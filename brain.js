@@ -68,7 +68,7 @@ export default class Brain {
 			await this.activateNeurons(frame, 0);
 
 			// recursive Pattern Processing and Higher-Level Activation
-			await this.processLevelsRecursively();
+			// await this.processLevelsRecursively();
 
 			// Phase C: Prediction and Inference
 			// await this._makePredictions(connection);
@@ -119,8 +119,10 @@ export default class Brain {
 		// get the neuron ids to activate for the given coordinates
 		const neuronIds = await this.getFrameNeuronIds(frame, level);
 
+		console.log('neuronIds', neuronIds);
 		// activate the neurons by inserting to the context with age 0
 		const activations = neuronIds.map(neuronId => [neuronId, level, 0]);
+		console.log('activations', activations);
 		await this.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES ?', [activations]);
 
 		// reinforce connections between active neurons in the current level
@@ -141,65 +143,111 @@ export default class Brain {
 		// at level 1, the resolution is 10^-7, level 2 is 10^-6, etc.
 		const resolution = level === 0 ? 0 : Math.pow(10, level - 8);
 
-		// get all the neurons that have coordinates in close ranges, depending on the resolution
-		const candidateNeuronIds = await this.getNeuronsFromFrame(frame, resolution);
+		// get all the neurons that have coordinates in close ranges for each point
+		const pointNeuronMatches = await this.getNeuronsFromFrame(frame, resolution);
+		console.log('pointNeuronMatches', pointNeuronMatches);
 
-		// if there are no neurons found, create neurons to signify current observations
-		if (candidateNeuronIds.length === 0) return this.createFrameNeurons(frame);
+		// neuron ids to be returned for each point of the frame
+		const frameNeuronIds = [];
 
-		// get the best matching neurons among the matches
-		return this.getBestMatchingNeuronIds(candidateNeuronIds, frame, resolution);
+		// create neurons for points with no matches
+		const pointsWithoutMatches = pointNeuronMatches.filter(p => p.neuron_ids.length === 0);
+		if (pointsWithoutMatches.length > 0) {
+			const newNeuronIds = await this.createFrameNeurons(pointsWithoutMatches.map(p => JSON.parse(p.point_str)));
+			console.log('newNeuronIds', newNeuronIds);
+			frameNeuronIds.push(...newNeuronIds);
+		}
+
+		// if there are no points with matches, we are done
+		const pointsWithMatches = pointNeuronMatches.filter(p => p.neuron_ids.length > 0);
+		console.log('pointsWithMatches', pointsWithMatches);
+		if (pointsWithMatches.length === 0) return frameNeuronIds;
+
+		// find the best matching neurons for each point
+		const bestMatchingResults = await this.getBestMatchingNeuronIds(pointsWithMatches, frame, resolution);
+		console.log('bestMatchingResults', bestMatchingResults);
+
+		// extract neuron IDs from successful matches
+		const successfulMatches = bestMatchingResults.filter(result => result.neuron_id !== null);
+		const successfulNeuronIds = successfulMatches.map(result => result.neuron_id);
+		frameNeuronIds.push(...successfulNeuronIds);
+
+		// identify points that need new neurons (those that had potential matches but none were close enough)
+		// get the point strings that successfully matched
+		const successfullyMatchedPointStrings = successfulMatches.map(result => result.point_str);
+		
+		// find points that had potential matches but didn't get a successful match
+		const pointsNeedingNeurons = pointsWithMatches
+			.filter(pointMatch => !successfullyMatchedPointStrings.includes(pointMatch.point_str))
+			.map(pointMatch => JSON.parse(pointMatch.point_str));
+			
+		if (pointsNeedingNeurons.length > 0) {
+			console.log(`${pointsNeedingNeurons.length} points had potential matches but none were close enough. Creating neurons for them.`);
+			const additionalNeuronIds = await this.createFrameNeurons(pointsNeedingNeurons);
+			frameNeuronIds.push(...additionalNeuronIds);
+		}
+
+		// return the neuron ids corresponding to the frame points
+		return frameNeuronIds;
 	}
 
 	/**
-	 * returns the best matching neurons to a given set of neurons and coordinates 
-	 * For each dimension, finds the minimum distance to any active point in that dimension
+	 * returns the best matching neurons for each point with their matching neurons array
+	 * For each point, finds the closest neuron among its candidates
 	 */
-	async getBestMatchingNeuronIds(neuronIds, frame, resolution) {
+	async getBestMatchingNeuronIds(pointNeuronMatches, frame, resolution) {
+		const unionQueries = [];
 
-		// create a map of dimensions to their active values
-		const dimensionToValues = new Map();
-		
-		// collect all values for each dimension from the frame
-		for (const coordinates of frame) {
-			for (const [dimName, value] of Object.entries(coordinates)) {
+		// for each point with its matching neurons, calculate distances
+		for (let i = 0; i < pointNeuronMatches.length; i++) {
+			const { point_str, neuron_ids } = pointNeuronMatches[i];
+			
+			// if no matching neurons for this point, skip it (will be handled later)
+			if (neuron_ids.length === 0) continue;
+
+			// create a map of dimensions to their values for this point
+			const dimensionToValues = new Map();
+			for (const [dimName, value] of Object.entries(JSON.parse(point_str))) {
 				const dimId = this.dimensionNameToId[dimName];
 				if (!dimensionToValues.has(dimId)) dimensionToValues.set(dimId, []);
 				dimensionToValues.get(dimId).push(value);
 			}
+
+			const dimIds = Array.from(dimensionToValues.keys());
+
+			// convert to the format needed for SQL distance calculation
+			// for each dimension, calculate the distance to its value
+			const distanceConditions = dimIds.map(dimId => {
+				const value = dimensionToValues.get(dimId)[0]; // each dimension has exactly one value for a point
+				return `WHEN dimension_id = ${dimId} THEN POW(value - ${value}, 2)`;
+			}).join(' ');
+
+			// create a select for this point that calculates distances to its matching neurons
+			const pointQuery = `
+				SELECT '${point_str}' as point_str, neuron_id, SQRT(SUM(CASE ${distanceConditions} END)) AS distance
+				FROM coordinates
+				WHERE neuron_id IN (${neuron_ids.join(',')})
+				AND dimension_id IN (${dimIds.join(',')})
+				GROUP BY neuron_id
+				HAVING distance <= ${resolution}
+				ORDER BY distance
+				LIMIT 1
+			`;
+
+			unionQueries.push(pointQuery);
 		}
 
-		const dimIds = Array.from(dimensionToValues.keys());
+		// if no queries to run, return empty array
+		if (unionQueries.length === 0) return [];
 
-		// convert to the format needed for SQL distance calculation
-		// for each dimension, find the minimum distance to any of its active values
-		// note that we do not have an else condition for the case statement - if we encounter an unknown dimension, it should error out
-		const distanceConditions = dimIds.map(dimId => {
-			const values = dimensionToValues.get(dimId);
-			const valueConditions = values.map(value => `POW(value - ${value}, 2)`).join(', ');
-			if (values.length === 1) return `WHEN dimension_id = ${dimId} THEN ${valueConditions}`;
-			return `WHEN dimension_id = ${dimId} THEN LEAST(${valueConditions})`;
-		}).join(' ');
+		// combine all point queries with UNION
+		const fullQuery = unionQueries.join(' UNION ALL ');
 
-		// get the neurons with their distances
-		const [distanceRows] = await this.conn.query(`
-			SELECT neuron_id, SQRT(SUM(CASE ${distanceConditions} END)) AS distance
-			FROM coordinates
-			WHERE neuron_id IN (${neuronIds.join(',')})
-			AND dimension_id IN (${dimIds.join(',')}) -- the dimensions of the neurons that are not seen in the frame are not relevant
-			GROUP BY neuron_id
-			HAVING distance <= ${resolution}
-			ORDER BY distance
-			LIMIT ${frame.length} -- select the same number of neurons as the frame points, one corresponding to each, hopefully in the best case
-		`);
-
-		// if after calculating the distances, we see none of the neurons is a good fit, create them
-		if (distanceRows.length === 0) return this.createFrameNeurons(frame);
-
-		// return all matching neuron ids
-		const matchingNeuronIds = distanceRows.map(row => row.neuron_id);
-		console.log(`found ${matchingNeuronIds.length} matching neurons (distances: ${distanceRows.map(r => r.distance.toFixed(4)).join(', ')}).`);
-		return matchingNeuronIds;
+		// get the closest neurons for each point
+		const [distanceRows] = await this.conn.query(fullQuery);
+		
+		// return the closest neuron ids
+		return distanceRows;
 	}
 
 	/**
@@ -231,35 +279,55 @@ export default class Brain {
 	}
 
 	/**
-	 * returns the neurons within the range of dimensional values
+	 * returns the neurons within the range of dimensional values for each point
+	 * Returns an array of objects with point_str and neuron_ids for each point
 	 */
 	async getNeuronsFromFrame(frame, resolution) {
+		const unionQueries = [];
+		const allParams = [];
 
-		// coordinate filters
-		const valueRangeFilters = [];
-		const valueRangeParams = [];
+		// for each point in the frame, create a separate select query
+		for (let i = 0; i < frame.length; i++) {
+			const point = frame[i];
+			const pointStr = JSON.stringify(point);
+			
+			// coordinate filters for this specific point
+			const valueRangeFilters = [];
+			const pointParams = [];
 
-		// for each point in the frame, get the neurons that may be possible matches
-		for (const point of frame)
 			for (const [dimName, value] of Object.entries(point)) {
 				valueRangeFilters.push(`(dimension_id = ? AND value BETWEEN ? AND ?)`);
-				valueRangeParams.push(this.dimensionNameToId[dimName], value - resolution, value + resolution);
+				pointParams.push(this.dimensionNameToId[dimName], value - resolution, value + resolution);
 			}
 
-		// get the matching neurons to the given values and return them
-		const [rows] = await this.conn.query(`
-			SELECT DISTINCT neuron_id
-			FROM coordinates
-			WHERE ${valueRangeFilters.join(' OR ')}
-		`, valueRangeParams);
-		return rows.map(row => row.neuron_id);
+			// create a select for this point that returns point_str and neuron_ids
+			const pointQuery = `
+				SELECT ? AS point_str, COALESCE(JSON_ARRAYAGG(neuron_id), JSON_ARRAY()) AS neuron_ids
+				FROM (
+					SELECT DISTINCT neuron_id
+					FROM coordinates
+					WHERE ${valueRangeFilters.join(' OR ')}
+				) AS distinct_neurons
+			`;
+
+			unionQueries.push(pointQuery);
+			allParams.push(pointStr, ...pointParams);
+		}
+
+		// combine all point queries with UNION
+		const fullQuery = unionQueries.join(' UNION ALL ');
+
+		// get the matching neurons for each point
+		const [rows] = await this.conn.query(fullQuery, allParams);
+		
+		// return results
+		return rows;
 	}
 
 	/**
 	 * reinforces the connections between active neurons at a level
 	 */
 	async reinforceConnections(level) {
-		console.log('reinforcing connections in level', level);
 		await this.conn.query(`
 			INSERT INTO connections (source_id, target_id, strength)
             SELECT s.neuron_id as source_id, t.neuron_id as target_id, 1 / (1 + t.age) as strength -- as the age difference increases, strength decreases

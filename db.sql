@@ -18,9 +18,6 @@ CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
     creation_time DATETIME NOT NULL DEFAULT NOW()
 );
-truncate neurons;
-
-select * from neurons;
 
 -- DROP TABLE IF EXISTS coordinates;
 CREATE TABLE IF NOT EXISTS coordinates (
@@ -31,9 +28,6 @@ CREATE TABLE IF NOT EXISTS coordinates (
     INDEX (dimension_id, value),
     FOREIGN KEY (neuron_id) REFERENCES neurons(id) ON DELETE CASCADE
 );
-
-select * from coordinates;
-truncate coordinates;
 
 -- DROP TABLE IF EXISTS connections;
 CREATE TABLE IF NOT EXISTS connections (
@@ -47,8 +41,25 @@ CREATE TABLE IF NOT EXISTS connections (
     FOREIGN KEY (target_id) REFERENCES neurons(id) ON DELETE CASCADE
 );
 
-select * from connections;
+truncate active_neurons;
 truncate connections;
+truncate coordinates;
+delete from neurons;
+select * from neurons;
+select * from coordinates;
+select * from connections;
+select * from active_neurons;
+
+
+INSERT INTO connections (source_id, target_id, strength)
+SELECT s.neuron_id as source_id, t.neuron_id as target_id, 1 / (1 + t.age) as strength -- as the age difference increases, strength decreases
+FROM active_neurons s
+CROSS JOIN active_neurons t
+WHERE s.level = 0 -- get the active neurons in the given level
+AND s.age = 0 -- reinforcing connections for the newly activated neurons only
+AND t.level = s.level -- reinforcing connections only within the same level
+AND (t.neuron_id != s.neuron_id OR t.age != s.age) -- if it's the same neuron, it's gotta be an older one
+ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength); -- if connection exists, add on to it
 
 -- **MEMORY Tables (Per-run persistent, cleared at application start or on demand):**
 
