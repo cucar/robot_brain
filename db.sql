@@ -1,6 +1,36 @@
 CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
+-- SELECT '{"x":0.11,"y":0.21,"r":1,"g":0,"b":0}' as point_str, (
+		-- SELECT CONCAT(neuron_id, '|', distance) as neuron_distance
+		-- FROM (
+				SELECT neuron_id, dimension_id, SQRT(SUM(
+					CASE 
+                    WHEN dimension_id = 1 THEN POW( val - 0.11, 2) 
+                    WHEN dimension_id = 2 THEN POW( val - 0.21, 2) 
+                    WHEN dimension_id = 3 THEN POW(val - 1, 2) 
+                    WHEN dimension_id = 4 THEN POW(val - 0, 2) 
+                    WHEN dimension_id = 5 THEN POW(val - 0, 2) 
+                    END)) AS distance
+				FROM coordinates
+				WHERE neuron_id IN (39)
+				AND dimension_id IN (1,2,3,4,5);
+				-- GROUP BY neuron_id
+				-- HAVING distance <= 1e-8
+				-- ORDER BY distance
+				-- LIMIT 1;
+		-- ) q;
+-- ) as neuron_distance;
+
+truncate active_neurons;
+truncate connections;
+truncate coordinates;
+delete from neurons;
+select * from neurons;
+select * from coordinates where neuron_id = 40;
+select * from connections;
+select * from active_neurons;
+
 DROP TABLE IF EXISTS dimensions;
 CREATE TABLE IF NOT EXISTS dimensions (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -19,13 +49,13 @@ CREATE TABLE IF NOT EXISTS neurons (
     creation_time DATETIME NOT NULL DEFAULT NOW()
 );
 
--- DROP TABLE IF EXISTS coordinates;
+DROP TABLE IF EXISTS coordinates;
 CREATE TABLE IF NOT EXISTS coordinates (
     neuron_id BIGINT UNSIGNED NOT NULL,
     dimension_id INT NOT NULL,
-    value DOUBLE NOT NULL,
+    val DOUBLE NOT NULL,
     PRIMARY KEY (neuron_id, dimension_id),
-    INDEX (dimension_id, value),
+    INDEX (dimension_id, val),
     FOREIGN KEY (neuron_id) REFERENCES neurons(id) ON DELETE CASCADE
 );
 
@@ -40,16 +70,6 @@ CREATE TABLE IF NOT EXISTS connections (
     FOREIGN KEY (source_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (target_id) REFERENCES neurons(id) ON DELETE CASCADE
 );
-
-truncate active_neurons;
-truncate connections;
-truncate coordinates;
-delete from neurons;
-select * from neurons;
-select * from coordinates;
-select * from connections;
-select * from active_neurons;
-
 
 INSERT INTO connections (source_id, target_id, strength)
 SELECT s.neuron_id as source_id, t.neuron_id as target_id, 1 / (1 + t.age) as strength -- as the age difference increases, strength decreases

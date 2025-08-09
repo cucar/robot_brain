@@ -9,6 +9,9 @@ export default class Brain {
 
 		// set hyperparameters
 		this.decayRate = 1000; // run forget cycle every decay rate frames
+		this.adaptationSpeed = 0.1; // how much neuron coordinates adapt towards observations
+		this.maxLevel = 6; // maximum number of levels we will process patterns recursively
+		this.maxResolution = 2; // at the highest level, this is the resolution used to match concepts (10^-maxResolution)
 
 		this.hp = {
 			_alpha_: 1.5, // Peakiness multiplier
@@ -64,11 +67,11 @@ export default class Brain {
 			// age the neurons in the frame - sliding the window
 			await this.ageNeurons();
 
-			// activate the neurons corresponding to the frame in level 0 with age 0
-			await this.activateNeurons(frame, 0);
+			// activate the neurons corresponding to the frame in level 0 with age 0 (base neurons)
+			await this.activateFrameNeurons(frame, 0);
 
-			// recursive Pattern Processing and Higher-Level Activation
-			// await this.processLevelsRecursively();
+			// now activate interneurons recursively (age = 0, level > 0)
+			// await this.activeInterneurons();
 
 			// Phase C: Prediction and Inference
 			// await this._makePredictions(connection);
@@ -113,89 +116,137 @@ export default class Brain {
 	/**
 	 * activates neurons corresponding to given set of points active for the frame
 	 */
-	async activateNeurons(frame, level) {
+	async activateFrameNeurons(frame, level) {
 		console.log('activating neurons', level, frame);
 
-		// get the neuron ids to activate for the given coordinates
-		const neuronIds = await this.getFrameNeuronIds(frame, level);
+		// get the neurons to activate for the given coordinates as { point_str, neuron_id }
+		const matches = await this.getFrameNeurons(frame, level);
 
-		console.log('neuronIds', neuronIds);
-		// activate the neurons by inserting to the context with age 0
-		const activations = neuronIds.map(neuronId => [neuronId, level, 0]);
-		console.log('activations', activations);
-		await this.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES ?', [activations]);
+		// activate the neurons of the frame
+		await this.activateNeurons(matches, level);
 
 		// reinforce connections between active neurons in the current level
 		await this.reinforceConnections(level);
 	}
 
 	/**
-	 * returns the best matching neuron ids for a given set of coordinates and level of resolution
+	 * activates a given set of neurons at a given level with age 0 - matches is an array of { point_str, neuron_id }
 	 */
-	async getFrameNeuronIds(frame, level) {
+	async activateNeurons(matches, level) {
+
+		// derive unique neuron ids and activate with age 0
+		const uniqueNeuronIds = Array.from(new Set((matches || []).map(m => m.neuron_id)));
+		const activations = uniqueNeuronIds.map(neuronId => [neuronId, level, 0]);
+		console.log('activations', activations);
+		await this.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES ?', [activations]);
+
+		// adapt coordinates of activated neurons towards their observed points
+		await this.applyCoordinateAdaptation(matches);
+	}
+
+	/**
+	 * returns the best matching neurons for given frame and level as [{ point_str, neuron_id }]
+	 */
+	async getFrameNeurons(frame, level) {
 
 		// we may relax this restriction later, but the inherent nature of levels and resolutions prevents infinite expansion
-		if (level > 6) throw new Error('Level cannot exceed 6');
+		if (level > this.maxLevel) throw new Error(`Level cannot exceed ${this.maxLevel}.`);
 
-		// resolution is the matching threshold we will use when fetching this neuron
-		// at the base level, this is very fine, to the point of making it exact (0)
+		// resolution is the matching threshold we will use when fetching the neurons
+		// at level 0, it's very fine, to the point of making it almost exact (10^-8)
+		// at level 1, the resolution is 10^-7, level 2 is 10^-6, etc. level 6 would be 10^-2.
 		// as we go into higher levels, we need to be able to handle partial matches due to the different states of concepts
-		// at level 1, the resolution is 10^-7, level 2 is 10^-6, etc.
-		const resolution = level === 0 ? 0 : Math.pow(10, level - 8);
+		// that's why we increase the resolution to cast a wider net to group higher level concepts
+		const resolution = Math.pow(10, level - (this.maxResolution + this.maxLevel));
 
 		// get all the neurons that have coordinates in close ranges for each point
 		const pointNeuronMatches = await this.getNeuronsFromFrame(frame, resolution);
 		console.log('pointNeuronMatches', pointNeuronMatches);
 
-		// neuron ids to be returned for each point of the frame
-		const frameNeuronIds = [];
+		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
+		const matches = [];
 
 		// create neurons for points with no matches
 		const pointsWithoutMatches = pointNeuronMatches.filter(p => p.neuron_ids.length === 0);
 		if (pointsWithoutMatches.length > 0) {
-			const newNeuronIds = await this.createFrameNeurons(pointsWithoutMatches.map(p => JSON.parse(p.point_str)));
-			console.log('newNeuronIds', newNeuronIds);
-			frameNeuronIds.push(...newNeuronIds);
+			const newNeurons = await this.createFrameNeurons(pointsWithoutMatches.map(p => p.point_str));
+			console.log('newNeurons', newNeurons);
+			matches.push(...newNeurons);
 		}
 
 		// if there are no points with matches, we are done
 		const pointsWithMatches = pointNeuronMatches.filter(p => p.neuron_ids.length > 0);
 		console.log('pointsWithMatches', pointsWithMatches);
-		if (pointsWithMatches.length === 0) return frameNeuronIds;
+		if (pointsWithMatches.length === 0) return matches;
 
 		// find the best matching neurons for each point
-		const bestMatchingResults = await this.getBestMatchingNeuronIds(pointsWithMatches, frame, resolution);
+		const bestMatchingResults = await this.getBestMatchingNeuronIds(pointsWithMatches, resolution);
 		console.log('bestMatchingResults', bestMatchingResults);
 
-		// extract neuron IDs from successful matches
-		const successfulMatches = bestMatchingResults.filter(result => result.neuron_id !== null);
-		const successfulNeuronIds = successfulMatches.map(result => result.neuron_id);
-		frameNeuronIds.push(...successfulNeuronIds);
+		// add successful matches to the results
+		matches.push(...bestMatchingResults.filter(result => result.neuron_id));
 
-		// identify points that need new neurons (those that had potential matches but none were close enough)
-		// get the point strings that successfully matched
-		const successfullyMatchedPointStrings = successfulMatches.map(result => result.point_str);
-		
-		// find points that had potential matches but didn't get a successful match
-		const pointsNeedingNeurons = pointsWithMatches
-			.filter(pointMatch => !successfullyMatchedPointStrings.includes(pointMatch.point_str))
-			.map(pointMatch => JSON.parse(pointMatch.point_str));
-			
+		// identify points that need new neurons (had candidates but none close enough)
+		const pointsNeedingNeurons = bestMatchingResults.filter(r => !r.neuron_id).map(r => r.point_str);
 		if (pointsNeedingNeurons.length > 0) {
 			console.log(`${pointsNeedingNeurons.length} points had potential matches but none were close enough. Creating neurons for them.`);
-			const additionalNeuronIds = await this.createFrameNeurons(pointsNeedingNeurons);
-			frameNeuronIds.push(...additionalNeuronIds);
+			const additionalNeurons = await this.createFrameNeurons(pointsNeedingNeurons);
+			matches.push(...additionalNeurons);
 		}
 
-		// return the neuron ids corresponding to the frame points
-		return frameNeuronIds;
+		// return matches: [{ point_str, neuron_id }]
+		return matches;
+	}
+
+	/**
+	 * Applies coordinate adaptation for matched existing neurons, moving their coordinates
+	 * towards the newly observed matched point values using learning rate.
+	 * matches: Array<{ neuron_id: number, point: Record<dimName,string|number> }>
+	 */
+	async applyCoordinateAdaptation(matches) {
+
+		// Purpose: Across one frame, multiple observed points can match the same neuron.
+		// We aggregate observations per (neuron_id, dimension_id) and use the mean to
+		// produce a single deterministic update per pair:
+		//   new = old * (1 - lr) + observed_mean * lr
+		// This avoids order-dependent multiple updates and stabilizes learning.
+
+		// Expand matches into a flat list of valid (neuronId, dimId, value) entries
+		const observedEntries = matches.flatMap(m => 
+			Object.entries(JSON.parse(m.point_str)).map(([dimName, val]) => 
+				({ neuronId: m.neuron_id, dimId: this.dimensionNameToId[dimName], val })));
+
+		// Reduce to an aggregate map keyed by `${neuronId}:${dimId}` with sum and count
+		const aggregate = observedEntries.reduce((map, { neuronId, dimId, val }) => ({
+			...map,
+			[`${neuronId}:${dimId}`]: {
+				neuronId,
+				dimId,
+				sum: (map[`${neuronId}:${dimId}`]?.sum || 0) + val,
+				count: (map[`${neuronId}:${dimId}`]?.count || 0) + 1,
+			}
+		}), {});
+
+		// Now update the neuron coordinates for adaptation - use a single UPDATE with CASE expression
+		const lr = this.adaptationSpeed; // hyperparameter to control the speed of adaptation
+		const cases = [];
+		const wherePairs = [];
+		for (const { neuronId, dimId, sum, count } of Object.values(aggregate)) {
+			const observedMean = sum / count;
+			cases.push(`WHEN neuron_id = ${neuronId} AND dimension_id = ${dimId} THEN val * (1 - ${lr}) + ${observedMean} * ${lr}`);
+			wherePairs.push(`(${neuronId}, ${dimId})`);
+		}
+		const sql = `UPDATE coordinates
+			SET val = CASE ${cases.join(' ')} ELSE val END
+			WHERE (neuron_id, dimension_id) IN (${wherePairs.join(',')})`;
+		await this.conn.query(sql);
 	}
 
 	/**
 	 * returns the best matching neurons for each point with their matching neurons array
 	 * For each point, finds the closest neuron among its candidates
 	 */
-	async getBestMatchingNeuronIds(pointNeuronMatches, frame, resolution) {
+	async getBestMatchingNeuronIds(pointNeuronMatches, resolution) {
 		const unionQueries = [];
 
 		// for each point with its matching neurons, calculate distances
@@ -213,25 +264,32 @@ export default class Brain {
 				dimensionToValues.get(dimId).push(value);
 			}
 
+			// TODO: instead of filtering out the unobserved dimensions of matching neurons, they should increase
+			//  the distance slightly, but not too much - hard to find the right amount - good enough for now
 			const dimIds = Array.from(dimensionToValues.keys());
 
 			// convert to the format needed for SQL distance calculation
 			// for each dimension, calculate the distance to its value
 			const distanceConditions = dimIds.map(dimId => {
 				const value = dimensionToValues.get(dimId)[0]; // each dimension has exactly one value for a point
-				return `WHEN dimension_id = ${dimId} THEN POW(value - ${value}, 2)`;
+				return `WHEN dimension_id = ${dimId} THEN POW(val - ${value}, 2)`;
 			}).join(' ');
 
 			// create a select for this point that calculates distances to its matching neurons
 			const pointQuery = `
-				SELECT '${point_str}' as point_str, neuron_id, SQRT(SUM(CASE ${distanceConditions} END)) AS distance
-				FROM coordinates
-				WHERE neuron_id IN (${neuron_ids.join(',')})
-				AND dimension_id IN (${dimIds.join(',')})
-				GROUP BY neuron_id
-				HAVING distance <= ${resolution}
-				ORDER BY distance
-				LIMIT 1
+				SELECT '${point_str}' as point_str, (
+					SELECT CONCAT(neuron_id, '|', distance) as neuron_distance
+					FROM (
+						SELECT neuron_id, SQRT(SUM(CASE ${distanceConditions} END)) AS distance
+						FROM coordinates
+						WHERE neuron_id IN (${neuron_ids.join(',')})
+						AND dimension_id IN (${dimIds.join(',')})
+						GROUP BY neuron_id
+						HAVING distance <= ${resolution}
+						ORDER BY distance
+						LIMIT 1
+					) q
+				) as neuron_distance
 			`;
 
 			unionQueries.push(pointQuery);
@@ -245,21 +303,23 @@ export default class Brain {
 
 		// get the closest neurons for each point
 		const [distanceRows] = await this.conn.query(fullQuery);
+		console.log('neuron matches with distances', distanceRows, fullQuery);
 		
 		// return the closest neuron ids
-		return distanceRows;
+		return distanceRows.map(r => ({ point_str: r.point_str, neuron_id: r.neuron_distance ? r.neuron_distance.split('|')[0] : null }));
 	}
 
 	/**
 	 * creates new neurons from a given set of points in the frame
+	 * TODO: this should do bulk insert, instead of inserting one neuron at a time - good enough for now
 	 */
-	async createFrameNeurons(frame) {
-		const neuronIds = [];
-		for (const coordinates of frame) {
-			const neuronId = await this.createNeuron(coordinates);
-			neuronIds.push(neuronId);
+	async createFrameNeurons(points) {
+		const created = [];
+		for (const pointStr of points) {
+			const neuronId = await this.createNeuron(JSON.parse(pointStr));
+			created.push({ point_str: pointStr, neuron_id: neuronId });
 		}
-		return neuronIds;
+		return created;
 	}
 
 	/**
@@ -272,7 +332,7 @@ export default class Brain {
 		console.log('newNeuronId', newNeuronId);
 
 		const params = Object.entries(coordinates).map(([dimName, value]) => [newNeuronId, this.dimensionNameToId[dimName], value]);
-		await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, value) VALUES ?', [params]);
+		await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [params]);
 
 		console.log(`created new neuron ${newNeuronId} with coordinates ${JSON.stringify(coordinates)}`);
 		return newNeuronId;
@@ -284,25 +344,18 @@ export default class Brain {
 	 */
 	async getNeuronsFromFrame(frame, resolution) {
 		const unionQueries = [];
-		const allParams = [];
 
 		// for each point in the frame, create a separate select query
-		for (let i = 0; i < frame.length; i++) {
-			const point = frame[i];
-			const pointStr = JSON.stringify(point);
-			
+		for (const point of frame) {
+
 			// coordinate filters for this specific point
 			const valueRangeFilters = [];
-			const pointParams = [];
-
-			for (const [dimName, value] of Object.entries(point)) {
-				valueRangeFilters.push(`(dimension_id = ? AND value BETWEEN ? AND ?)`);
-				pointParams.push(this.dimensionNameToId[dimName], value - resolution, value + resolution);
-			}
+			for (const [dimName, value] of Object.entries(point))
+				valueRangeFilters.push(`(dimension_id = ${this.dimensionNameToId[dimName]} AND val BETWEEN ${value - resolution} AND ${value + resolution})`);
 
 			// create a select for this point that returns point_str and neuron_ids
 			const pointQuery = `
-				SELECT ? AS point_str, COALESCE(JSON_ARRAYAGG(neuron_id), JSON_ARRAY()) AS neuron_ids
+				SELECT '${JSON.stringify(point)}' AS point_str, COALESCE(JSON_ARRAYAGG(neuron_id), JSON_ARRAY()) AS neuron_ids
 				FROM (
 					SELECT DISTINCT neuron_id
 					FROM coordinates
@@ -311,21 +364,17 @@ export default class Brain {
 			`;
 
 			unionQueries.push(pointQuery);
-			allParams.push(pointStr, ...pointParams);
 		}
 
-		// combine all point queries with UNION
-		const fullQuery = unionQueries.join(' UNION ALL ');
-
-		// get the matching neurons for each point
-		const [rows] = await this.conn.query(fullQuery, allParams);
+		// combine all point queries with UNION and get the matching neurons for each point
+		const [rows] = await this.conn.query(unionQueries.join(' UNION ALL '));
 		
 		// return results
 		return rows;
 	}
 
 	/**
-	 * reinforces the connections between active neurons at a level
+	 * reinforces the connections between newly active neurons (age = 0) at a level
 	 */
 	async reinforceConnections(level) {
 		await this.conn.query(`
@@ -341,47 +390,50 @@ export default class Brain {
 		`, [level]);
 	}
 
+	/**
+	 * activates interneurons recursively based on currently observed patterns in level 0 (age = 0)
+	 */
+	async activeInterneurons() {
+		console.log('activating interneurons...');
 
-	async processLevelsRecursively() {
-		console.log("Phase B: Starting recursive level processing.");
-		let currentProcessingLevel = 0;
+
+		let level = 0;
 		const activeNeurons = await this.conn.query('SELECT COUNT(*) AS count FROM active_neurons WHERE level = 0');
 		let newHigherLevelNeuronsActivated = activeNeurons[0][0].count;
 
 		while (newHigherLevelNeuronsActivated > 0) {
-			console.log(`\n  Processing Level: ${currentProcessingLevel}`);
+			console.log(`\n  Processing Level: ${level}`);
 
 			// Clear temporary tables for the current level's pattern processing
 			await this.resetFrameTables();
 
 			// B.1: Calculate Peakiness Scores of the current level
-			await this.calculatePeakiness(currentProcessingLevel);
+			await this.calculatePeakiness(level);
 
 			// B.2: Sequential Peak Selection, Ingredient/Centroid, and Suppression
 			const patternsObserved = await this._selectPeaksAndFormPatterns(connection);
 
 			if (patternsObserved.length === 0) {
-				console.log(`  No patterns observed at Level ${currentProcessingLevel}. Ending recursion.`);
+				console.log(`  No patterns observed at Level ${level}. Ending recursion.`);
 				newHigherLevelNeuronsActivated = 0;
 				break;
 			}
 
 			// B.3: Match Observed Patterns or Create New Interneurons and activate them
-			const activatedNextLevelNeurons = await this._matchOrCreateInterneurons(connection, patternsObserved, currentProcessingLevel);
+			const activatedNextLevelNeurons = await this._matchOrCreateInterneurons(connection, patternsObserved, level);
 
 			// B.4: Reinforce Connections for newly activated neurons
-			await this._reinforceLevelConnections(activatedNextLevelNeurons, currentProcessingLevel);
+			await this._reinforceLevelConnections(activatedNextLevelNeurons, level);
 
 			if (activatedNextLevelNeurons.length === 0) {
-				console.log(`  No new higher-level neurons activated from Level ${currentProcessingLevel}. Ending recursion.`);
+				console.log(`  No new higher-level neurons activated from Level ${level}. Ending recursion.`);
 				newHigherLevelNeuronsActivated = 0;
 				break;
 			}
 
-			currentProcessingLevel++;
+			level++;
 			newHigherLevelNeuronsActivated = activatedNextLevelNeurons.length; // Count new activations for next loop
 		}
-		console.log("Phase B: Recursive processing complete.");
 	}
 
 	async calculatePeakiness(level) {
@@ -585,10 +637,10 @@ export default class Brain {
 
 				// Update coordinates of the matched interneuron (adaptive learning)
 				const coordUpdates = observedCentroid.map(obsCoord => `
-                    UPDATE neuron_coordinates
-                    SET value = value * (1 - ${this.hp._learning_rate_coordinates_}) + ${obsCoord.value} * ${this.hp._learning_rate_coordinates_}
-                    WHERE neuron_id = ${activatedNeuronId} AND dimension_id = ${obsCoord.dimension_id}
-                `).join(';');
+					UPDATE neuron_coordinates
+					SET value = value * (1 - ${this.adaptationSpeed}) + ${obsCoord.value} * ${this.adaptationSpeed}
+					WHERE neuron_id = ${activatedNeuronId} AND dimension_id = ${obsCoord.dimension_id}
+				`).join(';');
 				// Need to ensure all dimensions exist for the interneuron first before updating.
 				// This makes a batch update more complex or requires individual updates.
 				// For now, let's assume they have the same set of relevant dimensions after creation.
