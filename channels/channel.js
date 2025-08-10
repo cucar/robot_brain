@@ -35,9 +35,9 @@ export default class Channel {
 	processInput(inputData) {
 		const inputCoords = [];
 		for (const dimName in inputData) {
-			if (this.dimensionIds[dimName] !== undefined) {
+			if (this.dimensionNameToId[dimName] !== undefined) {
 				inputCoords.push({
-					dimension_id: this.dimensionIds[dimName],
+					dimension_id: this.dimensionNameToId[dimName],
 					value: inputData[dimName]
 				});
 			} else {
