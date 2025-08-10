@@ -8,19 +8,16 @@ export default class Brain {
 	constructor() {
 
 		// set hyperparameters
+		this.neuronMaxAge = 10; // Frames a neuron stays active
 		this.decayRate = 1000; // run forget cycle every decay rate frames
 		this.adaptationSpeed = 0.1; // how much neuron coordinates adapt towards observations
 		this.maxLevel = 6; // maximum number of levels we will process patterns recursively
 		this.maxResolution = 2; // at the highest level, this is the resolution used to match concepts (10^-maxResolution)
+		this.peakMinStrength = 3; // minimum connection strength for a peak (pattern needs to observed at least this many times)
+		this.peakMinRatio = 1.5; // minimum ratio required to exceed the neighborhood strength by to form a peak
 
 		this.hp = {
-			_alpha_: 1.5, // Peakiness multiplier
-			_beta_: 5,   // Minimum weighted degree for a peak
 			_min_conn_strength_: 2, // Min observation_count for an ingredient conn
-			_match_threshold_: 1.0, // Max distance for pattern matching
-			_t_cycles_: 10, // Frames a neuron stays active
-			_max_connection_strength_: 100, // Max conn strength
-			_learning_rate_coordinates_: 0.1, // How much interneuron coords adapt
 		};
 
 		// initialize the forget cycle counter
@@ -71,7 +68,7 @@ export default class Brain {
 			await this.activateFrameNeurons(frame, 0);
 
 			// now activate interneurons recursively (age = 0, level > 0)
-			// await this.activeInterneurons();
+			await this.activeInterneurons();
 
 			// Phase C: Prediction and Inference
 			// await this._makePredictions(connection);
@@ -97,8 +94,8 @@ export default class Brain {
 	 * truncates frame memory tables
 	 */
 	async resetFrameTables() {
-		await this.conn.query('TRUNCATE TABLE suppressed_neurons');
 		await this.conn.query('TRUNCATE TABLE potential_peaks');
+		await this.conn.query('TRUNCATE TABLE suppressed_neurons');
 		await this.conn.query('TRUNCATE TABLE observed_pattern_centroids');
 		await this.conn.query('TRUNCATE TABLE observed_pattern_ingredients');
 		console.log('Frame tables truncated.');
@@ -109,7 +106,7 @@ export default class Brain {
 	 */
 	async ageNeurons() {
 		await this.conn.query('UPDATE active_neurons SET age = age + 1');
-		await this.conn.query(`DELETE FROM active_neurons WHERE age > ?`, [this.hp._t_cycles_]);
+		await this.conn.query(`DELETE FROM active_neurons WHERE age > ?`, [this.neuronMaxAge]);
 		console.log('Active neurons aged and old ones deactivated.');
 	}
 
@@ -375,17 +372,25 @@ export default class Brain {
 
 	/**
 	 * reinforces the connections between newly active neurons (age = 0) at a level
+	 * note that the neuron connections are directionless. when we query the connections a neuron has, we don't care about direction.
+	 * that means all connections should be inserted in the same way for a given pair, regardless of the direction.
 	 */
 	async reinforceConnections(level) {
 		await this.conn.query(`
-			INSERT INTO connections (source_id, target_id, strength)
-            SELECT s.neuron_id as source_id, t.neuron_id as target_id, 1 / (1 + t.age) as strength -- as the age difference increases, strength decreases
+			INSERT INTO connections (neuron1_id, neuron2_id, strength)
+            SELECT 
+                LEAST(s.neuron_id, t.neuron_id) as neuron1_id, -- source is always the smaller neuron id
+                GREATEST(s.neuron_id, t.neuron_id) as neuron2_id, -- target is always the bigger neuron id
+                -- it's possible for a neuron to connect to an older target and that target to be also age 0 and connecting to an older source 
+                -- we sum up in that case - this should not be a problem for neurons connecting to earlier activations of themselves - will not double count
+                SUM(1 / (1 + t.age)) as strength -- as the age difference increases, strength decreases 
 			FROM active_neurons s
 			CROSS JOIN active_neurons t
 			WHERE s.level = ? -- get the active neurons in the given level
             AND s.age = 0 -- reinforcing connections for the newly activated neurons only 
 			AND t.level = s.level -- reinforcing connections only within the same level
 			AND (t.neuron_id != s.neuron_id OR t.age != s.age) -- if it's the same neuron, it's gotta be an older one
+			GROUP BY neuron1_id, neuron2_id
 			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength) -- if connection exists, add on to it
 		`, [level]);
 	}
@@ -396,140 +401,141 @@ export default class Brain {
 	async activeInterneurons() {
 		console.log('activating interneurons...');
 
-
+		// start with level 0 and loop until there are no neurons activated
 		let level = 0;
-		const activeNeurons = await this.conn.query('SELECT COUNT(*) AS count FROM active_neurons WHERE level = 0');
-		let newHigherLevelNeuronsActivated = activeNeurons[0][0].count;
-
+		let newHigherLevelNeuronsActivated = await this.getActiveNeuronCount(level);
 		while (newHigherLevelNeuronsActivated > 0) {
-			console.log(`\n  Processing Level: ${level}`);
+			console.log(`processing level: ${level}`);
 
 			// Clear temporary tables for the current level's pattern processing
 			await this.resetFrameTables();
 
-			// B.1: Calculate Peakiness Scores of the current level
+			// calculate peakiness scores of the current level
 			await this.calculatePeakiness(level);
 
-			// B.2: Sequential Peak Selection, Ingredient/Centroid, and Suppression
-			const patternsObserved = await this._selectPeaksAndFormPatterns(connection);
-
+			// select top peaks and get pattern centroids
+			const patternsObserved = await this.selectPeaksAndFormPatterns();
 			if (patternsObserved.length === 0) {
 				console.log(`  No patterns observed at Level ${level}. Ending recursion.`);
 				newHigherLevelNeuronsActivated = 0;
 				break;
 			}
 
-			// B.3: Match Observed Patterns or Create New Interneurons and activate them
-			const activatedNextLevelNeurons = await this._matchOrCreateInterneurons(connection, patternsObserved, level);
-
-			// B.4: Reinforce Connections for newly activated neurons
-			await this._reinforceLevelConnections(activatedNextLevelNeurons, level);
-
-			if (activatedNextLevelNeurons.length === 0) {
-				console.log(`  No new higher-level neurons activated from Level ${level}. Ending recursion.`);
-				newHigherLevelNeuronsActivated = 0;
-				break;
-			}
-
+			// activate neurons of observed patterns in the next level
 			level++;
-			newHigherLevelNeuronsActivated = activatedNextLevelNeurons.length; // Count new activations for next loop
+			await this.activateFrameNeurons(patternsObserved, level);
+
+			// get the new active neuron count in the new level
+			newHigherLevelNeuronsActivated = await this.getActiveNeuronCount(level);
 		}
 	}
 
+	/**
+	 * returns active neurons count at a given level
+	 */
+	async getActiveNeuronCount(level) {
+		const activeNeurons = await this.conn.query(`SELECT COUNT(*) AS count FROM active_neurons WHERE level = ${level}`);
+		return activeNeurons[0][0].count;
+	}
+
+	/**
+	 * calculates the peakiness scores of newly activated neurons based on co-activations
+	 */
 	async calculatePeakiness(level) {
 		console.log(`calculating peakiness for active neurons at level ${level}`);
 
 		// fetch all active neurons at the current level with their relevant connections to other active neurons.
-		const [activeNeuronsAndConnections] = await this.conn.query(`
-            SELECT s.neuron_id AS source_id, s.level AS source_level, c.target_id, c.strength
+		const [activeConnections] = await this.conn.query(`
+            SELECT c.neuron1_id, c.neuron2_id, SUM(c.strength) as strength
             FROM active_neurons s
-            JOIN connections c ON s.neuron_id = c.source_id
-            JOIN active_neurons t ON c.target_id = t.neuron_id
-            WHERE s.level = ?
+            CROSS JOIN active_neurons t
+            -- note that we join to the connections in a directionless way - smaller neuron id is always the source  
+            JOIN connections c ON c.neuron1_id = LEAST(s.neuron_id, t.neuron_id) AND c.neuron2_id = GREATEST(s.neuron_id, t.neuron_id) 
+            WHERE s.level = ? -- get the active neurons in the given level
+            AND s.age = 0 -- the source neurons that are newly activated will be firing - we calculate their scores 
+        	AND t.level = s.level -- we cluster within the same level
+			AND (t.neuron_id != s.neuron_id OR t.age != s.age) -- if it's the same neuron, it's gotta be an older one
+			GROUP BY c.neuron1_id, c.neuron2_id -- it's possible to see the same pair swapped as source and target, sum them up in that case
         `, [level]);
 
-		// In-memory calculation of weighted_degree and neighbor_avg_wd
-		const neuronWeightedDegrees = new Map(); // Map<neuronId, weightedDegree>
-		const neuronActiveNeighbors = new Map(); // Map<neuronId, Set<neighborId>>
+		// if there are no connections found between active neurons, error out - that's not normal - we must have added them even at first observation
+		if (activeConnections.length === 0) throw new Error('No connections found for calculating peakiness.');
 
-		activeNeuronsAndConnections.forEach(row => {
-			const { source_id, target_id, observation_count } = row;
+		// calculate active connection strengths (directionless) for each neuron from the query results
+		const neuronStrengths = activeConnections.reduce((result, { neuron1_id, neuron2_id, strength }) => {
+			result[neuron1_id] = (result[neuron1_id] || 0) + strength;
+			result[neuron2_id] = (result[neuron2_id] || 0) + strength;
+			return result;
+		}, {});
 
-			// Calculate weighted_degree
-			neuronWeightedDegrees.set(source_id, (neuronWeightedDegrees.get(source_id) || 0) + observation_count);
+		// calculate neighboring neurons for each neuron from the query results (directionless, from both sides)
+		const neuronNeighbors = activeConnections.reduce((result, { neuron1_id, neuron2_id }) => {
+			if (!result[neuron1_id]) result[neuron1_id] = new Set();
+			if (!result[neuron2_id]) result[neuron2_id] = new Set();
+			result[neuron1_id].add(neuron2_id);
+			result[neuron2_id].add(neuron1_id);
+			return result;
+		}, {});
 
-			// Store active neighbors for avg_neighbor_wd calculation
-			if (!neuronActiveNeighbors.has(source_id)) {
-				neuronActiveNeighbors.set(source_id, new Set());
-			}
-			neuronActiveNeighbors.get(source_id).add(target_id);
+		// calculate the peakiness scores for each active neuron
+		const peakinessScores = Object.entries(neuronStrengths).map(([neuronId, strength]) => {
+
+			// get the neighbors of the neuron - if there are none, its strength will not be impacted
+			const neighborIds = neuronNeighbors[neuronId] ? Array.from(neuronNeighbors[neuronId]) : [];
+			if (neighborIds.length === 0) return [Number(neuronId), strength];
+
+			// calculate the neighborhood average strength
+			const neighborhoodStrengthSum = neighborIds.reduce((agg, neighborId) => agg + (neuronStrengths[neighborId] || 0), 0);
+			const neighborhoodStrengthAvg = neighborhoodStrengthSum / neighborIds.size;
+
+			// calculate the peakiness score for the neuron and return it
+			const peakinessScore = (strength < this.peakMinStrength || strength < this.peakMinRatio * neighborhoodStrengthAvg) ? 0 :
+				(strength - this.peakMinRatio * neighborhoodStrengthAvg);
+			return [Number(neuronId), peakinessScore];
 		});
 
-		const peakinessScores = [];
-		for (const [neuron_id, weighted_degree] of neuronWeightedDegrees.entries()) {
-			let sumNeighborWeightedDegree = 0;
-			let numActiveNeighbors = 0;
-
-			const neighbors = neuronActiveNeighbors.get(neuron_id);
-			if (neighbors) {
-				for (const neighbor_id of neighbors) {
-					if (neuronWeightedDegrees.has(neighbor_id)) { // Ensure neighbor itself has an active weighted_degree
-						sumNeighborWeightedDegree += neuronWeightedDegrees.get(neighbor_id);
-						numActiveNeighbors++;
-					}
-				}
-			}
-
-			const avg_neighbor_wd = numActiveNeighbors > 0 ? sumNeighborWeightedDegree / numActiveNeighbors : null;
-
-			let peakiness_score = 0;
-			if (weighted_degree >= this.hp._beta_) { // Must meet minimum influence
-				if (avg_neighbor_wd === null || weighted_degree > this.hp._alpha_ * avg_neighbor_wd) {
-					peakiness_score = weighted_degree - (this.hp._alpha_ * (avg_neighbor_wd || 0)); // If no avg_neighbor_wd, it implies high peakiness
-				}
-			}
-			peakinessScores.push([neuron_id, peakiness_score]);
-		}
-
-		// Batch insert peakiness scores
-		if (peakinessScores.length > 0) {
-			await this.conn.query('INSERT INTO potential_peaks (neuron_id, peakiness_score) VALUES ?', [peakinessScores]);
-			console.log(`  Calculated and inserted ${peakinessScores.length} potential peaks.`);
-		}
-		else console.log("  No potential peaks found for calculation.");
+		// batch insert peakiness scores
+		await this.conn.query('INSERT INTO potential_peaks (neuron_id, peakiness_score) VALUES ?', [peakinessScores]);
+		console.log(`calculated and inserted ${peakinessScores.length} potential peaks.`);
 	}
 
-	async _selectPeaksAndFormPatterns(connection) {
+	// Thoughts: should this be like activateNeurons, but with higher-level/lower-level connections between neurons?
+	//  so, we will determine the peaks first, and their centroid will give us the new point,
+	//  but then, after that, we use the coordinates to fetch the closest matching neuron to the centroid
+	//  we could build and use connections for that to speed it up maybe?
+	//  that would allow us to activate higher level neurons faster? Not sure. Never mind.
+	async selectPeaksAndFormPatterns() {
 		console.log("  B.2: Selecting peaks and forming patterns.");
 		const patternsObserved = []; // To return for B.3
-		let patternIdCounter = (await connection.query('SELECT COALESCE(MAX(pattern_id), 0) AS max_id FROM observed_pattern_centroids'))[0][0].max_id;
+		let patternIdCounter = (await this.conn.query('SELECT COALESCE(MAX(pattern_id), 0) AS max_id FROM observed_pattern_centroids'))[0][0].max_id;
 
 		// Fetch peaks, ordered by score, not yet suppressed
-		const [peaks] = await connection.query(`
+		const [peaks] = await this.conn.query(`
             SELECT pp.neuron_id, pp.peakiness_score
             FROM potential_peaks pp
-            LEFT JOIN suppressed_neurons sn ON pp.neuron_id = sn.neuron_id
-            WHERE pp.peakiness_score > 0 AND sn.neuron_id IS NULL
+            WHERE pp.peakiness_score > 0 AND pp.neuron_id NOT IN (SELECT neuron_id FROM suppressed_neurons) 
             ORDER BY pp.peakiness_score DESC
         `);
+
+		// Thoughts: this neuron suppression makes it impossible to operate - I think we should just get all potential peaks
+		// and each one activates its own higher level neuron based on its surroundings (active connections impacting the centroid)
+		// so, each active neuron becomes like a switch - learning to activate different higher level patterns based on the surrounding neurons
 
 		for (const peak of peaks) {
 			const currentPeakId = peak.neuron_id;
 
 			// Re-check suppression in case another peak in this batch suppressed it
-			const [isSuppressed] = await connection.query('SELECT 1 FROM suppressed_neurons WHERE neuron_id = ?', [currentPeakId]);
-			if (isSuppressed.length > 0) {
-				continue;
-			}
+			const [isSuppressed] = await this.conn.query('SELECT 1 FROM suppressed_neurons WHERE neuron_id = ?', [currentPeakId]);
+			if (isSuppressed.length > 0) continue;
 
 			patternIdCounter++;
 
 			// B.2.a: Find Ingredient Neurons for the current peak.
-			const [ingredients] = await connection.query(`
+			const [ingredients] = await this.conn.query(`
                 SELECT c.target_id AS ingredient_id
                 FROM connections c
-                INNER JOIN active_neurons an_target ON c.target_id = an_target.neuron_id
-                WHERE c.source_id = ? AND c.observation_count > ?
+                JOIN active_neurons an_target ON c.target_id = an_target.neuron_id
+                WHERE c.source_id = ? AND c.strength > ?
             `, [currentPeakId, this.hp._min_conn_strength_]);
 
 			if (ingredients.length === 0) {
@@ -539,18 +545,18 @@ export default class Brain {
 
 			const ingredientIds = ingredients.map(i => i.ingredient_id);
 			const ingredientInserts = ingredientIds.map(id => [patternIdCounter, id]);
-			await connection.query('INSERT INTO observed_pattern_ingredients (pattern_id, ingredient_id) VALUES ?', [ingredientInserts]);
+			await this.conn.query('INSERT INTO observed_pattern_ingredients (pattern_id, ingredient_id) VALUES ?', [ingredientInserts]);
 
 			// B.2.b: Calculate the Centroid of these active ingredients.
-			const [centroidCoords] = await connection.query(`
-                SELECT nc.dimension_id, AVG(nc.value) AS centroid_value
-                FROM neuron_coordinates nc
-                WHERE nc.neuron_id IN (?)
-                GROUP BY nc.dimension_id
+			const [centroidCoords] = await this.conn.query(`
+                SELECT dimension_id, AVG(val) AS centroid_value
+                FROM coordinates c
+                WHERE neuron_id IN (?)
+                GROUP BY dimension_id
             `, [ingredientIds]);
 
 			const centroidInserts = centroidCoords.map(c => [patternIdCounter, c.dimension_id, c.centroid_value]);
-			await connection.query('INSERT INTO observed_pattern_centroids (pattern_id, dimension_id, value) VALUES ?', [centroidInserts]);
+			await this.conn.query('INSERT INTO observed_pattern_centroids (pattern_id, dimension_id, value) VALUES ?', [centroidInserts]);
 
 			// Store for later use
 			patternsObserved.push({
@@ -562,7 +568,7 @@ export default class Brain {
 			// B.2.c: Suppress the selected peak and its direct, strong, active neighbors.
 			const suppressedNeuronIds = [currentPeakId, ...ingredientIds];
 			const suppressedInserts = suppressedNeuronIds.map(id => [id]);
-			await connection.query('INSERT IGNORE INTO suppressed_neurons (neuron_id) VALUES ?', [suppressedInserts]);
+			await this.conn.query('INSERT IGNORE INTO suppressed_neurons (neuron_id) VALUES ?', [suppressedInserts]);
 
 			console.log(`    Pattern ${patternIdCounter} (from peak ${currentPeakId}) identified with ${ingredients.length} ingredients.`);
 		}
@@ -570,252 +576,11 @@ export default class Brain {
 		return patternsObserved;
 	}
 
-	async _matchOrCreateInterneurons(connection, patternsObserved, currentProcessingLevel) {
-		console.log(`  B.3: Matching/Creating interneurons for patterns at level ${currentProcessingLevel + 1}.`);
-		const activatedNextLevelNeurons = [];
-
-		for (const pattern of patternsObserved) {
-			const observedPatternId = pattern.pattern_id;
-			const observedCentroid = pattern.centroid; // [{dimension_id, value}, ...]
-
-			if (observedCentroid.length === 0) {
-				console.warn(`    Pattern ${observedPatternId} has no centroid coordinates. Skipping match/create.`);
-				continue;
-			}
-
-			// Try to find a matching existing interneuron
-			const dimValuePairs = observedCentroid.map(c => `(nc_inter.dimension_id = ${c.dimension_id} AND nc_inter.value = ${c.value})`).join(' OR '); // This won't work for Euclidean distance
-			// Euclidean distance matching needs a more complex query or in-app calculation.
-			// Let's fetch all relevant next-level interneurons and calculate distances in Node.js.
-
-			const [nextLevelInterneuronsRaw] = await connection.query(`
-                SELECT n.id AS neuron_id, nc.dimension_id, nc.value
-                FROM neurons n
-                INNER JOIN neuron_coordinates nc ON n.id = nc.neuron_id
-                WHERE n.level = ?;
-            `, [currentProcessingLevel + 1]);
-
-			const nextLevelInterneurons = new Map(); // Map<neuron_id, Map<dimension_id, value>>
-			nextLevelInterneuronsRaw.forEach(row => {
-				if (!nextLevelInterneurons.has(row.neuron_id)) {
-					nextLevelInterneurons.set(row.neuron_id, new Map());
-				}
-				nextLevelInterneurons.get(row.neuron_id).set(row.dimension_id, row.value);
-			});
-
-			let bestMatchId = null;
-			let minDistance = Infinity;
-
-			for (const [interneuronId, interneuronCoords] of nextLevelInterneurons.entries()) {
-				let sumSqDiff = 0;
-				let hasAllDims = true; // Check if interneuron has all dimensions of observed pattern
-
-				for (const obsCoord of observedCentroid) {
-					if (interneuronCoords.has(obsCoord.dimension_id)) {
-						const interCoordValue = interneuronCoords.get(obsCoord.dimension_id);
-						sumSqDiff += Math.pow(interCoordValue - obsCoord.value, 2);
-					} else {
-						hasAllDims = false; // Interneuron doesn't cover all dimensions of the pattern
-						break;
-					}
-				}
-
-				if (hasAllDims) {
-					const distance = Math.sqrt(sumSqDiff);
-					if (distance < minDistance) {
-						minDistance = distance;
-						bestMatchId = interneuronId;
-					}
-				}
-			}
-
-			let activatedNeuronId;
-			if (bestMatchId !== null && minDistance < this.hp._match_threshold_) {
-				// B.3.a: Handle Matched Pattern
-				activatedNeuronId = bestMatchId;
-				console.log(`    Pattern ${observedPatternId} matched existing interneuron ${activatedNeuronId} (Distance: ${minDistance.toFixed(2)}).`);
-
-				// Update coordinates of the matched interneuron (adaptive learning)
-				const coordUpdates = observedCentroid.map(obsCoord => `
-					UPDATE neuron_coordinates
-					SET value = value * (1 - ${this.adaptationSpeed}) + ${obsCoord.value} * ${this.adaptationSpeed}
-					WHERE neuron_id = ${activatedNeuronId} AND dimension_id = ${obsCoord.dimension_id}
-				`).join(';');
-				// Need to ensure all dimensions exist for the interneuron first before updating.
-				// This makes a batch update more complex or requires individual updates.
-				// For now, let's assume they have the same set of relevant dimensions after creation.
-				if (coordUpdates.length > 0) {
-					await connection.query(coordUpdates); // Execute multiple updates
-				}
-
-			} else {
-				// B.3.b: Create New Interneuron for Novel Pattern
-				const newNeuronId = await this._getNextNeuronId();
-				const newNeuronLevel = currentProcessingLevel + 1;
-
-				await connection.query('INSERT INTO neurons (id, creation_time) VALUES (?, NOW())', [newNeuronId, newNeuronLevel]);
-
-				const newCoordInserts = observedCentroid.map(c => [newNeuronId, c.dimension_id, c.value]);
-				if (newCoordInserts.length > 0) {
-					await connection.query('INSERT INTO coordinates (neuron_id, dimension_id, value) VALUES ?', [newCoordInserts]);
-				}
-				activatedNeuronId = newNeuronId;
-				console.log(`    Pattern ${observedPatternId} created new interneuron ${activatedNeuronId} at level ${newNeuronLevel}.`);
-			}
-
-			// Activate the matched/new interneuron
-			await connection.query(
-				'INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, ?, 0) ON DUPLICATE KEY UPDATE age = 0',
-				[activatedNeuronId, currentProcessingLevel + 1]
-			);
-			activatedNextLevelNeurons.push(activatedNeuronId);
-		}
-		return activatedNextLevelNeurons;
-	}
 
 	async _getNextNeuronId() {
 		const [rows] = await this.conn.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM neurons');
 		return rows[0].next_id;
 	}
-
-	async _reinforceLevelConnections(connection, activatedNextLevelNeurons, currentProcessingLevel) {
-		console.log(`  B.4: Reinforcing connections from Level ${currentProcessingLevel} to Level ${currentProcessingLevel + 1}.`);
-		if (activatedNextLevelNeurons.length === 0) {
-			console.log("    No next-level neurons to connect to.");
-			return;
-		}
-
-		const connectionsToReinforce = []; // [source_id, target_id] pairs
-		const nextLevelNeuronIds = activatedNextLevelNeurons;
-
-		// Get all patterns that led to these activatedNextLevelNeurons
-		const [patternsInfo] = await connection.query(`
-            SELECT
-                opc.pattern_id,
-                opc.dimension_id,
-                opc.value AS centroid_value,
-                opi.ingredient_id
-            FROM observed_pattern_centroids opc
-            INNER JOIN observed_pattern_ingredients opi ON opc.pattern_id = opi.pattern_id
-        `);
-
-		const patternsMap = new Map(); // Map<pattern_id, {centroid: [], ingredients: []}>
-		patternsInfo.forEach(row => {
-			if (!patternsMap.has(row.pattern_id)) {
-				patternsMap.set(row.pattern_id, { centroid: [], ingredients: [] });
-			}
-			patternsMap.get(row.pattern_id).centroid.push({ dimension_id: row.dimension_id, value: row.centroid_value });
-			if (!patternsMap.get(row.pattern_id).ingredients.includes(row.ingredient_id)) {
-				patternsMap.get(row.pattern_id).ingredients.push(row.ingredient_id);
-			}
-		});
-
-		// Loop through each newly activated next-level neuron and find its corresponding ingredients
-		for (const nextLevelNeuronId of nextLevelNeuronIds) {
-			// Find which pattern(s) this nextLevelNeuronId represents.
-			// This needs to be more robust. If it was a match, it matched a pattern_id.
-			// If it was new, its ID corresponds to one of the newly created patterns.
-			// For simplicity, let's assume one-to-one mapping for patternsObserved and activatedNextLevelNeurons here.
-			// In a real system, you'd track the pattern_id -> new_neuron_id mapping.
-
-			// A more direct way is to fetch the ingredients linked to this higher-level neuron.
-			// This implies the connections were already made (e.g. B.3). This is specifically REINFORCEMENT.
-			// So, we need: active ingredients -> newly activated higher-level neuron.
-
-			// Get the pattern_id corresponding to this `nextLevelNeuronId`
-			// This is a complex join, simplifying: fetch ingredients for patterns matching these nextLevelNeuronIds.
-			const [matchedPatternsData] = await connection.query(`
-                SELECT
-                    opi.ingredient_id,
-                    an.neuron_id AS next_level_neuron_id
-                FROM observed_pattern_ingredients opi
-                INNER JOIN observed_pattern_centroids opc ON opi.pattern_id = opc.pattern_id
-                INNER JOIN pattern_matches pm ON opc.pattern_id = pm.pattern_id
-                INNER JOIN active_neurons an ON (pm.is_match = 1 AND an.neuron_id = pm.interneuron_id) OR
-                                                (pm.is_match = 0 AND an.neuron_id = (SELECT n_new.id FROM neurons n_new
-                                                                                        WHERE n_new.level = ? AND n_new.creation_time = (
-                                                                                            SELECT MAX(creation_time) FROM neurons
-                                                                                            WHERE level = ? AND id <= ? AND id >= (SELECT COALESCE(MAX(id),0) + 1 FROM neurons) - COUNT(*) FROM pattern_matches WHERE is_match = 0)
-                                                                                        LIMIT 1
-                                                                                        )))
-                WHERE an.neuron_id IN (?)
-            `, [currentProcessingLevel + 1, currentProcessingLevel + 1, nextLevelNeuronId, nextLevelNeuronId]); // Placeholder needs more thought for new neurons
-
-			// Simpler approach for demo: Just reinforce all observed ingredients to all activated next-level neurons for those patterns.
-			// This assumes the patternsObserved from _selectPeaksAndFormPatterns are in order and map directly.
-			// A more robust system would store pattern_id -> activated_neuron_id mapping explicitly.
-
-			// For each pattern that was processed and resulted in a next-level activation:
-			const patternsThatActivated = patternsObserved.filter(p => nextLevelNeuronIds.includes(
-				// Find the neuron ID that this pattern resulted in (this mapping is implicit currently)
-				// This is the trickiest part for Node.js - reliably linking the pattern_id from B2 to the activated_neuron_id from B3
-				// We'd need to return activatedNeuronId along with its pattern_id from _matchOrCreateInterneurons
-				true // Placeholder
-			));
-
-			for (const pattern of patternsObserved) { // Iterating all patterns found in B2
-				const correspondingActivatedNeuron = activatedNextLevelNeurons.find(neuronId => {
-					// This logic is hard without a direct pattern_id to neuron_id map from B3.
-					// For now, let's simplify by linking all ingredients to all *newly activated* neurons from B3.
-					// A better approach would be to pass a map from B3: patternId -> activatedNeuronId.
-					return true; // Simplified for demo.
-				});
-
-				if (!correspondingActivatedNeuron) continue;
-
-				for (const ingredientId of pattern.ingredients) {
-					connectionsToReinforce.push([ingredientId, correspondingActivatedNeuron]); // Ingredient -> Pattern
-					connectionsToReinforce.push([correspondingActivatedNeuron, ingredientId]); // Pattern -> Ingredient
-				}
-			}
-		}
-
-
-		// Re-implementing the batch INSERT ... ON DUPLICATE KEY UPDATE with fetched data.
-		if (connectionsToReinforce.length > 0) {
-			const updates = [];
-			const inserts = [];
-
-			// Fetch existing counts for these potential connections
-			const connectionPairs = connectionsToReinforce.map(pair => `(${pair[0]}, ${pair[1]})`).join(',');
-			const [existingConnections] = await connection.query(`
-                SELECT source_id, target_id, observation_count
-                FROM connections
-                WHERE (source_id, target_id) IN (${connectionPairs})
-            `);
-
-			const existingMap = new Map();
-			existingConnections.forEach(conn => existingMap.set(`${conn.source_id}-${conn.target_id}`, conn.observation_count));
-
-			for (const [src, tgt] of connectionsToReinforce) {
-				const key = `${src}-${tgt}`;
-				if (existingMap.has(key)) {
-					const currentCount = existingMap.get(key);
-					updates.push(`WHEN source_id = ${src} AND target_id = ${tgt} THEN LEAST(${this.hp._max_connection_strength_}, ${currentCount} + 1)`);
-				} else {
-					inserts.push(`(${src}, ${tgt}, ${LEAST(this.hp._max_connection_strength_, 1)})`);
-				}
-			}
-
-			if (updates.length > 0) {
-				await connection.query(`
-                    UPDATE connections
-                    SET observation_count = CASE
-                        ${updates.join('\n')}
-                        ELSE observation_count
-                    END
-                    WHERE (source_id, target_id) IN (${connectionPairs})
-                `);
-			}
-			if (inserts.length > 0) {
-				await connection.query(`
-                    INSERT INTO connections (source_id, target_id, observation_count) VALUES ${inserts.join(',')}
-                `);
-			}
-			console.log(`  Reinforced ${connectionsToReinforce.length / 2} level connections.`);
-		}
-	}
-
 
 	async _makePredictions(connection) {
 		console.log("Phase C: Making predictions.");

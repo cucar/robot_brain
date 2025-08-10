@@ -59,16 +59,15 @@ CREATE TABLE IF NOT EXISTS coordinates (
     FOREIGN KEY (neuron_id) REFERENCES neurons(id) ON DELETE CASCADE
 );
 
--- DROP TABLE IF EXISTS connections;
+-- connections are directionless - source id is always smaller than target id by convention
+DROP TABLE IF EXISTS connections;
 CREATE TABLE IF NOT EXISTS connections (
-    source_id BIGINT UNSIGNED NOT NULL,
-    target_id BIGINT UNSIGNED NOT NULL,
+    neuron1_id BIGINT UNSIGNED NOT NULL,
+    neuron2_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1,
-    PRIMARY KEY (source_id, target_id), -- composite PRIMARY KEY on (source_id, target_id) for unique connections
-    INDEX idx_target_source (target_id, source_id), -- for reverse lookups (finding all sources to a target)
-    INDEX idx_source_strength (source_id, strength DESC), -- for efficient retrieval of strong outgoing connections
-    FOREIGN KEY (source_id) REFERENCES neurons(id) ON DELETE CASCADE,
-    FOREIGN KEY (target_id) REFERENCES neurons(id) ON DELETE CASCADE
+    PRIMARY KEY (neuron1_id, neuron2_id), -- composite PRIMARY KEY for unique connections
+    FOREIGN KEY (neuron1_id) REFERENCES neurons(id) ON DELETE CASCADE,
+    FOREIGN KEY (neuron2_id) REFERENCES neurons(id) ON DELETE CASCADE
 );
 
 INSERT INTO connections (source_id, target_id, strength)
@@ -95,16 +94,15 @@ CREATE TABLE IF NOT EXISTS active_neurons (
 
 select * from active_neurons;
 
--- holds neurons that are temporarily suppressed during peak selection within a level
-CREATE TABLE IF NOT EXISTS suppressed_neurons (
-    neuron_id BIGINT UNSIGNED PRIMARY KEY
-) ENGINE=MEMORY;
-
 -- stores candidates for patterns with their calculated peakiness score
 CREATE TABLE IF NOT EXISTS potential_peaks (
     neuron_id BIGINT UNSIGNED PRIMARY KEY,
-    peakiness_score FLOAT NOT NULL,
-    INDEX idx_peakiness_score (peakiness_score DESC) -- For efficient sorting
+    peakiness_score FLOAT NOT NULL
+) ENGINE=MEMORY;
+
+-- holds neurons that are temporarily suppressed during peak selection within a level
+CREATE TABLE IF NOT EXISTS suppressed_neurons (
+    neuron_id BIGINT UNSIGNED PRIMARY KEY
 ) ENGINE=MEMORY;
 
 -- stores the calculated centroids for detected patterns
