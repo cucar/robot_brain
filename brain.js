@@ -133,11 +133,50 @@ export default class Brain {
 		// reinforce connections between active neurons in the current level
 		await this.reinforceConnections(level);
 
-		// TODO: here, reinforce the pattern connections between the matched neurons and the point neuron ids that came from the previous iteration (clusters)
-		//  strengthen the inter-level connection from lower-level neurons to the higher-level neurons
+		// reinforce inter-level pattern links using previous level clusters
+		await this.reinforcePatterns(matches, level, clusters);
 
 		// TODO: get the lower-level neurons that activated these newly higher-level neurons before (children in patterns table)
 		//  the children neurons that are not activated yet will be the predictions. return them.
+
+		// Placeholder until prediction flow is implemented
+		return [];
+	}
+
+	/**
+	 * Reinforces inter-level pattern links from previous-level clusters to the current level's matched neurons.
+	 * For each matched parent neuron at level > 0, strengthens patterns(parent_id=parent, child_id in previous cluster).
+	 */
+	async reinforcePatterns(matches, level, clusters) {
+		
+		// Only meaningful for levels above 0 and when we have both matches and cluster context
+		if (level <= 0 || !Array.isArray(matches) || matches.length === 0 || !clusters || Object.keys(clusters).length === 0)
+			return;
+
+		// Aggregate counts to avoid duplicate rows and to reflect multiple appearances within a frame
+		const parentChildToCount = new Map(); // key: `${parentId}:${childId}` -> count
+		for (const match of matches) {
+			const parentNeuronId = Number(match.neuron_id);
+			const childNeuronIds = clusters[match.point_str] || [];
+			for (const childNeuronId of childNeuronIds) {
+				const key = `${parentNeuronId}:${childNeuronId}`;
+				parentChildToCount.set(key, (parentChildToCount.get(key) || 0) + 1);
+			}
+		}
+
+		const bulkRows = Array.from(parentChildToCount.entries()).map(([key, count]) => {
+			const [parentId, childId] = key.split(':').map(Number);
+			return [parentId, childId, count];
+		});
+
+		if (bulkRows.length === 0) return;
+
+		await this.conn.query(
+			`INSERT INTO patterns (parent_id, child_id, strength) VALUES ? 
+			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)`,
+			[bulkRows]
+		);
+		console.log(`Reinforced ${bulkRows.length} inter-level pattern link(s).`);
 	}
 
 	/**
