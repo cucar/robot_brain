@@ -179,32 +179,30 @@ export default class Brain {
 		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
 		const matches = [];
 
-		// create neurons for points with no matches
+		// separate points into with/without any candidate neurons
 		const pointsWithoutMatches = pointNeuronMatches.filter(p => p.neuron_ids.length === 0);
-		if (pointsWithoutMatches.length > 0) {
-			const newNeurons = await this.createFrameNeurons(pointsWithoutMatches.map(p => p.point_str));
-			console.log('newNeurons', newNeurons);
-			matches.push(...newNeurons);
-		}
-
-		// if there are no points with matches, we are done
 		const pointsWithMatches = pointNeuronMatches.filter(p => p.neuron_ids.length > 0);
 		console.log('pointsWithMatches', pointsWithMatches);
-		if (pointsWithMatches.length === 0) return matches;
 
-		// find the best matching neurons for each point
-		const bestMatchingResults = await this.getBestMatchingNeuronIds(pointsWithMatches, resolution);
-		console.log('bestMatchingResults', bestMatchingResults);
+		// find the best matching neurons for points that had any candidates
+		let bestMatchingResults = [];
+		if (pointsWithMatches.length > 0) {
+			bestMatchingResults = await this.getBestMatchingNeuronIds(pointsWithMatches, resolution);
+			console.log('bestMatchingResults', bestMatchingResults);
 
-		// add successful matches to the results
-		matches.push(...bestMatchingResults.filter(result => result.neuron_id));
+			// add successful matches to the results
+			matches.push(...bestMatchingResults.filter(result => result.neuron_id));
+		}
 
-		// identify points that need new neurons (had candidates but none close enough)
-		const pointsNeedingNeurons = bestMatchingResults.filter(r => !r.neuron_id).map(r => r.point_str);
+		// points that still need new neurons: those with no candidates + those with candidates but no close enough match
+		const pointsNeedingNeurons = [
+			...pointsWithoutMatches.map(p => p.point_str),
+			...bestMatchingResults.filter(r => !r.neuron_id).map(r => r.point_str)
+		];
 		if (pointsNeedingNeurons.length > 0) {
-			console.log(`${pointsNeedingNeurons.length} points had potential matches but none were close enough. Creating neurons for them.`);
-			const additionalNeurons = await this.createFrameNeurons(pointsNeedingNeurons);
-			matches.push(...additionalNeurons);
+			console.log(`${pointsNeedingNeurons.length} points need new neurons (after matching). Creating neurons once with internal dedupe.`);
+			const createdNeurons = await this.createFrameNeurons(pointsNeedingNeurons, resolution);
+			matches.push(...createdNeurons);
 		}
 
 		// return matches: [{ point_str, neuron_id }]
@@ -322,31 +320,98 @@ export default class Brain {
 
 	/**
 	 * creates new neurons from a given set of points in the frame
-	 * TODO: this should do bulk insert, instead of inserting one neuron at a time - good enough for now
 	 */
-	async createFrameNeurons(points) {
-		const created = [];
-		for (const pointStr of points) {
-			const neuronId = await this.createNeuron(JSON.parse(pointStr));
-			created.push({ point_str: pointStr, neuron_id: neuronId });
-		}
+	async createFrameNeurons(points, resolution) {
+		
+		// Deduplicate points within the batch
+		const repsToCreate = this.dedupePoints(points, resolution);
+
+		// Nothing to create
+		if (repsToCreate.length === 0) return [];
+
+		// 1) Bulk insert neurons. MySQL returns the first insert id; ids are contiguous within the statement.
+		const valuesSql = repsToCreate.map(() => '()').join(',');
+		const insertNeuronsResult = await this.conn.query(`INSERT INTO neurons () VALUES ${valuesSql}`);
+		const firstNewId = insertNeuronsResult[0].insertId;
+
+		// 2) Compute ids from the first insert id (assume auto_increment step = 1)
+		const created = repsToCreate.map((centroid, idx) => ({
+			point_str: JSON.stringify(centroid),
+			neuron_id: firstNewId + idx
+		}));
+
+		// 3) Bulk insert coordinates for all created neurons
+		const rows = created.flatMap(({ neuron_id, point_str }) => {
+			const centroid = JSON.parse(point_str);
+			return Object.entries(centroid).map(([dimName, value]) => [neuron_id, this.dimensionNameToId[dimName], value]);
+		});
+		if (rows.length > 0) await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [rows]);
+
 		return created;
 	}
 
 	/**
-	 * creates a new neuron with given coordinates
+	 * Resolution-aware deduplication for a batch of points (JSON strings). Returns representative centroid objects.
 	 */
-	async createNeuron(coordinates) {
+	dedupePoints(points, resolution) {
 
-		const result = await this.conn.query('INSERT INTO neurons () VALUES ()');
-		const newNeuronId = result[0].insertId;
-		console.log('newNeuronId', newNeuronId);
+		// 1) Parse and normalize input points
+		//    - Keep dims sorted to form a stable dimension-key per point
+		//    - Precompute grid coordinates per dimension using the provided resolution
+		const parsed = points.map(str => {
+			const point = JSON.parse(str);
+			const dims = Object.keys(point).sort();
+			return {
+				point,
+				dims,
+				dimKey: dims.join('|'),
+				grid: dims.map(d => Math.floor(point[d] / resolution))
+			};
+		});
 
-		const params = Object.entries(coordinates).map(([dimName, value]) => [newNeuronId, this.dimensionNameToId[dimName], value]);
-		await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [params]);
+		// 2) Group points by their dimension set so we only compare like-with-like
+		const groups = parsed.reduce((acc, entry) => (
+			acc.set(entry.dimKey, (acc.get(entry.dimKey) || []).concat(entry))
+		), new Map());
 
-		console.log(`created new neuron ${newNeuronId} with coordinates ${JSON.stringify(coordinates)}`);
-		return newNeuronId;
+		// Helper: generate neighbor offsets in {-1,0,1}^k functionally
+		const enumerateOffsets = k => Array.from({ length: k })
+			.reduce((acc) => [-1, 0, 1].flatMap(o => acc.map(a => [...a, o])), [[]]);
+
+		// Helper: for a cells map, find an existing representative within resolution among neighboring cells
+		const findMergeTarget = (cells, grid, dims, point) =>
+			enumerateOffsets(dims.length)
+				.map(offset => grid.map((g, i) => g + offset[i]).join(','))
+				.map(key => cells.get(key) || [])
+				.flat()
+				.find(rep => dims.every(d => Math.abs(rep.centroid[d] - point[d]) <= resolution)) || null;
+
+		// 3) For each dimension group, fold points into a sparse grid of representatives and return them.
+		// Final list of de-duped centroids to create neurons for.
+		return Array.from(groups.values()).flatMap(entries => {
+			// cells: Map<cellKey, Array<{ centroid, weight }>>
+			const cells = entries.reduce((cellMap, { point, dims, grid }) => {
+				const target = findMergeTarget(cellMap, grid, dims, point);
+				if (target) {
+					// Incremental weighted mean (equal weights here)
+					const w0 = target.weight || 1;
+					const w1 = 1;
+					const w = w0 + w1;
+					target.centroid = dims.reduce((agg, d) => ({
+						...agg,
+						[d]: (target.centroid[d] * w0 + point[d] * w1) / w,
+					}), target.centroid);
+					target.weight = w;
+					return cellMap;
+				}
+				const key = grid.join(',');
+				const nextList = (cellMap.get(key) || []).concat({ centroid: { ...point }, weight: 1 });
+				cellMap.set(key, nextList);
+				return cellMap;
+			}, new Map());
+
+			return Array.from(cells.values()).flat().map(rep => rep.centroid);
+		});
 	}
 
 	/**
@@ -530,9 +595,6 @@ export default class Brain {
 			// store as pattern { centroid, neuron_ids }
 			patterns.push({ centroid, neuron_ids: clusterStrengths.map(m => m.neuron_id) });
 		}
-
-		// TODO: deduplicate the resulting peak centroids by clustering/merging near-duplicates within resolution so that we won't create unnecessary higher level neurons.
-		const resolution = this.getResolution(level);
 
 		// return the patterns as { centroid, neuron_ids }
 		console.log(`calculated ${patterns.length} potential patterns.`);
