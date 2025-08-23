@@ -11,7 +11,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS connections;
 -- DROP TABLE IF EXISTS patterns;
 -- DROP TABLE IF EXISTS active_neurons;
--- DROP TABLE IF EXISTS predicted_neurons;
+-- DROP TABLE IF EXISTS predicted_connections;
 
 -- dimensions table determines input/output mapping
 CREATE TABLE IF NOT EXISTS dimensions (
@@ -82,15 +82,13 @@ CREATE TABLE IF NOT EXISTS active_neurons (
 ) ENGINE=MEMORY;
 
 -- predicted connections - potential future states (MEMORY table)
-CREATE TABLE IF NOT EXISTS predicted_neurons (
-    pattern_neuron_id BIGINT UNSIGNED NOT NULL,   -- predicting pattern neuron
-    connection_id BIGINT UNSIGNED NOT NULL,       -- predicted connection that did not occur yet
-    level INT NOT NULL,                           -- predicted level
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,      -- how long prediction exists - higher levels age slower
-    prediction_strength DOUBLE NOT NULL,          -- confidence of prediction
-    PRIMARY KEY (pattern_neuron_id, connection_id, level, age),
+CREATE TABLE IF NOT EXISTS predicted_connections (
+    pattern_neuron_id BIGINT UNSIGNED NOT NULL,     -- id of the predicting active pattern neuron
+    connection_id BIGINT UNSIGNED NOT NULL,         -- predicted connection that did not occur yet
+    level TINYINT NOT NULL,  					    -- level of the predicting active pattern neuron
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,        -- the age of the prediction - higher levels age slower
+    prediction_strength DOUBLE NOT NULL,            -- confidence of prediction
+    PRIMARY KEY (pattern_neuron_id, connection_id), -- different levels/ages predicting the same connection just resets the age and strengthens the connection
     INDEX idx_prediction_aging (age),
     INDEX idx_prediction_validation (connection_id)
 ) ENGINE=MEMORY;
-
-select pow(10, 2);
