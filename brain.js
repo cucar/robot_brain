@@ -100,7 +100,7 @@ export default class Brain {
 
 		// deactivate aged-out neurons, but age higher level neurons slower than the lower level neurons
 		// if level 0 max age = 10, level 1 max age = 100, level 2 is 1000, etc.
-		await this.conn.query('DELETE FROM active_neurons WHERE age >= pow(?, level + 1)', [this.baseNeuronMaxAge]);
+		await this.conn.query('DELETE FROM active_neurons WHERE age >= (? * (level + 1))', [this.baseNeuronMaxAge]);
 	}
 
 	/**
@@ -116,12 +116,12 @@ export default class Brain {
             UPDATE patterns p
             JOIN predicted_connections pc ON p.pattern_neuron_id = pc.pattern_neuron_id AND p.connection_id = pc.connection_id
             SET p.strength = p.strength - ?
-            WHERE pc.age >= POW(?, pc.level + 1)
+            WHERE pc.age >= (? * (pc.level + 1))
 		`, [this.negativeLearningRate, this.baseNeuronMaxAge]);
 
 		// delete aged-out predictions, but age higher level neurons slower than the lower level neurons
 		// if level 0 max age = 10, level 1 max age = 100, level 2 is 1000, etc.
-		await this.conn.query(`DELETE FROM predicted_connections WHERE age >= POW(?, level + 1)`, [this.baseNeuronMaxAge]);
+		await this.conn.query(`DELETE FROM predicted_connections WHERE age >= (? * (level + 1))`, [this.baseNeuronMaxAge]);
 	}
 
 	/**
