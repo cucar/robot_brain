@@ -319,9 +319,7 @@ export default class Brain {
 
 		// now get the neuron ids whose strength exceeds its neighborhood - those are the peaks
 		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
-
-		// if there are no peaks found in the level, no patterns to process - return false to indicate that we're done
-		if (peakNeuronIds.length === 0) return false;
+		if (peakNeuronIds.length === 0) return false; // if there are no peaks found in the level, no patterns to process - return false to indicate that we're done
 
 		// get a map from peak neuron ids to the connection ids it uses
 		const peakConnections = this.getPeakNeuronsConnections(peakNeuronIds, neighborhoodMap, connections);

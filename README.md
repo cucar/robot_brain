@@ -1,14 +1,17 @@
 # Machine Intelligence Engine
 
-This document describes the current implemented design, aligned with the code in `brain.js` and the MySQL schema in `db/db.sql`. It also outlines the planned Prediction workflow and inter-level connections.
+This document describes the current implemented spatio-temporal predictive learning architecture, aligned with the code in `brain.js` and the MySQL schema in `db/db.sql`.
 
 ## Overview
 
-- The system learns sparse, high-dimensional patterns from input frames by creating and adapting neurons with coordinates over named dimensions (e.g., `x`, `y`, `r`, `g`, `b`).
-- Within each frame, neurons that co-activate at the same level form undirected connections whose strengths reflect observation counts adjusted by temporal age.
-- Peaks are selected among newly activated neurons using a neighborhood-comparison heuristic. Each peak and its strongly connected neighbors define a cluster. A weighted centroid of cluster members becomes the next-level point for recursive processing.
-- New neurons are created for points that have no close-enough match at the current level. Existing neurons adapt their coordinates toward matched observations.
-- A periodic forgetting cycle decays connection strengths and prunes zero-strength edges.
+The Machine Intelligence Engine implements a **Hierarchical Spatio-Temporal Pattern Learning System** that:
+
+- **Learns multi-dimensional patterns** from input frames by creating neurons with coordinates over named dimensions (e.g., `x`, `y`, `r`, `g`, `b`, or any custom dimensions)
+- **Forms directed temporal connections** between neurons based on their temporal distance (age difference), enabling sequence learning and prediction
+- **Discovers spatial patterns** through peak detection in connection strength neighborhoods, forming higher-level pattern neurons
+- **Generates predictions** by decomposing learned patterns back to base neurons and predicting future connections
+- **Adapts continuously** through reinforcement learning with positive/negative feedback for accurate/inaccurate predictions
+- **Forgets unused patterns** through periodic decay cycles to prevent overfitting and maintain relevance
 
 ## Key Files
 
@@ -19,109 +22,193 @@ This document describes the current implemented design, aligned with the code in
 
 ## MySQL Schema (Implemented)
 
-Tables reflect the current code and are different from the early design draft:
+The current implementation uses a unified schema optimized for spatio-temporal pattern learning:
 
-- `dimensions(id, name)`
-- `neurons(id, creation_time)`
-- `coordinates(neuron_id, dimension_id, val)`
-- `connections(neuron1_id, neuron2_id, strength)`
-  - Undirected by convention: `neuron1_id = LEAST(a,b)`, `neuron2_id = GREATEST(a,b)`
-  - `strength` is the accumulated co-activation count (decayed in forgetting)
-- `patterns(parent_id, child_id, strength)`
-  - Stores inter-level (higher→lower) pattern links for prediction (planned usage)
-- `active_neurons(neuron_id, level, age)` ENGINE=MEMORY
+### Core Tables
+- **`dimensions(id, name)`** - Defines input/output coordinate space (e.g., 'x', 'y', 'r', 'g', 'b')
+- **`neurons(id)`** - Universal neuron storage (base neurons and pattern neurons use same table)
+- **`coordinates(neuron_id, dimension_id, val)`** - Stores dimensional values for base neurons
 
-Note: Earlier draft tables such as `potential_peaks`, `suppressed_neurons`, or directed `connections(source_id, target_id, observation_count)` are not used in the implementation.
+### Connection Architecture
+- **`connections(id, from_neuron_id, to_neuron_id, distance, strength)`** 
+  - **Directed temporal connections**: `from_neuron_id` → `to_neuron_id`
+  - **`distance`**: Temporal separation (0=spatial co-occurrence, 1=immediate sequence, 2=next step, etc.)
+  - **`strength`**: Connection weight (reinforced by observations, decayed by forgetting)
+  
+### Pattern Learning
+- **`patterns(pattern_neuron_id, connection_id, strength)`**
+  - Links pattern neurons to the connection patterns they represent
+  - Enables hierarchical decomposition and prediction generation
+
+### Memory Tables (ENGINE=MEMORY)
+- **`active_neurons(neuron_id, level, age)`** - Currently active neurons in sliding window
+  - **`level`**: Hierarchical level (0=base, 1=patterns of base, 2=patterns of patterns, etc.)
+  - **`age`**: Frames since activation (higher levels age slower)
+- **`predicted_connections(pattern_neuron_id, connection_id, level, age, prediction_strength)`**
+  - Active predictions waiting for validation
+  - Enables reinforcement learning through prediction accuracy
 
 ## Hyperparameters (brain.js)
 
-- `neuronMaxAge`: Frames an active neuron remains in the sliding window (default 10)
-- `decayRate`: Forget cycle period in frames (default 1000)
-- `adaptationSpeed`: Coordinate learning rate toward observed points (default 0.1)
-- `maxLevel`: Maximum recursive clustering depth per frame (default 6)
-- `maxResolution`: Highest-level matching tolerance exponent (default 2)
-- `peakMinStrength`: Minimum connection strength to be considered a peak (default 3)
-- `peakMinRatio`: Neighborhood ratio threshold for peaks (default 1.5)
+- **`baseNeuronMaxAge`**: Base frames a neuron stays active (default 10, higher levels age slower)
+- **`forgetCycles`**: Frames between forget cycles (default 1000)
+- **`forgetRate`**: Connection strength decay per forget cycle (default 0.1)
+- **`positiveLearningRate`**: Pattern strength increase for correct predictions (default 0.1)
+- **`negativeLearningRate`**: Pattern strength decrease for failed predictions (default 0.1)
+- **`maxLevels`**: Maximum hierarchical depth to prevent infinite recursion (default 6)
 
-## Per-Frame Processing (Implemented)
+## Frame Processing Workflow
 
-Called via `await brain.observeFrame(frame)`, where `frame` is an array of points like `{ x: 0.10, y: 0.20, r: 1, g: 0, b: 0 }`.
+The system processes input through `await brain.processFrame(frame)` where `frame` is an array of coordinate objects.
 
-1) Active Window Maintenance
-- Increment `age` of all active neurons; remove ones older than `neuronMaxAge`.
+### 1. Active Window Management
+- **Age neurons**: Increment age of all active neurons and predictions
+- **Sliding window**: Remove neurons/predictions older than `baseNeuronMaxAge * (level + 1)`
+- **Prediction validation**: Penalize predictions that didn't occur (negative learning)
 
-2) Multi-Level Loop per Frame
-- Initialize `level = 0`, `levelPoints = frame`, and `clusters = {}` (map from centroid JSON to ingredient neuron ids of the previous level).
-- For each level until no pattern is found:
-  - Matching and Creation
-    - Compute resolution: `resolution = 10^(level - (maxResolution + maxLevel))`.
-    - For each point in `levelPoints`, fetch candidate neurons within `±resolution` per dimension.
-    - Pick closest among candidates by Euclidean distance restricted to observed dimensions; accept if `distance <= resolution`.
-    - For points without acceptable matches, create new neurons with `coordinates` from the point. Creation is batched and deduplicated per level via a grid keyed by `resolution`.
-  - Activation
-    - Activate all matched or created neuron ids in `active_neurons` with `{ level, age: 0 }`.
-  - Coordinate Adaptation
-    - For each matched neuron, update `coordinates.val` toward the mean of observed values across the frame using `adaptationSpeed` with a single CASE-based `UPDATE` per frame.
-  - Intra-Level Connection Reinforcement
-    - Insert or update undirected `connections(neuron1_id, neuron2_id)` among all active neurons with `age = 0` at the same `level`.
-    - Increment by `SUM(1/(1 + target.age))` to reflect co-activation proximity; direction is ignored.
-  - Peak Detection and Cluster Centroids
-    - Compute each active neuron's total incident strength from `connections` among active neurons at this level.
-    - For a neuron to be a peak: `strength >= peakMinStrength` and `strength >= peakMinRatio * avg(neighbor strengths)`.
-    - For each peak, form a cluster: the peak plus its directly connected active neighbors. Use undirected connection strengths as soft weights.
-    - Compute a weighted centroid across dimensions using a streaming mean. This centroid is the next-level point.
-  - Next-Level Seeds
-    - If no clusters found, stop. Otherwise set `levelPoints = patterns.map(p => p.centroid)` and `clusters = { centroidJSON: neuron_ids }` for the next level.
+### 2. Base Neuron Activation
+- **Exact matching**: Find existing neurons with identical coordinate values across all dimensions
+- **Neuron creation**: Bulk create new neurons for unmatched input points (with deduplication)
+- **Activation**: Add matched/created neurons to `active_neurons` at level 0, age 0
+- **Connection reinforcement**: Create directed temporal connections from older neurons (age > 0) to new neurons (age = 0)
 
-3) Forgetting (Periodic)
-- Every `decayRate` frames: decrement `connections.strength` by 1 and delete edges with `strength <= 0`.
-- Planned: prune isolated neurons after removing edges; currently not implemented.
+### 3. Hierarchical Pattern Discovery
+For each level (0 to `maxLevels`):
 
-4) Predictions (Temporarily Stubbed)
-- The system collects `predictedNeuronIds` during per-level processing but does not compute or return predictions yet. A log statement exists as a placeholder.
+#### Connection Analysis
+- **Get active connections**: Retrieve directed connections flowing into newly activated neurons
+- **Prediction validation**: Reward patterns that correctly predicted these connections (positive learning)
+- **Strength calculation**: Compute total connection strength for each neuron (bidirectional)
+
+#### Peak Detection & Pattern Formation
+- **Neighborhood mapping**: Build bidirectional connectivity graphs
+- **Peak identification**: Find neurons whose strength exceeds their neighborhood average
+- **Pattern matching**: Match peak connection signatures to existing pattern neurons
+- **Pattern creation**: Create new pattern neurons for novel connection patterns
+- **Pattern reinforcement**: Strengthen pattern-connection associations for observed patterns
+
+#### Higher-Level Activation
+- **Pattern activation**: Activate matching/created pattern neurons at level+1
+- **Hierarchical connections**: Form connections between pattern neurons at higher level
+- **Prediction generation**: Generate predictions for inactive connections of active patterns
+
+### 4. Prediction System
+- **Pattern decomposition**: Recursively decompose pattern neurons to base neurons using CTE queries
+- **Temporal organization**: Organize predictions by temporal distance for sequence forecasting
+- **Confidence scoring**: Weight predictions by pattern strength and decomposition path
+- **Return format**: Structured predictions with coordinates, confidence, and temporal distance
+
+### 5. Forgetting Cycle (Periodic)
+- **Connection decay**: Reduce all connection and pattern strengths by `forgetRate`
+- **Pruning**: Remove connections/patterns with strength ≤ 0
+- **Neuron cleanup**: Delete orphaned neurons with no connections, patterns, or active state
 
 ## Channels
 
 The `channels/*` directory contains placeholder classes for `VisionChannel`, `AudioChannel`, `TextChannel`, and `SlopeChannel` that illustrate how raw inputs could be mapped to named dimensions. They are not integrated into the main processing path; `main.js` feeds normalized sample frames directly.
 
-## Differences From Early Design Draft
+## Key Architecture Changes
 
-- Edges are undirected (`connections(neuron1_id, neuron2_id)`), not directed `source→target`.
-- No SQL-driven phased temporary tables (`potential_peaks`, `suppressed_neurons`, etc.). Peak detection and centroids are computed with ad-hoc queries and in-memory aggregation in `brain.js`.
-- Pattern formation is local to the active set at a single level per frame; no global greedy suppression table is used.
-- Interneurons are not typed separately; all neurons share the same `neurons` table and are used across levels. Higher-level “concepts” emerge via centroids and matching resolution, not by explicit neuron types.
+The implementation evolved significantly from the original design:
 
-## Predictions (Planned)
+### Connection Model
+- **Directed temporal connections** instead of undirected co-occurrence
+- **Distance-based encoding** for temporal relationships (0=spatial, 1+=temporal sequence)
+- **Unified connection table** handles both spatial and temporal relationships
 
-The following features are planned and partially scaffolded by the `patterns` table and TODOs in `brain.js`:
+### Pattern Learning
+- **Connection-based patterns** instead of coordinate-based centroids
+- **Peak detection** in connection strength neighborhoods
+- **Pattern neurons** linked to connection signatures rather than coordinate clusters
+- **Hierarchical decomposition** through recursive pattern-connection relationships
 
-- Handle predictions end-to-end and return a map `{ neuronId: count }` sorted by descending count; log the predicted ids.
-- Strengthen inter-level connections (patterns)
-  - When a higher-level neuron is matched/created from a cluster of lower-level neurons, reinforce `patterns(parent=high, child=low)` for that cluster.
-  - When a higher-level neuron activates, all its children should activate; normally children activate the parent, but prior learning allows partial evidence to trigger the parent which then fans out to children.
-- Generate predictions from inter-level links
-  - For activated higher-level neurons, fetch their historical children (from `patterns`). Children not already active in this frame become predictions. Return these as the predicted neuron ids.
-- Forgetting for inter-level links
-  - Decay `patterns.strength` periodically; before deleting entries whose `strength` decays to zero, capture involved neuron ids to optionally prune orphaned neurons.
-- Matching continues to use centroid-to-neuron proximity per level; after matching at level N:
-  - First, reinforce inter-level links from level N−1 cluster children to the level N parent neuron.
-  - Then, collect other historically linked level N−1 children of that parent; the ones not active are predictions.
-- Storage location for inter-level links
-  - Use the dedicated `patterns(parent_id, child_id, strength)` table (preferable to overloading `connections`).
+### Prediction System
+- **Fully implemented end-to-end predictions** with confidence scoring
+- **Temporal sequence forecasting** organized by temporal distance
+- **Reinforcement learning** through prediction accuracy feedback
+- **Pattern decomposition** using recursive SQL queries to find base neurons
 
-## Running the Example
+### Memory Architecture
+- **Sliding window** with level-dependent aging (higher levels age slower)
+- **Active predictions table** for tracking and validating forecasts
+- **Bulk operations** optimized for high-performance real-time processing
 
-1) Ensure MySQL is running and apply `db/db.sql`.
-2) Configure DB access in `db/db.js` if needed.
-3) Run: `node main.js`
+## Usage Examples
 
-The sample frames in `main.js` send a couple of simple, normalized RGB points. You should see logs for neuron creation, activation, connection reinforcement, detected patterns, and the (stub) predicted ids list.
+### Basic Setup
+```bash
+# 1. Ensure MySQL is running and apply schema
+mysql -u root -p < db/db.sql
 
-## Next Steps
+# 2. Configure database connection in db/db.js if needed
 
-- Implement inter-level `patterns` reinforcement in `activateFrameNeurons` using the `clusters` map from the previous level.
-- Implement prediction extraction and aggregation, returning `{ neuronId: count }` and logging sorted ids.
-- Implement `patterns` decay and optional orphan-pruning in `runForgetCycle`.
-- Integrate channels to produce frames for `observeFrame`.
+# 3. Run the basic example
+node main.js
+```
+
+### Example Applications
+
+The system supports multiple learning scenarios:
+
+#### 1. **Sequence Learning** (Text Processing)
+```javascript
+// Learn character sequences like "cats"
+const letterCoords = {
+    'c': {d0: 0.1}, 'a': {d0: 0.2}, 
+    't': {d0: 0.3}, 's': {d0: 0.4}
+};
+
+// Train on repeated sequences
+for (const letter of "cats") {
+    const predictions = await brain.processFrame([letterCoords[letter]]);
+    // System learns temporal patterns and predicts next letters
+}
+```
+
+#### 2. **Multi-dimensional Pattern Recognition** (Market Analysis)
+```javascript
+// Learn market patterns with multiple indicators
+const marketFrame = [{
+    d0: 0.05,  // price change
+    d1: 0.03,  // volume change  
+    d2: 0.02   // volatility
+}];
+
+const predictions = await brain.processFrame(marketFrame);
+// Returns predictions organized by temporal distance
+```
+
+#### 3. **Motor Control Sequences**
+```javascript
+// Learn movement patterns
+const reachSequence = [
+    { motor0: 0.0, motor1: 0.0, motor2: 0.0 }, // rest
+    { motor0: 0.3, motor1: 0.0, motor2: 0.0 }, // extend
+    { motor0: 0.3, motor1: 0.4, motor2: 0.0 }, // flex
+    { motor0: 0.3, motor1: 0.4, motor2: 0.2 }  // grasp
+];
+
+// System learns the sequence and predicts next movements
+```
+
+### Prediction Output Format
+```javascript
+{
+    distance: 1,           // temporal distance (frames ahead)
+    strength: 0.85,        // average confidence
+    predictions: [{
+        coordinates: { x: 0.1, y: 0.2 },
+        confidence: 0.9    // prediction confidence
+    }]
+}
+```
+
+## Performance Characteristics
+
+- **Real-time processing**: Optimized for high-frequency input streams
+- **Hierarchical scaling**: Higher-level patterns emerge automatically
+- **Memory efficiency**: Sliding window prevents unbounded growth
+- **Adaptive learning**: Continuous reinforcement through prediction accuracy
+- **Bulk operations**: Database-optimized for concurrent pattern processing
 
 
