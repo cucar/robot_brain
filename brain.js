@@ -308,21 +308,9 @@ export default class Brain {
 		// before processing new patterns, check if any of these newly active connections were predicted
 		await this.validatePredictedConnections(connections);
 
-		// get the neuron strengths from the active connections (both ways - from and to)
-		const neuronStrengths = this.getNeuronStrengths(connections);
-
-		// get the neighborhood map for each neuron from its connections
-		const neighborhoodMap = this.buildNeighborhoodMap(connections);
-
-		// calculate the neighborhood average strength of each neuron. for each neuron, we need to calculate the strengths of its connected neurons.
-		const neighborhoodStrengths = this.getNeighborhoodStrengths(neighborhoodMap, neuronStrengths);
-
-		// now get the neuron ids whose strength exceeds its neighborhood - those are the peaks
-		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
-		if (peakNeuronIds.length === 0) return false; // if there are no peaks found in the level, no patterns to process - return false to indicate that we're done
-
-		// get a map from peak neuron ids to the connection ids it uses
-		const peakConnections = this.getPeakNeuronsConnections(peakNeuronIds, neighborhoodMap, connections);
+		// cluster connections around peaks
+		const peakConnections = this.detectPeaks(connections);
+		if (peakConnections.size === 0) return false; // if there are no peaks found in the level, no patterns to process - return false to indicate that we're done
 
 		// match peak neurons with their connections to known patterns using their connection ids. get all pattern neuron ids that use the connection ids.
 		const peakPatterns = await this.matchPatternNeurons(peakConnections);
@@ -386,6 +374,29 @@ export default class Brain {
 
 		// delete the predictions that came true
 		await this.conn.query('DELETE FROM predicted_connections WHERE connection_id IN (?)', [activeConnectionIds]);
+	}
+
+	/**
+	 * Generic peak detection that works for both active and predicted connections
+	 * @param {Array} connections - Array of connection objects with strength property
+	 * @returns {Map} Map of peak neuron IDs to their connection IDs
+	 */
+	detectPeaks(connections) {
+
+		// get the neuron strengths from the active connections (both ways - from and to)
+		const neuronStrengths = this.getNeuronStrengths(connections);
+
+		// get the neighborhood map for each neuron from its connections
+		const neighborhoodMap = this.buildNeighborhoodMap(connections);
+
+		// calculate the neighborhood average strength of each neuron. for each neuron, we need to calculate the strengths of its connected neurons.
+		const neighborhoodStrengths = this.getNeighborhoodStrengths(neighborhoodMap, neuronStrengths);
+
+		// now get the neuron ids whose strength exceeds its neighborhood - those are the peaks
+		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
+
+		// get a map from peak neuron ids to the connection ids it uses and return them
+		return this.getPeakNeuronsConnections(peakNeuronIds, neighborhoodMap, connections);
 	}
 
 	/**
@@ -665,9 +676,168 @@ export default class Brain {
 	}
 
 	/**
-	 * Gets all predicted base neurons directly from predicted_connections,
-	 * organized by temporal distance
-	 * @returns {Array} Array of predicted frames organized by temporal distance
+	 * returns a simplified view of predicted frames with predictions using peak clustering
+	 */
+	async getPredictedFrames() {
+
+		// get predicted connections in the same format as active connections
+		const predictedConnections = await this.getPredictedConnections();
+		if (predictedConnections.length === 0) return [];
+
+		// Use the generic peak detection method
+		const peakConnections = this.detectPeaks(predictedConnections);
+
+		// Organize by temporal distance
+		const peakClusters = await this.organizePredictedPeaksByTime(peakConnections, predictedConnections);
+		if (peakClusters.length === 0) return [];
+
+		// get predictions using peak clustering approach
+		const stockPredictions = await this.getStockPredictionsFromPeaks();
+
+		// return the frames from predictions in the expected format
+		return stockPredictions.map(frame => ({
+			distance: frame.days_ahead,
+			strength: frame.total_confidence,
+			predictions: frame.predictions.map(p => ({
+				from_coordinates: p.from_state,
+				to_coordinates: p.to_state,
+				confidence: p.confidence / frame.total_confidence
+			}))
+		}));
+	}
+
+	/**
+	 * returns predicted connections
+	 */
+	async getPredictedConnections() {
+		const [rows] = await this.conn.query(`
+			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, pc.prediction_strength as strength, pc.age as prediction_age
+			FROM predicted_connections pc
+			JOIN connections c ON pc.connection_id = c.id
+			WHERE pc.prediction_strength > 0
+			ORDER BY pc.prediction_strength DESC
+		`);
+		return rows;
+	}
+
+	/**
+	 * Organizes predicted peaks by temporal distance
+	 * returns an array of prediction frames organized by temporal distance
+	 * @param {Map} peakConnections - Map of peak neuron IDs to their connection IDs
+	 * @param {Array} allPredictedConnections - All predicted connections data
+	 */
+	organizePredictedPeaksByTime(peakConnections, allPredictedConnections) {
+		const timeFrames = new Map();
+		
+		for (const [peakNeuronId, connectionIds] of peakConnections) {
+
+			// Find all connections involving this peak neuron
+			const peakConnData = allPredictedConnections.filter(conn => connectionIds.includes(conn.id));
+			
+			for (const conn of peakConnData) {
+
+				// get the steps remaining until connection happens
+				const timeKey = conn.distance - conn.prediction_age;
+
+				if (!timeFrames.has(timeKey)) {
+					timeFrames.set(timeKey, {
+						days_ahead: timeKey,
+						peak_clusters: [],
+						total_strength: 0,
+						neuron_count: 0
+					});
+				}
+				
+				const frame = timeFrames.get(timeKey);
+				
+				// Add this peak cluster to the time frame
+				frame.peak_clusters.push({
+					peak_neuron_id: peakNeuronId,
+					connection_data: conn,
+					cluster_strength: conn.strength
+				});
+				
+				frame.total_strength += conn.strength;
+				frame.neuron_count++;
+			}
+		}
+		
+		// Convert to array and calculate averages
+		const frames = Array.from(timeFrames.values()).map(frame => ({
+			...frame,
+			avg_frame_strength: frame.neuron_count > 0 ? frame.total_strength / frame.neuron_count : 0,
+			// Sort clusters within each frame by strength
+			peak_clusters: frame.peak_clusters.sort((a, b) => b.cluster_strength - a.cluster_strength)
+		}));
+		
+		// Sort frames by temporal distance
+		return frames.sort((a, b) => a.days_ahead - b.days_ahead);
+	}
+
+	/**
+	 * Gets stock predictions from predicted peak clusters
+	 * Extracts coordinates from peak neurons and organizes by temporal distance
+	 * @returns {Array} Array of stock predictions organized by days ahead
+	 */
+	async getStockPredictionsFromPeaks() {
+		console.log('Getting stock predictions from predicted peak clusters...');
+		
+		// For each time frame, get coordinates of the peak neurons
+		const stockPredictions = [];
+		
+		for (const frame of peakClusters) {
+			const predictions = [];
+			
+			for (const cluster of frame.peak_clusters) {
+				// Get coordinates for both from and to neurons of predicted connections
+				const [fromCoords] = await this.conn.query(`
+					SELECT GROUP_CONCAT(DISTINCT CONCAT(d.name, ':', coord.val) ORDER BY d.name) as coordinates
+					FROM coordinates coord
+					INNER JOIN dimensions d ON coord.dimension_id = d.id
+					WHERE coord.neuron_id = ?
+				`, [cluster.connection_data.from_neuron_id]);
+				
+				const [toCoords] = await this.conn.query(`
+					SELECT GROUP_CONCAT(DISTINCT CONCAT(d.name, ':', coord.val) ORDER BY d.name) as coordinates
+					FROM coordinates coord
+					INNER JOIN dimensions d ON coord.dimension_id = d.id
+					WHERE coord.neuron_id = ?
+				`, [cluster.connection_data.to_neuron_id]);
+				
+				// Parse coordinates
+				const parseCoordinates = (coordStr) => {
+					const coords = {};
+					if (coordStr) {
+						coordStr.split(',').forEach(pair => {
+							const [dim, val] = pair.split(':');
+							coords[dim] = parseFloat(val);
+						});
+					}
+					return coords;
+				};
+				
+				predictions.push({
+					from_state: parseCoordinates(fromCoords[0]?.coordinates),
+					to_state: parseCoordinates(toCoords[0]?.coordinates),
+					confidence: cluster.cluster_strength,
+					peak_neuron_id: cluster.peak_neuron_id
+				});
+			}
+			
+			stockPredictions.push({
+				days_ahead: frame.days_ahead,
+				predictions: predictions,
+				total_confidence: frame.avg_frame_strength,
+				cluster_count: frame.peak_clusters.length
+			});
+		}
+		
+		return stockPredictions;
+	}
+
+	/**
+	 * gets all predicted base neurons directly from predicted_connections, organized by temporal distance.
+	 * returns an array of predicted frames organized by temporal distance.
 	 */
 	async getPredictedBaseNeurons() {
 		console.log('Getting predicted base neurons with direct CTE query...');
@@ -686,7 +856,7 @@ export default class Brain {
 					c.distance as temporal_distance,
 					c.strength as connection_strength
 				FROM predicted_connections pc
-				INNER JOIN connections c ON pc.connection_id = c.id
+				JOIN connections c ON pc.connection_id = c.id
 				WHERE pc.prediction_strength > 0
 			),
 			neuron_decomposition AS (
@@ -719,8 +889,8 @@ export default class Brain {
 					nd.prediction_level,
 					nd.decomposition_level + 1
 				FROM neuron_decomposition nd
-				INNER JOIN patterns p ON p.pattern_neuron_id = nd.neuron_id
-				INNER JOIN connections c ON p.connection_id = c.id
+				JOIN patterns p ON p.pattern_neuron_id = nd.neuron_id
+				JOIN connections c ON p.connection_id = c.id
 				WHERE nd.decomposition_level < 10
 				
 				UNION
@@ -810,23 +980,5 @@ export default class Brain {
 		return frames.sort((a, b) => a.temporal_distance - b.temporal_distance);
 	}
 
-	/**
-	 * returns a simplified view of predicted frames with predictions
-	 */
-	async getPredictedFrames() {
-
-		// get all predictions organized by time
-		const allPredictions = await this.getPredictedBaseNeurons();
-
-		// return the frames from predictions
-		return allPredictions.map(frame => ({
-			distance: frame.temporal_distance,
-			strength: frame.avg_frame_strength,
-			predictions: frame.neurons.map(n => ({
-				coordinates: n.coordinates,
-				confidence: n.strength / frame.total_strength
-			}))
-		}));
-	}
 
 }
