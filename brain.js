@@ -20,6 +20,32 @@ export default class Brain {
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
+
+		// initialize channel registry
+		this.channels = new Map();
+		
+		// used for global activity tracking so that we can trigger exploration when all channels are inactive
+		this.lastActivity = -1; // frame number of last activity across all channels
+		this.frameNumber = 0;
+		this.inactivityThreshold = 5; // frames of inactivity before exploration
+	}
+
+	/**
+	 * Register a channel with the brain
+	 */
+	registerChannel(name, channelClass) {
+		const channel = new channelClass(name);
+		this.channels.set(name, channel);
+		console.log(`Registered channel: ${name} (${channelClass.name})`);
+	}
+
+	/**
+	 * Reset brain context for clean episode start - this is like waking up the next morning after sleep
+	 */
+	async resetContext() {
+		console.log('Resetting brain context...');
+		await this.conn.query('DELETE FROM active_neurons');
+		await this.conn.query('DELETE FROM predicted_connections');
 	}
 
 	/**
@@ -30,8 +56,30 @@ export default class Brain {
 		// get new connection to the database
 		this.conn = await db.getConnection();
 
+		// create dimensions for all registered channels
+		await this.initializeChannelDimensions();
+
 		// load the dimensions
 		await this.loadDimensions();
+	}
+
+	/**
+	 * Initialize dimensions for all registered channels
+	 */
+	async initializeChannelDimensions() {
+		console.log('Initializing dimensions for registered channels...');
+		
+		for (const [channelName, channel] of this.channels) {
+			const dimensions = channel.getDimensions();
+			console.log(`Creating dimensions for ${channelName}:`, dimensions);
+			
+			for (const dimName of dimensions) {
+				await this.conn.query(
+					'INSERT IGNORE INTO dimensions (name) VALUES (?)',
+					[dimName]
+				);
+			}
+		}
 	}
 
 	/**
@@ -50,10 +98,86 @@ export default class Brain {
 	}
 
 	/**
+	 * Process frames in a loop until all channels are exhausted
+	 * Channels execute their own outputs and provide feedback based on state changes
+	 */
+	async processFrames() {
+		while (true) {
+			
+			// Get combined frame from all channels
+			const frame = await this.getFrame();
+			
+			// If no input data from any channel, we're done
+			if (!frame || frame.length === 0) {
+				console.log('Completed processing. no more channel data.');
+				return;
+			}
+			
+			console.log(`Processing frame: ${frame.length} neurons`);
+			
+			// Process the frame through the brain (includes output execution)
+			await this.processFrame(frame);
+		}
+	}
+
+	/**
+	 * Handle global exploration when ALL channels are inactive
+	 */
+	curiosityExploration() {
+
+		// Increment frame counter to be able to track inactivity
+		this.frameNumber++;
+
+		// Check if the brain is inactive - if some channel is active, no exploration needed
+		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return [];
+
+		// All channels inactive - trigger exploration on a random channel
+		const channelNames = Array.from(this.channels.keys());
+		if (channelNames.length === 0) return [];
+
+		// pick a random channel
+		const randomChannelName = channelNames[Math.floor(Math.random() * channelNames.length)];
+		const randomChannel = this.channels.get(randomChannelName);
+
+		// get exploration actions for the channel - if there are no valid actions, skip exploration for now, we'll try next time
+		const validActions = randomChannel.getValidExplorationActions();
+		if (validActions.length === 0) return [];
+
+		// pick a random action
+		const randomAction = validActions[Math.floor(Math.random() * validActions.length)];
+		console.log(`Brain: Global inactivity detected, triggering exploration on ${randomChannelName}:`, randomAction);
+		
+		// Brain manages the activity counter - mark brain as active
+		this.lastActivity = this.frameNumber;
+		
+		// return the random action - this is a point with a value on the output dimension of the channel
+		return [randomAction];
+	}
+
+	/**
+	 * returns the current frame combined from all registered channels
+	 * includes exploration if all channels are inactive
+	 */
+	async getFrame() {
+		const frame = [];
+		
+		// Get input data from all channels
+		for (const [channelName, channel] of this.channels) {
+			const channelFrame = await channel.getFrameData();
+			if (channelFrame && channelFrame.length > 0) frame.push(...channelFrame);
+		}
+		
+		// Add exploration if globally inactive
+		const explorationData = this.curiosityExploration();
+		if (explorationData.length > 0) frame.push(...explorationData);
+		
+		return frame;
+	}
+
+	/**
 	 * processes one frame of input values - this is an array of points [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
 	 */
 	async processFrame(frame) {
-		if (!frame || frame.length === 0) return; // ignore empty frames
 		console.log(`observing new frame: ${JSON.stringify(frame)}`);
 
 		// do the whole thing as a transaction to avoid inconsistent database states
@@ -79,8 +203,19 @@ export default class Brain {
 			await this.conn.commit();
 			console.log('Frame processed successfully.');
 
-			// return the predicted frames
-			return await this.getPredictedFrames();
+			// get the predicted frames for channel execution
+			const predictions = await this.getPredictedFrames();
+
+			// Let each channel execute outputs and update their states
+			for (const [channelName, channel] of this.channels) {
+				const outputs = await channel.executeOutputs(predictions, this.frameNumber);
+				
+				// Track global activity - if any channel produced action outputs, mark brain as active
+				if (outputs && outputs.actions.size > 0) {
+					this.lastActivity = this.frameNumber;
+					console.log(`${channelName} executed actions:`, Array.from(outputs.actions.keys()));
+				}
+			}
 		}
 		catch (error) {
 			await this.conn.rollback();
