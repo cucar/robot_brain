@@ -10,11 +10,12 @@ export default class StockChannel extends Channel {
 		
 		this.symbol = name; // Extract symbol from name (e.g., "AAPL" from name)
 
-		this.positionEntryPrice = null;
-		this.positionEntryFrame = null;
-		this.previousPrice = null; // Track previous price for feedback
-
-		this.state = {}; // for tracking channel-specific state to determine action neurons results like owning a stock
+		// State tracking
+		this.owned = false; // Simple owned flag
+		this.entryPrice = null; // Price when we bought
+		this.holdingFrames = 0; // How long we've held the position
+		this.previousPrice = null; // Track previous price for change calculation
+		this.previousVolume = null; // Track previous volume for change calculation
 
 		// Sample data for testing - in real implementation this would come from CSV or API
 		this.sampleData = [
@@ -22,15 +23,37 @@ export default class StockChannel extends Channel {
 			{ price: 152.5, volume: 1200000 },
 			{ price: 148.0, volume: 800000 },
 			{ price: 151.0, volume: 1100000 },
-			{ price: 149.5, volume: 900000 }
+			{ price: 149.5, volume: 900000 },
+			{ price: 153.0, volume: 1300000 },
+			{ price: 147.0, volume: 900000 },
+			{ price: 155.0, volume: 1500000 }
 		];
 		this.currentDataIndex = 0;
+
+		// Exponential discretization buckets for percentage changes
+		this.priceBuckets = [
+			{ min: -Infinity, max: -50, value: -7 },  // -100%+ to -50%
+			{ min: -50, max: -25, value: -6 },        // -50% to -25%
+			{ min: -25, max: -12.5, value: -5 },      // -25% to -12.5%
+			{ min: -12.5, max: -6.25, value: -4 },    // -12.5% to -6.25%
+			{ min: -6.25, max: -3.125, value: -3 },   // -6.25% to -3.125%
+			{ min: -3.125, max: -1.5625, value: -2 }, // -3.125% to -1.5625%
+			{ min: -1.5625, max: -0.05, value: -1 },  // -1.5625% to -0.05%
+			{ min: -0.05, max: 0.05, value: 0 },      // -0.05% to 0.05% (no change)
+			{ min: 0.05, max: 1.5625, value: 1 },     // 0.05% to 1.5625%
+			{ min: 1.5625, max: 3.125, value: 2 },    // 1.5625% to 3.125%
+			{ min: 3.125, max: 6.25, value: 3 },      // 3.125% to 6.25%
+			{ min: 6.25, max: 12.5, value: 4 },       // 6.25% to 12.5%
+			{ min: 12.5, max: 25, value: 5 },         // 12.5% to 25%
+			{ min: 25, max: 50, value: 6 },           // 25% to 50%
+			{ min: 50, max: Infinity, value: 7 }      // 50%+ to 100%+
+		];
 	}
 
 	getInputDimensions() {
 		return [
-			`${this.symbol}_price`,
-			`${this.symbol}_volume`
+			`${this.symbol}_price_change`, // Discretized percentage change in price
+			`${this.symbol}_volume_change` // Discretized percentage change in volume
 		];
 	}
 
@@ -47,35 +70,28 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get valid exploration actions based on current stock position
+	 * Discretize percentage change into exponential buckets
+	 */
+	discretizePercentageChange(percentChange) {
+		for (const bucket of this.priceBuckets)
+			if (percentChange > bucket.min && percentChange <= bucket.max)
+				return bucket.value;
+		return 0; // Default to no change bucket
+	}
+
+	/**
+	 * Get valid exploration actions based on current stock ownership
 	 * Can't sell if not owned, can't buy if already owned
 	 */
 	getValidExplorationActions() {
-		const validActions = [];
-
-		if (this.position !== 'long') {
-			// Can buy if not already long
-			validActions.push({ [`${this.symbol}_activity`]: 1 }); // Buy action
-		}
-
-		if (this.position === 'long') {
-			// Can sell if currently long
-			validActions.push({ [`${this.symbol}_activity`]: -1 }); // Sell action
-		}
-
-		// If no position, can also go short (sell first)
-		if (this.position !== 'short' && this.position !== 'long') {
-			validActions.push({ [`${this.symbol}_activity`]: -1 }); // Sell/short action
-		}
-
-		return validActions;
+		return [{ [`${this.symbol}_activity`]: (this.owned ? -1 : 1) }]
 	}
 
 	/**
 	 * Get frame input data for this stock channel
 	 */
 	async getFrameInputs() {
-
+		
 		// Return current data point and advance index
 		if (this.currentDataIndex >= this.sampleData.length) {
 			console.log(`${this.symbol}: No more data available`);
@@ -84,17 +100,42 @@ export default class StockChannel extends Channel {
 
 		const currentData = this.sampleData[this.currentDataIndex];
 		this.currentDataIndex++;
-		this.frameNumber++;
+
+		// Calculate percentage changes (skip first frame since no previous data)
+		let priceChange = 0;
+		let volumeChange = 0;
+
+		if (this.previousPrice !== null && this.previousVolume !== null) {
+			priceChange = ((currentData.price - this.previousPrice) / this.previousPrice) * 100;
+			volumeChange = ((currentData.volume - this.previousVolume) / this.previousVolume) * 100;
+		}
+
+		console.log(`${this.symbol}: Price: ${currentData.price} (${priceChange.toFixed(2)}%), Volume: ${currentData.volume} (${volumeChange.toFixed(2)}%)`);
 		
-		console.log(`${this.symbol}: Providing input data:`, currentData);
-		
-		// Store current price for feedback calculation in next frame
+		// Update previous values for next frame
 		this.previousPrice = currentData.price;
+		this.previousVolume = currentData.volume;
 		
-		// Return input neurons only
+		// Increment holding counter if we own the stock
+		if (this.owned) this.holdingFrames++;
+		
+		// For first frame, return zero change (no previous data to compare)
+		if (this.currentDataIndex === 1) {
+			console.log(`${this.symbol}: First frame - using zero change`);
+			return [
+				{ [`${this.symbol}_price_change`]: 0 },
+				{ [`${this.symbol}_volume_change`]: 0 }
+			];
+		}
+		
+		// Discretize the percentage changes
+		const discretePriceChange = this.discretizePercentageChange(priceChange);
+		const discreteVolumeChange = this.discretizePercentageChange(volumeChange);
+		
+		// Return discretized input neurons
 		return [
-			{ [`${this.symbol}_price`]: currentData.price },
-			{ [`${this.symbol}_volume`]: currentData.volume }
+			{ [`${this.symbol}_price_change`]: discretePriceChange },
+			{ [`${this.symbol}_volume_change`]: discreteVolumeChange }
 		];
 	}
 
@@ -102,94 +143,32 @@ export default class StockChannel extends Channel {
 	 * Get feedback neurons based on position and price movement
 	 */
 	async getFeedbackNeurons() {
-		// No feedback if we don't have a position or no previous price
-		if (!this.position || this.previousPrice === null) {
-			return [];
-		}
+
+		// No feedback if we don't own stock
+		if (!this.owned) return [];
 
 		// Get current price from the most recent data
 		const currentDataIndex = this.currentDataIndex - 1; // We already incremented in getFrameInputs
-		if (currentDataIndex < 0 || currentDataIndex >= this.sampleData.length) {
-			return [];
-		}
+		if (currentDataIndex < 0 || currentDataIndex >= this.sampleData.length) return [];
 
 		const currentPrice = this.sampleData[currentDataIndex].price;
-		const priceChange = currentPrice - this.previousPrice;
+		const priceChange = currentPrice - this.entryPrice;
+		const percentChange = (priceChange / this.entryPrice) * 100;
 
 		let feedbackValue = 0;
-
-		if (this.position === 'long') { // We own the stock
-			if (priceChange > 0) {
-				feedbackValue = 1; // Joy - stock went up while we owned it
-				console.log(`${this.symbol}: JOY! Owned stock went up by ${priceChange}`);
-			} else if (priceChange < 0) {
-				feedbackValue = -1; // Pain - stock went down while we owned it
-				console.log(`${this.symbol}: PAIN! Owned stock went down by ${priceChange}`);
-			}
-		} else if (this.position === 'short') { // We're short the stock
-			if (priceChange < 0) {
-				feedbackValue = 1; // Joy - stock went down while we were short
-				console.log(`${this.symbol}: JOY! Shorted stock went down by ${priceChange}`);
-			} else if (priceChange > 0) {
-				feedbackValue = -1; // Pain - stock went up while we were short
-				console.log(`${this.symbol}: PAIN! Shorted stock went up by ${priceChange}`);
-			}
+		if (priceChange > 0) {
+			feedbackValue = 1; // Joy - stock went up since we bought it
+			console.log(`${this.symbol}: JOY! Stock up ${percentChange.toFixed(2)}% since purchase (${priceChange.toFixed(2)} profit)`);
+		} 
+		else if (priceChange < 0) {
+			feedbackValue = -1; // Pain - stock went down since we bought it
+			console.log(`${this.symbol}: PAIN! Stock down ${percentChange.toFixed(2)}% since purchase (${Math.abs(priceChange).toFixed(2)} loss)`);
 		}
 
-		if (feedbackValue !== 0) {
-			return [{ [`${this.symbol}_reward`]: feedbackValue }];
-		}
-
-		return [];
+		return feedbackValue === 0 ? [] : [{ [`${this.symbol}_reward`]: feedbackValue }];
 	}
 
-	async buildFrame(marketData, frameNumber) {
-		const frame = [];
-
-		// Add input neurons
-		if (marketData.price !== undefined) {
-			frame.push({ [`${this.symbol}_price`]: marketData.price });
-		}
-		if (marketData.volume !== undefined) {
-			frame.push({ [`${this.symbol}_volume`]: marketData.volume });
-		}
-
-		// Add feedback neurons based on position and price movement
-		if (this.position && marketData.priceChange !== undefined) {
-			const feedbackNeuron = this.calculateFeedback(marketData.priceChange);
-			if (feedbackNeuron) {
-				frame.push(feedbackNeuron);
-			}
-		}
-
-		// Add exploration actions if needed
-		const explorationActions = this.generateExploration(
-			frameNumber,
-			[`action_buy_${this.symbol}`, `action_sell_${this.symbol}`]
-		);
-		frame.push(...explorationActions);
-
-		return frame;
-	}
-
-	calculateFeedback(priceChange) {
-		if (this.position === 'long') {
-			if (priceChange > 0) {
-				return { [`joy_owned_${this.symbol}_up`]: 1.0 };
-			} else if (priceChange < 0) {
-				return { [`pain_owned_${this.symbol}_down`]: 1.0 };
-			}
-		} else if (this.position === 'short') {
-			if (priceChange < 0) {
-				return { [`joy_short_${this.symbol}_down`]: 1.0 };
-			} else if (priceChange > 0) {
-				return { [`pain_short_${this.symbol}_up`]: 1.0 };
-			}
-		}
-		return null;
-	}
-
-	async executeOutputs(predictions, frameNumber) {
+	async executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
 			predictions: new Map()
@@ -244,32 +223,26 @@ export default class StockChannel extends Channel {
 			const currentPrice = this.sampleData[currentDataIndex]?.price;
 
 			if (strongestAction === 'buy') {
-				if (this.position !== 'long') {
-					this.position = 'long';
-					this.positionEntryPrice = currentPrice;
-					this.positionEntryFrame = frameNumber;
-					console.log(`${this.symbol}: EXECUTED BUY at ${currentPrice} (strength: ${maxStrength.toFixed(3)})`);
+				if (!this.owned) {
+					this.owned = true;
+					this.entryPrice = currentPrice;
+					this.holdingFrames = 0; // Reset holding counter
+					console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (strength: ${maxStrength.toFixed(3)})`);
 				}
 			} else if (strongestAction === 'sell') {
-				if (this.position === 'long') {
-					// Close long position
-					const profit = currentPrice - this.positionEntryPrice;
-					console.log(`${this.symbol}: EXECUTED SELL (close long) at ${currentPrice}, profit: ${profit.toFixed(2)} (strength: ${maxStrength.toFixed(3)})`);
-					this.position = null;
-				} else if (this.position !== 'short') {
-					// Open short position
-					this.position = 'short';
-					this.positionEntryPrice = currentPrice;
-					this.positionEntryFrame = frameNumber;
-					console.log(`${this.symbol}: EXECUTED SELL (open short) at ${currentPrice} (strength: ${maxStrength.toFixed(3)})`);
+				if (this.owned) {
+					// Sell owned stock
+					const profit = currentPrice - this.entryPrice;
+					const percentReturn = (profit / this.entryPrice) * 100;
+					
+					console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (strength: ${maxStrength.toFixed(3)})`);
+					console.log(`${this.symbol}: Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+					
+					this.owned = false;
+					this.entryPrice = null;
+					this.holdingFrames = 0; // Reset holding counter
 				}
 			}
 		}
-	}
-
-	async processRawInput(textString) {
-
-		// Logic to convert time series data to standardized slope values between 0 and 1
-		return [ { dimension_id: this.dimensionNameToId['slope'], value: textString.charCodeAt(0) } ];
 	}
 }

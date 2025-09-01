@@ -132,7 +132,7 @@ export default class ArmChannel extends Channel {
 	/**
 	 * Execute motor commands based on brain output
 	 */
-	async executeOutputs(predictions, frameNumber) {
+	async executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
 			predictions: new Map()
@@ -180,7 +180,6 @@ export default class ArmChannel extends Channel {
 			this.currentPosition.wrist = Math.max(0, Math.min(1, this.currentPosition.wrist));
 			
 			this.lastMovement = { shoulder: motorShoulder, elbow: motorElbow, wrist: motorWrist };
-			this.lastOutputFrame = frameNumber;
 			
 			console.log(`${this.name}: EXECUTED MOVEMENT - Shoulder: ${motorShoulder.toFixed(3)}, Elbow: ${motorElbow.toFixed(3)}, Wrist: ${motorWrist.toFixed(3)}`);
 			console.log(`${this.name}: New position:`, {

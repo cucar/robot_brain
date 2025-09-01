@@ -37,17 +37,10 @@ export default class Channel {
 	}
 
 	/**
-	 * Build input frame for this channel - override in subclasses
-	 */
-	async buildFrame(data, frameNumber) {
-		throw new Error('Channel must implement buildFrame() method');
-	}
-
-	/**
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * This method should execute actions and update channel state
 	 */
-	async executeOutputs(predictions, frameNumber) {
+	async executeOutputs(predictions) {
 		throw new Error('Channel must implement executeOutputs() method');
 	}
 

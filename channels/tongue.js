@@ -117,15 +117,13 @@ export default class TongueChannel extends Channel {
 	/**
 	 * Execute tongue movements based on brain output
 	 */
-	async executeOutputs(predictions, frameNumber) {
+	async executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
 			predictions: new Map()
 		};
 
-		if (!predictions || predictions.length === 0) {
-			return outputs;
-		}
+		if (!predictions || predictions.length === 0) return outputs;
 
 		// Extract tongue movement predictions
 		let tongueX = 0, tongueY = 0;
@@ -157,7 +155,6 @@ export default class TongueChannel extends Channel {
 			this.tonguePosition.y = Math.max(-1, Math.min(1, this.tonguePosition.y));
 			
 			this.lastMovement = { x: tongueX, y: tongueY };
-			this.lastOutputFrame = frameNumber;
 			
 			// Determine movement type
 			let movementType = 'positioning';

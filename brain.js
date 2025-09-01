@@ -208,7 +208,7 @@ export default class Brain {
 
 			// Let each channel execute outputs and update their states
 			for (const [channelName, channel] of this.channels) {
-				const outputs = await channel.executeOutputs(predictions, this.frameNumber);
+				const outputs = await channel.executeOutputs(predictions);
 				
 				// Track global activity - if any channel produced action outputs, mark brain as active
 				if (outputs && outputs.actions.size > 0) {

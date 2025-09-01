@@ -104,7 +104,7 @@ export default class EarsChannel extends Channel {
 	/**
 	 * Execute ear movements based on brain output
 	 */
-	async executeOutputs(predictions, frameNumber) {
+	async executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
 			predictions: new Map()
@@ -137,7 +137,6 @@ export default class EarsChannel extends Channel {
 			this.earOrientation = Math.max(-1, Math.min(1, this.earOrientation));
 			
 			this.lastMovement = earMovement;
-			this.lastOutputFrame = frameNumber;
 			
 			const direction = this.earOrientation > 0.1 ? 'right' : this.earOrientation < -0.1 ? 'left' : 'center';
 			console.log(`${this.name}: EXECUTED EAR MOVEMENT - Orientation: ${this.earOrientation.toFixed(3)} (${direction})`);

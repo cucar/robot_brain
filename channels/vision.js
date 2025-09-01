@@ -104,7 +104,7 @@ export default class EyesChannel extends Channel {
 	/**
 	 * Execute eye movements (saccades) based on brain output
 	 */
-	async executeOutputs(predictions, frameNumber) {
+	async executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
 			predictions: new Map()
@@ -144,7 +144,6 @@ export default class EyesChannel extends Channel {
 			this.eyePosition.y = Math.max(0, Math.min(1, this.eyePosition.y));
 			
 			this.lastSaccade = { x: saccadeX, y: saccadeY };
-			this.lastOutputFrame = frameNumber;
 			
 			console.log(`${this.name}: EXECUTED SACCADE to (${this.eyePosition.x.toFixed(3)}, ${this.eyePosition.y.toFixed(3)})`);
 			

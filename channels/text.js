@@ -126,7 +126,7 @@ export default class TextChannel extends Channel {
 	/**
 	 * Execute character output based on brain predictions
 	 */
-	async executeOutputs(predictions, frameNumber) {
+	async executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
 			predictions: new Map()
@@ -165,7 +165,6 @@ export default class TextChannel extends Channel {
 			}
 			
 			this.lastPredictedChar = charOutput;
-			this.lastOutputFrame = frameNumber;
 			
 			console.log(`${this.name}: PREDICTED CHARACTER '${closestChar}' (value: ${charOutput.toFixed(3)}, confidence: ${totalConfidence.toFixed(3)})`);
 			
