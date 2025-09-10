@@ -98,29 +98,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Process frames in a loop until all channels are exhausted
-	 * Channels execute their own outputs and provide feedback based on state changes
-	 */
-	async processFrames() {
-		while (true) {
-			
-			// Get combined frame from all channels
-			const frame = await this.getFrame();
-			
-			// If no input data from any channel, we're done
-			if (!frame || frame.length === 0) {
-				console.log('Completed processing. no more channel data.');
-				return;
-			}
-			
-			console.log(`Processing frame: ${frame.length} neurons`);
-			
-			// Process the frame through the brain (includes output execution)
-			await this.processFrame(frame);
-		}
-	}
-
-	/**
 	 * Handle global exploration when ALL channels are inactive
 	 */
 	curiosityExploration() {
@@ -166,6 +143,10 @@ export default class Brain {
 			const channelFrame = await channel.getFrameData();
 			if (channelFrame && channelFrame.length > 0) frame.push(...channelFrame);
 		}
+
+		// add the previous outputs to the current frame so that they can be learned as patterns
+		const previousOutputs = await this.activatePreviousOutputs();
+		if (previousOutputs.length > 0) frame.push(...previousOutputs);
 		
 		// Add exploration if globally inactive
 		const explorationData = this.curiosityExploration();
@@ -190,11 +171,14 @@ export default class Brain {
 			await this.ageNeurons();
 			await this.agePredictions();
 
-			// now, activate base neurons in the frame
-			await this.activateBaseNeurons(frame);
+			// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
+			await this.recognizeNeurons(frame);
 
-			// discover and activate patterns using connections - start recursion from base level
-			await this.activatePatternNeurons();
+			// predictions and habitual outputs - what's going to happen next? and what's the immediate response?
+			// do the predictions in each level
+			await this.predictNeurons();
+
+			// think the outputs through - remove outputs that lead to pain and try to add outputs that lead to joy
 
 			// now that the connection strengths are updated, run forget cycle periodically and delete dead connections/neurons
 			await this.runForgetCycle();
@@ -203,24 +187,37 @@ export default class Brain {
 			await this.conn.commit();
 			console.log('Frame processed successfully.');
 
-			// get the predicted frames for channel execution
-			const predictions = await this.getPredictedFrames();
-
-			// Let each channel execute outputs and update their states
-			for (const [channelName, channel] of this.channels) {
-				const outputs = await channel.executeOutputs(predictions);
-				
-				// Track global activity - if any channel produced action outputs, mark brain as active
-				if (outputs && outputs.actions.size > 0) {
-					this.lastActivity = this.frameNumber;
-					console.log(`${channelName} executed actions:`, Array.from(outputs.actions.keys()));
-				}
-			}
+			// get the outputs from processing the frame - get it from the memory tables
+			// habitually and pattern predicted and thought-out neurons that have output dimension values
+			return this.getFrameOutput();
 		}
 		catch (error) {
 			await this.conn.rollback();
 			console.error('Error processing frame, transaction rolled back:', error);
 			throw error;
+		}
+	}
+
+	/**
+	 * calls channels to execute the outputs from processing the frame
+	 */
+	async executeOutputs(outputs) {
+
+		// Let each channel execute outputs and update their states
+		for (const [channelName, channel] of this.channels) {
+
+			// get the channel outputs - filter by the output dimensions of the channel
+			const channelOutputs = this.getChannelOutputs(outputs, channel);
+
+			// now ask the channel to execute the outputs
+			const outputs = await channel.executeOutputs(channelOutputs);
+
+			// nothing to do if there are no actions to execute
+			if (!outputs || outputs.actions.size === 0) continue;
+
+			// Track global activity - if any channel produced action outputs, mark brain as active
+			this.lastActivity = this.frameNumber;
+			console.log(`${channelName} executed actions:`, Array.from(outputs.actions.keys()));
 		}
 	}
 
@@ -235,7 +232,7 @@ export default class Brain {
 
 		// deactivate aged-out neurons, but age higher level neurons slower than the lower level neurons
 		// if level 0 max age = 10, level 1 max age = 100, level 2 is 1000, etc.
-		await this.conn.query('DELETE FROM active_neurons WHERE age >= (? * (level + 1))', [this.baseNeuronMaxAge]);
+		await this.conn.query('DELETE FROM active_neurons WHERE age >= POW(?, level + 1)', [this.baseNeuronMaxAge]);
 	}
 
 	/**
@@ -260,9 +257,9 @@ export default class Brain {
 	}
 
 	/**
-	 * activate base neurons from frame
+	 * recognizes and activates neurons from frame
 	 */
-	async activateBaseNeurons(frame) {
+	async recognizeNeurons(frame) {
 
 		// bulk find/create neurons for all input points
 		const neuronIds = await this.getFrameNeurons(frame);
@@ -270,8 +267,8 @@ export default class Brain {
 		// bulk insert activations at base level
 		await this.activateNeurons(neuronIds);
 
-		// reinforce connections between active neurons in the current level
-		await this.reinforceConnections(0);
+		// discover and activate patterns using connections - start recursion from base level
+		await this.activatePatternNeurons();
 	}
 
 	/**
@@ -398,9 +395,24 @@ export default class Brain {
 	}
 
 	/**
-	 * activate neurons at a specified level & distance - age is always zero
+	 * activate neurons at a specified level & distance - age is always zero - not sending to save characters in query
 	 */
 	async activateNeurons(neuronIds, level = 0) {
+
+		// insert given neurons to the active neurons table
+		await this.insertActiveNeurons(neuronIds, level);
+
+		// reinforce connections between active neurons in the level
+		await this.reinforceConnections(level);
+
+		// now, activate the connections between them
+		await this.activateConnections();
+	}
+
+	/**
+	 * inserts neurons at a specified level & distance - age is always zero - not sending to save characters in query
+	 */
+	async insertActiveNeurons(neuronIds, level = 0) {
 		if (neuronIds.length === 0) return;
 		const activations = neuronIds.map(neuronId => [neuronId, level]);
 		await this.conn.query(`INSERT INTO active_neurons (neuron_id, level) VALUES ?`, [activations]);
@@ -458,9 +470,6 @@ export default class Brain {
 
 		// activate the observed pattern neurons in the higher level (new or previously existing)
 		await this.activateNeurons([...new Set(Array.from(peakPatterns.values()).flat())], level + 1);
-
-		// reinforce connections between active neurons in the higher level
-		await this.reinforceConnections(level + 1);
 
 		// now generate predictions for the newly observed patterns in the current level
 		await this.generatePredictions(peakPatterns, peakConnections, level);
@@ -809,311 +818,4 @@ export default class Brain {
 
 		console.log('Forgetting cycle completed.');
 	}
-
-	/**
-	 * returns a simplified view of predicted frames with predictions using peak clustering
-	 */
-	async getPredictedFrames() {
-
-		// get predicted connections in the same format as active connections
-		const predictedConnections = await this.getPredictedConnections();
-		if (predictedConnections.length === 0) return [];
-
-		// Use the generic peak detection method
-		const peakConnections = this.detectPeaks(predictedConnections);
-
-		// Organize by temporal distance
-		const peakClusters = await this.organizePredictedPeaksByTime(peakConnections, predictedConnections);
-		if (peakClusters.length === 0) return [];
-
-		// get predictions using peak clustering approach
-		const stockPredictions = await this.getStockPredictionsFromPeaks();
-
-		// return the frames from predictions in the expected format
-		return stockPredictions.map(frame => ({
-			distance: frame.days_ahead,
-			strength: frame.total_confidence,
-			predictions: frame.predictions.map(p => ({
-				from_coordinates: p.from_state,
-				to_coordinates: p.to_state,
-				confidence: p.confidence / frame.total_confidence
-			}))
-		}));
-	}
-
-	/**
-	 * returns predicted connections
-	 */
-	async getPredictedConnections() {
-		const [rows] = await this.conn.query(`
-			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, pc.prediction_strength as strength, pc.age as prediction_age
-			FROM predicted_connections pc
-			JOIN connections c ON pc.connection_id = c.id
-			WHERE pc.prediction_strength > 0
-			ORDER BY pc.prediction_strength DESC
-		`);
-		return rows;
-	}
-
-	/**
-	 * Organizes predicted peaks by temporal distance
-	 * returns an array of prediction frames organized by temporal distance
-	 * @param {Map} peakConnections - Map of peak neuron IDs to their connection IDs
-	 * @param {Array} allPredictedConnections - All predicted connections data
-	 */
-	organizePredictedPeaksByTime(peakConnections, allPredictedConnections) {
-		const timeFrames = new Map();
-		
-		for (const [peakNeuronId, connectionIds] of peakConnections) {
-
-			// Find all connections involving this peak neuron
-			const peakConnData = allPredictedConnections.filter(conn => connectionIds.includes(conn.id));
-			
-			for (const conn of peakConnData) {
-
-				// get the steps remaining until connection happens
-				const timeKey = conn.distance - conn.prediction_age;
-
-				if (!timeFrames.has(timeKey)) {
-					timeFrames.set(timeKey, {
-						days_ahead: timeKey,
-						peak_clusters: [],
-						total_strength: 0,
-						neuron_count: 0
-					});
-				}
-				
-				const frame = timeFrames.get(timeKey);
-				
-				// Add this peak cluster to the time frame
-				frame.peak_clusters.push({
-					peak_neuron_id: peakNeuronId,
-					connection_data: conn,
-					cluster_strength: conn.strength
-				});
-				
-				frame.total_strength += conn.strength;
-				frame.neuron_count++;
-			}
-		}
-		
-		// Convert to array and calculate averages
-		const frames = Array.from(timeFrames.values()).map(frame => ({
-			...frame,
-			avg_frame_strength: frame.neuron_count > 0 ? frame.total_strength / frame.neuron_count : 0,
-			// Sort clusters within each frame by strength
-			peak_clusters: frame.peak_clusters.sort((a, b) => b.cluster_strength - a.cluster_strength)
-		}));
-		
-		// Sort frames by temporal distance
-		return frames.sort((a, b) => a.days_ahead - b.days_ahead);
-	}
-
-	/**
-	 * Gets stock predictions from predicted peak clusters
-	 * Extracts coordinates from peak neurons and organizes by temporal distance
-	 * @returns {Array} Array of stock predictions organized by days ahead
-	 */
-	async getStockPredictionsFromPeaks() {
-		console.log('Getting stock predictions from predicted peak clusters...');
-		
-		// For each time frame, get coordinates of the peak neurons
-		const stockPredictions = [];
-		
-		for (const frame of peakClusters) {
-			const predictions = [];
-			
-			for (const cluster of frame.peak_clusters) {
-				// Get coordinates for both from and to neurons of predicted connections
-				const [fromCoords] = await this.conn.query(`
-					SELECT GROUP_CONCAT(DISTINCT CONCAT(d.name, ':', coord.val) ORDER BY d.name) as coordinates
-					FROM coordinates coord
-					INNER JOIN dimensions d ON coord.dimension_id = d.id
-					WHERE coord.neuron_id = ?
-				`, [cluster.connection_data.from_neuron_id]);
-				
-				const [toCoords] = await this.conn.query(`
-					SELECT GROUP_CONCAT(DISTINCT CONCAT(d.name, ':', coord.val) ORDER BY d.name) as coordinates
-					FROM coordinates coord
-					INNER JOIN dimensions d ON coord.dimension_id = d.id
-					WHERE coord.neuron_id = ?
-				`, [cluster.connection_data.to_neuron_id]);
-				
-				// Parse coordinates
-				const parseCoordinates = (coordStr) => {
-					const coords = {};
-					if (coordStr) {
-						coordStr.split(',').forEach(pair => {
-							const [dim, val] = pair.split(':');
-							coords[dim] = parseFloat(val);
-						});
-					}
-					return coords;
-				};
-				
-				predictions.push({
-					from_state: parseCoordinates(fromCoords[0]?.coordinates),
-					to_state: parseCoordinates(toCoords[0]?.coordinates),
-					confidence: cluster.cluster_strength,
-					peak_neuron_id: cluster.peak_neuron_id
-				});
-			}
-			
-			stockPredictions.push({
-				days_ahead: frame.days_ahead,
-				predictions: predictions,
-				total_confidence: frame.avg_frame_strength,
-				cluster_count: frame.peak_clusters.length
-			});
-		}
-		
-		return stockPredictions;
-	}
-
-	/**
-	 * gets all predicted base neurons directly from predicted_connections, organized by temporal distance.
-	 * returns an array of predicted frames organized by temporal distance.
-	 */
-	async getPredictedBaseNeurons() {
-		console.log('Getting predicted base neurons with direct CTE query...');
-
-		const [rows] = await this.conn.query(`
-			WITH RECURSIVE predicted_neurons AS (
-				-- Start with all predicted connections and their details
-				SELECT DISTINCT
-					pc.pattern_neuron_id,
-					pc.connection_id,
-					pc.level as prediction_level,
-					pc.age as prediction_age,
-					pc.prediction_strength,
-					c.from_neuron_id,
-					c.to_neuron_id,
-					c.distance as temporal_distance,
-					c.strength as connection_strength
-				FROM predicted_connections pc
-				JOIN connections c ON pc.connection_id = c.id
-				WHERE pc.prediction_strength > 0
-			),
-			neuron_decomposition AS (
-				-- Base case: get all neurons from predicted connections
-				SELECT DISTINCT 
-					from_neuron_id as neuron_id,
-					temporal_distance,
-					prediction_strength,
-					prediction_level,
-					0 as decomposition_level
-				FROM predicted_neurons
-				
-				UNION
-				
-				SELECT DISTINCT 
-					to_neuron_id as neuron_id,
-					temporal_distance,
-					prediction_strength,
-					prediction_level,
-					0 as decomposition_level
-				FROM predicted_neurons
-				
-				UNION
-				
-				-- Recursive case: decompose pattern neurons to base neurons
-				SELECT DISTINCT 
-					c.from_neuron_id as neuron_id,
-					nd.temporal_distance,
-					nd.prediction_strength,
-					nd.prediction_level,
-					nd.decomposition_level + 1
-				FROM neuron_decomposition nd
-				JOIN patterns p ON p.pattern_neuron_id = nd.neuron_id
-				JOIN connections c ON p.connection_id = c.id
-				WHERE nd.decomposition_level < 10
-				
-				UNION
-				
-				SELECT DISTINCT 
-					c.to_neuron_id as neuron_id,
-					nd.temporal_distance,
-					nd.prediction_strength,
-					nd.prediction_level,
-					nd.decomposition_level + 1
-				FROM neuron_decomposition nd
-				INNER JOIN patterns p ON p.pattern_neuron_id = nd.neuron_id
-				INNER JOIN connections c ON p.connection_id = c.id
-				WHERE nd.decomposition_level < 10
-			)
-			-- Get base neurons with coordinates and aggregate by temporal distance
-			SELECT 
-				nd.neuron_id,
-				nd.temporal_distance,
-				MAX(nd.prediction_strength) as max_strength,
-				AVG(nd.prediction_strength) as avg_strength,
-				MIN(nd.prediction_level) as min_level,
-				GROUP_CONCAT(DISTINCT CONCAT(d.name, ':', coord.val) ORDER BY d.id) as coordinates
-			FROM neuron_decomposition nd
-			INNER JOIN coordinates coord ON nd.neuron_id = coord.neuron_id
-			INNER JOIN dimensions d ON coord.dimension_id = d.id
-			GROUP BY nd.neuron_id, nd.temporal_distance
-			ORDER BY nd.temporal_distance, max_strength DESC
-		`);
-
-		// Organize results by temporal distance
-		return this.organizePredictionsByDistance(rows);
-	}
-
-	/**
-	 * Organizes raw prediction results by temporal distance
-	 * @param {Array} rows - Raw query results
-	 * @returns {Array} Organized prediction frames
-	 */
-	organizePredictionsByDistance(rows) {
-		const frameMap = new Map();
-
-		for (const row of rows) {
-			const distance = row.temporal_distance;
-
-			if (!frameMap.has(distance)) {
-				frameMap.set(distance, {
-					temporal_distance: distance,
-					neurons: [],
-					total_strength: 0,
-					neuron_count: 0
-				});
-			}
-
-			const frame = frameMap.get(distance);
-
-			// Parse coordinates string back into object
-			const coords = {};
-			if (row.coordinates) {
-				row.coordinates.split(',').forEach(pair => {
-					const [dim, val] = pair.split(':');
-					coords[dim] = parseFloat(val);
-				});
-			}
-
-			frame.neurons.push({
-				neuron_id: row.neuron_id,
-				coordinates: coords,
-				strength: row.max_strength,
-				avg_strength: row.avg_strength,
-				source_level: row.min_level
-			});
-
-			frame.total_strength += row.max_strength;
-			frame.neuron_count++;
-		}
-
-		// Convert to array and calculate averages
-		const frames = Array.from(frameMap.values()).map(frame => ({
-			...frame,
-			avg_frame_strength: frame.total_strength / frame.neuron_count,
-			// Sort neurons within each frame by strength
-			neurons: frame.neurons.sort((a, b) => b.strength - a.strength)
-		}));
-
-		// Sort frames by temporal distance
-		return frames.sort((a, b) => a.temporal_distance - b.temporal_distance);
-	}
-
-
 }

@@ -90,7 +90,7 @@ export default class StockChannel extends Channel {
 	/**
 	 * Get frame input data for this stock channel
 	 */
-	async getFrameInputs() {
+	async getFrameData() {
 		
 		// Return current data point and advance index
 		if (this.currentDataIndex >= this.sampleData.length) {
@@ -98,18 +98,24 @@ export default class StockChannel extends Channel {
 			return [];
 		}
 
+		// get raw current stock data for the frame - TODO: make this read from a file or table
 		const currentData = this.sampleData[this.currentDataIndex];
 		this.currentDataIndex++;
 
-		// Calculate percentage changes (skip first frame since no previous data)
-		let priceChange = 0;
-		let volumeChange = 0;
-
+		// if this is the first frame, return zero change (no previous data to compare)
 		if (this.previousPrice !== null && this.previousVolume !== null) {
-			priceChange = ((currentData.price - this.previousPrice) / this.previousPrice) * 100;
-			volumeChange = ((currentData.volume - this.previousVolume) / this.previousVolume) * 100;
+			console.log(`${this.symbol}: First frame - using zero change`);
+			this.previousPrice = currentData.price;
+			this.previousVolume = currentData.volume;
+			return [
+				{ [`${this.symbol}_price_change`]: 0 },
+				{ [`${this.symbol}_volume_change`]: 0 }
+			];
 		}
 
+		// Calculate percentage changes
+		const priceChange = ((currentData.price - this.previousPrice) / this.previousPrice) * 100;
+		const volumeChange = ((currentData.volume - this.previousVolume) / this.previousVolume) * 100;
 		console.log(`${this.symbol}: Price: ${currentData.price} (${priceChange.toFixed(2)}%), Volume: ${currentData.volume} (${volumeChange.toFixed(2)}%)`);
 		
 		// Update previous values for next frame
@@ -118,15 +124,6 @@ export default class StockChannel extends Channel {
 		
 		// Increment holding counter if we own the stock
 		if (this.owned) this.holdingFrames++;
-		
-		// For first frame, return zero change (no previous data to compare)
-		if (this.currentDataIndex === 1) {
-			console.log(`${this.symbol}: First frame - using zero change`);
-			return [
-				{ [`${this.symbol}_price_change`]: 0 },
-				{ [`${this.symbol}_volume_change`]: 0 }
-			];
-		}
 		
 		// Discretize the percentage changes
 		const discretePriceChange = this.discretizePercentageChange(priceChange);

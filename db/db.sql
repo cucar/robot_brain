@@ -11,7 +11,8 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS connections;
 -- DROP TABLE IF EXISTS patterns;
 -- DROP TABLE IF EXISTS active_neurons;
--- DROP TABLE IF EXISTS predicted_connections;
+-- DROP TABLE IF EXISTS predicted_neurons;
+-- DROP TABLE IF EXISTS pattern_validation;
 
 -- dimensions table determines input/output mapping
 CREATE TABLE IF NOT EXISTS dimensions (
@@ -81,14 +82,36 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- predicted connections - potential future states (MEMORY table)
-CREATE TABLE IF NOT EXISTS predicted_connections (
-    pattern_neuron_id BIGINT UNSIGNED NOT NULL,     -- id of the predicting active pattern neuron
-    connection_id BIGINT UNSIGNED NOT NULL,         -- predicted connection that did not occur yet
+-- used for tracking the active connections between neurons in active_neurons
+CREATE TABLE active_connections (
+    connection_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (connection_id, level, age)
+) ENGINE=MEMORY;
+
+-- predicted neurons in t+1 in each level - potential future states (MEMORY table)
+CREATE TABLE IF NOT EXISTS predicted_neurons (
+    neuron_id BIGINT UNSIGNED NOT NULL,     -- id of the predicting active pattern neuron
     level TINYINT NOT NULL,  					    -- level of the predicting active pattern neuron
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,        -- the age of the prediction - higher levels age slower
-    prediction_strength DOUBLE NOT NULL,            -- confidence of prediction
-    PRIMARY KEY (pattern_neuron_id, connection_id), -- different levels/ages predicting the same connection just resets the age and strengthens the connection
-    INDEX idx_prediction_aging (age),
-    INDEX idx_prediction_validation (connection_id)
+    PRIMARY KEY (neuron_id, level, age),
+    INDEX idx_level_age (level, age),
+    INDEX idx_current_active (age, level)
+) ENGINE=MEMORY;
+
+-- used for tracking the connections that were used to predict the neurons in t+1 so that we can weaken them if the prediction does not come true
+CREATE TABLE predicted_connections (
+    neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT,
+    age TINYINT DEFAULT 0,
+    connection_id BIGINT,
+    PRIMARY KEY (neuron_id, level, age, connection_id)
+) ENGINE=MEMORY;
+
+-- used for tracking which connections of predicted pattern neurons came true in lower levels for reinforcement
+CREATE TABLE pattern_validation (
+    pattern_neuron_id BIGINT,
+    connection_id BIGINT,
+    PRIMARY KEY (pattern_neuron_id, connection_id)
 ) ENGINE=MEMORY;
