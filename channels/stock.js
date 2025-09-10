@@ -103,7 +103,7 @@ export default class StockChannel extends Channel {
 		this.currentDataIndex++;
 
 		// if this is the first frame, return zero change (no previous data to compare)
-		if (this.previousPrice !== null && this.previousVolume !== null) {
+		if (this.previousPrice === null || !this.previousVolume === null) {
 			console.log(`${this.symbol}: First frame - using zero change`);
 			this.previousPrice = currentData.price;
 			this.previousVolume = currentData.volume;
@@ -165,15 +165,13 @@ export default class StockChannel extends Channel {
 		return feedbackValue === 0 ? [] : [{ [`${this.symbol}_reward`]: feedbackValue }];
 	}
 
-	async executeOutputs(predictions) {
+	executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
 			predictions: new Map()
 		};
 
-		if (!predictions || predictions.length === 0) {
-			return outputs;
-		}
+		if (!predictions || predictions.length === 0) return;
 
 		// Extract activity predictions from all prediction frames
 		predictions.forEach(frame => {
@@ -197,12 +195,10 @@ export default class StockChannel extends Channel {
 		});
 
 		// Execute the strongest action (fake buying/selling)
-		this.executeAction(outputs.actions, frameNumber);
-
-		return outputs;
+		this.executeAction(outputs.actions);
 	}
 
-	executeAction(actions, frameNumber) {
+	executeAction(actions) {
 		let strongestAction = null;
 		let maxStrength = 0;
 

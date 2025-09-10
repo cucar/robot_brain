@@ -209,11 +209,11 @@ export default class Brain {
 			// get the channel outputs - filter by the output dimensions of the channel
 			const channelOutputs = this.getChannelOutputs(outputs, channel);
 
-			// now ask the channel to execute the outputs
-			const outputs = await channel.executeOutputs(channelOutputs);
-
 			// nothing to do if there are no actions to execute
-			if (!outputs || outputs.actions.size === 0) continue;
+			if (!channelOutputs || channelOutputs.actions.size === 0) continue;
+
+			// now ask the channel to execute the outputs
+			await channel.executeOutputs(channelOutputs);
 
 			// Track global activity - if any channel produced action outputs, mark brain as active
 			this.lastActivity = this.frameNumber;
