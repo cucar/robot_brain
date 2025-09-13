@@ -423,7 +423,7 @@ export default class Brain {
 		while (true) {
 
 			// process the level to detect patterns - returns if there are patterns found or not
-			const patternsFound = await this.processLevel(level);
+			const patternsFound = await this.activateLevelPatterns(level);
 
 			// if no patterns are found in the level, nothing to do
 			if (!patternsFound) break;
@@ -443,8 +443,8 @@ export default class Brain {
 	/**
 	 * processes a level to detect patterns and activate them - returns if patterns found or not
 	 */
-	async processLevel(level) {
-		console.log(`processing level: ${level}`);
+	async activateLevelPatterns(level) {
+		console.log(`processing level to activate patterns in it: ${level}`);
 
 		// get all active connections between the newly activated neurons (age=0) and all active neurons in the requested level
 		const connections = await this.getActiveConnections(level);
