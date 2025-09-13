@@ -40,11 +40,38 @@ export default class Brain {
 	}
 
 	/**
-	 * Reset brain context for clean episode start - this is like waking up the next morning after sleep
+	 * Reset brain memory state for a clean episode start
 	 */
 	async resetContext() {
-		console.log('Resetting brain context...');
+		console.log('Resetting brain (memory tables)...');
 		await this.conn.query('TRUNCATE active_neurons');
+		await this.conn.query('TRUNCATE pattern_inference');
+		await this.conn.query('TRUNCATE connection_inference');
+		await this.conn.query('TRUNCATE inferred_neurons');
+	}
+
+	/**
+	 * Hard reset: clears ALL tables (used mainly for tests)
+	 */
+	async resetBrain() {
+		console.log('Hard resetting brain (all tables)...');
+
+		// truncate memory tables first (ENGINE=MEMORY) and then persistent ones
+		const tables = [
+			'active_neurons',
+			'pattern_inference',
+			'connection_inference',
+			'inferred_neurons',
+			'patterns',
+			'connections',
+			'coordinates',
+			'neuron_rewards',
+			'neurons',
+			'dimensions'
+		];
+		await this.conn.query('SET FOREIGN_KEY_CHECKS = 0');
+		for (const table of tables) await this.conn.query(`TRUNCATE ${table}`);
+		await this.conn.query('SET FOREIGN_KEY_CHECKS = 1');
 	}
 
 	/**
@@ -108,11 +135,8 @@ export default class Brain {
 		// Check if the brain is inactive - if some channel is active, no exploration needed
 		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return [];
 
-		// All channels inactive - trigger exploration on a random channel
+		// brain has been inactive - trigger exploration on a random channel
 		const channelNames = Array.from(this.channels.keys());
-		if (channelNames.length === 0) return [];
-
-		// pick a random channel
 		const randomChannelName = channelNames[Math.floor(Math.random() * channelNames.length)];
 		const randomChannel = this.channels.get(randomChannelName);
 
@@ -123,9 +147,6 @@ export default class Brain {
 		// pick a random action
 		const randomAction = validActions[Math.floor(Math.random() * validActions.length)];
 		console.log(`Brain: Global inactivity detected, triggering exploration on ${randomChannelName}:`, randomAction);
-		
-		// Brain manages the activity counter - mark brain as active
-		this.lastActivity = this.frameNumber;
 		
 		// return the random action - this is a point with a value on the output dimension of the channel
 		return [randomAction];
@@ -138,26 +159,23 @@ export default class Brain {
 	async getFrame() {
 		const frame = [];
 
+		// Increment frame counter to be able to track inactivity
+		this.frameNumber++;
+
 		// Get input data from all channels
 		for (const [_, channel] of this.channels) {
 			const channelFrame = await channel.getFrameData();
 			if (channelFrame && channelFrame.length > 0) frame.push(...channelFrame);
 		}
 
-		console.log('new frame', frame);
-		process.exit(0);
-
-		// Increment frame counter to be able to track inactivity
-		this.frameNumber++;
-
 		// add the previous outputs to the current frame so that they can be learned as patterns
 		// const previousOutputs = await this.activatePreviousOutputs();
 		// if (previousOutputs.length > 0) frame.push(...previousOutputs);
 		
 		// Add exploration if globally inactive
-		// const explorationData = this.curiosityExploration();
-		// if (explorationData.length > 0) frame.push(...explorationData);
-		
+		const explorationData = this.curiosityExploration();
+		if (explorationData.length > 0) frame.push(...explorationData);
+
 		return frame;
 	}
 
@@ -262,17 +280,18 @@ export default class Brain {
 		console.log('pointNeuronMatches', matches);
 
 		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
-		const neuronIds = matches.filter(p => p.neuron_id);
+		const neuronIds = matches.filter(p => p.neuron_id).map(p => p.neuron_id);
 
 		// create neurons for points with no matching neurons
 		const pointsNeedingNeurons = matches.filter(p => !p.neuron_id);
 		if (pointsNeedingNeurons.length > 0) {
-			console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with internal dedupe.`);
+			console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
 			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point_str));
 			neuronIds.push(...createdNeuronIds);
 		}
 
 		// return matching neuron ids to given points
+		console.log('frame neurons', neuronIds);
 		return neuronIds;
 	}
 
@@ -314,7 +333,7 @@ export default class Brain {
 		if (rows.find(row => row.neuron_id && row.neuron_id.includes(','))) throw new Error(`Multiple point matches: ${sql}`);
 
 		// return results
-		return rows;
+		return rows.map(row => ({ point_str: row.point_str, neuron_id: Number(row.neuron_id) }));
 	}
 
 	/**
@@ -385,9 +404,6 @@ export default class Brain {
 
 		// reinforce connections between active neurons in the level
 		await this.reinforceConnections(level);
-
-		// now, activate the connections between them
-		await this.activateConnections();
 	}
 
 	/**

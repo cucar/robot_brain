@@ -5,7 +5,9 @@ import Brain from '../brain.js';
 
 export default class Job {
 	constructor() {
-		this.brain = null;
+		console.log('starting new job...');
+		this.brain = new Brain();
+		this.hardReset = false;
 	}
 
 	/**
@@ -13,9 +15,6 @@ export default class Job {
 	 */
 	async run() {
 		try {
-			console.log('starting new job...');
-			this.brain = new Brain();
-
 			// get channels defined by child class and register them with brain
 			console.log('Registering channels with brain...');
 			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
@@ -24,8 +23,13 @@ export default class Job {
 			console.log('Initializing brain...');
 			await this.brain.init();
 
-			// Reset brain context for clean episode
-			await this.brain.resetContext();
+			// if job requests a hard reset (mainly for tests), perform before init
+			if (this.hardReset) {
+				console.log('Job requests hard reset. Clearing all tables...');
+				await this.brain.resetBrain();
+			}
+			// otherwise, just reset brain memory for clean episode
+			else await this.brain.resetContext();
 
 			// process the job/episode
 			console.log('Running episode...');

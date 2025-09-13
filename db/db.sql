@@ -15,6 +15,19 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS connection_inference;
 -- DROP TABLE IF EXISTS neuron_rewards;
 
+-- check state
+select * from neurons;
+select * from coordinates;
+select * from connections;
+
+-- reset the brain
+delete from neurons;
+truncate coordinates;
+truncate patterns;
+truncate neuron_rewards;
+delete from connections;
+delete from active_neurons;
+
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -22,8 +35,6 @@ CREATE TABLE IF NOT EXISTS dimensions (
     channel VARCHAR(50) NOT NULL,
     type ENUM('input', 'output') NOT NULL
 );
-
-select * from dimensions;
 
 -- these dimensions can be used for visual processing
 -- INSERT INTO dimensions (name) VALUES ('x'), ('y'), ('r'), ('g'), ('b');
