@@ -2,7 +2,7 @@
  * channels handle the interaction between the brain and a device. a device can be anything that has a consistent input/output mechanism.
  * examples of devices:
  * - eyes (input: visual data, output: eye movements - saccades)
- * - tounge (input: taste, output: tongue movements)
+ * - tongue (input: taste, output: tongue movements)
  * - ears (input: audio, output: ear movements - auriculomotor)
  * - arm/leg (input: touch, output: muscles)
  * - stocks (input: prices, output: buy/sell)
