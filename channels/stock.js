@@ -1,4 +1,7 @@
 import Channel from './channel.js';
+import { createReadStream, mkdirSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+import path from 'node:path';
 
 /**
  * Stock Channel Implementation - this channel is used for buying/selling stocks based on their values
@@ -7,8 +10,9 @@ export default class StockChannel extends Channel {
 
 	constructor(name) {
 		super(name);
-		
-		this.symbol = name; // Extract symbol from name (e.g., "AAPL" from name)
+
+		// Extract symbol from name (e.g., "AAPL" from name)
+		this.symbol = name;
 
 		// State tracking
 		this.owned = false; // Simple owned flag
@@ -17,18 +21,12 @@ export default class StockChannel extends Channel {
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
 
-		// Sample data for testing - in real implementation this would come from CSV or API
-		this.sampleData = [
-			{ price: 150.0, volume: 1000000 },
-			{ price: 152.5, volume: 1200000 },
-			{ price: 148.0, volume: 800000 },
-			{ price: 151.0, volume: 1100000 },
-			{ price: 149.5, volume: 900000 },
-			{ price: 153.0, volume: 1300000 },
-			{ price: 147.0, volume: 900000 },
-			{ price: 155.0, volume: 1500000 }
-		];
-		this.currentDataIndex = 0;
+		// CSV reading state
+		this.csvPath = null;
+		this.rl = null;
+		this.lineIterator = null;
+		this.currentPrice = null;
+		this.currentVolume = null;
 
 		// Exponential discretization buckets for percentage changes
 		this.priceBuckets = [
@@ -50,6 +48,51 @@ export default class StockChannel extends Channel {
 		];
 	}
 
+	/**
+	 * initialize this stock channel: open CSV and prepare iterator
+	 */
+	async initialize() {
+		const baseDir = path.resolve(process.cwd(), 'data', 'stock');
+		try { mkdirSync(baseDir, { recursive: true }); } catch {}
+		this.csvPath = path.resolve(baseDir, `${this.symbol}.csv`);
+		this.rl = createInterface({ input: createReadStream(this.csvPath), crlfDelay: Infinity });
+		this.lineIterator = this.rl[Symbol.asyncIterator]();
+	}
+
+	/**
+	 * Reads the next non-empty CSV line, parses it as { price, volume }.
+	 * Returns null on EOF. Throws on malformed lines.
+	 */
+	async readNextLine() {
+		if (!this.lineIterator) return null;
+		const { value, done } = await this.lineIterator.next();
+        if (done || value === undefined) return null;
+        const parts = String(value).trim().split(',');
+        if (parts.length < 2) throw new Error(`${this.symbol}: Invalid CSV line: ${value}`);
+        const price = parseFloat(parts[0]);
+        const volume = parseFloat(parts[1]);
+        if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${trimmed}'`);
+        return { price, volume };
+	}
+
+	/**
+	 * Compute discretized change inputs from previous → current and update state.
+	 */
+	computeChangeInputs() {
+		const priceChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
+		const volumeChange = ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
+		console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
+		this.previousPrice = this.currentPrice;
+		this.previousVolume = this.currentVolume;
+		return [
+			{ [`${this.symbol}_price_change`]: this.discretizePercentageChange(priceChange) },
+			{ [`${this.symbol}_volume_change`]: this.discretizePercentageChange(volumeChange) }
+		];
+	}
+
+	/**
+	 * returns the input dimensions for the channel
+	 */
 	getInputDimensions() {
 		return [
 			`${this.symbol}_price_change`, // Discretized percentage change in price
@@ -57,15 +100,12 @@ export default class StockChannel extends Channel {
 		];
 	}
 
+	/**
+	 * returns the output dimensions for the channel
+	 */
 	getOutputDimensions() {
 		return [
 			`${this.symbol}_activity` // -1 for sell, +1 for buy
-		];
-	}
-
-	getFeedbackDimensions() {
-		return [
-			`${this.symbol}_reward` // +1 for joy, -1 for pain
 		];
 	}
 
@@ -90,50 +130,38 @@ export default class StockChannel extends Channel {
 	/**
 	 * Get frame input data for this stock channel
 	 */
-	async getFrameData() {
+	async getFrameInputs() {
 		
-		// Return current data point and advance index
-		if (this.currentDataIndex >= this.sampleData.length) {
+		// Read next non-empty line; skip header if present
+		const row = await this.readNextLine();
+		if (!row) {
 			console.log(`${this.symbol}: No more data available`);
 			return [];
 		}
+		this.currentPrice = row.price;
+		this.currentVolume = row.volume;
 
-		// get raw current stock data for the frame - TODO: make this read from a file or table
-		const currentData = this.sampleData[this.currentDataIndex];
-		this.currentDataIndex++;
+		// if this is the first frame, read another line so that we can start sending change stats
+		if (this.previousPrice === null || this.previousVolume === null) {
+			
+			// seed baseline from the first observed line
+			this.previousPrice = this.currentPrice;
+			this.previousVolume = this.currentVolume;
 
-		// if this is the first frame, return zero change (no previous data to compare)
-		if (this.previousPrice === null || !this.previousVolume === null) {
-			console.log(`${this.symbol}: First frame - using zero change`);
-			this.previousPrice = currentData.price;
-			this.previousVolume = currentData.volume;
-			return [
-				{ [`${this.symbol}_price_change`]: 0 },
-				{ [`${this.symbol}_volume_change`]: 0 }
-			];
+			// read the next data line
+			const nextRow = await this.readNextLine();
+			this.currentPrice = nextRow.price;
+			this.currentVolume = nextRow.volume;
+
+			// compute and return discretized changes based on baseline → next
+			return this.computeChangeInputs();
 		}
-
-		// Calculate percentage changes
-		const priceChange = ((currentData.price - this.previousPrice) / this.previousPrice) * 100;
-		const volumeChange = ((currentData.volume - this.previousVolume) / this.previousVolume) * 100;
-		console.log(`${this.symbol}: Price: ${currentData.price} (${priceChange.toFixed(2)}%), Volume: ${currentData.volume} (${volumeChange.toFixed(2)}%)`);
-		
-		// Update previous values for next frame
-		this.previousPrice = currentData.price;
-		this.previousVolume = currentData.volume;
 		
 		// Increment holding counter if we own the stock
 		if (this.owned) this.holdingFrames++;
-		
-		// Discretize the percentage changes
-		const discretePriceChange = this.discretizePercentageChange(priceChange);
-		const discreteVolumeChange = this.discretizePercentageChange(volumeChange);
-		
-		// Return discretized input neurons
-		return [
-			{ [`${this.symbol}_price_change`]: discretePriceChange },
-			{ [`${this.symbol}_volume_change`]: discreteVolumeChange }
-		];
+
+		// Compute and return discretized changes
+		return this.computeChangeInputs();
 	}
 
 	/**
@@ -144,11 +172,9 @@ export default class StockChannel extends Channel {
 		// No feedback if we don't own stock
 		if (!this.owned) return [];
 
-		// Get current price from the most recent data
-		const currentDataIndex = this.currentDataIndex - 1; // We already incremented in getFrameInputs
-		if (currentDataIndex < 0 || currentDataIndex >= this.sampleData.length) return [];
-
-		const currentPrice = this.sampleData[currentDataIndex].price;
+		// Use last observed price
+		const currentPrice = this.currentPrice;
+		if (currentPrice === null || this.entryPrice === null) return [];
 		const priceChange = currentPrice - this.entryPrice;
 		const percentChange = (priceChange / this.entryPrice) * 100;
 
@@ -165,6 +191,9 @@ export default class StockChannel extends Channel {
 		return feedbackValue === 0 ? [] : [{ [`${this.symbol}_reward`]: feedbackValue }];
 	}
 
+	/**
+	 * executes output neurons returned by the brain after processing the frame
+	 */
 	executeOutputs(predictions) {
 		const outputs = {
 			actions: new Map(),
@@ -185,7 +214,8 @@ export default class StockChannel extends Channel {
 						// Positive activity = buy signal
 						const current = outputs.actions.get('buy') || 0;
 						outputs.actions.set('buy', current + confidence);
-					} else if (activityValue < 0) {
+					}
+					else if (activityValue < 0) {
 						// Negative activity = sell signal
 						const current = outputs.actions.get('sell') || 0;
 						outputs.actions.set('sell', current + confidence);
@@ -212,8 +242,7 @@ export default class StockChannel extends Channel {
 		if (strongestAction && maxStrength > 0) {
 
 			// Get current price for position tracking
-			const currentDataIndex = this.currentDataIndex - 1;
-			const currentPrice = this.sampleData[currentDataIndex]?.price;
+			const currentPrice = this.currentPrice;
 
 			if (strongestAction === 'buy') {
 				if (!this.owned) {

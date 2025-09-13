@@ -36,12 +36,6 @@ export default class TongueChannel extends Channel {
 		];
 	}
 
-	getFeedbackDimensions() {
-		return [
-			'taste_reward' // +1 for pleasant taste, -1 for unpleasant taste
-		];
-	}
-
 	/**
 	 * Get taste input data
 	 */

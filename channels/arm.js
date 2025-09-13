@@ -42,12 +42,6 @@ export default class ArmChannel extends Channel {
 		];
 	}
 
-	getFeedbackDimensions() {
-		return [
-			'movement_reward' // +1 for successful reach, -1 for failed movement
-		];
-	}
-
 	/**
 	 * Get proprioceptive and touch input data
 	 */
@@ -110,7 +104,7 @@ export default class ArmChannel extends Channel {
 		const totalError = shoulderError + elbowError + wristError;
 		const threshold = 0.05; // Acceptable error threshold
 
-		let feedbackValue = 0;
+		let feedbackValue;
 
 		if (totalError < threshold) {
 			feedbackValue = 1; // Reward for successful movement

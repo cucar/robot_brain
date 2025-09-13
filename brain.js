@@ -44,8 +44,7 @@ export default class Brain {
 	 */
 	async resetContext() {
 		console.log('Resetting brain context...');
-		await this.conn.query('DELETE FROM active_neurons');
-		await this.conn.query('DELETE FROM predicted_connections');
+		await this.conn.query('TRUNCATE active_neurons');
 	}
 
 	/**
@@ -57,29 +56,33 @@ export default class Brain {
 		this.conn = await db.getConnection();
 
 		// create dimensions for all registered channels
-		await this.initializeChannelDimensions();
+		await this.initializeDimensions();
 
 		// load the dimensions
 		await this.loadDimensions();
+
+		// initialize all registered channels (channel-specific setup)
+		for (const [, channel] of this.channels) await channel.initialize();
 	}
 
 	/**
 	 * Initialize dimensions for all registered channels
 	 */
-	async initializeChannelDimensions() {
+	async initializeDimensions() {
 		console.log('Initializing dimensions for registered channels...');
-		
 		for (const [channelName, channel] of this.channels) {
-			const dimensions = channel.getDimensions();
-			console.log(`Creating dimensions for ${channelName}:`, dimensions);
-			
-			for (const dimName of dimensions) {
-				await this.conn.query(
-					'INSERT IGNORE INTO dimensions (name) VALUES (?)',
-					[dimName]
-				);
-			}
+			await this.insertChannelDimensions(channel.getInputDimensions(), channelName, 'input');
+			await this.insertChannelDimensions(channel.getOutputDimensions(), channelName, 'output');
 		}
+	}
+
+	/**
+	 * inserts channel dimensions
+	 */
+	async insertChannelDimensions(dimensions, channelName, type){
+		console.log(`Creating ${type} dimensions for ${channelName}:`, dimensions);
+		for (const dimName of dimensions)
+			await this.conn.query('INSERT IGNORE INTO dimensions (name, channel, type) VALUES (?, ?, ?)', [dimName, channelName, type]);
 	}
 
 	/**
@@ -101,9 +104,6 @@ export default class Brain {
 	 * Handle global exploration when ALL channels are inactive
 	 */
 	curiosityExploration() {
-
-		// Increment frame counter to be able to track inactivity
-		this.frameNumber++;
 
 		// Check if the brain is inactive - if some channel is active, no exploration needed
 		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return [];
@@ -137,26 +137,32 @@ export default class Brain {
 	 */
 	async getFrame() {
 		const frame = [];
-		
+
 		// Get input data from all channels
-		for (const [channelName, channel] of this.channels) {
+		for (const [_, channel] of this.channels) {
 			const channelFrame = await channel.getFrameData();
 			if (channelFrame && channelFrame.length > 0) frame.push(...channelFrame);
 		}
 
+		console.log('new frame', frame);
+		process.exit(0);
+
+		// Increment frame counter to be able to track inactivity
+		this.frameNumber++;
+
 		// add the previous outputs to the current frame so that they can be learned as patterns
-		const previousOutputs = await this.activatePreviousOutputs();
-		if (previousOutputs.length > 0) frame.push(...previousOutputs);
+		// const previousOutputs = await this.activatePreviousOutputs();
+		// if (previousOutputs.length > 0) frame.push(...previousOutputs);
 		
 		// Add exploration if globally inactive
-		const explorationData = this.curiosityExploration();
-		if (explorationData.length > 0) frame.push(...explorationData);
+		// const explorationData = this.curiosityExploration();
+		// if (explorationData.length > 0) frame.push(...explorationData);
 		
 		return frame;
 	}
 
 	/**
-	 * processes one frame of input values - this is an array of points [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
+	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
 	 */
 	async processFrame(frame) {
 		console.log(`observing new frame: ${JSON.stringify(frame)}`);
@@ -167,35 +173,31 @@ export default class Brain {
 		// if there's an error, we'll roll the transaction back
 		try {
 
-			// age the active neurons and predictions in memory context - sliding the window
+			// age the active neurons in memory context - sliding the window
 			await this.ageNeurons();
-			await this.agePredictions();
 
 			// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
-			await this.recognizeNeurons(frame);
+			const level = await this.recognizeNeurons(frame);
 
-			// predictions and habitual outputs - what's going to happen next? and what's the immediate response?
-			// do the predictions in each level
-			await this.predictNeurons();
-
-			// think the outputs through - remove outputs that lead to pain and try to add outputs that lead to joy
-
-			// now that the connection strengths are updated, run forget cycle periodically and delete dead connections/neurons
-			await this.runForgetCycle();
+			// do predictions and outputs - what's going to happen next? and what's our best response?
+			await this.inferNeurons(level);
 
 			// now commit the transaction and return the new predictions
 			await this.conn.commit();
 			console.log('Frame processed successfully.');
-
-			// get the outputs from processing the frame - get it from the memory tables
-			// habitually and pattern predicted and thought-out neurons that have output dimension values
-			return this.getFrameOutput();
 		}
 		catch (error) {
 			await this.conn.rollback();
 			console.error('Error processing frame, transaction rolled back:', error);
 			throw error;
 		}
+
+		// run forget cycle periodically and delete dead connections/neurons
+		await this.runForgetCycle();
+
+		// get the outputs from processing the frame - get it from the memory tables
+		// habitual, pattern predicted and optimized outputs that have output dimension values
+		return this.getFrameOutput();
 	}
 
 	/**
@@ -236,28 +238,7 @@ export default class Brain {
 	}
 
 	/**
-	 * age predictions in memory and penalize the predictions that did not happen
-	 */
-	async agePredictions() {
-
-		// age all predictions
-		await this.conn.query('UPDATE predicted_connections SET age = age + 1');
-
-		// penalize about-to-be-deleted predictions in bulk - these predictions did not come true
-		await this.conn.query(`
-            UPDATE patterns p
-            JOIN predicted_connections pc ON p.pattern_neuron_id = pc.pattern_neuron_id AND p.connection_id = pc.connection_id
-            SET p.strength = p.strength - ?
-            WHERE pc.age >= (? * (pc.level + 1))
-		`, [this.negativeLearningRate, this.baseNeuronMaxAge]);
-
-		// delete aged-out predictions, but age higher level neurons slower than the lower level neurons
-		// if level 0 max age = 10, level 1 max age = 100, level 2 is 1000, etc.
-		await this.conn.query(`DELETE FROM predicted_connections WHERE age >= (? * (level + 1))`, [this.baseNeuronMaxAge]);
-	}
-
-	/**
-	 * recognizes and activates neurons from frame
+	 * recognizes and activates neurons from frame - returns the highest level of recognition reached
 	 */
 	async recognizeNeurons(frame) {
 
@@ -267,8 +248,8 @@ export default class Brain {
 		// bulk insert activations at base level
 		await this.activateNeurons(neuronIds);
 
-		// discover and activate patterns using connections - start recursion from base level
-		await this.activatePatternNeurons();
+		// discover and activate patterns using connections - start recursion from base level - return the highest level reached
+		return this.activatePatternNeurons();
 	}
 
 	/**
@@ -440,6 +421,7 @@ export default class Brain {
 				break;
 			}
 		}
+		return level; // return the maximum level reached - we will start inference from there
 	}
 
 	/**
@@ -451,9 +433,6 @@ export default class Brain {
 		// get all active connections between the newly activated neurons (age=0) and all active neurons in the requested level
 		const connections = await this.getActiveConnections(level);
 		if (connections.length === 0) return false; // if there are no connections (there is only one neuron), nothing to do
-
-		// before processing new patterns, check if any of these newly active connections were predicted
-		await this.validatePredictedConnections(connections);
 
 		// cluster connections around peaks
 		const peakConnections = this.detectPeaks(connections);
@@ -470,9 +449,6 @@ export default class Brain {
 
 		// activate the observed pattern neurons in the higher level (new or previously existing)
 		await this.activateNeurons([...new Set(Array.from(peakPatterns.values()).flat())], level + 1);
-
-		// now generate predictions for the newly observed patterns in the current level
-		await this.generatePredictions(peakPatterns, peakConnections, level);
 
 		// return true to indicate that we need to process the next level
 		return true;
@@ -498,26 +474,6 @@ export default class Brain {
             AND c.strength >= 0 -- ignore negative connections that are scheduled to be deleted 
 		`, [level]);
 		return rows;
-	}
-
-	/**
-	 * strengthens connections for patterns that predicted newly activated connections
-	 */
-	async validatePredictedConnections(activeConnections) {
-
-		// get active connection ids
-		const activeConnectionIds = activeConnections.map(c => c.id);
-
-		// increment strengths for correct predictions
-		await this.conn.query(`
-			UPDATE patterns p
-			INNER JOIN predicted_connections pc USING (pattern_neuron_id, connection_id)
-			SET p.strength = p.strength + ?
-			WHERE pc.connection_id IN (?)
-		`, [this.positiveLearningRate, activeConnectionIds]);
-
-		// delete the predictions that came true
-		await this.conn.query('DELETE FROM predicted_connections WHERE connection_id IN (?)', [activeConnectionIds]);
 	}
 
 	/**
@@ -757,30 +713,6 @@ export default class Brain {
         	INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
         	ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
     	`, [patternConnections]);
-	}
-
-	/**
-	 * generates predictions for newly activated patterns
-	 */
-	async generatePredictions(peakPatterns, peakConnections, level) {
-
-		// flatten all pattern neuron IDs
-		const patternNeuronIds = [...new Set(Array.from(peakPatterns.values()).flat())];
-
-		// flatten all currently active connection IDs
-		const connectionIds = [...new Set(Array.from(peakConnections.values()).flat())];
-
-		// insert predictions for inactive pattern connections
-		await this.conn.query(`
-			INSERT INTO predicted_connections (pattern_neuron_id, connection_id, level, age, prediction_strength)
-			SELECT p.pattern_neuron_id, p.connection_id, ? as level, 0 as age, p.strength as prediction_strength
-			FROM patterns p
-			WHERE p.pattern_neuron_id IN (?) -- get the newly activated patterns
-			AND p.connection_id NOT IN (?) -- get their connections that are not active yet 
-			AND p.strength > 0 -- ignore patterns scheduled to be deleted
-			-- if different levels/ages end up predicting the same neuron, we will reset its age and increment strength - level will be reset
-			ON DUPLICATE KEY UPDATE prediction_strength = prediction_strength + VALUES(prediction_strength), age = 0, level = VALUES(level)
-		`, [level + 1, patternNeuronIds, connectionIds]);
 	}
 
 	/**

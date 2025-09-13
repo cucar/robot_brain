@@ -13,15 +13,15 @@ export default class Job {
 	 */
 	async run() {
 		try {
-			// Initialize brain
-			console.log('Initializing brain...');
+			console.log('starting new job...');
 			this.brain = new Brain();
 
-			// Get channels defined by child class and register them with brain
+			// get channels defined by child class and register them with brain
 			console.log('Registering channels with brain...');
 			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
 
-			// Initialize brain (this will call getDimensions on channels and create dimensions)
+			// initialize brain (this will initialize channels and create dimensions)
+			console.log('Initializing brain...');
 			await this.brain.init();
 
 			// Reset brain context for clean episode

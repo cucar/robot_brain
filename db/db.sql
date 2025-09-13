@@ -11,17 +11,22 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS connections;
 -- DROP TABLE IF EXISTS patterns;
 -- DROP TABLE IF EXISTS active_neurons;
--- DROP TABLE IF EXISTS predicted_neurons;
--- DROP TABLE IF EXISTS pattern_validation;
+-- DROP TABLE IF EXISTS pattern_inference;
+-- DROP TABLE IF EXISTS connection_inference;
+-- DROP TABLE IF EXISTS neuron_rewards;
 
--- dimensions table determines input/output mapping
+-- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(50) UNIQUE NOT NULL
+    name VARCHAR(50) UNIQUE NOT NULL,
+    channel VARCHAR(50) NOT NULL,
+    type ENUM('input', 'output') NOT NULL
 );
 
+select * from dimensions;
+
 -- these dimensions can be used for visual processing
-INSERT INTO dimensions (name) VALUES ('x'), ('y'), ('r'), ('g'), ('b');
+-- INSERT INTO dimensions (name) VALUES ('x'), ('y'), ('r'), ('g'), ('b');
 
 -- these dimensions are used for forecasting timeseries changes - slopes can go from -100% to 100% (rate of change)
 -- INSERT INTO dimensions (name) VALUES ('gold_slope'), ('aem_slope');
@@ -71,6 +76,17 @@ CREATE TABLE IF NOT EXISTS patterns (
     INDEX idx_from_distance_strength (connection_id, strength DESC)
 );
 
+-- includes joy/pain level of neurons based on their exposure (time proximity) to them
+CREATE TABLE IF NOT EXISTS neuron_rewards (
+    neuron_id BIGINT UNSIGNED NOT NULL,
+    joy_score DOUBLE NOT NULL DEFAULT 0,
+    pain_score DOUBLE NOT NULL DEFAULT 0,
+    PRIMARY KEY (neuron_id),
+    FOREIGN KEY (neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
+    INDEX (joy_score, neuron_id),
+    INDEX (pain_score, neuron_id)
+);
+
 -- neurons currently active within the sliding window (MEMORY table)
 -- note that it is possible for the same neuron to be active in different ages or levels
 CREATE TABLE IF NOT EXISTS active_neurons (
@@ -82,36 +98,29 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- used for tracking the active connections between neurons in active_neurons
-CREATE TABLE active_connections (
-    connection_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    PRIMARY KEY (connection_id, level, age)
+-- stores down-level predictions - used to update pattern definitions based on results - valid for 10 cycles
+CREATE TABLE pattern_inference (
+    level TINYINT,
+    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
+    connection_id BIGINT,
+    age TINYINT DEFAULT 0,
+    validated BOOL NOT NULL DEFAULT false,
+    PRIMARY KEY (level, pattern_neuron_id, age, connection_id)
 ) ENGINE=MEMORY;
 
--- predicted neurons in t+1 in each level - potential future states (MEMORY table)
-CREATE TABLE IF NOT EXISTS predicted_neurons (
+-- used for tracking the connections from activated patterns so that we can adjust pattern definitions based on results - valid for 1 cycle
+CREATE TABLE connection_inference (
+    level TINYINT,
+    connection_id BIGINT,
+    PRIMARY KEY (level, connection_id)
+) ENGINE=MEMORY;
+
+-- prediction/output neurons in t+1 in each level - potential future states (MEMORY table)
+CREATE TABLE IF NOT EXISTS inferred_neurons (
     neuron_id BIGINT UNSIGNED NOT NULL,     -- id of the predicting active pattern neuron
     level TINYINT NOT NULL,  					    -- level of the predicting active pattern neuron
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,        -- the age of the prediction - higher levels age slower
     PRIMARY KEY (neuron_id, level, age),
     INDEX idx_level_age (level, age),
     INDEX idx_current_active (age, level)
-) ENGINE=MEMORY;
-
--- used for tracking the connections that were used to predict the neurons in t+1 so that we can weaken them if the prediction does not come true
-CREATE TABLE predicted_connections (
-    neuron_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT,
-    age TINYINT DEFAULT 0,
-    connection_id BIGINT,
-    PRIMARY KEY (neuron_id, level, age, connection_id)
-) ENGINE=MEMORY;
-
--- used for tracking which connections of predicted pattern neurons came true in lower levels for reinforcement
-CREATE TABLE pattern_validation (
-    pattern_neuron_id BIGINT,
-    connection_id BIGINT,
-    PRIMARY KEY (pattern_neuron_id, connection_id)
 ) ENGINE=MEMORY;

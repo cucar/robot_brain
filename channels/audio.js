@@ -36,12 +36,6 @@ export default class EarsChannel extends Channel {
 		];
 	}
 
-	getFeedbackDimensions() {
-		return [
-			'localization_reward' // +1 for correct sound localization, -1 for wrong direction
-		];
-	}
-
 	/**
 	 * Get audio input data
 	 */
@@ -88,7 +82,7 @@ export default class EarsChannel extends Channel {
 		const orientationError = Math.abs(this.earOrientation - actualDirection);
 		const threshold = 0.2; // Acceptable localization error
 
-		let feedbackValue = 0;
+		let feedbackValue;
 
 		if (orientationError < threshold) {
 			feedbackValue = 1; // Reward for accurate localization

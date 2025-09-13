@@ -36,12 +36,6 @@ export default class EyesChannel extends Channel {
 		];
 	}
 
-	getFeedbackDimensions() {
-		return [
-			'visual_attention_reward' // +1 for successful fixation, -1 for missing targets
-		];
-	}
-
 	/**
 	 * Get visual input data
 	 */
@@ -87,13 +81,14 @@ export default class EyesChannel extends Channel {
 			Math.pow(this.eyePosition.y - target.y, 2)
 		);
 
-		let feedbackValue = 0;
+		let feedbackValue;
 		const threshold = 0.05; // How close the eye needs to be to the target
 
 		if (distance < threshold) {
 			feedbackValue = 1; // Reward for successful fixation
 			console.log(`${this.name}: REWARD! Eye fixated on target (distance: ${distance.toFixed(3)})`);
-		} else {
+		}
+		else {
 			feedbackValue = -1; // Penalty for missing target
 			console.log(`${this.name}: PENALTY! Eye missed target (distance: ${distance.toFixed(3)})`);
 		}

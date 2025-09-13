@@ -43,12 +43,6 @@ export default class TextChannel extends Channel {
 		];
 	}
 
-	getFeedbackDimensions() {
-		return [
-			'text_reward' // +1 for correct prediction, -1 for wrong prediction
-		];
-	}
-
 	/**
 	 * Get character input data
 	 */
@@ -110,7 +104,7 @@ export default class TextChannel extends Channel {
 		const threshold = 0.05;
 		const error = Math.abs(this.lastPredictedChar - expectedValue);
 		
-		let feedbackValue = 0;
+		let feedbackValue;
 
 		if (error < threshold) {
 			feedbackValue = 1; // Reward for correct prediction
