@@ -215,7 +215,7 @@ export default class Brain {
 
 		// get the outputs from processing the frame - get it from the memory tables
 		// habitual, pattern predicted and optimized outputs that have output dimension values
-		return this.getFrameOutput();
+		return this.getFrameOutputs();
 	}
 
 	/**
@@ -268,6 +268,74 @@ export default class Brain {
 
 		// discover and activate patterns using connections - start recursion from base level - return the highest level reached
 		return this.activatePatternNeurons();
+	}
+
+	/**
+	 * infers predictions and outputs starting from the highest active level down to base level (reverse order)
+	 */
+	async inferNeurons(maxLevel) {
+
+		// process levels in reverse: maxLevel, maxLevel-1, ..., 0
+		for (let level = maxLevel; level >= 0; level--) {
+
+			// do same-level predictions for the level
+			await this.sameLevelPredictions(level);
+
+			// do lower-level predictions for the level unless we are already in level 0
+			if (level > 0) await this.lowerlLevelPredictions(level);
+
+			// determine predicted neuron strengths for the level - those are the actual predictions
+			await this.predictNeuronStrengths(level);
+
+			// do the rewards optimizations - avoid pain, maximize joy
+			await this.optimizeRewards(level);
+
+			// determine peak neurons for the level - those are the actual predictions
+			await this.inferPeakNeurons(level);
+		}
+	}
+
+	/**
+	 * Same-level predictions of connections for the next cycle of the level.
+	 * Handles rolling window of predictions with proper time dilation for higher levels.
+	 */
+	async sameLevelPredictions(level) {
+		
+		// age all existing predictions in the connection_inference table
+		await this.conn.query('UPDATE connection_inference SET age = age + 1 WHERE level = ?', [level]);
+		
+		// remove predictions that came true (predicted connection's to_neuron is now active at age 0)
+		// we don't need to strengthen the predicted connections that came true - strength was already be increased simply because of observation
+		await this.conn.query(`
+			DELETE ci 
+			FROM connection_inference ci
+			JOIN connections c ON ci.connection_id = c.id
+			JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = ci.level AND an.age = 0 
+			WHERE ci.level = ? 
+		`, [level, level]);
+
+		// but if the predicted connections did not come true, and they are expiring at max age, reduce their strengths
+		// these predictions did not come true and are about to be removed
+		await this.conn.query(`
+            UPDATE connections
+            SET strength = strength - ?
+            WHERE id IN (SELECT ci.connection_id FROM connection_inference ci WHERE ci.level = ? AND ci.age >= POW(?, ci.level))
+		`, [this.negativeLearningRate, level, this.baseNeuronMaxAge]);
+
+		// now that we used them for reinforcement, clear previous expired predictions for this level
+		await this.conn.query('DELETE FROM connection_inference WHERE level = ? AND age >= POW(?, level)', [level, this.baseNeuronMaxAge]);
+
+		// insert new predictions for the next cycle of this level, only from newly activated neurons (age 0)
+		// predict connections at bucketed distance 1 (next temporal step for this level)
+		await this.conn.query(`
+			INSERT INTO connection_inference (level, connection_id, age)
+			SELECT f.level, c.id, 0
+			FROM active_neurons f
+			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = 1
+			WHERE f.level = ?
+			AND f.age = 0
+			AND c.strength >= 0
+		`, [level]);
 	}
 
 	/**
@@ -383,7 +451,7 @@ export default class Brain {
             SELECT 
                 f.neuron_id as from_neuron_id, -- connection from the neuron id
                 t.neuron_id as to_neuron_id, -- connection to the neuron id
-                f.age as distance, -- taking the time distance between age=0 neurons, so from neuron age is the distance
+                IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level))) as distance, -- bucketed distance: level 0 = exact, higher levels = bucketed
                 1 as strength -- each observation increases strength by 1 
 			FROM active_neurons f -- connections are built from the older neurons to the new neurons
 			JOIN active_neurons t ON t.level = f.level -- reinforcing connections only within the same level
@@ -391,7 +459,7 @@ export default class Brain {
             AND f.level = ? -- get the active neurons in the given level
             AND (t.neuron_id != f.neuron_id OR f.age != 0) -- if it's the same neuron, it's gotta be an older one
 			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength) -- if connection exists, add on to it
-		`, [level]);
+		`, [this.baseNeuronMaxAge, level]);
 	}
 
 	/**
@@ -482,13 +550,15 @@ export default class Brain {
             SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
             FROM connections c
             -- source is the older neurons building connections from them to the new neurons
-			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id AND c.distance = f.age
+			JOIN active_neurons f 
+				ON c.from_neuron_id = f.neuron_id 
+			    AND c.distance = IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level)))
             -- getting active connections from older neurons to newly activated neurons within the same level
             JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
             WHERE f.level = ? -- get the active neurons in the given level
             AND (t.neuron_id != f.neuron_id OR f.age != 0) -- if it's the same neuron, it's gotta be an older one
             AND c.strength >= 0 -- ignore negative connections that are scheduled to be deleted 
-		`, [level]);
+		`, [this.baseNeuronMaxAge, level]);
 		return rows;
 	}
 

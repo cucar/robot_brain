@@ -13,20 +13,13 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS active_neurons;
 -- DROP TABLE IF EXISTS pattern_inference;
 -- DROP TABLE IF EXISTS connection_inference;
+-- DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS neuron_rewards;
 
 -- check state
 select * from neurons;
 select * from coordinates;
 select * from connections;
-
--- reset the brain
-delete from neurons;
-truncate coordinates;
-truncate patterns;
-truncate neuron_rewards;
-delete from connections;
-delete from active_neurons;
 
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (
@@ -119,11 +112,13 @@ CREATE TABLE pattern_inference (
     PRIMARY KEY (level, pattern_neuron_id, age, connection_id)
 ) ENGINE=MEMORY;
 
--- used for tracking the connections from activated patterns so that we can adjust pattern definitions based on results - valid for 1 cycle
+-- used for tracking the connections from activated patterns so that we can adjust pattern definitions based on results - rolling window
 CREATE TABLE connection_inference (
     level TINYINT,
     connection_id BIGINT,
-    PRIMARY KEY (level, connection_id)
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,     -- how long the prediction has been active
+    PRIMARY KEY (level, connection_id, age),
+    INDEX idx_level_age (level, age)
 ) ENGINE=MEMORY;
 
 -- prediction/output neurons in t+1 in each level - potential future states (MEMORY table)
