@@ -355,72 +355,59 @@ export default class Brain {
 		// age existing pattern predictions
 		await this.conn.query('UPDATE pattern_inference SET age = age + 1 WHERE level = ?', [level]);
 
-		// Validate predictions that came true - check if predicted connections are now active at age 0 in the target level
+		// validate predictions that came true - check if predicted connections are now active at age 0 in the target level
 		await this.conn.query(`
 			UPDATE pattern_inference pi
 			JOIN connections c ON pi.connection_id = c.id
-			JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = ? AND an.age = 0
+			JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = pi.level AND an.age = 0
 			SET pi.validated = true
-			WHERE pi.level = ? AND pi.validated = false
-		`, [level - 1, level]);
+			WHERE pi.level = ? 
+			AND pi.validated = false
+		`, [level]);
 
-		// Process patterns that are expiring (reached max age for the lower level)
-		// apply negative reinforcement if pattern was sufficiently active
-		// Apply negative reinforcement in a single optimized query
-		// Only weaken pattern definitions for failed predictions where the pattern was sufficiently activated (>= patternActivation threshold)
-		const maxAge = Math.pow(this.baseNeuronMaxAge, level);
+		// TODO: the expiring pattern predictions that did not pass the pattern activation threshold should deactivate patterns here
+		//  this is basically the brain realizing that it looked like the observation was going to be a pattern, but did not happen
+
+		// expiring pattern predictions that did pass the pattern activation threshold should apply negative reinforcement
+		// this is basically the brain realizing that a pattern was observed slightly different and its definition needs adjustment
 		await this.conn.query(`
-			UPDATE patterns p
-			JOIN (
-				SELECT 
-					pi.pattern_neuron_id,
-					pi.connection_id,
-					(SUM(CASE WHEN pi.validated = true THEN 1 ELSE 0 END) / COUNT(*)) as activation_rate
+            UPDATE patterns
+            SET strength = strength - ?
+            WHERE pattern_neuron_id IN (
+				SELECT pi.pattern_neuron_id
 				FROM pattern_inference pi
-				WHERE pi.level = ? AND pi.age >= ?
-				GROUP BY pi.pattern_neuron_id, pi.connection_id
-				HAVING activation_rate >= ?
-			) pattern_stats ON p.pattern_neuron_id = pattern_stats.pattern_neuron_id 
-				AND p.connection_id = pattern_stats.connection_id
-			JOIN pattern_inference pi_failed ON p.pattern_neuron_id = pi_failed.pattern_neuron_id 
-				AND p.connection_id = pi_failed.connection_id
-				AND pi_failed.level = ? 
-				AND pi_failed.age >= ?
-				AND pi_failed.validated = false
-			SET p.strength = p.strength - ?
-		`, [level, maxAge, this.patternActivation, level, maxAge, this.negativeLearningRate]);
+				WHERE pi.level = ?
+				AND pi.age >= POW(?, pi.level + 1)
+				GROUP BY pi.pattern_neuron_id
+				HAVING (SUM(IF(pi.validated = true, 1, 0)) / COUNT(*)) >= ?
+			)
+		`, [this.negativeLearningRate, level, this.patternActivation]);
 
-		// Clean up expired predictions
-		await this.conn.query('DELETE FROM pattern_inference WHERE level = ? AND age >= ?', [level, maxAge]);
+		// now that we used them for reinforcements, delete expired pattern predictions
+		await this.conn.query('DELETE FROM pattern_inference WHERE level = ? AND age >= POW(?, level + 1)', [level, this.baseNeuronMaxAge]);
 
-		// TODO: the expired patterns that were not validated should be deactivated
-		// this is basically the brain realizing that it looked like the observation was going to be a pattern, but did not happen
-
-		// Create new lower-level predictions from newly activated pattern neurons (age 0)
-		// Insert new lower-level predictions from newly activated pattern neurons (age 0)
-		// Get connections that are part of active patterns but exclude already active connections
-		// Create new pattern predictions from newly activated pattern neurons
+		// create new predictions from patterns that were just activated in the higher level
+		// if the higher level patterns are just activated (age=0) they must have been activated due to
+		// some new neurons in the lower level (age=0 as well) - insert them as validated
 		await this.conn.query(`
 			INSERT INTO pattern_inference (level, pattern_neuron_id, connection_id, age, validated)
-			SELECT an.level - 1, p.pattern_neuron_id, p.connection_id, 0, false
+			SELECT an.level - 1, p.pattern_neuron_id, p.connection_id, 0, EXISTS (
+                SELECT 1
+                FROM active_neurons f
+                JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
+                WHERE c.from_neuron_id = f.neuron_id
+                AND c.distance = IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level)))
+                AND f.level = an.level - 1
+                AND (t.neuron_id != f.neuron_id OR f.age != 0)
+                AND c.strength >= 0
+            )
 			FROM active_neurons an
 			JOIN patterns p ON an.neuron_id = p.pattern_neuron_id
 			JOIN connections c ON p.connection_id = c.id
-			WHERE an.level = ? 
+			WHERE an.level = ? + 1
 			AND an.age = 0
 			AND p.strength > 0
-			-- Exclude connections that are already active (using same logic as getActiveConnections)
-			AND NOT EXISTS (
-				SELECT 1 
-				FROM active_neurons f
-				JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
-				WHERE c.from_neuron_id = f.neuron_id 
-				AND c.distance = IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level)))
-				AND f.level = ? - 1
-				AND (t.neuron_id != f.neuron_id OR f.age != 0)
-				AND c.strength >= 0
-			)
-		`, [level, this.baseNeuronMaxAge, level]);
+		`, [this.baseNeuronMaxAge, level]);
 	}
 
 	/**
