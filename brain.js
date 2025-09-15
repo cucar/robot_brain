@@ -17,6 +17,7 @@ export default class Brain {
 		this.positiveLearningRate = 0.1; // how much pattern strengths will be incremented by when accurate
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
+		this.patternActivation = 0.8; // minimum percentage of pattern connections that must be active for negative reinforcement
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -195,10 +196,10 @@ export default class Brain {
 			await this.ageNeurons();
 
 			// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
-			const level = await this.recognizeNeurons(frame);
+			await this.recognizeNeurons(frame);
 
 			// do predictions and outputs - what's going to happen next? and what's our best response?
-			await this.inferNeurons(level);
+			await this.inferNeurons();
 
 			// now commit the transaction and return the new predictions
 			await this.conn.commit();
@@ -266,40 +267,43 @@ export default class Brain {
 		// bulk insert activations at base level
 		await this.activateNeurons(neuronIds);
 
-		// discover and activate patterns using connections - start recursion from base level - return the highest level reached
-		return this.activatePatternNeurons();
+		// discover and activate patterns using connections - start recursion from base level
+		await this.activatePatternNeurons();
 	}
 
 	/**
 	 * infers predictions and outputs starting from the highest active level down to base level (reverse order)
 	 */
-	async inferNeurons(maxLevel) {
+	async inferNeurons() {
+
+		// get the highest level that is currently active - that's where we will start from
+		const maxLevel = await this.getMaxActiveLevel();
 
 		// process levels in reverse: maxLevel, maxLevel-1, ..., 0
 		for (let level = maxLevel; level >= 0; level--) {
 
-			// do same-level predictions for the level
-			await this.sameLevelPredictions(level);
+			// do same-level connection predictions for the level
+			await this.inferConnections(level);
 
-			// do lower-level predictions for the level unless we are already in level 0
-			if (level > 0) await this.lowerlLevelPredictions(level);
+			// do the pattern predictions for the level
+			await this.inferPatterns(level);
 
 			// determine predicted neuron strengths for the level - those are the actual predictions
-			await this.predictNeuronStrengths(level);
+			let neuronStrengths = await this.predictNeuronStrengths(level);
 
 			// do the rewards optimizations - avoid pain, maximize joy
-			await this.optimizeRewards(level);
+			neuronStrengths = await this.optimizeRewards(neuronStrengths, level);
 
 			// determine peak neurons for the level - those are the actual predictions
-			await this.inferPeakNeurons(level);
+			await this.inferPeakNeurons(neuronStrengths, level);
 		}
 	}
 
 	/**
-	 * Same-level predictions of connections for the next cycle of the level.
-	 * Handles rolling window of predictions with proper time dilation for higher levels.
+	 * infer connections that will happen for the next cycle of the level from observations
+	 * handles rolling window of predictions with proper time dilation for higher levels.
 	 */
-	async sameLevelPredictions(level) {
+	async inferConnections(level) {
 		
 		// age all existing predictions in the connection_inference table
 		await this.conn.query('UPDATE connection_inference SET age = age + 1 WHERE level = ?', [level]);
@@ -312,7 +316,7 @@ export default class Brain {
 			JOIN connections c ON ci.connection_id = c.id
 			JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = ci.level AND an.age = 0 
 			WHERE ci.level = ? 
-		`, [level, level]);
+		`, [level]);
 
 		// but if the predicted connections did not come true, and they are expiring at max age, reduce their strengths
 		// these predictions did not come true and are about to be removed
@@ -325,17 +329,98 @@ export default class Brain {
 		// now that we used them for reinforcement, clear previous expired predictions for this level
 		await this.conn.query('DELETE FROM connection_inference WHERE level = ? AND age >= POW(?, level)', [level, this.baseNeuronMaxAge]);
 
-		// insert new predictions for the next cycle of this level, only from newly activated neurons (age 0)
-		// predict connections at bucketed distance 1 (next temporal step for this level)
+		// insert new predictions for the next cycle of this level from all active neurons
+		// predict connections where distance matches the next temporal step for the neuron's age (age + 1)
+		// distance calculation accounts for time dilation: level 0 = exact, higher levels = bucketed
 		await this.conn.query(`
-			INSERT INTO connection_inference (level, connection_id, age)
+			INSERT IGNORE INTO connection_inference (level, connection_id, age)
 			SELECT f.level, c.id, 0
 			FROM active_neurons f
-			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = 1
+			JOIN connections c ON c.from_neuron_id = f.neuron_id 
+				AND c.distance = IF(f.level = 0, f.age + 1, FLOOR((f.age + 1) / POW(?, f.level)))
 			WHERE f.level = ?
-			AND f.age = 0
 			AND c.strength >= 0
-		`, [level]);
+		`, [this.baseNeuronMaxAge, level]);
+	}
+
+	/**
+	 * Lower-level predictions from active patterns at the current level.
+	 * These predictions are valid for the reduced time-span of the lower level.
+	 * If pattern is in level 1, predictions are valid for 10 cycles of level 0.
+	 * If pattern is in level 2, predictions are valid for 10 cycles of level 1 (100 cycles of level 0).
+	 */
+	async inferPatterns(level) {
+		console.log(`Processing lower-level predictions for level ${level}`);
+
+		// age existing pattern predictions
+		await this.conn.query('UPDATE pattern_inference SET age = age + 1 WHERE level = ?', [level]);
+
+		// Validate predictions that came true - check if predicted connections are now active at age 0 in the target level
+		await this.conn.query(`
+			UPDATE pattern_inference pi
+			JOIN connections c ON pi.connection_id = c.id
+			JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = ? AND an.age = 0
+			SET pi.validated = true
+			WHERE pi.level = ? AND pi.validated = false
+		`, [level - 1, level]);
+
+		// Process patterns that are expiring (reached max age for the lower level)
+		// apply negative reinforcement if pattern was sufficiently active
+		// Apply negative reinforcement in a single optimized query
+		// Only weaken pattern definitions for failed predictions where the pattern was sufficiently activated (>= patternActivation threshold)
+		const maxAge = Math.pow(this.baseNeuronMaxAge, level);
+		await this.conn.query(`
+			UPDATE patterns p
+			JOIN (
+				SELECT 
+					pi.pattern_neuron_id,
+					pi.connection_id,
+					(SUM(CASE WHEN pi.validated = true THEN 1 ELSE 0 END) / COUNT(*)) as activation_rate
+				FROM pattern_inference pi
+				WHERE pi.level = ? AND pi.age >= ?
+				GROUP BY pi.pattern_neuron_id, pi.connection_id
+				HAVING activation_rate >= ?
+			) pattern_stats ON p.pattern_neuron_id = pattern_stats.pattern_neuron_id 
+				AND p.connection_id = pattern_stats.connection_id
+			JOIN pattern_inference pi_failed ON p.pattern_neuron_id = pi_failed.pattern_neuron_id 
+				AND p.connection_id = pi_failed.connection_id
+				AND pi_failed.level = ? 
+				AND pi_failed.age >= ?
+				AND pi_failed.validated = false
+			SET p.strength = p.strength - ?
+		`, [level, maxAge, this.patternActivation, level, maxAge, this.negativeLearningRate]);
+
+		// Clean up expired predictions
+		await this.conn.query('DELETE FROM pattern_inference WHERE level = ? AND age >= ?', [level, maxAge]);
+
+		// TODO: the expired patterns that were not validated should be deactivated
+		// this is basically the brain realizing that it looked like the observation was going to be a pattern, but did not happen
+
+		// Create new lower-level predictions from newly activated pattern neurons (age 0)
+		// Insert new lower-level predictions from newly activated pattern neurons (age 0)
+		// Get connections that are part of active patterns but exclude already active connections
+		// Create new pattern predictions from newly activated pattern neurons
+		await this.conn.query(`
+			INSERT INTO pattern_inference (level, pattern_neuron_id, connection_id, age, validated)
+			SELECT an.level - 1, p.pattern_neuron_id, p.connection_id, 0, false
+			FROM active_neurons an
+			JOIN patterns p ON an.neuron_id = p.pattern_neuron_id
+			JOIN connections c ON p.connection_id = c.id
+			WHERE an.level = ? 
+			AND an.age = 0
+			AND p.strength > 0
+			-- Exclude connections that are already active (using same logic as getActiveConnections)
+			AND NOT EXISTS (
+				SELECT 1 
+				FROM active_neurons f
+				JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
+				WHERE c.from_neuron_id = f.neuron_id 
+				AND c.distance = IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level)))
+				AND f.level = ? - 1
+				AND (t.neuron_id != f.neuron_id OR f.age != 0)
+				AND c.strength >= 0
+			)
+		`, [level, this.baseNeuronMaxAge, level]);
 	}
 
 	/**
@@ -505,7 +590,6 @@ export default class Brain {
 				break;
 			}
 		}
-		return level; // return the maximum level reached - we will start inference from there
 	}
 
 	/**
@@ -799,6 +883,14 @@ export default class Brain {
         	INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
         	ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
     	`, [patternConnections]);
+	}
+
+	/**
+	 * returns the maximum level from active neurons
+	 */
+	async getMaxActiveLevel() {
+		const [rows] = await this.conn.query('SELECT MAX(level) as max_level FROM active_neurons');
+		return rows[0].max_level || 0;
 	}
 
 	/**
