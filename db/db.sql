@@ -103,13 +103,12 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- stores down-level predictions - used to update pattern definitions based on results - valid for 10 cycles
+-- stores down-level predictions - used to update pattern strengths based on prediction results - rolling window
 CREATE TABLE pattern_inference (
     level TINYINT,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT,
     age TINYINT DEFAULT 0,
-    validated BOOL NOT NULL DEFAULT false,
     PRIMARY KEY (level, pattern_neuron_id, age, connection_id)
 ) ENGINE=MEMORY;
 

@@ -16,7 +16,6 @@ export default class Brain {
 		this.forgetRate = 0.1; // how much the connection strengths will be decremented by at forget cycles
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
-		this.patternActivation = 0.8; // minimum percentage of pattern connections that must be active for negative reinforcement
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 
 		// initialize the counter for forget cycle
@@ -287,8 +286,8 @@ export default class Brain {
 			// do same-level connection predictions for the level
 			await this.inferConnections(level);
 
-			// do the pattern predictions for the level
-			await this.inferPatterns(level);
+			// do the pattern predictions for the lower level - these will be used in the next iteration
+			if (level > 0) await this.inferPatterns(level);
 
 			// determine predicted neuron strengths for the level - those are the actual predictions
 			let neuronStrengths = await this.predictNeuronStrengths(level);
@@ -325,7 +324,12 @@ export default class Brain {
 		await this.conn.query(`
             UPDATE connections
             SET strength = strength - ?
-            WHERE id IN (SELECT ci.connection_id FROM connection_inference ci WHERE ci.level = ? AND ci.age >= POW(?, ci.level))
+            WHERE id IN (
+            	SELECT ci.connection_id 
+            	FROM connection_inference ci 
+            	WHERE ci.level = ? 
+            	AND ci.age >= POW(?, ci.level)
+            )
 		`, [this.negativeLearningRate, level, this.baseNeuronMaxAge]);
 
 		// now that we used them for reinforcement, clear previous expired predictions for this level
@@ -353,62 +357,58 @@ export default class Brain {
 	async inferPatterns(level) {
 		console.log(`Processing lower-level predictions for level ${level}`);
 
-		// age existing pattern predictions
-		await this.conn.query('UPDATE pattern_inference SET age = age + 1 WHERE level = ?', [level]);
+		// age existing pattern predictions in the lower level
+		await this.conn.query('UPDATE pattern_inference SET age = age + 1 WHERE level = ?', [level - 1]);
 
-		// validate predictions that came true - check if predicted connections are now active at age 0 in the target level
+		// remove predictions that came true (predicted connections are now active at age=0 in the target level)
+		// we don't need to strengthen the predicted connections that came true - strength was already be increased simply because of observation
 		await this.conn.query(`
-			UPDATE pattern_inference pi
-			JOIN connections c ON pi.connection_id = c.id
-			JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = pi.level AND an.age = 0
-			SET pi.validated = true
+            DELETE pi
+            FROM pattern_inference pi
+            JOIN connections c ON pi.connection_id = c.id
+            JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = pi.level AND an.age = 0
 			WHERE pi.level = ? 
-			AND pi.validated = false
-		`, [level]);
+		`, [level - 1]);
 
-		// TODO: the expiring pattern predictions that did not pass the pattern activation threshold should deactivate patterns here
-		//  this is basically the brain realizing that it looked like the observation was going to be a pattern, but did not happen
-
-		// expiring pattern predictions that did pass the pattern activation threshold should apply negative reinforcement
-		// this is basically the brain realizing that a pattern was observed slightly different and its definition needs adjustment
+		// but if the predicted connections did not come true, and they are expiring at max age, reduce their strengths
+		// these predictions did not come true and are about to be removed
 		await this.conn.query(`
             UPDATE patterns
             SET strength = strength - ?
             WHERE pattern_neuron_id IN (
-				SELECT pi.pattern_neuron_id
-				FROM pattern_inference pi
-				WHERE pi.level = ?
-				AND pi.age >= POW(?, pi.level + 1)
-				GROUP BY pi.pattern_neuron_id
-				HAVING (SUM(IF(pi.validated = true, 1, 0)) / COUNT(*)) >= ?
+            	SELECT pi.pattern_neuron_id 
+            	FROM pattern_inference pi 
+            	WHERE pi.level = ?
+                AND pi.age >= POW(?, pi.level + 1)
 			)
-		`, [this.negativeLearningRate, level, this.patternActivation]);
+		`, [this.negativeLearningRate, level - 1, this.baseNeuronMaxAge]);
 
 		// now that we used them for reinforcements, delete expired pattern predictions
-		await this.conn.query('DELETE FROM pattern_inference WHERE level = ? AND age >= POW(?, level + 1)', [level, this.baseNeuronMaxAge]);
+		await this.conn.query('DELETE FROM pattern_inference WHERE level = ? AND age >= POW(?, level + 1)', [level - 1, this.baseNeuronMaxAge]);
 
 		// create new predictions from patterns that were just activated in the higher level
 		// if the higher level patterns are just activated (age=0) they must have been activated due to
-		// some new neurons in the lower level (age=0 as well) - insert them as validated
+		// some new neurons in the lower level (age=0 as well) - exclude them
 		await this.conn.query(`
-			INSERT INTO pattern_inference (level, pattern_neuron_id, connection_id, age, validated)
-			SELECT an.level - 1, p.pattern_neuron_id, p.connection_id, 0, EXISTS (
+			INSERT INTO pattern_inference (level, pattern_neuron_id, connection_id, age)
+			SELECT an.level - 1, p.pattern_neuron_id, p.connection_id, 0 
+			FROM active_neurons an
+			JOIN patterns p ON an.neuron_id = p.pattern_neuron_id
+			JOIN connections c ON p.connection_id = c.id
+			WHERE an.level = ?
+			AND an.age = 0
+			AND p.strength > 0
+			AND NOT EXISTS (
                 SELECT 1
                 FROM active_neurons f
                 JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
                 WHERE c.from_neuron_id = f.neuron_id
-                AND c.distance = IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level)))
+                AND c.distance = FLOOR(f.age / POW(?, f.level))
                 AND f.level = an.level - 1
                 AND (t.neuron_id != f.neuron_id OR f.age != 0)
                 AND c.strength >= 0
             )
-			FROM active_neurons an
-			JOIN patterns p ON an.neuron_id = p.pattern_neuron_id
-			JOIN connections c ON p.connection_id = c.id
-			WHERE an.level = ? + 1
-			AND an.age = 0
-			AND p.strength > 0
-		`, [this.baseNeuronMaxAge, level]);
+		`, [level, this.baseNeuronMaxAge]);
 	}
 
 	/**
@@ -524,7 +524,7 @@ export default class Brain {
             SELECT 
                 f.neuron_id as from_neuron_id, -- connection from the neuron id
                 t.neuron_id as to_neuron_id, -- connection to the neuron id
-                IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level))) as distance, -- bucketed distance: level 0 = exact, higher levels = bucketed
+                FLOOR(f.age / POW(?, f.level)) as distance, -- bucketed distance: level 0 = exact, higher levels = bucketed
                 1 as strength -- each observation increases strength by 1 
 			FROM active_neurons f -- connections are built from the older neurons to the new neurons
 			JOIN active_neurons t ON t.level = f.level -- reinforcing connections only within the same level
@@ -630,7 +630,7 @@ export default class Brain {
             -- source is the older neurons building connections from them to the new neurons
 			JOIN active_neurons f 
 				ON c.from_neuron_id = f.neuron_id 
-			    AND c.distance = IF(f.level = 0, f.age, FLOOR(f.age / POW(?, f.level)))
+			    AND c.distance = FLOOR(f.age / POW(?, f.level))
             -- getting active connections from older neurons to newly activated neurons within the same level
             JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
             WHERE f.level = ? -- get the active neurons in the given level
@@ -963,6 +963,68 @@ export default class Brain {
         	INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
         	ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
     	`, [patternConnections]);
+	}
+
+	/**
+	 * Retrieves predicted connections from both connection_inference and pattern_inference tables,
+	 * calculates neuron strengths from all predicted connections.
+	 * This handles the overlap between connection-level and pattern-level predictions.
+	 * @param {number} level - The level to get predictions for
+	 * @returns {Map} Map of all neuron IDs to their combined prediction strength values
+	 */
+	async predictNeuronStrengths(level) {
+		console.log(`Predicting neuron strengths for level ${level}`);
+
+		// Get connection-level predictions for this level
+		const [connectionRows] = await this.conn.query(`
+			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
+			FROM connection_inference ci
+			JOIN connections c ON ci.connection_id = c.id
+			WHERE ci.level = ?
+			AND c.strength >= 0
+		`, [level]);
+
+		// Get pattern-level predictions for this level (from higher level patterns)
+		const [patternRows] = await this.conn.query(`
+			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
+			FROM pattern_inference pi
+			JOIN connections c ON pi.connection_id = c.id
+			WHERE pi.level = ?
+			AND c.strength >= 0
+		`, [level]);
+
+		// Combine both types of predictions into a single array
+		// Use a Map to deduplicate connections by ID and sum their strengths if they appear in both
+		const connectionMap = new Map();
+		
+		// Add connection-level predictions
+		for (const conn of connectionRows) {
+			connectionMap.set(conn.id, { ...conn });
+		}
+		
+		// Add pattern-level predictions, summing strengths for duplicates
+		for (const conn of patternRows) {
+			if (connectionMap.has(conn.id)) {
+				// Connection exists from both sources - sum the strengths
+				connectionMap.get(conn.id).strength += conn.strength;
+			} else {
+				connectionMap.set(conn.id, { ...conn });
+			}
+		}
+
+		// Convert back to array for neuron strength calculation
+		const allPredictedConnections = Array.from(connectionMap.values());
+		
+		if (allPredictedConnections.length === 0) {
+			console.log(`No predicted connections found for level ${level}`);
+			return new Map();
+		}
+
+		// Calculate neuron strengths from all predicted connections (both incoming and outgoing)
+		const neuronStrengths = this.getNeuronStrengths(allPredictedConnections);
+
+		console.log(`Calculated strengths for ${neuronStrengths.size} neurons at level ${level}`);
+		return neuronStrengths;
 	}
 
 	/**
