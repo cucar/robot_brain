@@ -18,6 +18,7 @@ export default class Brain {
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.patternActivation = 0.8; // minimum percentage of pattern connections that must be active for negative reinforcement
+		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -49,6 +50,7 @@ export default class Brain {
 		await this.conn.query('TRUNCATE pattern_inference');
 		await this.conn.query('TRUNCATE connection_inference');
 		await this.conn.query('TRUNCATE inferred_neurons');
+		await this.conn.query('TRUNCATE observed_patterns');
 	}
 
 	/**
@@ -63,6 +65,7 @@ export default class Brain {
 			'pattern_inference',
 			'connection_inference',
 			'inferred_neurons',
+			'observed_patterns',
 			'patterns',
 			'connections',
 			'coordinates',
@@ -593,8 +596,14 @@ export default class Brain {
 		const peakConnections = this.detectPeaks(connections);
 		if (peakConnections.size === 0) return false; // if there are no peaks found in the level, no patterns to process - return false to indicate that we're done
 
-		// match peak neurons with their connections to known patterns using their connection ids. get all pattern neuron ids that use the connection ids.
+		// save observed patterns (peak connections) to the observed_patterns table
+		await this.saveObservedPatterns(peakConnections);
+
+		// match observed patterns to known patterns using their connection ids. get all pattern neuron ids that use the connection ids.
 		const peakPatterns = await this.matchPatternNeurons(peakConnections);
+
+		// augment patterns that were matched to observed patterns with the
+		await this.augmentMatchedPatterns(peakPatterns);
 
 		// create new patterns for the peaks that do not have any matching patterns
 		await this.createNewPatterns(peakPatterns, peakConnections);
@@ -770,36 +779,82 @@ export default class Brain {
 	}
 
 	/**
-	 * matches pattern neurons to peak neurons from the connection ids in their cluster
-	 * input format: Map(peak_neuron_id, connection_ids)
+	 * saves observed patterns (peak connections) to the observed_patterns table
+	 * @param {Map} peakConnections - Map of peak_neuron_id -> array of connection_ids
+	 */
+	async saveObservedPatterns(peakConnections) {
+		const peakConnectionMappings = [];
+		for (const [peakNeuronId, connectionIds] of peakConnections)
+			for (const connectionId of connectionIds)
+				peakConnectionMappings.push([peakNeuronId, connectionId]);
+
+		// Clear and populate memory table for peak-connection mappings
+		await this.conn.query('TRUNCATE observed_patterns');
+		await this.conn.query('INSERT INTO observed_patterns VALUES ?', [peakConnectionMappings]);
+	}
+
+	/**
+	 * matches observed patterns to known patterns based on neuron overlap (66% threshold)
+	 * uses the observed_patterns table populated by saveObservedPatterns
 	 * output format: Map(peak_neuron_id, pattern_neuron_ids)
 	 */
 	async matchPatternNeurons(peakConnections) {
 
-		// for each peak, create a separate select query to get matching patterns
-		const unionQueries = [];
-		for (const [peakNeuronId, connectionIds] of peakConnections) {
+		// Single efficient query that processes all peaks at once
+		const [rows] = await this.conn.query(`
+			WITH observed_neurons AS (
+				-- All unique neurons for each peak from their observed connections
+			    -- Note that these are not the same thing as age=0 neurons - they include all neurons that are connected to them as well
+				SELECT DISTINCT op.peak_neuron_id, 
+					CASE WHEN v.direction = 'from' THEN c.from_neuron_id ELSE c.to_neuron_id END as neuron_id
+				FROM observed_patterns op
+				JOIN connections c ON op.connection_id = c.id
+				CROSS JOIN (SELECT 'from' as direction UNION SELECT 'to' as direction) AS v
+			),
+			observed_pattern_matches AS (
+				-- Get patterns that share connections with observed patterns (pattern-peak pairs)
+				SELECT DISTINCT p.pattern_neuron_id, op.peak_neuron_id
+				FROM patterns p 
+				JOIN observed_patterns op ON p.connection_id = op.connection_id 
+				WHERE p.strength > 0
+			),
+			candidate_pattern_neurons AS (
+				-- Get all unique neurons for each candidate pattern (once per pattern, not duplicated per peak)
+				SELECT DISTINCT p.pattern_neuron_id,
+					CASE WHEN v.direction = 'from' THEN c.from_neuron_id ELSE c.to_neuron_id END as neuron_id
+				FROM patterns p
+				JOIN connections c ON p.connection_id = c.id
+				CROSS JOIN (SELECT 'from' as direction UNION SELECT 'to' as direction) AS v
+				WHERE p.pattern_neuron_id IN (SELECT DISTINCT pattern_neuron_id FROM observed_pattern_matches) 
+				AND p.strength > 0
+			)
+			-- Calculate overlap percentage and return matching peak-pattern pairs
+			SELECT obs.peak_neuron_id, opm.pattern_neuron_id
+			FROM observed_neurons obs
+			JOIN observed_pattern_matches opm ON obs.peak_neuron_id = opm.peak_neuron_id
+			JOIN candidate_pattern_neurons cpn ON opm.pattern_neuron_id = cpn.pattern_neuron_id AND obs.neuron_id = cpn.neuron_id
+			GROUP BY obs.peak_neuron_id, opm.pattern_neuron_id
+			HAVING (COUNT(DISTINCT cpn.neuron_id) / COUNT(DISTINCT obs.neuron_id)) >= ?
+		`, [this.mergePatternThreshold]);
 
-			// create a select for this point that returns peak_neuron_id and pattern_neuron_ids
-			// note that it is possible for connections to be shared between peaks, but hopefully that will not be too common
-			unionQueries.push(`
-				SELECT '${peakNeuronId}' AS peak_neuron_id, GROUP_CONCAT(pattern_neuron_id) as pattern_neuron_ids
-				FROM patterns
-				WHERE connection_id IN (${connectionIds.join(',')})
-			`);
-		}
-
-		// combine all point queries with UNION and get the matching pattern neurons for each peak neuron
-		const sql = unionQueries.join(' UNION ALL ');
-		const [rows] = await this.conn.query(sql);
-
-		// convert query results to expected Map format: Map(peak_neuron_id, pattern_neuron_ids)
+		// Convert to expected format
 		const peakPatterns = new Map();
+		
+		// Initialize all peaks with empty arrays
+		for (const [peakNeuronId] of peakConnections) peakPatterns.set(peakNeuronId, []);
+		
+		// Fill in matched patterns
 		for (const row of rows) {
 			const peakNeuronId = parseInt(row.peak_neuron_id);
-			const patternNeuronIds = row.pattern_neuron_ids ? row.pattern_neuron_ids.split(',').map(id => parseInt(id)) : [];
-			peakPatterns.set(peakNeuronId, patternNeuronIds);
+			const patternNeuronId = parseInt(row.pattern_neuron_id);
+			
+			// Get existing array or create new one
+			if (!peakPatterns.has(peakNeuronId)) peakPatterns.set(peakNeuronId, []);
+			
+			// Add the pattern to this peak's array
+			peakPatterns.get(peakNeuronId).push(patternNeuronId);
 		}
+		
 		return peakPatterns;
 	}
 

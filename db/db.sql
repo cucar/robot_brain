@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS patterns (
     PRIMARY KEY (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
-    INDEX idx_from_distance_strength (connection_id, strength DESC)
+    INDEX idx_connection_strength (connection_id, strength),
+    INDEX idx_pattern_strength (pattern_neuron_id, strength)
 );
 
 -- includes joy/pain level of neurons based on their exposure (time proximity) to them
@@ -129,4 +130,12 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
     PRIMARY KEY (neuron_id, level, age),
     INDEX idx_level_age (level, age),
     INDEX idx_current_active (age, level)
+) ENGINE=MEMORY;
+
+-- mapping table for observed patterns - peak neurons and their connections (MEMORY table)
+CREATE TABLE IF NOT EXISTS observed_patterns (
+    peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL,
+    INDEX idx_connection (connection_id),
+    INDEX idx_peak (peak_neuron_id)
 ) ENGINE=MEMORY;
