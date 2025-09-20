@@ -602,8 +602,8 @@ export default class Brain {
 		// match observed patterns to known patterns using their connection ids. get all pattern neuron ids that use the connection ids.
 		const peakPatterns = await this.matchPatternNeurons(peakConnections);
 
-		// augment patterns that were matched to observed patterns with the
-		await this.augmentMatchedPatterns(peakPatterns);
+		// augment known patterns that were matched to observed patterns with the
+		await this.mergeMatchedPatterns(peakPatterns, peakConnections);
 
 		// create new patterns for the peaks that do not have any matching patterns
 		await this.createNewPatterns(peakPatterns, peakConnections);
@@ -805,8 +805,7 @@ export default class Brain {
 			WITH observed_neurons AS (
 				-- All unique neurons for each peak from their observed connections
 			    -- Note that these are not the same thing as age=0 neurons - they include all neurons that are connected to them as well
-				SELECT DISTINCT op.peak_neuron_id, 
-					CASE WHEN v.direction = 'from' THEN c.from_neuron_id ELSE c.to_neuron_id END as neuron_id
+				SELECT DISTINCT op.peak_neuron_id, IF(v.direction = 'from', c.from_neuron_id, c.to_neuron_id) as neuron_id
 				FROM observed_patterns op
 				JOIN connections c ON op.connection_id = c.id
 				CROSS JOIN (SELECT 'from' as direction UNION SELECT 'to' as direction) AS v
@@ -820,8 +819,7 @@ export default class Brain {
 			),
 			candidate_pattern_neurons AS (
 				-- Get all unique neurons for each candidate pattern (once per pattern, not duplicated per peak)
-				SELECT DISTINCT p.pattern_neuron_id,
-					CASE WHEN v.direction = 'from' THEN c.from_neuron_id ELSE c.to_neuron_id END as neuron_id
+				SELECT DISTINCT p.pattern_neuron_id, IF(v.direction = 'from', c.from_neuron_id, c.to_neuron_id) as neuron_id
 				FROM patterns p
 				JOIN connections c ON p.connection_id = c.id
 				CROSS JOIN (SELECT 'from' as direction UNION SELECT 'to' as direction) AS v
@@ -856,6 +854,47 @@ export default class Brain {
 		}
 		
 		return peakPatterns;
+	}
+
+	/**
+	 * merges observed patterns into existing matched pattern definitions
+	 * @param {Map} peakPatterns - Map of peak_neuron_id -> array of pattern_neuron_ids
+	 * @param {Map} peakConnections - Map of peak_neuron_id -> array of connection_ids
+	 */
+	async mergeMatchedPatterns(peakPatterns, peakConnections) {
+		
+		// Create reverse mapping: pattern_neuron_id -> array of peak_neuron_ids
+		const patternPeaks = new Map();
+		for (const [peakNeuronId, patternNeuronIds] of peakPatterns) {
+			for (const patternNeuronId of patternNeuronIds) {
+				if (!patternPeaks.has(patternNeuronId)) patternPeaks.set(patternNeuronId, []);
+				patternPeaks.get(patternNeuronId).push(peakNeuronId);
+			}
+		}
+
+		// For each matched pattern, collect all connection IDs from the observed patterns
+		const patternConnectionUpdates = [];
+		for (const [patternNeuronId, peakNeuronIds] of patternPeaks) {
+
+			// Get all connection IDs from the matched observed patterns
+			const connectionIds = new Set();
+			for (const peakNeuronId of peakNeuronIds) {
+				const peakConnections_for_peak = peakConnections.get(peakNeuronId) || [];
+				for (const connectionId of peakConnections_for_peak) connectionIds.add(connectionId);
+			}
+
+			// Add each connection to the pattern with strength increment of 1
+			for (const connectionId of connectionIds)
+				patternConnectionUpdates.push([patternNeuronId, connectionId, 1]);
+		}
+
+		// Batch insert/update all pattern-connection relationships
+		if (patternConnectionUpdates.length > 0) {
+			await this.conn.query(`
+				INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
+				ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
+			`, [patternConnectionUpdates]);
+		}
 	}
 
 	/**
