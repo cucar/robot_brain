@@ -827,12 +827,13 @@ export default class Brain {
 				AND p.strength > 0
 			)
 			-- Calculate overlap percentage and return matching peak-pattern pairs
-			SELECT obs.peak_neuron_id, opm.pattern_neuron_id
-			FROM observed_neurons obs
-			JOIN observed_pattern_matches opm ON obs.peak_neuron_id = opm.peak_neuron_id
-			JOIN candidate_pattern_neurons cpn ON opm.pattern_neuron_id = cpn.pattern_neuron_id AND obs.neuron_id = cpn.neuron_id
-			GROUP BY obs.peak_neuron_id, opm.pattern_neuron_id
-			HAVING (COUNT(DISTINCT cpn.neuron_id) / COUNT(DISTINCT obs.neuron_id)) >= ?
+			-- at least 66% of the known pattern's neurons should be part of the observed pattern to be matched
+			SELECT opm.peak_neuron_id, opm.pattern_neuron_id
+			FROM observed_pattern_matches opm
+			JOIN candidate_pattern_neurons cpn ON opm.pattern_neuron_id = cpn.pattern_neuron_id
+			LEFT JOIN observed_neurons obs ON opm.peak_neuron_id = obs.peak_neuron_id AND obs.neuron_id = cpn.neuron_id
+			GROUP BY opm.peak_neuron_id, opm.pattern_neuron_id
+			HAVING (COUNT(DISTINCT CASE WHEN obs.neuron_id IS NOT NULL THEN cpn.neuron_id END) / COUNT(DISTINCT cpn.neuron_id)) >= ?
 		`, [this.mergePatternThreshold]);
 
 		// Convert to expected format
