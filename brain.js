@@ -14,7 +14,6 @@ export default class Brain {
 		this.baseNeuronMaxAge = 10; // number of frames a base neuron stays active
 		this.forgetCycles = 1000; // number of frames between forget cycles
 		this.forgetRate = 0.1; // how much the connection strengths will be decremented by at forget cycles
-		this.positiveLearningRate = 0.1; // how much pattern strengths will be incremented by when accurate
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.patternActivation = 0.8; // minimum percentage of pattern connections that must be active for negative reinforcement
@@ -339,8 +338,7 @@ export default class Brain {
 			INSERT IGNORE INTO connection_inference (level, connection_id, age)
 			SELECT f.level, c.id, 0
 			FROM active_neurons f
-			JOIN connections c ON c.from_neuron_id = f.neuron_id 
-				AND c.distance = IF(f.level = 0, f.age + 1, FLOOR((f.age + 1) / POW(?, f.level)))
+			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = FLOOR((f.age + 1) / POW(?, f.level))
 			WHERE f.level = ?
 			AND c.strength >= 0
 		`, [this.baseNeuronMaxAge, level]);
