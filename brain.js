@@ -1027,16 +1027,12 @@ export default class Brain {
 
 		// remove orphaned neurons with no connections, no patterns, and not currently active
 		await this.conn.query(`
-	        DELETE n FROM neurons n
-    	    LEFT JOIN connections c1 ON n.id = c1.from_neuron_id
-        	LEFT JOIN connections c2 ON n.id = c2.to_neuron_id
-            LEFT JOIN patterns p ON n.id = p.pattern_neuron_id
-        	LEFT JOIN active_neurons an ON n.id = an.neuron_id
-        	WHERE c1.from_neuron_id IS NULL 
-          	AND c2.to_neuron_id IS NULL
-            AND p.pattern_neuron_id IS NULL
-          	AND an.neuron_id IS NULL
-    	`);
+			DELETE FROM neurons n
+			WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
+			  AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
+			  AND NOT EXISTS (SELECT 1 FROM patterns WHERE pattern_neuron_id = n.id)
+			  AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
+		`);
 
 		console.log('Forgetting cycle completed.');
 	}
