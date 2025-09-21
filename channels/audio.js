@@ -67,32 +67,28 @@ export default class EarsChannel extends Channel {
 	/**
 	 * Get feedback based on ear movement accuracy for sound localization
 	 */
-	async getFeedbackNeurons() {
+	async getFeedback() {
 		if (!this.lastMovement) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		// Get the actual sound direction
 		const currentDataIndex = this.currentDataIndex - 1;
 		if (currentDataIndex < 0 || currentDataIndex >= this.audioData.length) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		const actualDirection = this.audioData[currentDataIndex].direction;
 		const orientationError = Math.abs(this.earOrientation - actualDirection);
 		const threshold = 0.2; // Acceptable localization error
 
-		let feedbackValue;
-
 		if (orientationError < threshold) {
-			feedbackValue = 1; // Reward for accurate localization
-			console.log(`${this.name}: REWARD! Accurately localized sound (error: ${orientationError.toFixed(3)})`);
+			console.log(`${this.name}: JOY! Accurately localized sound (error: ${orientationError.toFixed(3)})`);
+			return { joy: 1, pain: 0 };
 		} else {
-			feedbackValue = -1; // Penalty for poor localization
-			console.log(`${this.name}: PENALTY! Poor sound localization (error: ${orientationError.toFixed(3)})`);
+			console.log(`${this.name}: PAIN! Poor sound localization (error: ${orientationError.toFixed(3)})`);
+			return { joy: 0, pain: 1 };
 		}
-
-		return [{ localization_reward: feedbackValue }];
 	}
 
 	/**

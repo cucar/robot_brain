@@ -17,12 +17,18 @@ export default class Brain {
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.rewardDecayRate = 0.05; // how much joy/pain rewards decay during forget cycles
+		this.painTolerance = 0; // remove predictions with pain_score above this threshold
+		this.riskTolerance = 1.5; // boost predictions only if joy_score/pain_score ratio exceeds this
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
 
 		// initialize channel registry
 		this.channels = new Map();
+		
+		// track all executed output neurons per channel for reward feedback
+		this.lastExecutedOutputNeurons = new Map();
 		
 		// used for global activity tracking so that we can trigger exploration when all channels are inactive
 		this.lastActivity = -1; // frame number of last activity across all channels
@@ -49,6 +55,7 @@ export default class Brain {
 		await this.conn.query('TRUNCATE connection_inference');
 		await this.conn.query('TRUNCATE inferred_neurons');
 		await this.conn.query('TRUNCATE observed_patterns');
+		await this.conn.query('TRUNCATE active_connections');
 	}
 
 	/**
@@ -64,6 +71,7 @@ export default class Brain {
 			'connection_inference',
 			'inferred_neurons',
 			'observed_patterns',
+			'active_connections',
 			'patterns',
 			'connections',
 			'coordinates',
@@ -166,12 +174,12 @@ export default class Brain {
 
 		// Get input data from all channels
 		for (const [_, channel] of this.channels) {
-			const channelFrame = await channel.getFrameData();
-			if (channelFrame && channelFrame.length > 0) frame.push(...channelFrame);
+			const channelInputs = await channel.getFrameInputs();
+			if (channelInputs && channelInputs.length > 0) frame.push(...channelInputs);
 		}
 
 		// add the previous outputs to the current frame so that they can be learned as patterns
-		// const previousOutputs = await this.activatePreviousOutputs();
+		// const previousOutputs = await this.getPreviousOutputs();
 		// if (previousOutputs.length > 0) frame.push(...previousOutputs);
 		
 		// Add exploration if globally inactive
@@ -182,10 +190,30 @@ export default class Brain {
 	}
 
 	/**
-	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
+	 * Get feedback from all channels
 	 */
-	async processFrame(frame) {
+	async getFeedback() {
+		console.log('Getting feedback from all channels...');
+		const channelFeedbacks = new Map();
+		
+		for (const [channelName, channel] of this.channels) {
+			const feedback = await channel.getFeedback();
+			if (feedback && (feedback.joy !== 0 || feedback.pain !== 0)) {
+				channelFeedbacks.set(channelName, feedback);
+				console.log(`${channelName}: feedback (joy: ${feedback.joy}, pain: ${feedback.pain})`);
+			}
+		}
+		
+		return channelFeedbacks;
+	}
+
+	/**
+	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
+	 * and feedback from channels - Map(channelName -> {joy, pain})
+	 */
+	async processFrame(frame, feedback = new Map()) {
 		console.log(`observing new frame: ${JSON.stringify(frame)}`);
+		console.log(`applying feedback from ${feedback.size} channels`);
 
 		// do the whole thing as a transaction to avoid inconsistent database states
 		await this.conn.beginTransaction();
@@ -193,11 +221,17 @@ export default class Brain {
 		// if there's an error, we'll roll the transaction back
 		try {
 
+			// apply hierarchical reward feedback to active neurons
+			await this.applyHierarchicalRewards(feedback);
+
 			// age the active neurons in memory context - sliding the window
 			await this.ageNeurons();
 
 			// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 			await this.recognizeNeurons(frame);
+
+			// populate active connections table for fast reward propagation
+			await this.populateActiveConnections();
 
 			// do predictions and outputs - what's going to happen next? and what's our best response?
 			await this.inferNeurons();
@@ -234,12 +268,29 @@ export default class Brain {
 			// nothing to do if there are no actions to execute
 			if (!channelOutputs || channelOutputs.actions.size === 0) continue;
 
+			// Track all executed output neurons for this channel for reward feedback
+			this.trackLastExecutedOutputNeurons(channelName, channelOutputs);
+
 			// now ask the channel to execute the outputs
 			await channel.executeOutputs(channelOutputs);
 
 			// Track global activity - if any channel produced action outputs, mark brain as active
 			this.lastActivity = this.frameNumber;
-			console.log(`${channelName} executed actions:`, Array.from(outputs.actions.keys()));
+			console.log(`${channelName} executed actions:`, Array.from(channelOutputs.actions.keys()));
+		}
+	}
+
+	/**
+	 * Track all executed output neurons for a channel for future reward feedback
+	 */
+	trackLastExecutedOutputNeurons(channelName, channelOutputs) {
+
+		const executedNeurons = [];
+		for (const [neuronId] of channelOutputs.actions) executedNeurons.push(neuronId);
+		
+		if (executedNeurons.length > 0) {
+			this.lastExecutedOutputNeurons.set(channelName, executedNeurons);
+			console.log(`${channelName}: Tracking ${executedNeurons.length} output neurons for feedback: [${executedNeurons.join(', ')}]`);
 		}
 	}
 
@@ -289,14 +340,25 @@ export default class Brain {
 			// do the pattern predictions for the lower level - these will be used in the next iteration
 			if (level > 0) await this.inferPatterns(level);
 
-			// determine predicted neuron strengths for the level - those are the actual predictions
-			let neuronStrengths = await this.predictNeuronStrengths(level);
+			// get predicted connections for the level
+			const predictedConnections = await this.getPredictedConnections(level);
+
+			// skip if no predicted connections
+			if (predictedConnections.length === 0) {
+				console.log(`No predicted connections for level ${level}, skipping inference`);
+				continue;
+			}
+
+			// determine predicted neuron strengths from connections
+			let neuronStrengths = this.getNeuronStrengths(predictedConnections);
+			if (neuronStrengths.size === 0) throw new Error('no neuron strengths.'); // should not happen
+			console.log(`Calculated strengths for ${neuronStrengths.size} neurons at level ${level}`);
 
 			// do the rewards optimizations - avoid pain, maximize joy
 			neuronStrengths = await this.optimizeRewards(neuronStrengths, level);
 
-			// determine peak neurons for the level - those are the actual predictions
-			await this.inferPeakNeurons(neuronStrengths, level);
+			// determine peak neurons for the level using peak detection algorithm
+			await this.inferPeakNeurons(neuronStrengths, level, predictedConnections);
 		}
 	}
 
@@ -966,18 +1028,16 @@ export default class Brain {
 	}
 
 	/**
-	 * Retrieves predicted connections from both connection_inference and pattern_inference tables,
-	 * calculates neuron strengths from all predicted connections.
-	 * This handles the overlap between connection-level and pattern-level predictions.
+	 * Get predicted connections from both connection_inference and pattern_inference tables
 	 * @param {number} level - The level to get predictions for
-	 * @returns {Map} Map of all neuron IDs to their combined prediction strength values
+	 * @returns Promise<{Array}> Array of predicted connection objects
 	 */
-	async predictNeuronStrengths(level) {
-		console.log(`Predicting neuron strengths for level ${level}`);
+	async getPredictedConnections(level) {
+		console.log(`Getting predicted connections for level ${level}`);
 
 		// get both connection-level and pattern-level predictions in a single query
 		const [predictedConnections] = await this.conn.query(`
-			SELECT c.from_neuron_id, c.to_neuron_id, c.strength
+			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
 			FROM connections c
 			WHERE c.strength >= 0 AND c.id IN (
 				SELECT connection_id FROM connection_inference WHERE level = ?
@@ -986,16 +1046,10 @@ export default class Brain {
 			)
 		`, [level, level]);
 		
-		if (predictedConnections.length === 0) {
-			console.log(`No predicted connections found for level ${level}`);
-			return new Map();
-		}
-
-		// Calculate neuron strengths from all predicted connections (both incoming and outgoing)
-		const neuronStrengths = this.getNeuronStrengths(predictedConnections);
-		console.log(`Calculated strengths for ${neuronStrengths.size} neurons at level ${level}`);
-		return neuronStrengths;
+		console.log(`Found ${predictedConnections.length} predicted connections for level ${level}`);
+		return predictedConnections;
 	}
+
 
 	/**
 	 * returns the maximum level from active neurons
@@ -1025,6 +1079,15 @@ export default class Brain {
 		await this.conn.query(`UPDATE connections SET strength = strength - ?`, [this.forgetRate]);
 		await this.conn.query(`DELETE FROM connections WHERE strength <= 0`);
 
+		// reduce reward scores (both joy and pain decay towards zero)
+		await this.conn.query(`
+			UPDATE neuron_rewards 
+			SET joy_score = GREATEST(0, joy_score - ?), pain_score = GREATEST(0, pain_score - ?)
+		`, [this.rewardDecayRate, this.rewardDecayRate]);
+
+		// remove neurons with zero rewards
+		await this.conn.query(`DELETE FROM neuron_rewards WHERE joy_score = 0 AND pain_score = 0`);
+
 		// remove orphaned neurons with no connections, no patterns, and not currently active
 		await this.conn.query(`
 			DELETE FROM neurons n
@@ -1035,5 +1098,364 @@ export default class Brain {
 		`);
 
 		console.log('Forgetting cycle completed.');
+	}
+
+	/**
+	 * Get frame outputs from inferred neurons that have output dimensions
+	 */
+	async getFrameOutputs() {
+		console.log('Getting frame outputs from inferred neurons...');
+
+		// Get frame outputs from inferred neurons that have output dimensions
+		// Only Level 0 neurons can be outputs since they have coordinates
+		const [rows] = await this.conn.query(`
+			SELECT inf.neuron_id, inf.level, c.dimension_id, c.val, d.name as dimension_name, d.channel, d.type
+			FROM inferred_neurons inf
+			JOIN coordinates c ON inf.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE d.type = 'output'
+			AND inf.age = 0
+			AND inf.level = 0
+			ORDER BY inf.neuron_id
+		`);
+		if (rows.length === 0) {
+			console.log('No output neurons found');
+			return [];
+		}
+
+		// Group by neuron and create output objects
+		const neuronOutputs = new Map();
+		for (const row of rows) {
+			const neuronId = row.neuron_id;
+			if (!neuronOutputs.has(neuronId))
+				neuronOutputs.set(neuronId, { neuron_id: neuronId, coordinates: {}, channel: row.channel });
+			neuronOutputs.get(neuronId).coordinates[row.dimension_name] = row.val;
+		}
+		const outputs = Array.from(neuronOutputs.values());
+		console.log(`Found ${outputs.length} output neurons`);
+		return outputs;
+	}
+
+	/**
+	 * Get channel-specific outputs filtered by the channel's output dimensions
+	 */
+	getChannelOutputs(outputs, channel) {
+		if (!outputs || outputs.length === 0) return null;
+
+		const channelOutputs = outputs.filter(output => output.channel === channel.name);
+		if (channelOutputs.length === 0) return null;
+
+		return {
+			actions: new Map(channelOutputs.map(output => [output.neuron_id, output])),
+			channelName: channel.name
+		};
+	}
+
+	/**
+	 * Optimize neuron strengths based on rewards (joy/pain) to avoid pain and maximize joy
+	 * Remove dangerous predictions and boost positive ones based on risk tolerance
+	 */
+	async optimizeRewards(neuronStrengths, level) {
+		console.log(`Optimizing rewards for level ${level}`);
+
+		// Get reward scores for all neurons in the strength map
+		const neuronIds = Array.from(neuronStrengths.keys());
+		const [rewardRows] = await this.conn.query(`
+			SELECT neuron_id, joy_score, pain_score
+			FROM neuron_rewards
+			WHERE neuron_id IN (${neuronIds.map(() => '?').join(',')})
+		`, neuronIds);
+
+		// Create a map of neuron rewards
+		const neuronRewards = new Map();
+		for (const row of rewardRows) neuronRewards.set(row.neuron_id, { joy: row.joy_score, pain: row.pain_score });
+
+		// Optimize neuron strengths based on rewards
+		const optimizedStrengths = new Map();
+		let removedCount = 0;
+		let boostedCount = 0;
+		for (const [neuronId, baseStrength] of neuronStrengths) {
+			const rewards = neuronRewards.get(neuronId);
+			
+			if (!rewards) {
+				// No reward history, keep original strength
+				optimizedStrengths.set(neuronId, baseStrength);
+				continue;
+			}
+			
+			const { joy, pain } = rewards;
+			
+			// Remove dangerous predictions (pain_score > pain_tolerance)
+			if (pain > this.painTolerance) {
+				console.log(`Removing dangerous prediction: neuron ${neuronId} (pain: ${pain})`);
+				removedCount++;
+				continue; // Don't add to optimizedStrengths (effectively removes it)
+			}
+			
+			let adjustedStrength = baseStrength;
+			
+			// Boost strengths for predictions with net positive reward above risk threshold
+			if (joy > 0 && pain === 0) {
+				// Pure joy case - always boost
+				adjustedStrength += joy;
+				boostedCount++;
+				console.log(`Boosting pure joy prediction: neuron ${neuronId} (joy: ${joy})`);
+			} else if (joy > 0 && pain > 0) {
+				// Mixed case - check risk tolerance
+				const riskRatio = joy / pain;
+				if (riskRatio > this.riskTolerance) {
+					adjustedStrength += joy;
+					boostedCount++;
+					console.log(`Boosting positive risk prediction: neuron ${neuronId} (joy/pain: ${riskRatio.toFixed(2)})`);
+				}
+			}
+			
+			optimizedStrengths.set(neuronId, Math.max(0, adjustedStrength));
+		}
+
+		console.log(`Optimized ${optimizedStrengths.size} neuron strengths (removed: ${removedCount}, boosted: ${boostedCount})`);
+		return optimizedStrengths;
+	}
+
+	/**
+	 * Determine peak neurons from optimized strengths using peak detection algorithm
+	 * and insert them into inferred_neurons table
+	 */
+	async inferPeakNeurons(neuronStrengths, level, predictedConnections) {
+		console.log(`Inferring peak neurons for level ${level} from ${neuronStrengths.size} candidates`);
+
+		// Use the same peak detection algorithm as detectPeaks
+		// Build neighborhood map from predicted connections
+		const neighborhoodMap = this.buildNeighborhoodMap(predictedConnections);
+		
+		// Get neighborhood average strengths
+		const neighborhoodStrengths = this.getNeighborhoodStrengths(neighborhoodMap, neuronStrengths);
+		
+		// Get peak neuron IDs (neurons stronger than their neighborhood average)
+		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
+		if (peakNeuronIds.length === 0) {
+			console.log(`No peak neurons found for level ${level}`);
+			return;
+		}
+
+		// Insert peak neurons into inferred_neurons table
+		const peakNeurons = peakNeuronIds.map(neuronId => [neuronId, level, 0]); // neuron_id, level, age=0
+		await this.conn.query('INSERT IGNORE INTO inferred_neurons (neuron_id, level, age) VALUES ?', [peakNeurons]);
+		console.log(`Inferred ${peakNeurons.length} peak neurons for level ${level}: [${peakNeuronIds.join(', ')}]`);
+	}
+
+	/**
+	 * Populate active_connections table for fast hierarchical reward propagation
+	 */
+	async populateActiveConnections() {
+		console.log('Populating active connections table...');
+
+		// Clear previous active connections
+		await this.conn.query('TRUNCATE active_connections');
+
+		// Populate active connections for all levels in one query
+		await this.conn.query(`
+			INSERT INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level, strength)
+			SELECT DISTINCT 
+				c.id as connection_id,
+				c.from_neuron_id,
+				c.to_neuron_id,
+				an_from.level,
+				c.strength
+			FROM connections c
+			JOIN active_neurons an_from ON c.from_neuron_id = an_from.neuron_id
+			JOIN active_neurons an_to ON c.to_neuron_id = an_to.neuron_id AND an_to.level = an_from.level
+			WHERE c.strength > 0
+		`);
+
+		const [countRows] = await this.conn.query('SELECT COUNT(*) as count FROM active_connections');
+		console.log(`Populated ${countRows[0].count} active connections`);
+	}
+
+	/**
+	 * Collect neuron rewards from channel feedbacks
+	 * @param {Map} channelFeedbacks - Map of channelName -> {joy, pain}
+	 * @returns {Map} Map of outputNeuron -> {joy, pain}
+	 */
+	getNeuronRewards(channelFeedbacks) {
+		const neuronRewards = new Map();
+		
+		for (const [channelName, feedback] of channelFeedbacks) {
+			const lastOutputNeurons = this.lastExecutedOutputNeurons.get(channelName);
+			if (!lastOutputNeurons || lastOutputNeurons.length === 0) {
+				console.log(`${channelName}: No previous output neurons to reward`);
+				continue;
+			}
+			
+			console.log(`${channelName}: Adding ${lastOutputNeurons.length} output neurons for batch processing`);
+			for (const outputNeuron of lastOutputNeurons) neuronRewards.set(outputNeuron, feedback);
+		}
+		
+		return neuronRewards;
+	}
+
+	/**
+	 * Build reward updates from reasoning neurons and neuron rewards
+	 * @param {Map} reasoningNeurons - Map of neuronId -> connected output neurons
+	 * @param {Map} neuronRewards - Map of outputNeuron -> {joy, pain}
+	 * @returns {Array} Array of [neuronId, totalJoy, totalPain] tuples
+	 */
+	buildRewardUpdates(reasoningNeurons, neuronRewards) {
+		const rewardUpdates = [];
+		
+		for (const [neuronId, connectedToOutputs] of reasoningNeurons) {
+			// Aggregate feedback from all connected output neurons
+			let totalJoy = 0;
+			let totalPain = 0;
+			
+			for (const outputNeuron of connectedToOutputs) {
+				const feedback = neuronRewards.get(outputNeuron);
+				if (feedback) {
+					totalJoy += feedback.joy;
+					totalPain += feedback.pain;
+				}
+			}
+			
+			if (totalJoy > 0 || totalPain > 0) {
+				rewardUpdates.push([neuronId, totalJoy, totalPain]);
+			}
+		}
+		
+		return rewardUpdates;
+	}
+
+	/**
+	 * Optimized batch hierarchical reward propagation using active_connections table
+	 */
+	async applyHierarchicalRewards(channelFeedbacks) {
+		if (channelFeedbacks.size === 0) {
+			console.log('No feedback to apply');
+			return;
+		}
+		
+		console.log('Applying batch hierarchical reward feedback...');
+		
+		// Collect feedback for all output neurons from all channels
+		const neuronRewards = this.getNeuronRewards(channelFeedbacks);
+		if (neuronRewards.size === 0) {
+			console.log('No output neurons to process');
+			return;
+		}
+
+		// get the reasoning neurons for the output neurons
+		const reasoningNeurons = await this.getReasoningNeurons(Array.from(neuronRewards.keys()));
+		
+		// Apply rewards in batch, avoiding duplicates
+		const rewardUpdates = this.buildRewardUpdates(reasoningNeurons, neuronRewards);
+		if (rewardUpdates.length === 0) {
+			console.log('No connected neurons found for reward propagation');
+			return;
+		}
+		
+		// Batch update neuron rewards
+		await this.conn.query(`
+			INSERT INTO neuron_rewards (neuron_id, joy_score, pain_score) VALUES ?
+			ON DUPLICATE KEY UPDATE 
+				joy_score = joy_score + VALUES(joy_score),
+				pain_score = pain_score + VALUES(pain_score)
+		`, [rewardUpdates]);
+		
+		console.log(`Applied batch hierarchical feedback to ${rewardUpdates.length} neurons from ${Array.from(neuronRewards.keys()).length} output neurons`);
+	}
+
+	/**
+	 * Initialize reasoning neurons map with output neurons
+	 * @param {Array} outputNeuronIds - Array of output neuron IDs
+	 * @returns {Map} Map of neuronId -> Set of output neurons it's connected to
+	 */
+	initializeReasoningNeurons(outputNeuronIds) {
+		const connectedNeurons = new Map();
+		for (const neuronId of outputNeuronIds) {
+			if (!connectedNeurons.has(neuronId)) connectedNeurons.set(neuronId, new Set());
+			connectedNeurons.get(neuronId).add(neuronId);
+		}
+		return connectedNeurons;
+	}
+
+	/**
+	 * Get reasoning patterns
+	 * @param {Array} neuronIds - Array of neuron IDs to find connections for
+	 * @param {number} level - The level to query
+	 * @returns Promise<{Object}> Object with connectionRows and patternRows
+	 */
+	async getReasoningPatterns(neuronIds, level) {
+		const placeholders = neuronIds.map(() => '?').join(',');
+		
+		const [results] = await this.conn.query(`
+			SELECT DISTINCT 
+				ac.connection_id, 
+				ac.from_neuron_id, 
+				ac.to_neuron_id,
+				p.pattern_neuron_id,
+				c.from_neuron_id as pattern_from_neuron_id,
+				c.to_neuron_id as pattern_to_neuron_id
+			FROM active_connections ac
+			LEFT JOIN patterns p ON ac.connection_id = p.connection_id 
+				AND p.strength > 0
+			LEFT JOIN connections c ON p.connection_id = c.id
+			LEFT JOIN active_neurons an ON p.pattern_neuron_id = an.neuron_id 
+				AND an.level = ?
+			WHERE ac.to_neuron_id IN (${placeholders}) 
+			AND ac.level = ?
+		`, [level + 1, ...neuronIds, level]);
+		
+		// Separate connection rows from pattern rows
+		const patternRows = [];
+		const seenPatterns = new Set();
+		
+		for (const row of results) {
+
+			// Add unique pattern rows (only if pattern exists)
+			if (row.pattern_neuron_id && !seenPatterns.has(row.pattern_neuron_id)) {
+				patternRows.push({
+					pattern_neuron_id: row.pattern_neuron_id,
+					from_neuron_id: row.pattern_from_neuron_id,
+					to_neuron_id: row.pattern_to_neuron_id
+				});
+				seenPatterns.add(row.pattern_neuron_id);
+			}
+		}
+		
+		return patternRows;
+	}
+
+
+	/**
+	 * Get complete output reasoning neurons using hierarchical connection tracing
+	 */
+	async getReasoningNeurons(outputNeuronIds) {
+		console.log(`Batch tracing hierarchical connections for ${outputNeuronIds.length} output neurons`);
+
+		// initialize the reasoning neurons map to include their own neurons
+		const allReasoningNeurons = this.initializeReasoningNeurons(outputNeuronIds);
+
+		// trace through levels using active_connections table
+		let currentLevelNeurons = new Set(outputNeuronIds);
+		for (let level = 0; level < this.maxLevels; level++) {
+
+			// nothing more to do if we reached the max level or a level with no connected neurons to outputs
+			if (level >= this.maxLevels - 1 || currentLevelNeurons.size === 0) break;
+			
+			// Get reasoning patterns at the next level
+			const currentNeuronIds = Array.from(currentLevelNeurons);
+			const patternRows = await this.getReasoningPatterns(currentNeuronIds, level);
+			const nextLevelNeurons = new Set(patternRows.map(row => row.pattern_neuron_id));
+			
+			// Add pattern neurons to all reasoning neurons
+			for (const neuronId of nextLevelNeurons) 
+				if (!allReasoningNeurons.has(neuronId))
+					allReasoningNeurons.set(neuronId, new Set());
+
+			console.log(`Level ${level}: Found ${nextLevelNeurons.size} pattern neurons at level ${level + 1}`);
+			currentLevelNeurons = nextLevelNeurons;
+		}
+		
+		console.log(`Total connected neurons found: ${allReasoningNeurons.size}`);
+		return allReasoningNeurons;
 	}
 }

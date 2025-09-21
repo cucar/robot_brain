@@ -64,15 +64,15 @@ export default class EyesChannel extends Channel {
 	/**
 	 * Get feedback based on eye movements and visual targets
 	 */
-	async getFeedbackNeurons() {
+	async getFeedback() {
 		if (!this.lastSaccade) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		// Get current visual target
 		const currentDataIndex = this.currentDataIndex - 1;
 		if (currentDataIndex < 0 || currentDataIndex >= this.visualData.length) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		const target = this.visualData[currentDataIndex];
@@ -81,19 +81,16 @@ export default class EyesChannel extends Channel {
 			Math.pow(this.eyePosition.y - target.y, 2)
 		);
 
-		let feedbackValue;
 		const threshold = 0.05; // How close the eye needs to be to the target
 
 		if (distance < threshold) {
-			feedbackValue = 1; // Reward for successful fixation
-			console.log(`${this.name}: REWARD! Eye fixated on target (distance: ${distance.toFixed(3)})`);
+			console.log(`${this.name}: JOY! Eye fixated on target (distance: ${distance.toFixed(3)})`);
+			return { joy: 1, pain: 0 };
 		}
 		else {
-			feedbackValue = -1; // Penalty for missing target
-			console.log(`${this.name}: PENALTY! Eye missed target (distance: ${distance.toFixed(3)})`);
+			console.log(`${this.name}: PAIN! Eye missed target (distance: ${distance.toFixed(3)})`);
+			return { joy: 0, pain: 1 };
 		}
-
-		return [{ visual_attention_reward: feedbackValue }];
 	}
 
 	/**

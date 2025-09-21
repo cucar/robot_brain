@@ -86,15 +86,15 @@ export default class TextChannel extends Channel {
 	/**
 	 * Get feedback based on character prediction accuracy
 	 */
-	async getFeedbackNeurons() {
+	async getFeedback() {
 		if (!this.lastPredictedChar) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		// Get the expected next character
 		const expectedCharIndex = this.currentLetterIndex; // Next character index
 		if (expectedCharIndex >= this.currentWord.length) {
-			return []; // End of word, no feedback
+			return { joy: 0, pain: 0 }; // End of word, no feedback
 		}
 
 		const expectedChar = this.currentWord[expectedCharIndex];
@@ -104,17 +104,13 @@ export default class TextChannel extends Channel {
 		const threshold = 0.05;
 		const error = Math.abs(this.lastPredictedChar - expectedValue);
 		
-		let feedbackValue;
-
 		if (error < threshold) {
-			feedbackValue = 1; // Reward for correct prediction
-			console.log(`${this.name}: REWARD! Correctly predicted next character '${expectedChar}'`);
+			console.log(`${this.name}: JOY! Correctly predicted next character '${expectedChar}'`);
+			return { joy: 1, pain: 0 };
 		} else {
-			feedbackValue = -1; // Penalty for wrong prediction
-			console.log(`${this.name}: PENALTY! Wrong prediction for character '${expectedChar}' (error: ${error.toFixed(3)})`);
+			console.log(`${this.name}: PAIN! Wrong prediction for character '${expectedChar}' (error: ${error.toFixed(3)})`);
+			return { joy: 0, pain: 1 };
 		}
-
-		return [{ text_reward: feedbackValue }];
 	}
 
 	/**

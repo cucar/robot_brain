@@ -165,30 +165,40 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get feedback neurons based on position and price movement
+	 * Get feedback based on recent price movement (associative/cumulative approach)
+	 * Feedback is proportional to recent price change, but cumulative rewards will reflect total P&L
 	 */
-	async getFeedbackNeurons() {
+	async getFeedback() {
 
 		// No feedback if we don't own stock
-		if (!this.owned) return [];
+		if (!this.owned) return { joy: 0, pain: 0 };
 
-		// Use last observed price
+		// Need both current and previous price for recent change calculation
 		const currentPrice = this.currentPrice;
-		if (currentPrice === null || this.entryPrice === null) return [];
-		const priceChange = currentPrice - this.entryPrice;
-		const percentChange = (priceChange / this.entryPrice) * 100;
+		if (currentPrice === null || this.previousPrice === null) return { joy: 0, pain: 0 };
 
-		let feedbackValue = 0;
-		if (priceChange > 0) {
-			feedbackValue = 1; // Joy - stock went up since we bought it
-			console.log(`${this.symbol}: JOY! Stock up ${percentChange.toFixed(2)}% since purchase (${priceChange.toFixed(2)} profit)`);
-		} 
-		else if (priceChange < 0) {
-			feedbackValue = -1; // Pain - stock went down since we bought it
-			console.log(`${this.symbol}: PAIN! Stock down ${percentChange.toFixed(2)}% since purchase (${Math.abs(priceChange).toFixed(2)} loss)`);
+		// Calculate recent price change (immediate feedback basis)
+		const recentChange = currentPrice - this.previousPrice;
+		
+		// No feedback if no price movement
+		if (recentChange === 0) return { joy: 0, pain: 0 };
+
+		// Feedback magnitude is proportional to actual price change
+		const feedbackMagnitude = Math.abs(recentChange);
+		
+		// Calculate overall performance for logging
+		const totalChange = currentPrice - this.entryPrice;
+		const percentChange = (totalChange / this.entryPrice) * 100;
+
+		// return the actual feedback
+		if (recentChange > 0) {
+			console.log(`${this.symbol}: JOY! Recent gain +$${recentChange.toFixed(2)} (total: ${percentChange.toFixed(2)}%, +$${totalChange.toFixed(2)})`);
+			return { joy: feedbackMagnitude, pain: 0 };
 		}
-
-		return feedbackValue === 0 ? [] : [{ [`${this.symbol}_reward`]: feedbackValue }];
+		else {
+			console.log(`${this.symbol}: PAIN! Recent loss -$${Math.abs(recentChange).toFixed(2)} (total: ${percentChange.toFixed(2)}%, ${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+			return { joy: 0, pain: feedbackMagnitude };
+		}
 	}
 
 	/**

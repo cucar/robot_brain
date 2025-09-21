@@ -15,6 +15,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS connection_inference;
 -- DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS neuron_rewards;
+-- DROP TABLE IF EXISTS active_connections;
 
 -- check state
 select * from neurons;
@@ -137,4 +138,18 @@ CREATE TABLE IF NOT EXISTS observed_patterns (
     connection_id BIGINT UNSIGNED NOT NULL,
     INDEX idx_connection (connection_id),
     INDEX idx_peak (peak_neuron_id)
+) ENGINE=MEMORY;
+
+-- active connections for fast hierarchical reward propagation (MEMORY table)
+-- this is just for faster processing - it temporarily holds the active connections for the current frame
+CREATE TABLE IF NOT EXISTS active_connections (
+    connection_id BIGINT UNSIGNED NOT NULL,
+    from_neuron_id BIGINT UNSIGNED NOT NULL,
+    to_neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    strength DOUBLE NOT NULL,
+    PRIMARY KEY (connection_id, level),
+    INDEX idx_to_neuron_level (to_neuron_id, level),
+    INDEX idx_from_neuron_level (from_neuron_id, level),
+    INDEX idx_level (level)
 ) ENGINE=MEMORY;

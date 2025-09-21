@@ -41,25 +41,6 @@ export default class Channel {
 	}
 
 	/**
-	 * Get frame data for processing - implemented in base class
-	 * Orchestrates inputs, exploration, and feedback
-	 * Returns array of frame objects: [{ [dim-name]: <value> }]
-	 */
-	async getFrameData() {
-		const frameData = [];
-
-		// Get input neurons from child class
-		const inputs = await this.getFrameInputs();
-		if (inputs && inputs.length > 0) frameData.push(...inputs);
-
-		// Get feedback neurons from child class
-		const feedback = await this.getFeedbackNeurons();
-		if (feedback && feedback.length > 0) frameData.push(...feedback);
-
-		return frameData;
-	}
-
-	/**
 	 * Get frame input data - override in subclasses
 	 * Returns array of input neuron objects: [{ [input-dim]: value }]
 	 */
@@ -68,12 +49,12 @@ export default class Channel {
 	}
 
 	/**
-	 * Get feedback neurons based on previous actions and current state - override in subclasses
-	 * Returns array of feedback neuron objects: [{ [feedback-dim]: value }]
+	 * Get feedback based on previous actions and current state - override in subclasses
+	 * Returns object with joy and pain values: { joy: number, pain: number }
+	 * Joy represents positive feedback (rewards), Pain represents negative feedback (punishment)
 	 */
-	async getFeedbackNeurons() {
-		// Default implementation returns empty array - will be overridden by child classes
-		return [];
+	async getFeedback() {
+		return { joy: 0, pain: 0 };
 	}
 
 	/**

@@ -76,36 +76,30 @@ export default class TongueChannel extends Channel {
 	/**
 	 * Get feedback based on taste preferences
 	 */
-	async getFeedbackNeurons() {
+	async getFeedback() {
 		if (!this.lastMovement) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		// Get the taste preference for the current taste
 		const currentDataIndex = this.currentDataIndex - 1;
 		if (currentDataIndex < 0 || currentDataIndex >= this.tasteData.length) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		const tastePreference = this.tasteData[currentDataIndex].preference;
-		let feedbackValue = 0;
 
 		if (tastePreference > 0.5) {
-			feedbackValue = 1; // Reward for pleasant taste
-			console.log(`${this.name}: REWARD! Pleasant taste (preference: ${tastePreference.toFixed(2)})`);
+			console.log(`${this.name}: JOY! Pleasant taste (preference: ${tastePreference.toFixed(2)})`);
+			return { joy: Math.abs(tastePreference), pain: 0 }; // Scale joy by preference strength
 		} else if (tastePreference < -0.5) {
-			feedbackValue = -1; // Penalty for unpleasant taste
-			console.log(`${this.name}: PENALTY! Unpleasant taste (preference: ${tastePreference.toFixed(2)})`);
+			console.log(`${this.name}: PAIN! Unpleasant taste (preference: ${tastePreference.toFixed(2)})`);
+			return { joy: 0, pain: Math.abs(tastePreference) }; // Scale pain by preference strength
 		} else {
 			// Neutral taste, no strong feedback
 			console.log(`${this.name}: Neutral taste (preference: ${tastePreference.toFixed(2)})`);
+			return { joy: 0, pain: 0 };
 		}
-
-		if (feedbackValue !== 0) {
-			return [{ taste_reward: feedbackValue }];
-		}
-
-		return [];
 	}
 
 	/**

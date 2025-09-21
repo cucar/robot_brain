@@ -59,8 +59,11 @@ export default class Job {
 
 			console.log(`Processing frame: ${frame.length} neurons`);
 
-			// Process the frame through the brain and get the outputs that it deems fit
-			const outputs = await this.brain.processFrame(frame);
+			// Get feedback from all channels for reward propagation
+			const feedback = await this.brain.getFeedback();
+
+			// Process the frame through the brain with feedback and get the outputs
+			const outputs = await this.brain.processFrame(frame, feedback);
 
 			// now ask the channels to execute the outputs
 			await this.brain.executeOutputs(outputs);

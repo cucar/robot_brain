@@ -91,9 +91,9 @@ export default class ArmChannel extends Channel {
 	/**
 	 * Get feedback based on movement success
 	 */
-	async getFeedbackNeurons() {
+	async getFeedback() {
 		if (!this.lastMovement || !this.targetPosition) {
-			return [];
+			return { joy: 0, pain: 0 };
 		}
 
 		// Calculate how close we got to the target
@@ -104,23 +104,20 @@ export default class ArmChannel extends Channel {
 		const totalError = shoulderError + elbowError + wristError;
 		const threshold = 0.05; // Acceptable error threshold
 
-		let feedbackValue;
-
 		if (totalError < threshold) {
-			feedbackValue = 1; // Reward for successful movement
-			console.log(`${this.name}: REWARD! Successful reach (error: ${totalError.toFixed(3)})`);
+			console.log(`${this.name}: JOY! Successful reach (error: ${totalError.toFixed(3)})`);
+			
+			// Extra joy for completing the full sequence
+			if (this.currentSequenceIndex === this.reachSequence.length) {
+				console.log(`${this.name}: SEQUENCE COMPLETED! Extra joy.`);
+				return { joy: 2, pain: 0 }; // Double joy for sequence completion
+			}
+			
+			return { joy: 1, pain: 0 };
 		} else {
-			feedbackValue = -1; // Penalty for inaccurate movement
-			console.log(`${this.name}: PENALTY! Missed target (error: ${totalError.toFixed(3)})`);
+			console.log(`${this.name}: PAIN! Missed target (error: ${totalError.toFixed(3)})`);
+			return { joy: 0, pain: 1 };
 		}
-
-		// Extra reward for completing the full sequence
-		if (this.currentSequenceIndex === this.reachSequence.length) {
-			feedbackValue = Math.max(feedbackValue, 1); // Ensure positive reward for completion
-			console.log(`${this.name}: SEQUENCE COMPLETED! Extra reward.`);
-		}
-
-		return [{ movement_reward: feedbackValue }];
 	}
 
 	/**
