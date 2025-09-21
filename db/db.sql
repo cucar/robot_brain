@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS connections (
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength DESC),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength DESC),
     INDEX idx_distance_strength (distance, strength DESC),
-    INDEX idx_strength (strength)
+    INDEX idx_strength (id, strength)
 );
 
 -- pattern neurons definitions - neuron connections between levels

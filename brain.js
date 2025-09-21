@@ -975,54 +975,24 @@ export default class Brain {
 	async predictNeuronStrengths(level) {
 		console.log(`Predicting neuron strengths for level ${level}`);
 
-		// Get connection-level predictions for this level
-		const [connectionRows] = await this.conn.query(`
-			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
-			FROM connection_inference ci
-			JOIN connections c ON ci.connection_id = c.id
-			WHERE ci.level = ?
-			AND c.strength >= 0
-		`, [level]);
-
-		// Get pattern-level predictions for this level (from higher level patterns)
-		const [patternRows] = await this.conn.query(`
-			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
-			FROM pattern_inference pi
-			JOIN connections c ON pi.connection_id = c.id
-			WHERE pi.level = ?
-			AND c.strength >= 0
-		`, [level]);
-
-		// Combine both types of predictions into a single array
-		// Use a Map to deduplicate connections by ID and sum their strengths if they appear in both
-		const connectionMap = new Map();
+		// get both connection-level and pattern-level predictions in a single query
+		const [predictedConnections] = await this.conn.query(`
+			SELECT c.from_neuron_id, c.to_neuron_id, c.strength
+			FROM connections c
+			WHERE c.strength >= 0 AND c.id IN (
+				SELECT connection_id FROM connection_inference WHERE level = ?
+				UNION
+				SELECT connection_id FROM pattern_inference WHERE level = ?
+			)
+		`, [level, level]);
 		
-		// Add connection-level predictions
-		for (const conn of connectionRows) {
-			connectionMap.set(conn.id, { ...conn });
-		}
-		
-		// Add pattern-level predictions, summing strengths for duplicates
-		for (const conn of patternRows) {
-			if (connectionMap.has(conn.id)) {
-				// Connection exists from both sources - sum the strengths
-				connectionMap.get(conn.id).strength += conn.strength;
-			} else {
-				connectionMap.set(conn.id, { ...conn });
-			}
-		}
-
-		// Convert back to array for neuron strength calculation
-		const allPredictedConnections = Array.from(connectionMap.values());
-		
-		if (allPredictedConnections.length === 0) {
+		if (predictedConnections.length === 0) {
 			console.log(`No predicted connections found for level ${level}`);
 			return new Map();
 		}
 
 		// Calculate neuron strengths from all predicted connections (both incoming and outgoing)
-		const neuronStrengths = this.getNeuronStrengths(allPredictedConnections);
-
+		const neuronStrengths = this.getNeuronStrengths(predictedConnections);
 		console.log(`Calculated strengths for ${neuronStrengths.size} neurons at level ${level}`);
 		return neuronStrengths;
 	}
