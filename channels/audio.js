@@ -69,13 +69,13 @@ export default class EarsChannel extends Channel {
 	 */
 	async getFeedback() {
 		if (!this.lastMovement) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		// Get the actual sound direction
 		const currentDataIndex = this.currentDataIndex - 1;
 		if (currentDataIndex < 0 || currentDataIndex >= this.audioData.length) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		const actualDirection = this.audioData[currentDataIndex].direction;
@@ -83,11 +83,11 @@ export default class EarsChannel extends Channel {
 		const threshold = 0.2; // Acceptable localization error
 
 		if (orientationError < threshold) {
-			console.log(`${this.name}: JOY! Accurately localized sound (error: ${orientationError.toFixed(3)})`);
-			return { joy: 1, pain: 0 };
+			console.log(`${this.name}: SUCCESS! Accurately localized sound (error: ${orientationError.toFixed(3)})`);
+			return 1.5; // Positive reward factor
 		} else {
-			console.log(`${this.name}: PAIN! Poor sound localization (error: ${orientationError.toFixed(3)})`);
-			return { joy: 0, pain: 1 };
+			console.log(`${this.name}: MISS! Poor sound localization (error: ${orientationError.toFixed(3)})`);
+			return 0.5; // Negative reward factor
 		}
 	}
 

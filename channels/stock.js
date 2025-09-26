@@ -165,40 +165,40 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get feedback based on recent price movement (associative/cumulative approach)
-	 * Feedback is proportional to recent price change, but cumulative rewards will reflect total P&L
+	 * Get feedback based on price movement using multiplicative reward factor
+	 * For owned stocks: multiply by (new_price / old_price)
+	 * For sold stocks: multiply by (old_price / new_price)
+	 * Returns 1.0 for no feedback (neutral)
 	 */
 	async getFeedback() {
 
-		// No feedback if we don't own stock
-		if (!this.owned) return { joy: 0, pain: 0 };
-
-		// Need both current and previous price for recent change calculation
+		// Need both current and previous price for calculation
 		const currentPrice = this.currentPrice;
-		if (currentPrice === null || this.previousPrice === null) return { joy: 0, pain: 0 };
+		if (currentPrice === null || this.previousPrice === null) return 1.0;
 
-		// Calculate recent price change (immediate feedback basis)
-		const recentChange = currentPrice - this.previousPrice;
-		
 		// No feedback if no price movement
-		if (recentChange === 0) return { joy: 0, pain: 0 };
+		if (currentPrice === this.previousPrice) return 1.0;
 
-		// Feedback magnitude is proportional to actual price change
-		const feedbackMagnitude = Math.abs(recentChange);
-		
-		// Calculate overall performance for logging
-		const totalChange = currentPrice - this.entryPrice;
-		const percentChange = (totalChange / this.entryPrice) * 100;
+		let rewardFactor = 1.0;
 
-		// return the actual feedback
-		if (recentChange > 0) {
-			console.log(`${this.symbol}: JOY! Recent gain +$${recentChange.toFixed(2)} (total: ${percentChange.toFixed(2)}%, +$${totalChange.toFixed(2)})`);
-			return { joy: feedbackMagnitude, pain: 0 };
+		if (this.owned) {
+			// For owned stocks: reward factor = new_price / old_price
+			// If price goes up, factor > 1.0 (reward increases)
+			// If price goes down, factor < 1.0 (reward decreases)
+			rewardFactor = currentPrice / this.previousPrice;
+
+			const totalChange = currentPrice - this.entryPrice;
+			const percentChange = (totalChange / this.entryPrice) * 100;
+			const recentChange = currentPrice - this.previousPrice;
+
+			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 		}
-		else {
-			console.log(`${this.symbol}: PAIN! Recent loss -$${Math.abs(recentChange).toFixed(2)} (total: ${percentChange.toFixed(2)}%, ${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
-			return { joy: 0, pain: feedbackMagnitude };
-		}
+		// Note: For sold stocks, we would multiply by (old_price / new_price)
+		// But this requires tracking sold positions, which isn't implemented yet
+		// For now, we only provide feedback when we own the stock
+
+		return rewardFactor;
 	}
 
 	/**

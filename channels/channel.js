@@ -50,11 +50,11 @@ export default class Channel {
 
 	/**
 	 * Get feedback based on previous actions and current state - override in subclasses
-	 * Returns object with joy and pain values: { joy: number, pain: number }
-	 * Joy represents positive feedback (rewards), Pain represents negative feedback (punishment)
+	 * Returns reward factor: number (1.0 = neutral, >1.0 = positive, <1.0 = negative)
+	 * This factor will be multiplied with existing neuron reward factors
 	 */
 	async getFeedback() {
-		return { joy: 0, pain: 0 };
+		return 1.0; // Neutral feedback by default
 	}
 
 	/**

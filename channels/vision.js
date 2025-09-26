@@ -66,30 +66,30 @@ export default class EyesChannel extends Channel {
 	 */
 	async getFeedback() {
 		if (!this.lastSaccade) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		// Get current visual target
 		const currentDataIndex = this.currentDataIndex - 1;
 		if (currentDataIndex < 0 || currentDataIndex >= this.visualData.length) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		const target = this.visualData[currentDataIndex];
 		const distance = Math.sqrt(
-			Math.pow(this.eyePosition.x - target.x, 2) + 
+			Math.pow(this.eyePosition.x - target.x, 2) +
 			Math.pow(this.eyePosition.y - target.y, 2)
 		);
 
 		const threshold = 0.05; // How close the eye needs to be to the target
 
 		if (distance < threshold) {
-			console.log(`${this.name}: JOY! Eye fixated on target (distance: ${distance.toFixed(3)})`);
-			return { joy: 1, pain: 0 };
+			console.log(`${this.name}: SUCCESS! Eye fixated on target (distance: ${distance.toFixed(3)})`);
+			return 1.5; // Positive reward factor
 		}
 		else {
-			console.log(`${this.name}: PAIN! Eye missed target (distance: ${distance.toFixed(3)})`);
-			return { joy: 0, pain: 1 };
+			console.log(`${this.name}: MISS! Eye missed target (distance: ${distance.toFixed(3)})`);
+			return 0.5; // Negative reward factor
 		}
 	}
 

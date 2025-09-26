@@ -88,28 +88,29 @@ export default class TextChannel extends Channel {
 	 */
 	async getFeedback() {
 		if (!this.lastPredictedChar) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		// Get the expected next character
 		const expectedCharIndex = this.currentLetterIndex; // Next character index
 		if (expectedCharIndex >= this.currentWord.length) {
-			return { joy: 0, pain: 0 }; // End of word, no feedback
+			return 1.0; // End of word, neutral feedback
 		}
 
 		const expectedChar = this.currentWord[expectedCharIndex];
 		const expectedValue = this.letterCoords[expectedChar] || 0;
-		
+
 		// Check if prediction was close to expected character
 		const threshold = 0.05;
 		const error = Math.abs(this.lastPredictedChar - expectedValue);
-		
+
 		if (error < threshold) {
-			console.log(`${this.name}: JOY! Correctly predicted next character '${expectedChar}'`);
-			return { joy: 1, pain: 0 };
-		} else {
-			console.log(`${this.name}: PAIN! Wrong prediction for character '${expectedChar}' (error: ${error.toFixed(3)})`);
-			return { joy: 0, pain: 1 };
+			console.log(`${this.name}: SUCCESS! Correctly predicted next character '${expectedChar}'`);
+			return 1.5; // Positive reward factor
+		}
+		else {
+			console.log(`${this.name}: MISS! Wrong prediction for character '${expectedChar}' (error: ${error.toFixed(3)})`);
+			return 0.5; // Negative reward factor
 		}
 	}
 

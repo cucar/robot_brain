@@ -82,15 +82,13 @@ CREATE TABLE IF NOT EXISTS patterns (
     INDEX idx_pattern_strength (pattern_neuron_id, strength)
 );
 
--- includes joy/pain level of neurons based on their exposure (time proximity) to them
+-- includes reward factor for neurons based on their performance (default 1.0 = neutral)
 CREATE TABLE IF NOT EXISTS neuron_rewards (
     neuron_id BIGINT UNSIGNED NOT NULL,
-    joy_score DOUBLE NOT NULL DEFAULT 0,
-    pain_score DOUBLE NOT NULL DEFAULT 0,
+    reward_factor DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (neuron_id),
     FOREIGN KEY (neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
-    INDEX (joy_score, neuron_id),
-    INDEX (pain_score, neuron_id)
+    INDEX (reward_factor, neuron_id)
 );
 
 -- neurons currently active within the sliding window (MEMORY table)

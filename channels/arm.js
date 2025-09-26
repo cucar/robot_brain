@@ -93,30 +93,31 @@ export default class ArmChannel extends Channel {
 	 */
 	async getFeedback() {
 		if (!this.lastMovement || !this.targetPosition) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		// Calculate how close we got to the target
 		const shoulderError = Math.abs(this.currentPosition.shoulder - this.targetPosition.shoulder);
 		const elbowError = Math.abs(this.currentPosition.elbow - this.targetPosition.elbow);
 		const wristError = Math.abs(this.currentPosition.wrist - this.targetPosition.wrist);
-		
+
 		const totalError = shoulderError + elbowError + wristError;
 		const threshold = 0.05; // Acceptable error threshold
 
 		if (totalError < threshold) {
-			console.log(`${this.name}: JOY! Successful reach (error: ${totalError.toFixed(3)})`);
-			
-			// Extra joy for completing the full sequence
+			console.log(`${this.name}: SUCCESS! Successful reach (error: ${totalError.toFixed(3)})`);
+
+			// Extra reward for completing the full sequence
 			if (this.currentSequenceIndex === this.reachSequence.length) {
-				console.log(`${this.name}: SEQUENCE COMPLETED! Extra joy.`);
-				return { joy: 2, pain: 0 }; // Double joy for sequence completion
+				console.log(`${this.name}: SEQUENCE COMPLETED! Extra reward.`);
+				return 2.0; // Double reward factor for sequence completion
 			}
-			
-			return { joy: 1, pain: 0 };
-		} else {
-			console.log(`${this.name}: PAIN! Missed target (error: ${totalError.toFixed(3)})`);
-			return { joy: 0, pain: 1 };
+
+			return 1.5; // Positive reward factor
+		}
+		else {
+			console.log(`${this.name}: MISS! Missed target (error: ${totalError.toFixed(3)})`);
+			return 0.5; // Negative reward factor
 		}
 	}
 

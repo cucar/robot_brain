@@ -78,27 +78,27 @@ export default class TongueChannel extends Channel {
 	 */
 	async getFeedback() {
 		if (!this.lastMovement) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		// Get the taste preference for the current taste
 		const currentDataIndex = this.currentDataIndex - 1;
 		if (currentDataIndex < 0 || currentDataIndex >= this.tasteData.length) {
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 
 		const tastePreference = this.tasteData[currentDataIndex].preference;
 
 		if (tastePreference > 0.5) {
-			console.log(`${this.name}: JOY! Pleasant taste (preference: ${tastePreference.toFixed(2)})`);
-			return { joy: Math.abs(tastePreference), pain: 0 }; // Scale joy by preference strength
+			console.log(`${this.name}: PLEASANT! Good taste (preference: ${tastePreference.toFixed(2)})`);
+			return 1.0 + Math.abs(tastePreference); // Scale positive reward by preference strength
 		} else if (tastePreference < -0.5) {
-			console.log(`${this.name}: PAIN! Unpleasant taste (preference: ${tastePreference.toFixed(2)})`);
-			return { joy: 0, pain: Math.abs(tastePreference) }; // Scale pain by preference strength
+			console.log(`${this.name}: UNPLEASANT! Bad taste (preference: ${tastePreference.toFixed(2)})`);
+			return 1.0 - Math.abs(tastePreference); // Scale negative reward by preference strength
 		} else {
 			// Neutral taste, no strong feedback
 			console.log(`${this.name}: Neutral taste (preference: ${tastePreference.toFixed(2)})`);
-			return { joy: 0, pain: 0 };
+			return 1.0; // Neutral
 		}
 	}
 
