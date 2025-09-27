@@ -132,33 +132,7 @@ export default class Brain {
 	}
 
 	/**
-	 * Handle global exploration when ALL channels are inactive
-	 */
-	curiosityExploration() {
-
-		// Check if the brain is inactive - if some channel is active, no exploration needed
-		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return [];
-
-		// brain has been inactive - trigger exploration on a random channel
-		const channelNames = Array.from(this.channels.keys());
-		const randomChannelName = channelNames[Math.floor(Math.random() * channelNames.length)];
-		const randomChannel = this.channels.get(randomChannelName);
-
-		// get exploration actions for the channel - if there are no valid actions, skip exploration for now, we'll try next time
-		const validActions = randomChannel.getValidExplorationActions();
-		if (validActions.length === 0) return [];
-
-		// pick a random action
-		const randomAction = validActions[Math.floor(Math.random() * validActions.length)];
-		console.log(`Brain: Global inactivity detected, triggering exploration on ${randomChannelName}:`, randomAction);
-		
-		// return the random action - this is a point with a value on the output dimension of the channel
-		return [randomAction];
-	}
-
-	/**
 	 * returns the current frame combined from all registered channels
-	 * includes exploration if all channels are inactive
 	 */
 	async getFrame() {
 		const frame = [];
@@ -171,14 +145,6 @@ export default class Brain {
 			const channelInputs = await channel.getFrameInputs();
 			if (channelInputs && channelInputs.length > 0) frame.push(...channelInputs);
 		}
-
-		// add the previous outputs to the current frame so that they can be learned as patterns
-		// const previousOutputs = await this.getPreviousOutputs();
-		// if (previousOutputs.length > 0) frame.push(...previousOutputs);
-		
-		// Add exploration if globally inactive
-		const explorationData = this.curiosityExploration();
-		if (explorationData.length > 0) frame.push(...explorationData);
 
 		return frame;
 	}
@@ -220,22 +186,21 @@ export default class Brain {
 		// if there's an error, we'll roll the transaction back
 		try {
 
-			// apply global reward to executed inferred neurons
+			// apply rewards to executed decisions (age >= 1)
 			await this.applyRewards(globalReward);
 
-			// age the active neurons in memory context - sliding the window
+			// age the active neurons in memory context - sliding the temporal window
 			await this.ageNeurons();
+
+			// execute previous frame's decisions + exploration if needed
+			await this.executeOutputs();
 
 			// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 			await this.recognizeNeurons(frame);
 
-			// populate active connections table for fast reward propagation
-			await this.populateActiveConnections();
-
 			// do predictions and outputs - what's going to happen next? and what's our best response?
 			await this.inferNeurons();
 
-			// now commit the transaction and return the new predictions
 			await this.conn.commit();
 			console.log('Frame processed successfully.');
 		}
@@ -247,36 +212,108 @@ export default class Brain {
 
 		// run forget cycle periodically and delete dead connections/neurons
 		await this.runForgetCycle();
-
-		// get the outputs from processing the frame - get it from the memory tables
-		// habitual, pattern predicted and optimized outputs that have output dimension values
-		return this.getFrameOutputs();
 	}
 
 	/**
-	 * calls channels to execute the outputs from processing the frame
+	 * Execute previous frame's decisions and exploration actions if needed
 	 */
-	async executeOutputs(outputs) {
+	async executeOutputs() {
 
-		// Let each channel execute outputs and update their states
-		for (const [channelName, channel] of this.channels) {
+		// Execute previous frame's decisions (age = 1)
+		await this.executePreviousOutputs();
 
-			// get the channel outputs - filter by the output dimensions of the channel
-			const channelOutputs = this.getChannelOutputs(outputs, channel);
+		// Execute exploration if brain is inactive
+		await this.curiosityExploration();
+	}
 
-			// nothing to do if there are no actions to execute
-			if (!channelOutputs || channelOutputs.actions.size === 0) continue;
+	/**
+	 * Execute decisions from previous frame (age = 1)
+	 */
+	async executePreviousOutputs() {
+		const [outputRows] = await this.conn.query(`
+			SELECT inf.neuron_id, c.dimension_id, c.val, d.name as dimension_name, d.channel
+			FROM inferred_neurons inf
+			JOIN coordinates c ON inf.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE d.type = 'output' AND inf.age = 1 AND inf.level = 0
+			ORDER BY d.channel, d.name
+		`);
 
-			// now ask the channel to execute the outputs
-			await channel.executeOutputs(channelOutputs);
+		if (outputRows.length === 0) {
+			console.log('No previous outputs to execute');
+			return;
+		}
 
-			// Track global activity - if any channel produced action outputs, mark brain as active
-			this.lastActivity = this.frameNumber;
-			console.log(`${channelName} executed actions:`, Array.from(channelOutputs.actions.keys()));
+		await this.executeOutputRows(outputRows);
+	}
+
+	/**
+	 * Execute curiosity exploration if brain is inactive
+	 */
+	async curiosityExploration() {
+		// Check if the brain is inactive
+		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) {
+			return; // Brain is active, no exploration needed
+		}
+
+		console.log('Brain inactive - executing curiosity exploration');
+
+		// Get a random channel for exploration
+		const channelNames = Array.from(this.channels.keys());
+		const randomChannelName = channelNames[Math.floor(Math.random() * channelNames.length)];
+		const randomChannel = this.channels.get(randomChannelName);
+
+		// Get exploration actions for the channel
+		const explorationActions = randomChannel.getValidExplorationActions();
+		if (explorationActions.length === 0) {
+			console.log(`No valid exploration actions for ${randomChannelName}`);
+			return;
+		}
+
+		// Execute random exploration action
+		const randomAction = explorationActions[Math.floor(Math.random() * explorationActions.length)];
+		console.log(`${randomChannelName}: Executing exploration action:`, randomAction);
+
+		await this.executeChannelOutputs(randomChannelName, randomAction);
+	}
+
+	/**
+	 * Execute output rows grouped by channel
+	 */
+	async executeOutputRows(outputRows) {
+		// Group outputs by channel
+		const channelOutputs = new Map();
+
+		for (const row of outputRows) {
+			if (!channelOutputs.has(row.channel)) {
+				channelOutputs.set(row.channel, new Map());
+			}
+			channelOutputs.get(row.channel).set(row.dimension_name, row.val);
+		}
+
+		// Execute outputs for each channel using unified method
+		for (const [channelName, outputs] of channelOutputs) {
+			const coordinates = Object.fromEntries(outputs);
+			await this.executeChannelOutputs(channelName, coordinates);
 		}
 	}
 
+	/**
+	 * Unified method to execute outputs on a specific channel
+	 */
+	async executeChannelOutputs(channelName, coordinates) {
+		const channel = this.channels.get(channelName);
+		if (!channel) {
+			console.log(`Warning: Channel ${channelName} not found`);
+			return;
+		}
 
+		console.log(`${channelName}: Executing outputs:`, coordinates);
+		await channel.executeOutputs(coordinates);
+
+		// Track global activity
+		this.lastActivity = this.frameNumber;
+	}
 
 	/**
 	 * ages neurons in the context - sliding the window across frames
@@ -313,6 +350,9 @@ export default class Brain {
 	 * infers predictions and outputs starting from the highest active level down to base level (reverse order)
 	 */
 	async inferNeurons() {
+
+		// populate active connections table for fast reward propagation
+		await this.populateActiveConnections();
 
 		// get the highest level that is currently active - that's where we will start from
 		const maxLevel = await this.getMaxActiveLevel();
@@ -1075,57 +1115,6 @@ export default class Brain {
 		`);
 
 		console.log('Forgetting cycle completed.');
-	}
-
-	/**
-	 * Get frame outputs from inferred neurons that have output dimensions
-	 */
-	async getFrameOutputs() {
-		console.log('Getting frame outputs from inferred neurons...');
-
-		// Get frame outputs from inferred neurons that have output dimensions
-		// Only Level 0 neurons can be outputs since they have coordinates
-		const [rows] = await this.conn.query(`
-			SELECT inf.neuron_id, inf.level, c.dimension_id, c.val, d.name as dimension_name, d.channel, d.type
-			FROM inferred_neurons inf
-			JOIN coordinates c ON inf.neuron_id = c.neuron_id
-			JOIN dimensions d ON c.dimension_id = d.id
-			WHERE d.type = 'output'
-			AND inf.age = 0
-			AND inf.level = 0
-			ORDER BY inf.neuron_id
-		`);
-		if (rows.length === 0) {
-			console.log('No output neurons found');
-			return [];
-		}
-
-		// Group by neuron and create output objects
-		const neuronOutputs = new Map();
-		for (const row of rows) {
-			const neuronId = row.neuron_id;
-			if (!neuronOutputs.has(neuronId))
-				neuronOutputs.set(neuronId, { neuron_id: neuronId, coordinates: {}, channel: row.channel });
-			neuronOutputs.get(neuronId).coordinates[row.dimension_name] = row.val;
-		}
-		const outputs = Array.from(neuronOutputs.values());
-		console.log(`Found ${outputs.length} output neurons`);
-		return outputs;
-	}
-
-	/**
-	 * Get channel-specific outputs filtered by the channel's output dimensions
-	 */
-	getChannelOutputs(outputs, channel) {
-		if (!outputs || outputs.length === 0) return null;
-
-		const channelOutputs = outputs.filter(output => output.channel === channel.name);
-		if (channelOutputs.length === 0) return null;
-
-		return {
-			actions: new Map(channelOutputs.map(output => [output.neuron_id, output])),
-			channelName: channel.name
-		};
 	}
 
 	/**

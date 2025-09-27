@@ -94,54 +94,27 @@ export default class EyesChannel extends Channel {
 	}
 
 	/**
-	 * Execute eye movements (saccades) based on brain output
+	 * Execute eye movements (saccades) based on brain output coordinates
 	 */
-	async executeOutputs(predictions) {
-		const outputs = {
-			actions: new Map(),
-			predictions: new Map()
-		};
-
-		if (!predictions || predictions.length === 0) {
-			return outputs;
+	async executeOutputs(coordinates) {
+		if (!coordinates || Object.keys(coordinates).length === 0) {
+			return;
 		}
 
-		// Extract saccade predictions
-		let saccadeX = 0, saccadeY = 0;
-		let totalConfidence = 0;
+		// Extract saccade coordinates
+		const saccadeX = coordinates.saccade_x || 0;
+		const saccadeY = coordinates.saccade_y || 0;
 
-		predictions.forEach(frame => {
-			frame.predictions.forEach(pred => {
-				if (pred.coordinates.saccade_x !== undefined) {
-					saccadeX += pred.coordinates.saccade_x * pred.confidence;
-					totalConfidence += pred.confidence;
-				}
-				if (pred.coordinates.saccade_y !== undefined) {
-					saccadeY += pred.coordinates.saccade_y * pred.confidence;
-					totalConfidence += pred.confidence;
-				}
-			});
-		});
+		// Execute the saccade (move eyes)
+		this.eyePosition.x += saccadeX * 0.1; // Scale movement
+		this.eyePosition.y += saccadeY * 0.1;
 
-		if (totalConfidence > 0) {
-			saccadeX /= totalConfidence;
-			saccadeY /= totalConfidence;
-			
-			// Execute the saccade (move eyes)
-			this.eyePosition.x += saccadeX * 0.1; // Scale movement
-			this.eyePosition.y += saccadeY * 0.1;
-			
-			// Keep within bounds
-			this.eyePosition.x = Math.max(0, Math.min(1, this.eyePosition.x));
-			this.eyePosition.y = Math.max(0, Math.min(1, this.eyePosition.y));
-			
-			this.lastSaccade = { x: saccadeX, y: saccadeY };
-			
-			console.log(`${this.name}: EXECUTED SACCADE to (${this.eyePosition.x.toFixed(3)}, ${this.eyePosition.y.toFixed(3)})`);
-			
-			outputs.actions.set('saccade', { x: saccadeX, y: saccadeY, confidence: totalConfidence });
-		}
+		// Keep within bounds
+		this.eyePosition.x = Math.max(0, Math.min(1, this.eyePosition.x));
+		this.eyePosition.y = Math.max(0, Math.min(1, this.eyePosition.y));
 
-		return outputs;
+		this.lastSaccade = { x: saccadeX, y: saccadeY };
+
+		console.log(`${this.name}: EXECUTED SACCADE to (${this.eyePosition.x.toFixed(3)}, ${this.eyePosition.y.toFixed(3)})`);
 	}
 }

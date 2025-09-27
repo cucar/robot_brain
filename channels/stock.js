@@ -15,11 +15,12 @@ export default class StockChannel extends Channel {
 		this.symbol = name;
 
 		// State tracking
-		this.owned = false; // Simple owned flag
-		this.entryPrice = null; // Price when we bought
-		this.holdingFrames = 0; // How long we've held the position
+		this.owned = false; // true = owned, false = sold (after first buy)
+		this.entryPrice = null; // Price when we bought (for owned) or sold (for sold)
+		this.holdingFrames = 0; // How long we've held the current position
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
+		this.hasTraded = false; // Track if we've ever made a trade
 
 		// CSV reading state
 		this.csvPath = null;
@@ -131,7 +132,7 @@ export default class StockChannel extends Channel {
 	 * Get frame input data for this stock channel
 	 */
 	async getFrameInputs() {
-		
+
 		// Read next non-empty line; skip header if present
 		const row = await this.readNextLine();
 		if (!row) {
@@ -143,7 +144,7 @@ export default class StockChannel extends Channel {
 
 		// if this is the first frame, read another line so that we can start sending change stats
 		if (this.previousPrice === null || this.previousVolume === null) {
-			
+
 			// seed baseline from the first observed line
 			this.previousPrice = this.currentPrice;
 			this.previousVolume = this.currentVolume;
@@ -156,9 +157,9 @@ export default class StockChannel extends Channel {
 			// compute and return discretized changes based on baseline → next
 			return this.computeChangeInputs();
 		}
-		
-		// Increment holding counter if we own the stock
-		if (this.owned) this.holdingFrames++;
+
+		// Increment holding counter for current position
+		this.holdingFrames++;
 
 		// Compute and return discretized changes
 		return this.computeChangeInputs();
@@ -167,7 +168,7 @@ export default class StockChannel extends Channel {
 	/**
 	 * Get feedback based on price movement using multiplicative reward factor
 	 * For owned stocks: multiply by (new_price / old_price)
-	 * For sold stocks: multiply by (old_price / new_price)
+	 * For sold stocks: multiply by (old_price / new_price) - inverse relationship
 	 * Returns 1.0 for no feedback (neutral)
 	 */
 	async getFeedback() {
@@ -176,8 +177,8 @@ export default class StockChannel extends Channel {
 		const currentPrice = this.currentPrice;
 		if (currentPrice === null || this.previousPrice === null) return 1.0;
 
-		// No feedback if no price movement
-		if (currentPrice === this.previousPrice) return 1.0;
+		// No feedback if no price movement or haven't traded yet
+		if (currentPrice === this.previousPrice || !this.hasTraded) return 1.0;
 
 		let rewardFactor = 1.0;
 
@@ -194,87 +195,73 @@ export default class StockChannel extends Channel {
 			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
 			console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 		}
-		// Note: For sold stocks, we would multiply by (old_price / new_price)
-		// But this requires tracking sold positions, which isn't implemented yet
-		// For now, we only provide feedback when we own the stock
+		else {
+			// For sold stocks: provide inverse feedback
+			// If price goes up after selling, factor < 1.0 (penalty for selling too early)
+			// If price goes down after selling, factor > 1.0 (reward for good timing)
+			rewardFactor = this.previousPrice / currentPrice;
+
+			const totalChange = this.entryPrice - currentPrice; // Profit from selling high and price going lower
+			const percentChange = (totalChange / this.entryPrice) * 100;
+			const recentChange = currentPrice - this.previousPrice;
+
+			console.log(`${this.symbol}: SOLD - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+		}
 
 		return rewardFactor;
 	}
 
 	/**
-	 * executes output neurons returned by the brain after processing the frame
+	 * Execute stock actions based on brain output coordinates
 	 */
-	executeOutputs(predictions) {
-		const outputs = {
-			actions: new Map(),
-			predictions: new Map()
-		};
+	async executeOutputs(coordinates) {
 
-		if (!predictions || predictions.length === 0) return;
+		if (!coordinates || Object.keys(coordinates).length === 0) return;
 
-		// Extract activity predictions from all prediction frames
-		predictions.forEach(frame => {
-			frame.predictions.forEach(pred => {
-				// Check for activity dimension (our new output format)
-				if (pred.coordinates[`${this.symbol}_activity`] !== undefined) {
-					const activityValue = pred.coordinates[`${this.symbol}_activity`];
-					const confidence = pred.confidence;
-					
-					if (activityValue > 0) {
-						// Positive activity = buy signal
-						const current = outputs.actions.get('buy') || 0;
-						outputs.actions.set('buy', current + confidence);
-					}
-					else if (activityValue < 0) {
-						// Negative activity = sell signal
-						const current = outputs.actions.get('sell') || 0;
-						outputs.actions.set('sell', current + confidence);
-					}
-				}
-			});
-		});
+		// Extract activity value
+		const activityValue = coordinates[`${this.symbol}_activity`];
+		if (activityValue === undefined) return;
 
-		// Execute the strongest action (fake buying/selling)
-		this.executeAction(outputs.actions);
-	}
+		// Get current price for position tracking
+		const currentPrice = this.currentPrice;
 
-	executeAction(actions) {
-		let strongestAction = null;
-		let maxStrength = 0;
+		// Positive activity = buy signal (+1)
+		if (activityValue > 0) {
 
-		for (const [action, strength] of actions) {
-			if (strength > maxStrength) {
-				maxStrength = strength;
-				strongestAction = action;
+			// if we already own the stock, nothing to do - just log it
+			if (this.owned) {
+				console.log(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
+				return;
 			}
+
+			// buy stock per request coming from the brain
+			this.owned = true;
+			this.entryPrice = currentPrice;
+			this.holdingFrames = 0; // Reset holding counter
+			this.hasTraded = true; // Mark that we've made our first trade
+			console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (activity: ${activityValue})`);
 		}
+		// Negative activity = sell signal (-1)
+		else if (activityValue < 0) {
 
-		if (strongestAction && maxStrength > 0) {
-
-			// Get current price for position tracking
-			const currentPrice = this.currentPrice;
-
-			if (strongestAction === 'buy') {
-				if (!this.owned) {
-					this.owned = true;
-					this.entryPrice = currentPrice;
-					this.holdingFrames = 0; // Reset holding counter
-					console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (strength: ${maxStrength.toFixed(3)})`);
-				}
-			} else if (strongestAction === 'sell') {
-				if (this.owned) {
-					// Sell owned stock
-					const profit = currentPrice - this.entryPrice;
-					const percentReturn = (profit / this.entryPrice) * 100;
-					
-					console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (strength: ${maxStrength.toFixed(3)})`);
-					console.log(`${this.symbol}: Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
-					
-					this.owned = false;
-					this.entryPrice = null;
-					this.holdingFrames = 0; // Reset holding counter
-				}
+			// if we don't own the stock, nothing to do - just log it
+			if (!this.owned) {
+				console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
+				return;
 			}
+
+			// Sell owned stock
+			const profit = currentPrice - this.entryPrice;
+			const percentReturn = (profit / this.entryPrice) * 100;
+
+			console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (activity: ${activityValue})`);
+			console.log(`${this.symbol}: Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+
+			// Switch to sold state
+			this.owned = false;
+			this.entryPrice = currentPrice; // Track sell price for sold position feedback
+			this.holdingFrames = 0; // Reset holding counter
 		}
 	}
 }
