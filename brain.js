@@ -24,9 +24,6 @@ export default class Brain {
 		// initialize channel registry
 		this.channels = new Map();
 		
-		// track all executed output neurons per channel for reward feedback
-		this.lastExecutedOutputNeurons = new Map();
-		
 		// used for global activity tracking so that we can trigger exploration when all channels are inactive
 		this.lastActivity = -1; // frame number of last activity across all channels
 		this.frameNumber = 0;
@@ -270,9 +267,6 @@ export default class Brain {
 			// nothing to do if there are no actions to execute
 			if (!channelOutputs || channelOutputs.actions.size === 0) continue;
 
-			// Track all executed output neurons for this channel for reward feedback
-			this.trackLastExecutedOutputNeurons(channelName, channelOutputs);
-
 			// now ask the channel to execute the outputs
 			await channel.executeOutputs(channelOutputs);
 
@@ -282,19 +276,7 @@ export default class Brain {
 		}
 	}
 
-	/**
-	 * Track all executed output neurons for a channel for future reward feedback
-	 */
-	trackLastExecutedOutputNeurons(channelName, channelOutputs) {
 
-		const executedNeurons = [];
-		for (const [neuronId] of channelOutputs.actions) executedNeurons.push(neuronId);
-		
-		if (executedNeurons.length > 0) {
-			this.lastExecutedOutputNeurons.set(channelName, executedNeurons);
-			console.log(`${channelName}: Tracking ${executedNeurons.length} output neurons for feedback: [${executedNeurons.join(', ')}]`);
-		}
-	}
 
 	/**
 	 * ages neurons in the context - sliding the window across frames
@@ -358,7 +340,7 @@ export default class Brain {
 			if (neuronStrengths.size === 0) throw new Error('no neuron strengths.'); // should not happen
 			console.log(`Calculated strengths for ${neuronStrengths.size} neurons at level ${level}`);
 
-			// do the rewards optimizations - avoid pain, maximize joy
+			// apply reward optimizations to neuron strengths
 			neuronStrengths = await this.optimizeRewards(neuronStrengths, level);
 
 			// determine peak neurons for the level using peak detection algorithm
