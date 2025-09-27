@@ -13,7 +13,9 @@ export default class Brain {
 		// set hyperparameters
 		this.baseNeuronMaxAge = 10; // number of frames a base neuron stays active
 		this.forgetCycles = 1000; // number of frames between forget cycles
-		this.forgetRate = 0.1; // how much the connection strengths will be decremented by at forget cycles
+		this.connectionForgetRate = 0.1; // how much connection strengths decay per forget cycle
+		this.patternForgetRate = 0.1; // how much pattern strengths decay per forget cycle
+		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
@@ -1086,7 +1088,7 @@ export default class Brain {
 	}
 
 	/**
-	 * runs the forget cycle, reducing conn weights and deleting unused neurons signifying unseen patterns
+	 * runs the forget cycle, reducing reward factors, pattern strengths, connection strengths and deleting unused neurons
 	 * also deletes obsolete (negative) connections - very important step that helps the system avoid curse of dimensionality
 	 */
 	async runForgetCycle() {
@@ -1097,15 +1099,22 @@ export default class Brain {
 		this.forgetCounter = 0;
 		console.log('Running forget cycle...');
 
-		// reduce pattern strengths across the board and remove dead patterns
-		await this.conn.query(`UPDATE patterns SET strength = strength - ?`, [this.forgetRate]);
+		// 1. REWARD FORGETTING: Remove neutral rewards first, then decay toward neutral
+		await this.conn.query(`DELETE FROM neuron_rewards WHERE ABS(reward_factor - 1.0) < 0.01`);
+		await this.conn.query(`
+			UPDATE neuron_rewards
+			SET reward_factor = reward_factor + (1.0 - reward_factor) * ?
+		`, [this.rewardForgetRate]);
+
+		// 2. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns
+		await this.conn.query(`UPDATE patterns SET strength = strength - ?`, [this.patternForgetRate]);
 		await this.conn.query(`DELETE FROM patterns WHERE strength <= 0`);
 
-		// reduce connection strengths across the board and remove dead connections
-		await this.conn.query(`UPDATE connections SET strength = strength - ?`, [this.forgetRate]);
+		// 3. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections
+		await this.conn.query(`UPDATE connections SET strength = strength - ?`, [this.connectionForgetRate]);
 		await this.conn.query(`DELETE FROM connections WHERE strength <= 0`);
 
-		// remove orphaned neurons with no connections, no patterns, and not currently active
+		// 4. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
 		await this.conn.query(`
 			DELETE FROM neurons n
 			WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
