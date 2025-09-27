@@ -55,17 +55,6 @@ export default class StockTrainingJob extends Job {
 	}
 
 	/**
-	 * Hook: Handle brain reset strategy
-	 */
-	async handleBrainReset() {
-		// Hard reset only before first episode
-		if (this.hardReset) {
-			console.log('🧠 Hard reset: Clearing all brain tables...');
-			await this.brain.resetBrain();
-		}
-	}
-
-	/**
 	 * Hook: Execute main job logic - multi-episode training
 	 */
 	async executeJob() {
