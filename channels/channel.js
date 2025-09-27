@@ -19,6 +19,15 @@ export default class Channel {
 	}
 
 	/**
+	 * Initialize channel - override in subclasses if needed
+	 * Called once during brain initialization
+	 */
+	async initialize() {
+		// Default implementation does nothing
+		// Child classes can override for channel-specific initialization
+	}
+
+	/**
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * This method should execute actions and update channel state
 	 */

@@ -187,30 +187,35 @@ export default class Brain {
 	}
 
 	/**
-	 * Get feedback from all channels
+	 * Get global feedback from all channels aggregated into a single reward factor
 	 */
 	async getFeedback() {
 		console.log('Getting feedback from all channels...');
-		const channelFeedbacks = new Map();
-		
+		let globalReward = 1.0; // Start with neutral
+		let feedbackCount = 0;
+
 		for (const [channelName, channel] of this.channels) {
-			const feedback = await channel.getFeedback();
-			if (feedback && (feedback.joy !== 0 || feedback.pain !== 0)) {
-				channelFeedbacks.set(channelName, feedback);
-				console.log(`${channelName}: feedback (joy: ${feedback.joy}, pain: ${feedback.pain})`);
+			const rewardFactor = await channel.getFeedback();
+			if (rewardFactor !== 1.0) { // Only process non-neutral feedback
+				console.log(`${channelName}: reward factor ${rewardFactor.toFixed(3)}`);
+				globalReward *= rewardFactor; // Multiplicative aggregation
+				feedbackCount++;
 			}
 		}
-		
-		return channelFeedbacks;
+
+		if (feedbackCount > 0) console.log(`Total reward: ${globalReward.toFixed(3)} (${feedbackCount} channels)`);
+		else console.log('No feedback from any channels');
+
+		return globalReward;
 	}
 
 	/**
 	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
-	 * and feedback from channels - Map(channelName -> {joy, pain})
+	 * and global reward factor from aggregated channel feedback
 	 */
-	async processFrame(frame, feedback = new Map()) {
+	async processFrame(frame, globalReward = 1.0) {
 		console.log(`observing new frame: ${JSON.stringify(frame)}`);
-		console.log(`applying feedback from ${feedback.size} channels`);
+		console.log(`applying global reward: ${globalReward.toFixed(3)}`);
 
 		// do the whole thing as a transaction to avoid inconsistent database states
 		await this.conn.beginTransaction();
@@ -218,8 +223,8 @@ export default class Brain {
 		// if there's an error, we'll roll the transaction back
 		try {
 
-			// apply hierarchical reward feedback to active neurons
-			await this.applyHierarchicalRewards(feedback);
+			// apply global reward to executed inferred neurons
+			await this.applyRewards(globalReward);
 
 			// age the active neurons in memory context - sliding the window
 			await this.ageNeurons();
@@ -295,14 +300,16 @@ export default class Brain {
 	 * ages neurons in the context - sliding the window across frames
 	 */
 	async ageNeurons() {
-		console.log('Aging active neurons and predictions...');
+		console.log('Aging active neurons and inferred neurons...');
 
 		// age all neurons in the context
 		await this.conn.query('UPDATE active_neurons SET age = age + 1');
+		await this.conn.query('UPDATE inferred_neurons SET age = age + 1');
 
 		// deactivate aged-out neurons, but age higher level neurons slower than the lower level neurons
 		// if level 0 max age = 10, level 1 max age = 100, level 2 is 1000, etc.
 		await this.conn.query('DELETE FROM active_neurons WHERE age >= POW(?, level + 1)', [this.baseNeuronMaxAge]);
+		await this.conn.query('DELETE FROM inferred_neurons WHERE age >= POW(?, level + 1)', [this.baseNeuronMaxAge]);
 	}
 
 	/**
@@ -1233,176 +1240,25 @@ export default class Brain {
 	}
 
 	/**
-	 * Collect neuron rewards from channel feedbacks
-	 * @param {Map} channelFeedbacks - Map of channelName -> reward_factor
-	 * @returns {Map} Map of outputNeuron -> reward_factor
+	 * Apply global reward to executed inferred neurons with linear temporal decay
 	 */
-	getNeuronRewards(channelFeedbacks) {
-		const neuronRewards = new Map();
-
-		for (const [channelName, rewardFactor] of channelFeedbacks) {
-			const lastOutputNeurons = this.lastExecutedOutputNeurons.get(channelName);
-			if (!lastOutputNeurons || lastOutputNeurons.length === 0) {
-				console.log(`${channelName}: No previous output neurons to reward`);
-				continue;
-			}
-
-			console.log(`${channelName}: Adding ${lastOutputNeurons.length} output neurons for batch processing (factor: ${rewardFactor})`);
-			for (const outputNeuron of lastOutputNeurons) neuronRewards.set(outputNeuron, rewardFactor);
-		}
-
-		return neuronRewards;
-	}
-
-	/**
-	 * Build reward updates from reasoning neurons and neuron rewards
-	 * @param {Map} reasoningNeurons - Map of outputNeuron -> Set of reasoning neurons
-	 * @param {Map} neuronRewards - Map of outputNeuron -> reward_factor
-	 * @returns {Array} Array of [neuronId, reward_factor] tuples
-	 */
-	buildRewardUpdates(reasoningNeurons, neuronRewards) {
-		const rewardUpdates = [];
-
-		// Process each output neuron and its reasoning neurons
-		for (const [outputNeuronId, reasoningNeuronIds] of reasoningNeurons) {
-			const rewardFactor = neuronRewards.get(outputNeuronId);
-			if (!rewardFactor) continue;
-
-			// Add the output neuron itself to reward updates
-			rewardUpdates.push([outputNeuronId, rewardFactor]);
-
-			// Add each reasoning neuron connected to this output neuron
-			for (const reasoningNeuronId of reasoningNeuronIds) {
-				// Reasoning neurons get the same reward factor as the output neuron
-				// If a reasoning neuron is connected to multiple output neurons, factors will be multiplied in the database
-				rewardUpdates.push([reasoningNeuronId, rewardFactor]);
-			}
-		}
-
-		return rewardUpdates;
-	}
-
-	/**
-	 * Optimized batch hierarchical reward propagation using active_connections table
-	 */
-	async applyHierarchicalRewards(channelFeedbacks) {
-		if (channelFeedbacks.size === 0) {
-			console.log('No feedback to apply');
-			return;
-		}
-		
-		console.log('Applying batch hierarchical reward feedback...');
-		
-		// collect feedback for all output neurons from all channels
-		const neuronRewards = this.getNeuronRewards(channelFeedbacks);
-		if (neuronRewards.size === 0) {
-			console.log('No output neurons to process');
+	async applyRewards(globalReward) {
+		if (globalReward === 1.0) {
+			console.log('Neutral global reward - no updates needed');
 			return;
 		}
 
-		// get the reasoning neurons for the output neurons
-		const reasoningNeurons = await this.getReasoningNeurons(Array.from(neuronRewards.keys()));
-		
-		// Apply rewards in batch, avoiding duplicates
-		const rewardUpdates = this.buildRewardUpdates(reasoningNeurons, neuronRewards);
-		if (rewardUpdates.length === 0) {
-			console.log('No connected neurons found for reward propagation');
-			return;
-		}
-		
-		// Batch update neuron rewards - multiply existing reward factor by new factor
-		await this.conn.query(`
-			INSERT INTO neuron_rewards (neuron_id, reward_factor) VALUES ?
-			ON DUPLICATE KEY UPDATE
-				reward_factor = reward_factor * VALUES(reward_factor)
-		`, [rewardUpdates]);
-		
-		console.log(`Applied batch hierarchical feedback to ${rewardUpdates.length} neurons from ${Array.from(neuronRewards.keys()).length} output neurons`);
-	}
+		// Apply global reward to all executed decisions (age >= 1) with linear temporal decay
+		// Recent decisions get full reward, older decisions get proportionally less, oldest get neutral (1.0)
+		// Formula: 1.0 + (globalReward - 1.0) * (1.0 - age/levelMaxAge)
+		const [result] = await this.conn.query(`
+			INSERT INTO neuron_rewards (neuron_id, reward_factor)
+			SELECT inf.neuron_id, 1.0 + (? - 1.0) * (1.0 - inf.age / POW(?, inf.level + 1))  -- Linear temporal decay
+			FROM inferred_neurons inf
+			WHERE inf.age >= 1  -- Executed decisions only, skip current frame
+			ON DUPLICATE KEY UPDATE reward_factor = reward_factor * VALUES(reward_factor)
+		`, [globalReward, this.baseNeuronMaxAge]);
 
-	/**
-	 * Initialize reasoning neurons map with output neurons
-	 * @param {Array} outputNeuronIds - Array of output neuron IDs
-	 * @returns {Map} Map of neuronId -> Set of output neurons it's connected to
-	 */
-	initializeReasoningNeurons(outputNeuronIds) {
-		const connectedNeurons = new Map();
-		for (const neuronId of outputNeuronIds) connectedNeurons.set(neuronId, new Set([neuronId]));
-		return connectedNeurons;
-	}
-
-	/**
-	 * Get reasoning patterns
-	 * @param {Array} neuronIds - Array of neuron IDs to find connections for
-	 * @param {number} level - The level to query
-	 * @returns Promise<{Array}> patterns
-	 */
-	async getReasoningPatterns(neuronIds, level) {
-
-		// get the active patterns in the higher level that use a connection in lower level that leads to the given neuron ids
-		const [results] = await this.conn.query(`
-			SELECT DISTINCT p.pattern_neuron_id, ac.to_neuron_id
-			FROM active_neurons an
-            JOIN patterns p ON p.pattern_neuron_id = an.neuron_id AND p.strength > 0
-			JOIN active_connections ac ON ac.connection_id = p.connection_id AND ac.level = an.level - 1
-			WHERE an.level = ?
-	  	    AND ac.to_neuron_id IN (${neuronIds.map(() => '?').join(',')})
-		`, [...neuronIds, level + 1]);
-
-		// return the patterns that lead to the given output neurons
-		const patternRows = [];
-		for (const row of results)
-			patternRows.push({ pattern_neuron_id: row.pattern_neuron_id, to_neuron_id: row.to_neuron_id });
-		return patternRows;
-	}
-
-
-	/**
-	 * Get complete output reasoning neurons using hierarchical connection tracing
-	 * Returns a map of output neuron IDs to the set of reasoning neurons they are connected to
-	 */
-	async getReasoningNeurons(outputNeuronIds) {
-		console.log(`Batch tracing hierarchical connections for ${outputNeuronIds.length} output neurons`);
-
-		// initialize the reasoning neurons map to include output neurons themselves
-		const reasoningNeurons = this.initializeReasoningNeurons(outputNeuronIds);
-
-		// trace through levels using active_connections table
-		let currentLevelNeurons = new Set(outputNeuronIds);
-		for (let level = 0; level < this.maxLevels; level++) {
-
-			// nothing more to do if we reached the max level or a level with no connected neurons to outputs
-			if (level >= this.maxLevels - 1 || currentLevelNeurons.size === 0) break;
-			
-			// Get reasoning patterns at the next level
-			const currentNeuronIds = Array.from(currentLevelNeurons);
-			const patternRows = await this.getReasoningPatterns(currentNeuronIds, level);
-			const nextLevelNeurons = new Set();
-
-			// For each pattern row, add the pattern neuron to all output neurons it's connected to
-			for (const patternRow of patternRows) {
-				const patternNeuronId = patternRow.pattern_neuron_id;
-				const toNeuronId = patternRow.to_neuron_id;
-				
-				// Check if the to_neuron_id is in our current level neurons
-				if (currentLevelNeurons.has(toNeuronId)) {
-					// Add this pattern neuron to all output neurons that the to_neuron is connected to
-					const connectedOutputs = reasoningNeurons.get(toNeuronId);
-					if (connectedOutputs) {
-						for (const outputNeuron of connectedOutputs) {
-							reasoningNeurons.get(outputNeuron).add(patternNeuronId);
-						}
-					}
-				}
-				
-				nextLevelNeurons.add(patternNeuronId);
-			}
-
-			console.log(`Level ${level}: Found ${nextLevelNeurons.size} pattern neurons at level ${level + 1}`);
-			currentLevelNeurons = nextLevelNeurons;
-		}
-		
-		console.log(`Total connected neurons found: ${reasoningNeurons.size}`);
-		return reasoningNeurons;
+		console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} executed inferred neurons with linear temporal decay`);
 	}
 }
