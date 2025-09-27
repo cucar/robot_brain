@@ -22,10 +22,22 @@ export default class StockChannel extends Channel {
 		this.previousVolume = null; // Track previous volume for change calculation
 		this.hasTraded = false; // Track if we've ever made a trade
 
+		// Episode metrics tracking
+		this.totalProfit = 0; // Total profit from all trades in current episode
+		this.totalLoss = 0; // Total loss from all trades in current episode
+		this.totalTrades = 0; // Total number of trades in current episode
+		this.profitableTrades = 0; // Number of profitable trades in current episode
+		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
+		this.lastUnrealizedProfit = 0; // Previous unrealized profit for tracking changes
+
+		// Holdout configuration
+		this.holdoutRows = 0; // Number of rows to hold out from training (set by job)
+		this.isTrainingMode = true; // true = training (skip holdout rows), false = prediction (use only holdout rows)
+		this.allRows = []; // Store all CSV rows for holdout management
+
 		// CSV reading state
 		this.csvPath = null;
 		this.rl = null;
-		this.lineIterator = null;
 		this.currentPrice = null;
 		this.currentVolume = null;
 
@@ -56,24 +68,91 @@ export default class StockChannel extends Channel {
 		const baseDir = path.resolve(process.cwd(), 'data', 'stock');
 		try { mkdirSync(baseDir, { recursive: true }); } catch {}
 		this.csvPath = path.resolve(baseDir, `${this.symbol}.csv`);
-		this.rl = createInterface({ input: createReadStream(this.csvPath), crlfDelay: Infinity });
-		this.lineIterator = this.rl[Symbol.asyncIterator]();
+		await this.loadAllRows();
+		this.prepareDataIterator();
 	}
 
 	/**
-	 * Reads the next non-empty CSV line, parses it as { price, volume }.
-	 * Returns null on EOF. Throws on malformed lines.
+	 * Load all CSV rows into memory for holdout management
 	 */
-	async readNextLine() {
-		if (!this.lineIterator) return null;
-		const { value, done } = await this.lineIterator.next();
-        if (done || value === undefined) return null;
-        const parts = String(value).trim().split(',');
-        if (parts.length < 2) throw new Error(`${this.symbol}: Invalid CSV line: ${value}`);
-        const price = parseFloat(parts[0]);
-        const volume = parseFloat(parts[1]);
-        if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${value}'`);
-        return { price, volume };
+	async loadAllRows() {
+		this.allRows = [];
+		const rl = createInterface({ input: createReadStream(this.csvPath), crlfDelay: Infinity });
+
+		for await (const line of rl) {
+			const parts = String(line).trim().split(',');
+			if (parts.length < 2) throw new Error(`${this.symbol}: Invalid CSV line: ${value}`);
+			const price = parseFloat(parts[0]);
+			const volume = parseFloat(parts[1]);
+			if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${value}'`);
+			this.allRows.push({ price, volume });
+		}
+
+		console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
+	}
+
+	/**
+	 * Prepare data iterator based on training/prediction mode
+	 */
+	prepareDataIterator() {
+
+		// Training: use all rows except holdout
+		if (this.isTrainingMode) {
+			if (this.holdoutRows > 0) this.dataRows = this.allRows.slice(0, -this.holdoutRows);
+			else this.dataRows = this.allRows; // Use all rows if no holdout
+		}
+		// Prediction: use only holdout rows
+		else {
+			if (this.holdoutRows > 0) this.dataRows = this.allRows.slice(-this.holdoutRows);
+			else this.dataRows = []; // No prediction data if no holdout
+		}
+
+		this.currentRowIndex = 0;
+		console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
+	}
+
+	/**
+	 * Reset channel state for new episode (keeps learned patterns but resets trading state)
+	 */
+	resetEpisode() {
+
+		// Reset trading state
+		this.owned = false;
+		this.entryPrice = null;
+		this.holdingFrames = 0;
+		this.hasTraded = false;
+		this.previousPrice = null;
+		this.previousVolume = null;
+		this.currentPrice = null;
+		this.currentVolume = null;
+
+		// Reset episode metrics
+		this.totalProfit = 0;
+		this.totalLoss = 0;
+		this.totalTrades = 0;
+		this.profitableTrades = 0;
+		this.unrealizedProfit = 0;
+		this.lastUnrealizedProfit = 0;
+
+		// Reset data iterator to start from beginning
+		this.prepareDataIterator();
+	}
+
+	/**
+	 * Set prediction mode (uses only holdout rows)
+	 */
+	setPredictionMode() {
+		this.isTrainingMode = false;
+		this.prepareDataIterator();
+	}
+
+	/**
+	 * Reads the next data row from the prepared dataset
+	 * Returns null when all rows are consumed
+	 */
+	readNextRow() {
+		if (this.currentRowIndex >= this.dataRows.length) return null;
+		return this.dataRows[this.currentRowIndex++];
 	}
 
 	/**
@@ -139,28 +218,24 @@ export default class StockChannel extends Channel {
 	 */
 	async getFrameInputs() {
 
-		// Read next non-empty line; skip header if present
-		const row = await this.readNextLine();
-		if (!row) {
-			console.log(`${this.symbol}: No more data available`);
-			return [];
-		}
+		// Read next data row
+		const row = this.readNextRow();
+		if (!row) return [];
+
 		this.currentPrice = row.price;
 		this.currentVolume = row.volume;
 
-		// if this is the first frame, read another line so that we can start sending change stats
+		// if this is the first frame, read another row so that we can start sending change stats
 		if (this.previousPrice === null || this.previousVolume === null) {
 
-			// seed baseline from the first observed line
+			// seed baseline from the first observed row
 			this.previousPrice = this.currentPrice;
 			this.previousVolume = this.currentVolume;
 
-			// read the next data line
-			const nextRow = await this.readNextLine();
-			if (!nextRow) {
-				console.log(`${this.symbol}: No second data line available`);
-				return [];
-			}
+			// read the next data row
+			const nextRow = this.readNextRow();
+			if (!nextRow) return [];
+
 			this.currentPrice = nextRow.price;
 			this.currentVolume = nextRow.volume;
 
@@ -173,6 +248,32 @@ export default class StockChannel extends Channel {
 
 		// Compute and return discretized changes
 		return this.computeChangeInputs();
+	}
+
+	/**
+	 * Update unrealized profit/loss metrics for owned positions
+	 */
+	updateUnrealizedProfitLoss() {
+
+		// if we have not bought anything yet, initialize
+		if (!this.owned || !this.entryPrice || !this.currentPrice) {
+			this.unrealizedProfit = 0;
+			return;
+		}
+
+		// Calculate current unrealized profit/loss
+		this.unrealizedProfit = this.currentPrice - this.entryPrice;
+
+		// Update running totals based on change in unrealized profit
+		const profitChange = this.unrealizedProfit - this.lastUnrealizedProfit;
+
+		// Unrealized profit increased
+		if (profitChange > 0) this.totalProfit += profitChange;
+		// Unrealized profit decreased (or loss increased)
+		else if (profitChange < 0) this.totalLoss += Math.abs(profitChange);
+
+		// Update last unrealized profit for next comparison
+		this.lastUnrealizedProfit = this.unrealizedProfit;
 	}
 
 	/**
@@ -189,6 +290,9 @@ export default class StockChannel extends Channel {
 
 		// No feedback if no price movement or haven't traded yet
 		if (currentPrice === this.previousPrice || !this.hasTraded) return 1.0;
+
+		// Update unrealized profit/loss metrics every frame
+		this.updateUnrealizedProfitLoss();
 
 		let rewardFactor;
 
@@ -250,6 +354,14 @@ export default class StockChannel extends Channel {
 			this.entryPrice = currentPrice;
 			this.holdingFrames = 0; // Reset holding counter
 			this.hasTraded = true; // Mark that we've made our first trade
+
+			// Reset unrealized profit tracking for new position
+			this.unrealizedProfit = 0;
+			this.lastUnrealizedProfit = 0;
+
+			// Track trade metrics
+			this.totalTrades++;
+
 			console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (activity: ${activityValue})`);
 		}
 		// Negative activity = sell signal (-1)
@@ -267,6 +379,14 @@ export default class StockChannel extends Channel {
 
 			console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (activity: ${activityValue})`);
 			console.log(`${this.symbol}: Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+
+			// Track trade metrics - the unrealized profit/loss has already been tracked
+			// during ownership, so we just need to count the trade and profitability
+			if (profit > 0) this.profitableTrades++;
+
+			// Reset unrealized profit tracking since position is closed
+			this.unrealizedProfit = 0;
+			this.lastUnrealizedProfit = 0;
 
 			// Switch to sold state
 			this.owned = false;

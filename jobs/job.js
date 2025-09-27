@@ -11,10 +11,13 @@ export default class Job {
 	}
 
 	/**
-	 * Main run method - implemented in base class
+	 * Main run method - template method pattern with hooks for customization
 	 */
 	async run() {
 		try {
+			// Allow jobs to show custom startup info
+			await this.showStartupInfo();
+
 			// get channels defined by child class and register them with brain
 			console.log('Registering channels with brain...');
 			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
@@ -23,22 +26,65 @@ export default class Job {
 			console.log('Initializing brain...');
 			await this.brain.init();
 
-			// if job requests a hard reset (mainly for tests), perform before init
-			if (this.hardReset) {
-				console.log('Job requests hard reset. Clearing all tables...');
-				await this.brain.resetBrain();
-			}
-			// otherwise, just reset brain memory for clean episode
-			else await this.brain.resetContext();
+			// Allow jobs to configure channels after brain initialization
+			await this.configureChannels();
 
-			// process the job/episode
-			console.log('Running episode...');
-			await this.processFrames();
+			// Handle brain reset strategy
+			await this.handleBrainReset();
+
+			// Execute the main job logic
+			await this.executeJob();
+
+			// Allow jobs to show custom results
+			await this.showResults();
 		}
 		catch (error) {
 			console.error('Job execution failed:', error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Hook: Show startup information (override in subclasses)
+	 */
+	async showStartupInfo() {
+		// Default: no custom startup info
+	}
+
+	/**
+	 * Hook: Configure channels after brain initialization (override in subclasses)
+	 */
+	async configureChannels() {
+		// Default: no custom channel configuration
+	}
+
+	/**
+	 * Hook: Handle brain reset strategy (override in subclasses)
+	 */
+	async handleBrainReset() {
+		// if job requests a hard reset (mainly for tests), perform before init
+		if (this.hardReset) {
+			console.log('Job requests hard reset. Clearing all tables...');
+			await this.brain.resetBrain();
+		}
+		// otherwise, just reset brain memory for clean episode
+		else await this.brain.resetContext();
+	}
+
+	/**
+	 * Hook: Execute main job logic (override in subclasses)
+	 */
+	async executeJob() {
+		// Default: single episode processing
+		console.log('Running episode...');
+		await this.processFrames();
+	}
+
+	/**
+	 * Hook: Show results (override in subclasses)
+	 */
+	async showResults() {
+		// Default: no custom results display
 	}
 
 	/**
