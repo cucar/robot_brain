@@ -72,7 +72,7 @@ export default class StockChannel extends Channel {
         if (parts.length < 2) throw new Error(`${this.symbol}: Invalid CSV line: ${value}`);
         const price = parseFloat(parts[0]);
         const volume = parseFloat(parts[1]);
-        if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${trimmed}'`);
+        if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${value}'`);
         return { price, volume };
 	}
 
@@ -122,10 +122,16 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Get valid exploration actions based on current stock ownership
-	 * Can't sell if not owned, can't buy if already owned
+	 * Before first trade: only buy is valid
+	 * After first trade: both buy and sell are valid (alternating states)
 	 */
 	getValidExplorationActions() {
-		return [{ [`${this.symbol}_activity`]: (this.owned ? -1 : 1) }]
+
+		// Before first trade, can only buy
+		if (!this.hasTraded) return [{ [`${this.symbol}_activity`]: 1 }];
+
+		// After first trade, can do opposite of current state
+		return [{ [`${this.symbol}_activity`]: (this.owned ? -1 : 1) }];
 	}
 
 	/**
@@ -151,6 +157,10 @@ export default class StockChannel extends Channel {
 
 			// read the next data line
 			const nextRow = await this.readNextLine();
+			if (!nextRow) {
+				console.log(`${this.symbol}: No second data line available`);
+				return [];
+			}
 			this.currentPrice = nextRow.price;
 			this.currentVolume = nextRow.volume;
 
@@ -180,7 +190,7 @@ export default class StockChannel extends Channel {
 		// No feedback if no price movement or haven't traded yet
 		if (currentPrice === this.previousPrice || !this.hasTraded) return 1.0;
 
-		let rewardFactor = 1.0;
+		let rewardFactor;
 
 		if (this.owned) {
 			// For owned stocks: reward factor = new_price / old_price
