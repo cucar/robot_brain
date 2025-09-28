@@ -354,47 +354,23 @@ graph TB
 ### Temporal Separation Architecture
 
 ```mermaid
-graph LR
-    subgraph "Frame N"
-        I1[Input:<br/>Visual data<br/>Motor feedback]
-        R1[Recognition:<br/>Activate neurons<br/>Form connections]
-        P1[Pattern Discovery:<br/>Detect peaks<br/>Create patterns]
-        D1[Decision Making:<br/>Infer outputs<br/>Age = 0]
-    end
+graph TD
+    F1[Frame N: Input → Recognition → Pattern Discovery → Decision Making]
+    TS1[⏱️ Temporal Separation ⏱️<br/>Decisions stored for next frame]
+    F2[Frame N+1: Execute Previous Actions → Input → Recognition → Decision Making]
+    TS2[⏱️ Temporal Separation ⏱️<br/>Decisions stored for next frame]
+    F3[Frame N+2: Execute Previous Actions → Input → Recognition → Decision Making]
 
-    subgraph "Frame N+1"
-        E1[Execute Actions:<br/>Previous decisions<br/>Age = 1]
-        I2[Input:<br/>New sensory data<br/>Action results]
-        R2[Recognition:<br/>Process outcomes<br/>Update connections]
-        D2[Decision Making:<br/>New inferences<br/>Age = 0]
-    end
+    F1 --> TS1
+    TS1 --> F2
+    F2 --> TS2
+    TS2 --> F3
 
-    subgraph "Frame N+2"
-        E2[Execute Actions:<br/>Previous decisions<br/>Age = 1]
-        I3[Input:<br/>Continued data<br/>Feedback loop]
-        R3[Recognition:<br/>Learn from results<br/>Adapt patterns]
-        D3[Decision Making:<br/>Improved decisions<br/>Age = 0]
-    end
-
-    I1 --> R1
-    R1 --> P1
-    P1 --> D1
-
-    D1 -.->|"Temporal<br/>Separation"| E1
-    E1 --> I2
-    I2 --> R2
-    R2 --> D2
-
-    D2 -.->|"Temporal<br/>Separation"| E2
-    E2 --> I3
-    I3 --> R3
-    R3 --> D3
-
-    style D1 fill:#e1f5fe
-    style D2 fill:#e1f5fe
-    style D3 fill:#e1f5fe
-    style E1 fill:#f3e5f5
-    style E2 fill:#f3e5f5
+    style F1 fill:#e1f5fe
+    style F2 fill:#f3e5f5
+    style F3 fill:#e8f5e8
+    style TS1 fill:#fff3e0
+    style TS2 fill:#fff3e0
 ```
 
 - Shows the critical innovation of separating decision-making from action execution
