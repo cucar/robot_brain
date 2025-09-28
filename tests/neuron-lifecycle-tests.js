@@ -56,6 +56,7 @@ class NeuronLifecycleTests {
         await this.testNeuronAging();
         await this.testLevelBasedAging();
         await this.testActivationIntegration();
+        await this.testReinforceConnectionsDirect();
         await this.testConnectionReinforcement();
 
         console.log(`\nResults: ${this.testsPassed} passed, ${this.testsFailed} failed`);
@@ -197,8 +198,46 @@ class NeuronLifecycleTests {
         console.log();
     }
 
+    async testReinforceConnectionsDirect() {
+        console.log('Testing reinforceConnections() Method Directly:');
+
+        // Clear and set up
+        await this.brain.conn.query('DELETE FROM active_neurons');
+        await this.brain.conn.query('DELETE FROM connections');
+
+        const neuronIds = await this.brain.bulkInsertNeurons(3);
+
+        // Set up active neurons with different ages
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 2)', [neuronIds[0]]); // Older
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[1]]); // Middle
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [neuronIds[2]]); // New
+
+        // Call reinforceConnections directly
+        await this.brain.reinforceConnections(0);
+
+        // Check connections were created from older neurons to new neuron (age=0)
+        const [connectionRows] = await this.brain.conn.query('SELECT * FROM connections ORDER BY from_neuron_id');
+
+        // Should create connections: neuronIds[0] -> neuronIds[2] and neuronIds[1] -> neuronIds[2]
+        // Distance should be FLOOR(age / POW(10, 0)) = age
+        this.assert(connectionRows.length === 2, 'Should create 2 connections to new neuron', connectionRows.length, 2);
+
+        const conn1 = connectionRows.find(c => c.from_neuron_id === neuronIds[0]);
+        const conn2 = connectionRows.find(c => c.from_neuron_id === neuronIds[1]);
+
+        this.assert(conn1 && conn1.to_neuron_id === neuronIds[2], 'Should connect from oldest to newest');
+        this.assert(conn1.distance === 2, 'Distance should match age (2)', conn1.distance, 2);
+        this.assert(conn1.strength === 1, 'Initial strength should be 1', conn1.strength, 1);
+
+        this.assert(conn2 && conn2.to_neuron_id === neuronIds[2], 'Should connect from middle to newest');
+        this.assert(conn2.distance === 1, 'Distance should match age (1)', conn2.distance, 1);
+        this.assert(conn2.strength === 1, 'Initial strength should be 1', conn2.strength, 1);
+
+        console.log();
+    }
+
     async testConnectionReinforcement() {
-        console.log('Testing Connection Reinforcement:');
+        console.log('Testing Connection Reinforcement Integration:');
 
         // Clear and set up
         await this.brain.conn.query('DELETE FROM active_neurons');

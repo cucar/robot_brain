@@ -47,7 +47,7 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 **Tests**: 27 tests covering coordinate matching, neuron creation, and bulk operations
 
 **Critical Areas Tested**:
-- `matchNeuronsFromPoints()` - Complex UNION SQL queries for coordinate matching
+- `matchFrameNeurons()` - Simplified single-query coordinate matching (refactored from complex UNION)
 - `createBaseNeurons()` - Bulk neuron creation with coordinate insertion and deduplication
 - `bulkInsertNeurons()` - Auto-increment ID handling and edge cases
 - `getFrameNeurons()` - End-to-end frame-to-neuron conversion with matching and creation
@@ -55,13 +55,14 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 #### 3b. Neuron Lifecycle & Activation (`tests/neuron-lifecycle-tests.js`) ✅
 **Focus**: Neuron activation, aging, and lifecycle management
-**Tests**: 15 tests covering activation, aging, and connection reinforcement
+**Tests**: 21 tests covering activation, aging, and connection reinforcement
 
 **Critical Areas Tested**:
 - `insertActiveNeurons()` - Neuron activation at different levels
 - `ageNeurons()` - Age progression and level-based cleanup (validates POW formulas from Section 1)
 - `activateNeurons()` - Integration of activation and connection reinforcement
-- `reinforceConnections()` - Temporal connection creation and strength reinforcement
+- `reinforceConnections()` - Direct testing of temporal connection creation with distance calculations
+- Connection strength reinforcement and duplicate handling
 - Level-based aging thresholds and neuron lifecycle management
 
 **Why Critical**: Neurons are the fundamental units of the brain. Any bugs in neuron management break the entire system.
@@ -240,9 +241,9 @@ Each test section should include:
 ### Test Execution Order
 1. ✅ **Section 1**: SQL Logic & Mathematical Calculations (COMPLETE - 12 tests)
 2. ✅ **Section 2**: Brain Initialization & Configuration (COMPLETE - 18 tests)
-3. ✅ **Section 3**: Neuron Management System (COMPLETE - 42 tests total)
+3. ✅ **Section 3**: Neuron Management System (COMPLETE - 49 tests total)
    - ✅ 3a: Neuron Creation & Coordinate Matching (27 tests)
-   - ✅ 3b: Neuron Lifecycle & Activation (15 tests)
+   - ✅ 3b: Neuron Lifecycle & Activation (22 tests)
 4. Work sequentially through sections 4-7
 5. Test Section 8 (Channels) in parallel with 4-7
 6. Complete with Sections 9-10 (Integration testing)
@@ -269,7 +270,7 @@ To begin testing:
 - `tests/neuron-creation-tests.js` - 27 tests for coordinate matching and neuron creation
 - `tests/neuron-lifecycle-tests.js` - 15 tests for activation, aging, and lifecycle management
 
-**Total: 72 tests covering the foundational brain architecture**
+**Total: 79 tests covering the foundational brain architecture**
 
 ### 📋 Planned
 - Sections 4-10 as outlined above
