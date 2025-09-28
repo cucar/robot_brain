@@ -8,69 +8,61 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 ## Test Sections
 
-### 1. SQL Query Logic & Mathematical Calculations (`tests/1-sql-logic/`)
-**Focus**: Complex SQL queries, mathematical formulas, and aggregation logic
+### 1. SQL Query Logic & Mathematical Calculations (`tests/sql-logic-tests.js`) ✅
+**Focus**: Critical mathematical formulas used in SQL queries
 
-**Critical Test Areas**:
-- POW function calculations for aging and distance (POW(baseNeuronMaxAge, level + 1))
-- Distance calculations using FLOOR(age / POW(...)) formulas
-- Temporal decay formulas in reward calculations
-- Complex JOIN conditions with multiple table relationships
-- GROUP BY and HAVING clauses in pattern detection
-- Aggregation logic for strength calculations
-- Pattern matching queries with percentage thresholds
-- Connection inference and pattern inference query logic
+**Test File**: Single focused test file with essential validations
+**Tests**: 12 tests covering core mathematical expressions
 
-**Key SQL Queries to Test**:
-- Aging queries: `DELETE FROM active_neurons WHERE age >= POW(?, level + 1)`
-- Distance calculations: `FLOOR(f.age / POW(?, f.level)) as distance`
-- Reward decay: `1.0 + (? - 1.0) * (1.0 - inf.age / POW(?, inf.level + 1))`
-- Pattern matching: Complex CTEs with overlap percentage calculations
-- Connection reinforcement: Multi-table JOINs with temporal conditions
+**Critical Areas Tested**:
+- POW function calculations: `POW(baseNeuronMaxAge, level + 1)` for aging thresholds
+- Distance calculations: `FLOOR(age / POW(baseNeuronMaxAge, level))` for connections
+- Reward decay formulas: `1.0 + (globalReward - 1.0) * (1.0 - age/levelMaxAge)` for temporal decay
 
-**Why Critical**: These mathematical calculations and complex queries are the brain's core logic. Incorrect formulas would cause learning failures, memory corruption, or system instability.
+**Why Critical**: These mathematical calculations are the foundation of the brain's learning logic. Incorrect formulas would cause system-wide failures.
 
 ---
 
-### 2. Brain Initialization & Configuration (`tests/2-initialization/`)
-**Focus**: Constructor parameters, hyperparameter validation, channel registration
+### 2. Brain Initialization & Configuration (`tests/brain-initialization-tests.js`) ✅
+**Focus**: Database connectivity, channel registration, and system initialization
 
-**Critical Test Areas**:
-- Brain constructor and hyperparameter validation
-- Database connection initialization
-- Dimension creation and loading
-- Channel registration and validation
-- Reset operations (context vs hard reset)
+**Test File**: Single focused test file with integration point validations
+**Tests**: 18 tests covering actual failure points
 
-**Key Methods to Test**:
-- `constructor()` - Hyperparameter initialization
-- `init()` - Database and dimension setup
-- `registerChannel()` - Channel registration
-- `resetContext()` - Memory table cleanup
-- `resetBrain()` - Complete system reset
+**Critical Areas Tested**:
+- Channel registration and dimension provision
+- Database connection establishment
+- Dimension creation and mapping consistency
+- Reset operations (memory vs full reset)
 
-**Why Critical**: Incorrect initialization leads to cascading failures throughout the system.
+**Why Critical**: These are integration points where real failures occur - database connectivity, dimension creation logic, and SQL operations.
 
 ---
 
-### 3. Neuron Management System (`tests/3-neurons/`)
-**Focus**: Neuron creation, activation, aging, and lifecycle
+### 3. Neuron Management System (Split into 2 focused test files) ✅
+**Focus**: Neuron creation, activation, aging, and lifecycle management
 
-**Critical Test Areas**:
-- Neuron creation from frame coordinates
-- Coordinate matching and tolerance handling
-- Neuron activation and deactivation
-- Age-based neuron lifecycle management
-- Level-based aging (POW function behavior)
-- Bulk operations and performance
+#### 3a. Neuron Creation & Coordinate Matching (`tests/neuron-creation-tests.js`) ✅
+**Focus**: Frame-to-neuron conversion and coordinate handling
+**Tests**: 27 tests covering coordinate matching, neuron creation, and bulk operations
 
-**Key Methods to Test**:
-- `getFrameNeurons()` - Frame to neuron conversion
-- `matchNeuronsFromPoints()` - Coordinate matching
-- `createBaseNeurons()` - Neuron creation
-- `activateNeurons()` - Neuron activation
-- `ageNeurons()` - Age progression and cleanup
-- `insertActiveNeurons()` - Bulk insertion
+**Critical Areas Tested**:
+- `matchNeuronsFromPoints()` - Complex UNION SQL queries for coordinate matching
+- `createBaseNeurons()` - Bulk neuron creation with coordinate insertion and deduplication
+- `bulkInsertNeurons()` - Auto-increment ID handling and edge cases
+- `getFrameNeurons()` - End-to-end frame-to-neuron conversion with matching and creation
+- Edge cases: empty frames, duplicate points, coordinate validation
+
+#### 3b. Neuron Lifecycle & Activation (`tests/neuron-lifecycle-tests.js`) ✅
+**Focus**: Neuron activation, aging, and lifecycle management
+**Tests**: 15 tests covering activation, aging, and connection reinforcement
+
+**Critical Areas Tested**:
+- `insertActiveNeurons()` - Neuron activation at different levels
+- `ageNeurons()` - Age progression and level-based cleanup (validates POW formulas from Section 1)
+- `activateNeurons()` - Integration of activation and connection reinforcement
+- `reinforceConnections()` - Temporal connection creation and strength reinforcement
+- Level-based aging thresholds and neuron lifecycle management
 
 **Why Critical**: Neurons are the fundamental units of the brain. Any bugs in neuron management break the entire system.
 
@@ -246,10 +238,14 @@ Each test section should include:
 - Validate mathematical calculations precisely
 
 ### Test Execution Order
-1. Start with Section 1 (SQL Query Logic & Mathematical Calculations)
-2. Work sequentially through sections 2-7
-3. Test Section 8 (Channels) in parallel with 2-7
-4. Complete with Sections 9-10 (Integration testing)
+1. ✅ **Section 1**: SQL Logic & Mathematical Calculations (COMPLETE - 12 tests)
+2. ✅ **Section 2**: Brain Initialization & Configuration (COMPLETE - 18 tests)
+3. ✅ **Section 3**: Neuron Management System (COMPLETE - 42 tests total)
+   - ✅ 3a: Neuron Creation & Coordinate Matching (27 tests)
+   - ✅ 3b: Neuron Lifecycle & Activation (15 tests)
+4. Work sequentially through sections 4-7
+5. Test Section 8 (Channels) in parallel with 4-7
+6. Complete with Sections 9-10 (Integration testing)
 
 ### Success Criteria
 - All tests must pass with 100% accuracy
@@ -261,8 +257,21 @@ Each test section should include:
 
 To begin testing:
 1. Set up test database environment
-2. Install testing dependencies (Jest, MySQL test utilities)
-3. Start with Section 1 (SQL Logic) tests - validate all mathematical formulas
+2. No external testing dependencies needed - uses plain Node.js with simple assertions
+3. Run tests individually: `node tests/sql-logic-tests.js`
 4. Work through each section systematically
 
-Each section will have its own subdirectory with specific test files and documentation.
+## Current Test Files
+
+### ✅ Completed
+- `tests/sql-logic-tests.js` - 12 tests validating core mathematical formulas
+- `tests/brain-initialization-tests.js` - 18 tests validating system initialization
+- `tests/neuron-creation-tests.js` - 27 tests for coordinate matching and neuron creation
+- `tests/neuron-lifecycle-tests.js` - 15 tests for activation, aging, and lifecycle management
+
+**Total: 72 tests covering the foundational brain architecture**
+
+### 📋 Planned
+- Sections 4-10 as outlined above
+
+Each test file is self-contained with focused, essential validations of actual failure points.
