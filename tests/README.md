@@ -87,26 +87,26 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 ---
 
-### 5. Inference & Prediction Engine (`tests/5-inference/`)
+### 5. Inference & Prediction Engine (`tests/inference-prediction-tests.js`) ✅
 **Focus**: Pattern inference, connection inference, prediction generation
 
-**Critical Test Areas**:
-- Pattern-based predictions
-- Connection-based predictions
-- Temporal prediction accuracy
-- Level-specific inference behavior
-- Prediction aging and expiration
-- Strength calculation algorithms
+**Test File**: Single focused test file with comprehensive inference validations
+**Tests**: 61 tests across 11 test methods covering all inference and prediction functionality
 
-**Key Methods to Test**:
-- `inferNeurons()` - Main inference orchestration
-- `inferPatterns()` - Pattern-based predictions
-- `inferConnections()` - Connection-based predictions
-- `getPredictedConnections()` - Prediction retrieval
-- `getNeuronStrengths()` - Strength calculations
-- `inferPeakNeurons()` - Peak neuron selection
+**Critical Areas Tested**:
+- `inferConnections()` - Same-level connection predictions with temporal distance calculations
+- `inferPatterns()` - Pattern-based lower-level predictions with aging and lifecycle management
+- `getPredictedConnections()` - Unified prediction retrieval from both connection and pattern inference
+- `getNeuronStrengths()` - Strength calculations from bidirectional connection sums
+- `inferPeakNeurons()` - Peak detection algorithm and inferred neuron insertion
+- `inferNeurons()` - Complete orchestration of multi-level inference processing
+- `optimizeRewards()` - Reward factor application to base strengths before peak detection
+- Temporal prediction accuracy with distance = age + 1 relationships
+- Level-specific inference behavior and proper level separation
+- Prediction aging, expiration, and lifecycle management
+- Edge cases: empty inputs, no connections, no predictions
 
-**Why Critical**: This is the brain's "thinking" process - predictions drive all outputs and learning.
+**Why Critical**: This is the brain's "thinking" process - predictions drive all outputs and learning. Any bugs in inference break the brain's ability to anticipate and respond to future states.
 
 ---
 
@@ -240,9 +240,10 @@ Each test section should include:
    - ✅ 3a: Neuron Creation & Coordinate Matching (27 tests)
    - ✅ 3b: Neuron Lifecycle & Activation (22 tests)
 4. ✅ **Section 4**: Connection & Pattern Learning (COMPLETE - 118 tests)
-5. Work sequentially through sections 5-7
-5. Test Section 8 (Channels) in parallel with 4-7
-6. Complete with Sections 9-10 (Integration testing)
+5. ✅ **Section 5**: Inference & Prediction Engine (COMPLETE - 11 test methods)
+6. Work sequentially through sections 6-7
+7. Test Section 8 (Channels) in parallel with 6-7
+8. Complete with Sections 9-10 (Integration testing)
 
 ### Success Criteria
 - All tests must pass with 100% accuracy
@@ -264,9 +265,11 @@ To begin testing:
 - `tests/sql-logic-tests.js` - 12 tests validating core mathematical formulas
 - `tests/brain-initialization-tests.js` - 18 tests validating system initialization
 - `tests/neuron-creation-tests.js` - 27 tests for coordinate matching and neuron creation
-- `tests/neuron-lifecycle-tests.js` - 15 tests for activation, aging, and lifecycle management
+- `tests/neuron-lifecycle-tests.js` - 22 tests for activation, aging, and lifecycle management
+- `tests/connection-pattern-tests.js` - 118 tests for connection learning and pattern detection
+- `tests/inference-prediction-tests.js` - 61 comprehensive tests for inference and prediction
 
-**Total: 197 tests covering the foundational brain architecture**
+**Total: 258 tests covering the foundational brain architecture and core learning systems**
 
 ### 📋 Planned
 - Sections 4-10 as outlined above
