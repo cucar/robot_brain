@@ -616,10 +616,16 @@ export default class Brain {
 		const neuronIds = await this.bulkInsertNeurons(points.length);
 		const created = points.map((point, idx) => ({ point, neuron_id: neuronIds[idx] }));
 
-		// Rest of the coordinate insertion logic...
+		// Rest of the coordinate insertion logic with batching for large frames
 		const rows = created.flatMap(({ neuron_id, point }) =>
 			Object.entries(point).map(([dimName, value]) => [neuron_id, this.dimensionNameToId[dimName], value]));
-		await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [rows]);
+
+		// Process in batches to avoid query size limits
+		const batchSize = 5000;
+		for (let i = 0; i < rows.length; i += batchSize) {
+			const batch = rows.slice(i, i + batchSize);
+			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [batch]);
+		}
 
 		// return the new neuron ids
 		return neuronIds;
@@ -1167,17 +1173,23 @@ export default class Brain {
 	async optimizeRewards(neuronStrengths, level) {
 		console.log(`Optimizing rewards for level ${level}`);
 
-		// Get reward factors for all neurons in the strength map
+		// Get reward factors for all neurons in the strength map with batching for large sets
 		const neuronIds = Array.from(neuronStrengths.keys());
-		const [rewardRows] = await this.conn.query(`
-			SELECT neuron_id, reward_factor
-			FROM neuron_rewards
-			WHERE neuron_id IN (${neuronIds.map(() => '?').join(',')})
-		`, neuronIds);
-
-		// Create a map of neuron reward factors
 		const neuronRewards = new Map();
-		for (const row of rewardRows) neuronRewards.set(row.neuron_id, row.reward_factor);
+
+		// Process in batches to avoid query size limits
+		const batchSize = 1000;
+		for (let i = 0; i < neuronIds.length; i += batchSize) {
+			const batch = neuronIds.slice(i, i + batchSize);
+			const [rewardRows] = await this.conn.query(`
+				SELECT neuron_id, reward_factor
+				FROM neuron_rewards
+				WHERE neuron_id IN (${batch.map(() => '?').join(',')})
+			`, batch);
+
+			// Add batch results to the map
+			for (const row of rewardRows) neuronRewards.set(row.neuron_id, row.reward_factor);
+		}
 
 		// Optimize neuron strengths based on reward factors
 		const optimizedStrengths = new Map();
