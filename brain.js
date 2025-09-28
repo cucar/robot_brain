@@ -504,10 +504,10 @@ export default class Brain {
 	/**
 	 * returns base neuron ids for given set of points coming from the frame
 	 */
-	async getFrameNeurons(points) {
+	async getFrameNeurons(frame) {
 
 		// try tp get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
-		const matches = await this.matchNeuronsFromPoints(points);
+		const matches = await this.matchFrameNeurons(frame);
 		console.log('pointNeuronMatches', matches);
 
 		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
@@ -529,42 +529,76 @@ export default class Brain {
 	/**
 	 * matches base neurons from dimensional values for each point - return format: [{ point_str, neuron_id }]
 	 */
-	async matchNeuronsFromPoints(frame) {
+	async matchFrameNeurons(frame) {
 		if (frame.length === 0) return [];
+		const neuronCoords = await this.getFrameCoordinates(frame);
+		return this.findFrameMatches(frame, neuronCoords);
+	}
 
-		// for each point in the frame, create a separate select query
-		const unionQueries = [];
-		for (const point of frame) {
-			const dimensions = Object.keys(point);
-			const dimCount = dimensions.length;
-			
-			// Build the dimension-value pairs for this point
-			const dimensionValuePairs =
-				Object.entries(point).map(([dimName, val]) => `(${this.dimensionNameToId[dimName]}, ${val})`);
-			
-			// Create a subquery for this point that finds neurons matching ALL its dimensions
-			unionQueries.push(`
-                SELECT '${JSON.stringify(point)}' as point_str, GROUP_CONCAT(neuron_id) as neuron_id
-                FROM (
-					SELECT DISTINCT neuron_id
-					FROM coordinates
-                    WHERE (dimension_id, val) IN (${dimensionValuePairs.join(', ')})
-					GROUP BY neuron_id
-					HAVING COUNT(*) = ${dimCount}
-				) AS matched_neurons
-			`);
+	/**
+	 * fetches all neuron coordinates that could potentially match any point in the frame
+	 */
+	async getFrameCoordinates(frame) {
+		const allPairs = [];
+
+		for (const point of frame)
+			for (const [dimName, val] of Object.entries(point))
+				allPairs.push([this.dimensionNameToId[dimName], val]);
+
+		const [rows] = await this.conn.query(`
+			SELECT neuron_id, dimension_id, val
+			FROM coordinates
+			WHERE (dimension_id, val) IN (?)
+		`, [allPairs]);
+
+		const neuronCoords = new Map();
+		for (const row of rows) {
+			if (!neuronCoords.has(row.neuron_id))
+				neuronCoords.set(row.neuron_id, new Map());
+			neuronCoords.get(row.neuron_id).set(row.dimension_id, row.val);
 		}
 
-		// combine all point queries with UNION and get the matching neurons for each point
-		const sql = unionQueries.join(' UNION ALL ');
-		const [rows] = await this.conn.query(sql);
+		return neuronCoords;
+	}
 
-		// if there are any points with multiple matches, error out
-		// this is theoretically possible, but should not happen as long as we are consistent with the input dimensions
-		if (rows.find(row => row.neuron_id && row.neuron_id.includes(','))) throw new Error(`Multiple point matches: ${sql}`);
+	/**
+	 * finds exact neuron matches for each point in the frame
+	 */
+	findFrameMatches(frame, neuronCoords) {
+		const results = [];
 
-		// return results
-		return rows.map(row => ({ point_str: row.point_str, neuron_id: Number(row.neuron_id) }));
+		for (const point of frame) {
+			const pointStr = JSON.stringify(point);
+			const matchedNeuronId = this.findPointMatch(point, neuronCoords);
+			results.push({ point_str: pointStr, neuron_id: matchedNeuronId });
+		}
+
+		return results;
+	}
+
+	/**
+	 * finds the neuron that exactly matches a single point
+	 */
+	findPointMatch(point, neuronCoords) {
+		const pointStr = JSON.stringify(point);
+		const expectedDimCount = Object.keys(point).length;
+		let matchedNeuronId = null;
+
+		for (const [neuronId, coords] of neuronCoords) {
+			let matchCount = 0;
+			for (const [dimName, val] of Object.entries(point)) {
+				const dimId = this.dimensionNameToId[dimName];
+				if (coords.has(dimId) && coords.get(dimId) === val) matchCount++;
+			}
+
+			if (matchCount === expectedDimCount) {
+				if (matchedNeuronId !== null)
+					throw new Error(`Multiple neuron matches for point: ${pointStr}`);
+				matchedNeuronId = neuronId;
+			}
+		}
+
+		return matchedNeuronId;
 	}
 
 	/**
