@@ -110,25 +110,27 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 ---
 
-### 6. Reward & Learning System (`tests/6-rewards/`)
+### 6. Reward & Learning System (`tests/reward-learning-tests.js`) ✅
 **Focus**: Reward application, temporal decay, learning reinforcement
 
-**Critical Test Areas**:
-- Global reward application
-- Temporal decay calculations
-- Reward factor multiplication
-- Negative learning rate application
-- Reward optimization algorithms
-- Hierarchical reward propagation
+**Test File**: Single focused test file with comprehensive reward system validations
+**Tests**: 11 test methods covering all reward and learning functionality
 
-**Key Methods to Test**:
-- `applyRewards()` - Global reward application
-- `optimizeRewards()` - Reward-based optimization
-- Temporal decay formulas
-- Reward factor storage and retrieval
-- Pattern strength adjustments
+**Critical Areas Tested**:
+- `applyRewards()` - Global reward application with temporal decay formula validation
+- `getFeedback()` - Multi-channel feedback aggregation with multiplicative combination
+- `optimizeRewards()` - Reward factor application to neuron strengths before peak detection
+- `runForgetCycle()` - Complete forget cycle including reward, connection, and pattern decay
+- Temporal decay calculations with level-specific aging (POW formulas)
+- Reward factor multiplication for compound learning over time
+- Negative learning rate application for failed predictions
+- Connection strength decay and pruning of weak connections
+- Pattern strength decay and pruning of weak patterns
+- Neuron cleanup removing orphaned neurons with no connections/patterns/activity
+- Multi-channel feedback aggregation with multiplicative rewards
+- Edge cases: empty tables, extreme values, no channels, no inferred neurons
 
-**Why Critical**: Without proper rewards, the brain cannot learn from experience or improve performance.
+**Why Critical**: Without proper rewards, the brain cannot learn from experience or improve performance. The reward system drives all behavioral adaptation and learning optimization.
 
 ---
 
@@ -241,9 +243,10 @@ Each test section should include:
    - ✅ 3b: Neuron Lifecycle & Activation (22 tests)
 4. ✅ **Section 4**: Connection & Pattern Learning (COMPLETE - 118 tests)
 5. ✅ **Section 5**: Inference & Prediction Engine (COMPLETE - 11 test methods)
-6. Work sequentially through sections 6-7
-7. Test Section 8 (Channels) in parallel with 6-7
-8. Complete with Sections 9-10 (Integration testing)
+6. ✅ **Section 6**: Reward & Learning System (COMPLETE - 11 test methods)
+7. Work sequentially through section 7
+8. Test Section 8 (Channels) in parallel with 7
+9. Complete with Sections 9-10 (Integration testing)
 
 ### Success Criteria
 - All tests must pass with 100% accuracy
@@ -268,8 +271,9 @@ To begin testing:
 - `tests/neuron-lifecycle-tests.js` - 22 tests for activation, aging, and lifecycle management
 - `tests/connection-pattern-tests.js` - 118 tests for connection learning and pattern detection
 - `tests/inference-prediction-tests.js` - 61 comprehensive tests for inference and prediction
+- `tests/reward-learning-tests.js` - 55 comprehensive tests across 11 test methods for reward and learning systems
 
-**Total: 258 tests covering the foundational brain architecture and core learning systems**
+**Total: 313 tests covering the foundational brain architecture and core learning systems**
 
 ### 📋 Planned
 - Sections 4-10 as outlined above

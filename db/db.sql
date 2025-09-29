@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
 ) ENGINE=MEMORY;
 
 -- mapping table for observed patterns - peak neurons and their connections (MEMORY table)
+-- this just a scratch table for faster processing - it temporarily holds the observed patterns for the current level in the frame
 CREATE TABLE IF NOT EXISTS observed_patterns (
     peak_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
@@ -139,7 +140,7 @@ CREATE TABLE IF NOT EXISTS observed_patterns (
 ) ENGINE=MEMORY;
 
 -- active connections for fast hierarchical reward propagation (MEMORY table)
--- this is just for faster processing - it temporarily holds the active connections for the current frame
+-- this just a scratch table for faster processing - it temporarily holds the active connections for the current frame
 CREATE TABLE IF NOT EXISTS active_connections (
     connection_id BIGINT UNSIGNED NOT NULL,
     from_neuron_id BIGINT UNSIGNED NOT NULL,
