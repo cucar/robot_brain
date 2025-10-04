@@ -34,8 +34,11 @@ The current implementation uses a unified schema optimized for spatio-temporal p
 
 ### Connection Architecture
 - **`connections(id, from_neuron_id, to_neuron_id, distance, strength)`**
-  - **Directed temporal connections**: `from_neuron_id` → `to_neuron_id`
-  - **`distance`**: Temporal separation (0=spatial co-occurrence, 1=immediate sequence, 2=next step, etc.)
+  - **Cross-level directed connections**: Neurons at any level can connect to neurons at any other level
+  - **`distance`**: Encodes both temporal and hierarchical relationships:
+    - **Same level**: Time-dilated temporal distance `FLOOR(age / POW(baseNeuronMaxAge, level))`
+    - **Higher → Lower**: `baseNeuronMaxAge - 1` (persistent context from slower timescale)
+    - **Lower → Higher**: `0` (instantaneous from faster timescale perspective)
   - **`strength`**: Connection weight (reinforced by observations, decayed by forgetting)
 
 ### Pattern Learning
@@ -60,7 +63,8 @@ The current implementation uses a unified schema optimized for spatio-temporal p
 - **`observed_patterns(peak_neuron_id, connection_id)`** - Temporary mapping of observed peak patterns
   - Used during pattern matching and creation phases
 - **`active_connections(connection_id, from_neuron_id, to_neuron_id, level, strength)`** - Active connections cache
-  - Temporary table for fast hierarchical reward propagation
+  - Contains only connections that are currently firing (distance matches temporal relationship)
+  - Temporary table for fast hierarchical reward propagation and pattern inference
 
 ## Hyperparameters (brain.js)
 
@@ -95,19 +99,26 @@ The system processes input through `await brain.processFrame(frame, globalReward
 
 ### 4. Recognition Phase
 - **Base neuron activation**: Find/create neurons for input coordinates and activate at level 0, age 0
-- **Connection reinforcement**: Create temporal connections from older active neurons to new ones
+- **Cross-level connection reinforcement**: Create connections from ALL active neurons (any level) to newly activated neurons
+  - Distance encodes hierarchical relationship: same-level uses temporal distance, cross-level uses fixed distances
+  - Higher-level neurons provide persistent context, lower-level neurons appear instantaneous
 - **Hierarchical pattern discovery**: Recursively detect patterns using peak detection in connection neighborhoods
+  - Patterns can now include connections across multiple levels (heterogeneous multi-scale patterns)
 - **Pattern activation**: Activate matching pattern neurons at higher levels and create new patterns for novel signatures
 
 ### 5. Inference Phase (Reverse Level Order)
 For each level from highest to lowest:
 
 #### Connection Predictions
-- **Same-level inference**: Predict connections within the current level using `connection_inference` table
+- **Cross-level inference**: Predict connections from any level to the target level using `connection_inference` table
+  - Distance matching accounts for source neuron's level relative to target level
 - **Pattern predictions**: Generate lower-level predictions from active patterns using `pattern_inference` table
+  - Uses `active_connections` table to exclude already-firing connections
 
 #### Strength Optimization
-- **Calculate neuron strengths**: Compute connection strength totals for predicted neurons
+- **Calculate neuron strengths**: Compute weighted connection strength totals for predicted neurons
+  - **Distance weighting**: Recent connections (distance=0) weighted at 1.0, distant connections (distance=9) weighted at 0.1
+  - Linear interpolation: `weight = (baseNeuronMaxAge - distance) / baseNeuronMaxAge`
 - **Apply reward factors**: Multiply base strengths by `neuron_rewards` factors to bias toward successful neurons
 - **Peak detection**: Identify neurons stronger than their neighborhood average
 
@@ -138,6 +149,63 @@ The `channels/*` directory contains fully integrated sensory and motor interface
 - **Feedback loop**: Channels provide reward signals via `getFeedback()` based on action outcomes and state changes
 - **Exploration**: Channels define valid exploration actions via `getValidExplorationActions()` for curiosity-driven learning
 - **Job coordination**: The job system orchestrates multiple channels for complex multi-modal learning scenarios
+
+## Cross-Level Connection Architecture
+
+The system implements a biologically-inspired cross-level connection architecture where neurons at any hierarchical level can form connections with neurons at any other level. This enables multi-scale pattern recognition and contextual learning.
+
+### Distance Encoding for Cross-Level Connections
+
+Connections encode both temporal and hierarchical relationships through their distance value:
+
+#### Same-Level Connections
+- **Formula**: `FLOOR(age / POW(baseNeuronMaxAge, level))`
+- **Meaning**: Time-dilated temporal distance
+- **Example**: At level 0, distance = exact age; at level 1, distance bucketed by 10s; at level 2, bucketed by 100s
+- **Purpose**: Captures temporal sequences at appropriate timescales for each level
+
+#### Higher → Lower Level Connections
+- **Formula**: `baseNeuronMaxAge - 1` (e.g., 9 if baseNeuronMaxAge=10)
+- **Meaning**: Persistent context from slower timescale
+- **Rationale**: Higher-level neurons exist for longer periods, acting as stable context for lower-level processing
+- **Example**: A Level 2 market trend neuron provides context for Level 0 price movements
+
+#### Lower → Higher Level Connections
+- **Formula**: `0` (zero distance)
+- **Meaning**: Instantaneous co-occurrence from higher perspective
+- **Rationale**: From a higher level's slow timescale, lower-level events appear to happen simultaneously
+- **Example**: Multiple Level 0 neurons activating "at once" from Level 2's perspective
+
+### Benefits of Cross-Level Connections
+
+1. **Multi-Scale Context Integration**: Higher-level patterns provide context for lower-level processing
+   - "This intraday pattern only happens during bull markets"
+   - "Daily breakouts are more reliable with specific volume patterns"
+
+2. **Skip Connections**: Direct information flow across levels enables faster learning
+   - Similar to ResNet skip connections in deep learning
+   - Shortcuts for critical long-term dependencies
+
+3. **Heterogeneous Patterns**: Patterns can encode relationships across multiple levels
+   - Level 2 pattern = Level 1 connections + Level 0 connections
+   - Richer compositional representations
+
+4. **Contextual Disambiguation**: Same low-level pattern means different things in different contexts
+   - Pattern X at Level 0 has meaning Y when Level 2 context is Z
+   - Enables context-aware predictions
+
+### Distance Weighting in Peak Detection
+
+To prioritize recent information, connection strengths are weighted by temporal proximity during peak detection:
+
+- **Formula**: `weight = (baseNeuronMaxAge - distance) / baseNeuronMaxAge`
+- **Examples** (baseNeuronMaxAge=10):
+  - distance=0 → weight=1.0 (100% - most recent)
+  - distance=1 → weight=0.9 (90%)
+  - distance=5 → weight=0.5 (50%)
+  - distance=9 → weight=0.1 (10% - oldest)
+
+This linear weighting ensures that more recent connections have greater influence on clustering and peak detection, while still allowing older connections to contribute.
 
 ## Core Architecture Systems
 

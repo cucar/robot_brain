@@ -21,15 +21,21 @@ The system represents a significant advancement over existing AI approaches by p
 - **Coordinate-based encoding** where each neuron represents a point in multi-dimensional space
 - **Automatic dimension discovery** from input channels (vision, audio, motor, financial, etc.)
 
-### 2. Temporal Connection Architecture  
-- **Directed temporal connections** between neurons based on timing relationships
-- **Distance encoding** that captures immediate sequences (distance=1) vs. longer-term patterns (distance=2+)
+### 2. Cross-Level Temporal Connection Architecture
+- **Cross-hierarchical connections** between neurons at any level, not just within levels
+- **Multi-scale distance encoding** that captures temporal, spatial, and hierarchical relationships:
+  - Same-level: Time-dilated temporal sequences
+  - Higher→Lower: Persistent contextual influence
+  - Lower→Higher: Instantaneous co-occurrence from higher perspective
 - **Strength-based learning** where frequently observed connections become stronger
+- **Distance-weighted inference** where recent connections have greater influence than distant ones
 
 ### 3. Hierarchical Pattern Discovery
 - **Automatic pattern detection** using peak detection algorithms in connection neighborhoods
 - **Multi-level abstraction** where patterns of patterns form higher-level concepts
+- **Heterogeneous multi-scale patterns** that can include connections across multiple hierarchical levels
 - **Connection-based patterns** that capture relationships rather than just static features
+- **Contextual pattern encoding** where higher-level context influences lower-level pattern interpretation
 
 ### 4. Temporal Separation Architecture
 - **Decision-Action separation** where decisions made in frame N are executed in frame N+1
@@ -115,17 +121,22 @@ The following aspects represent potentially patentable innovations:
 
 ### System Architecture Claims
 1. **Unified neural storage system** with coordinate-based multi-dimensional representation
-2. **Temporal connection architecture** with distance-based relationship encoding
-3. **Hierarchical pattern discovery** using connection neighborhood analysis
-4. **Temporal separation mechanism** between decision-making and action execution
-5. **Channel-based integration system** for multi-modal learning
+2. **Cross-level temporal connection architecture** with multi-scale distance encoding
+   - Connections span hierarchical levels with distance encoding temporal and hierarchical relationships
+   - Higher-level neurons provide persistent context, lower-level neurons appear instantaneous
+3. **Hierarchical pattern discovery** using connection neighborhood analysis with distance-weighted peak detection
+4. **Heterogeneous multi-scale patterns** that encode relationships across multiple hierarchical levels
+5. **Temporal separation mechanism** between decision-making and action execution
+6. **Channel-based integration system** for multi-modal learning
 
-### Method Claims  
-1. **Process for automatic pattern discovery** in temporal neural networks
-2. **Method for hierarchical abstraction** through recursive pattern formation
-3. **Technique for reward-based neural optimization** with temporal decay
-4. **Process for autonomous exploration** in multi-modal learning systems
-5. **Method for real-time adaptation** in continuous learning environments
+### Method Claims
+1. **Process for automatic pattern discovery** in cross-level temporal neural networks using distance-weighted peak detection
+2. **Method for hierarchical abstraction** through recursive pattern formation with heterogeneous multi-scale patterns
+3. **Technique for cross-level connection formation** with unified distance encoding for temporal and hierarchical relationships
+4. **Method for distance-weighted inference** with linear temporal proximity weighting
+5. **Technique for reward-based neural optimization** with temporal decay
+6. **Process for autonomous exploration** in multi-modal learning systems
+7. **Method for real-time adaptation** in continuous learning environments
 
 ### Application Claims
 1. **System for multi-modal robotic learning** combining vision, touch, and motor control
@@ -234,32 +245,35 @@ graph TB
 - Illustrates the feedback loop that enables continuous learning
 - Demonstrates multi-modal integration capabilities
 
-### Temporal Connection Learning
+### Cross-Level Temporal Connection Learning
 
 ```mermaid
-graph LR
-    subgraph "Frame N-2 (Age 2)"
-        N1[Neuron A<br/>coordinates: x=0.1, y=0.2]
+graph TB
+    subgraph "Level 2 (Age 5)"
+        N1[Neuron A<br/>Market Trend<br/>Level: 2, Age: 5]
     end
 
-    subgraph "Frame N-1 (Age 1)"
-        N2[Neuron B<br/>coordinates: x=0.15, y=0.25]
-        N3[Neuron C<br/>coordinates: x=0.3, y=0.4]
+    subgraph "Level 1 (Age 2)"
+        N2[Neuron B<br/>Daily Pattern<br/>Level: 1, Age: 2]
     end
 
-    subgraph "Frame N (Age 0)"
-        N4[Neuron D<br/>coordinates: x=0.2, y=0.3]
+    subgraph "Level 0 (Age 1)"
+        N3[Neuron C<br/>Price Movement<br/>Level: 0, Age: 1]
     end
 
-    subgraph "Connections Formed"
-        C1[Connection: A → D<br/>Distance: 2<br/>Strength: 1.0]
-        C2[Connection: B → D<br/>Distance: 1<br/>Strength: 1.0]
-        C3[Connection: C → D<br/>Distance: 1<br/>Strength: 1.0]
+    subgraph "Level 0 (Age 0 - New)"
+        N4[Neuron D<br/>New Price Point<br/>Level: 0, Age: 0]
     end
 
-    N1 -.->|"Temporal Distance = 2"| N4
-    N2 -.->|"Temporal Distance = 1"| N4
-    N3 -.->|"Temporal Distance = 1"| N4
+    subgraph "Cross-Level Connections Formed"
+        C1[A → D<br/>Higher→Lower<br/>Distance: 9<br/>Context]
+        C2[B → D<br/>Higher→Lower<br/>Distance: 9<br/>Context]
+        C3[C → D<br/>Same Level<br/>Distance: 1<br/>Temporal]
+    end
+
+    N1 -.->|"Persistent Context"| N4
+    N2 -.->|"Persistent Context"| N4
+    N3 -.->|"Temporal Sequence"| N4
 
     N1 --> C1
     N2 --> C2
@@ -270,16 +284,18 @@ graph LR
 
     style N1 fill:#ffcdd2
     style N2 fill:#f8bbd9
-    style N3 fill:#f8bbd9
+    style N3 fill:#e1bee7
     style N4 fill:#c8e6c9
     style C1 fill:#fff3e0
-    style C2 fill:#fff3e0
-    style C3 fill:#fff3e0
+    style C2 fill:#fff9c4
+    style C3 fill:#b2ebf2
 ```
 
-- Shows how neurons form directed connections based on temporal relationships
-- Illustrates the distance encoding mechanism (distance=1 for immediate sequences, distance=2+ for longer patterns)
-- Demonstrates strength-based learning where repeated observations increase connection strength
+- Shows how neurons at different hierarchical levels form cross-level connections
+- **Higher→Lower connections** (distance=9): Provide persistent contextual influence
+- **Same-level connections** (distance=1): Capture temporal sequences at appropriate timescale
+- **Lower→Higher connections** (distance=0, not shown): Would represent instantaneous aggregation
+- Demonstrates multi-scale pattern learning where context and detail interact across levels
 
 ### Hierarchical Pattern Discovery
 
@@ -450,30 +466,43 @@ graph TB
 
 **Patent Significance**: This coordinate-based approach enables explainable AI where decisions can be traced back to specific coordinate patterns, unlike black-box neural networks.
 
-### 2. Distance-Encoded Temporal Connections
-**Innovation**: Connections between neurons explicitly encode temporal distance, enabling sophisticated sequence learning.
+### 2. Cross-Level Distance-Encoded Connections
+**Innovation**: Connections between neurons span hierarchical levels and encode both temporal and hierarchical relationships through a unified distance metric.
 
 **Technical Details**:
-- Distance=0: Spatial co-occurrence (simultaneous activation)
-- Distance=1: Immediate temporal sequence (A followed by B)
-- Distance=2+: Longer-term temporal patterns (A followed by B after delay)
-- Connection strength increases with repeated observations
-- Higher hierarchical levels use bucketed distances for temporal abstraction
+- **Same-level connections**: Time-dilated temporal distance `FLOOR(age / POW(baseNeuronMaxAge, level))`
+  - Level 0: Exact temporal distance
+  - Level 1: Bucketed by 10s for temporal abstraction
+  - Level 2: Bucketed by 100s for long-term patterns
+- **Higher→Lower connections**: Distance = `baseNeuronMaxAge - 1` (persistent context)
+  - Higher-level neurons provide stable contextual influence
+  - Represents slower timescale influencing faster timescale
+- **Lower→Higher connections**: Distance = 0 (instantaneous co-occurrence)
+  - Lower-level events appear simultaneous from higher perspective
+  - Represents faster timescale aggregating to slower timescale
+- **Distance-weighted inference**: Linear weighting `(baseNeuronMaxAge - distance) / baseNeuronMaxAge`
+  - Recent connections (distance=0) weighted at 1.0
+  - Distant connections (distance=9) weighted at 0.1
+  - Prioritizes recent information in peak detection
 
-**Patent Significance**: This distance encoding enables the system to learn and predict sequences at multiple time scales simultaneously, from immediate reactions to long-term behavioral patterns.
+**Patent Significance**: This multi-scale distance encoding enables the system to learn patterns that span multiple hierarchical levels simultaneously, capturing both temporal sequences and contextual relationships. The cross-level architecture allows higher-level context to influence lower-level processing (top-down) while lower-level details aggregate to higher-level abstractions (bottom-up), mimicking biological neural hierarchies.
 
-### 3. Peak Detection Pattern Discovery
-**Innovation**: Automatic pattern discovery using neighborhood analysis and peak detection algorithms.
+### 3. Distance-Weighted Peak Detection Pattern Discovery
+**Innovation**: Automatic pattern discovery using neighborhood analysis and distance-weighted peak detection algorithms that work across hierarchical levels.
 
 **Technical Details**:
-- Builds bidirectional connectivity graphs from temporal connections
+- Builds bidirectional connectivity graphs from cross-level temporal connections
+- Applies distance weighting to connection strengths before aggregation
 - Calculates neighborhood strength averages for each neuron
-- Identifies "peak" neurons whose strength exceeds neighborhood average
-- Groups peak connections into pattern signatures
+- Identifies "peak" neurons whose weighted strength exceeds neighborhood average
+- Groups peak connections into pattern signatures (can include cross-level connections)
 - Matches observed patterns to existing patterns using overlap thresholds (default 66%)
 - Creates new pattern neurons for novel connection signatures
+- **Heterogeneous patterns**: Patterns can encode connections across multiple levels
+  - Example: Level 2 pattern = Level 1 connections + Level 0 connections
+  - Enables multi-scale compositional representations
 
-**Patent Significance**: This enables unsupervised learning of hierarchical abstractions without requiring pre-defined pattern templates or training data.
+**Patent Significance**: This enables unsupervised learning of hierarchical abstractions that span multiple timescales without requiring pre-defined pattern templates or training data. The cross-level pattern capability allows the system to discover relationships between fast and slow dynamics, such as "this rapid price movement pattern only occurs during this long-term market trend."
 
 ### 4. Temporal Separation Mechanism
 **Innovation**: Separates decision-making from action execution by one time frame to enable stable learning.
@@ -498,6 +527,37 @@ graph TB
 - Unified reward system aggregates feedback from all channels
 
 **Patent Significance**: This enables single systems to learn complex behaviors spanning multiple modalities (vision + motor + audio) without requiring separate training for each modality.
+
+### 6. Cross-Level Connection Architecture
+**Innovation**: A biologically-inspired architecture where neurons at different hierarchical levels can form direct connections, enabling multi-scale pattern recognition and contextual learning.
+
+**Technical Details**:
+- **Unrestricted connectivity**: Neurons at any level can connect to neurons at any other level
+  - Traditional hierarchical networks restrict connections to adjacent levels
+  - This system allows skip connections across multiple levels
+- **Unified distance metric**: Single distance value encodes both temporal and hierarchical relationships
+  - Same-level: Temporal sequence distance
+  - Cross-level: Fixed distances based on hierarchical relationship
+- **Biological motivation**: Mimics cortical connectivity where neurons don't respect strict layer boundaries
+  - Higher cortical areas provide context to lower areas (top-down)
+  - Lower areas aggregate to higher areas (bottom-up)
+  - Direct connections enable faster information flow
+- **Multi-scale context integration**:
+  - Higher-level patterns provide persistent context for lower-level processing
+  - Lower-level details can directly influence higher-level abstractions
+  - Same low-level pattern can have different meanings in different high-level contexts
+- **Heterogeneous pattern composition**:
+  - Patterns can include connections from multiple hierarchical levels
+  - Enables richer compositional representations
+  - Example: "This intraday price pattern (Level 0) only occurs during bull markets (Level 2)"
+
+**Patent Significance**: This cross-level architecture represents a significant departure from traditional hierarchical neural networks and enables the system to learn contextual relationships that span multiple timescales. The ability to form heterogeneous multi-scale patterns allows the system to capture complex real-world phenomena where fast and slow dynamics interact, such as:
+- Financial markets: Intraday patterns influenced by long-term trends
+- Robotics: Rapid motor adjustments guided by high-level goals
+- Autonomous vehicles: Immediate reactions contextualized by route planning
+- Industrial control: Fast control loops influenced by slow process dynamics
+
+This innovation addresses a fundamental limitation of traditional deep learning architectures where information must flow sequentially through layers, and provides a more brain-like architecture where context and detail interact bidirectionally across scales.
 
 ## Commercial Applications and Market Potential
 

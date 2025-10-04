@@ -427,15 +427,19 @@ export default class Brain {
 
 		// insert new predictions for the next cycle of this level from all active neurons
 		// predict connections where distance matches the next temporal step for the neuron's age (age + 1)
-		// distance calculation accounts for time dilation: level 0 = exact, higher levels = bucketed
+		// distance calculation accounts for time dilation and cross-level connections
+		// we predict connections that will fire when target neurons activate at the specified level
 		await this.conn.query(`
 			INSERT IGNORE INTO connection_inference (level, connection_id, age)
-			SELECT f.level, c.id, 0
+			SELECT ?, c.id, 0
 			FROM active_neurons f
-			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = FLOOR((f.age + 1) / POW(?, f.level))
-			WHERE f.level = ?
-			AND c.strength >= 0
-		`, [this.baseNeuronMaxAge, level]);
+			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = CASE 
+			    WHEN f.level = ? THEN FLOOR((f.age + 1) / POW(?, f.level))
+				WHEN f.level > ? THEN ? - 1
+				WHEN f.level < ? THEN 0
+			END
+            WHERE c.strength >= 0
+		`, [level, level, this.baseNeuronMaxAge, level, this.baseNeuronMaxAge, level]);
 	}
 
 	/**
@@ -479,26 +483,22 @@ export default class Brain {
 		// create new predictions from patterns that were just activated in the higher level
 		// if the higher level patterns are just activated (age=0) they must have been activated due to
 		// some new neurons in the lower level (age=0 as well) - exclude them
+		// use active_connections table to check if connection is already firing
 		await this.conn.query(`
 			INSERT INTO pattern_inference (level, pattern_neuron_id, connection_id, age)
 			SELECT an.level - 1, p.pattern_neuron_id, p.connection_id, 0 
 			FROM active_neurons an
 			JOIN patterns p ON an.neuron_id = p.pattern_neuron_id
-			JOIN connections c ON p.connection_id = c.id
 			WHERE an.level = ?
 			AND an.age = 0
 			AND p.strength > 0
 			AND NOT EXISTS (
                 SELECT 1
-                FROM active_neurons f
-                JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
-                WHERE c.from_neuron_id = f.neuron_id
-                AND c.distance = FLOOR(f.age / POW(?, f.level))
-                AND f.level = an.level - 1
-                AND (t.neuron_id != f.neuron_id OR f.age != 0)
-                AND c.strength >= 0
+                FROM active_connections ac
+                WHERE ac.connection_id = p.connection_id
+                AND ac.level = an.level - 1
             )
-		`, [level, this.baseNeuronMaxAge]);
+		`, [level]);
 	}
 
 	/**
@@ -647,22 +647,27 @@ export default class Brain {
 
 	/**
 	 * reinforces the connections between newly active neurons (age = 0) at a level
+	 * builds connections FROM all active neurons (any level) TO age=0 neurons at the specified level
 	 */
 	async reinforceConnections(level) {
 		await this.conn.query(`
 			INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength)
-            SELECT 
+            SELECT
                 f.neuron_id as from_neuron_id, -- connection from the neuron id
                 t.neuron_id as to_neuron_id, -- connection to the neuron id
-                FLOOR(f.age / POW(?, f.level)) as distance, -- bucketed distance: level 0 = exact, higher levels = bucketed
-                1 as strength -- each observation increases strength by 1 
+                CASE
+                    WHEN f.level = t.level THEN FLOOR(f.age / POW(?, f.level)) -- same level: time-dilated distance
+                    WHEN f.level > t.level THEN ? - 1 -- higher level source: maximum distance (persistent context)
+                    WHEN f.level < t.level THEN 0 -- lower level source: zero distance (instantaneous from higher perspective)
+                END as distance,
+                1 as strength -- each observation increases strength by 1
 			FROM active_neurons f -- connections are built from the older neurons to the new neurons
-			JOIN active_neurons t ON t.level = f.level -- reinforcing connections only within the same level
+			CROSS JOIN active_neurons t -- cross-level connections: from any level to target level
             WHERE t.age = 0 -- reinforcing connections for the newly activated target neurons only
-            AND f.level = ? -- get the active neurons in the given level
+            AND t.level = ? -- target neurons are at the specified level
             AND (t.neuron_id != f.neuron_id OR f.age != 0) -- if it's the same neuron, it's gotta be an older one
 			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength) -- if connection exists, add on to it
-		`, [this.baseNeuronMaxAge, level]);
+		`, [this.baseNeuronMaxAge, this.baseNeuronMaxAge, level]);
 	}
 
 	/**
@@ -747,10 +752,10 @@ export default class Brain {
 	}
 
 	/**
-	 * returns active directed connections flowing INTO newly activated neurons (age=0) from all active neurons at the specified level for spatio-temporal pooling
+	 * returns active directed connections flowing INTO newly activated neurons (age=0) from all active neurons for spatio-temporal pooling
 	 * connections are directed: older neurons → newer neurons. note that this includes connections between the age=0 neurons as well. that's the spatial pooling.
 	 * the others are temporal. so, these connections form the basis of the spatio-temporal pooling. there may be connections between the same neuron when their ages
-	 * are different. there may even be indirect connections between the same neuron on different levels (not sure how, but it looks possible).
+	 * are different. connections can span across levels, enabling multi-scale pattern recognition.
 	 * there should not be any connections from the same neuron to itself within the same age and level.
 	 */
 	async getActiveConnections(level) {
@@ -758,15 +763,17 @@ export default class Brain {
             SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
             FROM connections c
             -- source is the older neurons building connections from them to the new neurons
-			JOIN active_neurons f 
-				ON c.from_neuron_id = f.neuron_id 
-			    AND c.distance = FLOOR(f.age / POW(?, f.level))
-            -- getting active connections from older neurons to newly activated neurons within the same level
-            JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = f.level
-            WHERE f.level = ? -- get the active neurons in the given level
+			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
+            -- getting active connections from older neurons to newly activated neurons (cross-level enabled)
+            JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = ?
+            WHERE c.distance = CASE
+				WHEN f.level = t.level THEN FLOOR(f.age / POW(?, f.level))
+				WHEN f.level > t.level THEN ? - 1
+				WHEN f.level < t.level THEN 0
+            END 
             AND (t.neuron_id != f.neuron_id OR f.age != 0) -- if it's the same neuron, it's gotta be an older one
-            AND c.strength >= 0 -- ignore negative connections that are scheduled to be deleted 
-		`, [this.baseNeuronMaxAge, level]);
+            AND c.strength >= 0 -- ignore negative connections that are scheduled to be deleted
+		`, [this.baseNeuronMaxAge, this.baseNeuronMaxAge, level]);
 		return rows;
 	}
 
@@ -796,19 +803,27 @@ export default class Brain {
 	/**
 	 * returns the strength of each neuron from the sum of its active connections strengths.
 	 * this includes both incoming connections (to the neuron) and outgoing connections (from the neuron).
+	 * applies linear distance weighting: closer connections (distance=0) have full weight (1.0),
+	 * distant connections (distance=baseNeuronMaxAge-1) have minimal weight (0.1 if baseNeuronMaxAge=10).
 	 */
 	getNeuronStrengths(connections) {
 		const neuronStrengths = new Map();
+
 		for (const connection of connections) {
-			const { from_neuron_id, to_neuron_id, strength } = connection;
+			const { from_neuron_id, to_neuron_id, strength, distance } = connection;
 
-			// add strength for the source neuron (outgoing connection)
-			if (neuronStrengths.has(from_neuron_id)) neuronStrengths.set(from_neuron_id, neuronStrengths.get(from_neuron_id) + strength);
-			else neuronStrengths.set(from_neuron_id, strength);
+			// calculate linear distance weight: distance=0 → weight=1.0, distance=9 → weight=0.1
+			// simple linear interpolation: (baseNeuronMaxAge - distance) / baseNeuronMaxAge
+			const weight = (this.baseNeuronMaxAge - distance) / this.baseNeuronMaxAge;
+			const weightedStrength = strength * weight;
 
-			// add strength for the target neuron (incoming connection)
-			if (neuronStrengths.has(to_neuron_id)) neuronStrengths.set(to_neuron_id, neuronStrengths.get(to_neuron_id) + strength);
-			else neuronStrengths.set(to_neuron_id, strength);
+			// add weighted strength for the source neuron (outgoing connection)
+			if (neuronStrengths.has(from_neuron_id)) neuronStrengths.set(from_neuron_id, neuronStrengths.get(from_neuron_id) + weightedStrength);
+			else neuronStrengths.set(from_neuron_id, weightedStrength);
+
+			// add weighted strength for the target neuron (incoming connection)
+			if (neuronStrengths.has(to_neuron_id)) neuronStrengths.set(to_neuron_id, neuronStrengths.get(to_neuron_id) + weightedStrength);
+			else neuronStrengths.set(to_neuron_id, weightedStrength);
 		}
 		return neuronStrengths;
 	}
@@ -1239,6 +1254,8 @@ export default class Brain {
 
 	/**
 	 * Populate active_connections table for fast hierarchical reward propagation
+	 * Includes cross-level connections for multi-scale reward flow
+	 * Only includes connections that are currently firing (distance matches temporal relationship)
 	 */
 	async populateActiveConnections() {
 		console.log('Populating active connections table...');
@@ -1246,20 +1263,26 @@ export default class Brain {
 		// Clear previous active connections
 		await this.conn.query('TRUNCATE active_connections');
 
-		// Populate active connections for all levels in one query
+		// Populate active connections for all levels in one query (cross-level enabled)
+		// Only include connections where distance matches the current temporal relationship
 		await this.conn.query(`
 			INSERT INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level, strength)
-			SELECT DISTINCT 
+			SELECT DISTINCT
 				c.id as connection_id,
 				c.from_neuron_id,
 				c.to_neuron_id,
-				an_from.level,
+				t.level,
 				c.strength
 			FROM connections c
-			JOIN active_neurons an_from ON c.from_neuron_id = an_from.neuron_id
-			JOIN active_neurons an_to ON c.to_neuron_id = an_to.neuron_id AND an_to.level = an_from.level
+			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
+			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id
 			WHERE c.strength > 0
-		`);
+			AND c.distance = CASE
+				WHEN f.level = t.level THEN FLOOR(f.age / POW(?, f.level))
+				WHEN f.level > t.level THEN ? - 1
+				WHEN f.level < t.level THEN 0
+			END
+		`, [this.baseNeuronMaxAge, this.baseNeuronMaxAge]);
 
 		const [countRows] = await this.conn.query('SELECT COUNT(*) as count FROM active_connections');
 		console.log(`Populated ${countRows[0].count} active connections`);
