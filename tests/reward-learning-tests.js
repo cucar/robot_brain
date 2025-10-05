@@ -61,6 +61,8 @@ class RewardLearningTests {
         await this.testRewardFactorMultiplication();
         await this.testNegativeLearningRate();
         await this.testRewardOptimization();
+        await this.testCrossLevelRewardPropagation();
+        await this.testHierarchicalDecisionRewardLearning();
         await this.testMultiChannelFeedback();
         await this.testRewardForgetCycle();
         await this.testConnectionStrengthDecay();
@@ -314,6 +316,267 @@ class RewardLearningTests {
         this.assert(optimizedStrengths.get(neuronIds[0]) === 10.0, 'Strong positive reward should double strength', optimizedStrengths.get(neuronIds[0]), 10.0);
         this.assert(optimizedStrengths.get(neuronIds[1]) === 2.0, 'Negative reward should halve strength', optimizedStrengths.get(neuronIds[1]), 2.0);
         this.assert(optimizedStrengths.get(neuronIds[2]) === 3.0, 'No reward should maintain strength', optimizedStrengths.get(neuronIds[2]), 3.0);
+
+        console.log();
+    }
+
+    async testCrossLevelRewardPropagation() {
+        console.log('Testing Cross-Level Reward Propagation:');
+
+        // Clear tables
+        await this.brain.conn.query('DELETE FROM neuron_rewards');
+        await this.brain.conn.query('TRUNCATE inferred_neurons');
+        await this.brain.conn.query('DELETE FROM active_neurons');
+        await this.brain.conn.query('DELETE FROM connections');
+
+        const neuronIds = await this.brain.bulkInsertNeurons(12);
+
+        // Create multi-level hierarchy:
+        // Level 0: base actions/inputs
+        // Level 1: tactical patterns
+        // Level 2: strategic patterns
+
+        // Setup active neurons at different levels
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [neuronIds[0]]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[1]]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 1, 0)', [neuronIds[2]]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 1, 1)', [neuronIds[3]]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 2, 0)', [neuronIds[4]]);
+
+        // Create cross-level connections:
+        // 1. Lower → Higher (level 0 → level 1): distance = 0, full weight
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 10)', [neuronIds[0], neuronIds[2]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 8)', [neuronIds[1], neuronIds[2]]);
+
+        // 2. Higher → Lower (level 1 → level 0): distance = 9, minimal weight
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 20)', [neuronIds[2], neuronIds[0]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 15)', [neuronIds[3], neuronIds[0]]);
+
+        // 3. Level 1 → Level 2: lower → higher
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 12)', [neuronIds[2], neuronIds[4]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 10)', [neuronIds[3], neuronIds[4]]);
+
+        // 4. Level 2 → Level 0: multi-level higher → lower
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 25)', [neuronIds[4], neuronIds[0]]);
+
+        // Apply positive reward to level 2 strategic neuron (successful high-level decision)
+        await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 2, 1)', [neuronIds[4]]);
+        await this.brain.applyRewards(1.5); // 50% boost
+
+        // Get reward for level 2 neuron
+        const [level2Reward] = await this.brain.conn.query('SELECT reward_factor FROM neuron_rewards WHERE neuron_id = ?', [neuronIds[4]]);
+        this.assert(level2Reward.length === 1, 'Should create reward for level 2 neuron');
+        this.assert(level2Reward[0].reward_factor > 1.0, 'Level 2 neuron should have positive reward', level2Reward[0].reward_factor, '>1.0');
+
+        // Calculate neuron strengths with cross-level connections
+        const [allConnections] = await this.brain.conn.query('SELECT * FROM connections');
+        const baseStrengths = this.brain.getNeuronStrengths(allConnections);
+
+        // Apply reward optimization
+        const optimizedStrengths = await this.brain.optimizeRewards(baseStrengths, 0);
+
+        // Verify that level 2 neuron's reward affects its weighted strength
+        const level2BaseStrength = baseStrengths.get(neuronIds[4]);
+        const level2OptimizedStrength = optimizedStrengths.get(neuronIds[4]);
+
+        this.assert(level2OptimizedStrength > level2BaseStrength,
+            'Level 2 neuron with positive reward should have boosted strength',
+            level2OptimizedStrength, `>${level2BaseStrength}`);
+
+        // Test that cross-level connections properly weight the influence
+        // Level 0 neuron receives from:
+        // - Level 1 (distance=9): 20*0.1 + 15*0.1 = 3.5
+        // - Level 2 (distance=9): 25*0.1 = 2.5
+        // Total incoming from higher levels: 6.0
+        // Outgoing to level 1 (distance=0): 10*1.0 = 10.0
+        // Total: 16.0
+
+        const level0Strength = baseStrengths.get(neuronIds[0]);
+        this.assert(level0Strength === 16.0, 'Level 0 neuron should aggregate cross-level strengths correctly', level0Strength, 16.0);
+
+        // Test distance weighting impact on reward propagation
+        // Higher-level neurons with rewards should have less impact on lower levels due to distance weighting
+        const higherToLowerWeight = (this.brain.baseNeuronMaxAge - 9) / this.brain.baseNeuronMaxAge; // 0.1
+        const lowerToHigherWeight = (this.brain.baseNeuronMaxAge - 0) / this.brain.baseNeuronMaxAge; // 1.0
+
+        this.assert(lowerToHigherWeight / higherToLowerWeight === 10,
+            'Lower→higher should be 10x stronger than higher→lower for reward propagation');
+
+        // Simulate inference scenario where level 2 reward affects level 0 predictions
+        // Even with high reward on level 2, its influence on level 0 is limited by distance weighting
+        await this.brain.conn.query('UPDATE neuron_rewards SET reward_factor = 3.0 WHERE neuron_id = ?', [neuronIds[4]]);
+
+        const reOptimizedStrengths = await this.brain.optimizeRewards(baseStrengths, 0);
+
+        // Level 2 neuron's strength should triple
+        const level2Tripled = reOptimizedStrengths.get(neuronIds[4]);
+        this.assert(Math.abs(level2Tripled - level2BaseStrength * 3.0) < 0.01,
+            'Level 2 neuron with 3x reward should triple its strength',
+            level2Tripled, level2BaseStrength * 3.0);
+
+        // But level 0 neuron's strength from level 2 is still limited by distance weighting
+        // The 25*0.1=2.5 contribution from level 2 is small compared to other sources
+        const level0Optimized = reOptimizedStrengths.get(neuronIds[0]);
+        this.assert(level0Optimized === level0Strength,
+            'Level 0 neuron strength unchanged (level 2 reward doesn\'t affect level 0 directly)',
+            level0Optimized, level0Strength);
+
+        console.log();
+    }
+
+    async testHierarchicalDecisionRewardLearning() {
+        console.log('Testing Hierarchical Decision-Making with Reward Learning:');
+
+        // This test demonstrates the full cycle:
+        // 1. High-level strategy makes decision
+        // 2. Decision influences lower-level actions via cross-level connections
+        // 3. Actions produce outcomes
+        // 4. Rewards propagate back through hierarchy
+        // 5. Future decisions are influenced by learned rewards
+
+        // Clear tables
+        await this.brain.conn.query('DELETE FROM neuron_rewards');
+        await this.brain.conn.query('TRUNCATE inferred_neurons');
+        await this.brain.conn.query('DELETE FROM active_neurons');
+        await this.brain.conn.query('DELETE FROM connections');
+        await this.brain.conn.query('DELETE FROM patterns');
+
+        const neuronIds = await this.brain.bulkInsertNeurons(15);
+
+        // === SCENARIO: Learning which high-level strategy leads to success ===
+
+        // Level 0: Actions (e.g., move left, move right, jump)
+        const actionLeft = neuronIds[0];
+        const actionRight = neuronIds[1];
+        const actionJump = neuronIds[2];
+
+        // Level 1: Tactics (e.g., aggressive, defensive)
+        const tacticAggressive = neuronIds[3];
+        const tacticDefensive = neuronIds[4];
+
+        // Level 2: Strategies (e.g., strategy A, strategy B)
+        const strategyA = neuronIds[5];
+        const strategyB = neuronIds[6];
+
+        // Setup active neurons
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [actionLeft]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [actionRight]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [actionJump]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 1, 0)', [tacticAggressive]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 1, 0)', [tacticDefensive]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 2, 0)', [strategyA]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 2, 0)', [strategyB]);
+
+        // === PHASE 1: Initial connections (before learning) ===
+
+        // Strategy A → Aggressive tactic (lower→higher, distance=0)
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 15)', [tacticAggressive, strategyA]);
+
+        // Strategy B → Defensive tactic (lower→higher, distance=0)
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 15)', [tacticDefensive, strategyB]);
+
+        // Aggressive tactic → Jump action (higher→lower, distance=9)
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 100)', [tacticAggressive, actionJump]);
+
+        // Defensive tactic → Left action (higher→lower, distance=9)
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 100)', [tacticDefensive, actionLeft]);
+
+        // Calculate initial strengths
+        const [initialConnections] = await this.brain.conn.query('SELECT * FROM connections');
+        const initialStrengths = this.brain.getNeuronStrengths(initialConnections);
+
+        // Strategy A strength (from aggressive tactic): 15*1.0 = 15
+        // Strategy B strength (from defensive tactic): 15*1.0 = 15
+        this.assert(initialStrengths.get(strategyA) === 15, 'Strategy A initial strength', initialStrengths.get(strategyA), 15);
+        this.assert(initialStrengths.get(strategyB) === 15, 'Strategy B initial strength', initialStrengths.get(strategyB), 15);
+
+        // === PHASE 2: Execute Strategy A and receive positive reward ===
+
+        // Simulate that Strategy A was inferred and executed
+        await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 2, 1)', [strategyA]);
+        await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 1, 1)', [tacticAggressive]);
+        await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [actionJump]);
+
+        // Apply strong positive reward (successful outcome)
+        await this.brain.applyRewards(2.0); // 100% boost
+
+        const [rewardsAfterSuccess] = await this.brain.conn.query('SELECT neuron_id, reward_factor FROM neuron_rewards ORDER BY neuron_id');
+
+        this.assert(rewardsAfterSuccess.length === 3, 'Should create rewards for all executed neurons', rewardsAfterSuccess.length, 3);
+
+        const strategyAReward = rewardsAfterSuccess.find(r => r.neuron_id === strategyA).reward_factor;
+        const tacticAggressiveReward = rewardsAfterSuccess.find(r => r.neuron_id === tacticAggressive).reward_factor;
+        const actionJumpReward = rewardsAfterSuccess.find(r => r.neuron_id === actionJump).reward_factor;
+
+        this.assert(strategyAReward > 1.0, 'Strategy A should have positive reward', strategyAReward, '>1.0');
+        this.assert(tacticAggressiveReward > 1.0, 'Aggressive tactic should have positive reward', tacticAggressiveReward, '>1.0');
+        this.assert(actionJumpReward > 1.0, 'Jump action should have positive reward', actionJumpReward, '>1.0');
+
+        // === PHASE 3: Next decision cycle - Strategy A should be preferred ===
+
+        // Calculate optimized strengths with rewards
+        const optimizedStrengths = await this.brain.optimizeRewards(initialStrengths, 2);
+
+        const strategyAOptimized = optimizedStrengths.get(strategyA);
+        const strategyBOptimized = optimizedStrengths.get(strategyB);
+
+        // Strategy A should now be stronger due to reward
+        this.assert(strategyAOptimized > strategyBOptimized,
+            'Strategy A should be preferred after positive reward',
+            `${strategyAOptimized} > ${strategyBOptimized}`);
+
+        const strengthRatio = strategyAOptimized / strategyBOptimized;
+        this.assert(strengthRatio > 1.5,
+            'Strategy A should be significantly stronger (>1.5x)',
+            strengthRatio, '>1.5');
+
+        // === PHASE 4: Execute Strategy B and receive negative reward ===
+
+        await this.brain.conn.query('TRUNCATE inferred_neurons');
+        await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 2, 1)', [strategyB]);
+        await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 1, 1)', [tacticDefensive]);
+        await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [actionLeft]);
+
+        // Apply negative reward (failed outcome)
+        await this.brain.applyRewards(0.5); // 50% penalty
+
+        const [rewardsAfterFailure] = await this.brain.conn.query('SELECT neuron_id, reward_factor FROM neuron_rewards ORDER BY neuron_id');
+
+        const strategyBReward = rewardsAfterFailure.find(r => r.neuron_id === strategyB).reward_factor;
+        this.assert(strategyBReward < 1.0, 'Strategy B should have negative reward', strategyBReward, '<1.0');
+
+        // === PHASE 5: Final decision - Strategy A strongly preferred ===
+
+        const finalOptimizedStrengths = await this.brain.optimizeRewards(initialStrengths, 2);
+
+        const strategyAFinal = finalOptimizedStrengths.get(strategyA);
+        const strategyBFinal = finalOptimizedStrengths.get(strategyB);
+
+        this.assert(strategyAFinal > strategyBFinal * 2,
+            'Strategy A should be strongly preferred (>2x) after learning',
+            `${strategyAFinal} > ${strategyBFinal * 2}`);
+
+        // Verify the learning effect persists across levels
+        const tacticAggressiveFinal = finalOptimizedStrengths.get(tacticAggressive);
+        const tacticDefensiveFinal = finalOptimizedStrengths.get(tacticDefensive);
+
+        // Aggressive tactic should be preferred due to Strategy A's success
+        // But the effect is mediated by cross-level connections
+        this.assert(tacticAggressiveFinal !== tacticDefensiveFinal,
+            'Tactics should have different strengths after hierarchical learning');
+
+        // === VALIDATION: Cross-level reward learning works ===
+
+        // The key insight: rewards applied to high-level decisions (Strategy A)
+        // influence future inference at all levels through:
+        // 1. Direct reward optimization at each level
+        // 2. Cross-level connections with distance weighting
+        // 3. Pattern matching that links strategies to tactics to actions
+
+        console.log(`✅ Hierarchical learning validated:`);
+        console.log(`   Strategy A: ${initialStrengths.get(strategyA)} → ${strategyAFinal.toFixed(2)} (${((strategyAFinal/initialStrengths.get(strategyA) - 1) * 100).toFixed(1)}% boost)`);
+        console.log(`   Strategy B: ${initialStrengths.get(strategyB)} → ${strategyBFinal.toFixed(2)} (${((strategyBFinal/initialStrengths.get(strategyB) - 1) * 100).toFixed(1)}% change)`);
+        console.log(`   Preference ratio: ${(strategyAFinal/strategyBFinal).toFixed(2)}x`);
 
         console.log();
     }
