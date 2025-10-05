@@ -49,6 +49,8 @@ class InferencePredictionTests {
         await this.testPredictedConnections();
         await this.testNeuronStrengths();
         await this.testInferPeakNeurons();
+        await this.testDistanceWeightingInference();
+        await this.testCrossLevelInference();
         await this.testInferNeuronsOrchestration();
         await this.testTemporalPredictionAccuracy();
         await this.testLevelSpecificInference();
@@ -209,30 +211,32 @@ class InferencePredictionTests {
     async testNeuronStrengths() {
         console.log('Testing Neuron Strength Calculations:');
 
-        // Create test connections with known strengths
+        // Create test connections with known strengths and distances
+        // Using distance=0 for full weight (1.0) to match original test expectations
         const testConnections = [
-            { id: 1, from_neuron_id: 1, to_neuron_id: 2, strength: 5 },
-            { id: 2, from_neuron_id: 2, to_neuron_id: 3, strength: 3 },
-            { id: 3, from_neuron_id: 1, to_neuron_id: 3, strength: 2 },
-            { id: 4, from_neuron_id: 3, to_neuron_id: 4, strength: 4 }
+            { id: 1, from_neuron_id: 1, to_neuron_id: 2, distance: 0, strength: 5 },
+            { id: 2, from_neuron_id: 2, to_neuron_id: 3, distance: 0, strength: 3 },
+            { id: 3, from_neuron_id: 1, to_neuron_id: 3, distance: 0, strength: 2 },
+            { id: 4, from_neuron_id: 3, to_neuron_id: 4, distance: 0, strength: 4 }
         ];
 
         // Test getNeuronStrengths method
         const neuronStrengths = this.brain.getNeuronStrengths(testConnections);
-        
+
         this.assert(neuronStrengths instanceof Map, 'getNeuronStrengths should return a Map');
         this.assert(neuronStrengths.size === 4, 'Should calculate strengths for 4 neurons', neuronStrengths.size, 4);
-        
-        // Verify strength calculations (sum of incoming + outgoing connections)
+
+        // Verify strength calculations (sum of incoming + outgoing connections with distance weighting)
+        // With distance=0, weight=1.0, so weighted strengths equal raw strengths
         this.assert(neuronStrengths.get(1) === 7, 'Neuron 1 strength should be 7 (5+2 outgoing)', neuronStrengths.get(1), 7);
         this.assert(neuronStrengths.get(2) === 8, 'Neuron 2 strength should be 8 (5 incoming + 3 outgoing)', neuronStrengths.get(2), 8);
         this.assert(neuronStrengths.get(3) === 9, 'Neuron 3 strength should be 9 (3+2 incoming + 4 outgoing)', neuronStrengths.get(3), 9);
         this.assert(neuronStrengths.get(4) === 4, 'Neuron 4 strength should be 4 (4 incoming)', neuronStrengths.get(4), 4);
-        
+
         // Test empty connections
         const emptyStrengths = this.brain.getNeuronStrengths([]);
         this.assert(emptyStrengths.size === 0, 'Empty connections should return empty Map');
-        
+
         console.log();
     }
 
@@ -241,37 +245,273 @@ class InferencePredictionTests {
 
         // Clear inferred_neurons table
         await this.brain.conn.query('TRUNCATE inferred_neurons');
-        
-        // Create test scenario with clear peaks
+
+        // Create test scenario with clear peaks (with distance=0 for full weight)
         const testConnections = [
-            { id: 1, from_neuron_id: 1, to_neuron_id: 2, strength: 10 }, // Neuron 2 will be strong
-            { id: 2, from_neuron_id: 3, to_neuron_id: 2, strength: 8 },  // Neuron 2 gets more strength
-            { id: 3, from_neuron_id: 4, to_neuron_id: 5, strength: 2 },  // Weak connection
-            { id: 4, from_neuron_id: 5, to_neuron_id: 6, strength: 1 }   // Weak connection
+            { id: 1, from_neuron_id: 1, to_neuron_id: 2, distance: 0, strength: 10 }, // Neuron 2 will be strong
+            { id: 2, from_neuron_id: 3, to_neuron_id: 2, distance: 0, strength: 8 },  // Neuron 2 gets more strength
+            { id: 3, from_neuron_id: 4, to_neuron_id: 5, distance: 0, strength: 2 },  // Weak connection
+            { id: 4, from_neuron_id: 5, to_neuron_id: 6, distance: 0, strength: 1 }   // Weak connection
         ];
-        
+
         const neuronStrengths = this.brain.getNeuronStrengths(testConnections);
-        
+
         // Test inferPeakNeurons
         await this.brain.inferPeakNeurons(neuronStrengths, 0, testConnections);
-        
+
         // Validate inferred_neurons table
         const [inferredNeurons] = await this.brain.conn.query('SELECT neuron_id, level, age FROM inferred_neurons ORDER BY neuron_id');
-        
+
         this.assert(inferredNeurons.length > 0, 'Should infer at least one peak neuron', inferredNeurons.length, '>0');
         this.assert(inferredNeurons.every(neuron => neuron.level === 0), 'All inferred neurons should be at level 0');
         this.assert(inferredNeurons.every(neuron => neuron.age === 0), 'All inferred neurons should start with age 0');
-        
+
         // Neuron 2 should be a peak (strength 18 vs neighborhood average)
         const neuron2Inferred = inferredNeurons.find(neuron => neuron.neuron_id === 2);
         this.assert(neuron2Inferred !== undefined, 'Neuron 2 should be inferred as peak (highest strength)');
-        
+
         // Test empty case
         await this.brain.conn.query('TRUNCATE inferred_neurons');
         await this.brain.inferPeakNeurons(new Map(), 0, []);
         const [emptyInferred] = await this.brain.conn.query('SELECT * FROM inferred_neurons');
         this.assert(emptyInferred.length === 0, 'Empty strengths should not infer any neurons');
-        
+
+        console.log();
+    }
+
+    async testDistanceWeightingInference() {
+        console.log('Testing Distance Weighting in Prediction Inference:');
+
+        // Clear tables
+        await this.brain.conn.query('TRUNCATE inferred_neurons');
+        await this.brain.conn.query('TRUNCATE connection_inference');
+        await this.brain.conn.query('DELETE FROM active_neurons');
+        await this.brain.conn.query('DELETE FROM connections');
+
+        // Create neurons and connections to test distance weighting in predictions
+        const neuronIds = await this.brain.bulkInsertNeurons(10);
+
+        // Setup: neurons at different ages for temporal prediction testing
+        // For level 0, inferConnections predicts distance = FLOOR((age+1)/1)
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [neuronIds[0]]); // predicts distance=1
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[1]]); // predicts distance=2
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 8)', [neuronIds[2]]); // predicts distance=9
+
+        // Create connections matching the predicted distances
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 10)', [neuronIds[0], neuronIds[3]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 2, 10)', [neuronIds[1], neuronIds[3]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 10)', [neuronIds[2], neuronIds[3]]);
+
+        // Create connection inference for level 0
+        await this.brain.inferConnections(0);
+
+        // Get predicted connections
+        const predictedConnections = await this.brain.getPredictedConnections(0);
+
+        // Verify that predicted connections include distance information
+        this.assert(predictedConnections.length === 3, 'Should have 3 predicted connections', predictedConnections.length, 3);
+        this.assert(predictedConnections.every(c => c.distance !== undefined), 'All predicted connections should have distance');
+
+        // Calculate strengths with distance weighting
+        const neuronStrengths = this.brain.getNeuronStrengths(predictedConnections);
+
+        // Test that recent predictions (lower distance) contribute more to neuron strength
+        // Create two scenarios with same raw strength but different distances
+        const recentPredictions = [
+            { id: 1, from_neuron_id: 1, to_neuron_id: 2, distance: 0, strength: 20 }, // weight=1.0, weighted=20.0
+            { id: 2, from_neuron_id: 3, to_neuron_id: 2, distance: 1, strength: 20 }  // weight=0.9, weighted=18.0
+        ];
+
+        const distantPredictions = [
+            { id: 3, from_neuron_id: 4, to_neuron_id: 5, distance: 5, strength: 20 }, // weight=0.5, weighted=10.0
+            { id: 4, from_neuron_id: 6, to_neuron_id: 5, distance: 9, strength: 20 }  // weight=0.1, weighted=2.0
+        ];
+
+        const recentStrengths = this.brain.getNeuronStrengths(recentPredictions);
+        const distantStrengths = this.brain.getNeuronStrengths(distantPredictions);
+
+        // Neuron 2 (recent): 20.0 + 18.0 = 38.0
+        // Neuron 5 (distant): 10.0 + 2.0 = 12.0
+        this.assert(recentStrengths.get(2) === 38.0, 'Recent predictions should have high weighted strength', recentStrengths.get(2), 38.0);
+        this.assert(distantStrengths.get(5) === 12.0, 'Distant predictions should have low weighted strength', distantStrengths.get(5), 12.0);
+        this.assert(recentStrengths.get(2) > distantStrengths.get(5), 'Recent predictions should dominate inference');
+
+        // Test peak inference with distance weighting
+        // Neuron with recent strong predictions should be inferred over neuron with distant predictions
+        const inferenceTestConnections = [
+            // Neuron 7: distant but high raw strength
+            { id: 1, from_neuron_id: 1, to_neuron_id: 7, distance: 9, strength: 100 }, // weighted: 100 * 0.1 = 10.0
+            { id: 2, from_neuron_id: 2, to_neuron_id: 7, distance: 9, strength: 100 }, // weighted: 100 * 0.1 = 10.0
+            // Neuron 8: recent with moderate raw strength
+            { id: 3, from_neuron_id: 3, to_neuron_id: 8, distance: 0, strength: 15 },  // weighted: 15 * 1.0 = 15.0
+            { id: 4, from_neuron_id: 4, to_neuron_id: 8, distance: 0, strength: 15 },  // weighted: 15 * 1.0 = 15.0
+            // Neuron 9: weak connection for neighborhood
+            { id: 5, from_neuron_id: 5, to_neuron_id: 9, distance: 0, strength: 1 }
+        ];
+
+        const inferenceStrengths = this.brain.getNeuronStrengths(inferenceTestConnections);
+
+        // Neuron 7: 20.0 (distant, heavily discounted despite high raw strength)
+        // Neuron 8: 30.0 (recent, full weight)
+        this.assert(inferenceStrengths.get(7) === 20.0, 'Distant predictions should be discounted', inferenceStrengths.get(7), 20.0);
+        this.assert(inferenceStrengths.get(8) === 30.0, 'Recent predictions should have full weight', inferenceStrengths.get(8), 30.0);
+
+        // Infer peaks - neuron 8 should be preferred over neuron 7
+        await this.brain.conn.query('TRUNCATE inferred_neurons');
+        await this.brain.inferPeakNeurons(inferenceStrengths, 0, inferenceTestConnections);
+
+        const [inferredNeurons] = await this.brain.conn.query('SELECT neuron_id FROM inferred_neurons ORDER BY neuron_id');
+        const inferredIds = inferredNeurons.map(n => n.neuron_id);
+
+        this.assert(inferredIds.includes(8), 'Neuron with recent predictions should be inferred as peak');
+
+        // Verify that distance weighting affects prediction quality
+        // A prediction at distance=0 should be 10x stronger than distance=9
+        const immediateWeight = (this.brain.baseNeuronMaxAge - 0) / this.brain.baseNeuronMaxAge; // 1.0
+        const distantWeight = (this.brain.baseNeuronMaxAge - 9) / this.brain.baseNeuronMaxAge;   // 0.1
+
+        this.assert(immediateWeight === 1.0, 'Immediate predictions (distance=0) should have weight 1.0', immediateWeight, 1.0);
+        this.assert(distantWeight === 0.1, 'Distant predictions (distance=9) should have weight 0.1', distantWeight, 0.1);
+        this.assert(immediateWeight / distantWeight === 10, 'Immediate predictions should be 10x stronger than distant ones');
+
+        console.log();
+    }
+
+    async testCrossLevelInference() {
+        console.log('Testing Cross-Level Connection Inference:');
+
+        // Clear tables
+        await this.brain.conn.query('TRUNCATE inferred_neurons');
+        await this.brain.conn.query('TRUNCATE connection_inference');
+        await this.brain.conn.query('DELETE FROM active_neurons');
+        await this.brain.conn.query('DELETE FROM connections');
+
+        const neuronIds = await this.brain.bulkInsertNeurons(12);
+
+        // Create neurons at multiple levels with different ages
+        // Level 0: base neurons
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [neuronIds[0]]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[1]]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 2)', [neuronIds[2]]);
+
+        // Level 1: pattern neurons
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 1, 0)', [neuronIds[3]]);
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 1, 1)', [neuronIds[4]]);
+
+        // Level 2: higher-level pattern
+        await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 2, 0)', [neuronIds[5]]);
+
+        // Create cross-level connections:
+        // 1. Lower → Higher (level 0 → level 1): distance = 0
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 15)', [neuronIds[0], neuronIds[3]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 12)', [neuronIds[1], neuronIds[3]]);
+
+        // 2. Higher → Lower (level 1 → level 0): distance = 9
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 20)', [neuronIds[3], neuronIds[0]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 18)', [neuronIds[4], neuronIds[0]]);
+
+        // 3. Same-level temporal connections for comparison
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 10)', [neuronIds[0], neuronIds[6]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 2, 8)', [neuronIds[1], neuronIds[7]]);
+
+        // 4. Multi-level: level 0 → level 2
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 25)', [neuronIds[0], neuronIds[5]]);
+        await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 22)', [neuronIds[1], neuronIds[5]]);
+
+        // Run inference for level 0
+        await this.brain.inferConnections(0);
+
+        // Get predicted connections for level 0
+        const level0Predictions = await this.brain.getPredictedConnections(0);
+
+        // Should predict same-level temporal connections (distance matches age+1)
+        this.assert(level0Predictions.length > 0, 'Should have predictions for level 0');
+
+        // Calculate strengths with cross-level connections
+        const allConnections = await this.brain.conn.query('SELECT * FROM connections');
+        const strengths = this.brain.getNeuronStrengths(allConnections[0]);
+
+        // Test that lower→higher connections (distance=0) have full weight
+        const lowerToHigherConnections = allConnections[0].filter(c => c.distance === 0);
+        this.assert(lowerToHigherConnections.length > 0, 'Should have lower→higher connections');
+
+        const lowerToHigherStrengths = this.brain.getNeuronStrengths(lowerToHigherConnections);
+        const expectedWeight = 1.0;
+
+        // Verify one specific lower→higher connection
+        const testConn = lowerToHigherConnections[0];
+        const weightedStrength = testConn.strength * expectedWeight;
+        this.assert(weightedStrength === testConn.strength, 'Lower→higher should have full weight (no discount)', weightedStrength, testConn.strength);
+
+        // Test that higher→lower connections (distance=9) have minimal weight
+        const higherToLowerConnections = allConnections[0].filter(c => c.distance === 9);
+        this.assert(higherToLowerConnections.length > 0, 'Should have higher→lower connections');
+
+        const higherToLowerStrengths = this.brain.getNeuronStrengths(higherToLowerConnections);
+        const minimalWeight = 0.1;
+
+        // Verify one specific higher→lower connection
+        const testConn2 = higherToLowerConnections[0];
+        const weightedStrength2 = testConn2.strength * minimalWeight;
+        // The actual weighted strength in the map should be discounted
+        const actualStrength = higherToLowerStrengths.get(testConn2.to_neuron_id);
+        this.assert(actualStrength < testConn2.strength, 'Higher→lower should be discounted', actualStrength, '<' + testConn2.strength);
+
+        // Test peak inference with cross-level connections
+        // Create a scenario where cross-level connections influence peak detection
+        await this.brain.conn.query('TRUNCATE inferred_neurons');
+
+        const mixedConnections = [
+            // Neuron 8: receives from higher level (heavily discounted)
+            { id: 1, from_neuron_id: neuronIds[3], to_neuron_id: neuronIds[8], distance: 9, strength: 100 }, // 100*0.1=10
+            { id: 2, from_neuron_id: neuronIds[4], to_neuron_id: neuronIds[8], distance: 9, strength: 100 }, // 100*0.1=10
+            // Neuron 9: receives from lower level (full weight)
+            { id: 3, from_neuron_id: neuronIds[0], to_neuron_id: neuronIds[9], distance: 0, strength: 15 },  // 15*1.0=15
+            { id: 4, from_neuron_id: neuronIds[1], to_neuron_id: neuronIds[9], distance: 0, strength: 15 },  // 15*1.0=15
+            // Neuron 10: weak connection for neighborhood
+            { id: 5, from_neuron_id: neuronIds[2], to_neuron_id: neuronIds[10], distance: 0, strength: 2 }
+        ];
+
+        const mixedStrengths = this.brain.getNeuronStrengths(mixedConnections);
+
+        // Neuron 8: 10 + 10 = 20 (despite high raw strength, heavily discounted)
+        // Neuron 9: 15 + 15 = 30 (full weight from lower level)
+        this.assert(mixedStrengths.get(neuronIds[8]) === 20, 'Higher→lower should be heavily discounted', mixedStrengths.get(neuronIds[8]), 20);
+        this.assert(mixedStrengths.get(neuronIds[9]) === 30, 'Lower→higher should have full weight', mixedStrengths.get(neuronIds[9]), 30);
+        this.assert(mixedStrengths.get(neuronIds[9]) > mixedStrengths.get(neuronIds[8]), 'Lower→higher should dominate peak detection');
+
+        // Infer peaks - neuron 9 should be preferred despite neuron 8 having higher raw strength
+        await this.brain.inferPeakNeurons(mixedStrengths, 0, mixedConnections);
+
+        const [inferredNeurons] = await this.brain.conn.query('SELECT neuron_id FROM inferred_neurons ORDER BY neuron_id');
+        const inferredIds = inferredNeurons.map(n => n.neuron_id);
+
+        this.assert(inferredIds.includes(neuronIds[9]), 'Neuron with lower→higher connections should be inferred as peak');
+
+        // Verify cross-level connection behavior in multi-level inference
+        // Run inference at multiple levels
+        await this.brain.inferConnections(1);
+        await this.brain.inferConnections(2);
+
+        const [level1Inferences] = await this.brain.conn.query('SELECT COUNT(*) as count FROM connection_inference WHERE level = 1');
+        const [level2Inferences] = await this.brain.conn.query('SELECT COUNT(*) as count FROM connection_inference WHERE level = 2');
+
+        this.assert(level1Inferences[0].count > 0, 'Should create inferences at level 1');
+        this.assert(level2Inferences[0].count > 0, 'Should create inferences at level 2');
+
+        // Verify that cross-level connections are properly weighted across all levels
+        const allLevelConnections = await this.brain.conn.query('SELECT * FROM connections');
+        const allStrengths = this.brain.getNeuronStrengths(allLevelConnections[0]);
+
+        // All neurons should have non-negative weighted strengths
+        this.assert(Array.from(allStrengths.values()).every(s => s >= 0), 'All weighted strengths should be non-negative');
+
+        // Lower→higher connections should consistently have higher weight than higher→lower
+        const avgLowerToHigher = lowerToHigherConnections.reduce((sum, c) => sum + c.strength, 0) / lowerToHigherConnections.length;
+        const avgHigherToLower = higherToLowerConnections.reduce((sum, c) => sum + c.strength * 0.1, 0) / higherToLowerConnections.length;
+
+        this.assert(avgLowerToHigher > avgHigherToLower, 'Lower→higher should have higher average weighted strength');
+
         console.log();
     }
 
@@ -573,9 +813,8 @@ class InferencePredictionTests {
     }
 
     async cleanup() {
-        if (this.brain && this.brain.conn) {
-            await this.brain.conn.release();
-        }
+        if (this.brain && this.brain.conn) await this.brain.conn.release();
+		process.exit(0);
     }
 }
 

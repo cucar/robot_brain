@@ -158,10 +158,9 @@ class BrainInitializationTests {
     }
 
     async cleanup() {
-        if (this.brain && this.brain.conn) {
-            await this.brain.conn.release();
-        }
-    }
+        if (this.brain && this.brain.conn) await this.brain.conn.release();
+		process.exit(0);
+	}
 }
 
 // Run the tests

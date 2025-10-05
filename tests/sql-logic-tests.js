@@ -20,6 +20,7 @@ class SQLLogicTests {
 
     async cleanup() {
         if (this.conn) await this.conn.release();
+		process.exit(0);
     }
 
     // Simple assertion helper with debug output

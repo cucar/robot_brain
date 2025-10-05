@@ -773,7 +773,7 @@ export default class Brain {
             END 
             AND (t.neuron_id != f.neuron_id OR f.age != 0) -- if it's the same neuron, it's gotta be an older one
             AND c.strength >= 0 -- ignore negative connections that are scheduled to be deleted
-		`, [this.baseNeuronMaxAge, this.baseNeuronMaxAge, level]);
+		`, [level, this.baseNeuronMaxAge, this.baseNeuronMaxAge]);
 		return rows;
 	}
 
