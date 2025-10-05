@@ -134,25 +134,40 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 ---
 
-### 7. Memory Management & Forgetting (`tests/7-memory/`)
+### 7. Memory Management & Forgetting (`tests/memory-management-tests.js`) ✅
 **Focus**: Forget cycles, memory cleanup, system optimization
 
-**Critical Test Areas**:
-- Forget cycle timing and execution
-- Strength decay calculations
-- Orphaned neuron cleanup
-- Pattern and connection pruning
-- Memory table optimization
-- Performance under memory pressure
+**Test File**: Single focused test file with comprehensive memory management validations
+**Tests**: 42 tests across 7 test methods covering all memory management and forgetting functionality
 
-**Key Methods to Test**:
-- `runForgetCycle()` - Complete forget cycle
-- Strength decay algorithms
-- Orphaned data cleanup
-- Memory usage optimization
-- Forget cycle frequency control
+**Critical Areas Tested**:
+- `runForgetCycle()` - Complete forget cycle execution with timing control
+- Forget cycle timing and frequency control (forgetCounter, forgetCycles)
+- Inference table cleanup (connection_inference, pattern_inference, inferred_neurons)
+- Cross-level memory management with distance-weighted connections
+- Memory pressure handling with large datasets
+- Orphaned data cleanup (neurons, connections, patterns, rewards)
+- Forget cycle integration with all components
+- Reward decay toward neutral (1.0) with rewardForgetRate
+- Connection strength decay with connectionForgetRate
+- Pattern strength decay with patternForgetRate
+- Neuron cleanup removing orphaned neurons with no connections/patterns/activity
+- Edge cases: empty tables, strong data survival, rapid consecutive cycles
 
-**Why Critical**: Prevents memory bloat and maintains system performance over time.
+**Key Validations**:
+- Forget cycle runs every `forgetCycles` frames (default 1000)
+- Rewards decay toward neutral: `reward_factor = reward_factor + (1.0 - reward_factor) * rewardForgetRate`
+- Near-neutral rewards removed: `ABS(reward_factor - 1.0) < 0.01`
+- Connection/pattern strengths decay linearly: `strength = strength - forgetRate`
+- Weak connections/patterns removed: `strength <= 0`
+- Orphaned neurons removed: no connections, patterns, or activity
+- Inference tables cleaned by age: `age >= POW(baseNeuronMaxAge, level)` for connection_inference/inferred_neurons
+- Pattern inference cleaned by age: `age >= POW(baseNeuronMaxAge, level + 1)`
+- Cross-level connections decay equally regardless of distance
+- Memory pressure reduces connection count by 15%+ after 5 cycles
+- Strong data (strength > 0.5) survives multiple forget cycles
+
+**Why Critical**: Prevents memory bloat, maintains system performance over time, and ensures the brain doesn't accumulate weak or unused connections that would slow down processing and degrade learning quality.
 
 ---
 
@@ -241,11 +256,11 @@ Each test section should include:
 3. ✅ **Section 3**: Neuron Management System (COMPLETE - 49 tests total)
    - ✅ 3a: Neuron Creation & Coordinate Matching (27 tests)
    - ✅ 3b: Neuron Lifecycle & Activation (22 tests)
-4. ✅ **Section 4**: Connection & Pattern Learning (COMPLETE - 118 tests)
-5. ✅ **Section 5**: Inference & Prediction Engine (COMPLETE - 11 test methods)
-6. ✅ **Section 6**: Reward & Learning System (COMPLETE - 11 test methods)
-7. Work sequentially through section 7
-8. Test Section 8 (Channels) in parallel with 7
+4. ✅ **Section 4**: Connection & Pattern Learning (COMPLETE - 144 tests)
+5. ✅ **Section 5**: Inference & Prediction Engine (COMPLETE - 85 tests)
+6. ✅ **Section 6**: Reward & Learning System (COMPLETE - 73 tests)
+7. ✅ **Section 7**: Memory Management & Forgetting (COMPLETE - 42 tests)
+8. Test Section 8 (Channels) in parallel with integration testing
 9. Complete with Sections 9-10 (Integration testing)
 
 ### Success Criteria
@@ -269,11 +284,12 @@ To begin testing:
 - `tests/brain-initialization-tests.js` - 18 tests validating system initialization
 - `tests/neuron-creation-tests.js` - 27 tests for coordinate matching and neuron creation
 - `tests/neuron-lifecycle-tests.js` - 22 tests for activation, aging, and lifecycle management
-- `tests/connection-pattern-tests.js` - 118 tests for connection learning and pattern detection
-- `tests/inference-prediction-tests.js` - 61 comprehensive tests for inference and prediction
-- `tests/reward-learning-tests.js` - 55 comprehensive tests across 11 test methods for reward and learning systems
+- `tests/connection-pattern-tests.js` - 144 tests for connection learning, pattern detection, and cross-level connections
+- `tests/inference-prediction-tests.js` - 85 tests for inference, prediction, and cross-level inference
+- `tests/reward-learning-tests.js` - 73 tests for reward learning, hierarchical decision-making, and cross-level reward propagation
+- `tests/memory-management-tests.js` - 42 tests for forget cycles, memory cleanup, and system optimization
 
-**Total: 313 tests covering the foundational brain architecture and core learning systems**
+**Total: 423 tests covering the foundational brain architecture, core learning systems, and memory management**
 
 ### 📋 Planned
 - Sections 4-10 as outlined above
