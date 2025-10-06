@@ -12,13 +12,14 @@ export default class Brain {
 
 		// set hyperparameters
 		this.baseNeuronMaxAge = 10; // number of frames a base neuron stays active
-		this.forgetCycles = 1000; // number of frames between forget cycles
+		this.forgetCycles = 10; // number of frames between forget cycles
 		this.connectionForgetRate = 0.1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 0.1; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.minPeakStrength = 300.0; // minimum weighted strength for a neuron to be considered a peak (pattern)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -179,8 +180,10 @@ export default class Brain {
 	 * and global reward factor from aggregated channel feedback
 	 */
 	async processFrame(frame, globalReward = 1.0) {
-		console.log(`observing new frame: ${JSON.stringify(frame)}`);
+		console.log('******************************************************************');
+		console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)}`, this.frameNumber);
 		console.log(`applying global reward: ${globalReward.toFixed(3)}`);
+		console.log('******************************************************************');
 
 		// do the whole thing as a transaction to avoid inconsistent database states
 		await this.conn.beginTransaction();
@@ -323,9 +326,10 @@ export default class Brain {
 	async ageNeurons() {
 		console.log('Aging active neurons and inferred neurons...');
 
-		// age all neurons in the context
-		await this.conn.query('UPDATE active_neurons SET age = age + 1');
-		await this.conn.query('UPDATE inferred_neurons SET age = age + 1');
+		// age all neurons in the context - ORDER BY age DESC to avoid primary key collisions
+		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
+		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE inferred_neurons SET age = age + 1 ORDER BY age DESC');
 
 		// deactivate aged-out neurons, but age higher level neurons slower than the lower level neurons
 		// if level 0 max age = 10, level 1 max age = 100, level 2 is 1000, etc.
@@ -395,11 +399,21 @@ export default class Brain {
 	 * handles rolling window of predictions with proper time dilation for higher levels.
 	 */
 	async inferConnections(level) {
-		
-		// age all existing predictions in the connection_inference table
-		await this.conn.query('UPDATE connection_inference SET age = age + 1 WHERE level = ?', [level]);
-		
-		// remove predictions that came true (predicted connection's to_neuron is now active at age 0)
+
+		// age all existing predictions in the connection_inference table - ORDER BY age DESC to avoid primary key collisions
+		await this.conn.query('UPDATE connection_inference SET age = age + 1 WHERE level = ? ORDER BY age DESC', [level]);
+
+		// count and remove predictions that came true (predicted connection's to_neuron is now active at age 0)
+		const [predictionsTrue] = await this.conn.query(`
+			SELECT COUNT(*) as count
+			FROM connection_inference ci
+			JOIN connections c ON ci.connection_id = c.id
+			JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = ci.level AND an.age = 0
+			WHERE ci.level = ?
+		`, [level]);
+		if (predictionsTrue[0].count > 0)
+			console.log(`✓ ${predictionsTrue[0].count} connection predictions came true for level ${level}`);
+
 		// we don't need to strengthen the predicted connections that came true - strength was already be increased simply because of observation
 		await this.conn.query(`
 			DELETE ci 
@@ -411,6 +425,14 @@ export default class Brain {
 
 		// but if the predicted connections did not come true, and they are expiring at max age, reduce their strengths
 		// these predictions did not come true and are about to be removed
+		const [predictionsFalse] = await this.conn.query(`
+            SELECT COUNT(*) as count
+            FROM connection_inference ci
+            WHERE ci.level = ?
+            AND ci.age >= POW(?, ci.level)
+		`, [level, this.baseNeuronMaxAge]);
+		if (predictionsFalse[0].count > 0)
+			console.log(`✗ ${predictionsFalse[0].count} connection predictions expired for level ${level}`);
 		await this.conn.query(`
             UPDATE connections
             SET strength = strength - ?
@@ -429,8 +451,9 @@ export default class Brain {
 		// predict connections where distance matches the next temporal step for the neuron's age (age + 1)
 		// distance calculation accounts for time dilation and cross-level connections
 		// we predict connections that will fire when target neurons activate at the specified level
+		// use REPLACE to handle case where connection is re-predicted (resets age to 0)
 		await this.conn.query(`
-			INSERT IGNORE INTO connection_inference (level, connection_id, age)
+			REPLACE INTO connection_inference (level, connection_id, age)
 			SELECT ?, c.id, 0
 			FROM active_neurons f
 			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = CASE 
@@ -451,10 +474,20 @@ export default class Brain {
 	async inferPatterns(level) {
 		console.log(`Processing lower-level predictions for level ${level}`);
 
-		// age existing pattern predictions in the lower level
-		await this.conn.query('UPDATE pattern_inference SET age = age + 1 WHERE level = ?', [level - 1]);
+		// age existing pattern predictions in the lower level - ORDER BY age DESC to avoid primary key collisions
+		await this.conn.query('UPDATE pattern_inference SET age = age + 1 WHERE level = ? ORDER BY age DESC', [level - 1]);
 
-		// remove predictions that came true (predicted connections are now active at age=0 in the target level)
+		// count and remove predictions that came true (predicted connections are now active at age=0 in the target level)
+		const [patternPredictionsTrue] = await this.conn.query(`
+            SELECT COUNT(*) as count
+            FROM pattern_inference pi
+            JOIN connections c ON pi.connection_id = c.id
+            JOIN active_neurons an ON c.to_neuron_id = an.neuron_id AND an.level = pi.level AND an.age = 0
+			WHERE pi.level = ?
+		`, [level - 1]);
+		if (patternPredictionsTrue[0].count > 0)
+			console.log(`✓ ${patternPredictionsTrue[0].count} pattern predictions came true for level ${level - 1}`);
+
 		// we don't need to strengthen the predicted connections that came true - strength was already be increased simply because of observation
 		await this.conn.query(`
             DELETE pi
@@ -466,6 +499,14 @@ export default class Brain {
 
 		// but if the predicted connections did not come true, and they are expiring at max age, reduce their strengths
 		// these predictions did not come true and are about to be removed
+		const [patternPredictionsFalse] = await this.conn.query(`
+            SELECT COUNT(*) as count
+            FROM pattern_inference pi
+            WHERE pi.level = ?
+            AND pi.age >= POW(?, pi.level + 1)
+		`, [level - 1, this.baseNeuronMaxAge]);
+		if (patternPredictionsFalse[0].count > 0)
+			console.log(`✗ ${patternPredictionsFalse[0].count} pattern predictions expired for level ${level - 1}`);
 		await this.conn.query(`
             UPDATE patterns
             SET strength = strength - ?
@@ -723,6 +764,7 @@ export default class Brain {
 
 		// get all active connections between the newly activated neurons (age=0) and all active neurons in the requested level
 		const connections = await this.getActiveConnections(level);
+		console.log(`Found ${connections.length} active connections for level ${level}`);
 		if (connections.length === 0) return false; // if there are no connections (there is only one neuron), nothing to do
 
 		// cluster connections around peaks
@@ -795,6 +837,10 @@ export default class Brain {
 
 		// now get the neuron ids whose strength exceeds its neighborhood - those are the peaks
 		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
+		if (peakNeuronIds.length > 0) {
+			console.log(`Found ${peakNeuronIds.length} peaks: [${peakNeuronIds.join(', ')}]`, neuronStrengths, neighborhoodStrengths);
+			// process.exit(0);
+		}
 
 		// get a map from peak neuron ids to the connection ids it uses and return them
 		return this.getPeakNeuronsConnections(peakNeuronIds, neighborhoodMap, connections);
@@ -872,12 +918,14 @@ export default class Brain {
 	/**
 	 * get neurons whose strength exceeds their neighborhood average strength (peaks).
 	 * these are neurons that are stronger than their local neighborhood average.
+	 * also requires minimum absolute strength to avoid creating patterns from weak connections.
 	 */
 	getPeakNeurons(neuronStrengths, neighborhoodStrengths) {
 		const peaks = [];
 		for (const [neuronId, neuronStrength] of neuronStrengths) {
 			const neighborhoodStrength = neighborhoodStrengths.get(neuronId) || 0;
-			if (neuronStrength > neighborhoodStrength) peaks.push(neuronId);
+			// neuron must exceed neighborhood AND meet minimum strength threshold
+			if (neuronStrength > neighborhoodStrength && neuronStrength >= this.minPeakStrength) peaks.push(neuronId);
 		}
 		return peaks;
 	}
@@ -918,7 +966,9 @@ export default class Brain {
 			const incomingConnection = connections.find(c => c.from_neuron_id === neighborId && c.to_neuron_id === peakNeuronId);
 			if (incomingConnection) connectionIds.push(incomingConnection.id);
 		}
-		return connectionIds;
+
+		// Deduplicate connection IDs (can have duplicates with cross-level connections)
+		return [...new Set(connectionIds)];
 	}
 
 	/**

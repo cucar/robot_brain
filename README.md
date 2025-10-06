@@ -253,9 +253,33 @@ mysql -u root -p < db/db.sql
 
 # 2. Configure database connection in db/db.js if needed
 
-# 3. Run a specific job/episode
+# 3. Setup job data (downloads/prepares data for the job)
+node run-setup.js <job-name>
+
+# 4. Run a specific job/episode
 node run-brain.js <job-name>
 ```
+
+### Job Setup vs Job Execution
+
+The system separates **data preparation** from **job execution**:
+
+#### **Setup (Data Preparation)**
+```bash
+node run-setup.js <job-name>
+```
+- Downloads or prepares data required by the job
+- Only needs to be run once (or when you want to refresh data)
+- Optional - not all jobs require setup
+- Example: Downloads historical stock data from Alpha Vantage
+
+#### **Execution (Running the Brain)**
+```bash
+node run-brain.js <job-name>
+```
+- Runs the actual learning/training job
+- Uses data prepared by setup (if applicable)
+- Can be run multiple times with the same data
 
 ### Available Jobs
 
@@ -279,11 +303,18 @@ node run-brain.js arm1
 ```
 Learns arm movement patterns with proprioceptive feedback.
 
-#### **Financial Trading**
+#### **Financial Trading (Stock Training)**
 ```bash
-node run-brain.js stocks1
+# First, download historical stock data
+node run-setup.js stock-training
+
+# Then run the training job
+node run-brain.js stock-training
 ```
-Learns market patterns and executes trading decisions with performance feedback.
+Trains on historical stock data for KGC (Kinross Gold), GLD (Gold ETF), and SPY (S&P 500).
+- **Setup**: Downloads full historical daily data from Alpha Vantage API
+- **Training**: Runs 50 episodes through historical data, learning patterns and trading strategies
+- **Data location**: `data/stock/KGC.csv`, `data/stock/GLD.csv`, `data/stock/SPY.csv`
 
 #### **Multi-Modal Learning**
 ```bash

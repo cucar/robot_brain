@@ -1,5 +1,12 @@
 import Job from './job.js';
 import StockChannel from '../channels/stock.js';
+import fs from 'fs';
+import path from 'path';
+import https from 'https';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Stock Training Job - Trains the brain on multiple stock symbols over many episodes
@@ -13,14 +20,171 @@ export default class StockTrainingJob extends Job {
 
 		// Simple configuration - edit these values as needed
 		this.config = {
-			symbols: ['AAPL', 'GOOGL', 'MSFT'],  // Stock symbols to train on
-			maxEpisodes: 50,                      // Number of training episodes
-			holdoutRows: 5                        // Number of rows to hold out for prediction testing
+			symbols: ['KGC', 'GLD', 'SPY'],       // Stock symbols to train on
+			maxEpisodes: 1,                      // Number of training episodes
+			holdoutRows: 5,                       // Number of rows to hold out for prediction testing
+			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
 		};
 
 		// Training metrics
 		this.episodeResults = [];
 		this.currentEpisode = 0;
+	}
+
+	/**
+	 * Setup method - Downloads historical data from Alpha Vantage and processes it
+	 * Run this with: node run-setup.js stock-training
+	 */
+	async setup() {
+		console.log('📥 Downloading historical stock data from Alpha Vantage...');
+		console.log(`   Symbols: ${this.config.symbols.join(', ')}`);
+		console.log('');
+
+		// Ensure data directory exists
+		const dataDir = path.join(__dirname, '..', 'data', 'stock');
+		if (!fs.existsSync(dataDir)) {
+			fs.mkdirSync(dataDir, { recursive: true });
+			console.log(`✅ Created directory: ${dataDir}`);
+		}
+
+		// Remove old CSV files for symbols we're downloading
+		for (const symbol of this.config.symbols) {
+			const filePath = path.join(dataDir, `${symbol}.csv`);
+			if (fs.existsSync(filePath)) {
+				try {
+					fs.unlinkSync(filePath);
+				} catch (error) {
+					console.log(`   ⚠️  Could not delete old ${symbol}.csv: ${error.message}`);
+				}
+			}
+		}
+
+		// Download JSON data for all symbols
+		const symbolData = new Map();
+		for (const symbol of this.config.symbols) {
+			const data = await this.downloadSymbolData(symbol);
+			symbolData.set(symbol, data);
+		}
+
+		console.log('');
+		console.log('📊 Processing and aligning data...');
+
+		// Find oldest common date across all symbols
+		const oldestCommonDate = this.findOldestCommonDate(symbolData);
+		console.log(`   Oldest common date: ${oldestCommonDate}`);
+
+		// Process and save each symbol's data
+		for (const symbol of this.config.symbols) {
+			const data = symbolData.get(symbol);
+			await this.processAndSaveSymbolData(symbol, data, oldestCommonDate, dataDir);
+		}
+
+		console.log('');
+		console.log('✅ All data downloaded and processed successfully!');
+	}
+
+	/**
+	 * Download historical data for a single symbol as JSON
+	 */
+	async downloadSymbolData(symbol) {
+		const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=full&apikey=${this.config.alphaVantageApiKey}&datatype=json`;
+
+		console.log(`📊 Downloading ${symbol}...`);
+
+		return new Promise((resolve, reject) => {
+			https.get(url, (response) => {
+				if (response.statusCode !== 200) {
+					reject(new Error(`Failed to download ${symbol}: HTTP ${response.statusCode}`));
+					return;
+				}
+
+				let data = '';
+				response.on('data', (chunk) => {
+					data += chunk;
+				});
+
+				response.on('end', () => {
+					try {
+						const json = JSON.parse(data);
+
+						// Check for API error
+						if (json['Error Message']) {
+							reject(new Error(`API error for ${symbol}: ${json['Error Message']}`));
+							return;
+						}
+
+						if (json['Note']) {
+							reject(new Error(`API limit reached: ${json['Note']}`));
+							return;
+						}
+
+						if (!json['Time Series (Daily)']) {
+							reject(new Error(`No time series data for ${symbol}`));
+							return;
+						}
+
+						const timeSeriesData = json['Time Series (Daily)'];
+						const dateCount = Object.keys(timeSeriesData).length;
+						console.log(`   ✅ ${symbol}: ${dateCount} days of data`);
+
+						resolve(timeSeriesData);
+					} catch (error) {
+						reject(new Error(`Failed to parse JSON for ${symbol}: ${error.message}`));
+					}
+				});
+			}).on('error', (err) => {
+				reject(err);
+			});
+		});
+	}
+
+	/**
+	 * Find the oldest date that exists in all symbols' data
+	 */
+	findOldestCommonDate(symbolData) {
+		// Get all dates for each symbol
+		const symbolDates = new Map();
+		for (const [symbol, data] of symbolData) {
+			const dates = Object.keys(data).sort(); // Sort chronologically
+			symbolDates.set(symbol, new Set(dates));
+		}
+
+		// Find the oldest date (earliest in chronological order)
+		let oldestDate = null;
+		for (const [symbol, dates] of symbolDates) {
+			const symbolOldest = Array.from(dates).sort()[0];
+			if (!oldestDate || symbolOldest > oldestDate) {
+				oldestDate = symbolOldest;
+			}
+		}
+
+		return oldestDate;
+	}
+
+	/**
+	 * Process and save symbol data in the format expected by StockChannel
+	 * Format: open,volume (no header, chronological order)
+	 */
+	async processAndSaveSymbolData(symbol, data, oldestCommonDate, dataDir) {
+		// Get all dates and sort chronologically
+		const dates = Object.keys(data).sort();
+
+		// Filter to only dates >= oldestCommonDate
+		const filteredDates = dates.filter(date => date >= oldestCommonDate);
+
+		// Extract open price and volume for each date
+		const rows = filteredDates.map(date => {
+			const dayData = data[date];
+			const open = dayData['1. open'];
+			const volume = dayData['5. volume'];
+			return `${open},${volume}`;
+		});
+
+		// Write to CSV file (no header, chronological order)
+		const filePath = path.join(dataDir, `${symbol}.csv`);
+		fs.writeFileSync(filePath, rows.join('\n'));
+
+		console.log(`   ✅ ${symbol}.csv: ${rows.length} days (${filteredDates[0]} to ${filteredDates[filteredDates.length - 1]})`);
 	}
 
 	/**
@@ -113,10 +277,19 @@ export default class StockTrainingJob extends Job {
 
 			frameCount++;
 
+			// Show progress every 100 frames
+			if (frameCount % 100 === 0) {
+				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${5247}... `);
+			}
+
 			// Get feedback and process frame
 			const feedback = await this.brain.getFeedback();
 			await this.brain.processFrame(frame, feedback);
 		}
+
+		// Clear progress line
+		process.stdout.write(`\r`);
+		process.stdout.clearLine(0);
 
 		// Collect episode results from all channels
 		this.collectEpisodeResults(episodeMetrics);
