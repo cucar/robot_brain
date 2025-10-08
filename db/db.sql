@@ -108,7 +108,8 @@ CREATE TABLE pattern_inference (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT,
     age TINYINT DEFAULT 0,
-    PRIMARY KEY (level, pattern_neuron_id, age, connection_id)
+    PRIMARY KEY (level, pattern_neuron_id, age, connection_id),
+    INDEX idx_level_connection (level, connection_id)
 ) ENGINE=MEMORY;
 
 -- used for tracking the connections from activated patterns so that we can adjust pattern definitions based on results - rolling window

@@ -449,20 +449,23 @@ export default class Brain {
 
 		// insert new predictions for the next cycle of this level from all active neurons
 		// predict connections where distance matches the next temporal step for the neuron's age (age + 1)
-		// distance calculation accounts for time dilation and cross-level connections
+		// distance calculation accounts for time dilation and adjacent-level connections
 		// we predict connections that will fire when target neurons activate at the specified level
 		// use REPLACE to handle case where connection is re-predicted (resets age to 0)
 		await this.conn.query(`
 			REPLACE INTO connection_inference (level, connection_id, age)
 			SELECT ?, c.id, 0
 			FROM active_neurons f
-			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = CASE 
+			JOIN connections c ON c.from_neuron_id = f.neuron_id
+			JOIN neurons n ON c.to_neuron_id = n.id
+			WHERE c.distance = CASE
 			    WHEN f.level = ? THEN FLOOR((f.age + 1) / POW(?, f.level))
 				WHEN f.level > ? THEN ? - 1
 				WHEN f.level < ? THEN 0
 			END
-            WHERE c.strength >= 0
-		`, [level, level, this.baseNeuronMaxAge, level, this.baseNeuronMaxAge, level]);
+			AND ABS(f.level - ?) <= 1
+            AND c.strength >= 0
+		`, [level, level, this.baseNeuronMaxAge, level, this.baseNeuronMaxAge, level, level]);
 	}
 
 	/**
@@ -688,7 +691,8 @@ export default class Brain {
 
 	/**
 	 * reinforces the connections between newly active neurons (age = 0) at a level
-	 * builds connections FROM all active neurons (any level) TO age=0 neurons at the specified level
+	 * builds connections FROM all active neurons (adjacent levels only) TO age=0 neurons at the specified level
+	 * Adjacent levels: same level, one level up, one level down (like cortical columns)
 	 */
 	async reinforceConnections(level) {
 		await this.conn.query(`
@@ -703,9 +707,10 @@ export default class Brain {
                 END as distance,
                 1 as strength -- each observation increases strength by 1
 			FROM active_neurons f -- connections are built from the older neurons to the new neurons
-			CROSS JOIN active_neurons t -- cross-level connections: from any level to target level
+			CROSS JOIN active_neurons t -- cross-level connections: from adjacent levels only
             WHERE t.age = 0 -- reinforcing connections for the newly activated target neurons only
             AND t.level = ? -- target neurons are at the specified level
+            AND ABS(f.level - t.level) <= 1 -- restrict to adjacent levels only (same, +1, -1)
             AND (t.neuron_id != f.neuron_id OR f.age != 0) -- if it's the same neuron, it's gotta be an older one
 			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength) -- if connection exists, add on to it
 		`, [this.baseNeuronMaxAge, this.baseNeuronMaxAge, level]);
@@ -806,13 +811,14 @@ export default class Brain {
             FROM connections c
             -- source is the older neurons building connections from them to the new neurons
 			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
-            -- getting active connections from older neurons to newly activated neurons (cross-level enabled)
+            -- getting active connections from older neurons to newly activated neurons (adjacent levels only)
             JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = ?
             WHERE c.distance = CASE
 				WHEN f.level = t.level THEN FLOOR(f.age / POW(?, f.level))
 				WHEN f.level > t.level THEN ? - 1
 				WHEN f.level < t.level THEN 0
-            END 
+            END
+            AND ABS(f.level - t.level) <= 1 -- restrict to adjacent levels only (same, +1, -1)
             AND (t.neuron_id != f.neuron_id OR f.age != 0) -- if it's the same neuron, it's gotta be an older one
             AND c.strength >= 0 -- ignore negative connections that are scheduled to be deleted
 		`, [level, this.baseNeuronMaxAge, this.baseNeuronMaxAge]);
@@ -1168,17 +1174,20 @@ export default class Brain {
 	async getPredictedConnections(level) {
 		console.log(`Getting predicted connections for level ${level}`);
 
-		// get both connection-level and pattern-level predictions in a single query
+		// get both connection-level and pattern-level predictions using UNION ALL with JOINs
+		// UNION ALL is faster than UNION since we don't need to deduplicate (same connection can be predicted by both)
 		const [predictedConnections] = await this.conn.query(`
-			SELECT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
+			SELECT DISTINCT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
 			FROM connections c
-			WHERE c.strength >= 0 AND c.id IN (
-				SELECT connection_id FROM connection_inference WHERE level = ?
-				UNION
-				SELECT connection_id FROM pattern_inference WHERE level = ?
-			)
+			INNER JOIN connection_inference ci ON c.id = ci.connection_id
+			WHERE ci.level = ? AND c.strength >= 0
+			UNION
+			SELECT DISTINCT c.id, c.from_neuron_id, c.to_neuron_id, c.distance, c.strength
+			FROM connections c
+			INNER JOIN pattern_inference pi ON c.id = pi.connection_id
+			WHERE pi.level = ? AND c.strength >= 0
 		`, [level, level]);
-		
+
 		console.log(`Found ${predictedConnections.length} predicted connections for level ${level}`);
 		return predictedConnections;
 	}
@@ -1313,7 +1322,7 @@ export default class Brain {
 		// Clear previous active connections
 		await this.conn.query('TRUNCATE active_connections');
 
-		// Populate active connections for all levels in one query (cross-level enabled)
+		// Populate active connections for all levels in one query (adjacent levels only)
 		// Only include connections where distance matches the current temporal relationship
 		await this.conn.query(`
 			INSERT INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level, strength)
@@ -1327,6 +1336,7 @@ export default class Brain {
 			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
 			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id
 			WHERE c.strength > 0
+			AND ABS(f.level - t.level) <= 1
 			AND c.distance = CASE
 				WHEN f.level = t.level THEN FLOOR(f.age / POW(?, f.level))
 				WHEN f.level > t.level THEN ? - 1
