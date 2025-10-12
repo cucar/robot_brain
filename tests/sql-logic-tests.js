@@ -14,12 +14,12 @@ class SQLLogicTests {
     }
 
     async init() {
-        this.conn = await db.getConnection();
+        this.conn = await db();
         await this.conn.query('USE machine_intelligence');
     }
 
     async cleanup() {
-        if (this.conn) await this.conn.release();
+        if (this.conn) await this.conn.end();
 		process.exit(0);
     }
 
@@ -48,9 +48,10 @@ class SQLLogicTests {
         await this.testPOWCalculations();
         await this.testDistanceCalculations();
         await this.testRewardDecayFormulas();
+        await this.testRewardDecayFormulasWithDifferentBase();
 
         console.log(`\nResults: ${this.testsPassed} passed, ${this.testsFailed} failed`);
-        
+
         if (this.testsFailed > 0) {
             process.exit(1);
         }
@@ -98,45 +99,235 @@ class SQLLogicTests {
     }
 
     async testRewardDecayFormulas() {
-        console.log('Testing Reward Decay Formulas:');
+        console.log('Testing Reward Decay Formulas (Exponential Temporal Decay):');
         const baseNeuronMaxAge = 10;
 
-        // Test temporal decay formula: 1.0 + (globalReward - 1.0) * (1.0 - age/levelMaxAge)
+        // Generalized formula with exponential decay matching connection distance grouping:
+        // decayFactor = (N + 1 - bucketWithinTier) / POW(N, tier + 1)
+        // Where:
+        //   N = baseNeuronMaxAge
+        //   tier = FLOOR(LN(age) / LN(N))
+        //   bucketWithinTier = CEIL(age / POW(N, tier))
+        // Note: age >= 1 is guaranteed by the WHERE clause
 
-        // Positive reward, zero age (full reward)
-        const [rows1] = await this.conn.query(
-            'SELECT 1.0 + (? - 1.0) * (1.0 - ? / POW(?, ? + 1)) as reward_factor',
-            [1.5, 0, baseNeuronMaxAge, 0]
-        );
-        this.assert(this.isEqual(rows1[0].reward_factor, 1.5), 'Zero age should get full reward (1.5)', rows1[0].reward_factor, 1.5);
+        const rewardFormula = `
+            1.0 + (? - 1.0) * (
+                (? + 1 - CEIL(? / POW(?, FLOOR(LN(?) / LN(?)))))
+                / POW(?, FLOOR(LN(?) / LN(?)) + 1)
+            )
+        `;
 
-        // Positive reward, half age (half decay)
-        const [rows2] = await this.conn.query(
-            'SELECT 1.0 + (? - 1.0) * (1.0 - ? / POW(?, ? + 1)) as reward_factor',
-            [1.5, 5, baseNeuronMaxAge, 0]
+        // Test base tier (ages 1-10): decay from 1.0 to 0.1
+        const [age1] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 1, baseNeuronMaxAge, 1, baseNeuronMaxAge, baseNeuronMaxAge, 1, baseNeuronMaxAge]
         );
-        this.assert(this.isEqual(rows2[0].reward_factor, 1.25), 'Half age should get half-decayed reward (1.25)', rows2[0].reward_factor, 1.25);
+        this.assert(this.isEqual(age1[0].reward_factor, 1.5), 'Age 1 should get full reward (decay=1.0)', age1[0].reward_factor, 1.5);
 
-        // Positive reward, max age (neutral)
-        const [rows3] = await this.conn.query(
-            'SELECT 1.0 + (? - 1.0) * (1.0 - ? / POW(?, ? + 1)) as reward_factor',
-            [1.5, 10, baseNeuronMaxAge, 0]
+        const [age2] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 2, baseNeuronMaxAge, 2, baseNeuronMaxAge, baseNeuronMaxAge, 2, baseNeuronMaxAge]
         );
-        this.assert(this.isEqual(rows3[0].reward_factor, 1.0), 'Max age should decay to neutral (1.0)', rows3[0].reward_factor, 1.0);
+        this.assert(this.isEqual(age2[0].reward_factor, 1.45), 'Age 2 should get decay=0.9 (1.0 + 0.5*0.9 = 1.45)', age2[0].reward_factor, 1.45);
 
-        // Negative reward
-        const [rows4] = await this.conn.query(
-            'SELECT 1.0 + (? - 1.0) * (1.0 - ? / POW(?, ? + 1)) as reward_factor',
-            [0.5, 0, baseNeuronMaxAge, 0]
+        const [age5] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 5, baseNeuronMaxAge, 5, baseNeuronMaxAge, baseNeuronMaxAge, 5, baseNeuronMaxAge]
         );
-        this.assert(this.isEqual(rows4[0].reward_factor, 0.5), 'Zero age should get full negative reward (0.5)', rows4[0].reward_factor, 0.5);
+        this.assert(this.isEqual(age5[0].reward_factor, 1.3), 'Age 5 should get decay=0.6 (1.0 + 0.5*0.6 = 1.3)', age5[0].reward_factor, 1.3);
 
-        // Neutral reward (should always be 1.0)
-        const [rows5] = await this.conn.query(
-            'SELECT 1.0 + (? - 1.0) * (1.0 - ? / POW(?, ? + 1)) as reward_factor',
-            [1.0, 5, baseNeuronMaxAge, 0]
+        const [age9] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 9, baseNeuronMaxAge, 9, baseNeuronMaxAge, baseNeuronMaxAge, 9, baseNeuronMaxAge]
         );
-        this.assert(this.isEqual(rows5[0].reward_factor, 1.0), 'Neutral reward should always be 1.0', rows5[0].reward_factor, 1.0);
+        this.assert(this.isEqual(age9[0].reward_factor, 1.1), 'Age 9 should get decay=0.2 (1.0 + 0.5*0.2 = 1.1)', age9[0].reward_factor, 1.1);
+
+        const [age10] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 10, baseNeuronMaxAge, 10, baseNeuronMaxAge, baseNeuronMaxAge, 10, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age10[0].reward_factor, 1.05), 'Age 10 should get decay=0.1 (1.0 + 0.5*0.1 = 1.05)', age10[0].reward_factor, 1.05);
+
+        // Test first exponential tier (ages 11-100): decay from 0.09 to 0.01
+        const [age11] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 11, baseNeuronMaxAge, 11, baseNeuronMaxAge, baseNeuronMaxAge, 11, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age11[0].reward_factor, 1.045), 'Age 11 should get decay=0.09 (bucket 11-20)', age11[0].reward_factor, 1.045);
+
+        const [age15] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 15, baseNeuronMaxAge, 15, baseNeuronMaxAge, baseNeuronMaxAge, 15, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age15[0].reward_factor, 1.045), 'Age 15 should get decay=0.09 (same bucket as 11-20)', age15[0].reward_factor, 1.045);
+
+        const [age25] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 25, baseNeuronMaxAge, 25, baseNeuronMaxAge, baseNeuronMaxAge, 25, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age25[0].reward_factor, 1.04), 'Age 25 should get decay=0.08 (bucket 21-30)', age25[0].reward_factor, 1.04);
+
+        const [age78] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 78, baseNeuronMaxAge, 78, baseNeuronMaxAge, baseNeuronMaxAge, 78, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age78[0].reward_factor, 1.015), 'Age 78 should get decay=0.03 (bucket 71-80)', age78[0].reward_factor, 1.015);
+
+        const [age100] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 100, baseNeuronMaxAge, 100, baseNeuronMaxAge, baseNeuronMaxAge, 100, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age100[0].reward_factor, 1.005), 'Age 100 should get decay=0.01 (bucket 91-100)', age100[0].reward_factor, 1.005);
+
+        // Test second exponential tier (ages 101-1000): decay from 0.009 to 0.001
+        const [age101] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 101, baseNeuronMaxAge, 101, baseNeuronMaxAge, baseNeuronMaxAge, 101, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age101[0].reward_factor, 1.0045), 'Age 101 should get decay=0.009 (bucket 101-200)', age101[0].reward_factor, 1.0045);
+
+        const [age250] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 250, baseNeuronMaxAge, 250, baseNeuronMaxAge, baseNeuronMaxAge, 250, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age250[0].reward_factor, 1.004), 'Age 250 should get decay=0.008 (bucket 201-300)', age250[0].reward_factor, 1.004);
+
+        const [age1000] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 1000, baseNeuronMaxAge, 1000, baseNeuronMaxAge, baseNeuronMaxAge, 1000, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age1000[0].reward_factor, 1.0005), 'Age 1000 should get decay=0.001 (bucket 901-1000)', age1000[0].reward_factor, 1.0005);
+
+        // Test with negative reward
+        const [negAge1] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [0.5, baseNeuronMaxAge, 1, baseNeuronMaxAge, 1, baseNeuronMaxAge, baseNeuronMaxAge, 1, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(negAge1[0].reward_factor, 0.5), 'Age 1 with negative reward should get full penalty (0.5)', negAge1[0].reward_factor, 0.5);
+
+        const [negAge50] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [0.5, baseNeuronMaxAge, 50, baseNeuronMaxAge, 50, baseNeuronMaxAge, baseNeuronMaxAge, 50, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(negAge50[0].reward_factor, 0.97), 'Age 50 with negative reward should get decay=0.06 (bucket 41-50: 1.0 + (-0.5)*0.06 = 0.97)', negAge50[0].reward_factor, 0.97);
+
+        // Test neutral reward (should always be 1.0)
+        const [neutral] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.0, baseNeuronMaxAge, 50, baseNeuronMaxAge, 50, baseNeuronMaxAge, baseNeuronMaxAge, 50, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(neutral[0].reward_factor, 1.0), 'Neutral reward should always be 1.0 regardless of age', neutral[0].reward_factor, 1.0);
+
+        console.log();
+    }
+
+    async testRewardDecayFormulasWithDifferentBase() {
+        console.log('Testing Reward Decay Formulas with baseNeuronMaxAge = 5:');
+        const baseNeuronMaxAge = 5;
+
+        // Same generalized formula, but with N=5 instead of N=10
+        // This tests that the formula works for any baseNeuronMaxAge value
+
+        const rewardFormula = `
+            1.0 + (? - 1.0) * (
+                (? + 1 - CEIL(? / POW(?, FLOOR(LN(?) / LN(?)))))
+                / POW(?, FLOOR(LN(?) / LN(?)) + 1)
+            )
+        `;
+
+        // Test base tier (ages 1-5): decay from 1.0 to 0.2 (steps of 0.2)
+        // decayFactor = (6 - bucket) / 5
+        const [age1] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 1, baseNeuronMaxAge, 1, baseNeuronMaxAge, baseNeuronMaxAge, 1, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age1[0].reward_factor, 1.5), 'Age 1 should get full reward (decay=1.0 = 5/5)', age1[0].reward_factor, 1.5);
+
+        const [age2] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 2, baseNeuronMaxAge, 2, baseNeuronMaxAge, baseNeuronMaxAge, 2, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age2[0].reward_factor, 1.4), 'Age 2 should get decay=0.8 (4/5: 1.0 + 0.5*0.8 = 1.4)', age2[0].reward_factor, 1.4);
+
+        const [age3] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 3, baseNeuronMaxAge, 3, baseNeuronMaxAge, baseNeuronMaxAge, 3, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age3[0].reward_factor, 1.3), 'Age 3 should get decay=0.6 (3/5: 1.0 + 0.5*0.6 = 1.3)', age3[0].reward_factor, 1.3);
+
+        const [age5] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 5, baseNeuronMaxAge, 5, baseNeuronMaxAge, baseNeuronMaxAge, 5, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age5[0].reward_factor, 1.1), 'Age 5 should get decay=0.2 (1/5: 1.0 + 0.5*0.2 = 1.1)', age5[0].reward_factor, 1.1);
+
+        // Test first exponential tier (ages 6-25): decay from 0.16 to 0.04 (steps of 0.04)
+        // Buckets: 6-10 (bucket 2), 11-15 (bucket 3), 16-20 (bucket 4), 21-25 (bucket 5)
+        // decayFactor = (6 - bucket) / 25
+        const [age6] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 6, baseNeuronMaxAge, 6, baseNeuronMaxAge, baseNeuronMaxAge, 6, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age6[0].reward_factor, 1.08), 'Age 6 should get decay=0.16 (4/25: bucket 6-10)', age6[0].reward_factor, 1.08);
+
+        const [age10] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 10, baseNeuronMaxAge, 10, baseNeuronMaxAge, baseNeuronMaxAge, 10, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age10[0].reward_factor, 1.08), 'Age 10 should get decay=0.16 (same bucket as 6-10)', age10[0].reward_factor, 1.08);
+
+        const [age15] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 15, baseNeuronMaxAge, 15, baseNeuronMaxAge, baseNeuronMaxAge, 15, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age15[0].reward_factor, 1.06), 'Age 15 should get decay=0.12 (3/25: bucket 11-15)', age15[0].reward_factor, 1.06);
+
+        const [age25] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 25, baseNeuronMaxAge, 25, baseNeuronMaxAge, baseNeuronMaxAge, 25, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age25[0].reward_factor, 1.02), 'Age 25 should get decay=0.04 (1/25: bucket 21-25)', age25[0].reward_factor, 1.02);
+
+        // Test second exponential tier (ages 26-125): decay from 0.032 to 0.008
+        // Buckets: 26-50 (bucket 2), 51-75 (bucket 3), 76-100 (bucket 4), 101-125 (bucket 5)
+        // decayFactor = (6 - bucket) / 125
+        const [age26] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 26, baseNeuronMaxAge, 26, baseNeuronMaxAge, baseNeuronMaxAge, 26, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age26[0].reward_factor, 1.016), 'Age 26 should get decay=0.032 (4/125: bucket 26-50)', age26[0].reward_factor, 1.016);
+
+        const [age75] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 75, baseNeuronMaxAge, 75, baseNeuronMaxAge, baseNeuronMaxAge, 75, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age75[0].reward_factor, 1.012), 'Age 75 should get decay=0.024 (3/125: bucket 51-75)', age75[0].reward_factor, 1.012);
+
+        const [age125] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.5, baseNeuronMaxAge, 125, baseNeuronMaxAge, 125, baseNeuronMaxAge, baseNeuronMaxAge, 125, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(age125[0].reward_factor, 1.004), 'Age 125 should get decay=0.008 (1/125: bucket 101-125)', age125[0].reward_factor, 1.004);
+
+        // Test with negative reward
+        const [negAge1] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [0.5, baseNeuronMaxAge, 1, baseNeuronMaxAge, 1, baseNeuronMaxAge, baseNeuronMaxAge, 1, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(negAge1[0].reward_factor, 0.5), 'Age 1 with negative reward should get full penalty (0.5)', negAge1[0].reward_factor, 0.5);
+
+        const [negAge15] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [0.5, baseNeuronMaxAge, 15, baseNeuronMaxAge, 15, baseNeuronMaxAge, baseNeuronMaxAge, 15, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(negAge15[0].reward_factor, 0.94), 'Age 15 with negative reward should get decay=0.12 (1.0 + (-0.5)*0.12 = 0.94)', negAge15[0].reward_factor, 0.94);
+
+        // Test neutral reward
+        const [neutral] = await this.conn.query(
+            `SELECT ${rewardFormula} as reward_factor`,
+            [1.0, baseNeuronMaxAge, 50, baseNeuronMaxAge, 50, baseNeuronMaxAge, baseNeuronMaxAge, 50, baseNeuronMaxAge]
+        );
+        this.assert(this.isEqual(neutral[0].reward_factor, 1.0), 'Neutral reward should always be 1.0 regardless of age', neutral[0].reward_factor, 1.0);
 
         console.log();
     }

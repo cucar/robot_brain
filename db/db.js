@@ -7,5 +7,6 @@ export default () => mysql.createConnection({
 	database: 'machine_intelligence',
 	waitForConnections: true,
 	connectionLimit: 10,
-	queueLimit: 0
+	queueLimit: 0,
+	namedPlaceholders: true
 });

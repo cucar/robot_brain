@@ -1376,18 +1376,33 @@ export default class Brain {
 			return;
 		}
 
-		// Apply global reward to previously executed decisions with linear temporal decay
-		// age >= 1 means decisions from prior frames (not yet aged in current frame, but were executed when they were age=1)
-		// Recent decisions get full reward, older decisions get proportionally less, oldest get neutral (1.0)
-		// Formula: 1.0 + (globalReward - 1.0) * (1.0 - age/levelMaxAge)
-		const [result] = await this.conn.query(`
-			INSERT INTO neuron_rewards (neuron_id, reward_factor)
-			SELECT inf.neuron_id, 1.0 + (? - 1.0) * (1.0 - inf.age / POW(?, inf.level + 1))  -- Linear temporal decay
-			FROM inferred_neurons inf
-			WHERE inf.age >= 1  -- Prior frames' decisions (not yet aged this frame, but executed when age=1)
-			ON DUPLICATE KEY UPDATE reward_factor = reward_factor * VALUES(reward_factor)
-		`, [globalReward, this.baseNeuronMaxAge]);
+		// Apply global reward to previously executed decisions with exponential temporal decay
+		// age >= 1 means decisions from prior frames (not yet aged in current frame, but executed when age=1)
+		//
+		// Decay follows exponential rounding structure based on baseNeuronMaxAge (N):
+		// - Ages 1-N: decay from 1.0 to 1/N (N steps)
+		// - Ages (N+1)-(N²): decay from (N-1)/N² to 1/N² (N buckets of size N)
+		// - Ages (N²+1)-(N³): decay from (N-1)/N³ to 1/N³ (N buckets of size N²)
+		// - etc.
+		//
+		// Formula: decayFactor = (N + 1 - bucketWithinTier) / POW(N, tier + 1)
+		// Where:
+		//   tier = FLOOR(LOG(N, age))  -- which exponential tier (0 for 1-9, 1 for 10-99, etc.)
+		//   bucketWithinTier = CEIL(age / POW(N, tier))  -- which bucket within the tier (1 to N)
+		const [result] = await this.conn.execute(
+			`INSERT INTO neuron_rewards (neuron_id, reward_factor)
+			SELECT
+				neuron_id,
+				1.0 + (:globalReward - 1.0) * ((:N + 1 - CEIL(age / POW(:N, tier))) / POW(:N, tier + 1)) as reward_factor
+			FROM (
+				SELECT inf.neuron_id, inf.age, FLOOR(LOG(:N, inf.age)) as tier
+				FROM inferred_neurons inf
+				WHERE inf.age >= 1  -- Prior frames' decisions (not yet aged this frame, but executed when age=1)
+			) AS aged_neurons
+			ON DUPLICATE KEY UPDATE reward_factor = reward_factor * VALUES(reward_factor)`,
+			{ globalReward, N: this.baseNeuronMaxAge }
+		);
 
-		console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} executed inferred neurons with linear temporal decay`);
+		console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} executed inferred neurons with exponential temporal decay`);
 	}
 }
