@@ -52,12 +52,14 @@ export default class Brain {
 	 */
 	async resetContext() {
 		console.log('Resetting brain (memory tables)...');
-		await this.conn.query('TRUNCATE active_neurons');
-		await this.conn.query('TRUNCATE pattern_inference');
-		await this.conn.query('TRUNCATE connection_inference');
-		await this.conn.query('TRUNCATE inferred_neurons');
-		await this.conn.query('TRUNCATE observed_patterns');
-		await this.conn.query('TRUNCATE active_connections');
+		await this.truncateTables([
+			'active_neurons',
+			'pattern_inference',
+			'connection_inference',
+			'inferred_neurons',
+			'observed_patterns',
+			'active_connections'
+		]);
 	}
 
 	/**
@@ -65,9 +67,7 @@ export default class Brain {
 	 */
 	async resetBrain() {
 		console.log('Hard resetting brain (all tables)...');
-
-		// truncate memory tables first (ENGINE=MEMORY) and then persistent ones
-		const tables = [
+		await this.truncateTables([
 			'active_neurons',
 			'pattern_inference',
 			'connection_inference',
@@ -80,7 +80,13 @@ export default class Brain {
 			'neuron_rewards',
 			'neurons',
 			'dimensions'
-		];
+		]);
+	}
+
+	/**
+	 * truncates given tables for database reset
+	 */
+	async truncateTables(tables) {
 		await this.conn.query('SET FOREIGN_KEY_CHECKS = 0');
 		for (const table of tables) await this.conn.query(`TRUNCATE ${table}`);
 		await this.conn.query('SET FOREIGN_KEY_CHECKS = 1');
