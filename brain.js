@@ -20,7 +20,8 @@ export default class Brain {
 		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.minPeakStrength = 300.0; // minimum weighted strength for a neuron to be considered a peak (pattern)
+		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (pattern)
+		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -943,14 +944,13 @@ export default class Brain {
 	/**
 	 * get neurons whose strength exceeds their neighborhood average strength (peaks).
 	 * these are neurons that are stronger than their local neighborhood average.
-	 * also requires minimum absolute strength to avoid creating patterns from weak connections.
+	 * also requires minimum relative/absolute strength to avoid creating patterns from weak connections.
 	 */
 	getPeakNeurons(neuronStrengths, neighborhoodStrengths) {
 		const peaks = [];
 		for (const [neuronId, neuronStrength] of neuronStrengths) {
 			const neighborhoodStrength = neighborhoodStrengths.get(neuronId) || 0;
-			// neuron must exceed neighborhood AND meet minimum strength threshold
-			if (neuronStrength > neighborhoodStrength && neuronStrength >= this.minPeakStrength) peaks.push(neuronId);
+			if (neuronStrength >= this.minPeakStrength && (neuronStrength / neighborhoodStrength) > this.minPeakRatio) peaks.push(neuronId);
 		}
 		return peaks;
 	}
