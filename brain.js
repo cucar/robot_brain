@@ -203,7 +203,7 @@ export default class Brain {
 		// if there's an error, we'll roll the transaction back
 		try {
 
-			// apply rewards to executed decisions (age >= 1)
+			// apply rewards to previously executed decisions (before aging them further)
 			await this.applyRewards(globalReward);
 
 			// age the active neurons in memory context - sliding the temporal window
@@ -1376,14 +1376,15 @@ export default class Brain {
 			return;
 		}
 
-		// Apply global reward to all executed decisions (age >= 1) with linear temporal decay
+		// Apply global reward to previously executed decisions with linear temporal decay
+		// age >= 1 means decisions from prior frames (not yet aged in current frame, but were executed when they were age=1)
 		// Recent decisions get full reward, older decisions get proportionally less, oldest get neutral (1.0)
 		// Formula: 1.0 + (globalReward - 1.0) * (1.0 - age/levelMaxAge)
 		const [result] = await this.conn.query(`
 			INSERT INTO neuron_rewards (neuron_id, reward_factor)
 			SELECT inf.neuron_id, 1.0 + (? - 1.0) * (1.0 - inf.age / POW(?, inf.level + 1))  -- Linear temporal decay
 			FROM inferred_neurons inf
-			WHERE inf.age >= 1  -- Executed decisions only, skip current frame
+			WHERE inf.age >= 1  -- Prior frames' decisions (not yet aged this frame, but executed when age=1)
 			ON DUPLICATE KEY UPDATE reward_factor = reward_factor * VALUES(reward_factor)
 		`, [globalReward, this.baseNeuronMaxAge]);
 
