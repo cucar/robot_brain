@@ -1,4 +1,5 @@
-import db from './db/db.js';
+import readline from 'node:readline';
+import getMySQLConnection from './db/db.js';
 
 /**
  * Artificial Brain
@@ -31,6 +32,10 @@ export default class Brain {
 		this.lastActivity = -1; // frame number of last activity across all channels
 		this.frameNumber = 0;
 		this.inactivityThreshold = 5; // frames of inactivity before exploration
+
+		// Create readline interface for pausing between frames - used when debugging
+		this.debug = true;
+		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
 
 	/**
@@ -86,8 +91,8 @@ export default class Brain {
 	 */
 	async init() {
 
-		// get new connection to the database
-		this.conn = await db.getConnection();
+		// get new database connection
+		this.conn = await getMySQLConnection();
 
 		// create dimensions for all registered channels
 		await this.initializeDimensions();
@@ -217,6 +222,16 @@ export default class Brain {
 
 		// run forget cycle periodically and delete dead connections/neurons
 		await this.runForgetCycle();
+
+		// when debugging, wait for user to press Enter before continuing to next frame
+		if (this.debug) await this.waitForUser('Press Enter to continue to next frame');
+	}
+
+	/**
+	 * waits for user input to continue - used for debugging
+	 */
+	waitForUser(message) {
+		return new Promise(resolve => this.rl.question(`\n${message}...`, resolve));
 	}
 
 	/**
@@ -256,11 +271,9 @@ export default class Brain {
 	 * Execute curiosity exploration if brain is inactive
 	 */
 	async curiosityExploration() {
-		// Check if the brain is inactive
-		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) {
-			return; // Brain is active, no exploration needed
-		}
 
+		// Check if the brain is inactive - if active, no exploration needed
+		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
 		console.log('Brain inactive - executing curiosity exploration');
 
 		// Get a random channel for exploration
@@ -286,13 +299,12 @@ export default class Brain {
 	 * Execute output rows grouped by channel
 	 */
 	async executeOutputRows(outputRows) {
+
 		// Group outputs by channel
 		const channelOutputs = new Map();
 
 		for (const row of outputRows) {
-			if (!channelOutputs.has(row.channel)) {
-				channelOutputs.set(row.channel, new Map());
-			}
+			if (!channelOutputs.has(row.channel)) channelOutputs.set(row.channel, new Map());
 			channelOutputs.get(row.channel).set(row.dimension_name, row.val);
 		}
 
@@ -773,7 +785,7 @@ export default class Brain {
 		if (connections.length === 0) return false; // if there are no connections (there is only one neuron), nothing to do
 
 		// cluster connections around peaks
-		const peakConnections = this.detectPeaks(connections);
+		const peakConnections = await this.detectPeaks(connections);
 		if (peakConnections.size === 0) return false; // if there are no peaks found in the level, no patterns to process - return false to indicate that we're done
 
 		// save observed patterns (peak connections) to the observed_patterns table
@@ -830,7 +842,7 @@ export default class Brain {
 	 * @param {Array} connections - Array of connection objects with strength property
 	 * @returns {Map} Map of peak neuron IDs to their connection IDs
 	 */
-	detectPeaks(connections) {
+	async detectPeaks(connections) {
 
 		// get the neuron strengths from the active connections (both ways - from and to)
 		const neuronStrengths = this.getNeuronStrengths(connections);
@@ -843,10 +855,11 @@ export default class Brain {
 
 		// now get the neuron ids whose strength exceeds its neighborhood - those are the peaks
 		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
-		if (peakNeuronIds.length > 0) {
-			console.log(`Found ${peakNeuronIds.length} peaks: [${peakNeuronIds.join(', ')}]`, neuronStrengths, neighborhoodStrengths);
-			// process.exit(0);
-		}
+		if (peakNeuronIds.length > 0 && this.debug) await this.waitForUser(`
+			Found ${peakNeuronIds.length} peaks: [${peakNeuronIds.join(', ')}],
+			Neuron Strengths: ${JSON.stringify(neuronStrengths)}, 
+			Neighborhood Strengths: ${JSON.stringify(neighborhoodStrengths)}
+		`);
 
 		// get a map from peak neuron ids to the connection ids it uses and return them
 		return this.getPeakNeuronsConnections(peakNeuronIds, neighborhoodMap, connections);

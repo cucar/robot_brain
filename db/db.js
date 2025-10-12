@@ -1,6 +1,6 @@
 import mysql from 'mysql2/promise';
 
-export default mysql.createPool({
+export default () => mysql.createConnection({
 	host: 'localhost',
 	user: 'root',
 	password: 'deneme',
