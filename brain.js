@@ -738,12 +738,13 @@ export default class Brain {
 	}
 
 	/**
-	 * returns active directed connections flowing INTO newly activated neurons (age=0) from all active neurons for spatio-temporal pooling
-	 * Uses the active_connections table which is populated incrementally in activateConnections()
-	 * connections are directed: older neurons → newer neurons. note that this includes connections between the age=0 neurons as well. that's the spatial pooling.
-	 * the others are temporal. so, these connections form the basis of the spatio-temporal pooling. there may be connections between the same neuron when their ages
-	 * are different. connections can span across levels, enabling multi-scale pattern recognition.
-	 * there should not be any connections from the same neuron to itself within the same age and level.
+	 * Returns active connections for the level with exponential distance weighting.
+	 * Connections are weighted by their distance to age=0 (current activation target).
+	 * Uses the same exponential weighting formula as getPredictedConnections but for age=0.
+	 *
+	 * Weight formula: (N - distance_within_tier) / POW(N, tier + 1)
+	 * where tier = FLOOR(LOG(N, distance))
+	 * Special case: distance=0 gets weight=1.0 (spatial connections)
 	 */
 	async getActiveConnections(level) {
 		const [rows] = await this.conn.query(`
@@ -752,12 +753,18 @@ export default class Brain {
                 ac.from_neuron_id,
                 ac.to_neuron_id,
                 c.distance,
-                c.strength
+                IF(c.distance = 0,
+                    c.strength,
+                    c.strength * (
+                        (:N - MOD(c.distance, POW(:N, FLOOR(LOG(:N, c.distance)) + 1)))
+                        / POW(:N, FLOOR(LOG(:N, c.distance)) + 1)
+                    )
+                ) as strength
             FROM active_connections ac
             JOIN connections c ON ac.connection_id = c.id
             WHERE ac.level = ?
-            AND c.strength > 0  -- ignore connections that are scheduled to be deleted
-		`, [level]);
+            AND c.strength > 0
+		`, { level, N: this.baseNeuronMaxAge });
 		return rows;
 	}
 
@@ -916,25 +923,19 @@ export default class Brain {
 	/**
 	 * Returns the strength of each neuron from the sum of its incoming connections.
 	 * Only counts destination neurons (to_neuron_id) - these are the neurons being activated.
-	 * Applies linear distance weighting: closer connections (distance=0) have full weight (1.0),
-	 * distant connections (distance=baseNeuronMaxAge-1) have minimal weight (0.1 if baseNeuronMaxAge=10).
+	 * Strengths are already weighted by getActiveConnections or getPredictedConnections.
 	 */
 	getNeuronStrengths(connections) {
 		const neuronStrengths = new Map();
 
 		for (const connection of connections) {
-			const { to_neuron_id, strength, distance } = connection;
+			const { to_neuron_id, strength } = connection;
 
-			// calculate linear distance weight: distance=0 → weight=1.0, distance=9 → weight=0.1
-			// simple linear interpolation: (baseNeuronMaxAge - distance) / baseNeuronMaxAge
-			const weight = (this.baseNeuronMaxAge - distance) / this.baseNeuronMaxAge;
-			const weightedStrength = strength * weight;
-
-			// add weighted strength for the destination neuron (incoming connection)
+			// sum the already-weighted strength for the destination neuron
 			if (neuronStrengths.has(to_neuron_id))
-				neuronStrengths.set(to_neuron_id, neuronStrengths.get(to_neuron_id) + weightedStrength);
+				neuronStrengths.set(to_neuron_id, neuronStrengths.get(to_neuron_id) + strength);
 			else
-				neuronStrengths.set(to_neuron_id, weightedStrength);
+				neuronStrengths.set(to_neuron_id, strength);
 		}
 		return neuronStrengths;
 	}
@@ -1236,6 +1237,7 @@ export default class Brain {
 		// Combine predictions from both sources and apply exponential distance weighting
 		// Weight formula: (N - distance_within_tier) / POW(N, tier + 1)
 		// where tier = FLOOR(LOG(N, weight_distance))
+		// Special case: weight_distance=0 gets weight=1.0 (immediate predictions)
 		// This gives: distance=0 → weight=1.0, distance=1 → weight=0.9, distance=10 → weight=0.1, etc.
 		const [predictedConnections] = await this.conn.query(`
 			SELECT
@@ -1243,9 +1245,12 @@ export default class Brain {
 				c.from_neuron_id,
 				c.to_neuron_id,
 				c.distance,
-				c.strength * (
-					(:N - MOD(inf.weight_distance, POW(:N, FLOOR(LOG(:N, inf.weight_distance)) + 1)))
-					/ POW(:N, FLOOR(LOG(:N, inf.weight_distance)) + 1)
+				IF(inf.weight_distance = 0,
+					c.strength,
+					c.strength * (
+						(:N - MOD(inf.weight_distance, POW(:N, FLOOR(LOG(:N, inf.weight_distance)) + 1)))
+						/ POW(:N, FLOOR(LOG(:N, inf.weight_distance)) + 1)
+					)
 				) as strength
 			FROM connections c
 			INNER JOIN (
@@ -1254,7 +1259,7 @@ export default class Brain {
 				SELECT connection_id, weight_distance FROM pattern_inference WHERE level = :level
 			) inf ON c.id = inf.connection_id
 			WHERE c.strength > 0
-			AND inf.weight_distance > 0
+			AND inf.weight_distance >= 0
 		`, { level, N: this.baseNeuronMaxAge });
 
 		console.log(`Found ${predictedConnections.length} predicted connections for level ${level}`);
