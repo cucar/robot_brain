@@ -14,14 +14,13 @@ export default class Brain {
 		// set hyperparameters
 		this.baseNeuronMaxAge = 10; // number of frames a base neuron stays active
 		this.forgetCycles = 10; // number of frames between forget cycles
-		this.connectionForgetRate = 0.1; // how much connection strengths decay per forget cycle
-		this.patternForgetRate = 0.1; // how much pattern strengths decay per forget cycle
+		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
+		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
-		this.negativeLearningRate = 0.1; // how much pattern strengths will be decremented by when not accurate
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (pattern)
-		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
+		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -35,7 +34,7 @@ export default class Brain {
 		this.inactivityThreshold = 5; // frames of inactivity before exploration
 
 		// Create readline interface for pausing between frames - used when debugging
-		this.debug = true;
+		this.debug = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
 
@@ -408,15 +407,15 @@ export default class Brain {
 			}
 
 			// determine predicted neuron strengths from connections
-			let neuronStrengths = this.getNeuronStrengths(predictedConnections);
-			if (neuronStrengths.size === 0) throw new Error('no neuron strengths.'); // should not happen
-			console.log(`Calculated strengths for ${neuronStrengths.size} neurons at level ${level}`);
+			const { toNeuronStrengths } = this.getNeuronStrengths(predictedConnections);
+			if (toNeuronStrengths.size === 0) throw new Error('no neuron strengths.'); // should not happen
+			console.log(`Calculated strengths for ${toNeuronStrengths.size} neurons at level ${level}`);
 
-			// apply reward optimizations to neuron strengths
-			neuronStrengths = await this.optimizeRewards(neuronStrengths, level);
+			// apply reward optimizations to neuron strengths (only to_neurons being activated)
+			const optimizedStrengths = await this.optimizeRewards(toNeuronStrengths, level);
 
 			// determine peak neurons for the level using peak detection algorithm
-			await this.inferPeakNeurons(neuronStrengths, level, predictedConnections);
+			await this.inferPeakNeurons(optimizedStrengths, level, predictedConnections);
 		}
 	}
 
@@ -436,12 +435,13 @@ export default class Brain {
 		// Only include connections where c.distance > f.age + 1 (future connections)
 		await this.conn.query(`
 			INSERT INTO connection_inference (level, connection_id, weight_distance)
-			SELECT :level, c.id, c.distance - (f.age + 1) as weight_distance
+			SELECT :level, c.id, AVG(c.distance - (f.age + 1)) as weight_distance
 			FROM active_neurons f
 			JOIN connections c ON c.from_neuron_id = f.neuron_id
 			WHERE f.level = :level
 			AND c.distance > f.age + 1
 			AND c.strength > 0
+			GROUP BY c.id
 		`, { level });
 	}
 
@@ -463,7 +463,7 @@ export default class Brain {
 		// where f is the source neuron of the pattern's connection
 		await this.conn.query(`
 			INSERT INTO pattern_inference (level, pattern_neuron_id, connection_id, weight_distance)
-			SELECT :targetLevel, p.pattern_neuron_id, p.connection_id, c.distance - (f.age + 1) as weight_distance
+			SELECT :targetLevel, p.pattern_neuron_id, p.connection_id, AVG(c.distance - (f.age + 1)) as weight_distance
 			FROM active_neurons an
 			JOIN patterns p ON an.neuron_id = p.pattern_neuron_id
 			JOIN connections c ON p.connection_id = c.id
@@ -477,6 +477,7 @@ export default class Brain {
 				WHERE ac.connection_id = p.connection_id
 				AND ac.level = :targetLevel
 			)
+			GROUP BY p.pattern_neuron_id, p.connection_id
 		`, { level, targetLevel: level - 1 });
 	}
 
@@ -646,7 +647,7 @@ export default class Brain {
 			CROSS JOIN active_neurons t
             WHERE t.age = 0  -- target neurons are newly activated
             AND t.level = :level  -- target neurons are at the specified level
-            AND ABS(f.level - t.level) <= 1  -- restrict to adjacent levels only (same, +1, -1)
+            AND f.level = t.level  -- restrict to same level only
             AND (t.neuron_id != f.neuron_id OR f.age != 0)  -- no self-connections at same age
 			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
 		`, { N: this.baseNeuronMaxAge, level });
@@ -762,7 +763,7 @@ export default class Brain {
                 ) as strength
             FROM active_connections ac
             JOIN connections c ON ac.connection_id = c.id
-            WHERE ac.level = ?
+            WHERE ac.level = :level
             AND c.strength > 0
 		`, { level, N: this.baseNeuronMaxAge });
 		return rows;
@@ -776,13 +777,13 @@ export default class Brain {
 	 */
 	async activateConnections(level) {
 		await this.conn.query(`
-			INSERT INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level)
+			INSERT IGNORE INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level)
 			SELECT c.id as connection_id, c.from_neuron_id, c.to_neuron_id, t.level
 			FROM connections c
 			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
 			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = :level
 			WHERE c.distance = IF(f.age = 0, 0, FLOOR(f.age / POW(:N, FLOOR(LOG(:N, f.age)))) * POW(:N, FLOOR(LOG(:N, f.age))))
-			AND ABS(f.level - t.level) <= 1  -- restrict to adjacent levels only (same, +1, -1)
+			AND f.level = t.level  -- restrict to same levels only
 			AND (t.neuron_id != f.neuron_id OR f.age != 0)  -- no self-connections at same age
 			AND c.strength > 0  -- only connections that are not removed
 		`, { N: this.baseNeuronMaxAge, level });
@@ -899,86 +900,83 @@ export default class Brain {
 	 */
 	async detectPeaks(connections) {
 
-		// get the neuron strengths from the active connections (both ways - from and to)
-		const neuronStrengths = this.getNeuronStrengths(connections);
+		// Calculate strengths for both to_neurons (being activated) and from_neurons (sources)
+		const { toNeuronStrengths, fromNeuronStrengths } = this.getNeuronStrengths(connections);
 
-		// get the neighborhood map for each neuron from its connections
-		const neighborhoodMap = this.buildNeighborhoodMap(connections);
+		// Calculate average strength of source neurons for each to_neuron (neighborhood context)
+		const neighborhoodStrengths = this.getNeighborhoodStrengths(connections, fromNeuronStrengths);
 
-		// calculate the neighborhood average strength of each neuron. for each neuron, we need to calculate the strengths of its connected neurons.
-		const neighborhoodStrengths = this.getNeighborhoodStrengths(neighborhoodMap, neuronStrengths);
-
-		// now get the neuron ids whose strength exceeds its neighborhood - those are the peaks
-		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
+		// Find peaks: to_neurons whose strength exceeds their source neurons' average strength
+		const peakNeuronIds = this.getPeakNeurons(toNeuronStrengths, neighborhoodStrengths);
 		if (peakNeuronIds.length > 0 && this.debug) await this.waitForUser(`
 			Found ${peakNeuronIds.length} peaks: [${peakNeuronIds.join(', ')}],
-			Neuron Strengths: ${JSON.stringify(neuronStrengths)}, 
-			Neighborhood Strengths: ${JSON.stringify(neighborhoodStrengths)}
+			To-Neuron Strengths: ${JSON.stringify([...toNeuronStrengths.entries()])}
+			Neighborhood (From-Neuron avg) Strengths: ${JSON.stringify([...neighborhoodStrengths.entries()])}
+			Waiting...
 		`);
 
-		// get a map from peak neuron ids to the connection ids it uses and return them
-		return this.getPeakNeuronsConnections(peakNeuronIds, neighborhoodMap, connections);
+		// Get all connection IDs for each peak neuron
+		return this.getPeakNeuronsConnections(peakNeuronIds, connections);
 	}
 
 	/**
-	 * Returns the strength of each neuron from the sum of its incoming connections.
-	 * Only counts destination neurons (to_neuron_id) - these are the neurons being activated.
-	 * Strengths are already weighted by getActiveConnections or getPredictedConnections.
+	 * Calculate strengths for both to_neurons (being activated) and from_neurons (sources)
+	 * Returns { toNeuronStrengths, fromNeuronStrengths }
 	 */
 	getNeuronStrengths(connections) {
-		const neuronStrengths = new Map();
+		const toNeuronStrengths = new Map();
+		const fromNeuronStrengths = new Map();
 
 		for (const connection of connections) {
-			const { to_neuron_id, strength } = connection;
+			const { from_neuron_id, to_neuron_id, strength } = connection;
 
-			// sum the already-weighted strength for the destination neuron
-			if (neuronStrengths.has(to_neuron_id))
-				neuronStrengths.set(to_neuron_id, neuronStrengths.get(to_neuron_id) + strength);
+			// Sum incoming connection strengths for to_neurons (neurons being activated)
+			if (toNeuronStrengths.has(to_neuron_id))
+				toNeuronStrengths.set(to_neuron_id, toNeuronStrengths.get(to_neuron_id) + strength);
 			else
-				neuronStrengths.set(to_neuron_id, strength);
+				toNeuronStrengths.set(to_neuron_id, strength);
+
+			// Sum outgoing connection strengths for from_neurons (source neurons)
+			if (fromNeuronStrengths.has(from_neuron_id))
+				fromNeuronStrengths.set(from_neuron_id, fromNeuronStrengths.get(from_neuron_id) + strength);
+			else
+				fromNeuronStrengths.set(from_neuron_id, strength);
 		}
-		return neuronStrengths;
+
+		return { toNeuronStrengths, fromNeuronStrengths };
 	}
 
 	/**
-	 * returns average strengths for each neuron's neighborhood (both incoming and outgoing connections)
+	 * For each to_neuron, calculate the average strength of its source from_neurons
+	 * This represents the "neighborhood context" - how strong are the inputs feeding this neuron?
 	 */
-	getNeighborhoodStrengths(neighborhoodMap, neuronStrengths) {
+	getNeighborhoodStrengths(connections, fromNeuronStrengths) {
 		const neighborhoodAverages = new Map();
-		for (const [neuronId, neighbors] of neighborhoodMap) {
+
+		// Build map of to_neuron -> array of from_neurons
+		const toNeuronSources = new Map();
+		for (const connection of connections) {
+			const { from_neuron_id, to_neuron_id } = connection;
+			if (!toNeuronSources.has(to_neuron_id)) toNeuronSources.set(to_neuron_id, []);
+			toNeuronSources.get(to_neuron_id).push(from_neuron_id);
+		}
+
+		// Calculate average strength of source neurons for each to_neuron
+		for (const [toNeuronId, fromNeuronIds] of toNeuronSources) {
 			let totalStrength = 0;
 			let count = 0;
 
-			for (const neighborId of neighbors) {
-				const neighborStrength = neuronStrengths.get(neighborId) || 0;
-				totalStrength += neighborStrength;
+			for (const fromNeuronId of fromNeuronIds) {
+				const fromStrength = fromNeuronStrengths.get(fromNeuronId) || 0;
+				totalStrength += fromStrength;
 				count++;
 			}
 
 			const averageStrength = count > 0 ? (totalStrength / count) : 0;
-			neighborhoodAverages.set(neuronId, averageStrength);
+			neighborhoodAverages.set(toNeuronId, averageStrength);
 		}
 
 		return neighborhoodAverages;
-	}
-
-	/**
-	 * build a map of each neuron and its connected neighbors (bidirectional)
-	 */
-	buildNeighborhoodMap(connections) {
-		const neighborhoodMap = new Map();
-		for (const connection of connections) {
-			const { from_neuron_id, to_neuron_id } = connection;
-
-			// add to_neuron as neighbor of from_neuron (outgoing connection)
-			if (!neighborhoodMap.has(from_neuron_id)) neighborhoodMap.set(from_neuron_id, new Set());
-			neighborhoodMap.get(from_neuron_id).add(to_neuron_id);
-
-			// add from_neuron as neighbor of to_neuron (incoming connection)
-			if (!neighborhoodMap.has(to_neuron_id)) neighborhoodMap.set(to_neuron_id, new Set());
-			neighborhoodMap.get(to_neuron_id).add(from_neuron_id);
-		}
-		return neighborhoodMap;
 	}
 
 	/**
@@ -990,50 +988,31 @@ export default class Brain {
 		const peaks = [];
 		for (const [neuronId, neuronStrength] of neuronStrengths) {
 			const neighborhoodStrength = neighborhoodStrengths.get(neuronId) || 0;
-			if (neuronStrength >= this.minPeakStrength && (neuronStrength / neighborhoodStrength) > this.minPeakRatio) peaks.push(neuronId);
+			if (neuronStrength >= this.minPeakStrength && (neuronStrength / neighborhoodStrength) > this.minPeakRatio)
+				peaks.push(neuronId);
 		}
 		return peaks;
 	}
 
 	/**
-	 * returns a map of peak neurons to their connection IDs. for each peak neuron, returns all connection IDs where the neuron
-	 * appears either as source or target using the neighborhoodMap.
+	 * Returns a map of peak neurons to their connection IDs
+	 * For each peak neuron, returns all connection IDs where the peak is the to_neuron
 	 */
-	getPeakNeuronsConnections(peakNeuronIds, neighborhoodMap, connections) {
+	getPeakNeuronsConnections(peakNeuronIds, connections) {
 		const peakConnections = new Map();
 
 		for (const peakNeuronId of peakNeuronIds) {
-			const neighbors = neighborhoodMap.get(peakNeuronId);
-			if (!neighbors) {
-				peakConnections.set(peakNeuronId, []);
-				continue;
-			}
+			const connectionIds = [];
 
-			const connectionIds = this.getPeakNeuronConnections(peakNeuronId, neighbors, connections);
+			// Find all connections where this peak neuron is the to_neuron (being activated)
+			for (const connection of connections)
+				if (connection.to_neuron_id === peakNeuronId)
+					connectionIds.push(connection.id);
+
 			peakConnections.set(peakNeuronId, connectionIds);
 		}
 
 		return peakConnections;
-	}
-
-	/**
-	 * returns the connection IDs for a given peak neuron and its neighbors
-	 */
-	getPeakNeuronConnections(peakNeuronId, neighbors, connections) {
-		const connectionIds = [];
-		for (const neighborId of neighbors) {
-
-			// find connection from peak to neighbor
-			const outgoingConnection = connections.find(c => c.from_neuron_id === peakNeuronId && c.to_neuron_id === neighborId);
-			if (outgoingConnection) connectionIds.push(outgoingConnection.id);
-
-			// find connection from neighbor to peak
-			const incomingConnection = connections.find(c => c.from_neuron_id === neighborId && c.to_neuron_id === peakNeuronId);
-			if (incomingConnection) connectionIds.push(incomingConnection.id);
-		}
-
-		// Deduplicate connection IDs (can have duplicates with cross-level connections)
-		return [...new Set(connectionIds)];
 	}
 
 	/**
@@ -1253,7 +1232,7 @@ export default class Brain {
 					)
 				) as strength
 			FROM connections c
-			INNER JOIN (
+			JOIN (
 				SELECT connection_id, weight_distance FROM connection_inference WHERE level = :level
 				UNION ALL
 				SELECT connection_id, weight_distance FROM pattern_inference WHERE level = :level
@@ -1319,7 +1298,7 @@ export default class Brain {
 	 * Multiply base strength by reward factor (1.0 = neutral, >1.0 = boost, <1.0 = reduce)
 	 */
 	async optimizeRewards(neuronStrengths, level) {
-		console.log(`Optimizing rewards for level ${level}`);
+		console.log(`Optimizing rewards for level ${level}`, neuronStrengths);
 
 		// Get reward factors for all neurons in the strength map with batching for large sets
 		const neuronIds = Array.from(neuronStrengths.keys());
@@ -1366,14 +1345,20 @@ export default class Brain {
 	async inferPeakNeurons(neuronStrengths, level, predictedConnections) {
 		console.log(`Inferring peak neurons for level ${level} from ${neuronStrengths.size} candidates`);
 
-		// Use the same peak detection algorithm as detectPeaks
-		// Build neighborhood map from predicted connections
-		const neighborhoodMap = this.buildNeighborhoodMap(predictedConnections);
+		// Calculate from_neuron strengths from predicted connections
+		const fromNeuronStrengths = new Map();
+		for (const connection of predictedConnections) {
+			const { from_neuron_id, strength } = connection;
+			if (fromNeuronStrengths.has(from_neuron_id))
+				fromNeuronStrengths.set(from_neuron_id, fromNeuronStrengths.get(from_neuron_id) + strength);
+			else
+				fromNeuronStrengths.set(from_neuron_id, strength);
+		}
 
-		// Get neighborhood average strengths
-		const neighborhoodStrengths = this.getNeighborhoodStrengths(neighborhoodMap, neuronStrengths);
+		// Get neighborhood average strengths (average of source from_neurons)
+		const neighborhoodStrengths = this.getNeighborhoodStrengths(predictedConnections, fromNeuronStrengths);
 
-		// Get peak neuron IDs (neurons stronger than their neighborhood average)
+		// Get peak neuron IDs (to_neurons stronger than their source neurons' average)
 		const peakNeuronIds = this.getPeakNeurons(neuronStrengths, neighborhoodStrengths);
 		if (peakNeuronIds.length === 0) {
 			console.log(`No peak neurons found for level ${level}`);

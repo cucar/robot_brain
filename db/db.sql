@@ -20,6 +20,7 @@ USE machine_intelligence;
 -- check state
 select * from neurons;
 select * from coordinates;
+select * from patterns;
 select * from connections;
 select * from connections where id > 96 and distance = 2;
 select * from active_neurons;
