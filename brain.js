@@ -914,29 +914,27 @@ export default class Brain {
 	}
 
 	/**
-	 * returns the strength of each neuron from the sum of its active connections strengths.
-	 * this includes both incoming connections (to the neuron) and outgoing connections (from the neuron).
-	 * applies linear distance weighting: closer connections (distance=0) have full weight (1.0),
+	 * Returns the strength of each neuron from the sum of its incoming connections.
+	 * Only counts destination neurons (to_neuron_id) - these are the neurons being activated.
+	 * Applies linear distance weighting: closer connections (distance=0) have full weight (1.0),
 	 * distant connections (distance=baseNeuronMaxAge-1) have minimal weight (0.1 if baseNeuronMaxAge=10).
 	 */
 	getNeuronStrengths(connections) {
 		const neuronStrengths = new Map();
 
 		for (const connection of connections) {
-			const { from_neuron_id, to_neuron_id, strength, distance } = connection;
+			const { to_neuron_id, strength, distance } = connection;
 
 			// calculate linear distance weight: distance=0 → weight=1.0, distance=9 → weight=0.1
 			// simple linear interpolation: (baseNeuronMaxAge - distance) / baseNeuronMaxAge
 			const weight = (this.baseNeuronMaxAge - distance) / this.baseNeuronMaxAge;
 			const weightedStrength = strength * weight;
 
-			// add weighted strength for the source neuron (outgoing connection)
-			if (neuronStrengths.has(from_neuron_id)) neuronStrengths.set(from_neuron_id, neuronStrengths.get(from_neuron_id) + weightedStrength);
-			else neuronStrengths.set(from_neuron_id, weightedStrength);
-
-			// add weighted strength for the target neuron (incoming connection)
-			if (neuronStrengths.has(to_neuron_id)) neuronStrengths.set(to_neuron_id, neuronStrengths.get(to_neuron_id) + weightedStrength);
-			else neuronStrengths.set(to_neuron_id, weightedStrength);
+			// add weighted strength for the destination neuron (incoming connection)
+			if (neuronStrengths.has(to_neuron_id))
+				neuronStrengths.set(to_neuron_id, neuronStrengths.get(to_neuron_id) + weightedStrength);
+			else
+				neuronStrengths.set(to_neuron_id, weightedStrength);
 		}
 		return neuronStrengths;
 	}
