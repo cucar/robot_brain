@@ -21,8 +21,8 @@ USE machine_intelligence;
 select * from neurons;
 select * from coordinates;
 select * from connections;
+select * from connections where id > 96 and distance = 2;
 select * from active_neurons;
-select * from connections;
 select * from active_connections;
 
 -- dimensions table determines input/output mapping for channels
@@ -105,22 +105,23 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- stores down-level predictions - used to update pattern strengths based on prediction results - rolling window
+-- stores down-level predictions from patterns - rebuilt fresh each frame
 CREATE TABLE pattern_inference (
     level TINYINT,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT,
-    age TINYINT DEFAULT 0,
-    PRIMARY KEY (level, pattern_neuron_id, age, connection_id)
+    weight_distance TINYINT UNSIGNED NOT NULL,  -- exponentially-rounded distance to age=-1 for weighting
+    PRIMARY KEY (level, pattern_neuron_id, connection_id),
+    INDEX idx_level (level)
 ) ENGINE=MEMORY;
 
--- used for tracking the connections from activated patterns so that we can adjust pattern definitions based on results - rolling window
+-- stores same-level predictions from connections - rebuilt fresh each frame
 CREATE TABLE connection_inference (
     level TINYINT,
     connection_id BIGINT,
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,     -- how long the prediction has been active
-    PRIMARY KEY (level, connection_id, age),
-    INDEX idx_level_age (level, age)
+    weight_distance TINYINT UNSIGNED NOT NULL,  -- exponentially-rounded distance to age=-1 for weighting
+    PRIMARY KEY (level, connection_id),
+    INDEX idx_level (level)
 ) ENGINE=MEMORY;
 
 -- prediction/output neurons in t+1 in each level - potential future states (MEMORY table)
@@ -149,7 +150,6 @@ CREATE TABLE IF NOT EXISTS active_connections (
     from_neuron_id BIGINT UNSIGNED NOT NULL,
     to_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
-    strength DOUBLE NOT NULL,
     PRIMARY KEY (connection_id, level),
     INDEX idx_to_neuron_level (to_neuron_id, level),
     INDEX idx_from_neuron_level (from_neuron_id, level),
