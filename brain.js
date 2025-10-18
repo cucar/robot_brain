@@ -21,6 +21,7 @@ export default class Brain {
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (pattern)
 		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
+		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -742,10 +743,6 @@ export default class Brain {
 	 * Returns active connections for the level with exponential distance weighting.
 	 * Connections are weighted by their distance to age=0 (current activation target).
 	 * Uses the same exponential weighting formula as getPredictedConnections but for age=0.
-	 *
-	 * Weight formula: (N - distance_within_tier) / POW(N, tier + 1)
-	 * where tier = FLOOR(LOG(N, distance))
-	 * Special case: distance=0 gets weight=1.0 (spatial connections)
 	 */
 	async getActiveConnections(level) {
 		const [rows] = await this.conn.query(`
@@ -754,18 +751,12 @@ export default class Brain {
                 ac.from_neuron_id,
                 ac.to_neuron_id,
                 c.distance,
-                IF(c.distance = 0,
-                    c.strength,
-                    c.strength * (
-                        (:N - MOD(c.distance, POW(:N, FLOOR(LOG(:N, c.distance)) + 1)))
-                        / POW(:N, FLOOR(LOG(:N, c.distance)) + 1)
-                    )
-                ) as strength
+                c.strength * POW(:peakTimeDecayFactor, c.distance) as strength
             FROM active_connections ac
             JOIN connections c ON ac.connection_id = c.id
             WHERE ac.level = :level
             AND c.strength > 0
-		`, { level, N: this.baseNeuronMaxAge });
+		`, { level, peakTimeDecayFactor: this.peakTimeDecayFactor });
 		return rows;
 	}
 
