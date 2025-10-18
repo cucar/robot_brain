@@ -22,6 +22,7 @@ export default class Brain {
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (pattern)
 		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
+		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -340,8 +341,8 @@ export default class Brain {
 	}
 
 	/**
-	 * Ages all neurons in the context by 1, then deactivates aged-out neurons
-	 * Processes levels in natural order (0 → maxLevel) so lower levels are cleaned up first
+	 * Ages all neurons in the context by 1, then deactivates aged-out neurons.
+	 * With uniform aging, all levels are deactivated at once when age >= baseNeuronMaxAge.
 	 */
 	async ageNeurons() {
 		console.log('Aging active neurons and inferred neurons...');
@@ -351,19 +352,11 @@ export default class Brain {
 		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE inferred_neurons SET age = age + 1 ORDER BY age DESC');
 
-		// get max levels independently for active and inferred neurons
-		const [activeRows] = await this.conn.query('SELECT MAX(level) as max_level FROM active_neurons');
-		const [inferredRows] = await this.conn.query('SELECT MAX(level) as max_level FROM inferred_neurons');
-		const maxActiveLevel = activeRows[0].max_level || 0;
-		const maxInferredLevel = inferredRows[0].max_level || 0;
+		// deactivate old active neurons at all levels uniformly (age >= baseNeuronMaxAge)
+		await this.deactivateOldNeurons();
 
-		// deactivate old active neurons in natural order (0 → maxActiveLevel)
-		for (let level = 0; level <= maxActiveLevel; level++)
-			await this.deactivateOldNeurons(level);
-
-		// deactivate old inferred neurons in natural order (0 → maxInferredLevel)
-		for (let level = 0; level <= maxInferredLevel; level++)
-			await this.deactivateOldInferences(level);
+		// deactivate old inferred neurons at all levels
+		await this.deactivateOldInferences();
 	}
 
 	/**
@@ -799,71 +792,51 @@ export default class Brain {
 	}
 
 	/**
-	 * Deactivate (remove) old neurons from active_neurons at the specified level
-	 * This implements variable time dilation:
-	 * - Base level (0): Remove neurons when age >= baseNeuronMaxAge
-	 * - Higher levels: Remove neurons when they have no active connections in the level
-	 *
-	 * Called from ageNeurons() in natural order (0 → maxLevel) after aging.
+	 * Deactivate (remove) old neurons from active_neurons at all levels.
+	 * Uniform aging: All levels remove neurons when age >= baseNeuronMaxAge.
 	 * Also cleans up orphaned active_connections.
 	 *
-	 * @param {number} level - The level to deactivate old neurons from (required)
+	 * Called from ageNeurons() after aging.
 	 */
-	async deactivateOldNeurons(level) {
+	async deactivateOldNeurons() {
 
-		// Base level: simple age-based cleanup
-		if (level === 0) {
-			const [result] = await this.conn.query('DELETE FROM active_neurons WHERE level = 0 AND age >= ?', [this.baseNeuronMaxAge]);
-			console.log(`Deactivated ${result.affectedRows} aged-out neurons at level 0 (age >= ${this.baseNeuronMaxAge})`);
-			await this.cleanupActiveConnections(level); // clean up any orphaned active connections
-			return;
-		}
+		// Delete aged-out neurons from all levels at once
+		const [result] = await this.conn.query(
+			'DELETE FROM active_neurons WHERE age >= ?',
+			[this.baseNeuronMaxAge]
+		);
+		console.log(`Deactivated ${result.affectedRows} aged-out neurons across all levels (age >= ${this.baseNeuronMaxAge})`);
 
-		// Higher levels: remove pattern neurons whose defining connections are no longer active
-		// Variable time dilation - patterns stay active as long as at least one of their connections is active
-		const [result] = await this.conn.query(`
-			DELETE FROM active_neurons
-			WHERE level = ?
-			AND NOT EXISTS (
-				SELECT 1 FROM patterns p
-				JOIN active_connections ac ON p.connection_id = ac.connection_id
-				WHERE p.pattern_neuron_id = active_neurons.neuron_id
-				AND ac.level = ?  -- connections are at the level below the pattern
-			)
-		`, [level, level - 1]);
-		console.log(`Deactivated ${result.affectedRows} pattern neurons at level ${level} (no active connections in level ${level - 1})`);
-
-		// Clean up orphaned active connections for this level
-		await this.cleanupActiveConnections(level);
+		// Clean up orphaned active connections across all levels
+		await this.conn.query(`
+			DELETE FROM active_connections
+			WHERE NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = from_neuron_id)
+			   OR NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = to_neuron_id)
+		`);
 	}
 
 	/**
-	 * Deactivate (remove) old inferred neurons
-	 * Parallel structure to deactivateOldNeurons:
+	 * Deactivate (remove) old inferred neurons at all levels.
 	 * - Base level (0): Remove when age >= baseNeuronMaxAge
 	 * - Higher levels: Remove when pattern has no connections in inference tables
 	 *
-	 * Called from ageNeurons() in natural order (0 → maxLevel) after aging.
-	 *
-	 * @param {number} level - The level to deactivate old inferences from (required)
+	 * Called from ageNeurons() after aging.
+	 * NOTE: This will be simplified once we implement age=-1 only predictions.
 	 */
-	async deactivateOldInferences(level) {
+	async deactivateOldInferences() {
 
 		// Base level: simple age-based cleanup
-		if (level === 0) {
-			const [result] = await this.conn.query(`
-				DELETE FROM inferred_neurons
-				WHERE level = 0 AND age >= ?
-			`, [this.baseNeuronMaxAge]);
-			console.log(`Deactivated ${result.affectedRows} aged-out inferred neurons at level 0 (age >= ${this.baseNeuronMaxAge})`);
-			return;
-		}
+		const [baseResult] = await this.conn.query(`
+			DELETE FROM inferred_neurons
+			WHERE level = 0 AND age >= ?
+		`, [this.baseNeuronMaxAge]);
+		console.log(`Deactivated ${baseResult.affectedRows} aged-out inferred neurons at level 0 (age >= ${this.baseNeuronMaxAge})`);
 
 		// Higher levels: remove pattern neurons whose defining connections are not in inference tables
 		// A pattern stays inferred as long as at least one of its connections is still being predicted
-		const [result] = await this.conn.query(`
+		const [patternResult] = await this.conn.query(`
 			DELETE FROM inferred_neurons
-			WHERE level = ?
+			WHERE level > 0
 			AND NOT EXISTS (
 				SELECT 1 FROM patterns p
 				WHERE p.pattern_neuron_id = inferred_neurons.neuron_id
@@ -871,17 +844,17 @@ export default class Brain {
 					EXISTS (
 						SELECT 1 FROM connection_inference ci
 						WHERE ci.connection_id = p.connection_id
-						AND ci.level = ?
+						AND ci.level = inferred_neurons.level - 1
 					)
 					OR EXISTS (
 						SELECT 1 FROM pattern_inference pi
 						WHERE pi.connection_id = p.connection_id
-						AND pi.level = ?
+						AND pi.level = inferred_neurons.level - 1
 					)
 				)
 			)
-		`, [level, level - 1, level - 1]);
-		console.log(`Deactivated ${result.affectedRows} inferred pattern neurons at level ${level} (no connections in inference tables at level ${level - 1})`);
+		`);
+		console.log(`Deactivated ${patternResult.affectedRows} inferred pattern neurons at higher levels (no connections in inference tables)`);
 	}
 
 	/**
@@ -1364,7 +1337,8 @@ export default class Brain {
 	}
 
 	/**
-	 * Apply global reward to executed inferred neurons with linear temporal decay
+	 * Apply global reward to executed inferred neurons with exponential temporal decay.
+	 * Uses the same exponential decay formula as getActiveConnections for consistency.
 	 */
 	async applyRewards(globalReward) {
 		if (globalReward === 1.0) {
@@ -1374,29 +1348,15 @@ export default class Brain {
 
 		// Apply global reward to previously executed decisions with exponential temporal decay
 		// age >= 1 means decisions from prior frames (not yet aged in current frame, but executed when age=1)
-		//
-		// Decay follows exponential rounding structure based on baseNeuronMaxAge (N):
-		// - Ages 1-N: decay from 1.0 to 1/N (N steps)
-		// - Ages (N+1)-(N²): decay from (N-1)/N² to 1/N² (N buckets of size N)
-		// - Ages (N²+1)-(N³): decay from (N-1)/N³ to 1/N³ (N buckets of size N²)
-		// - etc.
-		//
-		// Formula: decayFactor = (N + 1 - bucketWithinTier) / POW(N, tier + 1)
-		// Where:
-		//   tier = FLOOR(LOG(N, age))  -- which exponential tier (0 for 1-9, 1 for 10-99, etc.)
-		//   bucketWithinTier = CEIL(age / POW(N, tier))  -- which bucket within the tier (1 to N)
+		// Uses pure exponential decay: decayFactor = POW(rewardTimeDecayFactor, age)
+		// Same formula as getActiveConnections uses for connection strengths
 		const [result] = await this.conn.execute(
 			`INSERT INTO neuron_rewards (neuron_id, reward_factor)
-			SELECT
-				neuron_id,
-				1.0 + (:globalReward - 1.0) * ((:N + 1 - CEIL(age / POW(:N, tier))) / POW(:N, tier + 1)) as reward_factor
-			FROM (
-				SELECT inf.neuron_id, inf.age, FLOOR(LOG(:N, inf.age)) as tier
-				FROM inferred_neurons inf
-				WHERE inf.age >= 1  -- Prior frames' decisions (not yet aged this frame, but executed when age=1)
-			) AS aged_neurons
+			SELECT neuron_id, 1.0 + (:globalReward - 1.0) * POW(:rewardTimeDecayFactor, age) as reward_factor
+			FROM inferred_neurons
+			WHERE age >= 1  -- Prior frames' decisions (not yet aged this frame, but executed when age=1)
 			ON DUPLICATE KEY UPDATE reward_factor = reward_factor * VALUES(reward_factor)`,
-			{ globalReward, N: this.baseNeuronMaxAge }
+			{ globalReward, rewardTimeDecayFactor: this.rewardTimeDecayFactor }
 		);
 
 		console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} executed inferred neurons with exponential temporal decay`);
