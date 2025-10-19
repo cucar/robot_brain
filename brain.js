@@ -608,16 +608,17 @@ export default class Brain {
 	}
 
 	/**
-	 * bulk insert neurons and return their IDs
+	 * Bulk insert neurons and return their IDs.
+	 * MySQL guarantees sequential auto-increment IDs.
+	 * @param {number} count - Number of neurons to create
+	 * @returns {Promise<Array<number>>} Array of neuron IDs
 	 */
 	async bulkInsertNeurons(count) {
-
-		// bulk insert neurons - mysql returns the first insert id - ids are continuous within the statement in the session
 		const valuesSql = Array(count).fill('()').join(',');
 		const insertNeuronsResult = await this.conn.query(`INSERT INTO neurons () VALUES ${valuesSql}`);
 		const firstNeuronId = insertNeuronsResult[0].insertId;
 
-		// compute ids from the first insert id (assume auto_increment step = 1)
+		// Return array of sequential IDs
 		return Array.from({ length: count }, (_, idx) => firstNeuronId + idx);
 	}
 
@@ -693,59 +694,34 @@ export default class Brain {
 	}
 
 	/**
-	 * processes a level to detect patterns and activate them - returns if patterns found or not
+	 * Processes a level to detect patterns and activate them
+	 * Returns true if patterns were found, false otherwise
 	 */
 	async activateLevelPatterns(level) {
-		console.log(`processing level to activate patterns in it: ${level}`);
+		console.log(`Processing level ${level} for pattern recognition`);
 
-		// get all active connections between the newly activated neurons (age=0) and all active neurons in the requested level
-		const connections = await this.getActiveConnections(level);
-		console.log(`Found ${connections.length} active connections for level ${level}`);
-		if (connections.length === 0) return false; // if there are no connections (there is only one neuron), nothing to do
+		// Detect peaks and write to observed_patterns table
+		const hasPeaks = await this.detectPeaks(level);
+		if (!hasPeaks) {
+			console.log(`No peaks found at level ${level}`);
+			return false;
+		}
 
-		// cluster connections around peaks
-		const peakConnections = await this.detectPeaks(connections);
-		if (peakConnections.size === 0) return false; // if there are no peaks found in the level, no patterns to process - return false to indicate that we're done
+		// Match observed patterns to known patterns and write to matched_patterns table
+		await this.matchPatternNeurons();
 
-		// save observed patterns (peak connections) to the observed_patterns table
-		await this.saveObservedPatterns(peakConnections);
+		// Merge matched patterns: add/strengthen observed connections, weaken unobserved connections
+		await this.mergeMatchedPatterns();
 
-		// match observed patterns to known patterns using their connection ids. get all pattern neuron ids that use the connection ids.
-		const peakPatterns = await this.matchPatternNeurons(peakConnections);
+		// Create new patterns for peaks without matches (also adds to matched_patterns table)
+		await this.createNewPatterns();
 
-		// merge matched patterns: add/strengthen observed connections, weaken unobserved connections
-		await this.mergeMatchedPatterns(peakPatterns, peakConnections);
+		// Activate all pattern neurons (from matched_patterns table) at the next level
+		const [patternNeurons] = await this.conn.query('SELECT DISTINCT pattern_neuron_id FROM matched_patterns');
+		const patternNeuronIds = patternNeurons.map(row => row.pattern_neuron_id);
+		if (patternNeuronIds.length > 0) await this.activateNeurons(patternNeuronIds, level + 1);
 
-		// create new patterns for the peaks that do not have any matching patterns
-		await this.createNewPatterns(peakPatterns, peakConnections);
-
-		// activate the observed pattern neurons in the higher level (new or previously existing)
-		await this.activateNeurons([...new Set(Array.from(peakPatterns.values()).flat())], level + 1);
-
-		// return true to indicate that we need to process the next level
 		return true;
-	}
-
-	/**
-	 * Returns active connections for pattern recognition at the specified level.
-	 * Only returns connections with age=0 (currently activating).
-	 * Connections are weighted by their distance with exponential decay.
-	 */
-	async getActiveConnections(level) {
-		const [rows] = await this.conn.query(`
-            SELECT
-                ac.connection_id as id,
-                ac.from_neuron_id,
-                ac.to_neuron_id,
-                c.distance,
-                c.strength * POW(:peakTimeDecayFactor, c.distance) as strength
-            FROM active_connections ac
-            JOIN connections c ON ac.connection_id = c.id
-            WHERE ac.level = :level
-            AND ac.age = 0
-            AND c.strength > 0
-		`, { level, peakTimeDecayFactor: this.peakTimeDecayFactor });
-		return rows;
 	}
 
 	/**
@@ -835,155 +811,98 @@ export default class Brain {
 	}
 
 	/**
-	 * Generic peak detection that works for both active and predicted connections
-	 * @param {Array} connections - Array of connection objects with strength property
-	 * @returns {Map} Map of peak neuron IDs to their connection IDs
+	 * Detect peaks and write directly to observed_patterns table
+	 * Peaks are to_neurons whose strength exceeds their source neurons' average strength
+	 * @param {number} level - The level to detect peaks for
 	 */
-	async detectPeaks(connections) {
-
-		// Calculate strengths for both to_neurons (being activated) and from_neurons (sources)
-		const { toNeuronStrengths, fromNeuronStrengths } = this.getNeuronStrengths(connections);
-
-		// Calculate average strength of source neurons for each to_neuron (neighborhood context)
-		const neighborhoodStrengths = this.getNeighborhoodStrengths(connections, fromNeuronStrengths);
-
-		// Find peaks: to_neurons whose strength exceeds their source neurons' average strength
-		const peakNeuronIds = this.getPeakNeurons(toNeuronStrengths, neighborhoodStrengths);
-		if (peakNeuronIds.length > 0 && this.debug) await this.waitForUser(`
-			Found ${peakNeuronIds.length} peaks: [${peakNeuronIds.join(', ')}],
-			To-Neuron Strengths: ${JSON.stringify([...toNeuronStrengths.entries()])}
-			Neighborhood (From-Neuron avg) Strengths: ${JSON.stringify([...neighborhoodStrengths.entries()])}
-			Waiting...
-		`);
-
-		// Get all connection IDs for each peak neuron
-		return this.getPeakNeuronsConnections(peakNeuronIds, connections);
-	}
-
-	/**
-	 * Calculate strengths for both to_neurons (being activated) and from_neurons (sources)
-	 * Returns { toNeuronStrengths, fromNeuronStrengths }
-	 */
-	getNeuronStrengths(connections) {
-		const toNeuronStrengths = new Map();
-		const fromNeuronStrengths = new Map();
-
-		for (const connection of connections) {
-			const { from_neuron_id, to_neuron_id, strength } = connection;
-
-			// Sum incoming connection strengths for to_neurons (neurons being activated)
-			if (toNeuronStrengths.has(to_neuron_id))
-				toNeuronStrengths.set(to_neuron_id, toNeuronStrengths.get(to_neuron_id) + strength);
-			else
-				toNeuronStrengths.set(to_neuron_id, strength);
-
-			// Sum outgoing connection strengths for from_neurons (source neurons)
-			if (fromNeuronStrengths.has(from_neuron_id))
-				fromNeuronStrengths.set(from_neuron_id, fromNeuronStrengths.get(from_neuron_id) + strength);
-			else
-				fromNeuronStrengths.set(from_neuron_id, strength);
-		}
-
-		return { toNeuronStrengths, fromNeuronStrengths };
-	}
-
-	/**
-	 * For each to_neuron, calculate the average strength of its source from_neurons
-	 * This represents the "neighborhood context" - how strong are the inputs feeding this neuron?
-	 */
-	getNeighborhoodStrengths(connections, fromNeuronStrengths) {
-		const neighborhoodAverages = new Map();
-
-		// Build map of to_neuron -> array of from_neurons
-		const toNeuronSources = new Map();
-		for (const connection of connections) {
-			const { from_neuron_id, to_neuron_id } = connection;
-			if (!toNeuronSources.has(to_neuron_id)) toNeuronSources.set(to_neuron_id, []);
-			toNeuronSources.get(to_neuron_id).push(from_neuron_id);
-		}
-
-		// Calculate average strength of source neurons for each to_neuron
-		for (const [toNeuronId, fromNeuronIds] of toNeuronSources) {
-			let totalStrength = 0;
-			let count = 0;
-
-			for (const fromNeuronId of fromNeuronIds) {
-				const fromStrength = fromNeuronStrengths.get(fromNeuronId) || 0;
-				totalStrength += fromStrength;
-				count++;
-			}
-
-			const averageStrength = count > 0 ? (totalStrength / count) : 0;
-			neighborhoodAverages.set(toNeuronId, averageStrength);
-		}
-
-		return neighborhoodAverages;
-	}
-
-	/**
-	 * get neurons whose strength exceeds their neighborhood average strength (peaks).
-	 * these are neurons that are stronger than their local neighborhood average.
-	 * also requires minimum relative/absolute strength to avoid creating patterns from weak connections.
-	 */
-	getPeakNeurons(neuronStrengths, neighborhoodStrengths) {
-		const peaks = [];
-		for (const [neuronId, neuronStrength] of neuronStrengths) {
-			const neighborhoodStrength = neighborhoodStrengths.get(neuronId) || 0;
-			if (neuronStrength >= this.minPeakStrength && (neuronStrength / neighborhoodStrength) > this.minPeakRatio)
-				peaks.push(neuronId);
-		}
-		return peaks;
-	}
-
-	/**
-	 * Returns a map of peak neurons to their connection IDs
-	 * For each peak neuron, returns all connection IDs where the peak is the to_neuron
-	 */
-	getPeakNeuronsConnections(peakNeuronIds, connections) {
-		const peakConnections = new Map();
-
-		for (const peakNeuronId of peakNeuronIds) {
-			const connectionIds = [];
-
-			// Find all connections where this peak neuron is the to_neuron (being activated)
-			for (const connection of connections)
-				if (connection.to_neuron_id === peakNeuronId)
-					connectionIds.push(connection.id);
-
-			peakConnections.set(peakNeuronId, connectionIds);
-		}
-
-		return peakConnections;
-	}
-
-	/**
-	 * saves observed patterns (peak connections) to the observed_patterns table
-	 * @param {Map} peakConnections - Map of peak_neuron_id -> array of connection_ids
-	 */
-	async saveObservedPatterns(peakConnections) {
-		const peakConnectionMappings = [];
-		for (const [peakNeuronId, connectionIds] of peakConnections)
-			for (const connectionId of connectionIds)
-				peakConnectionMappings.push([peakNeuronId, connectionId]);
-
-		// Clear and populate memory table for peak-connection mappings
+	async detectPeaks(level) {
+		// Clear observed_patterns table
 		await this.conn.query('TRUNCATE observed_patterns');
-		await this.conn.query('INSERT INTO observed_patterns VALUES ?', [peakConnectionMappings]);
+
+		// Detect peaks and insert into observed_patterns in one query
+		// Logic:
+		// 1. Calculate to_neuron strengths (sum of incoming connection strengths)
+		// 2. Calculate from_neuron strengths (sum of outgoing connection strengths)
+		// 3. Calculate neighborhood strength (average from_neuron strength for each to_neuron)
+		// 4. Find peaks where to_neuron strength >= minPeakStrength AND ratio > minPeakRatio
+		// 5. Insert all connections for those peaks into observed_patterns
+		await this.conn.query(`
+			INSERT INTO observed_patterns (peak_neuron_id, connection_id)
+			WITH connection_data AS (
+				-- Get all active connections with their strengths
+				SELECT
+					ac.connection_id,
+					ac.from_neuron_id,
+					ac.to_neuron_id,
+					c.strength * POW(:peakTimeDecayFactor, c.distance) as strength
+				FROM active_connections ac
+				JOIN connections c ON ac.connection_id = c.id
+				WHERE ac.level = :level
+				AND ac.age = 0
+				AND c.strength > 0
+			),
+			to_neuron_strengths AS (
+				-- Calculate total strength for each to_neuron (sum of incoming connections)
+				SELECT to_neuron_id, SUM(strength) as total_strength
+				FROM connection_data
+				GROUP BY to_neuron_id
+			),
+			from_neuron_strengths AS (
+				-- Calculate total strength for each from_neuron (sum of outgoing connections)
+				SELECT from_neuron_id, SUM(strength) as total_strength
+				FROM connection_data
+				GROUP BY from_neuron_id
+			),
+			neighborhood_strengths AS (
+				-- Calculate average from_neuron strength for each to_neuron (neighborhood context)
+				SELECT cd.to_neuron_id, AVG(fns.total_strength) as avg_neighborhood_strength
+				FROM connection_data cd
+				JOIN from_neuron_strengths fns ON cd.from_neuron_id = fns.from_neuron_id
+				GROUP BY cd.to_neuron_id
+			),
+			peaks AS (
+				-- Find peaks: to_neurons with strength >= minPeakStrength AND ratio > minPeakRatio
+				-- Using multiplication instead of division for better index usage
+				SELECT tns.to_neuron_id as peak_neuron_id
+				FROM to_neuron_strengths tns
+				JOIN neighborhood_strengths ns ON tns.to_neuron_id = ns.to_neuron_id
+				WHERE tns.total_strength >= :minPeakStrength
+				AND tns.total_strength > (ns.avg_neighborhood_strength * :minPeakRatio)
+			)
+			-- Insert all connections for peak neurons
+			SELECT p.peak_neuron_id, cd.connection_id
+			FROM peaks p
+			JOIN connection_data cd ON p.peak_neuron_id = cd.to_neuron_id
+		`, {
+			level,
+			peakTimeDecayFactor: this.peakTimeDecayFactor,
+			minPeakStrength: this.minPeakStrength,
+			minPeakRatio: this.minPeakRatio
+		});
+
+		// Get count for logging
+		const [result] = await this.conn.query('SELECT COUNT(DISTINCT peak_neuron_id) as peak_count FROM observed_patterns');
+		const peakCount = result[0].peak_count;
+		console.log(`Found ${peakCount} peaks at level ${level}`);
+
+		return peakCount > 0;
 	}
 
 	/**
 	 * Match observed patterns to known patterns owned by the peak neuron.
+	 * Writes results to matched_patterns memory table.
 	 * Each peak neuron only reviews patterns it learned before (via pattern_peaks table).
-	 * This improves performance by filtering to patterns owned by the peak neuron.
 	 * Matches by connection_id (which encodes from_neuron + to_neuron + distance) to preserve temporal structure.
 	 * Uses connection overlap (66% threshold) to determine if patterns match.
-	 *
-	 * Output format: Map(peak_neuron_id, pattern_neuron_ids)
 	 */
-	async matchPatternNeurons(peakConnections) {
+	async matchPatternNeurons() {
 
-		// Single efficient query that processes all peaks at once
-		const [rows] = await this.conn.query(`
+		// Clear matched_patterns table
+		await this.conn.query('TRUNCATE matched_patterns');
+
+		// Find matching patterns and insert into matched_patterns
+		await this.conn.query(`
+			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
 			WITH observed_pattern_matches AS (
 				-- Start from observed patterns and find matching patterns owned by the peak
 				-- PERFORMANCE: Starts from small set (current frame's observed patterns)
@@ -1011,150 +930,83 @@ export default class Brain {
 			HAVING (COUNT(DISTINCT CASE WHEN op.connection_id IS NOT NULL THEN cpc.connection_id END) / COUNT(DISTINCT cpc.connection_id)) >= ?
 		`, [this.mergePatternThreshold]);
 
-		// Convert to expected format
-		const peakPatterns = new Map();
-		
-		// Initialize all peaks with empty arrays
-		for (const [peakNeuronId] of peakConnections) peakPatterns.set(peakNeuronId, []);
-		
-		// Fill in matched patterns
-		for (const row of rows) {
-			const peakNeuronId = parseInt(row.peak_neuron_id);
-			const patternNeuronId = parseInt(row.pattern_neuron_id);
-			
-			// Get existing array or create new one
-			if (!peakPatterns.has(peakNeuronId)) peakPatterns.set(peakNeuronId, []);
-			
-			// Add the pattern to this peak's array
-			peakPatterns.get(peakNeuronId).push(patternNeuronId);
-		}
-		
-		return peakPatterns;
+		// Get count for logging
+		const [result] = await this.conn.query('SELECT COUNT(*) as match_count FROM matched_patterns');
+		console.log(`Matched ${result[0].match_count} pattern-peak pairs`);
 	}
 
 	/**
-	 * Merge matched patterns with observed patterns:
+	 * Merge matched patterns with observed patterns using pure SQL:
 	 * 1. Add new connections that weren't in the pattern before
 	 * 2. Strengthen connections that were observed (positive reinforcement)
 	 * 3. Weaken connections that were NOT observed (negative reinforcement)
-	 *
-	 * @param {Map} peakPatterns - Map of peak_neuron_id -> array of pattern_neuron_ids
-	 * @param {Map} peakConnections - Map of peak_neuron_id -> array of connection_ids
 	 */
-	async mergeMatchedPatterns(peakPatterns, peakConnections) {
-		const patternPeaks = this.reversePatternMapping(peakPatterns);
-		await this.reinforceObservedPatternConnections(patternPeaks, peakConnections);
-		await this.weakenUnobservedPatternConnections(patternPeaks, peakConnections);
+	async mergeMatchedPatterns() {
+
+		// Positive reinforcement: Add/strengthen observed connections
+		await this.conn.query(`
+			INSERT INTO patterns (pattern_neuron_id, connection_id, strength)
+			SELECT DISTINCT mp.pattern_neuron_id, op.connection_id, 1
+			FROM matched_patterns mp
+			JOIN observed_patterns op ON mp.peak_neuron_id = op.peak_neuron_id
+			ON DUPLICATE KEY UPDATE strength = strength + 1
+		`);
+
+		// Negative reinforcement: Weaken unobserved connections
+		await this.conn.query(`
+			UPDATE patterns p
+			JOIN matched_patterns mp ON p.pattern_neuron_id = mp.pattern_neuron_id
+			LEFT JOIN observed_patterns op ON mp.peak_neuron_id = op.peak_neuron_id AND p.connection_id = op.connection_id
+			SET p.strength = p.strength - ?
+			WHERE op.connection_id IS NULL
+		`, [this.patternNegativeReinforcement]);
 	}
 
 	/**
-	 * Create reverse mapping from pattern_neuron_id to peak_neuron_ids
+	 * Create new pattern neurons for peaks that don't have any matching patterns.
+	 * Leverages MySQL's sequential auto-increment IDs to map peaks to new pattern neurons.
+	 * No scratch table needed - pattern_peaks table establishes the mapping directly.
 	 */
-	reversePatternMapping(peakPatterns) {
-		const patternPeaks = new Map();
-		for (const [peakNeuronId, patternNeuronIds] of peakPatterns) {
-			for (const patternNeuronId of patternNeuronIds) {
-				if (!patternPeaks.has(patternNeuronId)) patternPeaks.set(patternNeuronId, []);
-				patternPeaks.get(patternNeuronId).push(peakNeuronId);
-			}
-		}
-		return patternPeaks;
-	}
+	async createNewPatterns() {
 
-	/**
-	 * Strengthen connections that were observed (positive reinforcement)
-	 * Also adds new connections that weren't in the pattern before
-	 */
-	async reinforceObservedPatternConnections(patternPeaks, peakConnections) {
-		const patternConnectionUpdates = [];
-
-		for (const [patternNeuronId, peakNeuronIds] of patternPeaks) {
-
-			// Get all connection IDs from the matched observed patterns
-			const connectionIds = new Set();
-			for (const peakNeuronId of peakNeuronIds) {
-				const peakConnections_for_peak = peakConnections.get(peakNeuronId) || [];
-				for (const connectionId of peakConnections_for_peak) connectionIds.add(connectionId);
-			}
-
-			// Add each connection to the pattern with strength increment of 1
-			for (const connectionId of connectionIds)
-				patternConnectionUpdates.push([patternNeuronId, connectionId, 1]);
-		}
-
-		// Batch insert/update all pattern-connection relationships
-		if (patternConnectionUpdates.length > 0) await this.conn.query(`
-			INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
-			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
-		`, [patternConnectionUpdates]);
-	}
-
-	/**
-	 * Weaken connections that were NOT observed (negative reinforcement)
-	 */
-	async weakenUnobservedPatternConnections(patternPeaks, peakConnections) {
-		const matchedPatternIds = Array.from(patternPeaks.keys());
-		if (matchedPatternIds.length === 0) return;
-
-		// Build list of (pattern_neuron_id, connection_id) pairs that WERE observed
-		const observedPairs = [];
-		for (const [patternNeuronId, peakNeuronIds] of patternPeaks)
-			for (const peakNeuronId of peakNeuronIds)
-				for (const connectionId of peakConnections.get(peakNeuronId) || [])
-					observedPairs.push([patternNeuronId, connectionId]);
-
-		// Weaken connections in matched patterns that were NOT observed
-		if (observedPairs.length > 0) await this.conn.query(`
-			UPDATE patterns
-			SET strength = strength - ?
-			WHERE pattern_neuron_id IN (?)
-			AND (pattern_neuron_id, connection_id) NOT IN (?)
-		`, [this.patternNegativeReinforcement, matchedPatternIds, observedPairs]);
-	}
-
-	/**
-	 * create new pattern neurons for peaks that don't have any matching patterns.
-	 * updates the peakPatterns map to include the newly created pattern neurons.
-	 * @param {Map} peakPatterns - Map of peak_neuron_id -> array of pattern_neuron_ids
-	 * @param {Map} peakConnections - Map of peak_neuron_id -> array of connection_ids
-	 */
-	async createNewPatterns(peakPatterns, peakConnections) {
-
-		// find peaks that need new patterns
-		const peaksNeedingPatterns = [];
-		for (const [peakNeuronId, connectionIds] of peakConnections) {
-			const existingPatterns = peakPatterns.get(peakNeuronId) || [];
-			if (existingPatterns.length === 0 && connectionIds.length > 0) peaksNeedingPatterns.push({ peakNeuronId, connectionIds });
-		}
-
-		// if all peaks have patterns, nothing to do - no new patterns to create
+		// Find peaks that need new patterns (peaks in observed_patterns but not in matched_patterns)
+		// Order by peak_neuron_id for deterministic mapping
+		const [peaksNeedingPatterns] = await this.conn.query(`
+			SELECT DISTINCT op.peak_neuron_id
+			FROM observed_patterns op
+			LEFT JOIN matched_patterns mp ON op.peak_neuron_id = mp.peak_neuron_id
+			WHERE mp.peak_neuron_id IS NULL
+			ORDER BY op.peak_neuron_id
+		`);
+		const count = peaksNeedingPatterns.length;
+		console.log(`Creating ${count} new patterns for peaks without matches`);
 		if (peaksNeedingPatterns.length === 0) return;
 
-		// bulk create new pattern neurons
-		const newPatternNeuronIds = await this.bulkInsertNeurons(peaksNeedingPatterns.length);
+		// Bulk create new pattern neurons - IDs are sequential
+		const patternNeuronIds = await this.bulkInsertNeurons(count);
 
-		// prepare pattern-connection relationships and pattern-peak mappings
-		const patternConnections = [];
-		const patternPeaks = [];
-		for (let i = 0; i < peaksNeedingPatterns.length; i++) {
-			const { peakNeuronId, connectionIds } = peaksNeedingPatterns[i];
-			const patternNeuronId = newPatternNeuronIds[i];
-
-			// add pattern-connection relationships
-			for (const connectionId of connectionIds) patternConnections.push([patternNeuronId, connectionId, 1]);
-
-			// add pattern-peak mapping (pattern is owned by this peak neuron)
-			patternPeaks.push([patternNeuronId, peakNeuronId]);
-
-			// update the peakPatterns map with the new pattern neuron id
-			peakPatterns.set(peakNeuronId, [patternNeuronId]);
+		// Insert pattern_peaks mappings using sequential IDs from bulkInsertNeurons
+		const patternPeakMappings = [];
+		for (let i = 0; i < count; i++) {
+			patternPeakMappings.push([
+				patternNeuronIds[i],
+				peaksNeedingPatterns[i].peak_neuron_id
+			]);
 		}
+		await this.conn.query(
+			'INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES ?',
+			[patternPeakMappings]
+		);
 
-		// batch insert all pattern-connection relationships
-		await this.conn.query(`INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?`, [patternConnections]);
-
-		// batch insert all pattern-peak mappings
-		await this.conn.query(`INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES ?`, [patternPeaks]);
+		// Bulk insert pattern-connection relationships using explicit pattern neuron IDs
+		// Safe for concurrent processes - uses exact IDs instead of range
+		await this.conn.query(`
+			INSERT INTO patterns (pattern_neuron_id, connection_id, strength)
+			SELECT pp.pattern_neuron_id, op.connection_id, 1
+			FROM pattern_peaks pp
+			JOIN observed_patterns op ON pp.peak_neuron_id = op.peak_neuron_id
+			WHERE pp.pattern_neuron_id IN (?)
+		`, [patternNeuronIds]);
 	}
 
 	/**

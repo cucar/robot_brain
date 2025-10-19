@@ -17,6 +17,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS neuron_rewards;
 -- DROP TABLE IF EXISTS active_connections;
+-- DROP TABLE IF EXISTS matched_patterns;
 
 -- check state
 select * from neurons;
@@ -154,6 +155,15 @@ CREATE TABLE IF NOT EXISTS observed_patterns (
     connection_id BIGINT UNSIGNED NOT NULL,
     INDEX idx_connection (connection_id),
     INDEX idx_peak (peak_neuron_id)
+) ENGINE=MEMORY;
+
+-- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
+-- this just a scratch table for faster processing - it temporarily holds the matched patterns for the current level in the frame
+CREATE TABLE IF NOT EXISTS matched_patterns (
+    peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (peak_neuron_id, pattern_neuron_id),
+    INDEX idx_pattern (pattern_neuron_id)
 ) ENGINE=MEMORY;
 
 -- active connections for fast hierarchical reward propagation (MEMORY table)
