@@ -12,11 +12,9 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS patterns;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
--- DROP TABLE IF EXISTS pattern_inference;
 -- DROP TABLE IF EXISTS connection_inference;
 -- DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS observed_patterns;
--- DROP TABLE IF EXISTS neuron_rewards;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 
@@ -100,15 +98,6 @@ CREATE TABLE IF NOT EXISTS pattern_peaks (
     INDEX idx_peak (peak_neuron_id)
 );
 
--- includes reward factor for neurons based on their performance (default 1.0 = neutral)
-CREATE TABLE IF NOT EXISTS neuron_rewards (
-    neuron_id BIGINT UNSIGNED NOT NULL,
-    reward_factor DOUBLE NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (neuron_id),
-    FOREIGN KEY (neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
-    INDEX (reward_factor, neuron_id)
-);
-
 -- neurons currently active within the sliding window (MEMORY table)
 -- note that it is possible for the same neuron to be active in different ages or levels
 CREATE TABLE IF NOT EXISTS active_neurons (
@@ -120,21 +109,10 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- stores down-level predictions from patterns - rebuilt fresh each frame
-CREATE TABLE pattern_inference (
-    level TINYINT,
-    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
-    connection_id BIGINT,
-    weight_distance TINYINT UNSIGNED NOT NULL,  -- exponentially-rounded distance to age=-1 for weighting
-    PRIMARY KEY (level, pattern_neuron_id, connection_id),
-    INDEX idx_level (level)
-) ENGINE=MEMORY;
-
--- stores same-level predictions from connections - rebuilt fresh each frame
+-- stores same-level connection predictions - scratch table for validation between frames
 CREATE TABLE connection_inference (
     level TINYINT,
     connection_id BIGINT,
-    weight_distance TINYINT UNSIGNED NOT NULL,  -- exponentially-rounded distance to age=-1 for weighting
     PRIMARY KEY (level, connection_id),
     INDEX idx_level (level)
 ) ENGINE=MEMORY;
