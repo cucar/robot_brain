@@ -341,18 +341,19 @@ export default class Brain {
 	}
 
 	/**
-	 * Ages all neurons in the context by 1, then deactivates aged-out neurons.
+	 * Ages all neurons and connections in the context by 1, then deactivates aged-out items.
 	 * With uniform aging, all levels are deactivated at once when age >= baseNeuronMaxAge.
 	 */
 	async ageNeurons() {
-		console.log('Aging active neurons and inferred neurons...');
+		console.log('Aging active neurons, connections, and inferred neurons...');
 
-		// age all neurons in the context - ORDER BY age DESC to avoid primary key collisions
+		// age all neurons and connections - ORDER BY age DESC to avoid primary key collisions
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
 		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE active_connections SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE inferred_neurons SET age = age + 1 ORDER BY age DESC');
 
-		// deactivate old active neurons at all levels uniformly (age >= baseNeuronMaxAge)
+		// deactivate old active neurons and connections at all levels uniformly (age >= baseNeuronMaxAge)
 		await this.deactivateOldNeurons();
 
 		// deactivate old inferred neurons at all levels
@@ -620,14 +621,9 @@ export default class Brain {
 	}
 
 	/**
-	 * reinforces the connections between newly active neurons (age = 0) at a level
-	 * builds connections FROM all active neurons (adjacent levels only) TO age=0 neurons at the specified level
-	 * Adjacent levels: same level, one level up, one level down (like cortical columns)
-	 * Distance calculation uses exponential rounding based on source neuron age:
-	 * - Ages 1-N: exact distance (1, 2, 3, ..., N-1)
-	 * - Ages N to N²-1: rounded to multiples of N (N, 2N, 3N, ...)
-	 * - Ages N² to N³-1: rounded to multiples of N² (N², 2N², 3N², ...)
-	 * This allows neurons to remember relative time distances with decreasing precision
+	 * Reinforce connections between active neurons at the specified level.
+	 * Creates connections from all active neurons to newly activated (age=0) neurons.
+	 * With uniform aging (age always 0-9), distance is simply the source neuron's age.
 	 */
 	async reinforceConnections(level) {
 		await this.conn.query(`
@@ -635,7 +631,7 @@ export default class Brain {
             SELECT
                 f.neuron_id as from_neuron_id,
                 t.neuron_id as to_neuron_id,
-                IF(f.age = 0, 0, FLOOR(f.age / POW(:N, FLOOR(LOG(:N, f.age)))) * POW(:N, FLOOR(LOG(:N, f.age)))) as distance,
+                f.age as distance,
                 1 as strength
 			FROM active_neurons f
 			CROSS JOIN active_neurons t
@@ -644,7 +640,7 @@ export default class Brain {
             AND f.level = t.level  -- restrict to same level only
             AND (t.neuron_id != f.neuron_id OR f.age != 0)  -- no self-connections at same age
 			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
-		`, { N: this.baseNeuronMaxAge, level });
+		`, { level });
 	}
 
 	/**
@@ -733,9 +729,9 @@ export default class Brain {
 	}
 
 	/**
-	 * Returns active connections for the level with exponential distance weighting.
-	 * Connections are weighted by their distance to age=0 (current activation target).
-	 * Uses the same exponential weighting formula as getPredictedConnections but for age=0.
+	 * Returns active connections for pattern recognition at the specified level.
+	 * Only returns connections with age=0 (currently activating).
+	 * Connections are weighted by their distance with exponential decay.
 	 */
 	async getActiveConnections(level) {
 		const [rows] = await this.conn.query(`
@@ -748,71 +744,54 @@ export default class Brain {
             FROM active_connections ac
             JOIN connections c ON ac.connection_id = c.id
             WHERE ac.level = :level
+            AND ac.age = 0
             AND c.strength > 0
 		`, { level, peakTimeDecayFactor: this.peakTimeDecayFactor });
 		return rows;
 	}
 
 	/**
-	 * Populate active_connections table for newly activated neurons at the specified level
-	 * This is called immediately after reinforceConnections in activateNeurons
-	 * Inserts connections from all active neurons to age=0 neurons at the specified level
-	 * Uses exponential rounding for distance matching (same as reinforceConnections)
+	 * Populate active_connections table for newly activated neurons at the specified level.
+	 * This is called immediately after reinforceConnections in activateNeurons.
+	 * Inserts connections from all active neurons to age=0 neurons at the specified level.
+	 * With uniform aging, distance matching is simply c.distance = f.age.
+	 * Connections are inserted with age=0 (matching the to_neuron age).
 	 */
 	async activateConnections(level) {
 		await this.conn.query(`
-			INSERT IGNORE INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level)
-			SELECT c.id as connection_id, c.from_neuron_id, c.to_neuron_id, t.level
+			INSERT IGNORE INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level, age)
+			SELECT c.id as connection_id, c.from_neuron_id, c.to_neuron_id, t.level, 0 as age
 			FROM connections c
 			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
 			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = :level
-			WHERE c.distance = IF(f.age = 0, 0, FLOOR(f.age / POW(:N, FLOOR(LOG(:N, f.age)))) * POW(:N, FLOOR(LOG(:N, f.age))))
+			WHERE c.distance = f.age
 			AND f.level = t.level  -- restrict to same levels only
 			AND (t.neuron_id != f.neuron_id OR f.age != 0)  -- no self-connections at same age
 			AND c.strength > 0  -- only connections that are not removed
-		`, { N: this.baseNeuronMaxAge, level });
+		`, { level });
 	}
 
 	/**
-	 * Clean up active_connections when neurons are removed from active_neurons
-	 * Removes connections where either the from_neuron or to_neuron is no longer active
-	 * This should be called after neurons are aged out or removed from active_neurons
-	 *
-	 * @param {number} level - The level to clean up connections for (required)
-	 */
-	async cleanupActiveConnections(level) {
-		await this.conn.query(`
-			DELETE FROM active_connections
-			WHERE level = ?
-			AND (
-				NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = from_neuron_id)
-				OR NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = to_neuron_id)
-			)
-		`, [level]);
-	}
-
-	/**
-	 * Deactivate (remove) old neurons from active_neurons at all levels.
-	 * Uniform aging: All levels remove neurons when age >= baseNeuronMaxAge.
-	 * Also cleans up orphaned active_connections.
+	 * Deactivate (remove) old neurons and connections at all levels.
+	 * Uniform aging: All levels remove items when age >= baseNeuronMaxAge.
 	 *
 	 * Called from ageNeurons() after aging.
 	 */
 	async deactivateOldNeurons() {
 
 		// Delete aged-out neurons from all levels at once
-		const [result] = await this.conn.query(
+		const [neuronResult] = await this.conn.query(
 			'DELETE FROM active_neurons WHERE age >= ?',
 			[this.baseNeuronMaxAge]
 		);
-		console.log(`Deactivated ${result.affectedRows} aged-out neurons across all levels (age >= ${this.baseNeuronMaxAge})`);
+		console.log(`Deactivated ${neuronResult.affectedRows} aged-out neurons across all levels (age >= ${this.baseNeuronMaxAge})`);
 
-		// Clean up orphaned active connections across all levels
-		await this.conn.query(`
-			DELETE FROM active_connections
-			WHERE NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = from_neuron_id)
-			   OR NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = to_neuron_id)
-		`);
+		// Delete aged-out connections from all levels at once
+		const [connectionResult] = await this.conn.query(
+			'DELETE FROM active_connections WHERE age >= ?',
+			[this.baseNeuronMaxAge]
+		);
+		console.log(`Deactivated ${connectionResult.affectedRows} aged-out connections across all levels (age >= ${this.baseNeuronMaxAge})`);
 	}
 
 	/**

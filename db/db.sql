@@ -151,8 +151,10 @@ CREATE TABLE IF NOT EXISTS active_connections (
     from_neuron_id BIGINT UNSIGNED NOT NULL,
     to_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
+    age TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (connection_id, level),
     INDEX idx_to_neuron_level (to_neuron_id, level),
     INDEX idx_from_neuron_level (from_neuron_id, level),
-    INDEX idx_level (level)
+    INDEX idx_level (level),
+    INDEX idx_age (age)
 ) ENGINE=MEMORY;
