@@ -15,6 +15,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_inference;
 -- DROP TABLE IF EXISTS connection_inference;
 -- DROP TABLE IF EXISTS inferred_neurons;
+-- DROP TABLE IF EXISTS observed_patterns;
 -- DROP TABLE IF EXISTS neuron_rewards;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
@@ -153,6 +154,7 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
 CREATE TABLE IF NOT EXISTS observed_patterns (
     peak_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
+    INDEX idx_peak_connection (peak_neuron_id, connection_id),  -- Composite index for JOINs in matchPatternNeurons and mergeMatchedPatterns
     INDEX idx_connection (connection_id),
     INDEX idx_peak (peak_neuron_id)
 ) ENGINE=MEMORY;
@@ -177,6 +179,5 @@ CREATE TABLE IF NOT EXISTS active_connections (
     PRIMARY KEY (connection_id, level),
     INDEX idx_to_neuron_level (to_neuron_id, level),
     INDEX idx_from_neuron_level (from_neuron_id, level),
-    INDEX idx_level (level),
-    INDEX idx_age (age)
+    INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
 ) ENGINE=MEMORY;
