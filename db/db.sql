@@ -10,6 +10,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS coordinates;
 -- DROP TABLE IF EXISTS connections;
 -- DROP TABLE IF EXISTS patterns;
+-- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
 -- DROP TABLE IF EXISTS pattern_inference;
 -- DROP TABLE IF EXISTS connection_inference;
@@ -84,6 +85,17 @@ CREATE TABLE IF NOT EXISTS patterns (
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
     INDEX idx_connection_strength (connection_id, strength),
     INDEX idx_pattern_strength (pattern_neuron_id, strength)
+);
+
+-- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
+-- patterns are learned by peak neurons to differentiate between sequences leading to them
+CREATE TABLE IF NOT EXISTS pattern_peaks (
+    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
+    peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (pattern_neuron_id),
+    FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
+    FOREIGN KEY (peak_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
+    INDEX idx_peak (peak_neuron_id)
 );
 
 -- includes reward factor for neurons based on their performance (default 1.0 = neutral)

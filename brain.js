@@ -23,6 +23,7 @@ export default class Brain {
 		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
+		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -712,14 +713,11 @@ export default class Brain {
 		// match observed patterns to known patterns using their connection ids. get all pattern neuron ids that use the connection ids.
 		const peakPatterns = await this.matchPatternNeurons(peakConnections);
 
-		// augment known patterns that were matched to observed patterns with the
+		// merge matched patterns: add/strengthen observed connections, weaken unobserved connections
 		await this.mergeMatchedPatterns(peakPatterns, peakConnections);
 
 		// create new patterns for the peaks that do not have any matching patterns
 		await this.createNewPatterns(peakPatterns, peakConnections);
-
-		// now strengthen the connections for each peak's pattern and its active connections that were just observed (increment by 1)
-		await this.reinforcePatterns(peakPatterns, peakConnections);
 
 		// activate the observed pattern neurons in the higher level (new or previously existing)
 		await this.activateNeurons([...new Set(Array.from(peakPatterns.values()).flat())], level + 1);
@@ -974,46 +972,43 @@ export default class Brain {
 	}
 
 	/**
-	 * matches observed patterns to known patterns based on neuron overlap (66% threshold)
-	 * uses the observed_patterns table populated by saveObservedPatterns
-	 * output format: Map(peak_neuron_id, pattern_neuron_ids)
+	 * Match observed patterns to known patterns owned by the peak neuron.
+	 * Each peak neuron only reviews patterns it learned before (via pattern_peaks table).
+	 * This improves performance by filtering to patterns owned by the peak neuron.
+	 * Matches by connection_id (which encodes from_neuron + to_neuron + distance) to preserve temporal structure.
+	 * Uses connection overlap (66% threshold) to determine if patterns match.
+	 *
+	 * Output format: Map(peak_neuron_id, pattern_neuron_ids)
 	 */
 	async matchPatternNeurons(peakConnections) {
 
 		// Single efficient query that processes all peaks at once
 		const [rows] = await this.conn.query(`
-			WITH observed_neurons AS (
-				-- All unique neurons for each peak from their observed connections
-			    -- Note that these are not the same thing as age=0 neurons - they include all neurons that are connected to them as well
-				SELECT DISTINCT op.peak_neuron_id, IF(v.direction = 'from', c.from_neuron_id, c.to_neuron_id) as neuron_id
+			WITH observed_pattern_matches AS (
+				-- Start from observed patterns and find matching patterns owned by the peak
+				-- PERFORMANCE: Starts from small set (current frame's observed patterns)
+				-- PERFORMANCE: Only matches patterns owned by the peak neuron (via pattern_peaks)
+				SELECT DISTINCT pp.pattern_neuron_id, op.peak_neuron_id
 				FROM observed_patterns op
-				JOIN connections c ON op.connection_id = c.id
-				CROSS JOIN (SELECT 'from' as direction UNION SELECT 'to' as direction) AS v
-			),
-			observed_pattern_matches AS (
-				-- Get patterns that share connections with observed patterns (pattern-peak pairs)
-				SELECT DISTINCT p.pattern_neuron_id, op.peak_neuron_id
-				FROM patterns p 
-				JOIN observed_patterns op ON p.connection_id = op.connection_id 
+				JOIN patterns p ON op.connection_id = p.connection_id
+				JOIN pattern_peaks pp ON p.pattern_neuron_id = pp.pattern_neuron_id AND pp.peak_neuron_id = op.peak_neuron_id
 				WHERE p.strength > 0
 			),
-			candidate_pattern_neurons AS (
-				-- Get all unique neurons for each candidate pattern (once per pattern, not duplicated per peak)
-				SELECT DISTINCT p.pattern_neuron_id, IF(v.direction = 'from', c.from_neuron_id, c.to_neuron_id) as neuron_id
-				FROM patterns p
-				JOIN connections c ON p.connection_id = c.id
-				CROSS JOIN (SELECT 'from' as direction UNION SELECT 'to' as direction) AS v
-				WHERE p.pattern_neuron_id IN (SELECT DISTINCT pattern_neuron_id FROM observed_pattern_matches) 
-				AND p.strength > 0
+			candidate_pattern_connections AS (
+				-- Get all connection_ids for each candidate pattern
+				SELECT pattern_neuron_id, connection_id
+				FROM patterns
+				WHERE pattern_neuron_id IN (SELECT pattern_neuron_id FROM observed_pattern_matches)
+				AND strength > 0
 			)
 			-- Calculate overlap percentage and return matching peak-pattern pairs
-			-- at least 66% of the known pattern's neurons should be part of the observed pattern to be matched
+			-- at least 66% of the known pattern's connections should be part of the observed pattern to be matched
 			SELECT opm.peak_neuron_id, opm.pattern_neuron_id
 			FROM observed_pattern_matches opm
-			JOIN candidate_pattern_neurons cpn ON opm.pattern_neuron_id = cpn.pattern_neuron_id
-			LEFT JOIN observed_neurons obs ON opm.peak_neuron_id = obs.peak_neuron_id AND obs.neuron_id = cpn.neuron_id
+			JOIN candidate_pattern_connections cpc ON opm.pattern_neuron_id = cpc.pattern_neuron_id
+			LEFT JOIN observed_patterns op ON opm.peak_neuron_id = op.peak_neuron_id AND op.connection_id = cpc.connection_id
 			GROUP BY opm.peak_neuron_id, opm.pattern_neuron_id
-			HAVING (COUNT(DISTINCT CASE WHEN obs.neuron_id IS NOT NULL THEN cpn.neuron_id END) / COUNT(DISTINCT cpn.neuron_id)) >= ?
+			HAVING (COUNT(DISTINCT CASE WHEN op.connection_id IS NOT NULL THEN cpc.connection_id END) / COUNT(DISTINCT cpc.connection_id)) >= ?
 		`, [this.mergePatternThreshold]);
 
 		// Convert to expected format
@@ -1038,13 +1033,24 @@ export default class Brain {
 	}
 
 	/**
-	 * merges observed patterns into existing matched pattern definitions
+	 * Merge matched patterns with observed patterns:
+	 * 1. Add new connections that weren't in the pattern before
+	 * 2. Strengthen connections that were observed (positive reinforcement)
+	 * 3. Weaken connections that were NOT observed (negative reinforcement)
+	 *
 	 * @param {Map} peakPatterns - Map of peak_neuron_id -> array of pattern_neuron_ids
 	 * @param {Map} peakConnections - Map of peak_neuron_id -> array of connection_ids
 	 */
 	async mergeMatchedPatterns(peakPatterns, peakConnections) {
-		
-		// Create reverse mapping: pattern_neuron_id -> array of peak_neuron_ids
+		const patternPeaks = this.reversePatternMapping(peakPatterns);
+		await this.reinforceObservedPatternConnections(patternPeaks, peakConnections);
+		await this.weakenUnobservedPatternConnections(patternPeaks, peakConnections);
+	}
+
+	/**
+	 * Create reverse mapping from pattern_neuron_id to peak_neuron_ids
+	 */
+	reversePatternMapping(peakPatterns) {
 		const patternPeaks = new Map();
 		for (const [peakNeuronId, patternNeuronIds] of peakPatterns) {
 			for (const patternNeuronId of patternNeuronIds) {
@@ -1052,9 +1058,16 @@ export default class Brain {
 				patternPeaks.get(patternNeuronId).push(peakNeuronId);
 			}
 		}
+		return patternPeaks;
+	}
 
-		// For each matched pattern, collect all connection IDs from the observed patterns
+	/**
+	 * Strengthen connections that were observed (positive reinforcement)
+	 * Also adds new connections that weren't in the pattern before
+	 */
+	async reinforceObservedPatternConnections(patternPeaks, peakConnections) {
 		const patternConnectionUpdates = [];
+
 		for (const [patternNeuronId, peakNeuronIds] of patternPeaks) {
 
 			// Get all connection IDs from the matched observed patterns
@@ -1070,12 +1083,33 @@ export default class Brain {
 		}
 
 		// Batch insert/update all pattern-connection relationships
-		if (patternConnectionUpdates.length > 0) {
-			await this.conn.query(`
-				INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
-				ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
-			`, [patternConnectionUpdates]);
-		}
+		if (patternConnectionUpdates.length > 0) await this.conn.query(`
+			INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
+			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
+		`, [patternConnectionUpdates]);
+	}
+
+	/**
+	 * Weaken connections that were NOT observed (negative reinforcement)
+	 */
+	async weakenUnobservedPatternConnections(patternPeaks, peakConnections) {
+		const matchedPatternIds = Array.from(patternPeaks.keys());
+		if (matchedPatternIds.length === 0) return;
+
+		// Build list of (pattern_neuron_id, connection_id) pairs that WERE observed
+		const observedPairs = [];
+		for (const [patternNeuronId, peakNeuronIds] of patternPeaks)
+			for (const peakNeuronId of peakNeuronIds)
+				for (const connectionId of peakConnections.get(peakNeuronId) || [])
+					observedPairs.push([patternNeuronId, connectionId]);
+
+		// Weaken connections in matched patterns that were NOT observed
+		if (observedPairs.length > 0) await this.conn.query(`
+			UPDATE patterns
+			SET strength = strength - ?
+			WHERE pattern_neuron_id IN (?)
+			AND (pattern_neuron_id, connection_id) NOT IN (?)
+		`, [this.patternNegativeReinforcement, matchedPatternIds, observedPairs]);
 	}
 
 	/**
@@ -1099,8 +1133,9 @@ export default class Brain {
 		// bulk create new pattern neurons
 		const newPatternNeuronIds = await this.bulkInsertNeurons(peaksNeedingPatterns.length);
 
-		// prepare pattern-connection relationships with strength = 1.0
+		// prepare pattern-connection relationships and pattern-peak mappings
 		const patternConnections = [];
+		const patternPeaks = [];
 		for (let i = 0; i < peaksNeedingPatterns.length; i++) {
 			const { peakNeuronId, connectionIds } = peaksNeedingPatterns[i];
 			const patternNeuronId = newPatternNeuronIds[i];
@@ -1108,43 +1143,18 @@ export default class Brain {
 			// add pattern-connection relationships
 			for (const connectionId of connectionIds) patternConnections.push([patternNeuronId, connectionId, 1]);
 
+			// add pattern-peak mapping (pattern is owned by this peak neuron)
+			patternPeaks.push([patternNeuronId, peakNeuronId]);
+
 			// update the peakPatterns map with the new pattern neuron id
 			peakPatterns.set(peakNeuronId, [patternNeuronId]);
 		}
 
 		// batch insert all pattern-connection relationships
 		await this.conn.query(`INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?`, [patternConnections]);
-	}
 
-	/**
-	 * reinforce the patterns for each peak by incrementing the strength of their pattern-connection relationships that were just observed.
-	 * @param {Map} peakPatterns - Map of peak_neuron_id -> array of pattern_neuron_ids
-	 * @param {Map} peakConnections - Map of peak_neuron_id -> array of connection_ids
-	 */
-	async reinforcePatterns(peakPatterns, peakConnections) {
-
-		// use a Set to deduplicate pattern-connection pairs
-		const uniquePairs = new Set();
-		for (const [peakNeuronId, patternNeuronIds] of peakPatterns) {
-			const connectionIds = peakConnections.get(peakNeuronId) || [];
-
-			// create all combinations of pattern neurons and connections for this peak
-			for (const patternNeuronId of patternNeuronIds)
-				for (const connectionId of connectionIds)
-					uniquePairs.add(`${patternNeuronId}-${connectionId}`);
-		}
-
-		// convert unique pairs back to array format for the query
-		const patternConnections = Array.from(uniquePairs).map(pair => {
-			const [patternNeuronId, connectionId] = pair.split('-').map(id => parseInt(id));
-			return [patternNeuronId, connectionId, 1];
-		});
-
-		// batch insert/update all pattern-connection relationships
-		await this.conn.query(`
-        	INSERT INTO patterns (pattern_neuron_id, connection_id, strength) VALUES ?
-        	ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
-    	`, [patternConnections]);
+		// batch insert all pattern-peak mappings
+		await this.conn.query(`INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES ?`, [patternPeaks]);
 	}
 
 	/**
