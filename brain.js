@@ -12,13 +12,13 @@ export default class Brain {
 	constructor() {
 
 		// set hyperparameters
-		this.baseNeuronMaxAge = 10; // number of frames a base neuron stays active
+		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
 		this.forgetCycles = 100; // number of frames between forget cycles (reduced from 10 to improve performance)
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
 		this.maxLevels = 6; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.33; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 2.0; // minimum weighted strength for a neuron to be considered a peak (reduced from 10.0 to allow faster pattern formation)
 		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
@@ -390,10 +390,6 @@ export default class Brain {
 	 */
 	async inferNeurons() {
 
-		// Clear age=0 inferred neurons (fresh predictions from this frame)
-		// Keep age>=1 neurons for execution in next frame
-		await this.conn.query('DELETE FROM inferred_neurons WHERE age = 0');
-
 		// Get the highest level that is currently active
 		const maxLevel = await this.getMaxActiveLevel();
 
@@ -486,8 +482,9 @@ export default class Brain {
 		`, { level });
 
 		// Infer neurons from predicted connections (to_neuron_id at age=-1)
+		// Use INSERT IGNORE because the same neuron may have been inferred from pattern inference
 		await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age)
+			INSERT IGNORE INTO inferred_neurons (neuron_id, level, age)
 			SELECT DISTINCT c.to_neuron_id, :level, 0
 			FROM connection_inference ci
 			JOIN connections c ON ci.connection_id = c.id
@@ -513,9 +510,9 @@ export default class Brain {
 
 		// Infer peak neurons from inferred pattern neurons
 		// Pattern neuron at level N → Peak neuron at level N-1
-		// note that the same neuron may have been inferred from the connections, so ignore duplicates
+		// This runs before inferConnections for the lower level, so no duplicates expected
 		await this.conn.query(`
-			INSERT IGNORE INTO inferred_neurons (neuron_id, level, age)
+			INSERT INTO inferred_neurons (neuron_id, level, age)
 			SELECT DISTINCT pp.peak_neuron_id, :targetLevel, 0
 			FROM inferred_neurons inf
 			JOIN pattern_peaks pp ON inf.neuron_id = pp.pattern_neuron_id
@@ -888,12 +885,6 @@ export default class Brain {
 
 		// Clear matched_patterns table
 		await this.conn.query('TRUNCATE matched_patterns');
-
-		// DEBUG: Check table counts before matching
-		const [opCount] = await this.conn.query('SELECT COUNT(*) as c FROM observed_patterns');
-		const [pCount] = await this.conn.query('SELECT COUNT(*) as c FROM patterns WHERE strength > 0');
-		const [ppCount] = await this.conn.query('SELECT COUNT(*) as c FROM pattern_peaks');
-		console.log(`  [DEBUG] Before matching: observed_patterns=${opCount[0].c}, patterns=${pCount[0].c}, pattern_peaks=${ppCount[0].c}`);
 
 		// Find matching patterns and insert into matched_patterns
 		await this.conn.query(`

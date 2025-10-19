@@ -19,13 +19,13 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS matched_patterns;
 
 -- check state
-select * from neurons;
-select * from coordinates;
-select * from patterns where pattern_neuron_id = 137;
-select * from connections;
+select count(*) from neurons;
+select count(*) from coordinates;
+select count(*) from connections;
 select * from connections where id > 96 and distance = 2;
 select * from active_neurons;
-select * from active_connections;
+select count(*) from active_connections;
+select count(*) from patterns where strength > 0;
 
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (
