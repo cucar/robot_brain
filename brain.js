@@ -13,13 +13,13 @@ export default class Brain {
 
 		// set hyperparameters
 		this.baseNeuronMaxAge = 10; // number of frames a base neuron stays active
-		this.forgetCycles = 10; // number of frames between forget cycles
+		this.forgetCycles = 100; // number of frames between forget cycles (reduced from 10 to improve performance)
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (pattern)
+		this.minPeakStrength = 2.0; // minimum weighted strength for a neuron to be considered a peak (reduced from 10.0 to allow faster pattern formation)
 		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
@@ -58,7 +58,6 @@ export default class Brain {
 		console.log('Resetting brain (memory tables)...');
 		await this.truncateTables([
 			'active_neurons',
-			'pattern_inference',
 			'connection_inference',
 			'inferred_neurons',
 			'observed_patterns',
@@ -77,6 +76,8 @@ export default class Brain {
 			'inferred_neurons',
 			'observed_patterns',
 			'active_connections',
+			'matched_patterns',
+			'pattern_peaks',
 			'patterns',
 			'connections',
 			'coordinates',
@@ -491,7 +492,6 @@ export default class Brain {
 			FROM connection_inference ci
 			JOIN connections c ON ci.connection_id = c.id
 			WHERE ci.level = :level
-			ON DUPLICATE KEY UPDATE age = age
 		`, { level });
 
 		const [result] = await this.conn.query(
@@ -513,14 +513,14 @@ export default class Brain {
 
 		// Infer peak neurons from inferred pattern neurons
 		// Pattern neuron at level N → Peak neuron at level N-1
+		// note that the same neuron may have been inferred from the connections, so ignore duplicates
 		await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age)
+			INSERT IGNORE INTO inferred_neurons (neuron_id, level, age)
 			SELECT DISTINCT pp.peak_neuron_id, :targetLevel, 0
 			FROM inferred_neurons inf
 			JOIN pattern_peaks pp ON inf.neuron_id = pp.pattern_neuron_id
 			WHERE inf.level = :level
 			AND inf.age = 0
-			ON DUPLICATE KEY UPDATE age = age
 		`, { level, targetLevel: level - 1 });
 
 		const [result] = await this.conn.query(`
@@ -889,6 +889,12 @@ export default class Brain {
 		// Clear matched_patterns table
 		await this.conn.query('TRUNCATE matched_patterns');
 
+		// DEBUG: Check table counts before matching
+		const [opCount] = await this.conn.query('SELECT COUNT(*) as c FROM observed_patterns');
+		const [pCount] = await this.conn.query('SELECT COUNT(*) as c FROM patterns WHERE strength > 0');
+		const [ppCount] = await this.conn.query('SELECT COUNT(*) as c FROM pattern_peaks');
+		console.log(`  [DEBUG] Before matching: observed_patterns=${opCount[0].c}, patterns=${pCount[0].c}, pattern_peaks=${ppCount[0].c}`);
+
 		// Find matching patterns and insert into matched_patterns
 		await this.conn.query(`
 			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
@@ -976,12 +982,11 @@ export default class Brain {
 
 		// Insert pattern_peaks mappings using sequential IDs from bulkInsertNeurons
 		const patternPeakMappings = [];
-		for (let i = 0; i < count; i++) {
-			patternPeakMappings.push([
-				patternNeuronIds[i],
-				peaksNeedingPatterns[i].peak_neuron_id
-			]);
-		}
+		for (let i = 0; i < count; i++)
+			patternPeakMappings.push([ patternNeuronIds[i], peaksNeedingPatterns[i].peak_neuron_id ]);
+
+		// Insert pattern_peaks - should never have duplicates since we're using fresh neuron IDs
+		// If we get a duplicate key error, it means we have a bug (reusing a pattern neuron ID)
 		await this.conn.query(
 			'INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES ?',
 			[patternPeakMappings]
@@ -995,6 +1000,14 @@ export default class Brain {
 			FROM pattern_peaks pp
 			JOIN observed_patterns op ON pp.peak_neuron_id = op.peak_neuron_id
 			WHERE pp.pattern_neuron_id IN (?)
+		`, [patternNeuronIds]);
+
+		// Add newly created patterns to matched_patterns so they get activated at the next level
+		await this.conn.query(`
+			INSERT INTO matched_patterns (pattern_neuron_id, peak_neuron_id)
+			SELECT pattern_neuron_id, peak_neuron_id
+			FROM pattern_peaks
+			WHERE pattern_neuron_id IN (?)
 		`, [patternNeuronIds]);
 	}
 
@@ -1027,6 +1040,14 @@ export default class Brain {
 		await this.conn.query(`DELETE FROM connections WHERE strength <= 0`);
 
 		// 3. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
+		// First, explicitly delete from pattern_peaks to avoid CASCADE timing issues
+		await this.conn.query(`
+			DELETE pp FROM pattern_peaks pp
+			LEFT JOIN patterns p ON pp.pattern_neuron_id = p.pattern_neuron_id
+			WHERE p.pattern_neuron_id IS NULL
+		`);
+
+		// Then delete orphaned neurons
 		await this.conn.query(`
 			DELETE FROM neurons n
 			WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)

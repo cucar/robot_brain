@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS active_connections (
     to_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
     age TINYINT NOT NULL DEFAULT 0,
-    PRIMARY KEY (connection_id, level),
+    PRIMARY KEY (connection_id, level, age),  -- Allow same connection at different ages for reward distribution
     INDEX idx_to_neuron_level (to_neuron_id, level),
     INDEX idx_from_neuron_level (from_neuron_id, level),
     INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
