@@ -13,18 +13,20 @@ export default class Brain {
 
 		// set hyperparameters
 		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
-		this.forgetCycles = 100; // number of frames between forget cycles (reduced from 10 to improve performance)
-		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
-		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
+		this.forgetCycles = 1000; // number of frames between forget cycles (reduced from 10 to improve performance)
+		this.connectionForgetRate = 0.05; // how much connection strengths decay per forget cycle
+		this.patternForgetRate = 0.05; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
 		this.maxLevels = 6; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.33; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.minPeakStrength = 2.0; // minimum weighted strength for a neuron to be considered a peak (reduced from 10.0 to allow faster pattern formation)
-		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
+		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (reduced from 10.0 to allow faster pattern formation)
+		this.minPeakRatio = 2.0; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
+		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be considered (lower than minPeakStrength)
+		this.minPredictionRatio = 2.0; // minimum ratio for prediction peaks (lower than minPeakRatio for more predictions)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
-		this.negativeLearningRate = 0.1; // how much to weaken connections when predictions fail
+		this.negativeLearningRate = 0.01; // how much to weaken connections when predictions fail
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -469,17 +471,51 @@ export default class Brain {
 		// Clear previous predictions for this level
 		await this.conn.query('DELETE FROM connection_inference WHERE level = ?', [level]);
 
-		// Predict connections for age=-1 (next frame)
-		// Join active_neurons with connections where distance = age + 1
+		// Predict connections using peak detection - only predict connections that stand out
+		// For predictions, we compare each to_neuron's strength to the average of all predicted to_neurons
 		await this.conn.query(`
 			INSERT INTO connection_inference (level, connection_id)
-			SELECT :level, c.id
-			FROM active_neurons f
-			JOIN connections c ON c.from_neuron_id = f.neuron_id
-			WHERE f.level = :level
-			AND c.distance = f.age + 1
-			AND c.strength > 0
-		`, { level });
+			WITH candidate_connections AS (
+				-- Get all possible connections from active neurons
+				SELECT
+					c.id as connection_id,
+					c.from_neuron_id,
+					c.to_neuron_id,
+					c.strength
+				FROM active_neurons f
+				JOIN connections c ON c.from_neuron_id = f.neuron_id
+				WHERE f.level = :level
+				AND c.distance = f.age + 1
+				AND c.strength > 0
+			),
+			to_neuron_strengths AS (
+				-- Calculate total strength for each to_neuron (sum of incoming predicted connections)
+				SELECT to_neuron_id, SUM(strength) as total_strength
+				FROM candidate_connections
+				GROUP BY to_neuron_id
+			),
+			avg_prediction_strength AS (
+				-- Calculate the average strength across all predicted to_neurons
+				SELECT AVG(total_strength) as avg_strength
+				FROM to_neuron_strengths
+			),
+			peak_predictions AS (
+				-- Find peak predictions: to_neurons stronger than average by minPredictionRatio
+				SELECT tns.to_neuron_id
+				FROM to_neuron_strengths tns
+				CROSS JOIN avg_prediction_strength aps
+				WHERE tns.total_strength >= :minPredictionStrength
+				AND tns.total_strength > (aps.avg_strength * :minPredictionRatio)
+			)
+			-- Insert all connections leading to peak predictions
+			SELECT :level, cc.connection_id
+			FROM peak_predictions pp
+			JOIN candidate_connections cc ON pp.to_neuron_id = cc.to_neuron_id
+		`, {
+			level,
+			minPredictionStrength: this.minPredictionStrength,
+			minPredictionRatio: this.minPredictionRatio
+		});
 
 		// Infer neurons from predicted connections (to_neuron_id at age=-1)
 		// Use INSERT IGNORE because the same neuron may have been inferred from pattern inference
@@ -1020,34 +1056,56 @@ export default class Brain {
 		this.forgetCounter++;
 		if (this.forgetCounter % this.forgetCycles !== 0) return;
 		this.forgetCounter = 0;
-		console.log('Running forget cycle...');
+
+		console.log('=== FORGET CYCLE STARTING ===');
+		const cycleStart = Date.now();
 
 		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns
-		await this.conn.query(`UPDATE patterns SET strength = strength - ?`, [this.patternForgetRate]);
-		await this.conn.query(`DELETE FROM patterns WHERE strength <= 0`);
+		console.log('Running forget cycle - pattern update...');
+		let stepStart = Date.now();
+		const [patternUpdateResult] = await this.conn.query(`UPDATE patterns SET strength = strength - ? WHERE strength > 0`, [this.patternForgetRate]);
+		console.log(`  Pattern UPDATE took ${Date.now() - stepStart}ms (updated ${patternUpdateResult.affectedRows} rows)`);
+
+		console.log('Running forget cycle - pattern delete...');
+		stepStart = Date.now();
+		const [patternDeleteResult] = await this.conn.query(`DELETE FROM patterns WHERE strength <= 0`);
+		console.log(`  Pattern DELETE took ${Date.now() - stepStart}ms (deleted ${patternDeleteResult.affectedRows} rows)`);
 
 		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections
-		await this.conn.query(`UPDATE connections SET strength = strength - ?`, [this.connectionForgetRate]);
-		await this.conn.query(`DELETE FROM connections WHERE strength <= 0`);
+		console.log('Running forget cycle - connection update...');
+		stepStart = Date.now();
+		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = strength - ? WHERE strength > 0`, [this.connectionForgetRate]);
+		console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
+
+		console.log('Running forget cycle - connection delete...');
+		stepStart = Date.now();
+		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength <= 0`);
+		console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
 
 		// 3. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
 		// First, explicitly delete from pattern_peaks to avoid CASCADE timing issues
-		await this.conn.query(`
+		console.log('Running forget cycle - pattern_peaks cleanup...');
+		stepStart = Date.now();
+		const [peaksDeleteResult] = await this.conn.query(`
 			DELETE pp FROM pattern_peaks pp
 			LEFT JOIN patterns p ON pp.pattern_neuron_id = p.pattern_neuron_id
 			WHERE p.pattern_neuron_id IS NULL
 		`);
+		console.log(`  Pattern_peaks DELETE took ${Date.now() - stepStart}ms (deleted ${peaksDeleteResult.affectedRows} rows)`);
 
 		// Then delete orphaned neurons
-		await this.conn.query(`
+		console.log('Running forget cycle - orphaned neurons cleanup...');
+		stepStart = Date.now();
+		const [neuronDeleteResult] = await this.conn.query(`
 			DELETE FROM neurons n
 			WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
 			  AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
 			  AND NOT EXISTS (SELECT 1 FROM patterns WHERE pattern_neuron_id = n.id)
 			  AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
 		`);
+		console.log(`  Orphaned neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
 
-		console.log('Forgetting cycle completed.');
+		console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}
 
 	/**

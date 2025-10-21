@@ -22,10 +22,14 @@ USE machine_intelligence;
 select count(*) from neurons;
 select count(*) from coordinates;
 select count(*) from connections;
+select count(*) from connections where strength < 0;
+select count(*) from connections where strength > 0;
 select * from connections where id > 96 and distance = 2;
 select * from active_neurons;
+select * from connection_inference;
 select count(*) from active_connections;
 select count(*) from patterns where strength > 0;
+select count(*) from patterns where strength < 0;
 
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (
@@ -72,7 +76,8 @@ CREATE TABLE IF NOT EXISTS connections (
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength DESC),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength DESC),
     INDEX idx_distance_strength (distance, strength DESC),
-    INDEX idx_strength (id, strength)
+    INDEX idx_strength (id, strength),
+    INDEX idx_strength2 (strength)
 );
 
 -- pattern neurons definitions - neuron connections between levels
@@ -84,7 +89,8 @@ CREATE TABLE IF NOT EXISTS patterns (
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
     INDEX idx_connection_strength (connection_id, strength),
-    INDEX idx_pattern_strength (pattern_neuron_id, strength)
+    INDEX idx_pattern_strength (pattern_neuron_id, strength),
+    INDEX idx_strength (strength)
 );
 
 -- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
@@ -159,3 +165,6 @@ CREATE TABLE IF NOT EXISTS active_connections (
     INDEX idx_from_neuron_level (from_neuron_id, level),
     INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
 ) ENGINE=MEMORY;
+
+-- increase the amount of records that can be stored in memory tables
+SET GLOBAL max_heap_table_size = 1024 * 1024 * 1024 * 2;
