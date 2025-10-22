@@ -14,17 +14,16 @@ export default class Brain {
 		// set hyperparameters
 		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
 		this.forgetCycles = 100; // number of frames between forget cycles
-		this.connectionForgetRate = 0.05; // how much connection strengths decay per forget cycle
-		this.patternForgetRate = 0.05; // how much pattern strengths decay per forget cycle
-		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
+		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
+		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1.5; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.4; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
-		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
-		this.negativeLearningRate = 0.1; // how much to weaken connections when predictions fail
+		this.patternNegativeReinforcement = 1; // how much to weaken pattern connections that were not observed
+		this.negativeLearningRate = 1; // how much to weaken connections when predictions fail
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -494,33 +493,35 @@ export default class Brain {
 				AND c.distance = f.age + 1
 				AND c.strength > 0
 			),
-			to_neuron_strengths AS (
-				-- Calculate total strength for each to_neuron (sum of incoming connections)
-				SELECT to_neuron_id, SUM(strength) as total_strength
-				FROM candidate_connections
-				GROUP BY to_neuron_id
-			),
-			from_neuron_strengths AS (
-				-- Calculate total strength for each from_neuron (sum of outgoing connections)
-				SELECT from_neuron_id, SUM(strength) as total_strength
-				FROM candidate_connections
-				GROUP BY from_neuron_id
+			neuron_strengths AS (
+				-- Calculate total strength for each neuron (sum of all connections it participates in)
+				SELECT neuron_id, SUM(strength) as total_strength
+				FROM (
+					SELECT from_neuron_id as neuron_id, strength FROM candidate_connections
+					UNION ALL
+					SELECT to_neuron_id as neuron_id, strength FROM candidate_connections
+				) all_neuron_connections
+				GROUP BY neuron_id
 			),
 			neighborhood_strengths AS (
 				-- Calculate average from_neuron strength for each to_neuron (neighborhood context)
-				SELECT cc.to_neuron_id, AVG(fns.total_strength) as avg_neighborhood_strength
-				FROM candidate_connections cc
-				JOIN from_neuron_strengths fns ON cc.from_neuron_id = fns.from_neuron_id
-				GROUP BY cc.to_neuron_id
+				-- Use DISTINCT to count each from_neuron only once (in case of multiple connections)
+				SELECT to_neuron_id, AVG(total_strength) as avg_neighborhood_strength
+				FROM (
+					SELECT DISTINCT cc.to_neuron_id, cc.from_neuron_id, ns.total_strength
+					FROM candidate_connections cc
+					JOIN neuron_strengths ns ON cc.from_neuron_id = ns.neuron_id
+				) unique_neighbors
+				GROUP BY to_neuron_id
 			),
 			peaks AS (
 				-- Find peaks: to_neurons with strength >= minPeakStrength AND ratio > minPeakRatio
 				-- Using multiplication instead of division for better index usage
-				SELECT tns.to_neuron_id as peak_neuron_id
-				FROM to_neuron_strengths tns
-				JOIN neighborhood_strengths ns ON tns.to_neuron_id = ns.to_neuron_id
-				WHERE tns.total_strength >= :minPeakStrength
-				AND tns.total_strength > (ns.avg_neighborhood_strength * :minPeakRatio)
+				SELECT ns.neuron_id as peak_neuron_id
+				FROM neuron_strengths ns
+				JOIN neighborhood_strengths nhs ON ns.neuron_id = nhs.to_neuron_id
+				WHERE ns.total_strength >= :minPeakStrength
+				AND ns.total_strength > (nhs.avg_neighborhood_strength * :minPeakRatio)
 			)
 			-- Insert all connections for peak neurons
 			SELECT :level, cc.connection_id
@@ -860,11 +861,10 @@ export default class Brain {
 
 		// Detect peaks and insert into observed_patterns in one query
 		// Logic:
-		// 1. Calculate to_neuron strengths (sum of incoming connection strengths)
-		// 2. Calculate from_neuron strengths (sum of outgoing connection strengths)
-		// 3. Calculate neighborhood strength (average from_neuron strength for each to_neuron)
-		// 4. Find peaks where to_neuron strength >= minPeakStrength AND ratio > minPeakRatio
-		// 5. Insert all connections for those peaks into observed_patterns
+		// 1. Calculate neuron strengths (sum of all connection strengths each neuron participates in)
+		// 2. Calculate neighborhood strength (average from_neuron strength for each to_neuron)
+		// 3. Find peaks where to_neuron strength >= minPeakStrength AND ratio > minPeakRatio
+		// 4. Insert all connections for those peaks into observed_patterns
 		await this.conn.query(`
 			INSERT INTO observed_patterns (peak_neuron_id, connection_id)
 			WITH connection_data AS (
@@ -880,33 +880,35 @@ export default class Brain {
 				AND ac.age = 0
 				AND c.strength > 0
 			),
-			to_neuron_strengths AS (
-				-- Calculate total strength for each to_neuron (sum of incoming connections)
-				SELECT to_neuron_id, SUM(strength) as total_strength
-				FROM connection_data
-				GROUP BY to_neuron_id
-			),
-			from_neuron_strengths AS (
-				-- Calculate total strength for each from_neuron (sum of outgoing connections)
-				SELECT from_neuron_id, SUM(strength) as total_strength
-				FROM connection_data
-				GROUP BY from_neuron_id
+			neuron_strengths AS (
+				-- Calculate total strength for each neuron (sum of all connections it participates in)
+				SELECT neuron_id, SUM(strength) as total_strength
+				FROM (
+					SELECT from_neuron_id as neuron_id, strength FROM connection_data
+					UNION ALL
+					SELECT to_neuron_id as neuron_id, strength FROM connection_data
+				) all_neuron_connections
+				GROUP BY neuron_id
 			),
 			neighborhood_strengths AS (
 				-- Calculate average from_neuron strength for each to_neuron (neighborhood context)
-				SELECT cd.to_neuron_id, AVG(fns.total_strength) as avg_neighborhood_strength
-				FROM connection_data cd
-				JOIN from_neuron_strengths fns ON cd.from_neuron_id = fns.from_neuron_id
-				GROUP BY cd.to_neuron_id
+				-- Use DISTINCT to count each from_neuron only once (in case of multiple connections)
+				SELECT to_neuron_id, AVG(total_strength) as avg_neighborhood_strength
+				FROM (
+					SELECT DISTINCT cd.to_neuron_id, cd.from_neuron_id, ns.total_strength
+					FROM connection_data cd
+					JOIN neuron_strengths ns ON cd.from_neuron_id = ns.neuron_id
+				) unique_neighbors
+				GROUP BY to_neuron_id
 			),
 			peaks AS (
 				-- Find peaks: to_neurons with strength >= minPeakStrength AND ratio > minPeakRatio
 				-- Using multiplication instead of division for better index usage
-				SELECT tns.to_neuron_id as peak_neuron_id
-				FROM to_neuron_strengths tns
-				JOIN neighborhood_strengths ns ON tns.to_neuron_id = ns.to_neuron_id
-				WHERE tns.total_strength >= :minPeakStrength
-				AND tns.total_strength > (ns.avg_neighborhood_strength * :minPeakRatio)
+				SELECT ns.neuron_id as peak_neuron_id
+				FROM neuron_strengths ns
+				JOIN neighborhood_strengths nhs ON ns.neuron_id = nhs.to_neuron_id
+				WHERE ns.total_strength >= :minPeakStrength
+				AND ns.total_strength > (nhs.avg_neighborhood_strength * :minPeakRatio)
 			)
 			-- Insert all connections for peak neurons
 			SELECT p.peak_neuron_id, cd.connection_id
