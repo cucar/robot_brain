@@ -13,20 +13,18 @@ export default class Brain {
 
 		// set hyperparameters
 		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
-		this.forgetCycles = 1000; // number of frames between forget cycles (reduced from 10 to improve performance)
+		this.forgetCycles = 100; // number of frames between forget cycles
 		this.connectionForgetRate = 0.05; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 0.05; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward factors decay toward neutral (1.0) per forget cycle
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (reduced from 10.0 to allow faster pattern formation)
-		this.minPeakRatio = 2.0; // minimum ratio of peak strength to neighborhood average to be considered a peak (pattern)
-		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be considered (lower than minPeakStrength)
-		this.minPredictionRatio = 2.0; // minimum ratio for prediction peaks (lower than minPeakRatio for more predictions)
+		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.5; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
-		this.negativeLearningRate = 0.01; // how much to weaken connections when predictions fail
+		this.negativeLearningRate = 0.1; // how much to weaken connections when predictions fail
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -408,32 +406,42 @@ export default class Brain {
 
 
 	/**
-	 * Validate connection predictions from the previous frame.
-	 * Check which predictions came true (matched active_connections).
-	 * Apply negative reinforcement to connections that predicted incorrectly.
+	 * reports accuracy of neuron predictions from the previous frame for accuracy reporting.
+	 * Check which predicted neurons (from inferred_neurons) actually got activated.
 	 */
-	async validateConnectionPredictions(level) {
+	async reportPredictionsAccuracy(level) {
 
-		// Get predictions from previous frame
-		const [predictions] = await this.conn.query(
-			'SELECT connection_id FROM connection_inference WHERE level = ?',
-			[level]
-		);
-
+		// Get predictions from previous frame (age=1 after aging)
+		const [predictions] = await this.conn.query('SELECT neuron_id FROM inferred_neurons WHERE level = ? AND age = 1', [level]);
 		if (predictions.length === 0) {
 			console.log(`Level ${level}: No predictions to validate`);
 			return;
 		}
 
-		// Find which predictions came true (exist in active_connections at age=0)
+		// Find which predictions came true (exist in active_neurons at age=0)
 		const [matches] = await this.conn.query(`
-			SELECT ci.connection_id
-			FROM connection_inference ci
-			JOIN active_connections ac ON ci.connection_id = ac.connection_id
-			WHERE ci.level = ?
-			AND ac.level = ?
-			AND ac.age = 0
+			SELECT inf.neuron_id
+			FROM inferred_neurons inf
+			JOIN active_neurons an ON inf.neuron_id = an.neuron_id
+			WHERE inf.level = ?
+			AND inf.age = 1
+			AND an.level = ?
+			AND an.age = 0
 		`, [level, level]);
+
+		const successRate = predictions.length > 0 ? (matches.length / predictions.length * 100).toFixed(1) : 0;
+		console.log(`Level ${level}: Prediction accuracy: ${matches.length}/${predictions.length} (${successRate}%)`);
+	}
+
+	/**
+	 * Validate connection predictions from the previous frame.
+	 * Apply negative reinforcement to connections that predicted incorrectly.
+	 */
+	async validateConnectionPredictions(level) {
+
+		// get the connections used for predictions from previous frame
+		const [predictions] = await this.conn.query('SELECT connection_id FROM connection_inference WHERE level = ?', [level]);
+		if (predictions.length === 0) return;
 
 		// Find which predictions failed (not in active_connections)
 		const [failures] = await this.conn.query(`
@@ -444,18 +452,13 @@ export default class Brain {
 			AND ac.connection_id IS NULL
 		`, [level, level]);
 
-		const successRate = predictions.length > 0 ? (matches.length / predictions.length * 100).toFixed(1) : 0;
-		console.log(`Level ${level}: Prediction accuracy: ${matches.length}/${predictions.length} (${successRate}%)`);
+		// if there are no failed predictions, no need to apply negative reinforcement
+		if (failures.length === 0) return;
 
 		// Apply negative reinforcement to failed predictions
-		if (failures.length > 0) {
-			const failedConnectionIds = failures.map(f => f.connection_id);
-			await this.conn.query(
-				'UPDATE connections SET strength = strength - ? WHERE id IN (?)',
-				[this.negativeLearningRate, failedConnectionIds]
-			);
-			console.log(`Level ${level}: Applied negative reinforcement to ${failures.length} failed predictions`);
-		}
+		const failedConnectionIds = failures.map(f => f.connection_id);
+		await this.conn.query('UPDATE connections SET strength = strength - ? WHERE id IN (?)', [this.negativeLearningRate, failedConnectionIds]);
+		console.log(`Level ${level}: Applied negative reinforcement to ${failures.length} failed connection predictions`);
 	}
 
 	/**
@@ -465,23 +468,26 @@ export default class Brain {
 	 */
 	async inferConnections(level) {
 
-		// First, validate predictions from the previous frame (before clearing)
+		// report the neuron prediction accuracy from previous frame
+		await this.reportPredictionsAccuracy(level);
+
+		// validate predictions from the previous frame (before clearing)
 		await this.validateConnectionPredictions(level);
 
 		// Clear previous predictions for this level
 		await this.conn.query('DELETE FROM connection_inference WHERE level = ?', [level]);
 
-		// Predict connections using peak detection - only predict connections that stand out
-		// For predictions, we compare each to_neuron's strength to the average of all predicted to_neurons
+		// Predict connections using the same peak detection algorithm as detectPeaks
+		// but for one frame into the future, using all possible connections from active neurons
 		await this.conn.query(`
 			INSERT INTO connection_inference (level, connection_id)
 			WITH candidate_connections AS (
-				-- Get all possible connections from active neurons
+				-- Get all possible connections from active neurons (one frame into the future)
 				SELECT
 					c.id as connection_id,
 					c.from_neuron_id,
 					c.to_neuron_id,
-					c.strength
+					c.strength * POW(:peakTimeDecayFactor, c.distance) as strength
 				FROM active_neurons f
 				JOIN connections c ON c.from_neuron_id = f.neuron_id
 				WHERE f.level = :level
@@ -489,32 +495,42 @@ export default class Brain {
 				AND c.strength > 0
 			),
 			to_neuron_strengths AS (
-				-- Calculate total strength for each to_neuron (sum of incoming predicted connections)
+				-- Calculate total strength for each to_neuron (sum of incoming connections)
 				SELECT to_neuron_id, SUM(strength) as total_strength
 				FROM candidate_connections
 				GROUP BY to_neuron_id
 			),
-			avg_prediction_strength AS (
-				-- Calculate the average strength across all predicted to_neurons
-				SELECT AVG(total_strength) as avg_strength
-				FROM to_neuron_strengths
+			from_neuron_strengths AS (
+				-- Calculate total strength for each from_neuron (sum of outgoing connections)
+				SELECT from_neuron_id, SUM(strength) as total_strength
+				FROM candidate_connections
+				GROUP BY from_neuron_id
 			),
-			peak_predictions AS (
-				-- Find peak predictions: to_neurons stronger than average by minPredictionRatio
-				SELECT tns.to_neuron_id
+			neighborhood_strengths AS (
+				-- Calculate average from_neuron strength for each to_neuron (neighborhood context)
+				SELECT cc.to_neuron_id, AVG(fns.total_strength) as avg_neighborhood_strength
+				FROM candidate_connections cc
+				JOIN from_neuron_strengths fns ON cc.from_neuron_id = fns.from_neuron_id
+				GROUP BY cc.to_neuron_id
+			),
+			peaks AS (
+				-- Find peaks: to_neurons with strength >= minPeakStrength AND ratio > minPeakRatio
+				-- Using multiplication instead of division for better index usage
+				SELECT tns.to_neuron_id as peak_neuron_id
 				FROM to_neuron_strengths tns
-				CROSS JOIN avg_prediction_strength aps
-				WHERE tns.total_strength >= :minPredictionStrength
-				AND tns.total_strength > (aps.avg_strength * :minPredictionRatio)
+				JOIN neighborhood_strengths ns ON tns.to_neuron_id = ns.to_neuron_id
+				WHERE tns.total_strength >= :minPeakStrength
+				AND tns.total_strength > (ns.avg_neighborhood_strength * :minPeakRatio)
 			)
-			-- Insert all connections leading to peak predictions
+			-- Insert all connections for peak neurons
 			SELECT :level, cc.connection_id
-			FROM peak_predictions pp
-			JOIN candidate_connections cc ON pp.to_neuron_id = cc.to_neuron_id
+			FROM peaks p
+			JOIN candidate_connections cc ON p.peak_neuron_id = cc.to_neuron_id
 		`, {
 			level,
-			minPredictionStrength: this.minPredictionStrength,
-			minPredictionRatio: this.minPredictionRatio
+			peakTimeDecayFactor: this.peakTimeDecayFactor,
+			minPeakStrength: this.minPeakStrength,
+			minPeakRatio: this.minPeakRatio
 		});
 
 		// Infer neurons from predicted connections (to_neuron_id at age=-1)
@@ -838,6 +854,7 @@ export default class Brain {
 	 * @param {number} level - The level to detect peaks for
 	 */
 	async detectPeaks(level) {
+
 		// Clear observed_patterns table
 		await this.conn.query('TRUNCATE observed_patterns');
 
