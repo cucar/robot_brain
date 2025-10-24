@@ -24,6 +24,8 @@ export default class Brain {
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 1; // how much to weaken pattern connections that were not observed
 		this.negativeLearningRate = 1; // how much to weaken connections when predictions fail
+		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
+		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -454,9 +456,11 @@ export default class Brain {
 		// if there are no failed predictions, no need to apply negative reinforcement
 		if (failures.length === 0) return;
 
-		// Apply negative reinforcement to failed predictions
+		// Apply negative reinforcement to failed predictions (clamped between minConnectionStrength and maxConnectionStrength)
 		const failedConnectionIds = failures.map(f => f.connection_id);
-		await this.conn.query('UPDATE connections SET strength = strength - ? WHERE id IN (?)', [this.negativeLearningRate, failedConnectionIds]);
+		await this.conn.query(
+			'UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE id IN (?)',
+			[this.minConnectionStrength, this.maxConnectionStrength, this.negativeLearningRate, failedConnectionIds]);
 		console.log(`Level ${level}: Applied negative reinforcement to ${failures.length} failed connection predictions`);
 	}
 
@@ -745,8 +749,8 @@ export default class Brain {
             AND t.level = :level  -- target neurons are at the specified level
             AND f.level = t.level  -- restrict to same level only
             AND (t.neuron_id != f.neuron_id OR f.age != 0)  -- no self-connections at same age
-			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
-		`, { level });
+			ON DUPLICATE KEY UPDATE strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, strength + VALUES(strength)))
+		`, { level, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 	}
 
 	/**
@@ -984,23 +988,23 @@ export default class Brain {
 	 */
 	async mergeMatchedPatterns() {
 
-		// Positive reinforcement: Add/strengthen observed connections
+		// Positive reinforcement: Add/strengthen observed connections (clamped between minConnectionStrength and maxConnectionStrength)
 		await this.conn.query(`
 			INSERT INTO patterns (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT mp.pattern_neuron_id, op.connection_id, 1
 			FROM matched_patterns mp
 			JOIN observed_patterns op ON mp.peak_neuron_id = op.peak_neuron_id
-			ON DUPLICATE KEY UPDATE strength = strength + 1
-		`);
+			ON DUPLICATE KEY UPDATE strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, strength + 1))
+		`, { minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 
-		// Negative reinforcement: Weaken unobserved connections
+		// Negative reinforcement: Weaken unobserved connections (clamped between minConnectionStrength and maxConnectionStrength)
 		await this.conn.query(`
 			UPDATE patterns p
 			JOIN matched_patterns mp ON p.pattern_neuron_id = mp.pattern_neuron_id
 			LEFT JOIN observed_patterns op ON mp.peak_neuron_id = op.peak_neuron_id AND p.connection_id = op.connection_id
-			SET p.strength = p.strength - ?
+			SET p.strength = GREATEST(?, LEAST(?, p.strength - ?))
 			WHERE op.connection_id IS NULL
-		`, [this.patternNegativeReinforcement]);
+		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
 	}
 
 	/**
@@ -1079,27 +1083,17 @@ export default class Brain {
 		console.log('=== FORGET CYCLE STARTING ===');
 		const cycleStart = Date.now();
 
-		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns
+		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns (clamped between minConnectionStrength and maxConnectionStrength)
 		console.log('Running forget cycle - pattern update...');
 		let stepStart = Date.now();
-		const [patternUpdateResult] = await this.conn.query(`UPDATE patterns SET strength = strength - ? WHERE strength > 0`, [this.patternForgetRate]);
+		const [patternUpdateResult] = await this.conn.query(`UPDATE patterns SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
 		console.log(`  Pattern UPDATE took ${Date.now() - stepStart}ms (updated ${patternUpdateResult.affectedRows} rows)`);
 
-		console.log('Running forget cycle - pattern delete...');
-		stepStart = Date.now();
-		const [patternDeleteResult] = await this.conn.query(`DELETE FROM patterns WHERE strength <= 0`);
-		console.log(`  Pattern DELETE took ${Date.now() - stepStart}ms (deleted ${patternDeleteResult.affectedRows} rows)`);
-
-		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections
+		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped between minConnectionStrength and maxConnectionStrength)
 		console.log('Running forget cycle - connection update...');
 		stepStart = Date.now();
-		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = strength - ? WHERE strength > 0`, [this.connectionForgetRate]);
+		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
 		console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
-
-		console.log('Running forget cycle - connection delete...');
-		stepStart = Date.now();
-		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength <= 0`);
-		console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
 
 		// 3. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
 		// First, explicitly delete from pattern_peaks to avoid CASCADE timing issues
@@ -1143,14 +1137,14 @@ export default class Brain {
 		// globalReward = 0.5 → adjustment = -0.5 per connection
 		const rewardAdjustment = globalReward - 1.0;
 
-		// Apply reward to active_connections with exponential temporal decay
+		// Apply reward to active_connections with exponential temporal decay (clamped between minConnectionStrength and maxConnectionStrength)
 		// Older connections (higher age) get less reward/punishment
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			JOIN active_connections ac ON c.id = ac.connection_id
-			SET c.strength = c.strength + (:rewardAdjustment * POW(:rewardTimeDecayFactor, ac.age))
+			SET c.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, c.strength + (:rewardAdjustment * POW(:rewardTimeDecayFactor, ac.age))))
 			WHERE ac.age >= 0
-		`, { rewardAdjustment, rewardTimeDecayFactor: this.rewardTimeDecayFactor });
+		`, { rewardAdjustment, rewardTimeDecayFactor: this.rewardTimeDecayFactor, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 
 		console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} active connections (adjustment: ${rewardAdjustment >= 0 ? '+' : ''}${rewardAdjustment.toFixed(3)})`);
 	}

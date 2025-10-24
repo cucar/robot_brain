@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS dimensions (
     name VARCHAR(50) UNIQUE NOT NULL,
     channel VARCHAR(50) NOT NULL,
     type ENUM('input', 'output') NOT NULL
-);
+) ENGINE=MEMORY;
 
 -- these dimensions can be used for visual processing
 -- INSERT INTO dimensions (name) VALUES ('x'), ('y'), ('r'), ('g'), ('b');
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS dimensions (
 -- neurons table is the core representation of concepts - auto increment
 CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY
-);
+) ENGINE=MEMORY;
 
 -- coordinates for base neurons
 CREATE TABLE IF NOT EXISTS coordinates (
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS coordinates (
     PRIMARY KEY (neuron_id, dimension_id),
     FOREIGN KEY (neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     INDEX (dimension_id, val)
-);
+) ENGINE=MEMORY;
 
 -- connections between neurons within levels - distance=0 is spatial (co-occurrence) - distance > 0 is temporal (sequences) 
 CREATE TABLE IF NOT EXISTS connections (
@@ -73,12 +73,12 @@ CREATE TABLE IF NOT EXISTS connections (
     FOREIGN KEY (from_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (to_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     UNIQUE INDEX (from_neuron_id, to_neuron_id, distance),
-    INDEX idx_from_distance_strength (from_neuron_id, distance, strength DESC),
-    INDEX idx_to_distance_strength (to_neuron_id, distance, strength DESC),
-    INDEX idx_distance_strength (distance, strength DESC),
+    INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
+    INDEX idx_to_distance_strength (to_neuron_id, distance, strength),
+    INDEX idx_distance_strength (distance, strength),
     INDEX idx_strength (id, strength),
     INDEX idx_strength2 (strength)
-);
+) ENGINE=MEMORY;
 
 -- pattern neurons definitions - neuron connections between levels
 CREATE TABLE IF NOT EXISTS patterns (
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS patterns (
     INDEX idx_connection_strength (connection_id, strength),
     INDEX idx_pattern_strength (pattern_neuron_id, strength),
     INDEX idx_strength (strength)
-);
+) ENGINE=MEMORY;
 
 -- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
 -- patterns are learned by peak neurons to differentiate between sequences leading to them
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS pattern_peaks (
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (peak_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     INDEX idx_peak (peak_neuron_id)
-);
+) ENGINE=MEMORY;
 
 -- neurons currently active within the sliding window (MEMORY table)
 -- note that it is possible for the same neuron to be active in different ages or levels
