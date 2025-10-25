@@ -19,11 +19,11 @@ export default class Brain {
 		this.maxLevels = 6; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1.4; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
-		this.patternNegativeReinforcement = 1; // how much to weaken pattern connections that were not observed
-		this.negativeLearningRate = 1; // how much to weaken connections when predictions fail
+		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
+		this.negativeLearningRate = 0.1; // how much to weaken connections when predictions fail
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
 
@@ -480,8 +480,9 @@ export default class Brain {
 		// Clear previous predictions for this level
 		await this.conn.query('DELETE FROM connection_inference WHERE level = ?', [level]);
 
-		// Predict connections using the same peak detection algorithm as detectPeaks
-		// but for one frame into the future, using all possible connections from active neurons
+		// Predict connections using peak detection on target neurons only
+		// Source neurons (from_neuron_id) are already active - only target neurons (to_neuron_id) are predictions
+		// Unlike detectPeaks, this allows empty neighborhoods (predictions work even without competition)
 		await this.conn.query(`
 			INSERT INTO connection_inference (level, connection_id)
 			WITH candidate_connections AS (
@@ -490,53 +491,55 @@ export default class Brain {
 					c.id as connection_id,
 					c.from_neuron_id,
 					c.to_neuron_id,
-					c.strength * POW(:peakTimeDecayFactor, c.distance) as strength
+					c.strength * POW(?, c.distance) as strength
 				FROM active_neurons f
 				JOIN connections c ON c.from_neuron_id = f.neuron_id
-				WHERE f.level = :level
+				WHERE f.level = ?
 				AND c.distance = f.age + 1
 				AND c.strength > 0
 			),
-			neuron_strengths AS (
-				-- Calculate total strength for each neuron (sum of all connections it participates in)
-				SELECT neuron_id, SUM(strength) as total_strength
-				FROM (
-					SELECT from_neuron_id as neuron_id, strength FROM candidate_connections
-					UNION ALL
-					SELECT to_neuron_id as neuron_id, strength FROM candidate_connections
-				) all_neuron_connections
-				GROUP BY neuron_id
+			neuron_connections AS (
+				-- Group connections by (from, to) pairs
+				SELECT from_neuron_id, to_neuron_id, SUM(strength) as strength
+			 	FROM candidate_connections
+			 	GROUP BY from_neuron_id, to_neuron_id
 			),
-			neighborhood_strengths AS (
-				-- Calculate average from_neuron strength for each to_neuron (neighborhood context)
-				-- Use DISTINCT to count each from_neuron only once (in case of multiple connections)
-				SELECT to_neuron_id, AVG(total_strength) as avg_neighborhood_strength
-				FROM (
-					SELECT DISTINCT cc.to_neuron_id, cc.from_neuron_id, ns.total_strength
-					FROM candidate_connections cc
-					JOIN neuron_strengths ns ON cc.from_neuron_id = ns.neuron_id
-				) unique_neighbors
+			target_neuron_strengths AS (
+				-- Calculate total strength for each TARGET neuron (predictions only)
+				-- Source neurons are already active, so they're not predictions
+				SELECT to_neuron_id, SUM(strength) as total_strength
+				FROM neuron_connections
 				GROUP BY to_neuron_id
 			),
+			neighborhood_strengths AS (
+				-- For each target, find OTHER targets that share the same sources
+				-- These are the competing predictions (the neighborhood)
+				-- Calculate average strength of those competing targets
+				SELECT
+					nc1.to_neuron_id,
+					AVG(tns2.total_strength) as avg_neighborhood_strength
+				FROM neuron_connections nc1
+				JOIN neuron_connections nc2 
+				    ON nc1.from_neuron_id = nc2.from_neuron_id 
+				    AND nc1.to_neuron_id != nc2.to_neuron_id
+				JOIN target_neuron_strengths tns2 ON nc2.to_neuron_id = tns2.to_neuron_id
+				GROUP BY nc1.to_neuron_id
+			),
 			peaks AS (
-				-- Find peaks: to_neurons with strength >= minPeakStrength AND ratio > minPeakRatio
-				-- Using multiplication instead of division for better index usage
-				SELECT ns.neuron_id as peak_neuron_id
-				FROM neuron_strengths ns
-				JOIN neighborhood_strengths nhs ON ns.neuron_id = nhs.to_neuron_id
-				WHERE ns.total_strength >= :minPeakStrength
-				AND ns.total_strength > (nhs.avg_neighborhood_strength * :minPeakRatio)
+				-- Find peaks: targets that stand out from competing targets
+				-- LEFT JOIN allows predictions even when there's no neighborhood (deterministic sequences)
+				-- COALESCE handles empty neighborhood case (avg = 0)
+				SELECT tns.to_neuron_id as peak_neuron_id
+				FROM target_neuron_strengths tns
+				LEFT JOIN neighborhood_strengths nhs ON tns.to_neuron_id = nhs.to_neuron_id
+				WHERE tns.total_strength >= ?
+				AND tns.total_strength > (COALESCE(nhs.avg_neighborhood_strength, 0) * ?)
 			)
 			-- Insert all connections for peak neurons
-			SELECT :level, cc.connection_id
+			SELECT ?, cc.connection_id
 			FROM peaks p
 			JOIN candidate_connections cc ON p.peak_neuron_id = cc.to_neuron_id
-		`, {
-			level,
-			peakTimeDecayFactor: this.peakTimeDecayFactor,
-			minPeakStrength: this.minPeakStrength,
-			minPeakRatio: this.minPeakRatio
-		});
+		`, [this.peakTimeDecayFactor, level, this.minPeakStrength, this.minPeakRatio, level]);
 
 		// Infer neurons from predicted connections (to_neuron_id at age=-1)
 		// Use INSERT IGNORE because the same neuron may have been inferred from pattern inference
@@ -865,10 +868,10 @@ export default class Brain {
 
 		// Detect peaks and insert into observed_patterns in one query
 		// Logic:
-		// 1. Calculate neuron strengths (sum of all connection strengths each neuron participates in)
-		// 2. Calculate neighborhood strength (average from_neuron strength for each to_neuron)
-		// 3. Find peaks where to_neuron strength >= minPeakStrength AND ratio > minPeakRatio
-		// 4. Insert all connections for those peaks into observed_patterns
+		// 1. Calculate target neuron strengths (only targets, not sources)
+		// 2. Calculate neighborhood: for each target, find OTHER targets that share the same sources
+		// 3. Find peaks where target strength >= minPeakStrength AND ratio > minPeakRatio
+		// 4. Only create patterns for targets with non-empty neighborhoods (competition required)
 		await this.conn.query(`
 			INSERT INTO observed_patterns (peak_neuron_id, connection_id)
 			WITH connection_data AS (
@@ -877,53 +880,55 @@ export default class Brain {
 					ac.connection_id,
 					ac.from_neuron_id,
 					ac.to_neuron_id,
-					c.strength * POW(:peakTimeDecayFactor, c.distance) as strength
+					c.strength * POW(?, c.distance) as strength
 				FROM active_connections ac
 				JOIN connections c ON ac.connection_id = c.id
-				WHERE ac.level = :level
+				WHERE ac.level = ?
 				AND ac.age = 0
 				AND c.strength > 0
 			),
-			neuron_strengths AS (
-				-- Calculate total strength for each neuron (sum of all connections it participates in)
-				SELECT neuron_id, SUM(strength) as total_strength
-				FROM (
-					SELECT from_neuron_id as neuron_id, strength FROM connection_data
-					UNION ALL
-					SELECT to_neuron_id as neuron_id, strength FROM connection_data
-				) all_neuron_connections
-				GROUP BY neuron_id
+			neuron_connections AS (
+				-- Group connections by (from, to) pairs
+				SELECT from_neuron_id, to_neuron_id, SUM(strength) as strength
+				FROM connection_data
+				GROUP BY from_neuron_id, to_neuron_id
 			),
-			neighborhood_strengths AS (
-				-- Calculate average from_neuron strength for each to_neuron (neighborhood context)
-				-- Use DISTINCT to count each from_neuron only once (in case of multiple connections)
-				SELECT to_neuron_id, AVG(total_strength) as avg_neighborhood_strength
-				FROM (
-					SELECT DISTINCT cd.to_neuron_id, cd.from_neuron_id, ns.total_strength
-					FROM connection_data cd
-					JOIN neuron_strengths ns ON cd.from_neuron_id = ns.neuron_id
-				) unique_neighbors
+			target_neuron_strengths AS (
+				-- Calculate total strength for each TARGET neuron only
+				-- Source neurons are already active, so they're not candidates for peaks
+				SELECT to_neuron_id, SUM(strength) as total_strength
+				FROM neuron_connections
 				GROUP BY to_neuron_id
 			),
+			neighborhood_strengths AS (
+				-- For each target, find OTHER targets that share the same sources
+				-- These are the competing targets (the neighborhood)
+				-- Calculate average strength of those competing targets
+				SELECT
+					nc1.to_neuron_id,
+					AVG(tns2.total_strength) as avg_neighborhood_strength
+				FROM neuron_connections nc1
+				JOIN neuron_connections nc2 
+				    ON nc1.from_neuron_id = nc2.from_neuron_id
+				    AND nc1.to_neuron_id != nc2.to_neuron_id
+				JOIN target_neuron_strengths tns2 ON nc2.to_neuron_id = tns2.to_neuron_id
+				GROUP BY nc1.to_neuron_id
+			),
 			peaks AS (
-				-- Find peaks: to_neurons with strength >= minPeakStrength AND ratio > minPeakRatio
-				-- Using multiplication instead of division for better index usage
-				SELECT ns.neuron_id as peak_neuron_id
-				FROM neuron_strengths ns
-				JOIN neighborhood_strengths nhs ON ns.neuron_id = nhs.to_neuron_id
-				WHERE ns.total_strength >= :minPeakStrength
-				AND ns.total_strength > (nhs.avg_neighborhood_strength * :minPeakRatio)
+				-- Find peaks: targets that stand out from competing targets
+				-- JOIN (not LEFT JOIN) ensures only targets with neighborhoods become peaks
+				-- This prevents pattern creation for deterministic sequences with no competition
+				SELECT tns.to_neuron_id as peak_neuron_id
+				FROM target_neuron_strengths tns
+				JOIN neighborhood_strengths nhs ON tns.to_neuron_id = nhs.to_neuron_id
+				WHERE tns.total_strength >= ?
+				AND tns.total_strength > (nhs.avg_neighborhood_strength * ?)
 			)
 			-- Insert all connections for peak neurons
 			SELECT p.peak_neuron_id, cd.connection_id
 			FROM peaks p
 			JOIN connection_data cd ON p.peak_neuron_id = cd.to_neuron_id
-		`, {
-			level,
-			peakTimeDecayFactor: this.peakTimeDecayFactor,
-			minPeakStrength: this.minPeakStrength,
-			minPeakRatio: this.minPeakRatio
-		});
+		`, [this.peakTimeDecayFactor, level, this.minPeakStrength, this.minPeakRatio]);
 
 		// Get count for logging
 		const [result] = await this.conn.query('SELECT COUNT(DISTINCT peak_neuron_id) as peak_count FROM observed_patterns');

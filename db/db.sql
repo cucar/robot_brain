@@ -22,14 +22,12 @@ USE machine_intelligence;
 select count(*) from neurons;
 select count(*) from coordinates;
 select count(*) from connections;
-select count(*) from connections where strength < 0;
 select count(*) from connections where strength > 0;
 select * from connections where id > 96 and distance = 2;
 select * from active_neurons;
 select * from connection_inference;
 select count(*) from active_connections;
 select count(*) from patterns where strength > 0;
-select count(*) from patterns where strength < 0;
 
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (
