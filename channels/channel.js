@@ -71,11 +71,27 @@ export default class Channel {
 	 * Child classes should override this to provide context-aware exploration
 	 * Examples:
 	 * - Stock: Can't sell if not owned
-	 * - Arm: Can't move beyond joint limits  
+	 * - Arm: Can't move beyond joint limits
 	 * - Eyes: Can't saccade outside visual field
 	 */
 	getValidExplorationActions() {
 		// Child classes must implement this with state-aware logic
 		throw new Error('Channel must implement getValidExplorationActions() method');
+	}
+
+	/**
+	 * Resolve conflicts between multiple predictions for this channel
+	 * Called by brain after all predictions are made, before execution
+	 *
+	 * @param {Array} predictions - Array of prediction objects with structure:
+	 *   [{ neuron_id, coordinates: {dim1: val1, dim2: val2}, strength: number }]
+	 * @returns {Array} - Array of selected predictions to execute (can be 0, 1, or many)
+	 *
+	 * Each channel must implement its own conflict resolution logic:
+	 * - Stock channel: Returns array with 1 prediction (can't buy and sell simultaneously)
+	 * - Vision channel: Returns array with multiple predictions (can detect multiple objects)
+	 */
+	resolveConflicts(predictions) {
+		throw new Error('Channel must implement resolveConflicts() method');
 	}
 }

@@ -67,13 +67,16 @@ export default class Brain {
 	}
 
 	/**
-	 * Hard reset: clears ALL tables (used mainly for tests)
+	 * Hard reset: clears ALL learned data (used mainly for tests)
+	 * Note: dimensions table is NOT truncated as it's schema-level configuration
 	 */
 	async resetBrain() {
-		console.log('Hard resetting brain (all tables)...');
+		console.log('Hard resetting brain (all learned data)...');
 		await this.truncateTables([
 			'active_neurons',
 			'connection_inference',
+			'connection_inferred_neurons',
+			'pattern_inferred_neurons',
 			'inferred_neurons',
 			'observed_patterns',
 			'active_connections',
@@ -82,8 +85,7 @@ export default class Brain {
 			'patterns',
 			'connections',
 			'coordinates',
-			'neurons',
-			'dimensions'
+			'neurons'
 		]);
 	}
 
@@ -353,6 +355,8 @@ export default class Brain {
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
 		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE active_connections SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE connection_inferred_neurons SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE pattern_inferred_neurons SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE inferred_neurons SET age = age + 1 ORDER BY age DESC');
 
 		// Delete aged-out neurons from all levels at once
@@ -365,6 +369,12 @@ export default class Brain {
 
 		// Clean up inferred neurons after execution (age >= 2)
 		// age=0: fresh predictions, age=1: executed this frame, age>=2: no longer needed
+		const [connectionInferredResult] = await this.conn.query('DELETE FROM connection_inferred_neurons WHERE age >= 2');
+		console.log(`Cleaned up ${connectionInferredResult.affectedRows} executed connection inferred neurons (age >= 2)`);
+
+		const [patternInferredResult] = await this.conn.query('DELETE FROM pattern_inferred_neurons WHERE age >= 2');
+		console.log(`Cleaned up ${patternInferredResult.affectedRows} executed pattern inferred neurons (age >= 2)`);
+
 		const [inferredResult] = await this.conn.query('DELETE FROM inferred_neurons WHERE age >= 2');
 		console.log(`Cleaned up ${inferredResult.affectedRows} executed inferred neurons (age >= 2)`);
 	}
@@ -403,35 +413,201 @@ export default class Brain {
 			// Pattern inference: Predict peak neurons for the lower level
 			if (level > 0) await this.inferPatterns(level);
 		}
+
+		// Resolve conflicts in input predictions at base level (after all predictions are made)
+		await this.resolveInputPredictionConflicts();
 	}
 
+	/**
+	 * Resolve conflicts in input predictions per channel.
+	 * Reads from connection_inferred_neurons and pattern_inferred_neurons,
+	 * resolves conflicts using channel logic, and writes final predictions to inferred_neurons.
+	 */
+	async resolveInputPredictionConflicts() {
+
+		// get the most recent predictions for the next frame at level 0 - if there are none, nothing to resolve
+		const connectionRows = await this.getInputPredictions('connection_inferred_neurons');
+		const patternRows = await this.getInputPredictions('pattern_inferred_neurons');
+		if (connectionRows.length === 0 && patternRows.length === 0) return;
+
+		// Group predictions by channel and resolve conflicts and write to the inferred_neurons table
+		const channelPredictions = this.groupPredictionsByChannel(connectionRows, patternRows);
+		await this.resolveAndWritePredictions(channelPredictions);
+	}
 
 	/**
-	 * reports accuracy of neuron predictions from the previous frame for accuracy reporting.
-	 * Check which predicted neurons (from inferred_neurons) actually got activated.
+	 * Get input predictions from a specific inference table
+	 */
+	async getInputPredictions(tableName) {
+		const [rows] = await this.conn.query(`
+			SELECT inf.neuron_id, inf.strength, c.dimension_id, c.val, d.name as dimension_name, d.channel
+			FROM ${tableName} inf
+			JOIN coordinates c ON inf.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE d.type = 'input' AND inf.age = 0 AND inf.level = 0
+			ORDER BY d.channel, inf.neuron_id
+		`);
+		return rows;
+	}
+
+	/**
+	 * Group predictions by channel, building complete prediction objects with coordinates.
+	 * If both connection and pattern inference predict the same neuron, their strengths are summed.
+	 */
+	groupPredictionsByChannel(connectionRows, patternRows) {
+		const channelPredictions = new Map();
+		this.addPredictionsToChannelMap(channelPredictions, connectionRows);
+		this.addPredictionsToChannelMap(channelPredictions, patternRows);
+		return channelPredictions;
+	}
+
+	/**
+	 * Add predictions from rows to the channel map.
+	 * If a neuron is already predicted, sum the strengths (both sources agree = higher confidence).
+	 */
+	addPredictionsToChannelMap(channelPredictions, rows) {
+		for (const row of rows) {
+
+			// if the channel doesn't have a map yet, create one - otherwise get it from the map
+			if (!channelPredictions.has(row.channel)) channelPredictions.set(row.channel, new Map());
+			const channelMap = channelPredictions.get(row.channel);
+
+			// if the neuron doesn't have a prediction yet, create one
+			if (!channelMap.has(row.neuron_id)) channelMap.set(row.neuron_id, { neuron_id: row.neuron_id, strength: row.strength, coordinates: {} });
+			// Both connection and pattern predict this neuron - sum strengths
+			else channelMap.get(row.neuron_id).strength += row.strength;
+
+			// add the coordinate to the neuron's prediction
+			channelMap.get(row.neuron_id).coordinates[row.dimension_name] = row.val;
+		}
+	}
+
+	/**
+	 * Resolve conflicts for each channel and write final predictions to inferred_neurons.
+	 * Channels can return multiple predictions (e.g., vision detecting multiple objects).
+	 */
+	async resolveAndWritePredictions(channelPredictions) {
+
+		// Resolve conflicts for each channel and collect selected predictions
+		const allSelectedPredictions = [];
+		for (const [channelName, predictionMap] of channelPredictions)
+			allSelectedPredictions.push(...this.channels.get(channelName).resolveConflicts(Array.from(predictionMap.values())));
+
+		// if there are no predictions, nothing to resolve
+		if (allSelectedPredictions.length === 0) return;
+
+		// Batch insert all selected predictions at once
+		await this.conn.query(
+			'INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES ?',
+			[allSelectedPredictions.map(p => [p.neuron_id, 0, 0, p.strength])]
+		);
+		console.log(`Resolved ${allSelectedPredictions.length} input predictions after conflict resolution`);
+	}
+
+	/**
+	 * Reports accuracy of neuron predictions from the previous frame.
+	 * At level 0: Tracks accuracy for connection_inferred_neurons, pattern_inferred_neurons, and final inferred_neurons (input predictions only).
+	 * At higher levels: Tracks accuracy for connection_inferred_neurons (all neurons).
 	 */
 	async reportPredictionsAccuracy(level) {
 
-		// Get predictions from previous frame (age=1 after aging)
-		const [predictions] = await this.conn.query('SELECT neuron_id FROM inferred_neurons WHERE level = ? AND age = 1', [level]);
-		if (predictions.length === 0) {
-			console.log(`Level ${level}: No predictions to validate`);
+		// At higher levels, only report connection prediction accuracy
+		if (level > 0) {
+			const [connectionPredictions] = await this.conn.query(`
+				SELECT DISTINCT neuron_id
+				FROM connection_inferred_neurons
+				WHERE age = 1 AND level = ?
+			`, [level]);
+
+			if (connectionPredictions.length === 0) return;
+
+			const [connectionMatches] = await this.conn.query(`
+				SELECT cin.neuron_id
+				FROM connection_inferred_neurons cin
+				JOIN active_neurons an ON cin.neuron_id = an.neuron_id AND an.level = ? AND an.age = 0
+				WHERE cin.age = 1 AND cin.level = ?
+			`, [level, level]);
+
+			const connectionSuccessRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
+			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${connectionSuccessRate}%)`);
 			return;
 		}
 
-		// Find which predictions came true (exist in active_neurons at age=0)
-		const [matches] = await this.conn.query(`
-			SELECT inf.neuron_id
-			FROM inferred_neurons inf
-			JOIN active_neurons an ON inf.neuron_id = an.neuron_id
-			WHERE inf.level = ?
-			AND inf.age = 1
-			AND an.level = ?
-			AND an.age = 0
-		`, [level, level]);
+		// Get connection predictions from previous frame (age=1)
+		const [connectionPredictions] = await this.conn.query(`
+			SELECT DISTINCT cin.neuron_id
+			FROM connection_inferred_neurons cin
+			JOIN coordinates c ON cin.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE d.type = 'input' AND cin.age = 1 AND cin.level = 0
+		`);
 
-		const successRate = predictions.length > 0 ? (matches.length / predictions.length * 100).toFixed(1) : 0;
-		console.log(`Level ${level}: Prediction accuracy: ${matches.length}/${predictions.length} (${successRate}%)`);
+		// Get pattern predictions from previous frame (age=1)
+		const [patternPredictions] = await this.conn.query(`
+			SELECT DISTINCT pin.neuron_id
+			FROM pattern_inferred_neurons pin
+			JOIN coordinates c ON pin.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE d.type = 'input' AND pin.age = 1 AND pin.level = 0
+		`);
+
+		// Get final resolved predictions from previous frame (age=1)
+		const [resolvedPredictions] = await this.conn.query(`
+			SELECT DISTINCT inf.neuron_id
+			FROM inferred_neurons inf
+			JOIN coordinates c ON inf.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE d.type = 'input' AND inf.age = 1 AND inf.level = 0
+		`);
+
+		if (connectionPredictions.length === 0 && patternPredictions.length === 0 && resolvedPredictions.length === 0) {
+			return; // No predictions to report
+		}
+
+		// Find which connection predictions came true
+		if (connectionPredictions.length > 0) {
+			const [connectionMatches] = await this.conn.query(`
+				SELECT cin.neuron_id
+				FROM connection_inferred_neurons cin
+				JOIN coordinates c ON cin.neuron_id = c.neuron_id
+				JOIN dimensions d ON c.dimension_id = d.id
+				JOIN active_neurons an ON cin.neuron_id = an.neuron_id AND an.level = ? AND an.age = 0
+				WHERE d.type = 'input' AND cin.age = 1 AND cin.level = 0
+			`, [level]);
+
+			const connectionSuccessRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
+			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${connectionSuccessRate}%)`);
+		}
+
+		// Find which pattern predictions came true
+		if (patternPredictions.length > 0) {
+			const [patternMatches] = await this.conn.query(`
+				SELECT pin.neuron_id
+				FROM pattern_inferred_neurons pin
+				JOIN coordinates c ON pin.neuron_id = c.neuron_id
+				JOIN dimensions d ON c.dimension_id = d.id
+				JOIN active_neurons an ON pin.neuron_id = an.neuron_id AND an.level = ? AND an.age = 0
+				WHERE d.type = 'input' AND pin.age = 1 AND pin.level = 0
+			`, [level]);
+
+			const patternSuccessRate = (patternMatches.length / patternPredictions.length * 100).toFixed(1);
+			console.log(`Level ${level}: Pattern prediction accuracy: ${patternMatches.length}/${patternPredictions.length} (${patternSuccessRate}%)`);
+		}
+
+		// Find which resolved predictions came true
+		if (resolvedPredictions.length > 0) {
+			const [resolvedMatches] = await this.conn.query(`
+				SELECT inf.neuron_id
+				FROM inferred_neurons inf
+				JOIN coordinates c ON inf.neuron_id = c.neuron_id
+				JOIN dimensions d ON c.dimension_id = d.id
+				JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = ? AND an.age = 0
+				WHERE d.type = 'input' AND inf.age = 1 AND inf.level = 0
+			`, [level]);
+
+			const resolvedSuccessRate = (resolvedMatches.length / resolvedPredictions.length * 100).toFixed(1);
+			console.log(`Level ${level}: Resolved prediction accuracy: ${resolvedMatches.length}/${resolvedPredictions.length} (${resolvedSuccessRate}%)`);
+		}
 	}
 
 	/**
@@ -484,7 +660,7 @@ export default class Brain {
 		// Source neurons (from_neuron_id) are already active - only target neurons (to_neuron_id) are predictions
 		// Unlike detectPeaks, this allows empty neighborhoods (predictions work even without competition)
 		await this.conn.query(`
-			INSERT INTO connection_inference (level, connection_id)
+			INSERT INTO connection_inference (level, connection_id, to_neuron_id, strength)
 			WITH candidate_connections AS (
 				-- Get all possible connections from active neurons (one frame into the future)
 				SELECT
@@ -515,13 +691,9 @@ export default class Brain {
 				-- For each target, find OTHER targets that share the same sources
 				-- These are the competing predictions (the neighborhood)
 				-- Calculate average strength of those competing targets
-				SELECT
-					nc1.to_neuron_id,
-					AVG(tns2.total_strength) as avg_neighborhood_strength
+				SELECT nc1.to_neuron_id, AVG(tns2.total_strength) as avg_neighborhood_strength
 				FROM neuron_connections nc1
-				JOIN neuron_connections nc2 
-				    ON nc1.from_neuron_id = nc2.from_neuron_id 
-				    AND nc1.to_neuron_id != nc2.to_neuron_id
+				JOIN neuron_connections nc2 ON nc1.from_neuron_id = nc2.from_neuron_id AND nc1.to_neuron_id != nc2.to_neuron_id
 				JOIN target_neuron_strengths tns2 ON nc2.to_neuron_id = tns2.to_neuron_id
 				GROUP BY nc1.to_neuron_id
 			),
@@ -535,27 +707,27 @@ export default class Brain {
 				WHERE tns.total_strength >= ?
 				AND tns.total_strength > (COALESCE(nhs.avg_neighborhood_strength, 0) * ?)
 			)
-			-- Insert all connections for peak neurons
-			SELECT ?, cc.connection_id
+			-- Insert all connections for peak neurons, storing each connection's individual strength
+			SELECT ?, cc.connection_id, cc.to_neuron_id, cc.strength
 			FROM peaks p
 			JOIN candidate_connections cc ON p.peak_neuron_id = cc.to_neuron_id
 		`, [this.peakTimeDecayFactor, level, this.minPeakStrength, this.minPeakRatio, level]);
 
-		// Infer neurons from predicted connections (to_neuron_id at age=-1)
-		// Use INSERT IGNORE because the same neuron may have been inferred from pattern inference
+		// Infer neurons from predicted connections
+		// Sum up the individual connection strengths for each target neuron
 		await this.conn.query(`
-			INSERT IGNORE INTO inferred_neurons (neuron_id, level, age)
-			SELECT DISTINCT c.to_neuron_id, :level, 0
-			FROM connection_inference ci
-			JOIN connections c ON ci.connection_id = c.id
-			WHERE ci.level = :level
-		`, { level });
+			INSERT INTO connection_inferred_neurons (neuron_id, level, age, strength)
+			SELECT to_neuron_id, ?, 0, SUM(strength)
+			FROM connection_inference
+			WHERE level = ?
+			GROUP BY to_neuron_id
+		`, [level, level]);
 
 		const [result] = await this.conn.query(
-			'SELECT COUNT(DISTINCT connection_id) as count FROM connection_inference WHERE level = ?',
+			'SELECT COUNT(DISTINCT neuron_id) as count FROM connection_inferred_neurons WHERE level = ? AND age = 0',
 			[level]
 		);
-		console.log(`Level ${level}: Predicted ${result[0].count} connections for next frame`);
+		console.log(`Level ${level}: Predicted ${result[0].count} neurons for next frame (from connections)`);
 	}
 
 	/**
@@ -570,22 +742,23 @@ export default class Brain {
 
 		// Infer peak neurons from inferred pattern neurons
 		// Pattern neuron at level N → Peak neuron at level N-1
-		// This runs before inferConnections for the lower level, so no duplicates expected
+		// Strength = sum of the pattern neurons' strengths (multiple patterns can predict the same peak)
 		await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age)
-			SELECT DISTINCT pp.peak_neuron_id, :targetLevel, 0
-			FROM inferred_neurons inf
+			INSERT INTO pattern_inferred_neurons (neuron_id, level, age, strength)
+			SELECT pp.peak_neuron_id, ?, 0, SUM(inf.strength)
+			FROM connection_inferred_neurons inf
 			JOIN pattern_peaks pp ON inf.neuron_id = pp.pattern_neuron_id
-			WHERE inf.level = :level
+			WHERE inf.level = ?
 			AND inf.age = 0
-		`, { level, targetLevel: level - 1 });
+			GROUP BY pp.peak_neuron_id
+		`, [level - 1, level]);
 
 		const [result] = await this.conn.query(`
 			SELECT COUNT(DISTINCT neuron_id) as count
-			FROM inferred_neurons
+			FROM pattern_inferred_neurons
 			WHERE level = ? AND age = 0
 		`, [level - 1]);
-		console.log(`Level ${level}: Predicted ${result[0].count} peak neurons for level ${level - 1}`);
+		console.log(`Level ${level}: Predicted ${result[0].count} peak neurons for level ${level - 1} (from patterns)`);
 	}
 
 	/**

@@ -355,6 +355,30 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
+	 * Resolve conflicts between multiple stock predictions
+	 * For stocks: only one action can be taken (buy OR sell, not both)
+	 * Prioritize price predictions over volume predictions, then select by strength
+	 * @returns {Array} - Array with single selected prediction
+	 */
+	resolveConflicts(predictions) {
+		if (!predictions || predictions.length === 0) return [];
+
+		const priceChangeDim = `${this.symbol}_price_change`;
+
+		// Filter to only predictions that have price_change coordinate
+		const pricePredictions = predictions.filter(pred => priceChangeDim in pred.coordinates);
+
+		// If we have price predictions, use those; otherwise fall back to all predictions
+		const candidatePredictions = pricePredictions.length > 0 ? pricePredictions : predictions;
+
+		// Find the strongest prediction among candidates
+		let strongest = candidatePredictions[0];
+		for (const pred of candidatePredictions) if (pred.strength > strongest.strength) strongest = pred;
+		console.log(`${this.symbol}: Resolved ${predictions.length} predictions (${pricePredictions.length} with price) - selected prediction (strength: ${strongest.strength.toFixed(2)})`);
+		return [strongest];
+	}
+
+	/**
 	 * Execute stock actions based on brain output coordinates
 	 */
 	async executeOutputs(coordinates) {

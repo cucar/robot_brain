@@ -13,6 +13,8 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
 -- DROP TABLE IF EXISTS connection_inference;
+-- DROP TABLE IF EXISTS pattern_inferred_neurons;
+-- DROP TABLE IF EXISTS connection_inferred_neurons;
 -- DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS observed_patterns;
 -- DROP TABLE IF EXISTS active_connections;
@@ -117,15 +119,39 @@ CREATE TABLE IF NOT EXISTS active_neurons (
 CREATE TABLE connection_inference (
     level TINYINT,
     connection_id BIGINT,
+    to_neuron_id BIGINT UNSIGNED,
+    strength DOUBLE NOT NULL DEFAULT 0.0,
     PRIMARY KEY (level, connection_id),
-    INDEX idx_level (level)
+    INDEX idx_level (level),
+    INDEX idx_to_neuron (level, to_neuron_id)
 ) ENGINE=MEMORY;
 
--- prediction/output neurons in t+1 in each level - potential future states (MEMORY table)
+-- connection-based predictions before conflict resolution (MEMORY table)
+CREATE TABLE IF NOT EXISTS connection_inferred_neurons (
+    neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    strength DOUBLE NOT NULL DEFAULT 0.0,
+    PRIMARY KEY (neuron_id, level, age),
+    INDEX idx_level_age (level, age)
+) ENGINE=MEMORY;
+
+-- pattern-based predictions before conflict resolution (MEMORY table)
+CREATE TABLE IF NOT EXISTS pattern_inferred_neurons (
+    neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    strength DOUBLE NOT NULL DEFAULT 0.0,
+    PRIMARY KEY (neuron_id, level, age),
+    INDEX idx_level_age (level, age)
+) ENGINE=MEMORY;
+
+-- final resolved predictions after conflict resolution (MEMORY table)
 CREATE TABLE IF NOT EXISTS inferred_neurons (
-    neuron_id BIGINT UNSIGNED NOT NULL,     -- id of the predicting active pattern neuron
-    level TINYINT NOT NULL,  					    -- level of the predicting active pattern neuron
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,        -- the age of the prediction - higher levels age slower
+    neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    strength DOUBLE NOT NULL DEFAULT 0.0,
     PRIMARY KEY (neuron_id, level, age),
     INDEX idx_level_age (level, age),
     INDEX idx_current_active (age, level)
