@@ -74,12 +74,19 @@ export default class StockChannel extends Channel {
 		// ];
 
 		// 5-part exponential discretization buckets for percentage changes
+		// this.priceBuckets = [
+		// 	{ min: -Infinity, max: -10, value: -2 },  // -100%+ to -10%
+		// 	{ min: -10, max: -0.05, value: -1 },      // -10% to -0.05%
+		// 	{ min: -0.05, max: 0.05, value: 0 },      // -0.05% to 0.05% (no change)
+		// 	{ min: 0.05, max: 10, value: 1 },         // 0.05% to 10%
+		// 	{ min: 10, max: Infinity, value: 2 }      // 10%+ to 100%+
+		// ];
+
+		// 3-part buckets for percentage changes
 		this.priceBuckets = [
-			{ min: -Infinity, max: -10, value: -2 },  // -100%+ to -10%
-			{ min: -10, max: -0.05, value: -1 },      // -10% to -0.05%
-			{ min: -0.05, max: 0.05, value: 0 },      // -0.05% to 0.05% (no change)
-			{ min: 0.05, max: 10, value: 1 },         // 0.05% to 10%
-			{ min: 10, max: Infinity, value: 2 }      // 10%+ to 100%+
+			{ min: -Infinity, max: -0, value: -1 },   // -100%+ to -0%
+			{ min: -0, max: 0, value: 0 },            // -0% (no change)
+			{ min: 0, max: Infinity, value: 1 }    // 0% to 100%+
 		];
 
 		// Binary discretization: up (1) or down/flat (0)

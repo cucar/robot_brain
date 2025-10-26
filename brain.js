@@ -16,10 +16,10 @@ export default class Brain {
 		this.forgetCycles = 100; // number of frames between forget cycles
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
-		this.maxLevels = 6; // just to prevent against infinite recursion
+		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.04; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -37,6 +37,9 @@ export default class Brain {
 		this.lastActivity = -1; // frame number of last activity across all channels
 		this.frameNumber = 0;
 		this.inactivityThreshold = 5; // frames of inactivity before exploration
+
+		// Prediction accuracy tracking (cumulative stats per level)
+		this.accuracyStats = new Map(); // level -> { connection: {correct, total}, pattern: {correct, total}, resolved: {correct, total} }
 
 		// Create readline interface for pausing between frames - used when debugging
 		this.debug = false;
@@ -511,6 +514,11 @@ export default class Brain {
 	 */
 	async reportPredictionsAccuracy(level) {
 
+		// Initialize accuracy stats for this level if needed
+		if (!this.accuracyStats.has(level))
+			this.accuracyStats.set(level, { connection: { correct: 0, total: 0 }, pattern: { correct: 0, total: 0 }, resolved: { correct: 0, total: 0 } });
+		const stats = this.accuracyStats.get(level);
+
 		// At higher levels, only report connection prediction accuracy
 		if (level > 0) {
 			const [connectionPredictions] = await this.conn.query(`
@@ -528,8 +536,13 @@ export default class Brain {
 				WHERE cin.age = 1 AND cin.level = ?
 			`, [level, level]);
 
-			const connectionSuccessRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
-			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${connectionSuccessRate}%)`);
+			// Update cumulative stats
+			stats.connection.correct += connectionMatches.length;
+			stats.connection.total += connectionPredictions.length;
+
+			const currentRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
+			const avgRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
+			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${currentRate}%) | Avg: ${stats.connection.correct}/${stats.connection.total} (${avgRate}%)`);
 			return;
 		}
 
@@ -575,8 +588,13 @@ export default class Brain {
 				WHERE d.type = 'input' AND cin.age = 1 AND cin.level = 0
 			`, [level]);
 
-			const connectionSuccessRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
-			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${connectionSuccessRate}%)`);
+			// Update cumulative stats
+			stats.connection.correct += connectionMatches.length;
+			stats.connection.total += connectionPredictions.length;
+
+			const currentRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
+			const avgRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
+			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${currentRate}%) | Avg: ${stats.connection.correct}/${stats.connection.total} (${avgRate}%)`);
 		}
 
 		// Find which pattern predictions came true
@@ -590,8 +608,13 @@ export default class Brain {
 				WHERE d.type = 'input' AND pin.age = 1 AND pin.level = 0
 			`, [level]);
 
-			const patternSuccessRate = (patternMatches.length / patternPredictions.length * 100).toFixed(1);
-			console.log(`Level ${level}: Pattern prediction accuracy: ${patternMatches.length}/${patternPredictions.length} (${patternSuccessRate}%)`);
+			// Update cumulative stats
+			stats.pattern.correct += patternMatches.length;
+			stats.pattern.total += patternPredictions.length;
+
+			const currentRate = (patternMatches.length / patternPredictions.length * 100).toFixed(1);
+			const avgRate = (stats.pattern.correct / stats.pattern.total * 100).toFixed(1);
+			console.log(`Level ${level}: Pattern prediction accuracy: ${patternMatches.length}/${patternPredictions.length} (${currentRate}%) | Avg: ${stats.pattern.correct}/${stats.pattern.total} (${avgRate}%)`);
 		}
 
 		// Find which resolved predictions came true
@@ -605,8 +628,13 @@ export default class Brain {
 				WHERE d.type = 'input' AND inf.age = 1 AND inf.level = 0
 			`, [level]);
 
-			const resolvedSuccessRate = (resolvedMatches.length / resolvedPredictions.length * 100).toFixed(1);
-			console.log(`Level ${level}: Resolved prediction accuracy: ${resolvedMatches.length}/${resolvedPredictions.length} (${resolvedSuccessRate}%)`);
+			// Update cumulative stats
+			stats.resolved.correct += resolvedMatches.length;
+			stats.resolved.total += resolvedPredictions.length;
+
+			const currentRate = (resolvedMatches.length / resolvedPredictions.length * 100).toFixed(1);
+			const avgRate = (stats.resolved.correct / stats.resolved.total * 100).toFixed(1);
+			console.log(`Level ${level}: Resolved prediction accuracy: ${resolvedMatches.length}/${resolvedPredictions.length} (${currentRate}%) | Avg: ${stats.resolved.correct}/${stats.resolved.total} (${avgRate}%)`);
 		}
 	}
 
