@@ -669,7 +669,6 @@ export default class Brain {
 		if (!this.connectionInference.has(level)) return;
 
 		const predictions = this.connectionInference.get(level);
-		const predictedConnections = new Set();
 
 		// Collect all connection IDs that were used for predictions
 		// (We need to track which connections made predictions, not just which neurons)
@@ -857,10 +856,10 @@ export default class Brain {
 			return;
 		}
 
-		// At level 0, report all three types of predictions
-		// (This is a simplified version - full implementation would check input dimensions)
-		// For now, just report connection predictions
-		const connectionPredictions = this.getPredictionsAtAge(this.connectionInference, 0, 1);
+		// At level 0, report all three types of predictions (input neurons only)
+
+		// Get connection predictions from previous frame (age=1, input neurons only)
+		const connectionPredictions = this.getInputPredictionsAtAge(this.connectionInference, 0, 1);
 		if (connectionPredictions.length > 0) {
 			const connectionMatches = connectionPredictions.filter(neuronId =>
 				this.activeNeurons.has(neuronId, 0, 0)
@@ -872,6 +871,36 @@ export default class Brain {
 			const currentRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
 			const avgRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
 			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${currentRate}%) | Avg: ${stats.connection.correct}/${stats.connection.total} (${avgRate}%)`);
+		}
+
+		// Get pattern predictions from previous frame (age=1, input neurons only)
+		const patternPredictions = this.getInputPredictionsAtAge(this.patternInference, 0, 1);
+		if (patternPredictions.length > 0) {
+			const patternMatches = patternPredictions.filter(neuronId =>
+				this.activeNeurons.has(neuronId, 0, 0)
+			);
+
+			stats.pattern.correct += patternMatches.length;
+			stats.pattern.total += patternPredictions.length;
+
+			const currentRate = (patternMatches.length / patternPredictions.length * 100).toFixed(1);
+			const avgRate = (stats.pattern.correct / stats.pattern.total * 100).toFixed(1);
+			console.log(`Level ${level}: Pattern prediction accuracy: ${patternMatches.length}/${patternPredictions.length} (${currentRate}%) | Avg: ${stats.pattern.correct}/${stats.pattern.total} (${avgRate}%)`);
+		}
+
+		// Get resolved predictions from previous frame (age=1, input neurons only)
+		const resolvedPredictions = this.getInputPredictionsAtAge(this.inferredNeurons, 0, 1);
+		if (resolvedPredictions.length > 0) {
+			const resolvedMatches = resolvedPredictions.filter(neuronId =>
+				this.activeNeurons.has(neuronId, 0, 0)
+			);
+
+			stats.resolved.correct += resolvedMatches.length;
+			stats.resolved.total += resolvedPredictions.length;
+
+			const currentRate = (resolvedMatches.length / resolvedPredictions.length * 100).toFixed(1);
+			const avgRate = (stats.resolved.correct / stats.resolved.total * 100).toFixed(1);
+			console.log(`Level ${level}: Resolved prediction accuracy: ${resolvedMatches.length}/${resolvedPredictions.length} (${currentRate}%) | Avg: ${stats.resolved.correct}/${stats.resolved.total} (${avgRate}%)`);
 		}
 	}
 
@@ -887,6 +916,35 @@ export default class Brain {
 		for (const [neuronId, data] of levelMap) {
 			if (data.age === age) {
 				predictions.push(neuronId);
+			}
+		}
+
+		return predictions;
+	}
+
+	/**
+	 * Get input predictions at a specific age from an inference map (level 0 only)
+	 * Filters to only include neurons with input dimensions
+	 */
+	getInputPredictionsAtAge(inferenceMap, level, age) {
+		if (level !== 0 || !inferenceMap.has(level)) return [];
+
+		const predictions = [];
+		const levelMap = inferenceMap.get(level);
+
+		for (const [neuronId, data] of levelMap) {
+			if (data.age === age) {
+				// Check if this neuron has input dimensions
+				const coords = this.neurons.getCoordinates(neuronId);
+				const hasInputDim = coords.some(coord => {
+					const dim = this.dimensionIdToName[coord.dimension_id];
+					const dimInfo = this.dimensions.get(dim);
+					return dimInfo && dimInfo.type === 'input';
+				});
+
+				if (hasInputDim) {
+					predictions.push(neuronId);
+				}
 			}
 		}
 
@@ -1137,7 +1195,7 @@ export default class Brain {
 		}
 
 		// Decay and delete weak pattern entries
-		for (const [key, entry] of this.patterns.byKey.entries()) {
+		for (const [_, entry] of this.patterns.byKey.entries()) {
 			const newStrength = entry.strength - this.patternForgetRate;
 
 			if (newStrength <= 0) {
