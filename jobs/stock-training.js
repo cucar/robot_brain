@@ -300,6 +300,9 @@ export default class StockTrainingJob extends Job {
 
 		this.episodeResults.push(episodeMetrics);
 		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
+
+		// Print final prediction accuracy summary
+		this.brain.printFinalAccuracySummary();
 	}
 
 	/**

@@ -1,7 +1,7 @@
 /**
  * Base Job Class - Common functionality for all episodes
  */
-import Brain from '../brain.js';
+import Brain from '../brain-inmemory.js';  // Using in-memory brain for performance
 
 export default class Job {
 	constructor() {
