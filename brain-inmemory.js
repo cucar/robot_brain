@@ -40,7 +40,7 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.04; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -626,27 +626,39 @@ export default class Brain {
 	async inferPatternsAtLevel(level) {
 		console.log(`Level ${level}: Inferring peak neurons for level ${level - 1}`);
 
-		// Get inferred pattern neurons at this level (age=0)
+		// Get inferred neurons at this level (age=0)
 		if (!this.connectionInference.has(level)) {
-			console.log(`Level ${level}: No pattern neurons to infer from`);
+			console.log(`Level ${level}: No inferred neurons to check`);
 			return;
 		}
 
-		const patternNeurons = this.connectionInference.get(level);
+		const inferredNeurons = this.connectionInference.get(level);
 		const peakPredictions = new Map(); // Map<peak_neuron_id, total_strength>
 
-		// For each inferred pattern neuron, find its peak neuron
-		for (const [patternNeuronId, data] of patternNeurons) {
-			if (data.age !== 0) continue;
+		// Count how many pattern neurons we have at age=0
+		let age0Count = 0;
+		let totalCount = 0;
+		let patternNeuronCount = 0;
+		let peaksFoundCount = 0;
 
-			// Get the peak neuron for this pattern
-			const peakNeuronId = this.patternPeaks.getPeak(patternNeuronId);
+		// For each inferred neuron, check if it's a pattern neuron and find its peak
+		for (const [neuronId, data] of inferredNeurons) {
+			totalCount++;
+			if (data.age !== 0) continue;
+			age0Count++;
+
+			// Check if this neuron is a pattern neuron (has a peak mapping)
+			const peakNeuronId = this.patternPeaks.getPeak(neuronId);
 			if (peakNeuronId) {
+				patternNeuronCount++;
+				peaksFoundCount++;
 				// Sum strengths if multiple patterns predict the same peak
 				const currentStrength = peakPredictions.get(peakNeuronId) || 0;
 				peakPredictions.set(peakNeuronId, currentStrength + data.strength);
 			}
 		}
+
+
 
 		// Store pattern predictions with age=0
 		if (peakPredictions.size > 0) {
@@ -1019,9 +1031,16 @@ export default class Brain {
 		);
 
 		// Step 7: Activate pattern neurons at next level
-		if (level + 1 < this.maxLevels && peaks.size > 0) {
-			for (const peakNeuronId of peaks.keys()) {
-				this.activeNeurons.add(peakNeuronId, level + 1, 0);
+		// Activate all pattern neurons from matched patterns (both matched and newly created)
+		if (level + 1 < this.maxLevels && this.matchedPatterns.size > 0) {
+			const patternNeuronIds = new Set();
+			for (const patternSet of this.matchedPatterns.values()) {
+				for (const patternNeuronId of patternSet) {
+					patternNeuronIds.add(patternNeuronId);
+				}
+			}
+			for (const patternNeuronId of patternNeuronIds) {
+				this.activeNeurons.add(patternNeuronId, level + 1, 0);
 			}
 		}
 

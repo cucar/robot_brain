@@ -12,14 +12,14 @@ export default class Brain {
 	constructor() {
 
 		// set hyperparameters
-		this.baseNeuronMaxAge = 3; // number of frames a base neuron stays active
+		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
 		this.forgetCycles = 100; // number of frames between forget cycles
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1.05; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.04; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
