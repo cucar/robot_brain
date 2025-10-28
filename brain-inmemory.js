@@ -366,12 +366,14 @@ export default class Brain {
 	 */
 	ageInferredNeurons(inferenceMap, label) {
 		let cleaned = 0;
+		let aged = 0;
 
 		for (const [level, neuronMap] of inferenceMap) {
 			// Age each neuron's metadata if it exists
 			for (const [neuronId, data] of neuronMap) {
 				if (typeof data === 'object' && data.age !== undefined) {
 					data.age++;
+					aged++;
 
 					// Clean up if age >= 2
 					if (data.age >= 2) {
@@ -387,8 +389,8 @@ export default class Brain {
 			}
 		}
 
-		if (cleaned > 0) {
-			console.log(`Cleaned up ${cleaned} executed ${label} (age >= 2)`);
+		if (aged > 0) {
+			console.log(`Aged ${aged} ${label} (cleaned ${cleaned} with age >= 2)`);
 		}
 	}
 
@@ -591,7 +593,9 @@ export default class Brain {
 		// Validate predictions from previous frame and apply negative reinforcement
 		this.validateConnectionPredictions(level);
 
-		// Clear previous predictions for this level
+		// Clear previous connection predictions for this level
+		// Note: Pattern predictions are NOT deleted here - they're deleted when new ones are created
+		// in inferPatternsAtLevel(level+1), after they've been validated
 		if (this.connectionInference.has(level)) {
 			this.connectionInference.delete(level);
 		}
@@ -624,7 +628,8 @@ export default class Brain {
 	 * predict its peak neuron at level N-1, age=-1.
 	 */
 	async inferPatternsAtLevel(level) {
-		console.log(`Level ${level}: Inferring peak neurons for level ${level - 1}`);
+		const targetLevel = level - 1;
+		console.log(`Level ${level}: Inferring peak neurons for level ${targetLevel}`);
 
 		// Get inferred neurons at this level (age=0)
 		if (!this.connectionInference.has(level)) {
@@ -635,41 +640,35 @@ export default class Brain {
 		const inferredNeurons = this.connectionInference.get(level);
 		const peakPredictions = new Map(); // Map<peak_neuron_id, total_strength>
 
-		// Count how many pattern neurons we have at age=0
-		let age0Count = 0;
-		let totalCount = 0;
-		let patternNeuronCount = 0;
-		let peaksFoundCount = 0;
-
 		// For each inferred neuron, check if it's a pattern neuron and find its peak
 		for (const [neuronId, data] of inferredNeurons) {
-			totalCount++;
 			if (data.age !== 0) continue;
-			age0Count++;
 
 			// Check if this neuron is a pattern neuron (has a peak mapping)
 			const peakNeuronId = this.patternPeaks.getPeak(neuronId);
 			if (peakNeuronId) {
-				patternNeuronCount++;
-				peaksFoundCount++;
 				// Sum strengths if multiple patterns predict the same peak
 				const currentStrength = peakPredictions.get(peakNeuronId) || 0;
 				peakPredictions.set(peakNeuronId, currentStrength + data.strength);
 			}
 		}
 
-
-
-		// Store pattern predictions with age=0
+		// Add pattern predictions with age=0 (like MySQL INSERT - don't delete existing predictions)
 		if (peakPredictions.size > 0) {
-			const neuronMap = new Map();
+			// Get or create the level map
+			let neuronMap = this.patternInference.get(targetLevel);
+			if (!neuronMap) {
+				neuronMap = new Map();
+				this.patternInference.set(targetLevel, neuronMap);
+			}
+
+			// Add new predictions with age=0
 			for (const [neuronId, strength] of peakPredictions) {
 				neuronMap.set(neuronId, { strength, age: 0 });
 			}
-			this.patternInference.set(level - 1, neuronMap);
 		}
 
-		console.log(`Level ${level}: Predicted ${peakPredictions.size} peak neurons for level ${level - 1} (from patterns)`);
+		console.log(`Level ${level}: Predicted ${peakPredictions.size} peak neurons for level ${targetLevel} (from patterns)`);
 	}
 
 	/**
@@ -850,11 +849,12 @@ export default class Brain {
 
 		const stats = this.accuracyStats.get(level);
 
-		// At higher levels, only report connection prediction accuracy
-		if (level > 0) {
-			const connectionPredictions = this.getPredictionsAtAge(this.connectionInference, level, 1);
-			if (connectionPredictions.length === 0) return;
+		// Report connection prediction accuracy for all levels
+		const connectionPredictions = level === 0
+			? this.getInputPredictionsAtAge(this.connectionInference, 0, 1)
+			: this.getPredictionsAtAge(this.connectionInference, level, 1);
 
+		if (connectionPredictions.length > 0) {
 			const connectionMatches = connectionPredictions.filter(neuronId =>
 				this.activeNeurons.has(neuronId, level, 0)
 			);
@@ -865,31 +865,24 @@ export default class Brain {
 			const currentRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
 			const avgRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
 			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${currentRate}%) | Avg: ${stats.connection.correct}/${stats.connection.total} (${avgRate}%)`);
-			return;
 		}
 
-		// At level 0, report all three types of predictions (input neurons only)
+		// Report pattern prediction accuracy for all levels
+		const patternPredictions = level === 0
+			? this.getInputPredictionsAtAge(this.patternInference, 0, 1)
+			: this.getPredictionsAtAge(this.patternInference, level, 1);
 
-		// Get connection predictions from previous frame (age=1, input neurons only)
-		const connectionPredictions = this.getInputPredictionsAtAge(this.connectionInference, 0, 1);
-		if (connectionPredictions.length > 0) {
-			const connectionMatches = connectionPredictions.filter(neuronId =>
-				this.activeNeurons.has(neuronId, 0, 0)
-			);
-
-			stats.connection.correct += connectionMatches.length;
-			stats.connection.total += connectionPredictions.length;
-
-			const currentRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
-			const avgRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
-			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${currentRate}%) | Avg: ${stats.connection.correct}/${stats.connection.total} (${avgRate}%)`);
+		// Debug: Check what's in patternInference for this level
+		if (this.patternInference.has(level)) {
+			const levelMap = this.patternInference.get(level);
+			const age0Count = Array.from(levelMap.values()).filter(d => d.age === 0).length;
+			const age1Count = Array.from(levelMap.values()).filter(d => d.age === 1).length;
+			console.log(`Level ${level}: Pattern inference debug: ${levelMap.size} total predictions (age=0: ${age0Count}, age=1: ${age1Count})`);
 		}
 
-		// Get pattern predictions from previous frame (age=1, input neurons only)
-		const patternPredictions = this.getInputPredictionsAtAge(this.patternInference, 0, 1);
 		if (patternPredictions.length > 0) {
 			const patternMatches = patternPredictions.filter(neuronId =>
-				this.activeNeurons.has(neuronId, 0, 0)
+				this.activeNeurons.has(neuronId, level, 0)
 			);
 
 			stats.pattern.correct += patternMatches.length;
@@ -900,19 +893,21 @@ export default class Brain {
 			console.log(`Level ${level}: Pattern prediction accuracy: ${patternMatches.length}/${patternPredictions.length} (${currentRate}%) | Avg: ${stats.pattern.correct}/${stats.pattern.total} (${avgRate}%)`);
 		}
 
-		// Get resolved predictions from previous frame (age=1, input neurons only)
-		const resolvedPredictions = this.getInputPredictionsAtAge(this.inferredNeurons, 0, 1);
-		if (resolvedPredictions.length > 0) {
-			const resolvedMatches = resolvedPredictions.filter(neuronId =>
-				this.activeNeurons.has(neuronId, 0, 0)
-			);
+		// Report resolved prediction accuracy (only at level 0)
+		if (level === 0) {
+			const resolvedPredictions = this.getInputPredictionsAtAge(this.inferredNeurons, 0, 1);
+			if (resolvedPredictions.length > 0) {
+				const resolvedMatches = resolvedPredictions.filter(neuronId =>
+					this.activeNeurons.has(neuronId, 0, 0)
+				);
 
-			stats.resolved.correct += resolvedMatches.length;
-			stats.resolved.total += resolvedPredictions.length;
+				stats.resolved.correct += resolvedMatches.length;
+				stats.resolved.total += resolvedPredictions.length;
 
-			const currentRate = (resolvedMatches.length / resolvedPredictions.length * 100).toFixed(1);
-			const avgRate = (stats.resolved.correct / stats.resolved.total * 100).toFixed(1);
-			console.log(`Level ${level}: Resolved prediction accuracy: ${resolvedMatches.length}/${resolvedPredictions.length} (${currentRate}%) | Avg: ${stats.resolved.correct}/${stats.resolved.total} (${avgRate}%)`);
+				const currentRate = (resolvedMatches.length / resolvedPredictions.length * 100).toFixed(1);
+				const avgRate = (stats.resolved.correct / stats.resolved.total * 100).toFixed(1);
+				console.log(`Level ${level}: Resolved prediction accuracy: ${resolvedMatches.length}/${resolvedPredictions.length} (${currentRate}%) | Avg: ${stats.resolved.correct}/${stats.resolved.total} (${avgRate}%)`);
+			}
 		}
 	}
 

@@ -493,8 +493,8 @@ graph TB
 **Technical Details**:
 - Builds bidirectional connectivity graphs from cross-level temporal connections
 - Applies distance weighting to connection strengths before aggregation
-- Calculates neighborhood strength averages for each neuron
-- Identifies "peak" neurons whose weighted strength exceeds neighborhood average
+- Calculates average strength across all candidate neurons
+- Identifies "peak" neurons whose weighted strength exceeds average by a ratio threshold
 - Groups peak connections into pattern signatures (can include cross-level connections)
 - Matches observed patterns to existing patterns using overlap thresholds (default 66%)
 - Creates new pattern neurons for novel connection signatures

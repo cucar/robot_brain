@@ -75,7 +75,7 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 **Critical Areas Tested**:
 - `getActiveConnections()` - Connection retrieval with proper distance calculations
-- `detectPeaks()` - Peak detection algorithm with neighborhood strength analysis
+- `detectPeaks()` - Peak detection algorithm with average-based strength analysis
 - `activateLevelPatterns()` - Level-specific pattern processing and activation
 - `activatePatternNeurons()` - Hierarchical pattern detection across multiple levels
 - `reinforceConnections()` - Connection strength updates and new connection creation

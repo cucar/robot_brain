@@ -704,7 +704,7 @@ class ActiveConnectionStore {
 		// Index: Map<level, Map<age, Set<connection_id>>>
 		this.byLevelAge = new Map();
 
-		// Index: Map<from_neuron_id, Set<connection_id>> (for neighborhood calculations)
+		// Index: Map<from_neuron_id, Set<connection_id>>
 		this.byFrom = new Map();
 
 		// Index: Map<to_neuron_id, Set<connection_id>>

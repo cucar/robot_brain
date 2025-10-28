@@ -8,21 +8,18 @@
 /**
  * Detect peaks in active connections at a specific level
  *
- * This replaces the complex SQL query with 5 CTEs and self-joins.
- *
  * Algorithm:
  * 1. Get all active connections at level (O(1) hash lookup)
  * 2. Calculate weighted strengths for each target neuron (O(N) single pass)
- * 3. Build neighborhood map: for each target, track which sources connect to it (O(N))
- * 4. For each target, find competing targets (share same sources) and calculate avg strength (O(N*M) where M = avg neighbors)
- * 5. Identify peaks: targets stronger than minPeakStrength AND stronger than neighborhood avg * minPeakRatio
+ * 3. Calculate average strength across all target neurons (O(N))
+ * 4. Identify peaks: targets stronger than minPeakStrength AND stronger than avg * minPeakRatio (O(N))
  *
  * @param {ActiveConnectionStore} activeConnectionStore
  * @param {ConnectionStore} connectionStore
  * @param {number} level - The level to detect peaks for
  * @param {number} peakTimeDecayFactor - Decay factor for connection strength based on distance (e.g., 0.9)
  * @param {number} minPeakStrength - Minimum absolute strength to be considered a peak
- * @param {number} minPeakRatio - Minimum ratio vs neighborhood average to be considered a peak
+ * @param {number} minPeakRatio - Minimum ratio vs average strength to be considered a peak
  * @returns {Map<peak_neuron_id, Set<connection_id>>} - Map of peak neurons to their connection IDs
  */
 export function detectPeaks(activeConnectionStore, connectionStore, level, peakTimeDecayFactor, minPeakStrength, minPeakRatio) {
@@ -36,8 +33,8 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 		return new Map();
 	}
 
-	// Step 2: Calculate weighted strengths and build data structures - O(N) single pass
-	// Map<to_neuron_id, {total_strength, sources: Set<from_neuron_id>, connections: Array<{connection_id, from_neuron_id, strength}>}>
+	// Step 2: Calculate weighted strengths for each target neuron - O(N) single pass
+	// Map<to_neuron_id, {total_strength, connections: Array<{connection_id, from_neuron_id, strength}>}>
 	const targetData = new Map();
 
 	for (const ac of activeConns) {
@@ -51,14 +48,12 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 		if (!targetData.has(conn.to_neuron_id)) {
 			targetData.set(conn.to_neuron_id, {
 				total_strength: 0,
-				sources: new Set(),
 				connections: []
 			});
 		}
 
 		const target = targetData.get(conn.to_neuron_id);
 		target.total_strength += weightedStrength;
-		target.sources.add(conn.from_neuron_id);
 		target.connections.push({
 			connection_id: conn.id,
 			from_neuron_id: conn.from_neuron_id,
@@ -66,58 +61,20 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 		});
 	}
 
-	// Step 3: Build source->targets index for neighborhood calculation - O(N)
-	// Map<from_neuron_id, Set<to_neuron_id>>
-	const sourceToTargets = new Map();
-
-	for (const [toNeuron, data] of targetData) {
-		for (const fromNeuron of data.sources) {
-			if (!sourceToTargets.has(fromNeuron)) {
-				sourceToTargets.set(fromNeuron, new Set());
-			}
-			sourceToTargets.get(fromNeuron).add(toNeuron);
-		}
+	// Step 3: Calculate average strength across all target neurons - O(N)
+	let totalStrength = 0;
+	for (const [, data] of targetData) {
+		totalStrength += data.total_strength;
 	}
+	const avgStrength = targetData.size > 0 ? totalStrength / targetData.size : 0;
 
-	// Step 4: Calculate neighborhood strengths and identify peaks - O(N*M) where M = avg neighbors per target
+	// Step 4: Identify peaks - O(N)
 	const peaks = new Map(); // Map<peak_neuron_id, Set<connection_id>>
 
 	for (const [toNeuron, data] of targetData) {
-		// Find all competing targets (other targets that share at least one source with this target)
-		const competitors = new Set();
-
-		for (const source of data.sources) {
-			const targetsFromSource = sourceToTargets.get(source);
-			if (targetsFromSource) {
-				for (const otherTarget of targetsFromSource) {
-					if (otherTarget !== toNeuron) {
-						competitors.add(otherTarget);
-					}
-				}
-			}
-		}
-
-		// Calculate average strength of competitors (neighborhood)
-		let neighborhoodSum = 0;
-		let neighborhoodCount = 0;
-
-		for (const competitor of competitors) {
-			const competitorData = targetData.get(competitor);
-			if (competitorData) {
-				neighborhoodSum += competitorData.total_strength;
-				neighborhoodCount++;
-			}
-		}
-
-		// Check if this target is a peak
-		// Must have a non-empty neighborhood (competition required)
-		if (neighborhoodCount === 0) continue;
-
-		const avgNeighborhoodStrength = neighborhoodSum / neighborhoodCount;
-
-		// Peak criteria: strength >= minPeakStrength AND strength > avgNeighborhood * minPeakRatio
+		// Peak criteria: strength >= minPeakStrength AND strength > avg * minPeakRatio
 		if (data.total_strength >= minPeakStrength &&
-		    data.total_strength > avgNeighborhoodStrength * minPeakRatio) {
+		    data.total_strength > avgStrength * minPeakRatio) {
 
 			// This is a peak! Store all its connection IDs
 			const connectionIds = new Set(data.connections.map(c => c.connection_id));
@@ -126,7 +83,7 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 	}
 
 	const elapsed = performance.now() - startTime;
-	console.log(`Found ${peaks.size} peaks at level ${level} (${elapsed.toFixed(2)}ms, ${activeConns.length} active connections, ${targetData.size} targets)`);
+	console.log(`Found ${peaks.size} peaks at level ${level} (${elapsed.toFixed(2)}ms, ${activeConns.length} active connections, ${targetData.size} targets, avg strength ${avgStrength.toFixed(2)})`);
 
 	return peaks;
 }
@@ -134,14 +91,12 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 /**
  * Infer connections for next frame using peak detection
  *
- * This replaces the connection inference SQL query with CTEs.
- *
  * Algorithm:
  * 1. Get all active neurons at this level (O(1))
  * 2. For each active neuron, get connections at distance = age + 1 (O(N) with index)
  * 3. Group by target neuron and calculate total strength (O(N))
- * 4. Apply peak detection to find strongest predictions
- * 5. Return predicted neurons with their strengths
+ * 4. Calculate average strength across all candidates (O(N))
+ * 5. Identify peaks: candidates stronger than minPeakStrength AND stronger than avg * minPeakRatio (O(N))
  *
  * @param {ActiveNeuronStore} activeNeuronStore
  * @param {ConnectionStore} connectionStore
@@ -154,7 +109,7 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 export function inferConnections(activeNeuronStore, connectionStore, level, peakTimeDecayFactor, minPeakStrength, minPeakRatio) {
 	const startTime = performance.now();
 
-	// Get all active neurons at this level (any age)
+	// Step 1: Get all active neurons at this level (any age)
 	const activeNeurons = activeNeuronStore.getByLevel(level);
 
 	if (activeNeurons.length === 0) {
@@ -162,7 +117,7 @@ export function inferConnections(activeNeuronStore, connectionStore, level, peak
 		return new Map();
 	}
 
-	// Build candidate connections: from active neurons at distance = age + 1
+	// Step 2-3: Build candidate connections and calculate total strengths - O(N)
 	// Map<to_neuron_id, {total_strength, connections: Array<{from_neuron_id, connection_id, strength}>}>
 	const candidates = new Map();
 
@@ -178,8 +133,7 @@ export function inferConnections(activeNeuronStore, connectionStore, level, peak
 			if (!candidates.has(conn.to_neuron_id)) {
 				candidates.set(conn.to_neuron_id, {
 					total_strength: 0,
-					connections: [],
-					sources: new Set()
+					connections: []
 				});
 			}
 
@@ -190,58 +144,29 @@ export function inferConnections(activeNeuronStore, connectionStore, level, peak
 				connection_id: conn.id,
 				strength: weightedStrength
 			});
-			candidate.sources.add(conn.from_neuron_id);
 		}
 	}
 
-	// Build source->targets index
-	const sourceToTargets = new Map();
-	for (const [toNeuron, data] of candidates) {
-		for (const source of data.sources) {
-			if (!sourceToTargets.has(source)) {
-				sourceToTargets.set(source, new Set());
-			}
-			sourceToTargets.get(source).add(toNeuron);
-		}
+	// Step 4: Calculate average strength across all candidates - O(N)
+	let totalStrength = 0;
+	for (const [, data] of candidates) {
+		totalStrength += data.total_strength;
 	}
+	const avgStrength = candidates.size > 0 ? totalStrength / candidates.size : 0;
 
-	// Apply peak detection
+	// Step 5: Identify peak predictions - O(N)
 	const predictions = new Map(); // Map<neuron_id, strength>
 
 	for (const [toNeuron, data] of candidates) {
-		// Find competitors
-		const competitors = new Set();
-		for (const source of data.sources) {
-			const targetsFromSource = sourceToTargets.get(source);
-			if (targetsFromSource) {
-				for (const otherTarget of targetsFromSource) {
-					if (otherTarget !== toNeuron) {
-						competitors.add(otherTarget);
-					}
-				}
-			}
-		}
-
-		// Calculate neighborhood average (allow empty neighborhoods for predictions)
-		let avgNeighborhood = 0;
-		if (competitors.size > 0) {
-			let sum = 0;
-			for (const competitor of competitors) {
-				const competitorData = candidates.get(competitor);
-				if (competitorData) sum += competitorData.total_strength;
-			}
-			avgNeighborhood = sum / competitors.size;
-		}
-
-		// Peak criteria (LEFT JOIN behavior - allow predictions even without neighborhood)
+		// Peak criteria: strength >= minPeakStrength AND strength > avg * minPeakRatio
 		if (data.total_strength >= minPeakStrength &&
-		    data.total_strength > avgNeighborhood * minPeakRatio) {
+		    data.total_strength > avgStrength * minPeakRatio) {
 			predictions.set(toNeuron, data.total_strength);
 		}
 	}
 
 	const elapsed = performance.now() - startTime;
-	console.log(`Level ${level}: Predicted ${predictions.size} neurons for next frame (${elapsed.toFixed(2)}ms, ${activeNeurons.length} active neurons, ${candidates.size} candidates)`);
+	console.log(`Level ${level}: Predicted ${predictions.size} neurons for next frame (${elapsed.toFixed(2)}ms, ${activeNeurons.length} active neurons, ${candidates.size} candidates, avg strength ${avgStrength.toFixed(2)})`);
 
 	return predictions;
 }

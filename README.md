@@ -120,7 +120,7 @@ For each level from highest to lowest:
   - **Distance weighting**: Recent connections (distance=0) weighted at 1.0, distant connections (distance=9) weighted at 0.1
   - Linear interpolation: `weight = (baseNeuronMaxAge - distance) / baseNeuronMaxAge`
 - **Apply reward factors**: Multiply base strengths by `neuron_rewards` factors to bias toward successful neurons
-- **Peak detection**: Identify neurons stronger than their neighborhood average
+- **Peak detection**: Identify neurons stronger than the average strength across all candidates
 
 #### Output Generation
 - **Infer peak neurons**: Insert peak neurons into `inferred_neurons` table for next frame execution
