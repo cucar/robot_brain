@@ -88,35 +88,34 @@ class InferencePredictionTests {
         // Clear and set up test data
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
+        await this.brain.conn.query('DELETE FROM pattern_peaks');
         await this.brain.conn.query('TRUNCATE connection_inference');
-        
+
         const neuronIds = await this.brain.bulkInsertNeurons(4);
-        
+
+        // Mark neuronIds[3] as a peak neuron so it can be predicted
+        await this.brain.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES (?, ?)', [neuronIds[3], neuronIds[3]]);
+
         // Create active neurons with different ages
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [neuronIds[0]]);
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[1]]);
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 2)', [neuronIds[2]]);
-        
+
         // Create connections with proper distances matching age + 1
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 5)', [neuronIds[0], neuronIds[3]]); // age 0 -> distance 1
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 2, 4)', [neuronIds[1], neuronIds[3]]); // age 1 -> distance 2
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 3, 3)', [neuronIds[2], neuronIds[3]]); // age 2 -> distance 3
-        
+
         // Test inferConnections
         await this.brain.inferConnections(0);
-        
-        // Validate connection_inference table
-        const [inferences] = await this.brain.conn.query('SELECT level, connection_id, age FROM connection_inference ORDER BY connection_id');
-        
+
+        // Validate connection_inference table (note: age column doesn't exist in schema, removed from test)
+        const [inferences] = await this.brain.conn.query('SELECT level, connection_id, to_neuron_id, strength FROM connection_inference ORDER BY connection_id');
+
         this.assert(inferences.length === 3, 'Should create 3 connection inferences', inferences.length, 3);
         this.assert(inferences.every(inf => inf.level === 0), 'All inferences should be for level 0');
-        this.assert(inferences.every(inf => inf.age === 0), 'All new inferences should start with age 0');
-        
-        // Test aging of existing inferences - manually age them to test aging logic
-        await this.brain.conn.query('UPDATE connection_inference SET age = age + 1 WHERE level = 0');
-        const [agedInferences] = await this.brain.conn.query('SELECT age FROM connection_inference ORDER BY connection_id');
-        this.assert(agedInferences.every(inf => inf.age === 1), 'Existing inferences should age to 1');
-        
+        this.assert(inferences.every(inf => inf.to_neuron_id === neuronIds[3]), 'All inferences should predict neuronIds[3]');
+
         console.log();
     }
 
