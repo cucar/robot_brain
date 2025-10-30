@@ -75,12 +75,12 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 **Critical Areas Tested**:
 - `getActiveConnections()` - Connection retrieval with proper distance calculations
-- `detectPeaks()` - Peak detection algorithm with average-based strength analysis
+- `getObservedPatterns()` - Peak detection algorithm with average-based strength analysis
 - `activateLevelPatterns()` - Level-specific pattern processing and activation
 - `activatePatternNeurons()` - Hierarchical pattern detection across multiple levels
 - `reinforceConnections()` - Connection strength updates and new connection creation
 - `reinforcePatterns()` - Pattern strength reinforcement and pattern-connection relationships
-- `matchPatternNeurons()` - Pattern matching and merging logic
+- `matchObservedPatterns()` - Pattern matching and merging logic
 - Edge cases: empty inputs, single connections, no active neurons
 
 **Why Critical**: This is where the brain learns relationships and builds knowledge hierarchies.

@@ -17,7 +17,7 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.20; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
 		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
@@ -205,37 +205,24 @@ export default class Brain {
 		console.log(`applying global reward: ${globalReward.toFixed(3)}`);
 		console.log('******************************************************************');
 
-		// do the whole thing as a transaction to avoid inconsistent database states
-		await this.conn.beginTransaction();
+		// apply rewards to previously executed decisions (before aging them further)
+		await this.applyRewards(globalReward);
 
-		// if there's an error, we'll roll the transaction back
-		try {
+		// age the active neurons in memory context - sliding the temporal window
+		await this.ageNeurons();
 
-			// apply rewards to previously executed decisions (before aging them further)
-			await this.applyRewards(globalReward);
+		// execute previous frame's decisions + exploration if needed
+		await this.executeOutputs();
 
-			// age the active neurons in memory context - sliding the temporal window
-			await this.ageNeurons();
+		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
+		await this.recognizeNeurons(frame);
 
-			// execute previous frame's decisions + exploration if needed
-			await this.executeOutputs();
+		// do predictions and outputs - what's going to happen next? and what's our best response?
+		await this.inferNeurons();
 
-			// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
-			await this.recognizeNeurons(frame);
-
-			// do predictions and outputs - what's going to happen next? and what's our best response?
-			await this.inferNeurons();
-
-			await this.conn.commit();
-			console.log('Frame processed successfully.');
-		}
-		catch (error) {
-			await this.conn.rollback();
-			console.error('Error processing frame, transaction rolled back:', error);
-			throw error;
-		}
-
+		// at this point the frame is processed - the forget cycle is a periodic cleanup task
 		// run forget cycle periodically and delete dead connections/neurons
+		console.log('Frame processed successfully.');
 		await this.runForgetCycle();
 
 		// when debugging, wait for user to press Enter before continuing to next frame
@@ -792,7 +779,7 @@ export default class Brain {
 	 */
 	async getFrameNeurons(frame) {
 
-		// try tp get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
+		// try to get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
 		const matches = await this.matchFrameNeurons(frame);
 		console.log('pointNeuronMatches', matches);
 
@@ -1011,14 +998,14 @@ export default class Brain {
 		console.log(`Processing level ${level} for pattern recognition`);
 
 		// Detect peaks and write to observed_patterns table
-		const hasPeaks = await this.detectPeaks(level);
+		const hasPeaks = await this.getObservedPatterns(level);
 		if (!hasPeaks) {
 			console.log(`No peaks found at level ${level}`);
 			return false;
 		}
 
 		// Match observed patterns to known patterns and write to matched_patterns table
-		await this.matchPatternNeurons();
+		await this.matchObservedPatterns();
 
 		// Merge matched patterns: add/strengthen observed connections, weaken unobserved connections
 		await this.mergeMatchedPatterns();
@@ -1060,7 +1047,8 @@ export default class Brain {
 	 * Peaks are to_neurons whose strength exceeds their source neurons' average strength
 	 * @param {number} level - The level to detect peaks for
 	 */
-	async detectPeaks(level) {
+	async getObservedPatterns(level) {
+		console.log('getting observed patterns');
 
 		// Clear observed_patterns table
 		await this.conn.query('TRUNCATE observed_patterns');
@@ -1075,11 +1063,7 @@ export default class Brain {
 			INSERT INTO observed_patterns (peak_neuron_id, connection_id)
 			WITH connection_data AS (
 				-- Get all active connections with their strengths
-				SELECT
-					ac.connection_id,
-					ac.from_neuron_id,
-					ac.to_neuron_id,
-					c.strength * POW(?, c.distance) as strength
+				SELECT ac.connection_id, ac.to_neuron_id, c.strength * POW(?, c.distance) as strength
 				FROM active_connections ac
 				JOIN connections c ON ac.connection_id = c.id
 				WHERE ac.level = ?
@@ -1089,10 +1073,7 @@ export default class Brain {
 			to_neuron_strengths AS (
 				-- Calculate total strength and connection count for each TARGET neuron
 				-- Source neurons are already active, so they're not candidates for peaks
-				SELECT
-					to_neuron_id,
-					SUM(strength) as total_strength,
-					COUNT(*) as connection_count
+				SELECT to_neuron_id, SUM(strength) as total_strength, COUNT(*) as connection_count
 				FROM connection_data
 				GROUP BY to_neuron_id
 			),
@@ -1132,39 +1113,25 @@ export default class Brain {
 	 * Matches by connection_id (which encodes from_neuron + to_neuron + distance) to preserve temporal structure.
 	 * Uses connection overlap (66% threshold) to determine if patterns match.
 	 */
-	async matchPatternNeurons() {
+	async matchObservedPatterns() {
+		console.log('Matching observed patterns to known patterns');
 
 		// Clear matched_patterns table
 		await this.conn.query('TRUNCATE matched_patterns');
 
 		// Find matching patterns and insert into matched_patterns
+		// find matching patterns for each observed patterns by the peak
+		// Calculate overlap percentage and return matching peak-pattern pairs
+		// at least 66% of the known pattern's connections should be part of the observed pattern to be matched
 		await this.conn.query(`
 			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
-			WITH observed_pattern_matches AS (
-				-- Start from observed patterns and find matching patterns owned by the peak
-				-- PERFORMANCE: Starts from small set (current frame's observed patterns)
-				-- PERFORMANCE: Only matches patterns owned by the peak neuron (via pattern_peaks)
-				SELECT DISTINCT pp.pattern_neuron_id, op.peak_neuron_id
-				FROM observed_patterns op
-				JOIN patterns p ON op.connection_id = p.connection_id
-				JOIN pattern_peaks pp ON p.pattern_neuron_id = pp.pattern_neuron_id AND pp.peak_neuron_id = op.peak_neuron_id
-				WHERE p.strength > 0
-			),
-			candidate_pattern_connections AS (
-				-- Get all connection_ids for each candidate pattern
-				SELECT pattern_neuron_id, connection_id
-				FROM patterns
-				WHERE pattern_neuron_id IN (SELECT pattern_neuron_id FROM observed_pattern_matches)
-				AND strength > 0
-			)
-			-- Calculate overlap percentage and return matching peak-pattern pairs
-			-- at least 66% of the known pattern's connections should be part of the observed pattern to be matched
-			SELECT opm.peak_neuron_id, opm.pattern_neuron_id
-			FROM observed_pattern_matches opm
-			JOIN candidate_pattern_connections cpc ON opm.pattern_neuron_id = cpc.pattern_neuron_id
-			LEFT JOIN observed_patterns op ON opm.peak_neuron_id = op.peak_neuron_id AND op.connection_id = cpc.connection_id
-			GROUP BY opm.peak_neuron_id, opm.pattern_neuron_id
-			HAVING (COUNT(DISTINCT CASE WHEN op.connection_id IS NOT NULL THEN cpc.connection_id END) / COUNT(DISTINCT cpc.connection_id)) >= ?
+			SELECT pp.peak_neuron_id, pp.pattern_neuron_id
+			FROM pattern_peaks pp
+			JOIN patterns p ON pp.pattern_neuron_id = p.pattern_neuron_id
+			LEFT JOIN observed_patterns op ON pp.peak_neuron_id = op.peak_neuron_id AND op.connection_id = p.connection_id
+			WHERE EXISTS (SELECT 1 FROM observed_patterns op2 WHERE pp.peak_neuron_id = op2.peak_neuron_id) 
+			GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
+			HAVING COUNT(DISTINCT CASE WHEN op.connection_id IS NOT NULL THEN p.connection_id END) >= COUNT(DISTINCT p.connection_id) * ?
 		`, [this.mergePatternThreshold]);
 
 		// Get count for logging
@@ -1179,6 +1146,7 @@ export default class Brain {
 	 * 3. Weaken connections that were NOT observed (negative reinforcement)
 	 */
 	async mergeMatchedPatterns() {
+		console.log('merging matched patterns...');
 
 		// Positive reinforcement: Add/strengthen observed connections (clamped between minConnectionStrength and maxConnectionStrength)
 		await this.conn.query(`
@@ -1193,9 +1161,13 @@ export default class Brain {
 		await this.conn.query(`
 			UPDATE patterns p
 			JOIN matched_patterns mp ON p.pattern_neuron_id = mp.pattern_neuron_id
-			LEFT JOIN observed_patterns op ON mp.peak_neuron_id = op.peak_neuron_id AND p.connection_id = op.connection_id
 			SET p.strength = GREATEST(?, LEAST(?, p.strength - ?))
-			WHERE op.connection_id IS NULL
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM observed_patterns op
+                WHERE op.peak_neuron_id = mp.peak_neuron_id
+                  AND op.connection_id = p.connection_id
+            )			
 		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
 	}
 
@@ -1205,15 +1177,18 @@ export default class Brain {
 	 * No scratch table needed - pattern_peaks table establishes the mapping directly.
 	 */
 	async createNewPatterns() {
+		console.log('creating new patterns...');
 
 		// Find peaks that need new patterns (peaks in observed_patterns but not in matched_patterns)
 		// Order by peak_neuron_id for deterministic mapping
 		const [peaksNeedingPatterns] = await this.conn.query(`
 			SELECT DISTINCT op.peak_neuron_id
 			FROM observed_patterns op
-			LEFT JOIN matched_patterns mp ON op.peak_neuron_id = mp.peak_neuron_id
-			WHERE mp.peak_neuron_id IS NULL
-			ORDER BY op.peak_neuron_id
+			WHERE NOT EXISTS (
+				SELECT 1
+				FROM matched_patterns mp
+				WHERE mp.peak_neuron_id = op.peak_neuron_id
+			)
 		`);
 		const count = peaksNeedingPatterns.length;
 		console.log(`Creating ${count} new patterns for peaks without matches`);

@@ -131,10 +131,10 @@ class ConnectionPatternTests {
             { id: 5, from_neuron_id: 2, to_neuron_id: 4, distance: 0, strength: 4 }
         ];
 
-        // Test detectPeaks method
-        const peakConnections = this.brain.detectPeaks(testConnections);
+        // Test getObservedPatterns method
+        const peakConnections = this.brain.getObservedPatterns(testConnections);
 
-        this.assert(peakConnections instanceof Map, 'detectPeaks should return a Map');
+        this.assert(peakConnections instanceof Map, 'getObservedPatterns should return a Map');
         this.assert(peakConnections.size > 0, 'Should detect at least one peak', peakConnections.size, '>0');
 
         // Verify peak detection logic - neuron 2 should be the peak (strength 12 > neighborhood avg 6.0)
@@ -830,9 +830,9 @@ class ConnectionPatternTests {
 
         // === EXECUTE PATTERN MATCHING ===
         await this.brain.saveObservedPatterns(peakConnections);
-        const peakPatterns = await this.brain.matchPatternNeurons(peakConnections);
+        const peakPatterns = await this.brain.matchObservedPatterns(peakConnections);
 
-        this.assert(peakPatterns instanceof Map, 'matchPatternNeurons should return a Map');
+        this.assert(peakPatterns instanceof Map, 'matchObservedPatterns should return a Map');
         this.assert(peakPatterns.size === 1, 'Should have 1 peak in the result');
 
         const peakNeuronId = neuronIds[2];
@@ -922,9 +922,9 @@ class ConnectionPatternTests {
 
         // === EXECUTE PATTERN MATCHING ===
         await this.brain.saveObservedPatterns(peakConnections);
-        const peakPatterns = await this.brain.matchPatternNeurons(peakConnections);
+        const peakPatterns = await this.brain.matchObservedPatterns(peakConnections);
 
-        this.assert(peakPatterns instanceof Map, 'matchPatternNeurons should return a Map');
+        this.assert(peakPatterns instanceof Map, 'matchObservedPatterns should return a Map');
         this.assert(peakPatterns.size === 1, 'Should have 1 peak in the result');
 
         const peakNeuronId = neuronIds[3];
@@ -976,14 +976,14 @@ class ConnectionPatternTests {
         console.log('Testing Edge Cases:');
 
         // Test empty connections
-        const emptyPeaks = this.brain.detectPeaks([]);
-        this.assert(emptyPeaks instanceof Map, 'detectPeaks should handle empty input');
+        const emptyPeaks = this.brain.getObservedPatterns([]);
+        this.assert(emptyPeaks instanceof Map, 'getObservedPatterns should handle empty input');
         this.assert(emptyPeaks.size === 0, 'Empty connections should return empty peaks');
 
         // Test single connection
         const singleConnection = [{ id: 1, from_neuron_id: 1, to_neuron_id: 2, distance: 0, strength: 1 }];
-        const singlePeaks = this.brain.detectPeaks(singleConnection);
-        this.assert(singlePeaks instanceof Map, 'detectPeaks should handle single connection');
+        const singlePeaks = this.brain.getObservedPatterns(singleConnection);
+        this.assert(singlePeaks instanceof Map, 'getObservedPatterns should handle single connection');
 
         // Test activateLevelPatterns with no connections
         await this.brain.conn.query('DELETE FROM active_neurons');

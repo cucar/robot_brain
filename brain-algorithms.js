@@ -176,7 +176,7 @@ export function inferConnections(activeNeuronStore, connectionStore, level, peak
  *
  * This replaces the pattern matching SQL query.
  *
- * @param {Map<peak_neuron_id, Set<connection_id>>} observedPatterns - From detectPeaks
+ * @param {Map<peak_neuron_id, Set<connection_id>>} observedPatterns - From getObservedPatterns
  * @param {PatternStore} patternStore
  * @param {PatternPeakStore} patternPeakStore
  * @param {number} mergePatternThreshold - Minimum overlap ratio (e.g., 0.66 for 66%)
@@ -230,7 +230,7 @@ export function matchPatterns(observedPatterns, patternStore, patternPeakStore, 
  * This replaces the pattern merging SQL queries.
  *
  * @param {Map<peak_neuron_id, Set<pattern_neuron_id>>} matchedPatterns - From matchPatterns
- * @param {Map<peak_neuron_id, Set<connection_id>>} observedPatterns - From detectPeaks
+ * @param {Map<peak_neuron_id, Set<connection_id>>} observedPatterns - From getObservedPatterns
  * @param {PatternStore} patternStore
  * @param {number} minConnectionStrength
  * @param {number} maxConnectionStrength
