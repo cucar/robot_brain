@@ -495,10 +495,7 @@ export default class Brain {
 
 		// Get all connection predictions and matches in bulk
 		const [connectionData] = await this.conn.query(`
-			SELECT
-				cin.level,
-				cin.neuron_id,
-                IF(an.neuron_id IS NOT NULL, 1, 0) as matched
+			SELECT cin.level, cin.neuron_id, IF(an.neuron_id IS NOT NULL, 1, 0) as matched
 			FROM connection_inferred_neurons cin
 			LEFT JOIN active_neurons an ON cin.neuron_id = an.neuron_id AND an.level = cin.level AND an.age = 0
 			WHERE cin.age = 1
@@ -506,10 +503,7 @@ export default class Brain {
 
 		// Get all pattern predictions and matches in bulk
 		const [patternData] = await this.conn.query(`
-			SELECT
-				pin.level,
-				pin.neuron_id,
-                IF(an.neuron_id IS NOT NULL, 1, 0) as matched
+			SELECT pin.level, pin.neuron_id, IF(an.neuron_id IS NOT NULL, 1, 0) as matched
 			FROM pattern_inferred_neurons pin
 			LEFT JOIN active_neurons an ON pin.neuron_id = an.neuron_id AND an.level = pin.level AND an.age = 0
 			WHERE pin.age = 1
@@ -517,10 +511,7 @@ export default class Brain {
 
 		// Get all resolved predictions and matches in bulk (level 0 only)
 		const [resolvedData] = await this.conn.query(`
-			SELECT
-				inf.level,
-				inf.neuron_id,
-                IF(an.neuron_id IS NOT NULL, 1, 0) as matched
+			SELECT inf.level, inf.neuron_id, IF(an.neuron_id IS NOT NULL, 1, 0) as matched
 			FROM inferred_neurons inf
 			LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
 			WHERE inf.age = 1 AND inf.level = 0
@@ -602,8 +593,13 @@ export default class Brain {
 		const [failures] = await this.conn.query(`
 			SELECT ci.level, ci.connection_id
 			FROM connection_inference ci
-			LEFT JOIN active_connections ac ON ci.connection_id = ac.connection_id AND ac.level = ci.level AND ac.age = 0
-			WHERE ac.connection_id IS NULL
+			WHERE NOT EXISTS (
+			    SELECT 1 
+			    FROM active_connections ac
+			    WHERE ci.connection_id = ac.connection_id 
+			      AND ac.level = ci.level 
+			      AND ac.age = 0
+			)    
 		`);
 
 		if (failures.length === 0) return;
@@ -701,9 +697,8 @@ export default class Brain {
 			GROUP BY level
 			ORDER BY level DESC
 		`);
-		for (const row of results) {
+		for (const row of results)
 			console.log(`Level ${row.level}: Predicted ${row.count} neurons for next frame (from connections)`);
-		}
 	}
 
 	/**
