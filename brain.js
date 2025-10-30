@@ -64,7 +64,11 @@ export default class Brain {
 			'active_neurons',
 			'connection_inference',
 			'inferred_neurons',
+			'observed_connections',
+			'observed_neuron_strengths',
+			'observed_peaks',
 			'observed_patterns',
+			'matched_peaks',
 			'active_connections'
 		]);
 	}
@@ -81,7 +85,11 @@ export default class Brain {
 			'connection_inferred_neurons',
 			'pattern_inferred_neurons',
 			'inferred_neurons',
+			'observed_connections',
+			'observed_neuron_strengths',
+			'observed_peaks',
 			'observed_patterns',
+			'matched_peaks',
 			'active_connections',
 			'matched_patterns',
 			'pattern_peaks',
@@ -1038,63 +1046,65 @@ export default class Brain {
 	}
 
 	/**
-	 * Detect peaks and write directly to observed_patterns table
+	 * Detect peaks and write directly to observed_peaks and observed_patterns tables
 	 * Peaks are to_neurons whose strength exceeds their source neurons' average strength
+	 * Uses scratch tables with indexes instead of CTEs for better performance
+	 * Strategy: Materialize data once, aggregate once, then filter
 	 * @param {number} level - The level to detect peaks for
 	 */
 	async getObservedPatterns(level) {
 		console.log('getting observed patterns');
 
-		// Clear observed_patterns table
+		// Clear scratch tables
+		await this.conn.query('TRUNCATE observed_connections');
+		await this.conn.query('TRUNCATE observed_neuron_strengths');
+		await this.conn.query('TRUNCATE observed_peaks');
 		await this.conn.query('TRUNCATE observed_patterns');
 
-		// Detect peaks and insert into observed_patterns in one query
-		// Logic:
-		// 1. Calculate target neuron strengths (only targets, not sources)
-		// 2. Calculate average strength across ALL predicted to_neurons
-		// 3. Find peaks where total_strength >= minPeakStrength AND total_strength > (avg_strength * minPeakRatio)
-		// 4. Only create patterns for targets with at least 2 connections (patterns need multiple connections)
+		// Step 1: Materialize weighted connection data (scan active_connections + connections ONCE)
+		await this.conn.query(`
+			INSERT INTO observed_connections (to_neuron_id, connection_id, strength)
+			SELECT ac.to_neuron_id, ac.connection_id, c.strength * POW(?, c.distance) as strength
+			FROM active_connections ac
+			JOIN connections c ON ac.connection_id = c.id
+			WHERE ac.level = ?
+			AND ac.age = 0
+			AND c.strength > 0
+		`, [this.peakTimeDecayFactor, level]);
+
+		// Step 2: Aggregate per neuron (GROUP BY ONCE)
+		await this.conn.query(`
+			INSERT INTO observed_neuron_strengths (to_neuron_id, total_strength, connection_count)
+			SELECT to_neuron_id, SUM(strength) as total_strength, COUNT(*) as connection_count
+			FROM observed_connections
+			GROUP BY to_neuron_id
+		`);
+
+		// Step 3a: Calculate average strength threshold
+		const [avgResult] = await this.conn.query('SELECT AVG(total_strength) as avg_strength FROM observed_neuron_strengths');
+		const avgStrength = avgResult[0].avg_strength || 0;
+		const strengthThreshold = avgStrength * this.minPeakRatio;
+
+		// Step 3b: Filter for peaks using the calculated threshold
+		await this.conn.query(`
+			INSERT INTO observed_peaks (peak_neuron_id, total_strength, connection_count)
+			SELECT to_neuron_id, total_strength, connection_count
+			FROM observed_neuron_strengths
+			WHERE total_strength >= ?
+			AND total_strength > ?
+			AND connection_count >= 2
+		`, [this.minPeakStrength, strengthThreshold]);
+
+		// Step 4: Populate observed_patterns using observed_peaks as filter
 		await this.conn.query(`
 			INSERT INTO observed_patterns (peak_neuron_id, connection_id)
-			WITH connection_data AS (
-				-- Get all active connections with their strengths
-				SELECT ac.connection_id, ac.to_neuron_id, c.strength * POW(?, c.distance) as strength
-				FROM active_connections ac
-				JOIN connections c ON ac.connection_id = c.id
-				WHERE ac.level = ?
-				AND ac.age = 0
-				AND c.strength > 0
-			),
-			to_neuron_strengths AS (
-				-- Calculate total strength and connection count for each TARGET neuron
-				-- Source neurons are already active, so they're not candidates for peaks
-				SELECT to_neuron_id, SUM(strength) as total_strength, COUNT(*) as connection_count
-				FROM connection_data
-				GROUP BY to_neuron_id
-			),
-			avg_prediction_strength AS (
-				-- Calculate the average strength across all predicted to_neurons
-				SELECT AVG(total_strength) as avg_strength
-				FROM to_neuron_strengths
-			),
-			peak_predictions AS (
-				-- Find peak predictions: to_neurons stronger than average by minPeakRatio
-				-- and with at least 2 connections (patterns cannot be defined with only one connection)
-				SELECT tns.to_neuron_id as peak_neuron_id
-				FROM to_neuron_strengths tns
-				CROSS JOIN avg_prediction_strength aps
-				WHERE tns.total_strength >= ?
-				AND tns.total_strength > (aps.avg_strength * ?)
-				AND tns.connection_count >= 2
-			)
-			-- Insert all connections for peak neurons
-			SELECT p.peak_neuron_id, cd.connection_id
-			FROM peak_predictions p
-			JOIN connection_data cd ON p.peak_neuron_id = cd.to_neuron_id
-		`, [this.peakTimeDecayFactor, level, this.minPeakStrength, this.minPeakRatio]);
+			SELECT oc.to_neuron_id, oc.connection_id
+			FROM observed_connections oc
+			JOIN observed_peaks opk ON oc.to_neuron_id = opk.peak_neuron_id
+		`);
 
 		// Get count for logging
-		const [result] = await this.conn.query('SELECT COUNT(DISTINCT peak_neuron_id) as peak_count FROM observed_patterns');
+		const [result] = await this.conn.query('SELECT COUNT(*) as peak_count FROM observed_peaks');
 		const peakCount = result[0].peak_count;
 		console.log(`Found ${peakCount} peaks at level ${level}`);
 
@@ -1103,7 +1113,7 @@ export default class Brain {
 
 	/**
 	 * Match observed patterns to known patterns owned by the peak neuron.
-	 * Writes results to matched_patterns memory table.
+	 * Writes results to matched_patterns and matched_peaks memory tables.
 	 * Each peak neuron only reviews patterns it learned before (via pattern_peaks table).
 	 * Matches by connection_id (which encodes from_neuron + to_neuron + distance) to preserve temporal structure.
 	 * Uses connection overlap (66% threshold) to determine if patterns match.
@@ -1111,23 +1121,32 @@ export default class Brain {
 	async matchObservedPatterns() {
 		console.log('Matching observed patterns to known patterns');
 
-		// Clear matched_patterns table
+		// Clear scratch tables
+		await this.conn.query('TRUNCATE matched_peaks');
 		await this.conn.query('TRUNCATE matched_patterns');
 
 		// Find matching patterns and insert into matched_patterns
 		// find matching patterns for each observed patterns by the peak
 		// Calculate overlap percentage and return matching peak-pattern pairs
 		// at least 66% of the known pattern's connections should be part of the observed pattern to be matched
+		// Use observed_peaks for fast existence check instead of scanning observed_patterns
 		await this.conn.query(`
 			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
 			SELECT pp.peak_neuron_id, pp.pattern_neuron_id
 			FROM pattern_peaks pp
+			JOIN observed_peaks opk ON pp.peak_neuron_id = opk.peak_neuron_id
 			JOIN patterns p ON pp.pattern_neuron_id = p.pattern_neuron_id
 			LEFT JOIN observed_patterns op ON pp.peak_neuron_id = op.peak_neuron_id AND op.connection_id = p.connection_id
-			WHERE EXISTS (SELECT 1 FROM observed_patterns op2 WHERE pp.peak_neuron_id = op2.peak_neuron_id) 
 			GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
 			HAVING COUNT(DISTINCT CASE WHEN op.connection_id IS NOT NULL THEN p.connection_id END) >= COUNT(DISTINCT p.connection_id) * ?
 		`, [this.mergePatternThreshold]);
+
+		// Populate matched_peaks with distinct peaks that have matches
+		await this.conn.query(`
+			INSERT INTO matched_peaks (peak_neuron_id)
+			SELECT DISTINCT peak_neuron_id
+			FROM matched_patterns
+		`);
 
 		// Get count for logging
 		const [result] = await this.conn.query('SELECT COUNT(*) as match_count FROM matched_patterns');
@@ -1174,15 +1193,15 @@ export default class Brain {
 	async createNewPatterns() {
 		console.log('creating new patterns...');
 
-		// Find peaks that need new patterns (peaks in observed_patterns but not in matched_patterns)
-		// Order by peak_neuron_id for deterministic mapping
+		// Find peaks that need new patterns (peaks in observed_peaks but not in matched_peaks)
+		// Use matched_peaks for fast indexed lookup instead of scanning matched_patterns
 		const [peaksNeedingPatterns] = await this.conn.query(`
-			SELECT DISTINCT op.peak_neuron_id
-			FROM observed_patterns op
+			SELECT opk.peak_neuron_id
+			FROM observed_peaks opk
 			WHERE NOT EXISTS (
 				SELECT 1
-				FROM matched_patterns mp
-				WHERE mp.peak_neuron_id = op.peak_neuron_id
+				FROM matched_peaks mpk
+				WHERE mpk.peak_neuron_id = opk.peak_neuron_id
 			)
 		`);
 		const count = peaksNeedingPatterns.length;
