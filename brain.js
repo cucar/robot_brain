@@ -1229,14 +1229,6 @@ export default class Brain {
 	}
 
 	/**
-	 * returns the maximum level from active neurons
-	 */
-	async getMaxActiveLevel() {
-		const [rows] = await this.conn.query('SELECT MAX(level) as max_level FROM active_neurons');
-		return rows[0].max_level || 0;
-	}
-
-	/**
 	 * runs the forget cycle, reducing reward factors, pattern strengths, connection strengths and deleting unused neurons
 	 * also deletes obsolete (negative) connections - very important step that helps the system avoid curse of dimensionality
 	 */
