@@ -591,7 +591,7 @@ export default class Brain {
 		this.reportPredictionsAccuracy(level);
 
 		// Validate predictions from previous frame and apply negative reinforcement
-		this.validateConnectionPredictions(level);
+		this.negativeReinforceConnections(level);
 
 		// Clear previous connection predictions for this level
 		// Note: Pattern predictions are NOT deleted here - they're deleted when new ones are created
@@ -672,10 +672,10 @@ export default class Brain {
 	}
 
 	/**
-	 * Validate connection predictions from the previous frame.
 	 * Apply negative reinforcement to connections that predicted incorrectly.
+	 * Validates connection predictions from the previous frame.
 	 */
-	validateConnectionPredictions(level) {
+	negativeReinforceConnections(level) {
 		// Get predictions from previous frame (stored in connectionInference with age=1)
 		if (!this.connectionInference.has(level)) return;
 

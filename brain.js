@@ -399,18 +399,62 @@ export default class Brain {
 	 */
 	async inferNeurons() {
 
+		// Report accuracy for all levels (from previous frame)
+		await this.reportPredictionsAccuracy();
+
 		// Connection inference for all levels (handles validation, aging, deletion)
 		await this.inferConnections();
 
 		// Pattern inference (recursive cascade down all levels)
 		await this.inferPatterns();
 
-		// Resolve conflicts in input predictions at base level
+		// Merge predictions for higher levels (level > 0)
+		await this.mergeHigherLevelPredictions();
+
+		// Resolve conflicts in input predictions at base level (level 0)
 		await this.resolveInputPredictionConflicts();
 	}
 
 	/**
-	 * Resolve conflicts in input predictions per channel.
+	 * Merge connection and pattern predictions for higher levels (level > 0).
+	 * Higher levels don't use channel-based conflict resolution - just combine predictions by summing strengths.
+	 * This allows the brain to learn connections between output neurons and high-level decision making.
+	 */
+	async mergeHigherLevelPredictions() {
+
+		// Combine connection and pattern predictions for all levels > 0
+		// Union both sources and sum strengths per neuron per level
+		await this.conn.query(`
+			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
+			SELECT neuron_id, level, age, SUM(strength) as strength
+			FROM (
+				SELECT neuron_id, level, age, strength
+				FROM connection_inferred_neurons
+				WHERE level > 0 AND age = 0
+
+				UNION ALL
+
+				SELECT neuron_id, level, age, strength
+				FROM pattern_inferred_neurons
+				WHERE level > 0 AND age = 0
+			) AS combined_predictions
+			GROUP BY neuron_id, level, age
+		`);
+
+		// Log predictions per level
+		const [results] = await this.conn.query(`
+			SELECT level, COUNT(DISTINCT neuron_id) as count
+			FROM inferred_neurons
+			WHERE age = 0 AND level > 0
+			GROUP BY level
+			ORDER BY level DESC
+		`);
+		for (const row of results)
+			console.log(`Level ${row.level}: Merged ${row.count} predictions to inferred_neurons (connection + pattern)`);
+	}
+
+	/**
+	 * Resolve conflicts in input predictions per channel (level 0 only).
 	 * Reads from connection_inferred_neurons and pattern_inferred_neurons,
 	 * resolves conflicts using channel logic, and writes final predictions to inferred_neurons.
 	 */
@@ -517,12 +561,12 @@ export default class Brain {
 			WHERE pin.age = 1
 		`);
 
-		// Get all resolved predictions and matches in bulk (level 0 only)
+		// Get all resolved predictions and matches in bulk (all levels)
 		const [resolvedData] = await this.conn.query(`
 			SELECT inf.level, inf.neuron_id, IF(an.neuron_id IS NOT NULL, 1, 0) as matched
 			FROM inferred_neurons inf
 			LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
-			WHERE inf.age = 1 AND inf.level = 0
+			WHERE inf.age = 1
 		`);
 
 		// Group by level
@@ -592,10 +636,10 @@ export default class Brain {
 	}
 
 	/**
-	 * Validate connection predictions from the previous frame for ALL levels.
 	 * Apply negative reinforcement to connections that predicted incorrectly.
+	 * Validates connection predictions from the previous frame for ALL levels.
 	 */
-	async validateConnectionPredictions() {
+	async negativeReinforceConnections() {
 
 		// Find which predictions failed (not in active_connections) across all levels
 		const [failures] = await this.conn.query(`
@@ -634,9 +678,8 @@ export default class Brain {
 	 */
 	async inferConnections() {
 
-		// Validate and report accuracy for all levels (from previous frame)
-		await this.reportPredictionsAccuracy();
-		await this.validateConnectionPredictions();
+		// Validate predictions for all levels (from previous frame)
+		await this.negativeReinforceConnections();
 
 		// Clear previous predictions (connection_inference is scratch table, just truncate)
 		await this.conn.query('TRUNCATE connection_inference');
