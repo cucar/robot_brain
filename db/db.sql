@@ -20,6 +20,10 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS observed_neuron_strengths;
 -- DROP TABLE IF EXISTS observed_peaks;
 -- DROP TABLE IF EXISTS observed_patterns;
+-- DROP TABLE IF EXISTS inferred_connections;
+-- DROP TABLE IF EXISTS inferred_neuron_strengths;
+-- DROP TABLE IF EXISTS inferred_level_strengths;
+-- DROP TABLE IF EXISTS inferred_peaks;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_peaks;
 -- DROP TABLE IF EXISTS matched_patterns;
@@ -198,6 +202,44 @@ CREATE TABLE IF NOT EXISTS observed_patterns (
     INDEX idx_peak_connection (peak_neuron_id, connection_id),  -- Composite index for JOINs in matchPatternNeurons and mergeMatchedPatterns
     INDEX idx_connection (connection_id),
     INDEX idx_peak (peak_neuron_id)
+) ENGINE=MEMORY;
+
+-- scratch table for candidate connections during inference (MEMORY table)
+-- stores pre-calculated weighted strengths for all candidate predictions
+CREATE TABLE IF NOT EXISTS inferred_connections (
+    level TINYINT NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL,
+    from_neuron_id BIGINT UNSIGNED NOT NULL,
+    to_neuron_id BIGINT UNSIGNED NOT NULL,
+    strength DOUBLE NOT NULL,
+    INDEX idx_level_to_neuron (level, to_neuron_id),
+    INDEX idx_connection (connection_id)
+) ENGINE=MEMORY;
+
+-- scratch table for per-neuron aggregates during inference (MEMORY table)
+-- stores total_strength for ALL candidate predictions before filtering for peaks
+CREATE TABLE IF NOT EXISTS inferred_neuron_strengths (
+    level TINYINT NOT NULL,
+    to_neuron_id BIGINT UNSIGNED NOT NULL,
+    total_strength DOUBLE NOT NULL,
+    PRIMARY KEY (level, to_neuron_id)
+) ENGINE=MEMORY;
+
+-- scratch table for per-level average strengths during inference (MEMORY table)
+-- stores average strength per level for peak detection threshold calculation
+CREATE TABLE IF NOT EXISTS inferred_level_strengths (
+    level TINYINT NOT NULL,
+    avg_strength DOUBLE NOT NULL,
+    PRIMARY KEY (level)
+) ENGINE=MEMORY;
+
+-- mapping table for inferred peak neurons - just the peaks detected during inference (MEMORY table)
+-- mirrors observed_peaks design - stores just the peak predictions for fast existence checks
+CREATE TABLE IF NOT EXISTS inferred_peaks (
+    level TINYINT NOT NULL,
+    peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    total_strength DOUBLE NOT NULL,
+    PRIMARY KEY (level, peak_neuron_id)
 ) ENGINE=MEMORY;
 
 -- mapping table for matched peaks (MEMORY table)

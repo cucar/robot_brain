@@ -675,6 +675,7 @@ export default class Brain {
 	 * Handles validation and deletion of previous predictions.
 	 * Uses average-based peak detection to identify strong predictions.
 	 * Only predicts neurons that are known peaks (exist in pattern_peaks table).
+	 * Uses scratch memory tables for better performance (similar to getObservedPatterns).
 	 */
 	async inferConnections() {
 
@@ -684,55 +685,26 @@ export default class Brain {
 		// Clear previous predictions (connection_inference is scratch table, just truncate)
 		await this.conn.query('TRUNCATE connection_inference');
 
-		// Predict connections for all levels in one query
-		await this.conn.query(`
-			INSERT INTO connection_inference (level, connection_id, to_neuron_id, strength)
-			WITH candidate_connections AS (
-				-- Get all possible connections from active neurons across ALL levels (one frame into the future)
-				-- Filter to only predict peak neurons for performance
-				SELECT
-					f.level,
-					c.id as connection_id,
-					c.from_neuron_id,
-					c.to_neuron_id,
-					c.strength * POW(?, c.distance) as strength
-				FROM active_neurons f
-				JOIN connections c ON c.from_neuron_id = f.neuron_id
-				WHERE c.distance = f.age + 1
-				AND c.strength > 0
-				AND c.to_neuron_id IN (SELECT peak_neuron_id FROM pattern_peaks)
-			),
-			to_neuron_strengths AS (
-				-- Calculate total strength for each TARGET neuron per level
-				-- Source neurons are already active, so they're not predictions
-				SELECT
-					level,
-					to_neuron_id,
-					SUM(strength) as total_strength
-				FROM candidate_connections
-				GROUP BY level, to_neuron_id
-			),
-			avg_prediction_strength AS (
-				-- Calculate the average strength across all predicted to_neurons per level
-				SELECT level, AVG(total_strength) as avg_strength
-				FROM to_neuron_strengths
-				GROUP BY level
-			),
-			peak_predictions AS (
-				-- Find peak predictions per level: to_neurons stronger than average by minPredictionRatio
-				SELECT tns.level, tns.to_neuron_id as peak_neuron_id
-				FROM to_neuron_strengths tns
-				JOIN avg_prediction_strength aps ON tns.level = aps.level
-				WHERE tns.total_strength >= ?
-				AND tns.total_strength > (aps.avg_strength * ?)
-			)
-			-- Insert all connections for peak neurons, storing each connection's individual strength
-			SELECT cc.level, cc.connection_id, cc.to_neuron_id, cc.strength
-			FROM peak_predictions p
-			JOIN candidate_connections cc ON p.level = cc.level AND p.peak_neuron_id = cc.to_neuron_id
-		`, [this.peakTimeDecayFactor, this.minPeakStrength, this.minPeakRatio]);
+		// Step 1: Materialize candidate connections
+		await this.getInferredConnections();
 
-		// Convert connection predictions to neuron predictions (sum strengths per neuron per level)
+		// Step 2: Aggregate per neuron per level
+		await this.getInferredNeuronStrengths();
+
+		// Step 3: Calculate average strength per level
+		await this.getInferredLevelStrengths();
+
+		// Step 4: Get inferred peaks - if none found, log and return
+		const peakCount = await this.getInferredPeaks();
+		if (peakCount === 0) {
+			console.log('No connection predictions found');
+			return;
+		}
+
+		// Step 5: Populate connection_inference using inferred_peaks as filter
+		await this.populateConnectionInference();
+
+		// Step 6: Convert connection predictions to neuron predictions
 		await this.conn.query(`
 			INSERT INTO connection_inferred_neurons (neuron_id, level, age, strength)
 			SELECT to_neuron_id, level, 0, SUM(strength)
@@ -750,6 +722,98 @@ export default class Brain {
 		`);
 		for (const row of results)
 			console.log(`Level ${row.level}: Predicted ${row.count} neurons for next frame (from connections)`);
+	}
+
+	/**
+	 * Materialize candidate connections from active neurons.
+	 * Truncates and populates inferred_connections scratch table.
+	 */
+	async getInferredConnections() {
+		// Clear and populate inferred_connections
+		await this.conn.query('TRUNCATE inferred_connections');
+		await this.conn.query(`
+			INSERT INTO inferred_connections (level, connection_id, from_neuron_id, to_neuron_id, strength)
+			SELECT
+				f.level,
+				c.id as connection_id,
+				c.from_neuron_id,
+				c.to_neuron_id,
+				c.strength * POW(?, c.distance) as strength
+			FROM active_neurons f
+			JOIN connections c ON c.from_neuron_id = f.neuron_id
+			WHERE c.distance = f.age + 1
+			AND c.strength > 0
+			AND c.to_neuron_id IN (SELECT peak_neuron_id FROM pattern_peaks)
+		`, [this.peakTimeDecayFactor]);
+	}
+
+	/**
+	 * Aggregate connection strengths per neuron per level.
+	 * Truncates and populates inferred_neuron_strengths scratch table.
+	 */
+	async getInferredNeuronStrengths() {
+		// Clear and populate inferred_neuron_strengths
+		await this.conn.query('TRUNCATE inferred_neuron_strengths');
+		await this.conn.query(`
+			INSERT INTO inferred_neuron_strengths (level, to_neuron_id, total_strength)
+			SELECT level, to_neuron_id, SUM(strength) as total_strength
+			FROM inferred_connections
+			GROUP BY level, to_neuron_id
+		`);
+	}
+
+	/**
+	 * Calculate average strength per level.
+	 * Truncates and populates inferred_level_strengths scratch table.
+	 */
+	async getInferredLevelStrengths() {
+		// Clear and populate inferred_level_strengths
+		await this.conn.query('TRUNCATE inferred_level_strengths');
+		await this.conn.query(`
+			INSERT INTO inferred_level_strengths (level, avg_strength)
+			SELECT level, AVG(total_strength) as avg_strength
+			FROM inferred_neuron_strengths
+			GROUP BY level
+		`);
+	}
+
+	/**
+	 * Filter neurons for peaks based on strength thresholds per level.
+	 * Truncates and populates inferred_peaks scratch table.
+	 * Returns the total number of peaks found across all levels.
+	 */
+	async getInferredPeaks() {
+		// Clear inferred_peaks
+		await this.conn.query('TRUNCATE inferred_peaks');
+
+		// Insert peaks using average strength per level from inferred_level_strengths
+		await this.conn.query(`
+			INSERT INTO inferred_peaks (level, peak_neuron_id, total_strength)
+			SELECT ins.level, ins.to_neuron_id, ins.total_strength
+			FROM inferred_neuron_strengths ins
+			JOIN inferred_level_strengths ils ON ins.level = ils.level
+			WHERE ins.total_strength >= ?
+			AND ins.total_strength > (ils.avg_strength * ?)
+		`, [this.minPeakStrength, this.minPeakRatio]);
+
+		// Get count for logging
+		const [result] = await this.conn.query('SELECT COUNT(*) as peak_count FROM inferred_peaks');
+		const totalPeaks = result[0].peak_count;
+		console.log(`Found ${totalPeaks} peak predictions across all levels`);
+
+		return totalPeaks;
+	}
+
+	/**
+	 * Populate connection_inference table using inferred_peaks as filter.
+	 */
+	async populateConnectionInference() {
+		await this.conn.query(`
+			INSERT INTO connection_inference (level, connection_id, to_neuron_id, strength)
+			SELECT ic.level, ic.connection_id, ic.to_neuron_id, ic.strength
+			FROM inferred_connections ic
+			JOIN inferred_peaks ip ON ic.level = ip.level AND ic.to_neuron_id = ip.peak_neuron_id
+		`);
 	}
 
 	/**

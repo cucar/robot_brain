@@ -151,7 +151,7 @@ export default class StockTrainingJob extends Job {
 
 		// Find the oldest date (earliest in chronological order)
 		let oldestDate = null;
-		for (const [symbol, dates] of symbolDates) {
+		for (const [_, dates] of symbolDates) {
 			const symbolOldest = Array.from(dates).sort()[0];
 			if (!oldestDate || symbolOldest > oldestDate) {
 				oldestDate = symbolOldest;
@@ -300,9 +300,6 @@ export default class StockTrainingJob extends Job {
 
 		this.episodeResults.push(episodeMetrics);
 		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
-
-		// Print final prediction accuracy summary
-		this.brain.printFinalAccuracySummary();
 	}
 
 	/**
