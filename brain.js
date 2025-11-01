@@ -19,7 +19,7 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.05; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -1262,11 +1262,23 @@ export default class Brain {
 		const [patternUpdateResult] = await this.conn.query(`UPDATE patterns SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
 		console.log(`  Pattern UPDATE took ${Date.now() - stepStart}ms (updated ${patternUpdateResult.affectedRows} rows)`);
 
+		// Delete patterns with zero strength
+		console.log('Running forget cycle - pattern deletion...');
+		stepStart = Date.now();
+		const [patternDeleteResult] = await this.conn.query(`DELETE FROM patterns WHERE strength = ?`, [this.minConnectionStrength]);
+		console.log(`  Pattern DELETE took ${Date.now() - stepStart}ms (deleted ${patternDeleteResult.affectedRows} rows)`);
+
 		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped between minConnectionStrength and maxConnectionStrength)
 		console.log('Running forget cycle - connection update...');
 		stepStart = Date.now();
 		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
 		console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
+
+		// Delete connections with zero strength
+		console.log('Running forget cycle - connection deletion...');
+		stepStart = Date.now();
+		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
+		console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
 
 		// 3. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
 		// First, explicitly delete from pattern_peaks to avoid CASCADE timing issues
