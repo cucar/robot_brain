@@ -1046,22 +1046,13 @@ export default class Brain {
 	}
 
 	/**
-	 * Detect peaks and write directly to observed_peaks and observed_patterns tables
-	 * Peaks are to_neurons whose strength exceeds their source neurons' average strength
-	 * Uses scratch tables with indexes instead of CTEs for better performance
-	 * Strategy: Materialize data once, aggregate once, then filter
-	 * @param {number} level - The level to detect peaks for
+	 * Materialize weighted connection data from active connections.
+	 * Truncates and populates observed_connections scratch table.
+	 * @param {number} level - The level to get connections for
 	 */
-	async getObservedPatterns(level) {
-		console.log('getting observed patterns');
-
-		// Clear scratch tables
+	async getObservedConnections(level) {
+		// Clear and populate observed_connections
 		await this.conn.query('TRUNCATE observed_connections');
-		await this.conn.query('TRUNCATE observed_neuron_strengths');
-		await this.conn.query('TRUNCATE observed_peaks');
-		await this.conn.query('TRUNCATE observed_patterns');
-
-		// Step 1: Materialize weighted connection data (scan active_connections + connections ONCE)
 		await this.conn.query(`
 			INSERT INTO observed_connections (to_neuron_id, connection_id, strength)
 			SELECT ac.to_neuron_id, ac.connection_id, c.strength * POW(?, c.distance) as strength
@@ -1071,21 +1062,36 @@ export default class Brain {
 			AND ac.age = 0
 			AND c.strength > 0
 		`, [this.peakTimeDecayFactor, level]);
+	}
 
-		// Step 2: Aggregate per neuron (GROUP BY ONCE)
+	/**
+	 * Aggregate connection strengths per neuron.
+	 * Truncates and populates observed_neuron_strengths scratch table.
+	 */
+	async getObservedNeuronStrengths() {
+		// Clear and populate observed_neuron_strengths
+		await this.conn.query('TRUNCATE observed_neuron_strengths');
 		await this.conn.query(`
 			INSERT INTO observed_neuron_strengths (to_neuron_id, total_strength, connection_count)
 			SELECT to_neuron_id, SUM(strength) as total_strength, COUNT(*) as connection_count
 			FROM observed_connections
 			GROUP BY to_neuron_id
 		`);
+	}
 
-		// Step 3a: Calculate average strength threshold
+	/**
+	 * Filter neurons for peaks based on strength thresholds.
+	 * Truncates and populates observed_peaks scratch table.
+	 * returns the number of peaks found.
+	 */
+	async getObservedPeaks() {
+		// Calculate average strength threshold
 		const [avgResult] = await this.conn.query('SELECT AVG(total_strength) as avg_strength FROM observed_neuron_strengths');
 		const avgStrength = avgResult[0].avg_strength || 0;
 		const strengthThreshold = avgStrength * this.minPeakRatio;
 
-		// Step 3b: Filter for peaks using the calculated threshold
+		// Clear and populate observed_peaks
+		await this.conn.query('TRUNCATE observed_peaks');
 		await this.conn.query(`
 			INSERT INTO observed_peaks (peak_neuron_id, total_strength, connection_count)
 			SELECT to_neuron_id, total_strength, connection_count
@@ -1095,7 +1101,34 @@ export default class Brain {
 			AND connection_count >= 2
 		`, [this.minPeakStrength, strengthThreshold]);
 
+		// Get count for logging
+		const [result] = await this.conn.query('SELECT COUNT(*) as peak_count FROM observed_peaks');
+		return result[0].peak_count;
+	}
+
+	/**
+	 * Detect peaks and write directly to observed_peaks and observed_patterns tables
+	 * Peaks are to_neurons whose strength exceeds their source neurons' average strength
+	 * Uses scratch tables with indexes instead of CTEs for better performance
+	 * Strategy: Materialize data once, aggregate once, then filter
+	 * @param {number} level - The level to detect peaks for
+	 */
+	async getObservedPatterns(level) {
+		console.log('getting observed patterns');
+
+		// Step 1: Materialize weighted connection data
+		await this.getObservedConnections(level);
+
+		// Step 2: Aggregate per neuron
+		await this.getObservedNeuronStrengths();
+
+		// Step 3: get observed peaks - if none found, return false, indicating no patterns found
+		const peakCount = await this.getObservedPeaks();
+		console.log(`Found ${peakCount} peaks at level ${level}`);
+		if (peakCount === 0) return false;
+
 		// Step 4: Populate observed_patterns using observed_peaks as filter
+		await this.conn.query('TRUNCATE observed_patterns');
 		await this.conn.query(`
 			INSERT INTO observed_patterns (peak_neuron_id, connection_id)
 			SELECT oc.to_neuron_id, oc.connection_id
@@ -1103,12 +1136,7 @@ export default class Brain {
 			JOIN observed_peaks opk ON oc.to_neuron_id = opk.peak_neuron_id
 		`);
 
-		// Get count for logging
-		const [result] = await this.conn.query('SELECT COUNT(*) as peak_count FROM observed_peaks');
-		const peakCount = result[0].peak_count;
-		console.log(`Found ${peakCount} peaks at level ${level}`);
-
-		return peakCount > 0;
+		return true;
 	}
 
 	/**
