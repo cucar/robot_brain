@@ -30,6 +30,11 @@ export default class StockChannel extends Channel {
 		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
 		this.lastUnrealizedProfit = 0; // Previous unrealized profit for tracking changes
 
+		// Continuous prediction tracking for price
+		this.lastPredictedPrice = null; // Predicted price from previous frame
+		this.pricePredictionErrors = []; // Array of price prediction errors for calculating metrics
+		this.priceForPrediction = null; // Price to use as base for next prediction (set before updating currentPrice)
+
 		// Holdout configuration
 		this.holdoutRows = 0; // Number of rows to hold out from training (set by job)
 		this.isTrainingMode = true; // true = training (skip holdout rows), false = prediction (use only holdout rows)
@@ -41,7 +46,30 @@ export default class StockChannel extends Channel {
 		this.currentPrice = null;
 		this.currentVolume = null;
 
-		// Exponential discretization buckets for percentage changes
+		// Fine-grained discretization for typical stock movements (-2% to +2%) with exponential for extremes
+		// this.priceBuckets = [
+		// 	{ min: -Infinity, max: -10, value: -10 },  // -100%+ to -10%
+		// 	{ min: -10, max: -5, value: -9 },          // -10% to -5%
+		// 	{ min: -5, max: -3, value: -8 },           // -5% to -3%
+		// 	{ min: -3, max: -2, value: -7 },           // -3% to -2%
+		// 	{ min: -2, max: -1, value: -6 },           // -2% to -1%
+		// 	{ min: -1, max: -0.5, value: -5 },         // -1% to -0.5%
+		// 	{ min: -0.5, max: -0.2, value: -4 },       // -0.5% to -0.2%
+		// 	{ min: -0.2, max: -0.05, value: -3 },      // -0.2% to -0.05%
+		// 	{ min: -0.05, max: -0.01, value: -2 },     // -0.05% to -0.01%
+		// 	{ min: -0.01, max: 0.01, value: 0 },       // -0.01% to 0.01% (no change)
+		// 	{ min: 0.01, max: 0.05, value: 2 },        // 0.01% to 0.05%
+		// 	{ min: 0.05, max: 0.2, value: 3 },         // 0.05% to 0.2%
+		// 	{ min: 0.2, max: 0.5, value: 4 },          // 0.2% to 0.5%
+		// 	{ min: 0.5, max: 1, value: 5 },            // 0.5% to 1%
+		// 	{ min: 1, max: 2, value: 6 },              // 1% to 2%
+		// 	{ min: 2, max: 3, value: 7 },              // 2% to 3%
+		// 	{ min: 3, max: 5, value: 8 },              // 3% to 5%
+		// 	{ min: 5, max: 10, value: 9 },             // 5% to 10%
+		// 	{ min: 10, max: Infinity, value: 10 }      // 10%+ to 100%+
+		// ];
+
+		// 15-part Exponential discretization buckets for percentage changes
 		this.priceBuckets = [
 			{ min: -Infinity, max: -50, value: -7 },  // -100%+ to -50%
 			{ min: -50, max: -25, value: -6 },        // -50% to -25%
@@ -169,6 +197,10 @@ export default class StockChannel extends Channel {
 		this.unrealizedProfit = 0;
 		this.lastUnrealizedProfit = 0;
 
+		// Reset continuous prediction tracking
+		this.lastPredictedPrice = null;
+		this.pricePredictionErrors = [];
+
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
 	}
@@ -196,6 +228,17 @@ export default class StockChannel extends Channel {
 	computeChangeInputs() {
 		const priceChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
 		const volumeChange = ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
+
+		// Calculate prediction error if we had a price prediction from previous frame
+		if (this.lastPredictedPrice !== null) {
+			const absoluteError = Math.abs(this.currentPrice - this.lastPredictedPrice);
+			const percentageError = (absoluteError / this.currentPrice) * 100;
+			this.pricePredictionErrors.push(percentageError);
+			const actualChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
+			console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${percentageError.toFixed(2)}%`);
+			this.lastPredictedPrice = null;
+		}
+
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
@@ -235,6 +278,22 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
+	 * Convert discretized bucket value back to approximate percentage change
+	 * Uses the midpoint of the bucket range
+	 */
+	bucketValueToPercentage(bucketValue) {
+		for (const bucket of this.priceBuckets) {
+			if (bucket.value === bucketValue) {
+				// Use midpoint of bucket range
+				const min = bucket.min === -Infinity ? -100 : bucket.min;
+				const max = bucket.max === Infinity ? 100 : bucket.max;
+				return (min + max) / 2;
+			}
+		}
+		return 0; // Default to no change
+	}
+
+	/**
 	 * Get valid exploration actions based on current stock ownership
 	 * Before first trade: only buy is valid
 	 * After first trade: both buy and sell are valid (alternating states)
@@ -252,6 +311,9 @@ export default class StockChannel extends Channel {
 	 * Get frame input data for this stock channel
 	 */
 	async getFrameInputs() {
+
+		// Save current price as base for predictions BEFORE reading new price
+		if (this.currentPrice !== null) this.priceForPrediction = this.currentPrice;
 
 		// Read next data row
 		const row = this.readNextRow();
@@ -369,24 +431,91 @@ export default class StockChannel extends Channel {
 	 * Resolve conflicts between multiple stock predictions
 	 * For stocks: only one action can be taken (buy OR sell, not both)
 	 * Prioritize price predictions over volume predictions, then select by strength
+	 * Also calculates continuous price prediction (weighted average of predicted prices)
+	 * IMPORTANT: Uses previousPrice (not currentPrice) to avoid lookahead bias - we're predicting
+	 * the NEXT frame's price based on data available BEFORE reading the next frame.
 	 * @returns {Array} - Array with single selected prediction
 	 */
 	resolveConflicts(predictions) {
-		if (!predictions || predictions.length === 0) return [];
+		if (!predictions || predictions.length === 0) {
+			this.lastPredictedPrice = null;
+			return [];
+		}
 
 		const priceChangeDim = `${this.symbol}_price_change`;
 
-		// Filter to only predictions that have price_change coordinate
+		// Filter to only predictions that have price_change coordinate (not volume)
 		const pricePredictions = predictions.filter(pred => priceChangeDim in pred.coordinates);
 
-		// If we have price predictions, use those; otherwise fall back to all predictions
-		const candidatePredictions = pricePredictions.length > 0 ? pricePredictions : predictions;
+		// Calculate continuous price prediction as weighted average of predicted prices
+		// Use priceForPrediction (the price from the CURRENT frame, which is the base for predicting NEXT frame)
+		if (pricePredictions.length > 0 && this.priceForPrediction !== null) {
+			let totalWeightedPrice = 0;
+			let totalStrength = 0;
+			const bucketDetails = [];
 
-		// Find the strongest prediction among candidates
-		let strongest = candidatePredictions[0];
-		for (const pred of candidatePredictions) if (pred.strength > strongest.strength) strongest = pred;
-		if (this.debug) console.log(`${this.symbol}: Resolved ${predictions.length} predictions (${pricePredictions.length} with price) - selected prediction (strength: ${strongest.strength.toFixed(2)})`);
-		return [strongest];
+			for (const pred of pricePredictions) {
+				const bucketValue = pred.coordinates[priceChangeDim];
+				const percentageChange = this.bucketValueToPercentage(bucketValue);
+				const predictedPrice = this.priceForPrediction * (1 + percentageChange / 100);
+				totalWeightedPrice += predictedPrice * pred.strength;
+				totalStrength += pred.strength;
+				bucketDetails.push(`B${bucketValue}(${percentageChange.toFixed(2)}%):${pred.strength.toFixed(1)}`);
+			}
+
+			this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
+			if (this.lastPredictedPrice !== null) {
+				const predictedChange = ((this.lastPredictedPrice - this.priceForPrediction) / this.priceForPrediction) * 100;
+				console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.priceForPrediction.toFixed(2)}`);
+			}
+		}
+		else this.lastPredictedPrice = null;
+
+		// Return strongest prediction for EACH dimension (price and volume separately)
+		const volumeChangeDim = `${this.symbol}_volume_change`;
+		const volumePredictions = predictions.filter(pred => volumeChangeDim in pred.coordinates);
+
+		const result = [];
+
+		// Add strongest price prediction if any
+		if (pricePredictions.length > 0) {
+			let strongestPrice = pricePredictions[0];
+			for (const pred of pricePredictions) if (pred.strength > strongestPrice.strength) strongestPrice = pred;
+			result.push(strongestPrice);
+		}
+
+		// Add strongest volume prediction if any
+		if (volumePredictions.length > 0) {
+			let strongestVolume = volumePredictions[0];
+			for (const pred of volumePredictions) if (pred.strength > strongestVolume.strength) strongestVolume = pred;
+			result.push(strongestVolume);
+		}
+
+		console.log(`${this.symbol}: Resolved ${predictions.length} predictions → returning ${result.length} (${pricePredictions.length > 0 ? 'price' : ''}${pricePredictions.length > 0 && volumePredictions.length > 0 ? '+' : ''}${volumePredictions.length > 0 ? 'volume' : ''})`);
+
+		return result;
+	}
+
+	/**
+	 * Get continuous prediction error metrics for price predictions since last call
+	 * Returns only NEW errors since last call, then clears the array
+	 * @returns {Object} - { totalError: number, count: number } or null if no predictions
+	 */
+	getPredictionMetrics() {
+		if (this.pricePredictionErrors.length === 0) return null;
+
+		// Calculate total error for all predictions since last call
+		const totalError = this.pricePredictionErrors.reduce((sum, err) => sum + err, 0);
+		const count = this.pricePredictionErrors.length;
+
+		// Clear the array so next call only returns new errors
+		this.pricePredictionErrors = [];
+
+		return {
+			totalError,
+			count,
+			symbol: this.symbol
+		};
 	}
 
 	/**

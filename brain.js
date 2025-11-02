@@ -41,6 +41,9 @@ export default class Brain {
 		// Prediction accuracy tracking (cumulative stats per level)
 		this.accuracyStats = new Map(); // level -> { connection: {correct, total}, pattern: {correct, total}, resolved: {correct, total} }
 
+		// Continuous prediction metrics (for channels that support it)
+		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
+
 		// Create readline interface for pausing between frames - used when debugging
 		this.debug = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -670,7 +673,25 @@ export default class Brain {
 		}
 		const higherAccuracy = higherTotal > 0 ? `${(higherCorrect / higherTotal * 100).toFixed(1)}%` : 'N/A';
 
-		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | Time: ${frameElapsed.toFixed(2)}ms`);
+		// Collect continuous prediction metrics from channels (only new errors since last call)
+		for (const [_, channel] of this.channels) {
+			if (typeof channel.getPredictionMetrics === 'function') {
+				const metrics = channel.getPredictionMetrics();
+				if (metrics) {
+					this.continuousPredictionMetrics.totalError += metrics.totalError;
+					this.continuousPredictionMetrics.count += metrics.count;
+				}
+			}
+		}
+
+		// Calculate average MAPE (Mean Absolute Percentage Error) and format with count
+		let mapeDisplay = 'N/A';
+		if (this.continuousPredictionMetrics.count > 0) {
+			const avgMAPE = (this.continuousPredictionMetrics.totalError / this.continuousPredictionMetrics.count).toFixed(2);
+			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
+		}
+
+		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 	/**
