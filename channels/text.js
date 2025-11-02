@@ -8,164 +8,115 @@ import Channel from './channel.js';
  */
 export default class TextChannel extends Channel {
 
-	constructor(name) {
+	constructor(name, pattern = 'cats') {
 		super(name);
-		
-		// Sample text data from main.js text processing example
-		this.trainingWords = ["cats", "dogs", "bird", "fish"];
-		this.currentWord = "cats";
+
+		// Pattern to learn (can be set from job)
+		this.pattern = pattern;
+
 		this.currentLetterIndex = 0;
-		this.wordIterations = 0;
+		this.patternIterations = 0;
 		this.maxIterations = 10;
-		
-		// Character to coordinate mapping (simplified 1D space from main.js)
-		this.letterCoords = {
-			'a': 0.1, 'b': 0.2, 'c': 0.3, 'd': 0.4, 'e': 0.5,
-			'f': 0.6, 'g': 0.7, 'h': 0.8, 'i': 0.9, 'j': 1.0,
-			'k': 0.11, 'l': 0.21, 'm': 0.31, 'n': 0.41, 'o': 0.51,
-			'p': 0.61, 'q': 0.71, 'r': 0.81, 's': 0.91, 't': 0.101,
-			'u': 0.111, 'v': 0.121, 'w': 0.131, 'x': 0.141, 'y': 0.151, 'z': 0.161
-		};
-		
 		this.lastPredictedChar = null;
-		this.currentPosition = 0; // Position in text sequence
 	}
 
+	/**
+	 * we only have one character input at a time
+	 */
 	getInputDimensions() {
-		return [
-			'char_input', 'text_position' // Character input and position in sequence
-		];
+		return [ 'char_input' ];
 	}
 
+	/**
+	 * text channel does not need any outputs - for now we are simply mimicking the inputs
+	 * in the future, we may want to generate text based on conscious thoughts - we would add it then
+	 * @returns {*[]}
+	 */
 	getOutputDimensions() {
-		return [
-			'char_output' // Character to output/predict
-		];
+		return [];
 	}
 
 	/**
 	 * Get character input data
 	 */
 	async getFrameInputs() {
-		if (this.wordIterations >= this.maxIterations) {
-			console.log(`${this.name}: Completed text learning iterations`);
-			return [];
-		}
 
-		// Reset to next word/iteration if current word is finished
-		if (this.currentLetterIndex >= this.currentWord.length) {
+		// Stop if we have reached the maximum number of iterations
+		if (this.patternIterations >= this.maxIterations) return [];
+
+		// Reset to next iteration if current pattern is finished
+		if (this.currentLetterIndex >= this.pattern.length) {
 			this.currentLetterIndex = 0;
-			this.wordIterations++;
-			this.currentPosition = 0;
-			
-			if (this.wordIterations >= this.maxIterations) {
-				return [];
-			}
-			
-			console.log(`${this.name}: Starting iteration ${this.wordIterations + 1} of word "${this.currentWord}"`);
+			this.patternIterations++;
+			if (this.patternIterations >= this.maxIterations) return [];
 		}
 
-		const currentChar = this.currentWord[this.currentLetterIndex];
-		const charValue = this.letterCoords[currentChar] || 0;
-		
+		// Use ASCII code for dimension value of the base neuron
+		const charValue = this.pattern[this.currentLetterIndex].charCodeAt(0);
+
+		// advance to next letter
 		this.currentLetterIndex++;
-		this.frameNumber++;
-		
-		console.log(`${this.name}: Reading character '${currentChar}' at position ${this.currentPosition}`);
-		
-		// Return character input neurons
-		const inputs = [
-			{ char_input: charValue },
-			{ text_position: this.currentPosition / 10.0 } // Normalized position
-		];
-		
-		this.currentPosition++;
-		return inputs;
+
+		// Return character input neuron
+		return [ { char_input: charValue } ];
 	}
 
 	/**
 	 * Get feedback based on character prediction accuracy
 	 */
 	async getFeedback() {
-		if (!this.lastPredictedChar) {
-			return 1.0; // Neutral
+		return 1.0; // Neutral - no feedback for now since this is simply mimicking the input
+	}
+
+	/**
+	 * Get valid exploration actions
+	 */
+	getValidExplorationActions() {
+		return []; // return empty array since this is input-only - for now
+	}
+
+	/**
+	 * Resolve conflicts between multiple character predictions
+	 * Since we can only predict one character at a time, pick the strongest prediction
+	 * @param {Array} predictions - Array of prediction objects with structure:
+	 *   [{ neuron_id, coordinates: {char_input: asciiValue}, strength: number }]
+	 * @returns {Array} - Array with single strongest prediction, or empty if no predictions
+	 */
+	resolveConflicts(predictions) {
+		if (!predictions || predictions.length === 0) {
+			this.lastPredictedChar = null;
+			return [];
 		}
 
-		// Get the expected next character
-		const expectedCharIndex = this.currentLetterIndex; // Next character index
-		if (expectedCharIndex >= this.currentWord.length) {
-			return 1.0; // End of word, neutral feedback
+		// Filter to only predictions that have char_input coordinate
+		const charPredictions = predictions.filter(pred => 'char_input' in pred.coordinates);
+
+		if (charPredictions.length === 0) {
+			this.lastPredictedChar = null;
+			return [];
 		}
 
-		const expectedChar = this.currentWord[expectedCharIndex];
-		const expectedValue = this.letterCoords[expectedChar] || 0;
+		// Find the strongest prediction
+		let strongest = charPredictions[0];
+		for (const pred of charPredictions)
+			if (pred.strength > strongest.strength) strongest = pred;
 
-		// Check if prediction was close to expected character
-		const threshold = 0.05;
-		const error = Math.abs(this.lastPredictedChar - expectedValue);
+		// Convert ASCII code to character for display
+		const asciiCode = Math.round(strongest.coordinates.char_input);
+		const predictedChar = String.fromCharCode(asciiCode);
 
-		if (error < threshold) {
-			console.log(`${this.name}: SUCCESS! Correctly predicted next character '${expectedChar}'`);
-			return 1.5; // Positive reward factor
-		}
-		else {
-			console.log(`${this.name}: MISS! Wrong prediction for character '${expectedChar}' (error: ${error.toFixed(3)})`);
-			return 0.5; // Negative reward factor
-		}
+		// Store for feedback calculation
+		this.lastPredictedChar = strongest.coordinates.char_input;
+
+		console.log(`text: Predicted '${predictedChar}' (ASCII: ${asciiCode}, strength: ${strongest.strength.toFixed(1)})`);
+
+		return [strongest];
 	}
 
 	/**
 	 * Execute character output based on brain predictions
 	 */
 	async executeOutputs(predictions) {
-		const outputs = {
-			actions: new Map(),
-			predictions: new Map()
-		};
-
-		if (!predictions || predictions.length === 0) {
-			return outputs;
-		}
-
-		// Extract character output predictions
-		let charOutput = 0;
-		let totalConfidence = 0;
-
-		predictions.forEach(frame => {
-			frame.predictions.forEach(pred => {
-				if (pred.coordinates.char_output !== undefined) {
-					charOutput += pred.coordinates.char_output * pred.confidence;
-					totalConfidence += pred.confidence;
-				}
-			});
-		});
-
-		if (totalConfidence > 0) {
-			charOutput /= totalConfidence;
-			
-			// Find closest character to the predicted value
-			let closestChar = 'a';
-			let minDistance = Infinity;
-			
-			for (const [char, value] of Object.entries(this.letterCoords)) {
-				const distance = Math.abs(charOutput - value);
-				if (distance < minDistance) {
-					minDistance = distance;
-					closestChar = char;
-				}
-			}
-			
-			this.lastPredictedChar = charOutput;
-			
-			console.log(`${this.name}: PREDICTED CHARACTER '${closestChar}' (value: ${charOutput.toFixed(3)}, confidence: ${totalConfidence.toFixed(3)})`);
-			
-			outputs.actions.set('character', { 
-				char: closestChar, 
-				value: charOutput, 
-				confidence: totalConfidence 
-			});
-		}
-
-		return outputs;
+		// there should not be any outputs for this channel - for now
 	}
 }
