@@ -17,9 +17,9 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.10; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1.05; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -184,21 +184,23 @@ export default class Brain {
 	 * Get global feedback from all channels aggregated into a single reward factor
 	 */
 	async getFeedback() {
-		console.log('Getting feedback from all channels...');
+		if (this.debug) console.log('Getting feedback from all channels...');
 		let globalReward = 1.0; // Start with neutral
 		let feedbackCount = 0;
 
 		for (const [channelName, channel] of this.channels) {
 			const rewardFactor = await channel.getFeedback();
 			if (rewardFactor !== 1.0) { // Only process non-neutral feedback
-				console.log(`${channelName}: reward factor ${rewardFactor.toFixed(3)}`);
+				if (this.debug) console.log(`${channelName}: reward factor ${rewardFactor.toFixed(3)}`);
 				globalReward *= rewardFactor; // Multiplicative aggregation
 				feedbackCount++;
 			}
 		}
 
-		if (feedbackCount > 0) console.log(`Total reward: ${globalReward.toFixed(3)} (${feedbackCount} channels)`);
-		else console.log('No feedback from any channels');
+		if (this.debug) {
+			if (feedbackCount > 0) console.log(`Total reward: ${globalReward.toFixed(3)} (${feedbackCount} channels)`);
+			else console.log('No feedback from any channels');
+		}
 
 		return globalReward;
 	}
@@ -208,10 +210,14 @@ export default class Brain {
 	 * and global reward factor from aggregated channel feedback
 	 */
 	async processFrame(frame, globalReward = 1.0) {
-		console.log('******************************************************************');
-		console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)}`, this.frameNumber);
-		console.log(`applying global reward: ${globalReward.toFixed(3)}`);
-		console.log('******************************************************************');
+		const frameStart = performance.now();
+
+		if (this.debug) {
+			console.log('******************************************************************');
+			console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)}`, this.frameNumber);
+			console.log(`applying global reward: ${globalReward.toFixed(3)}`);
+			console.log('******************************************************************');
+		}
 
 		// apply rewards to previously executed decisions (before aging them further)
 		await this.applyRewards(globalReward);
@@ -230,8 +236,11 @@ export default class Brain {
 
 		// at this point the frame is processed - the forget cycle is a periodic cleanup task
 		// run forget cycle periodically and delete dead connections/neurons
-		console.log('Frame processed successfully.');
 		await this.runForgetCycle();
+
+		// show frame processing summary
+		const frameElapsed = performance.now() - frameStart;
+		this.printFrameSummary(frameElapsed);
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		if (this.debug) await this.waitForUser('Press Enter to continue to next frame');
@@ -270,7 +279,7 @@ export default class Brain {
 		`);
 
 		if (outputRows.length === 0) {
-			console.log('No previous outputs to execute');
+			if (this.debug) console.log('No previous outputs to execute');
 			return;
 		}
 
@@ -284,7 +293,7 @@ export default class Brain {
 
 		// Check if the brain is inactive - if active, no exploration needed
 		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
-		console.log('Brain inactive - executing curiosity exploration');
+		if (this.debug) console.log('Brain inactive - executing curiosity exploration');
 
 		// Get a random channel for exploration
 		const channelNames = Array.from(this.channels.keys());
@@ -294,13 +303,13 @@ export default class Brain {
 		// Get exploration actions for the channel
 		const explorationActions = randomChannel.getValidExplorationActions();
 		if (explorationActions.length === 0) {
-			console.log(`No valid exploration actions for ${randomChannelName}`);
+			if (this.debug) console.log(`No valid exploration actions for ${randomChannelName}`);
 			return;
 		}
 
 		// Execute random exploration action
 		const randomAction = explorationActions[Math.floor(Math.random() * explorationActions.length)];
-		console.log(`${randomChannelName}: Executing exploration action:`, randomAction);
+		if (this.debug) console.log(`${randomChannelName}: Executing exploration action:`, randomAction);
 
 		await this.executeChannelOutputs(randomChannelName, randomAction);
 	}
@@ -331,11 +340,11 @@ export default class Brain {
 	async executeChannelOutputs(channelName, coordinates) {
 		const channel = this.channels.get(channelName);
 		if (!channel) {
-			console.log(`Warning: Channel ${channelName} not found`);
+			if (this.debug) console.log(`Warning: Channel ${channelName} not found`);
 			return;
 		}
 
-		console.log(`${channelName}: Executing outputs:`, coordinates);
+		if (this.debug) console.log(`${channelName}: Executing outputs:`, coordinates);
 		await channel.executeOutputs(coordinates);
 
 		// Track global activity
@@ -347,7 +356,7 @@ export default class Brain {
 	 * With uniform aging, all levels are deactivated at once when age >= baseNeuronMaxAge.
 	 */
 	async ageNeurons() {
-		console.log('Aging active neurons, connections, and inferred neurons...');
+		if (this.debug) console.log('Aging active neurons, connections, and inferred neurons...');
 
 		// age all neurons and connections - ORDER BY age DESC to avoid primary key collisions
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
@@ -359,22 +368,22 @@ export default class Brain {
 
 		// Delete aged-out neurons from all levels at once
 		const [neuronResult] = await this.conn.query('DELETE FROM active_neurons WHERE age >= ?', [this.baseNeuronMaxAge]);
-		console.log(`Deactivated ${neuronResult.affectedRows} aged-out neurons across all levels (age >= ${this.baseNeuronMaxAge})`);
+		if (this.debug) console.log(`Deactivated ${neuronResult.affectedRows} aged-out neurons across all levels (age >= ${this.baseNeuronMaxAge})`);
 
 		// Delete aged-out connections from all levels at once
 		const [connectionResult] = await this.conn.query('DELETE FROM active_connections WHERE age >= ?', [this.baseNeuronMaxAge]);
-		console.log(`Deactivated ${connectionResult.affectedRows} aged-out connections across all levels (age >= ${this.baseNeuronMaxAge})`);
+		if (this.debug) console.log(`Deactivated ${connectionResult.affectedRows} aged-out connections across all levels (age >= ${this.baseNeuronMaxAge})`);
 
 		// Clean up inferred neurons after execution (age >= 2)
 		// age=0: fresh predictions, age=1: executed this frame, age>=2: no longer needed
 		const [connectionInferredResult] = await this.conn.query('DELETE FROM connection_inferred_neurons WHERE age >= 2');
-		console.log(`Cleaned up ${connectionInferredResult.affectedRows} executed connection inferred neurons (age >= 2)`);
+		if (this.debug) console.log(`Cleaned up ${connectionInferredResult.affectedRows} executed connection inferred neurons (age >= 2)`);
 
 		const [patternInferredResult] = await this.conn.query('DELETE FROM pattern_inferred_neurons WHERE age >= 2');
-		console.log(`Cleaned up ${patternInferredResult.affectedRows} executed pattern inferred neurons (age >= 2)`);
+		if (this.debug) console.log(`Cleaned up ${patternInferredResult.affectedRows} executed pattern inferred neurons (age >= 2)`);
 
 		const [inferredResult] = await this.conn.query('DELETE FROM inferred_neurons WHERE age >= 2');
-		console.log(`Cleaned up ${inferredResult.affectedRows} executed inferred neurons (age >= 2)`);
+		if (this.debug) console.log(`Cleaned up ${inferredResult.affectedRows} executed inferred neurons (age >= 2)`);
 	}
 
 	/**
@@ -442,15 +451,17 @@ export default class Brain {
 		`);
 
 		// Log predictions per level
-		const [results] = await this.conn.query(`
-			SELECT level, COUNT(DISTINCT neuron_id) as count
-			FROM inferred_neurons
-			WHERE age = 0 AND level > 0
-			GROUP BY level
-			ORDER BY level DESC
-		`);
-		for (const row of results)
-			console.log(`Level ${row.level}: Merged ${row.count} predictions to inferred_neurons (connection + pattern)`);
+		if (this.debug) {
+			const [results] = await this.conn.query(`
+				SELECT level, COUNT(DISTINCT neuron_id) as count
+				FROM inferred_neurons
+				WHERE age = 0 AND level > 0
+				GROUP BY level
+				ORDER BY level DESC
+			`);
+			for (const row of results)
+				console.log(`Level ${row.level}: Merged ${row.count} predictions to inferred_neurons (connection + pattern)`);
+		}
 	}
 
 	/**
@@ -536,7 +547,7 @@ export default class Brain {
 			'INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES ?',
 			[allSelectedPredictions.map(p => [p.neuron_id, 0, 0, p.strength])]
 		);
-		console.log(`Resolved ${allSelectedPredictions.length} input predictions after conflict resolution`);
+		if (this.debug) console.log(`Resolved ${allSelectedPredictions.length} input predictions after conflict resolution`);
 	}
 
 	/**
@@ -612,7 +623,8 @@ export default class Brain {
 				cumulative.connection.total += stats.connection.total;
 				const currentRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
 				const avgRate = (cumulative.connection.correct / cumulative.connection.total * 100).toFixed(1);
-				console.log(`Level ${level}: Connection prediction accuracy: ${stats.connection.correct}/${stats.connection.total} (${currentRate}%) | Avg: ${cumulative.connection.correct}/${cumulative.connection.total} (${avgRate}%)`);
+				if (this.debug)
+					console.log(`Level ${level}: Connection prediction accuracy: ${stats.connection.correct}/${stats.connection.total} (${currentRate}%) | Avg: ${cumulative.connection.correct}/${cumulative.connection.total} (${avgRate}%)`);
 			}
 
 			// Report pattern accuracy
@@ -621,7 +633,8 @@ export default class Brain {
 				cumulative.pattern.total += stats.pattern.total;
 				const currentRate = (stats.pattern.correct / stats.pattern.total * 100).toFixed(1);
 				const avgRate = (cumulative.pattern.correct / cumulative.pattern.total * 100).toFixed(1);
-				console.log(`Level ${level}: Pattern prediction accuracy: ${stats.pattern.correct}/${stats.pattern.total} (${currentRate}%) | Avg: ${cumulative.pattern.correct}/${cumulative.pattern.total} (${avgRate}%)`);
+				if (this.debug)
+					console.log(`Level ${level}: Pattern prediction accuracy: ${stats.pattern.correct}/${stats.pattern.total} (${currentRate}%) | Avg: ${cumulative.pattern.correct}/${cumulative.pattern.total} (${avgRate}%)`);
 			}
 
 			// Report resolved accuracy (level 0 only)
@@ -630,9 +643,34 @@ export default class Brain {
 				cumulative.resolved.total += stats.resolved.total;
 				const currentRate = (stats.resolved.correct / stats.resolved.total * 100).toFixed(1);
 				const avgRate = (cumulative.resolved.correct / cumulative.resolved.total * 100).toFixed(1);
-				console.log(`Level ${level}: Resolved prediction accuracy: ${stats.resolved.correct}/${stats.resolved.total} (${currentRate}%) | Avg: ${cumulative.resolved.correct}/${cumulative.resolved.total} (${avgRate}%)`);
+				if (this.debug)
+					console.log(`Level ${level}: Resolved prediction accuracy: ${stats.resolved.correct}/${stats.resolved.total} (${currentRate}%) | Avg: ${cumulative.resolved.correct}/${cumulative.resolved.total} (${avgRate}%)`);
 			}
 		}
+	}
+
+	/**
+	 * Prints a one-line summary of the frame processing
+	 */
+	printFrameSummary(frameElapsed) {
+		// Get base level (level 0) accuracy
+		let baseAccuracy = 'N/A';
+		const baseCumulative = this.accuracyStats.get(0);
+		if (baseCumulative && baseCumulative.connection.total > 0)
+			baseAccuracy = `${(baseCumulative.connection.correct / baseCumulative.connection.total * 100).toFixed(1)}%`;
+
+		// Get higher level accuracy (aggregate all levels > 0)
+		let higherCorrect = 0;
+		let higherTotal = 0;
+		for (const [level, stats] of this.accuracyStats.entries()) {
+			if (level > 0) {
+				higherCorrect += stats.connection.correct;
+				higherTotal += stats.connection.total;
+			}
+		}
+		const higherAccuracy = higherTotal > 0 ? `${(higherCorrect / higherTotal * 100).toFixed(1)}%` : 'N/A';
+
+		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 	/**
@@ -666,8 +704,9 @@ export default class Brain {
 		const failuresByLevel = new Map();
 		for (const f of failures)
 			failuresByLevel.set(f.level, (failuresByLevel.get(f.level) || 0) + 1);
-		for (const [level, count] of failuresByLevel.entries())
-			console.log(`Level ${level}: Applied negative reinforcement to ${count} failed connection predictions`);
+		if (this.debug)
+			for (const [level, count] of failuresByLevel.entries())
+				console.log(`Level ${level}: Applied negative reinforcement to ${count} failed connection predictions`);
 	}
 
 	/**
@@ -697,7 +736,7 @@ export default class Brain {
 		// Step 4: Get inferred peaks - if none found, log and return
 		const peakCount = await this.getInferredPeaks();
 		if (peakCount === 0) {
-			console.log('No connection predictions found');
+			if (this.debug) console.log('No connection predictions found');
 			return;
 		}
 
@@ -713,15 +752,17 @@ export default class Brain {
 		`);
 
 		// Log predictions per level
-		const [results] = await this.conn.query(`
-			SELECT level, COUNT(DISTINCT neuron_id) as count
-			FROM connection_inferred_neurons
-			WHERE age = 0
-			GROUP BY level
-			ORDER BY level DESC
-		`);
-		for (const row of results)
-			console.log(`Level ${row.level}: Predicted ${row.count} neurons for next frame (from connections)`);
+		if (this.debug) {
+			const [results] = await this.conn.query(`
+				SELECT level, COUNT(DISTINCT neuron_id) as count
+				FROM connection_inferred_neurons
+				WHERE age = 0
+				GROUP BY level
+				ORDER BY level DESC
+			`);
+			for (const row of results)
+				console.log(`Level ${row.level}: Predicted ${row.count} neurons for next frame (from connections)`);
+		}
 	}
 
 	/**
@@ -799,7 +840,7 @@ export default class Brain {
 		// Get count for logging
 		const [result] = await this.conn.query('SELECT COUNT(*) as peak_count FROM inferred_peaks');
 		const totalPeaks = result[0].peak_count;
-		console.log(`Found ${totalPeaks} peak predictions across all levels`);
+		if (this.debug) console.log(`Found ${totalPeaks} peak predictions across all levels`);
 
 		return totalPeaks;
 	}
@@ -877,7 +918,7 @@ export default class Brain {
 		const maxLevel = maxLevelResult[0].max_level;
 
 		// Log for each source level
-		if (maxLevel !== null)
+		if (this.debug && maxLevel !== null)
 			for (let level = maxLevel; level > 0; level--) {
 				const count = predictionsBySourceLevel.get(level) || 0;
 				console.log(`Level ${level}: Predicted ${count} peak neurons for level ${level - 1} (from patterns)`);
@@ -891,7 +932,7 @@ export default class Brain {
 
 		// try to get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
 		const matches = await this.matchFrameNeurons(frame);
-		console.log('pointNeuronMatches', matches);
+		if (this.debug) console.log('pointNeuronMatches', matches);
 
 		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
 		const neuronIds = matches.filter(p => p.neuron_id).map(p => p.neuron_id);
@@ -899,13 +940,13 @@ export default class Brain {
 		// create neurons for points with no matching neurons
 		const pointsNeedingNeurons = matches.filter(p => !p.neuron_id);
 		if (pointsNeedingNeurons.length > 0) {
-			console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
+			if (this.debug) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
 			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point_str));
 			neuronIds.push(...createdNeuronIds);
 		}
 
 		// return matching neuron ids to given points
-		console.log('frame neurons', neuronIds);
+		if (this.debug) console.log('frame neurons', neuronIds);
 		return neuronIds;
 	}
 
@@ -1105,12 +1146,12 @@ export default class Brain {
 	 * Returns true if patterns were found, false otherwise
 	 */
 	async activateLevelPatterns(level) {
-		console.log(`Processing level ${level} for pattern recognition`);
+		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 		// Detect peaks and write to observed_patterns table
 		const hasPeaks = await this.getObservedPatterns(level);
 		if (!hasPeaks) {
-			console.log(`No peaks found at level ${level}`);
+			if (this.debug) console.log(`No peaks found at level ${level}`);
 			return false;
 		}
 
@@ -1221,7 +1262,7 @@ export default class Brain {
 	 * @param {number} level - The level to detect peaks for
 	 */
 	async getObservedPatterns(level) {
-		console.log('getting observed patterns');
+		if (this.debug) console.log('getting observed patterns');
 
 		// Step 1: Materialize weighted connection data
 		await this.getObservedConnections(level);
@@ -1231,7 +1272,7 @@ export default class Brain {
 
 		// Step 3: get observed peaks - if none found, return false, indicating no patterns found
 		const peakCount = await this.getObservedPeaks();
-		console.log(`Found ${peakCount} peaks at level ${level}`);
+		if (this.debug) console.log(`Found ${peakCount} peaks at level ${level}`);
 		if (peakCount === 0) return false;
 
 		// Step 4: Populate observed_patterns using observed_peaks as filter
@@ -1254,7 +1295,7 @@ export default class Brain {
 	 * Uses connection overlap (66% threshold) to determine if patterns match.
 	 */
 	async matchObservedPatterns() {
-		console.log('Matching observed patterns to known patterns');
+		if (this.debug) console.log('Matching observed patterns to known patterns');
 
 		// Clear scratch tables
 		await this.conn.query('TRUNCATE matched_peaks');
@@ -1285,7 +1326,7 @@ export default class Brain {
 
 		// Get count for logging
 		const [result] = await this.conn.query('SELECT COUNT(*) as match_count FROM matched_patterns');
-		console.log(`Matched ${result[0].match_count} pattern-peak pairs`);
+		if (this.debug) console.log(`Matched ${result[0].match_count} pattern-peak pairs`);
 	}
 
 	/**
@@ -1295,7 +1336,7 @@ export default class Brain {
 	 * 3. Weaken connections that were NOT observed (negative reinforcement)
 	 */
 	async mergeMatchedPatterns() {
-		console.log('merging matched patterns...');
+		if (this.debug) console.log('merging matched patterns...');
 
 		// Positive reinforcement: Add/strengthen observed connections (clamped between minConnectionStrength and maxConnectionStrength)
 		await this.conn.query(`
@@ -1326,7 +1367,7 @@ export default class Brain {
 	 * No scratch table needed - pattern_peaks table establishes the mapping directly.
 	 */
 	async createNewPatterns() {
-		console.log('creating new patterns...');
+		if (this.debug) console.log('creating new patterns...');
 
 		// Find peaks that need new patterns (peaks in observed_peaks but not in matched_peaks)
 		// Use matched_peaks for fast indexed lookup instead of scanning matched_patterns
@@ -1340,7 +1381,7 @@ export default class Brain {
 			)
 		`);
 		const count = peaksNeedingPatterns.length;
-		console.log(`Creating ${count} new patterns for peaks without matches`);
+		if (this.debug) console.log(`Creating ${count} new patterns for peaks without matches`);
 		if (peaksNeedingPatterns.length === 0) return;
 
 		// Bulk create new pattern neurons - IDs are sequential
@@ -1388,57 +1429,77 @@ export default class Brain {
 		if (this.forgetCounter % this.forgetCycles !== 0) return;
 		this.forgetCounter = 0;
 
-		console.log('=== FORGET CYCLE STARTING ===');
-		const cycleStart = Date.now();
+		if (this.debug) {
+			console.log('=== FORGET CYCLE STARTING ===');
+			const cycleStart = Date.now();
 
-		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns (clamped between minConnectionStrength and maxConnectionStrength)
-		console.log('Running forget cycle - pattern update...');
-		let stepStart = Date.now();
-		const [patternUpdateResult] = await this.conn.query(`UPDATE patterns SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
-		console.log(`  Pattern UPDATE took ${Date.now() - stepStart}ms (updated ${patternUpdateResult.affectedRows} rows)`);
+			// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns (clamped between minConnectionStrength and maxConnectionStrength)
+			console.log('Running forget cycle - pattern update...');
+			let stepStart = Date.now();
+			const [patternUpdateResult] = await this.conn.query(`UPDATE patterns SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
+			console.log(`  Pattern UPDATE took ${Date.now() - stepStart}ms (updated ${patternUpdateResult.affectedRows} rows)`);
 
-		// Delete patterns with zero strength
-		console.log('Running forget cycle - pattern deletion...');
-		stepStart = Date.now();
-		const [patternDeleteResult] = await this.conn.query(`DELETE FROM patterns WHERE strength = ?`, [this.minConnectionStrength]);
-		console.log(`  Pattern DELETE took ${Date.now() - stepStart}ms (deleted ${patternDeleteResult.affectedRows} rows)`);
+			// Delete patterns with zero strength
+			console.log('Running forget cycle - pattern deletion...');
+			stepStart = Date.now();
+			const [patternDeleteResult] = await this.conn.query(`DELETE FROM patterns WHERE strength = ?`, [this.minConnectionStrength]);
+			console.log(`  Pattern DELETE took ${Date.now() - stepStart}ms (deleted ${patternDeleteResult.affectedRows} rows)`);
 
-		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped between minConnectionStrength and maxConnectionStrength)
-		console.log('Running forget cycle - connection update...');
-		stepStart = Date.now();
-		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
-		console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
+			// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped between minConnectionStrength and maxConnectionStrength)
+			console.log('Running forget cycle - connection update...');
+			stepStart = Date.now();
+			const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
+			console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
 
-		// Delete connections with zero strength
-		console.log('Running forget cycle - connection deletion...');
-		stepStart = Date.now();
-		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
-		console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
+			// Delete connections with zero strength
+			console.log('Running forget cycle - connection deletion...');
+			stepStart = Date.now();
+			const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
+			console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
 
-		// 3. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
-		// First, explicitly delete from pattern_peaks to avoid CASCADE timing issues
-		console.log('Running forget cycle - pattern_peaks cleanup...');
-		stepStart = Date.now();
-		const [peaksDeleteResult] = await this.conn.query(`
-			DELETE pp FROM pattern_peaks pp
-			LEFT JOIN patterns p ON pp.pattern_neuron_id = p.pattern_neuron_id
-			WHERE p.pattern_neuron_id IS NULL
-		`);
-		console.log(`  Pattern_peaks DELETE took ${Date.now() - stepStart}ms (deleted ${peaksDeleteResult.affectedRows} rows)`);
+			// 3. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
+			// First, explicitly delete from pattern_peaks to avoid CASCADE timing issues
+			console.log('Running forget cycle - pattern_peaks cleanup...');
+			stepStart = Date.now();
+			const [peaksDeleteResult] = await this.conn.query(`
+				DELETE pp FROM pattern_peaks pp
+				LEFT JOIN patterns p ON pp.pattern_neuron_id = p.pattern_neuron_id
+				WHERE p.pattern_neuron_id IS NULL
+			`);
+			console.log(`  Pattern_peaks DELETE took ${Date.now() - stepStart}ms (deleted ${peaksDeleteResult.affectedRows} rows)`);
 
-		// Then delete orphaned neurons
-		console.log('Running forget cycle - orphaned neurons cleanup...');
-		stepStart = Date.now();
-		const [neuronDeleteResult] = await this.conn.query(`
-			DELETE FROM neurons n
-			WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
-			  AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
-			  AND NOT EXISTS (SELECT 1 FROM patterns WHERE pattern_neuron_id = n.id)
-			  AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
-		`);
-		console.log(`  Orphaned neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
+			// Then delete orphaned neurons
+			console.log('Running forget cycle - orphaned neurons cleanup...');
+			stepStart = Date.now();
+			const [neuronDeleteResult] = await this.conn.query(`
+				DELETE FROM neurons n
+				WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
+				  AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
+				  AND NOT EXISTS (SELECT 1 FROM patterns WHERE pattern_neuron_id = n.id)
+				  AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
+			`);
+			console.log(`  Orphaned neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
 
-		console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
+			console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
+		} else {
+			// Run forget cycle without logging
+			await this.conn.query(`UPDATE patterns SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
+			await this.conn.query(`DELETE FROM patterns WHERE strength = ?`, [this.minConnectionStrength]);
+			await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
+			await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
+			await this.conn.query(`
+				DELETE pp FROM pattern_peaks pp
+				LEFT JOIN patterns p ON pp.pattern_neuron_id = p.pattern_neuron_id
+				WHERE p.pattern_neuron_id IS NULL
+			`);
+			await this.conn.query(`
+				DELETE FROM neurons n
+				WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
+				  AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
+				  AND NOT EXISTS (SELECT 1 FROM patterns WHERE pattern_neuron_id = n.id)
+				  AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
+			`);
+		}
 	}
 
 	/**
@@ -1448,7 +1509,7 @@ export default class Brain {
 	 */
 	async applyRewards(globalReward) {
 		if (globalReward === 1.0) {
-			console.log('Neutral global reward - no updates needed');
+			if (this.debug) console.log('Neutral global reward - no updates needed');
 			return;
 		}
 
@@ -1466,6 +1527,6 @@ export default class Brain {
 			WHERE ac.age >= 0
 		`, { rewardAdjustment, rewardTimeDecayFactor: this.rewardTimeDecayFactor, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 
-		console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} active connections (adjustment: ${rewardAdjustment >= 0 ? '+' : ''}${rewardAdjustment.toFixed(3)})`);
+		if (this.debug) console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} active connections (adjustment: ${rewardAdjustment >= 0 ? '+' : ''}${rewardAdjustment.toFixed(3)})`);
 	}
 }

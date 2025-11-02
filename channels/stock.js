@@ -123,7 +123,7 @@ export default class StockChannel extends Channel {
 			this.allRows.push({ price, volume });
 		}
 
-		console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
+		if (this.debug) console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
 	}
 
 	/**
@@ -143,7 +143,7 @@ export default class StockChannel extends Channel {
 		}
 
 		this.currentRowIndex = 0;
-		console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
+		if (this.debug) console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
 	}
 
 	/**
@@ -196,7 +196,7 @@ export default class StockChannel extends Channel {
 	computeChangeInputs() {
 		const priceChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
 		const volumeChange = ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
-		console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
+		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
 		return [
@@ -337,12 +337,14 @@ export default class StockChannel extends Channel {
 			// If price goes down, factor < 1.0 (reward decreases)
 			rewardFactor = currentPrice / this.previousPrice;
 
-			const totalChange = currentPrice - this.entryPrice;
-			const percentChange = (totalChange / this.entryPrice) * 100;
-			const recentChange = currentPrice - this.previousPrice;
+			if (this.debug) {
+				const totalChange = currentPrice - this.entryPrice;
+				const percentChange = (totalChange / this.entryPrice) * 100;
+				const recentChange = currentPrice - this.previousPrice;
 
-			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+				console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+				console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+			}
 		}
 		else {
 			// For sold stocks: provide inverse feedback
@@ -350,12 +352,14 @@ export default class StockChannel extends Channel {
 			// If price goes down after selling, factor > 1.0 (reward for good timing)
 			rewardFactor = this.previousPrice / currentPrice;
 
-			const totalChange = this.entryPrice - currentPrice; // Profit from selling high and price going lower
-			const percentChange = (totalChange / this.entryPrice) * 100;
-			const recentChange = currentPrice - this.previousPrice;
+			if (this.debug) {
+				const totalChange = this.entryPrice - currentPrice; // Profit from selling high and price going lower
+				const percentChange = (totalChange / this.entryPrice) * 100;
+				const recentChange = currentPrice - this.previousPrice;
 
-			console.log(`${this.symbol}: SOLD - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+				console.log(`${this.symbol}: SOLD - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+				console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+			}
 		}
 
 		return rewardFactor;
@@ -381,7 +385,7 @@ export default class StockChannel extends Channel {
 		// Find the strongest prediction among candidates
 		let strongest = candidatePredictions[0];
 		for (const pred of candidatePredictions) if (pred.strength > strongest.strength) strongest = pred;
-		console.log(`${this.symbol}: Resolved ${predictions.length} predictions (${pricePredictions.length} with price) - selected prediction (strength: ${strongest.strength.toFixed(2)})`);
+		if (this.debug) console.log(`${this.symbol}: Resolved ${predictions.length} predictions (${pricePredictions.length} with price) - selected prediction (strength: ${strongest.strength.toFixed(2)})`);
 		return [strongest];
 	}
 
@@ -404,7 +408,7 @@ export default class StockChannel extends Channel {
 
 			// if we already own the stock, nothing to do - just log it
 			if (this.owned) {
-				console.log(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
+				if (this.debug) console.log(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
 				return;
 			}
 
@@ -421,14 +425,14 @@ export default class StockChannel extends Channel {
 			// Track trade metrics
 			this.totalTrades++;
 
-			console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (activity: ${activityValue})`);
+			if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (activity: ${activityValue})`);
 		}
 		// Negative activity = sell signal (-1)
 		else if (activityValue < 0) {
 
 			// if we don't own the stock, nothing to do - just log it
 			if (!this.owned) {
-				console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
+				if (this.debug) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
 				return;
 			}
 
@@ -436,8 +440,10 @@ export default class StockChannel extends Channel {
 			const profit = currentPrice - this.entryPrice;
 			const percentReturn = (profit / this.entryPrice) * 100;
 
-			console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (activity: ${activityValue})`);
-			console.log(`${this.symbol}: Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+			if (this.debug) {
+				console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (activity: ${activityValue})`);
+				console.log(`${this.symbol}: Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+			}
 
 			// Track trade metrics - the unrealized profit/loss has already been tracked
 			// during ownership, so we just need to count the trade and profitability

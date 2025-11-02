@@ -47,7 +47,7 @@ export default class ArmChannel extends Channel {
 	 */
 	async getFrameInputs() {
 		if (this.sequenceTrials >= this.maxTrials) {
-			console.log(`${this.name}: Completed all reaching trials`);
+			if (this.debug) console.log(`${this.name}: Completed all reaching trials`);
 			return [];
 		}
 
@@ -56,21 +56,23 @@ export default class ArmChannel extends Channel {
 			this.currentSequenceIndex = 0;
 			this.sequenceTrials++;
 			this.currentPosition = { shoulder: 0.0, elbow: 0.0, wrist: 0.0 }; // Reset to rest
-			
+
 			if (this.sequenceTrials >= this.maxTrials) {
 				return [];
 			}
-			
-			console.log(`${this.name}: Starting reaching trial ${this.sequenceTrials + 1}`);
+
+			if (this.debug) console.log(`${this.name}: Starting reaching trial ${this.sequenceTrials + 1}`);
 		}
 
 		// Get target position for this step
 		this.targetPosition = this.reachSequence[this.currentSequenceIndex];
 		this.currentSequenceIndex++;
 		this.frameNumber++;
-		
-		console.log(`${this.name}: Target position:`, this.targetPosition);
-		console.log(`${this.name}: Current position:`, this.currentPosition);
+
+		if (this.debug) {
+			console.log(`${this.name}: Target position:`, this.targetPosition);
+			console.log(`${this.name}: Current position:`, this.currentPosition);
+		}
 		
 		// Calculate touch/proprioception inputs (difference between current and target)
 		const shoulderDiff = this.targetPosition.shoulder - this.currentPosition.shoulder;

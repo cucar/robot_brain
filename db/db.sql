@@ -33,11 +33,15 @@ select count(*) from neurons;
 select count(*) from coordinates;
 select count(*) from connections;
 select count(*) from connections where strength > 0;
-select * from connections where id > 96 and distance = 2;
+select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM pattern_peaks pp) order by strength desc;
 select * from active_neurons;
 select * from connection_inference;
 select count(*) from active_connections;
+select count(*) from patterns;
 select count(*) from patterns where strength > 0;
+SELECT COUNT(DISTINCT pattern_neuron_id) as total_patterns FROM pattern_peaks;
+SELECT FLOOR(strength) as strength_bucket, COUNT(*) as count FROM connections WHERE strength > 0 GROUP BY strength_bucket ORDER BY strength_bucket;
+SELECT AVG(strength) as avg_strength, MAX(strength) as max_strength, MIN(strength) as min_strength FROM connections WHERE strength > 0;
 
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (

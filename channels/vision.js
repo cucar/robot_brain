@@ -41,15 +41,15 @@ export default class EyesChannel extends Channel {
 	 */
 	async getFrameInputs() {
 		if (this.currentDataIndex >= this.visualData.length) {
-			console.log(`${this.name}: No more visual data available`);
+			if (this.debug) console.log(`${this.name}: No more visual data available`);
 			return [];
 		}
 
 		const currentData = this.visualData[this.currentDataIndex];
 		this.currentDataIndex++;
 		this.frameNumber++;
-		
-		console.log(`${this.name}: Seeing visual data:`, currentData);
+
+		if (this.debug) console.log(`${this.name}: Seeing visual data:`, currentData);
 		
 		// Return visual input neurons
 		return [
@@ -84,11 +84,11 @@ export default class EyesChannel extends Channel {
 		const threshold = 0.05; // How close the eye needs to be to the target
 
 		if (distance < threshold) {
-			console.log(`${this.name}: SUCCESS! Eye fixated on target (distance: ${distance.toFixed(3)})`);
+			if (this.debug) console.log(`${this.name}: SUCCESS! Eye fixated on target (distance: ${distance.toFixed(3)})`);
 			return 1.5; // Positive reward factor
 		}
 		else {
-			console.log(`${this.name}: MISS! Eye missed target (distance: ${distance.toFixed(3)})`);
+			if (this.debug) console.log(`${this.name}: MISS! Eye missed target (distance: ${distance.toFixed(3)})`);
 			return 0.5; // Negative reward factor
 		}
 	}
@@ -115,6 +115,6 @@ export default class EyesChannel extends Channel {
 
 		this.lastSaccade = { x: saccadeX, y: saccadeY };
 
-		console.log(`${this.name}: EXECUTED SACCADE to (${this.eyePosition.x.toFixed(3)}, ${this.eyePosition.y.toFixed(3)})`);
+		if (this.debug) console.log(`${this.name}: EXECUTED SACCADE to (${this.eyePosition.x.toFixed(3)}, ${this.eyePosition.y.toFixed(3)})`);
 	}
 }
