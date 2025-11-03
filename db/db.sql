@@ -39,7 +39,12 @@ select * from connection_inference;
 select count(*) from active_connections;
 select count(*) from patterns;
 select count(*) from patterns where strength > 0;
-select * from observed_connections;
+select * from inferred_connections;
+select * from inferred_neuron_strengths;
+select * from inferred_level_strengths;
+
+
+SELECT AVG(total_strength) as avg_strength FROM observed_neuron_strengths;
 SELECT COUNT(DISTINCT pattern_neuron_id) as total_patterns FROM pattern_peaks;
 SELECT FLOOR(strength) as strength_bucket, COUNT(*) as count FROM connections WHERE strength > 0 GROUP BY strength_bucket ORDER BY strength_bucket;
 SELECT AVG(strength) as avg_strength, MAX(strength) as max_strength, MIN(strength) as min_strength FROM connections WHERE strength > 0;

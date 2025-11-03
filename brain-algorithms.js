@@ -138,22 +138,12 @@ export function inferConnections(activeNeuronStore, connectionStore, level, peak
 		}
 	}
 
-	// Step 4: Calculate average strength across all candidates - O(N)
-	let totalStrength = 0;
-	for (const [, data] of candidates) {
-		totalStrength += data.total_strength;
-	}
-	const avgStrength = candidates.size > 0 ? totalStrength / candidates.size : 0;
-
-	// Step 5: Identify peak predictions - O(N)
+	// Step 4: Return all candidates as predictions (no peak filtering for inference)
+	// Let conflict resolution handle filtering based on channel-specific logic
 	const predictions = new Map(); // Map<neuron_id, strength>
 
 	for (const [toNeuron, data] of candidates) {
-		// Peak criteria: strength >= minPeakStrength AND strength > avg * minPeakRatio
-		if (data.total_strength >= minPeakStrength &&
-		    data.total_strength > avgStrength * minPeakRatio) {
-			predictions.set(toNeuron, data.total_strength);
-		}
+		predictions.set(toNeuron, data.total_strength);
 	}
 
 	return predictions;
@@ -188,7 +178,7 @@ export function matchPatterns(observedPatterns, patternStore, patternPeakStore, 
 			// Calculate overlap: how many of the pattern's connections are in the observed pattern?
 			let matchCount = 0;
 			for (const pc of patternConnections) {
-				if (pc.strength > 0 && observedConnectionIds.has(pc.connection_id)) {
+				if (observedConnectionIds.has(pc.connection_id)) {
 					matchCount++;
 				}
 			}

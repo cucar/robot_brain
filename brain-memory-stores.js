@@ -92,6 +92,16 @@ class ConnectionStore {
 	}
 
 	/**
+	 * Get all connections to a neuron - O(1)
+	 */
+	findByTo(toNeuronId) {
+		const connectionIds = this.byTo.get(toNeuronId);
+		if (!connectionIds) return [];
+
+		return Array.from(connectionIds).map(id => this.byId.get(id));
+	}
+
+	/**
 	 * Get all connections from a neuron at a specific distance - O(1)
 	 * Returns: Array<{id, from_neuron_id, to_neuron_id, distance, strength}>
 	 */

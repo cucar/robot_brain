@@ -52,7 +52,7 @@ export default class BrainMemory extends Brain {
 	 * Reset brain memory state for a clean episode start
 	 */
 	async resetContext() {
-		console.log('Resetting brain (in-memory scratch tables)...');
+		console.log(`Resetting context... (Learned: ${this.neurons.size()} neurons, ${this.connections.size()} connections, ${this.patterns.size()} pattern entries)`);
 		this.activeNeurons.clear();
 		this.activeConnections.clear();
 		this.observedPatterns.clear();
@@ -467,6 +467,7 @@ export default class BrainMemory extends Brain {
 			const peakPredictions = new Map(); // Map<peak_neuron_id, total_strength>
 
 			// For each inferred neuron, check if it's a pattern neuron and find its peak
+			const debugPatternNeurons = [];
 			for (const [neuronId, data] of inferredNeurons) {
 				if (data.age !== 0) continue;
 
@@ -476,7 +477,13 @@ export default class BrainMemory extends Brain {
 					// Sum strengths if multiple patterns predict the same peak
 					const currentStrength = peakPredictions.get(peakNeuronId) || 0;
 					peakPredictions.set(peakNeuronId, currentStrength + data.strength);
+
+					if (this.debug && level === 1) debugPatternNeurons.push(`L${level}N${neuronId}→L${targetLevel}N${peakNeuronId}(${data.strength.toFixed(1)})`);
 				}
+			}
+
+			if (this.debug && level === 1 && debugPatternNeurons.length > 0) {
+				console.log(`   🔗 Level ${level} pattern neurons predicting level ${targetLevel}: ${debugPatternNeurons.join(', ')}`);
 			}
 
 			// Add pattern predictions with age=0
@@ -640,6 +647,12 @@ export default class BrainMemory extends Brain {
 		const channelPredictions = new Map();
 		this.addPredictionsToChannelMap(channelPredictions, connectionRows);
 		this.addPredictionsToChannelMap(channelPredictions, patternRows);
+
+		// Debug: Show pattern prediction strengths
+		if (this.debug && patternRows.length > 0) {
+			console.log(`   📊 Pattern predictions (L0): ${patternRows.map(r => `N${r.neuron_id}(${r.strength.toFixed(1)})`).join(', ')}`);
+		}
+
 		return channelPredictions;
 	}
 
@@ -694,6 +707,10 @@ export default class BrainMemory extends Brain {
 		// Group predictions by level
 		const levelStats = new Map();
 
+		// Debug: Track base level predictions vs activations
+		let debugBasePredictions = [];
+		let debugBaseActivations = [];
+
 		// Process connection predictions
 		for (const [level, predictions] of this.connectionInference) {
 			if (!levelStats.has(level)) {
@@ -704,7 +721,84 @@ export default class BrainMemory extends Brain {
 			for (const [neuronId, data] of predictions) {
 				if (data.age === 1) {
 					stats.connection.total++;
-					if (this.activeNeurons.has(neuronId, level, 0)) stats.connection.correct++;
+					const isCorrect = this.activeNeurons.has(neuronId, level, 0);
+					if (isCorrect) stats.connection.correct++;
+
+					// Debug base level - collect ALL predictions when debug is on
+					if (level === 0 && this.debug) {
+						debugBasePredictions.push({ neuronId, strength: data.strength, correct: isCorrect });
+					}
+				}
+			}
+		}
+
+		// Debug: Collect base level activations and show detailed comparison
+		if (this.debug) {
+			// Get all active neurons at level 0, age 0
+			const level0Map = this.activeNeurons.byLevelAge.get(0);
+			if (level0Map) {
+				const age0Set = level0Map.get(0);
+				if (age0Set) debugBaseActivations = Array.from(age0Set);
+			}
+
+			if (debugBasePredictions.length > 0 || debugBaseActivations.length > 0) {
+				console.log(`\n🔍 Base Level Debug (Frame ${this.frameNumber}):`);
+				console.log(`   Predictions (age=1): ${debugBasePredictions.length} total`);
+				console.log(`   Activations (age=0): ${debugBaseActivations.length} total`);
+				console.log(`   Correct predictions: ${debugBasePredictions.filter(p => p.correct).length}`);
+
+				// Show ALL predictions with their correctness
+				if (debugBasePredictions.length > 0) {
+					console.log(`   All predictions:`, debugBasePredictions.map(p => `${p.neuronId}(${p.strength.toFixed(1)})${p.correct ? '✓' : '✗'}`).join(', '));
+				}
+
+				// Show ALL activations
+				if (debugBaseActivations.length > 0) {
+					console.log(`   All activations:`, debugBaseActivations.join(', '));
+				}
+
+				// Show which activations were NOT predicted
+				const predictedIds = new Set(debugBasePredictions.map(p => p.neuronId));
+				const unpredicted = debugBaseActivations.filter(id => !predictedIds.has(id));
+				if (unpredicted.length > 0) {
+					console.log(`   ⚠️  Unpredicted activations: ${unpredicted.join(', ')}`);
+
+					// Show coordinates for unpredicted neurons
+					for (const neuronId of unpredicted) {
+						const coords = this.neurons.getCoordinates(neuronId);
+						const coordStr = coords.map(c => {
+							const dimName = this.dimensions.get(c.dimension_id)?.name || `dim${c.dimension_id}`;
+							return `${dimName}=${c.val}`;
+						}).join(', ');
+						console.log(`      Neuron ${neuronId}: ${coordStr}`);
+					}
+
+					// Check if there are any connections TO these neurons
+					for (const neuronId of unpredicted) {
+						const incomingConns = this.connections.findByTo(neuronId);
+						console.log(`      Neuron ${neuronId}: ${incomingConns.length} incoming connections`);
+						if (incomingConns.length > 0) {
+							const sample = incomingConns.slice(0, 3).map(c =>
+								`from=${c.from_neuron_id} dist=${c.distance} str=${c.strength.toFixed(1)}`
+							).join(', ');
+							console.log(`         Sample: ${sample}`);
+
+							// Check if source neurons are active at the right age
+							const distanceGroups = new Map();
+							for (const conn of incomingConns) {
+								if (!distanceGroups.has(conn.distance)) distanceGroups.set(conn.distance, []);
+								distanceGroups.get(conn.distance).push(conn);
+							}
+
+							for (const [distance, conns] of distanceGroups) {
+								const requiredAge = distance - 1;
+								const activeSourceCount = conns.filter(c =>
+									this.activeNeurons.has(c.from_neuron_id, 0, requiredAge)
+								).length;
+								console.log(`         Distance ${distance}: ${activeSourceCount}/${conns.length} source neurons active at age ${requiredAge}`);
+							}
+						}
+					}
 				}
 			}
 		}
@@ -734,7 +828,36 @@ export default class BrainMemory extends Brain {
 			for (const [neuronId, data] of predictions) {
 				if (data.age === 1) {
 					stats.resolved.total++;
-					if (this.activeNeurons.has(neuronId, level, 0)) stats.resolved.correct++;
+					const isCorrect = this.activeNeurons.has(neuronId, level, 0);
+					if (isCorrect) stats.resolved.correct++;
+
+					// Debug: Show resolved predictions that were wrong
+					if (!isCorrect && level === 0 && this.debug) {
+						const coords = this.neurons.getCoordinates(neuronId);
+						const coordStr = coords.map(c => {
+							const dimName = this.dimensions.get(c.dimension_id)?.name || `dim${c.dimension_id}`;
+							return `${dimName}=${c.val}`;
+						}).join(', ');
+						console.log(`   ❌ Resolved prediction WRONG: neuron ${neuronId} [${coordStr}] (strength ${data.strength.toFixed(1)}) was predicted but did NOT activate`);
+
+						// Show which connections contributed to this wrong prediction
+						const activeNeurons = this.activeNeurons.getByLevel(level);
+						const contributingConns = [];
+						for (const an of activeNeurons) {
+							const distance = an.age + 1;
+							const conn = this.connections.findByFromToDistance(an.neuron_id, neuronId, distance);
+							if (conn && conn.strength > 0) {
+								const anCoords = this.neurons.getCoordinates(an.neuron_id);
+								const anCoordStr = anCoords.map(c => {
+									const dimName = this.dimensions.get(c.dimension_id)?.name || `dim${c.dimension_id}`;
+									return `${dimName}=${c.val}`;
+								}).join(', ');
+								const weightedStr = conn.strength * Math.pow(this.peakTimeDecayFactor, conn.distance);
+								contributingConns.push(`N${an.neuron_id}[${anCoordStr}] age=${an.age} dist=${distance} str=${conn.strength.toFixed(1)} weighted=${weightedStr.toFixed(1)}`);
+							}
+						}
+						if (contributingConns.length > 0) console.log(`      Contributing connections: ${contributingConns.slice(0, 5).join(', ')}`);
+					}
 				}
 			}
 		}
@@ -811,6 +934,13 @@ export default class BrainMemory extends Brain {
 		);
 		this.observedPatterns = peaks;
 
+		if (this.debugPatterns) {
+			console.log(`   🔍 Level ${level} peak detection: ${peaks.size} peaks found`);
+			for (const [peakId, connIds] of peaks) {
+				console.log(`      Peak N${peakId}: ${connIds.size} connections`);
+			}
+		}
+
 		// Step 3: Match observed patterns to known patterns
 		if (peaks.size > 0) {
 			const matches = matchPatterns(
@@ -863,6 +993,9 @@ export default class BrainMemory extends Brain {
 			}
 			for (const patternNeuronId of patternNeuronIds) {
 				this.activeNeurons.add(patternNeuronId, level + 1, 0);
+			}
+			if (this.debugPatterns) {
+				console.log(`   → Level ${level} activated ${patternNeuronIds.size} pattern neurons at level ${level + 1}`);
 			}
 		}
 

@@ -14,17 +14,17 @@ export default class Brain {
 
 		// set hyperparameters
 		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
-		this.forgetCycles = 100; // number of frames between forget cycles
-		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
+		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
+		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
-		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
+		this.minPeakStrength = 1.0; // minimum weighted strength for a neuron to be considered a peak (reduced to allow more predictions)
+		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average (1.0 = just above average)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
-		this.negativeLearningRate = 0.1; // how much to weaken connections when predictions fail
+		this.negativeLearningRate = 1.0; // how much to weaken connections when predictions fail (match positive reinforcement)
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
 
@@ -46,7 +46,8 @@ export default class Brain {
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
 
 		// Create readline interface for pausing between frames - used when debugging
-		this.debug = false;
+		this.debug = true;
+		this.waitForUserInput = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
 
@@ -195,7 +196,7 @@ export default class Brain {
 		this.printFrameSummary(frameElapsed);
 
 		// when debugging, wait for user to press Enter before continuing to next frame
-		if (this.debug) await this.waitForUser('Press Enter to continue to next frame');
+		if (this.waitForUserInput) await this.waitForUser('Press Enter to continue to next frame');
 	}
 
 	/**
@@ -338,11 +339,11 @@ export default class Brain {
 	 * Prints a one-line summary of the frame processing
 	 */
 	printFrameSummary(frameElapsed) {
-		// Get base level (level 0) accuracy
+		// Get base level (level 0) accuracy - use RESOLVED accuracy (after conflict resolution)
 		let baseAccuracy = 'N/A';
 		const baseCumulative = this.accuracyStats.get(0);
-		if (baseCumulative && baseCumulative.connection.total > 0)
-			baseAccuracy = `${(baseCumulative.connection.correct / baseCumulative.connection.total * 100).toFixed(1)}%`;
+		if (baseCumulative && baseCumulative.resolved.total > 0)
+			baseAccuracy = `${(baseCumulative.resolved.correct / baseCumulative.resolved.total * 100).toFixed(1)}%`;
 
 		// Get higher level accuracy (aggregate all levels > 0)
 		let higherCorrect = 0;
@@ -373,7 +374,13 @@ export default class Brain {
 			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
 		}
 
-		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+		// Show connection count every 100 frames in memory implementation
+		let memoryStats = '';
+		if (this.connections && this.connections.size && this.frameNumber % 100 === 0) {
+			memoryStats = ` | Learned: ${this.connections.size()} conns, ${this.patterns ? this.patterns.size() : 0} patterns`;
+		}
+
+		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | Time: ${frameElapsed.toFixed(2)}ms${memoryStats}`);
 	}
 
 	// ========== ABSTRACT METHODS - Must be implemented by subclasses ==========
@@ -383,6 +390,13 @@ export default class Brain {
 	 */
 	async resetContext() {
 		throw new Error('resetContext() must be implemented by subclass');
+	}
+
+	/**
+	 * Reset accuracy stats for a new episode
+	 */
+	resetAccuracyStats() {
+		this.accuracyStats.clear();
 	}
 
 	/**
