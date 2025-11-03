@@ -4,7 +4,7 @@
  * Run with: node tests/neuron-creation-tests.js
  */
 
-import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 import Channel from '../channels/channel.js';
 
 // Mock channel for testing
@@ -68,8 +68,8 @@ class NeuronCreationTests {
 
     async setupBrain() {
         console.log('Setting up brain for testing...');
-        
-        this.brain = new Brain();
+
+        this.brain = new BrainMySQL();
         this.brain.registerChannel('test_channel', TestChannel);
         await this.brain.init();
         await this.brain.resetBrain(); // Clean slate

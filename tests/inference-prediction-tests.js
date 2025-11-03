@@ -1,4 +1,4 @@
-import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 
 /**
  * Test Channel for Inference & Prediction Engine Tests
@@ -69,8 +69,8 @@ class InferencePredictionTests {
 
     async setupBrain() {
         console.log('Setting up brain for inference testing...');
-        
-        this.brain = new Brain();
+
+        this.brain = new BrainMySQL();
         this.brain.registerChannel('test_channel', TestChannel);
         await this.brain.init();
         await this.brain.resetBrain(); // Clean slate

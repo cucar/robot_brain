@@ -9,7 +9,7 @@ import {
 	PatternPeakStore,
 	NeuronStore,
 	ActiveConnectionStore
-} from './brain-memory.js';
+} from './brain-memory-stores.js';
 
 import {
 	detectPeaks,

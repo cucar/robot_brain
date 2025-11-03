@@ -2,12 +2,12 @@
  * Test the in-memory brain implementation
  */
 
-import Brain from './brain-inmemory.js';
+import BrainMemory from './brain-memory.js';
 
 console.log('Testing In-Memory Brain Implementation\n');
 console.log('='.repeat(80));
 
-const brain = new Brain();
+const brain = new BrainMemory();
 
 // Initialize
 await brain.init();

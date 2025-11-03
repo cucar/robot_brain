@@ -1,9 +1,9 @@
-import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 
 async function testDeactivateOldNeurons() {
 	console.log('Testing deactivateOldNeurons...\n');
-	
-	const brain = new Brain();
+
+	const brain = new BrainMySQL();
 	await brain.init();
 	
 	try {

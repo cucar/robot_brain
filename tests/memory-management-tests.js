@@ -1,4 +1,4 @@
-import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 
 /**
  * Test Channel for Memory Management Tests
@@ -68,7 +68,7 @@ class MemoryManagementTests {
     async setupBrain() {
         console.log('Setting up brain for memory management testing...');
 
-        this.brain = new Brain();
+        this.brain = new BrainMySQL();
         this.brain.registerChannel('test_channel', TestChannel);
 
         await this.brain.init();

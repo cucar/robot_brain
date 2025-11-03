@@ -4,7 +4,7 @@
  * Run with: node tests/brain-initialization-tests.js
  */
 
-import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 import Channel from '../channels/channel.js';
 
 // Mock channel for testing
@@ -68,7 +68,7 @@ class BrainInitializationTests {
     async testChannelRegistration() {
         console.log('Testing Channel Registration:');
 
-        this.brain = new Brain();
+        this.brain = new BrainMySQL();
 
         // Test that channel registration creates proper instances
         this.brain.registerChannel('test_channel', TestChannel);

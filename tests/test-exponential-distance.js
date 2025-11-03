@@ -1,9 +1,9 @@
-import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 
 async function testExponentialDistance() {
 	console.log('Testing exponential distance rounding in reinforceConnections...\n');
-	
-	const brain = new Brain();
+
+	const brain = new BrainMySQL();
 	await brain.init();
 	
 	try {

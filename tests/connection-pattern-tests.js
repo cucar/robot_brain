@@ -1,4 +1,4 @@
-import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 
 /**
  * Test Channel for Connection & Pattern Learning Tests
@@ -68,8 +68,8 @@ class ConnectionPatternTests {
 
     async setupBrain() {
         console.log('Setting up brain for testing...');
-        
-        this.brain = new Brain();
+
+        this.brain = new BrainMySQL();
         this.brain.registerChannel('test_channel', TestChannel);
         await this.brain.init();
         await this.brain.resetBrain(); // Clean slate
