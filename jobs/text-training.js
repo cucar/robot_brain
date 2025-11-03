@@ -13,9 +13,9 @@ export default class TextTrainingJob extends Job {
 
 		// Simple configuration - edit these values as needed
 		this.config = {
-			pattern: 'abcabcabc',  // Pattern to learn
-			maxEpisodes: 1,         // Number of training episodes
-			iterationsPerEpisode: 3 // How many times to repeat pattern per episode
+			patterns: ['abcabcabc', 'abdabdabd'],  // Patterns to learn (will switch between them)
+			maxEpisodes: 2,         // Number of training episodes (one per pattern)
+			iterationsPerEpisode: 5 // How many times to repeat pattern per episode
 		};
 
 		// Training metrics
@@ -38,7 +38,7 @@ export default class TextTrainingJob extends Job {
 	 */
 	async showStartupInfo() {
 		console.log(`🚀 Starting Text Training Job`);
-		console.log(`📝 Pattern: "${this.config.pattern}"`);
+		console.log(`📝 Patterns: ${this.config.patterns.map(p => `"${p}"`).join(' → ')}`);
 		console.log(`🔄 Max Episodes: ${this.config.maxEpisodes}`);
 		console.log(`🔁 Iterations per Episode: ${this.config.iterationsPerEpisode}`);
 		console.log('');
@@ -49,7 +49,7 @@ export default class TextTrainingJob extends Job {
 	 */
 	async configureChannels() {
 		const textChannel = this.brain.channels.get('text'); // the single text channel we set up
-		textChannel.pattern = this.config.pattern;
+		// Pattern will be set per episode in runEpisode()
 		textChannel.maxIterations = this.config.iterationsPerEpisode;
 	}
 
@@ -76,13 +76,20 @@ export default class TextTrainingJob extends Job {
 	 */
 	async runEpisode() {
 		const startTime = Date.now();
-		process.stdout.write(`📝 Episode ${this.currentEpisode}/${this.config.maxEpisodes}... `);
+
+		// Get pattern for this episode (cycle through patterns)
+		const patternIndex = (this.currentEpisode - 1) % this.config.patterns.length;
+		const currentPattern = this.config.patterns[patternIndex];
+
+		process.stdout.write(`📝 Episode ${this.currentEpisode}/${this.config.maxEpisodes} (pattern: "${currentPattern}")... `);
 
 		// Reset context but keep learned patterns
 		await this.brain.resetContext();
-		
-		// Reset channel state for new episode
+
+		// Reset channel state for new episode and set pattern
 		this.resetChannelStates();
+		const textChannel = this.brain.channels.get('text');
+		textChannel.pattern = currentPattern;
 		
 		// Initialize episode metrics
 		const episodeMetrics = {
