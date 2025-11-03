@@ -90,9 +90,9 @@ class NeuronCreationTests {
             { test_x: 0.3, test_y: 0.4, test_value: 0.5 }
         ];
 
-        const matches = await this.brain.matchFrameNeurons(testFrame);
+        const matches = await this.brain.getFrameNeurons(testFrame);
         
-        this.assert(Array.isArray(matches), 'matchFrameNeurons should return array');
+        this.assert(Array.isArray(matches), 'getFrameNeurons should return array');
         this.assert(matches.length === 2, 'Should return matches for both points', matches.length, 2);
         
         // With no existing neurons, all matches should have null or NaN neuron_id

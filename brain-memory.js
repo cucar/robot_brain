@@ -104,61 +104,41 @@ export default class BrainMemory extends Brain {
 
 	/**
 	 * Match frame neurons to existing neurons or create new ones
+	 * Uses fast O(1) coordinate set lookup instead of iterative dimension matching
 	 */
-	async matchFrameNeurons(points) {
+	async getFrameNeurons(points) {
 		const neuronIds = [];
 
 		for (const point of points) {
-			// Find neurons matching all coordinates
-			let candidateNeurons = null;
 
+			// Build coordinate map using dimension IDs
+			const coordinateMap = new Map();
 			for (const [dimName, value] of Object.entries(point)) {
 				const dimId = await this.getDimensionId(dimName);
-				const neuronsWithCoord = this.neurons.findByDimensionValue(dimId, value);
-
-				if (candidateNeurons === null) {
-					candidateNeurons = new Set(neuronsWithCoord);
-				} else {
-					// Intersect with previous candidates
-					candidateNeurons = new Set(
-						neuronsWithCoord.filter(n => candidateNeurons.has(n))
-					);
-				}
-
-				if (candidateNeurons.size === 0) break;
+				coordinateMap.set(dimId, value);
 			}
 
-			let neuronId;
-			if (candidateNeurons && candidateNeurons.size > 0) {
-				// Use existing neuron
-				neuronId = Array.from(candidateNeurons)[0];
-			} else {
-				// Create new neuron
+			// Fast O(1) lookup by complete coordinate set using the key
+			const key = this.neurons.getCoordinateKey(coordinateMap);
+			let neuronId = this.neurons.byCoordinateSet.get(key) || null;
+
+			// Create new neuron if not found with coordinates
+			if (neuronId === null) {
 				neuronId = this.neurons.createNeuron();
-
-				// Set coordinates
-				for (const [dimName, value] of Object.entries(point)) {
-					const dimId = await this.getDimensionId(dimName);
-					this.neurons.setCoordinate(neuronId, dimId, value);
-
-					// Also store in MySQL for persistence
-					await this.conn.query(
-						'INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE val = VALUES(val)',
-						[neuronId, dimId, value]
-					);
-				}
+				for (const [dimId, value] of coordinateMap) this.neurons.setCoordinate(neuronId, dimId, value);
 			}
 
 			neuronIds.push(neuronId);
 		}
 
+		if (this.debug) console.log(`Matched/created ${neuronIds.length} neurons from ${points.length} points`);
 		return neuronIds;
 	}
 
 	/**
 	 * Activate neurons at base level (level 0)
 	 */
-	activateBaseNeurons(neuronIds) {
+	async activateNeurons(neuronIds) {
 		for (const neuronId of neuronIds) {
 			this.activeNeurons.add(neuronId, 0, 0); // level 0, age 0
 		}
@@ -345,22 +325,6 @@ export default class BrainMemory extends Brain {
 	}
 
 	/**
-	 * Recognizes and activates neurons from frame - returns the highest level of recognition reached
-	 */
-	async recognizeNeurons(frame) {
-		// Bulk find/create neurons for all input points
-		const neuronIds = await this.matchFrameNeurons(frame);
-
-		if (this.debug) console.log(`Matched/created ${neuronIds.length} neurons from ${frame.length} points`);
-
-		// Bulk insert activations at base level
-		this.activateBaseNeurons(neuronIds);
-
-		// Discover and activate patterns using connections - start recursion from base level
-		await this.activatePatternNeurons();
-	}
-
-	/**
 	 * Activate pattern neurons hierarchically
 	 */
 	async activatePatternNeurons() {
@@ -450,6 +414,7 @@ export default class BrainMemory extends Brain {
 	 * For each inferred pattern neuron at level N, predict its peak neuron at level N-1.
 	 */
 	async inferPatterns() {
+
 		// Clear previous pattern predictions
 		this.patternInference.clear();
 
@@ -1232,4 +1197,3 @@ export default class BrainMemory extends Brain {
 		console.log(`Frame: ${stats.frameNumber}`);
 	}
 }
-

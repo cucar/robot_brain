@@ -421,10 +421,19 @@ export default class Brain {
 	}
 
 	/**
-	 * recognizes and activates neurons from frame
+	 * Recognizes and activates neurons from frame - returns the highest level of recognition reached
+	 * Common implementation for both MySQL and Memory backends
 	 */
 	async recognizeNeurons(frame) {
-		throw new Error('recognizeNeurons() must be implemented by subclass');
+
+		// bulk find/create neurons for all input points
+		const neuronIds = await this.getFrameNeurons(frame);
+
+		// bulk insert activations at base level
+		await this.activateNeurons(neuronIds);
+
+		// discover and activate patterns using connections - start recursion from base level
+		await this.activatePatternNeurons();
 	}
 
 	/**
@@ -453,6 +462,27 @@ export default class Brain {
 	 */
 	async writeResolvedPredictions(allSelectedPredictions) {
 		throw new Error('writeResolvedPredictions() must be implemented by subclass');
+	}
+
+	/**
+	 * Get or create frame neurons from input points
+	 */
+	async getFrameNeurons(frame) {
+		throw new Error('getFrameNeurons() must be implemented by subclass');
+	}
+
+	/**
+	 * Activate neurons at base level (level 0)
+	 */
+	async activateNeurons(neuronIds) {
+		throw new Error('activateNeurons() must be implemented by subclass');
+	}
+
+	/**
+	 * Activate pattern neurons hierarchically
+	 */
+	async activatePatternNeurons() {
+		throw new Error('activatePatternNeurons() must be implemented by subclass');
 	}
 }
 

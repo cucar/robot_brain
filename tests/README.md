@@ -47,7 +47,7 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 **Tests**: 27 tests covering coordinate matching, neuron creation, and bulk operations
 
 **Critical Areas Tested**:
-- `matchFrameNeurons()` - Simplified single-query coordinate matching (refactored from complex UNION)
+- `getFrameNeurons()` - Simplified single-query coordinate matching (refactored from complex UNION)
 - `createBaseNeurons()` - Bulk neuron creation with coordinate insertion and deduplication
 - `bulkInsertNeurons()` - Auto-increment ID handling and edge cases
 - `getFrameNeurons()` - End-to-end frame-to-neuron conversion with matching and creation

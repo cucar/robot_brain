@@ -124,21 +124,6 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * recognizes and activates neurons from frame - returns the highest level of recognition reached
-	 */
-	async recognizeNeurons(frame) {
-
-		// bulk find/create neurons for all input points
-		const neuronIds = await this.getFrameNeurons(frame);
-
-		// bulk insert activations at base level
-		await this.activateNeurons(neuronIds);
-
-		// discover and activate patterns using connections - start recursion from base level
-		await this.activatePatternNeurons();
-	}
-
-	/**
 	 * Infer predictions and outputs using bulk processing for all levels.
 	 * Connection inference handles validation, aging, and deletion internally for all levels.
 	 * Pattern inference cascades predictions down all levels recursively.

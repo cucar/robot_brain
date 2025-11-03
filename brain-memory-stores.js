@@ -156,13 +156,6 @@ class ConnectionStore {
 	}
 
 	/**
-	 * Get all connections (for iteration)
-	 */
-	getAll() {
-		return Array.from(this.byId.values());
-	}
-
-	/**
 	 * Clear all connections
 	 */
 	clear() {
@@ -565,6 +558,10 @@ class NeuronStore {
 		// Reverse index: Map<dimension_id, Map<value, Set<neuron_id>>>
 		this.byDimensionValue = new Map();
 
+		// Fast lookup by coordinate set: Map<JSON_key, neuron_id>
+		// Key format: JSON string of {dimension_id: value} sorted by dimension_id
+		this.byCoordinateSet = new Map();
+
 		// Auto-increment ID
 		this.nextId = 1;
 	}
@@ -590,6 +587,17 @@ class NeuronStore {
 	}
 
 	/**
+	 * Create a coordinate set key from dimension IDs and values
+	 * Format: JSON string of {dimId: value} sorted by dimension ID for consistent keys
+	 */
+	getCoordinateKey(coordinateMap) {
+		const sorted = {};
+		const keys = Array.from(coordinateMap.keys()).sort((a, b) => a - b);
+		for (const dimId of keys) sorted[dimId] = coordinateMap.get(dimId);
+		return JSON.stringify(sorted);
+	}
+
+	/**
 	 * Set coordinate for a neuron
 	 */
 	setCoordinate(neuronId, dimensionId, value) {
@@ -611,6 +619,12 @@ class NeuronStore {
 			}
 		}
 
+		// Remove old coordinate set key if exists
+		if (oldValue !== undefined) {
+			const oldKey = this.getCoordinateKey(this.coordinates.get(neuronId));
+			this.byCoordinateSet.delete(oldKey);
+		}
+
 		// Set new value
 		this.coordinates.get(neuronId).set(dimensionId, value);
 
@@ -623,6 +637,10 @@ class NeuronStore {
 			dimMap.set(value, new Set());
 		}
 		dimMap.get(value).add(neuronId);
+
+		// Add to coordinate set index
+		const newKey = this.getCoordinateKey(this.coordinates.get(neuronId));
+		this.byCoordinateSet.set(newKey, neuronId);
 	}
 
 	/**
@@ -637,6 +655,16 @@ class NeuronStore {
 			dimension_id,
 			val
 		}));
+	}
+
+	/**
+	 * Find neuron by complete coordinate set - O(1)
+	 * coordinateMap: Map<dimension_id, value>
+	 * Returns: neuron_id or null if not found
+	 */
+	findByCoordinateSet(coordinateMap) {
+		const key = this.getCoordinateKey(coordinateMap);
+		return this.byCoordinateSet.get(key) || null;
 	}
 
 	/**
@@ -668,6 +696,11 @@ class NeuronStore {
 		// Remove coordinates
 		const coords = this.coordinates.get(neuronId);
 		if (coords) {
+			// Remove from coordinate set index
+			const key = this.getCoordinateKey(coords);
+			this.byCoordinateSet.delete(key);
+
+			// Remove from dimension value index
 			for (const [dimensionId, value] of coords) {
 				const dimMap = this.byDimensionValue.get(dimensionId);
 				if (dimMap) {
@@ -693,6 +726,7 @@ class NeuronStore {
 		this.neurons.clear();
 		this.coordinates.clear();
 		this.byDimensionValue.clear();
+		this.byCoordinateSet.clear();
 	}
 
 	/**
