@@ -169,11 +169,8 @@ export default class BrainMemory extends Brain {
 	 * With uniform aging, all levels are deactivated at once when age >= baseNeuronMaxAge.
 	 */
 	ageNeurons() {
-		console.log('Aging active neurons, connections, and inferred neurons...');
-
 		// Age all active neurons (collect first to avoid iterator issues)
 		const allActiveNeurons = Array.from(this.activeNeurons.byKey.values());
-		let deactivatedNeurons = 0;
 
 		for (const an of allActiveNeurons) {
 			const newAge = an.age + 1;
@@ -182,32 +179,19 @@ export default class BrainMemory extends Brain {
 			this.activeNeurons.delete(an.neuron_id, an.level, an.age);
 
 			// If not aged out, add back with new age
-			if (newAge < this.baseNeuronMaxAge) {
-				this.activeNeurons.add(an.neuron_id, an.level, newAge);
-			} else {
-				deactivatedNeurons++;
-			}
+			if (newAge < this.baseNeuronMaxAge) this.activeNeurons.add(an.neuron_id, an.level, newAge);
 		}
-
-		console.log(`Deactivated ${deactivatedNeurons} aged-out neurons across all levels (age >= ${this.baseNeuronMaxAge})`);
 
 		// Age all active connections (rebuild the store)
 		const allActiveConns = Array.from(this.activeConnections.byKey.values());
 		this.activeConnections.clear();
-		let deactivatedConnections = 0;
 
 		for (const ac of allActiveConns) {
 			const newAge = ac.age + 1;
 
 			// If not aged out, add back with new age
-			if (newAge < this.baseNeuronMaxAge) {
-				this.activeConnections.add(ac.connection_id, ac.from_neuron_id, ac.to_neuron_id, ac.level, newAge);
-			} else {
-				deactivatedConnections++;
-			}
+			if (newAge < this.baseNeuronMaxAge) this.activeConnections.add(ac.connection_id, ac.from_neuron_id, ac.to_neuron_id, ac.level, newAge);
 		}
-
-		console.log(`Deactivated ${deactivatedConnections} aged-out connections across all levels (age >= ${this.baseNeuronMaxAge})`);
 
 		// Age and clean up inferred neurons (connection_inferred_neurons, pattern_inferred_neurons, inferred_neurons)
 		// age=0: fresh predictions, age=1: executed this frame, age>=2: no longer needed
@@ -239,13 +223,7 @@ export default class BrainMemory extends Brain {
 			}
 
 			// Remove empty level maps
-			if (neuronMap.size === 0) {
-				inferenceMap.delete(level);
-			}
-		}
-
-		if (aged > 0) {
-			console.log(`Aged ${aged} ${label} (cleaned ${cleaned} with age >= 2)`);
+			if (neuronMap.size === 0) inferenceMap.delete(level);
 		}
 	}
 
@@ -265,10 +243,7 @@ export default class BrainMemory extends Brain {
 	 */
 	async executePreviousOutputs() {
 		// Get output neurons from inferred_neurons at age=1, level=0
-		if (!this.inferredNeurons.has(0)) {
-			console.log('No previous outputs to execute');
-			return;
-		}
+		if (!this.inferredNeurons.has(0)) return;
 
 		const level0Inferred = this.inferredNeurons.get(0);
 		const outputRows = [];
@@ -299,7 +274,7 @@ export default class BrainMemory extends Brain {
 		}
 
 		if (outputRows.length === 0) {
-			console.log('No previous outputs to execute');
+			if (this.debug) console.log('No previous outputs to execute');
 			return;
 		}
 
@@ -312,7 +287,7 @@ export default class BrainMemory extends Brain {
 	async curiosityExploration() {
 		// Check if the brain is inactive - if active, no exploration needed
 		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
-		console.log('Brain inactive - executing curiosity exploration');
+		if (this.debug) console.log('Brain inactive - executing curiosity exploration');
 
 		// Get a random channel for exploration
 		const channelNames = Array.from(this.channels.keys());
@@ -322,13 +297,13 @@ export default class BrainMemory extends Brain {
 		// Get exploration actions for the channel
 		const explorationActions = randomChannel.getValidExplorationActions();
 		if (explorationActions.length === 0) {
-			console.log(`No valid exploration actions for ${randomChannelName}`);
+			if (this.debug) console.log(`No valid exploration actions for ${randomChannelName}`);
 			return;
 		}
 
 		// Execute random exploration action
 		const randomAction = explorationActions[Math.floor(Math.random() * explorationActions.length)];
-		console.log(`${randomChannelName}: Executing exploration action:`, randomAction);
+		if (this.debug) console.log(`${randomChannelName}: Executing exploration action:`, randomAction);
 
 		await this.executeChannelOutputs(randomChannelName, randomAction);
 	}
@@ -362,7 +337,7 @@ export default class BrainMemory extends Brain {
 			return;
 		}
 
-		console.log(`${channelName}: Executing outputs:`, coordinates);
+		if (this.debug) console.log(`${channelName}: Executing outputs:`, coordinates);
 		await channel.executeOutputs(coordinates);
 
 		// Track global activity
@@ -376,7 +351,7 @@ export default class BrainMemory extends Brain {
 		// Bulk find/create neurons for all input points
 		const neuronIds = await this.matchFrameNeurons(frame);
 
-		console.log(`Matched/created ${neuronIds.length} neurons from ${frame.length} points`);
+		if (this.debug) console.log(`Matched/created ${neuronIds.length} neurons from ${frame.length} points`);
 
 		// Bulk insert activations at base level
 		this.activateBaseNeurons(neuronIds);
@@ -396,29 +371,27 @@ export default class BrainMemory extends Brain {
 			hasActivity = await this.processLevel(currentLevel);
 			currentLevel++;
 		}
-
-		console.log(`Processed ${currentLevel} levels`);
 	}
 
 	/**
-	 * Infer predictions and outputs starting from the highest active level down to base level.
-	 * Connection inference: Predict next frame's neurons from connections (with negative reinforcement).
-	 * Pattern inference: Predict lower-level peak neurons from higher-level pattern neurons.
+	 * Infer predictions and outputs using bulk processing for all levels.
+	 * Connection inference handles validation, aging, and deletion internally for all levels.
+	 * Pattern inference cascades predictions down all levels recursively.
 	 */
 	async inferNeurons() {
-		// Get the highest level that is currently active
-		const maxLevel = this.getMaxActiveLevel();
+		// Report accuracy for all levels (from previous frame)
+		this.reportPredictionsAccuracy();
 
-		// Process levels in reverse: maxLevel, maxLevel-1, ..., 0
-		for (let level = maxLevel; level >= 0; level--) {
-			// Connection inference: Predict connections for age=-1 at this level
-			await this.inferConnectionsAtLevel(level);
+		// Connection inference for all levels (handles validation, aging, deletion)
+		await this.inferConnections();
 
-			// Pattern inference: Predict peak neurons for the lower level
-			if (level > 0) await this.inferPatternsAtLevel(level);
-		}
+		// Pattern inference (recursive cascade down all levels)
+		await this.inferPatterns();
 
-		// Resolve conflicts in input predictions at base level (after all predictions are made)
+		// Merge predictions for higher levels (level > 0)
+		this.mergeHigherLevelPredictions();
+
+		// Resolve conflicts in input predictions at base level (level 0)
 		await this.resolveInputPredictionConflicts();
 	}
 
@@ -429,140 +402,178 @@ export default class BrainMemory extends Brain {
 		let maxLevel = 0;
 
 		for (const an of this.activeNeurons.byKey.values()) {
-			if (an.level > maxLevel) {
-				maxLevel = an.level;
-			}
+			if (an.level > maxLevel) maxLevel = an.level;
 		}
 
 		return maxLevel;
 	}
 
 	/**
-	 * Connection inference: Predict next frame's neurons from active connections.
-	 * Validates previous frame's predictions and applies negative reinforcement to failed predictions.
+	 * Connection inference for all levels at once.
+	 * Validates previous predictions, applies negative reinforcement, and makes new predictions.
 	 */
-	async inferConnectionsAtLevel(level) {
-		// Report the neuron prediction accuracy from previous frame
-		this.reportPredictionsAccuracy(level);
+	async inferConnections() {
+		// Validate previous frame's predictions and apply negative reinforcement
+		this.negativeReinforceConnections();
 
-		// Validate predictions from previous frame and apply negative reinforcement
-		this.negativeReinforceConnections(level);
+		// Clear previous connection predictions for all levels
+		this.connectionInference.clear();
 
-		// Clear previous connection predictions for this level
-		// Note: Pattern predictions are NOT deleted here - they're deleted when new ones are created
-		// in inferPatternsAtLevel(level+1), after they've been validated
-		if (this.connectionInference.has(level)) {
-			this.connectionInference.delete(level);
-		}
+		// Get the highest level that is currently active
+		const maxLevel = this.getMaxActiveLevel();
 
-		// Make new predictions using inferConnections algorithm
-		const predictions = inferConnections(
-			this.activeNeurons,
-			this.connections,
-			level,
-			this.peakTimeDecayFactor,
-			this.minPeakStrength,
-			this.minPeakRatio
-		);
+		// Make new predictions for all levels
+		for (let level = maxLevel; level >= 0; level--) {
+			const predictions = inferConnections(
+				this.activeNeurons,
+				this.connections,
+				level,
+				this.peakTimeDecayFactor,
+				this.minPeakStrength,
+				this.minPeakRatio
+			);
 
-		// Store predictions with age=0
-		if (predictions.size > 0) {
-			const neuronMap = new Map();
-			for (const [neuronId, strength] of predictions) {
-				neuronMap.set(neuronId, { strength, age: 0 });
+			// Store predictions with age=0
+			if (predictions.size > 0) {
+				const neuronMap = new Map();
+				for (const [neuronId, strength] of predictions) {
+					neuronMap.set(neuronId, { strength, age: 0 });
+				}
+				this.connectionInference.set(level, neuronMap);
+				if (this.debug) console.log(`Level ${level}: Predicted ${predictions.size} neurons for next frame (from connections)`);
 			}
-			this.connectionInference.set(level, neuronMap);
 		}
-
-		console.log(`Level ${level}: Predicted ${predictions.size} neurons for next frame (from connections)`);
 	}
 
 	/**
-	 * Pattern inference: Predict lower-level peak neurons from higher-level pattern neurons.
-	 * For each inferred pattern neuron at level N (from connection inference),
-	 * predict its peak neuron at level N-1, age=-1.
+	 * Pattern inference for all levels - cascades predictions down from higher levels.
+	 * For each inferred pattern neuron at level N, predict its peak neuron at level N-1.
 	 */
-	async inferPatternsAtLevel(level) {
-		const targetLevel = level - 1;
-		console.log(`Level ${level}: Inferring peak neurons for level ${targetLevel}`);
+	async inferPatterns() {
+		// Clear previous pattern predictions
+		this.patternInference.clear();
 
-		// Get inferred neurons at this level (age=0)
-		if (!this.connectionInference.has(level)) {
-			console.log(`Level ${level}: No inferred neurons to check`);
-			return;
-		}
+		// Get the highest level that is currently active
+		const maxLevel = this.getMaxActiveLevel();
 
-		const inferredNeurons = this.connectionInference.get(level);
-		const peakPredictions = new Map(); // Map<peak_neuron_id, total_strength>
+		// Process levels from high to low
+		for (let level = maxLevel; level > 0; level--) {
+			const targetLevel = level - 1;
 
-		// For each inferred neuron, check if it's a pattern neuron and find its peak
-		for (const [neuronId, data] of inferredNeurons) {
-			if (data.age !== 0) continue;
+			// Get inferred neurons at this level (age=0)
+			if (!this.connectionInference.has(level)) continue;
 
-			// Check if this neuron is a pattern neuron (has a peak mapping)
-			const peakNeuronId = this.patternPeaks.getPeak(neuronId);
-			if (peakNeuronId) {
-				// Sum strengths if multiple patterns predict the same peak
-				const currentStrength = peakPredictions.get(peakNeuronId) || 0;
-				peakPredictions.set(peakNeuronId, currentStrength + data.strength);
-			}
-		}
+			const inferredNeurons = this.connectionInference.get(level);
+			const peakPredictions = new Map(); // Map<peak_neuron_id, total_strength>
 
-		// Add pattern predictions with age=0 (like MySQL INSERT - don't delete existing predictions)
-		if (peakPredictions.size > 0) {
-			// Get or create the level map
-			let neuronMap = this.patternInference.get(targetLevel);
-			if (!neuronMap) {
-				neuronMap = new Map();
-				this.patternInference.set(targetLevel, neuronMap);
+			// For each inferred neuron, check if it's a pattern neuron and find its peak
+			for (const [neuronId, data] of inferredNeurons) {
+				if (data.age !== 0) continue;
+
+				// Check if this neuron is a pattern neuron (has a peak mapping)
+				const peakNeuronId = this.patternPeaks.getPeak(neuronId);
+				if (peakNeuronId) {
+					// Sum strengths if multiple patterns predict the same peak
+					const currentStrength = peakPredictions.get(peakNeuronId) || 0;
+					peakPredictions.set(peakNeuronId, currentStrength + data.strength);
+				}
 			}
 
-			// Add new predictions with age=0
-			for (const [neuronId, strength] of peakPredictions) {
-				neuronMap.set(neuronId, { strength, age: 0 });
+			// Add pattern predictions with age=0
+			if (peakPredictions.size > 0) {
+				// Get or create the level map
+				let neuronMap = this.patternInference.get(targetLevel);
+				if (!neuronMap) {
+					neuronMap = new Map();
+					this.patternInference.set(targetLevel, neuronMap);
+				}
+
+				// Add new predictions with age=0
+				for (const [neuronId, strength] of peakPredictions) {
+					neuronMap.set(neuronId, { strength, age: 0 });
+				}
+
+				if (this.debug) console.log(`Level ${level}: Predicted ${peakPredictions.size} peak neurons for level ${targetLevel} (from patterns)`);
 			}
 		}
+	}
 
-		console.log(`Level ${level}: Predicted ${peakPredictions.size} peak neurons for level ${targetLevel} (from patterns)`);
+	/**
+	 * Merge connection and pattern predictions for higher levels (level > 0).
+	 * Higher levels don't use channel-based conflict resolution - just combine predictions by summing strengths.
+	 * This allows the brain to learn connections between output neurons and high-level decision making.
+	 */
+	mergeHigherLevelPredictions() {
+		// Get the highest level that has predictions
+		const maxLevel = this.getMaxActiveLevel();
+
+		// Combine connection and pattern predictions for all levels > 0
+		for (let level = maxLevel; level > 0; level--) {
+			const mergedMap = new Map();
+
+			// Add connection predictions
+			if (this.connectionInference.has(level)) {
+				const connMap = this.connectionInference.get(level);
+				for (const [neuronId, data] of connMap) {
+					if (data.age === 0) {
+						mergedMap.set(neuronId, { strength: data.strength, age: 0 });
+					}
+				}
+			}
+
+			// Add pattern predictions (sum strengths if both sources predict same neuron)
+			if (this.patternInference.has(level)) {
+				const patternMap = this.patternInference.get(level);
+				for (const [neuronId, data] of patternMap) {
+					if (data.age === 0) {
+						const existing = mergedMap.get(neuronId);
+						if (existing) {
+							existing.strength += data.strength;
+						} else {
+							mergedMap.set(neuronId, { strength: data.strength, age: 0 });
+						}
+					}
+				}
+			}
+
+			// Store merged predictions in inferred_neurons
+			if (mergedMap.size > 0) {
+				this.inferredNeurons.set(level, mergedMap);
+				if (this.debug) console.log(`Level ${level}: Merged ${mergedMap.size} predictions to inferred_neurons (connection + pattern)`);
+			}
+		}
 	}
 
 	/**
 	 * Apply negative reinforcement to connections that predicted incorrectly.
-	 * Validates connection predictions from the previous frame.
+	 * Validates connection predictions from the previous frame for ALL levels.
 	 */
-	negativeReinforceConnections(level) {
-		// Get predictions from previous frame (stored in connectionInference with age=1)
-		if (!this.connectionInference.has(level)) return;
+	negativeReinforceConnections() {
+		let totalFailures = 0;
 
-		const predictions = this.connectionInference.get(level);
-
-		// Collect all connection IDs that were used for predictions
-		// (We need to track which connections made predictions, not just which neurons)
-		// For now, we'll use a simplified approach: check if predicted neurons activated
-
-		const predictedNeurons = new Set();
-		for (const [neuronId, data] of predictions) {
-			if (data.age === 1) {
-				predictedNeurons.add(neuronId);
+		// Process all levels
+		for (const [level, predictions] of this.connectionInference) {
+			// Collect all predicted neurons with age=1
+			const predictedNeurons = new Set();
+			for (const [neuronId, data] of predictions) {
+				if (data.age === 1) predictedNeurons.add(neuronId);
 			}
+
+			if (predictedNeurons.size === 0) continue;
+
+			// Find which predictions failed (not in active_neurons at age=0)
+			const failures = [];
+			for (const neuronId of predictedNeurons) {
+				const isActive = this.activeNeurons.has(neuronId, level, 0);
+				if (!isActive) failures.push(neuronId);
+			}
+
+			totalFailures += failures.length;
 		}
 
-		if (predictedNeurons.size === 0) return;
-
-		// Find which predictions failed (not in active_neurons at age=0)
-		const failures = [];
-		for (const neuronId of predictedNeurons) {
-			const isActive = this.activeNeurons.has(neuronId, level, 0);
-			if (!isActive) {
-				failures.push(neuronId);
-			}
+		if (totalFailures > 0 && this.debug) {
+			console.log(`Applied negative reinforcement to ${totalFailures} failed connection predictions across all levels`);
 		}
-
-		if (failures.length === 0) return;
-
-		// Apply negative reinforcement to connections that led to failed predictions
-		// This is a simplified version - ideally we'd track which specific connections made each prediction
-		console.log(`Level ${level}: Applied negative reinforcement to ${failures.length} failed connection predictions`);
 	}
 
 	/**
@@ -661,19 +672,9 @@ export default class BrainMemory extends Brain {
 	}
 
 	/**
-	 * Resolve conflicts for each channel and write final predictions to inferred_neurons.
-	 * Channels can return multiple predictions (e.g., vision detecting multiple objects).
+	 * Write resolved predictions to in-memory storage (implementation of abstract method)
 	 */
-	async resolveAndWritePredictions(channelPredictions) {
-		// Resolve conflicts for each channel and collect selected predictions
-		const allSelectedPredictions = [];
-		for (const [channelName, predictionMap] of channelPredictions) {
-			allSelectedPredictions.push(...this.channels.get(channelName).resolveConflicts(Array.from(predictionMap.values())));
-		}
-
-		// If there are no predictions, nothing to resolve
-		if (allSelectedPredictions.length === 0) return;
-
+	async writeResolvedPredictions(allSelectedPredictions) {
 		// Store selected predictions in inferred_neurons with age=0
 		if (!this.inferredNeurons.has(0)) {
 			this.inferredNeurons.set(0, new Map());
@@ -683,143 +684,114 @@ export default class BrainMemory extends Brain {
 		for (const pred of allSelectedPredictions) {
 			level0Inferred.set(pred.neuron_id, { strength: pred.strength, age: 0 });
 		}
-
-		console.log(`Resolved ${allSelectedPredictions.length} input predictions after conflict resolution`);
 	}
 
 	/**
-	 * Reports accuracy of neuron predictions from the previous frame.
-	 * At level 0: Tracks accuracy for connection_inferred_neurons, pattern_inferred_neurons, and final inferred_neurons (input predictions only).
-	 * At higher levels: Tracks accuracy for connection_inferred_neurons (all neurons).
+	 * Reports accuracy of neuron predictions from the previous frame for ALL levels.
+	 * Tracks accuracy for connection_inferred_neurons, pattern_inferred_neurons, and final inferred_neurons.
 	 */
-	reportPredictionsAccuracy(level) {
-		// Initialize accuracy stats for this level if needed
-		if (!this.accuracyStats.has(level)) {
-			this.accuracyStats.set(level, {
-				connection: { correct: 0, total: 0 },
-				pattern: { correct: 0, total: 0 },
-				resolved: { correct: 0, total: 0 }
-			});
-		}
+	reportPredictionsAccuracy() {
+		// Group predictions by level
+		const levelStats = new Map();
 
-		const stats = this.accuracyStats.get(level);
-
-		// Report connection prediction accuracy for all levels
-		const connectionPredictions = level === 0
-			? this.getInputPredictionsAtAge(this.connectionInference, 0, 1)
-			: this.getPredictionsAtAge(this.connectionInference, level, 1);
-
-		if (connectionPredictions.length > 0) {
-			const connectionMatches = connectionPredictions.filter(neuronId =>
-				this.activeNeurons.has(neuronId, level, 0)
-			);
-
-			stats.connection.correct += connectionMatches.length;
-			stats.connection.total += connectionPredictions.length;
-
-			const currentRate = (connectionMatches.length / connectionPredictions.length * 100).toFixed(1);
-			const avgRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
-			console.log(`Level ${level}: Connection prediction accuracy: ${connectionMatches.length}/${connectionPredictions.length} (${currentRate}%) | Avg: ${stats.connection.correct}/${stats.connection.total} (${avgRate}%)`);
-		}
-
-		// Report pattern prediction accuracy for all levels
-		const patternPredictions = level === 0
-			? this.getInputPredictionsAtAge(this.patternInference, 0, 1)
-			: this.getPredictionsAtAge(this.patternInference, level, 1);
-
-		// Debug: Check what's in patternInference for this level
-		if (this.patternInference.has(level)) {
-			const levelMap = this.patternInference.get(level);
-			const age0Count = Array.from(levelMap.values()).filter(d => d.age === 0).length;
-			const age1Count = Array.from(levelMap.values()).filter(d => d.age === 1).length;
-			console.log(`Level ${level}: Pattern inference debug: ${levelMap.size} total predictions (age=0: ${age0Count}, age=1: ${age1Count})`);
-		}
-
-		if (patternPredictions.length > 0) {
-			const patternMatches = patternPredictions.filter(neuronId =>
-				this.activeNeurons.has(neuronId, level, 0)
-			);
-
-			stats.pattern.correct += patternMatches.length;
-			stats.pattern.total += patternPredictions.length;
-
-			const currentRate = (patternMatches.length / patternPredictions.length * 100).toFixed(1);
-			const avgRate = (stats.pattern.correct / stats.pattern.total * 100).toFixed(1);
-			console.log(`Level ${level}: Pattern prediction accuracy: ${patternMatches.length}/${patternPredictions.length} (${currentRate}%) | Avg: ${stats.pattern.correct}/${stats.pattern.total} (${avgRate}%)`);
-		}
-
-		// Report resolved prediction accuracy (only at level 0)
-		if (level === 0) {
-			const resolvedPredictions = this.getInputPredictionsAtAge(this.inferredNeurons, 0, 1);
-			if (resolvedPredictions.length > 0) {
-				const resolvedMatches = resolvedPredictions.filter(neuronId =>
-					this.activeNeurons.has(neuronId, 0, 0)
-				);
-
-				stats.resolved.correct += resolvedMatches.length;
-				stats.resolved.total += resolvedPredictions.length;
-
-				const currentRate = (resolvedMatches.length / resolvedPredictions.length * 100).toFixed(1);
-				const avgRate = (stats.resolved.correct / stats.resolved.total * 100).toFixed(1);
-				console.log(`Level ${level}: Resolved prediction accuracy: ${resolvedMatches.length}/${resolvedPredictions.length} (${currentRate}%) | Avg: ${stats.resolved.correct}/${stats.resolved.total} (${avgRate}%)`);
+		// Process connection predictions
+		for (const [level, predictions] of this.connectionInference) {
+			if (!levelStats.has(level)) {
+				levelStats.set(level, { connection: { correct: 0, total: 0 }, pattern: { correct: 0, total: 0 }, resolved: { correct: 0, total: 0 } });
 			}
-		}
-	}
+			const stats = levelStats.get(level);
 
-	/**
-	 * Get predictions at a specific age from an inference map
-	 */
-	getPredictionsAtAge(inferenceMap, level, age) {
-		if (!inferenceMap.has(level)) return [];
-
-		const predictions = [];
-		const levelMap = inferenceMap.get(level);
-
-		for (const [neuronId, data] of levelMap) {
-			if (data.age === age) {
-				predictions.push(neuronId);
-			}
-		}
-
-		return predictions;
-	}
-
-	/**
-	 * Get input predictions at a specific age from an inference map (level 0 only)
-	 * Filters to only include neurons with input dimensions
-	 */
-	getInputPredictionsAtAge(inferenceMap, level, age) {
-		if (level !== 0 || !inferenceMap.has(level)) return [];
-
-		const predictions = [];
-		const levelMap = inferenceMap.get(level);
-
-		for (const [neuronId, data] of levelMap) {
-			if (data.age === age) {
-				// Check if this neuron has input dimensions
-				const coords = this.neurons.getCoordinates(neuronId);
-				const hasInputDim = coords.some(coord => {
-					const dim = this.dimensionIdToName[coord.dimension_id];
-					const dimInfo = this.dimensions.get(dim);
-					return dimInfo && dimInfo.type === 'input';
-				});
-
-				if (hasInputDim) {
-					predictions.push(neuronId);
+			for (const [neuronId, data] of predictions) {
+				if (data.age === 1) {
+					stats.connection.total++;
+					if (this.activeNeurons.has(neuronId, level, 0)) stats.connection.correct++;
 				}
 			}
 		}
 
-		return predictions;
+		// Process pattern predictions
+		for (const [level, predictions] of this.patternInference) {
+			if (!levelStats.has(level)) {
+				levelStats.set(level, { connection: { correct: 0, total: 0 }, pattern: { correct: 0, total: 0 }, resolved: { correct: 0, total: 0 } });
+			}
+			const stats = levelStats.get(level);
+
+			for (const [neuronId, data] of predictions) {
+				if (data.age === 1) {
+					stats.pattern.total++;
+					if (this.activeNeurons.has(neuronId, level, 0)) stats.pattern.correct++;
+				}
+			}
+		}
+
+		// Process resolved predictions (all levels)
+		for (const [level, predictions] of this.inferredNeurons) {
+			if (!levelStats.has(level)) {
+				levelStats.set(level, { connection: { correct: 0, total: 0 }, pattern: { correct: 0, total: 0 }, resolved: { correct: 0, total: 0 } });
+			}
+			const stats = levelStats.get(level);
+
+			for (const [neuronId, data] of predictions) {
+				if (data.age === 1) {
+					stats.resolved.total++;
+					if (this.activeNeurons.has(neuronId, level, 0)) stats.resolved.correct++;
+				}
+			}
+		}
+
+		// Report and update cumulative stats for each level
+		const levels = Array.from(levelStats.keys()).sort((a, b) => b - a);
+		for (const level of levels) {
+			const stats = levelStats.get(level);
+
+			// Initialize cumulative stats for this level if needed
+			if (!this.accuracyStats.has(level)) {
+				this.accuracyStats.set(level, { connection: { correct: 0, total: 0 }, pattern: { correct: 0, total: 0 }, resolved: { correct: 0, total: 0 } });
+			}
+			const cumulative = this.accuracyStats.get(level);
+
+			// Report connection accuracy
+			if (stats.connection.total > 0) {
+				cumulative.connection.correct += stats.connection.correct;
+				cumulative.connection.total += stats.connection.total;
+				const currentRate = (stats.connection.correct / stats.connection.total * 100).toFixed(1);
+				const avgRate = (cumulative.connection.correct / cumulative.connection.total * 100).toFixed(1);
+				if (this.debug) {
+					console.log(`Level ${level}: Connection prediction accuracy: ${stats.connection.correct}/${stats.connection.total} (${currentRate}%) | Avg: ${cumulative.connection.correct}/${cumulative.connection.total} (${avgRate}%)`);
+				}
+			}
+
+			// Report pattern accuracy
+			if (stats.pattern.total > 0) {
+				cumulative.pattern.correct += stats.pattern.correct;
+				cumulative.pattern.total += stats.pattern.total;
+				const currentRate = (stats.pattern.correct / stats.pattern.total * 100).toFixed(1);
+				const avgRate = (cumulative.pattern.correct / cumulative.pattern.total * 100).toFixed(1);
+				if (this.debug) {
+					console.log(`Level ${level}: Pattern prediction accuracy: ${stats.pattern.correct}/${stats.pattern.total} (${currentRate}%) | Avg: ${cumulative.pattern.correct}/${cumulative.pattern.total} (${avgRate}%)`);
+				}
+			}
+
+			// Report resolved accuracy
+			if (stats.resolved.total > 0) {
+				cumulative.resolved.correct += stats.resolved.correct;
+				cumulative.resolved.total += stats.resolved.total;
+				const currentRate = (stats.resolved.correct / stats.resolved.total * 100).toFixed(1);
+				const avgRate = (cumulative.resolved.correct / cumulative.resolved.total * 100).toFixed(1);
+				if (this.debug) {
+					console.log(`Level ${level}: Resolved prediction accuracy: ${stats.resolved.correct}/${stats.resolved.total} (${currentRate}%) | Avg: ${cumulative.resolved.correct}/${cumulative.resolved.total} (${avgRate}%)`);
+				}
+			}
+		}
 	}
+
+
 
 	/**
 	 * Process a single level - used during recognition phase
 	 * Activates connections, detects peaks, matches/creates patterns, reinforces connections
 	 */
 	async processLevel(level) {
-		console.log(`\n--- Processing Level ${level} ---`);
-
 		// Clear scratch tables for this level
 		this.activeConnections.clear();
 		this.observedPatterns.clear();
@@ -897,59 +869,7 @@ export default class BrainMemory extends Brain {
 		return peaks.size > 0;
 	}
 
-	/**
-	 * Process frame - main entry point
-	 * @param {Array} frame - Array of input/output points from channels
-	 * @param {number} globalReward - Reward factor from feedback (multiplicative, 1.0 = neutral)
-	 */
-	async processFrame(frame, globalReward = 1.0) {
-		const frameStart = performance.now();
-		this.frameNumber++;
 
-		console.log(`\n${'='.repeat(80)}`);
-		console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)} ${this.frameNumber}`);
-		console.log(`applying global reward: ${globalReward.toFixed(3)}`);
-		console.log('='.repeat(80));
-
-		// Step 1: Apply rewards to previously executed decisions (before aging them further)
-		this.applyRewards(globalReward);
-
-		// Step 2: Age the active neurons in memory context - sliding the temporal window
-		this.ageNeurons();
-
-		// Step 3: Execute previous frame's decisions + exploration if needed
-		await this.executeOutputs();
-
-		// Step 4: Activate base neurons from the frame along with higher level patterns from them
-		await this.recognizeNeurons(frame);
-
-		// Step 5: Do predictions and outputs - what's going to happen next?
-		await this.inferNeurons();
-
-		// Step 6: Forget cycle (if needed)
-		this.forgetCounter++;
-		if (this.forgetCounter >= this.forgetCycles) {
-			this.runForgetCycle();
-			this.forgetCounter = 0;
-		}
-
-		const frameElapsed = performance.now() - frameStart;
-		console.log(`\nFrame ${this.frameNumber} complete in ${frameElapsed.toFixed(2)}ms`);
-
-		// Show accuracy stats every 100 frames
-		if (this.frameNumber % 100 === 0) {
-			this.printAccuracyStats();
-		}
-
-		console.log('='.repeat(80));
-
-		// Debug pause
-		if (this.debug) {
-			await new Promise(resolve => {
-				this.rl.question('Press Enter to continue...', () => resolve());
-			});
-		}
-	}
 
 	/**
 	 * Print prediction accuracy statistics
@@ -1019,7 +939,7 @@ export default class BrainMemory extends Brain {
 	 */
 	applyRewards(globalReward) {
 		if (globalReward === 1.0) {
-			console.log('Neutral global reward - no updates needed');
+			if (this.debug) console.log('Neutral global reward - no updates needed');
 			return;
 		}
 
@@ -1028,7 +948,7 @@ export default class BrainMemory extends Brain {
 		// globalReward = 0.5 → adjustment = -0.5 per connection
 		const rewardAdjustment = globalReward - 1.0;
 
-		console.log(`\nApplying global reward ${globalReward.toFixed(3)} (adjustment: ${rewardAdjustment >= 0 ? '+' : ''}${rewardAdjustment.toFixed(3)})`);
+		if (this.debug) console.log(`\nApplying global reward ${globalReward.toFixed(3)} (adjustment: ${rewardAdjustment >= 0 ? '+' : ''}${rewardAdjustment.toFixed(3)})`);
 
 		applyRewards(
 			this.activeConnections,
@@ -1043,31 +963,30 @@ export default class BrainMemory extends Brain {
 
 	/**
 	 * Run forget cycle - decay weak connections and patterns
+	 * Reduces strengths and deletes unused neurons (clamped between minConnectionStrength and maxConnectionStrength)
+	 * Only runs every forgetCycles frames
 	 */
-	runForgetCycle() {
-		console.log('\n--- Running Forget Cycle ---');
+	async runForgetCycle() {
+		// Check if it's time to run the forget cycle
+		this.forgetCounter = (this.forgetCounter || 0) + 1;
+		if (this.forgetCounter < this.forgetCycles) return;
+
+		// Reset counter
+		this.forgetCounter = 0;
+
+		if (this.debug) console.log('\n--- Running Forget Cycle ---');
 		const startTime = performance.now();
 
 		let deletedConnections = 0;
 		let deletedPatterns = 0;
+		let deletedPatternPeaks = 0;
+		let deletedNeurons = 0;
 
-		// Decay and delete weak connections
-		for (const conn of this.connections.byId.values()) {
-			const newStrength = conn.strength - this.connectionForgetRate;
+		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns (clamped)
+		for (const entry of this.patterns.byKey.values()) {
+			const newStrength = Math.max(this.minConnectionStrength, Math.min(this.maxConnectionStrength, entry.strength - this.patternForgetRate));
 
-			if (newStrength <= 0) {
-				this.connections.delete(conn.id);
-				deletedConnections++;
-			} else {
-				this.connections.set(conn.from_neuron_id, conn.to_neuron_id, conn.distance, newStrength);
-			}
-		}
-
-		// Decay and delete weak pattern entries
-		for (const [_, entry] of this.patterns.byKey.entries()) {
-			const newStrength = entry.strength - this.patternForgetRate;
-
-			if (newStrength <= 0) {
+			if (newStrength <= this.minConnectionStrength) {
 				this.patterns.delete(entry.pattern_neuron_id, entry.connection_id);
 				deletedPatterns++;
 			} else {
@@ -1075,8 +994,58 @@ export default class BrainMemory extends Brain {
 			}
 		}
 
+		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped)
+		for (const conn of this.connections.byId.values()) {
+			const newStrength = Math.max(this.minConnectionStrength, Math.min(this.maxConnectionStrength, conn.strength - this.connectionForgetRate));
+
+			if (newStrength <= this.minConnectionStrength) {
+				this.connections.delete(conn.id);
+				deletedConnections++;
+			} else {
+				this.connections.set(conn.from_neuron_id, conn.to_neuron_id, conn.distance, newStrength);
+			}
+		}
+
+		// 3. PATTERN_PEAKS CLEANUP: Remove pattern peaks for patterns with no connections
+		const patternNeuronsWithConnections = new Set();
+		for (const entry of this.patterns.byKey.values()) {
+			patternNeuronsWithConnections.add(entry.pattern_neuron_id);
+		}
+
+		for (const mapping of this.patternPeaks.getAll()) {
+			if (!patternNeuronsWithConnections.has(mapping.pattern_neuron_id)) {
+				this.patternPeaks.delete(mapping.pattern_neuron_id);
+				deletedPatternPeaks++;
+			}
+		}
+
+		// 4. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
+		const neuronsToDelete = [];
+		for (const [neuronId] of this.neurons.neurons) {
+			// Check if neuron has any connections (from or to)
+			const hasFromConnections = this.connections.byFromDistance.has(neuronId);
+			const hasToConnections = this.connections.byTo.has(neuronId);
+
+			// Check if neuron is a pattern neuron
+			const isPatternNeuron = this.patterns.byPattern.has(neuronId);
+
+			// Check if neuron is currently active
+			const isActive = this.activeNeurons.getAll().some(an => an.neuron_id === neuronId);
+
+			if (!hasFromConnections && !hasToConnections && !isPatternNeuron && !isActive) {
+				neuronsToDelete.push(neuronId);
+			}
+		}
+
+		for (const neuronId of neuronsToDelete) {
+			this.neurons.delete(neuronId);
+			deletedNeurons++;
+		}
+
 		const elapsed = performance.now() - startTime;
-		console.log(`Forget cycle: deleted ${deletedConnections} connections, ${deletedPatterns} pattern entries (${elapsed.toFixed(2)}ms)`);
+		if (this.debug) {
+			console.log(`Forget cycle: deleted ${deletedConnections} connections, ${deletedPatterns} pattern entries, ${deletedPatternPeaks} pattern peaks, ${deletedNeurons} neurons (${elapsed.toFixed(2)}ms)`);
+		}
 	}
 
 	/**

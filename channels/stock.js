@@ -47,46 +47,46 @@ export default class StockChannel extends Channel {
 		this.currentVolume = null;
 
 		// Fine-grained discretization for typical stock movements (-2% to +2%) with exponential for extremes
-		// this.priceBuckets = [
-		// 	{ min: -Infinity, max: -10, value: -10 },  // -100%+ to -10%
-		// 	{ min: -10, max: -5, value: -9 },          // -10% to -5%
-		// 	{ min: -5, max: -3, value: -8 },           // -5% to -3%
-		// 	{ min: -3, max: -2, value: -7 },           // -3% to -2%
-		// 	{ min: -2, max: -1, value: -6 },           // -2% to -1%
-		// 	{ min: -1, max: -0.5, value: -5 },         // -1% to -0.5%
-		// 	{ min: -0.5, max: -0.2, value: -4 },       // -0.5% to -0.2%
-		// 	{ min: -0.2, max: -0.05, value: -3 },      // -0.2% to -0.05%
-		// 	{ min: -0.05, max: -0.01, value: -2 },     // -0.05% to -0.01%
-		// 	{ min: -0.01, max: 0.01, value: 0 },       // -0.01% to 0.01% (no change)
-		// 	{ min: 0.01, max: 0.05, value: 2 },        // 0.01% to 0.05%
-		// 	{ min: 0.05, max: 0.2, value: 3 },         // 0.05% to 0.2%
-		// 	{ min: 0.2, max: 0.5, value: 4 },          // 0.2% to 0.5%
-		// 	{ min: 0.5, max: 1, value: 5 },            // 0.5% to 1%
-		// 	{ min: 1, max: 2, value: 6 },              // 1% to 2%
-		// 	{ min: 2, max: 3, value: 7 },              // 2% to 3%
-		// 	{ min: 3, max: 5, value: 8 },              // 3% to 5%
-		// 	{ min: 5, max: 10, value: 9 },             // 5% to 10%
-		// 	{ min: 10, max: Infinity, value: 10 }      // 10%+ to 100%+
-		// ];
+		this.priceBuckets = [
+			{ min: -Infinity, max: -10, value: -10 },  // -100%+ to -10%
+			{ min: -10, max: -5, value: -9 },          // -10% to -5%
+			{ min: -5, max: -3, value: -8 },           // -5% to -3%
+			{ min: -3, max: -2, value: -7 },           // -3% to -2%
+			{ min: -2, max: -1, value: -6 },           // -2% to -1%
+			{ min: -1, max: -0.5, value: -5 },         // -1% to -0.5%
+			{ min: -0.5, max: -0.2, value: -4 },       // -0.5% to -0.2%
+			{ min: -0.2, max: -0.05, value: -3 },      // -0.2% to -0.05%
+			{ min: -0.05, max: -0.01, value: -2 },     // -0.05% to -0.01%
+			{ min: -0.01, max: 0.01, value: 0 },       // -0.01% to 0.01% (no change)
+			{ min: 0.01, max: 0.05, value: 2 },        // 0.01% to 0.05%
+			{ min: 0.05, max: 0.2, value: 3 },         // 0.05% to 0.2%
+			{ min: 0.2, max: 0.5, value: 4 },          // 0.2% to 0.5%
+			{ min: 0.5, max: 1, value: 5 },            // 0.5% to 1%
+			{ min: 1, max: 2, value: 6 },              // 1% to 2%
+			{ min: 2, max: 3, value: 7 },              // 2% to 3%
+			{ min: 3, max: 5, value: 8 },              // 3% to 5%
+			{ min: 5, max: 10, value: 9 },             // 5% to 10%
+			{ min: 10, max: Infinity, value: 10 }      // 10%+ to 100%+
+		];
 
 		// 15-part Exponential discretization buckets for percentage changes
-		this.priceBuckets = [
-			{ min: -Infinity, max: -50, value: -7 },  // -100%+ to -50%
-			{ min: -50, max: -25, value: -6 },        // -50% to -25%
-			{ min: -25, max: -12.5, value: -5 },      // -25% to -12.5%
-			{ min: -12.5, max: -6.25, value: -4 },    // -12.5% to -6.25%
-			{ min: -6.25, max: -3.125, value: -3 },   // -6.25% to -3.125%
-			{ min: -3.125, max: -1.5625, value: -2 }, // -3.125% to -1.5625%
-			{ min: -1.5625, max: -0.05, value: -1 },  // -1.5625% to -0.05%
-			{ min: -0.05, max: 0.05, value: 0 },      // -0.05% to 0.05% (no change)
-			{ min: 0.05, max: 1.5625, value: 1 },     // 0.05% to 1.5625%
-			{ min: 1.5625, max: 3.125, value: 2 },    // 1.5625% to 3.125%
-			{ min: 3.125, max: 6.25, value: 3 },      // 3.125% to 6.25%
-			{ min: 6.25, max: 12.5, value: 4 },       // 6.25% to 12.5%
-			{ min: 12.5, max: 25, value: 5 },         // 12.5% to 25%
-			{ min: 25, max: 50, value: 6 },           // 25% to 50%
-			{ min: 50, max: Infinity, value: 7 }      // 50%+ to 100%+
-		];
+		// this.priceBuckets = [
+		// 	{ min: -Infinity, max: -50, value: -7 },  // -100%+ to -50%
+		// 	{ min: -50, max: -25, value: -6 },        // -50% to -25%
+		// 	{ min: -25, max: -12.5, value: -5 },      // -25% to -12.5%
+		// 	{ min: -12.5, max: -6.25, value: -4 },    // -12.5% to -6.25%
+		// 	{ min: -6.25, max: -3.125, value: -3 },   // -6.25% to -3.125%
+		// 	{ min: -3.125, max: -1.5625, value: -2 }, // -3.125% to -1.5625%
+		// 	{ min: -1.5625, max: -0.05, value: -1 },  // -1.5625% to -0.05%
+		// 	{ min: -0.05, max: 0.05, value: 0 },      // -0.05% to 0.05% (no change)
+		// 	{ min: 0.05, max: 1.5625, value: 1 },     // 0.05% to 1.5625%
+		// 	{ min: 1.5625, max: 3.125, value: 2 },    // 1.5625% to 3.125%
+		// 	{ min: 3.125, max: 6.25, value: 3 },      // 3.125% to 6.25%
+		// 	{ min: 6.25, max: 12.5, value: 4 },       // 6.25% to 12.5%
+		// 	{ min: 12.5, max: 25, value: 5 },         // 12.5% to 25%
+		// 	{ min: 25, max: 50, value: 6 },           // 25% to 50%
+		// 	{ min: 50, max: Infinity, value: 7 }      // 50%+ to 100%+
+		// ];
 
 		// 9-part exponential discretization buckets for percentage changes
 		// this.priceBuckets = [
@@ -231,11 +231,19 @@ export default class StockChannel extends Channel {
 
 		// Calculate prediction error if we had a price prediction from previous frame
 		if (this.lastPredictedPrice !== null) {
-			const absoluteError = Math.abs(this.currentPrice - this.lastPredictedPrice);
-			const percentageError = (absoluteError / this.currentPrice) * 100;
-			this.pricePredictionErrors.push(percentageError);
 			const actualChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
-			console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${percentageError.toFixed(2)}%`);
+			const predictedChange = ((this.lastPredictedPrice - this.previousPrice) / this.previousPrice) * 100;
+
+			// Error is the absolute difference between predicted and actual percentage changes
+			const error = Math.abs(actualChange - predictedChange);
+			this.pricePredictionErrors.push(error);
+
+			// Calculate average error for this channel
+			const avgError = this.pricePredictionErrors.reduce((sum, err) => sum + err, 0) / this.pricePredictionErrors.length;
+
+			if (this.debug) {
+				console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
+			}
 			this.lastPredictedPrice = null;
 		}
 
@@ -349,6 +357,7 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Update unrealized profit/loss metrics for owned positions
+	 * This is just for display/tracking purposes - actual profit/loss is recorded when selling
 	 */
 	updateUnrealizedProfitLoss() {
 
@@ -358,18 +367,8 @@ export default class StockChannel extends Channel {
 			return;
 		}
 
-		// Calculate current unrealized profit/loss
+		// Calculate current unrealized profit/loss (for display only)
 		this.unrealizedProfit = this.currentPrice - this.entryPrice;
-
-		// Update running totals based on change in unrealized profit
-		const profitChange = this.unrealizedProfit - this.lastUnrealizedProfit;
-
-		// Unrealized profit increased
-		if (profitChange > 0) this.totalProfit += profitChange;
-		// Unrealized profit decreased (or loss increased)
-		else if (profitChange < 0) this.totalLoss += Math.abs(profitChange);
-
-		// Update last unrealized profit for next comparison
 		this.lastUnrealizedProfit = this.unrealizedProfit;
 	}
 
@@ -464,7 +463,7 @@ export default class StockChannel extends Channel {
 			}
 
 			this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
-			if (this.lastPredictedPrice !== null) {
+			if (this.lastPredictedPrice !== null && this.debug) {
 				const predictedChange = ((this.lastPredictedPrice - this.priceForPrediction) / this.priceForPrediction) * 100;
 				console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.priceForPrediction.toFixed(2)}`);
 			}
@@ -477,21 +476,23 @@ export default class StockChannel extends Channel {
 
 		const result = [];
 
-		// Add strongest price prediction if any
+		// Add the strongest price prediction if any
 		if (pricePredictions.length > 0) {
 			let strongestPrice = pricePredictions[0];
 			for (const pred of pricePredictions) if (pred.strength > strongestPrice.strength) strongestPrice = pred;
 			result.push(strongestPrice);
 		}
 
-		// Add strongest volume prediction if any
+		// Add the strongest volume prediction if any
 		if (volumePredictions.length > 0) {
 			let strongestVolume = volumePredictions[0];
 			for (const pred of volumePredictions) if (pred.strength > strongestVolume.strength) strongestVolume = pred;
 			result.push(strongestVolume);
 		}
 
-		console.log(`${this.symbol}: Resolved ${predictions.length} predictions → returning ${result.length} (${pricePredictions.length > 0 ? 'price' : ''}${pricePredictions.length > 0 && volumePredictions.length > 0 ? '+' : ''}${volumePredictions.length > 0 ? 'volume' : ''})`);
+		if (this.debug) {
+			console.log(`${this.symbol}: Resolved ${predictions.length} predictions → returning ${result.length} (${pricePredictions.length > 0 ? 'price' : ''}${pricePredictions.length > 0 && volumePredictions.length > 0 ? '+' : ''}${volumePredictions.length > 0 ? 'volume' : ''})`);
+		}
 
 		return result;
 	}
@@ -565,18 +566,23 @@ export default class StockChannel extends Channel {
 				return;
 			}
 
-			// Sell owned stock
+			// Sell owned stock - calculate realized profit/loss
 			const profit = currentPrice - this.entryPrice;
 			const percentReturn = (profit / this.entryPrice) * 100;
 
-			if (this.debug) {
-				console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (activity: ${activityValue})`);
-				console.log(`${this.symbol}: Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+			// Add realized profit/loss to totals
+			if (profit > 0) {
+				this.totalProfit += profit;
+				this.profitableTrades++;
+			} else if (profit < 0) {
+				this.totalLoss += Math.abs(profit);
 			}
 
-			// Track trade metrics - the unrealized profit/loss has already been tracked
-			// during ownership, so we just need to count the trade and profitability
-			if (profit > 0) this.profitableTrades++;
+			if (this.debug) {
+				console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (activity: ${activityValue})`);
+				console.log(`${this.symbol}: Realized Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+				console.log(`${this.symbol}: Episode totals: Profit $${this.totalProfit.toFixed(2)}, Loss $${this.totalLoss.toFixed(2)}, Net $${(this.totalProfit - this.totalLoss).toFixed(2)}`);
+			}
 
 			// Reset unrealized profit tracking since position is closed
 			this.unrealizedProfit = 0;

@@ -18,6 +18,7 @@ class BrainRunner {
 			await job.run();
 
 			console.log(`Job completed: ${jobName}`);
+			process.exit(0);
 		} 
 		catch (error) {
 			if (error.code === 'ERR_MODULE_NOT_FOUND') console.error(`Job not found: ./jobs/${jobName}.js`);

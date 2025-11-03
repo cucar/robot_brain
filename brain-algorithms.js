@@ -28,10 +28,7 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 	// Step 1: Get all active connections at this level, age 0 - O(1)
 	const activeConns = activeConnectionStore.getByLevelAge(level, 0);
 
-	if (activeConns.length === 0) {
-		console.log(`Found 0 peaks at level ${level} (no active connections)`);
-		return new Map();
-	}
+	if (activeConns.length === 0) return new Map();
 
 	// Step 2: Calculate weighted strengths for each target neuron - O(N) single pass
 	// Map<to_neuron_id, {total_strength, connections: Array<{connection_id, from_neuron_id, strength}>}>
@@ -82,9 +79,6 @@ export function detectPeaks(activeConnectionStore, connectionStore, level, peakT
 		}
 	}
 
-	const elapsed = performance.now() - startTime;
-	console.log(`Found ${peaks.size} peaks at level ${level} (${elapsed.toFixed(2)}ms, ${activeConns.length} active connections, ${targetData.size} targets, avg strength ${avgStrength.toFixed(2)})`);
-
 	return peaks;
 }
 
@@ -112,10 +106,7 @@ export function inferConnections(activeNeuronStore, connectionStore, level, peak
 	// Step 1: Get all active neurons at this level (any age)
 	const activeNeurons = activeNeuronStore.getByLevel(level);
 
-	if (activeNeurons.length === 0) {
-		console.log(`Level ${level}: Predicted 0 neurons for next frame (no active neurons)`);
-		return new Map();
-	}
+	if (activeNeurons.length === 0) return new Map();
 
 	// Step 2-3: Build candidate connections and calculate total strengths - O(N)
 	// Map<to_neuron_id, {total_strength, connections: Array<{from_neuron_id, connection_id, strength}>}>
@@ -165,9 +156,6 @@ export function inferConnections(activeNeuronStore, connectionStore, level, peak
 		}
 	}
 
-	const elapsed = performance.now() - startTime;
-	console.log(`Level ${level}: Predicted ${predictions.size} neurons for next frame (${elapsed.toFixed(2)}ms, ${activeNeurons.length} active neurons, ${candidates.size} candidates, avg strength ${avgStrength.toFixed(2)})`);
-
 	return predictions;
 }
 
@@ -216,10 +204,6 @@ export function matchPatterns(observedPatterns, patternStore, patternPeakStore, 
 			}
 		}
 	}
-
-	const totalMatches = Array.from(matches.values()).reduce((sum, set) => sum + set.size, 0);
-	const elapsed = performance.now() - startTime;
-	console.log(`Matched ${totalMatches} pattern-peak pairs (${elapsed.toFixed(2)}ms)`);
 
 	return matches;
 }
@@ -287,8 +271,6 @@ export function mergeMatchedPatterns(matchedPatterns, observedPatterns, patternS
 		}
 	}
 
-	const elapsed = performance.now() - startTime;
-	console.log(`Merged patterns: +${addedCount} added, +${strengthenedCount} strengthened, -${weakenedCount} weakened, -${deletedCount} deleted (${elapsed.toFixed(2)}ms)`);
 }
 
 /**
@@ -323,9 +305,6 @@ export function createNewPatterns(observedPatterns, matchedPatterns, neuronStore
 
 		newPatternIds.push(patternNeuronId);
 	}
-
-	const elapsed = performance.now() - startTime;
-	console.log(`Created ${newPatternIds.length} new patterns for peaks without matches (${elapsed.toFixed(2)}ms)`);
 
 	return newPatternIds;
 }
@@ -372,8 +351,6 @@ export function activateConnections(activeNeuronStore, connectionStore, activeCo
 		}
 	}
 
-	const elapsed = performance.now() - startTime;
-	console.log(`Activated ${activatedCount} connections at level ${level} (${elapsed.toFixed(2)}ms)`);
 }
 
 /**
@@ -423,8 +400,6 @@ export function reinforceConnections(activeNeuronStore, connectionStore, level, 
 		}
 	}
 
-	const elapsed = performance.now() - startTime;
-	console.log(`Reinforced ${reinforcedCount} connections, created ${createdCount} new connections at level ${level} (${elapsed.toFixed(2)}ms)`);
 }
 
 /**

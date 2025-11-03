@@ -18,7 +18,7 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.10; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 10.0; // minimum weighted strength for a neuron to be considered a peak (used for both pattern detection and prediction)
 		this.minPeakRatio = 1.2; // minimum ratio of peak strength to neighborhood average to be considered a peak (used for both pattern detection and prediction)
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
@@ -56,7 +56,7 @@ export default class Brain {
 	registerChannel(name, channelClass) {
 		const channel = new channelClass(name);
 		this.channels.set(name, channel);
-		console.log(`Registered channel: ${name} (${channelClass.name})`);
+		if (this.debug) console.log(`Registered channel: ${name} (${channelClass.name})`);
 	}
 
 	/**
@@ -81,7 +81,7 @@ export default class Brain {
 	 * Initialize dimensions for all registered channels
 	 */
 	async initializeDimensions() {
-		console.log('Initializing dimensions for registered channels...');
+		if (this.debug) console.log('Initializing dimensions for registered channels...');
 		for (const [channelName, channel] of this.channels) {
 			await this.insertChannelDimensions(channel.getInputDimensions(), channelName, 'input');
 			await this.insertChannelDimensions(channel.getOutputDimensions(), channelName, 'output');
@@ -92,24 +92,26 @@ export default class Brain {
 	 * inserts channel dimensions
 	 */
 	async insertChannelDimensions(dimensions, channelName, type){
-		console.log(`Creating ${type} dimensions for ${channelName}:`, dimensions);
+		if (this.debug) console.log(`Creating ${type} dimensions for ${channelName}:`, dimensions);
 		for (const dimName of dimensions)
 			await this.conn.query('INSERT IGNORE INTO dimensions (name, channel, type) VALUES (?, ?, ?)', [dimName, channelName, type]);
 	}
 
 	/**
-	 * loads the dimensions to memory for input
+	 * loads the dimensions to memory with full info (id, name, channel, type)
 	 */
 	async loadDimensions() {
 		this.dimensionNameToId = {};
 		this.dimensionIdToName = {};
-		const [rows] = await this.conn.query('SELECT id, name FROM dimensions');
-		console.log(rows);
+		this.dimensions = new Map(); // Map<dimension_name, {id, channel, type}>
+
+		const [rows] = await this.conn.query('SELECT id, name, channel, type FROM dimensions');
 		rows.forEach(row => {
 			this.dimensionNameToId[row.name] = row.id;
 			this.dimensionIdToName[row.id] = row.name;
+			this.dimensions.set(row.name, { id: row.id, channel: row.channel, type: row.type });
 		});
-		console.log('Dimensions loaded:', this.dimensionNameToId);
+		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
 	}
 
 	/**
