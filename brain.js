@@ -751,20 +751,19 @@ export default class Brain {
 		// Step 2: Aggregate per neuron per level
 		await this.getInferredNeuronStrengths();
 
-		// Step 3: Calculate average strength per level
-		await this.getInferredLevelStrengths();
+		// Step 3: Handle levels where neuron is peak by default (no neighbors)
+		const defaultPeakCount = await this.handleSingleValueInference();
 
-		// Step 4: Get inferred peaks - if none found, log and return
-		const peakCount = await this.getInferredPeaks();
-		if (peakCount === 0) {
+		// Step 4: Handle multi-value inference (peak detection with neighbors)
+		const detectedPeakCount = await this.handleMultiValueInference();
+
+		// Check if we have any predictions
+		if (defaultPeakCount === 0 && detectedPeakCount === 0) {
 			if (this.debug) console.log('No connection predictions found');
 			return;
 		}
 
-		// Step 5: Populate connection_inference using inferred_peaks as filter
-		await this.populateConnectionInference();
-
-		// Step 6: Convert connection predictions to neuron predictions
+		// Step 5: Convert connection predictions to neuron predictions
 		await this.conn.query(`
 			INSERT INTO connection_inferred_neurons (neuron_id, level, age, strength)
 			SELECT to_neuron_id, level, 0, SUM(strength)
@@ -787,6 +786,57 @@ export default class Brain {
 	}
 
 	/**
+	 * Handle inference for levels where the neuron is a peak by default (no neighbors to compare).
+	 * When there's only one neuron at a level, it's automatically a peak.
+	 * Returns count of default peak neurons.
+	 */
+	async handleSingleValueInference() {
+
+		// Insert connections for levels where neuron is peak by default (no neighbors)
+		await this.conn.query(`
+			INSERT INTO connection_inference (level, connection_id, to_neuron_id, strength)
+			SELECT ic.level, ic.connection_id, ic.to_neuron_id, ic.strength
+			FROM inferred_connections ic
+			WHERE ic.level IN (
+				SELECT level
+				FROM inferred_neuron_strengths
+				GROUP BY level
+				HAVING COUNT(*) = 1
+			)
+		`);
+
+		// Count default peak neurons
+		const [result] = await this.conn.query(`
+			SELECT COUNT(DISTINCT to_neuron_id) as neuron_count
+			FROM connection_inference
+		`);
+
+		const defaultPeakCount = result[0].neuron_count;
+		if (this.debug && defaultPeakCount > 0)
+			console.log(`Found ${defaultPeakCount} default peak(s) (no neighbors)`);
+
+		return defaultPeakCount;
+	}
+
+	/**
+	 * Handle multi-value inference using peak detection.
+	 * Returns number of peaks found.
+	 */
+	async handleMultiValueInference() {
+
+		// Calculate average strength per level
+		await this.getInferredLevelStrengths();
+
+		// Get inferred peaks
+		const peakCount = await this.getInferredPeaks();
+
+		// Populate connection_inference using inferred_peaks as filter
+		if (peakCount > 0) await this.populateConnectionInference();
+
+		return peakCount;
+	}
+
+	/**
 	 * Materialize candidate connections from active neurons.
 	 * Truncates and populates inferred_connections scratch table.
 	 */
@@ -805,7 +855,6 @@ export default class Brain {
 			JOIN connections c ON c.from_neuron_id = f.neuron_id
 			WHERE c.distance = f.age + 1
 			AND c.strength > 0
-			AND c.to_neuron_id IN (SELECT peak_neuron_id FROM pattern_peaks)
 		`, [this.peakTimeDecayFactor]);
 	}
 
@@ -845,6 +894,7 @@ export default class Brain {
 	 * Returns the total number of peaks found across all levels.
 	 */
 	async getInferredPeaks() {
+
 		// Clear inferred_peaks
 		await this.conn.query('TRUNCATE inferred_peaks');
 
@@ -1254,13 +1304,27 @@ export default class Brain {
 	 * returns the number of peaks found.
 	 */
 	async getObservedPeaks() {
+
 		// Calculate average strength threshold
-		const [avgResult] = await this.conn.query('SELECT AVG(total_strength) as avg_strength FROM observed_neuron_strengths');
-		const avgStrength = avgResult[0].avg_strength || 0;
-		const strengthThreshold = avgStrength * this.minPeakRatio;
+		const [statsResult] = await this.conn.query(`
+			SELECT SUM(total_strength) as sum_strength, COUNT(*) as neuron_count 
+			FROM observed_neuron_strengths
+		`);
+		const sumStrength = statsResult[0].sum_strength || 0;
+		const neuronCount = statsResult[0].neuron_count || 0;
 
 		// Clear and populate observed_peaks
 		await this.conn.query('TRUNCATE observed_peaks');
+
+		// no peaks possible if there are no observed neurons
+		if (neuronCount === 0) return 0;
+
+		// If only one neuron, set threshold to 0 (always include it as a peak)
+		// Otherwise, calculate threshold based on average
+		// const strengthThreshold = neuronCount <= 1 ? 0 : ((sumStrength / neuronCount) * this.minPeakRatio);
+		const strengthThreshold = (sumStrength / neuronCount) * this.minPeakRatio;
+
+		// populate the observed peaks
 		await this.conn.query(`
 			INSERT INTO observed_peaks (peak_neuron_id, total_strength, connection_count)
 			SELECT to_neuron_id, total_strength, connection_count
