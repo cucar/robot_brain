@@ -20,14 +20,14 @@ processFrame(frame, globalReward)
 │   ├─► getFrameNeurons() - Find/create base neurons
 │   ├─► activateNeurons() - Activate at level 0
 │   │   ├─► insertActiveNeurons()
-│   │   ├─► reinforceConnections() ◄── REMOVED IN NEW ARCH
+│   │   ├─► reinforceConnections() - Hebbian learning for connections
 │   │   └─► activateConnections()
 │   │
 │   └─► activatePatternNeurons() - Hierarchical recognition
 │       └─► For each level:
 │           ├─► getObservedPatterns() - Detect peaks
 │           ├─► matchObservedPatterns() - Match to known patterns
-│           ├─► mergeMatchedPatterns() - Reinforce ◄── REMOVED IN NEW ARCH
+│           ├─► mergeMatchedPatterns() - Hebbian learning for patterns
 │           ├─► createNewPatterns() - Create new ◄── REMOVED IN NEW ARCH
 │           └─► activateNeurons() at level+1
 │
@@ -62,24 +62,27 @@ processFrame(frame, globalReward)
 │   ├─► getFrameNeurons() - Find/create base neurons
 │   ├─► activateNeurons() - Activate at level 0
 │   │   ├─► insertActiveNeurons()
-│   │   ├─► createConnections() ◄── NEW: Hebbian only, no reinforcement
+│   │   ├─► reinforceConnections() - Hebbian learning (NO CHANGE)
 │   │   └─► activateConnections()
 │   │
 │   └─► activatePatternNeurons() - Hierarchical recognition
 │       └─► For each level:
 │           ├─► getObservedPatterns() - Detect peaks
 │           ├─► matchObservedPatterns() - Match to known patterns (pattern_past)
-│           └─► activateNeurons() at level+1 ◄── ONLY matching, no creation
+│           ├─► mergeMatchedPatterns() - Hebbian learning for patterns (NO CHANGE)
+│           └─► activateNeurons() at level+1 ◄── ONLY matching/reinforcement, no creation
 │
 ├─► validateAndLearnFromErrors() ◄── NEW PHASE
 │   ├─► Check failed predictions (age=1 in connection_inferred_neurons)
 │   ├─► Filter by strength >= minErrorPatternThreshold
 │   ├─► For each confident failure:
-│   │   ├─► Get connections from connection_inference
-│   │   ├─► Create pattern neuron at level+1
-│   │   ├─► Insert into pattern_past (connections TO peak)
-│   │   ├─► Insert into pattern_future (connections FROM peak)
-│   │   └─► Create pattern_peaks mapping
+│   │   ├─► Identify predictor neurons (who made the wrong prediction)
+│   │   ├─► For each predictor neuron:
+│   │   │   ├─► Create pattern neuron at level+1
+│   │   │   ├─► Pattern peak = predictor neuron (not the failed prediction)
+│   │   │   ├─► Insert into pattern_past (connections TO predictor)
+│   │   │   ├─► Insert into pattern_future (connections FROM predictor)
+│   │   │   └─► Create pattern_peaks mapping (pattern → predictor)
 │   └─► negativeReinforceConnections() - Weaken failed predictions
 │
 ├─► inferNeurons() ◄── REFACTORED: Top-down flow
@@ -143,26 +146,29 @@ Frame N:
       └─► Only activate matched patterns
 
 Frame N+1:
-  Prediction from connections: Neuron D (strength: 0.8)
-  Actual observation: Neuron E
+  Neuron C (active at age=0) predicts Neuron D (strength: 0.8)
+  Actual observation: Neuron E (not D)
   │
   └─► validateAndLearnFromErrors():
       ├─► Prediction failed (D not observed)
       ├─► Strength 0.8 >= minErrorPatternThreshold (0.5)
+      ├─► Predictor neuron: C (the one that made the wrong prediction)
       └─► Create error pattern at level 1:
           ├─► Pattern_1 neuron created
-          ├─► pattern_past: Pattern_1 → {connections that predicted D}
-          ├─► pattern_future: Pattern_1 → {connections from D}
-          └─► pattern_peaks: Pattern_1 → peak_neuron_id = D
+          ├─► pattern_peaks: Pattern_1 → peak_neuron_id = C (the predictor)
+          ├─► pattern_past: Pattern_1 → {connections TO C} (context when C was active)
+          └─► pattern_future: Pattern_1 → {connections FROM C} (including C→D that failed)
 
 Frame N+2:
-  Similar context occurs again
+  Neuron C appears again in similar context
   │
-  └─► Pattern_1 activated at level 1
+  └─► Pattern_1 activated at level 1 (matched via pattern_past)
       └─► Provides top-down prediction via pattern_future
+      └─► Pattern learns: "When C appears in this context, here's what it predicts"
 ```
 
 **Benefit:** Only creates patterns when predictions fail, focusing learning on errors
+**Key Insight:** Pattern peak is the predictor neuron (who made the error), not the predicted neuron
 
 ## Inference Flow: Current vs New
 
@@ -230,20 +236,21 @@ Final:
 ### Pattern Structure
 
 ```
-Peak Neuron C at Level 0:
-  Observed sequence: A → B → C → D → E
-  
+Scenario: Neuron C made a wrong prediction
+  Observed sequence: A → B → C (predicted D, but D didn't appear)
+
 Pattern Neuron P1 created at Level 1:
+  Peak = C (the predictor neuron that made the error)
   │
   ├─► pattern_past (for recognition):
-  │   └─► Connections leading TO peak C:
+  │   └─► Connections leading TO peak C (the context when C was active):
   │       ├─► conn(A → C, distance=2)
   │       └─► conn(B → C, distance=1)
   │
   └─► pattern_future (for inference):
-      └─► Connections FROM peak C:
-          ├─► conn(C → D, distance=1)
-          └─► conn(C → E, distance=2)
+      └─► Connections FROM peak C (what C predicts):
+          ├─► conn(C → D, distance=1) - the failed prediction
+          └─► conn(C → E, distance=2) - other predictions from C
 ```
 
 ### Usage
@@ -289,36 +296,40 @@ Frame 1-5: Learning phase
       └─► conn(Volume_HIGH → Price_UP, distance=1)
 
 Frame 6: Prediction
-  Observe: Price UP
-  Predict: Volume HIGH (strength: 0.9)
+  Observe: Price_UP (active at age=0)
+  Predict: Volume_HIGH (strength: 0.9) via connection from Price_UP
   │
   └─► inferConnectionsAtLevel(0):
       └─► connection_inferred_neurons: Volume_HIGH (strength: 0.9)
 
 Frame 7: Validation
-  Actual: Volume LOW (not Volume HIGH)
+  Actual: Volume_LOW observed (not Volume_HIGH)
   │
   └─► validateAndLearnFromErrors():
       ├─► Prediction failed: Volume_HIGH not observed
       ├─► Strength 0.9 >= minErrorPatternThreshold (0.5)
+      ├─► Predictor neuron: Price_UP (the one that made the wrong prediction)
       └─► Create error pattern at level 1:
-          ├─► Pattern_Market_Reversal created
-          ├─► pattern_past: {conn(Price_UP → Volume_HIGH)}
-          ├─► pattern_future: {conn(Volume_HIGH → Price_UP)}
-          └─► pattern_peaks: Pattern_Market_Reversal → Volume_HIGH
+          ├─► Pattern_Market_Context created
+          ├─► pattern_peaks: Pattern_Market_Context → Price_UP (the predictor)
+          ├─► pattern_past: {connections TO Price_UP} (context when Price_UP was active)
+          └─► pattern_future: {connections FROM Price_UP} (including Price_UP → Volume_HIGH)
 
 Frame 8+: Pattern usage
-  Similar context: Price UP observed
+  Similar context occurs, Price_UP appears again
   │
   ├─► Recognition:
-  │   └─► Pattern_Market_Reversal NOT activated (Volume_HIGH not observed)
+  │   └─► Pattern_Market_Context activated (Price_UP is the peak, context matches)
+  │   └─► Pattern neuron active at level 1
   │
   └─► Inference:
-      └─► If Pattern_Market_Reversal was active at level 1:
-          └─► Would predict Price_UP via pattern_future
+      └─► Pattern_Market_Context (level 1) uses pattern_future to predict
+          └─► Predicts based on connections FROM Price_UP
+          └─► Pattern strength reflects reliability of Price_UP's predictions in this context
 ```
 
-**Key Insight:** Pattern created only when confident prediction failed, capturing the error context for future learning
+**Key Insight:** Pattern created only when confident prediction failed, capturing the predictor's context
+**Pattern Peak:** The neuron that made the error (Price_UP), not the failed prediction (Volume_HIGH)
 
 ## Summary of Architectural Benefits
 

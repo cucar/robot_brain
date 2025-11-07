@@ -3,37 +3,58 @@
 ## Overview
 This document outlines the implementation plan for refactoring the brain architecture from continuous pattern creation to error-driven learning with top-down inference.
 
+## Critical Concept: Pattern Peak in Error-Driven Learning
+
+**WHO IS LEARNING?**
+- The neuron doing the predicting is the one that needs to learn
+- **Pattern peak = the predictor neuron** (not the predicted neuron)
+- When neuron X predicts neuron D incorrectly, X is the one that needs to learn
+- Pattern captures: "When X appears in this context (pattern_past), here's what X predicts (pattern_future)"
+
+**Example:**
+```
+Neuron X (active) → predicts Neuron D (fails)
+Pattern created:
+  - Peak: X (the predictor)
+  - pattern_past: connections TO X (context when X was active)
+  - pattern_future: connections FROM X (including X→D that failed)
+```
+
+**Pattern Activation:**
+- Pattern activates when peak neuron X appears with matching context (pattern_past)
+- Pattern provides top-down predictions via pattern_future
+- Pattern strength reflects reliability of X's predictions in this context
+
 ## Core Architectural Changes
 
-### 1. Pattern Recognition → Match Only (No Creation)
+### 1. Pattern Recognition → Match and Reinforce (No Creation)
 **Current Behavior:**
 - `activateLevelPatterns()` detects peaks, matches patterns, merges (reinforces), and creates new patterns
 - Pattern creation happens during every recognition cycle
 
 **New Behavior:**
-- Pattern recognition only matches and activates existing patterns
-- No pattern creation during recognition
-- No reinforcement during recognition (positive or negative)
+- Pattern recognition matches and activates existing patterns
+- Pattern connections ARE reinforced during recognition (Hebbian learning for vertical connections)
+- No pattern creation during recognition - only during error-driven learning
 
 **Changes Required:**
-- Remove `mergeMatchedPatterns()` call from `activateLevelPatterns()`
+- Keep `mergeMatchedPatterns()` call in `activateLevelPatterns()` - Hebbian learning for patterns
 - Remove `createNewPatterns()` call from `activateLevelPatterns()`
-- Keep only: `getObservedPatterns()`, `matchObservedPatterns()`, and pattern neuron activation
+- Keep: `getObservedPatterns()`, `matchObservedPatterns()`, `mergeMatchedPatterns()`, and pattern neuron activation
 
-### 2. Connection Learning → Hebbian Only (No Reinforcement on Activation)
+### 2. Connection Learning → Hebbian Reinforcement (No Change)
 **Current Behavior:**
 - `activateNeurons()` calls `reinforceConnections()` which strengthens existing connections
-- Connections are created/strengthened whenever neurons co-occur
+- Connections are created/strengthened whenever neurons co-occur (Hebbian learning)
 
 **New Behavior:**
-- Connection creation still happens (Hebbian: neurons that fire together wire together)
-- Connection reinforcement (strengthening) removed from activation
-- Connections only strengthened during error-driven learning
+- **NO CHANGE** - Keep all Hebbian learning for connections
+- Connection creation and reinforcement both happen during activation
+- This is the basis of Hebbian learning: neurons that fire together wire together
 
 **Changes Required:**
-- Remove `reinforceConnections()` call from `activateNeurons()`
-- Keep connection creation logic (INSERT with strength=1)
-- Remove ON DUPLICATE KEY UPDATE logic from connection creation
+- **NONE** - Keep `reinforceConnections()` call in `activateNeurons()`
+- Keep all existing connection learning logic
 
 ### 3. Error-Driven Pattern Creation
 **New Phase:** `validateAndLearnFromErrors()` - runs before `inferNeurons()`
@@ -41,11 +62,18 @@ This document outlines the implementation plan for refactoring the brain archite
 **Process:**
 1. Check predictions from previous frame (age=1 in connection_inferred_neurons)
 2. For each failed prediction where strength >= `minErrorPatternThreshold`:
-   - Get all connections from connection_inference that predicted this neuron
-   - Create a new pattern neuron at level+1
-   - Store connections in pattern_past table (for learning/matching)
-   - Store connections in pattern_future table (for inference unpacking)
+   - **Identify the predictor neurons** (from_neuron_id from connections in connection_inference)
+   - For each unique predictor neuron (the peak):
+     - Create a new pattern neuron at level+1
+     - **Pattern peak:** The neuron that made the wrong prediction
+     - **Pattern past:** Connections leading TO the peak (the context when peak was active)
+     - **Pattern future:** Connections FROM the peak (including the failed prediction)
 3. Apply negative reinforcement to failed connection predictions (existing logic)
+
+**Key Insight:**
+- The neuron doing the predicting is the one that needs to learn
+- Pattern peak = the predictor neuron (not the predicted neuron)
+- Pattern captures: "When peak neuron appears in this context, here's what it predicts"
 
 **New Hyperparameter:**
 ```javascript
@@ -183,26 +211,19 @@ async unpackPatternPredictions(predictions, targetLevel) {
 
 ### Phase 2: Remove Pattern Creation from Recognition
 1. **Modify `activateLevelPatterns()`:**
-   - Remove `mergeMatchedPatterns()` call
+   - **Keep `mergeMatchedPatterns()` call** - Hebbian learning for patterns
    - Remove `createNewPatterns()` call
-   - Keep only matching and activation logic
+   - Keep matching and activation logic
 
 2. **Update `matchObservedPatterns()`:**
    - Change references from `patterns` → `pattern_past`
    - No other logic changes needed
 
-### Phase 3: Remove Connection Reinforcement from Activation
-1. **Modify `activateNeurons()`:**
-   - Remove `reinforceConnections()` call
-   - Keep `insertActiveNeurons()` call
-   - Keep `activateConnections()` call
+3. **Update `mergeMatchedPatterns()`:**
+   - Change references from `patterns` → `pattern_past`
+   - Keep all reinforcement logic (Hebbian learning)
 
-2. **Modify `reinforceConnections()` (if still used elsewhere):**
-   - Change INSERT ... ON DUPLICATE KEY UPDATE to just INSERT
-   - Remove strength increment logic
-   - Or delete method entirely if only used in activation
-
-### Phase 4: Implement Error-Driven Learning
+### Phase 3: Implement Error-Driven Learning
 1. **Add hyperparameter:**
    ```javascript
    this.minErrorPatternThreshold = 0.5;
@@ -212,11 +233,13 @@ async unpackPatternPredictions(predictions, targetLevel) {
    - Check failed predictions from connection_inferred_neurons (age=1)
    - Filter by strength >= minErrorPatternThreshold
    - For each failed prediction:
-     - Get connections from connection_inference
-     - Create pattern neuron at level+1
-     - Insert into pattern_past (connections leading to peak)
-     - Insert into pattern_future (connections from peak)
-     - Create pattern_peaks mapping
+     - **Get the predictor neurons** (from_neuron_id from connections in connection_inference)
+     - Group by predictor neuron (each predictor gets its own pattern)
+     - For each predictor neuron (the peak):
+       - Create pattern neuron at level+1
+       - Insert into pattern_past (connections leading TO the predictor/peak)
+       - Insert into pattern_future (connections FROM the predictor/peak, including failed predictions)
+       - Create pattern_peaks mapping (pattern_neuron_id → predictor_neuron_id)
 
 3. **Update `processFrame()` flow:**
    ```javascript
@@ -225,16 +248,16 @@ async unpackPatternPredictions(predictions, targetLevel) {
        await this.ageNeurons();
        await this.executeOutputs();
        await this.recognizeNeurons(frame);
-       
+
        // NEW: Error-driven learning before inference
        await this.validateAndLearnFromErrors();
-       
+
        await this.inferNeurons();
        await this.runForgetCycle();
    }
    ```
 
-### Phase 5: Implement Top-Down Inference
+### Phase 4: Implement Top-Down Inference
 1. **Create helper method:**
    ```javascript
    async getMaxActiveLevel() {
@@ -269,7 +292,7 @@ async unpackPatternPredictions(predictions, targetLevel) {
    - Keep `mergeHigherLevelPredictions()` for level > 0
    - Keep `resolveInputPredictionConflicts()` for level 0
 
-### Phase 6: Update Negative Reinforcement
+### Phase 5: Update Negative Reinforcement
 1. **Connection negative reinforcement:**
    - Keep existing `negativeReinforceConnections()` logic
    - Uses connection_inference table (already correct)
@@ -383,50 +406,72 @@ async validateAndLearnFromErrors() {
 }
 
 async createErrorPatterns(failures, level) {
-    // For each failed prediction, get the connections that caused it
+    // For each failed prediction, get the predictor neurons
     for (const failure of failures) {
         // Get connections from connection_inference that predicted this neuron
-        const [connections] = await this.conn.query(`
-            SELECT connection_id, strength
-            FROM connection_inference
-            WHERE level = ? AND to_neuron_id = ?
+        // These connections tell us WHO predicted (from_neuron_id) and what they predicted (to_neuron_id)
+        const [predictorConnections] = await this.conn.query(`
+            SELECT DISTINCT c.from_neuron_id as predictor_neuron_id, ci.connection_id
+            FROM connection_inference ci
+            JOIN connections c ON ci.connection_id = c.id
+            WHERE ci.level = ? AND ci.to_neuron_id = ?
         `, [level, failure.neuron_id]);
 
-        if (connections.length === 0) continue;
+        if (predictorConnections.length === 0) continue;
 
-        // Create new pattern neuron at level+1
-        const patternNeuronId = await this.bulkInsertNeurons(1);
+        // Group by predictor neuron - each predictor gets its own pattern
+        const predictorMap = new Map();
+        for (const pc of predictorConnections) {
+            if (!predictorMap.has(pc.predictor_neuron_id))
+                predictorMap.set(pc.predictor_neuron_id, []);
+            predictorMap.get(pc.predictor_neuron_id).push(pc.connection_id);
+        }
 
-        // Map pattern to peak
-        await this.conn.query(
-            'INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES (?, ?)',
-            [patternNeuronId[0], failure.neuron_id]
-        );
+        // Create a pattern for each predictor neuron
+        for (const [predictorNeuronId, connectionIds] of predictorMap) {
+            // Create new pattern neuron at level+1
+            const patternNeuronId = await this.bulkInsertNeurons(1);
 
-        // Insert into pattern_past (connections leading TO the peak)
-        // These are the connections that predicted the failed neuron
-        const pastRows = connections.map(c => [patternNeuronId[0], c.connection_id, 1.0]);
-        await this.conn.query(
-            'INSERT INTO pattern_past (pattern_neuron_id, connection_id, strength) VALUES ?',
-            [pastRows]
-        );
-
-        // Insert into pattern_future (connections FROM the peak)
-        // Get connections where from_neuron_id = failure.neuron_id
-        const [futureConnections] = await this.conn.query(`
-            SELECT id as connection_id
-            FROM connections
-            WHERE from_neuron_id = ?
-            AND distance > 0
-            AND strength > 0
-        `, [failure.neuron_id]);
-
-        if (futureConnections.length > 0) {
-            const futureRows = futureConnections.map(c => [patternNeuronId[0], c.connection_id, 1.0]);
+            // Map pattern to peak (the predictor neuron, not the failed prediction)
             await this.conn.query(
-                'INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength) VALUES ?',
-                [futureRows]
+                'INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES (?, ?)',
+                [patternNeuronId[0], predictorNeuronId]
             );
+
+            // Insert into pattern_past (connections leading TO the predictor/peak)
+            // Get connections where to_neuron_id = predictorNeuronId
+            const [pastConnections] = await this.conn.query(`
+                SELECT id as connection_id
+                FROM connections
+                WHERE to_neuron_id = ?
+                AND strength > 0
+            `, [predictorNeuronId]);
+
+            if (pastConnections.length > 0) {
+                const pastRows = pastConnections.map(c => [patternNeuronId[0], c.connection_id, 1.0]);
+                await this.conn.query(
+                    'INSERT INTO pattern_past (pattern_neuron_id, connection_id, strength) VALUES ?',
+                    [pastRows]
+                );
+            }
+
+            // Insert into pattern_future (connections FROM the predictor/peak)
+            // This includes the failed prediction and any other predictions from this neuron
+            const [futureConnections] = await this.conn.query(`
+                SELECT id as connection_id
+                FROM connections
+                WHERE from_neuron_id = ?
+                AND distance > 0
+                AND strength > 0
+            `, [predictorNeuronId]);
+
+            if (futureConnections.length > 0) {
+                const futureRows = futureConnections.map(c => [patternNeuronId[0], c.connection_id, 1.0]);
+                await this.conn.query(
+                    'INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength) VALUES ?',
+                    [futureRows]
+                );
+            }
         }
     }
 }
@@ -576,22 +621,32 @@ async inferPatternsFromLevel(level) {
 
 ## Summary of Key Changes
 
+### The ONLY Logic Change
+**Remove pattern creation from recognition:**
+- Remove `createNewPatterns()` call from `activateLevelPatterns()`
+- Add error-driven pattern creation in `validateAndLearnFromErrors()`
+
+**Everything else stays the same:**
+- Keep `reinforceConnections()` - Hebbian learning for connections
+- Keep `mergeMatchedPatterns()` - Hebbian learning for patterns
+- All other recognition and inference logic unchanged
+
 ### Files to Modify
 1. **brain.js**
    - Add `minErrorPatternThreshold` hyperparameter
    - Update `processFrame()` to call `validateAndLearnFromErrors()`
 
 2. **brain-mysql.js**
-   - Modify `activateLevelPatterns()` - remove creation/reinforcement
-   - Modify `activateNeurons()` - remove reinforcement call
+   - Modify `activateLevelPatterns()` - remove `createNewPatterns()` call only
    - Add `validateAndLearnFromErrors()` method
-   - Add `createErrorPatterns()` method
+   - Add `createErrorPatterns()` method - creates patterns with peak = predictor neuron
    - Refactor `inferNeurons()` - top-down flow
    - Add `getMaxActiveLevel()` method
    - Refactor `inferConnections()` → `inferConnectionsAtLevel(level)`
    - Add `inferPatternsFromLevel(level)` method
    - Add `unpackPatternPredictions()` method
    - Update `matchObservedPatterns()` - use pattern_past
+   - Update `mergeMatchedPatterns()` - use pattern_past
    - Update `runForgetCycle()` - handle both pattern tables
 
 3. **brain-memory.js**
