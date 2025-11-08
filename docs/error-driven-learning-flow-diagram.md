@@ -116,23 +116,25 @@ processFrame(frame, globalReward)
 
 ```
 Frame N:
-  Active neurons at level 0: [A, B, C]
+  Active neurons at level 0: [A (age=2), B (age=1), C (age=0)]
   │
   ├─► Detect peaks: [C is peak]
   ├─► Match patterns: [No match found]
   └─► Create new pattern: Pattern_1 for peak C
-      └─► patterns table: Pattern_1 → {conn(A→C), conn(B→C)}
+      └─► patterns table: Pattern_1 → {conn(A→C, dist=2), conn(B→C, dist=1)}
 
 Frame N+1:
-  Active neurons at level 0: [A, B, C]
+  Active neurons at level 0: [A (age=2), B (age=1), C (age=0)]
   │
   ├─► Detect peaks: [C is peak]
   ├─► Match patterns: [Pattern_1 matches 66%]
   └─► Merge (reinforce): Pattern_1 connections strengthened
-      └─► patterns table: Pattern_1 → {conn(A→C): 2.0, conn(B→C): 2.0}
+      └─► patterns table: Pattern_1 → {conn(A→C, dist=2): 2.0, conn(B→C, dist=1): 2.0}
 ```
 
 **Problem:** Creates patterns for every peak, even if not predictive
+
+**Note:** Connections exist at multiple distances (1-9 based on source neuron age), capturing temporal context
 
 ### New: Error-Driven Pattern Creation
 
@@ -156,19 +158,26 @@ Frame N+1:
       └─► Create error pattern at level 1:
           ├─► Pattern_1 neuron created
           ├─► pattern_peaks: Pattern_1 → peak_neuron_id = C (the predictor)
-          ├─► pattern_past: Pattern_1 → {connections TO C} (context when C was active)
-          └─► pattern_future: Pattern_1 → {connections FROM C} (including C→D that failed)
+          ├─► pattern_past: Pattern_1 → {ALL connections TO C at distances 1-9}
+          │   Example: {A→C (dist=2), B→C (dist=1), X→C (dist=3), ...}
+          └─► pattern_future: Pattern_1 → {ALL connections FROM C}
+              Example: {C→D (dist=1), C→E (dist=2), ...}
 
 Frame N+2:
   Neuron C appears again in similar context
+  Active neurons: [A (age=2), B (age=1), C (age=0)]
   │
-  └─► Pattern_1 activated at level 1 (matched via pattern_past)
-      └─► Provides top-down prediction via pattern_future
-      └─► Pattern learns: "When C appears in this context, here's what it predicts"
+  └─► Pattern_1 matching:
+      ├─► Peak C is active ✓
+      ├─► Check pattern_past: A at age=2 ✓, B at age=1 ✓
+      └─► Pattern_1 activated at level 1 (context matches!)
+          └─► Provides top-down prediction via pattern_future
+          └─► Pattern learns: "When C appears in this context, here's what it predicts"
 ```
 
 **Benefit:** Only creates patterns when predictions fail, focusing learning on errors
 **Key Insight:** Pattern peak is the predictor neuron (who made the error), not the predicted neuron
+**Context Capture:** pattern_past includes connections at ALL distances (1-9), capturing up to 9 frames of history
 
 ## Inference Flow: Current vs New
 
@@ -237,21 +246,28 @@ Final:
 
 ```
 Scenario: Neuron C made a wrong prediction
-  Observed sequence: A → B → C (predicted D, but D didn't appear)
+  Observed sequence: X → Y → A → B → C (predicted D, but D didn't appear)
+  Active neurons when C appeared: X (age=4), Y (age=3), A (age=2), B (age=1), C (age=0)
 
 Pattern Neuron P1 created at Level 1:
   Peak = C (the predictor neuron that made the error)
   │
   ├─► pattern_past (for recognition):
-  │   └─► Connections leading TO peak C (the context when C was active):
-  │       ├─► conn(A → C, distance=2)
-  │       └─► conn(B → C, distance=1)
+  │   └─► ALL connections leading TO peak C (the context when C was active):
+  │       ├─► conn(B → C, distance=1) - immediate predecessor
+  │       ├─► conn(A → C, distance=2) - 2 frames back
+  │       ├─► conn(Y → C, distance=3) - 3 frames back
+  │       ├─► conn(X → C, distance=4) - 4 frames back
+  │       └─► ... up to distance=9 (captures 9 frames of history!)
   │
   └─► pattern_future (for inference):
-      └─► Connections FROM peak C (what C predicts):
+      └─► ALL connections FROM peak C (what C predicts):
           ├─► conn(C → D, distance=1) - the failed prediction
-          └─► conn(C → E, distance=2) - other predictions from C
+          ├─► conn(C → E, distance=2) - other predictions from C
+          └─► ... all connections FROM C
 ```
+
+**Key Insight:** pattern_past captures up to 9 frames of temporal context through multiple-distance connections!
 
 ### Usage
 
@@ -285,24 +301,28 @@ P1 is active at level 1
 
 ## Error-Driven Learning Example
 
-### Scenario: Stock Price Prediction
+### Scenario: Stock Price Prediction with Context
 
 ```
-Frame 1-5: Learning phase
-  Observe: Price UP → Volume HIGH → Price UP
+Frames 1-10: Learning phase
+  Observe: News_Positive → Price_UP → Volume_HIGH → Price_UP
   │
-  └─► Connections created (Hebbian):
+  └─► Connections created (Hebbian) at multiple distances:
+      ├─► conn(News_Positive → Price_UP, distance=1)
+      ├─► conn(News_Positive → Volume_HIGH, distance=2)
       ├─► conn(Price_UP → Volume_HIGH, distance=1)
-      └─► conn(Volume_HIGH → Price_UP, distance=1)
+      ├─► conn(Volume_HIGH → Price_UP, distance=1)
+      └─► ... many more at various distances
 
-Frame 6: Prediction
-  Observe: Price_UP (active at age=0)
+Frame 11: Different context
+  Observe: News_Negative → Price_UP (dead cat bounce)
+  Active neurons: News_Negative (age=1), Price_UP (age=0)
   Predict: Volume_HIGH (strength: 0.9) via connection from Price_UP
   │
   └─► inferConnectionsAtLevel(0):
       └─► connection_inferred_neurons: Volume_HIGH (strength: 0.9)
 
-Frame 7: Validation
+Frame 12: Validation
   Actual: Volume_LOW observed (not Volume_HIGH)
   │
   └─► validateAndLearnFromErrors():
@@ -310,26 +330,45 @@ Frame 7: Validation
       ├─► Strength 0.9 >= minErrorPatternThreshold (0.5)
       ├─► Predictor neuron: Price_UP (the one that made the wrong prediction)
       └─► Create error pattern at level 1:
-          ├─► Pattern_Market_Context created
-          ├─► pattern_peaks: Pattern_Market_Context → Price_UP (the predictor)
-          ├─► pattern_past: {connections TO Price_UP} (context when Price_UP was active)
-          └─► pattern_future: {connections FROM Price_UP} (including Price_UP → Volume_HIGH)
+          ├─► Pattern_Bearish_Context created
+          ├─► pattern_peaks: Pattern_Bearish_Context → Price_UP (the predictor)
+          ├─► pattern_past: {ALL connections TO Price_UP}
+          │   ├─► News_Negative → Price_UP (distance=1)
+          │   └─► ... other active neurons at various distances
+          └─► pattern_future: {ALL connections FROM Price_UP}
+              ├─► Price_UP → Volume_HIGH (distance=1) - the failed prediction
+              └─► ... other predictions from Price_UP
 
-Frame 8+: Pattern usage
-  Similar context occurs, Price_UP appears again
+Frame 13+: Pattern usage - Bullish context
+  Observe: News_Positive → Price_UP
+  Active neurons: News_Positive (age=1), Price_UP (age=0)
   │
   ├─► Recognition:
-  │   └─► Pattern_Market_Context activated (Price_UP is the peak, context matches)
+  │   └─► Pattern_Bearish_Context does NOT activate
+  │       (News_Positive at distance=1, not News_Negative)
+  │
+  └─► Inference:
+      └─► Connection-based prediction: Volume_HIGH (works in bullish context)
+
+Frame 20+: Pattern usage - Bearish context
+  Observe: News_Negative → Price_UP
+  Active neurons: News_Negative (age=1), Price_UP (age=0)
+  │
+  ├─► Recognition:
+  │   └─► Pattern_Bearish_Context ACTIVATES ✓
+  │       (News_Negative at distance=1 matches pattern_past)
   │   └─► Pattern neuron active at level 1
   │
   └─► Inference:
-      └─► Pattern_Market_Context (level 1) uses pattern_future to predict
-          └─► Predicts based on connections FROM Price_UP
-          └─► Pattern strength reflects reliability of Price_UP's predictions in this context
+      └─► Pattern_Bearish_Context provides top-down prediction
+          └─► Predicts Volume_LOW (learned from error)
+          └─► Overrides or modulates connection-based prediction
 ```
 
-**Key Insight:** Pattern created only when confident prediction failed, capturing the predictor's context
+**Key Insight:** Pattern differentiates contexts based on what happened BEFORE Price_UP appeared
+**Context Differentiation:** News_Positive vs News_Negative at distance=1 creates different contexts
 **Pattern Peak:** The neuron that made the error (Price_UP), not the failed prediction (Volume_HIGH)
+**Multiple Distance Power:** Captures up to 9 frames of history, enabling rich context differentiation
 
 ## Summary of Architectural Benefits
 
