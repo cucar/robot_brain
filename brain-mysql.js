@@ -187,10 +187,10 @@ export default class BrainMySQL extends Brain {
 				this.accuracyStats.set(row.level, { connection: { correct: 0, total: 0 }, pattern: { correct: 0, total: 0 }, resolved: { correct: 0, total: 0 } });
 			const cumulative = this.accuracyStats.get(row.level);
 
-			// Update and report
-			cumulative[statType].correct += row.correct;
-			cumulative[statType].total += row.total;
-			const currentRate = (row.correct / row.total * 100).toFixed(1);
+			// Update and report - convert to Number to avoid BigInt issues
+			cumulative[statType].correct += Number(row.correct);
+			cumulative[statType].total += Number(row.total);
+			const currentRate = (Number(row.correct) / Number(row.total) * 100).toFixed(1);
 			const avgRate = (cumulative[statType].correct / cumulative[statType].total * 100).toFixed(1);
 			if (this.debug)
 				console.log(`Level ${row.level}: ${displayName} prediction accuracy: ${row.correct}/${row.total} (${currentRate}%) | Avg: ${cumulative[statType].correct}/${cumulative[statType].total} (${avgRate}%)`);
