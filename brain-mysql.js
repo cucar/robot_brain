@@ -338,8 +338,6 @@ export default class BrainMySQL extends Brain {
 			console.log(`Level ${this.lastInferenceLevel}: Weakened ${result.affectedRows} failed pattern predictions`);
 	}
 
-
-
 	/**
 	 * Pattern inference from a source level (MySQL implementation)
 	 * Returns count of predictions made.
