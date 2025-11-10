@@ -346,10 +346,10 @@ class ConnectionPatternTests {
         // Get connection IDs for validation
         const [connectionRows] = await this.brain.conn.query('SELECT id, from_neuron_id, to_neuron_id FROM connections ORDER BY id');
 
-        // Test activateLevelPatterns
-        const patternsFound = await this.brain.activateLevelPatterns(0);
+        // Test recognizeLevelPatterns
+        const patternsFound = await this.brain.recognizeLevelPatterns(0);
 
-        this.assert(typeof patternsFound === 'boolean', 'activateLevelPatterns should return boolean');
+        this.assert(typeof patternsFound === 'boolean', 'recognizeLevelPatterns should return boolean');
         this.assert(patternsFound === true, 'Should find patterns with sufficient connections');
 
         // Validate peak detection - neuron 2 should be the peak (receives connections from 0 and 1)
@@ -410,7 +410,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 8)', [neuronIds[2], neuronIds[4]]);
 
         // Process level 0 patterns first to validate level 0 behavior
-        await this.brain.activateLevelPatterns(0);
+        await this.brain.recognizeLevelPatterns(0);
 
         // === LEVEL 0 VALIDATION ===
         const [level0Neurons] = await this.brain.conn.query('SELECT neuron_id, age FROM active_neurons WHERE level = 0 ORDER BY neuron_id');
@@ -432,7 +432,7 @@ class ConnectionPatternTests {
         // Continue hierarchical activation from level 1 onwards (level 0 already processed)
         // Process remaining levels manually since activatePatternNeurons would try to reprocess level 0
         for (let level = 1; level < this.brain.maxLevels; level++) {
-            const hasPatterns = await this.brain.activateLevelPatterns(level);
+            const hasPatterns = await this.brain.recognizeLevelPatterns(level);
             if (!hasPatterns) break;
         }
 
@@ -488,7 +488,7 @@ class ConnectionPatternTests {
     async testLevel2PatternCreation() {
         console.log('Testing Level 2 Pattern Creation:');
         // This test follows the proper brain flow: use activatePatternNeurons() for complete hierarchy
-        // rather than calling activateLevelPatterns() directly which violates calling assumptions
+        // rather than calling recognizeLevelPatterns() directly which violates calling assumptions
 
         // Clear and set up scenario that will definitely create level 2 patterns
         await this.brain.conn.query('DELETE FROM active_neurons');
@@ -560,7 +560,7 @@ class ConnectionPatternTests {
         // === FRAME 2: HIERARCHICAL ACTIVATION FOR LEVEL 2 ===
         // Process patterns starting from Level 1 (since Level 0 is already processed)
         // This should detect the Level 1 convergent pattern and create Level 2
-        const level1Result = await this.brain.activateLevelPatterns(1);
+        const level1Result = await this.brain.recognizeLevelPatterns(1);
         this.assert(level1Result === true, 'Level 1 should detect convergent pattern and create Level 2');
 
         // Check final levels
@@ -985,11 +985,11 @@ class ConnectionPatternTests {
         const singlePeaks = this.brain.getObservedPatterns(singleConnection);
         this.assert(singlePeaks instanceof Map, 'getObservedPatterns should handle single connection');
 
-        // Test activateLevelPatterns with no connections
+        // Test recognizeLevelPatterns with no connections
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
 
-        const noPatterns = await this.brain.activateLevelPatterns(0);
+        const noPatterns = await this.brain.recognizeLevelPatterns(0);
         this.assert(noPatterns === false, 'Should return false when no connections exist');
 
         // Test getActiveConnections with no active neurons

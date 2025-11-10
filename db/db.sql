@@ -9,13 +9,13 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS neurons;
 -- DROP TABLE IF EXISTS coordinates;
 -- DROP TABLE IF EXISTS connections;
--- DROP TABLE IF EXISTS patterns;
+-- DROP TABLE IF EXISTS patterns_past;
+-- DROP TABLE IF EXISTS patterns_future;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
 -- DROP TABLE IF EXISTS connection_inference;
--- DROP TABLE IF EXISTS pattern_inferred_neurons;
--- DROP TABLE IF EXISTS connection_inferred_neurons;
 -- DROP TABLE IF EXISTS inferred_neurons;
+-- DROP TABLE IF EXISTS inferred_neurons_resolved;
 -- DROP TABLE IF EXISTS observed_connections;
 -- DROP TABLE IF EXISTS observed_neuron_strengths;
 -- DROP TABLE IF EXISTS observed_peaks;
@@ -27,6 +27,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_peaks;
 -- DROP TABLE IF EXISTS matched_patterns;
+-- DROP TABLE IF EXISTS new_patterns;
 
 -- check state
 select count(*) from neurons;
@@ -98,8 +99,8 @@ CREATE TABLE IF NOT EXISTS connections (
     INDEX idx_strength2 (strength)
 ) ENGINE=MEMORY;
 
--- pattern neurons definitions - neuron connections between levels
-CREATE TABLE IF NOT EXISTS patterns (
+-- pattern_past: connections leading TO the peak (for recognition/matching)
+CREATE TABLE IF NOT EXISTS pattern_past (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
@@ -111,11 +112,24 @@ CREATE TABLE IF NOT EXISTS patterns (
     INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
+-- pattern_future: connections FROM the peak (for inference/unpacking)
+CREATE TABLE IF NOT EXISTS pattern_future (
+    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL,
+    strength DOUBLE NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (pattern_neuron_id, connection_id),
+    FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
+    FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
+    INDEX idx_pattern_strength (pattern_neuron_id, strength),
+    INDEX idx_strength (strength)
+) ENGINE=MEMORY;
+
 -- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
 -- patterns are learned by peak neurons to differentiate between sequences leading to them
 CREATE TABLE IF NOT EXISTS pattern_peaks (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    strength DECIMAL(10,2) NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (peak_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
@@ -144,18 +158,9 @@ CREATE TABLE connection_inference (
     INDEX idx_to_neuron (level, to_neuron_id)
 ) ENGINE=MEMORY;
 
--- connection-based predictions before conflict resolution (MEMORY table)
-CREATE TABLE IF NOT EXISTS connection_inferred_neurons (
-    neuron_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    strength DOUBLE NOT NULL DEFAULT 0.0,
-    PRIMARY KEY (neuron_id, level, age),
-    INDEX idx_level_age (level, age)
-) ENGINE=MEMORY;
-
--- pattern-based predictions before conflict resolution (MEMORY table)
-CREATE TABLE IF NOT EXISTS pattern_inferred_neurons (
+-- raw predictions before conflict resolution (MEMORY table)
+-- used by both connection and pattern inference (only one has data per frame due to early-return)
+CREATE TABLE IF NOT EXISTS inferred_neurons (
     neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -165,7 +170,7 @@ CREATE TABLE IF NOT EXISTS pattern_inferred_neurons (
 ) ENGINE=MEMORY;
 
 -- final resolved predictions after conflict resolution (MEMORY table)
-CREATE TABLE IF NOT EXISTS inferred_neurons (
+CREATE TABLE IF NOT EXISTS inferred_neurons_resolved (
     neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -175,91 +180,12 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- scratch table for weighted connection data during peak detection (MEMORY table)
--- stores pre-calculated weighted strengths to avoid rescanning active_connections multiple times
-CREATE TABLE IF NOT EXISTS observed_connections (
-    to_neuron_id BIGINT UNSIGNED NOT NULL,
-    connection_id BIGINT UNSIGNED NOT NULL,
-    strength DOUBLE NOT NULL,
-    INDEX idx_to_neuron (to_neuron_id),
-    INDEX idx_connection (connection_id)
-) ENGINE=MEMORY;
-
--- scratch table for per-neuron aggregates during peak detection (MEMORY table)
--- stores total_strength and connection_count for ALL candidate neurons before filtering for peaks
-CREATE TABLE IF NOT EXISTS observed_neuron_strengths (
-    to_neuron_id BIGINT UNSIGNED NOT NULL,
-    total_strength DOUBLE NOT NULL,
-    connection_count INT UNSIGNED NOT NULL,
-    PRIMARY KEY (to_neuron_id),
-    INDEX idx_strength_count (total_strength, connection_count)
-) ENGINE=MEMORY;
-
--- mapping table for observed peak neurons - just the peaks detected in current frame (MEMORY table)
--- mirrors pattern_peaks design - stores just the peak neurons for fast existence checks
-CREATE TABLE IF NOT EXISTS observed_peaks (
-    peak_neuron_id BIGINT UNSIGNED NOT NULL,
-    total_strength DOUBLE NOT NULL,
-    connection_count INT UNSIGNED NOT NULL,
-    PRIMARY KEY (peak_neuron_id)
-) ENGINE=MEMORY;
-
--- mapping table for observed patterns - peak neurons and their connections (MEMORY table)
--- this just a scratch table for faster processing - it temporarily holds the observed patterns for the current level in the frame
-CREATE TABLE IF NOT EXISTS observed_patterns (
-    peak_neuron_id BIGINT UNSIGNED NOT NULL,
-    connection_id BIGINT UNSIGNED NOT NULL,
-    INDEX idx_peak_connection (peak_neuron_id, connection_id),  -- Composite index for JOINs in matchPatternNeurons and mergeMatchedPatterns
-    INDEX idx_connection (connection_id),
-    INDEX idx_peak (peak_neuron_id)
-) ENGINE=MEMORY;
-
--- scratch table for candidate connections during inference (MEMORY table)
--- stores pre-calculated weighted strengths for all candidate predictions
-CREATE TABLE IF NOT EXISTS inferred_connections (
-    level TINYINT NOT NULL,
-    connection_id BIGINT UNSIGNED NOT NULL,
-    from_neuron_id BIGINT UNSIGNED NOT NULL,
-    to_neuron_id BIGINT UNSIGNED NOT NULL,
-    strength DOUBLE NOT NULL,
-    INDEX idx_level_to_neuron (level, to_neuron_id),
-    INDEX idx_connection (connection_id)
-) ENGINE=MEMORY;
-
--- scratch table for per-neuron aggregates during inference (MEMORY table)
--- stores total_strength for ALL candidate predictions before filtering for peaks
-CREATE TABLE IF NOT EXISTS inferred_neuron_strengths (
-    level TINYINT NOT NULL,
-    to_neuron_id BIGINT UNSIGNED NOT NULL,
-    total_strength DOUBLE NOT NULL,
-    PRIMARY KEY (level, to_neuron_id)
-) ENGINE=MEMORY;
-
--- scratch table for per-level average strengths during inference (MEMORY table)
--- stores average strength per level for peak detection threshold calculation
-CREATE TABLE IF NOT EXISTS inferred_level_strengths (
-    level TINYINT NOT NULL,
-    avg_strength DOUBLE NOT NULL,
-    PRIMARY KEY (level)
-) ENGINE=MEMORY;
-
--- mapping table for inferred peak neurons - just the peaks detected during inference (MEMORY table)
--- mirrors observed_peaks design - stores just the peak predictions for fast existence checks
-CREATE TABLE IF NOT EXISTS inferred_peaks (
-    level TINYINT NOT NULL,
-    peak_neuron_id BIGINT UNSIGNED NOT NULL,
-    total_strength DOUBLE NOT NULL,
-    PRIMARY KEY (level, peak_neuron_id)
-) ENGINE=MEMORY;
+-- NOTE: Peak detection scratch tables removed - no longer needed
+-- Pattern recognition now matches active_connections directly to pattern_past
+-- No peak detection during recognition (only check neurons that are already in pattern_peaks)
+-- No peak detection during inference (use absolute strength threshold instead)
 
 -- mapping table for matched peaks (MEMORY table)
--- stores just the peak neurons that have at least one pattern match
--- mirrors observed_peaks and pattern_peaks design for fast existence checks
-CREATE TABLE IF NOT EXISTS matched_peaks (
-    peak_neuron_id BIGINT UNSIGNED NOT NULL,
-    PRIMARY KEY (peak_neuron_id)
-) ENGINE=MEMORY;
-
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
 -- this just a scratch table for faster processing - it temporarily holds the matched patterns for the current level in the frame
 CREATE TABLE IF NOT EXISTS matched_patterns (
@@ -267,6 +193,18 @@ CREATE TABLE IF NOT EXISTS matched_patterns (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     PRIMARY KEY (peak_neuron_id, pattern_neuron_id),
     INDEX idx_pattern (pattern_neuron_id)
+) ENGINE=MEMORY;
+
+-- scratch table for pattern connection analysis (MEMORY table)
+-- populated during matchObservedPatterns in a single pass, consumed by mergeMatchedPatterns
+-- status: 'common' = in both pattern and active (strengthen), 'novel' = in active only (add), 'missing' = in pattern only (weaken)
+CREATE TABLE IF NOT EXISTS matched_pattern_connections (
+    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL,
+    status ENUM('common', 'novel', 'missing') NOT NULL,
+    INDEX idx_pattern (pattern_neuron_id),
+    INDEX idx_connection (connection_id),
+    INDEX idx_status (status)
 ) ENGINE=MEMORY;
 
 -- active connections for fast hierarchical reward propagation (MEMORY table)
@@ -281,6 +219,52 @@ CREATE TABLE IF NOT EXISTS active_connections (
     INDEX idx_to_neuron_level (to_neuron_id, level),
     INDEX idx_from_neuron_level (from_neuron_id, level),
     INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
+) ENGINE=MEMORY;
+
+-- scratch table for tracking connection-based predictions (MEMORY table)
+-- populated during connection inference, used for validation and error pattern creation
+CREATE TABLE IF NOT EXISTS connection_inference_sources (
+    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL,
+    prediction_strength DOUBLE NOT NULL,
+    INDEX idx_inferred (inferred_neuron_id, level),
+    INDEX idx_connection (connection_id)
+) ENGINE=MEMORY;
+
+-- scratch table for tracking pattern-based predictions (MEMORY table)
+-- populated during pattern inference, used for validation and error pattern creation
+CREATE TABLE IF NOT EXISTS pattern_inference_sources (
+    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL,
+    prediction_strength DOUBLE NOT NULL,
+    INDEX idx_inferred (inferred_neuron_id, level),
+    INDEX idx_pattern (pattern_neuron_id),
+    INDEX idx_connection (connection_id)
+) ENGINE=MEMORY;
+
+-- scratch table for tracking unpredicted connections (MEMORY table)
+-- connections that fired but were not predicted
+CREATE TABLE IF NOT EXISTS unpredicted_connections (
+    connection_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    from_neuron_id BIGINT UNSIGNED NOT NULL,
+    to_neuron_id BIGINT UNSIGNED NOT NULL,
+    strength DOUBLE NOT NULL,
+    INDEX idx_connection (connection_id),
+    INDEX idx_from (from_neuron_id),
+    INDEX idx_level (level)
+) ENGINE=MEMORY;
+
+-- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)
+-- used during bulk pattern creation to track sequential IDs
+CREATE TABLE IF NOT EXISTS new_patterns (
+    seq_id INT AUTO_INCREMENT PRIMARY KEY,
+    peak_neuron_id BIGINT UNSIGNED NOT NULL UNIQUE,
+    pattern_neuron_id BIGINT UNSIGNED,
+    INDEX idx_peak (peak_neuron_id)
 ) ENGINE=MEMORY;
 
 -- increase the amount of records that can be stored in memory tables

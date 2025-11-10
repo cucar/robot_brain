@@ -295,7 +295,7 @@ async resetContext() {
 ### Major Logic Changes
 
 1. **Remove pattern creation from recognition**
-   - Remove createNewPatterns() from activateLevelPatterns()
+   - Remove createNewPatterns() from recognizeLevelPatterns()
    - Keep mergeMatchedPatterns() for Hebbian learning
 
 2. **New sequential inference architecture**

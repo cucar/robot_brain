@@ -44,7 +44,7 @@ Pattern created:
 
 ### 1. Pattern Recognition → Match and Reinforce (No Creation)
 **Current Behavior:**
-- `activateLevelPatterns()` detects peaks, matches patterns, merges (reinforces), and creates new patterns
+- `recognizeLevelPatterns()` detects peaks, matches patterns, merges (reinforces), and creates new patterns
 - Pattern creation happens during every recognition cycle
 
 **New Behavior:**
@@ -53,8 +53,8 @@ Pattern created:
 - No pattern creation during recognition - only during error-driven learning
 
 **Changes Required:**
-- Keep `mergeMatchedPatterns()` call in `activateLevelPatterns()` - Hebbian learning for patterns
-- Remove `createNewPatterns()` call from `activateLevelPatterns()`
+- Keep `mergeMatchedPatterns()` call in `recognizeLevelPatterns()` - Hebbian learning for patterns
+- Remove `createNewPatterns()` call from `recognizeLevelPatterns()`
 - Keep: `getObservedPatterns()`, `matchObservedPatterns()`, `mergeMatchedPatterns()`, and pattern neuron activation
 
 ### 2. Connection Learning → Hebbian Reinforcement (No Change)
@@ -228,7 +228,7 @@ async inferNextFrame() {
    - Delete patterns with strength <= minConnectionStrength from both tables
 
 ### Phase 2: Remove Pattern Creation from Recognition
-1. **Modify `activateLevelPatterns()`:**
+1. **Modify `recognizeLevelPatterns()`:**
    - **Keep `mergeMatchedPatterns()` call** - Hebbian learning for patterns
    - Remove `createNewPatterns()` call
    - Keep matching and activation logic
@@ -855,7 +855,7 @@ For level = maxActiveLevel down to 0:
 ### Major Logic Changes
 
 1. **Remove pattern creation from recognition:**
-   - Remove `createNewPatterns()` call from `activateLevelPatterns()`
+   - Remove `createNewPatterns()` call from `recognizeLevelPatterns()`
    - Add error-driven pattern creation in `validateAndLearnFromErrors()`
 
 2. **New inference architecture:**
@@ -884,7 +884,7 @@ For level = maxActiveLevel down to 0:
    - Update `processFrame()` to call `validateAndLearnFromErrors()`
 
 2. **brain-mysql.js**
-   - Modify `activateLevelPatterns()` - remove `createNewPatterns()` call only
+   - Modify `recognizeLevelPatterns()` - remove `createNewPatterns()` call only
    - Add `validateAndLearnFromErrors()` method
    - Add `createErrorPatterns()` method - creates patterns with peak = predictor neuron
    - Refactor `inferNeurons()` - top-down flow

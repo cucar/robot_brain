@@ -21,10 +21,13 @@ export default class Brain {
 		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 1.0; // minimum weighted strength for a neuron to be considered a peak (reduced to allow more predictions)
 		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average (1.0 = just above average)
+		this.minPredictionStrength = 1.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
+		this.connectionNegativeReinforcement = 1.0; // how much to weaken connections when predictions fail
 		this.negativeLearningRate = 1.0; // how much to weaken connections when predictions fail (match positive reinforcement)
+		this.minErrorPatternThreshold = 5.0; // minimum prediction strength to create error-driven pattern
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
 
@@ -44,6 +47,10 @@ export default class Brain {
 
 		// Continuous prediction metrics (for channels that support it)
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
+
+		// Track last frame's inference for error-driven learning
+		this.lastInferenceType = null; // 'connection' or 'pattern' or null
+		this.lastInferenceLevel = null; // level where inference was made
 
 		// Create readline interface for pausing between frames - used when debugging
 		this.debug = true;
@@ -164,7 +171,6 @@ export default class Brain {
 	 */
 	async processFrame(frame, globalReward = 1.0) {
 		const frameStart = performance.now();
-
 		if (this.debug) {
 			console.log('******************************************************************');
 			console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)}`, this.frameNumber);
@@ -183,6 +189,9 @@ export default class Brain {
 
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
+
+		// learn from previous frame's prediction errors - this has to be done after recognizing and activating new neurons
+		await this.learnFromPreviousFrameErrors();
 
 		// do predictions and outputs - what's going to happen next? and what's our best response?
 		await this.inferNeurons();
@@ -287,10 +296,9 @@ export default class Brain {
 	 * Group predictions by channel, building complete prediction objects with coordinates.
 	 * If both connection and pattern inference predict the same neuron, their strengths are summed.
 	 */
-	groupPredictionsByChannel(connectionRows, patternRows) {
+	groupPredictionsByChannel(predictionRows) {
 		const channelPredictions = new Map();
-		this.addPredictionsToChannelMap(channelPredictions, connectionRows);
-		this.addPredictionsToChannelMap(channelPredictions, patternRows);
+		this.addPredictionsToChannelMap(channelPredictions, predictionRows);
 		return channelPredictions;
 	}
 
@@ -414,6 +422,15 @@ export default class Brain {
 	}
 
 	/**
+	 * Get the highest level with active neurons (any age).
+	 * Called during inference to determine iteration range.
+	 * Implementation-specific: MySQL queries active_neurons table, Memory scans in-memory structure.
+	 */
+	async getMaxActiveLevel() {
+		throw new Error('getMaxActiveLevel() must be implemented by subclass');
+	}
+
+	/**
 	 * Execute decisions from previous frame (age = 1)
 	 */
 	async executePreviousOutputs() {
@@ -421,7 +438,7 @@ export default class Brain {
 	}
 
 	/**
-	 * Recognizes and activates neurons from frame - returns the highest level of recognition reached
+	 * Recognizes and activates neurons from frame
 	 * Common implementation for both MySQL and Memory backends
 	 */
 	async recognizeNeurons(frame) {
@@ -433,14 +450,61 @@ export default class Brain {
 		await this.activateNeurons(neuronIds);
 
 		// discover and activate patterns using connections - start recursion from base level
-		await this.activatePatternNeurons();
+		await this.recognizePatternNeurons();
+	}
+
+	/**
+	 * detects all spatial levels in age=0 neurons using unified connections - start from base level and go as high as possible
+	 */
+	async recognizePatternNeurons() {
+		let level = 0;
+		while (true) {
+
+			// process the level to detect patterns - returns if there are patterns found or not
+			const patternsFound = await this.recognizeLevelPatterns(level);
+
+			// if no patterns are found in the level, nothing to do
+			if (!patternsFound) break;
+
+			// increment the level to start processing it
+			level++;
+
+			// if we exceeded the max level, give warning and stop
+			if (level >= this.maxLevels) {
+				console.error('Max level exceeded.');
+				break;
+			}
+		}
 	}
 
 	/**
 	 * Infer predictions and outputs
+	 * Sequential inference with error-driven learning.
+	 * Alternates between connection and pattern inference going down levels:
+	 * connection@N, pattern@N-1, connection@N-1, pattern@N-2, ..., connection@0
 	 */
 	async inferNeurons() {
-		throw new Error('inferNeurons() must be implemented by subclass');
+
+		// Clear inference scratch data for new predictions
+		await this.clearInferenceData();
+
+		// Get max active level after recognition (includes all ages, not just age=0)
+		const maxActiveLevel = await this.getMaxActiveLevel();
+
+		// start from top level and alternate between connection and pattern inference, going down levels
+		// stop at first successful inference (early return pattern)
+		for (let level = maxActiveLevel; level >= 0; level--) {
+
+			// Try connection inference at this level (gradual Hebbian learning)
+			if (await this.inferConnections(level)) return;
+
+			// Try pattern inference from this level (fast context-based override)
+			// Patterns predict at level-1, so skip if already at base level
+			if (level > 0 && await this.inferPatterns(level)) return;
+		}
+
+		// if we got to this level, it looks like there were no predictions - should be rare
+		if (this.debug) console.log('No predictions at any level');
 	}
 
 	/**
@@ -455,6 +519,156 @@ export default class Brain {
 	 */
 	async applyRewards(globalReward) {
 		throw new Error('applyRewards() must be implemented by subclass');
+	}
+
+	/**
+	 * Apply negative reinforcement to failed predictions from previous frame.
+	 * Called at start of new frame after observations are available.
+	 * Uses cached inference type and level from previous frame.
+	 */
+	async learnFromPreviousFrameErrors() {
+
+		// First frame - no previous predictions to learn from
+		if (this.lastInferenceType === null) {
+			if (this.debug) console.log('No previous predictions - first frame');
+			return;
+		}
+
+		// Report accuracy from previous frame inference
+		await this.reportPredictionsAccuracy();
+
+		// Apply negative reinforcement based on previous frame's inference type
+		if (this.lastInferenceType === 'connection') await this.negativeReinforceConnections();
+		else await this.negativeReinforcePatterns();
+
+		// now create patterns from failed predictions - error-driven pattern creation at level + 1
+		await this.createErrorPatterns();
+	}
+
+	/**
+	 * Primary inference mechanism using learned connections between neurons.
+	 * Active neurons predict what should activate next based on connection strengths and temporal distances.
+	 * Returns true if predictions were made, false if not.
+	 */
+	async inferConnections(level) {
+
+		// Make predictions using connections from active neurons at this level
+		const count = await this.inferConnectionsAtLevel(level);
+		if (count === 0) return false;
+
+		// Cache inference type and level for next frame's error learning
+		this.lastInferenceType = 'connection';
+		this.lastInferenceLevel = level;
+
+		// If predictions are at higher level, unpack through pattern chain to base level
+		if (level > 0) await this.unpackToBase(level, 'connection');
+
+		// Use channel logic to resolve conflicting predictions at base level
+		await this.resolveInputPredictionConflicts();
+		return true;
+	}
+
+	/**
+	 * Override mechanism for fast adaptation to changing contexts.
+	 * Patterns are meta-connections that capture full context (all connections to/from a peak).
+	 * Connections learn gradually (Hebbian), patterns enable instant learning (error-driven).
+	 * Returns true if predictions were made, false if not.
+	 */
+	async inferPatterns(level) {
+
+		// Make predictions at level-1 using pattern_future from this level
+		const count = await this.inferPatternsFromLevel(level);
+		if (count === 0) return false;
+
+		// Cache inference type and level for next frame's error learning
+		this.lastInferenceType = 'pattern';
+		this.lastInferenceLevel = level;
+
+		// If predictions are at higher level, unpack through pattern chain to base level
+		if (level > 1) await this.unpackToBase(level - 1, 'pattern');
+
+		// Use channel logic to resolve conflicting predictions at base level
+		await this.resolveInputPredictionConflicts();
+		return true;
+	}
+
+	/**
+	 * Resolve conflicts in input predictions per channel (level 0 only).
+	 * Reads from inferred_neurons table (which contains predictions from either connection or pattern inference).
+	 */
+	async resolveInputPredictionConflicts() {
+
+		// Read predictions from inferred_neurons table
+		const predictedRows = await this.getInputPredictions();
+
+		// Group predictions by channel and resolve conflicts and write to the inferred_neurons_resolved table
+		const channelPredictions = this.groupPredictionsByChannel(predictedRows);
+		await this.resolveAndWritePredictions(channelPredictions);
+	}
+
+	/**
+	 * Apply negative reinforcement to failed connection predictions (implementation-specific)
+	 */
+	async negativeReinforceConnections() {
+		throw new Error('negativeReinforceConnections() must be implemented by subclass');
+	}
+
+	/**
+	 * Apply negative reinforcement to failed pattern predictions (implementation-specific)
+	 */
+	async negativeReinforcePatterns() {
+		throw new Error('negativeReinforcePatterns() must be implemented by subclass');
+	}
+
+	/**
+	 * Creates error-driven patterns from failed predictions (implementation-specific)
+	 */
+	async createErrorPatterns() {
+		throw new Error('createErrorPatterns() must be implemented by subclass');
+	}
+
+	/**
+	 * Clear inference scratch data for new predictions (implementation-specific)
+	 */
+	async clearInferenceData() {
+		throw new Error('clearInferenceData() must be implemented by subclass');
+	}
+
+	/**
+	 * Report accuracy of predictions from previous frame (implementation-specific)
+	 */
+	async reportPredictionsAccuracy() {
+		throw new Error('reportPredictionsAccuracy() must be implemented by subclass');
+	}
+
+	/**
+	 * Connection inference at a specific level (implementation-specific)
+	 * Returns count of predictions made.
+	 */
+	async inferConnectionsAtLevel(level) {
+		throw new Error('inferConnectionsAtLevel() must be implemented by subclass');
+	}
+
+	/**
+	 * Pattern inference from a source level (implementation-specific)
+	 * Returns count of predictions made.
+	 */
+	async inferPatternsFromLevel(sourceLevel) {
+		throw new Error('inferPatternsFromLevel() must be implemented by subclass');
+	}
+
+	/**
+	 * Unpack predictions from higher level to base level via peak chain (implementation-specific)
+	 */
+	async unpackToBase(fromLevel, source) {
+		throw new Error('unpackToBase() must be implemented by subclass');
+	}
+
+	/**
+	 * Get input predictions from inferred_neurons table (implementation-specific)
+	 */
+	async getInputPredictions() {
+		throw new Error('getInputPredictions() must be implemented by subclass');
 	}
 
 	/**
@@ -479,10 +693,10 @@ export default class Brain {
 	}
 
 	/**
-	 * Activate pattern neurons hierarchically
+	 * Activate pattern neurons in a level
 	 */
-	async activatePatternNeurons() {
-		throw new Error('activatePatternNeurons() must be implemented by subclass');
+	async recognizeLevelPatterns(level) {
+		throw new Error('recognizeLevelPatterns(level) must be implemented by subclass');
 	}
 }
 

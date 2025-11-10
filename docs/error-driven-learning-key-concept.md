@@ -248,14 +248,14 @@ NO CHANGE
 **Pattern Level (Vertical):**
 ```
 Pattern matches observed context → Pattern strengthened
-mergeMatchedPatterns() in activateLevelPatterns()
+mergeMatchedPatterns() in recognizeLevelPatterns()
 NO CHANGE
 ```
 
 **What Changes:**
 ```
 Pattern creation moved from recognition to error-driven learning
-createNewPatterns() removed from activateLevelPatterns()
+createNewPatterns() removed from recognizeLevelPatterns()
 createErrorPatterns() added to validateAndLearnFromErrors()
 ```
 
