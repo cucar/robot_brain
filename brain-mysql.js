@@ -404,7 +404,7 @@ export default class BrainMySQL extends Brain {
 			SELECT neuron_id, level, 0 as age, strength
 			FROM unpack
 			WHERE level < ?
-			ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)
+			ON DUPLICATE KEY UPDATE strength = inferred_neurons.strength + VALUES(strength)
 		`, [fromLevel, fromLevel]);
 
 		if (this.debug) console.log(`Unpacked to base level`);
