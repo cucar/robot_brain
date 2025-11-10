@@ -38,8 +38,9 @@ select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM
 select * from active_neurons;
 select * from connection_inference;
 select count(*) from active_connections;
-select count(*) from patterns;
-select count(*) from patterns where strength > 0;
+select count(*) from pattern_peaks;
+select count(*) from pattern_past;
+select count(*) from pattern_future;
 select * from inferred_connections;
 select * from inferred_neuron_strengths;
 select * from inferred_level_strengths;

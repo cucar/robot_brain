@@ -522,7 +522,7 @@ export default class Brain {
 	}
 
 	/**
-	 * Apply negative reinforcement to failed predictions from previous frame.
+	 * Learn from previous frame's predictions by comparing them to current observations.
 	 * Called at start of new frame after observations are available.
 	 * Uses cached inference type and level from previous frame.
 	 */
@@ -537,9 +537,9 @@ export default class Brain {
 		// Report accuracy from previous frame inference
 		await this.reportPredictionsAccuracy();
 
-		// Apply negative reinforcement based on previous frame's inference type
+		// Merge predictions with observations based on previous frame's inference type
 		if (this.lastInferenceType === 'connection') await this.negativeReinforceConnections();
-		else await this.negativeReinforcePatterns();
+		else await this.mergePatternFuture();
 
 		// now create patterns from failed predictions - error-driven pattern creation at level + 1
 		await this.createErrorPatterns();
@@ -614,10 +614,11 @@ export default class Brain {
 	}
 
 	/**
-	 * Apply negative reinforcement to failed pattern predictions (implementation-specific)
+	 * Merge pattern_future with observed connections (implementation-specific)
+	 * Applies positive reinforcement, negative reinforcement, and adds novel connections
 	 */
-	async negativeReinforcePatterns() {
-		throw new Error('negativeReinforcePatterns() must be implemented by subclass');
+	async mergePatternFuture() {
+		throw new Error('mergePatternFuture() must be implemented by subclass');
 	}
 
 	/**

@@ -21,7 +21,7 @@ export default class StockTrainingJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],       // Stock symbols to train on
-			maxEpisodes: 500,                      // Number of training episodes
+			maxEpisodes: 50,                      // Number of training episodes
 			holdoutRows: 5242,                       // Number of rows to hold out for prediction testing
 			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
 		};
@@ -264,7 +264,9 @@ export default class StockTrainingJob extends Job {
 			netProfit: 0,
 			totalTrades: 0,
 			profitableTrades: 0,
-			channelResults: new Map()
+			channelResults: new Map(),
+			baseAccuracy: null,
+			overallAccuracy: null
 		};
 
 		// Process all frames until all channels are exhausted
@@ -274,16 +276,14 @@ export default class StockTrainingJob extends Job {
 			const frame = await this.brain.getFrame();
 
 			// If no input data from any channel, episode is complete
-			if (!frame || frame.length === 0) {
+			if (!frame || frame.length === 0)
 				break;
-			}
 
 			frameCount++;
 
 			// Show progress every 100 frames
-			if (frameCount % 100 === 0) {
+			if (frameCount % 100 === 0)
 				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${5247}... `);
-			}
 
 			// Get feedback and process frame
 			const feedback = await this.brain.getFeedback();
@@ -296,7 +296,22 @@ export default class StockTrainingJob extends Job {
 
 		// Collect episode results from all channels
 		this.collectEpisodeResults(episodeMetrics);
-		
+
+		// Capture base level accuracy stats
+		const baseStats = this.brain.accuracyStats.get(0);
+		if (baseStats && baseStats.resolved.total > 0)
+			episodeMetrics.baseAccuracy = (baseStats.resolved.correct / baseStats.resolved.total * 100);
+
+		// Capture overall accuracy across all levels
+		let totalCorrect = 0;
+		let totalPredictions = 0;
+		for (const [level, stats] of this.brain.accuracyStats) {
+			totalCorrect += stats.resolved.correct;
+			totalPredictions += stats.resolved.total;
+		}
+		if (totalPredictions > 0)
+			episodeMetrics.overallAccuracy = (totalCorrect / totalPredictions * 100);
+
 		const duration = Date.now() - startTime;
 		episodeMetrics.duration = duration;
 		episodeMetrics.frames = frameCount;
@@ -310,9 +325,9 @@ export default class StockTrainingJob extends Job {
 	 */
 	resetChannelStates() {
 		for (const [_, channel] of this.brain.channels) {
-			if (channel.resetEpisode) {
+			if (channel.resetEpisode)
 				channel.resetEpisode();
-			} else {
+			else {
 				// Manual reset for stock channels
 				channel.owned = false;
 				channel.entryPrice = null;
@@ -324,9 +339,8 @@ export default class StockTrainingJob extends Job {
 				channel.currentVolume = null;
 				
 				// Reset CSV iterator
-				if (channel.rl) {
+				if (channel.rl)
 					channel.rl.close();
-				}
 				// Will be re-initialized on first getFrameInputs() call
 				channel.rl = null;
 				channel.lineIterator = null;
@@ -387,40 +401,58 @@ export default class StockTrainingJob extends Job {
 	showFinalResults() {
 		console.log(`\n🎯 Final Training Results (${this.config.maxEpisodes} episodes):`);
 		console.log('='.repeat(60));
-		
+
 		const totalNetProfit = this.episodeResults.reduce((sum, ep) => sum + ep.netProfit, 0);
 		const avgNetProfit = totalNetProfit / this.episodeResults.length;
 		const totalTrades = this.episodeResults.reduce((sum, ep) => sum + ep.totalTrades, 0);
 		const avgTrades = totalTrades / this.episodeResults.length;
-		
+
 		console.log(`📈 Overall Performance:`);
 		console.log(`   Total Net Profit: $${totalNetProfit.toFixed(2)}`);
 		console.log(`   Average per Episode: $${avgNetProfit.toFixed(2)}`);
 		console.log(`   Total Trades: ${totalTrades}`);
 		console.log(`   Average Trades per Episode: ${avgTrades.toFixed(1)}`);
-		
+
+		// Show base level accuracy per episode
+		console.log(`\n📊 Base Level Accuracy by Episode:`);
+		for (const ep of this.episodeResults) {
+			if (ep.baseAccuracy !== null)
+				console.log(`   Episode ${ep.episode}: ${ep.baseAccuracy.toFixed(2)}%`);
+			else
+				console.log(`   Episode ${ep.episode}: N/A`);
+		}
+
+		// Show overall accuracy (all levels) per episode
+		console.log(`\n📊 Overall Accuracy (All Levels) by Episode:`);
+		for (const ep of this.episodeResults) {
+			if (ep.overallAccuracy !== null)
+				console.log(`   Episode ${ep.episode}: ${ep.overallAccuracy.toFixed(2)}%`);
+			else
+				console.log(`   Episode ${ep.episode}: N/A`);
+		}
+
 		// Show improvement trend
 		if (this.episodeResults.length >= 20) {
 			const first10 = this.episodeResults.slice(0, 10);
 			const last10 = this.episodeResults.slice(-10);
-			
+
 			const firstAvg = first10.reduce((sum, ep) => sum + ep.netProfit, 0) / first10.length;
 			const lastAvg = last10.reduce((sum, ep) => sum + ep.netProfit, 0) / last10.length;
 			const improvement = lastAvg - firstAvg;
-			
+
 			console.log(`\n📊 Learning Progress:`);
 			console.log(`   First 10 episodes avg: $${firstAvg.toFixed(2)}`);
 			console.log(`   Last 10 episodes avg: $${lastAvg.toFixed(2)}`);
 			console.log(`   Improvement: $${improvement.toFixed(2)} (${improvement >= 0 ? '📈' : '📉'})`);
 		}
-		
+
 		console.log('\n🏆 Best Episodes:');
 		const sortedByProfit = [...this.episodeResults].sort((a, b) => b.netProfit - a.netProfit);
 		for (let i = 0; i < Math.min(5, sortedByProfit.length); i++) {
 			const ep = sortedByProfit[i];
 			console.log(`   #${ep.episode}: $${ep.netProfit.toFixed(2)} (${ep.totalTrades} trades)`);
 		}
-		
+
 		console.log('='.repeat(60));
 	}
 }
