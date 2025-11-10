@@ -4,29 +4,23 @@
 CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
--- drop statements for reset
+-- drop statements for reset (used tables only)
 -- DROP TABLE IF EXISTS dimensions;
 -- DROP TABLE IF EXISTS neurons;
 -- DROP TABLE IF EXISTS coordinates;
 -- DROP TABLE IF EXISTS connections;
--- DROP TABLE IF EXISTS patterns_past;
--- DROP TABLE IF EXISTS patterns_future;
+-- DROP TABLE IF EXISTS pattern_past;
+-- DROP TABLE IF EXISTS pattern_future;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
--- DROP TABLE IF EXISTS connection_inference;
 -- DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS inferred_neurons_resolved;
--- DROP TABLE IF EXISTS observed_connections;
--- DROP TABLE IF EXISTS observed_neuron_strengths;
--- DROP TABLE IF EXISTS observed_peaks;
--- DROP TABLE IF EXISTS observed_patterns;
--- DROP TABLE IF EXISTS inferred_connections;
--- DROP TABLE IF EXISTS inferred_neuron_strengths;
--- DROP TABLE IF EXISTS inferred_level_strengths;
--- DROP TABLE IF EXISTS inferred_peaks;
 -- DROP TABLE IF EXISTS active_connections;
--- DROP TABLE IF EXISTS matched_peaks;
 -- DROP TABLE IF EXISTS matched_patterns;
+-- DROP TABLE IF EXISTS matched_pattern_connections;
+-- DROP TABLE IF EXISTS connection_inference_sources;
+-- DROP TABLE IF EXISTS pattern_inference_sources;
+-- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
 -- check state
@@ -36,17 +30,11 @@ select count(*) from connections;
 select count(*) from connections where strength > 0;
 select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM pattern_peaks pp) order by strength desc;
 select * from active_neurons;
-select * from connection_inference;
 select count(*) from active_connections;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
-select * from inferred_connections;
-select * from inferred_neuron_strengths;
-select * from inferred_level_strengths;
 
-
-SELECT AVG(total_strength) as avg_strength FROM observed_neuron_strengths;
 SELECT COUNT(DISTINCT pattern_neuron_id) as total_patterns FROM pattern_peaks;
 SELECT FLOOR(strength) as strength_bucket, COUNT(*) as count FROM connections WHERE strength > 0 GROUP BY strength_bucket ORDER BY strength_bucket;
 SELECT AVG(strength) as avg_strength, MAX(strength) as max_strength, MIN(strength) as min_strength FROM connections WHERE strength > 0;
@@ -148,16 +136,7 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- stores same-level connection predictions - scratch table for validation between frames
-CREATE TABLE connection_inference (
-    level TINYINT,
-    connection_id BIGINT,
-    to_neuron_id BIGINT UNSIGNED,
-    strength DOUBLE NOT NULL DEFAULT 0.0,
-    PRIMARY KEY (level, connection_id),
-    INDEX idx_level (level),
-    INDEX idx_to_neuron (level, to_neuron_id)
-) ENGINE=MEMORY;
+
 
 -- raw predictions before conflict resolution (MEMORY table)
 -- used by both connection and pattern inference (only one has data per frame due to early-return)
@@ -181,14 +160,9 @@ CREATE TABLE IF NOT EXISTS inferred_neurons_resolved (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- NOTE: Peak detection scratch tables removed - no longer needed
--- Pattern recognition now matches active_connections directly to pattern_past
--- No peak detection during recognition (only check neurons that are already in pattern_peaks)
--- No peak detection during inference (use absolute strength threshold instead)
-
--- mapping table for matched peaks (MEMORY table)
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
 -- this just a scratch table for faster processing - it temporarily holds the matched patterns for the current level in the frame
+-- DROP TABLE IF EXISTS matched_patterns;
 CREATE TABLE IF NOT EXISTS matched_patterns (
     peak_neuron_id BIGINT UNSIGNED NOT NULL,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
@@ -199,6 +173,7 @@ CREATE TABLE IF NOT EXISTS matched_patterns (
 -- scratch table for pattern connection analysis (MEMORY table)
 -- populated during matchObservedPatterns in a single pass, consumed by mergeMatchedPatterns
 -- status: 'common' = in both pattern and active (strengthen), 'novel' = in active only (add), 'missing' = in pattern only (weaken)
+-- DROP TABLE IF EXISTS matched_pattern_connections;
 CREATE TABLE IF NOT EXISTS matched_pattern_connections (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
@@ -210,6 +185,7 @@ CREATE TABLE IF NOT EXISTS matched_pattern_connections (
 
 -- active connections for fast hierarchical reward propagation (MEMORY table)
 -- this just a scratch table for faster processing - it temporarily holds the active connections for the current frame
+-- DROP TABLE IF EXISTS active_connections;
 CREATE TABLE IF NOT EXISTS active_connections (
     connection_id BIGINT UNSIGNED NOT NULL,
     from_neuron_id BIGINT UNSIGNED NOT NULL,
@@ -224,6 +200,7 @@ CREATE TABLE IF NOT EXISTS active_connections (
 
 -- scratch table for tracking connection-based predictions (MEMORY table)
 -- populated during connection inference, used for validation and error pattern creation
+-- DROP TABLE IF EXISTS connection_inference_sources;
 CREATE TABLE IF NOT EXISTS connection_inference_sources (
     inferred_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
@@ -235,6 +212,7 @@ CREATE TABLE IF NOT EXISTS connection_inference_sources (
 
 -- scratch table for tracking pattern-based predictions (MEMORY table)
 -- populated during pattern inference, used for validation and error pattern creation
+-- DROP TABLE IF EXISTS pattern_inference_sources;
 CREATE TABLE IF NOT EXISTS pattern_inference_sources (
     inferred_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
@@ -248,6 +226,7 @@ CREATE TABLE IF NOT EXISTS pattern_inference_sources (
 
 -- scratch table for tracking unpredicted connections (MEMORY table)
 -- connections that fired but were not predicted
+-- DROP TABLE IF EXISTS unpredicted_connections;
 CREATE TABLE IF NOT EXISTS unpredicted_connections (
     connection_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
@@ -261,6 +240,7 @@ CREATE TABLE IF NOT EXISTS unpredicted_connections (
 
 -- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)
 -- used during bulk pattern creation to track sequential IDs
+-- DROP TABLE IF EXISTS new_patterns;
 CREATE TABLE IF NOT EXISTS new_patterns (
     seq_id INT AUTO_INCREMENT PRIMARY KEY,
     peak_neuron_id BIGINT UNSIGNED NOT NULL UNIQUE,

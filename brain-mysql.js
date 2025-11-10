@@ -21,11 +21,10 @@ export default class BrainMySQL extends Brain {
 		await this.truncateTables([
 			'active_neurons',
 			'inferred_neurons',
+			'inferred_neurons_resolved',
 			'matched_patterns',
 			'matched_pattern_connections',
 			'active_connections',
-			'connection_inferred_neurons',
-			'pattern_inferred_neurons',
 			'connection_inference_sources',
 			'pattern_inference_sources',
 			'unpredicted_connections',
@@ -41,15 +40,15 @@ export default class BrainMySQL extends Brain {
 		console.log('Hard resetting brain (all learned data)...');
 		await this.truncateTables([
 			'active_neurons',
-			'connection_inferred_neurons',
-			'pattern_inferred_neurons',
 			'inferred_neurons',
-			'observed_connections',
-			'observed_neuron_strengths',
-			'observed_peaks',
-			'observed_patterns',
+			'inferred_neurons_resolved',
 			'active_connections',
 			'matched_patterns',
+			'matched_pattern_connections',
+			'connection_inference_sources',
+			'pattern_inference_sources',
+			'unpredicted_connections',
+			'new_patterns',
 			'pattern_peaks',
 			'pattern_past',
 			'pattern_future',
@@ -354,9 +353,11 @@ export default class BrainMySQL extends Brain {
 
 		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted connections
 		// Connection in pattern_future AND observed in active_connections FROM peak at age=0
+		// Only for patterns whose predictions were strong enough to be inferred
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
+			JOIN inferred_neurons inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
 			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength + 1))
@@ -367,9 +368,11 @@ export default class BrainMySQL extends Brain {
 
 		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections
 		// Connection in pattern_future but NOT observed in active_connections FROM peak
+		// Only for patterns whose predictions were strong enough to be inferred
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
+			JOIN inferred_neurons inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
 			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength - ?))
@@ -381,10 +384,12 @@ export default class BrainMySQL extends Brain {
 
 		// 3. ADD NOVEL CONNECTIONS: Observed but not predicted
 		// Active connections FROM peaks of patterns that made predictions, but not in pattern_future
+		// Only for patterns whose predictions were strong enough to be inferred
 		const [novelResult] = await this.conn.query(`
 			INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT pis.pattern_neuron_id, ac.connection_id, 1.0
 			FROM pattern_inference_sources pis
+			JOIN inferred_neurons inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pis.pattern_neuron_id
 			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = ? AND ac.age = 0
 			LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = pis.pattern_neuron_id AND pf.connection_id = ac.connection_id
