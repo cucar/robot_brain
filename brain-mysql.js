@@ -718,7 +718,12 @@ export default class BrainMySQL extends Brain {
 			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = :level
 			WHERE c.distance = f.age
 			AND f.level = t.level  -- restrict to same levels only
-			AND (t.neuron_id != f.neuron_id OR f.age != 0)  -- no self-connections at same age
+            -- we used to have the condition below that enabled us to do associative pooling, but I'm realizing that 
+            -- it should really be used only for spatial processing - it's a special case of that 
+            -- spatial pooling will look at the neighboring neurons in terms of X-Y coordinates
+            -- associative pooling is just a special case of that where there are no X-Y coordinates	
+            -- AND (t.neuron_id != f.neuron_id OR f.age > 0)  -- no self-connections at same age
+            AND f.age > 0 -- at this point, we are only learning connections between different ages to use for inference 
 			AND c.strength > 0  -- only connections that are not removed
 		`, { level });
 	}

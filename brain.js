@@ -21,7 +21,7 @@ export default class Brain {
 		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPeakStrength = 1.0; // minimum weighted strength for a neuron to be considered a peak (reduced to allow more predictions)
 		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average (1.0 = just above average)
-		this.minPredictionStrength = 1.0; // minimum strength for a prediction to be made
+		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
