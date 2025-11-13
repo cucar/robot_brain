@@ -21,8 +21,8 @@ export default class StockTrainingJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],       // Stock symbols to train on
-			maxEpisodes: 50,                      // Number of training episodes
-			holdoutRows: 5242,                       // Number of rows to hold out for prediction testing
+			maxEpisodes: 10,                      // Number of training episodes
+			holdoutRows: 5200,                       // Number of rows to hold out for prediction testing
 			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
 		};
 

@@ -18,15 +18,12 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.minPeakStrength = 1.0; // minimum weighted strength for a neuron to be considered a peak (reduced to allow more predictions)
-		this.minPeakRatio = 1.0; // minimum ratio of peak strength to neighborhood average (1.0 = just above average)
+		this.mergePatternThreshold = 0.75; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.connectionNegativeReinforcement = 1.0; // how much to weaken connections when predictions fail
-		this.negativeLearningRate = 1.0; // how much to weaken connections when predictions fail (match positive reinforcement)
 		this.minErrorPatternThreshold = 5.0; // minimum prediction strength to create error-driven pattern
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
@@ -53,7 +50,7 @@ export default class Brain {
 		this.lastInferenceLevel = null; // level where inference was made
 
 		// Create readline interface for pausing between frames - used when debugging
-		this.debug = true;
+		this.debug = false;
 		this.waitForUserInput = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
@@ -354,12 +351,13 @@ export default class Brain {
 			baseAccuracy = `${(baseCumulative.resolved.correct / baseCumulative.resolved.total * 100).toFixed(1)}%`;
 
 		// Get higher level accuracy (aggregate all levels > 0)
+		// Include both connection and pattern predictions
 		let higherCorrect = 0;
 		let higherTotal = 0;
 		for (const [level, stats] of this.accuracyStats.entries()) {
 			if (level > 0) {
-				higherCorrect += stats.connection.correct;
-				higherTotal += stats.connection.total;
+				higherCorrect += stats.connection.correct + stats.pattern.correct;
+				higherTotal += stats.connection.total + stats.pattern.total;
 			}
 		}
 		const higherAccuracy = higherTotal > 0 ? `${(higherCorrect / higherTotal * 100).toFixed(1)}%` : 'N/A';
