@@ -1014,7 +1014,7 @@ export default class BrainMySQL extends Brain {
 			UPDATE connections c
 			JOIN active_connections ac ON c.id = ac.connection_id
 			SET c.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, c.strength * POW(:globalReward, POW(:rewardTimeDecayFactor, ac.age))))
-			WHERE ac.age >= 0
+			WHERE ac.age > 0 -- skip the recently made connections - that's where the output was executed
 		`, { globalReward, rewardTimeDecayFactor: this.rewardTimeDecayFactor, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 
 		if (this.debug) console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} active connections (multiplicative)`);

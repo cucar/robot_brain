@@ -21,7 +21,7 @@ export default class StockTrainingJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],       // Stock symbols to train on
-			maxEpisodes: 10,                      // Number of training episodes
+			maxEpisodes: 20,                      // Number of training episodes
 			holdoutRows: 5200,                       // Number of rows to hold out for prediction testing
 			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
 		};
@@ -412,6 +412,11 @@ export default class StockTrainingJob extends Job {
 		console.log(`   Average per Episode: $${avgNetProfit.toFixed(2)}`);
 		console.log(`   Total Trades: ${totalTrades}`);
 		console.log(`   Average Trades per Episode: ${avgTrades.toFixed(1)}`);
+
+		// Show net profit per episode
+		console.log(`\n💰 Net Profit by Episode:`);
+		for (const ep of this.episodeResults)
+			console.log(`   Episode ${ep.episode}: $${ep.netProfit.toFixed(2)} (${ep.totalTrades} trades)`);
 
 		// Show base level accuracy per episode
 		console.log(`\n📊 Base Level Accuracy by Episode:`);
