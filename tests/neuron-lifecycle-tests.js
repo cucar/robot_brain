@@ -85,7 +85,7 @@ class NeuronLifecycleTests {
         console.log('Testing Neuron Activation:');
 
         // Create some test neurons first
-        const neuronIds = await this.brain.bulkInsertNeurons(3);
+        const neuronIds = await this.brain.createNeurons(3);
         
         // Test insertActiveNeurons
         await this.brain.insertActiveNeurons(neuronIds, 0);
@@ -116,7 +116,7 @@ class NeuronLifecycleTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM inferred_neurons');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(2);
+        const neuronIds = await this.brain.createNeurons(2);
         await this.brain.insertActiveNeurons(neuronIds, 0);
         
         // Insert some inferred neurons too
@@ -142,7 +142,7 @@ class NeuronLifecycleTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM inferred_neurons');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(3);
+        const neuronIds = await this.brain.createNeurons(3);
         
         // Insert neurons at different levels with high ages
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 9)', [neuronIds[0]]);  // Close to level 0 max (10)
@@ -173,7 +173,7 @@ class NeuronLifecycleTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(2);
+        const neuronIds = await this.brain.createNeurons(2);
         
         // Activate first neuron, then second (to create temporal connection)
         await this.brain.activateNeurons([neuronIds[0]], 0);
@@ -205,7 +205,7 @@ class NeuronLifecycleTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(3);
+        const neuronIds = await this.brain.createNeurons(3);
 
         // Set up active neurons with different ages
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 2)', [neuronIds[0]]); // Older
@@ -243,7 +243,7 @@ class NeuronLifecycleTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(2);
+        const neuronIds = await this.brain.createNeurons(2);
         
         // Create initial connection with correct distance for reinforcement
         // For level 0, distance = FLOOR(age / POW(10, 0)) = FLOOR(age / 1) = age

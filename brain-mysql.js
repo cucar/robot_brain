@@ -478,52 +478,38 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Create error-driven patterns from unpredicted connections.
-	 * Only triggered when there are failed predictions (surprising errors).
-	 * Populates unpredicted_connections, then creates patterns at lastInferenceLevel + 1.
-	 *
-	 * Pattern structure:
-	 * - Peak: Active neuron at age=1 that should have predicted the unpredicted connections
-	 * - Past: Active connections at age=0 leading TO the peak (context snapshot)
-	 * - Future: Active connections at age=0 FROM peak that were NOT predicted (what to learn)
+	 * Populate new_patterns table from unpredicted connections.
+	 * Finds peak neurons (from_neurons of unpredicted connections) and creates one pattern per peak.
+	 * Returns the number of patterns to create.
 	 */
-	async createErrorPatterns() {
-
-		// For pattern inference: predictions were made at lastInferenceLevel - 1
-		// For connection inference: predictions were made at lastInferenceLevel
-		const predictionLevel = this.lastInferenceType === 'pattern' ? this.lastInferenceLevel - 1 : this.lastInferenceLevel;
-		const newPatternLevel = predictionLevel + 1;
-
-		// First check if we have failed predictions (surprising errors)
-		const failedCount = await this.countFailedPredictions();
-		if (failedCount === 0) {
-			if (this.debug) console.log(`Level ${this.lastInferenceLevel}: No failed predictions, skipping pattern creation`);
-			return;
-		}
-
-		// We have errors, now find what we should have predicted instead
-		const unpredictedCount = await this.populateUnpredictedConnections();
-		if (unpredictedCount === 0) {
-			if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Failed predictions but no unpredicted connections to learn from`);
-			return;
-		}
-
-		// Find pattern peaks: from_neurons of unpredicted connections
-		// Create one pattern per peak neuron
+	async populateNewPatterns() {
 		await this.conn.query(`TRUNCATE new_patterns`);
 		const [insertResult] = await this.conn.query(`
 			INSERT INTO new_patterns (peak_neuron_id)
 			SELECT from_neuron_id FROM unpredicted_connections GROUP BY from_neuron_id
 		`);
-		const patternCount = insertResult.affectedRows;
-		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Creating ${patternCount} error patterns at level ${newPatternLevel}`);
+		return insertResult.affectedRows;
+	}
+
+	/**
+	 * Create pattern neurons and map them to new_patterns.
+	 * @param {number} patternCount - Number of patterns to create neurons for
+	 */
+	async createPatternNeurons(patternCount) {
 
 		// Create pattern neurons (one per peak)
-		const patternNeuronIds = await this.bulkInsertNeurons(patternCount);
+		const patternNeuronIds = await this.createNeurons(patternCount);
 
 		// Update new_patterns with pattern neuron IDs in bulk
 		// seq_id auto-increments from 1, patternNeuronIds are sequential, so: pattern_neuron_id = firstNeuronId + (seq_id - 1)
 		await this.conn.query('UPDATE new_patterns SET pattern_neuron_id = ? + (seq_id - 1)', [patternNeuronIds[0]]);
+	}
+
+	/**
+	 * Merge new patterns into pattern_peaks, pattern_past, pattern_future.
+	 * @param {number} predictionLevel - Level where predictions were made
+	 */
+	async mergeNewPatterns(predictionLevel) {
 
 		// Create pattern_peaks entries
 		await this.conn.query(`
@@ -553,42 +539,6 @@ export default class BrainMySQL extends Brain {
 			FROM new_patterns np
 			JOIN unpredicted_connections uc ON uc.from_neuron_id = np.peak_neuron_id
 		`);
-
-		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Created ${patternCount} error patterns`);
-	}
-
-	/**
-	 * returns base neuron ids for given set of points coming from the frame
-	 */
-	async getFrameNeurons(frame) {
-
-		// try to get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
-		const matches = await this.matchFrameNeurons(frame);
-		if (this.debug) console.log('pointNeuronMatches', matches);
-
-		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
-		const neuronIds = matches.filter(p => p.neuron_id).map(p => p.neuron_id);
-
-		// create neurons for points with no matching neurons
-		const pointsNeedingNeurons = matches.filter(p => !p.neuron_id);
-		if (pointsNeedingNeurons.length > 0) {
-			if (this.debug) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
-			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point_str));
-			neuronIds.push(...createdNeuronIds);
-		}
-
-		// return matching neuron ids to given points
-		if (this.debug) console.log('frame neurons', neuronIds);
-		return neuronIds;
-	}
-
-	/**
-	 * matches base neurons from dimensional values for each point - return format: [{ point_str, neuron_id }]
-	 */
-	async matchFrameNeurons(frame) {
-		if (frame.length === 0) return [];
-		const neuronCoords = await this.getFrameCoordinates(frame);
-		return this.findFrameMatches(frame, neuronCoords);
 	}
 
 	/**
@@ -618,82 +568,30 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * finds exact neuron matches for each point in the frame
+	 * Sets coordinates for neurons in batches to avoid query size limits
+	 * @param {Array<{neuron_id: number, point: Object}>} neurons - Array of neuron_id and point pairs
 	 */
-	findFrameMatches(frame, neuronCoords) {
-		const results = [];
+	async setNeuronCoordinates(neurons) {
 
-		for (const point of frame) {
-			const pointStr = JSON.stringify(point);
-			const matchedNeuronId = this.findPointMatch(point, neuronCoords);
-			results.push({ point_str: pointStr, neuron_id: matchedNeuronId });
-		}
-
-		return results;
-	}
-
-	/**
-	 * finds the neuron that exactly matches a single point
-	 */
-	findPointMatch(point, neuronCoords) {
-		const pointStr = JSON.stringify(point);
-		const expectedDimCount = Object.keys(point).length;
-		let matchedNeuronId = null;
-
-		for (const [neuronId, coords] of neuronCoords) {
-			let matchCount = 0;
-			for (const [dimName, val] of Object.entries(point)) {
-				const dimId = this.dimensionNameToId[dimName];
-				if (coords.has(dimId) && coords.get(dimId) === val) matchCount++;
-			}
-
-			if (matchCount === expectedDimCount) {
-				if (matchedNeuronId !== null)
-					throw new Error(`Multiple neuron matches for point: ${pointStr}`);
-				matchedNeuronId = neuronId;
-			}
-		}
-
-		return matchedNeuronId;
-	}
-
-	/**
-	 * creates base neurons from a given set of points and returns their ids
-	 */
-	async createBaseNeurons(pointStrs) {
-
-		// nothing to create if no points are sent - should not happen
-		if (pointStrs.length === 0) return [];
-
-		// deduplicate points and parse them
-		const points = [...new Set(pointStrs)].map(pointStr => JSON.parse(pointStr));
-
-		// bulk insert neurons and get their IDs
-		const neuronIds = await this.bulkInsertNeurons(points.length);
-		const created = points.map((point, idx) => ({ point, neuron_id: neuronIds[idx] }));
-
-		// Rest of the coordinate insertion logic with batching for large frames
-		const rows = created.flatMap(({ neuron_id, point }) =>
+		// flatten to rows of [neuron_id, dimension_id, value]
+		const rows = neurons.flatMap(({ neuron_id, point }) =>
 			Object.entries(point).map(([dimName, value]) => [neuron_id, this.dimensionNameToId[dimName], value]));
 
 		// Process in batches to avoid query size limits
 		const batchSize = 5000;
 		for (let i = 0; i < rows.length; i += batchSize) {
 			const batch = rows.slice(i, i + batchSize);
-			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [batch]);
+			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ? ON DUPLICATE KEY UPDATE val = VALUES(val)', [batch]);
 		}
-
-		// return the new neuron ids
-		return neuronIds;
 	}
 
 	/**
-	 * Bulk insert neurons and return their IDs.
+	 * Creates new neurons and return their IDs.
 	 * MySQL guarantees sequential auto-increment IDs.
 	 * @param {number} count - Number of neurons to create
 	 * @returns {Promise<Array<number>>} Array of neuron IDs
 	 */
-	async bulkInsertNeurons(count) {
+	async createNeurons(count) {
 		const valuesSql = Array(count).fill('()').join(',');
 		const insertNeuronsResult = await this.conn.query(`INSERT INTO neurons () VALUES ${valuesSql}`);
 		const firstNeuronId = insertNeuronsResult[0].insertId;
@@ -1013,7 +911,7 @@ export default class BrainMySQL extends Brain {
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			JOIN active_connections ac ON c.id = ac.connection_id
-			SET c.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, c.strength * POW(:globalReward, POW(:rewardTimeDecayFactor, ac.age))))
+			SET c.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, c.strength * POW(:globalReward, POW(:rewardTimeDecayFactor, ac.age - 1))))
 			WHERE ac.age > 0 -- skip the recently made connections - that's where the output was executed
 		`, { globalReward, rewardTimeDecayFactor: this.rewardTimeDecayFactor, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 

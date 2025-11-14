@@ -88,7 +88,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(4);
+        const neuronIds = await this.brain.createNeurons(4);
         
         // Create active neurons at different ages
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 2)', [neuronIds[0]]);
@@ -214,7 +214,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(10);
+        const neuronIds = await this.brain.createNeurons(10);
 
         // Create neurons at different levels
         // Level 0: base neurons
@@ -332,7 +332,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('TRUNCATE observed_patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(6);
+        const neuronIds = await this.brain.createNeurons(6);
 
         // Create a clear pattern: 2 older neurons connecting to 1 new neuron (convergent pattern)
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]);
@@ -391,7 +391,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('TRUNCATE observed_patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(10);
+        const neuronIds = await this.brain.createNeurons(10);
 
         // Create base level neurons (level 0) - 3 older neurons, 2 new neurons
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]);
@@ -496,7 +496,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('TRUNCATE observed_patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(12);
+        const neuronIds = await this.brain.createNeurons(12);
 
         // === LEVEL 0 SETUP ===
         // Create 6 base neurons: 4 older (age=1), 2 new (age=0)
@@ -658,7 +658,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('TRUNCATE observed_patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(8);
+        const neuronIds = await this.brain.createNeurons(8);
 
         // === SETUP MULTIPLE PATTERNS FOR COMPREHENSIVE TESTING ===
         // Create connections for two different patterns
@@ -763,7 +763,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(3);
+        const neuronIds = await this.brain.createNeurons(3);
 
         // Create initial connection
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 2)', [neuronIds[0], neuronIds[1]]);
@@ -801,7 +801,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('TRUNCATE observed_patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(10);
+        const neuronIds = await this.brain.createNeurons(10);
 
         // === SETUP SCENARIO FOR SUCCESSFUL MERGING (>=66% OVERLAP) ===
         // Create a pattern with 3 connections: A->B, B->C, C->D
@@ -887,7 +887,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('TRUNCATE observed_patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(12);
+        const neuronIds = await this.brain.createNeurons(12);
 
         // === SETUP SCENARIO FOR FAILED MERGING (<66% OVERLAP) ===
         // Create 3 connections that will be observed

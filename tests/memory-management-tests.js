@@ -118,7 +118,7 @@ class MemoryManagementTests {
         await this.brain.conn.query('TRUNCATE pattern_inference');
         await this.brain.conn.query('TRUNCATE inferred_neurons');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(20);
+        const neuronIds = await this.brain.createNeurons(20);
 
         // Create actual connections first for inference tables to reference
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 1.0)', [neuronIds[0], neuronIds[1]]);
@@ -198,7 +198,7 @@ class MemoryManagementTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('DELETE FROM neuron_rewards');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(15);
+        const neuronIds = await this.brain.createNeurons(15);
 
         // Create cross-level connections at different levels
         // Level 0 → Level 1 (distance=0)
@@ -250,7 +250,7 @@ class MemoryManagementTests {
 
         // Create large number of neurons and connections to simulate memory pressure
         const batchSize = 100;
-        const neuronIds = await this.brain.bulkInsertNeurons(batchSize);
+        const neuronIds = await this.brain.createNeurons(batchSize);
 
         // Create many connections with varying strengths
         let strongCount = 0;
@@ -306,7 +306,7 @@ class MemoryManagementTests {
         await this.brain.conn.query('DELETE FROM neurons WHERE id > 0');
         await this.brain.conn.query('DELETE FROM active_neurons');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(20);
+        const neuronIds = await this.brain.createNeurons(20);
 
         // Create various scenarios:
         // 1. Neurons with connections (should survive)
@@ -367,7 +367,7 @@ class MemoryManagementTests {
         await this.brain.conn.query('DELETE FROM neuron_rewards');
         await this.brain.conn.query('DELETE FROM neurons WHERE id > 0');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(10);
+        const neuronIds = await this.brain.createNeurons(10);
 
         // Create interconnected data
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 1.5)', [neuronIds[0], neuronIds[1]]);
@@ -435,7 +435,7 @@ class MemoryManagementTests {
         this.assert(emptyRew[0].count === 0, 'Empty rewards should remain empty');
 
         // Test forget cycle with all strong data (nothing should be removed)
-        const neuronIds = await this.brain.bulkInsertNeurons(5);
+        const neuronIds = await this.brain.createNeurons(5);
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 5.0)', [neuronIds[0], neuronIds[1]]);
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 4.0)', [neuronIds[1], neuronIds[2]]);
 

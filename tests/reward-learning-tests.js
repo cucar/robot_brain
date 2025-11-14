@@ -101,7 +101,7 @@ class RewardLearningTests {
         await this.brain.conn.query('DELETE FROM neuron_rewards');
         await this.brain.conn.query('TRUNCATE inferred_neurons');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(4);
+        const neuronIds = await this.brain.createNeurons(4);
         
         // Create inferred neurons with different ages and levels
         await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]); // Age 1 - executed
@@ -152,7 +152,7 @@ class RewardLearningTests {
         await this.brain.conn.query('DELETE FROM neuron_rewards');
         await this.brain.conn.query('TRUNCATE inferred_neurons');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(6);
+        const neuronIds = await this.brain.createNeurons(6);
         
         // Create neurons at different ages and levels for comprehensive testing
         await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]); // Recent
@@ -203,7 +203,7 @@ class RewardLearningTests {
         await this.brain.conn.query('DELETE FROM neuron_rewards');
         await this.brain.conn.query('TRUNCATE inferred_neurons');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(3);
+        const neuronIds = await this.brain.createNeurons(3);
         
         // Create inferred neurons
         await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]);
@@ -243,7 +243,7 @@ class RewardLearningTests {
         await this.brain.conn.query('TRUNCATE connection_inference');
         await this.brain.conn.query('TRUNCATE pattern_inference');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(6);
+        const neuronIds = await this.brain.createNeurons(6);
 
         // Create connections with initial strengths
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 2.0)', [neuronIds[0], neuronIds[1]]);
@@ -298,7 +298,7 @@ class RewardLearningTests {
         // This test is already covered in inference tests, but let's test integration
         await this.brain.conn.query('DELETE FROM neuron_rewards');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(3);
+        const neuronIds = await this.brain.createNeurons(3);
 
         // Create different reward scenarios
         await this.brain.conn.query('INSERT INTO neuron_rewards (neuron_id, reward_factor) VALUES (?, 2.0)', [neuronIds[0]]); // Strong positive
@@ -329,7 +329,7 @@ class RewardLearningTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(12);
+        const neuronIds = await this.brain.createNeurons(12);
 
         // Create multi-level hierarchy:
         // Level 0: base actions/inputs
@@ -441,7 +441,7 @@ class RewardLearningTests {
         await this.brain.conn.query('DELETE FROM connections');
         await this.brain.conn.query('DELETE FROM patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(15);
+        const neuronIds = await this.brain.createNeurons(15);
 
         // === SCENARIO: Learning which high-level strategy leads to success ===
 
@@ -627,7 +627,7 @@ class RewardLearningTests {
         // Clear and set up reward forgetting scenario
         await this.brain.conn.query('DELETE FROM neuron_rewards');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(5);
+        const neuronIds = await this.brain.createNeurons(5);
 
         // Create rewards with different factors
         await this.brain.conn.query('INSERT INTO neuron_rewards (neuron_id, reward_factor) VALUES (?, 1.005)', [neuronIds[0]]); // Near neutral - should be deleted
@@ -684,7 +684,7 @@ class RewardLearningTests {
         // Clear and set up connection decay scenario
         await this.brain.conn.query('DELETE FROM connections');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(6);
+        const neuronIds = await this.brain.createNeurons(6);
 
         // Create connections with different strengths
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 2.0)', [neuronIds[0], neuronIds[1]]);
@@ -726,7 +726,7 @@ class RewardLearningTests {
         await this.brain.conn.query('DELETE FROM connections');
         await this.brain.conn.query('DELETE FROM patterns');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(6);
+        const neuronIds = await this.brain.createNeurons(6);
 
         // Create connections for patterns
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 1.0)', [neuronIds[0], neuronIds[1]]);
@@ -779,7 +779,7 @@ class RewardLearningTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM neuron_rewards');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(8);
+        const neuronIds = await this.brain.createNeurons(8);
 
         // Create different neuron scenarios:
         // neuronIds[0] - has connections (should survive)
@@ -879,7 +879,7 @@ class RewardLearningTests {
         this.assert(emptyRewards[0].count === 0, 'Empty rewards should remain empty');
 
         // Test extreme reward values
-        const neuronIds = await this.brain.bulkInsertNeurons(2);
+        const neuronIds = await this.brain.createNeurons(2);
         await this.brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]);
 
         // Test very large positive reward

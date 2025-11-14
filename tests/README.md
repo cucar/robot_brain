@@ -49,7 +49,7 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 **Critical Areas Tested**:
 - `getFrameNeurons()` - Simplified single-query coordinate matching (refactored from complex UNION)
 - `createBaseNeurons()` - Bulk neuron creation with coordinate insertion and deduplication
-- `bulkInsertNeurons()` - Auto-increment ID handling and edge cases
+- `createNeurons()` - Auto-increment ID handling and edge cases
 - `getFrameNeurons()` - End-to-end frame-to-neuron conversion with matching and creation
 - Edge cases: empty frames, duplicate points, coordinate validation
 

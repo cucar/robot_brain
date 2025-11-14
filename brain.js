@@ -18,7 +18,7 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.75; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
@@ -452,6 +452,102 @@ export default class Brain {
 	}
 
 	/**
+	 * returns base neuron ids for given set of points coming from the frame
+	 */
+	async getFrameNeurons(frame) {
+
+		// try to get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
+		const matches = await this.matchFrameNeurons(frame);
+		if (this.debug) console.log('pointNeuronMatches', matches);
+
+		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
+		const neuronIds = matches.filter(p => p.neuron_id).map(p => p.neuron_id);
+
+		// create neurons for points with no matching neurons
+		const pointsNeedingNeurons = matches.filter(p => !p.neuron_id);
+		if (pointsNeedingNeurons.length > 0) {
+			if (this.debug) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
+			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point_str));
+			neuronIds.push(...createdNeuronIds);
+		}
+
+		// return matching neuron ids to given points
+		if (this.debug) console.log('frame neurons', neuronIds);
+		return neuronIds;
+	}
+
+	/**
+	 * creates base neurons from a given set of points and returns their ids
+	 */
+	async createBaseNeurons(pointStrs) {
+
+		// nothing to create if no points are sent - should not happen
+		if (pointStrs.length === 0) return [];
+
+		// deduplicate points and parse them
+		const points = [...new Set(pointStrs)].map(pointStr => JSON.parse(pointStr));
+
+		// bulk insert neurons and get their IDs
+		const neuronIds = await this.createNeurons(points.length);
+		const created = points.map((point, idx) => ({ point, neuron_id: neuronIds[idx] }));
+
+		// insert coordinates for the created neurons
+		await this.setNeuronCoordinates(created);
+
+		// return the new neuron ids
+		return neuronIds;
+	}
+
+	/**
+	 * matches base neurons from dimensional values for each point - return format: [{ point_str, neuron_id }]
+	 */
+	async matchFrameNeurons(frame) {
+		if (frame.length === 0) return [];
+		const neuronCoords = await this.getFrameCoordinates(frame);
+		return this.findFrameMatches(frame, neuronCoords);
+	}
+
+	/**
+	 * finds exact neuron matches for each point in the frame
+	 */
+	findFrameMatches(frame, neuronCoords) {
+		const results = [];
+
+		for (const point of frame) {
+			const pointStr = JSON.stringify(point);
+			const matchedNeuronId = this.findPointMatch(point, neuronCoords);
+			results.push({ point_str: pointStr, neuron_id: matchedNeuronId });
+		}
+
+		return results;
+	}
+
+	/**
+	 * finds the neuron that exactly matches a single point
+	 */
+	findPointMatch(point, neuronCoords) {
+		const pointStr = JSON.stringify(point);
+		const expectedDimCount = Object.keys(point).length;
+		let matchedNeuronId = null;
+
+		for (const [neuronId, coords] of neuronCoords) {
+			let matchCount = 0;
+			for (const [dimName, val] of Object.entries(point)) {
+				const dimId = this.dimensionNameToId[dimName];
+				if (coords.has(dimId) && coords.get(dimId) === val) matchCount++;
+			}
+
+			if (matchCount === expectedDimCount) {
+				if (matchedNeuronId !== null)
+					throw new Error(`Multiple neuron matches for point: ${pointStr}`);
+				matchedNeuronId = neuronId;
+			}
+		}
+
+		return matchedNeuronId;
+	}
+
+	/**
 	 * detects all spatial levels in age=0 neurons using unified connections - start from base level and go as high as possible
 	 */
 	async recognizePatternNeurons() {
@@ -605,6 +701,44 @@ export default class Brain {
 	}
 
 	/**
+	 * Creates error-driven patterns from failed predictions.
+	 * Common orchestration logic with implementation-specific methods.
+	 */
+	async createErrorPatterns() {
+
+		// For pattern inference: predictions were made at lastInferenceLevel - 1
+		// For connection inference: predictions were made at lastInferenceLevel
+		const predictionLevel = this.lastInferenceType === 'pattern' ? this.lastInferenceLevel - 1 : this.lastInferenceLevel;
+		const newPatternLevel = predictionLevel + 1;
+
+		// First check if we have failed predictions (surprising errors)
+		const failedCount = await this.countFailedPredictions();
+		if (failedCount === 0) {
+			if (this.debug) console.log(`Level ${this.lastInferenceLevel}: No failed predictions, skipping pattern creation`);
+			return;
+		}
+
+		// We have errors, now find what we should have predicted instead
+		const unpredictedCount = await this.populateUnpredictedConnections();
+		if (unpredictedCount === 0) {
+			if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Failed predictions but no unpredicted connections to learn from`);
+			return;
+		}
+
+		// Populate new_patterns table with peaks from unpredicted connections
+		const patternCount = await this.populateNewPatterns();
+		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Creating ${patternCount} error patterns at level ${newPatternLevel}`);
+
+		// Create pattern neurons and map them to new_patterns
+		await this.createPatternNeurons(patternCount);
+
+		// Merge new patterns into pattern_peaks, pattern_past, pattern_future
+		await this.mergeNewPatterns(predictionLevel);
+
+		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Created ${patternCount} error patterns`);
+	}
+
+	/**
 	 * Apply negative reinforcement to failed connection predictions (implementation-specific)
 	 */
 	async negativeReinforceConnections() {
@@ -617,13 +751,6 @@ export default class Brain {
 	 */
 	async mergePatternFuture() {
 		throw new Error('mergePatternFuture() must be implemented by subclass');
-	}
-
-	/**
-	 * Creates error-driven patterns from failed predictions (implementation-specific)
-	 */
-	async createErrorPatterns() {
-		throw new Error('createErrorPatterns() must be implemented by subclass');
 	}
 
 	/**
@@ -678,10 +805,24 @@ export default class Brain {
 	}
 
 	/**
-	 * Get or create frame neurons from input points
+	 * fetches all neuron coordinates that could potentially match any point in the frame
 	 */
-	async getFrameNeurons(frame) {
-		throw new Error('getFrameNeurons() must be implemented by subclass');
+	async getFrameCoordinates(frame) {
+		throw new Error('getFrameCoordinates(frame) must be implemented by subclass');
+	}
+
+	/**
+	 * Sets coordinates for neurons in batches to avoid query size limits
+	 */
+	async setNeuronCoordinates(neurons) {
+		throw new Error('setNeuronCoordinates(neurons) must be implemented by subclass');
+	}
+
+	/**
+	 * Creates new neurons and return their IDs.
+	 */
+	async createNeurons(count) {
+		throw new Error('createNeurons(count) must be implemented by subclass');
 	}
 
 	/**
@@ -696,6 +837,47 @@ export default class Brain {
 	 */
 	async recognizeLevelPatterns(level) {
 		throw new Error('recognizeLevelPatterns(level) must be implemented by subclass');
+	}
+
+	/**
+	 * Count high-confidence failed predictions (implementation-specific)
+	 * Returns the count of failed predictions.
+	 */
+	async countFailedPredictions() {
+		throw new Error('countFailedPredictions() must be implemented by subclass');
+	}
+
+	/**
+	 * Populate unpredicted_connections with active connections that were not predicted (implementation-specific)
+	 * Returns the number of unpredicted connections found.
+	 */
+	async populateUnpredictedConnections() {
+		throw new Error('populateUnpredictedConnections() must be implemented by subclass');
+	}
+
+	/**
+	 * Populate new_patterns table from unpredicted connections (implementation-specific)
+	 * Finds peak neurons (from_neurons of unpredicted connections) and creates one pattern per peak.
+	 * Returns the number of patterns to create.
+	 */
+	async populateNewPatterns() {
+		throw new Error('populateNewPatterns() must be implemented by subclass');
+	}
+
+	/**
+	 * Create pattern neurons and map them to new_patterns (implementation-specific)
+	 * @param {number} patternCount - Number of patterns to create neurons for
+	 */
+	async createPatternNeurons(patternCount) {
+		throw new Error('createPatternNeurons(patternCount) must be implemented by subclass');
+	}
+
+	/**
+	 * Merge new patterns into pattern_peaks, pattern_past, pattern_future (implementation-specific)
+	 * @param {number} predictionLevel - Level where predictions were made
+	 */
+	async mergeNewPatterns(predictionLevel) {
+		throw new Error('mergeNewPatterns(predictionLevel) must be implemented by subclass');
 	}
 }
 

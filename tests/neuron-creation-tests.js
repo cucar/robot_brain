@@ -135,10 +135,10 @@ class NeuronCreationTests {
     async testBulkOperations() {
         console.log('Testing Bulk Operations:');
 
-        // Test bulkInsertNeurons
-        const neuronIds = await this.brain.bulkInsertNeurons(3);
+        // Test createNeurons
+        const neuronIds = await this.brain.createNeurons(3);
         
-        this.assert(Array.isArray(neuronIds), 'bulkInsertNeurons should return array');
+        this.assert(Array.isArray(neuronIds), 'createNeurons should return array');
         this.assert(neuronIds.length === 3, 'Should return 3 neuron IDs', neuronIds.length, 3);
         
         // Test that IDs are sequential (MySQL auto_increment behavior)
@@ -147,10 +147,10 @@ class NeuronCreationTests {
         
         // Test empty bulk insert - should handle gracefully
         try {
-            const emptyIds = await this.brain.bulkInsertNeurons(0);
+            const emptyIds = await this.brain.createNeurons(0);
             this.assert(emptyIds.length === 0, 'Empty bulk insert should return empty array');
         } catch (error) {
-            // bulkInsertNeurons(0) creates invalid SQL, which is expected behavior
+            // createNeurons(0) creates invalid SQL, which is expected behavior
             this.assert(error.code === 'ER_PARSE_ERROR', 'Empty bulk insert should fail with parse error');
         }
         

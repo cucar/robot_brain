@@ -91,7 +91,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('DELETE FROM pattern_peaks');
         await this.brain.conn.query('TRUNCATE connection_inference');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(4);
+        const neuronIds = await this.brain.createNeurons(4);
 
         // Mark neuronIds[3] as a peak neuron so it can be predicted
         await this.brain.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES (?, ?)', [neuronIds[3], neuronIds[3]]);
@@ -128,7 +128,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('DELETE FROM patterns');
         await this.brain.conn.query('TRUNCATE pattern_inference');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(6);
+        const neuronIds = await this.brain.createNeurons(6);
         
         // Create level 1 active pattern neuron (age=0)
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 1, 0)', [neuronIds[0]]);
@@ -171,7 +171,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('TRUNCATE connection_inference');
         await this.brain.conn.query('TRUNCATE pattern_inference');
         
-        const neuronIds = await this.brain.bulkInsertNeurons(6);
+        const neuronIds = await this.brain.createNeurons(6);
         
         // Create connections
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 1, 5)', [neuronIds[0], neuronIds[1]]);
@@ -288,7 +288,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('DELETE FROM connections');
 
         // Create neurons and connections to test distance weighting in predictions
-        const neuronIds = await this.brain.bulkInsertNeurons(10);
+        const neuronIds = await this.brain.createNeurons(10);
 
         // Setup: neurons at different ages for temporal prediction testing
         // For level 0, inferConnections predicts distance = FLOOR((age+1)/1)
@@ -385,7 +385,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('DELETE FROM active_neurons');
         await this.brain.conn.query('DELETE FROM connections');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(12);
+        const neuronIds = await this.brain.createNeurons(12);
 
         // Create neurons at multiple levels with different ages
         // Level 0: base neurons
@@ -525,7 +525,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('TRUNCATE pattern_inference');
         await this.brain.conn.query('TRUNCATE inferred_neurons');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(8);
+        const neuronIds = await this.brain.createNeurons(8);
 
         // Create multi-level active neurons
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]);
@@ -579,7 +579,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('DELETE FROM connections');
         await this.brain.conn.query('TRUNCATE connection_inference');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(5);
+        const neuronIds = await this.brain.createNeurons(5);
 
         // Create temporal sequence: A(age=2) -> B(age=1) -> C(age=0)
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 2)', [neuronIds[0]]);
@@ -626,7 +626,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('TRUNCATE connection_inference');
         await this.brain.conn.query('TRUNCATE pattern_inference');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(10);
+        const neuronIds = await this.brain.createNeurons(10);
 
         // Create neurons at different levels with proper ages for connections
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 1)', [neuronIds[0]]);
@@ -690,7 +690,7 @@ class InferencePredictionTests {
         await this.brain.conn.query('TRUNCATE connection_inference');
         await this.brain.conn.query('TRUNCATE pattern_inference');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(4);
+        const neuronIds = await this.brain.createNeurons(4);
 
         // Manually insert predictions with different ages
         await this.brain.conn.query('INSERT INTO connection_inference (level, connection_id, age) VALUES (0, 1, 0)');
@@ -733,7 +733,7 @@ class InferencePredictionTests {
         // Clear and set up reward scenario
         await this.brain.conn.query('DELETE FROM neuron_rewards');
 
-        const neuronIds = await this.brain.bulkInsertNeurons(4);
+        const neuronIds = await this.brain.createNeurons(4);
 
         // Create neuron rewards with different factors
         await this.brain.conn.query('INSERT INTO neuron_rewards (neuron_id, reward_factor) VALUES (?, 1.5)', [neuronIds[0]]); // Positive reward
@@ -782,7 +782,7 @@ class InferencePredictionTests {
         this.assert(emptyInferences[0].count === 0, 'No active neurons should create no inferences');
 
         // Test no connections
-        const neuronIds = await this.brain.bulkInsertNeurons(2);
+        const neuronIds = await this.brain.createNeurons(2);
         await this.brain.conn.query('INSERT INTO active_neurons (neuron_id, level, age) VALUES (?, 0, 0)', [neuronIds[0]]);
         await this.brain.conn.query('DELETE FROM connections');
 
