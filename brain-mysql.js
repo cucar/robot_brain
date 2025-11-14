@@ -63,7 +63,7 @@ export default class BrainMySQL extends Brain {
 	 */
 	async truncateTables(tables) {
 		await this.conn.query('SET FOREIGN_KEY_CHECKS = 0');
-		for (const table of tables) await this.conn.query(`TRUNCATE ${table}`);
+		await Promise.all(tables.map(table => this.conn.query(`TRUNCATE ${table}`)));
 		await this.conn.query('SET FOREIGN_KEY_CHECKS = 1');
 	}
 
@@ -857,33 +857,52 @@ export default class BrainMySQL extends Brain {
 			console.log('Running forget cycle - orphaned neurons cleanup...');
 			stepStart = Date.now();
 			const [neuronDeleteResult] = await this.conn.query(`
-				DELETE FROM neurons n
-				WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM pattern_past WHERE pattern_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM pattern_future WHERE pattern_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
+				DELETE n FROM neurons n
+				LEFT JOIN connections c1 ON c1.from_neuron_id = n.id
+				LEFT JOIN connections c2 ON c2.to_neuron_id = n.id
+				LEFT JOIN pattern_past pp ON pp.pattern_neuron_id = n.id
+				LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = n.id
+				LEFT JOIN active_neurons an ON an.neuron_id = n.id
+				WHERE c1.from_neuron_id IS NULL
+				  AND c2.to_neuron_id IS NULL
+				  AND pp.pattern_neuron_id IS NULL
+				  AND pf.pattern_neuron_id IS NULL
+				  AND an.neuron_id IS NULL
 			`);
 			console.log(`  Orphaned neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
 
 			console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
-		} else {
-			// Run forget cycle without logging
-			await this.conn.query(`UPDATE pattern_past SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
-			await this.conn.query(`UPDATE pattern_future SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
-			await this.conn.query(`UPDATE pattern_peaks SET strength = GREATEST(0, strength - ?) WHERE strength > 0`, [this.patternForgetRate]);
-			await this.conn.query(`DELETE FROM pattern_past WHERE strength = ?`, [this.minConnectionStrength]);
-			await this.conn.query(`DELETE FROM pattern_future WHERE strength = ?`, [this.minConnectionStrength]);
-			await this.conn.query(`DELETE FROM pattern_peaks WHERE strength <= 0`);
-			await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
-			await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
+		}
+		else {
+			// Run forget cycle without logging - parallelize independent UPDATE operations
+			await Promise.all([
+				this.conn.query(`UPDATE pattern_past SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]),
+				this.conn.query(`UPDATE pattern_future SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]),
+				this.conn.query(`UPDATE pattern_peaks SET strength = GREATEST(0, strength - ?) WHERE strength > 0`, [this.patternForgetRate]),
+				this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate])
+			]);
+
+			// Delete operations after updates complete - parallelize independent DELETE operations
+			await Promise.all([
+				this.conn.query(`DELETE FROM pattern_past WHERE strength = ?`, [this.minConnectionStrength]),
+				this.conn.query(`DELETE FROM pattern_future WHERE strength = ?`, [this.minConnectionStrength]),
+				this.conn.query(`DELETE FROM pattern_peaks WHERE strength <= 0`),
+				this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength])
+			]);
+
+			// Orphaned neuron cleanup - optimized with LEFT JOINs instead of NOT EXISTS
 			await this.conn.query(`
-				DELETE FROM neurons n
-				WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM pattern_past WHERE pattern_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM pattern_future WHERE pattern_neuron_id = n.id)
-				  AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
+				DELETE n FROM neurons n
+				LEFT JOIN connections c1 ON c1.from_neuron_id = n.id
+				LEFT JOIN connections c2 ON c2.to_neuron_id = n.id
+				LEFT JOIN pattern_past pp ON pp.pattern_neuron_id = n.id
+				LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = n.id
+				LEFT JOIN active_neurons an ON an.neuron_id = n.id
+				WHERE c1.from_neuron_id IS NULL
+				  AND c2.to_neuron_id IS NULL
+				  AND pp.pattern_neuron_id IS NULL
+				  AND pf.pattern_neuron_id IS NULL
+				  AND an.neuron_id IS NULL
 			`);
 		}
 	}
