@@ -25,15 +25,80 @@ USE machine_intelligence;
 
 -- check state
 select count(*) from neurons;
-select count(*) from coordinates;
+select * from dimensions;
+select * from coordinates;
 select count(*) from connections;
 select count(*) from connections where strength > 0;
 select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM pattern_peaks pp) order by strength desc;
 select * from active_neurons;
-select count(*) from active_connections;
+select * from active_connections;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
+
+select * from inferred_neurons_resolved where age = 1;
+select * from connection_inference_sources;
+
+SELECT * 
+FROM inferred_neurons_resolved inf
+LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
+WHERE inf.age = 1;
+            
+select * 
+from connections c
+JOIN connection_inference_sources cis ON cis.connection_id = c.id
+JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level
+WHERE cis.level = 0
+AND c.strength > 0
+AND NOT EXISTS (
+	SELECT 1 FROM active_neurons an
+	WHERE an.neuron_id = cis.inferred_neuron_id
+	AND an.level = cis.level
+	AND an.age = 0
+);
+
+SELECT * 
+FROM inferred_neurons_resolved inf
+LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
+WHERE inf.age = 1;
+
+select * from connection_inference_sources;
+
+SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
+FROM connection_inference_sources
+WHERE level = 1
+GROUP BY inferred_neuron_id, level
+HAVING total_strength >= 10;
+
+SELECT src.neuron_id, src.level, src.strength
+FROM inferred_neurons src
+WHERE src.level = 0
+AND src.age = 0;
+
+WITH RECURSIVE unpack AS (
+				-- Base case: start with predictions at fromLevel
+				SELECT src.neuron_id, src.level, src.strength
+				FROM inferred_neurons src
+				WHERE src.level = 1
+				AND src.age = 0
+
+				UNION ALL
+
+				-- Recursive case: pattern neuron at level N is its peak neuron at level N-1
+				SELECT pp.peak_neuron_id as neuron_id, u.level - 1 as level, u.strength
+				FROM unpack u
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = u.neuron_id
+				WHERE u.level > 0
+			)
+			SELECT neuron_id, level, 0 as age, strength
+			FROM unpack
+			WHERE level < 1;
+            
+select * from connection_inference_sources;
+select * from active_connections where to_neuron_id = 6;
+            
+select * from unpredicted_connections;
+select * from new_patterns;
 
 SELECT COUNT(DISTINCT pattern_neuron_id) as total_patterns FROM pattern_peaks;
 SELECT FLOOR(strength) as strength_bucket, COUNT(*) as count FROM connections WHERE strength > 0 GROUP BY strength_bucket ORDER BY strength_bucket;

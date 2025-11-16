@@ -158,9 +158,10 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Write resolved predictions to MySQL storage (implementation of abstract method)
+	 * This is called after conflict resolution at base level (level 0)
 	 */
 	async writeResolvedPredictions(allSelectedPredictions) {
-		// Batch insert all selected predictions at once
+		// Batch insert all selected predictions at once (all at level 0)
 		await this.conn.query(
 			'INSERT INTO inferred_neurons_resolved (neuron_id, level, age, strength) VALUES ?',
 			[allSelectedPredictions.map(p => [p.neuron_id, 0, 0, p.strength])]
@@ -168,48 +169,48 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Get and report accuracy for a given inference table and stat type.
+	 * Copy higher level predictions from inferred_neurons to inferred_neurons_resolved
+	 * For levels > 0, there's no conflict resolution, so predictions are copied directly
 	 */
-	async reportAccuracyForTable(tableName, statType, displayName) {
+	async copyHigherLevelPredictions() {
+		await this.conn.query(`
+			INSERT INTO inferred_neurons_resolved (neuron_id, level, age, strength)
+			SELECT neuron_id, level, age, strength
+			FROM inferred_neurons
+			WHERE level > 0 AND age = 0
+			ON DUPLICATE KEY UPDATE strength = VALUES(strength)
+		`);
+	}
+
+	/**
+	 * Reports accuracy of neuron inference from the previous frame for ALL levels.
+	 */
+	async reportPredictionsAccuracy() {
+
+		// get the inferred neurons and correct activations
 		const [data] = await this.conn.query(`
-			SELECT
-				inf.level,
-				COUNT(*) as total,
-				SUM(IF(an.neuron_id IS NOT NULL, 1, 0)) as correct
-			FROM ${tableName} inf
+			SELECT inf.level, COUNT(*) as total, SUM(IF(an.neuron_id IS NOT NULL, 1, 0)) as correct
+			FROM inferred_neurons_resolved inf
 			LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
 			WHERE inf.age = 1
 			GROUP BY inf.level
 		`);
 
+		// process the results to report accuracy
 		for (const row of data) {
-			// Initialize cumulative stats for this level if needed
-			if (!this.accuracyStats.has(row.level))
-				this.accuracyStats.set(row.level, { connection: { correct: 0, total: 0 }, pattern: { correct: 0, total: 0 }, resolved: { correct: 0, total: 0 } });
+
+			// initialize cumulative stats for this level if needed
+			if (!this.accuracyStats.has(row.level)) this.accuracyStats.set(row.level, { correct: 0, total: 0 });
 			const cumulative = this.accuracyStats.get(row.level);
 
-			// Update and report - convert to Number to avoid BigInt issues
-			cumulative[statType].correct += Number(row.correct);
-			cumulative[statType].total += Number(row.total);
+			// update and report - convert to Number to avoid BigInt issues
+			cumulative.correct += Number(row.correct);
+			cumulative.total += Number(row.total);
 			const currentRate = (Number(row.correct) / Number(row.total) * 100).toFixed(1);
-			const avgRate = (cumulative[statType].correct / cumulative[statType].total * 100).toFixed(1);
+			const avgRate = (cumulative.correct / cumulative.total * 100).toFixed(1);
 			if (this.debug)
-				console.log(`Level ${row.level}: ${displayName} prediction accuracy: ${row.correct}/${row.total} (${currentRate}%) | Avg: ${cumulative[statType].correct}/${cumulative[statType].total} (${avgRate}%)`);
+				console.log(`Level ${row.level} prediction accuracy: ${row.correct}/${row.total} (${currentRate}%) | Avg: ${cumulative.correct}/${cumulative.total} (${avgRate}%)`);
 		}
-	}
-
-	/**
-	 * Reports accuracy of neuron predictions from the previous frame for ALL levels.
-	 * Tracks accuracy for inferred_neurons (raw predictions) and inferred_neurons_resolved (final predictions).
-	 */
-	async reportPredictionsAccuracy() {
-
-		// Report raw predictions (from whichever inference type was used)
-		const displayName = this.lastInferenceType.charAt(0).toUpperCase() + this.lastInferenceType.slice(1);
-		await this.reportAccuracyForTable('inferred_neurons', this.lastInferenceType, displayName);
-
-		// Report resolved predictions
-		await this.reportAccuracyForTable('inferred_neurons_resolved', 'resolved', 'Resolved');
 	}
 
 	/**
@@ -220,9 +221,11 @@ export default class BrainMySQL extends Brain {
 
 		// Apply negative reinforcement to failed connection predictions
 		// Failed = predicted but not observed
+		// Only weaken connections whose predictions made it through conflict resolution
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			JOIN connection_inference_sources cis ON cis.connection_id = c.id
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level
 			SET c.strength = GREATEST(0, c.strength - ?)
 			WHERE cis.level = ?
 			AND c.strength > 0
@@ -250,7 +253,7 @@ export default class BrainMySQL extends Brain {
 
 		const [result] = await this.conn.query(`
 			SELECT COUNT(*) as count
-			FROM inferred_neurons inf
+			FROM inferred_neurons_resolved inf
 			WHERE inf.level = ?
 			AND inf.age = 1
 			AND inf.strength >= ?
@@ -266,7 +269,7 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Populate unpredicted_connections with active connections at age=0 that were not predicted.
-	 * These are connections that fired but were not in the inferred_neurons predictions.
+	 * These are connections that fired but were not in the inferred_neurons_resolved predictions.
 	 * Works for both connection and pattern inference types.
 	 * No strength filter - we want to learn ALL unpredicted connections when surprised.
 	 * Returns the number of unpredicted connections found.
@@ -286,7 +289,8 @@ export default class BrainMySQL extends Brain {
 			WHERE ac.level = ?
 			AND ac.age = 0
 			AND NOT EXISTS (
-				SELECT 1 FROM inferred_neurons inf
+				SELECT 1 
+				FROM inferred_neurons_resolved inf
 				WHERE inf.neuron_id = c.to_neuron_id
 				AND inf.level = ac.level
 				AND inf.age = 1
@@ -307,7 +311,6 @@ export default class BrainMySQL extends Brain {
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE an.level = ?
-			AND an.age >= 0
 			AND c.distance = an.age + 1
 			AND c.strength > 0
 		`, [level, this.peakTimeDecayFactor, level]);
@@ -355,11 +358,11 @@ export default class BrainMySQL extends Brain {
 
 		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted connections
 		// Connection in pattern_future AND observed in active_connections FROM peak at age=0
-		// Only for patterns whose predictions were strong enough to be inferred
+		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN inferred_neurons inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
 			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength + 1))
@@ -370,11 +373,11 @@ export default class BrainMySQL extends Brain {
 
 		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections
 		// Connection in pattern_future but NOT observed in active_connections FROM peak
-		// Only for patterns whose predictions were strong enough to be inferred
+		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN inferred_neurons inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
 			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength - ?))
@@ -386,12 +389,12 @@ export default class BrainMySQL extends Brain {
 
 		// 3. ADD NOVEL CONNECTIONS: Observed but not predicted
 		// Active connections FROM peaks of patterns that made predictions, but not in pattern_future
-		// Only for patterns whose predictions were strong enough to be inferred
+		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
 		const [novelResult] = await this.conn.query(`
 			INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT pis.pattern_neuron_id, ac.connection_id, 1.0
 			FROM pattern_inference_sources pis
-			JOIN inferred_neurons inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pis.pattern_neuron_id
 			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = ? AND ac.age = 0
 			LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = pis.pattern_neuron_id AND pf.connection_id = ac.connection_id
@@ -450,31 +453,23 @@ export default class BrainMySQL extends Brain {
 	async unpackToBase(fromLevel, source) {
 		if (this.debug) console.log(`Unpacking ${source} predictions from level ${fromLevel} to base`);
 
-		// Recursive CTE to unpack all levels in ONE query
-		// Follows pattern_neuron → peak_neuron chain down to base level
+		// Unpack level by level, grouping at each step to handle multiple patterns sharing same peak
 		// A pattern neuron at level N IS its peak neuron at level N-1
-		// Writes intermediate peaks at each level as inferred neurons
-		await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
-			WITH RECURSIVE unpack AS (
-				-- Base case: start with predictions at fromLevel
-				SELECT src.neuron_id, src.level, src.strength
-				FROM inferred_neurons src
-				WHERE src.level = ?
+		// Loop from fromLevel down to level 1, unpacking each level to the one below
+		for (let level = fromLevel; level > 0; level--) {
 
-				UNION ALL
-
-				-- Recursive case: pattern neuron at level N is its peak neuron at level N-1
-				SELECT pp.peak_neuron_id as neuron_id, u.level - 1 as level, u.strength
-				FROM unpack u
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = u.neuron_id
-				WHERE u.level > 0
-			)
-			SELECT neuron_id, level, 0 as age, strength
-			FROM unpack
-			WHERE level < ?
-			ON DUPLICATE KEY UPDATE strength = inferred_neurons.strength + VALUES(strength)
-		`, [fromLevel, fromLevel]);
+			// Unpack pattern neurons at this level to their peaks at level-1
+			// Multiple patterns can share same peak, so GROUP BY to sum strengths
+			await this.conn.query(`
+				INSERT INTO inferred_neurons (neuron_id, level, age, strength)
+				SELECT pp.peak_neuron_id, ?, 0, SUM(inf.strength)
+				FROM inferred_neurons inf
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = inf.neuron_id
+				WHERE inf.level = ?
+				AND inf.age = 0
+				GROUP BY pp.peak_neuron_id
+			`, [level - 1, level]);
+		}
 
 		if (this.debug) console.log(`Unpacked to base level`);
 	}

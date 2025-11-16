@@ -19,7 +19,7 @@ export default class Brain {
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.80; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
+		this.inactivityThreshold = 5; // frames of inactivity before exploration - require activity in every frame
 		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
@@ -40,7 +40,7 @@ export default class Brain {
 		this.frameNumber = 0;
 
 		// Prediction accuracy tracking (cumulative stats per level)
-		this.accuracyStats = new Map(); // level -> { connection: {correct, total}, pattern: {correct, total}, resolved: {correct, total} }
+		this.accuracyStats = new Map(); // level -> {correct, total}
 
 		// Continuous prediction metrics (for channels that support it)
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
@@ -362,22 +362,22 @@ export default class Brain {
 	 * Prints a one-line summary of the frame processing
 	 */
 	printFrameSummary(frameElapsed) {
+
 		// Get base level (level 0) accuracy - use RESOLVED accuracy (after conflict resolution)
 		let baseAccuracy = 'N/A';
 		const baseCumulative = this.accuracyStats.get(0);
-		if (baseCumulative && baseCumulative.resolved.total > 0)
-			baseAccuracy = `${(baseCumulative.resolved.correct / baseCumulative.resolved.total * 100).toFixed(1)}%`;
+		if (baseCumulative && baseCumulative.total > 0)
+			baseAccuracy = `${(baseCumulative.correct / baseCumulative.total * 100).toFixed(1)}%`;
 
 		// Get higher level accuracy (aggregate all levels > 0)
 		// Include both connection and pattern predictions
 		let higherCorrect = 0;
 		let higherTotal = 0;
-		for (const [level, stats] of this.accuracyStats.entries()) {
+		for (const [level, stats] of this.accuracyStats.entries())
 			if (level > 0) {
-				higherCorrect += stats.connection.correct + stats.pattern.correct;
-				higherTotal += stats.connection.total + stats.pattern.total;
+				higherCorrect += stats.correct;
+				higherTotal += stats.total;
 			}
-		}
 		const higherAccuracy = higherTotal > 0 ? `${(higherCorrect / higherTotal * 100).toFixed(1)}%` : 'N/A';
 
 		// Collect continuous prediction metrics from channels (only new errors since last call)
@@ -398,13 +398,7 @@ export default class Brain {
 			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
 		}
 
-		// Show connection count every 100 frames in memory implementation
-		let memoryStats = '';
-		if (this.connections && this.connections.size && this.frameNumber % 100 === 0) {
-			memoryStats = ` | Learned: ${this.connections.size()} conns, ${this.patterns ? this.patterns.size() : 0} patterns`;
-		}
-
-		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | Time: ${frameElapsed.toFixed(2)}ms${memoryStats}`);
+		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 	// ========== ABSTRACT METHODS - Must be implemented by subclasses ==========
@@ -642,7 +636,8 @@ export default class Brain {
 		// Report accuracy from previous frame inference
 		await this.reportPredictionsAccuracy();
 
-		// Merge predictions with observations based on previous frame's inference type
+		// if we had made the inference using connections, apply negative reinforcement to failed predictions
+		// otherwise if we had made the inference using patterns, merge predictions with observations based on previous frame's inference type
 		if (this.lastInferenceType === 'connection') await this.negativeReinforceConnections();
 		else await this.mergePatternFuture();
 
@@ -670,6 +665,10 @@ export default class Brain {
 
 		// Use channel logic to resolve conflicting inference at base level
 		await this.resolveChannelInferenceConflicts();
+
+		// For higher levels, copy predictions directly to resolved table (no conflict resolution at higher levels)
+		if (level > 0) await this.copyHigherLevelPredictions();
+
 		return true;
 	}
 
@@ -694,6 +693,11 @@ export default class Brain {
 
 		// Use channel logic to resolve conflicting predictions at base level
 		await this.resolveChannelInferenceConflicts();
+
+		// For higher levels, copy predictions directly to resolved table (no conflict resolution at higher levels)
+		// Pattern predictions are at level-1, so copy if level-1 > 0
+		if (level > 1) await this.copyHigherLevelPredictions();
+
 		return true;
 	}
 
@@ -732,17 +736,13 @@ export default class Brain {
 
 		// First check if we have failed predictions (surprising errors)
 		const failedCount = await this.countFailedPredictions();
-		if (failedCount === 0) {
-			if (this.debug) console.log(`Level ${this.lastInferenceLevel}: No failed predictions, skipping pattern creation`);
-			return;
-		}
+		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: failed predictions count: ${failedCount}`);
+		if (failedCount === 0) return;
 
 		// We have errors, now find what we should have predicted instead
 		const unpredictedCount = await this.populateUnpredictedConnections();
-		if (unpredictedCount === 0) {
-			if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Failed predictions but no unpredicted connections to learn from`);
-			return;
-		}
+		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: unpredicted connections count: ${unpredictedCount}`);
+		if (unpredictedCount === 0) return;
 
 		// Populate new_patterns table with peaks from unpredicted connections
 		const patternCount = await this.populateNewPatterns();
@@ -821,6 +821,14 @@ export default class Brain {
 	 */
 	async writeResolvedPredictions() {
 		throw new Error('writeResolvedPredictions() must be implemented by subclass');
+	}
+
+	/**
+	 * Copy higher level predictions from inferred_neurons to inferred_neurons_resolved (implementation-specific)
+	 * For levels > 0, there's no conflict resolution, so predictions are copied directly
+	 */
+	async copyHigherLevelPredictions() {
+		throw new Error('copyHigherLevelPredictions() must be implemented by subclass');
 	}
 
 	/**
