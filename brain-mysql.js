@@ -854,17 +854,13 @@ export default class BrainMySQL extends Brain {
 			console.log('Running forget cycle - orphaned neurons cleanup...');
 			stepStart = Date.now();
 			const [neuronDeleteResult] = await this.conn.query(`
-				DELETE n FROM neurons n
-				LEFT JOIN connections c1 ON c1.from_neuron_id = n.id
-				LEFT JOIN connections c2 ON c2.to_neuron_id = n.id
-				LEFT JOIN pattern_past pp ON pp.pattern_neuron_id = n.id
-				LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = n.id
-				LEFT JOIN active_neurons an ON an.neuron_id = n.id
-				WHERE c1.from_neuron_id IS NULL
-				  AND c2.to_neuron_id IS NULL
-				  AND pp.pattern_neuron_id IS NULL
-				  AND pf.pattern_neuron_id IS NULL
-				  AND an.neuron_id IS NULL
+                DELETE 
+                FROM neurons n
+                WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
+				AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
+				AND NOT EXISTS (SELECT 1 FROM pattern_past WHERE pattern_neuron_id = n.id)
+				AND NOT EXISTS (SELECT 1 FROM pattern_future WHERE pattern_neuron_id = n.id)
+				AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
 			`);
 			console.log(`  Orphaned neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
 
@@ -889,17 +885,13 @@ export default class BrainMySQL extends Brain {
 
 			// Orphaned neuron cleanup - optimized with LEFT JOINs instead of NOT EXISTS
 			await this.conn.query(`
-				DELETE n FROM neurons n
-				LEFT JOIN connections c1 ON c1.from_neuron_id = n.id
-				LEFT JOIN connections c2 ON c2.to_neuron_id = n.id
-				LEFT JOIN pattern_past pp ON pp.pattern_neuron_id = n.id
-				LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = n.id
-				LEFT JOIN active_neurons an ON an.neuron_id = n.id
-				WHERE c1.from_neuron_id IS NULL
-				  AND c2.to_neuron_id IS NULL
-				  AND pp.pattern_neuron_id IS NULL
-				  AND pf.pattern_neuron_id IS NULL
-				  AND an.neuron_id IS NULL
+                DELETE
+                FROM neurons n
+                WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
+                AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
+                AND NOT EXISTS (SELECT 1 FROM pattern_past WHERE pattern_neuron_id = n.id)
+                AND NOT EXISTS (SELECT 1 FROM pattern_future WHERE pattern_neuron_id = n.id)
+                AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
 			`);
 		}
 	}

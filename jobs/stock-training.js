@@ -21,7 +21,7 @@ export default class StockTrainingJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],       // Stock symbols to train on
-			maxEpisodes: 20,                      // Number of training episodes
+			maxEpisodes: 10,                      // Number of training episodes
 			holdoutRows: 5240,                       // Number of rows to hold out for prediction testing
 			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
 		};
@@ -269,21 +269,22 @@ export default class StockTrainingJob extends Job {
 			overallAccuracy: null
 		};
 
-		// Process all frames until all channels are exhausted
+		// Calculate expected number of frames based on data rows
+		const stockChannel = this.brain.channels.values().next().value;
+		const expectedFrames = stockChannel.dataRows.length - 1; // -1 because first frame reads 2 rows
+
+		// Process all frames for the episode duration
 		let frameCount = 0;
-		while (true) {
+		while (frameCount < expectedFrames) {
+
 			// Get combined frame from all channels
 			const frame = await this.brain.getFrame();
-
-			// If no input data from any channel, episode is complete
-			if (!frame || frame.length === 0)
-				break;
 
 			frameCount++;
 
 			// Show progress every 100 frames
 			if (frameCount % 100 === 0)
-				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${5247}... `);
+				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${expectedFrames}... `);
 
 			// Get feedback and process frame
 			const feedback = await this.brain.getFeedback();
@@ -324,28 +325,7 @@ export default class StockTrainingJob extends Job {
 	 * Reset all channel states for a new episode
 	 */
 	resetChannelStates() {
-		for (const [_, channel] of this.brain.channels) {
-			if (channel.resetEpisode)
-				channel.resetEpisode();
-			else {
-				// Manual reset for stock channels
-				channel.owned = false;
-				channel.entryPrice = null;
-				channel.holdingFrames = 0;
-				channel.hasTraded = false;
-				channel.previousPrice = null;
-				channel.previousVolume = null;
-				channel.currentPrice = null;
-				channel.currentVolume = null;
-				
-				// Reset CSV iterator
-				if (channel.rl)
-					channel.rl.close();
-				// Will be re-initialized on first getFrameInputs() call
-				channel.rl = null;
-				channel.lineIterator = null;
-			}
-		}
+		for (const [_, channel] of this.brain.channels) channel.resetEpisode();
 	}
 
 	/**

@@ -18,8 +18,8 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.80; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.inactivityThreshold = 5; // frames of inactivity before exploration - require activity in every frame
+		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
 		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
@@ -282,6 +282,9 @@ export default class Brain {
 
 			// execute the selected actions
 			await this.executeChannelOutputs(channelName, randomAction);
+
+			// add explored action to frame so it gets recognized as a neuron with coordinates
+			frame.push(randomAction);
 			exploredCount++;
 		}
 

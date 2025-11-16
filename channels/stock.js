@@ -309,22 +309,8 @@ export default class StockChannel extends Channel {
 	getValidExplorationActions() {
 		const actions = [];
 		const activityDim = `${this.symbol}_activity`;
-
-		if (!this.hasTraded) {
-			actions.push({ [activityDim]: 1 });  // buy
-			actions.push({ [activityDim]: 0 });  // hold
-			return actions;
-		}
-
-		if (this.owned) {
-			actions.push({ [activityDim]: -1 }); // sell
-			actions.push({ [activityDim]: 0 });  // hold
-		}
-		else {
-			actions.push({ [activityDim]: 1 });  // buy
-			actions.push({ [activityDim]: 0 });  // hold
-		}
-
+		actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
+		actions.push({ [activityDim]: 0 });  // hold
 		return actions;
 	}
 
@@ -667,7 +653,8 @@ export default class StockChannel extends Channel {
 			if (profit > 0) {
 				this.totalProfit += profit;
 				this.profitableTrades++;
-			} else if (profit < 0) {
+			}
+			else if (profit < 0) {
 				this.totalLoss += Math.abs(profit);
 			}
 
@@ -686,5 +673,10 @@ export default class StockChannel extends Channel {
 			this.entryPrice = currentPrice; // Track sell price for sold position feedback
 			this.holdingFrames = 0; // Reset holding counter
 		}
+		// hold activity = hold signal (0)
+		else if (activityValue === 0) {
+			if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
+		}
+
 	}
 }
