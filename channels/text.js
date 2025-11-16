@@ -76,41 +76,85 @@ export default class TextChannel extends Channel {
 	}
 
 	/**
-	 * Resolve conflicts between multiple character predictions
-	 * Since we can only predict one character at a time, pick the strongest prediction
-	 * @param {Array} predictions - Array of prediction objects with structure:
-	 *   [{ neuron_id, coordinates: {char_input: asciiValue}, strength: number }]
-	 * @returns {Array} - Array with single strongest prediction, or empty if no predictions
+	 * Get resolved inference for text channel
+	 * Resolves conflicts for input predictions only (no outputs for this channel)
+	 * Input predictions: char_input (strongest wins)
+	 * @param {Array} inferences - all inferred neurons for this channel
+	 * @returns {Array} - strongest character prediction
 	 */
-	resolveConflicts(predictions) {
-		if (!predictions || predictions.length === 0) {
+	getResolvedInference(inferences) {
+
+		// if there are no inferences, nothing to resolve
+		if (!inferences || inferences.length === 0) {
 			this.lastPredictedChar = null;
 			return [];
 		}
 
-		// Filter to only predictions that have char_input coordinate
-		const charPredictions = predictions.filter(pred => 'char_input' in pred.coordinates);
+		// Separate into input predictions and output inferences
+		const { inputPredictions } = this.separateInputsAndOutputs(inferences);
 
-		if (charPredictions.length === 0) {
+		// Resolve input predictions: select strongest character
+		// No output resolution needed for text channel (no output dimensions)
+		return this.resolveInputPredictions(inputPredictions);
+	}
+
+	/**
+	 * Resolve input predictions: select strongest character prediction
+	 * @param {Array} inputPredictions - predictions for char_input dimension
+	 * @returns {Array} - strongest character prediction
+	 */
+	resolveInputPredictions(inputPredictions) {
+		if (inputPredictions.length === 0) {
 			this.lastPredictedChar = null;
 			return [];
 		}
 
-		// Find the strongest prediction
-		let strongest = charPredictions[0];
-		for (const pred of charPredictions)
-			if (pred.strength > strongest.strength) strongest = pred;
+		// Find strongest character prediction
+		const strongest = this.findStrongest(inputPredictions);
+		if (!strongest) {
+			this.lastPredictedChar = null;
+			return [];
+		}
 
-		// Convert ASCII code to character for display
-		const asciiCode = Math.round(strongest.coordinates.char_input);
-		const predictedChar = String.fromCharCode(asciiCode);
-
-		// Store for feedback calculation
-		this.lastPredictedChar = strongest.coordinates.char_input;
-
-		console.log(`text: Predicted '${predictedChar}' (ASCII: ${asciiCode}, strength: ${strongest.strength.toFixed(1)})`);
+		// Store and log prediction
+		this.storePrediction(strongest);
+		this.logPrediction(strongest);
 
 		return [strongest];
+	}
+
+	/**
+	 * Find the strongest inference from a list
+	 * @param {Array} inferences - list of inferences
+	 * @returns {Object|null} - strongest inference or null if empty
+	 */
+	findStrongest(inferences) {
+		if (inferences.length === 0) return null;
+
+		let strongest = inferences[0];
+		for (const inf of inferences)
+			if (inf.strength > strongest.strength)
+				strongest = inf;
+
+		return strongest;
+	}
+
+	/**
+	 * Store prediction for feedback calculation
+	 * @param {Object} prediction - the prediction to store
+	 */
+	storePrediction(prediction) {
+		this.lastPredictedChar = prediction.coordinates.char_input;
+	}
+
+	/**
+	 * Log prediction for debugging
+	 * @param {Object} prediction - the prediction to log
+	 */
+	logPrediction(prediction) {
+		const asciiCode = Math.round(prediction.coordinates.char_input);
+		const predictedChar = String.fromCharCode(asciiCode);
+		console.log(`text: Predicted '${predictedChar}' (ASCII: ${asciiCode}, strength: ${prediction.strength.toFixed(1)})`);
 	}
 
 	/**

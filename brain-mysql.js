@@ -68,27 +68,6 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Execute decisions from previous frame (age = 1)
-	 */
-	async executePreviousOutputs() {
-		const [outputRows] = await this.conn.query(`
-			SELECT inf.neuron_id, c.dimension_id, c.val, d.name as dimension_name, d.channel
-			FROM inferred_neurons inf
-			JOIN coordinates c ON inf.neuron_id = c.neuron_id
-			JOIN dimensions d ON c.dimension_id = d.id
-			WHERE d.type = 'output' AND inf.age = 1 AND inf.level = 0
-			ORDER BY d.channel, d.name
-		`);
-
-		if (outputRows.length === 0) {
-			if (this.debug) console.log('No previous outputs to execute');
-			return;
-		}
-
-		await this.executeOutputRows(outputRows);
-	}
-
-	/**
 	 * Ages all neurons and connections in the context by 1, then deactivates aged-out items.
 	 * With uniform aging, all levels are deactivated at once when age >= baseNeuronMaxAge.
 	 */
@@ -140,18 +119,41 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Get input predictions from inferred_neurons table (MySQL implementation)
+	 * Get inferred base neurons with their coordinates and group by channel (MySQL implementation)
+	 * @returns {Promise<Map>} - Map of channel names to array of inference objects (neuron_id, strength, coordinates)
 	 */
-	async getInputPredictions() {
-		const [rows] = await this.conn.query(`
+	async getChannelInferences() {
+
+		// get inferred base neurons from mysql
+		const [baseNeuronCoordinates] = await this.conn.query(`
 			SELECT inf.neuron_id, inf.strength, c.dimension_id, c.val, d.name as dimension_name, d.channel
 			FROM inferred_neurons inf
 			JOIN coordinates c ON inf.neuron_id = c.neuron_id
 			JOIN dimensions d ON c.dimension_id = d.id
-			WHERE d.type = 'input' AND inf.age = 0 AND inf.level = 0
+			WHERE inf.age = 0 AND inf.level = 0
 			ORDER BY d.channel, inf.neuron_id
 		`);
-		return rows;
+
+		// group inferred coordinates by channel, building complete prediction objects with coordinates
+		const channelInferences = new Map();
+		for (const coordinate of baseNeuronCoordinates) {
+
+			// if the channel doesn't have a map yet, create one - otherwise get it from the map
+			if (!channelInferences.has(coordinate.channel)) channelInferences.set(coordinate.channel, new Map());
+			const channelMap = channelInferences.get(coordinate.channel);
+
+			// if the neuron doesn't have a record yet, create one with no coordinates
+			if (!channelMap.has(coordinate.neuron_id)) channelMap.set(coordinate.neuron_id, { neuron_id: coordinate.neuron_id, strength: coordinate.strength, coordinates: {} });
+			// if the neuron is inferred through multiple paths, sum inference strengths
+			else channelMap.get(coordinate.neuron_id).strength += coordinate.strength;
+
+			// add the coordinate to the neuron's prediction
+			channelMap.get(coordinate.neuron_id).coordinates[coordinate.dimension_name] = coordinate.val;
+		}
+
+		// go through the channel inferences, convert to array of objects and return them
+		for (const [channel, neuronMap] of channelInferences) channelInferences.set(channel, Array.from(neuronMap.values()));
+		return channelInferences;
 	}
 
 	/**

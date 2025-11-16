@@ -17,6 +17,7 @@ export default class Channel {
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
 		this.debug = false; // controls verbosity of channel output
+		this.inferredActions = []; // actions selected by resolveConflicts
 	}
 
 	/**
@@ -32,7 +33,7 @@ export default class Channel {
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * This method should execute actions and update channel state
 	 */
-	async executeOutputs(predictions) {
+	async executeOutputs() {
 		throw new Error('Channel must implement executeOutputs() method');
 	}
 
@@ -59,6 +60,17 @@ export default class Channel {
 	}
 
 	/**
+	 * Get inferred actions scheduled for current frame
+	 * Returns actions selected by resolveConflicts in previous frame
+	 */
+	async getFrameOutputs() {
+		if (this.inferredActions.length === 0) return [];
+		const actions = this.inferredActions;
+		this.inferredActions = [];
+		return actions;
+	}
+
+	/**
 	 * Get feedback based on previous actions and current state - override in subclasses
 	 * Returns reward factor: number (1.0 = neutral, >1.0 = positive, <1.0 = negative)
 	 * This factor will be multiplied with existing neuron reward factors
@@ -81,18 +93,46 @@ export default class Channel {
 	}
 
 	/**
-	 * Resolve conflicts between multiple predictions for this channel
-	 * Called by brain after all predictions are made, before execution
-	 *
-	 * @param {Array} predictions - Array of prediction objects with structure:
-	 *   [{ neuron_id, coordinates: {dim1: val1, dim2: val2}, strength: number }]
+	 * Resolve conflicts between multiple inferred base neurons for this channel
+	 * Base implementation calls getResolvedInference and stores result automatically
+	 * Child classes override getResolvedInference, not this method
+	 * @param {Array} inference - Array of inference objects with structure: [{ neuron_id, coordinates: {dim1: val1, dim2: val2}, strength: number }]
 	 * @returns {Array} - Array of selected predictions to execute (can be 0, 1, or many)
-	 *
-	 * Each channel must implement its own conflict resolution logic:
+	 */
+	resolveConflicts(inference) {
+
+		// ask the child class to resolve conflicts and return the selected neurons
+		const resolvedInference = this.getResolvedInference(inference);
+
+		// store only output neurons for next frame execution
+		const outputDims = new Set(this.getOutputDimensions());
+		const inferredOutput = resolvedInference.filter(pred => Object.keys(pred.coordinates).some(dim => outputDims.has(dim)));
+		this.inferredActions = inferredOutput.map(pred => pred.coordinates);
+
+		return resolvedInference;
+	}
+
+	/**
+	 * Separate inferences into input predictions and output inferences
+	 * @param {Array} inferences - all inferences
+	 * @returns {Object} - { inputPredictions, outputInferences }
+	 */
+	separateInputsAndOutputs(inferences) {
+		const inputDims = new Set(this.getInputDimensions());
+		const outputDims = new Set(this.getOutputDimensions());
+		const inputPredictions = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => inputDims.has(dim)));
+		const outputInferences = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => outputDims.has(dim)));
+		return { inputPredictions, outputInferences };
+	}
+
+	/**
+	 * Get resolved inference for this channel - override in subclasses
+	 * Child classes implement their own conflict resolution logic here
+	 * Examples:
 	 * - Stock channel: Returns array with 1 prediction (can't buy and sell simultaneously)
 	 * - Vision channel: Returns array with multiple predictions (can detect multiple objects)
 	 */
-	resolveConflicts(predictions) {
-		throw new Error('Channel must implement resolveConflicts() method');
+	getResolvedInference() {
+		throw new Error('Channel must implement getResolvedInference() method');
 	}
 }

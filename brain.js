@@ -18,7 +18,8 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.50; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.80; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
 		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
@@ -37,7 +38,6 @@ export default class Brain {
 		// used for global activity tracking so that we can trigger exploration when all channels are inactive
 		this.lastActivity = -1; // frame number of last activity across all channels
 		this.frameNumber = 0;
-		this.inactivityThreshold = 5; // frames of inactivity before exploration
 
 		// Prediction accuracy tracking (cumulative stats per level)
 		this.accuracyStats = new Map(); // level -> { connection: {correct, total}, pattern: {correct, total}, resolved: {correct, total} }
@@ -128,10 +128,16 @@ export default class Brain {
 		// Increment frame counter to be able to track inactivity
 		this.frameNumber++;
 
-		// Get input data from all channels
+		// Get input and output data from all channels
 		for (const [_, channel] of this.channels) {
+
+			// get the frame inputs from the channel
 			const channelInputs = await channel.getFrameInputs();
 			if (channelInputs && channelInputs.length > 0) frame.push(...channelInputs);
+
+			// get last inferred outputs to be executed in this frame in case there are any
+			const channelOutputs = await channel.getFrameOutputs();
+			if (channelOutputs && channelOutputs.length > 0) frame.push(...channelOutputs);
 		}
 
 		return frame;
@@ -182,7 +188,7 @@ export default class Brain {
 		await this.ageNeurons();
 
 		// execute previous frame's decisions + exploration if needed
-		await this.executeOutputs();
+		await this.executeOutputs(frame);
 
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
@@ -215,41 +221,101 @@ export default class Brain {
 	/**
 	 * Execute previous frame's decisions and exploration actions if needed
 	 */
-	async executeOutputs() {
+	async executeOutputs(frame) {
 
-		// Execute previous frame's decisions (age = 1)
-		await this.executePreviousOutputs();
+		// Execute previous frame's decisions (output neurons in current frame)
+		await this.executeInferredActions(frame);
 
 		// Execute exploration if brain is inactive
-		await this.curiosityExploration();
+		await this.curiosityExploration(frame);
 	}
 
 	/**
-	 * Execute curiosity exploration if brain is inactive
+	 * Execute decisions from previous frame (age = 1)
+	 * Reads output neurons from the frame instead of querying database
 	 */
-	async curiosityExploration() {
+	async executeInferredActions(frame){
 
-		// Check if the brain is inactive - if active, no exploration needed
-		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
-		if (this.debug) console.log('Brain inactive - executing curiosity exploration');
+		// Get channel outputs from frame
+		const channelOutputs = this.getFrameChannelOutputs(frame);
 
-		// Get a random channel for exploration
-		const channelNames = Array.from(this.channels.keys());
-		const randomChannelName = channelNames[Math.floor(Math.random() * channelNames.length)];
-		const randomChannel = this.channels.get(randomChannelName);
-
-		// Get exploration actions for the channel
-		const explorationActions = randomChannel.getValidExplorationActions();
-		if (explorationActions.length === 0) {
-			if (this.debug) console.log(`No valid exploration actions for ${randomChannelName}`);
+		// nothing to do if there are no outputs
+		if (channelOutputs.size === 0) {
+			if (this.debug) console.log('No inferred outputs to execute');
 			return;
 		}
 
-		// Execute random exploration action
-		const randomAction = explorationActions[Math.floor(Math.random() * explorationActions.length)];
-		if (this.debug) console.log(`${randomChannelName}: Executing exploration action:`, randomAction);
+		// execute outputs for each channel
+		for (const [channelName, coordinates] of channelOutputs)
+			await this.executeChannelOutputs(channelName, coordinates);
+	}
 
-		await this.executeChannelOutputs(randomChannelName, randomAction);
+	/**
+	 * Execute curiosity exploration for channels without inferred outputs
+	 */
+	async curiosityExploration(frame){
+
+		// Check if the brain is inactive - if active, no exploration needed
+		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
+
+		// Get channel outputs from frame
+		const channelOutputs = this.getFrameChannelOutputs(frame);
+
+		// Explore channels without outputs
+		let exploredCount = 0;
+		for (const [channelName, channel] of this.channels) {
+
+			// Skip if channel doesn't have output dimensions
+			const channelOutputDims = channel.getOutputDimensions();
+			if (channelOutputDims.length === 0) continue;
+
+			// Skip if this channel already has output in frame
+			if (channelOutputs.has(channelName)) continue;
+
+			// Execute exploration for this channel
+			const validActions = channel.getValidExplorationActions();
+			if (validActions.length === 0) continue;
+
+			// pick a random action from the valid ones
+			const randomAction = validActions[Math.floor(Math.random() * validActions.length)];
+			if (this.debug) console.log(`${channelName}: Curiosity exploration:`, randomAction);
+
+			// execute the selected actions
+			await this.executeChannelOutputs(channelName, randomAction);
+			exploredCount++;
+		}
+
+		if (this.debug && exploredCount > 0) console.log(`Explored ${exploredCount} channels without predictions`);
+	}
+
+	/**
+	 * returns channel outputs from frame, grouped by channel
+	 * @param {Array} frame - frame data points
+	 * @returns {Map} - Map of channel name to coordinates object (empty object if channel has output but no values yet)
+	 */
+	getFrameChannelOutputs(frame) {
+		const outputDimToChannel = this.getOutputDimensionToChannelMap();
+		const channelOutputs = new Map();
+		for (const point of frame)
+			for (const [dim, value] of Object.entries(point))
+				if (outputDimToChannel.has(dim)) {
+					const channelName = outputDimToChannel.get(dim);
+					if (!channelOutputs.has(channelName)) channelOutputs.set(channelName, {});
+					channelOutputs.get(channelName)[dim] = value;
+				}
+		return channelOutputs;
+	}
+
+	/**
+	 * Get mapping of output dimension names to channel names
+	 * @returns {Map} - Map of dimension name to channel name
+	 */
+	getOutputDimensionToChannelMap() {
+		const outputDimToChannel = new Map();
+		for (const [channelName, channel] of this.channels)
+			for (const dim of channel.getOutputDimensions())
+				outputDimToChannel.set(dim, channelName);
+		return outputDimToChannel;
 	}
 
 	/**
@@ -276,68 +342,20 @@ export default class Brain {
 	 * Unified method to execute outputs on a specific channel
 	 */
 	async executeChannelOutputs(channelName, coordinates) {
+
+		// get the channel object
 		const channel = this.channels.get(channelName);
 		if (!channel) {
 			if (this.debug) console.log(`Warning: Channel ${channelName} not found`);
 			return;
 		}
 
+		// execute outputs in the channel
 		if (this.debug) console.log(`${channelName}: Executing outputs:`, coordinates);
 		await channel.executeOutputs(coordinates);
 
 		// Track global activity
 		this.lastActivity = this.frameNumber;
-	}
-
-	/**
-	 * Group predictions by channel, building complete prediction objects with coordinates.
-	 * If both connection and pattern inference predict the same neuron, their strengths are summed.
-	 */
-	groupPredictionsByChannel(predictionRows) {
-		const channelPredictions = new Map();
-		this.addPredictionsToChannelMap(channelPredictions, predictionRows);
-		return channelPredictions;
-	}
-
-	/**
-	 * Add predictions from rows to the channel map.
-	 * If a neuron is already predicted, sum the strengths (both sources agree = higher confidence).
-	 */
-	addPredictionsToChannelMap(channelPredictions, rows) {
-		for (const row of rows) {
-
-			// if the channel doesn't have a map yet, create one - otherwise get it from the map
-			if (!channelPredictions.has(row.channel)) channelPredictions.set(row.channel, new Map());
-			const channelMap = channelPredictions.get(row.channel);
-
-			// if the neuron doesn't have a prediction yet, create one
-			if (!channelMap.has(row.neuron_id)) channelMap.set(row.neuron_id, { neuron_id: row.neuron_id, strength: row.strength, coordinates: {} });
-			// Both connection and pattern predict this neuron - sum strengths
-			else channelMap.get(row.neuron_id).strength += row.strength;
-
-			// add the coordinate to the neuron's prediction
-			channelMap.get(row.neuron_id).coordinates[row.dimension_name] = row.val;
-		}
-	}
-
-	/**
-	 * Resolve conflicts for each channel and write final predictions to inferred_neurons.
-	 * Channels can return multiple predictions (e.g., vision detecting multiple objects).
-	 */
-	async resolveAndWritePredictions(channelPredictions) {
-
-		// Resolve conflicts for each channel and collect selected predictions
-		const allSelectedPredictions = [];
-		for (const [channelName, predictionMap] of channelPredictions)
-			allSelectedPredictions.push(...this.channels.get(channelName).resolveConflicts(Array.from(predictionMap.values())));
-
-		// if there are no predictions, nothing to resolve
-		if (allSelectedPredictions.length === 0) return;
-
-		// Write selected predictions - implementation-specific
-		await this.writeResolvedPredictions(allSelectedPredictions);
-
-		if (this.debug) console.log(`Resolved ${allSelectedPredictions.length} input predictions after conflict resolution`);
 	}
 
 	/**
@@ -426,13 +444,6 @@ export default class Brain {
 	 */
 	async getMaxActiveLevel() {
 		throw new Error('getMaxActiveLevel() must be implemented by subclass');
-	}
-
-	/**
-	 * Execute decisions from previous frame (age = 1)
-	 */
-	async executePreviousOutputs() {
-		throw new Error('executePreviousOutputs() must be implemented by subclass');
 	}
 
 	/**
@@ -611,7 +622,7 @@ export default class Brain {
 	/**
 	 * Apply global reward to active connections
 	 */
-	async applyRewards(globalReward) {
+	async applyRewards() {
 		throw new Error('applyRewards() must be implemented by subclass');
 	}
 
@@ -657,8 +668,8 @@ export default class Brain {
 		// If predictions are at higher level, unpack through pattern chain to base level
 		if (level > 0) await this.unpackToBase(level, 'connection');
 
-		// Use channel logic to resolve conflicting predictions at base level
-		await this.resolveInputPredictionConflicts();
+		// Use channel logic to resolve conflicting inference at base level
+		await this.resolveChannelInferenceConflicts();
 		return true;
 	}
 
@@ -682,22 +693,30 @@ export default class Brain {
 		if (level > 1) await this.unpackToBase(level - 1, 'pattern');
 
 		// Use channel logic to resolve conflicting predictions at base level
-		await this.resolveInputPredictionConflicts();
+		await this.resolveChannelInferenceConflicts();
 		return true;
 	}
 
 	/**
-	 * Resolve conflicts in input predictions per channel (level 0 only).
+	 * Resolve inference conflicts per channel (level 0 only).
 	 * Reads from inferred_neurons table (which contains predictions from either connection or pattern inference).
 	 */
-	async resolveInputPredictionConflicts() {
+	async resolveChannelInferenceConflicts() {
 
-		// Read predictions from inferred_neurons table
-		const predictedRows = await this.getInputPredictions();
+		// Read inferred base neurons from inferred_neurons table - if there are none, nothing to resolve
+		const channelInferences = await this.getChannelInferences();
+		if (channelInferences.size === 0) return;
 
-		// Group predictions by channel and resolve conflicts and write to the inferred_neurons_resolved table
-		const channelPredictions = this.groupPredictionsByChannel(predictedRows);
-		await this.resolveAndWritePredictions(channelPredictions);
+		// Resolve conflicts for each channel and collect resolved inferences
+		// Channels resolve conflicts and store final inferred neurons in their own memory as well to be executed in the next frame
+		const resolvedInferences = [];
+		for (const [channelName, channelInference] of channelInferences)
+			resolvedInferences.push(...this.channels.get(channelName).resolveConflicts(channelInference));
+
+		// Write selected predictions to be used later for accuracy reporting - implementation-specific
+		await this.writeResolvedPredictions(resolvedInferences);
+
+		if (this.debug) console.log(`Resolved ${resolvedInferences.length} input predictions after conflict resolution`);
 	}
 
 	/**
@@ -771,7 +790,7 @@ export default class Brain {
 	 * Connection inference at a specific level (implementation-specific)
 	 * Returns count of predictions made.
 	 */
-	async inferConnectionsAtLevel(level) {
+	async inferConnectionsAtLevel() {
 		throw new Error('inferConnectionsAtLevel() must be implemented by subclass');
 	}
 
@@ -779,63 +798,63 @@ export default class Brain {
 	 * Pattern inference from a source level (implementation-specific)
 	 * Returns count of predictions made.
 	 */
-	async inferPatternsFromLevel(sourceLevel) {
+	async inferPatternsFromLevel() {
 		throw new Error('inferPatternsFromLevel() must be implemented by subclass');
 	}
 
 	/**
 	 * Unpack predictions from higher level to base level via peak chain (implementation-specific)
 	 */
-	async unpackToBase(fromLevel, source) {
+	async unpackToBase() {
 		throw new Error('unpackToBase() must be implemented by subclass');
 	}
 
 	/**
-	 * Get input predictions from inferred_neurons table (implementation-specific)
+	 * Get inferred	base neurons grouped by channels (implementation-specific)
 	 */
-	async getInputPredictions() {
-		throw new Error('getInputPredictions() must be implemented by subclass');
+	async getChannelInferences() {
+		throw new Error('getChannelInferences() must be implemented by subclass');
 	}
 
 	/**
 	 * Write resolved predictions to storage (implementation-specific)
 	 */
-	async writeResolvedPredictions(allSelectedPredictions) {
+	async writeResolvedPredictions() {
 		throw new Error('writeResolvedPredictions() must be implemented by subclass');
 	}
 
 	/**
 	 * fetches all neuron coordinates that could potentially match any point in the frame
 	 */
-	async getFrameCoordinates(frame) {
+	async getFrameCoordinates() {
 		throw new Error('getFrameCoordinates(frame) must be implemented by subclass');
 	}
 
 	/**
 	 * Sets coordinates for neurons in batches to avoid query size limits
 	 */
-	async setNeuronCoordinates(neurons) {
+	async setNeuronCoordinates() {
 		throw new Error('setNeuronCoordinates(neurons) must be implemented by subclass');
 	}
 
 	/**
 	 * Creates new neurons and return their IDs.
 	 */
-	async createNeurons(count) {
+	async createNeurons() {
 		throw new Error('createNeurons(count) must be implemented by subclass');
 	}
 
 	/**
 	 * Activate neurons at base level (level 0)
 	 */
-	async activateNeurons(neuronIds) {
+	async activateNeurons() {
 		throw new Error('activateNeurons() must be implemented by subclass');
 	}
 
 	/**
 	 * Activate pattern neurons in a level
 	 */
-	async recognizeLevelPatterns(level) {
+	async recognizeLevelPatterns() {
 		throw new Error('recognizeLevelPatterns(level) must be implemented by subclass');
 	}
 
@@ -866,17 +885,15 @@ export default class Brain {
 
 	/**
 	 * Create pattern neurons and map them to new_patterns (implementation-specific)
-	 * @param {number} patternCount - Number of patterns to create neurons for
 	 */
-	async createPatternNeurons(patternCount) {
+	async createPatternNeurons() {
 		throw new Error('createPatternNeurons(patternCount) must be implemented by subclass');
 	}
 
 	/**
 	 * Merge new patterns into pattern_peaks, pattern_past, pattern_future (implementation-specific)
-	 * @param {number} predictionLevel - Level where predictions were made
 	 */
-	async mergeNewPatterns(predictionLevel) {
+	async mergeNewPatterns() {
 		throw new Error('mergeNewPatterns(predictionLevel) must be implemented by subclass');
 	}
 }

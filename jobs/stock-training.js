@@ -1,9 +1,9 @@
 import Job from './job.js';
 import StockChannel from '../channels/stock.js';
-import fs from 'fs';
-import path from 'path';
-import https from 'https';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
+import https from 'node:https';
+import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,7 +22,7 @@ export default class StockTrainingJob extends Job {
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],       // Stock symbols to train on
 			maxEpisodes: 20,                      // Number of training episodes
-			holdoutRows: 5200,                       // Number of rows to hold out for prediction testing
+			holdoutRows: 5240,                       // Number of rows to hold out for prediction testing
 			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
 		};
 
@@ -305,7 +305,7 @@ export default class StockTrainingJob extends Job {
 		// Capture overall accuracy across all levels
 		let totalCorrect = 0;
 		let totalPredictions = 0;
-		for (const [level, stats] of this.brain.accuracyStats) {
+		for (const [_, stats] of this.brain.accuracyStats) {
 			totalCorrect += stats.resolved.correct;
 			totalPredictions += stats.resolved.total;
 		}

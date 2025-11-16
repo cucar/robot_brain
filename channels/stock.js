@@ -241,9 +241,7 @@ export default class StockChannel extends Channel {
 			// Calculate average error for this channel
 			const avgError = this.pricePredictionErrors.reduce((sum, err) => sum + err, 0) / this.pricePredictionErrors.length;
 
-			if (this.debug) {
-				console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
-			}
+			if (this.debug) console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
 			this.lastPredictedPrice = null;
 		}
 
@@ -252,7 +250,8 @@ export default class StockChannel extends Channel {
 		this.previousVolume = this.currentVolume;
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizePercentageChange(priceChange) },
-			{ [`${this.symbol}_volume_change`]: this.discretizePercentageChange(volumeChange) }
+			{ [`${this.symbol}_volume_change`]: this.discretizePercentageChange(volumeChange) },
+			{ [`${this.symbol}_position`]: this.owned ? 1 : 0 }
 		];
 	}
 
@@ -261,8 +260,9 @@ export default class StockChannel extends Channel {
 	 */
 	getInputDimensions() {
 		return [
-			`${this.symbol}_price_change`, // Discretized percentage change in price
-			`${this.symbol}_volume_change` // Discretized percentage change in volume
+			`${this.symbol}_price_change`,
+			`${this.symbol}_volume_change`,
+			`${this.symbol}_position`
 		];
 	}
 
@@ -271,7 +271,7 @@ export default class StockChannel extends Channel {
 	 */
 	getOutputDimensions() {
 		return [
-			`${this.symbol}_activity` // -1 for sell, +1 for buy
+			`${this.symbol}_activity` // -1 to sell, 0 to hold, and +1 to buy
 		];
 	}
 
@@ -303,16 +303,29 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Get valid exploration actions based on current stock ownership
-	 * Before first trade: only buy is valid
-	 * After first trade: both buy and sell are valid (alternating states)
+	 * Before first trade: can buy or hold
+	 * After first trade: can buy/hold (if not owned) or sell/hold (if owned)
 	 */
 	getValidExplorationActions() {
+		const actions = [];
+		const activityDim = `${this.symbol}_activity`;
 
-		// Before first trade, can only buy
-		if (!this.hasTraded) return [{ [`${this.symbol}_activity`]: 1 }];
+		if (!this.hasTraded) {
+			actions.push({ [activityDim]: 1 });  // buy
+			actions.push({ [activityDim]: 0 });  // hold
+			return actions;
+		}
 
-		// After first trade, can do opposite of current state
-		return [{ [`${this.symbol}_activity`]: (this.owned ? -1 : 1) }];
+		if (this.owned) {
+			actions.push({ [activityDim]: -1 }); // sell
+			actions.push({ [activityDim]: 0 });  // hold
+		}
+		else {
+			actions.push({ [activityDim]: 1 });  // buy
+			actions.push({ [activityDim]: 0 });  // hold
+		}
+
+		return actions;
 	}
 
 	/**
@@ -427,74 +440,154 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Resolve conflicts between multiple stock predictions
-	 * For stocks: only one action can be taken (buy OR sell, not both)
-	 * Prioritize price predictions over volume predictions, then select by strength
-	 * Also calculates continuous price prediction (weighted average of predicted prices)
-	 * IMPORTANT: Uses previousPrice (not currentPrice) to avoid lookahead bias - we're predicting
-	 * the NEXT frame's price based on data available BEFORE reading the next frame.
-	 * @returns {Array} - Array with single selected prediction
+	 * Get resolved inference for stock channel
+	 * Resolves conflicts for both input predictions and output inferences
+	 * Input predictions: price_change, volume_change, position (strongest wins per dimension)
+	 * Output inferences: activity (strongest wins)
+	 * @param {Array} inferences - all inferred neurons for this channel
+	 * @returns {Array} - resolved neurons with strongest per dimension
 	 */
-	resolveConflicts(predictions) {
-		if (!predictions || predictions.length === 0) {
+	getResolvedInference(inferences) {
+
+		// if there are no inferences, nothing to resolve
+		if (!inferences || inferences.length === 0) {
 			this.lastPredictedPrice = null;
 			return [];
 		}
 
-		const priceChangeDim = `${this.symbol}_price_change`;
+		// Separate into input predictions and output inferences
+		const { inputPredictions, outputInferences } = this.separateInputsAndOutputs(inferences);
 
-		// Filter to only predictions that have price_change coordinate (not volume)
-		const pricePredictions = predictions.filter(pred => priceChangeDim in pred.coordinates);
+		// Resolve input predictions: select strongest for each input dimension
+		const resolvedInputs = this.resolveInputPredictions(inputPredictions);
 
-		// Calculate continuous price prediction as weighted average of predicted prices
-		// Use priceForPrediction (the price from the CURRENT frame, which is the base for predicting NEXT frame)
-		if (pricePredictions.length > 0 && this.priceForPrediction !== null) {
-			let totalWeightedPrice = 0;
-			let totalStrength = 0;
-			const bucketDetails = [];
+		// Resolve output inferences: select strongest action
+		const resolvedOutputs = this.resolveOutputInferences(outputInferences);
 
-			for (const pred of pricePredictions) {
-				const bucketValue = pred.coordinates[priceChangeDim];
-				const percentageChange = this.bucketValueToPercentage(bucketValue);
-				const predictedPrice = this.priceForPrediction * (1 + percentageChange / 100);
-				totalWeightedPrice += predictedPrice * pred.strength;
-				totalStrength += pred.strength;
-				bucketDetails.push(`B${bucketValue}(${percentageChange.toFixed(2)}%):${pred.strength.toFixed(1)}`);
-			}
+		// Combine and return
+		const resolved = [...resolvedInputs, ...resolvedOutputs];
+		if (this.debug) this.logResolution(inferences.length, inputPredictions.length, outputInferences.length, resolved.length);
+		return resolved;
+	}
 
-			this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
-			if (this.lastPredictedPrice !== null && this.debug) {
-				const predictedChange = ((this.lastPredictedPrice - this.priceForPrediction) / this.priceForPrediction) * 100;
-				console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.priceForPrediction.toFixed(2)}`);
-			}
+	/**
+	 * Resolve input predictions: select strongest for each input dimension. Also calculates continuous price prediction for accuracy tracking
+	 * @param {Array} inputPredictions - predictions for input dimensions
+	 * @returns {Array} - strongest prediction per input dimension
+	 */
+	resolveInputPredictions(inputPredictions) {
+
+		// if there are no input predictions, nothing to resolve
+		if (inputPredictions.length === 0) {
+			this.lastPredictedPrice = null;
+			return [];
 		}
+
+		// Group by dimension
+		const byDimension = this.groupByDimension(inputPredictions);
+
+		// Calculate continuous price prediction for tracking
+		const priceChangeDim = `${this.symbol}_price_change`;
+		if (byDimension.has(priceChangeDim)) this.calculateContinuousPricePrediction(byDimension.get(priceChangeDim));
 		else this.lastPredictedPrice = null;
 
-		// Return strongest prediction for EACH dimension (price and volume separately)
-		const volumeChangeDim = `${this.symbol}_volume_change`;
-		const volumePredictions = predictions.filter(pred => volumeChangeDim in pred.coordinates);
+		// Select strongest for each dimension
+		return this.selectStrongestPerDimension(byDimension);
+	}
 
-		const result = [];
+	/**
+	 * Resolve output inferences: select strongest for each output dimension
+	 * @param {Array} outputInferences - inferences for output dimensions
+	 * @returns {Array} - strongest inference per output dimension
+	 */
+	resolveOutputInferences(outputInferences) {
+		if (outputInferences.length === 0) return [];
 
-		// Add the strongest price prediction if any
-		if (pricePredictions.length > 0) {
-			let strongestPrice = pricePredictions[0];
-			for (const pred of pricePredictions) if (pred.strength > strongestPrice.strength) strongestPrice = pred;
-			result.push(strongestPrice);
+		// Group by dimension and select strongest for each
+		const byDimension = this.groupByDimension(outputInferences);
+		return this.selectStrongestPerDimension(byDimension);
+	}
+
+	/**
+	 * Select strongest inference for each dimension
+	 * @param {Map} byDimension - Map of dimension name to array of inferences
+	 * @returns {Array} - strongest inference per dimension
+	 */
+	selectStrongestPerDimension(byDimension) {
+		const resolved = [];
+		for (const [_, inferences] of byDimension) {
+			const strongest = this.findStrongest(inferences);
+			if (strongest) resolved.push(strongest);
+		}
+		return resolved;
+	}
+
+	/**
+	 * Group inferences by dimension
+	 * @param {Array} inferences - list of inferences
+	 * @returns {Map} - Map of dimension name to array of inferences
+	 */
+	groupByDimension(inferences) {
+		const groups = new Map();
+		for (const inf of inferences)
+			for (const dim of Object.keys(inf.coordinates)) {
+				if (!groups.has(dim)) groups.set(dim, []);
+				groups.get(dim).push(inf);
+			}
+		return groups;
+	}
+
+	/**
+	 * Calculate continuous price prediction as weighted average
+	 * Uses priceForPrediction (current frame price) as base for predicting next frame
+	 * @param {Array} pricePredictions - predictions for price_change dimension
+	 */
+	calculateContinuousPricePrediction(pricePredictions) {
+		if (pricePredictions.length === 0 || this.priceForPrediction === null) {
+			this.lastPredictedPrice = null;
+			return;
 		}
 
-		// Add the strongest volume prediction if any
-		if (volumePredictions.length > 0) {
-			let strongestVolume = volumePredictions[0];
-			for (const pred of volumePredictions) if (pred.strength > strongestVolume.strength) strongestVolume = pred;
-			result.push(strongestVolume);
+		const priceChangeDim = `${this.symbol}_price_change`;
+		let totalWeightedPrice = 0;
+		let totalStrength = 0;
+		const bucketDetails = [];
+
+		for (const pred of pricePredictions) {
+			const bucketValue = pred.coordinates[priceChangeDim];
+			const percentageChange = this.bucketValueToPercentage(bucketValue);
+			const predictedPrice = this.priceForPrediction * (1 + percentageChange / 100);
+
+			totalWeightedPrice += predictedPrice * pred.strength;
+			totalStrength += pred.strength;
+			bucketDetails.push(`B${bucketValue}(${percentageChange.toFixed(2)}%):${pred.strength.toFixed(1)}`);
 		}
 
-		if (this.debug) {
-			console.log(`${this.symbol}: Resolved ${predictions.length} predictions → returning ${result.length} (${pricePredictions.length > 0 ? 'price' : ''}${pricePredictions.length > 0 && volumePredictions.length > 0 ? '+' : ''}${volumePredictions.length > 0 ? 'volume' : ''})`);
-		}
+		this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
 
-		return result;
+		if (this.lastPredictedPrice !== null && this.debug) {
+			const predictedChange = ((this.lastPredictedPrice - this.priceForPrediction) / this.priceForPrediction) * 100;
+			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.priceForPrediction.toFixed(2)}`);
+		}
+	}
+
+	/**
+	 * Find the strongest inference from a list
+	 * @param {Array} inferences - list of inferences
+	 * @returns {Object|null} - strongest inference or null if empty
+	 */
+	findStrongest(inferences) {
+		if (inferences.length === 0) return null;
+		let strongest = inferences[0];
+		for (const inf of inferences) if (inf.strength > strongest.strength) strongest = inf;
+		return strongest;
+	}
+
+	/**
+	 * Log resolution results for debugging
+	 */
+	logResolution(totalCount, inputCount, outputCount, resolvedCount) {
+		console.log(`${this.symbol}: Resolved ${totalCount} inferences (${inputCount} inputs, ${outputCount} outputs) → ${resolvedCount} selected`);
 	}
 
 	/**
