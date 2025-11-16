@@ -34,6 +34,7 @@ export default class StockChannel extends Channel {
 		this.lastPredictedPrice = null; // Predicted price from previous frame
 		this.pricePredictionErrors = []; // Array of price prediction errors for calculating metrics
 		this.priceForPrediction = null; // Price to use as base for next prediction (set before updating currentPrice)
+		this.priceForFeedback = null; // Price from previous frame for feedback calculation (lagged by 1 frame)
 
 		// Holdout configuration
 		this.holdoutRows = 0; // Number of rows to hold out from training (set by job)
@@ -200,6 +201,7 @@ export default class StockChannel extends Channel {
 		// Reset continuous prediction tracking
 		this.lastPredictedPrice = null;
 		this.pricePredictionErrors = [];
+		this.priceForFeedback = null;
 
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
@@ -322,6 +324,10 @@ export default class StockChannel extends Channel {
 		// Save current price as base for predictions BEFORE reading new price
 		if (this.currentPrice !== null) this.priceForPrediction = this.currentPrice;
 
+		// Save current price for feedback calculation (lagged by 1 frame)
+		// This ensures feedback is based on the price change AFTER the previous decision was executed
+		if (this.currentPrice !== null) this.priceForFeedback = this.currentPrice;
+
 		// Read next data row
 		const row = this.readNextRow();
 		if (!row) return [];
@@ -376,15 +382,20 @@ export default class StockChannel extends Channel {
 	 * For owned stocks: multiply by (new_price / old_price)
 	 * For sold stocks: multiply by (old_price / new_price) - inverse relationship
 	 * Returns 1.0 for no feedback (neutral)
+	 *
+	 * Uses priceForFeedback (lagged by 1 frame) to ensure feedback is based on the price change
+	 * AFTER the previous frame's decision was executed, not the current frame's observation.
 	 */
 	async getFeedback() {
 
-		// Need both current and previous price for calculation
+		// Need both current and lagged price for calculation
 		const currentPrice = this.currentPrice;
-		if (currentPrice === null || this.previousPrice === null) return 1.0;
+		const previousPrice = this.priceForFeedback;
+
+		if (currentPrice === null || previousPrice === null) return 1.0;
 
 		// No feedback if no price movement or haven't traded yet
-		if (currentPrice === this.previousPrice || !this.hasTraded) return 1.0;
+		if (currentPrice === previousPrice || !this.hasTraded) return 1.0;
 
 		// Update unrealized profit/loss metrics every frame
 		this.updateUnrealizedProfitLoss();
@@ -395,14 +406,14 @@ export default class StockChannel extends Channel {
 			// For owned stocks: reward factor = new_price / old_price
 			// If price goes up, factor > 1.0 (reward increases)
 			// If price goes down, factor < 1.0 (reward decreases)
-			rewardFactor = currentPrice / this.previousPrice;
+			rewardFactor = currentPrice / previousPrice;
 
 			if (this.debug) {
 				const totalChange = currentPrice - this.entryPrice;
 				const percentChange = (totalChange / this.entryPrice) * 100;
-				const recentChange = currentPrice - this.previousPrice;
+				const recentChange = currentPrice - previousPrice;
 
-				console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+				console.log(`${this.symbol}: OWNED - Price ${previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
 				console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 		}
@@ -410,14 +421,14 @@ export default class StockChannel extends Channel {
 			// For sold stocks: provide inverse feedback
 			// If price goes up after selling, factor < 1.0 (penalty for selling too early)
 			// If price goes down after selling, factor > 1.0 (reward for good timing)
-			rewardFactor = this.previousPrice / currentPrice;
+			rewardFactor = previousPrice / currentPrice;
 
 			if (this.debug) {
 				const totalChange = this.entryPrice - currentPrice; // Profit from selling high and price going lower
 				const percentChange = (totalChange / this.entryPrice) * 100;
-				const recentChange = currentPrice - this.previousPrice;
+				const recentChange = currentPrice - previousPrice;
 
-				console.log(`${this.symbol}: SOLD - Price ${this.previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+				console.log(`${this.symbol}: SOLD - Price ${previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
 				console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 		}

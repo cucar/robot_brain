@@ -900,6 +900,9 @@ export default class BrainMySQL extends Brain {
 	 * Apply global reward to active connections that led to executed outputs.
 	 * Uses multiplicative rewards with exponential temporal decay.
 	 * Older connections get less reward/punishment (decay applied to the reward exponent).
+	 *
+	 * Phase 1 Credit Assignment: Only rewards connections that led to neurons in inferred_neurons_resolved
+	 * (the outputs that were actually executed after conflict resolution).
 	 */
 	async applyRewards(globalReward) {
 
@@ -914,15 +917,18 @@ export default class BrainMySQL extends Brain {
 		// globalReward = 0.5, age = 0 → multiply by 0.5^1.0 = 0.5 (50% decrease)
 		// This is proportional to existing strength, avoiding saturation issues
 
-		// Apply reward to active_connections with exponential temporal decay (clamped between minConnectionStrength and maxConnectionStrength)
-		// Older connections (higher age) get less reward/punishment via decay applied to the exponent
+		// Apply reward to active_connections that led to resolved outputs (proper credit assignment)
+		// Only reward connections whose to_neuron was in the final resolved predictions that got executed
+		// Exponential temporal decay: older connections (higher age) get less reward/punishment
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			JOIN active_connections ac ON c.id = ac.connection_id
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = ac.to_neuron_id AND inf.level = ac.level
 			SET c.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, c.strength * POW(:globalReward, POW(:rewardTimeDecayFactor, ac.age - 1))))
-			WHERE ac.age > 0 -- skip the recently made connections - that's where the output was executed
+			WHERE ac.age > 0 -- skip the recently made connections (age=0)
+			AND inf.age = 1 -- outputs that were just executed this frame
 		`, { globalReward, rewardTimeDecayFactor: this.rewardTimeDecayFactor, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 
-		if (this.debug) console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} active connections (multiplicative)`);
+		if (this.debug) console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} connections that led to executed outputs`);
 	}
 }
