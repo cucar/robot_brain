@@ -21,6 +21,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS connection_inference_sources;
 -- DROP TABLE IF EXISTS pattern_inference_sources;
 -- DROP TABLE IF EXISTS inference_log;
+-- DROP TABLE IF EXISTS inference_chain;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
@@ -300,6 +301,22 @@ CREATE TABLE IF NOT EXISTS inference_log (
     type ENUM('connection', 'pattern') NOT NULL,
     PRIMARY KEY (age, level),
     INDEX idx_age (age)
+) ENGINE=MEMORY;
+
+-- scratch table for tracking the unpacking chain from high-level predictions to base-level outputs
+-- used for channel-specific reward attribution in applyRewards
+-- populated during unpackToBase, ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
+CREATE TABLE IF NOT EXISTS inference_chain (
+    base_neuron_id BIGINT UNSIGNED NOT NULL,
+    base_level TINYINT NOT NULL,
+    base_age TINYINT UNSIGNED NOT NULL,
+    source_neuron_id BIGINT UNSIGNED NOT NULL,
+    source_level TINYINT NOT NULL,
+    source_age TINYINT UNSIGNED NOT NULL,
+    PRIMARY KEY (base_neuron_id, base_level, base_age, source_neuron_id, source_level, source_age),
+    INDEX idx_base (base_neuron_id, base_level, base_age),
+    INDEX idx_source (source_neuron_id, source_level, source_age),
+    INDEX idx_age (base_age)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking unpredicted connections (MEMORY table)

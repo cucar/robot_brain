@@ -145,45 +145,46 @@ export default class Brain {
 	}
 
 	/**
-	 * Get global feedback from all channels aggregated into a single reward factor
+	 * Get channel-specific feedback as a Map of channel_name -> reward
+	 * Each channel provides its own reward signal based on its objectives
 	 */
 	async getFeedback() {
 		if (this.debug) console.log('Getting feedback from all channels...');
-		let globalReward = 1.0; // Start with neutral
+		const channelRewards = new Map();
 		let feedbackCount = 0;
 
 		for (const [channelName, channel] of this.channels) {
 			const rewardFactor = await channel.getFeedback();
 			if (rewardFactor !== 1.0) { // Only process non-neutral feedback
 				if (this.debug) console.log(`${channelName}: reward factor ${rewardFactor.toFixed(3)}`);
-				globalReward *= rewardFactor; // Multiplicative aggregation
+				channelRewards.set(channelName, rewardFactor);
 				feedbackCount++;
 			}
 		}
 
 		if (this.debug) {
-			if (feedbackCount > 0) console.log(`Total reward: ${globalReward.toFixed(3)} (${feedbackCount} channels)`);
+			if (feedbackCount > 0) console.log(`Received feedback from ${feedbackCount} channels`);
 			else console.log('No feedback from any channels');
 		}
 
-		return globalReward;
+		return channelRewards;
 	}
 
 	/**
 	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
-	 * and global reward factor from aggregated channel feedback
+	 * and channel-specific rewards (Map of channel_name -> reward)
 	 */
-	async processFrame(frame, globalReward = 1.0) {
+	async processFrame(frame, channelRewards = new Map()) {
 		const frameStart = performance.now();
 		if (this.debug) {
 			console.log('******************************************************************');
 			console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)}`, this.frameNumber);
-			console.log(`applying global reward: ${globalReward.toFixed(3)}`);
+			if (channelRewards.size > 0) console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 			console.log('******************************************************************');
 		}
 
 		// apply rewards to previously executed decisions (before aging them further)
-		await this.applyRewards(globalReward);
+		await this.applyRewards(channelRewards);
 
 		// age the active neurons in memory context - sliding the temporal window
 		await this.ageNeurons();
