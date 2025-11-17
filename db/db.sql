@@ -20,6 +20,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
 -- DROP TABLE IF EXISTS connection_inference_sources;
 -- DROP TABLE IF EXISTS pattern_inference_sources;
+-- DROP TABLE IF EXISTS inference_log;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
@@ -39,12 +40,12 @@ select count(*) from pattern_future;
 select * from inferred_neurons_resolved where age = 1;
 select * from connection_inference_sources;
 
-SELECT * 
+SELECT *
 FROM inferred_neurons_resolved inf
 LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
 WHERE inf.age = 1;
-            
-select * 
+
+select *
 from connections c
 JOIN connection_inference_sources cis ON cis.connection_id = c.id
 JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level
@@ -57,7 +58,7 @@ AND NOT EXISTS (
 	AND an.age = 0
 );
 
-SELECT * 
+SELECT *
 FROM inferred_neurons_resolved inf
 LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
 WHERE inf.age = 1;
@@ -93,10 +94,10 @@ WITH RECURSIVE unpack AS (
 			SELECT neuron_id, level, 0 as age, strength
 			FROM unpack
 			WHERE level < 1;
-            
+
 select * from connection_inference_sources;
 select * from active_connections where to_neuron_id = 6;
-            
+
 select * from unpredicted_connections;
 select * from new_patterns;
 
@@ -260,28 +261,45 @@ CREATE TABLE IF NOT EXISTS active_connections (
 
 -- scratch table for tracking connection-based predictions (MEMORY table)
 -- populated during connection inference, used for validation and error pattern creation
+-- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
 CREATE TABLE IF NOT EXISTS connection_inference_sources (
     inferred_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     connection_id BIGINT UNSIGNED NOT NULL,
     prediction_strength DOUBLE NOT NULL,
-    INDEX idx_inferred (inferred_neuron_id, level),
+    PRIMARY KEY (inferred_neuron_id, level, age, connection_id),
     INDEX idx_connection (connection_id),
-    INDEX idx_aggregate (level, inferred_neuron_id, prediction_strength)
+    INDEX idx_aggregate (level, inferred_neuron_id, prediction_strength),
+    INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking pattern-based predictions (MEMORY table)
 -- populated during pattern inference, used for validation and error pattern creation
+-- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
 CREATE TABLE IF NOT EXISTS pattern_inference_sources (
     inferred_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
     prediction_strength DOUBLE NOT NULL,
-    INDEX idx_inferred (inferred_neuron_id, level),
+    PRIMARY KEY (inferred_neuron_id, level, age, pattern_neuron_id, connection_id),
     INDEX idx_pattern (pattern_neuron_id),
     INDEX idx_connection (connection_id),
-    INDEX idx_aggregate (level, inferred_neuron_id, prediction_strength)
+    INDEX idx_aggregate (level, inferred_neuron_id, prediction_strength),
+    INDEX idx_age (age)
+) ENGINE=MEMORY;
+
+-- scratch table for tracking which inference type was performed at each level for each frame
+-- used for temporal credit assignment in applyRewards
+-- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
+CREATE TABLE IF NOT EXISTS inference_log (
+    age TINYINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    type ENUM('connection', 'pattern') NOT NULL,
+    PRIMARY KEY (age, level),
+    INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking unpredicted connections (MEMORY table)

@@ -70,6 +70,7 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Ages all neurons and connections in the context by 1, then deactivates aged-out items.
 	 * With uniform aging, all levels are deactivated at once when age >= baseNeuronMaxAge.
+	 * Also ages inference source tables and inference_log for temporal credit assignment.
 	 */
 	async ageNeurons() {
 		if (this.debug) console.log('Aging active neurons, connections, and inferred neurons...');
@@ -78,8 +79,13 @@ export default class BrainMySQL extends Brain {
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
 		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE active_connections SET age = age + 1 ORDER BY age DESC');
+
+		// Age inference source tables for temporal credit assignment
 		await this.conn.query('UPDATE inferred_neurons SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE inferred_neurons_resolved SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE connection_inference_sources SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE pattern_inference_sources SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE inference_log SET age = age + 1 ORDER BY age DESC');
 
 		// Delete aged-out neurons from all levels at once
 		const [neuronResult] = await this.conn.query('DELETE FROM active_neurons WHERE age >= ?', [this.baseNeuronMaxAge]);
@@ -96,6 +102,16 @@ export default class BrainMySQL extends Brain {
 
 		const [resolvedResult] = await this.conn.query('DELETE FROM inferred_neurons_resolved WHERE age >= 2');
 		if (this.debug) console.log(`Cleaned up ${resolvedResult.affectedRows} executed resolved neurons (age >= 2)`);
+
+		// Delete aged-out inference sources (same lifecycle as neurons)
+		const [connInfResult] = await this.conn.query('DELETE FROM connection_inference_sources WHERE age >= ?', [this.baseNeuronMaxAge]);
+		if (this.debug) console.log(`Cleaned up ${connInfResult.affectedRows} aged-out connection inference sources (age >= ${this.baseNeuronMaxAge})`);
+
+		const [patternInfResult] = await this.conn.query('DELETE FROM pattern_inference_sources WHERE age >= ?', [this.baseNeuronMaxAge]);
+		if (this.debug) console.log(`Cleaned up ${patternInfResult.affectedRows} aged-out pattern inference sources (age >= ${this.baseNeuronMaxAge})`);
+
+		const [infLogResult] = await this.conn.query('DELETE FROM inference_log WHERE age >= ?', [this.baseNeuronMaxAge]);
+		if (this.debug) console.log(`Cleaned up ${infLogResult.affectedRows} aged-out inference log entries (age >= ${this.baseNeuronMaxAge})`);
 	}
 
 	/**
@@ -105,17 +121,6 @@ export default class BrainMySQL extends Brain {
 	async getMaxActiveLevel() {
 		const [maxLevelResult] = await this.conn.query('SELECT MAX(level) as max_level FROM active_neurons');
 		return maxLevelResult[0].max_level || 0;
-	}
-
-	/**
-	 * Clear inference scratch data for new predictions (MySQL implementation)
-	 */
-	async clearInferenceData() {
-		await this.truncateTables([
-			'inferred_neurons',
-			'connection_inference_sources',
-			'pattern_inference_sources'
-		]);
 	}
 
 	/**
@@ -225,7 +230,7 @@ export default class BrainMySQL extends Brain {
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			JOIN connection_inference_sources cis ON cis.connection_id = c.id
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level AND inf.age = cis.age
 			SET c.strength = GREATEST(0, c.strength - ?)
 			WHERE cis.level = ?
 			AND c.strength > 0
@@ -304,10 +309,16 @@ export default class BrainMySQL extends Brain {
 	 */
 	async inferConnectionsAtLevel(level) {
 
-		// Populate details table with ALL individual connection predictions
+		// Log this inference for temporal credit assignment
 		await this.conn.query(`
-			INSERT INTO connection_inference_sources (inferred_neuron_id, level, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, c.id, c.strength * POW(?, c.distance)
+            INSERT INTO inference_log (age, level, type) VALUES (0, ?, 'connection')
+            ON DUPLICATE KEY UPDATE type = 'connection'
+		`, [level]);
+
+		// Populate details table with ALL individual connection predictions (age=0 for new predictions)
+		await this.conn.query(`
+			INSERT INTO connection_inference_sources (inferred_neuron_id, level, age, connection_id, prediction_strength)
+			SELECT c.to_neuron_id, ?, 0, c.id, c.strength * POW(?, c.distance)
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE an.level = ?
@@ -320,7 +331,7 @@ export default class BrainMySQL extends Brain {
 			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
 			SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
 			FROM connection_inference_sources
-			WHERE level = ?
+			WHERE level = ? AND age = 0
 			GROUP BY inferred_neuron_id, level
 			HAVING total_strength >= ?
 		`, [level, this.minPredictionStrength]);
@@ -362,7 +373,7 @@ export default class BrainMySQL extends Brain {
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
 			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength + 1))
@@ -377,7 +388,7 @@ export default class BrainMySQL extends Brain {
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
 			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength - ?))
@@ -394,7 +405,7 @@ export default class BrainMySQL extends Brain {
 			INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT pis.pattern_neuron_id, ac.connection_id, 1.0
 			FROM pattern_inference_sources pis
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pis.pattern_neuron_id
 			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = ? AND ac.age = 0
 			LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = pis.pattern_neuron_id AND pf.connection_id = ac.connection_id
@@ -416,10 +427,16 @@ export default class BrainMySQL extends Brain {
 	 */
 	async inferPatternsFromLevel(sourceLevel) {
 
-		// Populate details table with ALL individual pattern predictions
+		// Log this inference for temporal credit assignment
 		await this.conn.query(`
-			INSERT INTO pattern_inference_sources (inferred_neuron_id, level, pattern_neuron_id, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, an.neuron_id, c.id, pf.strength * c.strength * POW(?, c.distance)
+            INSERT INTO inference_log (age, level, type) VALUES (0, ?, 'pattern')
+            ON DUPLICATE KEY UPDATE type = 'pattern'
+		`, [sourceLevel]);
+
+		// Populate details table with ALL individual pattern predictions (age=0 for new predictions)
+		await this.conn.query(`
+			INSERT INTO pattern_inference_sources (inferred_neuron_id, level, age, pattern_neuron_id, connection_id, prediction_strength)
+			SELECT c.to_neuron_id, ?, 0, an.neuron_id, c.id, pf.strength * c.strength * POW(?, c.distance)
 			FROM active_neurons an
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
 			JOIN connections c ON c.id = pf.connection_id
@@ -435,7 +452,7 @@ export default class BrainMySQL extends Brain {
 			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
 			SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
 			FROM pattern_inference_sources
-			WHERE level = ?
+			WHERE level = ? AND age = 0
 			GROUP BY inferred_neuron_id, level
 			HAVING total_strength >= ?
 		`, [sourceLevel - 1, this.minPredictionStrength]);
@@ -897,12 +914,14 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Apply global reward to active connections that led to executed outputs.
+	 * Apply global reward to connections/patterns that led to executed outputs.
 	 * Uses multiplicative rewards with exponential temporal decay.
 	 * Older connections get less reward/punishment (decay applied to the reward exponent).
 	 *
-	 * Phase 1 Credit Assignment: Only rewards connections that led to neurons in inferred_neurons_resolved
-	 * (the outputs that were actually executed after conflict resolution).
+	 * Credit Assignment: Traces back through inference_log to find which inference type
+	 * was used at each level, then rewards only the connections/patterns that made those inferences.
+	 * - For connection inference: rewards connections in connection_inference_sources
+	 * - For pattern inference: rewards pattern_future connections that made the predictions
 	 */
 	async applyRewards(globalReward) {
 
@@ -912,23 +931,57 @@ export default class BrainMySQL extends Brain {
 		}
 
 		// Multiplicative reward: strength is multiplied by globalReward raised to a decayed power
-		// globalReward = 1.5, age = 0 → multiply by 1.5^1.0 = 1.5 (50% increase)
-		// globalReward = 1.5, age = 1 → multiply by 1.5^0.9 = 1.41 (41% increase)
-		// globalReward = 0.5, age = 0 → multiply by 0.5^1.0 = 0.5 (50% decrease)
+		// globalReward = 1.5, age = 1 → multiply by 1.5^1.0 = 1.5 (50% increase)
+		// globalReward = 1.5, age = 2 → multiply by 1.5^0.9 = 1.41 (41% increase)
+		// globalReward = 0.5, age = 1 → multiply by 0.5^1.0 = 0.5 (50% decrease)
 		// This is proportional to existing strength, avoiding saturation issues
 
-		// Apply reward to active_connections that led to resolved outputs (proper credit assignment)
-		// Only reward connections whose to_neuron was in the final resolved predictions that got executed
-		// Exponential temporal decay: older connections (higher age) get less reward/punishment
-		const [result] = await this.conn.query(`
+		// Reward connection-based inferences
+		// Find connections that made predictions which became executed outputs
+		// Join on neuron_id, level, AND age to match inference sources with resolved outputs
+		const [connResult] = await this.conn.query(`
 			UPDATE connections c
-			JOIN active_connections ac ON c.id = ac.connection_id
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = ac.to_neuron_id AND inf.level = ac.level
-			SET c.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, c.strength * POW(:globalReward, POW(:rewardTimeDecayFactor, ac.age - 1))))
-			WHERE ac.age > 0 -- skip the recently made connections (age=0)
-			AND inf.age = 1 -- outputs that were just executed this frame
-		`, { globalReward, rewardTimeDecayFactor: this.rewardTimeDecayFactor, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
+			JOIN connection_inference_sources cis ON c.id = cis.connection_id
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level AND inf.age = cis.age
+			JOIN inference_log il ON il.age = cis.age AND il.level = cis.level AND il.type = 'connection'
+			SET c.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength,
+				c.strength * POW(:globalReward, POW(:rewardTimeDecayFactor, cis.age - 1))))
+			WHERE cis.age > 0 AND cis.age <= :maxRewardsAge
+			AND inf.age > 0 AND inf.age <= :maxRewardsAge
+		`, {
+			globalReward,
+			rewardTimeDecayFactor: this.rewardTimeDecayFactor,
+			minConnectionStrength: this.minConnectionStrength,
+			maxConnectionStrength: this.maxConnectionStrength,
+			maxRewardsAge: this.maxRewardsAge
+		});
 
-		if (this.debug) console.log(`Applied global reward ${globalReward.toFixed(3)} to ${result.affectedRows} connections that led to executed outputs`);
+		// Reward pattern-based inferences
+		// Find pattern_future connections that made predictions which became executed outputs
+		// Join on neuron_id, level, AND age to match inference sources with resolved outputs
+		// Note: pattern_inference_sources.level is where predictions were made (sourceLevel - 1)
+		// inference_log.level is where pattern neurons are (sourceLevel)
+		// So we join on il.level = pis.level + 1
+		const [patternResult] = await this.conn.query(`
+			UPDATE pattern_future pf
+			JOIN pattern_inference_sources pis ON pf.connection_id = pis.connection_id AND pf.pattern_neuron_id = pis.pattern_neuron_id
+			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
+			JOIN inference_log il ON il.age = pis.age AND il.level = pis.level + 1 AND il.type = 'pattern'
+			SET pf.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength,
+				pf.strength * POW(:globalReward, POW(:rewardTimeDecayFactor, pis.age - 1))))
+			WHERE pis.age > 0 AND pis.age <= :maxRewardsAge
+			AND inf.age > 0 AND inf.age <= :maxRewardsAge
+		`, {
+			globalReward,
+			rewardTimeDecayFactor: this.rewardTimeDecayFactor,
+			minConnectionStrength: this.minConnectionStrength,
+			maxConnectionStrength: this.maxConnectionStrength,
+			maxRewardsAge: this.maxRewardsAge
+		});
+
+		if (this.debug) {
+			const totalRewarded = connResult.affectedRows + patternResult.affectedRows;
+			console.log(`Applied global reward ${globalReward.toFixed(3)} to ${connResult.affectedRows} connections and ${patternResult.affectedRows} pattern_future entries (total: ${totalRewarded})`);
+		}
 	}
 }

@@ -28,6 +28,7 @@ export default class Brain {
 		this.minErrorPatternThreshold = 5.0; // minimum prediction strength to create error-driven pattern
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
+		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -584,11 +585,9 @@ export default class Brain {
 	 * Sequential inference with error-driven learning.
 	 * Alternates between connection and pattern inference going down levels:
 	 * connection@N, pattern@N-1, connection@N-1, pattern@N-2, ..., connection@0
+	 * Note: inferred_neurons ages and gets cleaned up (age >= 2), no need to truncate
 	 */
 	async inferNeurons() {
-
-		// Clear inference scratch data for new predictions
-		await this.clearInferenceData();
 
 		// Get max active level after recognition (includes all ages, not just age=0)
 		const maxActiveLevel = await this.getMaxActiveLevel();
@@ -773,13 +772,6 @@ export default class Brain {
 	 */
 	async mergePatternFuture() {
 		throw new Error('mergePatternFuture() must be implemented by subclass');
-	}
-
-	/**
-	 * Clear inference scratch data for new predictions (implementation-specific)
-	 */
-	async clearInferenceData() {
-		throw new Error('clearInferenceData() must be implemented by subclass');
 	}
 
 	/**
