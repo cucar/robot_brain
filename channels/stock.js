@@ -14,6 +14,9 @@ export default class StockChannel extends Channel {
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
 
+		// Hyperparameters
+		this.rewardAmplification = 3; // Power to raise reward ratios to (higher = stronger rewards/penalties)
+
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
 		this.entryPrice = null; // Price when we bought (for owned) or sold (for sold)
@@ -243,11 +246,11 @@ export default class StockChannel extends Channel {
 			// Calculate average error for this channel
 			const avgError = this.pricePredictionErrors.reduce((sum, err) => sum + err, 0) / this.pricePredictionErrors.length;
 
-			if (this.debug) console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
+			if (this.debug2) console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
 			this.lastPredictedPrice = null;
 		}
 
-		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
+		if (this.debug2) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
 		return [
@@ -385,6 +388,10 @@ export default class StockChannel extends Channel {
 	 *
 	 * Uses priceForFeedback (lagged by 1 frame) to ensure feedback is based on the price change
 	 * AFTER the previous frame's decision was executed, not the current frame's observation.
+	 *
+	 * Applies rewardAmplification to amplify the reward signal:
+	 * - rewardFactor = ratio^rewardAmplification
+	 * - Higher amplification = stronger rewards and penalties
 	 */
 	async getFeedback() {
 
@@ -400,36 +407,40 @@ export default class StockChannel extends Channel {
 		// Update unrealized profit/loss metrics every frame
 		this.updateUnrealizedProfitLoss();
 
-		let rewardFactor;
+		let ratio;
 
 		if (this.owned) {
-			// For owned stocks: reward factor = new_price / old_price
-			// If price goes up, factor > 1.0 (reward increases)
-			// If price goes down, factor < 1.0 (reward decreases)
-			rewardFactor = currentPrice / previousPrice;
+			// For owned stocks: ratio = new_price / old_price
+			// If price goes up, ratio > 1.0 (reward increases)
+			// If price goes down, ratio < 1.0 (reward decreases)
+			ratio = currentPrice / previousPrice;
+		}
+		else {
+			// For sold stocks: provide inverse feedback
+			// If price goes up after selling, ratio < 1.0 (penalty for selling too early)
+			// If price goes down after selling, ratio > 1.0 (reward for good timing)
+			ratio = previousPrice / currentPrice;
+		}
 
-			if (this.debug) {
+		// Amplify the reward signal by raising to a power
+		const rewardFactor = Math.pow(ratio, this.rewardAmplification);
+
+		if (this.debug) {
+			if (this.owned) {
 				const totalChange = currentPrice - this.entryPrice;
 				const percentChange = (totalChange / this.entryPrice) * 100;
 				const recentChange = currentPrice - previousPrice;
 
 				console.log(`${this.symbol}: OWNED - Price ${previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-				console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+				console.log(`${this.symbol}: Ratio: ${ratio.toFixed(4)} → Reward factor: ${rewardFactor.toFixed(4)} (amp=${this.rewardAmplification}) | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
-		}
-		else {
-			// For sold stocks: provide inverse feedback
-			// If price goes up after selling, factor < 1.0 (penalty for selling too early)
-			// If price goes down after selling, factor > 1.0 (reward for good timing)
-			rewardFactor = previousPrice / currentPrice;
-
-			if (this.debug) {
+			else {
 				const totalChange = this.entryPrice - currentPrice; // Profit from selling high and price going lower
 				const percentChange = (totalChange / this.entryPrice) * 100;
 				const recentChange = currentPrice - previousPrice;
 
 				console.log(`${this.symbol}: SOLD - Price ${previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-				console.log(`${this.symbol}: Reward factor: ${rewardFactor.toFixed(4)} | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+				console.log(`${this.symbol}: Ratio: ${ratio.toFixed(4)} → Reward factor: ${rewardFactor.toFixed(4)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 		}
 
@@ -463,7 +474,7 @@ export default class StockChannel extends Channel {
 
 		// Combine and return
 		const resolved = [...resolvedInputs, ...resolvedOutputs];
-		if (this.debug) this.logResolution(inferences.length, inputPredictions.length, outputInferences.length, resolved.length);
+		if (this.debug2) this.logResolution(inferences.length, inputPredictions.length, outputInferences.length, resolved.length);
 		return resolved;
 	}
 
@@ -562,7 +573,7 @@ export default class StockChannel extends Channel {
 
 		this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
 
-		if (this.lastPredictedPrice !== null && this.debug) {
+		if (this.lastPredictedPrice !== null && this.debug2) {
 			const predictedChange = ((this.lastPredictedPrice - this.priceForPrediction) / this.priceForPrediction) * 100;
 			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.priceForPrediction.toFixed(2)}`);
 		}
@@ -652,7 +663,7 @@ export default class StockChannel extends Channel {
 
 			// if we don't own the stock, nothing to do - just log it
 			if (!this.owned) {
-				if (this.debug) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
+				if (this.debug2) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
 				return;
 			}
 
@@ -686,7 +697,7 @@ export default class StockChannel extends Channel {
 		}
 		// hold activity = hold signal (0)
 		else if (activityValue === 0) {
-			if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
+			if (this.debug2) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
 		}
 
 	}

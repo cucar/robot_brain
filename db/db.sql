@@ -22,6 +22,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_inference_sources;
 -- DROP TABLE IF EXISTS inference_log;
 -- DROP TABLE IF EXISTS inference_chain;
+-- DROP TABLE IF EXISTS unpack_sources;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
@@ -303,20 +304,32 @@ CREATE TABLE IF NOT EXISTS inference_log (
     INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
--- scratch table for tracking the unpacking chain from high-level predictions to base-level outputs
+-- scratch table for tracking which high-level source neurons unpacked to which base-level outputs
 -- used for channel-specific reward attribution in applyRewards
--- populated during unpackToBase, ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
+-- populated during unpackToBase: maps base outputs (level 0) to their source-level neurons
+-- source_level can be obtained from inference_log by joining on age
+-- unpacking is just mechanical translation via pattern_peaks, so we only track endpoints
+-- age represents how many frames ago this prediction was made (both source and base age together)
+-- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
 CREATE TABLE IF NOT EXISTS inference_chain (
     base_neuron_id BIGINT UNSIGNED NOT NULL,
-    base_level TINYINT NOT NULL,
-    base_age TINYINT UNSIGNED NOT NULL,
     source_neuron_id BIGINT UNSIGNED NOT NULL,
-    source_level TINYINT NOT NULL,
-    source_age TINYINT UNSIGNED NOT NULL,
-    PRIMARY KEY (base_neuron_id, base_level, base_age, source_neuron_id, source_level, source_age),
-    INDEX idx_base (base_neuron_id, base_level, base_age),
-    INDEX idx_source (source_neuron_id, source_level, source_age),
-    INDEX idx_age (base_age)
+    age TINYINT UNSIGNED NOT NULL,
+    PRIMARY KEY (base_neuron_id, source_neuron_id, age),
+    INDEX idx_base (base_neuron_id, age),
+    INDEX idx_source (source_neuron_id, age),
+    INDEX idx_age (age)
+) ENGINE=MEMORY;
+
+-- scratch table for tracking source neurons during unpacking (MEMORY table)
+-- used internally by unpackToBase to propagate source info as we unpack level by level
+-- truncated at start of unpackToBase, populated during unpacking, then copied to inference_chain
+CREATE TABLE IF NOT EXISTS unpack_sources (
+    current_neuron_id BIGINT UNSIGNED NOT NULL,
+    current_level TINYINT NOT NULL,
+    source_neuron_id BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (current_neuron_id, current_level, source_neuron_id),
+    INDEX idx_current (current_neuron_id, current_level)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking unpredicted connections (MEMORY table)
