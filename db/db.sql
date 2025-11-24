@@ -29,15 +29,80 @@ USE machine_intelligence;
 -- check state
 select count(*) from neurons;
 select * from dimensions;
-select * from coordinates;
+select * from coordinates where neuron_id = 5;
 select count(*) from connections;
 select count(*) from connections where strength > 0;
 select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM pattern_peaks pp) order by strength desc;
-select * from active_neurons;
-select * from active_connections;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
+select * from unpack_sources;
+select * from inferred_neurons;
+select * from inferred_neurons_resolved;
+select * from inference_log;
+select * from inference_chain;
+select * from connections;
+select * from coordinates where dimension_id = 16;
+
+select * from connection_inference_sources where age = 1 and inferred_neuron_id = 8;
+select * from connections where id = 9;
+select * from coordinates where neuron_id = 3;
+select * from dimensions;
+
+SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
+FROM active_neurons an
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+WHERE an.level = 0
+AND c.distance = an.age + 1
+AND c.strength > 0;
+
+select * from inference_chain;
+
+select * from active_neurons;
+select * from active_connections;
+select * from connections;
+
+SELECT an.level, an.age, an.neuron_id, c.to_neuron_id, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
+FROM active_neurons an
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+WHERE an.level = 0
+AND c.distance = an.age + 1
+AND c.strength > 0;
+
+select * from dimensions;
+select * from coordinates where neuron_id in (4);
+
+select * from connections where id in (9, 13);            
+
+select * 
+from connection_inference_sources cis -- ON c.id = cis.connection_id
+JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
+JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
+JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
+JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (16)
+WHERE ic.age > 0 AND ic.age <= 10
+AND cis.level = il.level
+;
+
+select id from dimensions where type = 'output';
+select * from inference_chain;
+select * from unpack_sources;
+
+SELECT current_neuron_id, source_neuron_id, 0
+FROM unpack_sources
+WHERE current_level = 0;
+
+select * 
+from connections c
+JOIN connection_inference_sources cis ON c.id = cis.connection_id
+JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
+-- JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
+-- JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
+-- JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (select id from dimensions where type = 'output')
+-- WHERE ic.age > 0 AND ic.age <= 1
+-- AND cis.level = il.level
+;
+                
 
 select * from inferred_neurons_resolved where age = 1;
 select * from connection_inference_sources;
@@ -77,25 +142,6 @@ SELECT src.neuron_id, src.level, src.strength
 FROM inferred_neurons src
 WHERE src.level = 0
 AND src.age = 0;
-
-WITH RECURSIVE unpack AS (
-				-- Base case: start with predictions at fromLevel
-				SELECT src.neuron_id, src.level, src.strength
-				FROM inferred_neurons src
-				WHERE src.level = 1
-				AND src.age = 0
-
-				UNION ALL
-
-				-- Recursive case: pattern neuron at level N is its peak neuron at level N-1
-				SELECT pp.peak_neuron_id as neuron_id, u.level - 1 as level, u.strength
-				FROM unpack u
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = u.neuron_id
-				WHERE u.level > 0
-			)
-			SELECT neuron_id, level, 0 as age, strength
-			FROM unpack
-			WHERE level < 1;
 
 select * from connection_inference_sources;
 select * from active_connections where to_neuron_id = 6;
@@ -146,6 +192,7 @@ CREATE TABLE IF NOT EXISTS connections (
     to_neuron_id BIGINT UNSIGNED NOT NULL,
     distance TINYINT UNSIGNED NOT NULL,  -- 0=spatial, 1=immediate, 2=next step, etc.
     strength DOUBLE NOT NULL DEFAULT 1.0,
+    reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
     FOREIGN KEY (from_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (to_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     UNIQUE INDEX (from_neuron_id, to_neuron_id, distance),
@@ -174,6 +221,7 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
+    reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
     PRIMARY KEY (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,

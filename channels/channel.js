@@ -136,4 +136,14 @@ export default class Channel {
 	getResolvedInference() {
 		throw new Error('Channel must implement getResolvedInference() method');
 	}
+
+	/**
+	 * Get output performance metrics - override in subclasses
+	 * Returns channel-specific performance data (e.g., profit/loss, win rate, score, etc.)
+	 * @returns {Object|null} - { value: number, label: string, format: string } or null
+	 * Example: { value: 5.23, label: 'AAPL', format: 'currency' }
+	 */
+	getOutputPerformanceMetrics() {
+		return null; // Default: no output performance tracking
+	}
 }

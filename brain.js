@@ -28,6 +28,7 @@ export default class Brain {
 		this.minErrorPatternThreshold = 5.0; // minimum prediction strength to create error-driven pattern
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
+		this.maxConnectionReward = 10.0; // maximum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
 
 		// initialize the counter for forget cycle
@@ -179,7 +180,7 @@ export default class Brain {
 		if (this.debug) {
 			console.log('******************************************************************');
 			console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)}`, this.frameNumber);
-			if (channelRewards.size > 0) console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
+			console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 			console.log('******************************************************************');
 		}
 
@@ -210,13 +211,14 @@ export default class Brain {
 		this.printFrameSummary(frameElapsed);
 
 		// when debugging, wait for user to press Enter before continuing to next frame
-		if (this.waitForUserInput) await this.waitForUser('Press Enter to continue to next frame');
+		await this.waitForUser('Press Enter to continue to next frame');
 	}
 
 	/**
 	 * waits for user input to continue - used for debugging
 	 */
 	waitForUser(message) {
+		if (!this.waitForUserInput) return Promise.resolve();
 		return new Promise(resolve => this.rl.question(`\n${message}...`, resolve));
 	}
 
@@ -240,6 +242,7 @@ export default class Brain {
 
 		// Get channel outputs from frame
 		const channelOutputs = this.getFrameChannelOutputs(frame);
+		if (this.debug) console.log('channelOutputs', channelOutputs);
 
 		// nothing to do if there are no outputs
 		if (channelOutputs.size === 0) {
@@ -248,6 +251,7 @@ export default class Brain {
 		}
 
 		// execute outputs for each channel
+		if (this.debug) console.log(`Executing ${channelOutputs.size} inferred outputs`, channelOutputs);
 		for (const [channelName, coordinates] of channelOutputs)
 			await this.executeChannelOutputs(channelName, coordinates);
 	}
@@ -403,7 +407,27 @@ export default class Brain {
 			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
 		}
 
-		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+		// Collect output performance metrics from channels
+		const outputMetrics = [];
+		for (const [_, channel] of this.channels) {
+			if (typeof channel.getOutputPerformanceMetrics === 'function') {
+				const metrics = channel.getOutputPerformanceMetrics();
+				if (metrics) outputMetrics.push(metrics);
+			}
+		}
+
+		// Format output performance display
+		let outputDisplay = 'N/A';
+		if (outputMetrics.length > 0) {
+			outputDisplay = outputMetrics.map(m => {
+				const formatted = m.format === 'currency'
+					? `$${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
+					: m.value.toFixed(2);
+				return outputMetrics.length > 1 ? `${m.label}:${formatted}` : formatted;
+			}).join(', ');
+		}
+
+		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 	// ========== ABSTRACT METHODS - Must be implemented by subclasses ==========
@@ -664,7 +688,7 @@ export default class Brain {
 		this.lastInferenceLevel = level;
 
 		// If predictions are at higher level, unpack through pattern chain to base level
-		if (level > 0) await this.unpackToBase(level, 'connection');
+		await this.unpackToBase(level, 'connection');
 
 		// Use channel logic to resolve conflicting inference at base level
 		await this.resolveChannelInferenceConflicts();
@@ -723,7 +747,7 @@ export default class Brain {
 		// Write selected predictions to be used later for accuracy reporting - implementation-specific
 		await this.writeResolvedPredictions(resolvedInferences);
 
-		if (this.debug) console.log(`Resolved ${resolvedInferences.length} input predictions after conflict resolution`);
+		if (this.debug) console.log(`Resolved ${resolvedInferences.length} neurons after conflict resolution`);
 	}
 
 	/**

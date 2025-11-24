@@ -232,9 +232,10 @@ export default class BrainMySQL extends Brain {
 	 */
 	async negativeReinforceConnections() {
 
-		// Apply negative reinforcement to failed connection predictions
+		// Apply negative reinforcement to failed INPUT predictions only
 		// Failed = predicted but not observed
 		// Only weaken connections whose predictions made it through conflict resolution
+		// Output predictions are not penalized (they are actions, not predictions of world state)
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			JOIN connection_inference_sources cis ON cis.connection_id = c.id
@@ -242,6 +243,12 @@ export default class BrainMySQL extends Brain {
 			SET c.strength = GREATEST(0, c.strength - ?)
 			WHERE cis.level = ?
 			AND c.strength > 0
+			AND EXISTS (
+				SELECT 1 FROM coordinates coord
+				JOIN dimensions d ON d.id = coord.dimension_id
+				WHERE coord.neuron_id = cis.inferred_neuron_id
+				AND d.type = 'input'
+			)
 			AND NOT EXISTS (
 				SELECT 1 FROM active_neurons an
 				WHERE an.neuron_id = cis.inferred_neuron_id
@@ -250,7 +257,7 @@ export default class BrainMySQL extends Brain {
 			)
 		`, [this.connectionNegativeReinforcement, this.lastInferenceLevel]);
 		if (this.debug && result.affectedRows > 0)
-			console.log(`Level ${this.lastInferenceLevel}: Weakened ${result.affectedRows} failed connection predictions`);
+			console.log(`Level ${this.lastInferenceLevel}: Weakened ${result.affectedRows} failed INPUT predictions`);
 	}
 
 	/**
@@ -326,7 +333,7 @@ export default class BrainMySQL extends Brain {
 		// Populate details table with ALL individual connection predictions (age=0 for new predictions)
 		await this.conn.query(`
 			INSERT INTO connection_inference_sources (inferred_neuron_id, level, age, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, 0, c.id, c.strength * POW(?, c.distance)
+			SELECT c.to_neuron_id, ?, 0, c.id, c.strength * c.reward * POW(?, c.distance - 1)
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE an.level = ?
@@ -444,7 +451,7 @@ export default class BrainMySQL extends Brain {
 		// Populate details table with ALL individual pattern predictions (age=0 for new predictions)
 		await this.conn.query(`
 			INSERT INTO pattern_inference_sources (inferred_neuron_id, level, age, pattern_neuron_id, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, 0, an.neuron_id, c.id, pf.strength * c.strength * POW(?, c.distance)
+			SELECT c.to_neuron_id, ?, 0, an.neuron_id, c.id, pf.strength * pf.reward * c.strength * c.reward * POW(?, c.distance - 1)
 			FROM active_neurons an
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
 			JOIN connections c ON c.id = pf.connection_id
@@ -523,14 +530,14 @@ export default class BrainMySQL extends Brain {
 
 		// Now copy the base-level mappings (current_level = 0) to inference_chain
 		// Age is 0 since these are fresh predictions
-		await this.conn.query(`
+		const [insertResult] = await this.conn.query(`
 			INSERT INTO inference_chain (base_neuron_id, source_neuron_id, age)
 			SELECT current_neuron_id, source_neuron_id, 0
 			FROM unpack_sources
 			WHERE current_level = 0
 		`);
 
-		if (this.debug) console.log(`Unpacked to base level`);
+		if (this.debug) console.log(`Unpacked to base level. ${insertResult.affectedRows} base-level predictions added to inference_chain.`);
 	}
 
 	/**
@@ -968,10 +975,8 @@ export default class BrainMySQL extends Brain {
 	 */
 	async applyRewards(channelRewards) {
 
-		if (channelRewards.size === 0) {
-			if (this.debug) console.log('No channel rewards - no updates needed');
-			return;
-		}
+		// nothing to update if there are no rewards
+		if (channelRewards.size === 0) return;
 
 		// Multiplicative reward: strength is multiplied by reward raised to a decayed power
 		// reward = 1.5, age = 1 → multiply by 1.5^1.0 = 1.5 (50% increase)
@@ -1015,13 +1020,13 @@ export default class BrainMySQL extends Brain {
 				JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
 				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET c.strength = GREATEST(?, LEAST(?, c.strength * POW(?, POW(?, ic.age - 1))))
+				SET c.reward = GREATEST(1.0 / ?, LEAST(?, c.reward * POW(?, POW(?, ic.age - 1))))
 				WHERE ic.age > 0 AND ic.age <= ?
 				AND cis.level = il.level
 			`, [
 				outputDimIds,
-				this.minConnectionStrength,
-				this.maxConnectionStrength,
+				this.maxConnectionReward,
+				this.maxConnectionReward,
 				reward,
 				this.rewardTimeDecayFactor,
 				this.maxRewardsAge
@@ -1040,26 +1045,23 @@ export default class BrainMySQL extends Brain {
 				JOIN inference_log il ON il.age = ic.age AND il.type = 'pattern'
 				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET pf.strength = GREATEST(?, LEAST(?, pf.strength * POW(?, POW(?, ic.age - 1))))
+				SET pf.reward = GREATEST(1.0 / ?, LEAST(?, pf.reward * POW(?, POW(?, ic.age - 1))))
 				WHERE ic.age > 0 AND ic.age <= ?
 				AND il.level = pis.level + 1
 			`, [
 				outputDimIds,
-				this.minConnectionStrength,
-				this.maxConnectionStrength,
+				this.maxConnectionReward,
+				this.maxConnectionReward,
 				reward,
 				this.rewardTimeDecayFactor,
 				this.maxRewardsAge
 			]);
 			totalPatternsRewarded += patternResult.affectedRows;
 
-			if (this.debug) {
-				console.log(`  ${channelName}: rewarded ${connResult.affectedRows} connections and ${patternResult.affectedRows} pattern_future entries`);
-			}
+			if (this.debug) console.log(`  ${channelName}: rewarded ${connResult.affectedRows} connections and ${patternResult.affectedRows} pattern_future entries`);
 		}
 
-		if (this.debug) {
-			console.log(`Total rewarded: ${totalConnectionsRewarded} connections and ${totalPatternsRewarded} pattern_future entries`);
-		}
+		if (this.debug) console.log(`Total rewarded: ${totalConnectionsRewarded} connections and ${totalPatternsRewarded} pattern_future entries`);
+		// await this.waitForUser('Rewards applied');
 	}
 }

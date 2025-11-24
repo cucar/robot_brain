@@ -23,7 +23,6 @@ export default class StockChannel extends Channel {
 		this.holdingFrames = 0; // How long we've held the current position
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
-		this.hasTraded = false; // Track if we've ever made a trade
 
 		// Episode metrics tracking
 		this.totalProfit = 0; // Total profit from all trades in current episode
@@ -155,7 +154,7 @@ export default class StockChannel extends Channel {
 			this.allRows.push({ price, volume });
 		}
 
-		if (this.debug) console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
+		if (this.debug2) console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
 	}
 
 	/**
@@ -175,7 +174,7 @@ export default class StockChannel extends Channel {
 		}
 
 		this.currentRowIndex = 0;
-		if (this.debug) console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
+		if (this.debug2) console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
 	}
 
 	/**
@@ -401,31 +400,21 @@ export default class StockChannel extends Channel {
 
 		if (currentPrice === null || previousPrice === null) return 1.0;
 
-		// No feedback if no price movement or haven't traded yet
-		if (currentPrice === previousPrice || !this.hasTraded) return 1.0;
-
 		// Update unrealized profit/loss metrics every frame
 		this.updateUnrealizedProfitLoss();
 
-		let ratio;
-
-		if (this.owned) {
-			// For owned stocks: ratio = new_price / old_price
-			// If price goes up, ratio > 1.0 (reward increases)
-			// If price goes down, ratio < 1.0 (reward decreases)
-			ratio = currentPrice / previousPrice;
-		}
-		else {
-			// For sold stocks: provide inverse feedback
-			// If price goes up after selling, ratio < 1.0 (penalty for selling too early)
-			// If price goes down after selling, ratio > 1.0 (reward for good timing)
-			ratio = previousPrice / currentPrice;
-		}
+		// For owned stocks: ratio = new_price / old_price
+		// If price goes up, ratio > 1.0 (reward increases)
+		// If price goes down, ratio < 1.0 (reward decreases)
+		// For sold stocks: provide inverse feedback
+		// If price goes up after selling, ratio < 1.0 (penalty for selling too early)
+		// If price goes down after selling, ratio > 1.0 (reward for good timing)
+		const ratio = this.owned ? (currentPrice / previousPrice) : (previousPrice / currentPrice);
 
 		// Amplify the reward signal by raising to a power
 		const rewardFactor = Math.pow(ratio, this.rewardAmplification);
 
-		if (this.debug) {
+		if (this.debug2) {
 			if (this.owned) {
 				const totalChange = currentPrice - this.entryPrice;
 				const percentChange = (totalChange / this.entryPrice) * 100;
@@ -456,6 +445,7 @@ export default class StockChannel extends Channel {
 	 * @returns {Array} - resolved neurons with strongest per dimension
 	 */
 	getResolvedInference(inferences) {
+		if (this.debug2) console.log('getResolvedInference', inferences);
 
 		// if there are no inferences, nothing to resolve
 		if (!inferences || inferences.length === 0) {
@@ -474,7 +464,7 @@ export default class StockChannel extends Channel {
 
 		// Combine and return
 		const resolved = [...resolvedInputs, ...resolvedOutputs];
-		if (this.debug2) this.logResolution(inferences.length, inputPredictions.length, outputInferences.length, resolved.length);
+		if (this.debug) this.logResolution(inferences.length, inputPredictions.length, outputInferences.length, resolved.length);
 		return resolved;
 	}
 
@@ -621,6 +611,25 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
+	 * Get current profit/loss for performance tracking
+	 * Returns net P&L including both realized and unrealized gains/losses
+	 * @returns {Object} - { value: number, label: string, format: string }
+	 */
+	getOutputPerformanceMetrics() {
+		// Net realized P&L from closed trades
+		const realizedPL = this.totalProfit - this.totalLoss;
+
+		// Add unrealized P&L from current open position
+		const totalPL = realizedPL + this.unrealizedProfit;
+
+		return {
+			value: totalPL,
+			label: this.symbol,
+			format: 'currency'
+		};
+	}
+
+	/**
 	 * Execute stock actions based on brain output coordinates
 	 */
 	async executeOutputs(coordinates) {
@@ -647,7 +656,6 @@ export default class StockChannel extends Channel {
 			this.owned = true;
 			this.entryPrice = currentPrice;
 			this.holdingFrames = 0; // Reset holding counter
-			this.hasTraded = true; // Mark that we've made our first trade
 
 			// Reset unrealized profit tracking for new position
 			this.unrealizedProfit = 0;
@@ -663,7 +671,7 @@ export default class StockChannel extends Channel {
 
 			// if we don't own the stock, nothing to do - just log it
 			if (!this.owned) {
-				if (this.debug2) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
+				if (this.debug) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
 				return;
 			}
 
@@ -696,8 +704,8 @@ export default class StockChannel extends Channel {
 			this.holdingFrames = 0; // Reset holding counter
 		}
 		// hold activity = hold signal (0)
-		else if (activityValue === 0) {
-			if (this.debug2) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
+		else {
+			if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
 		}
 
 	}
