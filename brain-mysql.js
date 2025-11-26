@@ -916,7 +916,21 @@ export default class BrainMySQL extends Brain {
 			const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
 			console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
 
-			// 3. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
+			// 3. REWARD DECAY: Move reward factors back toward 1.0 (neutral)
+			// Formula: reward = reward + (1.0 - reward) * rewardForgetRate
+			// reward=2.0, rate=0.05 → 2.0 + (1.0-2.0)*0.05 = 1.95
+			// reward=0.5, rate=0.05 → 0.5 + (1.0-0.5)*0.05 = 0.525
+			console.log('Running forget cycle - connection reward decay...');
+			stepStart = Date.now();
+			const [connRewardResult] = await this.conn.query(`UPDATE connections SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]);
+			console.log(`  Connection reward decay took ${Date.now() - stepStart}ms (updated ${connRewardResult.affectedRows} rows)`);
+
+			console.log('Running forget cycle - pattern_future reward decay...');
+			stepStart = Date.now();
+			const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]);
+			console.log(`  Pattern_future reward decay took ${Date.now() - stepStart}ms (updated ${patternRewardResult.affectedRows} rows)`);
+
+			// 4. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
 			console.log('Running forget cycle - orphaned neurons cleanup...');
 			stepStart = Date.now();
 			const [neuronDeleteResult] = await this.conn.query(`
@@ -938,7 +952,9 @@ export default class BrainMySQL extends Brain {
 				this.conn.query(`UPDATE pattern_past SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]),
 				this.conn.query(`UPDATE pattern_future SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]),
 				this.conn.query(`UPDATE pattern_peaks SET strength = GREATEST(0, strength - ?) WHERE strength > 0`, [this.patternForgetRate]),
-				this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate])
+				this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]),
+				this.conn.query(`UPDATE connections SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]),
+				this.conn.query(`UPDATE pattern_future SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate])
 			]);
 
 			// Delete operations after updates complete - parallelize independent DELETE operations
@@ -978,12 +994,13 @@ export default class BrainMySQL extends Brain {
 		// nothing to update if there are no rewards
 		if (channelRewards.size === 0) return;
 
-		// Multiplicative reward: strength is multiplied by reward raised to a decayed power
-		// reward = 1.5, age = 1 → multiply by 1.5^1.0 = 1.5 (50% increase)
-		// reward = 1.5, age = 2 → multiply by 1.5^0.9 = 1.41 (41% increase)
-		// reward = 0.5, age = 1 → multiply by 0.5^1.0 = 0.5 (50% decrease)
+		// Multiplicative reward: strength is multiplied by reward with time-decayed effect
+		// Formula: strength * (1 + (reward - 1) * POW(rewardTimeDecayFactor, age - 1))
+		// reward = 1.5, age = 1 → multiply by 1 + 0.5 * 0.9^0 = 1.5 (50% increase)
+		// reward = 1.5, age = 2 → multiply by 1 + 0.5 * 0.9^1 = 1.45 (45% increase)
+		// reward = 0.5, age = 1 → multiply by 1 + (-0.5) * 0.9^0 = 0.5 (50% decrease)
+		// reward = 0.5, age = 2 → multiply by 1 + (-0.5) * 0.9^1 = 0.55 (45% decrease)
 		// This is proportional to existing strength, avoiding saturation issues
-
 		let totalConnectionsRewarded = 0;
 		let totalPatternsRewarded = 0;
 
@@ -1020,7 +1037,7 @@ export default class BrainMySQL extends Brain {
 				JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
 				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET c.reward = GREATEST(1.0 / ?, LEAST(?, c.reward * POW(?, POW(?, ic.age - 1))))
+				SET c.reward = GREATEST(1.0 / ?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, ic.age - 1))))
 				WHERE ic.age > 0 AND ic.age <= ?
 				AND cis.level = il.level
 			`, [
@@ -1045,7 +1062,7 @@ export default class BrainMySQL extends Brain {
 				JOIN inference_log il ON il.age = ic.age AND il.type = 'pattern'
 				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET pf.reward = GREATEST(1.0 / ?, LEAST(?, pf.reward * POW(?, POW(?, ic.age - 1))))
+				SET pf.reward = GREATEST(1.0 / ?, LEAST(?, pf.reward * (1 + (? - 1) * POW(?, ic.age - 1))))
 				WHERE ic.age > 0 AND ic.age <= ?
 				AND il.level = pis.level + 1
 			`, [
@@ -1058,7 +1075,7 @@ export default class BrainMySQL extends Brain {
 			]);
 			totalPatternsRewarded += patternResult.affectedRows;
 
-			if (this.debug) console.log(`  ${channelName}: rewarded ${connResult.affectedRows} connections and ${patternResult.affectedRows} pattern_future entries`);
+			if (this.debug) console.log(`  ${channelName}: rewarded ${connResult.affectedRows} connections and ${patternResult.affectedRows} pattern_future entries: ${reward}`);
 		}
 
 		if (this.debug) console.log(`Total rewarded: ${totalConnectionsRewarded} connections and ${totalPatternsRewarded} pattern_future entries`);

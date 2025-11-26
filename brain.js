@@ -17,6 +17,7 @@ export default class Brain {
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
+		this.rewardForgetRate = 0.05; // how much reward factors decay toward 1.0 per forget cycle (0.05 = 5% decay toward neutral)
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
@@ -716,14 +717,14 @@ export default class Brain {
 		this.lastInferenceLevel = level;
 
 		// If predictions are at higher level, unpack through pattern chain to base level
-		if (level > 1) await this.unpackToBase(level - 1, 'pattern');
+		if (level > 0) await this.unpackToBase(level - 1, 'pattern');
 
 		// Use channel logic to resolve conflicting predictions at base level
 		await this.resolveChannelInferenceConflicts();
 
 		// For higher levels, copy predictions directly to resolved table (no conflict resolution at higher levels)
 		// Pattern predictions are at level-1, so copy if level-1 > 0
-		if (level > 1) await this.copyHigherLevelPredictions();
+		if (level > 0) await this.copyHigherLevelPredictions();
 
 		return true;
 	}

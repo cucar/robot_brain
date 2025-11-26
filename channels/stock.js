@@ -15,7 +15,7 @@ export default class StockChannel extends Channel {
 		this.symbol = name;
 
 		// Hyperparameters
-		this.rewardAmplification = 3; // Power to raise reward ratios to (higher = stronger rewards/penalties)
+		this.rewardAmplification = 5; // Power to raise reward ratios to (higher = stronger rewards/penalties)
 
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
@@ -634,11 +634,17 @@ export default class StockChannel extends Channel {
 	 */
 	async executeOutputs(coordinates) {
 
-		if (!coordinates || Object.keys(coordinates).length === 0) return;
+		if (!coordinates || Object.keys(coordinates).length === 0) {
+			this.lastAction = 0; // No action = hold
+			return;
+		}
 
 		// Extract activity value
 		const activityValue = coordinates[`${this.symbol}_activity`];
-		if (activityValue === undefined) return;
+		if (activityValue === undefined) {
+			this.lastAction = 0; // No action = hold
+			return;
+		}
 
 		// Get current price for position tracking
 		const currentPrice = this.currentPrice;
@@ -649,6 +655,7 @@ export default class StockChannel extends Channel {
 			// if we already own the stock, nothing to do - just log it
 			if (this.owned) {
 				if (this.debug) console.log(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
+				this.lastAction = 0; // Ignored = hold
 				return;
 			}
 
@@ -663,6 +670,7 @@ export default class StockChannel extends Channel {
 
 			// Track trade metrics
 			this.totalTrades++;
+			this.lastAction = 1; // BUY
 
 			if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (activity: ${activityValue})`);
 		}
@@ -672,6 +680,7 @@ export default class StockChannel extends Channel {
 			// if we don't own the stock, nothing to do - just log it
 			if (!this.owned) {
 				if (this.debug) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
+				this.lastAction = 0; // Ignored = hold
 				return;
 			}
 
@@ -702,10 +711,12 @@ export default class StockChannel extends Channel {
 			this.owned = false;
 			this.entryPrice = currentPrice; // Track sell price for sold position feedback
 			this.holdingFrames = 0; // Reset holding counter
+			this.lastAction = -1; // SELL
 		}
 		// hold activity = hold signal (0)
 		else {
 			if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
+			this.lastAction = 0; // HOLD
 		}
 
 	}
