@@ -24,6 +24,10 @@ export default class StockChannel extends Channel {
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
 
+		// Deterministic exploration
+		this.explorationSequence = [1, 0, -1, 0]; // BUY, HOLD, SELL, HOLD
+		this.explorationIndex = 0; // Current position in exploration sequence
+
 		// Episode metrics tracking
 		this.totalProfit = 0; // Total profit from all trades in current episode
 		this.totalLoss = 0; // Total loss from all trades in current episode
@@ -311,11 +315,20 @@ export default class StockChannel extends Channel {
 	 * After first trade: can buy/hold (if not owned) or sell/hold (if owned)
 	 */
 	getValidExplorationActions() {
-		const actions = [];
+
+		// NOTE: this is temporary. the following code should be used for true random exploration
+		// this is made deterministic to be able to troubleshoot output performance issues
+		// const actions = [];
+		// const activityDim = `${this.symbol}_activity`;
+		// actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
+		// actions.push({ [activityDim]: 0 });  // hold
+		// return actions;
+
+		// Return deterministic action from sequence
 		const activityDim = `${this.symbol}_activity`;
-		actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
-		actions.push({ [activityDim]: 0 });  // hold
-		return actions;
+		const action = this.explorationSequence[this.explorationIndex];
+		this.explorationIndex = (this.explorationIndex + 1) % this.explorationSequence.length;
+		return [{ [activityDim]: action }];
 	}
 
 	/**
