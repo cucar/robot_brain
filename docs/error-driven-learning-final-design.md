@@ -52,7 +52,7 @@ All methods use scratch tables for data flow (no parameters for data):
 - **Output**: count of predictions
 - **Writes to**: pattern_inferred_neurons, inference_sources
 
-### unpackToBase(fromLevel, source)
+### saveInferenceChain(fromLevel, source)
 - **Input**: fromLevel (level where predictions are), source ('connection' or 'pattern')
 - **Output**: None
 - **Reads from**: connection_inferred_neurons or pattern_inferred_neurons
@@ -175,7 +175,7 @@ inferConnectionsAtLevel(N)
 connection_inferred_neurons (level N)
 inference_sources (source='connection')
   ↓
-unpackToBase(N, 'connection')  [if N > 0]
+saveInferenceChain(N, 'connection')  [if N > 0]
   ↓
 connection_inferred_neurons (level 0)
   ↓
@@ -202,7 +202,7 @@ inferPatternsFromLevel(N)
 pattern_inferred_neurons (level N-1)
 inference_sources (source='pattern')
   ↓
-unpackToBase(N-1, 'pattern')  [if N-1 > 0]
+saveInferenceChain(N-1, 'pattern')  [if N-1 > 0]
   ↓
 pattern_inferred_neurons (level 0)
   ↓

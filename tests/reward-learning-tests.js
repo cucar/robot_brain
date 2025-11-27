@@ -21,7 +21,7 @@ class TestChannel {
     async getFrameInputs() { return []; }
     async executeOutputs() {}
     
-    async getFeedback() {
+    async getRewards() {
         return this.feedbackValue;
     }
     
@@ -599,7 +599,7 @@ class RewardLearningTests {
         this.brain.channels.set('channel3', channel3);
 
         // Test feedback aggregation
-        const globalReward = await this.brain.getFeedback();
+        const globalReward = await this.brain.getRewards();
 
         // Expected: 1.2 * 0.8 = 0.96 (neutral channel ignored)
         const expectedReward = 1.2 * 0.8;
@@ -609,13 +609,13 @@ class RewardLearningTests {
         // Test all neutral feedback
         channel1.setFeedback(1.0);
         channel2.setFeedback(1.0);
-        const neutralGlobalReward = await this.brain.getFeedback();
+        const neutralGlobalReward = await this.brain.getRewards();
         this.assert(neutralGlobalReward === 1.0, 'All neutral feedback should return 1.0');
 
         // Test single channel feedback
         channel1.setFeedback(1.5);
         channel2.setFeedback(1.0);
-        const singleChannelReward = await this.brain.getFeedback();
+        const singleChannelReward = await this.brain.getRewards();
         this.assert(singleChannelReward === 1.5, 'Single channel feedback should pass through');
 
         console.log();
@@ -855,10 +855,10 @@ class RewardLearningTests {
         const emptyOptimized = await this.brain.optimizeRewards(new Map(), 0);
         this.assert(emptyOptimized.size === 0, 'Empty strengths should return empty optimized Map');
 
-        // Test getFeedback with no channels
+        // Test getRewards with no channels
         const originalChannels = this.brain.channels;
         this.brain.channels = new Map();
-        const noChannelFeedback = await this.brain.getFeedback();
+        const noChannelFeedback = await this.brain.getRewards();
         this.assert(noChannelFeedback === 1.0, 'No channels should return neutral feedback');
         this.brain.channels = originalChannels;
 

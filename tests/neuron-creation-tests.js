@@ -25,7 +25,7 @@ class TestChannel extends Channel {
     }
     
     async executeOutputs(predictions) {}
-    getValidExplorationActions() { return []; }
+    getExplorationAction() { return {}; }
 }
 
 class NeuronCreationTests {

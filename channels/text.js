@@ -64,15 +64,15 @@ export default class TextChannel extends Channel {
 	/**
 	 * Get feedback based on character prediction accuracy
 	 */
-	async getFeedback() {
+	async getRewards() {
 		return 1.0; // Neutral - no feedback for now since this is simply mimicking the input
 	}
 
 	/**
-	 * Get valid exploration actions
+	 * Get valid exploration action
 	 */
-	getValidExplorationActions() {
-		return []; // return empty array since this is input-only - for now
+	getExplorationAction() {
+		return null; // return empty array since this is input-only - for now
 	}
 
 	/**

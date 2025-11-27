@@ -5,7 +5,7 @@ import Brain from '../brain-mysql.js';
 
 export default class Job {
 	constructor() {
-		console.log('starting new job...');
+		// console.log('starting new job...');
 		this.brain = new Brain();
 		this.hardReset = false;
 	}
@@ -19,11 +19,11 @@ export default class Job {
 			await this.showStartupInfo();
 
 			// get channels defined by child class and register them with brain
-			console.log('Registering channels with brain...');
+			// console.log('Registering channels with brain...');
 			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
 
 			// initialize brain (this will initialize channels and create dimensions)
-			console.log('Initializing brain...');
+			// console.log('Initializing brain...');
 			await this.brain.init();
 
 			// Allow jobs to configure channels after brain initialization
@@ -105,11 +105,8 @@ export default class Job {
 
 			console.log(`Processing frame: ${frame.length} neurons`);
 
-			// Get feedback from all channels for reward propagation
-			const feedback = await this.brain.getFeedback();
-
 			// Process the frame through the brain with feedback (executes outputs internally)
-			await this.brain.processFrame(frame, feedback);
+			await this.brain.processFrame(frame);
 		}
 	}
 

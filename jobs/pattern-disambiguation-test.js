@@ -112,7 +112,7 @@ export default class PatternDisambiguationTest extends Job {
 			{ char_input: data.s3_price },
 			{ char_input: data.s3_vol }
 		];
-		const feedback = await this.brain.getFeedback();
+		const feedback = await this.brain.getRewards();
 		await this.brain.processFrame(frame, feedback);
 	}
 

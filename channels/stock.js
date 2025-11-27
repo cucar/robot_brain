@@ -34,13 +34,10 @@ export default class StockChannel extends Channel {
 		this.totalTrades = 0; // Total number of trades in current episode
 		this.profitableTrades = 0; // Number of profitable trades in current episode
 		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
-		this.lastUnrealizedProfit = 0; // Previous unrealized profit for tracking changes
 
 		// Continuous prediction tracking for price
 		this.lastPredictedPrice = null; // Predicted price from previous frame
 		this.pricePredictionErrors = []; // Array of price prediction errors for calculating metrics
-		this.priceForPrediction = null; // Price to use as base for next prediction (set before updating currentPrice)
-		this.priceForFeedback = null; // Price from previous frame for feedback calculation (lagged by 1 frame)
 
 		// Holdout configuration
 		this.holdoutRows = 0; // Number of rows to hold out from training (set by job)
@@ -207,7 +204,6 @@ export default class StockChannel extends Channel {
 		// Reset continuous prediction tracking
 		this.lastPredictedPrice = null;
 		this.pricePredictionErrors = [];
-		this.priceForFeedback = null;
 
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
@@ -253,7 +249,7 @@ export default class StockChannel extends Channel {
 			this.lastPredictedPrice = null;
 		}
 
-		if (this.debug2) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
+		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
 		return [
@@ -310,11 +306,11 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get valid exploration actions based on current stock ownership
+	 * Returns a valid exploration action based on current stock ownership
 	 * Before first trade: can buy or hold
 	 * After first trade: can buy/hold (if not owned) or sell/hold (if owned)
 	 */
-	getValidExplorationActions() {
+	getExplorationAction() {
 
 		// NOTE: this is temporary. the following code should be used for true random exploration
 		// this is made deterministic to be able to troubleshoot output performance issues
@@ -322,26 +318,19 @@ export default class StockChannel extends Channel {
 		// const activityDim = `${this.symbol}_activity`;
 		// actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
 		// actions.push({ [activityDim]: 0 });  // hold
-		// return actions;
+		// return actions[Math.floor(Math.random() * actions.length)]; // return a random action
 
 		// Return deterministic action from sequence
 		const activityDim = `${this.symbol}_activity`;
 		const action = this.explorationSequence[this.explorationIndex];
 		this.explorationIndex = (this.explorationIndex + 1) % this.explorationSequence.length;
-		return [{ [activityDim]: action }];
+		return { [activityDim]: action };
 	}
 
 	/**
 	 * Get frame input data for this stock channel
 	 */
-	async getFrameInputs() {
-
-		// Save current price as base for predictions BEFORE reading new price
-		if (this.currentPrice !== null) this.priceForPrediction = this.currentPrice;
-
-		// Save current price for feedback calculation (lagged by 1 frame)
-		// This ensures feedback is based on the price change AFTER the previous decision was executed
-		if (this.currentPrice !== null) this.priceForFeedback = this.currentPrice;
+	getFrameInputs() {
 
 		// Read next data row
 		const row = this.readNextRow();
@@ -398,20 +387,14 @@ export default class StockChannel extends Channel {
 	 * For sold stocks: multiply by (old_price / new_price) - inverse relationship
 	 * Returns 1.0 for no feedback (neutral)
 	 *
-	 * Uses priceForFeedback (lagged by 1 frame) to ensure feedback is based on the price change
-	 * AFTER the previous frame's decision was executed, not the current frame's observation.
-	 *
 	 * Applies rewardAmplification to amplify the reward signal:
 	 * - rewardFactor = ratio^rewardAmplification
 	 * - Higher amplification = stronger rewards and penalties
 	 */
-	async getFeedback() {
+	async getRewards() {
 
-		// Need both current and lagged price for calculation
-		const currentPrice = this.currentPrice;
-		const previousPrice = this.priceForFeedback;
-
-		if (currentPrice === null || previousPrice === null) return 1.0;
+		// Need both current and previous price for calculation
+		if (this.currentPrice === null || this.previousPrice === null) return 1.0;
 
 		// Update unrealized profit/loss metrics every frame
 		this.updateUnrealizedProfitLoss();
@@ -422,26 +405,26 @@ export default class StockChannel extends Channel {
 		// For sold stocks: provide inverse feedback
 		// If price goes up after selling, ratio < 1.0 (penalty for selling too early)
 		// If price goes down after selling, ratio > 1.0 (reward for good timing)
-		const ratio = this.owned ? (currentPrice / previousPrice) : (previousPrice / currentPrice);
+		const ratio = this.owned ? (this.currentPrice / this.previousPrice) : (this.previousPrice / this.currentPrice);
 
 		// Amplify the reward signal by raising to a power
 		const rewardFactor = Math.pow(ratio, this.rewardAmplification);
 
 		if (this.debug2) {
 			if (this.owned) {
-				const totalChange = currentPrice - this.entryPrice;
+				const totalChange = this.currentPrice - this.entryPrice;
 				const percentChange = (totalChange / this.entryPrice) * 100;
-				const recentChange = currentPrice - previousPrice;
+				const recentChange = this.currentPrice - this.previousPrice;
 
-				console.log(`${this.symbol}: OWNED - Price ${previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+				console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
 				console.log(`${this.symbol}: Ratio: ${ratio.toFixed(4)} → Reward factor: ${rewardFactor.toFixed(4)} (amp=${this.rewardAmplification}) | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 			else {
-				const totalChange = this.entryPrice - currentPrice; // Profit from selling high and price going lower
+				const totalChange = this.entryPrice - this.currentPrice; // Profit from selling high and price going lower
 				const percentChange = (totalChange / this.entryPrice) * 100;
-				const recentChange = currentPrice - previousPrice;
+				const recentChange = this.currentPrice - this.previousPrice;
 
-				console.log(`${this.symbol}: SOLD - Price ${previousPrice.toFixed(2)} → ${currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+				console.log(`${this.symbol}: SOLD - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
 				console.log(`${this.symbol}: Ratio: ${ratio.toFixed(4)} → Reward factor: ${rewardFactor.toFixed(4)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 		}
@@ -454,6 +437,7 @@ export default class StockChannel extends Channel {
 	 * Resolves conflicts for both input predictions and output inferences
 	 * Input predictions: price_change, volume_change, position (strongest wins per dimension)
 	 * Output inferences: activity (strongest wins)
+	 * Position-aware resolution: Ensures position input is coherent with activity output
 	 * @param {Array} inferences - all inferred neurons for this channel
 	 * @returns {Array} - resolved neurons with strongest per dimension
 	 */
@@ -475,10 +459,52 @@ export default class StockChannel extends Channel {
 		// Resolve output inferences: select strongest action
 		const resolvedOutputs = this.resolveOutputInferences(outputInferences);
 
+		// Make position coherent with activity output
+		this.makePositionCoherent(resolvedInputs, resolvedOutputs);
+
 		// Combine and return
 		const resolved = [...resolvedInputs, ...resolvedOutputs];
 		if (this.debug) this.logResolution(inferences.length, inputPredictions.length, outputInferences.length, resolved.length);
 		return resolved;
+	}
+
+	/**
+	 * Ensure position input is coherent with activity output
+	 * If activity=BUY(1), force position=OWNED(1) for next frame
+	 * If activity=SELL(-1), force position=NOT_OWNED(0) for next frame
+	 * If activity=HOLD(0), keep current position (use current this.owned state)
+	 * @param {Array} resolvedInputs - resolved input predictions (modified in place)
+	 * @param {Array} resolvedOutputs - resolved output inferences
+	 */
+	makePositionCoherent(resolvedInputs, resolvedOutputs) {
+		const activityDim = `${this.symbol}_activity`;
+		const positionDim = `${this.symbol}_position`;
+
+		// Find activity output
+		const activityOutput = resolvedOutputs.find(pred => pred.coordinates[activityDim] !== undefined);
+		if (!activityOutput) return; // No activity output, nothing to adjust
+
+		const activity = activityOutput.coordinates[activityDim];
+
+		// Determine what position should be based on activity
+		let expectedPosition;
+		if (activity === 1) expectedPosition = 1; // BUY → will be OWNED
+		else if (activity === -1) expectedPosition = 0; // SELL → will be NOT_OWNED
+		else expectedPosition = this.owned ? 1 : 0; // HOLD → keep current position
+
+		// Find position input prediction
+		const positionPred = resolvedInputs.find(pred => pred.coordinates[positionDim] !== undefined);
+		if (!positionPred) {
+			// No position prediction exists - this is OK, position is an input not an output
+			// The brain will observe the actual position in the next frame
+			return;
+		}
+
+		// Adjust position to be coherent with activity
+		if (positionPred.coordinates[positionDim] !== expectedPosition) {
+			if (this.debug2) console.log(`Adjusting position prediction from ${positionPred.coordinates[positionDim]} to ${expectedPosition} to match activity ${activity}`);
+			positionPred.coordinates[positionDim] = expectedPosition;
+		}
 	}
 
 	/**
@@ -550,11 +576,11 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Calculate continuous price prediction as weighted average
-	 * Uses priceForPrediction (current frame price) as base for predicting next frame
+	 * Uses previousPrice as base for predicting next frame
 	 * @param {Array} pricePredictions - predictions for price_change dimension
 	 */
 	calculateContinuousPricePrediction(pricePredictions) {
-		if (pricePredictions.length === 0 || this.priceForPrediction === null) {
+		if (pricePredictions.length === 0 || this.previousPrice === null) {
 			this.lastPredictedPrice = null;
 			return;
 		}
@@ -567,7 +593,7 @@ export default class StockChannel extends Channel {
 		for (const pred of pricePredictions) {
 			const bucketValue = pred.coordinates[priceChangeDim];
 			const percentageChange = this.bucketValueToPercentage(bucketValue);
-			const predictedPrice = this.priceForPrediction * (1 + percentageChange / 100);
+			const predictedPrice = this.previousPrice * (1 + percentageChange / 100);
 
 			totalWeightedPrice += predictedPrice * pred.strength;
 			totalStrength += pred.strength;
@@ -577,8 +603,8 @@ export default class StockChannel extends Channel {
 		this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
 
 		if (this.lastPredictedPrice !== null && this.debug2) {
-			const predictedChange = ((this.lastPredictedPrice - this.priceForPrediction) / this.priceForPrediction) * 100;
-			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.priceForPrediction.toFixed(2)}`);
+			const predictedChange = ((this.lastPredictedPrice - this.previousPrice) / this.previousPrice) * 100;
+			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.previousPrice.toFixed(2)}`);
 		}
 	}
 

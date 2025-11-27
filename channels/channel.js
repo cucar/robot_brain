@@ -16,8 +16,8 @@ export default class Channel {
 	constructor(name) {
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
-		this.debug = false; // controls verbosity of channel output
-		this.debug2 = false; // controls detailed verbosity of channel output
+		this.debug = true; // controls verbosity of channel output
+		this.debug2 = false; // more detailed, verbose debug mode
 		this.inferredActions = []; // actions selected by resolveConflicts
 	}
 
@@ -76,21 +76,21 @@ export default class Channel {
 	 * Returns reward factor: number (1.0 = neutral, >1.0 = positive, <1.0 = negative)
 	 * This factor will be multiplied with existing neuron reward factors
 	 */
-	async getFeedback() {
+	async getRewards() {
 		return 1.0; // Neutral feedback by default
 	}
 
 	/**
-	 * Get valid exploration actions based on current channel state
+	 * Returns an exploration action based on current channel state
 	 * Child classes should override this to provide context-aware exploration
 	 * Examples:
 	 * - Stock: Can't sell if not owned
 	 * - Arm: Can't move beyond joint limits
 	 * - Eyes: Can't saccade outside visual field
 	 */
-	getValidExplorationActions() {
+	getExplorationAction() {
 		// Child classes must implement this with state-aware logic
-		throw new Error('Channel must implement getValidExplorationActions() method');
+		throw new Error('Channel must implement getExplorationAction() method');
 	}
 
 	/**

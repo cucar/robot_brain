@@ -118,7 +118,7 @@ The test plan is organized into 10 hierarchical sections, starting with foundati
 
 **Critical Areas Tested**:
 - `applyRewards()` - Global reward application with temporal decay formula validation
-- `getFeedback()` - Multi-channel feedback aggregation with multiplicative combination
+- `getRewards()` - Multi-channel feedback aggregation with multiplicative combination
 - `optimizeRewards()` - Reward factor application to neuron strengths before peak detection
 - `runForgetCycle()` - Complete forget cycle including reward, connection, and pattern decay
 - Temporal decay calculations with level-specific aging (POW formulas)

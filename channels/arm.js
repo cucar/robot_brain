@@ -93,7 +93,7 @@ export default class ArmChannel extends Channel {
 	/**
 	 * Get feedback based on movement success
 	 */
-	async getFeedback() {
+	async getRewards() {
 		if (!this.lastMovement || !this.targetPosition) {
 			return 1.0; // Neutral
 		}

@@ -76,7 +76,7 @@ export default class TongueChannel extends Channel {
 	/**
 	 * Get feedback based on taste preferences
 	 */
-	async getFeedback() {
+	async getRewards() {
 		if (!this.lastMovement) {
 			return 1.0; // Neutral
 		}

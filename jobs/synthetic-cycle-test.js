@@ -89,11 +89,6 @@ export default class SyntheticCycleTest extends Job {
 		console.log(`🔁 Cycles: ${this.config.cycleRepeats}`);
 		console.log(`📋 Total Frames: ${this.config.cycleRepeats * this.config.cyclePattern.length}`);
 		console.log('');
-		console.log('🎯 Expected Optimal Strategy:');
-		console.log('   BUY at -3% (Frame 3 of each cycle)');
-		console.log('   SELL at +1% (Frame 1 of each cycle)');
-		console.log('   Expected profit per cycle: ~8%');
-		console.log('');
 	}
 
 	/**
@@ -129,8 +124,7 @@ export default class SyntheticCycleTest extends Job {
 			frameCount++;
 
 			// Get feedback and process
-			const feedback = await this.brain.getFeedback();
-			await this.brain.processFrame(frame, feedback);
+			await this.brain.processFrame(frame);
 
 			// Track trades with source information
 			if (stockChannel.lastAction !== 0) {

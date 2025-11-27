@@ -112,7 +112,7 @@ export default class TextTrainingJob extends Job {
 			frameCount++;
 
 			// Get feedback and process frame
-			const feedback = await this.brain.getFeedback();
+			const feedback = await this.brain.getRewards();
 			await this.brain.processFrame(frame, feedback);
 		}
 

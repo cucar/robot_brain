@@ -184,7 +184,7 @@ async inferNextFrame() {
 
     if (connectionPredictions > 0) {
       // Got predictions! Unpack to base if needed
-      if (level > 0) await this.unpackToBase(level, 'connection');
+      if (level > 0) await this.saveInferenceChain(level, 'connection');
 
       // Validate and learn from errors
       await this.validateAndLearnFromErrors('connection', level);
@@ -197,7 +197,7 @@ async inferNextFrame() {
 
       if (patternPredictions > 0) {
         // Got predictions! Unpack to base if needed
-        if (level > 0) await this.unpackToBase(level, 'pattern');
+        if (level > 0) await this.saveInferenceChain(level, 'pattern');
 
         // Validate and learn from errors
         await this.validateAndLearnFromErrors('pattern', level + 1);
@@ -407,7 +407,7 @@ async inferNextFrame() {
 
     if (connectionPredictions > 0) {
       // Got predictions! Unpack to base if needed
-      if (level > 0) await this.unpackToBase(level, 'connection');
+      if (level > 0) await this.saveInferenceChain(level, 'connection');
 
       // Validate and learn from errors
       await this.validateAndLearnFromErrors('connection', level);
@@ -420,7 +420,7 @@ async inferNextFrame() {
 
       if (patternPredictions > 0) {
         // Got predictions! Unpack to base if needed
-        if (level > 0) await this.unpackToBase(level, 'pattern');
+        if (level > 0) await this.saveInferenceChain(level, 'pattern');
 
         // Validate and learn from errors
         await this.validateAndLearnFromErrors('pattern', level + 1);
@@ -502,7 +502,7 @@ HAVING total_strength >= ?
 
 ### Unpacking to Base Level
 
-**unpackToBase(fromLevel, source):**
+**saveInferenceChain(fromLevel, source):**
 - Follows peak chain from fromLevel down to level 0
 - Accumulates strength from pattern_peaks at each level
 - Uses recursive CTE for efficiency

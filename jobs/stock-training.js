@@ -287,7 +287,7 @@ export default class StockTrainingJob extends Job {
 				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${expectedFrames}... `);
 
 			// Get feedback and process frame
-			const feedback = await this.brain.getFeedback();
+			const feedback = await this.brain.getRewards();
 			await this.brain.processFrame(frame, feedback);
 		}
 

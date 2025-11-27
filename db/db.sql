@@ -20,11 +20,24 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
 -- DROP TABLE IF EXISTS connection_inference_sources;
 -- DROP TABLE IF EXISTS pattern_inference_sources;
+-- DROP TABLE IF EXISTS exploration_inference_sources;
 -- DROP TABLE IF EXISTS inference_log;
 -- DROP TABLE IF EXISTS inference_chain;
 -- DROP TABLE IF EXISTS unpack_sources;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
+
+SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
+FROM active_neurons an
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+WHERE an.level = 0
+AND c.to_neuron_id = 4
+AND c.distance = an.age + 1
+AND c.strength > 0;
+
+SELECT SUM(prediction_strength) as total_strength
+FROM exploration_inference_sources
+WHERE inferred_neuron_id = 4 AND level = 0 AND age = 0;
 
 -- check state
 select count(*) from neurons;
@@ -341,20 +354,34 @@ CREATE TABLE IF NOT EXISTS pattern_inference_sources (
     INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
+-- scratch table for tracking exploration-based predictions (MEMORY table)
+-- populated during curiosity exploration, used for reward application
+-- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
+CREATE TABLE IF NOT EXISTS exploration_inference_sources (
+    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    connection_id BIGINT UNSIGNED NOT NULL,
+    prediction_strength DOUBLE NOT NULL,
+    PRIMARY KEY (inferred_neuron_id, age, connection_id),
+    INDEX idx_connection (connection_id),
+    INDEX idx_aggregate (inferred_neuron_id, prediction_strength),
+    INDEX idx_age (age)
+) ENGINE=MEMORY;
+
 -- scratch table for tracking which inference type was performed at each level for each frame
 -- used for temporal credit assignment in applyRewards
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
 CREATE TABLE IF NOT EXISTS inference_log (
     age TINYINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
-    type ENUM('connection', 'pattern') NOT NULL,
+    type ENUM('connection', 'pattern', 'exploration') NOT NULL,
     PRIMARY KEY (age, level),
     INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking which high-level source neurons unpacked to which base-level outputs
 -- used for channel-specific reward attribution in applyRewards
--- populated during unpackToBase: maps base outputs (level 0) to their source-level neurons
+-- populated during saveInferenceChain: maps base outputs (level 0) to their source-level neurons
 -- source_level can be obtained from inference_log by joining on age
 -- unpacking is just mechanical translation via pattern_peaks, so we only track endpoints
 -- age represents how many frames ago this prediction was made (both source and base age together)
@@ -370,8 +397,8 @@ CREATE TABLE IF NOT EXISTS inference_chain (
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking source neurons during unpacking (MEMORY table)
--- used internally by unpackToBase to propagate source info as we unpack level by level
--- truncated at start of unpackToBase, populated during unpacking, then copied to inference_chain
+-- used internally by saveInferenceChain to propagate source info as we unpack level by level
+-- truncated at start of saveInferenceChain, populated during unpacking, then copied to inference_chain
 CREATE TABLE IF NOT EXISTS unpack_sources (
     current_neuron_id BIGINT UNSIGNED NOT NULL,
     current_level TINYINT NOT NULL,

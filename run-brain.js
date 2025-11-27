@@ -5,7 +5,7 @@
 
 class BrainRunner {
 	async run(jobName) {
-		console.log(`Starting job: ${jobName}`);
+		// console.log(`Starting job: ${jobName}`);
 
 		try {
 			// Dynamically import job class

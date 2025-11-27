@@ -29,7 +29,7 @@ async function testFeedbackTiming() {
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);
 	
-	const feedback1 = await channel.getFeedback();
+	const feedback1 = await channel.getRewards();
 	console.log('Feedback 1:', feedback1, '(should be 1.0 - no trade yet)\n');
 
 	// Simulate a buy decision
@@ -45,7 +45,7 @@ async function testFeedbackTiming() {
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);
 	
-	const feedback2 = await channel.getFeedback();
+	const feedback2 = await channel.getRewards();
 	console.log('Feedback 2:', feedback2);
 	console.log('Expected: 105/100 = 1.05 (5% gain)\n');
 
@@ -55,7 +55,7 @@ async function testFeedbackTiming() {
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);
 	
-	const feedback3 = await channel.getFeedback();
+	const feedback3 = await channel.getRewards();
 	console.log('Feedback 3:', feedback3);
 	console.log('Expected: 110/105 = 1.0476 (4.76% gain)\n');
 
@@ -65,7 +65,7 @@ async function testFeedbackTiming() {
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);
 	
-	const feedback4 = await channel.getFeedback();
+	const feedback4 = await channel.getRewards();
 	console.log('Feedback 4:', feedback4);
 	console.log('Expected: 108/110 = 0.9818 (1.82% loss)\n');
 

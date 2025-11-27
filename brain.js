@@ -30,6 +30,7 @@ export default class Brain {
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
 		this.maxConnectionReward = 10.0; // maximum reward factor for connections and patterns (clamped to prevent extreme values)
+		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
 
 		// initialize the counter for forget cycle
@@ -53,8 +54,9 @@ export default class Brain {
 		this.lastInferenceLevel = null; // level where inference was made
 
 		// Create readline interface for pausing between frames - used when debugging
-		this.debug = false;
-		this.waitForUserInput = false;
+		this.debug = true;
+		this.debug2 = false; // deeper, more verbose debug level
+		this.waitForUserInput = true;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
 
@@ -64,7 +66,7 @@ export default class Brain {
 	registerChannel(name, channelClass) {
 		const channel = new channelClass(name);
 		this.channels.set(name, channel);
-		if (this.debug) console.log(`Registered channel: ${name} (${channelClass.name})`);
+		if (this.debug2) console.log(`Registered channel: ${name} (${channelClass.name})`);
 	}
 
 	/**
@@ -89,7 +91,7 @@ export default class Brain {
 	 * Initialize dimensions for all registered channels
 	 */
 	async initializeDimensions() {
-		if (this.debug) console.log('Initializing dimensions for registered channels...');
+		if (this.debug2) console.log('Initializing dimensions for registered channels...');
 		for (const [channelName, channel] of this.channels) {
 			await this.insertChannelDimensions(channel.getInputDimensions(), channelName, 'input');
 			await this.insertChannelDimensions(channel.getOutputDimensions(), channelName, 'output');
@@ -100,7 +102,7 @@ export default class Brain {
 	 * inserts channel dimensions
 	 */
 	async insertChannelDimensions(dimensions, channelName, type){
-		if (this.debug) console.log(`Creating ${type} dimensions for ${channelName}:`, dimensions);
+		if (this.debug2) console.log(`Creating ${type} dimensions for ${channelName}:`, dimensions);
 		for (const dimName of dimensions)
 			await this.conn.query('INSERT IGNORE INTO dimensions (name, channel, type) VALUES (?, ?, ?)', [dimName, channelName, type]);
 	}
@@ -119,7 +121,7 @@ export default class Brain {
 			this.dimensionIdToName[row.id] = row.name;
 			this.dimensions.set(row.name, { id: row.id, channel: row.channel, type: row.type });
 		});
-		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
+		if (this.debug2) console.log('Dimensions loaded:', this.dimensionNameToId);
 	}
 
 	/**
@@ -130,6 +132,8 @@ export default class Brain {
 
 		// Increment frame counter to be able to track inactivity
 		this.frameNumber++;
+		console.log('******************************************************************');
+		console.log(`OBSERVING FRAME ${this.frameNumber}`);
 
 		// Get input and output data from all channels
 		for (const [_, channel] of this.channels) {
@@ -143,6 +147,8 @@ export default class Brain {
 			if (channelOutputs && channelOutputs.length > 0) frame.push(...channelOutputs);
 		}
 
+		console.log(`frame points: ${JSON.stringify(frame)}`);
+		console.log('******************************************************************');
 		return frame;
 	}
 
@@ -150,24 +156,26 @@ export default class Brain {
 	 * Get channel-specific feedback as a Map of channel_name -> reward
 	 * Each channel provides its own reward signal based on its objectives
 	 */
-	async getFeedback() {
-		if (this.debug) console.log('Getting feedback from all channels...');
+	async getChannelRewards() {
+		if (this.debug2) console.log('Getting rewards feedback from all channels...');
 		const channelRewards = new Map();
 		let feedbackCount = 0;
 
 		for (const [channelName, channel] of this.channels) {
-			const rewardFactor = await channel.getFeedback();
+			const rewardFactor = await channel.getRewards();
 			if (rewardFactor !== 1.0) { // Only process non-neutral feedback
-				if (this.debug) console.log(`${channelName}: reward factor ${rewardFactor.toFixed(3)}`);
+				if (this.debug2) console.log(`${channelName}: reward factor ${rewardFactor.toFixed(3)}`);
 				channelRewards.set(channelName, rewardFactor);
 				feedbackCount++;
 			}
 		}
 
-		if (this.debug) {
-			if (feedbackCount > 0) console.log(`Received feedback from ${feedbackCount} channels`);
-			else console.log('No feedback from any channels');
+		if (this.debug2) {
+			if (feedbackCount > 0) console.log(`Received rewards from ${feedbackCount} channels`);
+			else console.log('No rewards from any channels');
 		}
+		if (this.debug && feedbackCount > 0)
+			console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 
 		return channelRewards;
 	}
@@ -176,14 +184,11 @@ export default class Brain {
 	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
 	 * and channel-specific rewards (Map of channel_name -> reward)
 	 */
-	async processFrame(frame, channelRewards = new Map()) {
+	async processFrame(frame) {
 		const frameStart = performance.now();
-		if (this.debug) {
-			console.log('******************************************************************');
-			console.log(`OBSERVING NEW FRAME: ${JSON.stringify(frame)}`, this.frameNumber);
-			console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
-			console.log('******************************************************************');
-		}
+
+		// Get rewards from all channels for reward propagation
+		const channelRewards = await this.getChannelRewards();
 
 		// apply rewards to previously executed decisions (before aging them further)
 		await this.applyRewards(channelRewards);
@@ -224,30 +229,18 @@ export default class Brain {
 	}
 
 	/**
-	 * Execute previous frame's decisions and exploration actions if needed
-	 */
-	async executeOutputs(frame) {
-
-		// Execute previous frame's decisions (output neurons in current frame)
-		await this.executeInferredActions(frame);
-
-		// Execute exploration if brain is inactive
-		await this.curiosityExploration(frame);
-	}
-
-	/**
 	 * Execute decisions from previous frame (age = 1)
 	 * Reads output neurons from the frame instead of querying database
 	 */
-	async executeInferredActions(frame){
+	async executeOutputs(frame){
 
 		// Get channel outputs from frame
 		const channelOutputs = this.getFrameChannelOutputs(frame);
-		if (this.debug) console.log('channelOutputs', channelOutputs);
+		if (channelOutputs.size > 0 && this.debug) console.log('channelOutputs', channelOutputs);
 
 		// nothing to do if there are no outputs
 		if (channelOutputs.size === 0) {
-			if (this.debug) console.log('No inferred outputs to execute');
+			if (this.debug2) console.log('No inferred outputs to execute');
 			return;
 		}
 
@@ -258,17 +251,35 @@ export default class Brain {
 	}
 
 	/**
-	 * Execute curiosity exploration for channels without inferred outputs
+	 * exploration inference - creates predictions for channels without inferred outputs
+	 * Writes to inferred_neurons and exploration_inference_sources tables
+	 * Only called when no predictions exist from connection/pattern inference
+	 * Returns true if exploration happened, false otherwise
 	 */
-	async curiosityExploration(frame){
+	async inferExploration(){
 
 		// Check if the brain is inactive - if active, no exploration needed
 		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
 
-		// Get channel outputs from frame
-		const channelOutputs = this.getFrameChannelOutputs(frame);
+		// create exploration predictions for all channels with output dimensions
+		const count = await this.inferExplorationActions();
+		if (count === 0) return;
 
-		// Explore channels without outputs
+		// Set inference type for error learning and rewards
+		this.lastInferenceType = 'exploration';
+		this.lastInferenceLevel = 0;
+
+		// save reasoning for exploration predictions
+		await this.saveInferenceChain(0, 'exploration');
+
+		// resolve exploration conflicts at base level
+		await this.resolveChannelInferenceConflicts();
+	}
+
+	/**
+	 * infers exploration actions for each channel
+	 */
+	async inferExplorationActions() {
 		let exploredCount = 0;
 		for (const [channelName, channel] of this.channels) {
 
@@ -276,26 +287,24 @@ export default class Brain {
 			const channelOutputDims = channel.getOutputDimensions();
 			if (channelOutputDims.length === 0) continue;
 
-			// Skip if this channel already has output in frame
-			if (channelOutputs.has(channelName)) continue;
+			// Get exploration action for this channel
+			const actionNeuron = channel.getExplorationAction();
+			if (this.debug) console.log(`Curiosity exploration for ${channelName}: `, actionNeuron);
+			if (actionNeuron == null) continue;
 
-			// Execute exploration for this channel
-			const validActions = channel.getValidExplorationActions();
-			if (validActions.length === 0) continue;
-
-			// pick a random action from the valid ones
-			const randomAction = validActions[Math.floor(Math.random() * validActions.length)];
-			if (this.debug) console.log(`${channelName}: Curiosity exploration:`, randomAction);
-
-			// execute the selected actions
-			await this.executeChannelOutputs(channelName, randomAction);
-
-			// add explored action to frame so it gets recognized as a neuron with coordinates
-			frame.push(randomAction);
+			// Find/create neuron for this action and write exploration prediction
+			await this.saveExplorationAction(actionNeuron);
 			exploredCount++;
 		}
+		if (this.debug2) console.log(`Explored ${exploredCount} channels without predictions`);
+		return exploredCount;
+	}
 
-		if (this.debug && exploredCount > 0) console.log(`Explored ${exploredCount} channels without predictions`);
+	/**
+	 * Write exploration prediction to storage - implementation-specific
+	 */
+	async saveExplorationAction() {
+		throw new Error('saveExplorationAction() must be implemented by subclass');
 	}
 
 	/**
@@ -478,6 +487,7 @@ export default class Brain {
 
 		// bulk find/create neurons for all input points
 		const neuronIds = await this.getFrameNeurons(frame);
+		console.log('frame neuron ids', neuronIds);
 
 		// bulk insert activations at base level
 		await this.activateNeurons(neuronIds);
@@ -493,7 +503,7 @@ export default class Brain {
 
 		// try to get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
 		const matches = await this.matchFrameNeurons(frame);
-		if (this.debug) console.log('pointNeuronMatches', matches);
+		if (this.debug2) console.log('pointNeuronMatches', matches);
 
 		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
 		const neuronIds = matches.filter(p => p.neuron_id).map(p => p.neuron_id);
@@ -501,7 +511,7 @@ export default class Brain {
 		// create neurons for points with no matching neurons
 		const pointsNeedingNeurons = matches.filter(p => !p.neuron_id);
 		if (pointsNeedingNeurons.length > 0) {
-			if (this.debug) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
+			if (this.debug2) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
 			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point_str));
 			neuronIds.push(...createdNeuronIds);
 		}
@@ -611,6 +621,7 @@ export default class Brain {
 	 * Sequential inference with error-driven learning.
 	 * Alternates between connection and pattern inference going down levels:
 	 * connection@N, pattern@N-1, connection@N-1, pattern@N-2, ..., connection@0
+	 * If no predictions exist, uses curiosity exploration to generate predictions.
 	 * Note: inferred_neurons ages and gets cleaned up (age >= 2), no need to truncate
 	 */
 	async inferNeurons() {
@@ -630,8 +641,8 @@ export default class Brain {
 			if (level > 0 && await this.inferPatterns(level)) return;
 		}
 
-		// if we got to this level, it looks like there were no predictions - should be rare
-		if (this.debug) console.log('No predictions at any level');
+		// No predictions at any level - use exploration
+		await this.inferExploration();
 	}
 
 	/**
@@ -657,7 +668,7 @@ export default class Brain {
 
 		// First frame - no previous predictions to learn from
 		if (this.lastInferenceType === null) {
-			if (this.debug) console.log('No previous predictions - first frame');
+			if (this.debug2) console.log('No previous predictions - first frame');
 			return;
 		}
 
@@ -689,7 +700,7 @@ export default class Brain {
 		this.lastInferenceLevel = level;
 
 		// If predictions are at higher level, unpack through pattern chain to base level
-		await this.unpackToBase(level, 'connection');
+		await this.saveInferenceChain(level, 'connection');
 
 		// Use channel logic to resolve conflicting inference at base level
 		await this.resolveChannelInferenceConflicts();
@@ -717,7 +728,7 @@ export default class Brain {
 		this.lastInferenceLevel = level;
 
 		// If predictions are at higher level, unpack through pattern chain to base level
-		if (level > 0) await this.unpackToBase(level - 1, 'pattern');
+		if (level > 0) await this.saveInferenceChain(level - 1, 'pattern');
 
 		// Use channel logic to resolve conflicting predictions at base level
 		await this.resolveChannelInferenceConflicts();
@@ -745,8 +756,8 @@ export default class Brain {
 		for (const [channelName, channelInference] of channelInferences)
 			resolvedInferences.push(...this.channels.get(channelName).resolveConflicts(channelInference));
 
-		// Write selected predictions to be used later for accuracy reporting - implementation-specific
-		await this.writeResolvedPredictions(resolvedInferences);
+		// save selected predictions to be used later for accuracy reporting - implementation-specific
+		await this.saveResolvedPredictions(resolvedInferences);
 
 		if (this.debug) console.log(`Resolved ${resolvedInferences.length} neurons after conflict resolution`);
 	}
@@ -826,8 +837,8 @@ export default class Brain {
 	/**
 	 * Unpack predictions from higher level to base level via peak chain (implementation-specific)
 	 */
-	async unpackToBase() {
-		throw new Error('unpackToBase() must be implemented by subclass');
+	async saveInferenceChain() {
+		throw new Error('saveInferenceChain() must be implemented by subclass');
 	}
 
 	/**
@@ -838,10 +849,10 @@ export default class Brain {
 	}
 
 	/**
-	 * Write resolved predictions to storage (implementation-specific)
+	 * save resolved predictions to storage (implementation-specific)
 	 */
-	async writeResolvedPredictions() {
-		throw new Error('writeResolvedPredictions() must be implemented by subclass');
+	async saveResolvedPredictions() {
+		throw new Error('saveResolvedPredictions() must be implemented by subclass');
 	}
 
 	/**

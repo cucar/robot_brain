@@ -25,8 +25,8 @@ class TestChannel extends Channel {
         // Mock implementation
     }
     
-    getValidExplorationActions() {
-        return [{ test_output_1: 1 }];
+    getExplorationAction() {
+        return { test_output_1: 1 };
     }
 }
 

@@ -64,7 +64,7 @@ export default class EyesChannel extends Channel {
 	/**
 	 * Get feedback based on eye movements and visual targets
 	 */
-	async getFeedback() {
+	async getRewards() {
 		if (!this.lastSaccade) {
 			return 1.0; // Neutral
 		}

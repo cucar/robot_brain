@@ -103,7 +103,7 @@ export default class StockPredictionJob extends Job {
 			frameCount++;
 
 			// Get feedback and process frame
-			const feedback = await this.brain.getFeedback();
+			const feedback = await this.brain.getRewards();
 			await this.brain.processFrame(frame, feedback);
 		}
 

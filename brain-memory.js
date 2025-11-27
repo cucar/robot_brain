@@ -275,17 +275,13 @@ export default class BrainMemory extends Brain {
 		const randomChannel = this.channels.get(randomChannelName);
 
 		// Get exploration actions for the channel
-		const explorationActions = randomChannel.getValidExplorationActions();
-		if (explorationActions.length === 0) {
-			if (this.debug) console.log(`No valid exploration actions for ${randomChannelName}`);
+		const explorationAction = randomChannel.getExplorationAction();
+		if (explorationAction === null) {
+			if (this.debug) console.log(`No exploration actions for ${randomChannelName}`);
 			return;
 		}
 
-		// Execute random exploration action
-		const randomAction = explorationActions[Math.floor(Math.random() * explorationActions.length)];
-		if (this.debug) console.log(`${randomChannelName}: Executing exploration action:`, randomAction);
-
-		await this.executeChannelOutputs(randomChannelName, randomAction);
+		await this.executeChannelOutputs(randomChannelName, [ explorationAction ]);
 	}
 
 	/**
@@ -650,18 +646,13 @@ export default class BrainMemory extends Brain {
 	}
 
 	/**
-	 * Write resolved predictions to in-memory storage (implementation of abstract method)
+	 * save resolved predictions to in-memory storage (implementation of abstract method)
 	 */
-	async writeResolvedPredictions(allSelectedPredictions) {
+	async saveResolvedPredictions(allSelectedPredictions) {
 		// Store selected predictions in inferred_neurons with age=0
-		if (!this.inferredNeurons.has(0)) {
-			this.inferredNeurons.set(0, new Map());
-		}
-
+		if (!this.inferredNeurons.has(0)) this.inferredNeurons.set(0, new Map());
 		const level0Inferred = this.inferredNeurons.get(0);
-		for (const pred of allSelectedPredictions) {
-			level0Inferred.set(pred.neuron_id, { strength: pred.strength, age: 0 });
-		}
+		for (const pred of allSelectedPredictions) level0Inferred.set(pred.neuron_id, { strength: pred.strength, age: 0 });
 	}
 
 	/**

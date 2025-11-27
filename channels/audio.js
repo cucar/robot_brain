@@ -67,7 +67,7 @@ export default class EarsChannel extends Channel {
 	/**
 	 * Get feedback based on ear movement accuracy for sound localization
 	 */
-	async getFeedback() {
+	async getRewards() {
 		if (!this.lastMovement) {
 			return 1.0; // Neutral
 		}
