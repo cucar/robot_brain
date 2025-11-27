@@ -119,34 +119,31 @@ export default class SyntheticCycleTest extends Job {
 
 		// Process all frames
 		while (frameCount < expectedFrames) {
+
 			// Get frame
 			const frame = await this.brain.getFrame();
 			frameCount++;
 
-			// Get feedback and process
-			await this.brain.processFrame(frame);
-
 			// Track trades with source information
-			if (stockChannel.lastAction !== 0) {
+			if (stockChannel.lastAction !== null && stockChannel.lastAction !== 0) {
 				const action = stockChannel.lastAction === 1 ? 'BUY' : 'SELL';
 				const priceChange = stockChannel.currentRow?.price_change || 0;
 				const cycleFrame = ((frameCount - 1) % this.config.cyclePattern.length) + 1;
 
 				// Determine source: check if this was from curiosity or inference
-				const source = stockChannel.lastActionSource || 'unknown';
-
 				trades.push({
 					frame: frameCount,
 					cycleFrame: cycleFrame,
 					action: action,
-					priceChange: (priceChange * 100).toFixed(2) + '%',
-					source: source
+					priceChange: (priceChange * 100).toFixed(2) + '%'
 				});
 			}
 
+			// Get feedback and process
+			await this.brain.processFrame(frame);
+
 			// Show progress every 25 frames
-			if (frameCount % 25 === 0)
-				process.stdout.write(`\rFrame ${frameCount}/${expectedFrames}... `);
+			if (frameCount % 25 === 0) console.log(`\rFrame ${frameCount}/${expectedFrames}... `);
 		}
 
 		console.log(`\r✅ Completed ${frameCount} frames\n`);
@@ -181,31 +178,8 @@ export default class SyntheticCycleTest extends Job {
 
 		// Show all trades
 		console.log(`\n📋 Trade History:`);
-		if (trades.length === 0) {
-			console.log('   No trades executed');
-		} else {
-			for (const trade of trades)
-				console.log(`   Frame ${trade.frame} (Cycle ${trade.cycleFrame}): ${trade.action} at ${trade.priceChange}`);
-		}
-
-		// Analyze trade pattern
-		console.log(`\n🔍 Trade Pattern Analysis:`);
-		const buyFrames = trades.filter(t => t.action === 'BUY').map(t => t.cycleFrame);
-		const sellFrames = trades.filter(t => t.action === 'SELL').map(t => t.cycleFrame);
-		
-		console.log(`   BUY frames: ${buyFrames.length > 0 ? buyFrames.join(', ') : 'none'}`);
-		console.log(`   SELL frames: ${sellFrames.length > 0 ? sellFrames.join(', ') : 'none'}`);
-		
-		// Check if optimal
-		const optimalBuys = buyFrames.filter(f => f === 3).length;
-		const optimalSells = sellFrames.filter(f => f === 1).length;
-		const totalCycles = this.config.cycleRepeats;
-		
-		console.log(`\n✅ Optimal Trades:`);
-		console.log(`   BUY at Frame 3: ${optimalBuys}/${totalCycles} cycles (${(optimalBuys / totalCycles * 100).toFixed(1)}%)`);
-		console.log(`   SELL at Frame 1: ${optimalSells}/${totalCycles} cycles (${(optimalSells / totalCycles * 100).toFixed(1)}%)`);
-
-		console.log('='.repeat(60));
+		if (trades.length === 0) console.log('   No trades executed');
+		else for (const trade of trades) console.log(`   Frame ${trade.frame} (Cycle ${trade.cycleFrame}): ${trade.action} at ${trade.priceChange}`);
 	}
 }
 

@@ -255,10 +255,7 @@ export default class BrainMemory extends Brain {
 
 		if (outputRows.length === 0) {
 			if (this.debug) console.log('No previous outputs to execute');
-			return;
 		}
-
-		await this.executeOutputRows(outputRows);
 	}
 
 	/**
@@ -278,46 +275,7 @@ export default class BrainMemory extends Brain {
 		const explorationAction = randomChannel.getExplorationAction();
 		if (explorationAction === null) {
 			if (this.debug) console.log(`No exploration actions for ${randomChannelName}`);
-			return;
 		}
-
-		await this.executeChannelOutputs(randomChannelName, [ explorationAction ]);
-	}
-
-	/**
-	 * Execute output rows grouped by channel
-	 */
-	async executeOutputRows(outputRows) {
-		// Group outputs by channel
-		const channelOutputs = new Map();
-
-		for (const row of outputRows) {
-			if (!channelOutputs.has(row.channel)) channelOutputs.set(row.channel, new Map());
-			channelOutputs.get(row.channel).set(row.dimension_name, row.val);
-		}
-
-		// Execute outputs for each channel using unified method
-		for (const [channelName, outputs] of channelOutputs) {
-			const coordinates = Object.fromEntries(outputs);
-			await this.executeChannelOutputs(channelName, coordinates);
-		}
-	}
-
-	/**
-	 * Unified method to execute outputs on a specific channel
-	 */
-	async executeChannelOutputs(channelName, coordinates) {
-		const channel = this.channels.get(channelName);
-		if (!channel) {
-			console.log(`Warning: Channel ${channelName} not found`);
-			return;
-		}
-
-		if (this.debug) console.log(`${channelName}: Executing outputs:`, coordinates);
-		await channel.executeOutputs(coordinates);
-
-		// Track global activity
-		this.lastActivity = this.frameNumber;
 	}
 
 	/**

@@ -22,8 +22,8 @@ class TestChannel extends Channel {
             { test_x: 0.1, test_y: 0.2, test_value: 1.0 }
         ];
     }
-    
-    async executeOutputs(predictions) {}
+
+    async executeOutputs(inputs, outputs) { return inputs; }
     getExplorationAction() { return {}; }
 }
 

@@ -32,9 +32,13 @@ export default class Channel {
 
 	/**
 	 * Execute outputs based on brain predictions - override in subclasses
-	 * This method should execute actions and update channel state
+	 * This method should execute actions, update channel state, and return final frame points
+	 *
+	 * @param {Array} inputs - Frame inputs from getFrameInputs()
+	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
+	 * @returns {Promise<Array>} - Final frame points (inputs + outputs, with inputs potentially modified by outputs)
 	 */
-	async executeOutputs() {
+	async executeOutputs(inputs, outputs) {
 		throw new Error('Channel must implement executeOutputs() method');
 	}
 

@@ -49,10 +49,6 @@ export default class Brain {
 		// Continuous prediction metrics (for channels that support it)
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
 
-		// Track last frame's inference for error-driven learning
-		this.lastInferenceType = null; // 'connection' or 'pattern' or null
-		this.lastInferenceLevel = null; // level where inference was made
-
 		// Create readline interface for pausing between frames - used when debugging
 		this.debug = true;
 		this.debug2 = false; // deeper, more verbose debug level
@@ -135,16 +131,24 @@ export default class Brain {
 		console.log('******************************************************************');
 		console.log(`OBSERVING FRAME ${this.frameNumber}`);
 
-		// Get input and output data from all channels
+		// process each channel: get inputs, get outputs, execute outputs (which returns final frame points)
 		for (const [_, channel] of this.channels) {
 
-			// get the frame inputs from the channel
+			// get the frame inputs from the channel (current state before any outputs are executed)
 			const channelInputs = await channel.getFrameInputs();
-			if (channelInputs && channelInputs.length > 0) frame.push(...channelInputs);
 
 			// get last inferred outputs to be executed in this frame in case there are any
 			const channelOutputs = await channel.getFrameOutputs();
-			if (channelOutputs && channelOutputs.length > 0) frame.push(...channelOutputs);
+
+			// Update last activity if any channel has outputs
+			if (channelOutputs && channelOutputs.length > 0) this.lastActivity = this.frameNumber;
+
+			// execute outputs - this updates channel state and returns final frame points
+			// if there are outputs, they can modify the inputs; if no outputs, returns inputs as-is
+			const channelFrame = await channel.executeOutputs(channelInputs, channelOutputs);
+
+			// Add frame points to the frame
+			if (channelFrame && channelFrame.length > 0) frame.push(...channelFrame);
 		}
 
 		console.log(`frame points: ${JSON.stringify(frame)}`);
@@ -174,7 +178,7 @@ export default class Brain {
 			if (feedbackCount > 0) console.log(`Received rewards from ${feedbackCount} channels`);
 			else console.log('No rewards from any channels');
 		}
-		if (this.debug && feedbackCount > 0)
+		if (this.debug2 && feedbackCount > 0)
 			console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 
 		return channelRewards;
@@ -196,9 +200,6 @@ export default class Brain {
 		// age the active neurons in memory context - sliding the temporal window
 		await this.ageNeurons();
 
-		// execute previous frame's decisions + exploration if needed
-		await this.executeOutputs(frame);
-
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
 
@@ -207,6 +208,15 @@ export default class Brain {
 
 		// do predictions and outputs - what's going to happen next? and what's our best response?
 		await this.inferNeurons();
+
+		// if no outputs were inferred and inactivity threshold reached, use exploration
+		await this.inferExploration();
+
+		// resolve exploration conflicts at base level
+		await this.resolveChannelInferenceConflicts();
+
+		// For higher levels, copy predictions directly to resolved table (no conflict resolution at higher levels)
+		await this.copyHigherLevelPredictions();
 
 		// at this point the frame is processed - the forget cycle is a periodic cleanup task
 		// run forget cycle periodically and delete dead connections/neurons
@@ -229,51 +239,20 @@ export default class Brain {
 	}
 
 	/**
-	 * Execute decisions from previous frame (age = 1)
-	 * Reads output neurons from the frame instead of querying database
-	 */
-	async executeOutputs(frame){
-
-		// Get channel outputs from frame
-		const channelOutputs = this.getFrameChannelOutputs(frame);
-		if (channelOutputs.size > 0 && this.debug) console.log('channelOutputs', channelOutputs);
-
-		// nothing to do if there are no outputs
-		if (channelOutputs.size === 0) {
-			if (this.debug2) console.log('No inferred outputs to execute');
-			return;
-		}
-
-		// execute outputs for each channel
-		if (this.debug) console.log(`Executing ${channelOutputs.size} inferred outputs`, channelOutputs);
-		for (const [channelName, coordinates] of channelOutputs)
-			await this.executeChannelOutputs(channelName, coordinates);
-	}
-
-	/**
 	 * exploration inference - creates predictions for channels without inferred outputs
 	 * Writes to inferred_neurons and exploration_inference_sources tables
-	 * Only called when no predictions exist from connection/pattern inference
+	 * Only called when inactivity threshold is reached (no outputs for N frames)
 	 * Returns true if exploration happened, false otherwise
 	 */
 	async inferExploration(){
 
-		// Check if the brain is inactive - if active, no exploration needed
+		// Check if the brain has outputs - if yes, no exploration needed
+		// This checks if any channel has output neurons (not just any inferred neurons)
 		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
 
 		// create exploration predictions for all channels with output dimensions
-		const count = await this.inferExplorationActions();
-		if (count === 0) return;
-
-		// Set inference type for error learning and rewards
-		this.lastInferenceType = 'exploration';
-		this.lastInferenceLevel = 0;
-
-		// save reasoning for exploration predictions
-		await this.saveInferenceChain(0, 'exploration');
-
-		// resolve exploration conflicts at base level
-		await this.resolveChannelInferenceConflicts();
+		// saveExplorationAction handles writing to inferred_neurons, exploration_inference_sources, and inference_log
+		await this.inferExplorationActions();
 	}
 
 	/**
@@ -289,10 +268,10 @@ export default class Brain {
 
 			// Get exploration action for this channel
 			const actionNeuron = channel.getExplorationAction();
-			if (this.debug) console.log(`Curiosity exploration for ${channelName}: `, actionNeuron);
-			if (actionNeuron == null) continue;
+			if (!actionNeuron) continue;
 
 			// Find/create neuron for this action and write exploration prediction
+			if (this.debug) console.log(`Curiosity exploration for ${channelName}: `, actionNeuron);
 			await this.saveExplorationAction(actionNeuron);
 			exploredCount++;
 		}
@@ -305,76 +284,6 @@ export default class Brain {
 	 */
 	async saveExplorationAction() {
 		throw new Error('saveExplorationAction() must be implemented by subclass');
-	}
-
-	/**
-	 * returns channel outputs from frame, grouped by channel
-	 * @param {Array} frame - frame data points
-	 * @returns {Map} - Map of channel name to coordinates object (empty object if channel has output but no values yet)
-	 */
-	getFrameChannelOutputs(frame) {
-		const outputDimToChannel = this.getOutputDimensionToChannelMap();
-		const channelOutputs = new Map();
-		for (const point of frame)
-			for (const [dim, value] of Object.entries(point))
-				if (outputDimToChannel.has(dim)) {
-					const channelName = outputDimToChannel.get(dim);
-					if (!channelOutputs.has(channelName)) channelOutputs.set(channelName, {});
-					channelOutputs.get(channelName)[dim] = value;
-				}
-		return channelOutputs;
-	}
-
-	/**
-	 * Get mapping of output dimension names to channel names
-	 * @returns {Map} - Map of dimension name to channel name
-	 */
-	getOutputDimensionToChannelMap() {
-		const outputDimToChannel = new Map();
-		for (const [channelName, channel] of this.channels)
-			for (const dim of channel.getOutputDimensions())
-				outputDimToChannel.set(dim, channelName);
-		return outputDimToChannel;
-	}
-
-	/**
-	 * Execute output rows grouped by channel
-	 */
-	async executeOutputRows(outputRows) {
-
-		// Group outputs by channel
-		const channelOutputs = new Map();
-
-		for (const row of outputRows) {
-			if (!channelOutputs.has(row.channel)) channelOutputs.set(row.channel, new Map());
-			channelOutputs.get(row.channel).set(row.dimension_name, row.val);
-		}
-
-		// Execute outputs for each channel using unified method
-		for (const [channelName, outputs] of channelOutputs) {
-			const coordinates = Object.fromEntries(outputs);
-			await this.executeChannelOutputs(channelName, coordinates);
-		}
-	}
-
-	/**
-	 * Unified method to execute outputs on a specific channel
-	 */
-	async executeChannelOutputs(channelName, coordinates) {
-
-		// get the channel object
-		const channel = this.channels.get(channelName);
-		if (!channel) {
-			if (this.debug) console.log(`Warning: Channel ${channelName} not found`);
-			return;
-		}
-
-		// execute outputs in the channel
-		if (this.debug) console.log(`${channelName}: Executing outputs:`, coordinates);
-		await channel.executeOutputs(coordinates);
-
-		// Track global activity
-		this.lastActivity = this.frameNumber;
 	}
 
 	/**
@@ -621,7 +530,6 @@ export default class Brain {
 	 * Sequential inference with error-driven learning.
 	 * Alternates between connection and pattern inference going down levels:
 	 * connection@N, pattern@N-1, connection@N-1, pattern@N-2, ..., connection@0
-	 * If no predictions exist, uses curiosity exploration to generate predictions.
 	 * Note: inferred_neurons ages and gets cleaned up (age >= 2), no need to truncate
 	 */
 	async inferNeurons() {
@@ -640,9 +548,6 @@ export default class Brain {
 			// Patterns predict at level-1, so skip if already at base level
 			if (level > 0 && await this.inferPatterns(level)) return;
 		}
-
-		// No predictions at any level - use exploration
-		await this.inferExploration();
 	}
 
 	/**
@@ -662,25 +567,21 @@ export default class Brain {
 	/**
 	 * Learn from previous frame's predictions by comparing them to current observations.
 	 * Called at start of new frame after observations are available.
-	 * Uses cached inference type and level from previous frame.
+	 * Processes all inference types that occurred in previous frame.
 	 */
 	async learnFromPreviousFrameErrors() {
 
-		// First frame - no previous predictions to learn from
-		if (this.lastInferenceType === null) {
-			if (this.debug2) console.log('No previous predictions - first frame');
-			return;
-		}
-
-		// Report accuracy from previous frame inference
+		// Report accuracy from previous frame inference (all types)
 		await this.reportPredictionsAccuracy();
 
-		// if we had made the inference using connections, apply negative reinforcement to failed predictions
-		// otherwise if we had made the inference using patterns, merge predictions with observations based on previous frame's inference type
-		if (this.lastInferenceType === 'connection') await this.negativeReinforceConnections();
-		else await this.mergePatternFuture();
+		// Apply learning for each inference type that occurred
+		// Connection inference: negative reinforcement for failed predictions
+		await this.negativeReinforceConnections();
 
-		// now create patterns from failed predictions - error-driven pattern creation at level + 1
+		// Pattern inference: merge pattern_future with observations
+		await this.mergePatternFuture();
+
+		// Create error patterns from failed predictions (all types)
 		await this.createErrorPatterns();
 	}
 
@@ -695,18 +596,8 @@ export default class Brain {
 		const count = await this.inferConnectionsAtLevel(level);
 		if (count === 0) return false;
 
-		// Cache inference type and level for next frame's error learning
-		this.lastInferenceType = 'connection';
-		this.lastInferenceLevel = level;
-
 		// If predictions are at higher level, unpack through pattern chain to base level
 		await this.saveInferenceChain(level, 'connection');
-
-		// Use channel logic to resolve conflicting inference at base level
-		await this.resolveChannelInferenceConflicts();
-
-		// For higher levels, copy predictions directly to resolved table (no conflict resolution at higher levels)
-		if (level > 0) await this.copyHigherLevelPredictions();
 
 		return true;
 	}
@@ -723,19 +614,8 @@ export default class Brain {
 		const count = await this.inferPatternsFromLevel(level);
 		if (count === 0) return false;
 
-		// Cache inference type and level for next frame's error learning
-		this.lastInferenceType = 'pattern';
-		this.lastInferenceLevel = level;
-
 		// If predictions are at higher level, unpack through pattern chain to base level
 		if (level > 0) await this.saveInferenceChain(level - 1, 'pattern');
-
-		// Use channel logic to resolve conflicting predictions at base level
-		await this.resolveChannelInferenceConflicts();
-
-		// For higher levels, copy predictions directly to resolved table (no conflict resolution at higher levels)
-		// Pattern predictions are at level-1, so copy if level-1 > 0
-		if (level > 0) await this.copyHigherLevelPredictions();
 
 		return true;
 	}
@@ -763,6 +643,15 @@ export default class Brain {
 	}
 
 	/**
+	 * Get the prediction level from previous frame's inference.
+	 * Returns null if no inference occurred (only exploration).
+	 * Implementation-specific: queries source tables to determine which inference type occurred.
+	 */
+	async getPreviousInferenceLevel() {
+		throw new Error('getPreviousInferenceLevel() must be implemented by subclass');
+	}
+
+	/**
 	 * Creates error-driven patterns from failed predictions.
 	 * Common orchestration logic with implementation-specific methods.
 	 */
@@ -770,22 +659,23 @@ export default class Brain {
 
 		// For pattern inference: predictions were made at lastInferenceLevel - 1
 		// For connection inference: predictions were made at lastInferenceLevel
-		const predictionLevel = this.lastInferenceType === 'pattern' ? this.lastInferenceLevel - 1 : this.lastInferenceLevel;
+		const predictionLevel = await this.getPreviousInferenceLevel();
+		if (predictionLevel === null) return; // No inference occurred (only exploration) - no error patterns to create
 		const newPatternLevel = predictionLevel + 1;
 
 		// First check if we have failed predictions (surprising errors)
-		const failedCount = await this.countFailedPredictions();
-		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: failed predictions count: ${failedCount}`);
+		const failedCount = await this.countFailedPredictions(predictionLevel);
+		if (this.debug) console.log(`Level ${predictionLevel}: failed predictions count: ${failedCount}`);
 		if (failedCount === 0) return;
 
 		// We have errors, now find what we should have predicted instead
-		const unpredictedCount = await this.populateUnpredictedConnections();
-		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: unpredicted connections count: ${unpredictedCount}`);
+		const unpredictedCount = await this.populateUnpredictedConnections(predictionLevel);
+		if (this.debug) console.log(`Level ${predictionLevel}: unpredicted connections count: ${unpredictedCount}`);
 		if (unpredictedCount === 0) return;
 
 		// Populate new_patterns table with peaks from unpredicted connections
 		const patternCount = await this.populateNewPatterns();
-		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Creating ${patternCount} error patterns at level ${newPatternLevel}`);
+		if (this.debug) console.log(`Level ${predictionLevel}: Creating ${patternCount} error patterns at level ${newPatternLevel}`);
 
 		// Create pattern neurons and map them to new_patterns
 		await this.createPatternNeurons(patternCount);
@@ -793,7 +683,7 @@ export default class Brain {
 		// Merge new patterns into pattern_peaks, pattern_past, pattern_future
 		await this.mergeNewPatterns(predictionLevel);
 
-		if (this.debug) console.log(`Level ${this.lastInferenceLevel}: Created ${patternCount} error patterns`);
+		if (this.debug) console.log(`Level ${predictionLevel}: Created ${patternCount} error patterns`);
 	}
 
 	/**

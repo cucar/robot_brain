@@ -187,7 +187,6 @@ export default class StockChannel extends Channel {
 		this.owned = false;
 		this.entryPrice = null;
 		this.holdingFrames = 0;
-		this.hasTraded = false;
 		this.previousPrice = null;
 		this.previousVolume = null;
 		this.currentPrice = null;
@@ -199,7 +198,6 @@ export default class StockChannel extends Channel {
 		this.totalTrades = 0;
 		this.profitableTrades = 0;
 		this.unrealizedProfit = 0;
-		this.lastUnrealizedProfit = 0;
 
 		// Reset continuous prediction tracking
 		this.lastPredictedPrice = null;
@@ -218,12 +216,24 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Reads the next data row from the prepared dataset
-	 * Returns null when all rows are consumed
+	 * Reads the next data row from the prepared dataset - returns true if we should continue to process
 	 */
 	readNextRow() {
-		if (this.currentRowIndex >= this.dataRows.length) return null;
-		return this.dataRows[this.currentRowIndex++];
+
+		// return false when all rows are consumed - this will stop the processing loop
+		if (this.currentRowIndex >= this.dataRows.length) return false;
+
+		// save the current price/volume as previous before reading next row
+		this.previousPrice = this.currentPrice;
+		this.previousVolume = this.currentVolume;
+
+		// get the new row and update price/volume
+		const row = this.dataRows[this.currentRowIndex++];
+		this.currentPrice = row.price;
+		this.currentVolume = row.volume;
+
+		// return true to indicate that we have more data
+		return true;
 	}
 
 	/**
@@ -250,8 +260,6 @@ export default class StockChannel extends Channel {
 		}
 
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
-		this.previousPrice = this.currentPrice;
-		this.previousVolume = this.currentVolume;
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizePercentageChange(priceChange) },
 			{ [`${this.symbol}_volume_change`]: this.discretizePercentageChange(volumeChange) },
@@ -332,30 +340,11 @@ export default class StockChannel extends Channel {
 	 */
 	getFrameInputs() {
 
-		// Read next data row
-		const row = this.readNextRow();
-		if (!row) return [];
-
-		this.currentPrice = row.price;
-		this.currentVolume = row.volume;
+		// Read next data row - if none left, we're done
+		if (!this.readNextRow()) return [];
 
 		// if this is the first frame, read another row so that we can start sending change stats
-		if (this.previousPrice === null || this.previousVolume === null) {
-
-			// seed baseline from the first observed row
-			this.previousPrice = this.currentPrice;
-			this.previousVolume = this.currentVolume;
-
-			// read the next data row
-			const nextRow = this.readNextRow();
-			if (!nextRow) return [];
-
-			this.currentPrice = nextRow.price;
-			this.currentVolume = nextRow.volume;
-
-			// compute and return discretized changes based on baseline → next
-			return this.computeChangeInputs();
-		}
+		if (this.previousPrice === null || this.previousVolume === null) this.readNextRow();
 
 		// Increment holding counter for current position
 		this.holdingFrames++;
@@ -378,7 +367,6 @@ export default class StockChannel extends Channel {
 
 		// Calculate current unrealized profit/loss (for display only)
 		this.unrealizedProfit = this.currentPrice - this.entryPrice;
-		this.lastUnrealizedProfit = this.unrealizedProfit;
 	}
 
 	/**
@@ -442,7 +430,7 @@ export default class StockChannel extends Channel {
 	 * @returns {Array} - resolved neurons with strongest per dimension
 	 */
 	getResolvedInference(inferences) {
-		if (this.debug2) console.log('getResolvedInference', inferences);
+		if (this.debug) console.log('getResolvedInference', inferences);
 
 		// if there are no inferences, nothing to resolve
 		if (!inferences || inferences.length === 0) {
@@ -482,15 +470,18 @@ export default class StockChannel extends Channel {
 
 		// Find activity output
 		const activityOutput = resolvedOutputs.find(pred => pred.coordinates[activityDim] !== undefined);
-		if (!activityOutput) return; // No activity output, nothing to adjust
 
-		const activity = activityOutput.coordinates[activityDim];
-
-		// Determine what position should be based on activity
+		// Determine what position should be based on activity (or current state if no activity)
 		let expectedPosition;
-		if (activity === 1) expectedPosition = 1; // BUY → will be OWNED
-		else if (activity === -1) expectedPosition = 0; // SELL → will be NOT_OWNED
-		else expectedPosition = this.owned ? 1 : 0; // HOLD → keep current position
+		if (!activityOutput) {
+			// No activity output means implicit HOLD → keep current position
+			expectedPosition = this.owned ? 1 : 0;
+		} else {
+			const activity = activityOutput.coordinates[activityDim];
+			if (activity === 1) expectedPosition = 1; // BUY → will be OWNED
+			else if (activity === -1) expectedPosition = 0; // SELL → will be NOT_OWNED
+			else expectedPosition = this.owned ? 1 : 0; // HOLD → keep current position
+		}
 
 		// Find position input prediction
 		const positionPred = resolvedInputs.find(pred => pred.coordinates[positionDim] !== undefined);
@@ -500,9 +491,9 @@ export default class StockChannel extends Channel {
 			return;
 		}
 
-		// Adjust position to be coherent with activity
+		// Adjust position to be coherent with activity (or current state)
 		if (positionPred.coordinates[positionDim] !== expectedPosition) {
-			if (this.debug2) console.log(`Adjusting position prediction from ${positionPred.coordinates[positionDim]} to ${expectedPosition} to match activity ${activity}`);
+			if (this.debug2) console.log(`Adjusting position prediction from ${positionPred.coordinates[positionDim]} to ${expectedPosition} to match activity ${activityOutput ? activityOutput.coordinates[activityDim] : 'HOLD (no output)'}`);
 			positionPred.coordinates[positionDim] = expectedPosition;
 		}
 	}
@@ -670,23 +661,23 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Execute stock actions based on brain output coordinates
+	 * Returns final frame points (inputs + outputs, with inputs updated to reflect executed outputs)
 	 */
-	async executeOutputs(coordinates) {
+	async executeOutputs(inputs, outputs) {
 
-		if (!coordinates || Object.keys(coordinates).length === 0) {
-			this.lastAction = 0; // No action = hold
-			return;
+		// if no outputs, just return inputs as-is
+		if (!outputs || outputs.length === 0) {
+			this.lastAction = null; // No action
+			return inputs;
 		}
 
-		// Extract activity value
-		const activityValue = coordinates[`${this.symbol}_activity`];
-		if (activityValue === undefined) {
-			this.lastAction = 0; // No action = hold
-			return;
-		}
+		// Extract coordinates from outputs array
+		const output = outputs[0]; // should be single action neuron for stock channel - cannot be multiple - conflict resolution ensures it
+		if (!output || Object.keys(output).length === 0) throw new Error('No coordinates in outputs');
 
-		// Get current price for position tracking
-		const currentPrice = this.currentPrice;
+		// extract activity value
+		const activityValue = output[`${this.symbol}_activity`];
+		if (activityValue === undefined) throw new Error('No activity found in outputs');
 
 		// Positive activity = buy signal (+1)
 		if (activityValue > 0) {
@@ -695,23 +686,23 @@ export default class StockChannel extends Channel {
 			if (this.owned) {
 				if (this.debug) console.log(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
 				this.lastAction = 0; // Ignored = hold
-				return;
+				// Return current inputs + output (no state change)
+				return [...inputs, output];
 			}
 
 			// buy stock per request coming from the brain
 			this.owned = true;
-			this.entryPrice = currentPrice;
+			this.entryPrice = this.previousPrice; // prices are the end of day prices. we buy in the morning, at the close price of the previous day
 			this.holdingFrames = 0; // Reset holding counter
 
 			// Reset unrealized profit tracking for new position
 			this.unrealizedProfit = 0;
-			this.lastUnrealizedProfit = 0;
 
 			// Track trade metrics
 			this.totalTrades++;
 			this.lastAction = 1; // BUY
 
-			if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${currentPrice} (activity: ${activityValue})`);
+			if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${this.previousPrice} (activity: ${activityValue})`);
 		}
 		// Negative activity = sell signal (-1)
 		else if (activityValue < 0) {
@@ -720,11 +711,12 @@ export default class StockChannel extends Channel {
 			if (!this.owned) {
 				if (this.debug) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
 				this.lastAction = 0; // Ignored = hold
-				return;
+				// Return current inputs + output (no state change)
+				return [...inputs, output];
 			}
 
-			// Sell owned stock - calculate realized profit/loss
-			const profit = currentPrice - this.entryPrice;
+			// Sell owned stock - calculate realized profit/loss - assume we are selling at the end of day price of yesterday
+			const profit = this.previousPrice - this.entryPrice;
 			const percentReturn = (profit / this.entryPrice) * 100;
 
 			// Add realized profit/loss to totals
@@ -737,18 +729,17 @@ export default class StockChannel extends Channel {
 			}
 
 			if (this.debug) {
-				console.log(`${this.symbol}: EXECUTED SELL at $${currentPrice} (activity: ${activityValue})`);
+				console.log(`${this.symbol}: EXECUTED SELL at $${this.previousPrice} (activity: ${activityValue})`);
 				console.log(`${this.symbol}: Realized Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
 				console.log(`${this.symbol}: Episode totals: Profit $${this.totalProfit.toFixed(2)}, Loss $${this.totalLoss.toFixed(2)}, Net $${(this.totalProfit - this.totalLoss).toFixed(2)}`);
 			}
 
 			// Reset unrealized profit tracking since position is closed
 			this.unrealizedProfit = 0;
-			this.lastUnrealizedProfit = 0;
 
 			// Switch to sold state
 			this.owned = false;
-			this.entryPrice = currentPrice; // Track sell price for sold position feedback
+			this.entryPrice = this.previousPrice; // Track sell price for sold position feedback
 			this.holdingFrames = 0; // Reset holding counter
 			this.lastAction = -1; // SELL
 		}
@@ -758,5 +749,12 @@ export default class StockChannel extends Channel {
 			this.lastAction = 0; // HOLD
 		}
 
+		// Update position coordinate in inputs if it changed (buy/sell changes ownership)
+		const positionDim = `${this.symbol}_position`;
+		const positionInput = inputs.find(inp => positionDim in inp);
+		if (positionInput) positionInput[positionDim] = this.owned ? 1 : 0;
+
+		// Return updated inputs + outputs
+		return [...inputs, output];
 	}
 }

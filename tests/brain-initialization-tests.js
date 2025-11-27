@@ -20,11 +20,11 @@ class TestChannel extends Channel {
     async getFrameInputs() {
         return [{ test_input_1: 0.5, test_input_2: 1.0 }];
     }
-    
-    async executeOutputs(predictions) {
-        // Mock implementation
+
+    async executeOutputs(inputs, outputs) {
+        return [...inputs, ...(outputs || [])];
     }
-    
+
     getExplorationAction() {
         return { test_output_1: 1 };
     }

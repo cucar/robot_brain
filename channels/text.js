@@ -159,8 +159,10 @@ export default class TextChannel extends Channel {
 
 	/**
 	 * Execute character output based on brain predictions
+	 * Returns final frame points (inputs only, since text channel has no outputs)
 	 */
-	async executeOutputs(predictions) {
-		// there should not be any outputs for this channel - for now
+	async executeOutputs(inputs, outputs) {
+		// Text channel has no outputs - just return inputs as-is
+		return inputs;
 	}
 }

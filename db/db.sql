@@ -27,6 +27,8 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
+select * from inferred_neurons;
+
 SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
 FROM active_neurons an
 JOIN connections c ON c.from_neuron_id = an.neuron_id
@@ -124,6 +126,12 @@ SELECT *
 FROM inferred_neurons_resolved inf
 LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
 WHERE inf.age = 1;
+
+SELECT current_neuron_id, source_neuron_id, 0
+FROM unpack_sources
+WHERE current_level = 0;
+
+select * from inference_chain;
 
 select *
 from connections c
@@ -362,7 +370,7 @@ CREATE TABLE IF NOT EXISTS exploration_inference_sources (
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     connection_id BIGINT UNSIGNED NOT NULL,
     prediction_strength DOUBLE NOT NULL,
-    PRIMARY KEY (inferred_neuron_id, age, connection_id),
+		PRIMARY KEY (inferred_neuron_id, age, connection_id),
     INDEX idx_connection (connection_id),
     INDEX idx_aggregate (inferred_neuron_id, prediction_strength),
     INDEX idx_age (age)
@@ -371,11 +379,12 @@ CREATE TABLE IF NOT EXISTS exploration_inference_sources (
 -- scratch table for tracking which inference type was performed at each level for each frame
 -- used for temporal credit assignment in applyRewards
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
+-- multiple inference types can occur in same frame (e.g., connection + exploration)
 CREATE TABLE IF NOT EXISTS inference_log (
     age TINYINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
     type ENUM('connection', 'pattern', 'exploration') NOT NULL,
-    PRIMARY KEY (age, level),
+    PRIMARY KEY (age, level, type),
     INDEX idx_age (age)
 ) ENGINE=MEMORY;
 

@@ -79,7 +79,6 @@ export default class BrainMySQL extends Brain {
 	 * Also ages inference source tables and inference_log for temporal credit assignment.
 	 */
 	async ageNeurons() {
-		if (this.frameNumber < this.baseNeuronMaxAge) return; // Skip aging until we have enough frames
 		if (this.debug) console.log('Aging active neurons, connections, and inferred neurons...');
 
 		// age all neurons and connections - ORDER BY age DESC to avoid primary key collisions
@@ -95,6 +94,9 @@ export default class BrainMySQL extends Brain {
 		await this.conn.query('UPDATE exploration_inference_sources SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE inference_log SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE inference_chain SET age = age + 1 ORDER BY age DESC');
+
+		// Skip deletions until we have enough frames
+		if (this.frameNumber < this.baseNeuronMaxAge) return;
 
 		// Delete aged-out neurons from all levels at once
 		const [neuronResult] = await this.conn.query('DELETE FROM active_neurons WHERE age >= ?', [this.baseNeuronMaxAge]);
@@ -197,7 +199,6 @@ export default class BrainMySQL extends Brain {
 			SELECT neuron_id, level, age, strength
 			FROM inferred_neurons
 			WHERE level > 0 AND age = 0
-			ON DUPLICATE KEY UPDATE strength = VALUES(strength)
 		`);
 	}
 
@@ -263,6 +264,7 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Apply negative reinforcement to failed connection predictions.
 	 * Weakens connections that made incorrect predictions.
+	 * Processes all levels that had connection inference in previous frame.
 	 */
 	async negativeReinforceConnections() {
 
@@ -275,7 +277,7 @@ export default class BrainMySQL extends Brain {
 			JOIN connection_inference_sources cis ON cis.connection_id = c.id
 			JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level AND inf.age = cis.age
 			SET c.strength = GREATEST(0, c.strength - ?)
-			WHERE cis.level = ?
+			WHERE cis.age = 1
 			AND c.strength > 0
 			AND EXISTS (
 				SELECT 1 FROM coordinates coord
@@ -289,9 +291,9 @@ export default class BrainMySQL extends Brain {
 				AND an.level = cis.level
 				AND an.age = 0
 			)
-		`, [this.connectionNegativeReinforcement, this.lastInferenceLevel]);
+		`, [this.connectionNegativeReinforcement]);
 		if (this.debug && result.affectedRows > 0)
-			console.log(`Level ${this.lastInferenceLevel}: Weakened ${result.affectedRows} failed INPUT predictions`);
+			console.log(`Weakened ${result.affectedRows} failed INPUT predictions`);
 	}
 
 	/**
@@ -299,11 +301,7 @@ export default class BrainMySQL extends Brain {
 	 * This is the entry criteria for error pattern creation - we only learn when surprised by confident predictions failing.
 	 * Returns the count of high-confidence failed predictions.
 	 */
-	async countFailedPredictions() {
-
-		// For pattern inference: predictions were made at lastInferenceLevel - 1
-		// For connection inference: predictions were made at lastInferenceLevel
-		const predictionLevel = this.lastInferenceType === 'pattern' ? this.lastInferenceLevel - 1 : this.lastInferenceLevel;
+	async countFailedPredictions(predictionLevel) {
 
 		const [result] = await this.conn.query(`
 			SELECT COUNT(*) as count
@@ -328,12 +326,8 @@ export default class BrainMySQL extends Brain {
 	 * No strength filter - we want to learn ALL unpredicted connections when surprised.
 	 * Returns the number of unpredicted connections found.
 	 */
-	async populateUnpredictedConnections() {
+	async populateUnpredictedConnections(predictionLevel) {
 		await this.conn.query(`TRUNCATE unpredicted_connections`);
-
-		// For pattern inference: predictions were made at lastInferenceLevel - 1
-		// For connection inference: predictions were made at lastInferenceLevel
-		const predictionLevel = this.lastInferenceType === 'pattern' ? this.lastInferenceLevel - 1 : this.lastInferenceLevel;
 
 		const [result] = await this.conn.query(`
 			INSERT INTO unpredicted_connections (connection_id, level, from_neuron_id, to_neuron_id, strength)
@@ -429,19 +423,27 @@ export default class BrainMySQL extends Brain {
 			AND c.strength > 0
 		`, [this.peakTimeDecayFactor, neuronId]);
 		if (this.debug && result.affectedRows > 0) console.log(`Exploration: ${result.affectedRows} possible connection sources`);
-		if (result.affectedRows === 0) return;
 
+		// even if there are no active connections that could predict this neuron, we still have to infer it to execute
+		if (result.affectedRows === 0) await this.conn.query(`
+			INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, ?)
+		`, [neuronId, this.minPredictionStrength]);
 		// Write prediction to inferred_neurons - use sum of all connection strengths, or default if no connections exist
-		await this.conn.query(`
-            INSERT INTO inferred_neurons (neuron_id, level, age, strength)
-            SELECT inferred_neuron_id, 0, 0, SUM(prediction_strength) as total_strength
+		else await this.conn.query(`
+			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
+			SELECT inferred_neuron_id, 0, 0, SUM(prediction_strength) as total_strength
 			FROM exploration_inference_sources
 			WHERE age = 0
-            GROUP BY inferred_neuron_id
+			GROUP BY inferred_neuron_id
 		`);
-		if (this.debug) console.log(`Exploration: inferred neuron ${neuronId}`);
+
+		// Insert into inference_chain - exploration neurons point to themselves (no source)
+		await this.conn.query(`
+			INSERT INTO inference_chain (base_neuron_id, source_neuron_id, age) VALUES (?, ?, 0)
+		`, [neuronId, neuronId]);
 
 		// Log this inference for temporal credit assignment
+		if (this.debug) console.log(`Exploration: inferred neuron ${neuronId}`);
 		await this.conn.query('INSERT INTO inference_log (age, level, type) VALUES (0, 0, \'exploration\')');
 	}
 
@@ -457,19 +459,6 @@ export default class BrainMySQL extends Brain {
 	 */
 	async mergePatternFuture() {
 
-		// Pattern neurons are at lastInferenceLevel, but predictions were made at lastInferenceLevel - 1
-		const predictionLevel = this.lastInferenceLevel - 1;
-
-		if (this.debug) {
-			const [pfCount] = await this.conn.query('SELECT COUNT(*) as count FROM pattern_future');
-			const [pisCount] = await this.conn.query('SELECT COUNT(DISTINCT pattern_neuron_id) as count FROM pattern_inference_sources WHERE level = ?', [predictionLevel]);
-			const [acCount] = await this.conn.query('SELECT COUNT(*) as count FROM active_connections WHERE level = ? AND age = 0', [predictionLevel]);
-			console.log(`Level ${this.lastInferenceLevel}: Before merge - pattern_future: ${pfCount[0].count}, patterns that predicted: ${pisCount[0].count}, active_connections: ${acCount[0].count}`);
-		}
-
-		// Get the peaks of patterns that made predictions in previous frame
-		// We need to compare their pattern_future with what actually happened (active_connections FROM those peaks)
-
 		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted connections
 		// Connection in pattern_future AND observed in active_connections FROM peak at age=0
 		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
@@ -478,12 +467,12 @@ export default class BrainMySQL extends Brain {
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
 			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
+			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = pis.level AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength + 1))
-			WHERE pis.level = ?
-		`, [predictionLevel, this.minConnectionStrength, this.maxConnectionStrength, predictionLevel]);
-		if (this.debug)
-			console.log(`Level ${this.lastInferenceLevel}: Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
+			WHERE pis.age = 1
+		`, [this.minConnectionStrength, this.maxConnectionStrength]);
+		if (this.debug && strengthenResult.affectedRows > 0)
+			console.log(`Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
 
 		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections
 		// Connection in pattern_future but NOT observed in active_connections FROM peak
@@ -493,13 +482,13 @@ export default class BrainMySQL extends Brain {
 			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
 			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = ? AND ac.age = 0
+			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = pis.level AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength - ?))
-			WHERE pis.level = ?
+			WHERE pis.age = 1
 			AND ac.connection_id IS NULL
-		`, [predictionLevel, this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement, predictionLevel]);
-		if (this.debug)
-			console.log(`Level ${this.lastInferenceLevel}: Weakened ${weakenResult.affectedRows} failed pattern_future predictions`);
+		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
+		if (this.debug && weakenResult.affectedRows > 0)
+			console.log(`Weakened ${weakenResult.affectedRows} failed pattern_future predictions`);
 
 		// 3. ADD NOVEL CONNECTIONS: Observed but not predicted
 		// Active connections FROM peaks of patterns that made predictions, but not in pattern_future
@@ -510,18 +499,31 @@ export default class BrainMySQL extends Brain {
 			FROM pattern_inference_sources pis
 			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pis.pattern_neuron_id
-			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = ? AND ac.age = 0
+			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = pis.level AND ac.age = 0
 			LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = pis.pattern_neuron_id AND pf.connection_id = ac.connection_id
-			WHERE pis.level = ?
+			WHERE pis.age = 1
 			AND pf.connection_id IS NULL
-		`, [predictionLevel, predictionLevel]);
-		if (this.debug)
-			console.log(`Level ${this.lastInferenceLevel}: Added ${novelResult.affectedRows} novel connections to pattern_future`);
+		`);
+		if (this.debug && novelResult.affectedRows > 0)
+			console.log(`Added ${novelResult.affectedRows} novel connections to pattern_future`);
+	}
 
-		if (this.debug) {
-			const [pfCountAfter] = await this.conn.query('SELECT COUNT(*) as count FROM pattern_future');
-			console.log(`Level ${this.lastInferenceLevel}: After merge - pattern_future: ${pfCountAfter[0].count}`);
-		}
+	/**
+	 * Get the prediction level from previous frame's inference.
+	 * Returns null if no inference occurred (only exploration).
+	 */
+	async getPreviousInferenceLevel() {
+
+		// Get prediction level from whichever inference type occurred (age=1 means previous frame)
+		// Only ONE of these will have entries (connection and pattern are mutually exclusive)
+		const [levelResult] = await this.conn.query(`
+			SELECT level FROM pattern_inference_sources WHERE age = 1
+			UNION
+			SELECT level FROM connection_inference_sources WHERE age = 1
+			LIMIT 1
+		`);
+
+		return levelResult[0] ? levelResult[0].level : null;
 	}
 
 	/**

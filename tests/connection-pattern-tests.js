@@ -14,7 +14,7 @@ class TestChannel {
     
     async initialize() {}
     async getFrameInputs() { return []; }
-    async executeOutputs() {}
+    async executeOutputs(inputs, outputs) { return [...inputs, ...(outputs || [])]; }
     async getRewards() { return 1.0; }
 }
 
