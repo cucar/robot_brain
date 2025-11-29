@@ -145,7 +145,7 @@ The `channels/*` directory contains fully integrated sensory and motor interface
 
 ### Channel Integration
 - **Dimension registration**: Channels automatically register their input/output dimensions with the brain during initialization
-- **Frame processing**: Channels provide input data via `getFrameInputs()` and execute outputs via `executeOutputs()`
+- **Frame processing**: Channels provide input data via `getFrameEvents()` and execute outputs via `executeOutputs()`
 - **Feedback loop**: Channels provide reward signals via `getRewards()` based on action outcomes and state changes
 - **Exploration**: Channels define valid exploration actions via `getExplorationAction()` for curiosity-driven learning
 - **Job coordination**: The job system orchestrates multiple channels for complex multi-modal learning scenarios
@@ -346,8 +346,9 @@ export default class CustomJob extends Job {
 
 ### Channel Output Format
 Channels execute outputs and provide feedback automatically. The brain processes:
-- **Input dimensions**: Sensory data from channel `getFrameInputs()`
-- **Output dimensions**: Motor commands via channel `executeOutputs()`
+- **Event dimensions**: Sensory data from channel `getFrameEvents()`
+- **State dimensions**: State data from channel `getFrameState()`
+- **Action dimensions**: Motor commands via channel `executeOutputs()`
 - **Reward signals**: Performance feedback via channel `getRewards()`
 
 ## Performance Characteristics

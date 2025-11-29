@@ -24,7 +24,7 @@ export default class EyesChannel extends Channel {
 		this.lastSaccade = null;
 	}
 
-	getInputDimensions() {
+	getEventDimensions() {
 		return [
 			'visual_x', 'visual_y', 'visual_r', 'visual_g', 'visual_b'
 		];
@@ -39,7 +39,7 @@ export default class EyesChannel extends Channel {
 	/**
 	 * Get visual input data
 	 */
-	async getFrameInputs() {
+	async getFrameEvents() {
 		if (this.currentDataIndex >= this.visualData.length) {
 			if (this.debug) console.log(`${this.name}: No more visual data available`);
 			return [];

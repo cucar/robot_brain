@@ -9,7 +9,7 @@ import Channel from '../channels/channel.js';
 
 // Mock channel for testing
 class TestChannel extends Channel {
-    getInputDimensions() {
+	getEventDimensions() {
         return ['test_input_1', 'test_input_2'];
     }
     
@@ -17,7 +17,7 @@ class TestChannel extends Channel {
         return ['test_output_1'];
     }
     
-    async getFrameInputs() {
+    async getFrameEvents() {
         return [{ test_input_1: 0.5, test_input_2: 1.0 }];
     }
 

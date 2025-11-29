@@ -24,7 +24,7 @@ async function testFeedbackTiming() {
 	channel.prepareDataIterator();
 
 	console.log('=== Frame 1: Initial frame (reads 2 rows) ===');
-	const frame1 = await channel.getFrameInputs();
+	const frame1 = await channel.getFrameEvents();
 	console.log('Frame 1 inputs:', frame1);
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);
@@ -40,7 +40,7 @@ async function testFeedbackTiming() {
 	console.log('Bought at:', channel.entryPrice, '\n');
 
 	console.log('=== Frame 2: After buy decision ===');
-	const frame2 = await channel.getFrameInputs();
+	const frame2 = await channel.getFrameEvents();
 	console.log('Frame 2 inputs:', frame2);
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);
@@ -50,7 +50,7 @@ async function testFeedbackTiming() {
 	console.log('Expected: 105/100 = 1.05 (5% gain)\n');
 
 	console.log('=== Frame 3: Continue holding ===');
-	const frame3 = await channel.getFrameInputs();
+	const frame3 = await channel.getFrameEvents();
 	console.log('Frame 3 inputs:', frame3);
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);
@@ -60,7 +60,7 @@ async function testFeedbackTiming() {
 	console.log('Expected: 110/105 = 1.0476 (4.76% gain)\n');
 
 	console.log('=== Frame 4: Continue holding ===');
-	const frame4 = await channel.getFrameInputs();
+	const frame4 = await channel.getFrameEvents();
 	console.log('Frame 4 inputs:', frame4);
 	console.log('currentPrice:', channel.currentPrice);
 	console.log('priceForFeedback:', channel.priceForFeedback);

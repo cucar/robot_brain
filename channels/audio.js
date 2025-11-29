@@ -24,7 +24,7 @@ export default class EarsChannel extends Channel {
 		this.lastMovement = null;
 	}
 
-	getInputDimensions() {
+	getEventDimensions() {
 		return [
 			'audio_frequency', 'audio_amplitude', 'audio_duration'
 		];
@@ -39,7 +39,7 @@ export default class EarsChannel extends Channel {
 	/**
 	 * Get audio input data
 	 */
-	async getFrameInputs() {
+	async getFrameEvents() {
 		if (this.currentDataIndex >= this.audioData.length) {
 			console.log(`${this.name}: No more audio data available`);
 			return [];

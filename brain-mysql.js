@@ -79,7 +79,7 @@ export default class BrainMySQL extends Brain {
 	 * Also ages inference source tables and inference_log for temporal credit assignment.
 	 */
 	async ageNeurons() {
-		if (this.debug) console.log('Aging active neurons, connections, and inferred neurons...');
+		if (this.debug2) console.log('Aging active neurons, connections, and inferred neurons...');
 
 		// age all neurons and connections - ORDER BY age DESC to avoid primary key collisions
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
@@ -178,6 +178,42 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
+	 * Check if a channel needs exploration (MySQL implementation)
+	 * Returns true if channel has no inferred outputs OR if holding too long
+	 * @param {string} channelName - name of the channel to check
+	 * @returns {Promise<boolean>} - true if channel needs exploration
+	 */
+	async channelNeedsExploration(channelName) {
+		const channel = this.channels.get(channelName);
+		if (!channel) return false;
+
+		// Check if channel is holding too long (if it has holdingFrames property)
+		if (channel.holdingFrames !== undefined &&
+			channel.maxHoldingFrames !== undefined &&
+			channel.holdingFrames > channel.maxHoldingFrames) return true;
+
+		const outputDimNames = channel.getOutputDimensions();
+		if (outputDimNames.length === 0) return false;
+
+		// Get dimension IDs for this channel's output dimensions
+		const outputDimIds = outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined);
+		if (outputDimIds.length === 0) return false;
+
+		// Check if any inferred neurons have coordinates in these output dimensions
+		const [result] = await this.conn.query(`
+			SELECT COUNT(*) as count
+			FROM inferred_neurons inf
+			JOIN coordinates c ON inf.neuron_id = c.neuron_id
+			WHERE inf.age = 0 AND inf.level = 0
+			AND c.dimension_id IN (?)
+			LIMIT 1
+		`, [outputDimIds]);
+
+		// Return true if NO outputs (needs exploration)
+		return result[0].count === 0;
+	}
+
+	/**
 	 * save resolved predictions to MySQL storage (implementation of abstract method)
 	 * This is called after conflict resolution at base level (level 0)
 	 */
@@ -268,22 +304,21 @@ export default class BrainMySQL extends Brain {
 	 */
 	async negativeReinforceConnections() {
 
-		// Apply negative reinforcement to failed INPUT predictions only
-		// Failed = predicted but not observed
-		// Only weaken connections whose predictions made it through conflict resolution
-		// Output predictions are not penalized (they are actions, not predictions of world state)
+		// Apply negative reinforcement to failed INPUT predictions only - Failed = predicted but not observed
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			JOIN connection_inference_sources cis ON cis.connection_id = c.id
+            -- only weaken connections whose predictions made it through conflict resolution	
 			JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level AND inf.age = cis.age
 			SET c.strength = GREATEST(0, c.strength - ?)
 			WHERE cis.age = 1
 			AND c.strength > 0
+			-- outputs are not penalized (they are actions, not predictions of world state)  
 			AND EXISTS (
 				SELECT 1 FROM coordinates coord
 				JOIN dimensions d ON d.id = coord.dimension_id
 				WHERE coord.neuron_id = cis.inferred_neuron_id
-				AND d.type = 'input'
+				AND d.type != 'action'
 			)
 			AND NOT EXISTS (
 				SELECT 1 FROM active_neurons an
@@ -422,7 +457,10 @@ export default class BrainMySQL extends Brain {
 			AND c.distance = an.age + 1
 			AND c.strength > 0
 		`, [this.peakTimeDecayFactor, neuronId]);
-		if (this.debug && result.affectedRows > 0) console.log(`Exploration: ${result.affectedRows} possible connection sources`);
+		if (this.debug) {
+			if (result.affectedRows > 0) console.log(`Exploration: ${result.affectedRows} possible connection sources`);
+			else console.log(`Exploration: No active neurons that could predict the output neuron`);
+		}
 
 		// even if there are no active connections that could predict this neuron, we still have to infer it to execute
 		if (result.affectedRows === 0) await this.conn.query(`
@@ -778,7 +816,53 @@ export default class BrainMySQL extends Brain {
 			-- spatial pooling will look at the neighboring neurons in terms of X-Y coordinates
 			-- associative pooling is just a special case of that where there are no X-Y coordinates	
             -- AND (t.neuron_id != f.neuron_id OR f.age > 0)  -- no self-connections at same age
-            AND f.age > 0 -- at this point, we are only learning connections between different ages to use for inference 
+            AND f.age > 0 -- at this point, we are only learning connections between different ages to use for inference
+			-- Block connections where non-action neurons predict state/event neurons
+			-- Allowed: action→*, *→action, event→event
+			-- Blocked: state→state, state→event, event→state
+			AND NOT (
+				(
+					-- Block state → state
+					EXISTS (
+						SELECT 1 FROM coordinates cf
+						JOIN dimensions df ON df.id = cf.dimension_id
+						WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
+					)
+					AND EXISTS (
+						SELECT 1 FROM coordinates ct
+						JOIN dimensions dt ON dt.id = ct.dimension_id
+						WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
+					)
+				)
+				OR
+				(
+					-- Block state → event
+					EXISTS (
+						SELECT 1 FROM coordinates cf
+						JOIN dimensions df ON df.id = cf.dimension_id
+						WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
+					)
+					AND EXISTS (
+						SELECT 1 FROM coordinates ct
+						JOIN dimensions dt ON dt.id = ct.dimension_id
+						WHERE ct.neuron_id = t.neuron_id AND dt.type = 'event'
+					)
+				)
+				OR
+				(
+					-- Block event → state
+					EXISTS (
+						SELECT 1 FROM coordinates cf
+						JOIN dimensions df ON df.id = cf.dimension_id
+						WHERE cf.neuron_id = f.neuron_id AND df.type = 'event'
+					)
+					AND EXISTS (
+						SELECT 1 FROM coordinates ct
+						JOIN dimensions dt ON dt.id = ct.dimension_id
+						WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
+					)
+				)
+			)
 			ON DUPLICATE KEY UPDATE strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, strength + VALUES(strength)))
 		`, { level, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 	}
@@ -1095,6 +1179,10 @@ export default class BrainMySQL extends Brain {
 	 */
 	async applyRewards(channelRewards) {
 
+		// it is not possible to apply rewards until at least we have 3 frames
+		// first 2 frames build connections, we infer output in frame 3 using them, we reward them in frame 4
+		if (this.frameNumber < 4) return;
+
 		// nothing to update if there are no rewards
 		if (channelRewards.size === 0) return;
 
@@ -1190,7 +1278,7 @@ export default class BrainMySQL extends Brain {
 		}
 
 		if (this.debug) console.log(`Total rewarded: ${totalConnectionsRewarded} connections, ${totalPatternsRewarded} patterns, ${totalExplorationRewarded} exploration`);
-		// await this.waitForUser('Rewards applied');
+		await this.waitForUser('Rewards applied');
 	}
 
 	/**

@@ -29,7 +29,7 @@ export default class ArmChannel extends Channel {
 		this.maxTrials = 5;
 	}
 
-	getInputDimensions() {
+	getEventDimensions() {
 		return [
 			'touch_shoulder', 'touch_elbow', 'touch_wrist', // Touch/proprioception inputs
 			'joint_shoulder', 'joint_elbow', 'joint_wrist'  // Current joint positions
@@ -45,7 +45,7 @@ export default class ArmChannel extends Channel {
 	/**
 	 * Get proprioceptive and touch input data
 	 */
-	async getFrameInputs() {
+	async getFrameEvents() {
 		if (this.sequenceTrials >= this.maxTrials) {
 			if (this.debug) console.log(`${this.name}: Completed all reaching trials`);
 			return [];

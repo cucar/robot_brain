@@ -27,7 +27,132 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
+select c.neuron_id, d.name, d.type, c.val 
+from coordinates c join dimensions d on d.id = c.dimension_id 
+-- where c.neuron_id in (7,8,9,10) 
+order by d.type, d.name;
+
+3	TEST_position	state	0
+7	TEST_position	state	1
+1	TEST_price_change	event	5
+5	TEST_price_change	event	-6
+9	TEST_price_change	event	-7
+2	TEST_volume_change	event	5
+6	TEST_volume_change	event	-6
+10	TEST_volume_change	event	-7
+4	TEST_activity	action	1
+8	TEST_activity	action	0;
+
+SELECT f.neuron_id as from_neuron_id, fd.name as from_dim, fc.val as from_val, t.neuron_id as to_neuron_id, td.name as to_dim, tc.val as to_val, f.age as distance, 1 as strength
+FROM active_neurons f
+join coordinates fc on fc.neuron_id = f.neuron_id
+join dimensions fd on fd.id = fc.dimension_id 
+CROSS JOIN active_neurons t
+join coordinates tc on tc.neuron_id = t.neuron_id
+join dimensions td on td.id = tc.dimension_id 
+WHERE t.age = 0  -- target neurons are newly activated
+AND t.level = 0  -- target neurons are at the specified level
+AND f.level = t.level  -- restrict to same level only
+-- we used to have the condition below that enabled us to do associative pooling, but I'm realizing that 
+-- it should really be used only for spatial processing - it's a special case of that 
+-- spatial pooling will look at the neighboring neurons in terms of X-Y coordinates
+-- associative pooling is just a special case of that where there are no X-Y coordinates	
+-- AND (t.neuron_id != f.neuron_id OR f.age > 0)  -- no self-connections at same age
+AND f.age > 0 -- at this point, we are only learning connections between different ages to use for inference
+-- Block connections where non-action neurons predict state/event neurons
+-- Allowed: action→*, *→action, event→event
+-- Blocked: state→state, state→event, event→state
+AND NOT (
+	(
+		-- Block state → state
+		EXISTS (
+			SELECT 1 FROM coordinates cf
+			JOIN dimensions df ON df.id = cf.dimension_id
+			WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
+		)
+		AND EXISTS (
+			SELECT 1 FROM coordinates ct
+			JOIN dimensions dt ON dt.id = ct.dimension_id
+			WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
+		)
+	)
+	OR
+	(
+		-- Block state → event
+		EXISTS (
+			SELECT 1 FROM coordinates cf
+			JOIN dimensions df ON df.id = cf.dimension_id
+			WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
+		)
+		AND EXISTS (
+			SELECT 1 FROM coordinates ct
+			JOIN dimensions dt ON dt.id = ct.dimension_id
+			WHERE ct.neuron_id = t.neuron_id AND dt.type = 'event'
+		)
+	)
+	OR
+	(
+		-- Block event → state
+		EXISTS (
+			SELECT 1 FROM coordinates cf
+			JOIN dimensions df ON df.id = cf.dimension_id
+			WHERE cf.neuron_id = f.neuron_id AND df.type = 'event'
+		)
+		AND EXISTS (
+			SELECT 1 FROM coordinates ct
+			JOIN dimensions dt ON dt.id = ct.dimension_id
+			WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
+		)
+	)
+);
+
+select * 
+from exploration_inference_sources eis
+JOIN inference_chain ic ON ic.source_neuron_id = eis.inferred_neuron_id AND ic.age = eis.age
+JOIN inference_log il ON il.age = ic.age AND il.type = 'exploration' AND il.level = 0
+JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
+JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (4)
+WHERE ic.age > 0 AND ic.age <= 1;
+
+select * 
+from connection_inference_sources cis
+JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
+JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
+JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
+JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (4)
+WHERE ic.age > 0 AND ic.age <= 1
+AND cis.level = il.level
+;
+
 select * from inferred_neurons;
+select * from inference_chain;
+select * from connection_inference_sources;
+select * from connections;
+select * from exploration_inference_sources;
+
+select * from dimensions;
+
+SELECT c.from_neuron_id, c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
+FROM active_neurons an
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+WHERE an.level = 0
+AND c.distance = an.age + 1
+AND c.strength > 0;
+
+select * from connection_inference_sources;
+
+SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
+FROM connection_inference_sources
+WHERE level = 0 AND age = 0
+GROUP BY inferred_neuron_id, level
+HAVING total_strength >= 1;
+
+select * from coordinates where neuron_id in (6,7,8,9);
+select * from dimensions;
+
+select * from inferred_neurons where age = 0;
+
+
 
 SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
 FROM active_neurons an
@@ -164,6 +289,8 @@ FROM inferred_neurons src
 WHERE src.level = 0
 AND src.age = 0;
 
+select * from connections;
+
 select * from connection_inference_sources;
 select * from active_connections where to_neuron_id = 6;
 
@@ -179,7 +306,7 @@ CREATE TABLE IF NOT EXISTS dimensions (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(50) UNIQUE NOT NULL,
     channel VARCHAR(50) NOT NULL,
-    type ENUM('input', 'output') NOT NULL
+    type ENUM('state', 'event', 'action') NOT NULL
 ) ENGINE=MEMORY;
 
 -- these dimensions can be used for visual processing

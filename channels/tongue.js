@@ -24,7 +24,7 @@ export default class TongueChannel extends Channel {
 		this.lastMovement = null;
 	}
 
-	getInputDimensions() {
+	getEventDimensions() {
 		return [
 			'taste_sweet', 'taste_sour', 'taste_salty', 'taste_bitter', 'taste_umami'
 		];
@@ -39,7 +39,7 @@ export default class TongueChannel extends Channel {
 	/**
 	 * Get taste input data
 	 */
-	async getFrameInputs() {
+	async getFrameEvents() {
 		if (this.currentDataIndex >= this.tasteData.length) {
 			console.log(`${this.name}: No more taste data available`);
 			return [];

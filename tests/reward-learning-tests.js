@@ -8,8 +8,8 @@ class TestChannel {
         this.name = name;
         this.feedbackValue = 1.0; // Default neutral
     }
-    
-    getInputDimensions() {
+
+	getEventDimensions() {
         return ['test_x', 'test_y', 'test_value'];
     }
     
@@ -18,7 +18,7 @@ class TestChannel {
     }
     
     async initialize() {}
-    async getFrameInputs() { return []; }
+    async getFrameEvents() { return []; }
     async executeOutputs() {}
     
     async getRewards() {

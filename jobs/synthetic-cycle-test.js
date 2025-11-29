@@ -21,8 +21,8 @@ export default class SyntheticCycleTest extends Job {
 
 		this.config = {
 			symbol: 'TEST',
-			cyclePattern: [0.01, -0.02, -0.03, 0.02, 0.03, -0.01], // +1%, -2%, -3%, +2%, +3%, -1%
-			cycleRepeats: 20,
+			cyclePattern: [0.009, -0.019, -0.029, 0.019, 0.029, -0.009], // +1%, -2%, -3%, +2%, +3%, -1%
+			cycleRepeats: 50,
 			startPrice: 100.00,
 			startVolume: 100000
 		};
@@ -127,7 +127,7 @@ export default class SyntheticCycleTest extends Job {
 			// Track trades with source information
 			if (stockChannel.lastAction !== null && stockChannel.lastAction !== 0) {
 				const action = stockChannel.lastAction === 1 ? 'BUY' : 'SELL';
-				const priceChange = stockChannel.currentRow?.price_change || 0;
+				const priceChange = ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice);
 				const cycleFrame = ((frameCount - 1) % this.config.cyclePattern.length) + 1;
 
 				// Determine source: check if this was from curiosity or inference

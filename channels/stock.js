@@ -16,6 +16,7 @@ export default class StockChannel extends Channel {
 
 		// Hyperparameters
 		this.rewardAmplification = 5; // Power to raise reward ratios to (higher = stronger rewards/penalties)
+		this.maxHoldingFrames = 6; // Maximum frames to hold before forcing action via exploration
 
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
@@ -262,18 +263,25 @@ export default class StockChannel extends Channel {
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizePercentageChange(priceChange) },
-			{ [`${this.symbol}_volume_change`]: this.discretizePercentageChange(volumeChange) },
-			{ [`${this.symbol}_position`]: this.owned ? 1 : 0 }
+			{ [`${this.symbol}_volume_change`]: this.discretizePercentageChange(volumeChange) }
 		];
 	}
 
 	/**
 	 * returns the input dimensions for the channel
 	 */
-	getInputDimensions() {
+	getEventDimensions() {
 		return [
 			`${this.symbol}_price_change`,
-			`${this.symbol}_volume_change`,
+			`${this.symbol}_volume_change`
+		];
+	}
+
+	/**
+	 * returns the state dimensions for the channel
+	 */
+	getStateDimensions() {
+		return [
 			`${this.symbol}_position`
 		];
 	}
@@ -315,21 +323,28 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Returns a valid exploration action based on current stock ownership
-	 * Before first trade: can buy or hold
-	 * After first trade: can buy/hold (if not owned) or sell/hold (if owned)
+	 * If holding too long, forces a buy/sell action (not hold)
+	 * Otherwise uses deterministic exploration sequence
 	 */
 	getExplorationAction() {
+		const activityDim = `${this.symbol}_activity`;
+
+		// Check if we need to force an action due to extended holding
+		if (this.holdingFrames > this.maxHoldingFrames) {
+			// Force an action: buy if not owned, sell if owned
+			const forcedAction = this.owned ? -1 : 1;
+			if (this.debug) console.log(`${this.symbol}: Forcing action after ${this.holdingFrames} frames (${forcedAction > 0 ? 'BUY' : 'SELL'})`);
+			return { [activityDim]: forcedAction };
+		}
 
 		// NOTE: this is temporary. the following code should be used for true random exploration
 		// this is made deterministic to be able to troubleshoot output performance issues
 		// const actions = [];
-		// const activityDim = `${this.symbol}_activity`;
 		// actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
 		// actions.push({ [activityDim]: 0 });  // hold
 		// return actions[Math.floor(Math.random() * actions.length)]; // return a random action
 
 		// Return deterministic action from sequence
-		const activityDim = `${this.symbol}_activity`;
 		const action = this.explorationSequence[this.explorationIndex];
 		this.explorationIndex = (this.explorationIndex + 1) % this.explorationSequence.length;
 		return { [activityDim]: action };
@@ -338,7 +353,7 @@ export default class StockChannel extends Channel {
 	/**
 	 * Get frame input data for this stock channel
 	 */
-	getFrameInputs() {
+	getFrameEvents() {
 
 		// Read next data row - if none left, we're done
 		if (!this.readNextRow()) return [];
@@ -351,6 +366,13 @@ export default class StockChannel extends Channel {
 
 		// Compute and return discretized changes
 		return this.computeChangeInputs();
+	}
+
+	/**
+	 * Get frame state data for this stock channel
+	 */
+	getFrameState() {
+		return [ { [`${this.symbol}_position`]: this.owned ? 1 : 0 } ];
 	}
 
 	/**
@@ -421,98 +443,18 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get resolved inference for stock channel
-	 * Resolves conflicts for both input predictions and output inferences
-	 * Input predictions: price_change, volume_change, position (strongest wins per dimension)
-	 * Output inferences: activity (strongest wins)
-	 * Position-aware resolution: Ensures position input is coherent with activity output
-	 * @param {Array} inferences - all inferred neurons for this channel
-	 * @returns {Array} - resolved neurons with strongest per dimension
+	 * Resolve event predictions: select strongest for each input dimension. Also calculates continuous price prediction for accuracy tracking
 	 */
-	getResolvedInference(inferences) {
-		if (this.debug) console.log('getResolvedInference', inferences);
-
-		// if there are no inferences, nothing to resolve
-		if (!inferences || inferences.length === 0) {
-			this.lastPredictedPrice = null;
-			return [];
-		}
-
-		// Separate into input predictions and output inferences
-		const { inputPredictions, outputInferences } = this.separateInputsAndOutputs(inferences);
-
-		// Resolve input predictions: select strongest for each input dimension
-		const resolvedInputs = this.resolveInputPredictions(inputPredictions);
-
-		// Resolve output inferences: select strongest action
-		const resolvedOutputs = this.resolveOutputInferences(outputInferences);
-
-		// Make position coherent with activity output
-		this.makePositionCoherent(resolvedInputs, resolvedOutputs);
-
-		// Combine and return
-		const resolved = [...resolvedInputs, ...resolvedOutputs];
-		if (this.debug) this.logResolution(inferences.length, inputPredictions.length, outputInferences.length, resolved.length);
-		return resolved;
-	}
-
-	/**
-	 * Ensure position input is coherent with activity output
-	 * If activity=BUY(1), force position=OWNED(1) for next frame
-	 * If activity=SELL(-1), force position=NOT_OWNED(0) for next frame
-	 * If activity=HOLD(0), keep current position (use current this.owned state)
-	 * @param {Array} resolvedInputs - resolved input predictions (modified in place)
-	 * @param {Array} resolvedOutputs - resolved output inferences
-	 */
-	makePositionCoherent(resolvedInputs, resolvedOutputs) {
-		const activityDim = `${this.symbol}_activity`;
-		const positionDim = `${this.symbol}_position`;
-
-		// Find activity output
-		const activityOutput = resolvedOutputs.find(pred => pred.coordinates[activityDim] !== undefined);
-
-		// Determine what position should be based on activity (or current state if no activity)
-		let expectedPosition;
-		if (!activityOutput) {
-			// No activity output means implicit HOLD → keep current position
-			expectedPosition = this.owned ? 1 : 0;
-		} else {
-			const activity = activityOutput.coordinates[activityDim];
-			if (activity === 1) expectedPosition = 1; // BUY → will be OWNED
-			else if (activity === -1) expectedPosition = 0; // SELL → will be NOT_OWNED
-			else expectedPosition = this.owned ? 1 : 0; // HOLD → keep current position
-		}
-
-		// Find position input prediction
-		const positionPred = resolvedInputs.find(pred => pred.coordinates[positionDim] !== undefined);
-		if (!positionPred) {
-			// No position prediction exists - this is OK, position is an input not an output
-			// The brain will observe the actual position in the next frame
-			return;
-		}
-
-		// Adjust position to be coherent with activity (or current state)
-		if (positionPred.coordinates[positionDim] !== expectedPosition) {
-			if (this.debug2) console.log(`Adjusting position prediction from ${positionPred.coordinates[positionDim]} to ${expectedPosition} to match activity ${activityOutput ? activityOutput.coordinates[activityDim] : 'HOLD (no output)'}`);
-			positionPred.coordinates[positionDim] = expectedPosition;
-		}
-	}
-
-	/**
-	 * Resolve input predictions: select strongest for each input dimension. Also calculates continuous price prediction for accuracy tracking
-	 * @param {Array} inputPredictions - predictions for input dimensions
-	 * @returns {Array} - strongest prediction per input dimension
-	 */
-	resolveInputPredictions(inputPredictions) {
+	resolveEventPredictions(events) {
 
 		// if there are no input predictions, nothing to resolve
-		if (inputPredictions.length === 0) {
+		if (events.length === 0) {
 			this.lastPredictedPrice = null;
 			return [];
 		}
 
 		// Group by dimension
-		const byDimension = this.groupByDimension(inputPredictions);
+		const byDimension = this.groupByDimension(events);
 
 		// Calculate continuous price prediction for tracking
 		const priceChangeDim = `${this.symbol}_price_change`;
@@ -524,15 +466,13 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Resolve output inferences: select strongest for each output dimension
-	 * @param {Array} outputInferences - inferences for output dimensions
-	 * @returns {Array} - strongest inference per output dimension
+	 * Resolve action inferences: select strongest for each output dimension
 	 */
-	resolveOutputInferences(outputInferences) {
-		if (outputInferences.length === 0) return [];
+	resolveActionInferences(actions) {
+		if (actions.length === 0) return [];
 
 		// Group by dimension and select strongest for each
-		const byDimension = this.groupByDimension(outputInferences);
+		const byDimension = this.groupByDimension(actions);
 		return this.selectStrongestPerDimension(byDimension);
 	}
 
@@ -612,13 +552,6 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Log resolution results for debugging
-	 */
-	logResolution(totalCount, inputCount, outputCount, resolvedCount) {
-		console.log(`${this.symbol}: Resolved ${totalCount} inferences (${inputCount} inputs, ${outputCount} outputs) → ${resolvedCount} selected`);
-	}
-
-	/**
 	 * Get continuous prediction error metrics for price predictions since last call
 	 * Returns only NEW errors since last call, then clears the array
 	 * @returns {Object} - { totalError: number, count: number } or null if no predictions
@@ -663,12 +596,12 @@ export default class StockChannel extends Channel {
 	 * Execute stock actions based on brain output coordinates
 	 * Returns final frame points (inputs + outputs, with inputs updated to reflect executed outputs)
 	 */
-	async executeOutputs(inputs, outputs) {
+	async executeOutputs(outputs) {
 
 		// if no outputs, just return inputs as-is
 		if (!outputs || outputs.length === 0) {
 			this.lastAction = null; // No action
-			return inputs;
+			return;
 		}
 
 		// Extract coordinates from outputs array
@@ -682,12 +615,12 @@ export default class StockChannel extends Channel {
 		// Positive activity = buy signal (+1)
 		if (activityValue > 0) {
 
-			// if we already own the stock, nothing to do - just log it
+			// if we already own the stock, nothing to do - should not happen - just log it
 			if (this.owned) {
-				if (this.debug) console.log(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
+				console.warn(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
 				this.lastAction = 0; // Ignored = hold
 				// Return current inputs + output (no state change)
-				return [...inputs, output];
+				return;
 			}
 
 			// buy stock per request coming from the brain
@@ -707,12 +640,12 @@ export default class StockChannel extends Channel {
 		// Negative activity = sell signal (-1)
 		else if (activityValue < 0) {
 
-			// if we don't own the stock, nothing to do - just log it
+			// if we don't own the stock, nothing to do - should not happen - just log it
 			if (!this.owned) {
-				if (this.debug) console.log(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
+				console.warn(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
 				this.lastAction = 0; // Ignored = hold
 				// Return current inputs + output (no state change)
-				return [...inputs, output];
+				return;
 			}
 
 			// Sell owned stock - calculate realized profit/loss - assume we are selling at the end of day price of yesterday
@@ -748,13 +681,5 @@ export default class StockChannel extends Channel {
 			if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
 			this.lastAction = 0; // HOLD
 		}
-
-		// Update position coordinate in inputs if it changed (buy/sell changes ownership)
-		const positionDim = `${this.symbol}_position`;
-		const positionInput = inputs.find(inp => positionDim in inp);
-		if (positionInput) positionInput[positionDim] = this.owned ? 1 : 0;
-
-		// Return updated inputs + outputs
-		return [...inputs, output];
 	}
 }

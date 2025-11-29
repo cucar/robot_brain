@@ -4,7 +4,7 @@ import BrainMySQL from '../brain-mysql.js';
  * Test Channel for Inference & Prediction Engine Tests
  */
 class TestChannel {
-    getInputDimensions() {
+	getEventDimensions() {
         return ['test_x', 'test_y', 'test_value'];
     }
     
@@ -13,7 +13,7 @@ class TestChannel {
     }
     
     async initialize() {}
-    async getFrameInputs() { return []; }
+    async getFrameEvents() { return []; }
     async executeOutputs() {}
     async getRewards() { return 1.0; }
 }

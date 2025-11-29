@@ -23,7 +23,7 @@ export default class TextChannel extends Channel {
 	/**
 	 * we only have one character input at a time
 	 */
-	getInputDimensions() {
+	getEventDimensions() {
 		return [ 'char_input' ];
 	}
 
@@ -39,7 +39,7 @@ export default class TextChannel extends Channel {
 	/**
 	 * Get character input data
 	 */
-	async getFrameInputs() {
+	async getFrameEvents() {
 
 		// Stop if we have reached the maximum number of iterations
 		if (this.patternIterations >= this.maxIterations) return [];
@@ -76,34 +76,11 @@ export default class TextChannel extends Channel {
 	}
 
 	/**
-	 * Get resolved inference for text channel
-	 * Resolves conflicts for input predictions only (no outputs for this channel)
-	 * Input predictions: char_input (strongest wins)
-	 * @param {Array} inferences - all inferred neurons for this channel
-	 * @returns {Array} - strongest character prediction
-	 */
-	getResolvedInference(inferences) {
-
-		// if there are no inferences, nothing to resolve
-		if (!inferences || inferences.length === 0) {
-			this.lastPredictedChar = null;
-			return [];
-		}
-
-		// Separate into input predictions and output inferences
-		const { inputPredictions } = this.separateInputsAndOutputs(inferences);
-
-		// Resolve input predictions: select strongest character
-		// No output resolution needed for text channel (no output dimensions)
-		return this.resolveInputPredictions(inputPredictions);
-	}
-
-	/**
 	 * Resolve input predictions: select strongest character prediction
 	 * @param {Array} inputPredictions - predictions for char_input dimension
 	 * @returns {Array} - strongest character prediction
 	 */
-	resolveInputPredictions(inputPredictions) {
+	resolveEventPredictions(inputPredictions) {
 		if (inputPredictions.length === 0) {
 			this.lastPredictedChar = null;
 			return [];

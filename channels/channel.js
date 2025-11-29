@@ -34,19 +34,25 @@ export default class Channel {
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * This method should execute actions, update channel state, and return final frame points
 	 *
-	 * @param {Array} inputs - Frame inputs from getFrameInputs()
 	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
-	 * @returns {Promise<Array>} - Final frame points (inputs + outputs, with inputs potentially modified by outputs)
+	 * @returns {void}
 	 */
-	async executeOutputs(inputs, outputs) {
+	async executeOutputs(outputs) {
 		throw new Error('Channel must implement executeOutputs() method');
 	}
 
 	/**
-	 * Get input dimension names - override in subclasses
+	 * Get event dimension names - override in subclasses
 	 */
-	getInputDimensions() {
-		throw new Error('Channel must implement getInputDimensions() method');
+	getEventDimensions() {
+		throw new Error('Channel must implement getEventDimensions() method');
+	}
+
+	/**
+	 * Get state dimension names - override in subclasses - default implementation returns empty array
+	 */
+	getStateDimensions() {
+		return [];
 	}
 
 	/**
@@ -57,11 +63,19 @@ export default class Channel {
 	}
 
 	/**
-	 * Get frame input data - override in subclasses
+	 * Get frame events data - override in subclasses
 	 * Returns array of input neuron objects: [{ [input-dim]: value }]
 	 */
-	async getFrameInputs() {
-		throw new Error('Channel must implement getFrameInputs() method');
+	async getFrameEvents() {
+		throw new Error('Channel must implement getFrameEvents() method');
+	}
+
+	/**
+	 * Get frame state data - override in subclasses
+	 * Returns array of input neuron objects: [{ [input-dim]: value }]
+	 */
+	async getFrameState() {
+		throw new Error('Channel must implement getFrameState() method');
 	}
 
 	/**
@@ -118,27 +132,70 @@ export default class Channel {
 	}
 
 	/**
-	 * Separate inferences into input predictions and output inferences
+	 * returns event and action inferences
 	 * @param {Array} inferences - all inferences
-	 * @returns {Object} - { inputPredictions, outputInferences }
+	 * @returns {Object} - { events, actions }
 	 */
-	separateInputsAndOutputs(inferences) {
-		const inputDims = new Set(this.getInputDimensions());
+	getEventsAndActions(inferences) {
+		const eventDims = new Set(this.getEventDimensions());
 		const outputDims = new Set(this.getOutputDimensions());
-		const inputPredictions = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => inputDims.has(dim)));
-		const outputInferences = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => outputDims.has(dim)));
-		return { inputPredictions, outputInferences };
+		const events = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => eventDims.has(dim)));
+		const actions = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => outputDims.has(dim)));
+		return { events, actions };
 	}
 
 	/**
-	 * Get resolved inference for this channel - override in subclasses
-	 * Child classes implement their own conflict resolution logic here
-	 * Examples:
-	 * - Stock channel: Returns array with 1 prediction (can't buy and sell simultaneously)
-	 * - Vision channel: Returns array with multiple predictions (can detect multiple objects)
+	 * Get resolved inference for the channel
+	 * Resolves conflicts for both event predictions and action inferences
+	 * Conflict resolution logic is implemented in channel subclasses
+	 * State neurons exist only to help guide actions, so they are filtered out
+	 * @param {Array} inferences - all inferred neurons for this channel
+	 * @returns {Array} - resolved neurons according to channel specific logic
 	 */
-	getResolvedInference() {
-		throw new Error('Channel must implement getResolvedInference() method');
+	getResolvedInference(inferences) {
+
+		// if there are no inferences, nothing to resolve
+		if (!inferences || inferences.length === 0) return [];
+
+		// Separate into input predictions and output inferences
+		const { events, actions } = this.getEventsAndActions(inferences);
+
+		// Resolve event predictions: select strongest for each input dimension
+		const resolvedEvents = this.resolveEventPredictions(events);
+
+		// Resolve action inferences: select strongest action
+		const resolvedActions = this.resolveActionInferences(actions);
+
+		// Combine and return
+		const resolved = [...resolvedEvents, ...resolvedActions];
+		if (this.debug) console.log('getResolvedInference', resolved);
+		if (this.debug) this.logResolution(inferences.length, events.length, outputInferences.length, resolved.length);
+		return resolved;
+	}
+
+	/**
+	 * Log resolution results for debugging
+	 */
+	logResolution(totalCount, inputCount, outputCount, resolvedCount) {
+		console.log(`${this.name}: Resolved ${totalCount} inferences (${inputCount} inputs, ${outputCount} outputs) → ${resolvedCount} selected`);
+	}
+
+	/**
+	 * Get resolved event predictions for this channel - override in subclasses
+	 * @param {Array} events - predictions for event dimensions
+	 * @returns {Array} - strongest prediction per event dimension
+	 */
+	resolveEventPredictions(events) {
+		throw new Error('Channel must implement resolveEventPredictions(events) method');
+	}
+
+	/**
+	 * Resolve action inferences: select strongest for each output dimension
+	 * @param {Array} actions - inferences for output dimensions
+	 * @returns {Array} - strongest inference per output dimension
+	 */
+	resolveActionInferences(actions) {
+		throw new Error('Channel must implement resolveEventPredictions(actions) method');
 	}
 
 	/**

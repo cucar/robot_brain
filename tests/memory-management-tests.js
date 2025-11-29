@@ -7,8 +7,8 @@ class TestChannel {
     constructor(name = 'test_channel') {
         this.name = name;
     }
-    
-    getInputDimensions() {
+
+	getEventDimensions() {
         return ['test_x', 'test_y', 'test_value'];
     }
     
@@ -17,7 +17,7 @@ class TestChannel {
     }
     
     async initialize() {}
-    async getFrameInputs() { return []; }
+    async getFrameEvents() { return []; }
     async executeOutputs() {}
     async getRewards() { return 1.0; }
 }

@@ -235,12 +235,12 @@ export default class BrainMemory extends Brain {
 				const coords = this.neurons.getCoordinates(neuronId);
 				if (coords.length === 0) continue;
 
-				// Check if this neuron has output dimensions
+				// Check if this neuron has action dimensions
 				for (const coord of coords) {
 					const dim = this.dimensionIdToName[coord.dimension_id];
 					const dimInfo = this.dimensions.get(dim);
 
-					if (dimInfo && dimInfo.type === 'output') {
+					if (dimInfo && dimInfo.type === 'action') {
 						outputRows.push({
 							neuron_id: neuronId,
 							dimension_id: coord.dimension_id,
@@ -601,6 +601,48 @@ export default class BrainMemory extends Brain {
 			// Add the coordinate to the neuron's prediction
 			channelMap.get(row.neuron_id).coordinates[row.dimension_name] = row.val;
 		}
+	}
+
+	/**
+	 * Check if a channel needs exploration (in-memory implementation)
+	 * Returns true if channel has no inferred outputs OR if holding too long
+	 * @param {string} channelName - name of the channel to check
+	 * @returns {Promise<boolean>} - true if channel needs exploration
+	 */
+	async channelNeedsExploration(channelName) {
+		const channel = this.channels.get(channelName);
+		if (!channel) return false;
+
+		// Check if channel is holding too long (if it has holdingFrames property)
+		if (channel.holdingFrames !== undefined && channel.maxHoldingFrames !== undefined) {
+			if (channel.holdingFrames > channel.maxHoldingFrames) return true;
+		}
+
+		const outputDimNames = channel.getOutputDimensions();
+		if (outputDimNames.length === 0) return false;
+
+		// Get dimension IDs for this channel's output dimensions
+		const outputDimIds = new Set(outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined));
+		if (outputDimIds.size === 0) return false;
+
+		// Check if any inferred neurons at level 0, age 0 have coordinates in these output dimensions
+		const level0Inferred = this.inferredNeurons.get(0);
+		if (!level0Inferred) return true; // No inferred neurons = needs exploration
+
+		for (const [neuronId, data] of level0Inferred) {
+			if (data.age !== 0) continue;
+
+			// Get neuron coordinates
+			const coords = this.neurons.getCoordinates(neuronId);
+			if (coords.length === 0) continue;
+
+			// Check if any coordinate is in the output dimensions
+			for (const coord of coords) {
+				if (outputDimIds.has(coord.dimension_id)) return false; // Has outputs = doesn't need exploration
+			}
+		}
+
+		return true; // No outputs found = needs exploration
 	}
 
 	/**

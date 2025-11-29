@@ -21,7 +21,7 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
-		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
+		this.minPredictionStrength = 1.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -89,8 +89,9 @@ export default class Brain {
 	async initializeDimensions() {
 		if (this.debug2) console.log('Initializing dimensions for registered channels...');
 		for (const [channelName, channel] of this.channels) {
-			await this.insertChannelDimensions(channel.getInputDimensions(), channelName, 'input');
-			await this.insertChannelDimensions(channel.getOutputDimensions(), channelName, 'output');
+			await this.insertChannelDimensions(channel.getEventDimensions(), channelName, 'event');
+			await this.insertChannelDimensions(channel.getStateDimensions(), channelName, 'state');
+			await this.insertChannelDimensions(channel.getOutputDimensions(), channelName, 'action');
 		}
 	}
 
@@ -128,31 +129,33 @@ export default class Brain {
 
 		// Increment frame counter to be able to track inactivity
 		this.frameNumber++;
-		console.log('******************************************************************');
-		console.log(`OBSERVING FRAME ${this.frameNumber}`);
+		if (this.debug) console.log('******************************************************************');
+		if (this.debug) console.log(`OBSERVING FRAME ${this.frameNumber}`);
 
 		// process each channel: get inputs, get outputs, execute outputs (which returns final frame points)
 		for (const [_, channel] of this.channels) {
 
-			// get the frame inputs from the channel (current state before any outputs are executed)
-			const channelInputs = await channel.getFrameInputs();
+			// get the frame event inputs from the channel (current state before any outputs are executed)
+			const channelEvents = await channel.getFrameEvents();
 
 			// get last inferred outputs to be executed in this frame in case there are any
 			const channelOutputs = await channel.getFrameOutputs();
 
-			// Update last activity if any channel has outputs
+			// update last activity for exploration if any channel has outputs
 			if (channelOutputs && channelOutputs.length > 0) this.lastActivity = this.frameNumber;
 
-			// execute outputs - this updates channel state and returns final frame points
-			// if there are outputs, they can modify the inputs; if no outputs, returns inputs as-is
-			const channelFrame = await channel.executeOutputs(channelInputs, channelOutputs);
+			// execute outputs - this updates channel state
+			await channel.executeOutputs(channelOutputs);
+
+			// get the frame state inputs from the channel as it may have changed from outputs
+			const channelState = await channel.getFrameState();
 
 			// Add frame points to the frame
-			if (channelFrame && channelFrame.length > 0) frame.push(...channelFrame);
+			frame.push(...[ ...channelEvents, ...channelState, ...channelOutputs ]);
 		}
 
-		console.log(`frame points: ${JSON.stringify(frame)}`);
-		console.log('******************************************************************');
+		if (this.debug) console.log(`frame points: ${JSON.stringify(frame)}`);
+		if (this.debug) console.log('******************************************************************');
 		return frame;
 	}
 
@@ -191,14 +194,14 @@ export default class Brain {
 	async processFrame(frame) {
 		const frameStart = performance.now();
 
+		// age the active neurons in memory context - sliding the temporal window
+		await this.ageNeurons();
+
 		// Get rewards from all channels for reward propagation
 		const channelRewards = await this.getChannelRewards();
 
 		// apply rewards to previously executed decisions (before aging them further)
 		await this.applyRewards(channelRewards);
-
-		// age the active neurons in memory context - sliding the temporal window
-		await this.ageNeurons();
 
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
@@ -252,30 +255,26 @@ export default class Brain {
 
 		// create exploration predictions for all channels with output dimensions
 		// saveExplorationAction handles writing to inferred_neurons, exploration_inference_sources, and inference_log
-		await this.inferExplorationActions();
-	}
-
-	/**
-	 * infers exploration actions for each channel
-	 */
-	async inferExplorationActions() {
 		let exploredCount = 0;
 		for (const [channelName, channel] of this.channels) {
 
-			// Skip if channel doesn't have output dimensions
-			const channelOutputDims = channel.getOutputDimensions();
-			if (channelOutputDims.length === 0) continue;
+			// Check if channel needs exploration (no outputs or holding too long)
+			if (!await this.channelNeedsExploration(channelName)) {
+				if (this.debug) console.log(`Skipping exploration for ${channelName}: has inferred outputs and not holding too long.`);
+				continue;
+			}
 
 			// Get exploration action for this channel
 			const actionNeuron = channel.getExplorationAction();
 			if (!actionNeuron) continue;
 
 			// Find/create neuron for this action and write exploration prediction
-			if (this.debug) console.log(`Curiosity exploration for ${channelName}: `, actionNeuron);
+			if (this.debug) console.log(`Exploration for ${channelName}: `, actionNeuron);
 			await this.saveExplorationAction(actionNeuron);
 			exploredCount++;
 		}
 		if (this.debug2) console.log(`Explored ${exploredCount} channels without predictions`);
+		await this.waitForUser('inferred exploration');
 		return exploredCount;
 	}
 
@@ -396,7 +395,7 @@ export default class Brain {
 
 		// bulk find/create neurons for all input points
 		const neuronIds = await this.getFrameNeurons(frame);
-		console.log('frame neuron ids', neuronIds);
+		if (this.debug) console.log('frame neurons', neuronIds);
 
 		// bulk insert activations at base level
 		await this.activateNeurons(neuronIds);
@@ -426,7 +425,6 @@ export default class Brain {
 		}
 
 		// return matching neuron ids to given points
-		if (this.debug) console.log('frame neurons', neuronIds);
 		return neuronIds;
 	}
 
@@ -736,6 +734,16 @@ export default class Brain {
 	 */
 	async getChannelInferences() {
 		throw new Error('getChannelInferences() must be implemented by subclass');
+	}
+
+	/**
+	 * Check if a channel needs exploration (implementation-specific)
+	 * Returns true if channel has no inferred outputs OR if holding too long
+	 * @param {string} channelName - name of the channel to check
+	 * @returns {Promise<boolean>} - true if channel needs exploration
+	 */
+	async channelNeedsExploration(channelName) {
+		throw new Error('channelNeedsExploration() must be implemented by subclass');
 	}
 
 	/**
