@@ -258,19 +258,22 @@ export default class Brain {
 		let exploredCount = 0;
 		for (const [channelName, channel] of this.channels) {
 
+			// Get exploration action for this channel - returns null if no exploration needed
+			const actionCoordinates = channel.getExplorationAction();
+			if (!actionCoordinates) throw new Error(`Channel ${channelName} exploration action is null`);
+
+			// Find or create neuron for this action
+			const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
+
 			// Check if channel needs exploration (no outputs or holding too long)
-			if (!await this.channelNeedsExploration(channelName)) {
+			if (!await this.channelNeedsExploration(channelName, actionNeuronId)) {
 				if (this.debug) console.log(`Skipping exploration for ${channelName}: has inferred outputs and not holding too long.`);
 				continue;
 			}
 
-			// Get exploration action for this channel
-			const actionNeuron = channel.getExplorationAction();
-			if (!actionNeuron) continue;
-
 			// Find/create neuron for this action and write exploration prediction
-			if (this.debug) console.log(`Exploration for ${channelName}: `, actionNeuron);
-			await this.saveExplorationAction(actionNeuron);
+			if (this.debug) console.log(`Exploration for ${channelName}: `, actionCoordinates, actionNeuronId);
+			await this.saveExplorationAction(actionNeuronId);
 			exploredCount++;
 		}
 		if (this.debug2) console.log(`Explored ${exploredCount} channels without predictions`);
@@ -425,6 +428,7 @@ export default class Brain {
 		}
 
 		// return matching neuron ids to given points
+		if (neuronIds.length === 0) throw new Error(`Failed to create neuron for exploration action: ${JSON.stringify(frame)}`);
 		return neuronIds;
 	}
 
@@ -740,9 +744,10 @@ export default class Brain {
 	 * Check if a channel needs exploration (implementation-specific)
 	 * Returns true if channel has no inferred outputs OR if holding too long
 	 * @param {string} channelName - name of the channel to check
+	 * @param {string} actionNeuronId - action neuron id - used to check if it's already inferred or not
 	 * @returns {Promise<boolean>} - true if channel needs exploration
 	 */
-	async channelNeedsExploration(channelName) {
+	async channelNeedsExploration(channelName, actionNeuronId) {
 		throw new Error('channelNeedsExploration() must be implemented by subclass');
 	}
 

@@ -33,7 +33,6 @@ export default class Channel {
 	/**
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * This method should execute actions, update channel state, and return final frame points
-	 *
 	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
 	 * @returns {void}
 	 */
@@ -169,7 +168,7 @@ export default class Channel {
 		// Combine and return
 		const resolved = [...resolvedEvents, ...resolvedActions];
 		if (this.debug) console.log('getResolvedInference', resolved);
-		if (this.debug) this.logResolution(inferences.length, events.length, outputInferences.length, resolved.length);
+		if (this.debug) this.logResolution(inferences.length, events.length, actions.length, resolved.length);
 		return resolved;
 	}
 

@@ -32,17 +32,6 @@ from coordinates c join dimensions d on d.id = c.dimension_id
 -- where c.neuron_id in (7,8,9,10) 
 order by d.type, d.name;
 
-3	TEST_position	state	0
-7	TEST_position	state	1
-1	TEST_price_change	event	5
-5	TEST_price_change	event	-6
-9	TEST_price_change	event	-7
-2	TEST_volume_change	event	5
-6	TEST_volume_change	event	-6
-10	TEST_volume_change	event	-7
-4	TEST_activity	action	1
-8	TEST_activity	action	0;
-
 SELECT f.neuron_id as from_neuron_id, fd.name as from_dim, fc.val as from_val, t.neuron_id as to_neuron_id, td.name as to_dim, tc.val as to_val, f.age as distance, 1 as strength
 FROM active_neurons f
 join coordinates fc on fc.neuron_id = f.neuron_id

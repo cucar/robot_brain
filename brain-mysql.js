@@ -180,17 +180,10 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Check if a channel needs exploration (MySQL implementation)
 	 * Returns true if channel has no inferred outputs OR if holding too long
-	 * @param {string} channelName - name of the channel to check
-	 * @returns {Promise<boolean>} - true if channel needs exploration
 	 */
-	async channelNeedsExploration(channelName) {
+	async channelNeedsExploration(channelName, actionNeuronId) {
 		const channel = this.channels.get(channelName);
 		if (!channel) return false;
-
-		// Check if channel is holding too long (if it has holdingFrames property)
-		if (channel.holdingFrames !== undefined &&
-			channel.maxHoldingFrames !== undefined &&
-			channel.holdingFrames > channel.maxHoldingFrames) return true;
 
 		const outputDimNames = channel.getOutputDimensions();
 		if (outputDimNames.length === 0) return false;
@@ -199,18 +192,33 @@ export default class BrainMySQL extends Brain {
 		const outputDimIds = outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined);
 		if (outputDimIds.length === 0) return false;
 
-		// Check if any inferred neurons have coordinates in these output dimensions
+		// Check if any inferred neurons exist for output dimensions AND if action neuron is among them
 		const [result] = await this.conn.query(`
-			SELECT COUNT(*) as count
-			FROM inferred_neurons inf
-			JOIN coordinates c ON inf.neuron_id = c.neuron_id
-			WHERE inf.age = 0 AND inf.level = 0
-			AND c.dimension_id IN (?)
-			LIMIT 1
-		`, [outputDimIds]);
+            SELECT COUNT(*) as inferred_output_count, MAX(IF(inf.neuron_id = ?, 1, 0)) as action_neuron_inferred
+            FROM inferred_neurons inf
+            WHERE inf.age = 0
+            AND inf.level = 0
+            AND EXISTS (SELECT 1 FROM coordinates c WHERE c.neuron_id = inf.neuron_id AND c.dimension_id IN (?))
+		`, [actionNeuronId, outputDimIds]);
+		const inferredOutputCount = result[0].inferred_output_count;
+		const actionNeuronInferred = result[0].action_neuron_inferred === 1;
+
+		// If action neuron is already inferred, no need for exploration
+		// Check if channel is holding too long (if it has holdingFrames property)
+		// If it is, and we don't have it already as an inferred action, we need exploration
+		if (channel.holdingFrames && channel.maxHoldingFrames && channel.holdingFrames > channel.maxHoldingFrames) {
+
+			// if the action neuron is not inferred, we need exploration
+			if (!actionNeuronInferred) return true;
+
+			// if we are holding too long, and the action neuron is inferred, we don't need exploration,
+			// but we do need to make sure it's selected - update its strength to a very high value to make sure it's selected
+			await this.conn.query('UPDATE inferred_neurons SET strength = 1000000 WHERE neuron_id = ? and age = 0 and level = 0', [actionNeuronId]);
+			return false;
+		}
 
 		// Return true if NO outputs (needs exploration)
-		return result[0].count === 0;
+		return inferredOutputCount === 0;
 	}
 
 	/**
@@ -430,18 +438,10 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Write exploration prediction to storage (MySQL implementation)
 	 * Creates prediction in inferred_neurons and tracks sources in exploration_inference_sources
-	 * @param {Object} coordinates - action coordinates (e.g., {TEST_activity: 1})
+	 * @param {Number} actionNeuronId - action neuron id
 	 * @returns {Promise<void>}
 	 */
-	async saveExplorationAction(coordinates) {
-
-		// Find or create neuron for this action
-		const neuronIds = await this.getFrameNeurons([coordinates]);
-		if (neuronIds.length === 0) {
-			console.warn(`Failed to create neuron for exploration action:`, coordinates);
-			return;
-		}
-		const neuronId = neuronIds[0];
+	async saveExplorationAction(actionNeuronId) {
 
 		// Populate exploration_inference_sources with ALL active connections that could predict this neuron
 		// Only record connections that actually exist - if none exist yet, that's OK
@@ -456,32 +456,35 @@ export default class BrainMySQL extends Brain {
 			AND c.to_neuron_id = ?
 			AND c.distance = an.age + 1
 			AND c.strength > 0
-		`, [this.peakTimeDecayFactor, neuronId]);
+		`, [this.peakTimeDecayFactor, actionNeuronId]);
 		if (this.debug) {
 			if (result.affectedRows > 0) console.log(`Exploration: ${result.affectedRows} possible connection sources`);
 			else console.log(`Exploration: No active neurons that could predict the output neuron`);
 		}
 
 		// even if there are no active connections that could predict this neuron, we still have to infer it to execute
-		if (result.affectedRows === 0) await this.conn.query(`
+		// 1M strength is arbitrary but very high to make sure it's selected over other habitual options
+		// if (result.affectedRows === 0)
+		await this.conn.query(`
 			INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, ?)
-		`, [neuronId, this.minPredictionStrength]);
+		`, [actionNeuronId, 1000000]);
+
 		// Write prediction to inferred_neurons - use sum of all connection strengths, or default if no connections exist
-		else await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
-			SELECT inferred_neuron_id, 0, 0, SUM(prediction_strength) as total_strength
-			FROM exploration_inference_sources
-			WHERE age = 0
-			GROUP BY inferred_neuron_id
-		`);
+		// else await this.conn.query(`
+		// 	INSERT INTO inferred_neurons (neuron_id, level, age, strength)
+		// 	SELECT inferred_neuron_id, 0, 0, SUM(prediction_strength) as total_strength
+		// 	FROM exploration_inference_sources
+		// 	WHERE age = 0
+		// 	GROUP BY inferred_neuron_id
+		// `);
 
 		// Insert into inference_chain - exploration neurons point to themselves (no source)
 		await this.conn.query(`
 			INSERT INTO inference_chain (base_neuron_id, source_neuron_id, age) VALUES (?, ?, 0)
-		`, [neuronId, neuronId]);
+		`, [actionNeuronId, actionNeuronId]);
 
 		// Log this inference for temporal credit assignment
-		if (this.debug) console.log(`Exploration: inferred neuron ${neuronId}`);
+		if (this.debug) console.log(`Exploration: inferred neuron ${actionNeuronId}`);
 		await this.conn.query('INSERT INTO inference_log (age, level, type) VALUES (0, 0, \'exploration\')');
 	}
 
