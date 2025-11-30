@@ -21,11 +21,12 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS connection_inference_sources;
 -- DROP TABLE IF EXISTS pattern_inference_sources;
 -- DROP TABLE IF EXISTS exploration_inference_sources;
--- DROP TABLE IF EXISTS inference_log;
 -- DROP TABLE IF EXISTS inference_chain;
 -- DROP TABLE IF EXISTS unpack_sources;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
+
+select * from connections;
 
 select c.neuron_id, d.name, d.type, c.val 
 from coordinates c join dimensions d on d.id = c.dimension_id 
@@ -34,7 +35,6 @@ order by d.type, d.name;
 
 select * from inferred_neurons where age = 0;
 select * from connection_inference_sources where age = 0;
-select * from inference_log where age = 0;
 
 SELECT inf.neuron_id, inf.strength, c.dimension_id, c.val, d.name as dimension_name, d.channel
 			FROM inferred_neurons inf
@@ -110,18 +110,16 @@ AND NOT (
 select * 
 from exploration_inference_sources eis
 JOIN inference_chain ic ON ic.source_neuron_id = eis.inferred_neuron_id AND ic.age = eis.age
-JOIN inference_log il ON il.age = ic.age AND il.type = 'exploration' AND il.level = 0
 JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (4)
-WHERE ic.age > 0 AND ic.age <= 1;
+WHERE il.level = 0 AND ic.age > 0 AND ic.age <= 1;
 
 select * 
 from connection_inference_sources cis
 JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
-JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
 JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (4)
-WHERE ic.age > 0 AND ic.age <= 1
+WHERE il.level = 0 AND ic.age > 0 AND ic.age <= 1
 AND cis.level = il.level
 ;
 
@@ -180,7 +178,6 @@ select count(*) from pattern_future;
 select * from unpack_sources;
 select * from inferred_neurons;
 select * from inferred_neurons_resolved;
-select * from inference_log;
 select * from inference_chain;
 select * from connections;
 select * from coordinates where dimension_id = 16;
@@ -215,16 +212,6 @@ select * from coordinates where neuron_id in (4);
 
 select * from connections where id in (9, 13);            
 
-select * 
-from connection_inference_sources cis -- ON c.id = cis.connection_id
-JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
-JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
-JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
-JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (16)
-WHERE ic.age > 0 AND ic.age <= 10
-AND cis.level = il.level
-;
-
 select id from dimensions where type = 'output';
 select * from inference_chain;
 select * from unpack_sources;
@@ -237,7 +224,6 @@ select *
 from connections c
 JOIN connection_inference_sources cis ON c.id = cis.connection_id
 JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
--- JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
 -- JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 -- JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (select id from dimensions where type = 'output')
 -- WHERE ic.age > 0 AND ic.age <= 1
@@ -258,6 +244,11 @@ FROM unpack_sources
 WHERE current_level = 0;
 
 select * from inference_chain;
+
+select count(*) from pattern_past;
+select count(*) from pattern_future;
+select count(*) from connections;
+select * from active_neurons;
 
 select *
 from connections c
@@ -506,22 +497,9 @@ CREATE TABLE IF NOT EXISTS exploration_inference_sources (
     INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
--- scratch table for tracking which inference type was performed at each level for each frame
--- used for temporal credit assignment in applyRewards
--- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
--- multiple inference types can occur in same frame (e.g., connection + exploration)
-CREATE TABLE IF NOT EXISTS inference_log (
-    age TINYINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
-    type ENUM('connection', 'pattern', 'exploration') NOT NULL,
-    PRIMARY KEY (age, level, type),
-    INDEX idx_age (age)
-) ENGINE=MEMORY;
-
 -- scratch table for tracking which high-level source neurons unpacked to which base-level outputs
 -- used for channel-specific reward attribution in applyRewards
 -- populated during saveInferenceChain: maps base outputs (level 0) to their source-level neurons
--- source_level can be obtained from inference_log by joining on age
 -- unpacking is just mechanical translation via pattern_peaks, so we only track endpoints
 -- age represents how many frames ago this prediction was made (both source and base age together)
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge

@@ -32,8 +32,8 @@ export default class Brain {
 		this.maxConnectionReward = 10.0; // maximum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
-		this.habituationDecay = 0.8; // multiply habituation by this when connection/pattern is used for executed output
-		this.dishabituationRate = 0.01; // recovery toward 1.0 per forget cycle
+		this.habituationDecay = 0.75; // multiply habituation by this when connection/pattern is used for executed output
+		this.dishabituationRate = 0.1; // recovery toward 1.0 per forget cycle
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
