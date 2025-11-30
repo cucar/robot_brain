@@ -32,6 +32,18 @@ from coordinates c join dimensions d on d.id = c.dimension_id
 -- where c.neuron_id in (7,8,9,10) 
 order by d.type, d.name;
 
+select * from inferred_neurons where age = 0;
+select * from connection_inference_sources where age = 0;
+select * from inference_log where age = 0;
+
+SELECT inf.neuron_id, inf.strength, c.dimension_id, c.val, d.name as dimension_name, d.channel
+			FROM inferred_neurons inf
+			JOIN coordinates c ON inf.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE inf.age = 0 AND inf.level = 0
+			ORDER BY d.channel, inf.neuron_id;
+
+
 SELECT f.neuron_id as from_neuron_id, fd.name as from_dim, fc.val as from_val, t.neuron_id as to_neuron_id, td.name as to_dim, tc.val as to_val, f.age as distance, 1 as strength
 FROM active_neurons f
 join coordinates fc on fc.neuron_id = f.neuron_id
@@ -330,6 +342,7 @@ CREATE TABLE IF NOT EXISTS connections (
     distance TINYINT UNSIGNED NOT NULL,  -- 0=spatial, 1=immediate, 2=next step, etc.
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
+    habituation DOUBLE NOT NULL DEFAULT 1.0,  -- habituation factor: decays with use, recovers over time
     FOREIGN KEY (from_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (to_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     UNIQUE INDEX (from_neuron_id, to_neuron_id, distance),
@@ -359,6 +372,7 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
+    habituation DOUBLE NOT NULL DEFAULT 1.0,  -- habituation factor: decays with use, recovers over time
     PRIMARY KEY (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,

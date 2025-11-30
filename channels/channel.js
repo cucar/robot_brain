@@ -16,7 +16,7 @@ export default class Channel {
 	constructor(name) {
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
-		this.debug = true; // controls verbosity of channel output
+		this.debug = false; // controls verbosity of channel output
 		this.debug2 = false; // more detailed, verbose debug mode
 		this.inferredActions = []; // actions selected by resolveConflicts
 	}

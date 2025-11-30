@@ -21,7 +21,7 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
-		this.minPredictionStrength = 1.0; // minimum strength for a prediction to be made
+		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -32,6 +32,8 @@ export default class Brain {
 		this.maxConnectionReward = 10.0; // maximum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
+		this.habituationDecay = 0.8; // multiply habituation by this when connection/pattern is used for executed output
+		this.dishabituationRate = 0.01; // recovery toward 1.0 per forget cycle
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -50,9 +52,9 @@ export default class Brain {
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
 
 		// Create readline interface for pausing between frames - used when debugging
-		this.debug = true;
+		this.debug = false;
 		this.debug2 = false; // deeper, more verbose debug level
-		this.waitForUserInput = true;
+		this.waitForUserInput = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
 
@@ -265,9 +267,9 @@ export default class Brain {
 			// Find or create neuron for this action
 			const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
 
-			// Check if channel needs exploration (no outputs or holding too long)
+			// Check if channel needs exploration (no outputs or about to activate the same action)
 			if (!await this.channelNeedsExploration(channelName, actionNeuronId)) {
-				if (this.debug) console.log(`Skipping exploration for ${channelName}: has inferred outputs and not holding too long.`);
+				if (this.debug) console.log(`Skipping exploration for ${channelName}: has inferred outputs or about to activate the same action.`);
 				continue;
 			}
 

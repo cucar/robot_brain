@@ -396,9 +396,10 @@ export default class BrainMySQL extends Brain {
 	async inferConnectionsAtLevel(level) {
 
 		// Populate details table with ALL individual connection predictions (age=0 for new predictions)
+		// Prediction strength includes habituation factor to suppress frequently-used connections
 		const [sourcesResult] = await this.conn.query(`
 			INSERT INTO connection_inference_sources (inferred_neuron_id, level, age, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, 0, c.id, c.strength * c.reward * POW(?, c.distance - 1)
+			SELECT c.to_neuron_id, ?, 0, c.id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1)
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE an.level = ?
@@ -447,9 +448,10 @@ export default class BrainMySQL extends Brain {
 		// Only record connections that actually exist - if none exist yet, that's OK
 		// When the sequence is observed, reinforceConnections() will create them
 		// Then future exploration of the same action will have connections to reward
+		// Include habituation in strength calculation for consistency with connection inference
 		const [result] = await this.conn.query(`
 			INSERT INTO exploration_inference_sources (inferred_neuron_id, age, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, 0, c.id, c.strength * c.reward * POW(?, c.distance - 1)
+			SELECT c.to_neuron_id, 0, c.id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1)
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE an.level = 0
@@ -574,9 +576,11 @@ export default class BrainMySQL extends Brain {
 	async inferPatternsFromLevel(sourceLevel) {
 
 		// Populate details table with ALL individual pattern predictions (age=0 for new predictions)
+		// Include pf.habituation to suppress frequently-used pattern predictions
+		// Note: c.habituation is NOT included here because pattern inference rewards pattern_future, not connections
 		const [sourcesResult] = await this.conn.query(`
 			INSERT INTO pattern_inference_sources (inferred_neuron_id, level, age, pattern_neuron_id, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, 0, an.neuron_id, c.id, pf.strength * pf.reward * c.strength * c.reward * POW(?, c.distance - 1)
+			SELECT c.to_neuron_id, ?, 0, an.neuron_id, c.id, pf.strength * pf.reward * pf.habituation * c.strength * c.reward * POW(?, c.distance - 1)
 			FROM active_neurons an
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
 			JOIN connections c ON c.id = pf.connection_id
@@ -1113,7 +1117,21 @@ export default class BrainMySQL extends Brain {
 			const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]);
 			console.log(`  Pattern_future reward decay took ${Date.now() - stepStart}ms (updated ${patternRewardResult.affectedRows} rows)`);
 
-			// 4. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
+			// 4. DISHABITUATION: Recover habituation toward 1.0
+			// Formula: habituation = habituation + (1.0 - habituation) * dishabituationRate
+			// habituation=0.5, rate=0.01 → 0.5 + (1.0-0.5)*0.01 = 0.505
+			// habituation=0.9, rate=0.01 → 0.9 + (1.0-0.9)*0.01 = 0.901
+			console.log('Running forget cycle - connection dishabituation...');
+			stepStart = Date.now();
+			const [connDishabResult] = await this.conn.query(`UPDATE connections SET habituation = habituation + (1.0 - habituation) * ? WHERE habituation < 1.0`, [this.dishabituationRate]);
+			console.log(`  Connection dishabituation took ${Date.now() - stepStart}ms (updated ${connDishabResult.affectedRows} rows)`);
+
+			console.log('Running forget cycle - pattern_future dishabituation...');
+			stepStart = Date.now();
+			const [patternDishabResult] = await this.conn.query(`UPDATE pattern_future SET habituation = habituation + (1.0 - habituation) * ? WHERE habituation < 1.0`, [this.dishabituationRate]);
+			console.log(`  Pattern_future dishabituation took ${Date.now() - stepStart}ms (updated ${patternDishabResult.affectedRows} rows)`);
+
+			// 5. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
 			console.log('Running forget cycle - orphaned neurons cleanup...');
 			stepStart = Date.now();
 			const [neuronDeleteResult] = await this.conn.query(`
@@ -1137,7 +1155,10 @@ export default class BrainMySQL extends Brain {
 				this.conn.query(`UPDATE pattern_peaks SET strength = GREATEST(0, strength - ?) WHERE strength > 0`, [this.patternForgetRate]),
 				this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]),
 				this.conn.query(`UPDATE connections SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]),
-				this.conn.query(`UPDATE pattern_future SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate])
+				this.conn.query(`UPDATE pattern_future SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]),
+				// Dishabituation: recover habituation toward 1.0
+				this.conn.query(`UPDATE connections SET habituation = habituation + (1.0 - habituation) * ? WHERE habituation < 1.0`, [this.dishabituationRate]),
+				this.conn.query(`UPDATE pattern_future SET habituation = habituation + (1.0 - habituation) * ? WHERE habituation < 1.0`, [this.dishabituationRate])
 			]);
 
 			// Delete operations after updates complete - parallelize independent DELETE operations
@@ -1190,14 +1211,14 @@ export default class BrainMySQL extends Brain {
 		if (channelRewards.size === 0) return;
 
 		// Process each channel's rewards separately
+		// Note: we process ALL channels (even neutral rewards) because habituation must be applied
+		// whenever an action is executed, regardless of reward value
 		let totalConnectionsRewarded = 0;
 		let totalPatternsRewarded = 0;
 		let totalExplorationRewarded = 0;
 		for (const [channelName, reward] of channelRewards) {
 
-			// Skip neutral rewards
-			if (reward === 1.0) continue;
-			if (this.debug) console.log(`Applying reward ${reward.toFixed(3)} for channel: ${channelName}`);
+			if (this.debug) console.log(`Applying reward ${reward.toFixed(3)} and habituation for channel: ${channelName}`);
 
 			// Get the output dimension IDs for this channel
 			const outputDimIds = this.getChannelOutputDims(channelName);
@@ -1206,7 +1227,7 @@ export default class BrainMySQL extends Brain {
 				continue;
 			}
 
-			// Reward exploration-based inferences for this channel
+			// Reward and habituate exploration-based inferences for this channel
 			// Only rewards connections that exist in exploration_inference_sources
 			const [exploreResult] = await this.conn.query(`
 				UPDATE connections c
@@ -1215,7 +1236,8 @@ export default class BrainMySQL extends Brain {
 				JOIN inference_log il ON il.age = ic.age AND il.type = 'exploration' AND il.level = 0
 				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, ic.age - 1))))
+				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, ic.age - 1)))),
+				    c.habituation = c.habituation * ?
 				WHERE ic.age > 0 AND ic.age <= ?
 			`, [
 				outputDimIds,
@@ -1223,11 +1245,12 @@ export default class BrainMySQL extends Brain {
 				this.maxConnectionReward,
 				reward,
 				this.rewardTimeDecayFactor,
+				this.habituationDecay,
 				this.maxRewardsAge
 			]);
 			totalExplorationRewarded += exploreResult.affectedRows;
 
-			// Reward connection-based inferences for this channel
+			// Reward and habituate connection-based inferences for this channel
 			// 1. Find base-level outputs that belong to this channel (via output dimensions)
 			// 2. Use inference_chain to find which source neurons created these base outputs
 			// 3. Join to inference_log to get the source level and verify it was connection inference
@@ -1239,7 +1262,8 @@ export default class BrainMySQL extends Brain {
 				JOIN inference_log il ON il.age = ic.age AND il.type = 'connection'
 				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, ic.age - 1))))
+				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, ic.age - 1)))),
+				    c.habituation = c.habituation * ?
 				WHERE ic.age > 0 AND ic.age <= ?
 				AND cis.level = il.level
 			`, [
@@ -1248,11 +1272,12 @@ export default class BrainMySQL extends Brain {
 				this.maxConnectionReward,
 				reward,
 				this.rewardTimeDecayFactor,
+				this.habituationDecay,
 				this.maxRewardsAge
 			]);
 			totalConnectionsRewarded += connResult.affectedRows;
 
-			// Reward pattern-based inferences for this channel
+			// Reward and habituate pattern-based inferences for this channel
 			// Similar logic but for pattern_future connections
 			// Note: pattern_inference_sources.level is where predictions were made (sourceLevel - 1)
 			// inference_log.level is where pattern neurons are (sourceLevel)
@@ -1264,7 +1289,8 @@ export default class BrainMySQL extends Brain {
 				JOIN inference_log il ON il.age = ic.age AND il.type = 'pattern'
 				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
 				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET pf.reward = GREATEST(?, LEAST(?, pf.reward * (1 + (? - 1) * POW(?, ic.age - 1))))
+				SET pf.reward = GREATEST(?, LEAST(?, pf.reward * (1 + (? - 1) * POW(?, ic.age - 1)))),
+				    pf.habituation = pf.habituation * ?
 				WHERE ic.age > 0 AND ic.age <= ?
 				AND il.level = pis.level + 1
 			`, [
@@ -1273,6 +1299,7 @@ export default class BrainMySQL extends Brain {
 				this.maxConnectionReward,
 				reward,
 				this.rewardTimeDecayFactor,
+				this.habituationDecay,
 				this.maxRewardsAge
 			]);
 			totalPatternsRewarded += patternResult.affectedRows;

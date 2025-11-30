@@ -16,7 +16,6 @@ export default class StockChannel extends Channel {
 
 		// Hyperparameters
 		this.rewardAmplification = 5; // Power to raise reward ratios to (higher = stronger rewards/penalties)
-		this.maxHoldingFrames = 6; // Maximum frames to hold before forcing action via exploration
 
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
@@ -323,31 +322,20 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Returns a valid exploration action based on current stock ownership
-	 * If holding too long, forces a buy/sell action (not hold)
-	 * Otherwise uses deterministic exploration sequence
+	 * Uses deterministic exploration sequence (habituation mechanism handles extended holding)
 	 */
 	getExplorationAction() {
 		const activityDim = `${this.symbol}_activity`;
+		const actions = [];
+		actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
+		actions.push({ [activityDim]: 0 });  // hold
+		return actions[Math.floor(Math.random() * actions.length)]; // return a random action
 
-		// Check if we need to force an action due to extended holding
-		if (this.holdingFrames > this.maxHoldingFrames) {
-			// Force an action: buy if not owned, sell if owned
-			const forcedAction = this.owned ? -1 : 1;
-			if (this.debug) console.log(`${this.symbol}: Forcing action after ${this.holdingFrames} frames (${forcedAction > 0 ? 'BUY' : 'SELL'})`);
-			return { [activityDim]: forcedAction };
-		}
-
-		// NOTE: this is temporary. the following code should be used for true random exploration
-		// this is made deterministic to be able to troubleshoot output performance issues
-		// const actions = [];
-		// actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
-		// actions.push({ [activityDim]: 0 });  // hold
-		// return actions[Math.floor(Math.random() * actions.length)]; // return a random action
-
+		// NOTE: following code is deterministic to be able to troubleshoot output performance issues
 		// Return deterministic action from sequence
-		const action = this.explorationSequence[this.explorationIndex];
-		this.explorationIndex = (this.explorationIndex + 1) % this.explorationSequence.length;
-		return { [activityDim]: action };
+		// const action = this.explorationSequence[this.explorationIndex];
+		// this.explorationIndex = (this.explorationIndex + 1) % this.explorationSequence.length;
+		// return { [activityDim]: action };
 	}
 
 	/**
