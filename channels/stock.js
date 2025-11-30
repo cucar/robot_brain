@@ -601,73 +601,85 @@ export default class StockChannel extends Channel {
 		if (activityValue === undefined) throw new Error('No activity found in outputs');
 
 		// Positive activity = buy signal (+1)
-		if (activityValue > 0) {
-
-			// if we already own the stock, nothing to do - should not happen - just log it
-			if (this.owned) {
-				console.warn(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
-				this.lastAction = 0; // Ignored = hold
-				// Return current inputs + output (no state change)
-				return;
-			}
-
-			// buy stock per request coming from the brain
-			this.owned = true;
-			this.entryPrice = this.previousPrice; // prices are the end of day prices. we buy in the morning, at the close price of the previous day
-			this.holdingFrames = 0; // Reset holding counter
-
-			// Reset unrealized profit tracking for new position
-			this.unrealizedProfit = 0;
-
-			// Track trade metrics
-			this.totalTrades++;
-			this.lastAction = 1; // BUY
-
-			if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${this.previousPrice} (activity: ${activityValue})`);
-		}
+		if (activityValue > 0) this.executeBuy(activityValue);
 		// Negative activity = sell signal (-1)
-		else if (activityValue < 0) {
-
-			// if we don't own the stock, nothing to do - should not happen - just log it
-			if (!this.owned) {
-				console.warn(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
-				this.lastAction = 0; // Ignored = hold
-				// Return current inputs + output (no state change)
-				return;
-			}
-
-			// Sell owned stock - calculate realized profit/loss - assume we are selling at the end of day price of yesterday
-			const profit = this.previousPrice - this.entryPrice;
-			const percentReturn = (profit / this.entryPrice) * 100;
-
-			// Add realized profit/loss to totals
-			if (profit > 0) {
-				this.totalProfit += profit;
-				this.profitableTrades++;
-			}
-			else if (profit < 0) {
-				this.totalLoss += Math.abs(profit);
-			}
-
-			if (this.debug) {
-				console.log(`${this.symbol}: EXECUTED SELL at $${this.previousPrice} (activity: ${activityValue})`);
-				console.log(`${this.symbol}: Realized Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
-				console.log(`${this.symbol}: Episode totals: Profit $${this.totalProfit.toFixed(2)}, Loss $${this.totalLoss.toFixed(2)}, Net $${(this.totalProfit - this.totalLoss).toFixed(2)}`);
-			}
-
-			// Reset unrealized profit tracking since position is closed
-			this.unrealizedProfit = 0;
-
-			// Switch to sold state
-			this.owned = false;
-			this.entryPrice = this.previousPrice; // Track sell price for sold position feedback
-			this.holdingFrames = 0; // Reset holding counter
-			this.lastAction = -1; // SELL
-		}
+		else if (activityValue < 0) this.executeSell(activityValue);
 		// hold activity = hold signal (0)
-		else {
-			if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
-			this.lastAction = 0; // HOLD
+		else this.executeHold();
+	}
+
+	/**
+	 * Execute a buy action
+	 */
+	executeBuy(activityValue) {
+
+		// if we already own the stock, nothing to do - should not happen - just log it
+		if (this.owned) {
+			console.warn(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
+			this.lastAction = 0; // Ignored = hold
+			return;
 		}
+
+		// buy stock per request coming from the brain
+		this.owned = true;
+		this.entryPrice = this.previousPrice; // prices are the end of day prices. we buy in the morning, at the close price of the previous day
+		this.holdingFrames = 0; // Reset holding counter
+
+		// Reset unrealized profit tracking for new position
+		this.unrealizedProfit = 0;
+
+		// Track trade metrics
+		this.totalTrades++;
+		this.lastAction = 1; // BUY
+
+		if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${this.previousPrice} (activity: ${activityValue})`);
+	}
+
+	/**
+	 * Execute a sell action
+	 */
+	executeSell(activityValue) {
+
+		// if we don't own the stock, nothing to do - should not happen - just log it
+		if (!this.owned) {
+			console.warn(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
+			this.lastAction = 0; // Ignored = hold
+			return;
+		}
+
+		// Sell owned stock - calculate realized profit/loss - assume we are selling at the end of day price of yesterday (beginning price of today)
+		const profit = this.previousPrice - this.entryPrice;
+		const percentReturn = (profit / this.entryPrice) * 100;
+
+		// Add realized profit/loss to totals
+		if (profit > 0) {
+			this.totalProfit += profit;
+			this.profitableTrades++;
+		}
+		else if (profit < 0)
+			this.totalLoss += Math.abs(profit);
+
+		if (this.debug) {
+			console.log(`${this.symbol}: EXECUTED SELL at $${this.previousPrice} (activity: ${activityValue})`);
+			console.log(`${this.symbol}: Realized Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+			console.log(`${this.symbol}: Episode totals: Profit $${this.totalProfit.toFixed(2)}, Loss $${this.totalLoss.toFixed(2)}, Net $${(this.totalProfit - this.totalLoss).toFixed(2)}`);
+		}
+
+		// Reset unrealized profit tracking since position is closed
+		this.unrealizedProfit = 0;
+
+		// Switch to sold state
+		this.owned = false;
+		this.entryPrice = this.previousPrice; // Track sell price for sold position feedback
+		this.holdingFrames = 0; // Reset holding counter
+		this.lastAction = -1; // SELL
+	}
+
+	/**
+	 * Execute a hold action
+	 */
+	executeHold() {
+		if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
+		this.lastAction = 0; // HOLD
 	}
 }
