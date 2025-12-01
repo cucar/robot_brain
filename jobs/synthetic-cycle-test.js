@@ -9,9 +9,6 @@ const __dirname = path.dirname(__filename);
 
 /**
  * Synthetic Cycle Test - Tests if brain can learn a perfectly repeating price pattern
- * Pattern: +1%, -2%, -3%, +2%, +5% (repeats 50 times)
- * Optimal strategy: BUY at -3%, SELL at +1%
- * Expected profit per cycle: +8% (gain +2%, +5%, +1%)
  */
 export default class SyntheticCycleTest extends Job {
 
@@ -22,7 +19,7 @@ export default class SyntheticCycleTest extends Job {
 		this.config = {
 			symbol: 'TEST',
 			cyclePattern: [0.009, -0.019, -0.029, 0.019, 0.029, -0.009], // +1%, -2%, -3%, +2%, +3%, -1%
-			cycleRepeats: 50,
+			cycleRepeats: 20,
 			startPrice: 100.00,
 			startVolume: 100000
 		};

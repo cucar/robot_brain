@@ -1298,4 +1298,132 @@ export default class BrainMySQL extends Brain {
 		const outputDimNames = channel.getOutputDimensions();
 		return outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined);
 	}
+
+	/**
+	 * Get detailed inference information for diagnostic output (MySQL implementation)
+	 */
+	async getInferenceDetails(level) {
+
+		// Get inferred neurons with their coordinates
+		const [inferences] = await this.conn.query(`
+			SELECT inf.neuron_id, inf.strength, c.dimension_id, c.val, d.name as dimension_name
+			FROM inferred_neurons inf
+			JOIN coordinates c ON inf.neuron_id = c.neuron_id
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE inf.age = 0 AND inf.level = ?
+			ORDER BY inf.neuron_id, d.name
+		`, [level]);
+
+		if (inferences.length === 0) return [];
+
+		// Group coordinates by neuron_id
+		const neuronMap = new Map();
+		for (const row of inferences) {
+			if (!neuronMap.has(row.neuron_id)) {
+				neuronMap.set(row.neuron_id, {
+					neuron_id: row.neuron_id,
+					strength: row.strength,
+					coordinates: {},
+					sources: []
+				});
+			}
+			neuronMap.get(row.neuron_id).coordinates[row.dimension_name] = row.val;
+		}
+
+		// Get connection inference sources
+		const [connSources] = await this.conn.query(`
+			SELECT cis.inferred_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
+			       c.habituation as conn_habituation, cis.prediction_strength
+			FROM connection_inference_sources cis
+			JOIN connections c ON c.id = cis.connection_id
+			WHERE cis.age = 0 AND cis.level = ?
+		`, [level]);
+
+		// Aggregate connection sources by neuron
+		const connSourceMap = new Map();
+		for (const row of connSources) {
+			if (!connSourceMap.has(row.inferred_neuron_id)) {
+				connSourceMap.set(row.inferred_neuron_id, {
+					type: 'connection',
+					connection_strength: 0,
+					connection_reward: 0,
+					connection_habituation: 0,
+					prediction_strength: 0,
+					count: 0
+				});
+			}
+			const src = connSourceMap.get(row.inferred_neuron_id);
+			src.connection_strength += row.conn_strength;
+			src.connection_reward += row.conn_reward;
+			src.connection_habituation += row.conn_habituation;
+			src.prediction_strength += row.prediction_strength;
+			src.count++;
+		}
+
+		// Average the values
+		for (const src of connSourceMap.values()) {
+			src.connection_strength /= src.count;
+			src.connection_reward /= src.count;
+			src.connection_habituation /= src.count;
+			delete src.count;
+		}
+
+		// Get pattern inference sources
+		const [patternSources] = await this.conn.query(`
+			SELECT pis.inferred_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
+			       c.habituation as conn_habituation, pf.strength as pattern_strength,
+			       pf.reward as pattern_reward, pf.habituation as pattern_habituation,
+			       pis.prediction_strength
+			FROM pattern_inference_sources pis
+			JOIN connections c ON c.id = pis.connection_id
+			JOIN pattern_future pf ON pf.pattern_neuron_id = pis.pattern_neuron_id AND pf.connection_id = pis.connection_id
+			WHERE pis.age = 0 AND pis.level = ?
+		`, [level]);
+
+		// Aggregate pattern sources by neuron
+		const patternSourceMap = new Map();
+		for (const row of patternSources) {
+			if (!patternSourceMap.has(row.inferred_neuron_id)) {
+				patternSourceMap.set(row.inferred_neuron_id, {
+					type: 'pattern',
+					connection_strength: 0,
+					connection_reward: 0,
+					connection_habituation: 0,
+					pattern_strength: 0,
+					pattern_reward: 0,
+					pattern_habituation: 0,
+					prediction_strength: 0,
+					count: 0
+				});
+			}
+			const src = patternSourceMap.get(row.inferred_neuron_id);
+			src.connection_strength += row.conn_strength;
+			src.connection_reward += row.conn_reward;
+			src.connection_habituation += row.conn_habituation;
+			src.pattern_strength += row.pattern_strength;
+			src.pattern_reward += row.pattern_reward;
+			src.pattern_habituation += row.pattern_habituation;
+			src.prediction_strength += row.prediction_strength;
+			src.count++;
+		}
+
+		// Average the values
+		for (const src of patternSourceMap.values()) {
+			src.connection_strength /= src.count;
+			src.connection_reward /= src.count;
+			src.connection_habituation /= src.count;
+			src.pattern_strength /= src.count;
+			src.pattern_reward /= src.count;
+			src.pattern_habituation /= src.count;
+			delete src.count;
+		}
+
+		// Attach sources to neurons
+		for (const [neuronId, neuron] of neuronMap) {
+			if (connSourceMap.has(neuronId)) neuron.sources.push(connSourceMap.get(neuronId));
+			if (patternSourceMap.has(neuronId)) neuron.sources.push(patternSourceMap.get(neuronId));
+		}
+
+		return Array.from(neuronMap.values());
+	}
 }

@@ -22,6 +22,9 @@ export default class Job {
 			// console.log('Registering channels with brain...');
 			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
 
+			// Apply runner options to channels if provided
+			if (this.runnerOptions?.diagnostic) for (const [_, channel] of this.brain.channels) channel.diagnostic = true;
+
 			// initialize brain (this will initialize channels and create dimensions)
 			// console.log('Initializing brain...');
 			await this.brain.init();

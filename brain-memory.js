@@ -1187,4 +1187,38 @@ export default class BrainMemory extends Brain {
 		console.log(`Active Connections: ${stats.activeConnections}`);
 		console.log(`Frame: ${stats.frameNumber}`);
 	}
+
+	/**
+	 * Get detailed inference information for diagnostic output (Memory implementation)
+	 * Note: This is a simplified stub for BrainMemory - full implementation would require
+	 * tracking source information similar to BrainMySQL's inference_sources tables
+	 */
+	async getInferenceDetails(level) {
+		// For now, return basic inference info without detailed source tracking
+		// Full implementation would require adding source tracking to in-memory structures
+		const details = [];
+
+		if (!this.inferredNeurons.has(level)) return details;
+
+		const levelInferences = this.inferredNeurons.get(level);
+		for (const [neuronId, data] of levelInferences) {
+			if (data.age !== 0) continue;
+
+			const coords = this.neurons.getCoordinates(neuronId);
+			const coordinates = {};
+			for (const coord of coords) {
+				const dimName = this.dimensionIdToName[coord.dimension_id];
+				if (dimName) coordinates[dimName] = coord.val;
+			}
+
+			details.push({
+				neuron_id: neuronId,
+				strength: data.strength,
+				coordinates,
+				sources: [] // Would need source tracking for full implementation
+			});
+		}
+
+		return details;
+	}
 }

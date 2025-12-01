@@ -18,6 +18,7 @@ export default class Channel {
 		this.frameNumber = 0; // frame counter for channel-specific operations
 		this.debug = false; // controls verbosity of channel output
 		this.debug2 = false; // more detailed, verbose debug mode
+		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 		this.inferredActions = []; // actions selected by resolveConflicts
 	}
 
@@ -177,6 +178,99 @@ export default class Channel {
 	 */
 	logResolution(totalCount, inputCount, outputCount, resolvedCount) {
 		console.log(`${this.name}: Resolved ${totalCount} inferences (${inputCount} inputs, ${outputCount} outputs) → ${resolvedCount} selected`);
+	}
+
+	/**
+	 * Display diagnostic information for inferences
+	 * @param {Array} inferenceDetails - detailed inference info from brain.getInferenceDetails()
+	 * @param {Array} resolvedInferences - resolved inferences after conflict resolution
+	 */
+	displayDiagnostics(inferenceDetails, resolvedInferences) {
+		if (!this.diagnostic || inferenceDetails.length === 0) return;
+
+		// Build a map of resolved neuron IDs for quick lookup
+		const resolvedIds = new Set(resolvedInferences.map(inf => inf.neuron_id));
+
+		// Group inferences by dimension for cleaner output
+		const outputDims = new Set(this.getOutputDimensions());
+		const eventDims = new Set(this.getEventDimensions());
+
+		const outputs = [];
+		const events = [];
+
+		for (const inf of inferenceDetails) {
+			const dimNames = Object.keys(inf.coordinates);
+			const isOutput = dimNames.some(dim => outputDims.has(dim));
+			const isEvent = dimNames.some(dim => eventDims.has(dim));
+
+			if (isOutput) outputs.push(inf);
+			else if (isEvent) events.push(inf);
+		}
+
+		// Display output inferences
+		if (outputs.length > 0) {
+			const parts = [];
+			for (const inf of outputs) {
+				const coordStr = this.formatCoordinates(inf.coordinates);
+				const sourceStr = this.formatSources(inf.sources);
+				const resolved = resolvedIds.has(inf.neuron_id) ? '✓' : '✗';
+				parts.push(`${coordStr}(${sourceStr}) ${resolved}`);
+			}
+			console.log(`  ${this.name} Actions: ${parts.join(' | ')}`);
+		}
+
+		// Display event predictions
+		if (events.length > 0) {
+			const parts = [];
+			for (const inf of events) {
+				const coordStr = this.formatCoordinates(inf.coordinates);
+				const sourceStr = this.formatSources(inf.sources);
+				const resolved = resolvedIds.has(inf.neuron_id) ? '✓' : '✗';
+				parts.push(`${coordStr}(${sourceStr}) ${resolved}`);
+			}
+			console.log(`  ${this.name} Events: ${parts.join(' | ')}`);
+		}
+	}
+
+	/**
+	 * Format coordinates for diagnostic display
+	 */
+	formatCoordinates(coordinates) {
+		const parts = [];
+		for (const [dim, val] of Object.entries(coordinates)) {
+			// Remove channel prefix for cleaner display
+			const shortDim = dim.replace(`${this.name}_`, '');
+			parts.push(`${shortDim}=${val}`);
+		}
+		return parts.join(',');
+	}
+
+	/**
+	 * Format source information for diagnostic display
+	 */
+	formatSources(sources) {
+		if (sources.length === 0) return 's:0';
+
+		const parts = [];
+		for (const src of sources) {
+			if (src.type === 'connection') {
+				const s = src.connection_strength.toFixed(0);
+				const r = src.connection_reward.toFixed(2);
+				const h = src.connection_habituation.toFixed(2);
+				const eff = src.prediction_strength.toFixed(0);
+				parts.push(`C:s${s}×r${r}×h${h}=${eff}`);
+			}
+			else if (src.type === 'pattern') {
+				const ps = src.pattern_strength.toFixed(0);
+				const pr = src.pattern_reward.toFixed(2);
+				const ph = src.pattern_habituation.toFixed(2);
+				const cs = src.connection_strength.toFixed(0);
+				const cr = src.connection_reward.toFixed(2);
+				const eff = src.prediction_strength.toFixed(0);
+				parts.push(`P:ps${ps}×pr${pr}×ph${ph}×cs${cs}×cr${cr}=${eff}`);
+			}
+		}
+		return parts.join('+');
 	}
 
 	/**

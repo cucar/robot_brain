@@ -14,9 +14,9 @@ export default class Brain {
 
 		// set hyperparameters
 		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
-		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
-		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
-		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
+		this.forgetCycles = 1; // number of frames between forget cycles (increased to let connections stabilize)
+		this.connectionForgetRate = 0.01; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
+		this.patternForgetRate = 0.01; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward factors decay toward 1.0 per forget cycle (0.05 = 5% decay toward neutral)
 		this.maxLevels = 10; // just to prevent against infinite recursion
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
@@ -33,7 +33,7 @@ export default class Brain {
 		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
 		this.habituationDecay = 0.75; // multiply habituation by this when connection/pattern is used for executed output
-		this.dishabituationRate = 0.1; // recovery toward 1.0 per forget cycle
+		this.dishabituationRate = 0.01; // recovery toward 1.0 per forget cycle
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -54,6 +54,7 @@ export default class Brain {
 		// Create readline interface for pausing between frames - used when debugging
 		this.debug = false;
 		this.debug2 = false; // deeper, more verbose debug level
+		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 		this.waitForUserInput = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
@@ -196,6 +197,9 @@ export default class Brain {
 	async processFrame(frame) {
 		const frameStart = performance.now();
 
+		// Display diagnostic frame header if enabled
+		if (this.diagnostic) this.displayFrameHeader(frame);
+
 		// age the active neurons in memory context - sliding the temporal window
 		await this.ageNeurons();
 
@@ -204,6 +208,9 @@ export default class Brain {
 
 		// apply rewards to previously executed decisions (before aging them further)
 		await this.applyRewards(channelRewards);
+
+		// Display reward information if diagnostic mode enabled
+		if (this.diagnostic && channelRewards.size > 0) this.displayRewards(channelRewards);
 
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
@@ -241,6 +248,32 @@ export default class Brain {
 	waitForUser(message) {
 		if (!this.waitForUserInput) return Promise.resolve();
 		return new Promise(resolve => this.rl.question(`\n${message}...`, resolve));
+	}
+
+	/**
+	 * Display diagnostic frame header with frame number and observations
+	 */
+	displayFrameHeader(frame) {
+		if (!this.diagnostic) return;
+
+		// Build observation string from frame
+		const observations = [];
+		for (const point of frame)
+			for (const [dim, val] of Object.entries(point))
+				observations.push(`${dim}=${val}`);
+
+		console.log(`\nF${this.frameNumber} | Obs: ${observations.join(', ')}`);
+	}
+
+	/**
+	 * Display reward information for diagnostic output
+	 */
+	displayRewards(channelRewards) {
+		if (!this.diagnostic) return;
+		const rewardParts = [];
+		for (const [channelName, reward] of channelRewards)
+			rewardParts.push(`${channelName}:${reward.toFixed(3)}x`);
+		console.log(`  Rewards: ${rewardParts.join(', ')}`);
 	}
 
 	/**
@@ -634,11 +667,27 @@ export default class Brain {
 		const channelInferences = await this.getChannelInferences();
 		if (channelInferences.size === 0) return;
 
+		// Get detailed inference information for diagnostics if enabled
+		let inferenceDetails = null;
+		if (this.diagnostic) inferenceDetails = await this.getInferenceDetails(0);
+
 		// Resolve conflicts for each channel and collect resolved inferences
 		// Channels resolve conflicts and store final inferred neurons in their own memory as well to be executed in the next frame
 		const resolvedInferences = [];
-		for (const [channelName, channelInference] of channelInferences)
-			resolvedInferences.push(...this.channels.get(channelName).resolveConflicts(channelInference));
+		for (const [channelName, channelInference] of channelInferences) {
+			const channel = this.channels.get(channelName);
+			const resolved = channel.resolveConflicts(channelInference);
+			resolvedInferences.push(...resolved);
+
+			// Display diagnostics for this channel if enabled
+			if (this.diagnostic && inferenceDetails) {
+				const channelDetails = inferenceDetails.filter(inf => {
+					const dims = Object.keys(inf.coordinates);
+					return dims.some(dim => dim.startsWith(channelName + '_'));
+				});
+				channel.displayDiagnostics(channelDetails, resolved);
+			}
+		}
 
 		// save selected predictions to be used later for accuracy reporting - implementation-specific
 		await this.saveResolvedPredictions(resolvedInferences);
@@ -840,6 +889,29 @@ export default class Brain {
 	 */
 	async mergeNewPatterns() {
 		throw new Error('mergeNewPatterns(predictionLevel) must be implemented by subclass');
+	}
+
+	/**
+	 * Get detailed inference information for diagnostic output (implementation-specific)
+	 * Returns array of objects with structure:
+	 * [{
+	 *   neuron_id: number,
+	 *   coordinates: {dim1: val1, dim2: val2},
+	 *   strength: number,
+	 *   sources: [{
+	 *     type: 'connection'|'pattern',
+	 *     connection_strength: number,
+	 *     connection_reward: number,
+	 *     connection_habituation: number,
+	 *     pattern_strength: number (if type='pattern'),
+	 *     pattern_reward: number (if type='pattern'),
+	 *     pattern_habituation: number (if type='pattern'),
+	 *     prediction_strength: number
+	 *   }]
+	 * }]
+	 */
+	async getInferenceDetails(level) {
+		throw new Error('getInferenceDetails(level) must be implemented by subclass');
 	}
 }
 
