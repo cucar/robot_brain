@@ -30,7 +30,7 @@ select * from connections;
 
 select c.neuron_id, d.name, d.type, c.val 
 from coordinates c join dimensions d on d.id = c.dimension_id 
--- where c.neuron_id in (7,8,9,10) 
+-- where c.neuron_id in () 
 order by d.type, d.name;
 
 select * from inferred_neurons where age = 0;

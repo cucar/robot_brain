@@ -183,7 +183,7 @@ export default class BrainMemory extends Brain {
 	/**
 	 * Age inferred neurons and clean up old ones (age >= 2)
 	 */
-	ageInferredNeurons(inferenceMap, label) {
+	ageInferredNeurons(inferenceMap) {
 		let cleaned = 0;
 		let aged = 0;
 
@@ -607,16 +607,12 @@ export default class BrainMemory extends Brain {
 	 * Check if a channel needs exploration (in-memory implementation)
 	 * Returns true if channel has no inferred outputs OR if holding too long
 	 * @param {string} channelName - name of the channel to check
+	 * @param {string} actionNeuronId - action neuron id - used to check if it's already inferred or not
 	 * @returns {Promise<boolean>} - true if channel needs exploration
 	 */
-	async channelNeedsExploration(channelName) {
+	async channelNeedsExploration(channelName, actionNeuronId) {
 		const channel = this.channels.get(channelName);
 		if (!channel) return false;
-
-		// Check if channel is holding too long (if it has holdingFrames property)
-		if (channel.holdingFrames !== undefined && channel.maxHoldingFrames !== undefined) {
-			if (channel.holdingFrames > channel.maxHoldingFrames) return true;
-		}
 
 		const outputDimNames = channel.getOutputDimensions();
 		if (outputDimNames.length === 0) return false;

@@ -174,6 +174,9 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Check if a channel needs exploration (MySQL implementation)
 	 * Returns true if channel has no inferred outputs OR if holding too long
+	 * @param {string} channelName - name of the channel to check
+	 * @param {string} actionNeuronId - action neuron id - used to check if it's already inferred or not
+	 * @returns {Promise<boolean>} - true if channel needs exploration
 	 */
 	async channelNeedsExploration(channelName, actionNeuronId) {
 		const channel = this.channels.get(channelName);
@@ -198,20 +201,9 @@ export default class BrainMySQL extends Brain {
 		const actionNeuronInferred = result[0].action_neuron_inferred === 1;
 
 		// If action neuron is already inferred, no need for exploration
-		// Check if channel is holding too long (if it has holdingFrames property)
-		// If it is, and we don't have it already as an inferred action, we need exploration
-		if (channel.holdingFrames && channel.maxHoldingFrames && channel.holdingFrames > channel.maxHoldingFrames) {
+		if (actionNeuronInferred) return false;
 
-			// if the action neuron is not inferred, we need exploration
-			if (!actionNeuronInferred) return true;
-
-			// if we are holding too long, and the action neuron is inferred, we don't need exploration,
-			// but we do need to make sure it's selected - update its strength to a very high value to make sure it's selected
-			await this.conn.query('UPDATE inferred_neurons SET strength = 1000000 WHERE neuron_id = ? and age = 0 and level = 0', [actionNeuronId]);
-			return false;
-		}
-
-		// Return true if NO outputs (needs exploration)
+		// If there are NO outputs, we need exploration
 		return inferredOutputCount === 0;
 	}
 
@@ -1283,7 +1275,7 @@ export default class BrainMySQL extends Brain {
 		}
 
 		if (this.debug) console.log(`Total rewarded: ${totalConnectionsRewarded} connections, ${totalPatternsRewarded} patterns, ${totalExplorationRewarded} exploration`);
-		await this.waitForUser('Rewards applied');
+		// await this.waitForUser('Rewards applied');
 	}
 
 	/**
@@ -1330,7 +1322,7 @@ export default class BrainMySQL extends Brain {
 			neuronMap.get(row.neuron_id).coordinates[row.dimension_name] = row.val;
 		}
 
-		// Get connection inference sources
+		// Get connection inference sources - keep each connection separate for diagnostic display
 		const [connSources] = await this.conn.query(`
 			SELECT cis.inferred_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
 			       c.habituation as conn_habituation, cis.prediction_strength
@@ -1339,36 +1331,24 @@ export default class BrainMySQL extends Brain {
 			WHERE cis.age = 0 AND cis.level = ?
 		`, [level]);
 
-		// Aggregate connection sources by neuron
+		// Group connection sources by neuron, keeping each connection separate
 		const connSourceMap = new Map();
 		for (const row of connSources) {
 			if (!connSourceMap.has(row.inferred_neuron_id)) {
 				connSourceMap.set(row.inferred_neuron_id, {
 					type: 'connection',
-					connection_strength: 0,
-					connection_reward: 0,
-					connection_habituation: 0,
-					prediction_strength: 0,
-					count: 0
+					sources: []
 				});
 			}
-			const src = connSourceMap.get(row.inferred_neuron_id);
-			src.connection_strength += row.conn_strength;
-			src.connection_reward += row.conn_reward;
-			src.connection_habituation += row.conn_habituation;
-			src.prediction_strength += row.prediction_strength;
-			src.count++;
+			connSourceMap.get(row.inferred_neuron_id).sources.push({
+				connection_strength: row.conn_strength,
+				connection_reward: row.conn_reward,
+				connection_habituation: row.conn_habituation,
+				prediction_strength: row.prediction_strength
+			});
 		}
 
-		// Average the values
-		for (const src of connSourceMap.values()) {
-			src.connection_strength /= src.count;
-			src.connection_reward /= src.count;
-			src.connection_habituation /= src.count;
-			delete src.count;
-		}
-
-		// Get pattern inference sources
+		// Get pattern inference sources - keep each pattern separate for diagnostic display
 		const [patternSources] = await this.conn.query(`
 			SELECT pis.inferred_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
 			       c.habituation as conn_habituation, pf.strength as pattern_strength,
@@ -1380,42 +1360,24 @@ export default class BrainMySQL extends Brain {
 			WHERE pis.age = 0 AND pis.level = ?
 		`, [level]);
 
-		// Aggregate pattern sources by neuron
+		// Group pattern sources by neuron, keeping each pattern separate
 		const patternSourceMap = new Map();
 		for (const row of patternSources) {
 			if (!patternSourceMap.has(row.inferred_neuron_id)) {
 				patternSourceMap.set(row.inferred_neuron_id, {
 					type: 'pattern',
-					connection_strength: 0,
-					connection_reward: 0,
-					connection_habituation: 0,
-					pattern_strength: 0,
-					pattern_reward: 0,
-					pattern_habituation: 0,
-					prediction_strength: 0,
-					count: 0
+					sources: []
 				});
 			}
-			const src = patternSourceMap.get(row.inferred_neuron_id);
-			src.connection_strength += row.conn_strength;
-			src.connection_reward += row.conn_reward;
-			src.connection_habituation += row.conn_habituation;
-			src.pattern_strength += row.pattern_strength;
-			src.pattern_reward += row.pattern_reward;
-			src.pattern_habituation += row.pattern_habituation;
-			src.prediction_strength += row.prediction_strength;
-			src.count++;
-		}
-
-		// Average the values
-		for (const src of patternSourceMap.values()) {
-			src.connection_strength /= src.count;
-			src.connection_reward /= src.count;
-			src.connection_habituation /= src.count;
-			src.pattern_strength /= src.count;
-			src.pattern_reward /= src.count;
-			src.pattern_habituation /= src.count;
-			delete src.count;
+			patternSourceMap.get(row.inferred_neuron_id).sources.push({
+				connection_strength: row.conn_strength,
+				connection_reward: row.conn_reward,
+				connection_habituation: row.conn_habituation,
+				pattern_strength: row.pattern_strength,
+				pattern_reward: row.pattern_reward,
+				pattern_habituation: row.pattern_habituation,
+				prediction_strength: row.prediction_strength
+			});
 		}
 
 		// Attach sources to neurons

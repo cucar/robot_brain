@@ -33,7 +33,7 @@ export default class Brain {
 		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
 		this.habituationDecay = 0.75; // multiply habituation by this when connection/pattern is used for executed output
-		this.dishabituationRate = 0.01; // recovery toward 1.0 per forget cycle
+		this.dishabituationRate = 0.1; // recovery toward 1.0 per forget cycle
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -187,6 +187,9 @@ export default class Brain {
 		if (this.debug2 && feedbackCount > 0)
 			console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 
+		// Display reward information if diagnostic mode enabled
+		if (this.diagnostic && channelRewards.size > 0) this.displayRewards(channelRewards);
+
 		return channelRewards;
 	}
 
@@ -208,9 +211,6 @@ export default class Brain {
 
 		// apply rewards to previously executed decisions (before aging them further)
 		await this.applyRewards(channelRewards);
-
-		// Display reward information if diagnostic mode enabled
-		if (this.diagnostic && channelRewards.size > 0) this.displayRewards(channelRewards);
 
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
@@ -312,7 +312,7 @@ export default class Brain {
 			exploredCount++;
 		}
 		if (this.debug2) console.log(`Explored ${exploredCount} channels without predictions`);
-		await this.waitForUser('inferred exploration');
+		// await this.waitForUser('inferred exploration');
 		return exploredCount;
 	}
 
@@ -794,12 +794,9 @@ export default class Brain {
 	/**
 	 * Check if a channel needs exploration (implementation-specific)
 	 * Returns true if channel has no inferred outputs OR if holding too long
-	 * @param {string} channelName - name of the channel to check
-	 * @param {string} actionNeuronId - action neuron id - used to check if it's already inferred or not
-	 * @returns {Promise<boolean>} - true if channel needs exploration
 	 */
-	async channelNeedsExploration(channelName, actionNeuronId) {
-		throw new Error('channelNeedsExploration() must be implemented by subclass');
+	async channelNeedsExploration() {
+		throw new Error('channelNeedsExploration(channelName, actionNeuronId) must be implemented by subclass');
 	}
 
 	/**
@@ -910,7 +907,7 @@ export default class Brain {
 	 *   }]
 	 * }]
 	 */
-	async getInferenceDetails(level) {
+	async getInferenceDetails() {
 		throw new Error('getInferenceDetails(level) must be implemented by subclass');
 	}
 }

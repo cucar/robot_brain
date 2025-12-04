@@ -34,10 +34,8 @@ export default class Channel {
 	/**
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * This method should execute actions, update channel state, and return final frame points
-	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
-	 * @returns {void}
 	 */
-	async executeOutputs(outputs) {
+	async executeOutputs() {
 		throw new Error('Channel must implement executeOutputs() method');
 	}
 
@@ -213,8 +211,9 @@ export default class Channel {
 			for (const inf of outputs) {
 				const coordStr = this.formatCoordinates(inf.coordinates);
 				const sourceStr = this.formatSources(inf.sources);
+				const strength = inf.strength.toFixed(0);
 				const resolved = resolvedIds.has(inf.neuron_id) ? '✓' : '✗';
-				parts.push(`${coordStr}(${sourceStr}) ${resolved}`);
+				parts.push(`${coordStr}(${sourceStr} → ${strength}) ${resolved}`);
 			}
 			console.log(`  ${this.name} Actions: ${parts.join(' | ')}`);
 		}
@@ -225,8 +224,9 @@ export default class Channel {
 			for (const inf of events) {
 				const coordStr = this.formatCoordinates(inf.coordinates);
 				const sourceStr = this.formatSources(inf.sources);
+				const strength = inf.strength.toFixed(0);
 				const resolved = resolvedIds.has(inf.neuron_id) ? '✓' : '✗';
-				parts.push(`${coordStr}(${sourceStr}) ${resolved}`);
+				parts.push(`${coordStr}(${sourceStr}→${strength}) ${resolved}`);
 			}
 			console.log(`  ${this.name} Events: ${parts.join(' | ')}`);
 		}
@@ -253,21 +253,29 @@ export default class Channel {
 
 		const parts = [];
 		for (const src of sources) {
-			if (src.type === 'connection') {
-				const s = src.connection_strength.toFixed(0);
-				const r = src.connection_reward.toFixed(2);
-				const h = src.connection_habituation.toFixed(2);
-				const eff = src.prediction_strength.toFixed(0);
-				parts.push(`C:s${s}×r${r}×h${h}=${eff}`);
+			if (src.type === 'connection' && src.sources) {
+				const connParts = [];
+				for (const conn of src.sources) {
+					const s = conn.connection_strength.toFixed(0);
+					const r = conn.connection_reward.toFixed(2);
+					const h = conn.connection_habituation.toFixed(2);
+					const eff = conn.prediction_strength.toFixed(0);
+					connParts.push(`s${s}×r${r}×h${h}=${eff}`);
+				}
+				parts.push(`C:${connParts.join(' + ')}`);
 			}
-			else if (src.type === 'pattern') {
-				const ps = src.pattern_strength.toFixed(0);
-				const pr = src.pattern_reward.toFixed(2);
-				const ph = src.pattern_habituation.toFixed(2);
-				const cs = src.connection_strength.toFixed(0);
-				const cr = src.connection_reward.toFixed(2);
-				const eff = src.prediction_strength.toFixed(0);
-				parts.push(`P:ps${ps}×pr${pr}×ph${ph}×cs${cs}×cr${cr}=${eff}`);
+			else if (src.type === 'pattern' && src.sources) {
+				const patternParts = [];
+				for (const pat of src.sources) {
+					const ps = pat.pattern_strength.toFixed(0);
+					const pr = pat.pattern_reward.toFixed(2);
+					const ph = pat.pattern_habituation.toFixed(2);
+					const cs = pat.connection_strength.toFixed(0);
+					const cr = pat.connection_reward.toFixed(2);
+					const eff = pat.prediction_strength.toFixed(0);
+					patternParts.push(`ps${ps}×pr${pr}×ph${ph}×cs${cs}×cr${cr}=${eff}`);
+				}
+				parts.push(`P:${patternParts.join('+')}`);
 			}
 		}
 		return parts.join('+');
@@ -275,19 +283,15 @@ export default class Channel {
 
 	/**
 	 * Get resolved event predictions for this channel - override in subclasses
-	 * @param {Array} events - predictions for event dimensions
-	 * @returns {Array} - strongest prediction per event dimension
 	 */
-	resolveEventPredictions(events) {
+	resolveEventPredictions() {
 		throw new Error('Channel must implement resolveEventPredictions(events) method');
 	}
 
 	/**
 	 * Resolve action inferences: select strongest for each output dimension
-	 * @param {Array} actions - inferences for output dimensions
-	 * @returns {Array} - strongest inference per output dimension
 	 */
-	resolveActionInferences(actions) {
+	resolveActionInferences() {
 		throw new Error('Channel must implement resolveEventPredictions(actions) method');
 	}
 

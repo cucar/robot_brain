@@ -432,6 +432,8 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Resolve event predictions: select strongest for each input dimension. Also calculates continuous price prediction for accuracy tracking
+	 * @param {Array} events - predictions for event dimensions
+	 * @returns {Array} - strongest prediction per event dimension
 	 */
 	resolveEventPredictions(events) {
 
@@ -455,6 +457,8 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Resolve action inferences: select strongest for each output dimension
+	 * @param {Array} actions - inferences for output dimensions
+	 * @returns {Array} - strongest inference per output dimension
 	 */
 	resolveActionInferences(actions) {
 		if (actions.length === 0) return [];
@@ -583,6 +587,8 @@ export default class StockChannel extends Channel {
 	/**
 	 * Execute stock actions based on brain output coordinates
 	 * Returns final frame points (inputs + outputs, with inputs updated to reflect executed outputs)
+	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
+	 * @returns {void}
 	 */
 	async executeOutputs(outputs) {
 
@@ -606,6 +612,9 @@ export default class StockChannel extends Channel {
 		else if (activityValue < 0) this.executeSell(activityValue);
 		// hold activity = hold signal (0)
 		else this.executeHold();
+
+		// show current status
+		if (this.diagnostic) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice.toFixed(2)}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
 	}
 
 	/**
