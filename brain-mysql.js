@@ -173,7 +173,8 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Check if a channel needs exploration (MySQL implementation)
-	 * Returns true if channel has no inferred outputs OR if holding too long
+	 * Uses probabilistic exploration inversely proportional to total inference strength.
+	 * Higher confidence predictions = lower exploration probability.
 	 * @param {string} channelName - name of the channel to check
 	 * @param {string} actionNeuronId - action neuron id - used to check if it's already inferred or not
 	 * @returns {Promise<boolean>} - true if channel needs exploration
@@ -189,22 +190,28 @@ export default class BrainMySQL extends Brain {
 		const outputDimIds = outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined);
 		if (outputDimIds.length === 0) return false;
 
-		// Check if any inferred neurons exist for output dimensions AND if action neuron is among them
+		// Get total inference strength for output dimensions AND check if action neuron is among them
 		const [result] = await this.conn.query(`
-            SELECT COUNT(*) as inferred_output_count, MAX(IF(inf.neuron_id = ?, 1, 0)) as action_neuron_inferred
+            SELECT COALESCE(SUM(inf.strength), 0) as total_strength, MAX(IF(inf.neuron_id = ?, 1, 0)) as action_neuron_inferred
             FROM inferred_neurons inf
             WHERE inf.age = 0
             AND inf.level = 0
             AND EXISTS (SELECT 1 FROM coordinates c WHERE c.neuron_id = inf.neuron_id AND c.dimension_id IN (?))
 		`, [actionNeuronId, outputDimIds]);
-		const inferredOutputCount = result[0].inferred_output_count;
+		const totalStrength = result[0].total_strength || 0;
 		const actionNeuronInferred = result[0].action_neuron_inferred === 1;
 
 		// If action neuron is already inferred, no need for exploration
 		if (actionNeuronInferred) return false;
 
-		// If there are NO outputs, we need exploration
-		return inferredOutputCount === 0;
+		// If no outputs at all, must explore
+		if (totalStrength === 0) return true;
+
+		// Probabilistic exploration inversely proportional to confidence
+		const explorationProb = this.minExploration +
+			(this.maxExploration - this.minExploration) /
+			(1 + totalStrength / this.explorationScale);
+		return Math.random() < explorationProb;
 	}
 
 	/**

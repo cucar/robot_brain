@@ -35,6 +35,11 @@ export default class Brain {
 		this.habituationDecay = 0.75; // multiply habituation by this when connection/pattern is used for executed output
 		this.dishabituationRate = 0.1; // recovery toward 1.0 per forget cycle
 
+		// exploration hyperparameters - probability inversely proportional to inference strength
+		this.minExploration = 0.01; // 1% minimum - never stop exploring
+		this.maxExploration = 1.0; // 100% when totalStrength = 0
+		this.explorationScale = 1000; // controls decay rate of exploration probability
+
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
 
