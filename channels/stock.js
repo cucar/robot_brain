@@ -456,28 +456,29 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Resolve action inferences: select strongest for each output dimension
+	 * Resolve action inferences using Boltzmann selection
+	 * Probabilistically selects actions based on their inference strengths
 	 * @param {Array} actions - inferences for output dimensions
-	 * @returns {Array} - strongest inference per output dimension
+	 * @returns {Array} - selected inference per output dimension
 	 */
 	resolveActionInferences(actions) {
 		if (actions.length === 0) return [];
 
-		// Group by dimension and select strongest for each
+		// Group by dimension and select using Boltzmann
 		const byDimension = this.groupByDimension(actions);
-		return this.selectStrongestPerDimension(byDimension);
+		return this.selectPerDimension(byDimension);
 	}
 
 	/**
-	 * Select strongest inference for each dimension
+	 * Select one inference per dimension using Boltzmann selection
 	 * @param {Map} byDimension - Map of dimension name to array of inferences
-	 * @returns {Array} - strongest inference per dimension
+	 * @returns {Array} - selected inference per dimension
 	 */
-	selectStrongestPerDimension(byDimension) {
+	selectPerDimension(byDimension) {
 		const resolved = [];
 		for (const [_, inferences] of byDimension) {
-			const strongest = this.findStrongest(inferences);
-			if (strongest) resolved.push(strongest);
+			const selected = this.boltzmannSelect(inferences);
+			if (selected) resolved.push(selected);
 		}
 		return resolved;
 	}
@@ -532,15 +533,28 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Find the strongest inference from a list
+	 * Boltzmann selection from a list of inferences
+	 * Selects probabilistically based on strength - higher strength = higher probability
+	 * With strengths A=2, B=3, C=5: probabilities are 20%, 30%, 50%
 	 * @param {Array} inferences - list of inferences
-	 * @returns {Object|null} - strongest inference or null if empty
+	 * @returns {Object|null} - selected inference or null if empty
 	 */
-	findStrongest(inferences) {
+	boltzmannSelect(inferences) {
 		if (inferences.length === 0) return null;
-		let strongest = inferences[0];
-		for (const inf of inferences) if (inf.strength > strongest.strength) strongest = inf;
-		return strongest;
+		if (inferences.length === 1) return inferences[0];
+
+		// Calculate total strength for normalization
+		const totalStrength = inferences.reduce((sum, inf) => sum + inf.strength, 0);
+		if (totalStrength <= 0) return inferences[0]; // Fallback if all strengths are 0 or negative
+
+		// Sample from distribution
+		const r = Math.random() * totalStrength;
+		let cumulative = 0;
+		for (const inf of inferences) {
+			cumulative += inf.strength;
+			if (r < cumulative) return inf;
+		}
+		return inferences[inferences.length - 1]; // Fallback for floating point edge case
 	}
 
 	/**
