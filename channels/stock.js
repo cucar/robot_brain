@@ -32,15 +32,7 @@ export default class StockChannel extends Channel {
 		this.explorationStrategy = 'strongest'; // boltzmann or strongest
 
 		// Episode metrics tracking
-		this.totalProfit = 0; // Total profit from all trades in current episode
-		this.totalLoss = 0; // Total loss from all trades in current episode
-		this.totalTrades = 0; // Total number of trades in current episode
-		this.profitableTrades = 0; // Number of profitable trades in current episode
-		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
-
-		// Continuous prediction tracking for price
-		this.lastPredictedPrice = null; // Predicted price from previous frame
-		this.pricePredictionErrors = []; // Array of price prediction errors for calculating metrics
+		this.initializeEpisodeMetrics();
 
 		// Holdout configuration
 		this.holdoutRows = 0; // Number of rows to hold out from training (set by job)
@@ -143,6 +135,19 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
+	 * Initialize episode metrics to zero
+	 */
+	initializeEpisodeMetrics() {
+		this.totalProfit = 0; // Total profit from all trades in current episode
+		this.totalLoss = 0; // Total loss from all trades in current episode
+		this.totalTrades = 0; // Total number of trades in current episode
+		this.profitableTrades = 0; // Number of profitable trades in current episode
+		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
+		this.lastPredictedPrice = null; // Predicted price from previous frame
+		this.pricePredictionErrors = []; // Array of price prediction errors for calculating metrics
+	}
+
+	/**
 	 * Load all CSV rows into memory for holdout management
 	 */
 	async loadAllRows() {
@@ -196,15 +201,7 @@ export default class StockChannel extends Channel {
 		this.currentVolume = null;
 
 		// Reset episode metrics
-		this.totalProfit = 0;
-		this.totalLoss = 0;
-		this.totalTrades = 0;
-		this.profitableTrades = 0;
-		this.unrealizedProfit = 0;
-
-		// Reset continuous prediction tracking
-		this.lastPredictedPrice = null;
-		this.pricePredictionErrors = [];
+		this.initializeEpisodeMetrics();
 
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
