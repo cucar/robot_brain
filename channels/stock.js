@@ -15,7 +15,7 @@ export default class StockChannel extends Channel {
 		this.symbol = name;
 
 		// Hyperparameters
-		this.rewardAmplification = 5; // Power to raise reward ratios to (higher = stronger rewards/penalties)
+		this.rewardAmplification = 30; // Power to raise reward ratios to (higher = stronger rewards/penalties)
 
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
@@ -27,6 +27,9 @@ export default class StockChannel extends Channel {
 		// Deterministic exploration
 		this.explorationSequence = [1, 0, -1, 0]; // BUY, HOLD, SELL, HOLD
 		this.explorationIndex = 0; // Current position in exploration sequence
+
+		// exploration strategy - boltzmann or strongest selection
+		this.explorationStrategy = 'strongest'; // boltzmann or strongest
 
 		// Episode metrics tracking
 		this.totalProfit = 0; // Total profit from all trades in current episode
@@ -451,35 +454,50 @@ export default class StockChannel extends Channel {
 		if (byDimension.has(priceChangeDim)) this.calculateContinuousPricePrediction(byDimension.get(priceChangeDim));
 		else this.lastPredictedPrice = null;
 
-		// Select strongest for each dimension
-		return this.selectStrongestPerDimension(byDimension);
+		// Select events for each dimension
+		return this.selectPerDimension(byDimension);
 	}
 
 	/**
-	 * Resolve action inferences using Boltzmann selection
-	 * Probabilistically selects actions based on their inference strengths
+	 * Resolve action inferences: filter invalid actions, then select action inferences
 	 * @param {Array} actions - inferences for output dimensions
 	 * @returns {Array} - selected inference per output dimension
 	 */
 	resolveActionInferences(actions) {
 		if (actions.length === 0) return [];
 
-		// Group by dimension and select using Boltzmann
-		const byDimension = this.groupByDimension(actions);
+		// Filter out invalid actions based on current state
+		const activityDim = `${this.symbol}_activity`;
+		const validActions = actions.filter(action => {
+
+			// if not an activity action, error out - should not happen
+			const activity = action.coordinates[activityDim];
+			if (activity === undefined) throw new Error(`Non-action neuron found for inference: ${JSON.stringify(actions)}`);
+
+			// Can't buy if already owned
+			if (activity > 0 && this.owned) return false;
+
+			// Can't sell if not owned
+			return !(activity < 0 && !this.owned);
+		});
+
+		// if all the given actions are invalid, nothing left
+		if (validActions.length === 0) return [];
+
+		// Group by dimension and select the actions to execute
+		const byDimension = this.groupByDimension(validActions);
 		return this.selectPerDimension(byDimension);
 	}
 
 	/**
-	 * Select one inference per dimension using Boltzmann selection
+	 * Select one inference per dimension
 	 * @param {Map} byDimension - Map of dimension name to array of inferences
 	 * @returns {Array} - selected inference per dimension
 	 */
 	selectPerDimension(byDimension) {
 		const resolved = [];
-		for (const [_, inferences] of byDimension) {
-			const selected = this.boltzmannSelect(inferences);
-			if (selected) resolved.push(selected);
-		}
+		for (const [_, inferences] of byDimension)
+			resolved.push(this.explorationStrategy === 'boltzmann' ? this.boltzmannSelect(inferences) : this.findStrongest(inferences));
 		return resolved;
 	}
 
@@ -534,27 +552,43 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Boltzmann selection from a list of inferences
-	 * Selects probabilistically based on strength - higher strength = higher probability
-	 * With strengths A=2, B=3, C=5: probabilities are 20%, 30%, 50%
+	 * Selects probabilistically using Boltzmann (softmax) distribution
+	 * P(i) = exp(strength_i / T) / sum(exp(strength_j / T))
+	 * Lower temperature = more deterministic (favors highest strength)
+	 * Higher temperature = more random (approaches uniform distribution)
 	 * @param {Array} inferences - list of inferences
+	 * @param {number} temperature - temperature parameter (default: 1.0)
 	 * @returns {Object|null} - selected inference or null if empty
 	 */
-	boltzmannSelect(inferences) {
+	boltzmannSelect(inferences, temperature = 1.0) {
 		if (inferences.length === 0) return null;
 		if (inferences.length === 1) return inferences[0];
 
-		// Calculate total strength for normalization
-		const totalStrength = inferences.reduce((sum, inf) => sum + inf.strength, 0);
-		if (totalStrength <= 0) return inferences[0]; // Fallback if all strengths are 0 or negative
+		// Calculate exponential weights (Boltzmann factors)
+		const weights = inferences.map(inf => Math.exp(inf.strength / temperature));
+		const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+		if (totalWeight <= 0 || !isFinite(totalWeight)) return inferences[0]; // Fallback for numerical issues
 
 		// Sample from distribution
-		const r = Math.random() * totalStrength;
+		const r = Math.random() * totalWeight;
 		let cumulative = 0;
-		for (const inf of inferences) {
-			cumulative += inf.strength;
-			if (r < cumulative) return inf;
+		for (let i = 0; i < inferences.length; i++) {
+			cumulative += weights[i];
+			if (r < cumulative) return inferences[i];
 		}
 		return inferences[inferences.length - 1]; // Fallback for floating point edge case
+	}
+
+	/**
+	 * Find the strongest inference from a list
+	 * @param {Array} inferences - list of inferences
+	 * @returns {Object|null} - strongest inference or null if empty
+	 */
+	findStrongest(inferences) {
+		if (inferences.length === 0) return null;
+		let strongest = inferences[0];
+		for (const inf of inferences) if (inf.strength > strongest.strength) strongest = inf;
+		return strongest;
 	}
 
 	/**
@@ -600,15 +634,14 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Execute stock actions based on brain output coordinates
-	 * Returns final frame points (inputs + outputs, with inputs updated to reflect executed outputs)
+	 * Invalid actions are filtered during conflict resolution, so we should only receive valid actions
 	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
-	 * @returns {void}
 	 */
 	async executeOutputs(outputs) {
 
-		// if no outputs, just return inputs as-is
+		// if no outputs, nothing to execute
 		if (!outputs || outputs.length === 0) {
-			this.lastAction = null; // No action
+			this.lastAction = null;
 			return;
 		}
 
@@ -628,20 +661,16 @@ export default class StockChannel extends Channel {
 		else this.executeHold();
 
 		// show current status
-		if (this.diagnostic) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice.toFixed(2)}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
+		if (this.diagnostic) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice?.toFixed(2) ?? 'N/A'}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
 	}
 
 	/**
-	 * Execute a buy action
+	 * Execute a buy action - should only be called when not already owned (filtered in conflict resolution)
 	 */
 	executeBuy(activityValue) {
 
-		// if we already own the stock, nothing to do - should not happen - just log it
-		if (this.owned) {
-			console.warn(`${this.symbol}: BUY SIGNAL IGNORED - Already owned at $${this.entryPrice}`);
-			this.lastAction = 0; // Ignored = hold
-			return;
-		}
+		// Safety check - should never happen since conflict resolution filters invalid actions
+		if (this.owned) throw new Error(`${this.symbol}: BUY received when already owned - conflict resolution failed`);
 
 		// buy stock per request coming from the brain
 		this.owned = true;
@@ -659,16 +688,12 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Execute a sell action
+	 * Execute a sell action - should only be called when owned (filtered in conflict resolution)
 	 */
 	executeSell(activityValue) {
 
-		// if we don't own the stock, nothing to do - should not happen - just log it
-		if (!this.owned) {
-			console.warn(`${this.symbol}: SELL SIGNAL IGNORED - Not owned`);
-			this.lastAction = 0; // Ignored = hold
-			return;
-		}
+		// Safety check - should never happen since conflict resolution filters invalid actions
+		if (!this.owned) throw new Error(`${this.symbol}: SELL received when not owned - conflict resolution failed`);
 
 		// Sell owned stock - calculate realized profit/loss - assume we are selling at the end of day price of yesterday (beginning price of today)
 		const profit = this.previousPrice - this.entryPrice;

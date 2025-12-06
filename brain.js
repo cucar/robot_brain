@@ -12,33 +12,47 @@ export default class Brain {
 	 */
 	constructor() {
 
-		// set hyperparameters
-		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active
-		this.forgetCycles = 1; // number of frames between forget cycles (increased to let connections stabilize)
-		this.connectionForgetRate = 0.01; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
-		this.patternForgetRate = 0.01; // how much pattern strengths decay per forget cycle
-		this.rewardForgetRate = 0.05; // how much reward factors decay toward 1.0 per forget cycle (0.05 = 5% decay toward neutral)
-		this.maxLevels = 10; // just to prevent against infinite recursion
-		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
-		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
-		this.minPredictionStrength = 10.0; // minimum strength for a prediction to be made
-		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
-		this.rewardTimeDecayFactor = 0.9; // reward temporal decay = POW(rewardTimeDecayFactor, age)
-		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
-		this.connectionNegativeReinforcement = 1.0; // how much to weaken connections when predictions fail
-		this.minErrorPatternThreshold = 5.0; // minimum prediction strength to create error-driven pattern
+		//************************************************************
+		// hyperparameters
+		//************************************************************
+
+		// structural limits for the brain
+		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active - this determines the context length
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 1000; // maximum strength value for connections and patterns (clamped to prevent overflow)
 		this.maxConnectionReward = 10.0; // maximum reward factor for connections and patterns (clamped to prevent extreme values)
 		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
-		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
-		this.habituationDecay = 0.75; // multiply habituation by this when connection/pattern is used for executed output
-		this.dishabituationRate = 0.1; // recovery toward 1.0 per forget cycle
 
-		// exploration hyperparameters - probability inversely proportional to inference strength
-		this.minExploration = 0.01; // 1% minimum - never stop exploring
+		// connection learning parameters
+		this.connectionNegativeReinforcement = 1.0; // how much to weaken connections when predictions fail
+
+		// pattern learning parameters
+		this.minErrorPatternThreshold = 50.0; // minimum prediction strength to create error-driven pattern
+		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
+		this.maxLevels = 10; // just to prevent against infinite recursion
+
+		// inference parameters
+		this.minInferenceStrength = 10.0; // minimum strength for an inference to be made
+		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
+		this.rewardTimeDecayFactor = 0.95; // reward temporal decay = POW(rewardTimeDecayFactor, age)
+
+		// reward parameters
+		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
+		this.habituationDecay = 0.95; // multiply habituation by this when connection/pattern is used for executed output
+
+		// exploration parameters - probability inversely proportional to inference strength
+		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
+		this.minExploration = 0.001; // 0.1% minimum - never stop exploring
 		this.maxExploration = 1.0; // 100% when totalStrength = 0
-		this.explorationScale = 1000; // controls decay rate of exploration probability
+		this.explorationScale = 50; // controls decay rate of exploration probability (should match typical inference strengths)
+
+		// forget cycle parameters - very important - fights curse of dimensionality
+		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
+		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
+		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
+		this.rewardForgetRate = 0.05; // how much reward factors decay toward 1.0 per forget cycle (0.05 = 5% decay toward neutral)
+		this.dishabituationRate = 0.01; // recovery toward 1.0 per forget cycle
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -56,10 +70,12 @@ export default class Brain {
 		// Continuous prediction metrics (for channels that support it)
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
 
-		// Create readline interface for pausing between frames - used when debugging
+		// Debugging flags
 		this.debug = false;
 		this.debug2 = false; // deeper, more verbose debug level
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
+
+		// Create readline interface for pausing between frames - used when debugging
 		this.waitForUserInput = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 	}
@@ -319,6 +335,22 @@ export default class Brain {
 		if (this.debug2) console.log(`Explored ${exploredCount} channels without predictions`);
 		// await this.waitForUser('inferred exploration');
 		return exploredCount;
+	}
+
+	/**
+	 * determine if we should explore or not based on total inference strength
+	 */
+	async decideExploration(totalInferenceStrength) {
+
+		// Linear decay from maxExploration to minExploration as strength increases
+		// explorationScale defines the strength at which exploration reaches minimum
+		const explorationRange = this.maxExploration - this.minExploration;
+		let inferenceScale = totalInferenceStrength / this.explorationScale;
+		if (inferenceScale > 1.0) inferenceScale = 1.0;
+		const explorationProb = this.maxExploration - inferenceScale * explorationRange;
+
+		// Randomly decide if we should explore based on probability
+		return Math.random() < explorationProb;
 	}
 
 	/**
@@ -695,7 +727,7 @@ export default class Brain {
 		}
 
 		// save selected predictions to be used later for accuracy reporting - implementation-specific
-		await this.saveResolvedPredictions(resolvedInferences);
+		if (resolvedInferences.length > 0) await this.saveResolvedPredictions(resolvedInferences);
 
 		if (this.debug) console.log(`Resolved ${resolvedInferences.length} neurons after conflict resolution`);
 	}

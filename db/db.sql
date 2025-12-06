@@ -166,7 +166,10 @@ FROM exploration_inference_sources
 WHERE inferred_neuron_id = 4 AND level = 0 AND age = 0;
 
 -- check state
-select count(*) from neurons;
+select * from active_neurons;
+select * from neurons;
+select * from coordinates;
+select * from pattern_past;
 select * from dimensions;
 select * from coordinates where neuron_id = 5;
 select count(*) from connections;

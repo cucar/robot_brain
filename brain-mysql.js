@@ -198,20 +198,17 @@ export default class BrainMySQL extends Brain {
             AND inf.level = 0
             AND EXISTS (SELECT 1 FROM coordinates c WHERE c.neuron_id = inf.neuron_id AND c.dimension_id IN (?))
 		`, [actionNeuronId, outputDimIds]);
-		const totalStrength = result[0].total_strength || 0;
+		const totalInferenceStrength = result[0].total_strength || 0;
 		const actionNeuronInferred = result[0].action_neuron_inferred === 1;
 
 		// If action neuron is already inferred, no need for exploration
 		if (actionNeuronInferred) return false;
 
 		// If no outputs at all, must explore
-		if (totalStrength === 0) return true;
+		if (totalInferenceStrength === 0) return true;
 
 		// Probabilistic exploration inversely proportional to confidence
-		const explorationProb = this.minExploration +
-			(this.maxExploration - this.minExploration) /
-			(1 + totalStrength / this.explorationScale);
-		return Math.random() < explorationProb;
+		return this.decideExploration(totalInferenceStrength);
 	}
 
 	/**
@@ -410,7 +407,7 @@ export default class BrainMySQL extends Brain {
 			WHERE level = ? AND age = 0
 			GROUP BY inferred_neuron_id, level
 			HAVING total_strength >= ?
-		`, [level, this.minPredictionStrength]);
+		`, [level, this.minInferenceStrength]);
 		if (this.debug) console.log(`Level ${level}: Connection inference predicted ${inferenceResult.affectedRows} neurons`);
 		if (inferenceResult.affectedRows === 0) return 0;
 
@@ -589,7 +586,7 @@ export default class BrainMySQL extends Brain {
 			WHERE level = ? AND age = 0
 			GROUP BY inferred_neuron_id, level
 			HAVING total_strength >= ?
-		`, [sourceLevel - 1, this.minPredictionStrength]);
+		`, [sourceLevel - 1, this.minInferenceStrength]);
 		if (this.debug) console.log(`Level ${sourceLevel}: Pattern inference predicted ${inferenceResult.affectedRows} neurons at level ${sourceLevel - 1}`);
 		if (inferenceResult.affectedRows === 0) return 0;
 

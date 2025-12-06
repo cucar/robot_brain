@@ -33,7 +33,7 @@ export default class Channel {
 
 	/**
 	 * Execute outputs based on brain predictions - override in subclasses
-	 * This method should execute actions, update channel state, and return final frame points
+	 * Invalid actions should be filtered during conflict resolution, so only valid actions should be received
 	 */
 	async executeOutputs() {
 		throw new Error('Channel must implement executeOutputs() method');
