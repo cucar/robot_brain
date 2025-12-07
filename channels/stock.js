@@ -15,7 +15,7 @@ export default class StockChannel extends Channel {
 		this.symbol = name;
 
 		// Hyperparameters
-		this.rewardAmplification = 30; // Power to raise reward ratios to (higher = stronger rewards/penalties)
+		this.rewardAmplification = 10; // Power to raise reward ratios to (higher = stronger rewards/penalties)
 
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
@@ -422,7 +422,7 @@ export default class StockChannel extends Channel {
 				const percentChange = (totalChange / this.entryPrice) * 100;
 				const recentChange = this.currentPrice - this.previousPrice;
 
-				console.log(`${this.symbol}: SOLD - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+				console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
 				console.log(`${this.symbol}: Ratio: ${ratio.toFixed(4)} → Reward factor: ${rewardFactor.toFixed(4)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 		}

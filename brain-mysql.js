@@ -238,15 +238,29 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Reports accuracy of neuron inference from the previous frame for ALL levels.
+	 * Only checks input predictions (event and state dimensions), not output predictions (action dimensions).
+	 * Output predictions become self-fulfilled prophecies when executed, so they shouldn't be checked.
+	 * Higher-level neurons (pattern neurons) are always checked since they don't have coordinates.
 	 */
 	async reportPredictionsAccuracy() {
 
-		// get the inferred neurons and correct activations
+		// Get the inferred neurons and correct activations
+		// For level 0: only count neurons that have at least one input dimension (event or state)
+		// For level > 0: count all neurons (pattern neurons don't have coordinates)
 		const [data] = await this.conn.query(`
 			SELECT inf.level, COUNT(*) as total, SUM(IF(an.neuron_id IS NOT NULL, 1, 0)) as correct
 			FROM inferred_neurons_resolved inf
 			LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
 			WHERE inf.age = 1
+			AND (
+				inf.level > 0
+				OR EXISTS (
+					SELECT 1 FROM coordinates c
+					JOIN dimensions d ON c.dimension_id = d.id
+					WHERE c.neuron_id = inf.neuron_id
+					AND d.type IN ('event', 'state')
+				)
+			)
 			GROUP BY inf.level
 		`);
 
@@ -277,6 +291,12 @@ export default class BrainMySQL extends Brain {
 				AND NOT EXISTS (
 					SELECT 1 FROM active_neurons an
 					WHERE an.neuron_id = inf.neuron_id AND an.level = 0 AND an.age = 0
+				)
+				AND EXISTS (
+					SELECT 1 FROM coordinates c2
+					JOIN dimensions d2 ON c2.dimension_id = d2.id
+					WHERE c2.neuron_id = inf.neuron_id
+					AND d2.type IN ('event', 'state')
 				)
 				ORDER BY inf.neuron_id, d.name
 			`);
@@ -409,7 +429,6 @@ export default class BrainMySQL extends Brain {
 			HAVING total_strength >= ?
 		`, [level, this.minInferenceStrength]);
 		if (this.debug) console.log(`Level ${level}: Connection inference predicted ${inferenceResult.affectedRows} neurons`);
-		if (inferenceResult.affectedRows === 0) return 0;
 
 		// Delete predictions that didn't meet the strength threshold (not in inferred_neurons)
 		const [deleteResult] = await this.conn.query(`
@@ -1279,7 +1298,7 @@ export default class BrainMySQL extends Brain {
 		}
 
 		if (this.debug) console.log(`Total rewarded: ${totalConnectionsRewarded} connections, ${totalPatternsRewarded} patterns, ${totalExplorationRewarded} exploration`);
-		// await this.waitForUser('Rewards applied');
+		await this.waitForUser('Rewards applied');
 	}
 
 	/**

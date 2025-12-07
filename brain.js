@@ -33,19 +33,19 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// inference parameters
-		this.minInferenceStrength = 10.0; // minimum strength for an inference to be made
+		this.minInferenceStrength = 100.0; // minimum strength for an inference to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.95; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 
 		// reward parameters
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
-		this.habituationDecay = 0.95; // multiply habituation by this when connection/pattern is used for executed output
+		this.habituationDecay = 0.99; // multiply habituation by this when connection/pattern is used for executed output
 
 		// exploration parameters - probability inversely proportional to inference strength
 		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
-		this.minExploration = 0.001; // 0.1% minimum - never stop exploring
+		this.minExploration = 0.05; // minimum - never stop exploring
 		this.maxExploration = 1.0; // 100% when totalStrength = 0
-		this.explorationScale = 50; // controls decay rate of exploration probability (should match typical inference strengths)
+		this.explorationScale = 200; // controls decay rate of exploration probability (should match typical inference strengths)
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
@@ -350,7 +350,10 @@ export default class Brain {
 		const explorationProb = this.maxExploration - inferenceScale * explorationRange;
 
 		// Randomly decide if we should explore based on probability
-		return Math.random() < explorationProb;
+		const explore = Math.random() < explorationProb;
+		if (this.debug) console.log(`Total inference strength: ${totalInferenceStrength} → Exploration probability: ${explorationProb.toFixed(2)} → Explore: ${explore}`);
+		if (explore) await this.waitForUser('deciding to do exploration even though we have inference');
+		return explore;
 	}
 
 	/**
