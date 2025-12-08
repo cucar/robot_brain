@@ -80,11 +80,16 @@ export default class Channel {
 	 * Get inferred actions scheduled for current frame
 	 * Returns actions selected by resolveConflicts in previous frame
 	 */
-	async getFrameOutputs() {
-		if (this.inferredActions.length === 0) return [];
-		const actions = this.inferredActions;
-		this.inferredActions = [];
-		return actions;
+	getFrameOutputs() {
+		return this.inferredActions;
+	}
+
+	/**
+	 * Set inferred actions scheduled for next frame
+	 */
+	setFrameOutputs(inferences, resolved) {
+		if (this.debug) this.logResolution(inferences, resolved);
+		this.inferredActions = this.getActions(resolved).map(inf => inf.coordinates);
 	}
 
 	/**
@@ -110,72 +115,60 @@ export default class Channel {
 	}
 
 	/**
-	 * Resolve conflicts between multiple inferred base neurons for this channel
-	 * Base implementation calls getResolvedInference and stores result automatically
-	 * Child classes override getResolvedInference, not this method
-	 * @param {Array} inference - Array of inference objects with structure: [{ neuron_id, coordinates: {dim1: val1, dim2: val2}, strength: number }]
-	 * @returns {Array} - Array of selected predictions to execute (can be 0, 1, or many)
-	 */
-	resolveConflicts(inference) {
-
-		// ask the child class to resolve conflicts and return the selected neurons
-		const resolvedInference = this.getResolvedInference(inference);
-
-		// store only output neurons for next frame execution
-		const outputDims = new Set(this.getOutputDimensions());
-		const inferredOutput = resolvedInference.filter(pred => Object.keys(pred.coordinates).some(dim => outputDims.has(dim)));
-		this.inferredActions = inferredOutput.map(pred => pred.coordinates);
-
-		return resolvedInference;
-	}
-
-	/**
-	 * returns event and action inferences
-	 * @param {Array} inferences - all inferences
-	 * @returns {Object} - { events, actions }
-	 */
-	getEventsAndActions(inferences) {
-		const eventDims = new Set(this.getEventDimensions());
-		const outputDims = new Set(this.getOutputDimensions());
-		const events = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => eventDims.has(dim)));
-		const actions = inferences.filter(inf => Object.keys(inf.coordinates).some(dim => outputDims.has(dim)));
-		return { events, actions };
-	}
-
-	/**
-	 * Get resolved inference for the channel
-	 * Resolves conflicts for both event predictions and action inferences
-	 * Conflict resolution logic is implemented in channel subclasses
-	 * State neurons exist only to help guide actions, so they are filtered out
+	 * Resolve conflicts between multiple inferred neurons
+	 * Implemented in base class - calls resolveEventPredictions and resolveActionInferences
 	 * @param {Array} inferences - all inferred neurons for this channel
-	 * @returns {Array} - resolved neurons according to channel specific logic
+	 * @returns {Array} - resolved inferences
 	 */
-	getResolvedInference(inferences) {
+	resolveConflicts(inferences) {
 
 		// if there are no inferences, nothing to resolve
 		if (!inferences || inferences.length === 0) return [];
 
-		// Separate into input predictions and output inferences
-		const { events, actions } = this.getEventsAndActions(inferences);
-
 		// Resolve event predictions: select strongest for each input dimension
-		const resolvedEvents = this.resolveEventPredictions(events);
+		const resolvedEvents = this.resolveEventPredictions(this.getEvents(inferences));
 
-		// Resolve action inferences: select strongest action
-		const resolvedActions = this.resolveActionInferences(actions);
+		// Resolve action inferences: select best action
+		const resolvedActions = this.resolveActionInferences(this.getActions(inferences));
 
 		// Combine and return
-		const resolved = [...resolvedEvents, ...resolvedActions];
-		if (this.debug) console.log('getResolvedInference', resolved);
-		if (this.debug) this.logResolution(inferences.length, events.length, actions.length, resolved.length);
-		return resolved;
+		return [...resolvedEvents, ...resolvedActions];
+	}
+
+	/**
+	 * Correct invalid action inferences based on channel state
+	 * Default implementation: no corrections needed
+	 * Child classes override to implement state-aware corrections
+	 * @param {Array} inferences - resolved inferences
+	 * @returns {Array} - corrections array: [{ originalNeuronId, correctedCoordinates }]
+	 */
+	correctActionInferences(inferences) {
+		return []; // Default: no corrections
+	}
+
+	/**
+	 * returns event inferences
+	 */
+	getEvents(inferences) {
+		const eventDims = new Set(this.getEventDimensions());
+		return inferences.filter(inf => Object.keys(inf.coordinates).some(dim => eventDims.has(dim)));
+	}
+
+	/**
+	 * returns action inferences
+	 */
+	getActions(inferences) {
+		const outputDims = new Set(this.getOutputDimensions());
+		return inferences.filter(inf => Object.keys(inf.coordinates).some(dim => outputDims.has(dim)));
 	}
 
 	/**
 	 * Log resolution results for debugging
 	 */
-	logResolution(totalCount, inputCount, outputCount, resolvedCount) {
-		console.log(`${this.name}: Resolved ${totalCount} inferences (${inputCount} inputs, ${outputCount} outputs) → ${resolvedCount} selected`);
+	logResolution(inferences, resolved) {
+		const events = this.getEvents(inferences);
+		const actions = this.getActions(inferences);
+		console.log(`${this.name}: Resolved ${inferences.length} inferences (${events.length} inputs, ${actions.length} outputs) → ${resolved.length} selected`, resolved);
 	}
 
 	/**

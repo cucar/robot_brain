@@ -212,14 +212,14 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * save resolved predictions to MySQL storage (implementation of abstract method)
+	 * save resolved inferences to MySQL storage (implementation of abstract method)
 	 * This is called after conflict resolution at base level (level 0)
 	 */
-	async saveResolvedPredictions(allSelectedPredictions) {
-		// Batch insert all selected predictions at once (all at level 0)
+	async saveResolvedInferences(resolvedInferences) {
+		// Batch insert all inferences at once (all at level 0)
 		await this.conn.query(
 			'INSERT INTO inferred_neurons_resolved (neuron_id, level, age, strength) VALUES ?',
-			[allSelectedPredictions.map(p => [p.neuron_id, 0, 0, p.strength])]
+			[resolvedInferences.map(p => [p.neuron_id, 0, 0, p.strength])]
 		);
 	}
 
@@ -443,18 +443,32 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Write exploration prediction to storage (MySQL implementation)
-	 * Creates prediction in inferred_neurons and tracks sources in exploration_inference_sources
-	 * @param {Number} actionNeuronId - action neuron id
-	 * @returns {Promise<void>}
+	 * Override an inference with a new neuron (unified method for correction and exploration)
+	 * Both correction and exploration are override mechanisms - the only difference is:
+	 * - Correction: interprets existing inference to make it valid
+	 * - Exploration: randomly selects a valid action
+	 *
+	 * This method:
+	 * 1. Cleans up ALL inference sources (connection, pattern, exploration) for original neuron
+	 * 2. Inserts override sources (exploration_inference_sources) for the new neuron
+	 * 3. Updates inference_chain (removes original, adds new)
+	 * 4. Updates inferred_neurons (removes original, adds new)
+	 *
+	 * @param {Number} overrideNeuronId - neuron ID to use instead
+	 * @param {Number|null} originalNeuronId - neuron ID being overridden (null for pure exploration)
 	 */
-	async saveExplorationAction(actionNeuronId) {
+	async overrideInference(overrideNeuronId, originalNeuronId = null) {
 
-		// Populate exploration_inference_sources with ALL active connections that could predict this neuron
-		// Only record connections that actually exist - if none exist yet, that's OK
-		// When the sequence is observed, reinforceConnections() will create them
-		// Then future exploration of the same action will have connections to reward
-		// Include habituation in strength calculation for consistency with connection inference
+		// 1. Clean up inference sources for BOTH neurons
+		const neuronsToClean = originalNeuronId ? [originalNeuronId, overrideNeuronId] : [overrideNeuronId];
+
+		for (const neuronId of neuronsToClean) {
+			await this.conn.query(`DELETE FROM connection_inference_sources WHERE inferred_neuron_id = ? AND age = 0`, [neuronId]);
+			await this.conn.query(`DELETE FROM pattern_inference_sources WHERE inferred_neuron_id = ? AND age = 0`, [neuronId]);
+			await this.conn.query(`DELETE FROM exploration_inference_sources WHERE inferred_neuron_id = ? AND age = 0`, [neuronId]);
+		}
+
+		// 2. Insert override sources for the new neuron
 		const [result] = await this.conn.query(`
 			INSERT INTO exploration_inference_sources (inferred_neuron_id, age, connection_id, prediction_strength)
 			SELECT c.to_neuron_id, 0, c.id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1)
@@ -464,34 +478,50 @@ export default class BrainMySQL extends Brain {
 			AND c.to_neuron_id = ?
 			AND c.distance = an.age + 1
 			AND c.strength > 0
-		`, [this.peakTimeDecayFactor, actionNeuronId]);
-		if (this.debug) {
-			if (result.affectedRows > 0) console.log(`Exploration: ${result.affectedRows} possible connection sources`);
-			else console.log(`Exploration: No active neurons that could predict the output neuron`);
+		`, [this.peakTimeDecayFactor, overrideNeuronId]);
+
+		if (this.debug && result.affectedRows > 0) console.log(`  Found ${result.affectedRows} possible connection sources for override`);
+
+		// 3. Update inference_chain (delete original, insert new)
+		if (originalNeuronId) await this.conn.query(`DELETE FROM inference_chain WHERE base_neuron_id = ? AND age = 0`, [originalNeuronId]);
+		await this.conn.query(`INSERT IGNORE INTO inference_chain (base_neuron_id, source_neuron_id, age) VALUES (?, ?, 0)`, [overrideNeuronId, overrideNeuronId]);
+
+		// 4. Update inferred_neurons (delete original, insert new)
+		if (originalNeuronId) await this.conn.query(`DELETE FROM inferred_neurons WHERE neuron_id = ? AND age = 0 AND level = 0`, [originalNeuronId]);
+		await this.conn.query(`INSERT IGNORE INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, ?)`, [overrideNeuronId, 1000000]);
+	}
+
+	/**
+	 * Correct inferred actions when conflict resolution changes them (MySQL implementation)
+	 * Correction is an override mechanism that interprets existing connection/pattern inferences
+	 * Skips corrections for neurons that came from exploration (already overridden)
+	 * @param {Array} corrections - Array of { originalNeuronId, correctedCoordinates }
+	 */
+	async correctInferredActions(corrections) {
+		if (!corrections || corrections.length === 0) return;
+
+		for (const correction of corrections) {
+			const { originalNeuronId, correctedCoordinates } = correction;
+
+			// Skip if this neuron came from exploration (check if it has exploration_inference_sources)
+			const [explorationCheck] = await this.conn.query(
+				'SELECT COUNT(*) as count FROM exploration_inference_sources WHERE inferred_neuron_id = ? AND age = 0',
+				[originalNeuronId]
+			);
+
+			if (explorationCheck[0].count > 0) {
+				if (this.debug) console.log(`Skipping correction for neuron ${originalNeuronId}: came from exploration`);
+				continue;
+			}
+
+			// Find or create neuron for corrected action
+			const [correctedNeuronId] = await this.getFrameNeurons([correctedCoordinates]);
+
+			if (this.debug) console.log(`Correcting inference: neuron ${originalNeuronId} → ${correctedNeuronId}`);
+
+			// Use unified override method
+			await this.overrideInference(correctedNeuronId, originalNeuronId);
 		}
-
-		// even if there are no active connections that could predict this neuron, we still have to infer it to execute
-		// 1M strength is arbitrary but very high to make sure it's selected over other habitual options
-		// if (result.affectedRows === 0)
-		await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, ?)
-		`, [actionNeuronId, 1000000]);
-
-		// Write prediction to inferred_neurons - use sum of all connection strengths, or default if no connections exist
-		// else await this.conn.query(`
-		// 	INSERT INTO inferred_neurons (neuron_id, level, age, strength)
-		// 	SELECT inferred_neuron_id, 0, 0, SUM(prediction_strength) as total_strength
-		// 	FROM exploration_inference_sources
-		// 	WHERE age = 0
-		// 	GROUP BY inferred_neuron_id
-		// `);
-
-		// Insert into inference_chain - exploration neurons point to themselves (no source)
-		await this.conn.query(`
-			INSERT INTO inference_chain (base_neuron_id, source_neuron_id, age) VALUES (?, ?, 0)
-		`, [actionNeuronId, actionNeuronId]);
-
-		if (this.debug) console.log(`Exploration: inferred neuron ${actionNeuronId}`);
 	}
 
 	/**

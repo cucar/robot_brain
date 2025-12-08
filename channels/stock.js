@@ -3,6 +3,11 @@ import { createReadStream, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
 
+const SELL = -1;
+const HOLD_OUT = -0.5;
+const HOLD_IN = 0.5;
+const BUY = 1;
+
 /**
  * Stock Channel Implementation - this channel is used for buying/selling stocks based on their values
  */
@@ -25,7 +30,7 @@ export default class StockChannel extends Channel {
 		this.previousVolume = null; // Track previous volume for change calculation
 
 		// Deterministic exploration
-		this.explorationSequence = [1, 0, -1, 0]; // BUY, HOLD, SELL, HOLD
+		this.explorationSequence = [BUY, HOLD_IN, SELL, HOLD_OUT];
 		this.explorationIndex = 0; // Current position in exploration sequence
 
 		// exploration strategy - boltzmann or strongest selection
@@ -280,18 +285,14 @@ export default class StockChannel extends Channel {
 	 * returns the state dimensions for the channel
 	 */
 	getStateDimensions() {
-		return [
-			`${this.symbol}_position`
-		];
+		return [];
 	}
 
 	/**
 	 * returns the output dimensions for the channel
 	 */
 	getOutputDimensions() {
-		return [
-			`${this.symbol}_activity` // -1 to sell, 0 to hold, and +1 to buy
-		];
+		return [ `${this.symbol}_activity` ];
 	}
 
 	/**
@@ -321,15 +322,21 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Returns a valid exploration action based on current stock ownership
-	 * Uses deterministic exploration sequence (habituation mechanism handles extended holding)
+	 * Returns a valid exploration action based on current position
+	 * Returns only feasible actions: if owned, can sell or hold-in; if not owned, can buy or hold-out
 	 */
 	getExplorationAction() {
 		const activityDim = `${this.symbol}_activity`;
 		const actions = [];
-		actions.push({ [activityDim]: this.owned ? -1 : 1 }); // buy or sell
-		actions.push({ [activityDim]: 0 });  // hold
-		return actions[Math.floor(Math.random() * actions.length)]; // return a random action
+		if (this.owned) {
+			actions.push({ [activityDim]: SELL });
+			actions.push({ [activityDim]: HOLD_IN });
+		}
+		else {
+			actions.push({ [activityDim]: BUY });
+			actions.push({ [activityDim]: HOLD_OUT });
+		}
+		return actions[Math.floor(Math.random() * actions.length)];
 
 		// NOTE: following code is deterministic to be able to troubleshoot output performance issues
 		// Return deterministic action from sequence
@@ -360,7 +367,7 @@ export default class StockChannel extends Channel {
 	 * Get frame state data for this stock channel
 	 */
 	getFrameState() {
-		return [ { [`${this.symbol}_position`]: this.owned ? 1 : 0 } ];
+		return [];
 	}
 
 	/**
@@ -456,34 +463,65 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Resolve action inferences: filter invalid actions, then select action inferences
+	 * Resolve action conflicts: select best action when multiple predicted
 	 * @param {Array} actions - inferences for output dimensions
-	 * @returns {Array} - selected inference per output dimension
+	 * @returns {Array} - resolved actions (one per dimension)
 	 */
 	resolveActionInferences(actions) {
 		if (actions.length === 0) return [];
 
-		// Filter out invalid actions based on current state
-		const activityDim = `${this.symbol}_activity`;
-		const validActions = actions.filter(action => {
-
-			// if not an activity action, error out - should not happen
-			const activity = action.coordinates[activityDim];
-			if (activity === undefined) throw new Error(`Non-action neuron found for inference: ${JSON.stringify(actions)}`);
-
-			// Can't buy if already owned
-			if (activity > 0 && this.owned) return false;
-
-			// Can't sell if not owned
-			return !(activity < 0 && !this.owned);
-		});
-
-		// if all the given actions are invalid, nothing left
-		if (validActions.length === 0) return [];
-
-		// Group by dimension and select the actions to execute
-		const byDimension = this.groupByDimension(validActions);
+		// Group by dimension and select the action to execute
+		const byDimension = this.groupByDimension(actions);
 		return this.selectPerDimension(byDimension);
+	}
+
+	/**
+	 * Correct invalid action inferences based on current position
+	 * Maps position-agnostic actions to executable actions based on current position
+	 * @param {Array} inferences - resolved inferences
+	 * @returns {Array} - corrections: [{ originalNeuronId, correctedCoordinates }]
+	 */
+	correctActionInferences(inferences) {
+
+		// get the action inferences
+		const actions = this.getActions(inferences);
+		if (actions.length === 0) return [];
+
+		// Check each resolved action and correct if needed
+		const activityDim = `${this.symbol}_activity`;
+		const corrections = [];
+		for (const action of actions) {
+
+			// get the activity value
+			const activity = action.coordinates[activityDim];
+			if (activity === undefined) continue; // Not an action neuron
+
+			// Determine if correction is needed based on position
+			let correctedActivity = null;
+			if (activity === HOLD_IN && !this.owned) correctedActivity = BUY;
+			if (activity === HOLD_OUT && this.owned) correctedActivity = SELL;
+			if (activity === BUY && this.owned) correctedActivity = HOLD_IN;
+			if (activity === SELL && !this.owned) correctedActivity = HOLD_OUT;
+
+			// if no correction is needed, skip
+			if (correctedActivity === null) continue;
+
+			// If correction needed, track it
+			corrections.push({ originalNeuronId: action.neuron_id, correctedCoordinates: { [activityDim]: correctedActivity } });
+		}
+
+		return corrections;
+	}
+
+	/**
+	 * returns the label for an activity value
+	 */
+	getActionName(activityValue) {
+		if (activityValue === BUY) return 'BUY';
+		if (activityValue === HOLD_IN) return 'HOLD_IN';
+		if (activityValue === HOLD_OUT) return 'HOLD_OUT';
+		if (activityValue === SELL) return 'SELL';
+		return 'UNKNOWN';
 	}
 
 	/**
@@ -631,7 +669,7 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Execute stock actions based on brain output coordinates
-	 * Invalid actions are filtered during conflict resolution, so we should only receive valid actions
+	 * Conflict resolution ensures actions are position-aware, so we should only receive valid actions
 	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
 	 */
 	async executeOutputs(outputs) {
@@ -650,12 +688,11 @@ export default class StockChannel extends Channel {
 		const activityValue = output[`${this.symbol}_activity`];
 		if (activityValue === undefined) throw new Error('No activity found in outputs');
 
-		// Positive activity = buy signal (+1)
-		if (activityValue > 0) this.executeBuy(activityValue);
-		// Negative activity = sell signal (-1)
-		else if (activityValue < 0) this.executeSell(activityValue);
-		// hold activity = hold signal (0)
-		else this.executeHold();
+		// Determine action type: After conflict resolution, these should be position-appropriate
+		if (activityValue === BUY) this.executeBuy(activityValue);
+		if (activityValue === HOLD_IN) this.executeHoldIn(activityValue);
+		if (activityValue === HOLD_OUT) this.executeHoldOut(activityValue);
+		if (activityValue === SELL) this.executeSell(activityValue);
 
 		// show current status
 		if (this.diagnostic) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice?.toFixed(2) ?? 'N/A'}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
@@ -679,7 +716,7 @@ export default class StockChannel extends Channel {
 
 		// Track trade metrics
 		this.totalTrades++;
-		this.lastAction = 1; // BUY
+		this.lastAction = BUY;
 
 		if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${this.previousPrice} (activity: ${activityValue})`);
 	}
@@ -717,14 +754,22 @@ export default class StockChannel extends Channel {
 		this.owned = false;
 		this.entryPrice = this.previousPrice; // Track sell price for sold position feedback
 		this.holdingFrames = 0; // Reset holding counter
-		this.lastAction = -1; // SELL
+		this.lastAction = SELL;
 	}
 
 	/**
-	 * Execute a hold action
+	 * Execute a hold-in action
 	 */
-	executeHold() {
-		if (this.debug) console.log(`${this.symbol}: HOLD SIGNAL - ${this.owned ? '' : 'Not '}Owned`);
-		this.lastAction = 0; // HOLD
+	executeHoldIn() {
+		if (this.debug) console.log(`${this.symbol}: HOLD IN SIGNAL (Owned)`);
+		this.lastAction = HOLD_IN;
+	}
+
+	/**
+	 * Execute a hold-out action
+	 */
+	executeHoldOut() {
+		if (this.debug) console.log(`${this.symbol}: HOLD OUT SIGNAL (Not Owned)`);
+		this.lastAction = HOLD_OUT;
 	}
 }
