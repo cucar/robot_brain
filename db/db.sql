@@ -69,58 +69,12 @@ join dimensions td on td.id = tc.dimension_id
 WHERE t.age = 0  -- target neurons are newly activated
 AND t.level = 0  -- target neurons are at the specified level
 AND f.level = t.level  -- restrict to same level only
--- we used to have the condition below that enabled us to do associative pooling, but I'm realizing that 
--- it should really be used only for spatial processing - it's a special case of that 
+-- we used to have the condition below that enabled us to do associative pooling, but I'm realizing that
+-- it should really be used only for spatial processing - it's a special case of that
 -- spatial pooling will look at the neighboring neurons in terms of X-Y coordinates
--- associative pooling is just a special case of that where there are no X-Y coordinates	
+-- associative pooling is just a special case of that where there are no X-Y coordinates
 -- AND (t.neuron_id != f.neuron_id OR f.age > 0)  -- no self-connections at same age
-AND f.age > 0 -- at this point, we are only learning connections between different ages to use for inference
--- Block connections where non-action neurons predict state/event neurons
--- Allowed: action→*, *→action, event→event
--- Blocked: state→state, state→event, event→state
-AND NOT (
-	(
-		-- Block state → state
-		EXISTS (
-			SELECT 1 FROM coordinates cf
-			JOIN dimensions df ON df.id = cf.dimension_id
-			WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
-		)
-		AND EXISTS (
-			SELECT 1 FROM coordinates ct
-			JOIN dimensions dt ON dt.id = ct.dimension_id
-			WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
-		)
-	)
-	OR
-	(
-		-- Block state → event
-		EXISTS (
-			SELECT 1 FROM coordinates cf
-			JOIN dimensions df ON df.id = cf.dimension_id
-			WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
-		)
-		AND EXISTS (
-			SELECT 1 FROM coordinates ct
-			JOIN dimensions dt ON dt.id = ct.dimension_id
-			WHERE ct.neuron_id = t.neuron_id AND dt.type = 'event'
-		)
-	)
-	OR
-	(
-		-- Block event → state
-		EXISTS (
-			SELECT 1 FROM coordinates cf
-			JOIN dimensions df ON df.id = cf.dimension_id
-			WHERE cf.neuron_id = f.neuron_id AND df.type = 'event'
-		)
-		AND EXISTS (
-			SELECT 1 FROM coordinates ct
-			JOIN dimensions dt ON dt.id = ct.dimension_id
-			WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
-		)
-	)
-);
+AND f.age > 0; -- at this point, we are only learning connections between different ages to use for inference
 
 select * 
 from exploration_inference_sources eis
@@ -316,7 +270,7 @@ CREATE TABLE IF NOT EXISTS dimensions (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(50) UNIQUE NOT NULL,
     channel VARCHAR(50) NOT NULL,
-    type ENUM('state', 'event', 'action') NOT NULL
+    type ENUM('event', 'action') NOT NULL
 ) ENGINE=MEMORY;
 
 -- these dimensions can be used for visual processing

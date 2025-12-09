@@ -114,7 +114,6 @@ export default class Brain {
 		if (this.debug2) console.log('Initializing dimensions for registered channels...');
 		for (const [channelName, channel] of this.channels) {
 			await this.insertChannelDimensions(channel.getEventDimensions(), channelName, 'event');
-			await this.insertChannelDimensions(channel.getStateDimensions(), channelName, 'state');
 			await this.insertChannelDimensions(channel.getOutputDimensions(), channelName, 'action');
 		}
 	}
@@ -171,11 +170,8 @@ export default class Brain {
 			// execute outputs - this updates channel state
 			await channel.executeOutputs(channelOutputs);
 
-			// get the frame state inputs from the channel as it may have changed from outputs
-			const channelState = await channel.getFrameState();
-
 			// Add frame points to the frame
-			frame.push(...[ ...channelEvents, ...channelState, ...channelOutputs ]);
+			frame.push(...[ ...channelEvents, ...channelOutputs ]);
 		}
 
 		if (this.debug) console.log(`frame points: ${JSON.stringify(frame)}`);

@@ -537,12 +537,12 @@ export default class BrainMemory extends Brain {
 			const coords = this.neurons.getCoordinates(neuronId);
 			if (coords.length === 0) continue;
 
-			// Check if this neuron has input dimensions
+			// Check if this neuron has event dimensions
 			for (const coord of coords) {
 				const dim = this.dimensionIdToName[coord.dimension_id];
 				const dimInfo = this.dimensions.get(dim);
 
-				if (dimInfo && dimInfo.type === 'input') {
+				if (dimInfo && dimInfo.type === 'event') {
 					rows.push({
 						neuron_id: neuronId,
 						strength: data.strength,

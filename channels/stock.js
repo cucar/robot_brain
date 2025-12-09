@@ -282,13 +282,6 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * returns the state dimensions for the channel
-	 */
-	getStateDimensions() {
-		return [];
-	}
-
-	/**
 	 * returns the output dimensions for the channel
 	 */
 	getOutputDimensions() {
@@ -361,13 +354,6 @@ export default class StockChannel extends Channel {
 
 		// Compute and return discretized changes
 		return this.computeChangeInputs();
-	}
-
-	/**
-	 * Get frame state data for this stock channel
-	 */
-	getFrameState() {
-		return [];
 	}
 
 	/**

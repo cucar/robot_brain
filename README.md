@@ -347,7 +347,6 @@ export default class CustomJob extends Job {
 ### Channel Output Format
 Channels execute outputs and provide feedback automatically. The brain processes:
 - **Event dimensions**: Sensory data from channel `getFrameEvents()`
-- **State dimensions**: State data from channel `getFrameState()`
 - **Action dimensions**: Motor commands via channel `executeOutputs()`
 - **Reward signals**: Performance feedback via channel `getRewards()`
 

@@ -47,14 +47,7 @@ export default class Channel {
 	}
 
 	/**
-	 * Get state dimension names - override in subclasses - default implementation returns empty array
-	 */
-	getStateDimensions() {
-		return [];
-	}
-
-	/**
-	 * Get output dimension names - override in subclasses  
+	 * Get output dimension names - override in subclasses
 	 */
 	getOutputDimensions() {
 		throw new Error('Channel must implement getOutputDimensions() method');
@@ -66,14 +59,6 @@ export default class Channel {
 	 */
 	async getFrameEvents() {
 		throw new Error('Channel must implement getFrameEvents() method');
-	}
-
-	/**
-	 * Get frame state data - override in subclasses
-	 * Returns array of input neuron objects: [{ [input-dim]: value }]
-	 */
-	async getFrameState() {
-		throw new Error('Channel must implement getFrameState() method');
 	}
 
 	/**

@@ -238,14 +238,14 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Reports accuracy of neuron inference from the previous frame for ALL levels.
-	 * Only checks input predictions (event and state dimensions), not output predictions (action dimensions).
+	 * Only checks input predictions (event dimensions), not output predictions (action dimensions).
 	 * Output predictions become self-fulfilled prophecies when executed, so they shouldn't be checked.
 	 * Higher-level neurons (pattern neurons) are always checked since they don't have coordinates.
 	 */
 	async reportPredictionsAccuracy() {
 
 		// Get the inferred neurons and correct activations
-		// For level 0: only count neurons that have at least one input dimension (event or state)
+		// For level 0: only count neurons that have at least one event dimension
 		// For level > 0: count all neurons (pattern neurons don't have coordinates)
 		const [data] = await this.conn.query(`
 			SELECT inf.level, COUNT(*) as total, SUM(IF(an.neuron_id IS NOT NULL, 1, 0)) as correct
@@ -258,7 +258,7 @@ export default class BrainMySQL extends Brain {
 					SELECT 1 FROM coordinates c
 					JOIN dimensions d ON c.dimension_id = d.id
 					WHERE c.neuron_id = inf.neuron_id
-					AND d.type IN ('event', 'state')
+					AND d.type = 'event'
 				)
 			)
 			GROUP BY inf.level
@@ -849,58 +849,12 @@ export default class BrainMySQL extends Brain {
             WHERE t.age = 0  -- target neurons are newly activated
             AND t.level = :level  -- target neurons are at the specified level
             AND f.level = t.level  -- restrict to same level only
-			-- we used to have the condition below that enabled us to do associative pooling, but I'm realizing that 
-            -- it should really be used only for spatial processing - it's a special case of that 
+			-- we used to have the condition below that enabled us to do associative pooling, but I'm realizing that
+            -- it should really be used only for spatial processing - it's a special case of that
 			-- spatial pooling will look at the neighboring neurons in terms of X-Y coordinates
-			-- associative pooling is just a special case of that where there are no X-Y coordinates	
+			-- associative pooling is just a special case of that where there are no X-Y coordinates
             -- AND (t.neuron_id != f.neuron_id OR f.age > 0)  -- no self-connections at same age
             AND f.age > 0 -- at this point, we are only learning connections between different ages to use for inference
-			-- Block connections where non-action neurons predict state/event neurons
-			-- Allowed: action→*, *→action, event→event
-			-- Blocked: state→state, state→event, event→state
-			AND NOT (
-				(
-					-- Block state → state
-					EXISTS (
-						SELECT 1 FROM coordinates cf
-						JOIN dimensions df ON df.id = cf.dimension_id
-						WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
-					)
-					AND EXISTS (
-						SELECT 1 FROM coordinates ct
-						JOIN dimensions dt ON dt.id = ct.dimension_id
-						WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
-					)
-				)
-				OR
-				(
-					-- Block state → event
-					EXISTS (
-						SELECT 1 FROM coordinates cf
-						JOIN dimensions df ON df.id = cf.dimension_id
-						WHERE cf.neuron_id = f.neuron_id AND df.type = 'state'
-					)
-					AND EXISTS (
-						SELECT 1 FROM coordinates ct
-						JOIN dimensions dt ON dt.id = ct.dimension_id
-						WHERE ct.neuron_id = t.neuron_id AND dt.type = 'event'
-					)
-				)
-				OR
-				(
-					-- Block event → state
-					EXISTS (
-						SELECT 1 FROM coordinates cf
-						JOIN dimensions df ON df.id = cf.dimension_id
-						WHERE cf.neuron_id = f.neuron_id AND df.type = 'event'
-					)
-					AND EXISTS (
-						SELECT 1 FROM coordinates ct
-						JOIN dimensions dt ON dt.id = ct.dimension_id
-						WHERE ct.neuron_id = t.neuron_id AND dt.type = 'state'
-					)
-				)
-			)
 			ON DUPLICATE KEY UPDATE strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, strength + VALUES(strength)))
 		`, { level, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 	}
