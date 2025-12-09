@@ -45,7 +45,7 @@ export default class Brain {
 		this.inactivityThreshold = 0; // frames of inactivity before exploration - require activity in every frame
 		this.minExploration = 0.05; // minimum - never stop exploring
 		this.maxExploration = 1.0; // 100% when totalStrength = 0
-		this.explorationScale = 200; // controls decay rate of exploration probability (should match typical inference strengths)
+		this.explorationScale = 100; // controls decay rate of exploration probability (should match typical inference strengths)
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)

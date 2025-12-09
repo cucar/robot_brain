@@ -20,9 +20,9 @@ export default class StockTrainingJob extends Job {
 
 		// Simple configuration - edit these values as needed
 		this.config = {
-			symbols: ['KGC', 'GLD', 'SPY'],       // Stock symbols to train on
-			maxEpisodes: 1,                      // Number of training episodes
-			holdoutRows: 50,                       // Number of rows to hold out for prediction testing
+			symbols: ['KGC' /* , 'GLD', 'SPY' */],       // Stock symbols to train on
+			maxEpisodes: 100,                      // Number of training episodes
+			holdoutRows: 5240,                       // Number of rows to hold out for prediction testing
 			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
 		};
 
@@ -249,6 +249,12 @@ export default class StockTrainingJob extends Job {
 
 		// Reset context but keep learned patterns
 		await this.brain.resetContext();
+
+		// reset the stock channels owned flags
+		for (const [, channel] of this.brain.channels) {
+			channel.inferredActions = [];
+			channel.owned = false;
+		}
 
 		// Reset accuracy stats for this episode
 		this.brain.resetAccuracyStats();
