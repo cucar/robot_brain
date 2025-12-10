@@ -14,15 +14,10 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
 -- DROP TABLE IF EXISTS inferred_neurons;
--- DROP TABLE IF EXISTS inferred_neurons_resolved;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
--- DROP TABLE IF EXISTS connection_inference_sources;
--- DROP TABLE IF EXISTS pattern_inference_sources;
--- DROP TABLE IF EXISTS exploration_inference_sources;
--- DROP TABLE IF EXISTS inference_chain;
--- DROP TABLE IF EXISTS unpack_sources;
+-- DROP TABLE IF EXISTS inference_sources;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
@@ -331,17 +326,18 @@ CREATE TABLE IF NOT EXISTS pattern_past (
 
 -- pattern_future: connections FROM the peak (for inference/unpacking)
 CREATE TABLE IF NOT EXISTS pattern_future (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
     habituation DOUBLE NOT NULL DEFAULT 1.0,  -- habituation factor: decays with use, recovers over time
-    PRIMARY KEY (pattern_neuron_id, connection_id),
+    UNIQUE KEY uk_pattern_connection (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
     INDEX idx_pattern_strength (pattern_neuron_id, strength),
     INDEX idx_strength (strength)
-) ENGINE=MEMORY;
+) ENGINE=InnoDB;
 
 -- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
 -- patterns are learned by peak neurons to differentiate between sequences leading to them
@@ -366,8 +362,9 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
--- raw predictions before conflict resolution (MEMORY table)
+-- inferred neurons from connection/pattern inference or exploration (MEMORY table)
 -- used by both connection and pattern inference (only one has data per frame due to early-return)
+-- after conflict resolution, invalid inferences are deleted and corrections are applied
 CREATE TABLE IF NOT EXISTS inferred_neurons (
     neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
@@ -375,17 +372,6 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
     strength DOUBLE NOT NULL DEFAULT 0.0,
     PRIMARY KEY (neuron_id, level, age),
     INDEX idx_level_age (level, age)
-) ENGINE=MEMORY;
-
--- final resolved predictions after conflict resolution (MEMORY table)
-CREATE TABLE IF NOT EXISTS inferred_neurons_resolved (
-    neuron_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    strength DOUBLE NOT NULL DEFAULT 0.0,
-    PRIMARY KEY (neuron_id, level, age),
-    INDEX idx_level_age (level, age),
-    INDEX idx_current_active (age, level)
 ) ENGINE=MEMORY;
 
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
@@ -423,77 +409,21 @@ CREATE TABLE IF NOT EXISTS active_connections (
     INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
 ) ENGINE=MEMORY;
 
--- scratch table for tracking connection-based predictions (MEMORY table)
--- populated during connection inference, used for validation and error pattern creation
+-- unified inference sources table (MEMORY table)
+-- tracks which connections or pattern_future records led to each base-level output
+-- source_type: 'connection' for connection inference/exploration, 'pattern' for pattern inference
+-- source_id: connection.id for connection type, pattern_future.id for pattern type
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS connection_inference_sources (
-    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
+CREATE TABLE IF NOT EXISTS inference_sources (
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    connection_id BIGINT UNSIGNED NOT NULL,
-    prediction_strength DOUBLE NOT NULL,
-    PRIMARY KEY (inferred_neuron_id, level, age, connection_id),
-    INDEX idx_connection (connection_id),
-    INDEX idx_aggregate (level, inferred_neuron_id, prediction_strength),
-    INDEX idx_age (age)
-) ENGINE=MEMORY;
-
--- scratch table for tracking pattern-based predictions (MEMORY table)
--- populated during pattern inference, used for validation and error pattern creation
--- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS pattern_inference_sources (
-    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    pattern_neuron_id BIGINT UNSIGNED NOT NULL,
-    connection_id BIGINT UNSIGNED NOT NULL,
-    prediction_strength DOUBLE NOT NULL,
-    PRIMARY KEY (inferred_neuron_id, level, age, pattern_neuron_id, connection_id),
-    INDEX idx_pattern (pattern_neuron_id),
-    INDEX idx_connection (connection_id),
-    INDEX idx_aggregate (level, inferred_neuron_id, prediction_strength),
-    INDEX idx_age (age)
-) ENGINE=MEMORY;
-
--- scratch table for tracking exploration-based predictions (MEMORY table)
--- populated during curiosity exploration, used for reward application
--- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS exploration_inference_sources (
-    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    connection_id BIGINT UNSIGNED NOT NULL,
-    prediction_strength DOUBLE NOT NULL,
-		PRIMARY KEY (inferred_neuron_id, age, connection_id),
-    INDEX idx_connection (connection_id),
-    INDEX idx_aggregate (inferred_neuron_id, prediction_strength),
-    INDEX idx_age (age)
-) ENGINE=MEMORY;
-
--- scratch table for tracking which high-level source neurons unpacked to which base-level outputs
--- used for channel-specific reward attribution in applyRewards
--- populated during saveInferenceChain: maps base outputs (level 0) to their source-level neurons
--- unpacking is just mechanical translation via pattern_peaks, so we only track endpoints
--- age represents how many frames ago this prediction was made (both source and base age together)
--- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS inference_chain (
     base_neuron_id BIGINT UNSIGNED NOT NULL,
-    source_neuron_id BIGINT UNSIGNED NOT NULL,
-    age TINYINT UNSIGNED NOT NULL,
-    PRIMARY KEY (base_neuron_id, source_neuron_id, age),
-    INDEX idx_base (base_neuron_id, age),
-    INDEX idx_source (source_neuron_id, age),
+    source_type ENUM('connection', 'pattern') NOT NULL,
+    source_id BIGINT UNSIGNED NOT NULL,
+    inference_strength DOUBLE NOT NULL,
+    PRIMARY KEY (age, base_neuron_id, source_type, source_id),
+    INDEX idx_base_age (base_neuron_id, age),
+    INDEX idx_source_type (source_type, source_id),
     INDEX idx_age (age)
-) ENGINE=MEMORY;
-
--- scratch table for tracking source neurons during unpacking (MEMORY table)
--- used internally by saveInferenceChain to propagate source info as we unpack level by level
--- truncated at start of saveInferenceChain, populated during unpacking, then copied to inference_chain
-CREATE TABLE IF NOT EXISTS unpack_sources (
-    current_neuron_id BIGINT UNSIGNED NOT NULL,
-    current_level TINYINT NOT NULL,
-    source_neuron_id BIGINT UNSIGNED NOT NULL,
-    PRIMARY KEY (current_neuron_id, current_level, source_neuron_id),
-    INDEX idx_current (current_neuron_id, current_level)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking unpredicted connections (MEMORY table)

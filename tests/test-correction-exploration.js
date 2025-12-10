@@ -1,6 +1,7 @@
 /**
  * Test correction and exploration override mechanisms
  * Verifies that both correction and exploration properly clean up inference sources
+ * Updated to use unified inference_sources table
  */
 
 import BrainMySQL from '../brain-mysql.js';
@@ -28,15 +29,10 @@ async function testCorrectionAndExploration() {
 		const [overrideNeuronId] = await brain.getFrameNeurons([overrideCoords]);
 		console.log(`   Created neurons: original=${originalNeuronId}, override=${overrideNeuronId}`);
 
-		// Manually insert some inference sources for original neuron
+		// Manually insert some inference sources for original neuron (using unified table)
 		await brain.conn.query(`
-			INSERT INTO connection_inference_sources (inferred_neuron_id, level, age, connection_id, prediction_strength)
-			VALUES (?, 0, 0, 999, 10.0)
-		`, [originalNeuronId]);
-
-		await brain.conn.query(`
-			INSERT INTO pattern_inference_sources (inferred_neuron_id, level, age, pattern_neuron_id, connection_id, prediction_strength)
-			VALUES (?, 0, 0, 888, 999, 5.0)
+			INSERT INTO inference_sources (age, base_neuron_id, source_type, source_id, inference_strength)
+			VALUES (0, ?, 'connection', 999, 10.0)
 		`, [originalNeuronId]);
 
 		await brain.conn.query(`
@@ -45,25 +41,23 @@ async function testCorrectionAndExploration() {
 		`, [originalNeuronId]);
 
 		// Verify original sources exist
-		const [connBefore] = await brain.conn.query('SELECT COUNT(*) as count FROM connection_inference_sources WHERE inferred_neuron_id = ?', [originalNeuronId]);
-		const [patternBefore] = await brain.conn.query('SELECT COUNT(*) as count FROM pattern_inference_sources WHERE inferred_neuron_id = ?', [originalNeuronId]);
+		const [sourcesBefore] = await brain.conn.query('SELECT COUNT(*) as count FROM inference_sources WHERE base_neuron_id = ?', [originalNeuronId]);
 		const [inferredBefore] = await brain.conn.query('SELECT COUNT(*) as count FROM inferred_neurons WHERE neuron_id = ?', [originalNeuronId]);
 
-		console.log(`   Before override: connection=${connBefore[0].count}, pattern=${patternBefore[0].count}, inferred=${inferredBefore[0].count}`);
+		console.log(`   Before override: sources=${sourcesBefore[0].count}, inferred=${inferredBefore[0].count}`);
 
 		// Call unified override method
 		await brain.overrideInference(overrideNeuronId, originalNeuronId);
 
 		// Verify original sources are deleted and override is in place
-		const [connAfter] = await brain.conn.query('SELECT COUNT(*) as count FROM connection_inference_sources WHERE inferred_neuron_id = ?', [originalNeuronId]);
-		const [patternAfter] = await brain.conn.query('SELECT COUNT(*) as count FROM pattern_inference_sources WHERE inferred_neuron_id = ?', [originalNeuronId]);
+		const [sourcesOriginalAfter] = await brain.conn.query('SELECT COUNT(*) as count FROM inference_sources WHERE base_neuron_id = ?', [originalNeuronId]);
 		const [inferredOriginal] = await brain.conn.query('SELECT COUNT(*) as count FROM inferred_neurons WHERE neuron_id = ? AND age = 0', [originalNeuronId]);
 		const [inferredOverride] = await brain.conn.query('SELECT COUNT(*) as count FROM inferred_neurons WHERE neuron_id = ? AND age = 0', [overrideNeuronId]);
-		const [exploreOverride] = await brain.conn.query('SELECT COUNT(*) as count FROM exploration_inference_sources WHERE inferred_neuron_id = ? AND age = 0', [overrideNeuronId]);
+		const [sourcesOverride] = await brain.conn.query('SELECT COUNT(*) as count FROM inference_sources WHERE base_neuron_id = ? AND age = 0', [overrideNeuronId]);
 
-		console.log(`   After override: original inferred=${inferredOriginal[0].count}, override inferred=${inferredOverride[0].count}, override sources=${exploreOverride[0].count}`);
+		console.log(`   After override: original sources=${sourcesOriginalAfter[0].count}, original inferred=${inferredOriginal[0].count}, override inferred=${inferredOverride[0].count}, override sources=${sourcesOverride[0].count}`);
 
-		if (connAfter[0].count === 0 && patternAfter[0].count === 0 && inferredOriginal[0].count === 0 && inferredOverride[0].count === 1)
+		if (sourcesOriginalAfter[0].count === 0 && inferredOriginal[0].count === 0 && inferredOverride[0].count === 1)
 			console.log('   ✅ overrideInference works correctly\n');
 		else
 			console.log('   ❌ overrideInference failed\n');
@@ -79,12 +73,11 @@ async function testCorrectionAndExploration() {
 
 		// Verify it was saved
 		const [inferredCheck] = await brain.conn.query('SELECT * FROM inferred_neurons WHERE neuron_id = ? AND age = 0', [exploreNeuronId]);
-		const [chainCheck] = await brain.conn.query('SELECT * FROM inference_chain WHERE base_neuron_id = ? AND age = 0', [exploreNeuronId]);
-		const [exploreSourceCheck] = await brain.conn.query('SELECT * FROM exploration_inference_sources WHERE inferred_neuron_id = ? AND age = 0', [exploreNeuronId]);
+		// Note: inference_sources may or may not have entries depending on whether connections exist
 
-		console.log(`   Inferred neurons: ${inferredCheck.length}, Inference chain: ${chainCheck.length}, Exploration sources: ${exploreSourceCheck.length}`);
+		console.log(`   Inferred neurons: ${inferredCheck.length}`);
 
-		if (inferredCheck.length > 0 && chainCheck.length > 0)
+		if (inferredCheck.length > 0)
 			console.log('   ✅ Exploration override works correctly\n');
 		else
 			console.log('   ❌ Exploration override failed\n');
@@ -96,10 +89,10 @@ async function testCorrectionAndExploration() {
 		const corrCorrectedCoords = { TEST_activity: -1 }; // SELL
 		const [corrOriginalNeuronId] = await brain.getFrameNeurons([corrOriginalCoords]);
 
-		// Clean up and add original to inferred_neurons with connection sources (not exploration)
+		// Clean up and add original to inferred_neurons with connection sources
 		await brain.conn.query('DELETE FROM inferred_neurons WHERE neuron_id = ?', [corrOriginalNeuronId]);
 		await brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, 100)', [corrOriginalNeuronId]);
-		await brain.conn.query('INSERT INTO connection_inference_sources (inferred_neuron_id, level, age, connection_id, prediction_strength) VALUES (?, 0, 0, 999, 10.0)', [corrOriginalNeuronId]);
+		await brain.conn.query('INSERT INTO inference_sources (age, base_neuron_id, source_type, source_id, inference_strength) VALUES (0, ?, \'connection\', 999, 10.0)', [corrOriginalNeuronId]);
 
 		// Apply correction
 		const corrections = [{ originalNeuronId: corrOriginalNeuronId, correctedCoordinates: corrCorrectedCoords }];
@@ -116,34 +109,6 @@ async function testCorrectionAndExploration() {
 			console.log('   ✅ correctInferredActions works correctly\n');
 		else
 			console.log('   ❌ correctInferredActions failed\n');
-
-		console.log('4️⃣ Testing that corrections skip exploration neurons...');
-
-		// Create an exploration neuron
-		const skipCoords = { TEST_activity: 0 }; // HOLD
-		const [skipNeuronId] = await brain.getFrameNeurons([skipCoords]);
-
-		// Manually mark it as exploration by inserting exploration_inference_sources
-		// (simpler than setting up active neurons and connections)
-		await brain.conn.query('DELETE FROM inferred_neurons WHERE neuron_id = ?', [skipNeuronId]);
-		await brain.conn.query('INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, 1000000)', [skipNeuronId]);
-		await brain.conn.query('INSERT INTO exploration_inference_sources (inferred_neuron_id, age, connection_id, prediction_strength) VALUES (?, 0, 999, 10.0)', [skipNeuronId]);
-
-		// Try to correct it (should be skipped)
-		const skipCorrections = [{ originalNeuronId: skipNeuronId, correctedCoordinates: { TEST_activity: 1 } }];
-		await brain.correctInferredActions(skipCorrections);
-
-		// Verify the exploration neuron is still there (not corrected)
-		const [skipCheck] = await brain.conn.query('SELECT * FROM inferred_neurons WHERE neuron_id = ? AND age = 0', [skipNeuronId]);
-		const [exploreSourceStillThere] = await brain.conn.query('SELECT * FROM exploration_inference_sources WHERE inferred_neuron_id = ? AND age = 0', [skipNeuronId]);
-
-		console.log(`   Exploration neuron still in inferred_neurons: ${skipCheck.length}`);
-		console.log(`   Exploration sources still present: ${exploreSourceStillThere.length}`);
-
-		if (skipCheck.length > 0 && exploreSourceStillThere.length > 0)
-			console.log('   ✅ Corrections correctly skip exploration neurons\n');
-		else
-			console.log('   ❌ Corrections did not skip exploration neurons\n');
 
 		console.log('✅ All tests completed!');
 

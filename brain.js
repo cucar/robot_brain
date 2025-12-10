@@ -164,6 +164,9 @@ export default class Brain {
 			// get last inferred outputs to be executed in this frame in case there are any
 			const channelOutputs = channel.getFrameOutputs();
 
+			// clear the inferred actions so they don't get executed again if no new inference happens
+			channel.clearFrameOutputs();
+
 			// update last activity for exploration if any channel has outputs
 			if (channelOutputs && channelOutputs.length > 0) this.lastActivity = this.frameNumber;
 
@@ -236,13 +239,8 @@ export default class Brain {
 		await this.learnFromPreviousFrameErrors();
 
 		// do predictions and outputs - what's going to happen next? and what's our best response?
+		// inferNeurons includes exploration (first), connection/pattern inference, and conflict resolution
 		await this.inferNeurons();
-
-		// explore previously unobserved actions to be able to discover new patterns
-		await this.exploreInferences();
-
-		// resolve inferences: resolve conflicts and correct invalid actions
-		await this.resolveInferences();
 
 		// at this point the frame is processed - the forget cycle is a periodic cleanup task
 		// run forget cycle periodically and delete dead connections/neurons
@@ -291,43 +289,54 @@ export default class Brain {
 	}
 
 	/**
-	 * exploration inference - creates predictions for channels without inferred outputs
-	 * Writes to inferred_neurons and exploration_inference_sources tables
-	 * Only called when inactivity threshold is reached (no outputs for N frames)
+	 * Exploration inference - creates random action predictions for all channels
+	 * Called at the start of inferNeurons - if exploration happens, we skip connection/pattern inference
+	 * Writes to inferred_neurons and inference_sources tables
 	 * Returns true if exploration happened, false otherwise
 	 */
-	async exploreInferences(){
+	async exploreInferences() {
 
-		// Check if the brain has outputs - if yes, no exploration needed
-		// This checks if any channel has output neurons (not just any inferred neurons)
-		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
+		// Check inactivity threshold - only explore if we've been inactive for N frames
+		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return false;
 
-		// create exploration predictions for all channels with output dimensions
-		let exploredCount = 0;
+		// Decide whether to explore based on probability
+		// Since exploration happens before inference, we don't have inference strength yet
+		// Use a simple probability check based on exploration parameters
+		if (!this.shouldExplore()) return false;
+
+		// Create exploration predictions for all channels with output dimensions
 		for (const [channelName, channel] of this.channels) {
 
-			// Get exploration action for this channel - returns null if no exploration needed
+			// Get exploration action for this channel
 			const actionCoordinates = channel.getExplorationAction();
 			if (!actionCoordinates) throw new Error(`Channel ${channelName} exploration action is null`);
 
 			// Find or create neuron for this action
 			const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
 
-			// Check if channel needs exploration (no outputs or about to activate the same action)
-			if (!await this.channelNeedsExploration(channelName, actionNeuronId)) {
-				if (this.debug) console.log(`Skipping exploration for ${channelName}: has inferred outputs or about to activate the same action.`);
-				continue;
-			}
-
-			// Find/create neuron for this action and write exploration prediction
-			// Use unified override method (no original neuron since exploration doesn't override a specific inference)
+			// Save exploration inference (writes to inferred_neurons and inference_sources)
 			if (this.debug) console.log(`Exploration for ${channelName}: `, actionCoordinates, actionNeuronId);
-			await this.overrideInference(actionNeuronId);
-			exploredCount++;
+			await this.saveExplorationInference(actionNeuronId);
+
+			// Save the action for execution in next frame
+			channel.setFrameOutputs([], [{ neuron_id: actionNeuronId, strength: 1.0, coordinates: actionCoordinates }]);
 		}
-		if (this.debug2) console.log(`Explored ${exploredCount} channels without predictions`);
-		// await this.waitForUser('inferred exploration');
-		return exploredCount;
+
+		// Update last activity since we're generating outputs
+		this.lastActivity = this.frameNumber;
+
+		if (this.debug2) console.log(`Exploration completed for all channels`);
+		return true;
+	}
+
+	/**
+	 * Decide whether to explore based on probability
+	 * Returns true if we should explore, false otherwise
+	 */
+	shouldExplore() {
+		// Simple probability-based exploration
+		// minExploration ensures we always have some chance to explore
+		return Math.random() < this.minExploration;
 	}
 
 	/**
@@ -590,27 +599,42 @@ export default class Brain {
 
 	/**
 	 * Infer predictions and outputs
-	 * Sequential inference with error-driven learning.
-	 * Alternates between connection and pattern inference going down levels:
-	 * connection@N, pattern@N-1, connection@N-1, pattern@N-2, ..., connection@0
+	 * Order of operations:
+	 * 1. Try exploration first - if successful, we're done (no need for inference)
+	 * 2. If no exploration, do connection/pattern inference level by level
+	 * 3. After inference, resolve conflicts and correct invalid actions
 	 * Note: inferred_neurons ages and gets cleaned up (age >= 2), no need to truncate
 	 */
 	async inferNeurons() {
 
+		// Try exploration first - if successful, we're done
+		// Exploration is a fallback when we want to try new actions
+		if (await this.exploreInferences()) return;
+
 		// Get max active level after recognition (includes all ages, not just age=0)
 		const maxActiveLevel = await this.getMaxActiveLevel();
 
-		// start from top level and alternate between connection and pattern inference, going down levels
-		// stop at first successful inference (early return pattern)
+		// Start from top level and alternate between connection and pattern inference, going down levels
+		// Break at first successful inference (then resolve conflicts)
+		let inferenceOccurred = false;
 		for (let level = maxActiveLevel; level >= 0; level--) {
 
 			// Try connection inference at this level (gradual Hebbian learning)
-			if (await this.inferConnections(level)) return;
+			if (await this.inferConnections(level)) {
+				inferenceOccurred = true;
+				break;
+			}
 
 			// Try pattern inference from this level (fast context-based override)
 			// Patterns predict at level-1, so skip if already at base level
-			if (level > 0 && await this.inferPatterns(level)) return;
+			if (level > 0 && await this.inferPatterns(level)) {
+				inferenceOccurred = true;
+				break;
+			}
 		}
+
+		// Resolve conflicts and correct invalid actions for connection/pattern inferences
+		if (inferenceOccurred) await this.resolveInferences();
 	}
 
 	/**
@@ -656,13 +680,9 @@ export default class Brain {
 	async inferConnections(level) {
 
 		// Make predictions using connections from active neurons at this level
+		// inferConnectionsAtLevel now handles unpacking and saving inference sources internally
 		const count = await this.inferConnectionsAtLevel(level);
-		if (count === 0) return false;
-
-		// If predictions are at higher level, unpack through pattern chain to base level
-		await this.saveInferenceChain(level, 'connection');
-
-		return true;
+		return count > 0;
 	}
 
 	/**
@@ -674,13 +694,9 @@ export default class Brain {
 	async inferPatterns(level) {
 
 		// Make predictions at level-1 using pattern_future from this level
+		// inferPatternsFromLevel now handles unpacking and saving inference sources internally
 		const count = await this.inferPatternsFromLevel(level);
-		if (count === 0) return false;
-
-		// If predictions are at higher level, unpack through pattern chain to base level
-		if (level > 0) await this.saveInferenceChain(level - 1, 'pattern');
-
-		return true;
+		return count > 0;
 	}
 
 	/**
@@ -695,6 +711,12 @@ export default class Brain {
 		// Get detailed inference information for diagnostics if enabled
 		const inferenceDetails = this.diagnostic ? await this.getInferenceDetails(0) : null;
 
+		// Collect all inferred neuron IDs before resolution to track deletions
+		const allInferredNeuronIds = new Set();
+		for (const [, channelInference] of channelInferences)
+			for (const inf of channelInference)
+				allInferredNeuronIds.add(inf.neuron_id);
+
 		// Correct inferences for each channel and collect resolved inferences and corrections
 		// Channels resolve conflicts and correct invalid actions, storing final neurons for next frame execution
 		const resolvedInferences = [];
@@ -708,13 +730,14 @@ export default class Brain {
 			await this.correctInferredActions(allCorrections);
 		}
 
-		// save selected inferences to be used later for accuracy reporting - implementation-specific
-		await this.saveResolvedInferences(resolvedInferences);
-		if (this.debug) console.log(`Resolved ${resolvedInferences.length} neurons after conflict resolution`);
+		// Determine which neurons were deleted (not in resolved)
+		const resolvedNeuronIds = new Set(resolvedInferences.map(inf => inf.neuron_id));
+		const deletedNeuronIds = [...allInferredNeuronIds].filter(id => !resolvedNeuronIds.has(id));
 
-		// For higher levels, copy predictions directly to resolved table (no conflict resolution at higher levels)
-		// TODO: this is probably problematic due to the inferred neurons that were overridden by exploration and correction
-		await this.copyHigherLevelPredictions();
+		// save selected inferences to be used later for accuracy reporting - implementation-specific
+		// Also deletes neurons that were not resolved (conflict losers)
+		await this.saveResolvedInferences(resolvedInferences, deletedNeuronIds);
+		if (this.debug) console.log(`Resolved ${resolvedInferences.length} neurons after conflict resolution, deleted ${deletedNeuronIds.length}`);
 	}
 
 	/**
@@ -849,13 +872,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Unpack predictions from higher level to base level via peak chain (implementation-specific)
-	 */
-	async saveInferenceChain() {
-		throw new Error('saveInferenceChain() must be implemented by subclass');
-	}
-
-	/**
 	 * Get inferred	base neurons grouped by channels (implementation-specific)
 	 */
 	async getChannelInferences() {
@@ -872,9 +888,20 @@ export default class Brain {
 
 	/**
 	 * save resolved inferences to storage (implementation-specific)
+	 * @param {Array} resolvedInferences - neurons that survived conflict resolution
+	 * @param {Array} deletedNeuronIds - neuron IDs that were deleted during conflict resolution
 	 */
-	async saveResolvedInferences() {
+	async saveResolvedInferences(resolvedInferences, deletedNeuronIds) {
 		throw new Error('saveResolvedInferences() must be implemented by subclass');
+	}
+
+	/**
+	 * Save exploration inference to inferred_neurons and inference_sources (implementation-specific)
+	 * Called when exploration generates an action without prior inference
+	 * @param {Number} actionNeuronId - neuron ID for the exploration action
+	 */
+	async saveExplorationInference(actionNeuronId) {
+		throw new Error('saveExplorationInference() must be implemented by subclass');
 	}
 
 	/**
@@ -884,9 +911,9 @@ export default class Brain {
 	 * - Exploration: randomly selects a valid action
 	 *
 	 * This method:
-	 * 1. Cleans up ALL inference sources (connection, pattern, exploration) for original neuron
-	 * 2. Inserts override sources (exploration_inference_sources) for the new neuron
-	 * 3. Updates inference_chain (removes original, adds new)
+	 * 1. Cleans up inference_sources for original neuron
+	 * 2. Finds connections that could have predicted the override neuron
+	 * 3. Inserts override sources into inference_sources
 	 * 4. Updates inferred_neurons (removes original, adds new)
 	 *
 	 * @param {Number} overrideNeuronId - neuron ID to use instead
@@ -903,14 +930,6 @@ export default class Brain {
 	 */
 	async correctInferredActions(corrections) {
 		throw new Error('correctInferredActions() must be implemented by subclass');
-	}
-
-	/**
-	 * Copy higher level predictions from inferred_neurons to inferred_neurons_resolved (implementation-specific)
-	 * For levels > 0, there's no conflict resolution, so predictions are copied directly
-	 */
-	async copyHigherLevelPredictions() {
-		throw new Error('copyHigherLevelPredictions() must be implemented by subclass');
 	}
 
 	/**

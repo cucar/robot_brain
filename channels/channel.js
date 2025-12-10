@@ -78,6 +78,13 @@ export default class Channel {
 	}
 
 	/**
+	 * Clear inferred actions after execution to prevent re-execution
+	 */
+	clearFrameOutputs() {
+		this.inferredActions = [];
+	}
+
+	/**
 	 * Get feedback based on previous actions and current state - override in subclasses
 	 * Returns reward factor: number (1.0 = neutral, >1.0 = positive, <1.0 = negative)
 	 * This factor will be multiplied with existing neuron reward factors

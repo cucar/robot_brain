@@ -21,14 +21,10 @@ export default class BrainMySQL extends Brain {
 		await this.truncateTables([
 			'active_neurons',
 			'inferred_neurons',
-			'inferred_neurons_resolved',
 			'matched_patterns',
 			'matched_pattern_connections',
 			'active_connections',
-			'connection_inference_sources',
-			'pattern_inference_sources',
-			'exploration_inference_sources',
-			'inference_chain',
+			'inference_sources',
 			'unpredicted_connections',
 			'new_patterns'
 		]);
@@ -43,14 +39,10 @@ export default class BrainMySQL extends Brain {
 		await this.truncateTables([
 			'active_neurons',
 			'inferred_neurons',
-			'inferred_neurons_resolved',
 			'active_connections',
 			'matched_patterns',
 			'matched_pattern_connections',
-			'connection_inference_sources',
-			'pattern_inference_sources',
-			'exploration_inference_sources',
-			'inference_chain',
+			'inference_sources',
 			'unpredicted_connections',
 			'new_patterns',
 			'pattern_peaks',
@@ -84,13 +76,9 @@ export default class BrainMySQL extends Brain {
 		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
 		await this.conn.query('UPDATE active_connections SET age = age + 1 ORDER BY age DESC');
 
-		// Age inference source tables for temporal credit assignment
+		// Age inference tables for temporal credit assignment
 		await this.conn.query('UPDATE inferred_neurons SET age = age + 1 ORDER BY age DESC');
-		await this.conn.query('UPDATE inferred_neurons_resolved SET age = age + 1 ORDER BY age DESC');
-		await this.conn.query('UPDATE connection_inference_sources SET age = age + 1 ORDER BY age DESC');
-		await this.conn.query('UPDATE pattern_inference_sources SET age = age + 1 ORDER BY age DESC');
-		await this.conn.query('UPDATE exploration_inference_sources SET age = age + 1 ORDER BY age DESC');
-		await this.conn.query('UPDATE inference_chain SET age = age + 1 ORDER BY age DESC');
+		await this.conn.query('UPDATE inference_sources SET age = age + 1 ORDER BY age DESC');
 
 		// Skip deletions until we have enough frames
 		if (this.frameNumber < this.baseNeuronMaxAge) return;
@@ -107,21 +95,9 @@ export default class BrainMySQL extends Brain {
 		const [inferredResult] = await this.conn.query('DELETE FROM inferred_neurons WHERE age >= ?', [this.baseNeuronMaxAge]);
 		if (this.debug) console.log(`Cleaned up ${inferredResult.affectedRows} executed inferred neurons (age >= ${this.baseNeuronMaxAge})`);
 
-		const [resolvedResult] = await this.conn.query('DELETE FROM inferred_neurons_resolved WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Cleaned up ${resolvedResult.affectedRows} executed resolved neurons (age >= ${this.baseNeuronMaxAge})`);
-
 		// Delete aged-out inference sources (same lifecycle as neurons)
-		const [connInfResult] = await this.conn.query('DELETE FROM connection_inference_sources WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Cleaned up ${connInfResult.affectedRows} aged-out connection inference sources (age >= ${this.baseNeuronMaxAge})`);
-
-		const [patternInfResult] = await this.conn.query('DELETE FROM pattern_inference_sources WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Cleaned up ${patternInfResult.affectedRows} aged-out pattern inference sources (age >= ${this.baseNeuronMaxAge})`);
-
-		const [exploreInfResult] = await this.conn.query('DELETE FROM exploration_inference_sources WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Cleaned up ${exploreInfResult.affectedRows} aged-out exploration inference sources (age >= ${this.baseNeuronMaxAge})`);
-
-		const [infChainResult] = await this.conn.query('DELETE FROM inference_chain WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Cleaned up ${infChainResult.affectedRows} aged-out inference chain entries (age >= ${this.baseNeuronMaxAge})`);
+		const [sourcesResult] = await this.conn.query('DELETE FROM inference_sources WHERE age >= ?', [this.baseNeuronMaxAge]);
+		if (this.debug) console.log(`Cleaned up ${sourcesResult.affectedRows} aged-out inference sources (age >= ${this.baseNeuronMaxAge})`);
 	}
 
 	/**
@@ -212,28 +188,24 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * save resolved inferences to MySQL storage (implementation of abstract method)
+	 * Save resolved inferences to MySQL storage (implementation of abstract method)
 	 * This is called after conflict resolution at base level (level 0)
+	 * Updates inferred_neurons in place (deletes invalid, inserts corrected)
 	 */
-	async saveResolvedInferences(resolvedInferences) {
-		// Batch insert all inferences at once (all at level 0)
-		await this.conn.query(
-			'INSERT INTO inferred_neurons_resolved (neuron_id, level, age, strength) VALUES ?',
-			[resolvedInferences.map(p => [p.neuron_id, 0, 0, p.strength])]
-		);
-	}
+	async saveResolvedInferences(resolvedInferences, deletedNeuronIds) {
+		// Delete invalid inferences that were removed during conflict resolution
+		if (deletedNeuronIds.length > 0) {
+			await this.conn.query('DELETE FROM inferred_neurons WHERE neuron_id IN (?) AND level = 0 AND age = 0', [deletedNeuronIds]);
+			// Also delete their inference sources
+			await this.conn.query('DELETE FROM inference_sources WHERE base_neuron_id IN (?) AND age = 0', [deletedNeuronIds]);
+		}
 
-	/**
-	 * Copy higher level predictions from inferred_neurons to inferred_neurons_resolved
-	 * For levels > 0, there's no conflict resolution, so predictions are copied directly
-	 */
-	async copyHigherLevelPredictions() {
-		await this.conn.query(`
-			INSERT INTO inferred_neurons_resolved (neuron_id, level, age, strength)
-			SELECT neuron_id, level, age, strength
-			FROM inferred_neurons
-			WHERE level > 0 AND age = 0
-		`);
+		// Insert corrected inferences (if any)
+		if (resolvedInferences.length > 0)
+			await this.conn.query(
+				'INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES ? ON DUPLICATE KEY UPDATE strength = VALUES(strength)',
+				[resolvedInferences.map(p => [p.neuron_id, 0, 0, p.strength])]
+			);
 	}
 
 	/**
@@ -249,7 +221,7 @@ export default class BrainMySQL extends Brain {
 		// For level > 0: count all neurons (pattern neurons don't have coordinates)
 		const [data] = await this.conn.query(`
 			SELECT inf.level, COUNT(*) as total, SUM(IF(an.neuron_id IS NOT NULL, 1, 0)) as correct
-			FROM inferred_neurons_resolved inf
+			FROM inferred_neurons inf
 			LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
 			WHERE inf.age = 1
 			AND (
@@ -284,7 +256,7 @@ export default class BrainMySQL extends Brain {
 		if (this.debug && data.some(row => row.level === 0)) {
 			const [failed] = await this.conn.query(`
 				SELECT inf.neuron_id, d.name as dimension_name, c.val
-				FROM inferred_neurons_resolved inf
+				FROM inferred_neurons inf
 				JOIN coordinates c ON inf.neuron_id = c.neuron_id
 				JOIN dimensions d ON c.dimension_id = d.id
 				WHERE inf.level = 0 AND inf.age = 1
@@ -318,30 +290,30 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Apply negative reinforcement to failed connection predictions.
 	 * Weakens connections that made incorrect predictions.
-	 * Processes all levels that had connection inference in previous frame.
+	 * Uses inference_sources to find which connections made predictions.
 	 */
 	async negativeReinforceConnections() {
 
 		// Apply negative reinforcement to failed INPUT predictions only - Failed = predicted but not observed
 		const [result] = await this.conn.query(`
 			UPDATE connections c
-			JOIN connection_inference_sources cis ON cis.connection_id = c.id
-            -- only weaken connections whose predictions made it through conflict resolution	
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level AND inf.age = cis.age
+			JOIN inference_sources isrc ON isrc.source_id = c.id AND isrc.source_type = 'connection'
+			-- only weaken connections whose predictions made it through conflict resolution
+			JOIN inferred_neurons inf ON inf.neuron_id = isrc.base_neuron_id AND inf.level = 0 AND inf.age = isrc.age
 			SET c.strength = GREATEST(0, c.strength - ?)
-			WHERE cis.age = 1
+			WHERE isrc.age = 1
 			AND c.strength > 0
-			-- outputs are not penalized (they are actions, not predictions of world state)  
+			-- outputs are not penalized (they are actions, not predictions of world state)
 			AND EXISTS (
 				SELECT 1 FROM coordinates coord
 				JOIN dimensions d ON d.id = coord.dimension_id
-				WHERE coord.neuron_id = cis.inferred_neuron_id
+				WHERE coord.neuron_id = isrc.base_neuron_id
 				AND d.type != 'action'
 			)
 			AND NOT EXISTS (
 				SELECT 1 FROM active_neurons an
-				WHERE an.neuron_id = cis.inferred_neuron_id
-				AND an.level = cis.level
+				WHERE an.neuron_id = isrc.base_neuron_id
+				AND an.level = 0
 				AND an.age = 0
 			)
 		`, [this.connectionNegativeReinforcement]);
@@ -358,7 +330,7 @@ export default class BrainMySQL extends Brain {
 
 		const [result] = await this.conn.query(`
 			SELECT COUNT(*) as count
-			FROM inferred_neurons_resolved inf
+			FROM inferred_neurons inf
 			WHERE inf.level = ?
 			AND inf.age = 1
 			AND inf.strength >= ?
@@ -374,7 +346,7 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Populate unpredicted_connections with active connections at age=0 that were not predicted.
-	 * These are connections that fired but were not in the inferred_neurons_resolved predictions.
+	 * These are connections that fired but were not in the inferred_neurons predictions.
 	 * Works for both connection and pattern inference types.
 	 * No strength filter - we want to learn ALL unpredicted connections when surprised.
 	 * Returns the number of unpredicted connections found.
@@ -390,8 +362,8 @@ export default class BrainMySQL extends Brain {
 			WHERE ac.level = ?
 			AND ac.age = 0
 			AND NOT EXISTS (
-				SELECT 1 
-				FROM inferred_neurons_resolved inf
+				SELECT 1
+				FROM inferred_neurons inf
 				WHERE inf.neuron_id = c.to_neuron_id
 				AND inf.level = ac.level
 				AND inf.age = 1
@@ -402,44 +374,71 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Connection inference at a specific level (MySQL implementation). Returns number of predictions made.
+	 * Collects connection sources in memory, then unpacks to base level and saves to inference_sources.
 	 */
 	async inferConnectionsAtLevel(level) {
 
-		// Populate details table with ALL individual connection predictions (age=0 for new predictions)
-		// Prediction strength includes habituation factor to suppress frequently-used connections
-		const [sourcesResult] = await this.conn.query(`
-			INSERT INTO connection_inference_sources (inferred_neuron_id, level, age, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, 0, c.id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1)
+		// Get all connection predictions at this level
+		const [predictions] = await this.conn.query(`
+			SELECT c.to_neuron_id, c.id as connection_id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1) as prediction_strength
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE an.level = ?
 			AND c.distance = an.age + 1
 			AND c.strength > 0
-		`, [level, this.peakTimeDecayFactor, level]);
-		if (this.debug && sourcesResult.affectedRows > 0) console.log(`Level ${level}: Connection inference created ${sourcesResult.affectedRows} predictions`);
-		if (sourcesResult.affectedRows === 0) return 0;
+		`, [this.peakTimeDecayFactor, level]);
+		if (this.debug && predictions.length > 0) console.log(`Level ${level}: Connection inference found ${predictions.length} predictions`);
+		if (predictions.length === 0) return 0;
 
-		// Aggregate details to create master table (only predictions meeting strength threshold)
-		const [inferenceResult] = await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
-			SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
-			FROM connection_inference_sources
-			WHERE level = ? AND age = 0
-			GROUP BY inferred_neuron_id, level
-			HAVING total_strength >= ?
-		`, [level, this.minInferenceStrength]);
-		if (this.debug) console.log(`Level ${level}: Connection inference predicted ${inferenceResult.affectedRows} neurons`);
+		// Build in-memory map: neuron_id → [{source_type, source_id, strength}]
+		const neuronSources = new Map();
+		for (const pred of predictions) {
+			if (!neuronSources.has(pred.to_neuron_id)) neuronSources.set(pred.to_neuron_id, []);
+			neuronSources.get(pred.to_neuron_id).push({
+				source_type: 'connection',
+				source_id: pred.connection_id,
+				strength: pred.prediction_strength
+			});
+		}
 
-		// Delete predictions that didn't meet the strength threshold (not in inferred_neurons)
-		const [deleteResult] = await this.conn.query(`
-			DELETE cis FROM connection_inference_sources cis
-			LEFT JOIN inferred_neurons inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level AND inf.age = cis.age
-			WHERE cis.level = ? AND cis.age = 0 AND inf.neuron_id IS NULL
-		`, [level]);
-		if (this.debug) console.log(`Level ${level}: Deleted ${deleteResult.affectedRows} weak connection predictions`)
+		// Aggregate strengths per neuron and filter by threshold
+		// Build a filtered map with only neurons that pass the threshold
+		const filteredNeuronSources = new Map();
+		const aggregatedNeurons = [];
+		for (const [neuronId, sources] of neuronSources) {
+			const totalStrength = sources.reduce((sum, s) => sum + s.strength, 0);
+			if (totalStrength >= this.minInferenceStrength) {
+				aggregatedNeurons.push({ neuron_id: neuronId, strength: totalStrength });
+				filteredNeuronSources.set(neuronId, sources);
+			}
+		}
+		if (aggregatedNeurons.length === 0) return 0;
 
-		// return the number of inferred neurons
-		return inferenceResult.affectedRows;
+		// Insert into inferred_neurons
+		await this.conn.query(
+			'INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES ?',
+			[aggregatedNeurons.map(n => [n.neuron_id, level, 0, n.strength])]
+		);
+		if (this.debug) console.log(`Level ${level}: Connection inference predicted ${aggregatedNeurons.length} neurons`);
+
+		// Unpack to base level and save inference sources (only for neurons that passed threshold)
+		await this.unpackAndSaveInferenceSources(level, filteredNeuronSources);
+
+		return aggregatedNeurons.length;
+	}
+
+	/**
+	 * Save exploration inference to inferred_neurons and inference_sources (MySQL implementation)
+	 * Called when exploration generates an action without prior inference
+	 * Uses overrideInference with null originalNeuronId to find and save connection sources
+	 * @param {Number} actionNeuronId - neuron ID for the exploration action
+	 */
+	async saveExplorationInference(actionNeuronId) {
+		// Use overrideInference with null original - it will:
+		// 1. Find connections that could have predicted this action
+		// 2. Save them to inference_sources with source_type='connection'
+		// 3. Insert into inferred_neurons
+		await this.overrideInference(actionNeuronId, null);
 	}
 
 	/**
@@ -449,9 +448,9 @@ export default class BrainMySQL extends Brain {
 	 * - Exploration: randomly selects a valid action
 	 *
 	 * This method:
-	 * 1. Cleans up ALL inference sources (connection, pattern, exploration) for original neuron
-	 * 2. Inserts override sources (exploration_inference_sources) for the new neuron
-	 * 3. Updates inference_chain (removes original, adds new)
+	 * 1. Cleans up inference_sources for original neuron (if any)
+	 * 2. Finds connections that could have predicted the override neuron
+	 * 3. Inserts override sources into inference_sources
 	 * 4. Updates inferred_neurons (removes original, adds new)
 	 *
 	 * @param {Number} overrideNeuronId - neuron ID to use instead
@@ -459,19 +458,17 @@ export default class BrainMySQL extends Brain {
 	 */
 	async overrideInference(overrideNeuronId, originalNeuronId = null) {
 
-		// 1. Clean up inference sources for BOTH neurons
-		const neuronsToClean = originalNeuronId ? [originalNeuronId, overrideNeuronId] : [overrideNeuronId];
+		// 1. Clean up inference sources for original neuron (if any)
+		if (originalNeuronId)
+			await this.conn.query('DELETE FROM inference_sources WHERE base_neuron_id = ? AND age = 0', [originalNeuronId]);
 
-		for (const neuronId of neuronsToClean) {
-			await this.conn.query(`DELETE FROM connection_inference_sources WHERE inferred_neuron_id = ? AND age = 0`, [neuronId]);
-			await this.conn.query(`DELETE FROM pattern_inference_sources WHERE inferred_neuron_id = ? AND age = 0`, [neuronId]);
-			await this.conn.query(`DELETE FROM exploration_inference_sources WHERE inferred_neuron_id = ? AND age = 0`, [neuronId]);
-		}
+		// Also clean up any existing sources for the override neuron (in case it was already inferred)
+		await this.conn.query('DELETE FROM inference_sources WHERE base_neuron_id = ? AND age = 0', [overrideNeuronId]);
 
-		// 2. Insert override sources for the new neuron
+		// 2. Find connections that could have predicted the override neuron and insert as sources
 		const [result] = await this.conn.query(`
-			INSERT INTO exploration_inference_sources (inferred_neuron_id, age, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, 0, c.id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1)
+			INSERT INTO inference_sources (age, base_neuron_id, source_type, source_id, inference_strength)
+			SELECT 0, c.to_neuron_id, 'connection', c.id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1)
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE an.level = 0
@@ -482,19 +479,14 @@ export default class BrainMySQL extends Brain {
 
 		if (this.debug && result.affectedRows > 0) console.log(`  Found ${result.affectedRows} possible connection sources for override`);
 
-		// 3. Update inference_chain (delete original, insert new)
-		if (originalNeuronId) await this.conn.query(`DELETE FROM inference_chain WHERE base_neuron_id = ? AND age = 0`, [originalNeuronId]);
-		await this.conn.query(`INSERT IGNORE INTO inference_chain (base_neuron_id, source_neuron_id, age) VALUES (?, ?, 0)`, [overrideNeuronId, overrideNeuronId]);
-
-		// 4. Update inferred_neurons (delete original, insert new)
-		if (originalNeuronId) await this.conn.query(`DELETE FROM inferred_neurons WHERE neuron_id = ? AND age = 0 AND level = 0`, [originalNeuronId]);
-		await this.conn.query(`INSERT IGNORE INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, ?)`, [overrideNeuronId, 1000000]);
+		// 3. Update inferred_neurons (delete original, insert new)
+		if (originalNeuronId) await this.conn.query('DELETE FROM inferred_neurons WHERE neuron_id = ? AND age = 0 AND level = 0', [originalNeuronId]);
+		await this.conn.query('INSERT IGNORE INTO inferred_neurons (neuron_id, level, age, strength) VALUES (?, 0, 0, ?)', [overrideNeuronId, 1000000]);
 	}
 
 	/**
 	 * Correct inferred actions when conflict resolution changes them (MySQL implementation)
 	 * Correction is an override mechanism that interprets existing connection/pattern inferences
-	 * Skips corrections for neurons that came from exploration (already overridden)
 	 * @param {Array} corrections - Array of { originalNeuronId, correctedCoordinates }
 	 */
 	async correctInferredActions(corrections) {
@@ -502,17 +494,6 @@ export default class BrainMySQL extends Brain {
 
 		for (const correction of corrections) {
 			const { originalNeuronId, correctedCoordinates } = correction;
-
-			// Skip if this neuron came from exploration (check if it has exploration_inference_sources)
-			const [explorationCheck] = await this.conn.query(
-				'SELECT COUNT(*) as count FROM exploration_inference_sources WHERE inferred_neuron_id = ? AND age = 0',
-				[originalNeuronId]
-			);
-
-			if (explorationCheck[0].count > 0) {
-				if (this.debug) console.log(`Skipping correction for neuron ${originalNeuronId}: came from exploration`);
-				continue;
-			}
 
 			// Find or create neuron for corrected action
 			const [correctedNeuronId] = await this.getFrameNeurons([correctedCoordinates]);
@@ -527,7 +508,7 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Merge pattern_future with observed connections FROM the peak.
 	 * Called during learning phase after pattern inference from previous frame.
-	 * Uses pattern_inference_sources to know which patterns made predictions.
+	 * Uses inference_sources with source_type='pattern' to know which patterns made predictions.
 	 *
 	 * Applies three types of reinforcement:
 	 * 1. Positive: Strengthen pattern_future connections that were correctly predicted (predicted AND observed)
@@ -541,12 +522,12 @@ export default class BrainMySQL extends Brain {
 		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
-			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
+			JOIN inference_sources isrc ON isrc.source_id = pf.id AND isrc.source_type = 'pattern'
+			JOIN inferred_neurons inf ON inf.neuron_id = isrc.base_neuron_id AND inf.level = 0 AND inf.age = isrc.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = pis.level AND ac.age = 0
+			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = 0 AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength + 1))
-			WHERE pis.age = 1
+			WHERE isrc.age = 1
 		`, [this.minConnectionStrength, this.maxConnectionStrength]);
 		if (this.debug && strengthenResult.affectedRows > 0)
 			console.log(`Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
@@ -556,12 +537,12 @@ export default class BrainMySQL extends Brain {
 		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
-			JOIN pattern_inference_sources pis ON pis.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
+			JOIN inference_sources isrc ON isrc.source_id = pf.id AND isrc.source_type = 'pattern'
+			JOIN inferred_neurons inf ON inf.neuron_id = isrc.base_neuron_id AND inf.level = 0 AND inf.age = isrc.age
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = pis.level AND ac.age = 0
+			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = 0 AND ac.age = 0
 			SET pf.strength = GREATEST(?, LEAST(?, pf.strength - ?))
-			WHERE pis.age = 1
+			WHERE isrc.age = 1
 			AND ac.connection_id IS NULL
 		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
 		if (this.debug && weakenResult.affectedRows > 0)
@@ -572,13 +553,14 @@ export default class BrainMySQL extends Brain {
 		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
 		const [novelResult] = await this.conn.query(`
 			INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength)
-			SELECT DISTINCT pis.pattern_neuron_id, ac.connection_id, 1.0
-			FROM pattern_inference_sources pis
-			JOIN inferred_neurons_resolved inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
-			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pis.pattern_neuron_id
-			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = pis.level AND ac.age = 0
-			LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = pis.pattern_neuron_id AND pf.connection_id = ac.connection_id
-			WHERE pis.age = 1
+			SELECT DISTINCT pf_src.pattern_neuron_id, ac.connection_id, 1.0
+			FROM inference_sources isrc
+			JOIN pattern_future pf_src ON pf_src.id = isrc.source_id AND isrc.source_type = 'pattern'
+			JOIN inferred_neurons inf ON inf.neuron_id = isrc.base_neuron_id AND inf.level = 0 AND inf.age = isrc.age
+			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf_src.pattern_neuron_id
+			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = 0 AND ac.age = 0
+			LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = pf_src.pattern_neuron_id AND pf.connection_id = ac.connection_id
+			WHERE isrc.age = 1
 			AND pf.connection_id IS NULL
 		`);
 		if (this.debug && novelResult.affectedRows > 0)
@@ -588,33 +570,28 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Get the prediction level from previous frame's inference.
 	 * Returns null if no inference occurred (only exploration).
+	 * With unified inference_sources, we check inferred_neurons at age=1.
 	 */
 	async getPreviousInferenceLevel() {
 
-		// Get prediction level from whichever inference type occurred (age=1 means previous frame)
-		// Only ONE of these will have entries (connection and pattern are mutually exclusive)
+		// Get prediction level from inferred_neurons (age=1 means previous frame)
 		const [levelResult] = await this.conn.query(`
-			SELECT level FROM pattern_inference_sources WHERE age = 1
-			UNION
-			SELECT level FROM connection_inference_sources WHERE age = 1
-			LIMIT 1
+			SELECT MAX(level) as level FROM inferred_neurons WHERE age = 1
 		`);
 
-		return levelResult[0] ? levelResult[0].level : null;
+		return levelResult[0] && levelResult[0].level !== null ? levelResult[0].level : null;
 	}
 
 	/**
 	 * Pattern inference from a source level (MySQL implementation)
+	 * Collects pattern sources in memory, then unpacks to base level and saves to inference_sources.
 	 * Returns count of predictions made.
 	 */
 	async inferPatternsFromLevel(sourceLevel) {
 
-		// Populate details table with ALL individual pattern predictions (age=0 for new predictions)
-		// Include pf.habituation to suppress frequently-used pattern predictions
-		// Note: c.habituation is NOT included here because pattern inference rewards pattern_future, not connections
-		const [sourcesResult] = await this.conn.query(`
-			INSERT INTO pattern_inference_sources (inferred_neuron_id, level, age, pattern_neuron_id, connection_id, prediction_strength)
-			SELECT c.to_neuron_id, ?, 0, an.neuron_id, c.id, pf.strength * pf.reward * pf.habituation * c.strength * c.reward * POW(?, c.distance - 1)
+		// Get all pattern predictions at this level
+		const [predictions] = await this.conn.query(`
+			SELECT c.to_neuron_id, pf.id as pattern_future_id, pf.strength * pf.reward * pf.habituation * c.strength * c.reward * POW(?, c.distance - 1) as prediction_strength
 			FROM active_neurons an
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
 			JOIN connections c ON c.id = pf.connection_id
@@ -623,93 +600,138 @@ export default class BrainMySQL extends Brain {
 			AND c.distance = an.age + 1
 			AND pf.strength > 0
 			AND c.strength > 0
-		`, [sourceLevel - 1, this.peakTimeDecayFactor, sourceLevel]);
-		if (this.debug) console.log(`Level ${sourceLevel}: Pattern inference created ${sourcesResult.affectedRows} predictions`);
-		if (sourcesResult.affectedRows === 0) return 0;
+		`, [this.peakTimeDecayFactor, sourceLevel]);
+		if (this.debug && predictions.length > 0) console.log(`Level ${sourceLevel}: Pattern inference found ${predictions.length} predictions`);
+		if (predictions.length === 0) return 0;
 
-		// Aggregate details to create master table (only predictions meeting strength threshold)
-		const [inferenceResult] = await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, level, age, strength)
-			SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
-			FROM pattern_inference_sources
-			WHERE level = ? AND age = 0
-			GROUP BY inferred_neuron_id, level
-			HAVING total_strength >= ?
-		`, [sourceLevel - 1, this.minInferenceStrength]);
-		if (this.debug) console.log(`Level ${sourceLevel}: Pattern inference predicted ${inferenceResult.affectedRows} neurons at level ${sourceLevel - 1}`);
-		if (inferenceResult.affectedRows === 0) return 0;
+		// Build in-memory map: neuron_id → [{source_type, source_id, strength}]
+		const neuronSources = new Map();
+		for (const pred of predictions) {
+			if (!neuronSources.has(pred.to_neuron_id)) neuronSources.set(pred.to_neuron_id, []);
+			neuronSources.get(pred.to_neuron_id).push({
+				source_type: 'pattern',
+				source_id: pred.pattern_future_id,
+				strength: pred.prediction_strength
+			});
+		}
 
-		// Delete predictions that didn't meet the strength threshold (not in inferred_neurons)
-		const [deleteResult] = await this.conn.query(`
-			DELETE pis FROM pattern_inference_sources pis
-			LEFT JOIN inferred_neurons inf ON inf.neuron_id = pis.inferred_neuron_id AND inf.level = pis.level AND inf.age = pis.age
-			WHERE pis.level = ? AND pis.age = 0 AND inf.neuron_id IS NULL
-		`, [sourceLevel - 1]);
-		if (this.debug) console.log(`Level ${sourceLevel}: Deleted ${deleteResult.affectedRows} weak pattern predictions`);
+		// Aggregate strengths per neuron and filter by threshold
+		// Build a filtered map with only neurons that pass the threshold
+		const filteredNeuronSources = new Map();
+		const aggregatedNeurons = [];
+		for (const [neuronId, sources] of neuronSources) {
+			const totalStrength = sources.reduce((sum, s) => sum + s.strength, 0);
+			if (totalStrength >= this.minInferenceStrength) {
+				aggregatedNeurons.push({ neuron_id: neuronId, strength: totalStrength });
+				filteredNeuronSources.set(neuronId, sources);
+			}
+		}
+		if (aggregatedNeurons.length === 0) return 0;
 
-		// return the number of inferred neurons
-		return inferenceResult.affectedRows;
+		// Insert into inferred_neurons at level sourceLevel - 1 (patterns predict one level down)
+		const targetLevel = sourceLevel - 1;
+		await this.conn.query(
+			'INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES ?',
+			[aggregatedNeurons.map(n => [n.neuron_id, targetLevel, 0, n.strength])]
+		);
+		if (this.debug) console.log(`Level ${sourceLevel}: Pattern inference predicted ${aggregatedNeurons.length} neurons at level ${targetLevel}`);
+
+		// Unpack to base level and save inference sources (only for neurons that passed threshold)
+		await this.unpackAndSaveInferenceSources(targetLevel, filteredNeuronSources);
+
+		return aggregatedNeurons.length;
 	}
 
 	/**
-	 * Unpack predictions from higher level to base level via peak chain (MySQL implementation)
+	 * Unpack predictions from higher level to base level via peak chain (in-memory implementation)
 	 * Follows pattern_neuron → peak_neuron → peak_neuron down to base.
-	 * Tracks which source-level neurons (where inference happened) led to which base outputs.
-	 * Uses unpack_sources scratch table (defined in db.sql) to propagate source info during unpacking.
+	 * Tracks which sources (connection_id or pattern_future_id) led to which base outputs.
+	 * @param {Number} fromLevel - the level where predictions were made
+	 * @param {Map} neuronSources - Map of neuron_id → [{source_type, source_id, strength}]
 	 */
-	async saveInferenceChain(fromLevel, source) {
-		if (this.debug2) console.log(`saving ${source} inference chain from level ${fromLevel} to base`);
+	async unpackAndSaveInferenceSources(fromLevel, neuronSources) {
+		if (this.debug2) console.log(`Unpacking inference sources from level ${fromLevel} to base`);
 
-		// Clear the scratch table for tracking source neurons during unpacking
-		await this.conn.query('TRUNCATE TABLE unpack_sources');
-
-		// Initialize: source neurons are the predictions at fromLevel
-		await this.conn.query(`
-			INSERT INTO unpack_sources (current_neuron_id, current_level, source_neuron_id)
-			SELECT neuron_id, level, neuron_id
-			FROM inferred_neurons
-			WHERE level = ? AND age = 0
-		`, [fromLevel]);
-
-		// Unpack level by level, grouping at each step to handle multiple patterns sharing same peak
-		// A pattern neuron at level N IS its peak neuron at level N-1
-		// Loop from fromLevel down to level 1, unpacking each level to the one below
-		for (let level = fromLevel; level > 0; level--) {
-
-			// Unpack pattern neurons at this level to their peaks at level-1
-			// Multiple patterns can share same peak, so GROUP BY to sum strengths
-			await this.conn.query(`
-				INSERT INTO inferred_neurons (neuron_id, level, age, strength)
-				SELECT pp.peak_neuron_id, ?, 0, SUM(inf.strength)
-				FROM inferred_neurons inf
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = inf.neuron_id
-				WHERE inf.level = ?
-				AND inf.age = 0
-				GROUP BY pp.peak_neuron_id
-			`, [level - 1, level]);
-
-			// Update unpack_sources: propagate source info to the unpacked neurons
-			// For each peak at level-1, inherit the source info from the patterns that unpacked to it
-			// Multiple patterns can share the same peak, so we'll have multiple source neurons for the same current neuron
-			await this.conn.query(`
-				INSERT INTO unpack_sources (current_neuron_id, current_level, source_neuron_id)
-				SELECT pp.peak_neuron_id, ?, us.source_neuron_id
-				FROM inferred_neurons inf
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = inf.neuron_id
-				JOIN unpack_sources us ON us.current_neuron_id = inf.neuron_id AND us.current_level = inf.level
-				WHERE inf.level = ? AND inf.age = 0
-			`, [level - 1, level]);
+		// If already at base level, just save directly
+		if (fromLevel === 0) {
+			await this.saveInferenceSourcesToDb(neuronSources);
+			return;
 		}
 
-		// Now copy the base-level mappings (current_level = 0) to inference_chain
-		// Age is 0 since these are fresh predictions
-		const [insertResult] = await this.conn.query(`
-			INSERT INTO inference_chain (base_neuron_id, source_neuron_id, age)
-			SELECT current_neuron_id, source_neuron_id, 0
-			FROM unpack_sources
-			WHERE current_level = 0
-		`);
-		if (this.debug && insertResult.affectedRows > 0) console.log(`Saved ${insertResult.affectedRows} predictions to inference_chain.`);
+		// Unpack level by level
+		let currentLevelSources = neuronSources;
+
+		for (let level = fromLevel; level > 0; level--) {
+			// Get all neuron IDs at current level
+			const neuronIds = [...currentLevelSources.keys()];
+			if (neuronIds.length === 0) break;
+
+			// Query pattern_peaks to get peak_neuron_id for each pattern_neuron_id
+			const [peaks] = await this.conn.query(
+				'SELECT pattern_neuron_id, peak_neuron_id FROM pattern_peaks WHERE pattern_neuron_id IN (?)',
+				[neuronIds]
+			);
+
+			// Build next level's mapping - peaks inherit sources from parent patterns
+			const nextLevelSources = new Map();
+			for (const peak of peaks) {
+				const sources = currentLevelSources.get(peak.pattern_neuron_id);
+				if (!sources) continue;
+
+				if (!nextLevelSources.has(peak.peak_neuron_id))
+					nextLevelSources.set(peak.peak_neuron_id, []);
+				nextLevelSources.get(peak.peak_neuron_id).push(...sources);
+			}
+
+			// Also insert unpacked neurons into inferred_neurons at level-1
+			if (nextLevelSources.size > 0) {
+				const unpackedNeurons = [];
+				for (const [neuronId, sources] of nextLevelSources) {
+					const totalStrength = sources.reduce((sum, s) => sum + s.strength, 0);
+					unpackedNeurons.push([neuronId, level - 1, 0, totalStrength]);
+				}
+				await this.conn.query(
+					'INSERT INTO inferred_neurons (neuron_id, level, age, strength) VALUES ? ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength)',
+					[unpackedNeurons]
+				);
+			}
+
+			currentLevelSources = nextLevelSources;
+		}
+
+		// Now at base level - save to inference_sources
+		await this.saveInferenceSourcesToDb(currentLevelSources);
+	}
+
+	/**
+	 * Save inference sources to the database
+	 * Deduplicates and aggregates sources that reach the same base neuron via multiple paths
+	 * @param {Map} neuronSources - Map of base_neuron_id → [{source_type, source_id, strength}]
+	 */
+	async saveInferenceSourcesToDb(neuronSources) {
+		// Dedupe and aggregate (same source can reach same base via multiple paths)
+		const deduped = new Map();
+		for (const [baseNeuronId, sources] of neuronSources) {
+			for (const src of sources) {
+				const key = `${baseNeuronId}:${src.source_type}:${src.source_id}`;
+				if (deduped.has(key))
+					deduped.get(key).strength += src.strength;
+				else
+					deduped.set(key, { base_neuron_id: baseNeuronId, ...src });
+			}
+		}
+
+		if (deduped.size === 0) return;
+
+		// Batch insert into inference_sources
+		const rows = [...deduped.values()].map(s =>
+			[0, s.base_neuron_id, s.source_type, s.source_id, s.strength]
+		);
+		await this.conn.query(
+			'INSERT INTO inference_sources (age, base_neuron_id, source_type, source_id, inference_strength) VALUES ?',
+			[rows]
+		);
+		if (this.debug) console.log(`Saved ${rows.length} inference sources to database`);
 	}
 
 	/**
@@ -1174,9 +1196,8 @@ export default class BrainMySQL extends Brain {
 	 *
 	 * Channel-Specific Credit Assignment:
 	 * 1. Identify which channel each base-level output belongs to (via output dimensions)
-	 * 2. Backtrack through inference_chain to find the high-level source neurons
-	 * 3. Join to appropriate inference source table (connection/pattern/exploration) to find what made predictions
-	 * 4. Apply channel-specific reward to the connections/patterns at the source level
+	 * 2. Use inference_sources to find which connections/patterns made predictions for each base output
+	 * 3. Apply channel-specific reward to the connections/patterns based on source_type
 	 *
 	 * Multiplicative reward: strength is multiplied by reward with time-decayed effect
 	 * Formula: strength * (1 + (reward - 1) * POW(rewardTimeDecayFactor, age - 1))
@@ -1200,7 +1221,6 @@ export default class BrainMySQL extends Brain {
 		// whenever an action is executed, regardless of reward value
 		let totalConnectionsRewarded = 0;
 		let totalPatternsRewarded = 0;
-		let totalExplorationRewarded = 0;
 		for (const [channelName, reward] of channelRewards) {
 
 			if (this.debug) console.log(`Applying reward ${reward.toFixed(3)} and habituation for channel: ${channelName}`);
@@ -1212,39 +1232,16 @@ export default class BrainMySQL extends Brain {
 				continue;
 			}
 
-			// Reward and habituate exploration-based inferences for this channel
-			// The existence of rows in exploration_inference_sources proves exploration happened
-			const [exploreResult] = await this.conn.query(`
-				UPDATE connections c
-				JOIN exploration_inference_sources eis ON c.id = eis.connection_id
-				JOIN inference_chain ic ON ic.source_neuron_id = eis.inferred_neuron_id AND ic.age = eis.age
-				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
-				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, ic.age - 1)))),
-				    c.habituation = c.habituation * ?
-				WHERE ic.age > 0 AND ic.age <= ?
-			`, [
-				outputDimIds,
-				this.minConnectionReward,
-				this.maxConnectionReward,
-				reward,
-				this.rewardTimeDecayFactor,
-				this.habituationDecay,
-				this.maxRewardsAge
-			]);
-			totalExplorationRewarded += exploreResult.affectedRows;
-
 			// Reward and habituate connection-based inferences for this channel
-			// The existence of rows in connection_inference_sources proves connection inference happened
+			// source_type='connection' covers both regular connection inference and exploration
 			const [connResult] = await this.conn.query(`
 				UPDATE connections c
-				JOIN connection_inference_sources cis ON c.id = cis.connection_id
-				JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
-				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
-				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, ic.age - 1)))),
+				JOIN inference_sources isrc ON c.id = isrc.source_id AND isrc.source_type = 'connection'
+				JOIN inferred_neurons inf ON inf.neuron_id = isrc.base_neuron_id AND inf.level = 0 AND inf.age = isrc.age
+				JOIN coordinates coord ON coord.neuron_id = isrc.base_neuron_id AND coord.dimension_id IN (?)
+				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, isrc.age - 1)))),
 				    c.habituation = c.habituation * ?
-				WHERE ic.age > 0 AND ic.age <= ?
+				WHERE isrc.age > 0 AND isrc.age <= ?
 			`, [
 				outputDimIds,
 				this.minConnectionReward,
@@ -1257,16 +1254,15 @@ export default class BrainMySQL extends Brain {
 			totalConnectionsRewarded += connResult.affectedRows;
 
 			// Reward and habituate pattern-based inferences for this channel
-			// The existence of rows in pattern_inference_sources proves pattern inference happened
+			// source_type='pattern' means source_id is pattern_future.id
 			const [patternResult] = await this.conn.query(`
 				UPDATE pattern_future pf
-				JOIN pattern_inference_sources pis ON pf.connection_id = pis.connection_id AND pf.pattern_neuron_id = pis.pattern_neuron_id
-				JOIN inference_chain ic ON ic.source_neuron_id = pis.inferred_neuron_id AND ic.age = pis.age
-				JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
-				JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (?)
-				SET pf.reward = GREATEST(?, LEAST(?, pf.reward * (1 + (? - 1) * POW(?, ic.age - 1)))),
+				JOIN inference_sources isrc ON pf.id = isrc.source_id AND isrc.source_type = 'pattern'
+				JOIN inferred_neurons inf ON inf.neuron_id = isrc.base_neuron_id AND inf.level = 0 AND inf.age = isrc.age
+				JOIN coordinates coord ON coord.neuron_id = isrc.base_neuron_id AND coord.dimension_id IN (?)
+				SET pf.reward = GREATEST(?, LEAST(?, pf.reward * (1 + (? - 1) * POW(?, isrc.age - 1)))),
 				    pf.habituation = pf.habituation * ?
-				WHERE ic.age > 0 AND ic.age <= ?
+				WHERE isrc.age > 0 AND isrc.age <= ?
 			`, [
 				outputDimIds,
 				this.minConnectionReward,
@@ -1278,10 +1274,10 @@ export default class BrainMySQL extends Brain {
 			]);
 			totalPatternsRewarded += patternResult.affectedRows;
 
-			if (this.debug) console.log(`  ${channelName}: rewarded ${connResult.affectedRows} connections, ${patternResult.affectedRows} patterns, ${exploreResult.affectedRows} exploration: ${reward}`);
+			if (this.debug) console.log(`  ${channelName}: rewarded ${connResult.affectedRows} connections, ${patternResult.affectedRows} patterns: ${reward}`);
 		}
 
-		if (this.debug) console.log(`Total rewarded: ${totalConnectionsRewarded} connections, ${totalPatternsRewarded} patterns, ${totalExplorationRewarded} exploration`);
+		if (this.debug) console.log(`Total rewarded: ${totalConnectionsRewarded} connections, ${totalPatternsRewarded} patterns`);
 		await this.waitForUser('Rewards applied');
 	}
 
@@ -1300,6 +1296,7 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Get detailed inference information for diagnostic output (MySQL implementation)
+	 * Uses the unified inference_sources table
 	 */
 	async getInferenceDetails(level) {
 
@@ -1329,61 +1326,65 @@ export default class BrainMySQL extends Brain {
 			neuronMap.get(row.neuron_id).coordinates[row.dimension_name] = row.val;
 		}
 
-		// Get connection inference sources - keep each connection separate for diagnostic display
-		const [connSources] = await this.conn.query(`
-			SELECT cis.inferred_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
-			       c.habituation as conn_habituation, cis.prediction_strength
-			FROM connection_inference_sources cis
-			JOIN connections c ON c.id = cis.connection_id
-			WHERE cis.age = 0 AND cis.level = ?
-		`, [level]);
+		// Get inference sources for base level neurons
+		const neuronIds = [...neuronMap.keys()];
+		if (neuronIds.length === 0) return Array.from(neuronMap.values());
 
-		// Group connection sources by neuron, keeping each connection separate
+		// Get connection sources
+		const [connSources] = await this.conn.query(`
+			SELECT isrc.base_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
+			       c.habituation as conn_habituation, isrc.inference_strength
+			FROM inference_sources isrc
+			JOIN connections c ON c.id = isrc.source_id
+			WHERE isrc.age = 0 AND isrc.source_type = 'connection' AND isrc.base_neuron_id IN (?)
+		`, [neuronIds]);
+
+		// Group connection sources by neuron
 		const connSourceMap = new Map();
 		for (const row of connSources) {
-			if (!connSourceMap.has(row.inferred_neuron_id)) {
-				connSourceMap.set(row.inferred_neuron_id, {
+			if (!connSourceMap.has(row.base_neuron_id)) {
+				connSourceMap.set(row.base_neuron_id, {
 					type: 'connection',
 					sources: []
 				});
 			}
-			connSourceMap.get(row.inferred_neuron_id).sources.push({
+			connSourceMap.get(row.base_neuron_id).sources.push({
 				connection_strength: row.conn_strength,
 				connection_reward: row.conn_reward,
 				connection_habituation: row.conn_habituation,
-				prediction_strength: row.prediction_strength
+				prediction_strength: row.inference_strength
 			});
 		}
 
-		// Get pattern inference sources - keep each pattern separate for diagnostic display
+		// Get pattern sources
 		const [patternSources] = await this.conn.query(`
-			SELECT pis.inferred_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
+			SELECT isrc.base_neuron_id, c.strength as conn_strength, c.reward as conn_reward,
 			       c.habituation as conn_habituation, pf.strength as pattern_strength,
 			       pf.reward as pattern_reward, pf.habituation as pattern_habituation,
-			       pis.prediction_strength
-			FROM pattern_inference_sources pis
-			JOIN connections c ON c.id = pis.connection_id
-			JOIN pattern_future pf ON pf.pattern_neuron_id = pis.pattern_neuron_id AND pf.connection_id = pis.connection_id
-			WHERE pis.age = 0 AND pis.level = ?
-		`, [level]);
+			       isrc.inference_strength
+			FROM inference_sources isrc
+			JOIN pattern_future pf ON pf.id = isrc.source_id
+			JOIN connections c ON c.id = pf.connection_id
+			WHERE isrc.age = 0 AND isrc.source_type = 'pattern' AND isrc.base_neuron_id IN (?)
+		`, [neuronIds]);
 
-		// Group pattern sources by neuron, keeping each pattern separate
+		// Group pattern sources by neuron
 		const patternSourceMap = new Map();
 		for (const row of patternSources) {
-			if (!patternSourceMap.has(row.inferred_neuron_id)) {
-				patternSourceMap.set(row.inferred_neuron_id, {
+			if (!patternSourceMap.has(row.base_neuron_id)) {
+				patternSourceMap.set(row.base_neuron_id, {
 					type: 'pattern',
 					sources: []
 				});
 			}
-			patternSourceMap.get(row.inferred_neuron_id).sources.push({
+			patternSourceMap.get(row.base_neuron_id).sources.push({
 				connection_strength: row.conn_strength,
 				connection_reward: row.conn_reward,
 				connection_habituation: row.conn_habituation,
 				pattern_strength: row.pattern_strength,
 				pattern_reward: row.pattern_reward,
 				pattern_habituation: row.pattern_habituation,
-				prediction_strength: row.prediction_strength
+				prediction_strength: row.inference_strength
 			});
 		}
 
