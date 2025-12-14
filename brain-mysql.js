@@ -692,8 +692,9 @@ export default class BrainMySQL extends Brain {
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future
 			SET strength = GREATEST(?, LEAST(?, strength + 1))
+            WHERE strength > 0
 			-- pattern future record should be inferred in the previous frame
-			WHERE id IN (SELECT source_id FROM org_inference_sources WHERE age = 1 AND source_type = 'pattern')
+			AND id IN (SELECT source_id FROM org_inference_sources WHERE age = 1 AND source_type = 'pattern')
 			-- and pattern future connection should now be active (came true)
 			AND connection_id IN (SELECT connection_id FROM active_connections WHERE age = 0)
 		`, [this.minConnectionStrength, this.maxConnectionStrength]);
@@ -705,8 +706,9 @@ export default class BrainMySQL extends Brain {
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future
 			SET strength = GREATEST(?, LEAST(?, strength - ?))
+            WHERE strength > 0
             -- pattern future record should be inferred in the previous frame
-            WHERE id IN (SELECT source_id FROM org_inference_sources WHERE age = 1 AND source_type = 'pattern')
+            AND id IN (SELECT source_id FROM org_inference_sources WHERE age = 1 AND source_type = 'pattern')
 			-- and pattern future connection should NOT be active (did NOT come true)
 			AND connection_id NOT IN (SELECT connection_id FROM active_connections WHERE age = 0)
 		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
