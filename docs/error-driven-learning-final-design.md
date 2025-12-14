@@ -97,14 +97,26 @@ CREATE TABLE pattern_inferred_neurons (
 ### New Scratch Tables
 
 ```sql
-CREATE TABLE inference_sources (
+-- Original inference sources (at the level where inference was made)
+CREATE TABLE org_inference_sources (
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     inferred_neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
-    predictor_neuron_id BIGINT UNSIGNED NOT NULL,
-    prediction_strength DOUBLE NOT NULL,
-    source ENUM('connection', 'pattern') NOT NULL,
-    INDEX idx_inferred (inferred_neuron_id, level),
-    INDEX idx_predictor (predictor_neuron_id)
+    source_type ENUM('connection', 'pattern') NOT NULL,
+    source_id BIGINT UNSIGNED NOT NULL,
+    inference_strength DOUBLE NOT NULL,
+    PRIMARY KEY (age, inferred_neuron_id, level, source_type, source_id)
+);
+
+-- Base inference sources (unpacked to base level for rewards)
+CREATE TABLE base_inference_sources (
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    base_neuron_id BIGINT UNSIGNED NOT NULL,
+    source_type ENUM('connection', 'pattern') NOT NULL,
+    source_id BIGINT UNSIGNED NOT NULL,
+    inference_strength DOUBLE NOT NULL,
+    PRIMARY KEY (age, base_neuron_id, source_type, source_id),
+    INDEX idx_base_age (base_neuron_id, age)
 ) ENGINE=MEMORY;
 
 CREATE TABLE failed_predictions (

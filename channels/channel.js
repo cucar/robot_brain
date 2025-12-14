@@ -72,8 +72,7 @@ export default class Channel {
 	/**
 	 * Set inferred actions scheduled for next frame
 	 */
-	setFrameOutputs(inferences, resolved) {
-		if (this.debug) this.logResolution(inferences, resolved);
+	setFrameOutputs(resolved) {
 		this.inferredActions = this.getActions(resolved).map(inf => inf.coordinates);
 	}
 
@@ -124,7 +123,9 @@ export default class Channel {
 		const resolvedActions = this.resolveActionInferences(this.getActions(inferences));
 
 		// Combine and return
-		return [...resolvedEvents, ...resolvedActions];
+		const resolved = [...resolvedEvents, ...resolvedActions];
+		if (this.debug) this.logResolution(inferences, resolved);
+		return resolved;
 	}
 
 	/**

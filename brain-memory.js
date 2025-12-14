@@ -262,9 +262,6 @@ export default class BrainMemory extends Brain {
 	 * Execute curiosity exploration if brain is inactive
 	 */
 	async curiosityExploration() {
-		// Check if the brain is inactive - if active, no exploration needed
-		if ((this.frameNumber - this.lastActivity) < this.inactivityThreshold) return;
-		if (this.debug) console.log('Brain inactive - executing curiosity exploration');
 
 		// Get a random channel for exploration
 		const channelNames = Array.from(this.channels.keys());
@@ -1187,16 +1184,17 @@ export default class BrainMemory extends Brain {
 	/**
 	 * Get detailed inference information for diagnostic output (Memory implementation)
 	 * Note: This is a simplified stub for BrainMemory - full implementation would require
-	 * tracking source information similar to BrainMySQL's inference_sources tables
+	 * tracking source information similar to BrainMySQL's base_inference_sources table
 	 */
-	async getInferenceDetails(level) {
+	async getInferenceDetails() {
+
+		if (!this.inferredNeurons.has(0)) return [];
+
 		// For now, return basic inference info without detailed source tracking
 		// Full implementation would require adding source tracking to in-memory structures
 		const details = [];
 
-		if (!this.inferredNeurons.has(level)) return details;
-
-		const levelInferences = this.inferredNeurons.get(level);
+		const levelInferences = this.inferredNeurons.get(0);
 		for (const [neuronId, data] of levelInferences) {
 			if (data.age !== 0) continue;
 

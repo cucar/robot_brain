@@ -17,7 +17,8 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
--- DROP TABLE IF EXISTS inference_sources;
+-- DROP TABLE IF EXISTS base_inference_sources;
+-- DROP TABLE IF EXISTS org_inference_sources;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
@@ -337,7 +338,7 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
     INDEX idx_pattern_strength (pattern_neuron_id, strength),
     INDEX idx_strength (strength)
-) ENGINE=InnoDB;
+) ENGINE=MEMORY;
 
 -- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
 -- patterns are learned by peak neurons to differentiate between sequences leading to them
@@ -409,12 +410,33 @@ CREATE TABLE IF NOT EXISTS active_connections (
     INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
 ) ENGINE=MEMORY;
 
--- unified inference sources table (MEMORY table)
--- tracks which connections or pattern_future records led to each base-level output
+-- original inference sources table (MEMORY table)
+-- tracks which connections or pattern_future records led to each inference at the level where inference was made
+-- used by learnFromErrors methods to validate predictions at their original level
 -- source_type: 'connection' for connection inference/exploration, 'pattern' for pattern inference
 -- source_id: connection.id for connection type, pattern_future.id for pattern type
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS inference_sources (
+CREATE TABLE IF NOT EXISTS org_inference_sources (
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
+    level TINYINT NOT NULL,
+    source_type ENUM('connection', 'pattern') NOT NULL,
+    source_id BIGINT UNSIGNED NOT NULL,
+    inference_strength DOUBLE NOT NULL,
+    PRIMARY KEY (age, inferred_neuron_id, level, source_type, source_id),
+    INDEX idx_neuron_age (inferred_neuron_id, age),
+    INDEX idx_source_type (source_type, source_id),
+    INDEX idx_age (age),
+    INDEX idx_level_age (level, age)
+) ENGINE=MEMORY;
+
+-- base inference sources table (MEMORY table)
+-- tracks which connections or pattern_future records led to each base-level output (unpacked from higher levels)
+-- used by applyRewards to reward sources that led to outputs
+-- source_type: 'connection' for connection inference/exploration, 'pattern' for pattern inference
+-- source_id: connection.id for connection type, pattern_future.id for pattern type
+-- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
+CREATE TABLE IF NOT EXISTS base_inference_sources (
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     base_neuron_id BIGINT UNSIGNED NOT NULL,
     source_type ENUM('connection', 'pattern') NOT NULL,
