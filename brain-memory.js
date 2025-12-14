@@ -601,44 +601,6 @@ export default class BrainMemory extends Brain {
 	}
 
 	/**
-	 * Check if a channel needs exploration (in-memory implementation)
-	 * Returns true if channel has no inferred outputs OR if holding too long
-	 * @param {string} channelName - name of the channel to check
-	 * @param {string} actionNeuronId - action neuron id - used to check if it's already inferred or not
-	 * @returns {Promise<boolean>} - true if channel needs exploration
-	 */
-	async channelNeedsExploration(channelName, actionNeuronId) {
-		const channel = this.channels.get(channelName);
-		if (!channel) return false;
-
-		const outputDimNames = channel.getOutputDimensions();
-		if (outputDimNames.length === 0) return false;
-
-		// Get dimension IDs for this channel's output dimensions
-		const outputDimIds = new Set(outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined));
-		if (outputDimIds.size === 0) return false;
-
-		// Check if any inferred neurons at level 0, age 0 have coordinates in these output dimensions
-		const level0Inferred = this.inferredNeurons.get(0);
-		if (!level0Inferred) return true; // No inferred neurons = needs exploration
-
-		for (const [neuronId, data] of level0Inferred) {
-			if (data.age !== 0) continue;
-
-			// Get neuron coordinates
-			const coords = this.neurons.getCoordinates(neuronId);
-			if (coords.length === 0) continue;
-
-			// Check if any coordinate is in the output dimensions
-			for (const coord of coords) {
-				if (outputDimIds.has(coord.dimension_id)) return false; // Has outputs = doesn't need exploration
-			}
-		}
-
-		return true; // No outputs found = needs exploration
-	}
-
-	/**
 	 * save resolved predictions to in-memory storage (implementation of abstract method)
 	 */
 	async saveResolvedPredictions(allSelectedPredictions) {

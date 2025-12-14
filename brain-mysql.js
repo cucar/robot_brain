@@ -152,46 +152,6 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Check if a channel needs exploration (MySQL implementation)
-	 * Uses probabilistic exploration inversely proportional to total inference strength.
-	 * Higher confidence predictions = lower exploration probability.
-	 * @param {string} channelName - name of the channel to check
-	 * @param {string} actionNeuronId - action neuron id - used to check if it's already inferred or not
-	 * @returns {Promise<boolean>} - true if channel needs exploration
-	 */
-	async channelNeedsExploration(channelName, actionNeuronId) {
-		const channel = this.channels.get(channelName);
-		if (!channel) return false;
-
-		const outputDimNames = channel.getOutputDimensions();
-		if (outputDimNames.length === 0) return false;
-
-		// Get dimension IDs for this channel's output dimensions
-		const outputDimIds = outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined);
-		if (outputDimIds.length === 0) return false;
-
-		// Get total inference strength for output dimensions AND check if action neuron is among them
-		const [result] = await this.conn.query(`
-            SELECT COALESCE(SUM(inf.strength), 0) as total_strength, MAX(IF(inf.neuron_id = ?, 1, 0)) as action_neuron_inferred
-            FROM inferred_neurons inf
-            WHERE inf.age = 0
-            AND inf.level = 0
-            AND EXISTS (SELECT 1 FROM coordinates c WHERE c.neuron_id = inf.neuron_id AND c.dimension_id IN (?))
-		`, [actionNeuronId, outputDimIds]);
-		const totalInferenceStrength = result[0].total_strength || 0;
-		const actionNeuronInferred = result[0].action_neuron_inferred === 1;
-
-		// If action neuron is already inferred, no need for exploration
-		if (actionNeuronInferred) return false;
-
-		// If no outputs at all, must explore
-		if (totalInferenceStrength === 0) return true;
-
-		// Probabilistic exploration inversely proportional to confidence
-		return this.decideExploration(totalInferenceStrength);
-	}
-
-	/**
 	 * Save resolved inferences to MySQL storage (implementation of abstract method)
 	 * This is called after conflict resolution at base level (level 0)
 	 * Updates inferred_neurons in place (deletes invalid, inserts corrected)
@@ -300,22 +260,18 @@ export default class BrainMySQL extends Brain {
 		// Apply negative reinforcement to failed INPUT predictions only - Failed = predicted but not observed
 		const [result] = await this.conn.query(`
 			UPDATE connections c
-			JOIN org_inference_sources isrc ON isrc.source_id = c.id AND isrc.source_type = 'connection'
 			SET c.strength = GREATEST(0, c.strength - ?)
-			WHERE isrc.age = 1
-			AND c.strength > 0
-			-- outputs are not penalized (they are actions, not predictions of world state)
+			WHERE c.strength > 0
+			-- penalize connections that were inferred in the previous frame
+			AND c.id IN (SELECT source_id FROM org_inference_sources WHERE source_type = 'connection' AND age = 1)
+			-- penalize the connections that did not come true
+			AND c.id NOT IN (SELECT connection_id FROM active_connections WHERE age = 0)
+			-- negative reinforcement only applies to event predictions - not actions
 			AND EXISTS (
 				SELECT 1 FROM coordinates coord
 				JOIN dimensions d ON d.id = coord.dimension_id
-				WHERE coord.neuron_id = isrc.inferred_neuron_id
-				AND d.type != 'action'
-			)
-			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an
-				WHERE an.neuron_id = isrc.inferred_neuron_id
-				AND an.level = isrc.level
-				AND an.age = 0
+				WHERE coord.neuron_id = c.to_neuron_id
+				AND d.type = 'event'
 			)
 		`, [this.connectionNegativeReinforcement]);
 		if (this.debug && result.affectedRows > 0)
@@ -733,47 +689,46 @@ export default class BrainMySQL extends Brain {
 
 		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted connections
 		// Connection in pattern_future AND observed in active_connections FROM peak at age=0
-		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
-		// Pattern at level N predicts level N-1, so we check active_connections at level N-1
 		const [strengthenResult] = await this.conn.query(`
-			UPDATE pattern_future pf
-			JOIN org_inference_sources isrc ON isrc.source_id = pf.id AND isrc.source_type = 'pattern'
-			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = isrc.level AND ac.age = 0
-			SET pf.strength = GREATEST(?, LEAST(?, pf.strength + 1))
-			WHERE isrc.age = 1
+			UPDATE pattern_future
+			SET strength = GREATEST(?, LEAST(?, strength + 1))
+			-- pattern future record should be inferred in the previous frame
+			WHERE id IN (SELECT source_id FROM org_inference_sources WHERE age = 1 AND source_type = 'pattern')
+			-- and pattern future connection should now be active (came true)
+			AND connection_id IN (SELECT connection_id FROM active_connections WHERE age = 0)
 		`, [this.minConnectionStrength, this.maxConnectionStrength]);
 		if (this.debug && strengthenResult.affectedRows > 0)
 			console.log(`Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
 
 		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections
 		// Connection in pattern_future but NOT observed in active_connections FROM peak
-		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
 		const [weakenResult] = await this.conn.query(`
-			UPDATE pattern_future pf
-			JOIN org_inference_sources isrc ON isrc.source_id = pf.id AND isrc.source_type = 'pattern'
-			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			LEFT JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.connection_id = pf.connection_id AND ac.level = isrc.level AND ac.age = 0
-			SET pf.strength = GREATEST(?, LEAST(?, pf.strength - ?))
-			WHERE isrc.age = 1
-			AND ac.connection_id IS NULL
+			UPDATE pattern_future
+			SET strength = GREATEST(?, LEAST(?, strength - ?))
+            -- pattern future record should be inferred in the previous frame
+            WHERE id IN (SELECT source_id FROM org_inference_sources WHERE age = 1 AND source_type = 'pattern')
+			-- and pattern future connection should NOT be active (did NOT come true)
+			AND connection_id NOT IN (SELECT connection_id FROM active_connections WHERE age = 0)
 		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
 		if (this.debug && weakenResult.affectedRows > 0)
 			console.log(`Weakened ${weakenResult.affectedRows} failed pattern_future predictions`);
 
 		// 3. ADD NOVEL CONNECTIONS: Observed but not predicted
-		// Active connections FROM peaks of patterns that made predictions, but not in pattern_future
-		// Only for patterns whose predictions were strong enough to be inferred and made it through conflict resolution
+		// For patterns that made predictions: add observed connections FROM their peaks that were NOT predicted (not in pattern_future)
 		const [novelResult] = await this.conn.query(`
 			INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT pf_src.pattern_neuron_id, ac.connection_id, 1.0
 			FROM org_inference_sources isrc
-			JOIN pattern_future pf_src ON pf_src.id = isrc.source_id AND isrc.source_type = 'pattern'
+			JOIN pattern_future pf_src ON pf_src.id = isrc.source_id
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf_src.pattern_neuron_id
-			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.level = isrc.level AND ac.age = 0
-			LEFT JOIN pattern_future pf ON pf.pattern_neuron_id = pf_src.pattern_neuron_id AND pf.connection_id = ac.connection_id
+			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.age = 0
 			WHERE isrc.age = 1
-			AND pf.connection_id IS NULL
+			AND isrc.source_type = 'pattern'
+			AND NOT EXISTS (
+				SELECT 1 FROM pattern_future pf
+				WHERE pf.pattern_neuron_id = pf_src.pattern_neuron_id
+				AND pf.connection_id = ac.connection_id
+			)
 		`);
 		if (this.debug && novelResult.affectedRows > 0)
 			console.log(`Added ${novelResult.affectedRows} novel connections to pattern_future`);

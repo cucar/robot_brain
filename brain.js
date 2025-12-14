@@ -304,25 +304,6 @@ export default class Brain {
 	}
 
 	/**
-	 * determine if we should explore or not based on total inference strength
-	 */
-	async decideExploration(totalInferenceStrength) {
-
-		// Linear decay from maxExploration to minExploration as strength increases
-		// explorationScale defines the strength at which exploration reaches minimum
-		const explorationRange = this.maxExploration - this.minExploration;
-		let inferenceScale = totalInferenceStrength / this.explorationScale;
-		if (inferenceScale > 1.0) inferenceScale = 1.0;
-		const explorationProb = this.maxExploration - inferenceScale * explorationRange;
-
-		// Randomly decide if we should explore based on probability
-		const explore = Math.random() < explorationProb;
-		if (this.debug) console.log(`Total inference strength: ${totalInferenceStrength} → Exploration probability: ${explorationProb.toFixed(2)} → Explore: ${explore}`);
-		if (explore) await this.waitForUser('deciding to do exploration even though we have inference');
-		return explore;
-	}
-
-	/**
 	 * Prints a one-line summary of the frame processing
 	 */
 	printFrameSummary(frameElapsed) {
@@ -594,22 +575,39 @@ export default class Brain {
 
 			// Check if this channel has any inferred output neurons and resolve their conflicts if so
 			const channelBaseInferences = baseInferences.get(channelName);
-			const hasInference = channelBaseInferences && channelBaseInferences.length > 0;
-			if (hasInference) await this.resolveChannelBaseInferences(channelName, channelBaseInferences);
+			const hasInferences = channelBaseInferences && channelBaseInferences.length > 0;
+			if (hasInferences) await this.resolveChannelBaseInferences(channelName, channelBaseInferences);
 
 			// if the channel does not have any inference, we have to explore it
 			// but even if it does have inference, we will occasionally need to force exploration
-			if (!hasInference || this.shouldExploreChannel()) await this.exploreChannel(channelName);
+			if (!hasInferences || this.shouldExploreChannel(channelName, channelBaseInferences)) await this.exploreChannel(channelName);
 		}
 	}
 
 	/**
-	 * Decide whether to explore a channel based on inactivity and probability
-	 * Simple probability-based exploration - minExploration ensures we always have some chance to explore
+	 * Decide whether to explore a channel based on inference strength
+	 * Exploration probability is inversely proportional to total inference strength
+	 * Higher confidence predictions = lower exploration probability
+	 * @param {string} channelName - name of the channel to check
+	 * @param {Array} channelBaseInferences - array of channel base inferences
 	 * @returns {boolean} - true if we should explore this channel
 	 */
-	shouldExploreChannel() {
-		return Math.random() < this.minExploration;
+	shouldExploreChannel(channelName, channelBaseInferences) {
+
+		// Calculate total inference strength for this channel
+		const totalInferenceStrength = channelBaseInferences.reduce((sum, inf) => sum + inf.strength, 0);
+
+		// Linear decay from maxExploration to minExploration as strength increases
+		// explorationScale defines the strength at which exploration reaches minimum
+		const explorationRange = this.maxExploration - this.minExploration;
+		let inferenceScale = totalInferenceStrength / this.explorationScale;
+		if (inferenceScale > 1.0) inferenceScale = 1.0;
+		const explorationProb = this.maxExploration - inferenceScale * explorationRange;
+
+		// Randomly decide if we should explore based on probability
+		const explore = Math.random() < explorationProb;
+		if (this.debug && explore) console.log(`${channelName}: Total strength ${totalInferenceStrength.toFixed(2)} → Exploration prob ${explorationProb.toFixed(2)} → Exploring`);
+		return explore;
 	}
 
 	/**
@@ -797,14 +795,6 @@ export default class Brain {
 	 */
 	async getChannelBaseInferences() {
 		throw new Error('getChannelBaseInferences() must be implemented by subclass');
-	}
-
-	/**
-	 * Check if a channel needs exploration (implementation-specific)
-	 * Returns true if channel has no inferred outputs OR if holding too long
-	 */
-	async channelNeedsExploration() {
-		throw new Error('channelNeedsExploration(channelName, actionNeuronId) must be implemented by subclass');
 	}
 
 	/**
