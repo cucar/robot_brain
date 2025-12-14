@@ -19,7 +19,6 @@ export default class Channel {
 		this.debug = false; // controls verbosity of channel output
 		this.debug2 = false; // more detailed, verbose debug mode
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
-		this.inferredActions = []; // actions selected by resolveConflicts
 	}
 
 	/**
@@ -59,28 +58,6 @@ export default class Channel {
 	 */
 	async getFrameEvents() {
 		throw new Error('Channel must implement getFrameEvents() method');
-	}
-
-	/**
-	 * Get inferred actions scheduled for current frame
-	 * Returns actions selected by resolveConflicts in previous frame
-	 */
-	getFrameOutputs() {
-		return this.inferredActions;
-	}
-
-	/**
-	 * Set inferred actions scheduled for next frame
-	 */
-	setFrameOutputs(resolved) {
-		this.inferredActions = this.getActions(resolved).map(inf => inf.coordinates);
-	}
-
-	/**
-	 * Clear inferred actions after execution to prevent re-execution
-	 */
-	clearFrameOutputs() {
-		this.inferredActions = [];
 	}
 
 	/**

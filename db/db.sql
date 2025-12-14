@@ -22,6 +22,8 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
+select * from base_inference_sources;
+
 select * from dimensions;
 select * from connections;
 select * from active_neurons;
@@ -180,7 +182,7 @@ select * from coordinates where neuron_id in (4);
 
 select * from connections where id in (9, 13);            
 
-select id from dimensions where type = 'output';
+select id from dimensions where type = 'action';
 select * from inference_chain;
 select * from unpack_sources;
 
@@ -193,7 +195,7 @@ from connections c
 JOIN connection_inference_sources cis ON c.id = cis.connection_id
 JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
 -- JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
--- JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (select id from dimensions where type = 'output')
+-- JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (select id from dimensions where type = 'action')
 -- WHERE ic.age > 0 AND ic.age <= 1
 -- AND cis.level = il.level
 ;

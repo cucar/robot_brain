@@ -14,9 +14,9 @@ await brain.init();
 
 // Setup test dimensions manually (simulating a simple channel)
 console.log('\nSetting up test dimensions...');
-await brain.conn.query("INSERT IGNORE INTO dimensions (name, channel, type) VALUES ('price_change', 'test', 'input')");
-await brain.conn.query("INSERT IGNORE INTO dimensions (name, channel, type) VALUES ('volume_change', 'test', 'input')");
-await brain.conn.query("INSERT IGNORE INTO dimensions (name, channel, type) VALUES ('action', 'test', 'output')");
+await brain.conn.query("INSERT IGNORE INTO dimensions (name, channel, type) VALUES ('price_change', 'test', 'event')");
+await brain.conn.query("INSERT IGNORE INTO dimensions (name, channel, type) VALUES ('volume_change', 'test', 'event')");
+await brain.conn.query("INSERT IGNORE INTO dimensions (name, channel, type) VALUES ('action', 'test', 'action')");
 
 console.log('\n1. Testing basic frame processing...');
 

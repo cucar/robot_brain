@@ -151,19 +151,19 @@ export default class Brain {
 		if (this.debug) console.log('******************************************************************');
 		if (this.debug) console.log(`OBSERVING FRAME ${this.frameNumber}`);
 
-		// process each channel: get inputs, get outputs, execute outputs (which returns final frame points)
-		for (const [_, channel] of this.channels) {
+		// Get all frame outputs from previous frame's inference (one query for all channels)
+		const frameOutputs = await this.getFrameOutputs();
 
-			// get the frame event inputs from the channel (current state before any outputs are executed)
+		// Process each channel: get inputs from channel, get outputs from brain tables, execute
+		for (const [channelName, channel] of this.channels) {
+
+			// Get the frame event inputs from the channel (current state before any outputs are executed)
 			const channelEvents = await channel.getFrameEvents();
 
-			// get last inferred outputs to be executed in this frame in case there are any
-			const channelOutputs = channel.getFrameOutputs();
+			// Get last inferred outputs to be executed in this frame (from brain's inference tables)
+			const channelOutputs = frameOutputs.get(channelName) || [];
 
-			// clear the inferred actions so they don't get executed again if no new inference happens
-			channel.clearFrameOutputs();
-
-			// execute outputs - this updates channel state
+			// Execute outputs - this updates channel state
 			await channel.executeOutputs(channelOutputs);
 
 			// Add frame points to the frame
@@ -230,7 +230,7 @@ export default class Brain {
 		await this.learnFromErrors();
 
 		// do predictions and outputs - what's going to happen next? and what's our best response?
-		// inferNeurons includes exploration (first), connection/pattern inference, and conflict resolution
+		// this includes exploration (first), connection/pattern inference, and conflict resolution
 		await this.inferNeurons();
 
 		// at this point the frame is processed - the forget cycle is a periodic cleanup task
@@ -279,9 +279,8 @@ export default class Brain {
 	}
 
 	/**
-	 * Exploration inference for a single channel - creates random action prediction
-	 * Called when a channel has no inferred outputs after connection/pattern inference
-	 * Writes to inferred_neurons and inference_sources tables
+	 * Explore a channel by selecting a random valid action.
+	 * Deletes any prior inferences for this channel, inserts exploration neuron and sources.
 	 * @param {string} channelName - name of the channel to explore
 	 */
 	async exploreChannel(channelName) {
@@ -294,13 +293,9 @@ export default class Brain {
 		// Find or create neuron for this action
 		const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
 
-		// Save exploration inference (writes to inference_sources and inferred_neurons)
+		// Save exploration: delete prior channel inferences, insert exploration neuron and sources
 		if (this.debug) console.log(`Exploration for ${channelName}: `, actionCoordinates, actionNeuronId);
-		await this.overrideBaseInferenceSources(actionNeuronId, null);
-		await this.saveExplorationNeuron(actionNeuronId);
-
-		// Save the action for execution in next frame (no resolution needed - exploration is valid by design)
-		channel.setFrameOutputs([], [{ neuron_id: actionNeuronId, strength: 1.0, coordinates: actionCoordinates }]);
+		await this.saveExploration(channelName, actionNeuronId);
 	}
 
 	/**
@@ -567,21 +562,108 @@ export default class Brain {
 			if (level > 0 && await this.inferPatterns(level)) break;
 		}
 
+		// Process inferences: resolve conflicts, correct, explore - updates inference tables
+		await this.processInferences();
+	}
+
+	/**
+	 * Process inferences for all channels after connection/pattern inference.
+	 * Gets channel base inferences and processes each channel: resolve, correct, explore.
+	 * All operations update the inference tables (inferred_neurons, org_inference_sources, base_inference_sources).
+	 */
+	async processInferences() {
+
 		// Get inferred base neurons grouped by channel - may be empty for some/all channels
 		const baseInferences = await this.getChannelBaseInferences();
 
-		// Per-channel: resolve if inference exists - explore if needed
-		for (const [channelName, _] of this.channels) {
+		// Get detailed inference information for diagnostics if enabled (one query for all channels)
+		const inferenceDetails = this.diagnostic ? await this.getInferenceDetails() : null;
 
-			// Check if this channel has any inferred output neurons and resolve their conflicts if so
-			const channelBaseInferences = baseInferences.get(channelName);
-			const hasInferences = channelBaseInferences && channelBaseInferences.length > 0;
-			if (hasInferences) await this.resolveChannelBaseInferences(channelName, channelBaseInferences);
-
-			// if the channel does not have any inference, we have to explore it
-			// but even if it does have inference, we will occasionally need to force exploration
-			if (!hasInferences || this.shouldExploreChannel(channelName, channelBaseInferences)) await this.exploreChannel(channelName);
+		// Process each channel's inferences
+		for (const [channelName, channel] of this.channels) {
+			const channelBaseInferences = baseInferences.get(channelName) || [];
+			await this.processChannelInferences(channelName, channel, channelBaseInferences, inferenceDetails);
 		}
+	}
+
+	/**
+	 * Process inferences for a single channel.
+	 * Each step reads from and writes to inference tables directly.
+	 * @param {string} channelName - name of the channel
+	 * @param {Object} channel - channel instance
+	 * @param {Array} channelBaseInferences - array of base level inference objects for this channel
+	 * @param {Array|null} inferenceDetails - detailed inference info for diagnostics (or null if disabled)
+	 */
+	async processChannelInferences(channelName, channel, channelBaseInferences, inferenceDetails) {
+
+		// if there are inferences, resolve conflicts and correct them if needed - updates inference tables
+		if (channelBaseInferences.length > 0) {
+			await this.resolveChannelConflicts(channelName, channel, channelBaseInferences);
+			await this.correctChannelActions(channelName, channel);
+		}
+
+		// Explore if there are no inferences - even if there are inferences, we may need to explore occasionally
+		if (this.shouldExploreChannel(channelName, channelBaseInferences))
+			await this.exploreChannel(channelName);
+
+		// Diagnostics - reads current state from tables
+		if (this.diagnostic && inferenceDetails)
+			await this.displayChannelDiagnostics(channelName, channel, inferenceDetails);
+	}
+
+	/**
+	 * Resolve conflicts for a channel using channel-specific logic.
+	 * Updates inferred_neurons table: deletes losers, keeps winners.
+	 */
+	async resolveChannelConflicts(channelName, channel, channelBaseInferences) {
+
+		// Call channel-specific conflict resolution
+		const resolved = channel.resolveConflicts(channelBaseInferences);
+
+		// Determine which neurons lost (not in resolved)
+		const resolvedNeuronIds = new Set(resolved.map(inf => inf.neuron_id));
+		const deletedNeuronIds = channelBaseInferences.map(inf => inf.neuron_id).filter(id => !resolvedNeuronIds.has(id));
+
+		// Delete losers from inference tables
+		if (deletedNeuronIds.length > 0) await this.deleteConflictLosers(deletedNeuronIds);
+
+		if (this.debug) console.log(`${channelName}: Kept ${resolved.length}, deleted ${deletedNeuronIds.length}`);
+	}
+
+	/**
+	 * Correct invalid actions for a channel using channel-specific logic.
+	 * Reads current inferences from tables, applies corrections, updates tables.
+	 */
+	async correctChannelActions(channelName, channel) {
+
+		// Get current output inferences for this channel from tables
+		const channelActions = await this.getChannelActions(channelName);
+		if (channelActions.length === 0) return;
+
+		// Call channel-specific correction logic
+		const corrections = channel.correctActionInferences(channelActions);
+		if (corrections.length === 0) return;
+
+		// Get neuron ids for corrected coordinates
+		const correctedNeuronIds = await this.getFrameNeurons(corrections.map(c => c.correctedCoordinates));
+		for (let i = 0; i < corrections.length; i++) corrections[i].correctedNeuronId = correctedNeuronIds[i];
+
+		// Update neuron_id in inference tables (strength stays in place)
+		await this.applyInferenceCorrections(corrections);
+
+		if (this.debug) console.log(`${channelName}: Applied ${corrections.length} corrections`);
+	}
+
+	/**
+	 * Display diagnostics for a channel.
+	 * Reads current resolved state from tables.
+	 */
+	async displayChannelDiagnostics(channelName, channel, inferenceDetails) {
+		const channelDetails = inferenceDetails.filter(inf =>
+			Object.keys(inf.coordinates).some(dim => dim.startsWith(channelName + '_'))
+		);
+		const resolved = await this.getChannelActions(channelName);
+		channel.displayDiagnostics(channelDetails, resolved);
 	}
 
 	/**
@@ -593,6 +675,9 @@ export default class Brain {
 	 * @returns {boolean} - true if we should explore this channel
 	 */
 	shouldExploreChannel(channelName, channelBaseInferences) {
+
+		// If there are no inferences, we should explore
+		if (!channelBaseInferences.length) return true;
 
 		// Calculate total inference strength for this channel
 		const totalInferenceStrength = channelBaseInferences.reduce((sum, inf) => sum + inf.strength, 0);
@@ -643,67 +728,6 @@ export default class Brain {
 
 		// Create error patterns from failed predictions (all types)
 		await this.createErrorPatterns();
-	}
-
-	/**
-	 * Resolve inferences for a single channel.
-	 * Resolves conflicts, corrects invalid actions, and saves for next frame execution.
-	 * @param {string} channelName - name of the channel
-	 * @param {Array} channelBaseInferences - array of base level inference objects for this channel
-	 */
-	async resolveChannelBaseInferences(channelName, channelBaseInferences) {
-		const channel = this.channels.get(channelName);
-
-		// Get detailed inference information for diagnostics if enabled
-		const inferenceDetails = this.diagnostic ? await this.getInferenceDetails() : null;
-
-		// Resolve conflicts based on channel-specific logic
-		const resolved = channel.resolveConflicts(channelBaseInferences);
-
-		// Correct invalid actions based on channel-specific logic if needed
-		const corrections = channel.correctActionInferences(resolved);
-		if (corrections.length > 0) {
-
-			// Get the neuron ids for the corrected actions
-			const correctedNeuronIds = await this.getFrameNeurons(corrections.map(c => c.correctedCoordinates));
-
-			// Find the original neuron id and change it to the corrected neuron id and coordinates
-			// Also add the original strength to the correction object
-			for (let i = 0; i < corrections.length; i++) {
-				const originalNeuronId = corrections[i].originalNeuronId;
-				const correctedCoordinates = corrections[i].correctedCoordinates;
-				const correctedNeuronId = correctedNeuronIds[i];
-				resolved.forEach(inf => {
-					if (inf.neuron_id === originalNeuronId) {
-						inf.neuron_id = correctedNeuronId;
-						inf.coordinates = correctedCoordinates;
-						corrections[i].strength = inf.strength; // Add original strength to correction object
-					}
-				});
-			}
-
-			// Apply corrections to inference sources (delete original, insert exploration sources for corrected)
-			if (this.debug) console.log(`Applying ${corrections.length} inference corrections for ${channelName}`);
-			await this.correctInferredActions(corrections);
-		}
-
-		// Save the resolved actions so that they can be executed in the next frame
-		channel.setFrameOutputs(resolved);
-
-		// Determine which neurons were deleted (not in resolved)
-		const resolvedNeuronIds = new Set(resolved.map(inf => inf.neuron_id));
-		const inferredNeuronIds = new Set(channelBaseInferences.map(inf => inf.neuron_id));
-		const deletedNeuronIds = [...inferredNeuronIds].filter(id => !resolvedNeuronIds.has(id));
-
-		// Save resolved inferences and delete conflict losers - implementation-specific
-		await this.saveResolvedInferences(resolved, deletedNeuronIds);
-		if (this.debug) console.log(`${channelName}: Resolved ${resolved.length} neurons, deleted ${deletedNeuronIds.length}`);
-
-		// Display diagnostics for this channel if enabled
-		if (this.diagnostic && inferenceDetails) {
-			const channelDetails = inferenceDetails.filter(inf => Object.keys(inf.coordinates).some(dim => dim.startsWith(channelName + '_')));
-			channel.displayDiagnostics(channelDetails, resolved);
-		}
 	}
 
 	/**
@@ -798,51 +822,52 @@ export default class Brain {
 	}
 
 	/**
-	 * save resolved inferences to storage (implementation-specific)
-	 * @param {Array} resolvedInferences - neurons that survived conflict resolution
-	 * @param {Array} deletedNeuronIds - neuron IDs that were deleted during conflict resolution
+	 * Get frame outputs for all channels from inferred_neurons table (implementation-specific)
+	 * Reads output neurons (age=0, level=0) grouped by channel
+	 * @returns {Promise<Map>} - Map of channel names to array of output coordinates
 	 */
-	async saveResolvedInferences(resolvedInferences, deletedNeuronIds) {
-		throw new Error('saveResolvedInferences() must be implemented by subclass');
+	async getFrameOutputs() {
+		throw new Error('getFrameOutputs() must be implemented by subclass');
+	}
+
+	/**
+	 * Delete conflict losers from inference tables (implementation-specific)
+	 * @param {Array} deletedNeuronIds - neuron IDs that lost conflict resolution
+	 */
+	async deleteConflictLosers(deletedNeuronIds) {
+		throw new Error('deleteConflictLosers() must be implemented by subclass');
 	}
 
 	/**
 	 * Override an inference with a new neuron (implementation-specific)
 	 * Unified method used by both correction and exploration:
 	 * - Correction: interprets existing inference to make it valid
-	 * - Exploration: randomly selects a valid action
-	 *
-	 * This method:
-	 * 1. Cleans up inference_sources for original neuron
-	 * 2. Finds connections that could have predicted the override neuron
-	 * 3. Inserts override sources into inference_sources
-	 *
-	 * Note: Does NOT update inferred_neurons - caller must handle that separately
-	 *
-	 * @param {Number} overrideNeuronId - neuron ID to use instead
-	 * @param {Number|null} originalNeuronId - neuron ID being overridden (null for pure exploration)
+	 * Save exploration action for a channel (implementation-specific)
+	 * 1. Deletes any prior inferences for this channel
+	 * 2. Inserts exploration neuron into inferred_neurons
+	 * 3. Finds connections that could have predicted it and inserts as sources
+	 * @param {string} channelName - name of the channel
+	 * @param {Number} neuronId - exploration neuron ID
 	 */
-	async overrideBaseInferenceSources(overrideNeuronId, originalNeuronId = null) {
-		throw new Error('overrideBaseInferenceSources() must be implemented by subclass');
+	async saveExploration(channelName, neuronId) {
+		throw new Error('saveExploration() must be implemented by subclass');
 	}
 
 	/**
-	 * Save exploration neuron to inferred_neurons table (implementation-specific)
-	 * Called after overrideBaseInferenceSources for exploration actions
-	 * @param {Number} neuronId - neuron ID to save
+	 * Get current output inferences for a channel from inferred_neurons table (implementation-specific)
+	 * @param {string} channelName - name of the channel
+	 * @returns {Promise<Array>} - array of { neuron_id, strength, coordinates }
 	 */
-	async saveExplorationNeuron(neuronId) {
-		throw new Error('saveExplorationNeuron() must be implemented by subclass');
+	async getChannelActions(channelName) {
+		throw new Error('getChannelActions() must be implemented by subclass');
 	}
 
 	/**
-	 * Correct inferred actions when conflict resolution changes them (implementation-specific)
-	 * Correction is an override mechanism that interprets existing connection/pattern inferences
-	 * Only updates inference sources - inferred_neurons will be updated by saveResolvedInferences
-	 * @param {Array} corrections - Array of { originalNeuronId, correctedCoordinates, strength }
+	 * Apply inference corrections - just updates neuron_id in place (implementation-specific)
+	 * @param {Array} corrections - Array of { originalNeuronId, correctedNeuronId }
 	 */
-	async correctInferredActions(corrections) {
-		throw new Error('correctInferredActions() must be implemented by subclass');
+	async applyInferenceCorrections(corrections) {
+		throw new Error('applyInferenceCorrections() must be implemented by subclass');
 	}
 
 	/**
