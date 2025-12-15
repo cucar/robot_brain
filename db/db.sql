@@ -22,79 +22,38 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
+select * from inferred_neurons;
+select * from org_inference_sources where source_type = 'pattern';
 select * from base_inference_sources;
 
 select * from dimensions;
 select * from connections;
 select * from active_neurons;
 select * from active_connections;
-select * from exploration_inference_sources where age = 2;
-select * from connection_inference_sources where age = 2;
-select * from inferred_neurons_resolved;
-select * from inference_chain;
 
-select c.*
-from exploration_inference_sources eis
-join connections c ON c.id = eis.connection_id
-JOIN inference_chain ic ON ic.source_neuron_id = eis.inferred_neuron_id AND ic.age = eis.age
-JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
-JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (4)
-WHERE ic.age > 1 AND ic.age <= 2;
+SELECT c.*
+FROM active_neurons an
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+WHERE an.level = 0 
+AND c.to_neuron_id = 3
+-- AND c.distance = an.age + 1 
+AND c.strength > 0;
 
 select c.neuron_id, d.name, d.type, c.val 
 from coordinates c join dimensions d on d.id = c.dimension_id 
--- where c.neuron_id in () 
 order by c.neuron_id;
 
 select * from inferred_neurons where age = 0;
-select * from connection_inference_sources where age = 0;
 
 SELECT inf.neuron_id, inf.strength, c.dimension_id, c.val, d.name as dimension_name, d.channel
-			FROM inferred_neurons inf
-			JOIN coordinates c ON inf.neuron_id = c.neuron_id
-			JOIN dimensions d ON c.dimension_id = d.id
-			WHERE inf.age = 0 AND inf.level = 0
-			ORDER BY d.channel, inf.neuron_id;
-
-
-SELECT f.neuron_id as from_neuron_id, fd.name as from_dim, fc.val as from_val, t.neuron_id as to_neuron_id, td.name as to_dim, tc.val as to_val, f.age as distance, 1 as strength
-FROM active_neurons f
-join coordinates fc on fc.neuron_id = f.neuron_id
-join dimensions fd on fd.id = fc.dimension_id 
-CROSS JOIN active_neurons t
-join coordinates tc on tc.neuron_id = t.neuron_id
-join dimensions td on td.id = tc.dimension_id 
-WHERE t.age = 0  -- target neurons are newly activated
-AND t.level = 0  -- target neurons are at the specified level
-AND f.level = t.level  -- restrict to same level only
--- we used to have the condition below that enabled us to do associative pooling, but I'm realizing that
--- it should really be used only for spatial processing - it's a special case of that
--- spatial pooling will look at the neighboring neurons in terms of X-Y coordinates
--- associative pooling is just a special case of that where there are no X-Y coordinates
--- AND (t.neuron_id != f.neuron_id OR f.age > 0)  -- no self-connections at same age
-AND f.age > 0; -- at this point, we are only learning connections between different ages to use for inference
-
-select * 
-from exploration_inference_sources eis
-JOIN inference_chain ic ON ic.source_neuron_id = eis.inferred_neuron_id AND ic.age = eis.age
-JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
-JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (4)
-WHERE il.level = 0 AND ic.age > 0 AND ic.age <= 1;
-
-select * 
-from connection_inference_sources cis
-JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
-JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
-JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (4)
-WHERE il.level = 0 AND ic.age > 0 AND ic.age <= 1
-AND cis.level = il.level
-;
+FROM inferred_neurons inf
+JOIN coordinates c ON inf.neuron_id = c.neuron_id
+JOIN dimensions d ON c.dimension_id = d.id
+WHERE inf.age = 0 AND inf.level = 0
+ORDER BY d.channel, inf.neuron_id;
 
 select * from inferred_neurons;
-select * from inference_chain;
-select * from connection_inference_sources;
 select * from connections;
-select * from exploration_inference_sources;
 
 select * from dimensions;
 
@@ -107,18 +66,10 @@ AND c.strength > 0;
 
 select * from connection_inference_sources;
 
-SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
-FROM connection_inference_sources
-WHERE level = 0 AND age = 0
-GROUP BY inferred_neuron_id, level
-HAVING total_strength >= 1;
-
 select * from coordinates where neuron_id in (6,7,8,9);
 select * from dimensions;
 
 select * from inferred_neurons where age = 0;
-
-
 
 SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
 FROM active_neurons an
@@ -128,11 +79,6 @@ AND c.to_neuron_id = 4
 AND c.distance = an.age + 1
 AND c.strength > 0;
 
-SELECT SUM(prediction_strength) as total_strength
-FROM exploration_inference_sources
-WHERE inferred_neuron_id = 4 AND level = 0 AND age = 0;
-
--- check state
 select * from active_neurons;
 select * from neurons;
 select * from coordinates;
@@ -147,8 +93,6 @@ select count(*) from pattern_past;
 select count(*) from pattern_future;
 select * from unpack_sources;
 select * from inferred_neurons;
-select * from inferred_neurons_resolved;
-select * from inference_chain;
 select * from connections;
 select * from coordinates where dimension_id = 16;
 
@@ -164,8 +108,6 @@ WHERE an.level = 0
 AND c.distance = an.age + 1
 AND c.strength > 0;
 
-select * from inference_chain;
-
 select * from active_neurons;
 select * from active_connections;
 select * from connections;
@@ -178,73 +120,18 @@ AND c.distance = an.age + 1
 AND c.strength > 0;
 
 select * from dimensions;
+select * from dimensions where type = 'action';
+
 select * from coordinates where neuron_id in (4);
 
 select * from connections where id in (9, 13);            
 
-select id from dimensions where type = 'action';
-select * from inference_chain;
-select * from unpack_sources;
-
-SELECT current_neuron_id, source_neuron_id, 0
-FROM unpack_sources
-WHERE current_level = 0;
-
-select * 
-from connections c
-JOIN connection_inference_sources cis ON c.id = cis.connection_id
-JOIN inference_chain ic ON ic.source_neuron_id = cis.inferred_neuron_id AND ic.age = cis.age
--- JOIN inferred_neurons_resolved inf ON inf.neuron_id = ic.base_neuron_id AND inf.level = 0 AND inf.age = ic.age
--- JOIN coordinates coord ON coord.neuron_id = ic.base_neuron_id AND coord.dimension_id IN (select id from dimensions where type = 'action')
--- WHERE ic.age > 0 AND ic.age <= 1
--- AND cis.level = il.level
-;
-                
-
-select * from inferred_neurons_resolved where age = 1;
-select * from connection_inference_sources;
-
-SELECT *
-FROM inferred_neurons_resolved inf
-LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
-WHERE inf.age = 1;
-
-SELECT current_neuron_id, source_neuron_id, 0
-FROM unpack_sources
-WHERE current_level = 0;
-
-select * from inference_chain;
+select * from inferred_neurons where age = 1;
 
 select count(*) from pattern_past;
 select count(*) from pattern_future;
 select count(*) from connections;
 select * from active_neurons;
-
-select *
-from connections c
-JOIN connection_inference_sources cis ON cis.connection_id = c.id
-JOIN inferred_neurons_resolved inf ON inf.neuron_id = cis.inferred_neuron_id AND inf.level = cis.level
-WHERE cis.level = 0
-AND c.strength > 0
-AND NOT EXISTS (
-	SELECT 1 FROM active_neurons an
-	WHERE an.neuron_id = cis.inferred_neuron_id
-	AND an.level = cis.level
-	AND an.age = 0
-);
-
-SELECT *
-FROM inferred_neurons_resolved inf
-LEFT JOIN active_neurons an ON inf.neuron_id = an.neuron_id AND an.level = inf.level AND an.age = 0
-WHERE inf.age = 1;
-
-select * from connection_inference_sources;
-
-SELECT inferred_neuron_id, level, 0, SUM(prediction_strength) as total_strength
-FROM connection_inference_sources
-WHERE level = 1
-GROUP BY inferred_neuron_id, level
-HAVING total_strength >= 10;
 
 SELECT src.neuron_id, src.level, src.strength
 FROM inferred_neurons src
@@ -258,10 +145,6 @@ select * from active_connections where to_neuron_id = 6;
 
 select * from unpredicted_connections;
 select * from new_patterns;
-
-SELECT COUNT(DISTINCT pattern_neuron_id) as total_patterns FROM pattern_peaks;
-SELECT FLOOR(strength) as strength_bucket, COUNT(*) as count FROM connections WHERE strength > 0 GROUP BY strength_bucket ORDER BY strength_bucket;
-SELECT AVG(strength) as avg_strength, MAX(strength) as max_strength, MIN(strength) as min_strength FROM connections WHERE strength > 0;
 
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (

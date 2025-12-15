@@ -27,13 +27,13 @@ export default class Brain {
 		this.connectionNegativeReinforcement = 1.0; // how much to weaken connections when predictions fail
 
 		// pattern learning parameters
-		this.minErrorPatternThreshold = 50.0; // minimum prediction strength to create error-driven pattern
+		this.minErrorPatternThreshold = 10.0; // minimum prediction strength to create error-driven pattern
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// inference parameters
-		this.minInferenceStrength = 50.0; // minimum strength for an inference to be made
+		this.minInferenceStrength = 10.0; // minimum strength for an inference to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.95; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 
@@ -42,7 +42,7 @@ export default class Brain {
 		this.habituationDecay = 0.99; // multiply habituation by this when connection/pattern is used for executed output
 
 		// exploration parameters - probability inversely proportional to inference strength
-		this.minExploration = 0.05; // minimum - never stop exploring
+		this.minExploration = 0.03; // minimum - never stop exploring
 		this.maxExploration = 1.0; // 100% when totalStrength = 0
 		this.explorationScale = 100; // controls decay rate of exploration probability (should match typical inference strengths)
 

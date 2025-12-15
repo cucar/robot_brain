@@ -359,11 +359,14 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Connection inference at a specific level (MySQL implementation). Returns number of predictions made.
 	 * Collects connection sources in memory, then saves to org_inference_sources and unpacks to base_inference_sources.
+	 * Filters out painful predictions (reward < 1.0).
 	 * @returns {Boolean} True if predictions were made, false if not
 	 */
 	async inferConnections(level) {
 
 		// Get all connection inferences at this level
+		// Filter: skip painful predictions (reward < 1.0)
+		// Note: event/input connections never get rewarded/punished so their reward stays at 1.0
 		const [inferences] = await this.conn.query(`
 			SELECT c.to_neuron_id, c.id as connection_id, c.strength * c.reward * c.habituation * POW(?, c.distance - 1) as prediction_strength
 			FROM active_neurons an
@@ -371,8 +374,9 @@ export default class BrainMySQL extends Brain {
 			WHERE an.level = ?
 			AND c.distance = an.age + 1
 			AND c.strength > 0
+			AND c.reward >= 1.0
 		`, [this.peakTimeDecayFactor, level]);
-		if (this.debug && inferences.length > 0) console.log(`Level ${level}: Connection inference found ${inferences.length} predictions`);
+		if (this.debug && inferences.length > 0) console.log(`Level ${level}: Connection inference found ${inferences.length} predictions (painful filtered)`);
 		if (!inferences || inferences.length === 0) return false;
 
 		// save inferences using common logic
@@ -382,11 +386,14 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Pattern inference from a source level (MySQL implementation)
 	 * Collects pattern sources in memory, then saves to org_inference_sources and unpacks to base_inference_sources.
+	 * Filters out painful predictions (combined reward < 1.0).
 	 * @returns {Boolean} True if predictions were made, false if not
 	 **/
 	async inferPatterns(sourceLevel) {
 
 		// Get all pattern predictions at this level
+		// Filter: skip painful predictions (pf.reward * c.reward < 1.0)
+		// Note: event/input connections never get rewarded/punished so their reward stays at 1.0
 		const [inferences] = await this.conn.query(`
 			SELECT c.to_neuron_id, pf.id as pattern_future_id, pf.strength * pf.reward * pf.habituation * c.strength * c.reward * POW(?, c.distance - 1) as prediction_strength
 			FROM active_neurons an
@@ -397,8 +404,9 @@ export default class BrainMySQL extends Brain {
 			AND c.distance = an.age + 1
 			AND pf.strength > 0
 			AND c.strength > 0
+			AND (pf.reward * c.reward) >= 1.0
 		`, [this.peakTimeDecayFactor, sourceLevel]);
-		if (this.debug && inferences.length > 0) console.log(`Level ${sourceLevel}: Pattern inference found ${inferences.length} predictions`);
+		if (this.debug && inferences.length > 0) console.log(`Level ${sourceLevel}: Pattern inference found ${inferences.length} predictions (painful filtered)`);
 		if (!inferences || inferences.length === 0) return false;
 
 		// Patterns predict one level down
@@ -414,6 +422,12 @@ export default class BrainMySQL extends Brain {
 	 * @returns {Boolean} True if predictions were made, false if not
 	 */
 	async saveInferences(inferences, targetLevel, sourceType, sourceIdField) {
+
+		// if there are no inferences, return false to indicate that there were none
+		if (inferences.length === 0) {
+			if (this.debug) console.log(`Level ${targetLevel}: No ${sourceType} inferences.`);
+			return false;
+		}
 
 		// Build in-memory map: neuron_id → [{source_type, source_id, strength}]
 		const neuronSources = new Map();
@@ -439,7 +453,10 @@ export default class BrainMySQL extends Brain {
 		}
 
 		// if no neurons pass the threshold, return false to indicate that no inferences were made
-		if (inferredNeurons.length === 0) return false;
+		if (inferredNeurons.length === 0) {
+			if (this.debug) console.log(`Level ${targetLevel}: None of the inferred neurons are strong enough.`, neuronSources);
+			return false;
+		}
 
 		// Insert into inferred_neurons
 		await this.insertInferredNeurons(inferredNeurons.map(n => [n.neuron_id, targetLevel, 0, n.strength]));

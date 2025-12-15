@@ -20,7 +20,7 @@ export default class StockChannel extends Channel {
 		this.symbol = name;
 
 		// Hyperparameters
-		this.rewardAmplification = 10; // Power to raise reward ratios to (higher = stronger rewards/penalties)
+		this.rewardAmplification = 20; // Power to raise reward ratios to (higher = stronger rewards/penalties)
 
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
@@ -28,10 +28,6 @@ export default class StockChannel extends Channel {
 		this.holdingFrames = 0; // How long we've held the current position
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
-
-		// Deterministic exploration
-		this.explorationSequence = [BUY, HOLD_IN, SELL, HOLD_OUT];
-		this.explorationIndex = 0; // Current position in exploration sequence
 
 		// exploration strategy - boltzmann or strongest selection
 		this.explorationStrategy = 'strongest'; // boltzmann or strongest
@@ -319,6 +315,8 @@ export default class StockChannel extends Channel {
 	 * Returns only feasible actions: if owned, can sell or hold-in; if not owned, can buy or hold-out
 	 */
 	getExplorationAction() {
+
+		// get the available actions based on current state
 		const activityDim = `${this.symbol}_activity`;
 		const actions = [];
 		if (this.owned) {
@@ -329,13 +327,17 @@ export default class StockChannel extends Channel {
 			actions.push({ [activityDim]: BUY });
 			actions.push({ [activityDim]: HOLD_OUT });
 		}
-		return actions[Math.floor(Math.random() * actions.length)];
 
-		// NOTE: following code is deterministic to be able to troubleshoot output performance issues
-		// Return deterministic action from sequence
-		// const action = this.explorationSequence[this.explorationIndex];
-		// this.explorationIndex = (this.explorationIndex + 1) % this.explorationSequence.length;
-		// return { [activityDim]: action };
+		// get the action to execute for exploration
+		const actionIndex = Math.floor(Math.random() * actions.length);
+
+		// following code is deterministic to be able to debug output performance issues
+		// if (this.explorationIndex === undefined) this.explorationIndex = 0;
+		// const actionIndex = this.explorationIndex;
+		// this.explorationIndex = this.explorationIndex === 0 ? 1 : 0;
+
+		// return the selected exploration action
+		return actions[actionIndex];
 	}
 
 	/**
