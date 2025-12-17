@@ -127,7 +127,7 @@ select * from coordinates where neuron_id in (4);
 select * from connections where id in (9, 13);            
 
 select * from inferred_neurons where age = 1;
-
+ 
 select count(*) from pattern_past;
 select count(*) from pattern_future;
 select count(*) from connections;
@@ -308,6 +308,7 @@ CREATE TABLE IF NOT EXISTS org_inference_sources (
     source_type ENUM('connection', 'pattern') NOT NULL,
     source_id BIGINT UNSIGNED NOT NULL,
     inference_strength DOUBLE NOT NULL,
+    reward DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (age, inferred_neuron_id, level, source_type, source_id),
     INDEX idx_neuron_age (inferred_neuron_id, age),
     INDEX idx_source_type (source_type, source_id),
@@ -327,6 +328,7 @@ CREATE TABLE IF NOT EXISTS base_inference_sources (
     source_type ENUM('connection', 'pattern') NOT NULL,
     source_id BIGINT UNSIGNED NOT NULL,
     inference_strength DOUBLE NOT NULL,
+    reward DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (age, base_neuron_id, source_type, source_id),
     INDEX idx_base_age (base_neuron_id, age),
     INDEX idx_source_type (source_type, source_id),

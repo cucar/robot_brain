@@ -83,24 +83,26 @@ export default class Channel {
 	}
 
 	/**
-	 * Resolve conflicts between multiple inferred neurons
-	 * Implemented in base class - calls resolveEventPredictions and resolveActionInferences
+	 * Resolve conflicts between multiple inferred event neurons.
+	 * Actions are already resolved by maximizeRewards() before this is called.
+	 * This only handles event (input) predictions - selects strongest per dimension.
 	 * @param {Array} inferences - all inferred neurons for this channel
-	 * @returns {Array} - resolved inferences
+	 * @returns {Array} - resolved inferences (events only, actions pass through)
 	 */
 	resolveConflicts(inferences) {
 
 		// if there are no inferences, nothing to resolve
 		if (!inferences || inferences.length === 0) return [];
 
+		// Separate events and actions
+		const events = this.getEvents(inferences);
+		const actions = this.getActions(inferences);
+
 		// Resolve event predictions: select strongest for each input dimension
-		const resolvedEvents = this.resolveEventPredictions(this.getEvents(inferences));
+		const resolvedEvents = this.resolveEventPredictions(events);
 
-		// Resolve action inferences: select best action
-		const resolvedActions = this.resolveActionInferences(this.getActions(inferences));
-
-		// Combine and return
-		const resolved = [...resolvedEvents, ...resolvedActions];
+		// Actions already resolved by maximizeRewards - just pass them through
+		const resolved = [...resolvedEvents, ...actions];
 		if (this.debug) this.logResolution(inferences, resolved);
 		return resolved;
 	}
@@ -175,8 +177,10 @@ export default class Channel {
 				const coordStr = this.formatCoordinates(inf.coordinates);
 				const sourceStr = this.formatSources(inf.sources);
 				const strength = inf.strength.toFixed(0);
+				const reward = inf.reward.toFixed(2);
+				const effective = (inf.strength * inf.reward).toFixed(0);
 				const resolved = resolvedIds.has(inf.neuron_id) ? '✓' : '✗';
-				parts.push(`${coordStr}(${sourceStr} → ${strength}) ${resolved}`);
+				parts.push(`${coordStr}(${sourceStr} → S:${strength} R:${reward} E:${effective}) ${resolved}`);
 			}
 			console.log(`  ${this.name} Actions: ${parts.join(' | ')}`);
 		}
@@ -188,8 +192,10 @@ export default class Channel {
 				const coordStr = this.formatCoordinates(inf.coordinates);
 				const sourceStr = this.formatSources(inf.sources);
 				const strength = inf.strength.toFixed(0);
+				const reward = inf.reward.toFixed(2);
+				const effective = (inf.strength * inf.reward).toFixed(0);
 				const resolved = resolvedIds.has(inf.neuron_id) ? '✓' : '✗';
-				parts.push(`${coordStr}(${sourceStr}→${strength}) ${resolved}`);
+				parts.push(`${coordStr}(${sourceStr} → S:${strength} R:${reward} E:${effective}) ${resolved}`);
 			}
 			console.log(`  ${this.name} Events: ${parts.join(' | ')}`);
 		}

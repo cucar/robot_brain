@@ -33,7 +33,6 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// inference parameters
-		this.minInferenceStrength = 10.0; // minimum strength for an inference to be made
 		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
 		this.rewardTimeDecayFactor = 0.95; // reward temporal decay = POW(rewardTimeDecayFactor, age)
 
@@ -280,10 +279,12 @@ export default class Brain {
 
 	/**
 	 * Explore a channel by selecting a random valid action.
-	 * Deletes any prior inferences for this channel, inserts exploration neuron and sources.
+	 * Replaces all action inferences for this channel with exploration neuron.
 	 * @param {string} channelName - name of the channel to explore
+	 * @param {Array} inferences - current inferences for this channel
+	 * @returns {Array} Updated inferences with exploration action
 	 */
-	async exploreChannel(channelName) {
+	async exploreChannel(channelName, inferences) {
 		const channel = this.channels.get(channelName);
 
 		// Get exploration action for this channel (returns state-appropriate action)
@@ -293,9 +294,21 @@ export default class Brain {
 		// Find or create neuron for this action
 		const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
 
-		// Save exploration: delete prior channel inferences, insert exploration neuron and sources
-		if (this.debug) console.log(`Exploration for ${channelName}: `, actionCoordinates, actionNeuronId);
-		await this.saveExploration(channelName, actionNeuronId);
+		// Get connections that could have predicted this neuron (for learning)
+		const sources = await this.getExplorationSources(actionNeuronId);
+
+		// Remove all action inferences for this channel, add exploration
+		const events = inferences.filter(inf => !this.isActionInference(inf, channelName));
+		const exploration = {
+			neuron_id: actionNeuronId,
+			strength: 100000, // High strength for exploration
+			reward: 1.0, // Neutral reward
+			coordinates: actionCoordinates,
+			sources
+		};
+
+		if (this.debug) console.log(`Exploration for ${channelName}:`, actionCoordinates, actionNeuronId);
+		return [...events, exploration];
 	}
 
 	/**
@@ -538,140 +551,379 @@ export default class Brain {
 	}
 
 	/**
-	 * Infer predictions and outputs
-	 * Order of operations:
-	 * 1. Do connection/pattern inference level by level (populates inferred_neurons)
-	 * 2. For each channel: resolve conflicts if inference exists
-	 * 3. For each channel: explore if no inference exists or when exploration is needed
-	 * Note: inferred_neurons ages and gets cleaned up (age >= 2), no need to truncate
+	 * Get raw inferences from connections or patterns.
+	 * Tries inference level by level (high to low), returns first successful inference.
+	 * Returns raw inferences with strength and reward, no filtering or processing.
+	 * @returns {Promise<Object|null>} {level, inferences: [{neuron_id, strength, reward, sources}]} or null if no inferences
 	 */
-	async inferNeurons() {
+	async getInferences() {
 
 		// Get max active level after recognition (includes all ages, not just age=0)
 		const maxActiveLevel = await this.getMaxActiveLevel();
 
-		// Do connection/pattern inference level by level (populates inferred_neurons globally)
-		// Break at first successful inference level
+		// Try inference level by level (high to low)
 		for (let level = maxActiveLevel; level >= 0; level--) {
 
 			// Try connection inference at this level (gradual Hebbian learning)
-			if (await this.inferConnections(level)) break;
+			const connectionInferences = await this.inferConnections(level);
+			if (connectionInferences) return {level, inferences: connectionInferences, type: 'connection'};
 
 			// Try pattern inference from this level (fast context-based override)
 			// Patterns predict at level-1, so skip if already at base level
-			if (level > 0 && await this.inferPatterns(level)) break;
+			if (level > 0) {
+				const patternInferences = await this.inferPatterns(level);
+				if (patternInferences) return {level: level - 1, inferences: patternInferences, type: 'pattern'};
+			}
 		}
 
-		// Process inferences: resolve conflicts, correct, explore - updates inference tables
-		await this.processInferences();
+		return null; // No inferences at any level
 	}
 
 	/**
-	 * Process inferences for all channels after connection/pattern inference.
-	 * Gets channel base inferences and processes each channel: resolve, correct, explore.
-	 * All operations update the inference tables (inferred_neurons, org_inference_sources, base_inference_sources).
+	 * Aggregate raw inferences by neuron_id.
+	 * Multiple sources can predict the same neuron - we sum strengths and average rewards (weighted by strength).
+	 * @param {Array} rawInferences - Array of {neuron_id, source_type, source_id, strength, reward}
+	 * @returns {Map} neuron_id → {neuron_id, strength, reward, sources: [{source_type, source_id, strength, reward}]}
 	 */
-	async processInferences() {
+	aggregateInferences(rawInferences) {
+		const neuronMap = new Map();
 
-		// Get inferred base neurons grouped by channel - may be empty for some/all channels
-		const baseInferences = await this.getChannelBaseInferences();
+		for (const inf of rawInferences) {
+			if (!neuronMap.has(inf.neuron_id)) {
+				neuronMap.set(inf.neuron_id, {
+					neuron_id: inf.neuron_id,
+					strength: 0,
+					reward: 0,
+					sources: []
+				});
+			}
 
-		// Get detailed inference information for diagnostics if enabled (one query for all channels)
-		const inferenceDetails = this.diagnostic ? await this.getInferenceDetails() : null;
+			const neuron = neuronMap.get(inf.neuron_id);
+			neuron.sources.push({
+				source_type: inf.source_type,
+				source_id: inf.source_id,
+				strength: inf.strength,
+				reward: inf.reward
+			});
+		}
 
-		// Process each channel's inferences
-		for (const [channelName, channel] of this.channels) {
-			const channelBaseInferences = baseInferences.get(channelName) || [];
-			await this.processChannelInferences(channelName, channel, channelBaseInferences, inferenceDetails);
+		// Calculate aggregated strength and weighted average reward for each neuron
+		for (const neuron of neuronMap.values()) {
+			neuron.strength = neuron.sources.reduce((sum, s) => sum + s.strength, 0);
+			const totalRewardContribution = neuron.sources.reduce((sum, s) => sum + s.reward * s.strength, 0);
+			neuron.reward = totalRewardContribution / neuron.strength;
+		}
+
+		return neuronMap;
+	}
+
+	/**
+	 * Group base inferences by channel based on neuron coordinates.
+	 * @param {Map} baseInferences - Map of neuron_id → {neuron_id, strength, reward, sources}
+	 * @returns {Promise<Map>} Map of channel_name → Array of inference objects with coordinates
+	 */
+	async groupByChannel(baseInferences) {
+		if (baseInferences.size === 0) return new Map();
+
+		// Get coordinates for all neurons
+		const neuronIds = [...baseInferences.keys()];
+		const coordinates = await this.getNeuronCoordinates(neuronIds);
+
+		// Group by channel
+		const channelMap = new Map();
+		for (const [neuronId, neuron] of baseInferences) {
+			const coords = coordinates.get(neuronId);
+			if (!coords) continue;
+
+			// Determine channel from coordinates
+			for (const [dimName, dimInfo] of coords) {
+				const channelName = dimInfo.channel;
+				if (!channelMap.has(channelName)) channelMap.set(channelName, []);
+
+				// Convert coords Map to object for channel processing
+				const coordsObj = {};
+				for (const [dn, di] of coords) coordsObj[dn] = di.value;
+
+				channelMap.get(channelName).push({
+					neuron_id: neuronId,
+					strength: neuron.strength,
+					reward: neuron.reward,
+					coordinates: coordsObj,
+					sources: neuron.sources
+				});
+				break; // Only add to one channel
+			}
+		}
+
+		return channelMap;
+	}
+
+	/**
+	 * Update baseInferences Map with processed results from a channel.
+	 * Removes neurons that were in the original channel inferences but not in processed.
+	 * Updates neurons that were modified (corrected).
+	 * Adds new neurons (exploration).
+	 * @param {Map} baseInferences - Original base inferences Map
+	 * @param {Array} originalChannelInferences - Original inferences for this channel (before processing)
+	 * @param {Array} processed - Processed inferences array from channel
+	 */
+	updateBaseInferences(baseInferences, originalChannelInferences, processed) {
+		// Build set of processed neuron IDs
+		const processedIds = new Set(processed.map(inf => inf.neuron_id));
+
+		// Remove neurons that were in original channel inferences but not in processed
+		for (const inf of originalChannelInferences)
+			if (!processedIds.has(inf.neuron_id))
+				baseInferences.delete(inf.neuron_id);
+
+		// Update/add all processed neurons
+		for (const inf of processed) {
+			baseInferences.set(inf.neuron_id, {
+				neuron_id: inf.neuron_id,
+				strength: inf.strength,
+				reward: inf.reward,
+				sources: inf.sources
+			});
 		}
 	}
 
 	/**
-	 * Process inferences for a single channel.
-	 * Each step reads from and writes to inference tables directly.
+	 * Get action inferences for a specific channel.
+	 * @param {Array} inferences - Array of inference objects
+	 * @param {string} channelName - Channel name
+	 * @returns {Array} Action inferences only
+	 */
+	getActions(inferences, channelName) {
+		return inferences.filter(inf => this.isActionInference(inf, channelName));
+	}
+
+	/**
+	 * Check if an inference is an action for a specific channel.
+	 * @param {Object} inf - Inference object with coordinates
+	 * @param {string} channelName - Channel name
+	 * @returns {boolean}
+	 */
+	isActionInference(inf, channelName) {
+		const channel = this.channels.get(channelName);
+		if (!channel) return false;
+		const actionDims = channel.getOutputDimensions();
+		return Object.keys(inf.coordinates).some(dim => actionDims.includes(dim));
+	}
+
+	/**
+	 * Check if an inference belongs to a specific channel.
+	 * @param {Object} inf - Inference object with coordinates
+	 * @param {string} channelName - Channel name
+	 * @returns {boolean}
+	 */
+	isChannelInference(inf, channelName) {
+		return Object.keys(inf.coordinates).some(dim => dim.startsWith(channelName + '_'));
+	}
+
+	/**
+	 * Maximize rewards for action inferences.
+	 * For each action dimension, keep only the neuron with highest strength * reward.
+	 * Only applies to actions (outputs), not events (inputs).
+	 * @param {Map} aggregatedInferences - Map of neuron_id → {neuron_id, strength, reward, sources}
+	 * @returns {Map} Filtered map with only highest reward actions per dimension
+	 */
+	async maximizeRewards(aggregatedInferences) {
+		if (aggregatedInferences.size === 0) return aggregatedInferences;
+
+		// Get coordinates for all inferred neurons to determine which are actions
+		const neuronIds = [...aggregatedInferences.keys()];
+		const coordinates = await this.getNeuronCoordinates(neuronIds);
+
+		// Group actions by dimension (only action dimensions)
+		const actionsByDimension = new Map();
+
+		for (const [neuronId, neuron] of aggregatedInferences) {
+			const coords = coordinates.get(neuronId);
+			if (!coords) continue;
+
+			// Check if this neuron has any action dimensions
+			for (const [dimName, dimInfo] of coords) {
+				if (dimInfo.type === 'action') {
+					const key = dimName; // dimension name is the key
+					if (!actionsByDimension.has(key)) actionsByDimension.set(key, []);
+					actionsByDimension.get(key).push({neuronId, neuron, dimName, value: dimInfo.value});
+				}
+			}
+		}
+
+		// For each action dimension, find the neuron with the highest effective strength (strength * reward)
+		const neuronsToRemove = new Set();
+
+		for (const [dimName, neurons] of actionsByDimension) {
+			if (neurons.length <= 1) continue; // No conflict
+
+			// Find the best neuron (highest strength * reward)
+			let best = neurons[0];
+			let bestEffective = best.neuron.strength * best.neuron.reward;
+
+			for (let i = 1; i < neurons.length; i++) {
+				const effective = neurons[i].neuron.strength * neurons[i].neuron.reward;
+				if (effective > bestEffective) {
+					best = neurons[i];
+					bestEffective = effective;
+				}
+			}
+
+			// Mark all others for removal
+			for (const n of neurons) {
+				if (n.neuronId !== best.neuronId) {
+					neuronsToRemove.add(n.neuronId);
+					if (this.debug) console.log(`maximizeRewards: Removing ${dimName}=${n.value} (E:${(n.neuron.strength * n.neuron.reward).toFixed(0)}) in favor of ${dimName}=${best.value} (E:${bestEffective.toFixed(0)})`);
+				}
+			}
+		}
+
+		// Remove losing neurons
+		for (const neuronId of neuronsToRemove) aggregatedInferences.delete(neuronId);
+
+		return aggregatedInferences;
+	}
+
+	/**
+	 * Infer predictions and outputs
+	 * Order of operations:
+	 * 1. Get raw inferences (connection or pattern)
+	 * 2. Aggregate by neuron_id at inference level
+	 * 3. Unpack to base level (without saving intermediate levels)
+	 * 4. Process all inferences in memory (maximize, resolve, correct, explore)
+	 * 5. Save original level (if any) and final base level
+	 */
+	async inferNeurons() {
+
+		// 1. Get raw inferences (returns first successful level)
+		const rawInferences = await this.getInferences();
+
+		// 2. Aggregate by neuron_id at inference level (sum strengths, average rewards)
+		const aggregated = rawInferences ? this.aggregateInferences(rawInferences.inferences) : null;
+		if (this.debug && rawInferences) console.log(`Level ${rawInferences.level}: Aggregated ${aggregated.size} neurons from ${rawInferences.inferences.length} raw inferences`);
+
+		// 3. Unpack to base level without saving intermediate levels
+		const baseInferences = rawInferences ? await this.unpackToBase(aggregated, rawInferences.level) : new Map();
+
+		// 4. Process all inferences in memory: maximize rewards, resolve conflicts, correct actions, explore
+		const processedInferences = await this.processInferences(baseInferences);
+
+		// 5. Save original level (for accuracy/patterns) and final base level (for channels)
+		const originalLevel = rawInferences ? rawInferences.level : null;
+		await this.saveInferences(aggregated, originalLevel, processedInferences);
+	}
+
+	/**
+	 * Process base level inferences in memory.
+	 * Maximizes rewards, resolves conflicts, corrects actions, and explores.
+	 * @param {Map} baseInferences - Base level neurons from unpackToBase() (neuron_id → {neuron_id, strength, reward, sources})
+	 * @returns {Map} Processed base level neurons ready to save
+	 */
+	async processInferences(baseInferences) {
+
+		// 1. Maximize rewards for actions (pick best action per dimension)
+		baseInferences = await this.maximizeRewards(baseInferences);
+
+		// 2. Group inferences by channel
+		const channelInferences = await this.groupByChannel(baseInferences);
+
+		// 3. Get detailed inference information for diagnostics if enabled
+		const inferenceDetails = this.diagnostic ? await this.getInferenceDetailsFromMap(baseInferences) : null;
+
+		// 4. Process each channel: resolve events, correct actions, explore
+		for (const [channelName, channel] of this.channels) {
+			const originalInferences = channelInferences.get(channelName) || [];
+			const processed = await this.processChannelInferences(channelName, channel, originalInferences, inferenceDetails);
+
+			// Update baseInferences with processed results
+			this.updateBaseInferences(baseInferences, originalInferences, processed);
+		}
+
+		return baseInferences;
+	}
+
+	/**
+	 * Process inferences for a single channel in memory.
 	 * @param {string} channelName - name of the channel
 	 * @param {Object} channel - channel instance
-	 * @param {Array} channelBaseInferences - array of base level inference objects for this channel
+	 * @param {Array} inferences - array of inference objects for this channel
 	 * @param {Array|null} inferenceDetails - detailed inference info for diagnostics (or null if disabled)
+	 * @returns {Array} Processed inferences for this channel
 	 */
-	async processChannelInferences(channelName, channel, channelBaseInferences, inferenceDetails) {
+	async processChannelInferences(channelName, channel, inferences, inferenceDetails) {
 
-		// if there are inferences, resolve conflicts and correct them if needed - updates inference tables
-		if (channelBaseInferences.length > 0) {
-			await this.resolveChannelConflicts(channelName, channel, channelBaseInferences);
-			await this.correctChannelActions(channelName, channel);
-		}
+		let processed = inferences;
 
-		// Explore if there are no inferences - even if there are inferences, we may need to explore occasionally
-		if (this.shouldExploreChannel(channelName, channelBaseInferences))
-			await this.exploreChannel(channelName);
+		// 1. Resolve conflicts (events only - actions already resolved by maximizeRewards)
+		if (processed.length > 0)
+			processed = channel.resolveConflicts(processed);
 
-		// Diagnostics - reads current state from tables
+		// 2. Correct invalid actions
+		if (processed.length > 0)
+			processed = await this.correctChannelActions(channelName, channel, processed);
+
+		// 3. Explore if needed
+		if (this.shouldExploreChannel(channelName, inferences))
+			processed = await this.exploreChannel(channelName, processed);
+
+		// 4. Diagnostics
 		if (this.diagnostic && inferenceDetails)
-			await this.displayChannelDiagnostics(channelName, channel, inferenceDetails);
-	}
+			channel.displayDiagnostics(inferenceDetails.filter(inf => this.isChannelInference(inf, channelName)), processed);
 
-	/**
-	 * Resolve conflicts for a channel using channel-specific logic.
-	 * Updates inferred_neurons table: deletes losers, keeps winners.
-	 */
-	async resolveChannelConflicts(channelName, channel, channelBaseInferences) {
-
-		// Call channel-specific conflict resolution
-		const resolved = channel.resolveConflicts(channelBaseInferences);
-
-		// Determine which neurons lost (not in resolved)
-		const resolvedNeuronIds = new Set(resolved.map(inf => inf.neuron_id));
-		const deletedNeuronIds = channelBaseInferences.map(inf => inf.neuron_id).filter(id => !resolvedNeuronIds.has(id));
-
-		// Delete losers from inference tables
-		if (deletedNeuronIds.length > 0) await this.deleteConflictLosers(deletedNeuronIds);
-
-		if (this.debug) console.log(`${channelName}: Kept ${resolved.length}, deleted ${deletedNeuronIds.length}`);
+		return processed;
 	}
 
 	/**
 	 * Correct invalid actions for a channel using channel-specific logic.
-	 * Reads current inferences from tables, applies corrections, updates tables.
+	 * Works in-memory on inference array.
+	 * @param {string} channelName - name of the channel
+	 * @param {Object} channel - channel instance
+	 * @param {Array} inferences - array of inference objects
+	 * @returns {Array} Corrected inferences
 	 */
-	async correctChannelActions(channelName, channel) {
+	async correctChannelActions(channelName, channel, inferences) {
 
-		// Get current output inferences for this channel from tables
-		const channelActions = await this.getChannelActions(channelName);
-		if (channelActions.length === 0) return;
+		// Get only action inferences
+		const actions = this.getActions(inferences, channelName);
+		if (actions.length === 0) return inferences;
 
 		// Call channel-specific correction logic
-		const corrections = channel.correctActionInferences(channelActions);
-		if (corrections.length === 0) return;
+		const corrections = channel.correctActionInferences(actions);
+		if (corrections.length === 0) return inferences;
 
 		// Get neuron ids for corrected coordinates
 		const correctedNeuronIds = await this.getFrameNeurons(corrections.map(c => c.correctedCoordinates));
-		for (let i = 0; i < corrections.length; i++) corrections[i].correctedNeuronId = correctedNeuronIds[i];
 
-		// Update neuron_id in inference tables (strength stays in place)
-		await this.applyInferenceCorrections(corrections);
+		// Apply corrections to inferences array
+		const corrected = [...inferences];
+		for (let i = 0; i < corrections.length; i++) {
+			const correction = corrections[i];
+			const correctedNeuronId = correctedNeuronIds[i];
+
+			// Find the inference to correct
+			const idx = corrected.findIndex(inf => inf.neuron_id === correction.originalNeuronId);
+			if (idx !== -1) {
+				// Update neuron_id and coordinates, keep strength/reward/sources
+				corrected[idx] = {
+					...corrected[idx],
+					neuron_id: correctedNeuronId,
+					coordinates: correction.correctedCoordinates
+				};
+			}
+		}
 
 		if (this.debug) console.log(`${channelName}: Applied ${corrections.length} corrections`);
+		return corrected;
 	}
 
-	/**
-	 * Display diagnostics for a channel.
-	 * Reads current resolved state from tables.
-	 */
-	async displayChannelDiagnostics(channelName, channel, inferenceDetails) {
-		const channelDetails = inferenceDetails.filter(inf =>
-			Object.keys(inf.coordinates).some(dim => dim.startsWith(channelName + '_'))
-		);
-		const resolved = await this.getChannelActions(channelName);
-		channel.displayDiagnostics(channelDetails, resolved);
-	}
+
 
 	/**
-	 * Decide whether to explore a channel based on inference strength
-	 * Exploration probability is inversely proportional to total inference strength
+	 * Decide whether to explore a channel based on inference strength and reward
+	 * Exploration probability is inversely proportional to total effective inference strength (strength * reward)
 	 * Higher confidence predictions = lower exploration probability
 	 * @param {string} channelName - name of the channel to check
-	 * @param {Array} channelBaseInferences - array of channel base inferences
+	 * @param {Array} channelBaseInferences - array of channel base inferences with strength and reward
 	 * @returns {boolean} - true if we should explore this channel
 	 */
 	shouldExploreChannel(channelName, channelBaseInferences) {
@@ -679,8 +931,9 @@ export default class Brain {
 		// If there are no inferences, we should explore
 		if (!channelBaseInferences.length) return true;
 
-		// Calculate total inference strength for this channel
-		const totalInferenceStrength = channelBaseInferences.reduce((sum, inf) => sum + inf.strength, 0);
+		// Calculate total effective inference strength (strength * reward) for this channel
+		// We want less exploration when we have strong AND joyful predictions
+		const totalInferenceStrength = channelBaseInferences.reduce((sum, inf) => sum + inf.strength * inf.reward, 0);
 
 		// Linear decay from maxExploration to minExploration as strength increases
 		// explorationScale defines the strength at which exploration reaches minimum
@@ -691,7 +944,7 @@ export default class Brain {
 
 		// Randomly decide if we should explore based on probability
 		const explore = Math.random() < explorationProb;
-		if (this.debug && explore) console.log(`${channelName}: Total strength ${totalInferenceStrength.toFixed(2)} → Exploration prob ${explorationProb.toFixed(2)} → Exploring`);
+		if (this.debug && explore) console.log(`${channelName}: Total effective strength ${totalInferenceStrength.toFixed(2)} → Exploration prob ${explorationProb.toFixed(2)} → Exploring`);
 		return explore;
 	}
 
@@ -815,10 +1068,23 @@ export default class Brain {
 	}
 
 	/**
-	 * Get inferred	base neurons grouped by channels (implementation-specific)
+	 * Unpack aggregated inferences to base level without saving intermediate levels (implementation-specific)
+	 * @param {Map} aggregatedInferences - Map from aggregateInferences()
+	 * @param {Number} fromLevel - Level where predictions were made
+	 * @returns {Promise<Map>} Map of base level neurons with sources
 	 */
-	async getChannelBaseInferences() {
-		throw new Error('getChannelBaseInferences() must be implemented by subclass');
+	async unpackToBase(aggregatedInferences, fromLevel) {
+		throw new Error('unpackToBase(aggregatedInferences, fromLevel) must be implemented by subclass');
+	}
+
+	/**
+	 * Save inferences to database tables (implementation-specific)
+	 * @param {Map|null} originalInferences - Aggregated inferences at original level (null if only exploration)
+	 * @param {Number|null} originalLevel - Level where predictions were made (null if only exploration)
+	 * @param {Map} baseInferences - Final processed inferences at base level
+	 */
+	async saveInferences(originalInferences, originalLevel, baseInferences) {
+		throw new Error('saveInferences(originalInferences, originalLevel, baseInferences) must be implemented by subclass');
 	}
 
 	/**
@@ -831,43 +1097,31 @@ export default class Brain {
 	}
 
 	/**
-	 * Delete conflict losers from inference tables (implementation-specific)
-	 * @param {Array} deletedNeuronIds - neuron IDs that lost conflict resolution
-	 */
-	async deleteConflictLosers(deletedNeuronIds) {
-		throw new Error('deleteConflictLosers() must be implemented by subclass');
-	}
-
-	/**
-	 * Override an inference with a new neuron (implementation-specific)
-	 * Unified method used by both correction and exploration:
-	 * - Correction: interprets existing inference to make it valid
-	 * Save exploration action for a channel (implementation-specific)
-	 * 1. Deletes any prior inferences for this channel
-	 * 2. Inserts exploration neuron into inferred_neurons
-	 * 3. Finds connections that could have predicted it and inserts as sources
-	 * @param {string} channelName - name of the channel
+	 * Get connections that could have predicted an exploration neuron (implementation-specific)
+	 * Used for learning from exploration actions.
 	 * @param {Number} neuronId - exploration neuron ID
+	 * @returns {Promise<Array>} Array of {source_type, source_id, strength, reward}
 	 */
-	async saveExploration(channelName, neuronId) {
-		throw new Error('saveExploration() must be implemented by subclass');
+	async getExplorationSources(neuronId) {
+		throw new Error('getExplorationSources(neuronId) must be implemented by subclass');
 	}
 
 	/**
-	 * Get current output inferences for a channel from inferred_neurons table (implementation-specific)
-	 * @param {string} channelName - name of the channel
-	 * @returns {Promise<Array>} - array of { neuron_id, strength, coordinates }
+	 * Get detailed inference information from a Map for diagnostics (implementation-specific)
+	 * @param {Map} baseInferences - Map of neuron_id → {neuron_id, strength, reward, sources}
+	 * @returns {Promise<Array>} Array of inference details with source information
 	 */
-	async getChannelActions(channelName) {
-		throw new Error('getChannelActions() must be implemented by subclass');
+	async getInferenceDetailsFromMap(baseInferences) {
+		throw new Error('getInferenceDetailsFromMap(baseInferences) must be implemented by subclass');
 	}
 
 	/**
-	 * Apply inference corrections - just updates neuron_id in place (implementation-specific)
-	 * @param {Array} corrections - Array of { originalNeuronId, correctedNeuronId }
+	 * Get coordinates for a list of neuron IDs with dimension info
+	 * @param {Array<number>} neuronIds - Array of neuron IDs
+	 * @returns {Promise<Map>} Map of neuron_id → Map of dimension_name → {type, value, channel}
 	 */
-	async applyInferenceCorrections(corrections) {
-		throw new Error('applyInferenceCorrections() must be implemented by subclass');
+	async getNeuronCoordinates(neuronIds) {
+		throw new Error('getNeuronCoordinates(neuronIds) must be implemented by subclass');
 	}
 
 	/**

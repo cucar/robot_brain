@@ -576,10 +576,11 @@ export default class StockChannel extends Channel {
 	/**
 	 * Boltzmann selection from a list of inferences
 	 * Selects probabilistically using Boltzmann (softmax) distribution
-	 * P(i) = exp(strength_i / T) / sum(exp(strength_j / T))
+	 * P(i) = exp(effective_strength_i / T) / sum(exp(effective_strength_j / T))
+	 * Uses effective strength = strength * reward for selection
 	 * Lower temperature = more deterministic (favors highest strength)
 	 * Higher temperature = more random (approaches uniform distribution)
-	 * @param {Array} inferences - list of inferences
+	 * @param {Array} inferences - list of inferences with strength and reward
 	 * @param {number} temperature - temperature parameter (default: 1.0)
 	 * @returns {Object|null} - selected inference or null if empty
 	 */
@@ -587,8 +588,8 @@ export default class StockChannel extends Channel {
 		if (inferences.length === 0) return null;
 		if (inferences.length === 1) return inferences[0];
 
-		// Calculate exponential weights (Boltzmann factors)
-		const weights = inferences.map(inf => Math.exp(inf.strength / temperature));
+		// Calculate exponential weights (Boltzmann factors) using effective strength (strength * reward)
+		const weights = inferences.map(inf => Math.exp((inf.strength * inf.reward) / temperature));
 		const totalWeight = weights.reduce((sum, w) => sum + w, 0);
 		if (totalWeight <= 0 || !isFinite(totalWeight)) return inferences[0]; // Fallback for numerical issues
 
@@ -604,13 +605,18 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Find the strongest inference from a list
-	 * @param {Array} inferences - list of inferences
+	 * Uses effective strength = strength * reward for comparison
+	 * @param {Array} inferences - list of inferences with strength and reward
 	 * @returns {Object|null} - strongest inference or null if empty
 	 */
 	findStrongest(inferences) {
 		if (inferences.length === 0) return null;
 		let strongest = inferences[0];
-		for (const inf of inferences) if (inf.strength > strongest.strength) strongest = inf;
+		for (const inf of inferences) {
+			const effectiveStrength = inf.strength * inf.reward;
+			const strongestEffective = strongest.strength * strongest.reward;
+			if (effectiveStrength > strongestEffective) strongest = inf;
+		}
 		return strongest;
 	}
 
