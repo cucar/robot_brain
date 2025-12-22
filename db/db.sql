@@ -14,22 +14,48 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
 -- DROP TABLE IF EXISTS inferred_neurons;
+-- DROP TABLE IF EXISTS inference_sources;
+-- DROP TABLE IF EXISTS inferred_actions;
+-- DROP TABLE IF EXISTS action_sources;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
--- DROP TABLE IF EXISTS base_inference_sources;
--- DROP TABLE IF EXISTS org_inference_sources;
 -- DROP TABLE IF EXISTS unpredicted_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
 select * from inferred_neurons;
-select * from org_inference_sources where source_type = 'pattern';
-select * from base_inference_sources;
+select * from inferred_neurons where age = 1;
+select * from inference_sources;
+select * from inference_sources where source_type = 'pattern';
+select * from inferred_actions;
+select * from action_sources;
+select * from unpredicted_connections;
+select * from new_patterns;
 
+select * from neurons;
 select * from dimensions;
-select * from connections;
+
+select * from connections order by from_neuron_id, distance;
+select * from connections where id = 9;
+select * from connections where id in (9, 13);            
+select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM pattern_peaks pp) order by strength desc;
+select count(*) from connections;
+select count(*) from connections where strength > 0;
+
+select * from coordinates;
+select * from coordinates where neuron_id = 3;
+select * from coordinates where dimension_id = 16;
+select * from coordinates where neuron_id in (6,7,8,9);
+select * from coordinates where neuron_id = 5;
+
 select * from active_neurons;
 select * from active_connections;
+select * from active_connections where to_neuron_id = 6;
+
+select * from pattern_past;
+select count(*) from pattern_peaks;
+select count(*) from pattern_past;
+select count(*) from pattern_future;
 
 SELECT c.*
 FROM active_neurons an
@@ -43,34 +69,6 @@ select c.neuron_id, d.name, d.type, c.val
 from coordinates c join dimensions d on d.id = c.dimension_id 
 order by c.neuron_id;
 
-select * from inferred_neurons where age = 0;
-
-SELECT inf.neuron_id, inf.strength, c.dimension_id, c.val, d.name as dimension_name, d.channel
-FROM inferred_neurons inf
-JOIN coordinates c ON inf.neuron_id = c.neuron_id
-JOIN dimensions d ON c.dimension_id = d.id
-WHERE inf.age = 0 AND inf.level = 0
-ORDER BY d.channel, inf.neuron_id;
-
-select * from inferred_neurons;
-select * from connections;
-
-select * from dimensions;
-
-SELECT c.from_neuron_id, c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
-FROM active_neurons an
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-WHERE an.level = 0
-AND c.distance = an.age + 1
-AND c.strength > 0;
-
-select * from connection_inference_sources;
-
-select * from coordinates where neuron_id in (6,7,8,9);
-select * from dimensions;
-
-select * from inferred_neurons where age = 0;
-
 SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
 FROM active_neurons an
 JOIN connections c ON c.from_neuron_id = an.neuron_id
@@ -79,28 +77,6 @@ AND c.to_neuron_id = 4
 AND c.distance = an.age + 1
 AND c.strength > 0;
 
-select * from active_neurons;
-select * from neurons;
-select * from coordinates;
-select * from pattern_past;
-select * from dimensions;
-select * from coordinates where neuron_id = 5;
-select count(*) from connections;
-select count(*) from connections where strength > 0;
-select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM pattern_peaks pp) order by strength desc;
-select count(*) from pattern_peaks;
-select count(*) from pattern_past;
-select count(*) from pattern_future;
-select * from unpack_sources;
-select * from inferred_neurons;
-select * from connections;
-select * from coordinates where dimension_id = 16;
-
-select * from connection_inference_sources where age = 1 and inferred_neuron_id = 8;
-select * from connections where id = 9;
-select * from coordinates where neuron_id = 3;
-select * from dimensions;
-
 SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
 FROM active_neurons an
 JOIN connections c ON c.from_neuron_id = an.neuron_id
@@ -108,43 +84,10 @@ WHERE an.level = 0
 AND c.distance = an.age + 1
 AND c.strength > 0;
 
-select * from active_neurons;
-select * from active_connections;
-select * from connections;
-
-SELECT an.level, an.age, an.neuron_id, c.to_neuron_id, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
-FROM active_neurons an
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-WHERE an.level = 0
-AND c.distance = an.age + 1
-AND c.strength > 0;
-
-select * from dimensions;
-select * from dimensions where type = 'action';
-
-select * from coordinates where neuron_id in (4);
-
-select * from connections where id in (9, 13);            
-
-select * from inferred_neurons where age = 1;
- 
-select count(*) from pattern_past;
-select count(*) from pattern_future;
-select count(*) from connections;
-select * from active_neurons;
-
 SELECT src.neuron_id, src.level, src.strength
 FROM inferred_neurons src
 WHERE src.level = 0
 AND src.age = 0;
-
-select * from connections;
-
-select * from connection_inference_sources;
-select * from active_connections where to_neuron_id = 6;
-
-select * from unpredicted_connections;
-select * from new_patterns;
 
 -- dimensions table determines input/output mapping for channels
 CREATE TABLE IF NOT EXISTS dimensions (
@@ -186,7 +129,6 @@ CREATE TABLE IF NOT EXISTS connections (
     distance TINYINT UNSIGNED NOT NULL,  -- 0=spatial, 1=immediate, 2=next step, etc.
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
-    habituation DOUBLE NOT NULL DEFAULT 1.0,  -- habituation factor: decays with use, recovers over time
     FOREIGN KEY (from_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (to_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     UNIQUE INDEX (from_neuron_id, to_neuron_id, distance),
@@ -217,7 +159,6 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
-    habituation DOUBLE NOT NULL DEFAULT 1.0,  -- habituation factor: decays with use, recovers over time
     UNIQUE KEY uk_pattern_connection (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
@@ -256,8 +197,19 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
     level TINYINT NOT NULL,
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     strength DOUBLE NOT NULL DEFAULT 0.0,
+    reward DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (neuron_id, level, age),
     INDEX idx_level_age (level, age)
+) ENGINE=MEMORY;
+
+-- inferred actions unpacked from inferred_neurons (MEMORY table)
+CREATE TABLE IF NOT EXISTS inferred_actions (
+    neuron_id BIGINT UNSIGNED NOT NULL,
+    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    strength DOUBLE NOT NULL DEFAULT 0.0,
+    reward DOUBLE NOT NULL DEFAULT 1.0,
+    PRIMARY KEY (neuron_id, age),
+    INDEX idx_level_age (age)
 ) ENGINE=MEMORY;
 
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
@@ -295,42 +247,39 @@ CREATE TABLE IF NOT EXISTS active_connections (
     INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
 ) ENGINE=MEMORY;
 
--- original inference sources table (MEMORY table)
--- tracks which connections or pattern_future records led to each inference at the level where inference was made
--- used by learnFromErrors methods to validate predictions at their original level
--- source_type: 'connection' for connection inference/exploration, 'pattern' for pattern inference
+-- inference sources table (MEMORY table)
+-- tracks which connections or pattern_future records led to each inference (events + actions)
+-- used by learnFromErrors methods (negativeReinforceConnections, mergePatternFuture)
+-- source_type: 'connection' for connection inference, 'pattern' for pattern inference
 -- source_id: connection.id for connection type, pattern_future.id for pattern type
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS org_inference_sources (
+CREATE TABLE IF NOT EXISTS inference_sources (
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
+    neuron_id BIGINT UNSIGNED NOT NULL,
     source_type ENUM('connection', 'pattern') NOT NULL,
     source_id BIGINT UNSIGNED NOT NULL,
     inference_strength DOUBLE NOT NULL,
-    reward DOUBLE NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (age, inferred_neuron_id, level, source_type, source_id),
-    INDEX idx_neuron_age (inferred_neuron_id, age),
+    PRIMARY KEY (age, neuron_id, source_type, source_id),
+    INDEX idx_neuron_age (neuron_id, age),
     INDEX idx_source_type (source_type, source_id),
-    INDEX idx_age (age),
-    INDEX idx_level_age (level, age)
+    INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
--- base inference sources table (MEMORY table)
--- tracks which connections or pattern_future records led to each base-level output (unpacked from higher levels)
--- used by applyRewards to reward sources that led to outputs
+-- action sources table (MEMORY table)
+-- tracks which connections or pattern_future records led to each action decision
+-- used by applyRewards to reward sources that led to actions
 -- source_type: 'connection' for connection inference/exploration, 'pattern' for pattern inference
 -- source_id: connection.id for connection type, pattern_future.id for pattern type
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS base_inference_sources (
+CREATE TABLE IF NOT EXISTS action_sources (
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    base_neuron_id BIGINT UNSIGNED NOT NULL,
+    action_neuron_id BIGINT UNSIGNED NOT NULL,
     source_type ENUM('connection', 'pattern') NOT NULL,
     source_id BIGINT UNSIGNED NOT NULL,
     inference_strength DOUBLE NOT NULL,
     reward DOUBLE NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (age, base_neuron_id, source_type, source_id),
-    INDEX idx_base_age (base_neuron_id, age),
+    PRIMARY KEY (age, action_neuron_id, source_type, source_id),
+    INDEX idx_action_age (action_neuron_id, age),
     INDEX idx_source_type (source_type, source_id),
     INDEX idx_age (age)
 ) ENGINE=MEMORY;

@@ -3,10 +3,8 @@ import { createReadStream, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
 
-const SELL = -1;
-const HOLD_OUT = -0.5;
-const HOLD_IN = 0.5;
-const BUY = 1;
+const POSITION_OWN = 1;
+const POSITION_OUT = -1;
 
 /**
  * Stock Channel Implementation - this channel is used for buying/selling stocks based on their values
@@ -25,7 +23,8 @@ export default class StockChannel extends Channel {
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
 		this.entryPrice = null; // Price when we bought (for owned) or sold (for sold)
-		this.holdingFrames = 0; // How long we've held the current position
+		this.holdOutFrames = 0; // How long we've been in not-owned state (for trigger-to-action)
+		this.holdInFrames = 0; // How long we've been in owned state (for trigger-to-action)
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
 
@@ -195,7 +194,8 @@ export default class StockChannel extends Channel {
 		// Reset trading state
 		this.owned = false;
 		this.entryPrice = null;
-		this.holdingFrames = 0;
+		this.holdOutFrames = 0;
+		this.holdInFrames = 0;
 		this.previousPrice = null;
 		this.previousVolume = null;
 		this.currentPrice = null;
@@ -318,15 +318,7 @@ export default class StockChannel extends Channel {
 
 		// get the available actions based on current state
 		const activityDim = `${this.symbol}_activity`;
-		const actions = [];
-		if (this.owned) {
-			actions.push({ [activityDim]: SELL });
-			actions.push({ [activityDim]: HOLD_IN });
-		}
-		else {
-			actions.push({ [activityDim]: BUY });
-			actions.push({ [activityDim]: HOLD_OUT });
-		}
+		const actions = [ { [activityDim]: POSITION_OUT }, { [activityDim]: POSITION_OWN } ];
 
 		// get the action to execute for exploration
 		const actionIndex = Math.floor(Math.random() * actions.length);
@@ -350,9 +342,6 @@ export default class StockChannel extends Channel {
 
 		// if this is the first frame, read another row so that we can start sending change stats
 		if (this.previousPrice === null || this.previousVolume === null) this.readNextRow();
-
-		// Increment holding counter for current position
-		this.holdingFrames++;
 
 		// Compute and return discretized changes
 		return this.computeChangeInputs();
@@ -464,51 +453,11 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Correct invalid action inferences based on current position
-	 * Maps position-agnostic actions to executable actions based on current position
-	 * @param {Array} inferences - resolved inferences
-	 * @returns {Array} - corrections: [{ originalNeuronId, correctedCoordinates }]
-	 */
-	correctActionInferences(inferences) {
-
-		// get the action inferences
-		const actions = this.getActions(inferences);
-		if (actions.length === 0) return [];
-
-		// Check each resolved action and correct if needed
-		const activityDim = `${this.symbol}_activity`;
-		const corrections = [];
-		for (const action of actions) {
-
-			// get the activity value
-			const activity = action.coordinates[activityDim];
-			if (activity === undefined) continue; // Not an action neuron
-
-			// Determine if correction is needed based on position
-			let correctedActivity = null;
-			if (activity === HOLD_IN && !this.owned) correctedActivity = BUY;
-			if (activity === HOLD_OUT && this.owned) correctedActivity = SELL;
-			if (activity === BUY && this.owned) correctedActivity = HOLD_IN;
-			if (activity === SELL && !this.owned) correctedActivity = HOLD_OUT;
-
-			// if no correction is needed, skip
-			if (correctedActivity === null) continue;
-
-			// If correction needed, track it
-			corrections.push({ originalNeuronId: action.neuron_id, correctedCoordinates: { [activityDim]: correctedActivity } });
-		}
-
-		return corrections;
-	}
-
-	/**
 	 * returns the label for an activity value
 	 */
 	getActionName(activityValue) {
-		if (activityValue === BUY) return 'BUY';
-		if (activityValue === HOLD_IN) return 'HOLD_IN';
-		if (activityValue === HOLD_OUT) return 'HOLD_OUT';
-		if (activityValue === SELL) return 'SELL';
+		if (activityValue === POSITION_OWN) return 'POSITION_OWN';
+		if (activityValue === POSITION_OUT) return 'POSITION_OUT';
 		return 'UNKNOWN';
 	}
 
@@ -577,10 +526,11 @@ export default class StockChannel extends Channel {
 	 * Boltzmann selection from a list of inferences
 	 * Selects probabilistically using Boltzmann (softmax) distribution
 	 * P(i) = exp(effective_strength_i / T) / sum(exp(effective_strength_j / T))
-	 * Uses effective strength = strength * reward for selection
+	 * Uses raw strength since this is only called for events (inputs) which have reward = 1.0.
+	 * Action conflicts are handled by maximizeChannelRewards using strength * reward.
 	 * Lower temperature = more deterministic (favors highest strength)
 	 * Higher temperature = more random (approaches uniform distribution)
-	 * @param {Array} inferences - list of inferences with strength and reward
+	 * @param {Array} inferences - list of inferences with strength
 	 * @param {number} temperature - temperature parameter (default: 1.0)
 	 * @returns {Object|null} - selected inference or null if empty
 	 */
@@ -588,8 +538,8 @@ export default class StockChannel extends Channel {
 		if (inferences.length === 0) return null;
 		if (inferences.length === 1) return inferences[0];
 
-		// Calculate exponential weights (Boltzmann factors) using effective strength (strength * reward)
-		const weights = inferences.map(inf => Math.exp((inf.strength * inf.reward) / temperature));
+		// Calculate exponential weights (Boltzmann factors)
+		const weights = inferences.map(inf => Math.exp(inf.strength / temperature));
 		const totalWeight = weights.reduce((sum, w) => sum + w, 0);
 		if (totalWeight <= 0 || !isFinite(totalWeight)) return inferences[0]; // Fallback for numerical issues
 
@@ -604,19 +554,16 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Find the strongest inference from a list
-	 * Uses effective strength = strength * reward for comparison
-	 * @param {Array} inferences - list of inferences with strength and reward
+	 * Find the strongest inference from a list.
+	 * Uses raw strength since this is only called for events (inputs) which have reward = 1.0.
+	 * Action conflicts are handled by maximizeChannelRewards using strength * reward.
+	 * @param {Array} inferences - list of inferences with strength
 	 * @returns {Object|null} - strongest inference or null if empty
 	 */
 	findStrongest(inferences) {
 		if (inferences.length === 0) return null;
 		let strongest = inferences[0];
-		for (const inf of inferences) {
-			const effectiveStrength = inf.strength * inf.reward;
-			const strongestEffective = strongest.strength * strongest.reward;
-			if (effectiveStrength > strongestEffective) strongest = inf;
-		}
+		for (const inf of inferences) if (inf.strength > strongest.strength) strongest = inf;
 		return strongest;
 	}
 
@@ -683,10 +630,10 @@ export default class StockChannel extends Channel {
 		if (activityValue === undefined) throw new Error('No activity found in outputs');
 
 		// Determine action type: After conflict resolution, these should be position-appropriate
-		if (activityValue === BUY) this.executeBuy(activityValue);
-		if (activityValue === HOLD_IN) this.executeHoldIn(activityValue);
-		if (activityValue === HOLD_OUT) this.executeHoldOut(activityValue);
-		if (activityValue === SELL) this.executeSell(activityValue);
+		if (activityValue === POSITION_OWN && !this.owned) this.executeBuy(activityValue);
+		if (activityValue === POSITION_OWN && this.owned) this.executeHoldIn(activityValue);
+		if (activityValue === POSITION_OUT && !this.owned) this.executeHoldOut(activityValue);
+		if (activityValue === POSITION_OUT && this.owned) this.executeSell(activityValue);
 
 		// show current status
 		if (this.diagnostic) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice?.toFixed(2) ?? 'N/A'}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
@@ -703,14 +650,14 @@ export default class StockChannel extends Channel {
 		// buy stock per request coming from the brain
 		this.owned = true;
 		this.entryPrice = this.previousPrice; // prices are the end of day prices. we buy in the morning, at the close price of the previous day
-		this.holdingFrames = 0; // Reset holding counter
+		this.holdOutFrames = 0; // Reset hold-out counter (trigger-to-action)
 
 		// Reset unrealized profit tracking for new position
 		this.unrealizedProfit = 0;
 
 		// Track trade metrics
 		this.totalTrades++;
-		this.lastAction = BUY;
+		this.lastAction = POSITION_OWN;
 
 		if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${this.previousPrice} (activity: ${activityValue})`);
 	}
@@ -737,7 +684,7 @@ export default class StockChannel extends Channel {
 
 		if (this.debug) {
 			console.log(`${this.symbol}: EXECUTED SELL at $${this.previousPrice} (activity: ${activityValue})`);
-			console.log(`${this.symbol}: Realized Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdingFrames} frames`);
+			console.log(`${this.symbol}: Realized Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdInFrames} frames`);
 			console.log(`${this.symbol}: Episode totals: Profit $${this.totalProfit.toFixed(2)}, Loss $${this.totalLoss.toFixed(2)}, Net $${(this.totalProfit - this.totalLoss).toFixed(2)}`);
 		}
 
@@ -747,23 +694,25 @@ export default class StockChannel extends Channel {
 		// Switch to sold state
 		this.owned = false;
 		this.entryPrice = this.previousPrice; // Track sell price for sold position feedback
-		this.holdingFrames = 0; // Reset holding counter
-		this.lastAction = SELL;
+		this.holdInFrames = 0; // Reset hold-in counter (trigger-to-action)
+		this.lastAction = POSITION_OUT;
 	}
 
 	/**
 	 * Execute a hold-in action
 	 */
 	executeHoldIn() {
-		if (this.debug) console.log(`${this.symbol}: HOLD IN SIGNAL (Owned)`);
-		this.lastAction = HOLD_IN;
+		this.holdInFrames++; // Increment hold-in counter (trigger-to-action)
+		if (this.debug) console.log(`${this.symbol}: HOLD IN SIGNAL (Owned, ${this.holdInFrames} frames)`);
+		this.lastAction = POSITION_OWN;
 	}
 
 	/**
 	 * Execute a hold-out action
 	 */
 	executeHoldOut() {
-		if (this.debug) console.log(`${this.symbol}: HOLD OUT SIGNAL (Not Owned)`);
-		this.lastAction = HOLD_OUT;
+		this.holdOutFrames++; // Increment hold-out counter (trigger-to-action)
+		if (this.debug) console.log(`${this.symbol}: HOLD OUT SIGNAL (Not Owned, ${this.holdOutFrames} frames)`);
+		this.lastAction = POSITION_OUT;
 	}
 }
