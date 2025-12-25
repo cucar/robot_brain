@@ -549,7 +549,7 @@ class PatternPeakStore {
  */
 class NeuronStore {
 	constructor() {
-		// Map<neuron_id, {id}>
+		// Map<neuron_id, {id, level}>
 		this.neurons = new Map();
 
 		// Map<neuron_id, Map<dimension_id, value>>
@@ -568,22 +568,33 @@ class NeuronStore {
 
 	/**
 	 * Create a new neuron
+	 * @param {number} level - Level of the neuron (0 for base, 1+ for patterns)
 	 */
-	createNeuron() {
+	createNeuron(level = 0) {
 		const id = this.nextId++;
-		this.neurons.set(id, { id });
+		this.neurons.set(id, { id, level });
 		return id;
 	}
 
 	/**
 	 * Create multiple neurons in bulk
+	 * @param {number} count - Number of neurons to create
+	 * @param {number} level - Level of the neurons (0 for base, 1+ for patterns)
 	 */
-	createNeurons(count) {
+	createNeurons(count, level = 0) {
 		const ids = [];
-		for (let i = 0; i < count; i++) {
-			ids.push(this.createNeuron());
-		}
+		for (let i = 0; i < count; i++)
+			ids.push(this.createNeuron(level));
 		return ids;
+	}
+
+	/**
+	 * Get a neuron's level
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {number|undefined} Level or undefined if neuron not found
+	 */
+	getLevel(neuronId) {
+		return this.neurons.get(neuronId)?.level;
 	}
 
 	/**

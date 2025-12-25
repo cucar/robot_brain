@@ -28,9 +28,6 @@ export default class StockChannel extends Channel {
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
 
-		// exploration strategy - boltzmann or strongest selection
-		this.explorationStrategy = 'strongest'; // boltzmann or strongest
-
 		// Episode metrics tracking
 		this.initializeEpisodeMetrics();
 
@@ -415,41 +412,23 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Resolve event predictions: select strongest for each input dimension. Also calculates continuous price prediction for accuracy tracking
-	 * @param {Array} events - predictions for event dimensions
-	 * @returns {Array} - strongest prediction per event dimension
+	 * Called when brain determines winning event predictions via voting.
+	 * Used for channel-specific tracking (e.g., continuous price prediction).
+	 * @param {Array} winners - winning event predictions from voting
 	 */
-	resolveEventPredictions(events) {
-
-		// if there are no input predictions, nothing to resolve
-		if (events.length === 0) {
+	onEventPredictions(winners) {
+		if (winners.length === 0) {
 			this.lastPredictedPrice = null;
-			return [];
+			return;
 		}
 
-		// Group by dimension
-		const byDimension = this.groupByDimension(events);
+		// Group by dimension for tracking
+		const byDimension = this.groupByDimension(winners);
 
-		// Calculate continuous price prediction for tracking
+		// Calculate continuous price prediction for accuracy tracking
 		const priceChangeDim = `${this.symbol}_price_change`;
 		if (byDimension.has(priceChangeDim)) this.calculateContinuousPricePrediction(byDimension.get(priceChangeDim));
 		else this.lastPredictedPrice = null;
-
-		// Select events for each dimension
-		return this.selectPerDimension(byDimension);
-	}
-
-	/**
-	 * Resolve action conflicts: select best action when multiple predicted
-	 * @param {Array} actions - inferences for output dimensions
-	 * @returns {Array} - resolved actions (one per dimension)
-	 */
-	resolveActionInferences(actions) {
-		if (actions.length === 0) return [];
-
-		// Group by dimension and select the action to execute
-		const byDimension = this.groupByDimension(actions);
-		return this.selectPerDimension(byDimension);
 	}
 
 	/**
@@ -459,18 +438,6 @@ export default class StockChannel extends Channel {
 		if (activityValue === POSITION_OWN) return 'POSITION_OWN';
 		if (activityValue === POSITION_OUT) return 'POSITION_OUT';
 		return 'UNKNOWN';
-	}
-
-	/**
-	 * Select one inference per dimension
-	 * @param {Map} byDimension - Map of dimension name to array of inferences
-	 * @returns {Array} - selected inference per dimension
-	 */
-	selectPerDimension(byDimension) {
-		const resolved = [];
-		for (const [_, inferences] of byDimension)
-			resolved.push(this.explorationStrategy === 'boltzmann' ? this.boltzmannSelect(inferences) : this.findStrongest(inferences));
-		return resolved;
 	}
 
 	/**
@@ -525,48 +492,6 @@ export default class StockChannel extends Channel {
 	/**
 	 * Boltzmann selection from a list of inferences
 	 * Selects probabilistically using Boltzmann (softmax) distribution
-	 * P(i) = exp(effective_strength_i / T) / sum(exp(effective_strength_j / T))
-	 * Uses raw strength since this is only called for events (inputs) which have reward = 1.0.
-	 * Action conflicts are handled by maximizeChannelRewards using strength * reward.
-	 * Lower temperature = more deterministic (favors highest strength)
-	 * Higher temperature = more random (approaches uniform distribution)
-	 * @param {Array} inferences - list of inferences with strength
-	 * @param {number} temperature - temperature parameter (default: 1.0)
-	 * @returns {Object|null} - selected inference or null if empty
-	 */
-	boltzmannSelect(inferences, temperature = 1.0) {
-		if (inferences.length === 0) return null;
-		if (inferences.length === 1) return inferences[0];
-
-		// Calculate exponential weights (Boltzmann factors)
-		const weights = inferences.map(inf => Math.exp(inf.strength / temperature));
-		const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-		if (totalWeight <= 0 || !isFinite(totalWeight)) return inferences[0]; // Fallback for numerical issues
-
-		// Sample from distribution
-		const r = Math.random() * totalWeight;
-		let cumulative = 0;
-		for (let i = 0; i < inferences.length; i++) {
-			cumulative += weights[i];
-			if (r < cumulative) return inferences[i];
-		}
-		return inferences[inferences.length - 1]; // Fallback for floating point edge case
-	}
-
-	/**
-	 * Find the strongest inference from a list.
-	 * Uses raw strength since this is only called for events (inputs) which have reward = 1.0.
-	 * Action conflicts are handled by maximizeChannelRewards using strength * reward.
-	 * @param {Array} inferences - list of inferences with strength
-	 * @returns {Object|null} - strongest inference or null if empty
-	 */
-	findStrongest(inferences) {
-		if (inferences.length === 0) return null;
-		let strongest = inferences[0];
-		for (const inf of inferences) if (inf.strength > strongest.strength) strongest = inf;
-		return strongest;
-	}
-
 	/**
 	 * Get continuous prediction error metrics for price predictions since last call
 	 * Returns only NEW errors since last call, then clears the array

@@ -76,44 +76,26 @@ export default class TextChannel extends Channel {
 	}
 
 	/**
-	 * Resolve input predictions: select strongest character prediction
-	 * @param {Array} inputPredictions - predictions for char_input dimension
-	 * @returns {Array} - strongest character prediction
+	 * Called when brain determines winning event predictions via voting.
+	 * Used for channel-specific tracking (e.g., character prediction logging).
+	 * @param {Array} winners - winning event predictions from voting
 	 */
-	resolveEventPredictions(inputPredictions) {
-		if (inputPredictions.length === 0) {
+	onEventPredictions(winners) {
+		if (winners.length === 0) {
 			this.lastPredictedChar = null;
-			return [];
+			return;
 		}
 
-		// Find strongest character prediction
-		const strongest = this.findStrongest(inputPredictions);
-		if (!strongest) {
+		// Find the character prediction (should be exactly one winner per dimension)
+		const charPrediction = winners.find(w => w.coordinates && w.coordinates.char_input !== undefined);
+		if (!charPrediction) {
 			this.lastPredictedChar = null;
-			return [];
+			return;
 		}
 
 		// Store and log prediction
-		this.storePrediction(strongest);
-		this.logPrediction(strongest);
-
-		return [strongest];
-	}
-
-	/**
-	 * Find the strongest inference from a list
-	 * @param {Array} inferences - list of inferences
-	 * @returns {Object|null} - strongest inference or null if empty
-	 */
-	findStrongest(inferences) {
-		if (inferences.length === 0) return null;
-
-		let strongest = inferences[0];
-		for (const inf of inferences)
-			if (inf.strength > strongest.strength)
-				strongest = inf;
-
-		return strongest;
+		this.storePrediction(charPrediction);
+		this.logPrediction(charPrediction);
 	}
 
 	/**

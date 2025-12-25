@@ -107,8 +107,11 @@ CREATE TABLE IF NOT EXISTS dimensions (
 -- INSERT IGNORE INTO dimensions (name) VALUES ('d0'), ('d1'), ('d2'), ('d3'), ('d4'), ('d5'), ('d6'), ('d7'), ('d8'), ('d9'), ('d10'), ('d11'), ('d12'), ('d13'), ('d14'), ('d15'), ('d16'), ('d17'), ('d18'), ('d19');
 
 -- neurons table is the core representation of concepts - auto increment
+-- level is an intrinsic property: base neurons are level 0, pattern neurons are level 1+
 CREATE TABLE IF NOT EXISTS neurons (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    level TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    INDEX idx_level (level)
 ) ENGINE=MEMORY;
 
 -- coordinates for base neurons
@@ -152,17 +155,19 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
--- pattern_future: connections FROM the peak (for inference/unpacking)
+-- pattern_future: neurons predicted by the pattern (for inference/voting)
+-- stores to_neuron_id directly instead of connection_id - patterns always predict next frame
 CREATE TABLE IF NOT EXISTS pattern_future (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
-    connection_id BIGINT UNSIGNED NOT NULL,
+    to_neuron_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
-    UNIQUE KEY uk_pattern_connection (pattern_neuron_id, connection_id),
+    UNIQUE KEY uk_pattern_neuron (pattern_neuron_id, to_neuron_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
-    FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
+    FOREIGN KEY (to_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     INDEX idx_pattern_strength (pattern_neuron_id, strength),
+    INDEX idx_to_neuron (to_neuron_id),
     INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
@@ -270,6 +275,7 @@ CREATE TABLE IF NOT EXISTS inference_sources (
 -- used by applyRewards to reward sources that led to actions
 -- source_type: 'connection' for connection inference/exploration, 'pattern' for pattern inference
 -- source_id: connection.id for connection type, pattern_future.id for pattern type
+-- is_winner: 1 for winning votes (executed), 0 for losing votes (counterfactual rewards)
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
 CREATE TABLE IF NOT EXISTS action_sources (
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
@@ -278,10 +284,12 @@ CREATE TABLE IF NOT EXISTS action_sources (
     source_id BIGINT UNSIGNED NOT NULL,
     inference_strength DOUBLE NOT NULL,
     reward DOUBLE NOT NULL DEFAULT 1.0,
+    is_winner TINYINT UNSIGNED NOT NULL DEFAULT 1,
     PRIMARY KEY (age, action_neuron_id, source_type, source_id),
     INDEX idx_action_age (action_neuron_id, age),
     INDEX idx_source_type (source_type, source_id),
-    INDEX idx_age (age)
+    INDEX idx_age (age),
+    INDEX idx_is_winner (is_winner)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking unpredicted connections (MEMORY table)

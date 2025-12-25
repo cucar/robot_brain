@@ -83,50 +83,12 @@ export default class Channel {
 	}
 
 	/**
-	 * Resolve conflicts between multiple inferred event neurons.
-	 * Called only with event inferences (actions are processed separately by brain).
-	 * Selects strongest prediction per dimension.
-	 * @param {Array} events - event inferences for this channel
-	 * @returns {Array} - resolved event inferences
+	 * Called when brain determines winning event predictions via voting.
+	 * Override in subclasses for channel-specific tracking (e.g., continuous price prediction).
+	 * @param {Array} winners - winning event predictions from voting
 	 */
-	resolveConflicts(events) {
-		if (!events || events.length === 0) return [];
-
-		const resolved = this.resolveEventPredictions(events);
-		if (this.debug) this.logResolution(events, resolved);
-		return resolved;
-	}
-
-	/**
-	 * returns event inferences
-	 */
-	getEvents(inferences) {
-		const eventDims = new Set(this.getEventDimensions());
-		return inferences.filter(inf => Object.keys(inf.coordinates).some(dim => eventDims.has(dim)));
-	}
-
-	/**
-	 * returns action inferences
-	 */
-	getActions(inferences) {
-		const outputDims = new Set(this.getOutputDimensions());
-		return inferences.filter(inf => Object.keys(inf.coordinates).some(dim => outputDims.has(dim)));
-	}
-
-	/**
-	 * Log resolution results for debugging
-	 */
-	logResolution(inferences, resolved) {
-		const events = this.getEvents(inferences);
-		const actions = this.getActions(inferences);
-		console.log(`${this.name}: Resolved ${inferences.length} inferences (${events.length} inputs, ${actions.length} outputs) → ${resolved.length} selected`, resolved);
-	}
-
-	/**
-	 * Get resolved event predictions for this channel - override in subclasses
-	 */
-	resolveEventPredictions() {
-		throw new Error('Channel must implement resolveEventPredictions(events) method');
+	onEventPredictions(winners) {
+		// Default: no-op. Override in subclasses for tracking.
 	}
 
 	/**
