@@ -107,6 +107,7 @@ export default class SyntheticCycleTest extends Job {
 		const stockChannel = this.brain.channels.get(this.config.symbol);
 		stockChannel.debug2 = false;
 		this.brain.debug = false;
+		this.brain.debug2 = false;
 
 		// Reset accuracy stats
 		this.brain.resetAccuracyStats();

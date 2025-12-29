@@ -705,15 +705,15 @@ export default class Brain {
 	async determineConsensus(votes) {
 		if (votes.length === 0) return [];
 
-		// Aggregate votes by neuron_id (sum strengths, weighted average rewards)
+		// Aggregate votes by neuron_id (sum strengths, sum rewards)
 		const aggregated = new Map();
 		for (const vote of votes) {
 			if (!aggregated.has(vote.neuron_id))
-				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, reward: 1.0, sources: [] });
+				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, reward: 0, sources: [] });
 
 			const agg = aggregated.get(vote.neuron_id);
 			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level });
-			agg.reward = (agg.reward * agg.strength + vote.reward * vote.strength) / (agg.strength + vote.strength);
+			agg.reward += vote.reward;
 			agg.strength += vote.strength;
 		}
 
@@ -755,7 +755,7 @@ export default class Brain {
 			const winner = dimVotes[0];
 			winners.add(winner.neuron_id);
 
-			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (reward: ${winner.reward.toFixed(2)}, strength: ${winner.strength.toFixed(1)}, ${dimVotes.length} candidates)`);
+			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, reward: ${winner.reward.toFixed(2)}, strength: ${winner.strength.toFixed(1)}, ${dimVotes.length} candidates)`);
 		}
 
 		// Build inferences array with isWinner flag
@@ -960,7 +960,7 @@ export default class Brain {
 	 * @param {number} count - Number of neurons to create
 	 * @param {number} level - Level of the neurons (0 for base, 1+ for patterns)
 	 */
-	async createNeurons() {
+	async createNeurons(count, level) {
 		throw new Error('createNeurons(count, level) must be implemented by subclass');
 	}
 
@@ -1008,7 +1008,7 @@ export default class Brain {
 	 * @param {number} patternCount - Number of patterns to create
 	 * @param {number} level - Level of the pattern neurons
 	 */
-	async createPatternNeurons() {
+	async createPatternNeurons(patternCount, level) {
 		throw new Error('createPatternNeurons(patternCount, level) must be implemented by subclass');
 	}
 

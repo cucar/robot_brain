@@ -225,7 +225,6 @@ export default class BrainMySQL extends Brain {
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			JOIN neurons n ON n.id = c.to_neuron_id
 			WHERE c.distance = an.age + 1
-			AND c.strength > 0
 		`, [this.peakTimeDecayFactor, this.levelVoteMultiplier]);
 
 		// Collect pattern votes from ALL levels in one query
@@ -240,13 +239,24 @@ export default class BrainMySQL extends Brain {
 			JOIN connections c ON c.id = pf.connection_id
 			JOIN neurons n ON n.id = c.to_neuron_id
 			WHERE an.age = 0
-			AND pf.strength > 0
-			AND c.strength > 0
 		`, [this.peakTimeDecayFactor, this.levelVoteMultiplier]);
 
 		// Combine all votes
 		const allVotes = [...connectionVotes, ...patternVotes];
 		if (this.debug) console.log(`Collected ${connectionVotes.length} connection + ${patternVotes.length} pattern = ${allVotes.length} total votes`);
+
+		// Debug: show votes for action neurons (neuron 13 = OWN/1, neuron 14 = OUT/-1)
+		if (this.debug2) {
+			const actionVotes = allVotes.filter(v => v.neuron_id === 13 || v.neuron_id === 14);
+			// Group by neuron_id and calculate totals
+			const ownVotes = actionVotes.filter(v => v.neuron_id === 13); // neuron 13 = 1 = OWN
+			const outVotes = actionVotes.filter(v => v.neuron_id === 14); // neuron 14 = -1 = OUT
+			const ownStrength = ownVotes.reduce((s, v) => s + v.strength, 0);
+			const outStrength = outVotes.reduce((s, v) => s + v.strength, 0);
+			const ownReward = ownVotes.reduce((s, v) => s + v.reward, 0);
+			const outReward = outVotes.reduce((s, v) => s + v.reward, 0);
+			console.log(`Action votes: OWN(13): ${ownVotes.length} votes, strength=${ownStrength.toFixed(1)}, reward=${ownReward.toFixed(2)} | OUT(14): ${outVotes.length} votes, strength=${outStrength.toFixed(1)}, reward=${outReward.toFixed(2)}`);
+		}
 
 		return allVotes;
 	}

@@ -13,7 +13,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_future;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
-DROP TABLE IF EXISTS inferred_neurons;
+-- DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS inference_sources;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
@@ -39,7 +39,7 @@ select count(*) from connections;
 select count(*) from connections where strength > 0;
 
 select * from coordinates;
-select * from coordinates where neuron_id = 3;
+select * from coordinates where neuron_id = 2;
 select * from coordinates where dimension_id = 16;
 select * from coordinates where neuron_id in (6,7,8,9);
 select * from coordinates where neuron_id = 5;
