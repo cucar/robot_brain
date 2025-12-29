@@ -308,25 +308,31 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Returns a valid exploration action based on current position
-	 * Returns only feasible actions: if owned, can sell or hold-in; if not owned, can buy or hold-out
+	 * Returns an unexplored action given what's already been explored.
+	 * The brain tells us what actions have connections from the current context,
+	 * and we return something different.
+	 * @param {Array} exploredActions - Array of action coordinate objects already explored
+	 * @returns {Object|null} Action coordinates to explore, or null if all explored
 	 */
-	getExplorationAction() {
+	getExplorationAction(exploredActions = []) {
 
-		// get the available actions based on current state
 		const activityDim = `${this.symbol}_activity`;
-		const actions = [ { [activityDim]: POSITION_OUT }, { [activityDim]: POSITION_OWN } ];
+		const allActions = [
+			{ [activityDim]: POSITION_OUT },
+			{ [activityDim]: POSITION_OWN }
+		];
 
-		// get the action to execute for exploration
-		const actionIndex = Math.floor(Math.random() * actions.length);
+		// Filter out already explored actions
+		const unexplored = allActions.filter(action => {
+			const actionVal = action[activityDim];
+			return !exploredActions.some(explored => explored[activityDim] === actionVal);
+		});
 
-		// following code is deterministic to be able to debug output performance issues
-		// if (this.explorationIndex === undefined) this.explorationIndex = 0;
-		// const actionIndex = this.explorationIndex;
-		// this.explorationIndex = this.explorationIndex === 0 ? 1 : 0;
+		// If all actions explored, return null
+		if (unexplored.length === 0) return null;
 
-		// return the selected exploration action
-		return actions[actionIndex];
+		// Return a random unexplored action
+		return unexplored[Math.floor(Math.random() * unexplored.length)];
 	}
 
 	/**

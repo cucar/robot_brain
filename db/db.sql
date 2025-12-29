@@ -13,10 +13,8 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_future;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
--- DROP TABLE IF EXISTS inferred_neurons;
+DROP TABLE IF EXISTS inferred_neurons;
 -- DROP TABLE IF EXISTS inference_sources;
--- DROP TABLE IF EXISTS inferred_actions;
--- DROP TABLE IF EXISTS action_sources;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
@@ -27,8 +25,6 @@ select * from inferred_neurons;
 select * from inferred_neurons where age = 1;
 select * from inference_sources;
 select * from inference_sources where source_type = 'pattern';
-select * from inferred_actions;
-select * from action_sources;
 select * from unpredicted_connections;
 select * from new_patterns;
 
@@ -155,19 +151,19 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
--- pattern_future: neurons predicted by the pattern (for inference/voting)
--- stores to_neuron_id directly instead of connection_id - patterns always predict next frame
+-- pattern_future: connections predicted by the pattern (for inference/voting)
+-- stores connection_id (from peak neuron to target) like pattern_past for consistency
+-- patterns predict what connections from their peak neuron will fire next
 CREATE TABLE IF NOT EXISTS pattern_future (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
-    to_neuron_id BIGINT UNSIGNED NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
-    UNIQUE KEY uk_pattern_neuron (pattern_neuron_id, to_neuron_id),
+    PRIMARY KEY (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
-    FOREIGN KEY (to_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
+    FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
     INDEX idx_pattern_strength (pattern_neuron_id, strength),
-    INDEX idx_to_neuron (to_neuron_id),
+    INDEX idx_connection (connection_id),
     INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
@@ -195,26 +191,19 @@ CREATE TABLE IF NOT EXISTS active_neurons (
 ) ENGINE=MEMORY;
 
 -- inferred neurons from connection/pattern inference or exploration (MEMORY table)
--- used by both connection and pattern inference (only one has data per frame due to early-return)
--- after conflict resolution, invalid inferences are deleted and corrections are applied
+-- used by both connection and pattern inference
+-- after conflict resolution, is_winner is set for action neurons (NULL for events)
+-- is_winner: NULL for events, 1 for winning action votes, 0 for losing action votes
 CREATE TABLE IF NOT EXISTS inferred_neurons (
     neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     strength DOUBLE NOT NULL DEFAULT 0.0,
     reward DOUBLE NOT NULL DEFAULT 1.0,
+    is_winner TINYINT UNSIGNED DEFAULT NULL,
     PRIMARY KEY (neuron_id, level, age),
-    INDEX idx_level_age (level, age)
-) ENGINE=MEMORY;
-
--- inferred actions unpacked from inferred_neurons (MEMORY table)
-CREATE TABLE IF NOT EXISTS inferred_actions (
-    neuron_id BIGINT UNSIGNED NOT NULL,
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    strength DOUBLE NOT NULL DEFAULT 0.0,
-    reward DOUBLE NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (neuron_id, age),
-    INDEX idx_level_age (age)
+    INDEX idx_level_age (level, age),
+    INDEX idx_is_winner (is_winner)
 ) ENGINE=MEMORY;
 
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
@@ -254,7 +243,7 @@ CREATE TABLE IF NOT EXISTS active_connections (
 
 -- inference sources table (MEMORY table)
 -- tracks which connections or pattern_future records led to each inference (events + actions)
--- used by learnFromErrors methods (negativeReinforceConnections, mergePatternFuture)
+-- used by learnFromBaseLevel (negativeReinforceConnections, applyRewards) and learnFromInferenceLevel
 -- source_type: 'connection' for connection inference, 'pattern' for pattern inference
 -- source_id: connection.id for connection type, pattern_future.id for pattern type
 -- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
@@ -268,28 +257,6 @@ CREATE TABLE IF NOT EXISTS inference_sources (
     INDEX idx_neuron_age (neuron_id, age),
     INDEX idx_source_type (source_type, source_id),
     INDEX idx_age (age)
-) ENGINE=MEMORY;
-
--- action sources table (MEMORY table)
--- tracks which connections or pattern_future records led to each action decision
--- used by applyRewards to reward sources that led to actions
--- source_type: 'connection' for connection inference/exploration, 'pattern' for pattern inference
--- source_id: connection.id for connection type, pattern_future.id for pattern type
--- is_winner: 1 for winning votes (executed), 0 for losing votes (counterfactual rewards)
--- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
-CREATE TABLE IF NOT EXISTS action_sources (
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    action_neuron_id BIGINT UNSIGNED NOT NULL,
-    source_type ENUM('connection', 'pattern') NOT NULL,
-    source_id BIGINT UNSIGNED NOT NULL,
-    inference_strength DOUBLE NOT NULL,
-    reward DOUBLE NOT NULL DEFAULT 1.0,
-    is_winner TINYINT UNSIGNED NOT NULL DEFAULT 1,
-    PRIMARY KEY (age, action_neuron_id, source_type, source_id),
-    INDEX idx_action_age (action_neuron_id, age),
-    INDEX idx_source_type (source_type, source_id),
-    INDEX idx_age (age),
-    INDEX idx_is_winner (is_winner)
 ) ENGINE=MEMORY;
 
 -- scratch table for tracking unpredicted connections (MEMORY table)

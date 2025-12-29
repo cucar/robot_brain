@@ -19,7 +19,7 @@ export default class SyntheticCycleTest extends Job {
 		this.config = {
 			symbol: 'TEST',
 			cyclePattern: [0.009, -0.019, -0.029, 0.019, 0.029, -0.009], // +1%, -2%, -3%, +2%, +3%, -1%
-			cycleRepeats: 50,
+			cycleRepeats: 100,
 			startPrice: 100.00,
 			startVolume: 100000
 		};
@@ -103,11 +103,14 @@ export default class SyntheticCycleTest extends Job {
 	async executeJob() {
 		console.log('🚀 Running single episode...\n');
 
+		// Get the stock channel
+		const stockChannel = this.brain.channels.get(this.config.symbol);
+		stockChannel.debug2 = false;
+		this.brain.debug = false;
+
 		// Reset accuracy stats
 		this.brain.resetAccuracyStats();
 
-		// Get the stock channel
-		const stockChannel = this.brain.channels.get(this.config.symbol);
 		const expectedFrames = stockChannel.dataRows.length - 1;
 
 		// Track trades
