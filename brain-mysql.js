@@ -252,25 +252,6 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Insert inferred neurons into the database
-	 * @param {Array} neurons - Array of [neuron_id, level, age, strength, reward]
-	 * @param {String} duplicateMode - How to handle duplicates: 'ignore', 'replace', 'add'
-	 */
-	async insertInferredNeurons(neurons, duplicateMode = 'none') {
-		if (neurons.length === 0) return;
-
-		let query = 'INSERT INTO inferred_neurons (neuron_id, level, age, strength, reward) VALUES ?';
-		if (duplicateMode === 'ignore')
-			query += ' ON DUPLICATE KEY UPDATE strength = strength, reward = reward';
-		else if (duplicateMode === 'replace')
-			query += ' ON DUPLICATE KEY UPDATE strength = VALUES(strength), reward = VALUES(reward)';
-		else if (duplicateMode === 'add')
-			query += ' ON DUPLICATE KEY UPDATE strength = strength + VALUES(strength), reward = (reward * strength + VALUES(reward) * VALUES(strength)) / (strength + VALUES(strength))';
-
-		await this.conn.query(query, [neurons]);
-	}
-
-	/**
 	 * Deduplicate and aggregate inference sources
 	 * Same source can reach same neuron via multiple paths through the pattern hierarchy
 	 * @param {Map} neuronSources - Map of neuron_id → [{source_type, source_id, strength, reward}]
@@ -312,61 +293,35 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Save all inferences in one operation.
-	 * Exploration has already been applied to actionWinners/actionLosers.
-	 * @param {Map} eventWinners - Event winners from determineConsensus
-	 * @param {Map} actionWinners - Action winners (with exploration applied)
-	 * @param {Map} actionLosers - Action losers (with exploration applied)
+	 * @param {Array} inferences - Array of inference objects with isWinner flag
 	 */
-	async saveInferences(eventWinners, actionWinners, actionLosers) {
+	async saveInferences(inferences) {
+		if (inferences.length === 0) return;
 
-		// Collect all neurons to save
+		// Collect neurons and sources
 		const neurons = [];
 		const sources = new Map();
 
-		// Add event winners
-		for (const [neuronId, inf] of eventWinners) {
-			neurons.push([neuronId, inf.level || 0, 0, inf.strength, inf.reward]);
-			if (inf.sources && inf.sources.length > 0) sources.set(neuronId, inf.sources);
-		}
-
-		// Add action winners (is_winner = 1)
-		for (const [neuronId, inf] of actionWinners) {
-			neurons.push([neuronId, inf.level || 0, 0, inf.strength, inf.reward]);
-			if (inf.sources && inf.sources.length > 0) sources.set(neuronId, inf.sources);
-		}
-
-		// Add action losers (is_winner = 0)
-		for (const [neuronId, inf] of actionLosers) {
-			neurons.push([neuronId, inf.level || 0, 0, inf.strength, inf.reward]);
-			if (inf.sources && inf.sources.length > 0) sources.set(neuronId, inf.sources);
+		for (const inf of inferences) {
+			// is_winner: null for events, 1 for action winners, 0 for action losers
+			const isWinner = inf.dimType === 'action' ? (inf.isWinner ? 1 : 0) : null;
+			neurons.push([inf.neuron_id, inf.level || 0, 0, inf.strength, inf.reward, isWinner]);
+			if (inf.sources && inf.sources.length > 0) sources.set(inf.neuron_id, inf.sources);
 		}
 
 		// Save neurons and sources
-		if (neurons.length > 0) {
-			await this.insertInferredNeurons(neurons, 'ignore');
-			await this.saveInferenceSources(sources);
-		}
+		await this.conn.query(
+			'INSERT INTO inferred_neurons (neuron_id, level, age, strength, reward, is_winner) VALUES ? ON DUPLICATE KEY UPDATE strength = strength',
+			[neurons]
+		);
+		await this.saveInferenceSources(sources);
 
-		// Mark action winners (is_winner = 1)
-		if (actionWinners.size > 0) {
-			const winnerIds = [...actionWinners.keys()];
-			await this.conn.query(
-				'UPDATE inferred_neurons SET is_winner = 1 WHERE neuron_id IN (?) AND age = 0 AND level = 0',
-				[winnerIds]
-			);
+		if (this.debug) {
+			const eventCount = inferences.filter(i => i.dimType !== 'action').length;
+			const winnerCount = inferences.filter(i => i.dimType === 'action' && i.isWinner).length;
+			const loserCount = inferences.filter(i => i.dimType === 'action' && !i.isWinner).length;
+			console.log(`Saved ${inferences.length} inferences (${eventCount} events, ${winnerCount} winners, ${loserCount} losers)`);
 		}
-
-		// Mark action losers (is_winner = 0)
-		if (actionLosers.size > 0) {
-			const loserIds = [...actionLosers.keys()].filter(id => !actionWinners.has(id));
-			if (loserIds.length > 0)
-				await this.conn.query(
-					'UPDATE inferred_neurons SET is_winner = 0 WHERE neuron_id IN (?) AND age = 0 AND level = 0',
-					[loserIds]
-				);
-		}
-
-		if (this.debug) console.log(`Saved ${neurons.length} inferences (${eventWinners.size} events, ${actionWinners.size} winners, ${actionLosers.size} losers)`);
 	}
 
 	/**

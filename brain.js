@@ -313,8 +313,10 @@ export default class Brain {
 			strength: 100000, // High strength for exploration
 			reward: 1.0, // Neutral reward
 			coordinates: actionCoordinates,
+			dimType: 'action',
 			sources,
-			isExploration: true // Flag to identify exploration actions
+			isWinner: true,
+			isExploration: true
 		};
 
 		if (this.debug) console.log(`Exploration for ${channelName}:`, actionCoordinates, actionNeuronId);
@@ -322,63 +324,44 @@ export default class Brain {
 	}
 
 	/**
-	 * Apply exploration to action winners in memory.
-	 * Modifies actionWinners and actionLosers maps directly.
-	 * @param {Map} actionWinners - Map of neuron_id → winner data (modified in place)
-	 * @param {Map} actionLosers - Map of neuron_id → loser data (modified in place)
+	 * Apply exploration to action inferences.
+	 * Modifies inferences array in place - may add exploration action and update isWinner flags.
+	 * @param {Array} inferences - Array of inference objects (modified in place)
 	 */
-	async applyExploration(actionWinners, actionLosers) {
+	async applyExploration(inferences) {
 
-		// Group ALL votes (winners + losers) by channel
-		const votesByChannel = new Map();
-		const winnersByChannel = new Map();
-
-		for (const [neuronId, vote] of actionWinners) {
-			if (!vote.coordinates) continue;
-			for (const dimName of Object.keys(vote.coordinates)) {
+		// Group action inferences by channel
+		const byChannel = new Map();
+		for (const inf of inferences) {
+			if (!inf.coordinates || inf.dimType !== 'action') continue;
+			for (const dimName of Object.keys(inf.coordinates)) {
 				const dimInfo = this.dimensions.get(dimName);
 				if (dimInfo && dimInfo.type === 'action') {
-					if (!votesByChannel.has(dimInfo.channel)) votesByChannel.set(dimInfo.channel, []);
-					if (!winnersByChannel.has(dimInfo.channel)) winnersByChannel.set(dimInfo.channel, []);
-					votesByChannel.get(dimInfo.channel).push(vote);
-					winnersByChannel.get(dimInfo.channel).push(vote);
-				}
-			}
-		}
-
-		for (const [neuronId, vote] of actionLosers) {
-			if (!vote.coordinates) continue;
-			for (const dimName of Object.keys(vote.coordinates)) {
-				const dimInfo = this.dimensions.get(dimName);
-				if (dimInfo && dimInfo.type === 'action') {
-					if (!votesByChannel.has(dimInfo.channel)) votesByChannel.set(dimInfo.channel, []);
-					votesByChannel.get(dimInfo.channel).push(vote);
+					if (!byChannel.has(dimInfo.channel)) byChannel.set(dimInfo.channel, []);
+					byChannel.get(dimInfo.channel).push(inf);
 				}
 			}
 		}
 
 		// Process each channel
 		for (const [channelName] of this.channels) {
-			const channelVotes = votesByChannel.get(channelName) || [];
-			const channelWinners = winnersByChannel.get(channelName) || [];
+			const channelInferences = byChannel.get(channelName) || [];
+			const channelWinners = channelInferences.filter(inf => inf.isWinner);
 
 			// Check if we should explore this channel
-			if (this.shouldExploreChannel(channelName, channelWinners)) {
+			if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
 
-				// Get exploration action - pass ALL votes so channel knows what's been tried
-				if (!exploration) continue; // All actions have been tried, keep voting winners
-				const exploration = await this.exploreChannel(channelName, channelVotes);
+			// Get exploration action - pass all channel inferences so channel knows what's been tried
+			const exploration = await this.exploreChannel(channelName, channelInferences);
+			if (!exploration) continue; // All actions have been tried
 
-				// Move replaced winners to losers (if exploration picked different action)
-				for (const winner of channelWinners)
-					if (winner.neuron_id !== exploration.neuron_id) {
-						actionLosers.set(winner.neuron_id, winner);
-						actionWinners.delete(winner.neuron_id);
-					}
+			// Mark previous winners as losers
+			for (const winner of channelWinners)
+				if (winner.neuron_id !== exploration.neuron_id)
+					winner.isWinner = false;
 
-				// Add exploration as winner
-				actionWinners.set(exploration.neuron_id, exploration);
-			}
+			// Add exploration as winner
+			inferences.push(exploration);
 		}
 	}
 
@@ -701,28 +684,26 @@ export default class Brain {
 			return;
 		}
 
-		// Determine consensus - handles actions (max reward) and events (max strength) internally
-		// Returns winners and losers grouped by type
-		const { actionWinners, actionLosers, eventWinners } = await this.determineConsensus(allVotes);
+		// Determine consensus - pick best per dimension (reward DESC, then strength DESC)
+		// Returns array of inferences with isWinner flag
+		const inferences = await this.determineConsensus(allVotes);
 
-		// Apply exploration to actions in memory (before saving)
-		// This may override action winners and move them to losers
-		await this.applyExploration(actionWinners, actionLosers);
+		// Apply exploration to actions (may override winners)
+		await this.applyExploration(inferences);
 
-		// Save all inferences once (events + actions with exploration already applied)
-		await this.saveInferences(eventWinners, actionWinners, actionLosers);
+		// Save all inferences
+		await this.saveInferences(inferences);
 	}
 
 	/**
 	 * Determine consensus from votes using voting architecture.
 	 * All levels vote, winner is determined per dimension.
-	 * Actions: pick highest reward. Events: pick highest strength.
-	 * Returns winners and losers grouped by type.
+	 * Unified logic: pick highest reward, then highest strength (events have reward=1).
 	 * @param {Array} votes - Array of {neuron_id, source_type, source_id, strength, reward, level}
-	 * @returns {Promise<{actionWinners: Map, actionLosers: Map, eventWinners: Map}>}
+	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async determineConsensus(votes) {
-		if (votes.length === 0) return { actionWinners: new Map(), actionLosers: new Map(), eventWinners: new Map() };
+		if (votes.length === 0) return [];
 
 		// Aggregate votes by neuron_id (sum strengths, weighted average rewards)
 		const aggregated = new Map();
@@ -753,48 +734,35 @@ export default class Brain {
 		}
 
 		// Group by dimension
-		const actionsByDim = new Map();
-		const eventsByDim = new Map();
+		const byDimension = new Map();
 		for (const [neuronId, agg] of aggregated) {
 			if (!agg.coordinates) continue;
 			for (const dimName of Object.keys(agg.coordinates)) {
-				const dimInfo = this.dimensions.get(dimName);
-				if (!dimInfo) continue;
-				const targetMap = dimInfo.type === 'action' ? actionsByDim : eventsByDim;
-				if (!targetMap.has(dimName)) targetMap.set(dimName, []);
-				targetMap.get(dimName).push(agg);
+				if (!byDimension.has(dimName)) byDimension.set(dimName, []);
+				byDimension.get(dimName).push(agg);
 			}
 		}
 
-		// Find winners per dimension
-		const actionWinners = new Map();
-		const actionLosers = new Map();
-		const eventWinners = new Map();
+		// Find winner per dimension: highest reward, then highest strength
+		const inferences = [];
+		const winners = new Set();
 
-		// Actions: pick highest reward
-		for (const [dimName, dimVotes] of actionsByDim) {
+		for (const [dimName, dimVotes] of byDimension) {
 			if (dimVotes.length === 0) continue;
-			let winner = dimVotes[0];
-			for (const vote of dimVotes)
-				if (vote.reward > winner.reward) winner = vote;
-			for (const vote of dimVotes) {
-				if (vote.neuron_id === winner.neuron_id) actionWinners.set(vote.neuron_id, vote);
-				else actionLosers.set(vote.neuron_id, vote);
-			}
-			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (reward: ${winner.reward.toFixed(1)}, ${dimVotes.length} candidates)`);
+
+			// Sort by reward DESC, then strength DESC
+			dimVotes.sort((a, b) => b.reward - a.reward || b.strength - a.strength);
+			const winner = dimVotes[0];
+			winners.add(winner.neuron_id);
+
+			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (reward: ${winner.reward.toFixed(2)}, strength: ${winner.strength.toFixed(1)}, ${dimVotes.length} candidates)`);
 		}
 
-		// Events: pick highest strength
-		for (const [dimName, dimVotes] of eventsByDim) {
-			if (dimVotes.length === 0) continue;
-			let winner = dimVotes[0];
-			for (const vote of dimVotes)
-				if (vote.strength > winner.strength) winner = vote;
-			eventWinners.set(winner.neuron_id, winner);
-			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (strength: ${winner.strength.toFixed(1)}, ${dimVotes.length} candidates)`);
-		}
+		// Build inferences array with isWinner flag
+		for (const [neuronId, agg] of aggregated)
+			inferences.push({ ...agg, isWinner: winners.has(neuronId) });
 
-		return { actionWinners, actionLosers, eventWinners };
+		return inferences;
 	}
 
 	/**
@@ -931,7 +899,6 @@ export default class Brain {
 
 	/**
 	 * Collect votes from ALL levels in bulk for a specific dimension type (implementation-specific)
-	 * @param {string} dimensionType - 'action' or 'event'
 	 * @returns {Promise<Array>} Array of {neuron_id, source_type, source_id, strength, reward, level}
 	 */
 	async collectVotes() {
@@ -940,11 +907,9 @@ export default class Brain {
 
 	/**
 	 * Save all inferences for learning (implementation-specific)
-	 * @param {Map} eventWinners - Event winners from determineConsensus
-	 * @param {Map} actionWinners - Action winners (with exploration applied)
-	 * @param {Map} actionLosers - Action losers (with exploration applied)
+	 * @param {Array} inferences - inferences from determineConsensus
 	 */
-	async saveInferences(eventWinners, actionWinners, actionLosers) {
+	async saveInferences(inferences) {
 		throw new Error('saveInferences() must be implemented by subclass');
 	}
 
