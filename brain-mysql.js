@@ -25,7 +25,7 @@ export default class BrainMySQL extends Brain {
 			'matched_pattern_connections',
 			'active_connections',
 			'inference_sources',
-			'unpredicted_connections',
+			'new_pattern_connections',
 			'new_patterns'
 		]);
 	}
@@ -43,7 +43,7 @@ export default class BrainMySQL extends Brain {
 			'matched_patterns',
 			'matched_pattern_connections',
 			'inference_sources',
-			'unpredicted_connections',
+			'new_pattern_connections',
 			'new_patterns',
 			'pattern_peaks',
 			'pattern_past',
@@ -108,12 +108,13 @@ export default class BrainMySQL extends Brain {
 	async getFrameOutputs() {
 
 		// Get all winning action neurons from inferred_neurons table
+		// Only return neurons that have action dimensions (not event dimensions)
 		const [rows] = await this.conn.query(`
 			SELECT inf.neuron_id, c.dimension_id, c.val, d.name as dimension_name, d.channel
 			FROM inferred_neurons inf
 			JOIN coordinates c ON inf.neuron_id = c.neuron_id
 			JOIN dimensions d ON c.dimension_id = d.id
-			WHERE inf.age = 0 AND inf.level = 0 AND inf.is_winner = 1
+			WHERE inf.age = 0 AND inf.level = 0 AND inf.is_winner = 1 AND d.type = 'action'
 			ORDER BY d.channel, inf.neuron_id
 		`);
 
@@ -159,53 +160,142 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Check if there are high-confidence failed predictions (neurons predicted with high strength but didn't activate).
-	 * This is the entry criteria for error pattern creation - we only learn when surprised by confident predictions failing.
-	 * Returns the count of high-confidence failed predictions.
+	 * Count bad inferences: prediction errors OR negative reward actions.
+	 * This is the entry criteria for error pattern creation.
+	 * Returns the count of bad inferences.
 	 */
-	async countFailedPredictions(predictionLevel) {
+	async countBadInferences(predictionLevel) {
+		// Bad inferences are winners that either:
+		// 1. Didn't happen (prediction error)
+		// 2. Got negative actual_reward (action regret)
 		const [result] = await this.conn.query(`
 			SELECT COUNT(*) as count
 			FROM inferred_neurons inf
 			WHERE inf.level = ?
 			AND inf.age = 1
 			AND inf.strength >= ?
-			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an
-				WHERE an.neuron_id = inf.neuron_id
-				AND an.level = inf.level
-				AND an.age = 0
+			AND inf.is_winner = 1
+			AND (
+				NOT EXISTS (
+					SELECT 1 FROM active_neurons an
+					WHERE an.neuron_id = inf.neuron_id
+					AND an.level = inf.level
+					AND an.age = 0
+				)
+				OR inf.actual_reward < 1.0
 			)
 		`, [predictionLevel, this.minErrorPatternThreshold]);
+
+		// Debug: show what was predicted vs what happened
+		if (this.debug) {
+			const [predicted] = await this.conn.query(`
+				SELECT inf.neuron_id, inf.strength, inf.expected_reward, inf.actual_reward, inf.is_winner
+				FROM inferred_neurons inf
+				WHERE inf.level = ? AND inf.age = 1 AND inf.is_winner = 1
+			`, [predictionLevel]);
+			const [actual] = await this.conn.query(`
+				SELECT an.neuron_id
+				FROM active_neurons an
+				WHERE an.level = ? AND an.age = 0
+			`, [predictionLevel]);
+			console.log(`Predicted winners: [${predicted.map(p => `${p.neuron_id}(exp=${p.expected_reward.toFixed(2)},act=${(p.actual_reward ?? 'N/A')})`).join(',')}], Actual: [${actual.map(a => a.neuron_id).join(',')}]`);
+		}
+
 		return result[0].count;
 	}
 
 	/**
-	 * Populate unpredicted_connections with active connections at age=0 that were not predicted.
-	 * These are connections that fired but were not in the inferred_neurons predictions.
-	 * Works for both connection and pattern inference types.
-	 * Includes cross-level connections (base→high, high→base) via active_connections.level = target level.
-	 * No strength filter - we want to learn ALL unpredicted connections when surprised.
-	 * Returns the number of unpredicted connections found.
+	 * Populate new_pattern_connections with connections that should be predicted by new patterns.
+	 * Two sources:
+	 * 1. Prediction errors: active connections that weren't predicted as winners
+	 * 2. Action regret: connections to best loser for dimensions where winner got negative reward
+	 * Returns the number of new pattern connections found.
 	 */
-	async populateUnpredictedConnections(predictionLevel) {
-		await this.conn.query(`TRUNCATE unpredicted_connections`);
+	async populateNewPatternConnections(predictionLevel) {
+		await this.conn.query(`TRUNCATE new_pattern_connections`);
+		await this.populatePredictionErrorConnections(predictionLevel);
+		await this.populateActionRegretConnections(predictionLevel);
+		const [countResult] = await this.conn.query(`SELECT COUNT(*) as count FROM new_pattern_connections`);
+		return countResult[0].count;
+	}
+
+	/**
+	 * Populate connections from prediction errors - active connections not predicted as winners.
+	 */
+	async populatePredictionErrorConnections(predictionLevel) {
 		const [result] = await this.conn.query(`
-			INSERT INTO unpredicted_connections (connection_id, level, from_neuron_id, to_neuron_id, strength)
+			INSERT INTO new_pattern_connections (connection_id, level, from_neuron_id, to_neuron_id, strength)
 			SELECT ac.connection_id, ac.level, c.from_neuron_id, c.to_neuron_id, c.strength
 			FROM active_connections ac
 			JOIN connections c ON c.id = ac.connection_id
 			WHERE ac.level = ?
 			AND ac.age = 0
 			AND NOT EXISTS (
-				SELECT 1
-				FROM inferred_neurons inf
+				SELECT 1 FROM inferred_neurons inf
 				WHERE inf.neuron_id = c.to_neuron_id
 				AND inf.level = ac.level
 				AND inf.age = 1
+				AND inf.is_winner = 1
 			)
 		`, [predictionLevel]);
-		return result.affectedRows;
+		if (this.debug && result.affectedRows > 0)
+			console.log(`Found ${result.affectedRows} prediction error connections`);
+	}
+
+	/**
+	 * Populate connections from action regret - best loser connections for dimensions where winner got negative reward.
+	 */
+	async populateActionRegretConnections(predictionLevel) {
+		// Get loser votes (use expected_reward since actual_reward is only set for winners)
+		const [loserVotes] = await this.conn.query(`
+			SELECT inf.neuron_id, isrc.source_type, isrc.source_id, isrc.inference_strength as strength, inf.expected_reward as reward, inf.level
+			FROM inferred_neurons inf
+			JOIN inference_sources isrc ON isrc.neuron_id = inf.neuron_id AND isrc.age = inf.age
+			WHERE inf.level = ? AND inf.age = 1 AND inf.is_winner = 0
+		`, [predictionLevel]);
+
+		if (loserVotes.length === 0) return;
+
+		// Find best loser per dimension
+		const bestLosers = await this.determineConsensus(loserVotes);
+		const bestLoserWinners = bestLosers.filter(l => l.isWinner);
+
+		// Filter to dimensions where winner got negative actual_reward
+		const bestLoserNeuronIds = await this.filterToRegretDimensions(bestLoserWinners, predictionLevel);
+		if (bestLoserNeuronIds.length === 0) return;
+
+		// Insert connections to best losers
+		const [result] = await this.conn.query(`
+			INSERT IGNORE INTO new_pattern_connections (connection_id, level, from_neuron_id, to_neuron_id, strength)
+			SELECT c.id, ?, c.from_neuron_id, c.to_neuron_id, c.strength
+			FROM inference_sources isrc
+			JOIN connections c ON c.id = isrc.source_id
+			WHERE isrc.age = 1 AND isrc.source_type = 'connection' AND isrc.neuron_id IN (?)
+		`, [predictionLevel, bestLoserNeuronIds]);
+		if (this.debug && result.affectedRows > 0)
+			console.log(`Found ${result.affectedRows} action regret connections`);
+	}
+
+	/**
+	 * Filter the best losers to only those in dimensions where the winner got negative actual_reward.
+	 */
+	async filterToRegretDimensions(bestLoserWinners, predictionLevel) {
+		const neuronIds = [];
+		for (const loser of bestLoserWinners) {
+			if (!loser.coordinates) continue;
+			for (const dimName of Object.keys(loser.coordinates)) {
+				const [winnerCheck] = await this.conn.query(`
+					SELECT inf.actual_reward
+					FROM inferred_neurons inf
+					JOIN coordinates c ON c.neuron_id = inf.neuron_id
+					JOIN dimensions d ON d.id = c.dimension_id
+					WHERE inf.level = ? AND inf.age = 1 AND inf.is_winner = 1 AND d.name = ?
+				`, [predictionLevel, dimName]);
+				if (winnerCheck.length > 0 && winnerCheck[0].actual_reward < 1.0)
+					neuronIds.push(loser.neuron_id);
+			}
+		}
+		return neuronIds;
 	}
 
 	/**
@@ -313,24 +403,25 @@ export default class BrainMySQL extends Brain {
 		const sources = new Map();
 
 		for (const inf of inferences) {
-			// is_winner: null for events, 1 for action winners, 0 for action losers
-			const isWinner = inf.dimType === 'action' ? (inf.isWinner ? 1 : 0) : null;
+			// is_winner: 1 for winners (highest reward then strength per dimension), 0 for losers
+			const isWinner = inf.isWinner ? 1 : 0;
+			// expected_reward is from connection/pattern sources at inference time
+			// actual_reward is NULL until channel reward is applied
 			neurons.push([inf.neuron_id, inf.level || 0, 0, inf.strength, inf.reward, isWinner]);
 			if (inf.sources && inf.sources.length > 0) sources.set(inf.neuron_id, inf.sources);
 		}
 
 		// Save neurons and sources
 		await this.conn.query(
-			'INSERT INTO inferred_neurons (neuron_id, level, age, strength, reward, is_winner) VALUES ? ON DUPLICATE KEY UPDATE strength = strength',
+			'INSERT INTO inferred_neurons (neuron_id, level, age, strength, expected_reward, is_winner) VALUES ? ON DUPLICATE KEY UPDATE strength = strength',
 			[neurons]
 		);
 		await this.saveInferenceSources(sources);
 
 		if (this.debug) {
-			const eventCount = inferences.filter(i => i.dimType !== 'action').length;
-			const winnerCount = inferences.filter(i => i.dimType === 'action' && i.isWinner).length;
-			const loserCount = inferences.filter(i => i.dimType === 'action' && !i.isWinner).length;
-			console.log(`Saved ${inferences.length} inferences (${eventCount} events, ${winnerCount} winners, ${loserCount} losers)`);
+			const winnerCount = inferences.filter(i => i.isWinner).length;
+			const loserCount = inferences.filter(i => !i.isWinner).length;
+			console.log(`Saved ${inferences.length} inferences (${winnerCount} winners, ${loserCount} losers)`);
 		}
 	}
 
@@ -445,7 +536,7 @@ export default class BrainMySQL extends Brain {
 		await this.conn.query(`TRUNCATE new_patterns`);
 		const [insertResult] = await this.conn.query(`
 			INSERT INTO new_patterns (peak_neuron_id)
-			SELECT from_neuron_id FROM unpredicted_connections GROUP BY from_neuron_id
+			SELECT from_neuron_id FROM new_pattern_connections GROUP BY from_neuron_id
 		`);
 		return insertResult.affectedRows;
 	}
@@ -493,14 +584,15 @@ export default class BrainMySQL extends Brain {
 			AND ac.age = 1
 		`, [predictionLevel]);
 
-		// Create pattern_future entries: connections FROM peak to observed neurons
-		// Uses unpredicted_connections which contains connections from peak to newly active neurons
+		// Create pattern_future entries: connections FROM peak to target neurons
+		// Uses new_pattern_connections which contains connections the pattern should predict
 		// These are the connections the pattern should predict in the future
+		// Use INSERT IGNORE in case pattern already has this connection
 		await this.conn.query(`
-			INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength)
-			SELECT np.pattern_neuron_id, uc.connection_id, 1.0
+			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength)
+			SELECT np.pattern_neuron_id, npc.connection_id, 1.0
 			FROM new_patterns np
-			JOIN unpredicted_connections uc ON uc.from_neuron_id = np.peak_neuron_id
+			JOIN new_pattern_connections npc ON npc.from_neuron_id = np.peak_neuron_id
 		`);
 
 		// Add connections from peak to active action neurons (for voting)
@@ -951,6 +1043,17 @@ export default class BrainMySQL extends Brain {
 				)
 			`, [this.minConnectionReward, this.maxConnectionReward, reward, this.rewardTimeDecayFactor, this.maxRewardsAge, outputDimIds]);
 			totalWinnerPatterns += winnerPatternResult.affectedRows;
+
+			// Update inferred_neurons.actual_reward for action winners so countBadInferences can detect negative rewards
+			await this.conn.query(`
+				UPDATE inferred_neurons inf
+				SET inf.actual_reward = ?
+				WHERE inf.age = 1 AND inf.level = 0 AND inf.is_winner = 1
+				AND EXISTS (
+					SELECT 1 FROM coordinates coord
+					WHERE coord.neuron_id = inf.neuron_id AND coord.dimension_id IN (?)
+				)
+			`, [reward, outputDimIds]);
 
 			// LOSERS: Apply inverse reward (1/reward) to losing votes (is_winner=0)
 			// This trains dissenting levels even when outvoted

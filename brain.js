@@ -859,17 +859,17 @@ export default class Brain {
 		if (predictionLevel === null) return; // No inference occurred (only exploration) - no error patterns to create
 		const newPatternLevel = predictionLevel + 1;
 
-		// First check if we have failed predictions (surprising errors)
-		const failedCount = await this.countFailedPredictions(predictionLevel);
-		if (this.debug) console.log(`Level ${predictionLevel}: failed predictions count: ${failedCount}`);
-		if (failedCount === 0) return;
+		// First check if we have bad inferences (prediction errors or negative reward actions)
+		const badCount = await this.countBadInferences(predictionLevel);
+		if (this.debug) console.log(`Level ${predictionLevel}: bad inferences count: ${badCount}`);
+		if (badCount === 0) return;
 
 		// We have errors, now find what we should have predicted instead
-		const unpredictedCount = await this.populateUnpredictedConnections(predictionLevel);
-		if (this.debug) console.log(`Level ${predictionLevel}: unpredicted connections count: ${unpredictedCount}`);
-		if (unpredictedCount === 0) return;
+		const newPatternConnectionCount = await this.populateNewPatternConnections(predictionLevel);
+		if (this.debug) console.log(`Level ${predictionLevel}: new pattern connections count: ${newPatternConnectionCount}`);
+		if (newPatternConnectionCount === 0) return;
 
-		// Populate new_patterns table with peaks from unpredicted connections
+		// Populate new_patterns table with peaks from new pattern connections
 		const patternCount = await this.populateNewPatterns();
 		if (this.debug) console.log(`Level ${predictionLevel}: Creating ${patternCount} error patterns at level ${newPatternLevel}`);
 
@@ -979,24 +979,25 @@ export default class Brain {
 	}
 
 	/**
-	 * Count high-confidence failed predictions (implementation-specific)
-	 * Returns the count of failed predictions.
+	 * Count bad inferences: prediction errors OR negative reward actions (implementation-specific)
+	 * Returns the count of bad inferences.
 	 */
-	async countFailedPredictions() {
-		throw new Error('countFailedPredictions() must be implemented by subclass');
+	async countBadInferences() {
+		throw new Error('countBadInferences() must be implemented by subclass');
 	}
 
 	/**
-	 * Populate unpredicted_connections with active connections that were not predicted (implementation-specific)
-	 * Returns the number of unpredicted connections found.
+	 * Populate new_pattern_connections with connections that should be predicted by new patterns.
+	 * Includes: (1) active connections not predicted (prediction errors), (2) best loser connections (action regret)
+	 * Returns the number of new pattern connections found.
 	 */
-	async populateUnpredictedConnections() {
-		throw new Error('populateUnpredictedConnections() must be implemented by subclass');
+	async populateNewPatternConnections() {
+		throw new Error('populateNewPatternConnections() must be implemented by subclass');
 	}
 
 	/**
-	 * Populate new_patterns table from unpredicted connections (implementation-specific)
-	 * Finds peak neurons (from_neurons of unpredicted connections) and creates one pattern per peak.
+	 * Populate new_patterns table from new pattern connections (implementation-specific)
+	 * Finds peak neurons (from_neurons of new_pattern_connections) and creates one pattern per peak.
 	 * Returns the number of patterns to create.
 	 */
 	async populateNewPatterns() {

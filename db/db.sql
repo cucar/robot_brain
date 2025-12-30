@@ -18,14 +18,14 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
--- DROP TABLE IF EXISTS unpredicted_connections;
+-- DROP TABLE IF EXISTS new_pattern_connections;
 -- DROP TABLE IF EXISTS new_patterns;
 
 select * from inferred_neurons;
 select * from inferred_neurons where age = 1;
 select * from inference_sources;
 select * from inference_sources where source_type = 'pattern';
-select * from unpredicted_connections;
+select * from new_pattern_connections;
 select * from new_patterns;
 
 select * from neurons;
@@ -194,12 +194,15 @@ CREATE TABLE IF NOT EXISTS active_neurons (
 -- used by both connection and pattern inference
 -- after conflict resolution, is_winner is set for action neurons (NULL for events)
 -- is_winner: NULL for events, 1 for winning action votes, 0 for losing action votes
+-- expected_reward: reward from connection/pattern sources at inference time
+-- actual_reward: channel reward applied after action execution (NULL until reward applied)
 CREATE TABLE IF NOT EXISTS inferred_neurons (
     neuron_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     strength DOUBLE NOT NULL DEFAULT 0.0,
-    reward DOUBLE NOT NULL DEFAULT 1.0,
+    expected_reward DOUBLE NOT NULL DEFAULT 1.0,
+    actual_reward DOUBLE DEFAULT NULL,
     is_winner TINYINT UNSIGNED DEFAULT NULL,
     PRIMARY KEY (neuron_id, level, age),
     INDEX idx_level_age (level, age),
@@ -259,9 +262,9 @@ CREATE TABLE IF NOT EXISTS inference_sources (
     INDEX idx_age (age)
 ) ENGINE=MEMORY;
 
--- scratch table for tracking unpredicted connections (MEMORY table)
--- connections that fired but were not predicted
-CREATE TABLE IF NOT EXISTS unpredicted_connections (
+-- scratch table for new pattern connections (MEMORY table)
+-- connections that should be predicted by new patterns (from prediction errors or action regret)
+CREATE TABLE IF NOT EXISTS new_pattern_connections (
     connection_id BIGINT UNSIGNED NOT NULL,
     level TINYINT NOT NULL,
     from_neuron_id BIGINT UNSIGNED NOT NULL,
