@@ -19,7 +19,7 @@ export default class SyntheticCycleTest extends Job {
 		this.config = {
 			symbol: 'TEST',
 			cyclePattern: [0.009, -0.019, -0.029, 0.019, 0.029, -0.009], // +1%, -2%, -3%, +2%, +3%, -1%
-			cycleRepeats: 100,
+			cycleRepeats: 50,
 			startPrice: 100.00,
 			startVolume: 100000
 		};

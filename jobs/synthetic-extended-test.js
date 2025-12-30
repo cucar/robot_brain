@@ -91,41 +91,136 @@ export default class SyntheticExtendedTest extends Job {
 		this.brain.resetAccuracyStats();
 
 		const expectedFrames = stockChannel.dataRows.length - 1;
-		const cycleLength = this.config.sourceData.length - 1; // 11 frames per cycle
+		const cycleLength = this.config.sourceData.length; // 12 frames per cycle (not 11!)
 		let frameCount = 0;
 
+		// Pre-calculate optimal strategy per cycle frame
+		// Optimal: own before positive frames, out before negative frames
+		const optimalOwnership = this.calculateOptimalOwnership();
+		console.log('Optimal ownership by cycle frame:', optimalOwnership);
+		console.log('');
+
+		// Track decisions by cycle frame
+		const decisionStats = {};
+		for (let i = 1; i <= cycleLength; i++)
+			decisionStats[i] = { optimal: 0, suboptimal: 0, details: [] };
+
 		// Print header
-		console.log('Frame | CycleFrame | Price Change | Bucket | Action | Position | P&L');
-		console.log('------|------------|--------------|--------|--------|----------|----');
+		console.log('Frame | CycleFrame | Price Change | Optimal | Actual | Match | P&L');
+		console.log('------|------------|--------------|---------|--------|-------|----');
 
 		while (frameCount < expectedFrames) {
 			const frame = await this.brain.getFrame();
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
-			// Calculate price change and bucket
+			// Calculate price change
 			const priceChange = stockChannel.previousPrice && stockChannel.currentPrice
 				? ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice * 100)
 				: 0;
-			const bucket = stockChannel.discretizePercentageChange ? stockChannel.discretizePercentageChange(priceChange) : 'N/A';
 
-			// Get action name
-			const action = stockChannel.lastAction !== null ? stockChannel.getActionName(stockChannel.lastAction) : 'NONE';
-			const position = stockChannel.owned ? 'OWN' : 'OUT';
+			// Get actual position (what we owned DURING this frame's price change)
+			const actualOwned = stockChannel.owned;
+			const optimalOwned = optimalOwnership[cycleFrame];
+			const isOptimal = actualOwned === optimalOwned;
+
+			// Track stats
+			if (isOptimal)
+				decisionStats[cycleFrame].optimal++;
+			else {
+				decisionStats[cycleFrame].suboptimal++;
+				decisionStats[cycleFrame].details.push({ frame: frameCount, actual: actualOwned, optimal: optimalOwned });
+			}
+
 			const pnl = (stockChannel.totalProfit - stockChannel.totalLoss).toFixed(2);
+			const match = isOptimal ? '✓' : '✗';
 
-			console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${String(bucket).padStart(6)} | ${action.padStart(12)} | ${position.padStart(8)} | $${pnl}`);
+			console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${optimalOwned ? 'OWN' : 'OUT'.padStart(7)} | ${actualOwned ? 'OWN' : 'OUT'.padStart(6)} | ${match.padStart(5)} | $${pnl}`);
 
 			await this.brain.processFrame(frame);
-
-			// Stop after 10 cycles for analysis
-			// if (frameCount >= cycleLength * 10) {
-			// 	console.log('\n--- Stopping after 10 cycles for analysis ---');
-			// 	break;
-			// }
 		}
 
 		console.log(`\n✅ Completed ${frameCount} frames\n`);
+
+		// Show analysis
+		this.showOptimalityAnalysis(decisionStats, cycleLength, stockChannel);
+	}
+
+	/**
+	 * Calculate optimal ownership for each cycle frame
+	 * Optimal = own if price will go UP during this frame
+	 */
+	calculateOptimalOwnership() {
+		const ownership = {};
+		const data = this.config.sourceData;
+
+		for (let i = 0; i < data.length; i++) {
+			const cycleFrame = i + 1;
+			const currentPrice = data[i].price;
+			const nextPrice = data[(i + 1) % data.length].price;
+			const priceChange = (nextPrice - currentPrice) / currentPrice;
+
+			// Own if price goes up
+			ownership[cycleFrame] = priceChange > 0;
+		}
+
+		return ownership;
+	}
+
+	/**
+	 * Show detailed optimality analysis
+	 */
+	showOptimalityAnalysis(decisionStats, cycleLength, stockChannel) {
+		console.log('='.repeat(70));
+		console.log('📊 Optimality Analysis by Cycle Frame');
+		console.log('='.repeat(70));
+
+		const data = this.config.sourceData;
+		let totalOptimal = 0, totalSuboptimal = 0;
+
+		console.log('CycleFrame | PriceChange | Optimal | OptimalRate | Suboptimal Frames');
+		console.log('-----------|-------------|---------|-------------|------------------');
+
+		for (let i = 1; i <= cycleLength; i++) {
+			const stats = decisionStats[i];
+			const total = stats.optimal + stats.suboptimal;
+			const rate = total > 0 ? (stats.optimal / total * 100).toFixed(0) : 'N/A';
+
+			const currentPrice = data[i - 1].price;
+			const nextPrice = data[i % data.length].price;
+			const priceChange = ((nextPrice - currentPrice) / currentPrice * 100).toFixed(2);
+			const optimal = nextPrice > currentPrice ? 'OWN' : 'OUT';
+
+			totalOptimal += stats.optimal;
+			totalSuboptimal += stats.suboptimal;
+
+			// Show first few suboptimal frames
+			const suboptimalFrames = stats.details.slice(0, 3).map(d => d.frame).join(', ');
+			const more = stats.details.length > 3 ? ` (+${stats.details.length - 3} more)` : '';
+
+			console.log(`${String(i).padStart(10)} | ${priceChange.padStart(11)}% | ${optimal.padStart(7)} | ${rate.padStart(10)}% | ${suboptimalFrames}${more}`);
+		}
+
+		const overallRate = (totalOptimal / (totalOptimal + totalSuboptimal) * 100).toFixed(1);
+		console.log('');
+		console.log(`Overall Optimal Rate: ${totalOptimal}/${totalOptimal + totalSuboptimal} = ${overallRate}%`);
+
+		// Calculate theoretical optimal profit
+		let optimalProfit = 0;
+		for (let i = 0; i < data.length; i++) {
+			const currentPrice = data[i].price;
+			const nextPrice = data[(i + 1) % data.length].price;
+			if (nextPrice > currentPrice)
+				optimalProfit += nextPrice - currentPrice;
+		}
+		const totalCycles = Math.floor((totalOptimal + totalSuboptimal) / cycleLength);
+		const theoreticalOptimal = optimalProfit * totalCycles;
+
+		console.log(`\n💰 Profit Analysis:`);
+		console.log(`   Actual P&L: $${(stockChannel.totalProfit - stockChannel.totalLoss).toFixed(2)}`);
+		console.log(`   Per-cycle optimal: $${optimalProfit.toFixed(2)}`);
+		console.log(`   Theoretical optimal (${totalCycles} cycles): $${theoreticalOptimal.toFixed(2)}`);
+		console.log(`   Efficiency: ${((stockChannel.totalProfit - stockChannel.totalLoss) / theoreticalOptimal * 100).toFixed(1)}%`);
 	}
 
 	showTestResults(trades, stockChannel) {

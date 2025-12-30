@@ -162,9 +162,19 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Count bad inferences: prediction errors OR negative reward actions.
 	 * This is the entry criteria for error pattern creation.
+	 * Returns 0 if ANY pattern inference occurred (pattern errors handled by mergeMatchedPatterns).
+	 * Only creates new patterns when connection inference was used.
 	 * Returns the count of bad inferences.
 	 */
 	async countBadInferences(predictionLevel) {
+
+		// If any pattern inference occurred (won or lost), don't create new patterns
+		// Pattern errors are handled by mergeMatchedPatterns, not by creating new patterns
+		const [patternCheck] = await this.conn.query(`
+			SELECT COUNT(*) as count FROM inference_sources WHERE age = 1 AND source_type = 'pattern'
+		`);
+		if (patternCheck[0].count > 0) return 0;
+
 		// Bad inferences are winners that either:
 		// 1. Didn't happen (prediction error)
 		// 2. Got negative actual_reward (action regret)
