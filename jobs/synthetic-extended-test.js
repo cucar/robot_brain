@@ -36,7 +36,7 @@ export default class SyntheticExtendedTest extends Job {
 				{ price: 7.22, volume: 2742800 },
 				{ price: 7.51, volume: 1510600 }
 			],
-			cycleRepeats: 25 // 25 repeats × 11 frames = 275 frames
+			cycleRepeats: 25 // 25 repeats × 12 frames = 300 frames
 		};
 	}
 

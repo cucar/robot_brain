@@ -839,47 +839,32 @@ export default class Brain {
 	}
 
 	/**
-	 * Get the prediction level from previous frame's inference.
-	 * Returns null if no inference occurred (only exploration).
-	 * Implementation-specific: queries source tables to determine which inference type occurred.
-	 */
-	async getPreviousInferenceLevel() {
-		throw new Error('getPreviousInferenceLevel() must be implemented by subclass');
-	}
-
-	/**
 	 * Creates error-driven patterns from failed predictions.
-	 * Common orchestration logic with implementation-specific methods.
+	 * Processes all levels in bulk, like inferNeurons.
 	 */
 	async createErrorPatterns() {
 
-		// For pattern inference: predictions were made at lastInferenceLevel - 1
-		// For connection inference: predictions were made at lastInferenceLevel
-		const predictionLevel = await this.getPreviousInferenceLevel();
-		if (predictionLevel === null) return; // No inference occurred (only exploration) - no error patterns to create
-		const newPatternLevel = predictionLevel + 1;
-
-		// First check if we have bad inferences (prediction errors or negative reward actions)
-		const badCount = await this.countBadInferences(predictionLevel);
-		if (this.debug) console.log(`Level ${predictionLevel}: bad inferences count: ${badCount}`);
+		// Check if we have bad inferences across all levels
+		const badCount = await this.countBadInferences();
+		if (this.debug) console.log(`Bad inferences count: ${badCount}`);
 		if (badCount === 0) return;
 
-		// We have errors, now find what we should have predicted instead
-		const newPatternConnectionCount = await this.populateNewPatternConnections(predictionLevel);
-		if (this.debug) console.log(`Level ${predictionLevel}: new pattern connections count: ${newPatternConnectionCount}`);
+		// Find what we should have predicted instead (across all levels)
+		const newPatternConnectionCount = await this.populateNewPatternConnections();
+		if (this.debug) console.log(`New pattern connections count: ${newPatternConnectionCount}`);
 		if (newPatternConnectionCount === 0) return;
 
 		// Populate new_patterns table with peaks from new pattern connections
 		const patternCount = await this.populateNewPatterns();
-		if (this.debug) console.log(`Level ${predictionLevel}: Creating ${patternCount} error patterns at level ${newPatternLevel}`);
+		if (this.debug) console.log(`Creating ${patternCount} error patterns`);
 
 		// Create pattern neurons and map them to new_patterns
-		await this.createPatternNeurons(patternCount, newPatternLevel);
+		await this.createPatternNeurons(patternCount);
 
 		// Merge new patterns into pattern_peaks, pattern_past, pattern_future
-		await this.mergeNewPatterns(predictionLevel);
+		await this.mergeNewPatterns();
 
-		if (this.debug) console.log(`Level ${predictionLevel}: Created ${patternCount} error patterns`);
+		if (this.debug) console.log(`Created ${patternCount} error patterns`);
 	}
 
 	/**
@@ -1007,17 +992,16 @@ export default class Brain {
 	/**
 	 * Create pattern neurons and map them to new_patterns (implementation-specific)
 	 * @param {number} patternCount - Number of patterns to create
-	 * @param {number} level - Level of the pattern neurons
 	 */
-	async createPatternNeurons(patternCount, level) {
-		throw new Error('createPatternNeurons(patternCount, level) must be implemented by subclass');
+	async createPatternNeurons(patternCount) {
+		throw new Error('createPatternNeurons(patternCount) must be implemented by subclass');
 	}
 
 	/**
 	 * Merge new patterns into pattern_peaks, pattern_past, pattern_future (implementation-specific)
 	 */
 	async mergeNewPatterns() {
-		throw new Error('mergeNewPatterns(predictionLevel) must be implemented by subclass');
+		throw new Error('mergeNewPatterns() must be implemented by subclass');
 	}
 }
 

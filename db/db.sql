@@ -263,16 +263,13 @@ CREATE TABLE IF NOT EXISTS inference_sources (
 ) ENGINE=MEMORY;
 
 -- scratch table for new pattern connections (MEMORY table)
--- connections that should be predicted by new patterns (from prediction errors or action regret)
+-- connections FROM peak neurons that should be in pattern_future (from prediction errors or action regret)
+-- from_neuron_id is denormalized from connections table for grouping by peak neuron
 CREATE TABLE IF NOT EXISTS new_pattern_connections (
-    connection_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
+    connection_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
     from_neuron_id BIGINT UNSIGNED NOT NULL,
-    to_neuron_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL,
-    INDEX idx_connection (connection_id),
-    INDEX idx_from (from_neuron_id),
-    INDEX idx_level (level)
+    INDEX idx_from (from_neuron_id)
 ) ENGINE=MEMORY;
 
 -- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)
