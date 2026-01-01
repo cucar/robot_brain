@@ -215,17 +215,19 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Populate connections from prediction errors.
-	 * For each connection inference that was strong but wrong, add ALL connections FROM that peak neuron to pattern_future.
+	 * For each connection inference that was strong but wrong, add connections to what ACTUALLY happened.
+	 * Only adds connections from peak to currently active neurons (age=0), not all connections from peak.
 	 */
 	async populatePredictionErrorConnections() {
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_connections (connection_id, from_neuron_id, strength)
-			-- Find all connections FROM peak neurons that made bad inferences
+			-- Find connections FROM peak neurons to what actually happened (active at age=0)
 			SELECT c.id, c.from_neuron_id, c.strength
 			FROM inference_sources isrc
 			JOIN connections c_inferred ON c_inferred.id = isrc.source_id
 			JOIN active_neurons peak_an ON peak_an.neuron_id = c_inferred.from_neuron_id
 			JOIN connections c ON c.from_neuron_id = c_inferred.from_neuron_id
+			JOIN active_neurons actual ON actual.neuron_id = c.to_neuron_id AND actual.age = 0
 			WHERE isrc.age = 1
 			AND isrc.source_type = 'connection'
 			AND isrc.inference_strength >= ?
@@ -255,91 +257,90 @@ export default class BrainMySQL extends Brain {
 	}
 
 	/**
-	 * Populate connections from action regret - best loser connections for dimensions where winner got negative reward.
-	 * For each strong loser inference, add ALL connections FROM that peak neuron to pattern_future.
+	 * Populate connections from action regret - when an action got negative reward, create patterns to predict the best alternative.
+	 * Logic:
+	 * 1. Find action winners that got negative actual_reward (bad actions we took)
+	 * 2. For each such dimension, find the best loser action (what we should try instead)
+	 * 3. Create pattern connections TO that best loser from the current context
 	 */
 	async populateActionRegretConnections() {
-		// Get loser inferences that were strong and used Type 1 inference
-		const [loserInferences] = await this.conn.query(`
-			SELECT isrc.neuron_id, isrc.source_id, isrc.inference_strength, inf.expected_reward, inf.level
-			FROM inference_sources isrc
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
-			WHERE isrc.age = 1
-			AND isrc.source_type = 'connection'
-			AND isrc.inference_strength >= ?
+		// Step 1: Find action dimensions where winner got negative reward
+		const [regretDimensions] = await this.conn.query(`
+			SELECT DISTINCT c.dimension_id
+			FROM inferred_neurons inf
+			JOIN coordinates c ON c.neuron_id = inf.neuron_id
+			JOIN dimensions d ON d.id = c.dimension_id
+			WHERE inf.age = 1
+			AND inf.is_winner = 1
+			AND inf.actual_reward < 1.0
+			AND d.type = 'action'
+		`);
+
+		if (regretDimensions.length === 0) return;
+		const regretDimIds = regretDimensions.map(r => r.dimension_id);
+
+		// Step 2: Find the best loser for each regret dimension
+		// Best loser = highest expected_reward among losers, or if no losers were inferred, any alternative action
+		const [bestLosers] = await this.conn.query(`
+			SELECT inf.neuron_id, inf.expected_reward, c.dimension_id
+			FROM inferred_neurons inf
+			JOIN coordinates c ON c.neuron_id = inf.neuron_id
+			WHERE inf.age = 1
 			AND inf.is_winner = 0
-			-- Only for neurons that did NOT use Type 2 inference
-			AND NOT EXISTS (
-				SELECT 1 FROM inference_sources isrc2
-				WHERE isrc2.neuron_id = inf.neuron_id
-				AND isrc2.age = 1
-				AND isrc2.source_type = 'pattern'
-			)
-		`, [this.minErrorPatternThreshold]);
+			AND c.dimension_id IN (?)
+			ORDER BY inf.expected_reward DESC
+		`, [regretDimIds]);
 
-		if (loserInferences.length === 0) return;
+		// Group by dimension and pick the best loser per dimension
+		const bestLoserByDim = new Map();
+		for (const loser of bestLosers)
+			if (!bestLoserByDim.has(loser.dimension_id))
+				bestLoserByDim.set(loser.dimension_id, loser.neuron_id);
 
-		// Convert to votes format for determineConsensus
-		const loserVotes = loserInferences.map(inf => ({
-			neuron_id: inf.neuron_id,
-			source_type: 'connection',
-			source_id: inf.source_id,
-			strength: inf.inference_strength,
-			reward: inf.expected_reward,
-			level: inf.level
-		}));
+		// For dimensions with no inferred losers, find any alternative action neuron
+		const dimsWithoutLosers = regretDimIds.filter(d => !bestLoserByDim.has(d));
+		if (dimsWithoutLosers.length > 0) {
+			const [alternativeActions] = await this.conn.query(`
+				SELECT c.neuron_id, c.dimension_id
+				FROM coordinates c
+				JOIN neurons n ON n.id = c.neuron_id AND n.level = 0
+				WHERE c.dimension_id IN (?)
+				AND NOT EXISTS (
+					SELECT 1 FROM inferred_neurons inf
+					WHERE inf.neuron_id = c.neuron_id
+					AND inf.age = 1
+					AND inf.is_winner = 1
+				)
+			`, [dimsWithoutLosers]);
 
-		// Find best loser per dimension
-		const bestLosers = await this.determineConsensus(loserVotes);
-		const bestLoserWinners = bestLosers.filter(l => l.isWinner);
+			for (const alt of alternativeActions)
+				if (!bestLoserByDim.has(alt.dimension_id))
+					bestLoserByDim.set(alt.dimension_id, alt.neuron_id);
+		}
 
-		// Filter to dimensions where winner got negative actual_reward
-		const bestLoserNeuronIds = await this.filterToRegretDimensions(bestLoserWinners);
-		if (bestLoserNeuronIds.length === 0) return;
+		if (bestLoserByDim.size === 0) return;
+		const bestLoserNeuronIds = [...bestLoserByDim.values()];
 
-		// For each best loser, find the peak neurons that inferred it and add ALL their connections
+		// Step 3: Create pattern connections from active context TO the best loser neurons
+		// Use active_connections at age=1 as context (same as populatePredictionErrorConnections)
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_connections (connection_id, from_neuron_id, strength)
 			SELECT c.id, c.from_neuron_id, c.strength
-			FROM inference_sources isrc
-			JOIN connections c_inferred ON c_inferred.id = isrc.source_id
-			JOIN connections c ON c.from_neuron_id = c_inferred.from_neuron_id
-			WHERE isrc.age = 1
-			AND isrc.source_type = 'connection'
-			AND isrc.neuron_id IN (?)
-			-- The peak neuron has context (connections TO it from older neurons)
+			FROM connections c
+			JOIN active_neurons an ON an.neuron_id = c.from_neuron_id
+			WHERE c.to_neuron_id IN (?)
+			AND c.distance = an.age + 1
+			AND an.age > 0
+			AND c.strength > 0
+			-- The from_neuron has context (connections TO it from older neurons)
 			AND EXISTS (
 				SELECT 1 FROM active_connections context_ac
-				WHERE context_ac.to_neuron_id = c_inferred.from_neuron_id
+				WHERE context_ac.to_neuron_id = c.from_neuron_id
 				AND context_ac.age = 1
 			)
-			AND c.strength > 0
 		`, [bestLoserNeuronIds]);
 		if (this.debug && result.affectedRows > 0)
 			console.log(`Found ${result.affectedRows} action regret connections`);
-	}
-
-	/**
-	 * Filter the best losers to only those in dimensions where the winner got negative actual_reward.
-	 */
-	async filterToRegretDimensions(bestLoserWinners) {
-		if (bestLoserWinners.length === 0) return [];
-
-		const loserNeuronIds = bestLoserWinners.map(l => l.neuron_id);
-
-		// Find losers that share dimensions with winners that got negative rewards
-		const [results] = await this.conn.query(`
-			SELECT DISTINCT loser_c.neuron_id
-			FROM coordinates loser_c
-			JOIN coordinates winner_c ON winner_c.dimension_id = loser_c.dimension_id
-			JOIN inferred_neurons inf ON inf.neuron_id = winner_c.neuron_id
-			WHERE loser_c.neuron_id IN (?)
-			AND inf.age = 1
-			AND inf.is_winner = 1
-			AND inf.actual_reward < 1.0
-		`, [loserNeuronIds]);
-
-		return results.map(r => r.neuron_id);
 	}
 
 	/**
@@ -853,6 +854,7 @@ export default class BrainMySQL extends Brain {
 
 		// Determine which patterns matched based on overlap threshold
 		// A pattern matches if at least 66% of its pattern_past connections are in active_connections
+		// Pattern_past was created from connections at age=1, so we match against age=1
 		// active_connections.level = target level, so cross-level connections (base→high) are included
 		const [result] = await this.conn.query(`
 			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
@@ -860,7 +862,7 @@ export default class BrainMySQL extends Brain {
 			FROM active_neurons an
 			JOIN pattern_peaks pp ON an.neuron_id = pp.peak_neuron_id
 			JOIN pattern_past p ON pp.pattern_neuron_id = p.pattern_neuron_id
-			LEFT JOIN active_connections ac ON ac.to_neuron_id = pp.peak_neuron_id AND ac.connection_id = p.connection_id AND ac.level = ? AND ac.age = 0
+			LEFT JOIN active_connections ac ON ac.to_neuron_id = pp.peak_neuron_id AND ac.connection_id = p.connection_id AND ac.level = ? AND ac.age = 1
 			WHERE an.level = ? AND an.age = 0
 			GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
 			HAVING COUNT(DISTINCT CASE WHEN ac.connection_id IS NOT NULL THEN p.connection_id END) >= COUNT(DISTINCT p.connection_id) * ?
@@ -876,7 +878,7 @@ export default class BrainMySQL extends Brain {
 			SELECT mp.pattern_neuron_id, p.connection_id, IF(ac.connection_id IS NOT NULL, 'common', 'missing') as status
 			FROM matched_patterns mp
 			JOIN pattern_past p ON mp.pattern_neuron_id = p.pattern_neuron_id
-			LEFT JOIN active_connections ac ON ac.to_neuron_id = mp.peak_neuron_id AND ac.connection_id = p.connection_id AND ac.level = ? AND ac.age = 0
+			LEFT JOIN active_connections ac ON ac.to_neuron_id = mp.peak_neuron_id AND ac.connection_id = p.connection_id AND ac.level = ? AND ac.age = 1
 		`, [level]);
 
 		// Novel connections: active connections TO the peak not in pattern_past

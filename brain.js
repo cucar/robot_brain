@@ -644,10 +644,11 @@ export default class Brain {
 		// effectiveStrength = sum(strength * reward) for voting
 		// strength = sum(strength) for database
 		// reward = weighted average of rewards for database
+		// Also track max level and whether pattern votes exist for filtering
 		const aggregated = new Map();
 		for (const vote of votes) {
 			if (!aggregated.has(vote.neuron_id))
-				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, effectiveStrength: 0, strength: 0, totalWeightedReward: 0, sources: [] });
+				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, effectiveStrength: 0, strength: 0, totalWeightedReward: 0, sources: [], maxLevel: 0, hasPatternVotes: false });
 
 			const agg = aggregated.get(vote.neuron_id);
 			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level, from_dim_type: vote.from_dim_type });
@@ -658,6 +659,10 @@ export default class Brain {
 			// For database: accumulate weighted rewards
 			agg.totalWeightedReward += vote.reward * vote.strength;
 			agg.strength += vote.strength;
+
+			// Track max level and pattern votes for this neuron
+			if (vote.level > agg.maxLevel) agg.maxLevel = vote.level;
+			if (vote.source_type === 'pattern') agg.hasPatternVotes = true;
 		}
 
 		// Calculate final weighted average reward for each neuron
@@ -690,19 +695,31 @@ export default class Brain {
 			}
 		}
 
-		// Find winner per dimension: highest effectiveStrength (strength * reward)
+		// Find winner per dimension with level and pattern priority:
+		// 1. Higher level wins over lower level
+		// 2. At same level, pattern votes override connection votes
+		// 3. Among remaining, highest effectiveStrength wins
 		const inferences = [];
 		const winners = new Set();
 
 		for (const [dimName, dimVotes] of byDimension) {
 			if (dimVotes.length === 0) continue;
 
-			// Sort by effectiveStrength DESC
-			dimVotes.sort((a, b) => b.effectiveStrength - a.effectiveStrength);
-			const winner = dimVotes[0];
+			// Step 1: Filter to max level
+			const maxLevel = Math.max(...dimVotes.map(v => v.maxLevel));
+			let filtered = dimVotes.filter(v => v.maxLevel === maxLevel);
+
+			// Step 2: At max level, prefer pattern votes over connection votes
+			const hasPatterns = filtered.some(v => v.hasPatternVotes);
+			if (hasPatterns)
+				filtered = filtered.filter(v => v.hasPatternVotes);
+
+			// Step 3: Sort by effectiveStrength DESC and pick winner
+			filtered.sort((a, b) => b.effectiveStrength - a.effectiveStrength);
+			const winner = filtered[0];
 			winners.add(winner.neuron_id);
 
-			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, effectiveStrength: ${winner.effectiveStrength.toFixed(2)}, ${dimVotes.length} candidates)`);
+			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, effectiveStrength: ${winner.effectiveStrength.toFixed(2)}, level: ${winner.maxLevel}, pattern: ${winner.hasPatternVotes}, ${dimVotes.length} candidates)`);
 		}
 
 		// Build inferences array with isWinner flag
