@@ -18,14 +18,14 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
--- DROP TABLE IF EXISTS new_pattern_connections;
+-- DROP TABLE IF EXISTS new_pattern_future;
 -- DROP TABLE IF EXISTS new_patterns;
 
 select * from inferred_neurons;
 select * from inferred_neurons where age = 1;
 select * from inference_sources;
 select * from inference_sources where source_type = 'pattern';
-select * from new_pattern_connections;
+select * from new_pattern_future;
 select * from new_patterns;
 
 select * from neurons;
@@ -274,12 +274,8 @@ CREATE TABLE IF NOT EXISTS inference_sources (
 
 -- scratch table for new pattern connections (MEMORY table)
 -- connections FROM peak neurons that should be in pattern_future (from prediction errors or action regret)
--- from_neuron_id is denormalized from connections table for grouping by peak neuron
-CREATE TABLE IF NOT EXISTS new_pattern_connections (
-    connection_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
-    from_neuron_id BIGINT UNSIGNED NOT NULL,
-    strength DOUBLE NOT NULL,
-    INDEX idx_from (from_neuron_id)
+CREATE TABLE IF NOT EXISTS new_pattern_future (
+    connection_id BIGINT UNSIGNED NOT NULL PRIMARY KEY
 ) ENGINE=MEMORY;
 
 -- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)

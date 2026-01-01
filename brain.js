@@ -808,17 +808,13 @@ export default class Brain {
 	 */
 	async createErrorPatterns() {
 
-		// Check if we have bad inferences across all levels
-		const badCount = await this.countBadInferences();
-		if (this.debug) console.log(`Bad inferences count: ${badCount}`);
-		if (badCount === 0) return;
+		// Find connections that should be in pattern_future of new patterns
+		// (prediction errors and action regret, unified in one method)
+		const newPatternFutureCount = await this.populateNewPatternFuture();
+		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
+		if (newPatternFutureCount === 0) return;
 
-		// Find what we should have predicted instead (across all levels)
-		const newPatternConnectionCount = await this.populateNewPatternConnections();
-		if (this.debug) console.log(`New pattern connections count: ${newPatternConnectionCount}`);
-		if (newPatternConnectionCount === 0) return;
-
-		// Populate new_patterns table with peaks from new pattern connections
+		// Populate new_patterns table with peaks from new pattern future connections
 		const patternCount = await this.populateNewPatterns();
 		if (this.debug) console.log(`Creating ${patternCount} error patterns`);
 
@@ -926,25 +922,17 @@ export default class Brain {
 	}
 
 	/**
-	 * Count bad inferences: prediction errors OR negative reward actions (implementation-specific)
-	 * Returns the count of bad inferences.
+	 * Populate new_pattern_future with connections that should be in pattern_future of new patterns.
+	 * Unified method handling both prediction errors and action regret.
+	 * Returns the number of new pattern future connections found.
 	 */
-	async countBadInferences() {
-		throw new Error('countBadInferences() must be implemented by subclass');
+	async populateNewPatternFuture() {
+		throw new Error('populateNewPatternFuture() must be implemented by subclass');
 	}
 
 	/**
-	 * Populate new_pattern_connections with connections that should be predicted by new patterns.
-	 * Includes: (1) active connections not predicted (prediction errors), (2) best loser connections (action regret)
-	 * Returns the number of new pattern connections found.
-	 */
-	async populateNewPatternConnections() {
-		throw new Error('populateNewPatternConnections() must be implemented by subclass');
-	}
-
-	/**
-	 * Populate new_patterns table from new pattern connections (implementation-specific)
-	 * Finds peak neurons (from_neurons of new_pattern_connections) and creates one pattern per peak.
+	 * Populate new_patterns table from new_pattern_future (implementation-specific)
+	 * Finds peak neurons (from_neuron_id of connections in new_pattern_future) and creates one pattern per peak.
 	 * Returns the number of patterns to create.
 	 */
 	async populateNewPatterns() {
