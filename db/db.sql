@@ -41,7 +41,7 @@ select count(*) from connections where strength > 0;
 select * from coordinates;
 select * from coordinates where neuron_id = 2;
 select * from coordinates where dimension_id = 16;
-select * from coordinates where neuron_id in (6,7,8,9);
+select * from coordinates where neuron_id in (13,14);
 select * from coordinates where neuron_id = 5;
 
 select * from active_neurons;
@@ -49,10 +49,20 @@ select * from active_connections;
 select * from active_connections where to_neuron_id = 6;
 
 select * from pattern_past;
+select * from pattern_future;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
 
+SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, 'connection' as source_type, c.id as source_id,
+	c.strength, c.distance, POW(0.9, c.distance - 1), POW(1.2, an.level),
+	c.reward, n.level
+FROM active_neurons an
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+JOIN neurons n ON n.id = c.to_neuron_id
+WHERE c.distance = an.age + 1
+and c.to_neuron_id = 14;
+            
 SELECT c.*
 FROM active_neurons an
 JOIN connections c ON c.from_neuron_id = an.neuron_id

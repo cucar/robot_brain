@@ -84,10 +84,7 @@ export default class SyntheticExtendedTest extends Job {
 		console.log('🚀 Running extended continuous episode...\n');
 
 		const stockChannel = this.brain.channels.get(this.config.symbol);
-		stockChannel.debug = false;
-		stockChannel.debug2 = false;
-		this.brain.debug = false;
-		this.brain.debug2 = false;
+
 		this.brain.resetAccuracyStats();
 
 		const expectedFrames = stockChannel.dataRows.length - 1;
@@ -110,9 +107,14 @@ export default class SyntheticExtendedTest extends Job {
 		console.log('------|------------|--------------|---------|--------|-------|----');
 
 		while (frameCount < expectedFrames) {
+
+			// this executes the inferred actions from previous frame in the current frame
 			const frame = await this.brain.getFrame();
+
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
+
+			// this.brain.waitForUserInput = cycleFrame === 2 || cycleFrame === 3;
 
 			// Calculate price change
 			const priceChange = stockChannel.previousPrice && stockChannel.currentPrice
@@ -132,10 +134,10 @@ export default class SyntheticExtendedTest extends Job {
 				decisionStats[cycleFrame].details.push({ frame: frameCount, actual: actualOwned, optimal: optimalOwned });
 			}
 
-			const pnl = (stockChannel.totalProfit - stockChannel.totalLoss).toFixed(2);
 			const match = isOptimal ? '✓' : '✗';
+			const realizedPL = stockChannel.totalProfit - stockChannel.totalLoss;
 
-			console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${optimalOwned ? 'OWN' : 'OUT'.padStart(7)} | ${actualOwned ? 'OWN' : 'OUT'.padStart(6)} | ${match.padStart(5)} | $${pnl}`);
+			console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${optimalOwned ? 'OWN' : 'OUT'.padStart(7)} | ${actualOwned ? 'OWN' : 'OUT'.padStart(6)} | ${match.padStart(5)} | $${realizedPL.toFixed(2)}`);
 
 			await this.brain.processFrame(frame);
 		}
@@ -194,11 +196,9 @@ export default class SyntheticExtendedTest extends Job {
 			totalOptimal += stats.optimal;
 			totalSuboptimal += stats.suboptimal;
 
-			// Show first few suboptimal frames
-			const suboptimalFrames = stats.details.slice(0, 3).map(d => d.frame).join(', ');
-			const more = stats.details.length > 3 ? ` (+${stats.details.length - 3} more)` : '';
+			const suboptimalFrames = stats.details.map(d => d.frame).join(', ');
 
-			console.log(`${String(i).padStart(10)} | ${priceChange.padStart(11)}% | ${optimal.padStart(7)} | ${rate.padStart(10)}% | ${suboptimalFrames}${more}`);
+			console.log(`${String(i).padStart(10)} | ${priceChange.padStart(11)}% | ${optimal.padStart(7)} | ${rate.padStart(10)}% | ${suboptimalFrames}`);
 		}
 
 		const overallRate = (totalOptimal / (totalOptimal + totalSuboptimal) * 100).toFixed(1);

@@ -24,7 +24,7 @@ export default class Brain {
 		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
 
 		// connection learning parameters
-		this.connectionNegativeReinforcement = 1.0; // how much to weaken connections when predictions fail
+		this.connectionNegativeReinforcement = 0.1; // how much to weaken connections when predictions fail
 
 		// pattern learning parameters
 		this.minErrorPatternThreshold = 10.0; // minimum prediction strength to create error-driven pattern
@@ -46,6 +46,7 @@ export default class Brain {
 		this.minExploration = 0.03; // minimum - never stop exploring
 		this.maxExploration = 1.0; // 100% when totalStrength = 0
 		this.explorationScale = 1000; // controls decay rate of exploration probability
+		this.minExploredVotes = 2; // minimum votes to consider an action "explored" (excluding actions)
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
@@ -67,6 +68,7 @@ export default class Brain {
 
 		// Debugging info and flags
 		this.frameNumber = 0;
+		this.frameSummary = true; // show frame summary or not
 		this.debug = false;
 		this.debug2 = false; // deeper, more verbose debug level
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
@@ -222,6 +224,9 @@ export default class Brain {
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
 
+		// populate inference sources for executed actions (age=1) using just-created connections
+		await this.populateInferenceSources();
+
 		// learn from base level: compare L0 inferences (age=1) to L0 observations (age=0)
 		// - events: negative reinforcement for wrong predictions (strength)
 		// - actions: apply rewards based on channel outcomes (reward)
@@ -291,8 +296,17 @@ export default class Brain {
 	async exploreChannel(channelName, votedActions) {
 		const channel = this.channels.get(channelName);
 
-		// Extract coordinates from voted actions
-		const votedCoordinates = votedActions.map(a => a.coordinates).filter(c => c);
+		// Filter to only actions with sufficient non-action votes
+		// The votes from action neurons don't capture the situation (they just follow previous actions)
+		// Only votes from events (base level) or interneurons (level > 0, from_dim_type=null) count
+		const exploredActions = votedActions.filter(a => {
+			if (!a.sources) return false;
+			const relevantVotes = a.sources.filter(s => s.from_dim_type !== 'action').length;
+			return relevantVotes >= this.minExploredVotes;
+		});
+
+		// Extract coordinates from explored actions
+		const votedCoordinates = exploredActions.map(a => a.coordinates).filter(c => c);
 
 		// Ask channel for an action that wasn't voted for
 		const actionCoordinates = channel.getExplorationAction(votedCoordinates);
@@ -304,19 +318,14 @@ export default class Brain {
 		// Find or create neuron for this action
 		const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
 
-		// Get connections that could have predicted this neuron (for learning)
-		const sources = await this.getExplorationSources(actionNeuronId);
-
-		// Return exploration action (replaces all voting winners for this channel)
+		// Return exploration action - sources populated after execution in populateInferenceSources
 		const exploration = {
 			neuron_id: actionNeuronId,
 			strength: 100000, // High strength for exploration
 			reward: 1.0, // Neutral reward
 			coordinates: actionCoordinates,
 			dimType: 'action',
-			sources,
-			isWinner: true,
-			isExploration: true
+			isWinner: true
 		};
 
 		if (this.debug) console.log(`Exploration for ${channelName}:`, actionCoordinates, actionNeuronId);
@@ -349,7 +358,7 @@ export default class Brain {
 			const channelWinners = channelInferences.filter(inf => inf.isWinner);
 
 			// Check if we should explore this channel
-			if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
+			// if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
 
 			// Get exploration action - pass all channel inferences so channel knows what's been tried
 			const exploration = await this.exploreChannel(channelName, channelInferences);
@@ -425,7 +434,7 @@ export default class Brain {
 			}).join(', ');
 		}
 
-		console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 	// ========== ABSTRACT METHODS - Must be implemented by subclasses ==========
@@ -596,80 +605,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Aggregate raw inferences by neuron_id.
-	 * Multiple sources can predict the same neuron - we sum strengths and average rewards (weighted by strength).
-	 * @param {Array} inferences - Array of {neuron_id, source_type, source_id, strength, reward}
-	 * @returns {Map} neuron_id → {neuron_id, level, strength, reward, sources: [{source_type, source_id, strength, reward}]}
-	 */
-	aggregateInferences(inferences) {
-		const neuronMap = new Map();
-		for (const inf of inferences) {
-
-			// initialize neuron data if needed
-			if (!neuronMap.has(inf.neuron_id)) neuronMap.set(inf.neuron_id, { neuron_id: inf.neuron_id, level: inf.level, strength: 0, reward: 1.0, sources: [] });
-
-			// get the neuron inference data
-			const neuron = neuronMap.get(inf.neuron_id);
-
-			// add the new source for the neuron inference
-			neuron.sources.push({ source_type: inf.source_type, source_id: inf.source_id, strength: inf.strength, reward: inf.reward });
-
-			// update the expected reward for the neuron weighted by the neuron inference strengths
-			neuron.reward = (neuron.reward * neuron.strength + inf.reward * inf.strength) / (neuron.strength + inf.strength);
-
-			// increment the strength for the neuron inference
-			neuron.strength += inf.strength;
-		}
-		return neuronMap;
-	}
-
-	/**
-	 * Group base inferences by channel based on neuron coordinates.
-	 * @param {Map} baseInferences - Map of neuron_id → {neuron_id, strength, reward, sources}
-	 * @returns {Promise<Map>} Map of channel_name → Array of inference objects with coordinates
-	 */
-	async groupByChannel(baseInferences) {
-		if (baseInferences.size === 0) return new Map();
-
-		// Get coordinates for all neurons
-		const neuronIds = [...baseInferences.keys()];
-		const coordinates = await this.getNeuronCoordinates(neuronIds);
-
-		// loop over the base level inferred neurons and group them by channel
-		const channelMap = new Map();
-		for (const [neuronId, neuron] of baseInferences) {
-
-			// get the coordinates for the base level inferred neuron
-			const coords = coordinates.get(neuronId);
-			if (!coords) throw new Error(`Cannot find the base level inferred neuron coordinates: ${neuronId}`);
-
-			// Determine channel from coordinates
-			for (const [dimName, dimInfo] of coords) {
-
-				// add the channel to the channel map if needed
-				const channelName = dimInfo.channel;
-				if (!channelMap.has(channelName)) channelMap.set(channelName, []);
-
-				// Convert coords Map to object for channel processing
-				const coordsObj = {};
-				for (const [dn, di] of coords) coordsObj[dn] = di.value;
-
-				// add the neuron to the channel inferences
-				channelMap.get(channelName).push({
-					neuron_id: neuronId,
-					strength: neuron.strength,
-					reward: neuron.reward,
-					coordinates: coordsObj,
-					sources: neuron.sources
-				});
-				break; // Only add to one channel
-			}
-		}
-
-		return channelMap;
-	}
-
-	/**
 	 * Infer predictions and outputs using voting architecture.
 	 * All levels vote for both actions and events.
 	 */
@@ -684,7 +619,7 @@ export default class Brain {
 			return;
 		}
 
-		// Determine consensus - pick best per dimension (reward DESC, then strength DESC)
+		// Determine consensus - pick best per dimension (highest sum of strength * reward)
 		// Returns array of inferences with isWinner flag
 		const inferences = await this.determineConsensus(allVotes);
 
@@ -698,24 +633,36 @@ export default class Brain {
 	/**
 	 * Determine consensus from votes using voting architecture.
 	 * All levels vote, winner is determined per dimension.
-	 * Unified logic: pick highest reward, then highest strength (events have reward=1).
+	 * Unified logic: pick the highest effectiveStrength (sum of strength * reward per neuron).
 	 * @param {Array} votes - Array of {neuron_id, source_type, source_id, strength, reward, level}
 	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async determineConsensus(votes) {
 		if (votes.length === 0) return [];
 
-		// Aggregate votes by neuron_id (sum strengths, sum rewards)
+		// Aggregate votes by neuron_id
+		// effectiveStrength = sum(strength * reward) for voting
+		// strength = sum(strength) for database
+		// reward = weighted average of rewards for database
 		const aggregated = new Map();
 		for (const vote of votes) {
 			if (!aggregated.has(vote.neuron_id))
-				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, reward: 0, sources: [] });
+				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, effectiveStrength: 0, strength: 0, totalWeightedReward: 0, sources: [] });
 
 			const agg = aggregated.get(vote.neuron_id);
-			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level });
-			agg.reward += vote.reward;
+			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level, from_dim_type: vote.from_dim_type });
+
+			// For voting: sum of (strength * reward)
+			agg.effectiveStrength += vote.strength * vote.reward;
+
+			// For database: accumulate weighted rewards
+			agg.totalWeightedReward += vote.reward * vote.strength;
 			agg.strength += vote.strength;
 		}
+
+		// Calculate final weighted average reward for each neuron
+		for (const [neuronId, agg] of aggregated)
+			agg.reward = agg.strength > 0 ? agg.totalWeightedReward / agg.strength : 1.0;
 
 		// Get coordinates for all voted neurons to group by dimension
 		const neuronIds = [...aggregated.keys()];
@@ -743,19 +690,19 @@ export default class Brain {
 			}
 		}
 
-		// Find winner per dimension: highest reward, then highest strength
+		// Find winner per dimension: highest effectiveStrength (strength * reward)
 		const inferences = [];
 		const winners = new Set();
 
 		for (const [dimName, dimVotes] of byDimension) {
 			if (dimVotes.length === 0) continue;
 
-			// Sort by reward DESC, then strength DESC
-			dimVotes.sort((a, b) => b.reward - a.reward || b.strength - a.strength);
+			// Sort by effectiveStrength DESC
+			dimVotes.sort((a, b) => b.effectiveStrength - a.effectiveStrength);
 			const winner = dimVotes[0];
 			winners.add(winner.neuron_id);
 
-			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, reward: ${winner.reward.toFixed(2)}, strength: ${winner.strength.toFixed(1)}, ${dimVotes.length} candidates)`);
+			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, effectiveStrength: ${winner.effectiveStrength.toFixed(2)}, ${dimVotes.length} candidates)`);
 		}
 
 		// Build inferences array with isWinner flag
@@ -908,13 +855,11 @@ export default class Brain {
 	}
 
 	/**
-	 * Get connections that could have predicted an exploration neuron (implementation-specific)
-	 * Used for learning from exploration actions.
-	 * @param {Number} neuronId - exploration neuron ID
-	 * @returns {Promise<Array>} Array of {source_type, source_id, strength, reward}
+	 * Populate inference_sources for executed actions (implementation-specific)
+	 * Called after recognizeNeurons when connections have been created.
 	 */
-	async getExplorationSources(neuronId) {
-		throw new Error('getExplorationSources(neuronId) must be implemented by subclass');
+	async populateInferenceSources() {
+		throw new Error('populateInferenceSources() must be implemented by subclass');
 	}
 
 	/**

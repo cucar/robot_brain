@@ -105,9 +105,6 @@ export default class SyntheticCycleTest extends Job {
 
 		// Get the stock channel
 		const stockChannel = this.brain.channels.get(this.config.symbol);
-		stockChannel.debug2 = false;
-		this.brain.debug = false;
-		this.brain.debug2 = false;
 
 		// Reset accuracy stats
 		this.brain.resetAccuracyStats();
@@ -130,15 +127,14 @@ export default class SyntheticCycleTest extends Job {
 				const action = stockChannel.getActionName(stockChannel.lastAction);
 				const priceChange = ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice);
 				const cycleFrame = ((frameCount - 1) % this.config.cyclePattern.length) + 1;
-
-				// Determine source: check if this was from curiosity or inference
-				if (!action.startsWith('HOLD')) trades.push({
+				trades.push({
 					frame: frameCount,
 					cycleFrame: cycleFrame,
 					action: action,
 					priceChange: (priceChange * 100).toFixed(2) + '%'
 				});
 			}
+			else if (frameCount > 50) throw new Error('No action executed');
 
 			// Get feedback and process
 			await this.brain.processFrame(frame);
