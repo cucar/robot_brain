@@ -22,8 +22,7 @@ export default class StockTrainingJob extends Job {
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
 			maxEpisodes: 1,                      // Number of training episodes
-			holdoutRows: 50,                     // Number of rows to hold out for prediction testing
-			alphaVantageApiKey: '8DCVE4458VAJ8TUN' // Alpha Vantage API key
+			holdoutRows: 50                     // Number of rows to hold out for prediction testing
 		};
 
 		// Training metrics
@@ -69,14 +68,13 @@ export default class StockTrainingJob extends Job {
 		console.log('');
 		console.log('📊 Processing and aligning data...');
 
-		// Find oldest common date across all symbols
-		const oldestCommonDate = this.findOldestCommonDate(symbolData);
-		console.log(`   Oldest common date: ${oldestCommonDate}`);
+		// Find all dates that exist in ALL symbols (intersection)
+		const commonDates = this.findCommonDates(symbolData);
 
-		// Process and save each symbol's data
+		// Process and save each symbol's data using only common dates
 		for (const symbol of this.config.symbols) {
 			const data = symbolData.get(symbol);
-			await this.processAndSaveSymbolData(symbol, data, oldestCommonDate, dataDir);
+			await this.processAndSaveSymbolData(symbol, data, commonDates, dataDir);
 		}
 
 		console.log('');
@@ -84,96 +82,86 @@ export default class StockTrainingJob extends Job {
 	}
 
 	/**
-	 * Download historical data for a single symbol as JSON
+	 * Download historical data for a single symbol from Yahoo Finance Chart API
 	 */
 	async downloadSymbolData(symbol) {
-		const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=full&apikey=${this.config.alphaVantageApiKey}&datatype=json`;
+		const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=0&period2=9999999999&interval=1d`;
 
 		console.log(`📊 Downloading ${symbol}...`);
 
 		return new Promise((resolve, reject) => {
-			https.get(url, (response) => {
+			https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, response => {
 				if (response.statusCode !== 200) {
 					reject(new Error(`Failed to download ${symbol}: HTTP ${response.statusCode}`));
 					return;
 				}
 
 				let data = '';
-				response.on('data', (chunk) => {
-					data += chunk;
-				});
+				response.on('data', chunk => data += chunk);
 
 				response.on('end', () => {
 					try {
 						const json = JSON.parse(data);
-
-						// Check for API error
-						if (json['Error Message']) {
-							reject(new Error(`API error for ${symbol}: ${json['Error Message']}`));
+						if (!json.chart || !json.chart.result || !json.chart.result[0]) {
+							reject(new Error(`No chart data for ${symbol}`));
 							return;
 						}
 
-						if (json['Note']) {
-							reject(new Error(`API limit reached: ${json['Note']}`));
-							return;
+						const result = json.chart.result[0];
+						const timestamps = result.timestamp;
+						const opens = result.indicators.quote[0].open;
+						const volumes = result.indicators.quote[0].volume;
+
+						const timeSeriesData = {};
+						for (let i = 0; i < timestamps.length; i++) {
+							const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+							const open = opens[i];
+							const volume = volumes[i];
+							if (open != null && volume != null)
+								timeSeriesData[date] = { '1. open': String(open), '5. volume': String(volume) };
 						}
 
-						if (!json['Time Series (Daily)']) {
-							reject(new Error(`No time series data for ${symbol}`));
-							return;
-						}
-
-						const timeSeriesData = json['Time Series (Daily)'];
 						const dateCount = Object.keys(timeSeriesData).length;
 						console.log(`   ✅ ${symbol}: ${dateCount} days of data`);
-
 						resolve(timeSeriesData);
 					} catch (error) {
-						reject(new Error(`Failed to parse JSON for ${symbol}: ${error.message}`));
+						reject(new Error(`Failed to parse data for ${symbol}: ${error.message}`));
 					}
 				});
-			}).on('error', (err) => {
-				reject(err);
-			});
+			}).on('error', reject);
 		});
 	}
 
 	/**
-	 * Find the oldest date that exists in all symbols' data
+	 * Find all dates that exist in ALL symbols' data (intersection)
 	 */
-	findOldestCommonDate(symbolData) {
-		// Get all dates for each symbol
-		const symbolDates = new Map();
+	findCommonDates(symbolData) {
+		// Get all dates for each symbol as Sets
+		const symbolDateSets = [];
 		for (const [symbol, data] of symbolData) {
-			const dates = Object.keys(data).sort(); // Sort chronologically
-			symbolDates.set(symbol, new Set(dates));
+			const dates = new Set(Object.keys(data));
+			symbolDateSets.push(dates);
+			console.log(`   ${symbol}: ${dates.size} dates`);
 		}
 
-		// Find the oldest date (earliest in chronological order)
-		let oldestDate = null;
-		for (const [_, dates] of symbolDates) {
-			const symbolOldest = Array.from(dates).sort()[0];
-			if (!oldestDate || symbolOldest > oldestDate) {
-				oldestDate = symbolOldest;
-			}
-		}
+		// Find intersection of all date sets
+		let commonDates = symbolDateSets[0];
+		for (let i = 1; i < symbolDateSets.length; i++)
+			commonDates = new Set([...commonDates].filter(date => symbolDateSets[i].has(date)));
 
-		return oldestDate;
+		// Sort chronologically and return as array
+		const sortedDates = [...commonDates].sort();
+		console.log(`   Common dates: ${sortedDates.length} (${sortedDates[0]} to ${sortedDates[sortedDates.length - 1]})`);
+		return sortedDates;
 	}
 
 	/**
 	 * Process and save symbol data in the format expected by StockChannel
 	 * Format: open,volume (no header, chronological order)
 	 */
-	async processAndSaveSymbolData(symbol, data, oldestCommonDate, dataDir) {
-		// Get all dates and sort chronologically
-		const dates = Object.keys(data).sort();
-
-		// Filter to only dates >= oldestCommonDate
-		const filteredDates = dates.filter(date => date >= oldestCommonDate);
-
-		// Extract open price and volume for each date
-		const rows = filteredDates.map(date => {
+	async processAndSaveSymbolData(symbol, data, commonDates, dataDir) {
+		// Extract open price and volume for each common date
+		const rows = commonDates.map(date => {
 			const dayData = data[date];
 			const open = dayData['1. open'];
 			const volume = dayData['5. volume'];
@@ -184,7 +172,7 @@ export default class StockTrainingJob extends Job {
 		const filePath = path.join(dataDir, `${symbol}.csv`);
 		fs.writeFileSync(filePath, rows.join('\n'));
 
-		console.log(`   ✅ ${symbol}.csv: ${rows.length} days (${filteredDates[0]} to ${filteredDates[filteredDates.length - 1]})`);
+		console.log(`   ✅ ${symbol}.csv: ${rows.length} days (${commonDates[0]} to ${commonDates[commonDates.length - 1]})`);
 	}
 
 	/**
