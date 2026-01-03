@@ -23,7 +23,8 @@ USE machine_intelligence;
 
 select * from inferred_neurons where age = 0;
 select * from inferred_neurons where age = 1;
-select * from inference_sources;
+select * from inference_sources where age = 1;
+select c_inferred.* FROM inference_sources isrc JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age JOIN connections c_inferred ON c_inferred.id = isrc.source_id where inf.age = 1;
 select * from inference_sources where source_type = 'pattern';
 select * from new_pattern_future;
 select * from new_patterns;
@@ -70,7 +71,7 @@ FROM active_neurons an
 JOIN connections c ON c.from_neuron_id = an.neuron_id
 JOIN neurons n ON n.id = c.to_neuron_id
 WHERE c.distance = an.age + 1
-AND c.strength > 0
+-- AND c.strength > 0
 AND an.age < 6
 and c.to_neuron_id in (4, 6)
 -- and c.distance = 1
@@ -244,6 +245,7 @@ CREATE TABLE IF NOT EXISTS matched_pattern_connections (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
     status ENUM('common', 'novel', 'missing') NOT NULL,
+    PRIMARY KEY (pattern_neuron_id, connection_id),
     INDEX idx_pattern (pattern_neuron_id),
     INDEX idx_connection (connection_id),
     INDEX idx_status (status)
@@ -255,12 +257,11 @@ CREATE TABLE IF NOT EXISTS active_connections (
     connection_id BIGINT UNSIGNED NOT NULL,
     from_neuron_id BIGINT UNSIGNED NOT NULL,
     to_neuron_id BIGINT UNSIGNED NOT NULL,
-    level TINYINT NOT NULL,
     age TINYINT NOT NULL DEFAULT 0,
-    PRIMARY KEY (connection_id, level, age),  -- Allow same connection at different ages for reward distribution
-    INDEX idx_to_neuron_level (to_neuron_id, level),
-    INDEX idx_from_neuron_level (from_neuron_id, level),
-    INDEX idx_level_age (level, age)  -- Composite index for detectPeaks WHERE clause
+    PRIMARY KEY (connection_id, age),  -- Allow same connection at different ages for reward distribution
+    INDEX idx_to_neuron (to_neuron_id),
+    INDEX idx_from_neuron (from_neuron_id),
+    INDEX idx_level_age (age)
 ) ENGINE=MEMORY;
 
 -- inference sources table (MEMORY table)

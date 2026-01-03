@@ -630,19 +630,44 @@ export default class Brain {
 	}
 
 	/**
-	 * Determine consensus from votes using voting architecture.
-	 * All levels vote, winner is determined per dimension.
-	 * Actions: pick by highest reward (additive sum), strength as tiebreaker
-	 * Events: pick by highest strength only (reward not used for event predictions)
-	 * @param {Array} votes - Array of {neuron_id, source_type, source_id, strength, reward, level}
+	 * Determine consensus from votes - aggregate by neuron, then pick winner per dimension.
+	 * @param {Array} votes - Array of {from_neuron_id, neuron_id, source_type, source_id, strength, reward, level}
 	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async determineConsensus(votes) {
 		if (votes.length === 0) return [];
 
-		// Step 1: Aggregate by (from_neuron_id, to_neuron_id) so each source neuron votes once per target
-		// This prevents a single neuron with multiple distance connections from voting multiple times
+		// Aggregate votes: first by source-target pair, then by target neuron
+		const bySourceTarget = this.aggregateVotesBySourceTarget(votes);
+		const aggregated = this.aggregateVotesByTarget(bySourceTarget);
+
+		// Add coordinates and group by dimension
+		const byDimension = await this.groupVotesByDimension(aggregated);
+
+		// Select winner for each dimension
+		const winners = new Set();
+		for (const [dimName, dimVotes] of byDimension) {
+			const winner = this.selectWinnerForDimension(dimName, dimVotes);
+			if (winner) winners.add(winner.neuron_id);
+		}
+
+		// Build inferences array with isWinner flag
+		const inferences = [];
+		for (const [neuronId, agg] of aggregated)
+			inferences.push({ ...agg, isWinner: winners.has(neuronId) });
+
+		return inferences;
+	}
+
+	/**
+	 * Aggregate votes by (from_neuron_id, to_neuron_id) so each source neuron votes once per target.
+	 * This prevents a single neuron with multiple distance connections from voting multiple times.
+	 * @param {Array} votes - Raw votes from collectVotes
+	 * @returns {Map} Map of "from:to" -> aggregated vote
+	 */
+	aggregateVotesBySourceTarget(votes) {
 		const bySourceTarget = new Map();
+
 		for (const vote of votes) {
 			const key = `${vote.from_neuron_id}:${vote.neuron_id}`;
 			if (!bySourceTarget.has(key))
@@ -665,11 +690,17 @@ export default class Brain {
 		for (const [key, agg] of bySourceTarget)
 			agg.reward = agg.rewardCount > 0 ? agg.rewardSum / agg.rewardCount : 0;
 
-		// Step 2: Aggregate by to_neuron_id - each source neuron now counts once
-		// strength = sum(strength) - total confidence/votes
-		// rewardSum/rewardCount stored for later averaging (action dimensions need special handling)
-		// Also track which source neurons voted for each target
+		return bySourceTarget;
+	}
+
+	/**
+	 * Aggregate source-target pairs by target neuron. Each source neuron counts once per target.
+	 * @param {Map} bySourceTarget - Map from aggregateVotesBySourceTarget
+	 * @returns {Map} Map of neuron_id -> aggregated vote with sourceNeurons set
+	 */
+	aggregateVotesByTarget(bySourceTarget) {
 		const aggregated = new Map();
+
 		for (const [key, srcAgg] of bySourceTarget) {
 			if (!aggregated.has(srcAgg.neuron_id))
 				aggregated.set(srcAgg.neuron_id, { neuron_id: srcAgg.neuron_id, strength: 0, rewardSum: 0, rewardCount: 0, reward: 0, sources: [], maxLevel: 0, hasPatternVotes: false, sourceNeurons: new Set() });
@@ -688,11 +719,19 @@ export default class Brain {
 			if (srcAgg.hasPatternVotes) agg.hasPatternVotes = true;
 		}
 
-		// For now, calculate simple average - will be recalculated for actions per dimension
+		// Calculate simple average reward (will be recalculated for actions per dimension)
 		for (const [neuronId, agg] of aggregated)
 			agg.reward = agg.rewardCount > 0 ? agg.rewardSum / agg.rewardCount : 0;
 
-		// Get coordinates for all voted neurons to group by dimension
+		return aggregated;
+	}
+
+	/**
+	 * Add coordinates to aggregated votes and group by dimension.
+	 * @param {Map} aggregated - Map from aggregateVotesByTarget
+	 * @returns {Promise<Map>} Map of dimension name -> array of votes
+	 */
+	async groupVotesByDimension(aggregated) {
 		const neuronIds = [...aggregated.keys()];
 		const coordinates = await this.getNeuronCoordinates(neuronIds);
 
@@ -718,61 +757,52 @@ export default class Brain {
 			}
 		}
 
-		// Find winner per dimension with level and pattern priority:
-		// 1. Higher level wins over lower level
-		// 2. At same level, pattern votes override connection votes
-		// 3. Actions: Boltzmann selection based on reward (probabilistic)
-		//    Events: Deterministic selection by highest strength
-		const inferences = [];
-		const winners = new Set();
-		for (const [dimName, dimVotes] of byDimension) {
-			if (dimVotes.length === 0) continue;
+		return byDimension;
+	}
 
-			// Step 1: Filter to max level among the connections
-			const maxLevel = Math.max(...dimVotes.map(v => v.maxLevel));
-			let filtered = dimVotes.filter(v => v.maxLevel === maxLevel);
+	/**
+	 * Select winner for a dimension using level/pattern priority and Boltzmann (actions) or strength (events).
+	 * @param {string} dimName - Dimension name
+	 * @param {Array} dimVotes - Array of aggregated votes for this dimension
+	 * @returns {Object|null} Winning vote or null if no votes
+	 */
+	selectWinnerForDimension(dimName, dimVotes) {
+		if (dimVotes.length === 0) return null;
 
-			// Step 2: At max level, prefer pattern votes over connection votes
-			const hasPatterns = filtered.some(v => v.hasPatternVotes);
-			if (hasPatterns) filtered = filtered.filter(v => v.hasPatternVotes);
+		// Filter to max level
+		const maxLevel = Math.max(...dimVotes.map(v => v.maxLevel));
+		let filtered = dimVotes.filter(v => v.maxLevel === maxLevel);
 
-			// Step 3: Select winner based on dimension type
-			const dimInfo = this.dimensions.get(dimName);
-			const isAction = dimInfo && dimInfo.type === 'action';
-			let winner;
+		// At max level, prefer pattern votes over connection votes
+		const hasPatterns = filtered.some(v => v.hasPatternVotes);
+		if (hasPatterns) filtered = filtered.filter(v => v.hasPatternVotes);
 
-			if (isAction) {
-				// For actions: recalculate reward with all voters in denominator
-				// A neuron that doesn't vote for an action counts as 0 reward for that action
-				const allVoters = new Set();
-				for (const v of filtered)
-					for (const srcNeuron of v.sourceNeurons)
-						allVoters.add(srcNeuron);
-				const totalVoters = allVoters.size;
+		// Select winner based on dimension type
+		const dimInfo = this.dimensions.get(dimName);
+		const isAction = dimInfo && dimInfo.type === 'action';
 
-				// Recalculate reward for each candidate using total voters as denominator
-				for (const v of filtered)
-					v.reward = totalVoters > 0 ? v.rewardSum / totalVoters : 0;
+		if (isAction) {
+			// For actions: all voters count in denominator (missing votes = 0 reward)
+			const allVoters = new Set();
+			for (const v of filtered)
+				for (const srcNeuron of v.sourceNeurons)
+					allVoters.add(srcNeuron);
+			const totalVoters = allVoters.size;
 
-				// Actions: Boltzmann selection based on reward
-				winner = this.boltzmannSelect(filtered);
-				if (this.debug) console.log(`Voting: ${dimName} (action) Boltzmann selected = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, reward: ${winner.reward.toFixed(2)}, strength: ${winner.strength.toFixed(2)}, level: ${winner.maxLevel}, pattern: ${winner.hasPatternVotes}, ${filtered.length} candidates, ${totalVoters} voters)`);
-			}
-			else {
-				// Events: Deterministic selection by highest strength
-				filtered.sort((a, b) => b.strength - a.strength);
-				winner = filtered[0];
-				if (this.debug) console.log(`Voting: ${dimName} (event) winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, strength: ${winner.strength.toFixed(2)}, level: ${winner.maxLevel}, pattern: ${winner.hasPatternVotes}, ${filtered.length} candidates)`);
-			}
+			// Recalculate reward with total voters as denominator
+			for (const v of filtered)
+				v.reward = totalVoters > 0 ? v.rewardSum / totalVoters : 0;
 
-			winners.add(winner.neuron_id);
+			const winner = this.boltzmannSelect(filtered);
+			if (this.debug) console.log(`Voting: ${dimName} (action) Boltzmann = ${winner.coordinates[dimName]} (n${winner.neuron_id}, rwd=${winner.reward.toFixed(2)}, str=${winner.strength.toFixed(2)}, lvl=${winner.maxLevel}, pat=${winner.hasPatternVotes}, ${filtered.length} cand, ${totalVoters} voters)`);
+			return winner;
 		}
 
-		// Build inferences array with isWinner flag
-		for (const [neuronId, agg] of aggregated)
-			inferences.push({ ...agg, isWinner: winners.has(neuronId) });
-
-		return inferences;
+		// Events: deterministic selection by highest strength
+		filtered.sort((a, b) => b.strength - a.strength);
+		const winner = filtered[0];
+		if (this.debug) console.log(`Voting: ${dimName} (event) winner = ${winner.coordinates[dimName]} (n${winner.neuron_id}, str=${winner.strength.toFixed(2)}, lvl=${winner.maxLevel}, pat=${winner.hasPatternVotes}, ${filtered.length} cand)`);
+		return winner;
 	}
 
 	/**

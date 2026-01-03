@@ -470,7 +470,7 @@ export default class BrainMySQL extends Brain {
 				agg.distances.push(conn.distance);
 			}
 			// Calculate average reward per source
-			for (const [key, agg] of bySource)
+			for (const [_, agg] of bySource)
 				agg.reward = agg.rewardCount > 0 ? agg.rewardSum / agg.rewardCount : 0;
 			return [...bySource.values()];
 		};
@@ -648,46 +648,40 @@ export default class BrainMySQL extends Brain {
 	async mergePatternFuture() {
 
 		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted connections
-		// Connection's target neuron is now active at age=0
+		// Connection is now active at age=0
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
-			JOIN connections c ON c.id = pf.connection_id
-			SET pf.strength = GREATEST(?, LEAST(?, pf.strength + 1))
-			WHERE pf.strength > 0
-			AND pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
-			AND c.to_neuron_id IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
-		`, [this.minConnectionStrength, this.maxConnectionStrength]);
+			JOIN active_connections ac ON ac.connection_id = pf.connection_id AND ac.age = 0
+			SET pf.strength = LEAST(?, pf.strength + 1)
+			WHERE pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
+		`, [this.maxConnectionStrength]);
 		if (this.debug) console.log(`Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
 
 		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections
-		// Connection's target neuron is NOT active
+		// Connection is NOT active
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
-			JOIN connections c ON c.id = pf.connection_id
-			SET pf.strength = GREATEST(?, LEAST(?, pf.strength - ?))
-			WHERE pf.strength > 0
-			AND pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
-			AND c.to_neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
-		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
+			SET pf.strength = GREATEST(?, pf.strength - ?)
+			WHERE pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
+			AND pf.connection_id NOT IN (SELECT connection_id FROM active_connections WHERE age = 0)
+		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
 		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed pattern_future predictions`);
 
-		// 3. ADD NOVEL CONNECTIONS: Connections from peak to newly active neurons not yet in pattern_future
-		// Find patterns that made predictions, get their peak neurons, find connections from peak to active neurons
+		// 3. ADD NOVEL CONNECTIONS: Active connections from peak not yet in pattern_future
+		// Find patterns that made predictions, get their peak neurons, find active connections from peak
 		const [novelResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength)
-			SELECT DISTINCT pf_src.pattern_neuron_id, c.id, 1.0
+			SELECT DISTINCT pf_src.pattern_neuron_id, ac.connection_id, 1.0
 			FROM inference_sources isrc
 			JOIN pattern_future pf_src ON pf_src.connection_id = isrc.source_id
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf_src.pattern_neuron_id
-			JOIN connections c ON c.from_neuron_id = pp.peak_neuron_id
-			JOIN active_neurons an ON an.neuron_id = c.to_neuron_id AND an.age = 0
+			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.age = 0
 			WHERE isrc.age = 1
 			AND isrc.source_type = 'pattern'
-			AND c.strength > 0
 			AND NOT EXISTS (
 				SELECT 1 FROM pattern_future pf
 				WHERE pf.pattern_neuron_id = pf_src.pattern_neuron_id
-				AND pf.connection_id = c.id
+				AND pf.connection_id = ac.connection_id
 			)
 		`);
 		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel connections to pattern_future`);
@@ -948,8 +942,8 @@ export default class BrainMySQL extends Brain {
 	 */
 	async activateConnections(level) {
 		await this.conn.query(`
-			INSERT IGNORE INTO active_connections (connection_id, from_neuron_id, to_neuron_id, level, age)
-			SELECT c.id as connection_id, c.from_neuron_id, c.to_neuron_id, t.level, 0 as age
+			INSERT IGNORE INTO active_connections (connection_id, from_neuron_id, to_neuron_id, age)
+			SELECT c.id as connection_id, c.from_neuron_id, c.to_neuron_id, 0 as age
 			FROM connections c
 			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
 			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = :level
@@ -978,20 +972,19 @@ export default class BrainMySQL extends Brain {
 		await this.conn.query('TRUNCATE matched_pattern_connections');
 
 		// Determine which patterns matched based on overlap threshold
-		// A pattern matches if at least 66% of its pattern_past connections are in active_connections
-		// Pattern_past was created from connections at age=1, so we match against age=1
-		// active_connections.level = target level, so cross-level connections (base→high) are included
+		// A pattern matches if at least some percentage of its pattern_past connections are in active_connections
 		const [result] = await this.conn.query(`
-			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
-			SELECT pp.peak_neuron_id, pp.pattern_neuron_id
-			FROM active_neurons an
+            INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
+            SELECT pp.peak_neuron_id, pp.pattern_neuron_id
+            FROM active_neurons an
 			JOIN pattern_peaks pp ON an.neuron_id = pp.peak_neuron_id
 			JOIN pattern_past p ON pp.pattern_neuron_id = p.pattern_neuron_id
-			LEFT JOIN active_connections ac ON ac.to_neuron_id = pp.peak_neuron_id AND ac.connection_id = p.connection_id AND ac.level = ? AND ac.age = 1
-			WHERE an.level = ? AND an.age = 0
-			GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
-			HAVING COUNT(DISTINCT CASE WHEN ac.connection_id IS NOT NULL THEN p.connection_id END) >= COUNT(DISTINCT p.connection_id) * ?
-		`, [level, level, this.mergePatternThreshold]);
+			LEFT JOIN active_connections ac ON ac.connection_id = p.connection_id AND ac.age = 0
+            WHERE an.level = ?
+            AND an.age = 0
+            GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
+            HAVING SUM(IF(ac.connection_id IS NOT NULL, 1, 0)) >= COUNT(*) * ?
+		`, [level, this.mergePatternThreshold]);
 		if (this.debug && result.affectedRows > 0) console.log(`Matched ${result.affectedRows} pattern-peak pairs`);
 		if (result.affectedRows === 0) return 0;
 
@@ -1003,8 +996,8 @@ export default class BrainMySQL extends Brain {
 			SELECT mp.pattern_neuron_id, p.connection_id, IF(ac.connection_id IS NOT NULL, 'common', 'missing') as status
 			FROM matched_patterns mp
 			JOIN pattern_past p ON mp.pattern_neuron_id = p.pattern_neuron_id
-			LEFT JOIN active_connections ac ON ac.to_neuron_id = mp.peak_neuron_id AND ac.connection_id = p.connection_id AND ac.level = ? AND ac.age = 1
-		`, [level]);
+			LEFT JOIN active_connections ac ON ac.connection_id = p.connection_id AND ac.age = 0
+		`);
 
 		// Novel connections: active connections TO the peak not in pattern_past
 		// Includes cross-level connections (base→high)
@@ -1012,10 +1005,10 @@ export default class BrainMySQL extends Brain {
 			INSERT INTO matched_pattern_connections (pattern_neuron_id, connection_id, status)
 			SELECT mp.pattern_neuron_id, ac.connection_id, 'novel' as status
 			FROM matched_patterns mp
-			JOIN active_connections ac ON ac.to_neuron_id = mp.peak_neuron_id AND ac.level = ? AND ac.age = 0
+			JOIN active_connections ac ON ac.to_neuron_id = mp.peak_neuron_id AND ac.age = 0
 			LEFT JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id AND p.connection_id = ac.connection_id
 			WHERE p.connection_id IS NULL
-		`, [level]);
+		`);
 
 		return result.affectedRows;
 	}
@@ -1034,8 +1027,8 @@ export default class BrainMySQL extends Brain {
 		await this.conn.query(`
 			UPDATE pattern_peaks pp
 			JOIN matched_patterns mp ON pp.pattern_neuron_id = mp.pattern_neuron_id
-			SET pp.strength = LEAST(1000, pp.strength + 1.0)
-		`);
+			SET pp.strength = LEAST(?, pp.strength + 1)
+		`, [this.maxConnectionStrength]);
 
 		// Add novel connections: connections in active but not in pattern
 		await this.conn.query(`
@@ -1049,17 +1042,17 @@ export default class BrainMySQL extends Brain {
 		await this.conn.query(`
 			UPDATE pattern_past p
 			JOIN matched_pattern_connections mpc ON p.pattern_neuron_id = mpc.pattern_neuron_id AND p.connection_id = mpc.connection_id
-			SET p.strength = GREATEST(?, LEAST(?, p.strength + 1))
+			SET p.strength = LEAST(?, p.strength + 1)
 			WHERE mpc.status = 'common'
-		`, [this.minConnectionStrength, this.maxConnectionStrength]);
+		`, [this.maxConnectionStrength]);
 
 		// Weaken missing connections: connections in pattern but not in active (clamped between minConnectionStrength and maxConnectionStrength)
 		await this.conn.query(`
 			UPDATE pattern_past p
 			JOIN matched_pattern_connections mpc ON p.pattern_neuron_id = mpc.pattern_neuron_id AND p.connection_id = mpc.connection_id
-			SET p.strength = GREATEST(?, LEAST(?, p.strength - ?))
+			SET p.strength = GREATEST(?, p.strength - ?)
 			WHERE mpc.status = 'missing'
-		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
+		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
 	}
 
 	/**
@@ -1212,7 +1205,7 @@ export default class BrainMySQL extends Brain {
 			`, { smooth: this.rewardExpSmooth, reward, maxAge: this.maxRewardsAge, dimIds: outputDimIds });
 			totalWinnerPatterns += winnerPatternResult.affectedRows;
 
-			// Update inferred_neurons.actual_reward for action winners so populateNewPatternFuture can detect negative rewards
+			// Update inferred_neurons.actual_reward for action winners so that we can detect negative rewards for new patterns
 			await this.conn.query(`
 				UPDATE inferred_neurons inf
 				SET inf.actual_reward = ?
