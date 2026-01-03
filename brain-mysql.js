@@ -202,13 +202,14 @@ export default class BrainMySQL extends Brain {
 	async populatePredictionErrorFuture() {
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (connection_id)
-			SELECT c.id
+			SELECT ac.connection_id
 			FROM inference_sources isrc
 			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
 			JOIN connections c_inferred ON c_inferred.id = isrc.source_id
-			-- Find connections FROM the same peak TO what actually happened
-			JOIN connections c ON c.from_neuron_id = c_inferred.from_neuron_id
-			JOIN active_neurons actual ON actual.neuron_id = c.to_neuron_id AND actual.age = 0
+			-- Find active connections FROM the same peak (what actually happened)
+			-- Only distance=1: peak was at age=0 last frame, now at age=1, new observation at age=0
+			JOIN active_connections ac ON ac.from_neuron_id = c_inferred.from_neuron_id AND ac.age = 0
+			JOIN connections c ON c.id = ac.connection_id AND c.distance = 1
 			WHERE isrc.age = 1
 			AND isrc.source_type = 'connection'
 			AND isrc.inference_strength >= ?
@@ -231,25 +232,24 @@ export default class BrainMySQL extends Brain {
 				WHERE context_ac.to_neuron_id = c_inferred.from_neuron_id
 				AND context_ac.age = 1
 			)
-            -- Action neurons can NEVER be peaks (only events and interneurons can be peaks)
-            AND NOT EXISTS (
+			-- Action neurons can NEVER be peaks (only events and interneurons can be peaks)
+			AND NOT EXISTS (
 				SELECT 1 FROM coordinates coord
 				JOIN dimensions d ON d.id = coord.dimension_id
 				WHERE coord.neuron_id = c_inferred.from_neuron_id AND d.type = 'action'
 			)
 			-- Exclude peaks that have action regret (action regret takes priority)
-            AND (
-                inf.is_winner = 0 OR
-                inf.actual_reward >= 0 OR
-                NOT EXISTS (
-                	SELECT 1
-                	FROM coordinates coord
-                    JOIN dimensions d ON d.id = coord.dimension_id
-                	WHERE coord.neuron_id = inf.neuron_id
-                  	AND d.type = 'action'
-            	)
+			AND (
+				inf.is_winner = 0 OR
+				inf.actual_reward >= 0 OR
+				NOT EXISTS (
+					SELECT 1
+					FROM coordinates coord
+					JOIN dimensions d ON d.id = coord.dimension_id
+					WHERE coord.neuron_id = inf.neuron_id
+					AND d.type = 'action'
+				)
 			)
-			AND c.strength > 0
 		`, [this.minErrorPatternThreshold]);
 		if (this.debug) console.log(`Found ${result.affectedRows} prediction error connections`);
 	}
@@ -329,15 +329,17 @@ export default class BrainMySQL extends Brain {
 		}
 		if (this.debug) console.log(`Action regret: consensus found ${bestLoserNeuronIds.length} best loser actions`);
 
-		// Step 4: Insert connections from peaks to best losers
+		// Step 4: Insert active connections from peaks to the best losers
+		// Only distance=1: peak was at age=0 last frame, now at age=1, best loser at age=0
 		const peakNeuronIds = [...new Set(badActionInferences.map(b => b.peak_neuron_id))];
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (connection_id)
-			SELECT c.id
-			FROM connections c
-			WHERE c.from_neuron_id IN (?)
-			AND c.to_neuron_id IN (?)
-			AND c.strength > 0
+			SELECT ac.connection_id
+			FROM active_connections ac
+			JOIN connections c ON c.id = ac.connection_id AND c.distance = 1
+			WHERE ac.from_neuron_id IN (?)
+			AND ac.to_neuron_id IN (?)
+			AND ac.age = 0
 		`, [peakNeuronIds, bestLoserNeuronIds]);
 		if (this.debug) console.log(`Found ${result.affectedRows} action regret connections`);
 	}
@@ -377,10 +379,11 @@ export default class BrainMySQL extends Brain {
 				(SELECT d.type FROM coordinates coord JOIN dimensions d ON d.id = coord.dimension_id WHERE coord.neuron_id = c.from_neuron_id LIMIT 1) as from_dim_type
 			FROM active_neurons an
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
-			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
+			JOIN pattern_future pf ON pf.pattern_neuron_id = pp.pattern_neuron_id
 			JOIN connections c ON c.id = pf.connection_id
 			JOIN neurons n ON n.id = c.to_neuron_id
 			WHERE c.distance = an.age + 1
+			AND an.age = 0  
             AND c.strength > 0
             AND pf.strength > 0
 			AND an.age < :maxAge
@@ -985,7 +988,7 @@ export default class BrainMySQL extends Brain {
             GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
             HAVING SUM(IF(ac.connection_id IS NOT NULL, 1, 0)) >= COUNT(*) * ?
 		`, [level, this.mergePatternThreshold]);
-		if (this.debug && result.affectedRows > 0) console.log(`Matched ${result.affectedRows} pattern-peak pairs`);
+		if (this.debug) console.log(`Matched ${result.affectedRows} pattern-peak pairs`);
 		if (result.affectedRows === 0) return 0;
 
 		// Now populate matched_pattern_connections ONLY for matched patterns

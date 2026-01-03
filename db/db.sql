@@ -52,9 +52,30 @@ select * from active_connections where to_neuron_id = 6;
 select * from connections where id in (select connection_id from new_pattern_future);
 select * from new_patterns;
 
-select * from pattern_peaks;
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id ;
-select * from pattern_future p join connections c on p.connection_id = c.id;
+select * from pattern_peaks where peak_neuron_id = 2;
+select * from connections where id in (select connection_id from pattern_future where pattern_neuron_id = 10);
+
+SELECT pp.pattern_neuron_id, c.from_neuron_id, c.to_neuron_id as neuron_id, 'pattern' as source_type, pf.connection_id as source_id, c.distance
+FROM active_neurons an
+JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
+JOIN pattern_future pf ON pf.pattern_neuron_id = pp.pattern_neuron_id
+JOIN connections c ON c.id = pf.connection_id
+WHERE c.distance = an.age + 1
+AND c.strength > 0
+AND pf.strength > 0
+AND an.age < 5
+;
+
+select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
+from pattern_past p 
+join connections c on p.connection_id = c.id 
+where pattern_neuron_id in (select pattern_neuron_id from pattern_peaks where peak_neuron_id = 2)
+order by p.pattern_neuron_id, c.from_neuron_id, c.distance;
+
+select * from matched_patterns;
+select * from matched_pattern_connections;
+
+select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 10;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
@@ -62,7 +83,7 @@ select count(*) from pattern_future;
 -- 4 = out, 6 = own
 select c.neuron_id, d.name, d.type, c.val 
 from coordinates c join dimensions d on d.id = c.dimension_id 
-where c.neuron_id in (4,6)
+-- where c.neuron_id in (4,6)
 order by c.neuron_id;
 
 SELECT c.from_neuron_id, c.to_neuron_id, c.distance, c.reward,

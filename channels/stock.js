@@ -42,9 +42,19 @@ export default class StockChannel extends Channel {
 		this.currentPrice = null;
 		this.currentVolume = null;
 
-		// Fine-grained discretization for typical stock movements (-2% to +2%) with exponential for extremes
-		this.priceBuckets = [
-			{ min: -Infinity, max: -10, value: -10 },  // -100%+ to -10%
+		// Unified discretization buckets for percentage changes (used for both price and volume)
+		// Fine-grained for typical stock movements (-2% to +2%), exponential for extremes, extended for volume volatility
+		this.changeBuckets = [
+			{ min: -Infinity, max: -100, value: -20 }, // -100%+
+			{ min: -100, max: -90, value: -19 },       // -100% to -90%
+			{ min: -90, max: -80, value: -18 },        // -90% to -80%
+			{ min: -80, max: -70, value: -17 },        // -80% to -70%
+			{ min: -70, max: -60, value: -16 },        // -70% to -60%
+			{ min: -60, max: -50, value: -15 },        // -60% to -50%
+			{ min: -50, max: -40, value: -14 },        // -50% to -40%
+			{ min: -40, max: -30, value: -13 },        // -40% to -30%
+			{ min: -30, max: -20, value: -12 },        // -30% to -20%
+			{ min: -20, max: -10, value: -11 },        // -20% to -10%
 			{ min: -10, max: -5, value: -9 },          // -10% to -5%
 			{ min: -5, max: -3, value: -8 },           // -5% to -3%
 			{ min: -3, max: -2, value: -7 },           // -3% to -2%
@@ -62,76 +72,16 @@ export default class StockChannel extends Channel {
 			{ min: 2, max: 3, value: 7 },              // 2% to 3%
 			{ min: 3, max: 5, value: 8 },              // 3% to 5%
 			{ min: 5, max: 10, value: 9 },             // 5% to 10%
-			{ min: 10, max: Infinity, value: 10 }      // 10%+ to 100%+
-		];
-
-		// 15-part Exponential discretization buckets for percentage changes
-		// this.priceBuckets = [
-		// 	{ min: -Infinity, max: -50, value: -7 },  // -100%+ to -50%
-		// 	{ min: -50, max: -25, value: -6 },        // -50% to -25%
-		// 	{ min: -25, max: -12.5, value: -5 },      // -25% to -12.5%
-		// 	{ min: -12.5, max: -6.25, value: -4 },    // -12.5% to -6.25%
-		// 	{ min: -6.25, max: -3.125, value: -3 },   // -6.25% to -3.125%
-		// 	{ min: -3.125, max: -1.5625, value: -2 }, // -3.125% to -1.5625%
-		// 	{ min: -1.5625, max: -0.05, value: -1 },  // -1.5625% to -0.05%
-		// 	{ min: -0.05, max: 0.05, value: 0 },      // -0.05% to 0.05% (no change)
-		// 	{ min: 0.05, max: 1.5625, value: 1 },     // 0.05% to 1.5625%
-		// 	{ min: 1.5625, max: 3.125, value: 2 },    // 1.5625% to 3.125%
-		// 	{ min: 3.125, max: 6.25, value: 3 },      // 3.125% to 6.25%
-		// 	{ min: 6.25, max: 12.5, value: 4 },       // 6.25% to 12.5%
-		// 	{ min: 12.5, max: 25, value: 5 },         // 12.5% to 25%
-		// 	{ min: 25, max: 50, value: 6 },           // 25% to 50%
-		// 	{ min: 50, max: Infinity, value: 7 }      // 50%+ to 100%+
-		// ];
-
-		// 9-part exponential discretization buckets for percentage changes
-		// this.priceBuckets = [
-		// 	{ min: -Infinity, max: -50, value: -4 },
-		// 	{ min: -50, max: -10, value: -3 },
-		// 	{ min: -10, max: -3, value: -2 },
-		// 	{ min: -3, max: -0.05, value: -1 },
-		// 	{ min: -0.05, max: 0.05, value: 0 },
-		// 	{ min: 0.05, max: 3, value: 1 },
-		// 	{ min: 3, max: 10, value: 2 },
-		// 	{ min: 10, max: 50, value: 3 },
-		// 	{ min: 50, max: Infinity, value: 4 }
-		// ];
-
-		// 5-part exponential discretization buckets for percentage changes
-		// this.priceBuckets = [
-		// 	{ min: -Infinity, max: -10, value: -2 },  // -100%+ to -10%
-		// 	{ min: -10, max: -0.05, value: -1 },      // -10% to -0.05%
-		// 	{ min: -0.05, max: 0.05, value: 0 },      // -0.05% to 0.05% (no change)
-		// 	{ min: 0.05, max: 10, value: 1 },         // 0.05% to 10%
-		// 	{ min: 10, max: Infinity, value: 2 }      // 10%+ to 100%+
-		// ];
-
-		// 3-part buckets for percentage changes
-		// this.priceBuckets = [
-		// 	{ min: -Infinity, max: -0, value: -1 },   // -100%+ to -0%
-		// 	{ min: -0, max: 0, value: 0 },            // -0% (no change)
-		// 	{ min: 0, max: Infinity, value: 1 }    // 0% to 100%+
-		// ];
-
-		// Binary discretization: up (1) or down/flat (0)
-		// this.priceBuckets = [
-		// 	{ min: -Infinity, max: 0, value: 0 },     // Down or flat (<=0%)
-		// 	{ min: 0, max: Infinity, value: 1 }       // Up (>0%)
-		// ];
-
-		// Volume buckets - wider ranges since volume is more volatile (typical: -50% to +150%)
-		this.volumeBuckets = [
-			{ min: -Infinity, max: -75, value: -10 },   // Extreme drop
-			{ min: -75, max: -50, value: -8 },          // Very large drop
-			{ min: -50, max: -35, value: -6 },          // Large drop
-			{ min: -35, max: -20, value: -4 },          // Moderate drop
-			{ min: -20, max: -5, value: -2 },           // Small drop
-			{ min: -5, max: 5, value: 0 },              // Flat
-			{ min: 5, max: 25, value: 2 },              // Small increase
-			{ min: 25, max: 50, value: 4 },             // Moderate increase
-			{ min: 50, max: 100, value: 6 },            // Large increase
-			{ min: 100, max: 150, value: 8 },           // Very large increase
-			{ min: 150, max: Infinity, value: 10 }      // Extreme increase
+			{ min: 10, max: 20, value: 11 },           // 10% to 20%
+			{ min: 20, max: 30, value: 12 },           // 20% to 30%
+			{ min: 30, max: 40, value: 13 },           // 30% to 40%
+			{ min: 40, max: 50, value: 14 },           // 40% to 50%
+			{ min: 50, max: 60, value: 15 },           // 50% to 60%
+			{ min: 60, max: 70, value: 16 },           // 60% to 70%
+			{ min: 70, max: 80, value: 17 },           // 70% to 80%
+			{ min: 80, max: 90, value: 18 },           // 80% to 90%
+			{ min: 90, max: 100, value: 19 },          // 90% to 100%
+			{ min: 100, max: Infinity, value: 20 }     // 100%+
 		];
 	}
 
@@ -274,8 +224,8 @@ export default class StockChannel extends Channel {
 
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
-			{ [`${this.symbol}_price_change`]: this.discretizePercentageChange(priceChange) },
-			{ [`${this.symbol}_volume_change`]: this.discretizeVolumeChange(volumeChange) }
+			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange) },
+			{ [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange) }
 		];
 	}
 
@@ -297,20 +247,10 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Discretize percentage change into exponential buckets
+	 * Discretize percentage change into unified buckets
 	 */
-	discretizePercentageChange(percentChange) {
-		for (const bucket of this.priceBuckets)
-			if (percentChange > bucket.min && percentChange <= bucket.max)
-				return bucket.value;
-		return 0; // Default to no change bucket
-	}
-
-	/**
-	 * Discretize volume change into volume-specific buckets (wider ranges for volatile volume)
-	 */
-	discretizeVolumeChange(percentChange) {
-		for (const bucket of this.volumeBuckets)
+	discretizeChange(percentChange) {
+		for (const bucket of this.changeBuckets)
 			if (percentChange > bucket.min && percentChange <= bucket.max)
 				return bucket.value;
 		return 0; // Default to no change bucket
@@ -321,7 +261,7 @@ export default class StockChannel extends Channel {
 	 * Uses the midpoint of the bucket range
 	 */
 	bucketValueToPercentage(bucketValue) {
-		for (const bucket of this.priceBuckets) {
+		for (const bucket of this.changeBuckets) {
 			if (bucket.value === bucketValue) {
 				// Use midpoint of bucket range
 				const min = bucket.min === -Infinity ? -100 : bucket.min;
