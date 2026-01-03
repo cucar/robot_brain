@@ -21,7 +21,7 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS new_pattern_future;
 -- DROP TABLE IF EXISTS new_patterns;
 
-select * from inferred_neurons;
+select * from inferred_neurons where age = 0;
 select * from inferred_neurons where age = 1;
 select * from inference_sources;
 select * from inference_sources where source_type = 'pattern';
@@ -31,8 +31,8 @@ select * from new_patterns;
 select * from neurons;
 select * from dimensions;
 
-select * from connections order by from_neuron_id, distance;
-select * from connections where id = 9;
+select * from connections where to_neuron_id = 4 order by from_neuron_id, distance;
+select * from connections where from_neuron_id in (5,2) and to_neuron_id in (6, 9) and distance = 1 order by to_neuron_id, distance;
 select * from connections where id in (9, 13);            
 select * from connections where from_neuron_id in (SELECT pattern_neuron_id FROM pattern_peaks pp) order by strength desc;
 select count(*) from connections;
@@ -48,20 +48,33 @@ select * from active_neurons;
 select * from active_connections;
 select * from active_connections where to_neuron_id = 6;
 
-select * from pattern_past;
-select * from pattern_future;
+select * from connections where id in (select connection_id from new_pattern_future);
+select * from new_patterns;
+
+select * from pattern_peaks;
+select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id ;
+select * from pattern_future p join connections c on p.connection_id = c.id;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
 
-SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, 'connection' as source_type, c.id as source_id,
-	c.strength, c.distance, POW(0.9, c.distance - 1), POW(1.2, an.level),
-	c.reward, n.level
+-- 4 = out, 6 = own
+select c.neuron_id, d.name, d.type, c.val 
+from coordinates c join dimensions d on d.id = c.dimension_id 
+where c.neuron_id in (4,6)
+order by c.neuron_id;
+
+SELECT c.from_neuron_id, c.to_neuron_id, c.distance, c.reward,
+	(SELECT d.type FROM coordinates coord JOIN dimensions d ON d.id = coord.dimension_id WHERE coord.neuron_id = c.from_neuron_id LIMIT 1) as from_dim_type
 FROM active_neurons an
 JOIN connections c ON c.from_neuron_id = an.neuron_id
 JOIN neurons n ON n.id = c.to_neuron_id
 WHERE c.distance = an.age + 1
-and c.to_neuron_id = 14;
+AND c.strength > 0
+AND an.age < 6
+and c.to_neuron_id in (4, 6)
+-- and c.distance = 1
+order by c.from_neuron_id, c.to_neuron_id;
             
 SELECT c.*
 FROM active_neurons an
@@ -70,10 +83,6 @@ WHERE an.level = 0
 AND c.to_neuron_id = 3
 -- AND c.distance = an.age + 1 
 AND c.strength > 0;
-
-select c.neuron_id, d.name, d.type, c.val 
-from coordinates c join dimensions d on d.id = c.dimension_id 
-order by c.neuron_id;
 
 SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
 FROM active_neurons an
@@ -137,7 +146,7 @@ CREATE TABLE IF NOT EXISTS connections (
     to_neuron_id BIGINT UNSIGNED NOT NULL,
     distance TINYINT UNSIGNED NOT NULL,  -- 0=spatial, 1=immediate, 2=next step, etc.
     strength DOUBLE NOT NULL DEFAULT 1.0,
-    reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
+    reward DOUBLE NOT NULL DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
     FOREIGN KEY (from_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (to_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     UNIQUE INDEX (from_neuron_id, to_neuron_id, distance),
@@ -168,7 +177,7 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
-    reward DOUBLE NOT NULL DEFAULT 1.0,  -- multiplicative reward factor for temporal credit assignment
+    reward DOUBLE NOT NULL DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
     PRIMARY KEY (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
@@ -211,7 +220,7 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
     level TINYINT NOT NULL,
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     strength DOUBLE NOT NULL DEFAULT 0.0,
-    expected_reward DOUBLE NOT NULL DEFAULT 1.0,
+    expected_reward DOUBLE NOT NULL DEFAULT 0,  -- additive reward (0 = neutral)
     actual_reward DOUBLE DEFAULT NULL,
     is_winner TINYINT UNSIGNED DEFAULT NULL,
     PRIMARY KEY (neuron_id, level, age),

@@ -20,11 +20,9 @@ export default class Brain {
 		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active - this determines the context length
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 100; // maximum strength value for connections and patterns (clamped to prevent overflow)
-		this.maxConnectionReward = 10; // maximum reward factor for connections and patterns (wider range to overcome strength bias)
-		this.minConnectionReward = 1 / this.maxConnectionReward; // minimum reward factor for connections and patterns (clamped to prevent extreme values)
 
 		// connection learning parameters
-		this.connectionNegativeReinforcement = 0.1; // how much to weaken connections when predictions fail
+		this.connectionNegativeReinforcement = 0.25; // how much to weaken connections when predictions fail
 
 		// pattern learning parameters
 		this.minErrorPatternThreshold = 10.0; // minimum prediction strength to create error-driven pattern
@@ -33,14 +31,15 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// inference parameters
-		this.peakTimeDecayFactor = 0.9; // peak connection weight = POW(peakTimeDecayFactor, distance)
-		this.rewardTimeDecayFactor = 0.95; // reward temporal decay = POW(rewardTimeDecayFactor, age)
+		this.peakTimeDecayFactor = 0.75; // peak connection weight = POW(peakTimeDecayFactor, distance)
 
 		// voting parameters - all levels vote for actions, higher levels have more temporal context
 		this.levelVoteMultiplier = 1.2; // vote weight = strength * POW(levelVoteMultiplier, level)
+		this.boltzmannTemperature = 0.1; // temperature for Boltzmann selection (lower = more aggressive, 1.0 = standard)
 
 		// reward parameters
 		this.maxRewardsAge = 1; // how far back in time to apply rewards (1 = only most recent outputs)
+		this.rewardExpSmooth = 0.9; // exponential smoothing for rewards: new = smooth * observed + (1 - smooth) * old
 
 		// exploration parameters - probability inversely proportional to inference strength
 		this.minExploration = 0.03; // minimum - never stop exploring
@@ -52,7 +51,7 @@ export default class Brain {
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
-		this.rewardForgetRate = 0.05; // how much reward factors decay toward 1.0 per forget cycle (0.05 = 5% decay toward neutral)
+		this.rewardForgetRate = 0.05; // how much reward values decay toward 0 per forget cycle (0.05 = 5% decay toward neutral)
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -187,10 +186,10 @@ export default class Brain {
 		let feedbackCount = 0;
 
 		for (const [channelName, channel] of this.channels) {
-			const rewardFactor = await channel.getRewards();
-			if (rewardFactor !== 1.0) { // Only process non-neutral feedback
-				if (this.debug2) console.log(`${channelName}: reward factor ${rewardFactor.toFixed(3)}`);
-				channelRewards.set(channelName, rewardFactor);
+			const reward = await channel.getRewards();
+			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
+				if (this.debug2) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
+				channelRewards.set(channelName, reward);
 				feedbackCount++;
 			}
 		}
@@ -322,7 +321,7 @@ export default class Brain {
 		const exploration = {
 			neuron_id: actionNeuronId,
 			strength: 100000, // High strength for exploration
-			reward: 1.0, // Neutral reward
+			reward: 0, // Neutral reward (additive: 0 = neutral)
 			coordinates: actionCoordinates,
 			dimType: 'action',
 			isWinner: true
@@ -633,41 +632,65 @@ export default class Brain {
 	/**
 	 * Determine consensus from votes using voting architecture.
 	 * All levels vote, winner is determined per dimension.
-	 * Unified logic: pick the highest effectiveStrength (sum of strength * reward per neuron).
+	 * Actions: pick by highest reward (additive sum), strength as tiebreaker
+	 * Events: pick by highest strength only (reward not used for event predictions)
 	 * @param {Array} votes - Array of {neuron_id, source_type, source_id, strength, reward, level}
 	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async determineConsensus(votes) {
 		if (votes.length === 0) return [];
 
-		// Aggregate votes by neuron_id
-		// effectiveStrength = sum(strength * reward) for voting
-		// strength = sum(strength) for database
-		// reward = weighted average of rewards for database
-		// Also track max level and whether pattern votes exist for filtering
-		const aggregated = new Map();
+		// Step 1: Aggregate by (from_neuron_id, to_neuron_id) so each source neuron votes once per target
+		// This prevents a single neuron with multiple distance connections from voting multiple times
+		const bySourceTarget = new Map();
 		for (const vote of votes) {
-			if (!aggregated.has(vote.neuron_id))
-				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, effectiveStrength: 0, strength: 0, totalWeightedReward: 0, sources: [], maxLevel: 0, hasPatternVotes: false });
+			const key = `${vote.from_neuron_id}:${vote.neuron_id}`;
+			if (!bySourceTarget.has(key))
+				bySourceTarget.set(key, { from_neuron_id: vote.from_neuron_id, neuron_id: vote.neuron_id, strength: 0, rewardSum: 0, rewardCount: 0, sources: [], maxLevel: 0, hasPatternVotes: false, from_dim_type: vote.from_dim_type });
 
-			const agg = aggregated.get(vote.neuron_id);
+			const agg = bySourceTarget.get(key);
 			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level, from_dim_type: vote.from_dim_type });
 
-			// For voting: sum of (strength * reward)
-			agg.effectiveStrength += vote.strength * vote.reward;
-
-			// For database: accumulate weighted rewards
-			agg.totalWeightedReward += vote.reward * vote.strength;
+			// Sum strength across distances, average reward
 			agg.strength += vote.strength;
+			agg.rewardSum += vote.reward;
+			agg.rewardCount++;
 
-			// Track max level and pattern votes for this neuron
+			// Track max level and pattern votes
 			if (vote.level > agg.maxLevel) agg.maxLevel = vote.level;
 			if (vote.source_type === 'pattern') agg.hasPatternVotes = true;
 		}
 
-		// Calculate final weighted average reward for each neuron
+		// Calculate average reward per source-target pair
+		for (const [key, agg] of bySourceTarget)
+			agg.reward = agg.rewardCount > 0 ? agg.rewardSum / agg.rewardCount : 0;
+
+		// Step 2: Aggregate by to_neuron_id - each source neuron now counts once
+		// strength = sum(strength) - total confidence/votes
+		// rewardSum/rewardCount stored for later averaging (action dimensions need special handling)
+		// Also track which source neurons voted for each target
+		const aggregated = new Map();
+		for (const [key, srcAgg] of bySourceTarget) {
+			if (!aggregated.has(srcAgg.neuron_id))
+				aggregated.set(srcAgg.neuron_id, { neuron_id: srcAgg.neuron_id, strength: 0, rewardSum: 0, rewardCount: 0, reward: 0, sources: [], maxLevel: 0, hasPatternVotes: false, sourceNeurons: new Set() });
+
+			const agg = aggregated.get(srcAgg.neuron_id);
+			agg.sources.push(...srcAgg.sources);
+			agg.sourceNeurons.add(srcAgg.from_neuron_id);
+
+			// Sum strength, accumulate reward (averaging done later per dimension type)
+			agg.strength += srcAgg.strength;
+			agg.rewardSum += srcAgg.reward;
+			agg.rewardCount++;
+
+			// Track max level and pattern votes
+			if (srcAgg.maxLevel > agg.maxLevel) agg.maxLevel = srcAgg.maxLevel;
+			if (srcAgg.hasPatternVotes) agg.hasPatternVotes = true;
+		}
+
+		// For now, calculate simple average - will be recalculated for actions per dimension
 		for (const [neuronId, agg] of aggregated)
-			agg.reward = agg.strength > 0 ? agg.totalWeightedReward / agg.strength : 1.0;
+			agg.reward = agg.rewardCount > 0 ? agg.rewardSum / agg.rewardCount : 0;
 
 		// Get coordinates for all voted neurons to group by dimension
 		const neuronIds = [...aggregated.keys()];
@@ -698,28 +721,51 @@ export default class Brain {
 		// Find winner per dimension with level and pattern priority:
 		// 1. Higher level wins over lower level
 		// 2. At same level, pattern votes override connection votes
-		// 3. Among remaining, highest effectiveStrength wins
+		// 3. Actions: Boltzmann selection based on reward (probabilistic)
+		//    Events: Deterministic selection by highest strength
 		const inferences = [];
 		const winners = new Set();
-
 		for (const [dimName, dimVotes] of byDimension) {
 			if (dimVotes.length === 0) continue;
 
-			// Step 1: Filter to max level
+			// Step 1: Filter to max level among the connections
 			const maxLevel = Math.max(...dimVotes.map(v => v.maxLevel));
 			let filtered = dimVotes.filter(v => v.maxLevel === maxLevel);
 
 			// Step 2: At max level, prefer pattern votes over connection votes
 			const hasPatterns = filtered.some(v => v.hasPatternVotes);
-			if (hasPatterns)
-				filtered = filtered.filter(v => v.hasPatternVotes);
+			if (hasPatterns) filtered = filtered.filter(v => v.hasPatternVotes);
 
-			// Step 3: Sort by effectiveStrength DESC and pick winner
-			filtered.sort((a, b) => b.effectiveStrength - a.effectiveStrength);
-			const winner = filtered[0];
+			// Step 3: Select winner based on dimension type
+			const dimInfo = this.dimensions.get(dimName);
+			const isAction = dimInfo && dimInfo.type === 'action';
+			let winner;
+
+			if (isAction) {
+				// For actions: recalculate reward with all voters in denominator
+				// A neuron that doesn't vote for an action counts as 0 reward for that action
+				const allVoters = new Set();
+				for (const v of filtered)
+					for (const srcNeuron of v.sourceNeurons)
+						allVoters.add(srcNeuron);
+				const totalVoters = allVoters.size;
+
+				// Recalculate reward for each candidate using total voters as denominator
+				for (const v of filtered)
+					v.reward = totalVoters > 0 ? v.rewardSum / totalVoters : 0;
+
+				// Actions: Boltzmann selection based on reward
+				winner = this.boltzmannSelect(filtered);
+				if (this.debug) console.log(`Voting: ${dimName} (action) Boltzmann selected = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, reward: ${winner.reward.toFixed(2)}, strength: ${winner.strength.toFixed(2)}, level: ${winner.maxLevel}, pattern: ${winner.hasPatternVotes}, ${filtered.length} candidates, ${totalVoters} voters)`);
+			}
+			else {
+				// Events: Deterministic selection by highest strength
+				filtered.sort((a, b) => b.strength - a.strength);
+				winner = filtered[0];
+				if (this.debug) console.log(`Voting: ${dimName} (event) winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, strength: ${winner.strength.toFixed(2)}, level: ${winner.maxLevel}, pattern: ${winner.hasPatternVotes}, ${filtered.length} candidates)`);
+			}
+
 			winners.add(winner.neuron_id);
-
-			if (this.debug) console.log(`Voting: ${dimName} winner = ${winner.coordinates[dimName]} (neuron ${winner.neuron_id}, effectiveStrength: ${winner.effectiveStrength.toFixed(2)}, level: ${winner.maxLevel}, pattern: ${winner.hasPatternVotes}, ${dimVotes.length} candidates)`);
 		}
 
 		// Build inferences array with isWinner flag
@@ -727,6 +773,36 @@ export default class Brain {
 			inferences.push({ ...agg, isWinner: winners.has(neuronId) });
 
 		return inferences;
+	}
+
+	/**
+	 * Boltzmann selection from candidates based on reward values.
+	 * Uses exponential Boltzmann where probability is proportional to exp(reward / temperature).
+	 * Lower temperature = more aggressive (favors higher rewards more strongly).
+	 * @param {Array} candidates - Array of objects with reward property
+	 * @returns {Object} - Selected candidate
+	 */
+	boltzmannSelect(candidates) {
+		if (candidates.length === 0) return null;
+		if (candidates.length === 1) return candidates[0];
+
+		// Exponential Boltzmann with temperature: probability proportional to exp(reward / temperature)
+		const expValues = candidates.map(c => Math.exp(c.reward / this.boltzmannTemperature));
+		const sum = expValues.reduce((s, v) => s + v, 0);
+
+		// Calculate probabilities
+		const probabilities = expValues.map(v => v / sum);
+
+		// Sample from distribution
+		const rand = Math.random();
+		let cumulative = 0;
+		for (let i = 0; i < candidates.length; i++) {
+			cumulative += probabilities[i];
+			if (rand < cumulative) return candidates[i];
+		}
+
+		// Fallback (shouldn't happen due to floating point)
+		return candidates[candidates.length - 1];
 	}
 
 	/**
@@ -813,6 +889,7 @@ export default class Brain {
 		const newPatternFutureCount = await this.populateNewPatternFuture();
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
+		// if (newPatternFutureCount > 0) this.waitForUserInput = true;
 
 		// Populate new_patterns table with peaks from new pattern future connections
 		const patternCount = await this.populateNewPatterns();

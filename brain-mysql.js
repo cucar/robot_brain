@@ -231,12 +231,18 @@ export default class BrainMySQL extends Brain {
 				WHERE context_ac.to_neuron_id = c_inferred.from_neuron_id
 				AND context_ac.age = 1
 			)
+            -- Action neurons can NEVER be peaks (only events and interneurons can be peaks)
+            AND NOT EXISTS (
+				SELECT 1 FROM coordinates coord
+				JOIN dimensions d ON d.id = coord.dimension_id
+				WHERE coord.neuron_id = c_inferred.from_neuron_id AND d.type = 'action'
+			)
 			-- Exclude peaks that have action regret (action regret takes priority)
             AND (
-                inf.is_winner = 0 OR 
-                inf.actual_reward >= 1.0 OR 
+                inf.is_winner = 0 OR
+                inf.actual_reward >= 0 OR
                 NOT EXISTS (
-                	SELECT 1 
+                	SELECT 1
                 	FROM coordinates coord
                     JOIN dimensions d ON d.id = coord.dimension_id
                 	WHERE coord.neuron_id = inf.neuron_id
@@ -265,7 +271,7 @@ export default class BrainMySQL extends Brain {
 			AND isrc.source_type = 'connection'
 			AND isrc.inference_strength >= ?
 			AND inf.is_winner = 1
-			AND inf.actual_reward < 1.0
+			AND inf.actual_reward < 0
 			-- The inferred neuron is an action
 			AND EXISTS (
 				SELECT 1 FROM coordinates coord
@@ -285,6 +291,12 @@ export default class BrainMySQL extends Brain {
 				SELECT 1 FROM active_connections context_ac
 				WHERE context_ac.to_neuron_id = c_inferred.from_neuron_id
 				AND context_ac.age = 1
+			)
+			-- Action neurons can NEVER be peaks (only events and interneurons can be peaks)
+			AND NOT EXISTS (
+				SELECT 1 FROM coordinates coord
+			    JOIN dimensions d ON d.id = coord.dimension_id
+				WHERE coord.neuron_id = c_inferred.from_neuron_id AND d.type = 'action'
 			)
 		`, [this.minErrorPatternThreshold]);
 		if (badActionInferences.length === 0) {
@@ -342,14 +354,15 @@ export default class BrainMySQL extends Brain {
 		// from_dim_type: 'event'/'action' for base neurons, NULL for interneurons (level > 0)
 		// Exclude neurons at max age - they'll be deactivated before we can populate inference_sources
 		const [connectionVotes] = await this.conn.query(`
-			SELECT c.to_neuron_id as neuron_id, 'connection' as source_type, c.id as source_id,
+			SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, 'connection' as source_type, c.id as source_id,
 				c.strength * POW(:decay, c.distance - 1) * POW(:levelMult, an.level) as strength,
-				c.reward, n.level,
+                c.reward, n.level,
 				(SELECT d.type FROM coordinates coord JOIN dimensions d ON d.id = coord.dimension_id WHERE coord.neuron_id = c.from_neuron_id LIMIT 1) as from_dim_type
 			FROM active_neurons an
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			JOIN neurons n ON n.id = c.to_neuron_id
 			WHERE c.distance = an.age + 1
+            AND c.strength > 0
 			AND an.age < :maxAge
 		`, { decay: this.peakTimeDecayFactor, levelMult: this.levelVoteMultiplier, maxAge: this.baseNeuronMaxAge });
 
@@ -358,9 +371,9 @@ export default class BrainMySQL extends Brain {
 		// from_dim_type: check underlying connection's from_neuron_id, NULL for interneurons
 		// Exclude neurons at max age - they'll be deactivated before we can populate inference_sources
 		const [patternVotes] = await this.conn.query(`
-			SELECT c.to_neuron_id as neuron_id, 'pattern' as source_type, pf.connection_id as source_id,
+			SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, 'pattern' as source_type, pf.connection_id as source_id,
 				pf.strength * POW(:decay, c.distance - 1) * POW(:levelMult, an.level) as strength,
-				pf.reward, n.level,
+                pf.reward, n.level,
 				(SELECT d.type FROM coordinates coord JOIN dimensions d ON d.id = coord.dimension_id WHERE coord.neuron_id = c.from_neuron_id LIMIT 1) as from_dim_type
 			FROM active_neurons an
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
@@ -368,6 +381,8 @@ export default class BrainMySQL extends Brain {
 			JOIN connections c ON c.id = pf.connection_id
 			JOIN neurons n ON n.id = c.to_neuron_id
 			WHERE c.distance = an.age + 1
+            AND c.strength > 0
+            AND pf.strength > 0
 			AND an.age < :maxAge
 		`, { decay: this.peakTimeDecayFactor, levelMult: this.levelVoteMultiplier, maxAge: this.baseNeuronMaxAge });
 
@@ -404,24 +419,148 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Debug helper: show votes for OWN and OUT action neurons
+	 * Shows which price/volume changes are voting for which action
 	 * @param {Array} allVotes - Array of all votes
 	 */
 	async debugActionVotes(allVotes) {
 
 		// Populate cache if needed
 		if (!this.actionNeuronCache) await this.populateActionNeuronCache();
-
-		// cannot debug if action neurons are not created yet
 		if (!this.actionNeuronCache) return;
 
 		const { ownNeuronId, outNeuronId } = this.actionNeuronCache;
-		const ownVotes = allVotes.filter(v => v.neuron_id === ownNeuronId);
-		const outVotes = allVotes.filter(v => v.neuron_id === outNeuronId);
-		const ownStrength = ownVotes.reduce((s, v) => s + v.strength, 0);
-		const outStrength = outVotes.reduce((s, v) => s + v.strength, 0);
-		const ownReward = ownVotes.reduce((s, v) => s + v.reward, 0);
-		const outReward = outVotes.reduce((s, v) => s + v.reward, 0);
-		console.log(`Action votes: OWN(${ownNeuronId}): ${ownVotes.length} votes, strength=${ownStrength.toFixed(1)}, reward=${ownReward.toFixed(2)} | OUT(${outNeuronId}): ${outVotes.length} votes, strength=${outStrength.toFixed(1)}, reward=${outReward.toFixed(2)}`);
+
+		// Get source neuron coordinates for each vote
+		const sourceNeuronIds = [...new Set(allVotes.map(v => v.source_id))];
+		if (sourceNeuronIds.length === 0) return;
+
+		// Query connections to get from_neuron coordinates
+		const [connections] = await this.conn.query(`
+			SELECT c.id, c.from_neuron_id, c.distance, c.strength as conn_strength, c.reward as conn_reward,
+				GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as from_coords
+			FROM connections c
+			JOIN coordinates coord ON coord.neuron_id = c.from_neuron_id
+			JOIN dimensions d ON d.id = coord.dimension_id
+			WHERE c.id IN (?)
+			GROUP BY c.id
+		`, [sourceNeuronIds]);
+
+		const connMap = new Map(connections.map(c => [c.id, c]));
+
+		// Get bucket-to-percentage mapping from stock channel if available
+		const stockChannel = this.channels.get('TEST');
+		const bucketToPercent = stockChannel ? this.buildBucketPercentMap(stockChannel) : null;
+
+		// Calculate cycle frame (1-6) based on frame number
+		const cycleFrame = ((this.frameNumber - 1) % 6) + 1;
+
+		// Step 1: Aggregate by (from_neuron_id, to_neuron_id) - each source neuron votes once per target
+		const aggregateBySource = (votes) => {
+			const bySource = new Map();
+			for (const v of votes) {
+				const conn = connMap.get(v.source_id);
+				if (!conn) continue;
+				const key = conn.from_neuron_id;
+				if (!bySource.has(key))
+					bySource.set(key, { from_neuron_id: key, strength: 0, rewardSum: 0, rewardCount: 0, from_coords: conn.from_coords, distances: [] });
+				const agg = bySource.get(key);
+				agg.strength += v.strength;
+				agg.rewardSum += v.reward;
+				agg.rewardCount++;
+				agg.distances.push(conn.distance);
+			}
+			// Calculate average reward per source
+			for (const [key, agg] of bySource)
+				agg.reward = agg.rewardCount > 0 ? agg.rewardSum / agg.rewardCount : 0;
+			return [...bySource.values()];
+		};
+
+		const ownAgg = aggregateBySource(allVotes.filter(v => v.neuron_id === ownNeuronId));
+		const outAgg = aggregateBySource(allVotes.filter(v => v.neuron_id === outNeuronId));
+
+		// Format aggregated votes with source info
+		const formatAggVotes = (aggVotes, label) => {
+			if (aggVotes.length === 0) return `  ${label}: no votes`;
+			const lines = [`  ${label}:`];
+			for (const agg of aggVotes) {
+				const coordsWithPercent = this.formatCoordsWithPercent(agg.from_coords, bucketToPercent);
+				const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
+				lines.push(`    ${coordsWithPercent} (${distStr}) → str=${agg.strength.toFixed(1)}, avgRwd=${agg.reward.toFixed(2)}`);
+			}
+			return lines.join('\n');
+		};
+
+		// Step 2: Calculate totals - all voters count in denominator for both actions
+		// Collect all unique source neurons that voted for either action
+		const allVoters = new Set();
+		for (const agg of ownAgg) allVoters.add(agg.from_neuron_id);
+		for (const agg of outAgg) allVoters.add(agg.from_neuron_id);
+		const totalVoters = allVoters.size;
+
+		// Reward = sum of rewards / total voters (missing votes count as 0)
+		const ownTotal = {
+			str: ownAgg.reduce((s, a) => s + a.strength, 0),
+			rwd: totalVoters > 0 ? ownAgg.reduce((s, a) => s + a.rewardSum, 0) / totalVoters : 0
+		};
+		const outTotal = {
+			str: outAgg.reduce((s, a) => s + a.strength, 0),
+			rwd: totalVoters > 0 ? outAgg.reduce((s, a) => s + a.rewardSum, 0) / totalVoters : 0
+		};
+
+		// Calculate Boltzmann probabilities (exponential with temperature)
+		const ownExp = Math.exp(ownTotal.rwd / this.boltzmannTemperature);
+		const outExp = Math.exp(outTotal.rwd / this.boltzmannTemperature);
+		const sumExp = ownExp + outExp;
+		const ownProb = ownExp / sumExp;
+		const outProb = outExp / sumExp;
+
+		console.log(`\n=== ACTION VOTES (Cycle ${cycleFrame}/6) ===`);
+		console.log(formatAggVotes(ownAgg, `OWN (${ownAgg.length}/${totalVoters} voters, str=${ownTotal.str.toFixed(1)}, avgRwd=${ownTotal.rwd.toFixed(2)}, prob=${(ownProb * 100).toFixed(1)}%)`));
+		console.log(formatAggVotes(outAgg, `OUT (${outAgg.length}/${totalVoters} voters, str=${outTotal.str.toFixed(1)}, avgRwd=${outTotal.rwd.toFixed(2)}, prob=${(outProb * 100).toFixed(1)}%)`));
+		console.log(`  SELECTION: Boltzmann (OWN ${(ownProb * 100).toFixed(1)}% vs OUT ${(outProb * 100).toFixed(1)}%)`);
+		console.log(`===================\n`);
+	}
+
+	/**
+	 * Build a map from bucket values to percentage ranges for price/volume dimensions
+	 */
+	buildBucketPercentMap(stockChannel) {
+		const map = new Map();
+		if (stockChannel.priceBuckets)
+			for (const b of stockChannel.priceBuckets)
+				map.set(`price_change:${b.value}`, this.formatBucketRange(b.min, b.max));
+		if (stockChannel.volumeBuckets)
+			for (const b of stockChannel.volumeBuckets)
+				map.set(`volume_change:${b.value}`, this.formatBucketRange(b.min, b.max));
+		return map;
+	}
+
+	/**
+	 * Format bucket range as readable string
+	 */
+	formatBucketRange(min, max) {
+		if (min === -Infinity) return `<${max}%`;
+		if (max === Infinity) return `>${min}%`;
+		return `${min}%~${max}%`;
+	}
+
+	/**
+	 * Format coordinates string with percentage ranges where applicable
+	 */
+	formatCoordsWithPercent(coordsStr, bucketToPercent) {
+		if (!bucketToPercent) return coordsStr;
+		// Parse "TEST_price_change=5, TEST_volume_change=0" format
+		return coordsStr.split(', ').map(part => {
+			const [dimName, valStr] = part.split('=');
+			const val = parseFloat(valStr);
+			// Extract dimension type (price_change or volume_change)
+			const dimType = dimName.includes('price_change') ? 'price_change' : dimName.includes('volume_change') ? 'volume_change' : null;
+			if (dimType) {
+				const percentRange = bucketToPercent.get(`${dimType}:${val}`);
+				if (percentRange) return `${dimName}=${val}(${percentRange})`;
+			}
+			return part;
+		}).join(', ');
 	}
 
 	/**
@@ -518,8 +657,7 @@ export default class BrainMySQL extends Brain {
 			AND pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
 			AND c.to_neuron_id IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
 		`, [this.minConnectionStrength, this.maxConnectionStrength]);
-		if (this.debug && strengthenResult.affectedRows > 0)
-			console.log(`Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
+		if (this.debug) console.log(`Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
 
 		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections
 		// Connection's target neuron is NOT active
@@ -531,8 +669,7 @@ export default class BrainMySQL extends Brain {
 			AND pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
 			AND c.to_neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
 		`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternNegativeReinforcement]);
-		if (this.debug && weakenResult.affectedRows > 0)
-			console.log(`Weakened ${weakenResult.affectedRows} failed pattern_future predictions`);
+		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed pattern_future predictions`);
 
 		// 3. ADD NOVEL CONNECTIONS: Connections from peak to newly active neurons not yet in pattern_future
 		// Find patterns that made predictions, get their peak neurons, find connections from peak to active neurons
@@ -553,13 +690,13 @@ export default class BrainMySQL extends Brain {
 				AND pf.connection_id = c.id
 			)
 		`);
-		if (this.debug && novelResult.affectedRows > 0)
-			console.log(`Added ${novelResult.affectedRows} novel connections to pattern_future`);
+		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel connections to pattern_future`);
 	}
 
 	/**
 	 * Populate new_patterns table from new_pattern_future.
 	 * Finds unique peak neurons (one pattern per peak).
+	 * Action neurons can NEVER be peaks - only event neurons and interneurons can be peaks.
 	 * Returns the number of patterns to create.
 	 */
 	async populateNewPatterns() {
@@ -731,7 +868,7 @@ export default class BrainMySQL extends Brain {
 	 * Creates connections from all active neurons to newly activated (age=0) neurons at the specified level.
 	 * Cross-level connections allowed: same-level, high→base, and base→high.
 	 * Distance is purely temporal (source neuron's age), regardless of level difference.
-	 * At base level (0), excludes action→action connections to avoid sequence pollution.
+	 * Action neurons can NEVER be sources - only event neurons and interneurons can predict.
 	 */
 	async reinforceConnections(level) {
 		await this.conn.query(`
@@ -743,12 +880,11 @@ export default class BrainMySQL extends Brain {
             AND t.level = :level  -- target neurons are at the specified level
             AND (f.level = t.level OR t.level = 0 OR f.level = 0)  -- same level, high→base, or base→high
             AND f.age > 0 -- only learning connections between different ages for inference
-            -- At base level, exclude action→action connections (only event→action allowed for actions)
-            AND NOT (
-                :level = 0
-                AND f.level = 0
-                AND EXISTS (SELECT 1 FROM coordinates cf JOIN dimensions df ON df.id = cf.dimension_id WHERE cf.neuron_id = f.neuron_id AND df.type = 'action')
-                AND EXISTS (SELECT 1 FROM coordinates ct JOIN dimensions dt ON dt.id = ct.dimension_id WHERE ct.neuron_id = t.neuron_id AND dt.type = 'action')
+            -- Action neurons can NEVER be sources (only events and interneurons can predict)
+            AND NOT EXISTS (
+                SELECT 1 FROM coordinates cf
+                JOIN dimensions df ON df.id = cf.dimension_id
+                WHERE cf.neuron_id = f.neuron_id AND df.type = 'action'
             )
 			ON DUPLICATE KEY UPDATE strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, strength + VALUES(strength)))
 		`, { level, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
@@ -983,18 +1119,18 @@ export default class BrainMySQL extends Brain {
 		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
 		if (this.debug) console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
 
-		// 3. REWARD DECAY: Move reward factors back toward 1.0 (neutral)
-		// Formula: reward = reward + (1.0 - reward) * rewardForgetRate
-		// reward=2.0, rate=0.05 → 2.0 + (1.0-2.0)*0.05 = 1.95
-		// reward=0.5, rate=0.05 → 0.5 + (1.0-0.5)*0.05 = 0.525
+		// 3. REWARD DECAY: Move reward values back toward 0 (neutral)
+		// Formula: reward = reward * (1 - rewardForgetRate)
+		// reward=+10, rate=0.05 → 10 * 0.95 = 9.5
+		// reward=-10, rate=0.05 → -10 * 0.95 = -9.5
 		if (this.debug) console.log('Running forget cycle - connection reward decay...');
 		stepStart = Date.now();
-		const [connRewardResult] = await this.conn.query(`UPDATE connections SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]);
+		const [connRewardResult] = await this.conn.query(`UPDATE connections SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
 		if (this.debug) console.log(`  Connection reward decay took ${Date.now() - stepStart}ms (updated ${connRewardResult.affectedRows} rows)`);
 
 		if (this.debug) console.log('Running forget cycle - pattern_future reward decay...');
 		stepStart = Date.now();
-		const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward + (1.0 - reward) * ?`, [this.rewardForgetRate]);
+		const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
 		if (this.debug) console.log(`  Pattern_future reward decay took ${Date.now() - stepStart}ms (updated ${patternRewardResult.affectedRows} rows)`);
 
 		// 4. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
@@ -1016,27 +1152,17 @@ export default class BrainMySQL extends Brain {
 
 	/**
 	 * Apply channel-specific rewards to connections/patterns that led to executed outputs.
-	 * Uses multiplicative rewards with exponential temporal decay.
-	 * Older connections get less reward/punishment (decay applied to the reward exponent).
 	 *
 	 * Channel-Specific Credit Assignment:
 	 * 1. Identify which channel each base-level output belongs to (via output dimensions)
 	 * 2. Use inferred_neurons (is_winner) + inference_sources to find which connections/patterns led to each action
 	 * 3. Apply channel-specific reward to the connections/patterns based on source_type
 	 *
-	 * Multiplicative reward: strength is multiplied by reward with time-decayed effect
-	 * Formula: strength * (1 + (reward - 1) * POW(rewardTimeDecayFactor, age - 1))
-	 * reward = 1.5, age = 1 → multiply by 1 + 0.5 * 0.9^0 = 1.5 (50% increase)
-	 * reward = 1.5, age = 2 → multiply by 1 + 0.5 * 0.9^1 = 1.45 (45% increase)
-	 * reward = 0.5, age = 1 → multiply by 1 + (-0.5) * 0.9^0 = 0.5 (50% decrease)
-	 * reward = 0.5, age = 2 → multiply by 1 + (-0.5) * 0.9^1 = 0.55 (45% decrease)
-	 * This is proportional to existing strength, avoiding saturation issues
+	 * Exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
+	 * This converges to the expected reward for each connection.
+	 * Neutral reward is 0, positive is good, negative is bad
 	 */
 	async applyRewards(channelRewards) {
-
-		// it is not possible to apply rewards until at least we have 3 frames
-		// first 2 frames build connections, we infer output in frame 3 using them, we reward them in frame 4
-		if (this.frameNumber < 4) return;
 
 		// nothing to update if there are no rewards
 		if (channelRewards.size === 0) return;
@@ -1055,19 +1181,20 @@ export default class BrainMySQL extends Brain {
 			}
 
 			// WINNERS: Apply actual reward to winning votes (is_winner=1)
+			// Exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
 			// Reward connection-based inferences
 			const [winnerConnResult] = await this.conn.query(`
 				UPDATE connections c
 				JOIN inference_sources isrc ON c.id = isrc.source_id AND isrc.source_type = 'connection'
 				JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age AND inf.level = 0
-				SET c.reward = GREATEST(?, LEAST(?, c.reward * (1 + (? - 1) * POW(?, isrc.age - 1))))
-				WHERE isrc.age > 0 AND isrc.age <= ?
+				SET c.reward = :smooth * :reward + (1 - :smooth) * c.reward
+				WHERE isrc.age > 0 AND isrc.age <= :maxAge
 				AND inf.is_winner = 1
 				AND EXISTS (
 					SELECT 1 FROM coordinates coord
-					WHERE coord.neuron_id = isrc.neuron_id AND coord.dimension_id IN (?)
+					WHERE coord.neuron_id = isrc.neuron_id AND coord.dimension_id IN (:dimIds)
 				)
-			`, [this.minConnectionReward, this.maxConnectionReward, reward, this.rewardTimeDecayFactor, this.maxRewardsAge, outputDimIds]);
+			`, { smooth: this.rewardExpSmooth, reward, maxAge: this.maxRewardsAge, dimIds: outputDimIds });
 			totalWinnerConnections += winnerConnResult.affectedRows;
 
 			// Reward pattern-based inferences (pattern_future stores connection_id)
@@ -1075,14 +1202,14 @@ export default class BrainMySQL extends Brain {
 				UPDATE pattern_future pf
 				JOIN inference_sources isrc ON pf.connection_id = isrc.source_id AND isrc.source_type = 'pattern'
 				JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age AND inf.level = 0
-				SET pf.reward = GREATEST(?, LEAST(?, pf.reward * (1 + (? - 1) * POW(?, isrc.age - 1))))
-				WHERE isrc.age > 0 AND isrc.age <= ?
+				SET pf.reward = :smooth * :reward + (1 - :smooth) * pf.reward
+				WHERE isrc.age > 0 AND isrc.age <= :maxAge
 				AND inf.is_winner = 1
 				AND EXISTS (
 					SELECT 1 FROM coordinates coord
-					WHERE coord.neuron_id = isrc.neuron_id AND coord.dimension_id IN (?)
+					WHERE coord.neuron_id = isrc.neuron_id AND coord.dimension_id IN (:dimIds)
 				)
-			`, [this.minConnectionReward, this.maxConnectionReward, reward, this.rewardTimeDecayFactor, this.maxRewardsAge, outputDimIds]);
+			`, { smooth: this.rewardExpSmooth, reward, maxAge: this.maxRewardsAge, dimIds: outputDimIds });
 			totalWinnerPatterns += winnerPatternResult.affectedRows;
 
 			// Update inferred_neurons.actual_reward for action winners so populateNewPatternFuture can detect negative rewards

@@ -36,7 +36,7 @@ export default class SyntheticExtendedTest extends Job {
 				{ price: 7.22, volume: 2742800 },
 				{ price: 7.51, volume: 1510600 }
 			],
-			cycleRepeats: 10 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
+			cycleRepeats: 20 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
 		};
 	}
 
@@ -103,8 +103,8 @@ export default class SyntheticExtendedTest extends Job {
 			decisionStats[i] = { optimal: 0, suboptimal: 0, details: [] };
 
 		// Print header
-		console.log('Frame | CycleFrame | Price Change | Optimal | Actual | Match | P&L');
-		console.log('------|------------|--------------|---------|--------|-------|----');
+		console.log('Frame | CycleFrame | Price Change | Volume Change | Optimal | Actual | Match | P&L');
+		console.log('------|------------|--------------|---------------|---------|--------|-------|----');
 
 		while (frameCount < expectedFrames) {
 
@@ -119,6 +119,11 @@ export default class SyntheticExtendedTest extends Job {
 			// Calculate price change
 			const priceChange = stockChannel.previousPrice && stockChannel.currentPrice
 				? ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice * 100)
+				: 0;
+
+			// Calculate volume change
+			const volumeChange = stockChannel.previousVolume && stockChannel.currentVolume
+				? ((stockChannel.currentVolume - stockChannel.previousVolume) / stockChannel.previousVolume * 100)
 				: 0;
 
 			// Get actual position (what we owned DURING this frame's price change)
@@ -137,7 +142,7 @@ export default class SyntheticExtendedTest extends Job {
 			const match = isOptimal ? '✓' : '✗';
 			const realizedPL = stockChannel.totalProfit - stockChannel.totalLoss;
 
-			console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${optimalOwned ? 'OWN' : 'OUT'.padStart(7)} | ${actualOwned ? 'OWN' : 'OUT'.padStart(6)} | ${match.padStart(5)} | $${realizedPL.toFixed(2)}`);
+			// console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${volumeChange.toFixed(2).padStart(13)}% | ${optimalOwned ? 'OWN' : 'OUT'.padStart(7)} | ${actualOwned ? 'OWN' : 'OUT'.padStart(6)} | ${match.padStart(5)} | $${realizedPL.toFixed(2)}`);
 
 			await this.brain.processFrame(frame);
 		}
@@ -145,7 +150,7 @@ export default class SyntheticExtendedTest extends Job {
 		console.log(`\n✅ Completed ${frameCount} frames\n`);
 
 		// Show analysis
-		this.showOptimalityAnalysis(decisionStats, cycleLength, stockChannel);
+		await this.showOptimalityAnalysis(decisionStats, cycleLength, stockChannel);
 	}
 
 	/**
@@ -170,9 +175,25 @@ export default class SyntheticExtendedTest extends Job {
 	}
 
 	/**
+	 * Get neuron ID for a specific dimension and value
+	 */
+	async getNeuronIdForDimensionValue(dimensionName, value) {
+		const dimensionId = this.brain.dimensionNameToId[dimensionName];
+		if (!dimensionId) return null;
+
+		const [rows] = await this.brain.conn.query(`
+			SELECT neuron_id FROM coordinates
+			WHERE dimension_id = ? AND val = ?
+			LIMIT 1
+		`, [dimensionId, value]);
+
+		return rows.length > 0 ? rows[0].neuron_id : null;
+	}
+
+	/**
 	 * Show detailed optimality analysis
 	 */
-	showOptimalityAnalysis(decisionStats, cycleLength, stockChannel) {
+	async showOptimalityAnalysis(decisionStats, cycleLength, stockChannel) {
 		console.log('='.repeat(70));
 		console.log('📊 Optimality Analysis by Cycle Frame');
 		console.log('='.repeat(70));
@@ -180,8 +201,8 @@ export default class SyntheticExtendedTest extends Job {
 		const data = this.config.sourceData;
 		let totalOptimal = 0, totalSuboptimal = 0;
 
-		console.log('CycleFrame | PriceChange | Optimal | OptimalRate | Suboptimal Frames');
-		console.log('-----------|-------------|---------|-------------|------------------');
+		console.log('CycleFrame | PriceChange | PriceNeuron | VolumeChange | VolumeNeuron | Optimal | OptimalRate | Suboptimal Frames');
+		console.log('-----------|-------------|-------------|--------------|--------------|---------|-------------|------------------');
 
 		for (let i = 1; i <= cycleLength; i++) {
 			const stats = decisionStats[i];
@@ -190,7 +211,16 @@ export default class SyntheticExtendedTest extends Job {
 
 			const currentPrice = data[i - 1].price;
 			const nextPrice = data[i % data.length].price;
-			const priceChange = ((nextPrice - currentPrice) / currentPrice * 100).toFixed(2);
+			const priceChange = ((nextPrice - currentPrice) / currentPrice * 100);
+			const priceBucket = stockChannel.discretizePercentageChange(priceChange);
+			const priceNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_price_change`, priceBucket);
+
+			const currentVolume = data[i - 1].volume;
+			const nextVolume = data[i % data.length].volume;
+			const volumeChange = ((nextVolume - currentVolume) / currentVolume * 100);
+			const volumeBucket = stockChannel.discretizeVolumeChange(volumeChange);
+			const volumeNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_volume_change`, volumeBucket);
+
 			const optimal = nextPrice > currentPrice ? 'OWN' : 'OUT';
 
 			totalOptimal += stats.optimal;
@@ -198,7 +228,10 @@ export default class SyntheticExtendedTest extends Job {
 
 			const suboptimalFrames = stats.details.map(d => d.frame).join(', ');
 
-			console.log(`${String(i).padStart(10)} | ${priceChange.padStart(11)}% | ${optimal.padStart(7)} | ${rate.padStart(10)}% | ${suboptimalFrames}`);
+			const priceNeuronStr = priceNeuronId ? String(priceNeuronId) : 'N/A';
+			const volumeNeuronStr = volumeNeuronId ? String(volumeNeuronId) : 'N/A';
+
+			console.log(`${String(i).padStart(10)} | ${priceChange.toFixed(2).padStart(11)}% | ${priceNeuronStr.padStart(11)} | ${volumeChange.toFixed(2).padStart(12)}% | ${volumeNeuronStr.padStart(12)} | ${optimal.padStart(7)} | ${rate.padStart(10)}% | ${suboptimalFrames}`);
 		}
 
 		const overallRate = (totalOptimal / (totalOptimal + totalSuboptimal) * 100).toFixed(1);
@@ -221,32 +254,13 @@ export default class SyntheticExtendedTest extends Job {
 		console.log(`   Per-cycle optimal: $${optimalProfit.toFixed(2)}`);
 		console.log(`   Theoretical optimal (${totalCycles} cycles): $${theoreticalOptimal.toFixed(2)}`);
 		console.log(`   Efficiency: ${((stockChannel.totalProfit - stockChannel.totalLoss) / theoreticalOptimal * 100).toFixed(1)}%`);
-	}
 
-	showTestResults(trades, stockChannel) {
-		console.log('='.repeat(60));
-		console.log('📊 Extended Test Results');
-		console.log('='.repeat(60));
-
-		const baseAccuracy = this.brain.baseAccuracyStats || { correct: 0, total: 0 };
-		console.log(`\n🎯 Prediction Accuracy:`);
-		if (baseAccuracy.total > 0)
-			console.log(`   Base Level: ${baseAccuracy.correct}/${baseAccuracy.total} = ${(baseAccuracy.correct / baseAccuracy.total * 100).toFixed(2)}%`);
-
-		console.log(`\n💰 Trading Performance:`);
-		console.log(`   Total Trades: ${trades.length}`);
-		console.log(`   Net Profit: $${(stockChannel.totalProfit - stockChannel.totalLoss).toFixed(2)}`);
-		console.log(`   Position: ${stockChannel.owned ? 'OWNED' : 'NOT OWNED'}`);
-
-		// Show trade distribution by cycle frame
-		const tradesByFrame = {};
-		for (const trade of trades) {
-			const key = `${trade.cycleFrame}-${trade.action}`;
-			tradesByFrame[key] = (tradesByFrame[key] || 0) + 1;
-		}
-		console.log(`\n📋 Trade Distribution by Cycle Frame:`);
-		for (const [key, count] of Object.entries(tradesByFrame).sort())
-			console.log(`   ${key}: ${count} times`);
+		// Show action neuron IDs
+		console.log(`\n🎯 Action Neuron IDs:`);
+		const ownNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_activity`, 1);
+		const outNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_activity`, -1);
+		console.log(`   OWN (activity=1):  Neuron ${ownNeuronId || 'N/A'}`);
+		console.log(`   OUT (activity=-1): Neuron ${outNeuronId || 'N/A'}`);
 	}
 }
 

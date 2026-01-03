@@ -18,7 +18,7 @@ export default class StockChannel extends Channel {
 		this.symbol = name;
 
 		// Hyperparameters
-		this.rewardAmplification = 20; // Power to raise reward ratios to (higher = stronger rewards/penalties)
+		this.rewardAmplification = 1; // Power to raise reward ratios to (higher = stronger rewards/penalties)
 
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
@@ -118,6 +118,21 @@ export default class StockChannel extends Channel {
 		// 	{ min: -Infinity, max: 0, value: 0 },     // Down or flat (<=0%)
 		// 	{ min: 0, max: Infinity, value: 1 }       // Up (>0%)
 		// ];
+
+		// Volume buckets - wider ranges since volume is more volatile (typical: -50% to +150%)
+		this.volumeBuckets = [
+			{ min: -Infinity, max: -75, value: -10 },   // Extreme drop
+			{ min: -75, max: -50, value: -8 },          // Very large drop
+			{ min: -50, max: -35, value: -6 },          // Large drop
+			{ min: -35, max: -20, value: -4 },          // Moderate drop
+			{ min: -20, max: -5, value: -2 },           // Small drop
+			{ min: -5, max: 5, value: 0 },              // Flat
+			{ min: 5, max: 25, value: 2 },              // Small increase
+			{ min: 25, max: 50, value: 4 },             // Moderate increase
+			{ min: 50, max: 100, value: 6 },            // Large increase
+			{ min: 100, max: 150, value: 8 },           // Very large increase
+			{ min: 150, max: Infinity, value: 10 }      // Extreme increase
+		];
 	}
 
 	/**
@@ -260,7 +275,7 @@ export default class StockChannel extends Channel {
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizePercentageChange(priceChange) },
-			{ [`${this.symbol}_volume_change`]: this.discretizePercentageChange(volumeChange) }
+			{ [`${this.symbol}_volume_change`]: this.discretizeVolumeChange(volumeChange) }
 		];
 	}
 
@@ -286,6 +301,16 @@ export default class StockChannel extends Channel {
 	 */
 	discretizePercentageChange(percentChange) {
 		for (const bucket of this.priceBuckets)
+			if (percentChange > bucket.min && percentChange <= bucket.max)
+				return bucket.value;
+		return 0; // Default to no change bucket
+	}
+
+	/**
+	 * Discretize volume change into volume-specific buckets (wider ranges for volatile volume)
+	 */
+	discretizeVolumeChange(percentChange) {
+		for (const bucket of this.volumeBuckets)
 			if (percentChange > bucket.min && percentChange <= bucket.max)
 				return bucket.value;
 		return 0; // Default to no change bucket
@@ -372,49 +397,49 @@ export default class StockChannel extends Channel {
 	 * For sold stocks: multiply by (old_price / new_price) - inverse relationship
 	 * Returns 1.0 for no feedback (neutral)
 	 *
-	 * Applies rewardAmplification to amplify the reward signal:
-	 * - rewardFactor = ratio^rewardAmplification
-	 * - Higher amplification = stronger rewards and penalties
+	 * Returns additive reward (0 = neutral, positive = good, negative = bad):
+	 * - Owned: positive if price went up, negative if price went down
+	 * - Not owned: positive if price went down (good timing), negative if price went up (missed opportunity)
+	 * Applies rewardAmplification to scale the reward signal.
 	 */
 	async getRewards() {
 
 		// Need both current and previous price for calculation
-		if (this.currentPrice === null || this.previousPrice === null) return 1.0;
+		if (this.currentPrice === null || this.previousPrice === null) return 0;
 
 		// Update unrealized profit/loss metrics every frame
 		this.updateUnrealizedProfitLoss();
 
-		// For owned stocks: ratio = new_price / old_price
-		// If price goes up, ratio > 1.0 (reward increases)
-		// If price goes down, ratio < 1.0 (reward decreases)
-		// For sold stocks: provide inverse feedback
-		// If price goes up after selling, ratio < 1.0 (penalty for selling too early)
-		// If price goes down after selling, ratio > 1.0 (reward for good timing)
-		const ratio = this.owned ? (this.currentPrice / this.previousPrice) : (this.previousPrice / this.currentPrice);
+		// Calculate percentage change
+		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
 
-		// Amplify the reward signal by raising to a power
-		const rewardFactor = Math.pow(ratio, this.rewardAmplification);
+		// For owned stocks: positive change = positive reward
+		// For not owned: negative change = positive reward (good timing on selling)
+		const reward = this.owned ? percentChange : -percentChange;
+
+		// Amplify the reward signal
+		const amplifiedReward = reward * this.rewardAmplification;
 
 		if (this.debug2) {
 			if (this.owned) {
 				const totalChange = this.currentPrice - this.entryPrice;
-				const percentChange = (totalChange / this.entryPrice) * 100;
+				const totalPercentChange = (totalChange / this.entryPrice) * 100;
 				const recentChange = this.currentPrice - this.previousPrice;
 
 				console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-				console.log(`${this.symbol}: Ratio: ${ratio.toFixed(4)} → Reward factor: ${rewardFactor.toFixed(4)} (amp=${this.rewardAmplification}) | Total P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+				console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Total P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 			else {
 				const totalChange = this.entryPrice - this.currentPrice; // Profit from selling high and price going lower
-				const percentChange = (totalChange / this.entryPrice) * 100;
+				const totalPercentChange = (totalChange / this.entryPrice) * 100;
 				const recentChange = this.currentPrice - this.previousPrice;
 
 				console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-				console.log(`${this.symbol}: Ratio: ${ratio.toFixed(4)} → Reward factor: ${rewardFactor.toFixed(4)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${percentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+				console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 			}
 		}
 
-		return rewardFactor;
+		return amplifiedReward;
 	}
 
 	/**
