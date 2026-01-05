@@ -714,13 +714,20 @@ export default class BrainMySQL extends Brain {
 	 */
 	async createPatternNeurons(patternCount) {
 
-		// Get peak neurons with their levels
+		// Get peak neurons with their levels - use LEFT JOIN to detect missing neurons
 		const [peaks] = await this.conn.query(`
 			SELECT np.seq_id, np.peak_neuron_id, n.level
 			FROM new_patterns np
-			JOIN neurons n ON n.id = np.peak_neuron_id
+			LEFT JOIN neurons n ON n.id = np.peak_neuron_id
 			ORDER BY n.level, np.seq_id
 		`);
+
+		// Check for missing peak neurons (data integrity issue)
+		const missingPeaks = peaks.filter(p => p.level === null);
+		if (missingPeaks.length > 0) {
+			const missingIds = missingPeaks.map(p => p.peak_neuron_id);
+			throw new Error(`Data integrity error: peak neurons not found in neurons table: [${missingIds.join(', ')}]`);
+		}
 
 		// Group by level
 		const byLevel = new Map();
@@ -1129,19 +1136,25 @@ export default class BrainMySQL extends Brain {
 		const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
 		if (this.debug) console.log(`  Pattern_future reward decay took ${Date.now() - stepStart}ms (updated ${patternRewardResult.affectedRows} rows)`);
 
-		// 4. NEURON CLEANUP: Remove orphaned neurons with no connections, patterns, or activity
-		if (this.debug) console.log('Running forget cycle - orphaned neurons cleanup...');
+		// 4. PATTERN NEURON CLEANUP: Remove orphaned pattern neurons (level > 0) with no connections or pattern entries
+		// Base neurons (level 0) are NEVER deleted - they are fundamental encoding units with coordinates
+		// MEMORY engine doesn't enforce foreign keys, so deleting base neurons would leave orphaned coordinates
+		// which would cause ghost neurons to be "found" and connections created to non-existent neurons
+		if (this.debug) console.log('Running forget cycle - orphaned pattern neurons cleanup...');
 		stepStart = Date.now();
 		const [neuronDeleteResult] = await this.conn.query(`
 			DELETE
 			FROM neurons n
-			WHERE NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
+			WHERE n.level > 0
+			AND NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
 			AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
 			AND NOT EXISTS (SELECT 1 FROM pattern_past WHERE pattern_neuron_id = n.id)
 			AND NOT EXISTS (SELECT 1 FROM pattern_future WHERE pattern_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM pattern_peaks WHERE pattern_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM pattern_peaks WHERE peak_neuron_id = n.id)
 			AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
 		`);
-		if (this.debug) console.log(`  Orphaned neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
+		if (this.debug) console.log(`  Orphaned pattern neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
 
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}
