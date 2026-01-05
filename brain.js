@@ -26,6 +26,7 @@ export default class Brain {
 
 		// pattern learning parameters
 		this.minErrorPatternThreshold = 10.0; // minimum prediction strength to create error-driven pattern
+		this.minActionPatternThreshold = 0; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.maxLevels = 10; // just to prevent against infinite recursion
@@ -318,9 +319,11 @@ export default class Brain {
 		const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
 
 		// Return exploration action - sources populated after execution in populateInferenceSources
+		// Use low strength (below minErrorPatternThreshold) to avoid triggering error pattern creation
+		// when exploration fails - exploration is random, not a confident prediction that was wrong
 		const exploration = {
 			neuron_id: actionNeuronId,
-			strength: 100000, // High strength for exploration
+			strength: 1, // Low strength - exploration wins by marking others as losers, not by high strength
 			reward: 0, // Neutral reward (additive: 0 = neutral)
 			coordinates: actionCoordinates,
 			dimType: 'action',

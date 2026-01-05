@@ -213,6 +213,13 @@ export default class BrainMySQL extends Brain {
 			WHERE isrc.age = 1
 			AND isrc.source_type = 'connection'
 			AND isrc.inference_strength >= ?
+            -- The inferred neuron is an event or interneuron - not an action (those are handled separately below)
+            AND NOT EXISTS (
+                SELECT 1 FROM coordinates coord
+                JOIN dimensions d ON d.id = coord.dimension_id
+                WHERE coord.neuron_id = inf.neuron_id
+                AND d.type = 'action'
+            )
 			-- The inference didn't come true (prediction error)
 			AND NOT EXISTS (
 				SELECT 1 FROM active_neurons an
@@ -237,18 +244,6 @@ export default class BrainMySQL extends Brain {
 				SELECT 1 FROM coordinates coord
 				JOIN dimensions d ON d.id = coord.dimension_id
 				WHERE coord.neuron_id = c_inferred.from_neuron_id AND d.type = 'action'
-			)
-			-- Exclude peaks that have action regret (action regret takes priority)
-			AND (
-				inf.is_winner = 0 OR
-				inf.actual_reward >= 0 OR
-				NOT EXISTS (
-					SELECT 1
-					FROM coordinates coord
-					JOIN dimensions d ON d.id = coord.dimension_id
-					WHERE coord.neuron_id = inf.neuron_id
-					AND d.type = 'action'
-				)
 			)
 		`, [this.minErrorPatternThreshold]);
 		if (this.debug) console.log(`Found ${result.affectedRows} prediction error connections`);
@@ -298,7 +293,7 @@ export default class BrainMySQL extends Brain {
 			    JOIN dimensions d ON d.id = coord.dimension_id
 				WHERE coord.neuron_id = c_inferred.from_neuron_id AND d.type = 'action'
 			)
-		`, [this.minErrorPatternThreshold]);
+		`, [this.minActionPatternThreshold]);
 		if (badActionInferences.length === 0) {
 			if (this.debug) console.log('Action regret: no bad action inferences found');
 			return;
@@ -329,17 +324,16 @@ export default class BrainMySQL extends Brain {
 		}
 		if (this.debug) console.log(`Action regret: consensus found ${bestLoserNeuronIds.length} best loser actions`);
 
-		// Step 4: Insert active connections from peaks to the best losers
-		// Only distance=1: peak was at age=0 last frame, now at age=1, best loser at age=0
+		// Step 4: Insert connections from peaks to the best losers
+		// These connections exist but weren't active because we executed the wrong action
 		const peakNeuronIds = [...new Set(badActionInferences.map(b => b.peak_neuron_id))];
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (connection_id)
-			SELECT ac.connection_id
-			FROM active_connections ac
-			JOIN connections c ON c.id = ac.connection_id AND c.distance = 1
-			WHERE ac.from_neuron_id IN (?)
-			AND ac.to_neuron_id IN (?)
-			AND ac.age = 0
+			SELECT c.id
+			FROM connections c
+			WHERE c.from_neuron_id IN (?)
+			AND c.to_neuron_id IN (?)
+			AND c.distance = 1
 		`, [peakNeuronIds, bestLoserNeuronIds]);
 		if (this.debug) console.log(`Found ${result.affectedRows} action regret connections`);
 	}
