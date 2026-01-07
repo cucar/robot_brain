@@ -52,8 +52,8 @@ export default class SyntheticCycleTest extends Job {
 
 				// Calculate new price and volume
 				const newPrice = currentPrice * (1 + priceChange);
-				// const newVolume = currentVolume * (1 + priceChange); // change volume with price
-				const newVolume = currentVolume; // volume stays constant
+				const newVolume = currentVolume * (1 + priceChange); // change volume with price
+				// const newVolume = currentVolume; // volume stays constant
 
 				// Add row: open,volume
 				rows.push(`${currentPrice.toFixed(2)},${Math.round(currentVolume)}`);

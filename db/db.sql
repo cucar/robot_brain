@@ -30,7 +30,7 @@ select * from connections where id in (select connection_id from new_pattern_fut
 select * from active_neurons where age in (0,1) order by age, neuron_id;
 select * from new_patterns;
 
-select * from neurons;
+select * from neurons where level > 0;
 select * from dimensions;
 
 select * from connections where to_neuron_id = 4 order by from_neuron_id, distance;
@@ -76,10 +76,10 @@ order by p.pattern_neuron_id, c.from_neuron_id, c.distance;
 select * from matched_patterns;
 select * from matched_pattern_connections;
 
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 25 order by to_neuron_id;
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 37 order by to_neuron_id;
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 25 order by from_neuron_id, to_neuron_id, distance;
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 37 order by from_neuron_id, to_neuron_id, distance;
+select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 13 order by to_neuron_id, distance;
+select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by distance;
+select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 13 order by c.distance;
+select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by to_neuron_id, distance, from_neuron_id;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
@@ -87,7 +87,7 @@ select count(*) from pattern_future;
 -- 14 = out, 13 = own
 select c.neuron_id, d.name, d.type, c.val 
 from coordinates c join dimensions d on d.id = c.dimension_id 
--- where c.neuron_id in (4,6)
+where c.neuron_id <= 16
 order by c.neuron_id;
 
 SELECT c.from_neuron_id, c.to_neuron_id, c.distance, c.reward, c.strength, 

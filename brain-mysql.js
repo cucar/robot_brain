@@ -324,9 +324,27 @@ export default class BrainMySQL extends Brain {
 		}
 		if (this.debug) console.log(`Action regret: consensus found ${bestLoserNeuronIds.length} best loser actions`);
 
-		// Step 4: Insert connections from peaks to the best losers
-		// These connections exist but weren't active because we executed the wrong action
+		// Step 4: Filter out peaks that already have an active pattern predicting the best loser
 		const peakNeuronIds = [...new Set(badActionInferences.map(b => b.peak_neuron_id))];
+		const [coveredPeaks] = await this.conn.query(`
+			SELECT DISTINCT pp.peak_neuron_id
+			FROM pattern_peaks pp
+			JOIN active_neurons an ON an.neuron_id = pp.pattern_neuron_id AND an.age = 1
+			JOIN pattern_future pf ON pf.pattern_neuron_id = pp.pattern_neuron_id
+			JOIN connections c ON c.id = pf.connection_id
+			WHERE pp.peak_neuron_id IN (?)
+			AND c.to_neuron_id IN (?)
+		`, [peakNeuronIds, bestLoserNeuronIds]);
+		const coveredPeakIds = new Set(coveredPeaks.map(r => r.peak_neuron_id));
+		const uncoveredPeakIds = peakNeuronIds.filter(id => !coveredPeakIds.has(id));
+		if (uncoveredPeakIds.length === 0) {
+			if (this.debug) console.log('Action regret: all peaks already covered by existing patterns');
+			return;
+		}
+		if (this.debug) console.log(`Action regret: ${uncoveredPeakIds.length} uncovered peaks (${coveredPeakIds.size} already covered)`);
+
+		// Step 5: Insert connections from uncovered peaks to the best losers
+		// These connections exist but weren't active because we executed the wrong action
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (connection_id)
 			SELECT c.id
@@ -334,7 +352,7 @@ export default class BrainMySQL extends Brain {
 			WHERE c.from_neuron_id IN (?)
 			AND c.to_neuron_id IN (?)
 			AND c.distance = 1
-		`, [peakNeuronIds, bestLoserNeuronIds]);
+		`, [uncoveredPeakIds, bestLoserNeuronIds]);
 		if (this.debug) console.log(`Found ${result.affectedRows} action regret connections`);
 	}
 
