@@ -155,6 +155,7 @@ export default class BrainMySQL extends Brain {
 	async negativeReinforceConnections() {
 
 		// Apply negative reinforcement to failed event predictions - Failed = predicted but not observed
+		// Only applies to events/patterns, NOT actions (actions are handled by reward system)
 		const [result] = await this.conn.query(`
 			UPDATE connections c
 			SET c.strength = GREATEST(0, c.strength - ?)
@@ -163,6 +164,12 @@ export default class BrainMySQL extends Brain {
 			AND c.id IN (SELECT source_id FROM inference_sources WHERE source_type = 'connection' AND age = 1)
 			-- penalize the connections that did not come true
 			AND c.id NOT IN (SELECT connection_id FROM active_connections WHERE age = 0)
+			-- only penalize event/pattern predictions, not actions
+			AND NOT EXISTS (
+				SELECT 1 FROM coordinates coord
+				JOIN dimensions d ON d.id = coord.dimension_id
+				WHERE coord.neuron_id = c.to_neuron_id AND d.type = 'action'
+			)
 		`, [this.connectionNegativeReinforcement]);
 		if (this.debug && result.affectedRows > 0)
 			console.log(`Weakened ${result.affectedRows} failed event predictions`);
@@ -245,7 +252,7 @@ export default class BrainMySQL extends Brain {
 				JOIN dimensions d ON d.id = coord.dimension_id
 				WHERE coord.neuron_id = c_inferred.from_neuron_id AND d.type = 'action'
 			)
-		`, [this.minErrorPatternThreshold]);
+		`, [this.predictionErrorMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} prediction error connections`);
 	}
 
@@ -266,7 +273,7 @@ export default class BrainMySQL extends Brain {
 			AND isrc.source_type = 'connection'
 			AND isrc.inference_strength >= ?
 			AND inf.is_winner = 1
-			AND inf.actual_reward < 0
+			AND inf.actual_reward < ?
 			-- The inferred neuron is an action
 			AND EXISTS (
 				SELECT 1 FROM coordinates coord
@@ -293,7 +300,7 @@ export default class BrainMySQL extends Brain {
 			    JOIN dimensions d ON d.id = coord.dimension_id
 				WHERE coord.neuron_id = c_inferred.from_neuron_id AND d.type = 'action'
 			)
-		`, [this.minActionPatternThreshold]);
+		`, [this.actionRegretMinStrength, -this.actionRegretMinPain]);
 		if (badActionInferences.length === 0) {
 			if (this.debug) console.log('Action regret: no bad action inferences found');
 			return;
@@ -404,6 +411,15 @@ export default class BrainMySQL extends Brain {
 		// Combine all votes
 		const allVotes = [...connectionVotes, ...patternVotes];
 		if (this.debug) console.log(`Collected ${connectionVotes.length} connection + ${patternVotes.length} pattern = ${allVotes.length} total votes`);
+
+		// DEBUG: Check for level 1+ connection inferences (patterns doing connection inference)
+		// Check if from_neuron is a pattern (level > 0) by checking if from_dim_type is NULL
+		// const level1PlusConnectionVotes = connectionVotes.filter(v => v.from_dim_type === null);
+		// if (level1PlusConnectionVotes.length > 0) {
+		// 	console.error('FOUND LEVEL 1+ CONNECTION INFERENCES:');
+		// 	console.error(level1PlusConnectionVotes);
+		// 	process.exit(1);
+		// }
 
 		// Debug: show votes for action neurons
 		if (this.debug2) await this.debugActionVotes(allVotes);

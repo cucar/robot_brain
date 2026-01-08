@@ -25,8 +25,9 @@ export default class Brain {
 		this.connectionNegativeReinforcement = 0.25; // how much to weaken connections when predictions fail
 
 		// pattern learning parameters
-		this.minErrorPatternThreshold = 10.0; // minimum prediction strength to create error-driven pattern
-		this.minActionPatternThreshold = 0; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
+		this.predictionErrorMinStrength = 10.0; // minimum prediction strength to create error-driven pattern
+		this.actionRegretMinStrength = 0; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
+		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.maxLevels = 10; // just to prevent against infinite recursion
@@ -360,7 +361,7 @@ export default class Brain {
 			const channelWinners = channelInferences.filter(inf => inf.isWinner);
 
 			// Check if we should explore this channel
-			// if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
+			if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
 
 			// Get exploration action - pass all channel inferences so channel knows what's been tried
 			const exploration = await this.exploreChannel(channelName, channelInferences);
