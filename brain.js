@@ -26,7 +26,7 @@ export default class Brain {
 
 		// pattern learning parameters
 		this.predictionErrorMinStrength = 10.0; // minimum prediction strength to create error-driven pattern
-		this.actionRegretMinStrength = 0; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
+		this.actionRegretMinStrength = 10; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
