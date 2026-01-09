@@ -36,7 +36,7 @@ export default class SyntheticExtendedTest extends Job {
 				{ price: 7.22, volume: 2742800 },
 				{ price: 7.51, volume: 1510600 }
 			],
-			cycleRepeats: 20 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
+			cycleRepeats: 50 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
 		};
 	}
 
@@ -212,13 +212,13 @@ export default class SyntheticExtendedTest extends Job {
 			const currentPrice = data[i - 1].price;
 			const nextPrice = data[i % data.length].price;
 			const priceChange = ((nextPrice - currentPrice) / currentPrice * 100);
-			const priceBucket = stockChannel.discretizePercentageChange(priceChange);
+			const priceBucket = stockChannel.discretizeChange(priceChange);
 			const priceNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_price_change`, priceBucket);
 
 			const currentVolume = data[i - 1].volume;
 			const nextVolume = data[i % data.length].volume;
 			const volumeChange = ((nextVolume - currentVolume) / currentVolume * 100);
-			const volumeBucket = stockChannel.discretizeVolumeChange(volumeChange);
+			const volumeBucket = stockChannel.discretizeChange(volumeChange);
 			const volumeNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_volume_change`, volumeBucket);
 
 			const optimal = nextPrice > currentPrice ? 'OWN' : 'OUT';
