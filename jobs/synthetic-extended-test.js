@@ -22,19 +22,22 @@ export default class SyntheticExtendedTest extends Job {
 		this.config = {
 			symbol: 'TEST',
 			// Actual first 12 rows from KGC.csv (training data when holdoutRows=5240)
+			// Frame 1 reads row 0→1, Frame 2 reads row 1→2, etc., Frame 12 reads row 11→0
+			// Comments show frames in EXECUTION order (Frame 12 executes last but reads row 0)
+			// Format: Frame N: price% (neuron), volume% (neuron), optimal action
 			sourceData: [
-				{ price: 8.10, volume: 1447100 },
-				{ price: 8.11, volume: 2112900 },
-				{ price: 8.35, volume: 1411400 },
-				{ price: 8.29, volume: 2091100 },
-				{ price: 8.20, volume: 1247200 },
-				{ price: 8.15, volume: 770000 },
-				{ price: 8.19, volume: 1948400 },
-				{ price: 8.05, volume: 2701100 },
-				{ price: 7.94, volume: 1280800 },
-				{ price: 7.86, volume: 3083500 },
-				{ price: 7.22, volume: 2742800 },
-				{ price: 7.51, volume: 1510600 }
+				{ price: 8.10, volume: 1447100 },  // Frame 12: +7.86% (n17), -4.20% (n18), OWN
+				{ price: 8.11, volume: 2112900 },  // Frame 1:  +0.12% (n1),  +46.01% (n2),  OWN
+				{ price: 8.35, volume: 1411400 },  // Frame 2:  +2.96% (n3),  -33.20% (n4),  OWN
+				{ price: 8.29, volume: 2091100 },  // Frame 3:  -0.72% (n5),  +48.16% (n2),  OUT
+				{ price: 8.20, volume: 1247200 },  // Frame 4:  -1.09% (n7),  -40.36% (n8),  OUT
+				{ price: 8.15, volume: 770000 },   // Frame 5:  -0.61% (n5),  -38.26% (n4),  OUT
+				{ price: 8.19, volume: 1948400 },  // Frame 6:  +0.49% (n10), +153.04% (n11), OWN
+				{ price: 8.05, volume: 2701100 },  // Frame 7:  -1.71% (n7),  +38.63% (n12), OUT
+				{ price: 7.94, volume: 1280800 },  // Frame 8:  -1.37% (n7),  -52.58% (n13), OUT
+				{ price: 7.86, volume: 3083500 },  // Frame 9:  -1.01% (n7),  +140.75% (n11), OUT
+				{ price: 7.22, volume: 2742800 },  // Frame 10: -8.14% (n14), -11.05% (n15), OUT
+				{ price: 7.51, volume: 1510600 }   // Frame 11: +4.02% (n16), -44.92% (n8),  OWN
 			],
 			cycleRepeats: 50 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
 		};

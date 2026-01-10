@@ -235,10 +235,10 @@ export default class BrainMySQL extends Brain {
 			)
 			-- The peak neuron did NOT use Type 2 inference
 			AND NOT EXISTS (
-				SELECT 1 FROM inference_sources isrc2
-				WHERE isrc2.neuron_id = c_inferred.from_neuron_id
-				AND isrc2.age = 1
-				AND isrc2.source_type = 'pattern'
+				SELECT 1 FROM active_neurons an
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
+				WHERE pp.peak_neuron_id = c_inferred.from_neuron_id
+				AND an.age = 1
 			)
 			-- The peak neuron has context (connections TO it from older neurons)
 			AND EXISTS (
@@ -283,10 +283,10 @@ export default class BrainMySQL extends Brain {
 			)
 			-- The peak neuron did NOT use Type 2 inference
 			AND NOT EXISTS (
-				SELECT 1 FROM inference_sources isrc2
-				WHERE isrc2.neuron_id = c_inferred.from_neuron_id
-				AND isrc2.age = 1
-				AND isrc2.source_type = 'pattern'
+				SELECT 1 FROM active_neurons an
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
+				WHERE pp.peak_neuron_id = c_inferred.from_neuron_id
+				AND an.age = 1
 			)
 			-- The peak neuron has context (connections TO it from older neurons)
 			AND EXISTS (
@@ -631,6 +631,8 @@ export default class BrainMySQL extends Brain {
 	 * Called after recognizeNeurons when connections have been created.
 	 * Reverse-engineers collectVotes to find what would have predicted these neurons.
 	 * Note: one frame later, so active_neurons are +1 age - use c.distance = an.age (not an.age + 1)
+	 * Pattern inference overrides connection inference: if a neuron has pattern sources,
+	 * connection sources are deleted (biologically, a neuron does one type of inference per frame).
 	 */
 	async populateInferenceSources() {
 		// Connection sources: active_neurons that have connections TO the inferred neuron
@@ -662,7 +664,19 @@ export default class BrainMySQL extends Brain {
 			GROUP BY inf.age, inf.neuron_id, pf.connection_id
 		`, { decay: this.peakTimeDecayFactor, levelMult: this.levelVoteMultiplier });
 
-		if (this.debug) console.log(`Populated ${connResult.affectedRows} connection + ${patternResult.affectedRows} pattern inference sources`);
+		// Pattern inference overrides connection inference: delete connection sources
+		// for neurons that have pattern sources
+		const [deleteResult] = await this.conn.query(`
+			DELETE isrc FROM inference_sources isrc
+			JOIN (
+				SELECT DISTINCT neuron_id FROM inference_sources
+				WHERE age = 1 AND source_type = 'pattern'
+			) pattern_neurons ON pattern_neurons.neuron_id = isrc.neuron_id
+			WHERE isrc.age = 1
+			AND isrc.source_type = 'connection'
+		`);
+
+		if (this.debug) console.log(`Populated ${connResult.affectedRows} connection + ${patternResult.affectedRows} pattern sources, deleted ${deleteResult.affectedRows} overridden connection sources`);
 	}
 
 	/**
@@ -722,6 +736,8 @@ export default class BrainMySQL extends Brain {
 	 * Populate new_patterns table from new_pattern_future.
 	 * Finds unique peak neurons (one pattern per peak).
 	 * Action neurons can NEVER be peaks - only event neurons and interneurons can be peaks.
+	 * Note: Duplicate patterns are prevented upstream by discarding connection inferences
+	 * when pattern inferences exist (in aggregateVotesByTarget).
 	 * Returns the number of patterns to create.
 	 */
 	async populateNewPatterns() {
@@ -791,13 +807,17 @@ export default class BrainMySQL extends Brain {
 
 		// Create pattern_past entries (active connections at age=1 leading TO the peak)
 		// This captures the context that was present when the peak was active
-		// Includes cross-level connections (no level filter)
+		// Only same-level connections: pattern identity is determined by same-level context only
 		await this.conn.query(`
 			INSERT INTO pattern_past (pattern_neuron_id, connection_id, strength)
 			SELECT np.pattern_neuron_id, ac.connection_id, 1.0
 			FROM new_patterns np
+			JOIN neurons peak_n ON peak_n.id = np.peak_neuron_id
 			JOIN active_connections ac ON ac.to_neuron_id = np.peak_neuron_id
+			JOIN connections c ON c.id = ac.connection_id
+			JOIN neurons from_n ON from_n.id = c.from_neuron_id
 			WHERE ac.age = 1
+			AND from_n.level = peak_n.level
 		`);
 
 		// Create pattern_future entries: connections FROM peak to target neurons
@@ -898,7 +918,8 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Reinforce connections between active neurons.
 	 * Creates connections from all active neurons to newly activated (age=0) neurons at the specified level.
-	 * Cross-level connections allowed: same-level, high→base, and base→high.
+	 * Cross-level connections allowed: same-level and high→base (for inference to actions/events).
+	 * Base→high connections are not created (patterns are activated through pattern matching, not direct prediction).
 	 * Distance is purely temporal (source neuron's age), regardless of level difference.
 	 * Action neurons can NEVER be sources - only event neurons and interneurons can predict.
 	 */
@@ -910,7 +931,7 @@ export default class BrainMySQL extends Brain {
 			CROSS JOIN active_neurons t
             WHERE t.age = 0  -- target neurons are newly activated
             AND t.level = :level  -- target neurons are at the specified level
-            AND (f.level = t.level OR t.level = 0 OR f.level = 0)  -- same level, high→base, or base→high
+            AND (f.level = t.level OR t.level = 0)  -- same level or high→base (no base→high)
             AND f.age > 0 -- only learning connections between different ages for inference
             -- Action neurons can NEVER be sources (only events and interneurons can predict)
             AND NOT EXISTS (
@@ -975,7 +996,7 @@ export default class BrainMySQL extends Brain {
 	 * Populate active_connections table for newly activated neurons at the specified level.
 	 * This is called immediately after reinforceConnections in activateNeurons.
 	 * Inserts connections from all active neurons to age=0 neurons at the specified level.
-	 * Cross-level connections allowed: same-level, high→base, and base→high.
+	 * Cross-level connections allowed: same-level and high→base (no base→high).
 	 * Distance matching is purely temporal: c.distance = f.age.
 	 */
 	async activateConnections(level) {
@@ -986,7 +1007,7 @@ export default class BrainMySQL extends Brain {
 			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
 			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = :level
 			WHERE c.distance = f.age
-			AND (f.level = t.level OR t.level = 0 OR f.level = 0)  -- same level, high→base, or base→high
+			AND (f.level = t.level OR t.level = 0)  -- same level or high→base (no base→high)
             AND f.age > 0 -- only connections between different ages for inference
 			AND c.strength > 0  -- only connections that are not removed
 		`, { level });
@@ -998,7 +1019,7 @@ export default class BrainMySQL extends Brain {
 	 * Writes results to matched_patterns memory table.
 	 * Matches by connection_id (which encodes from_neuron + to_neuron + distance) to preserve temporal structure.
 	 * Uses connection overlap (66% threshold) to determine if patterns match.
-	 * Cross-level connections are included: pattern_past can contain connections from any level to the peak.
+	 * Pattern_past only contains same-level connections (pattern identity is determined by same-level context).
 	 * @param {number} level - The level to match patterns for (peak neuron level)
 	 * @returns {Promise<number>} - Number of matched patterns
 	 */
@@ -1038,14 +1059,18 @@ export default class BrainMySQL extends Brain {
 		`);
 
 		// Novel connections: active connections TO the peak not in pattern_past
-		// Includes cross-level connections (base→high)
+		// Only same-level connections: pattern identity is determined by same-level context only
 		await this.conn.query(`
 			INSERT INTO matched_pattern_connections (pattern_neuron_id, connection_id, status)
 			SELECT mp.pattern_neuron_id, ac.connection_id, 'novel' as status
 			FROM matched_patterns mp
+			JOIN neurons peak_n ON peak_n.id = mp.peak_neuron_id
 			JOIN active_connections ac ON ac.to_neuron_id = mp.peak_neuron_id AND ac.age = 0
+			JOIN connections c ON c.id = ac.connection_id
+			JOIN neurons from_n ON from_n.id = c.from_neuron_id
 			LEFT JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id AND p.connection_id = ac.connection_id
 			WHERE p.connection_id IS NULL
+			AND from_n.level = peak_n.level
 		`);
 
 		return result.affectedRows;

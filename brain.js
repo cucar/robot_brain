@@ -699,6 +699,7 @@ export default class Brain {
 
 	/**
 	 * Aggregate source-target pairs by target neuron. Each source neuron counts once per target.
+	 * If a neuron has pattern votes, connection votes are discarded (pattern inference overrides connection inference).
 	 * @param {Map} bySourceTarget - Map from aggregateVotesBySourceTarget
 	 * @returns {Map} Map of neuron_id -> aggregated vote with sourceNeurons set
 	 */
@@ -721,6 +722,21 @@ export default class Brain {
 			// Track max level and pattern votes
 			if (srcAgg.maxLevel > agg.maxLevel) agg.maxLevel = srcAgg.maxLevel;
 			if (srcAgg.hasPatternVotes) agg.hasPatternVotes = true;
+		}
+
+		// Pattern inference overrides connection inference: if a neuron has pattern votes,
+		// discard all connection votes. This ensures only pattern sources are saved to
+		// inference_sources, preventing duplicate error pattern creation.
+		for (const [neuronId, agg] of aggregated) {
+			if (agg.hasPatternVotes) {
+				// Filter to keep only pattern sources
+				const patternSources = agg.sources.filter(s => s.source_type === 'pattern');
+				// Recalculate strength and reward from pattern sources only
+				agg.sources = patternSources;
+				agg.strength = patternSources.reduce((sum, s) => sum + s.strength, 0);
+				agg.rewardSum = patternSources.reduce((sum, s) => sum + s.reward, 0);
+				agg.rewardCount = patternSources.length;
+			}
 		}
 
 		// Calculate simple average reward (will be recalculated for actions per dimension)
