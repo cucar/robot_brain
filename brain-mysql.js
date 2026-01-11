@@ -300,7 +300,7 @@ export default class BrainMySQL extends Brain {
 			)
 			-- Action neurons can NEVER be peaks (only events can be peaks)
 			AND n_peak.type = 'event'
-		`, [this.actionRegretMinStrength, -this.actionRegretMinPain]);
+		`, [this.actionRegretMinStrength, this.actionRegretMinPain]);
 		if (badActionInferences.length === 0) {
 			if (this.debug) console.log('Action regret: no bad action inferences found');
 			return;
@@ -689,7 +689,7 @@ export default class BrainMySQL extends Brain {
 	 * Uses inference_sources with source_type='pattern' to know which patterns made predictions.
 	 * pattern_future stores connection_id (from peak neuron to target).
 	 * This method only applies to EVENT patterns.
-	 * Action pattern refinement happens in applyRewards (reward-based) and refineActionPatterns (trial alternatives).
+	 * Action pattern refinement happens in applyRewards (both reward-based and trial alternatives).
 	 * Applies three types of reinforcement:
 	 * 1. Positive: Strengthen pattern_future connections that were correctly predicted (target now active)
 	 * 2. Negative: Weaken pattern_future connections that were incorrectly predicted (target NOT active)
@@ -1268,13 +1268,6 @@ export default class BrainMySQL extends Brain {
 
 			if (this.debug) console.log(`Applying reward ${reward.toFixed(3)} for channel: ${channelName}`);
 
-			// Get the output dimension IDs for this channel
-			const outputDimIds = this.getChannelOutputDims(channelName);
-			if (outputDimIds.length === 0) {
-				console.warn(`Warning: No output dimensions found for channel ${channelName}`);
-				continue;
-			}
-
 			// WINNERS: Apply actual reward to winning votes (is_winner=1)
 			// Exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
 			// Reward connection-based inferences
@@ -1282,14 +1275,12 @@ export default class BrainMySQL extends Brain {
 				UPDATE connections c
 				JOIN inference_sources isrc ON c.id = isrc.source_id AND isrc.source_type = 'connection'
 				JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age AND inf.level = 0
+				JOIN neurons n ON n.id = inf.neuron_id
 				SET c.reward = :smooth * :reward + (1 - :smooth) * c.reward
 				WHERE isrc.age > 0 AND isrc.age <= :maxAge
 				AND inf.is_winner = 1
-				AND EXISTS (
-					SELECT 1 FROM coordinates coord
-					WHERE coord.neuron_id = isrc.neuron_id AND coord.dimension_id IN (:dimIds)
-				)
-			`, { smooth: this.rewardExpSmooth, reward, maxAge: this.maxRewardsAge, dimIds: outputDimIds });
+				AND n.channel_id = (SELECT id FROM channels WHERE name = :channelName)
+			`, { smooth: this.rewardExpSmooth, reward, maxAge: this.maxRewardsAge, channelName });
 			totalWinnerConnections += winnerConnResult.affectedRows;
 
 			// Reward pattern-based inferences (pattern_future stores connection_id)
@@ -1297,112 +1288,75 @@ export default class BrainMySQL extends Brain {
 				UPDATE pattern_future pf
 				JOIN inference_sources isrc ON pf.connection_id = isrc.source_id AND isrc.source_type = 'pattern'
 				JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age AND inf.level = 0
+				JOIN neurons n ON n.id = inf.neuron_id
 				SET pf.reward = :smooth * :reward + (1 - :smooth) * pf.reward
 				WHERE isrc.age > 0 AND isrc.age <= :maxAge
 				AND inf.is_winner = 1
-				AND EXISTS (
-					SELECT 1 FROM coordinates coord
-					WHERE coord.neuron_id = isrc.neuron_id AND coord.dimension_id IN (:dimIds)
-				)
-			`, { smooth: this.rewardExpSmooth, reward, maxAge: this.maxRewardsAge, dimIds: outputDimIds });
+				AND n.channel_id = (SELECT id FROM channels WHERE name = :channelName)
+			`, { smooth: this.rewardExpSmooth, reward, maxAge: this.maxRewardsAge, channelName });
 			totalWinnerPatterns += winnerPatternResult.affectedRows;
 
 			// Update inferred_neurons.actual_reward for action winners so that we can detect negative rewards for new patterns
 			await this.conn.query(`
 				UPDATE inferred_neurons inf
+				JOIN neurons n ON n.id = inf.neuron_id
 				SET inf.actual_reward = ?
 				WHERE inf.age = 1 AND inf.level = 0 AND inf.is_winner = 1
-				AND EXISTS (
-					SELECT 1 FROM coordinates coord
-					WHERE coord.neuron_id = inf.neuron_id AND coord.dimension_id IN (?)
-				)
-			`, [reward, outputDimIds]);
+				AND n.channel_id = (SELECT id FROM channels WHERE name = ?)
+			`, [reward, channelName]);
 
 			// LOSERS: Leave alone - we don't know what would have happened if they were executed
+
+			// Refine action patterns: when action pattern prediction fails, add alternative actions to try
+			// Find action patterns in this channel that made winning predictions with negative rewards
+			// Add the single best untried alternative per failed pattern
+			if (reward < this.actionRegretMinPain) {
+				const [result] = await this.conn.query(`
+					INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength, reward)
+					SELECT pattern_neuron_id, connection_id, 1.0, 0.0
+					FROM (
+						SELECT pf.pattern_neuron_id, c_alt.id as connection_id,
+							   ROW_NUMBER() OVER (
+								   PARTITION BY pf.pattern_neuron_id
+								   ORDER BY c_alt.reward DESC, c_alt.id ASC
+							   ) as rn
+						FROM inference_sources isrc
+						JOIN pattern_future pf ON pf.connection_id = isrc.source_id
+						JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
+						JOIN neurons n_pattern ON n_pattern.id = pf.pattern_neuron_id
+						JOIN connections c_failed ON c_failed.id = pf.connection_id
+						JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
+						-- Find alternative connections from the same peak
+						JOIN connections c_alt ON c_alt.from_neuron_id = pp.peak_neuron_id AND c_alt.distance = 1
+						JOIN neurons n_action ON n_action.id = c_alt.to_neuron_id
+						WHERE isrc.age = 1
+						AND isrc.source_type = 'pattern'
+						AND n_pattern.type = 'action'
+						AND n_pattern.channel_id = (SELECT id FROM channels WHERE name = ?)
+						AND inf.is_winner = 1
+						AND inf.actual_reward < ?
+						-- Alternative must be in same channel and not the failed action
+						AND n_action.type = 'action'
+						AND n_action.channel_id = n_pattern.channel_id
+						AND c_alt.to_neuron_id != c_failed.to_neuron_id
+						-- Alternative must not already be in pattern_future
+						AND NOT EXISTS (
+							SELECT 1 FROM pattern_future pf2
+							WHERE pf2.pattern_neuron_id = pf.pattern_neuron_id
+							AND pf2.connection_id = c_alt.id
+						)
+					) ranked
+					WHERE rn = 1
+				`, [channelName, this.actionRegretMinPain]);
+
+				if (this.debug && result.affectedRows > 0)
+					console.log(`  ${channelName}: action pattern refinement: ${result.affectedRows} alternatives added`);
+			}
 
 			if (this.debug) console.log(`  ${channelName}: winners=${winnerConnResult.affectedRows}c/${winnerPatternResult.affectedRows}p (${reward.toFixed(2)})`);
 		}
 
 		if (this.debug) console.log(`Total rewarded: winners=${totalWinnerConnections}c/${totalWinnerPatterns}p`);
-
-		// Refine action patterns: when action pattern prediction fails, add alternative actions to try
-		await this.refineActionPatterns();
 	}
 
-	/**
-	 * Refine action patterns when their predictions get negative rewards.
-	 * When an action pattern's winning prediction results in pain, add alternative actions
-	 * from the same channel to pattern_future so they can be tried next time.
-	 *
-	 * This enables action patterns to learn through trial and error:
-	 * 1. Pattern created with initial action (from action regret)
-	 * 2. If that action fails, add other actions to try
-	 * 3. Over time, pattern_future accumulates all tried actions with their rewards
-	 * 4. Best action emerges as the one with the highest reward
-	 */
-	async refineActionPatterns() {
-
-		// Find action patterns that made winning predictions with negative rewards
-		// These are patterns where we need to try alternative actions
-		const [failedPatterns] = await this.conn.query(`
-			SELECT DISTINCT pf.pattern_neuron_id, pp.peak_neuron_id, n_pattern.channel_id, c.to_neuron_id as failed_action_neuron_id
-			FROM inference_sources isrc
-			JOIN pattern_future pf ON pf.connection_id = isrc.source_id
-			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			JOIN neurons n_pattern ON n_pattern.id = pf.pattern_neuron_id
-			JOIN connections c ON c.id = pf.connection_id
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
-			WHERE isrc.age = 1
-			AND isrc.source_type = 'pattern'
-			AND n_pattern.type = 'action'
-			AND inf.is_winner = 1
-			AND inf.actual_reward < ?
-		`, [-this.actionRegretMinPain]);
-
-		if (failedPatterns.length === 0) {
-			if (this.debug) console.log('Action pattern refinement: no failed action patterns');
-			return;
-		}
-		if (this.debug) console.log(`Action pattern refinement: ${failedPatterns.length} failed action patterns`);
-
-		// For each failed pattern, find alternative actions in the same channel
-		// that aren't already in pattern_future
-		let totalAdded = 0;
-		for (const fp of failedPatterns) {
-			// Find all action neurons in this channel (excluding the failed one)
-			// that have connections from the peak neuron at distance=1
-			const [result] = await this.conn.query(`
-				INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength, reward)
-				SELECT ?, c.id, 1.0, 0.0
-				FROM connections c
-				JOIN neurons n_action ON n_action.id = c.to_neuron_id
-				WHERE c.from_neuron_id = ?
-				AND c.distance = 1
-				AND n_action.type = 'action'
-				AND n_action.channel_id = ?
-				AND c.to_neuron_id != ?
-				AND NOT EXISTS (
-					SELECT 1 FROM pattern_future pf
-					WHERE pf.pattern_neuron_id = ?
-					AND pf.connection_id = c.id
-				)
-			`, [fp.pattern_neuron_id, fp.peak_neuron_id, fp.channel_id, fp.failed_action_neuron_id, fp.pattern_neuron_id]);
-			totalAdded += result.affectedRows;
-		}
-
-		if (this.debug) console.log(`Action pattern refinement: added ${totalAdded} alternative actions to try`);
-	}
-
-	/**
-	 * returns channel output dimensions got a given channel name
-	 */
-	getChannelOutputDims(channelName) {
-		const channel = this.channels.get(channelName);
-		if (!channel) {
-			console.warn(`Warning: No channel found: ${channelName}`);
-			return [];
-		}
-		const outputDimNames = channel.getOutputDimensions();
-		return outputDimNames.map(name => this.dimensionNameToId[name]).filter(id => id !== undefined);
-	}
 }

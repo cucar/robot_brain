@@ -51,8 +51,8 @@ export default class Brain {
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
-		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
-		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
+		this.connectionForgetRate = 0.1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
+		this.patternForgetRate = 0.1; // how much pattern strengths decay per forget cycle
 		this.rewardForgetRate = 0.05; // how much reward values decay toward 0 per forget cycle (0.05 = 5% decay toward neutral)
 
 		// initialize the counter for forget cycle
