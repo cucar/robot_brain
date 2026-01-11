@@ -252,6 +252,8 @@ export default class BrainMySQL extends Brain {
 			AND n_peak.type = 'event'
 			-- Only create patterns for event targets (action targets handled by action regret)
 			AND n_target.type = 'event'
+			-- Pattern future must only contain same-channel predictions
+			AND n_target.channel_id = n_peak.channel_id
 		`, [this.predictionErrorMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} prediction error connections`);
 	}
@@ -356,13 +358,17 @@ export default class BrainMySQL extends Brain {
 		// Step 5: Insert connections from uncovered peaks to the best losers
 		// These connections exist but weren't active because we executed the wrong action
 		// Type is 'action' since we're predicting action neurons
+		// Pattern future must only contain same-channel predictions
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (connection_id, type)
 			SELECT c.id, 'action'
 			FROM connections c
+			JOIN neurons n_peak ON n_peak.id = c.from_neuron_id
+			JOIN neurons n_target ON n_target.id = c.to_neuron_id
 			WHERE c.from_neuron_id IN (?)
 			AND c.to_neuron_id IN (?)
 			AND c.distance = 1
+			AND n_target.channel_id = n_peak.channel_id
 		`, [uncoveredPeakIds, bestLoserNeuronIds]);
 		if (this.debug) console.log(`Found ${result.affectedRows} action regret connections`);
 	}
@@ -736,6 +742,7 @@ export default class BrainMySQL extends Brain {
 
 		// 3. ADD NOVEL CONNECTIONS: Active connections from peak not yet in pattern_future (event patterns only)
 		// Find event patterns that made predictions, get their peak neurons, find active connections from peak
+		// Pattern future must only contain same-channel predictions
 		const [novelResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT pf_src.pattern_neuron_id, ac.connection_id, 1.0
@@ -751,6 +758,7 @@ export default class BrainMySQL extends Brain {
 			AND pattern_n.type = 'event'
 			AND c.distance = 1
 			AND target_n.type = 'event'
+			AND target_n.channel_id = pattern_n.channel_id
 			AND NOT EXISTS (
 				SELECT 1 FROM pattern_future pf
 				WHERE pf.pattern_neuron_id = pf_src.pattern_neuron_id

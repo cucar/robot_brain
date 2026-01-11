@@ -62,11 +62,11 @@ select * from connections where id in (select connection_id from pattern_future 
 select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
 from pattern_past p 
 join connections c on p.connection_id = c.id 
-where pattern_neuron_id in (select pattern_neuron_id from pattern_peaks where peak_neuron_id = 4)
+where pattern_neuron_id in (select id from neurons where level > 0 and type = 'action')
 order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
 select * from neurons where id in (32);
-select * from neurons where level > 0;
+select * from neurons where level > 0 and type = 'action';
 
 select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 21 order by to_neuron_id, distance;
 select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by distance;
