@@ -50,33 +50,24 @@ select * from active_neurons;
 select * from active_connections;
 select * from active_connections where to_neuron_id = 6;
 
+select * from matched_patterns;
+select * from matched_pattern_connections;
+
 select * from connections where id in (select connection_id from new_pattern_future);
 select * from new_patterns;
 
 select * from pattern_peaks;
 select * from connections where id in (select connection_id from pattern_future where pattern_neuron_id = 10);
 
-SELECT pp.pattern_neuron_id, c.from_neuron_id, c.to_neuron_id as neuron_id, 'pattern' as source_type, pf.connection_id as source_id, c.distance
-FROM active_neurons an
-JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
-JOIN pattern_future pf ON pf.pattern_neuron_id = pp.pattern_neuron_id
-JOIN connections c ON c.id = pf.connection_id
-WHERE c.distance = an.age + 1
--- AND c.strength > 0
-AND pf.strength > 0
-AND an.age < 5
-;
-
 select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
 from pattern_past p 
 join connections c on p.connection_id = c.id 
 where pattern_neuron_id in (select pattern_neuron_id from pattern_peaks where peak_neuron_id = 2)
-order by p.pattern_neuron_id, c.from_neuron_id, c.distance;
+order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
-select * from matched_patterns;
-select * from matched_pattern_connections;
+select * from neurons where id in (23, 26);
 
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 13 order by to_neuron_id, distance;
+select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 26 order by to_neuron_id, distance;
 select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by distance;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 13 order by c.distance;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by to_neuron_id, distance, from_neuron_id;
@@ -87,43 +78,8 @@ select count(*) from pattern_future;
 -- 14 = out, 13 = own
 select c.neuron_id, d.name, c.val 
 from coordinates c join dimensions d on d.id = c.dimension_id 
-where c.neuron_id <= 16
+-- where c.neuron_id <= 16
 order by c.neuron_id;
-
-SELECT c.from_neuron_id, c.to_neuron_id, c.distance, c.reward, c.strength, 
-	(SELECT d.type FROM coordinates coord JOIN dimensions d ON d.id = coord.dimension_id WHERE coord.neuron_id = c.from_neuron_id LIMIT 1) as from_dim_type
-FROM active_neurons an
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-JOIN neurons n ON n.id = c.to_neuron_id
-WHERE c.distance = an.age + 1
-AND c.strength > 0
-AND an.age < 5
--- and c.to_neuron_id = 13
--- and c.distance = 1
-order by c.from_neuron_id, c.to_neuron_id;
-            
-SELECT c.*
-FROM active_neurons an
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-WHERE an.level = 0 
-AND c.to_neuron_id = 3
--- AND c.distance = an.age + 1 
-AND c.strength > 0;
-
-SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
-FROM active_neurons an
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-WHERE an.level = 0
-AND c.to_neuron_id = 4
-AND c.distance = an.age + 1
-AND c.strength > 0;
-
-SELECT c.to_neuron_id, 0, 0, c.id, c.strength * c.reward * POW(0.9, c.distance - 1)
-FROM active_neurons an
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-WHERE an.level = 0
-AND c.distance = an.age + 1
-AND c.strength > 0;
 
 SELECT src.neuron_id, src.level, src.strength
 FROM inferred_neurons src

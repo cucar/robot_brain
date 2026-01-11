@@ -715,15 +715,21 @@ export default class BrainMySQL extends Brain {
 
 		// 3. ADD NOVEL CONNECTIONS: Active connections from peak not yet in pattern_future
 		// Find patterns that made predictions, get their peak neurons, find active connections from peak
+		// Only add distance=1 connections with matching type (event patterns get event targets, action patterns get action targets)
 		const [novelResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT pf_src.pattern_neuron_id, ac.connection_id, 1.0
 			FROM inference_sources isrc
 			JOIN pattern_future pf_src ON pf_src.connection_id = isrc.source_id
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf_src.pattern_neuron_id
+			JOIN neurons pattern_n ON pattern_n.id = pf_src.pattern_neuron_id
 			JOIN active_connections ac ON ac.from_neuron_id = pp.peak_neuron_id AND ac.age = 0
+			JOIN connections c ON c.id = ac.connection_id
+			JOIN neurons target_n ON target_n.id = c.to_neuron_id
 			WHERE isrc.age = 1
 			AND isrc.source_type = 'pattern'
+			AND c.distance = 1
+			AND target_n.type = pattern_n.type
 			AND NOT EXISTS (
 				SELECT 1 FROM pattern_future pf
 				WHERE pf.pattern_neuron_id = pf_src.pattern_neuron_id
@@ -744,12 +750,13 @@ export default class BrainMySQL extends Brain {
 	 */
 	async populateNewPatterns() {
 		await this.conn.query(`TRUNCATE new_patterns`);
+		// Create separate patterns for each (peak_neuron_id, type) combination
+		// This ensures event and action patterns are separate even for the same peak
 		const [insertResult] = await this.conn.query(`
 			INSERT INTO new_patterns (peak_neuron_id, type)
-			SELECT DISTINCT c.from_neuron_id, n.type
+			SELECT DISTINCT c.from_neuron_id, npf.type
 			FROM new_pattern_future npf
 			JOIN connections c ON c.id = npf.connection_id
-			JOIN neurons n ON n.id = c.from_neuron_id
 		`);
 		return insertResult.affectedRows;
 	}
@@ -757,14 +764,14 @@ export default class BrainMySQL extends Brain {
 	/**
 	 * Create pattern neurons and map them to new_patterns.
 	 * Creates neurons at peak_level+1 for each peak neuron.
-	 * Pattern neurons inherit type and channel_id from their peak neuron.
+	 * Pattern neurons use type from new_patterns (event/action) and channel_id from peak neuron.
 	 * @param {number} patternCount - Number of patterns to create neurons for
 	 */
 	async createPatternNeurons(patternCount) {
 
-		// Get peak neurons with their levels, type, and channel_id - use LEFT JOIN to detect missing neurons
+		// Get peak neurons with their levels and channel_id, pattern type from new_patterns
 		const [peaks] = await this.conn.query(`
-			SELECT np.seq_id, np.peak_neuron_id, n.level, n.type, n.channel_id
+			SELECT np.seq_id, np.peak_neuron_id, np.type as pattern_type, n.level, n.channel_id
 			FROM new_patterns np
 			LEFT JOIN neurons n ON n.id = np.peak_neuron_id
 			ORDER BY n.level, np.seq_id
@@ -777,8 +784,8 @@ export default class BrainMySQL extends Brain {
 			throw new Error(`Data integrity error: peak neurons not found in neurons table: [${missingIds.join(', ')}]`);
 		}
 
-		// Create pattern neurons with inherited type and channel_id
-		const neurons = peaks.map(p => [p.level + 1, p.type, p.channel_id]);
+		// Create pattern neurons with pattern type (from new_patterns) and channel_id (from peak)
+		const neurons = peaks.map(p => [p.level + 1, p.pattern_type, p.channel_id]);
 		const neuronIds = await this.createNeurons(neurons);
 
 		// Update new_patterns with pattern neuron IDs
@@ -819,12 +826,13 @@ export default class BrainMySQL extends Brain {
 
 		// Create pattern_future entries: connections FROM peak to target neurons
 		// Uses new_pattern_future which contains connection_ids
+		// Join on both peak_neuron_id AND type to ensure event/action separation
 		await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT np.pattern_neuron_id, npf.connection_id, 1.0
 			FROM new_patterns np
 			JOIN connections c ON c.from_neuron_id = np.peak_neuron_id
-			JOIN new_pattern_future npf ON npf.connection_id = c.id
+			JOIN new_pattern_future npf ON npf.connection_id = c.id AND npf.type = np.type
 		`);
 	}
 
