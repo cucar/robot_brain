@@ -307,20 +307,23 @@ export default class BrainMySQL extends Brain {
 		}
 		if (this.debug) console.log(`Action regret: found ${badActionInferences.length} bad action inferences`);
 
-		// Step 2: Get all loser votes from inference_sources (reconstruct the votes that lost)
+		// Step 2: Get ACTION loser votes from inference_sources (reconstruct the votes that lost)
+		// Only action neurons - event losers are handled by prediction error patterns
 		const [loserVotes] = await this.conn.query(`
 			SELECT isrc.neuron_id, isrc.source_type, isrc.source_id, isrc.inference_strength as strength,
 				inf.expected_reward as reward, inf.level, NULL as from_type
 			FROM inference_sources isrc
 			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
+			JOIN neurons n ON n.id = isrc.neuron_id
 			WHERE isrc.age = 1
 			AND inf.is_winner = 0
+			AND n.type = 'action'
 		`);
 		if (loserVotes.length === 0) {
-			if (this.debug) console.log('Action regret: no loser votes found');
+			if (this.debug) console.log('Action regret: no action loser votes found');
 			return;
 		}
-		if (this.debug) console.log(`Action regret: found ${loserVotes.length} loser votes`);
+		if (this.debug) console.log(`Action regret: found ${loserVotes.length} action loser votes`);
 
 		// Step 3: Use determineConsensus to find what SHOULD have won among losers
 		const consensusResults = await this.determineConsensus(loserVotes);
@@ -685,7 +688,8 @@ export default class BrainMySQL extends Brain {
 	 * Called during learning phase after pattern inference from previous frame.
 	 * Uses inference_sources with source_type='pattern' to know which patterns made predictions.
 	 * pattern_future stores connection_id (from peak neuron to target).
-	 *
+	 * This method only applies to EVENT patterns.
+	 * Action pattern refinement happens in applyRewards (reward-based) and refineActionPatterns (trial alternatives).
 	 * Applies three types of reinforcement:
 	 * 1. Positive: Strengthen pattern_future connections that were correctly predicted (target now active)
 	 * 2. Negative: Weaken pattern_future connections that were incorrectly predicted (target NOT active)
@@ -693,29 +697,45 @@ export default class BrainMySQL extends Brain {
 	 */
 	async mergePatternFuture() {
 
-		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted connections
+		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted connections (event patterns only)
 		// Connection is now active at age=0
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
+			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
 			JOIN active_connections ac ON ac.connection_id = pf.connection_id AND ac.age = 0
 			SET pf.strength = LEAST(?, pf.strength + 1)
 			WHERE pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
+			AND pn.type = 'event'
 		`, [this.maxConnectionStrength]);
-		if (this.debug) console.log(`Strengthened ${strengthenResult.affectedRows} correct pattern_future predictions`);
+		if (this.debug) console.log(`Strengthened ${strengthenResult.affectedRows} correct event pattern_future predictions`);
 
-		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections
+		// 1b. POSITIVE REINFORCEMENT FOR ACTION PATTERNS: Strengthen when action was executed (is_winner=1)
+		// Action patterns predict actions, so we strengthen when the predicted action was the winner
+		const [actionStrengthenResult] = await this.conn.query(`
+			UPDATE pattern_future pf
+			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
+			JOIN inference_sources isrc ON isrc.source_id = pf.connection_id AND isrc.source_type = 'pattern' AND isrc.age = 1
+			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age AND inf.level = 0
+			SET pf.strength = LEAST(?, pf.strength + 1)
+			WHERE pn.type = 'action'
+			AND inf.is_winner = 1
+		`, [this.maxConnectionStrength]);
+		if (this.debug) console.log(`Strengthened ${actionStrengthenResult.affectedRows} executed action pattern_future predictions`);
+
+		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted connections (event patterns only)
 		// Connection is NOT active
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
+			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
 			SET pf.strength = GREATEST(?, pf.strength - ?)
 			WHERE pf.connection_id IN (SELECT source_id FROM inference_sources WHERE age = 1 AND source_type = 'pattern')
+			AND pn.type = 'event'
 			AND pf.connection_id NOT IN (SELECT connection_id FROM active_connections WHERE age = 0)
 		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
-		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed pattern_future predictions`);
+		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed event pattern_future predictions`);
 
-		// 3. ADD NOVEL CONNECTIONS: Active connections from peak not yet in pattern_future
-		// Find patterns that made predictions, get their peak neurons, find active connections from peak
-		// Only add distance=1 connections with matching type (event patterns get event targets, action patterns get action targets)
+		// 3. ADD NOVEL CONNECTIONS: Active connections from peak not yet in pattern_future (event patterns only)
+		// Find event patterns that made predictions, get their peak neurons, find active connections from peak
 		const [novelResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT DISTINCT pf_src.pattern_neuron_id, ac.connection_id, 1.0
@@ -728,15 +748,16 @@ export default class BrainMySQL extends Brain {
 			JOIN neurons target_n ON target_n.id = c.to_neuron_id
 			WHERE isrc.age = 1
 			AND isrc.source_type = 'pattern'
+			AND pattern_n.type = 'event'
 			AND c.distance = 1
-			AND target_n.type = pattern_n.type
+			AND target_n.type = 'event'
 			AND NOT EXISTS (
 				SELECT 1 FROM pattern_future pf
 				WHERE pf.pattern_neuron_id = pf_src.pattern_neuron_id
 				AND pf.connection_id = ac.connection_id
 			)
 		`);
-		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel connections to pattern_future`);
+		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel connections to event pattern_future`);
 	}
 
 	/**
@@ -798,7 +819,7 @@ export default class BrainMySQL extends Brain {
 	 * Merge new patterns into pattern_peaks, pattern_past, pattern_future.
 	 * Processes all levels in bulk.
 	 */
-	async mergeNewPatterns() {
+	async createNewPatterns() {
 
 		// Create pattern_peaks entries
 		await this.conn.query(`
@@ -827,13 +848,14 @@ export default class BrainMySQL extends Brain {
 		// Create pattern_future entries: connections FROM peak to target neurons
 		// Uses new_pattern_future which contains connection_ids
 		// Join on both peak_neuron_id AND type to ensure event/action separation
-		await this.conn.query(`
+		const [futureResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength)
 			SELECT np.pattern_neuron_id, npf.connection_id, 1.0
 			FROM new_patterns np
 			JOIN connections c ON c.from_neuron_id = np.peak_neuron_id
 			JOIN new_pattern_future npf ON npf.connection_id = c.id AND npf.type = np.type
 		`);
+		if (this.debug) console.log(`Created ${futureResult.affectedRows} pattern_future entries`);
 	}
 
 	/**
@@ -992,8 +1014,8 @@ export default class BrainMySQL extends Brain {
 			return false;
 		}
 
-		// Merge matched patterns: add/strengthen observed connections, weaken unobserved connections
-		await this.mergeMatchedPatterns();
+		// Merge pattern_past: add/strengthen observed connections, weaken unobserved connections
+		await this.mergePatternPast();
 
 		// Activate all pattern neurons (from matched_patterns table) at the next level
 		const [patternNeurons] = await this.conn.query('SELECT DISTINCT pattern_neuron_id FROM matched_patterns');
@@ -1094,8 +1116,8 @@ export default class BrainMySQL extends Brain {
 	 * 2. Strengthen common connections (status='common')
 	 * 3. Weaken missing connections (status='missing')
 	 */
-	async mergeMatchedPatterns() {
-		if (this.debug) console.log('merging matched patterns...');
+	async mergePatternPast() {
+		if (this.debug) console.log('merging pattern_past...');
 
 		// Reinforce pattern_peaks strength for matched patterns
 		await this.conn.query(`
@@ -1302,7 +1324,73 @@ export default class BrainMySQL extends Brain {
 		}
 
 		if (this.debug) console.log(`Total rewarded: winners=${totalWinnerConnections}c/${totalWinnerPatterns}p`);
-		// await this.waitForUser('Rewards applied');
+
+		// Refine action patterns: when action pattern prediction fails, add alternative actions to try
+		await this.refineActionPatterns();
+	}
+
+	/**
+	 * Refine action patterns when their predictions get negative rewards.
+	 * When an action pattern's winning prediction results in pain, add alternative actions
+	 * from the same channel to pattern_future so they can be tried next time.
+	 *
+	 * This enables action patterns to learn through trial and error:
+	 * 1. Pattern created with initial action (from action regret)
+	 * 2. If that action fails, add other actions to try
+	 * 3. Over time, pattern_future accumulates all tried actions with their rewards
+	 * 4. Best action emerges as the one with the highest reward
+	 */
+	async refineActionPatterns() {
+
+		// Find action patterns that made winning predictions with negative rewards
+		// These are patterns where we need to try alternative actions
+		const [failedPatterns] = await this.conn.query(`
+			SELECT DISTINCT pf.pattern_neuron_id, pp.peak_neuron_id, n_pattern.channel_id, c.to_neuron_id as failed_action_neuron_id
+			FROM inference_sources isrc
+			JOIN pattern_future pf ON pf.connection_id = isrc.source_id
+			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
+			JOIN neurons n_pattern ON n_pattern.id = pf.pattern_neuron_id
+			JOIN connections c ON c.id = pf.connection_id
+			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
+			WHERE isrc.age = 1
+			AND isrc.source_type = 'pattern'
+			AND n_pattern.type = 'action'
+			AND inf.is_winner = 1
+			AND inf.actual_reward < ?
+		`, [-this.actionRegretMinPain]);
+
+		if (failedPatterns.length === 0) {
+			if (this.debug) console.log('Action pattern refinement: no failed action patterns');
+			return;
+		}
+		if (this.debug) console.log(`Action pattern refinement: ${failedPatterns.length} failed action patterns`);
+
+		// For each failed pattern, find alternative actions in the same channel
+		// that aren't already in pattern_future
+		let totalAdded = 0;
+		for (const fp of failedPatterns) {
+			// Find all action neurons in this channel (excluding the failed one)
+			// that have connections from the peak neuron at distance=1
+			const [result] = await this.conn.query(`
+				INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength, reward)
+				SELECT ?, c.id, 1.0, 0.0
+				FROM connections c
+				JOIN neurons n_action ON n_action.id = c.to_neuron_id
+				WHERE c.from_neuron_id = ?
+				AND c.distance = 1
+				AND n_action.type = 'action'
+				AND n_action.channel_id = ?
+				AND c.to_neuron_id != ?
+				AND NOT EXISTS (
+					SELECT 1 FROM pattern_future pf
+					WHERE pf.pattern_neuron_id = ?
+					AND pf.connection_id = c.id
+				)
+			`, [fp.pattern_neuron_id, fp.peak_neuron_id, fp.channel_id, fp.failed_action_neuron_id, fp.pattern_neuron_id]);
+			totalAdded += result.affectedRows;
+		}
+
+		if (this.debug) console.log(`Action pattern refinement: added ${totalAdded} alternative actions to try`);
 	}
 
 	/**

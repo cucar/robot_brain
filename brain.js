@@ -26,7 +26,7 @@ export default class Brain {
 
 		// pattern learning parameters
 		this.predictionErrorMinStrength = 10.0; // minimum prediction strength to create error-driven pattern
-		this.actionRegretMinStrength = 10; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
+		this.actionRegretMinStrength = 1; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -1033,8 +1033,8 @@ export default class Brain {
 		// Create pattern neurons and map them to new_patterns
 		await this.createPatternNeurons(patternCount);
 
-		// Merge new patterns into pattern_peaks, pattern_past, pattern_future
-		await this.mergeNewPatterns();
+		// Create new patterns in pattern_peaks, pattern_past, pattern_future
+		await this.createNewPatterns();
 
 		if (this.debug) console.log(`Created ${patternCount} error patterns`);
 	}
@@ -1160,10 +1160,10 @@ export default class Brain {
 	}
 
 	/**
-	 * Merge new patterns into pattern_peaks, pattern_past, pattern_future (implementation-specific)
+	 * Create new patterns in pattern_peaks, pattern_past, pattern_future (implementation-specific)
 	 */
-	async mergeNewPatterns() {
-		throw new Error('mergeNewPatterns() must be implemented by subclass');
+	async createNewPatterns() {
+		throw new Error('createNewPatterns() must be implemented by subclass');
 	}
 }
 

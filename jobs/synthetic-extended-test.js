@@ -39,7 +39,7 @@ export default class SyntheticExtendedTest extends Job {
 				{ price: 7.22, volume: 2742800 },  // Frame 10: -8.14% (n14), -11.05% (n15), OUT
 				{ price: 7.51, volume: 1510600 }   // Frame 11: +4.02% (n16), -44.92% (n8),  OWN
 			],
-			cycleRepeats: 50 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
+			cycleRepeats: 25 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
 		};
 	}
 
@@ -117,17 +117,18 @@ export default class SyntheticExtendedTest extends Job {
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
-			// this.brain.waitForUserInput = cycleFrame === 2 || cycleFrame === 3;
+			// Enable debug for specific frames we want to investigate
+			// this.brain.debug = [181, 207].includes(frameCount);
 
 			// Calculate price change
-			const priceChange = stockChannel.previousPrice && stockChannel.currentPrice
-				? ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice * 100)
-				: 0;
+			// const priceChange = stockChannel.previousPrice && stockChannel.currentPrice
+			// 	? ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice * 100)
+			// 	: 0;
 
 			// Calculate volume change
-			const volumeChange = stockChannel.previousVolume && stockChannel.currentVolume
-				? ((stockChannel.currentVolume - stockChannel.previousVolume) / stockChannel.previousVolume * 100)
-				: 0;
+			// const volumeChange = stockChannel.previousVolume && stockChannel.currentVolume
+			// 	? ((stockChannel.currentVolume - stockChannel.previousVolume) / stockChannel.previousVolume * 100)
+			// 	: 0;
 
 			// Get actual position (what we owned DURING this frame's price change)
 			const actualOwned = stockChannel.owned;
@@ -142,9 +143,8 @@ export default class SyntheticExtendedTest extends Job {
 				decisionStats[cycleFrame].details.push({ frame: frameCount, actual: actualOwned, optimal: optimalOwned });
 			}
 
-			const match = isOptimal ? '✓' : '✗';
-			const realizedPL = stockChannel.totalProfit - stockChannel.totalLoss;
-
+			// const match = isOptimal ? '✓' : '✗';
+			// const realizedPL = stockChannel.totalProfit - stockChannel.totalLoss;
 			// console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${volumeChange.toFixed(2).padStart(13)}% | ${optimalOwned ? 'OWN' : 'OUT'.padStart(7)} | ${actualOwned ? 'OWN' : 'OUT'.padStart(6)} | ${match.padStart(5)} | $${realizedPL.toFixed(2)}`);
 
 			await this.brain.processFrame(frame);
@@ -204,8 +204,8 @@ export default class SyntheticExtendedTest extends Job {
 		const data = this.config.sourceData;
 		let totalOptimal = 0, totalSuboptimal = 0;
 
-		console.log('CycleFrame | PriceChange | PriceNeuron | VolumeChange | VolumeNeuron | Optimal | OptimalRate | Suboptimal Frames');
-		console.log('-----------|-------------|-------------|--------------|--------------|---------|-------------|------------------');
+		console.log('CycleFrame | PriceChange  | PriceNeuron | VolumeChange  | VolumeNeuron | Optimal | OptimalRate | Suboptimal Frames');
+		console.log('-----------|--------------|-------------|---------------|--------------|---------|-------------|------------------');
 
 		for (let i = 1; i <= cycleLength; i++) {
 			const stats = decisionStats[i];

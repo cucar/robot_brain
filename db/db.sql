@@ -62,14 +62,15 @@ select * from connections where id in (select connection_id from pattern_future 
 select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
 from pattern_past p 
 join connections c on p.connection_id = c.id 
-where pattern_neuron_id in (select pattern_neuron_id from pattern_peaks where peak_neuron_id = 2)
+where pattern_neuron_id in (select pattern_neuron_id from pattern_peaks where peak_neuron_id = 4)
 order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
-select * from neurons where id in (23, 26);
+select * from neurons where id in (32);
+select * from neurons where level > 0 and id in (20, 29, 21, 33);
 
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 26 order by to_neuron_id, distance;
+select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 21 order by to_neuron_id, distance;
 select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by distance;
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 13 order by c.distance;
+select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 35 order by c.distance;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by to_neuron_id, distance, from_neuron_id;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
 select count(*) from pattern_past;
