@@ -96,6 +96,9 @@ export default class Brain {
 		// get new database connection
 		this.conn = await getMySQLConnection();
 
+		// register channels in DB and load channel IDs
+		await this.initializeChannels();
+
 		// create dimensions for all registered channels
 		await this.initializeDimensions();
 
@@ -107,44 +110,56 @@ export default class Brain {
 	}
 
 	/**
+	 * Initialize channels in DB and load channel IDs
+	 */
+	async initializeChannels() {
+		this.channelNameToId = {};
+		this.channelIdToName = {};
+
+		// Insert channels into DB
+		for (const [channelName] of this.channels)
+			await this.conn.query('INSERT IGNORE INTO channels (name) VALUES (?)', [channelName]);
+
+		// Load channel IDs
+		const [rows] = await this.conn.query('SELECT id, name FROM channels');
+		rows.forEach(row => {
+			this.channelNameToId[row.name] = row.id;
+			this.channelIdToName[row.id] = row.name;
+		});
+		if (this.debug2) console.log('Channels loaded:', this.channelNameToId);
+	}
+
+	/**
 	 * Initialize dimensions for all registered channels
 	 */
 	async initializeDimensions() {
 		if (this.debug2) console.log('Initializing dimensions for registered channels...');
-		for (const [channelName, channel] of this.channels) {
-			await this.insertChannelDimensions(channel.getEventDimensions(), channelName, 'event');
-			await this.insertChannelDimensions(channel.getOutputDimensions(), channelName, 'action');
+		for (const [, channel] of this.channels) {
+			for (const dimName of channel.getEventDimensions())
+				await this.conn.query('INSERT IGNORE INTO dimensions (name) VALUES (?)', [dimName]);
+			for (const dimName of channel.getOutputDimensions())
+				await this.conn.query('INSERT IGNORE INTO dimensions (name) VALUES (?)', [dimName]);
 		}
 	}
 
 	/**
-	 * inserts channel dimensions
-	 */
-	async insertChannelDimensions(dimensions, channelName, type){
-		if (this.debug2) console.log(`Creating ${type} dimensions for ${channelName}:`, dimensions);
-		for (const dimName of dimensions)
-			await this.conn.query('INSERT IGNORE INTO dimensions (name, channel, type) VALUES (?, ?, ?)', [dimName, channelName, type]);
-	}
-
-	/**
-	 * loads the dimensions to memory with full info (id, name, channel, type)
+	 * loads the dimensions to memory (just id and name, no channel/type)
 	 */
 	async loadDimensions() {
 		this.dimensionNameToId = {};
 		this.dimensionIdToName = {};
-		this.dimensions = new Map(); // Map<dimension_name, {id, channel, type}>
 
-		const [rows] = await this.conn.query('SELECT id, name, channel, type FROM dimensions');
+		const [rows] = await this.conn.query('SELECT id, name FROM dimensions');
 		rows.forEach(row => {
 			this.dimensionNameToId[row.name] = row.id;
 			this.dimensionIdToName[row.id] = row.name;
-			this.dimensions.set(row.name, { id: row.id, channel: row.channel, type: row.type });
 		});
 		if (this.debug2) console.log('Dimensions loaded:', this.dimensionNameToId);
 	}
 
 	/**
 	 * returns the current frame combined from all registered channels
+	 * Each frame point includes: coordinates, channel, type
 	 */
 	async getFrame() {
 		const frame = [];
@@ -159,18 +174,20 @@ export default class Brain {
 
 		// Process each channel: get inputs from channel, get outputs from brain tables, execute
 		for (const [channelName, channel] of this.channels) {
+			const channelId = this.channelNameToId[channelName];
 
 			// Get the frame event inputs from the channel (current state before any outputs are executed)
 			const channelEvents = await channel.getFrameEvents();
+			for (const event of channelEvents)
+				frame.push({ coordinates: event, channel: channelName, channel_id: channelId, type: 'event' });
 
 			// Get last inferred actions to be executed in this frame (from brain's inference tables)
 			const channelActions = frameOutputs.get(channelName) || [];
+			for (const action of channelActions)
+				frame.push({ coordinates: action, channel: channelName, channel_id: channelId, type: 'action' });
 
 			// Execute actions - this updates channel state
 			await channel.executeOutputs(channelActions);
-
-			// Add frame points to the frame
-			frame.push(...[ ...channelEvents, ...channelActions ]);
 		}
 
 		if (this.debug) console.log(`frame points: ${JSON.stringify(frame)}`);
@@ -299,10 +316,10 @@ export default class Brain {
 
 		// Filter to only actions with sufficient non-action votes
 		// The votes from action neurons don't capture the situation (they just follow previous actions)
-		// Only votes from events (base level) or interneurons (level > 0, from_dim_type=null) count
+		// Only votes from event neurons count
 		const exploredActions = votedActions.filter(a => {
 			if (!a.sources) return false;
-			const relevantVotes = a.sources.filter(s => s.from_dim_type !== 'action').length;
+			const relevantVotes = a.sources.filter(s => s.from_type === 'event').length;
 			return relevantVotes >= this.minExploredVotes;
 		});
 
@@ -316,8 +333,13 @@ export default class Brain {
 			return null; // All actions have been tried from this context
 		}
 
-		// Find or create neuron for this action
-		const [actionNeuronId] = await this.getFrameNeurons([actionCoordinates]);
+		// Find or create neuron for this action - wrap coordinates in frame point structure with channel metadata
+		const [actionNeuronId] = await this.getFrameNeurons([{
+			coordinates: actionCoordinates,
+			channel: channelName,
+			channel_id: this.channelNameToId[channelName],
+			type: 'action'
+		}]);
 
 		// Return exploration action - sources populated after execution in populateInferenceSources
 		// Use low strength (below minErrorPatternThreshold) to avoid triggering error pattern creation
@@ -327,7 +349,7 @@ export default class Brain {
 			strength: 1, // Low strength - exploration wins by marking others as losers, not by high strength
 			reward: 0, // Neutral reward (additive: 0 = neutral)
 			coordinates: actionCoordinates,
-			dimType: 'action',
+			type: 'action',
 			isWinner: true
 		};
 
@@ -342,17 +364,12 @@ export default class Brain {
 	 */
 	async applyExploration(inferences) {
 
-		// Group action inferences by channel
+		// Group action inferences by channel (using channel from neuron, not dimension)
 		const byChannel = new Map();
 		for (const inf of inferences) {
-			if (!inf.coordinates || inf.dimType !== 'action') continue;
-			for (const dimName of Object.keys(inf.coordinates)) {
-				const dimInfo = this.dimensions.get(dimName);
-				if (dimInfo && dimInfo.type === 'action') {
-					if (!byChannel.has(dimInfo.channel)) byChannel.set(dimInfo.channel, []);
-					byChannel.get(dimInfo.channel).push(inf);
-				}
-			}
+			if (!inf.coordinates || inf.type !== 'action') continue;
+			if (!byChannel.has(inf.channel)) byChannel.set(inf.channel, []);
+			byChannel.get(inf.channel).push(inf);
 		}
 
 		// Process each channel
@@ -488,22 +505,23 @@ export default class Brain {
 	}
 
 	/**
-	 * returns base neuron ids for given set of points coming from the frame
+	 * returns base neuron ids for given set of points coming from the frame	 *  points have structure: { coordinates, channel, channel_id, type }
 	 */
 	async getFrameNeurons(frame) {
 
-		// try to get all the neurons that have coordinates in close ranges for each point - return format: [{ point_str, neuron_id }]
+		// try to get all the neurons that have coordinates matching each point
+		// return format: [{ point, neuron_id }] where point is the full frame point
 		const matches = await this.matchFrameNeurons(frame);
 		if (this.debug2) console.log('pointNeuronMatches', matches);
 
-		// matching neuron ids to be returned for each point of the frame for adaptation { point_str, neuron_id }
+		// matching neuron ids to be returned for each point of the frame
 		const neuronIds = matches.filter(p => p.neuron_id).map(p => p.neuron_id);
 
 		// create neurons for points with no matching neurons
 		const pointsNeedingNeurons = matches.filter(p => !p.neuron_id);
 		if (pointsNeedingNeurons.length > 0) {
 			if (this.debug2) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
-			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point_str));
+			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point));
 			neuronIds.push(...createdNeuronIds);
 		}
 
@@ -513,29 +531,38 @@ export default class Brain {
 	}
 
 	/**
-	 * creates base neurons from a given set of points and returns their ids
+	 * creates base neurons from a given set of frame points and returns their ids
+	 * Frame points have structure: { coordinates, channel, channel_id, type }
 	 */
-	async createBaseNeurons(pointStrs) {
+	async createBaseNeurons(framePoints) {
+		if (framePoints.length === 0) return [];
 
-		// nothing to create if no points are sent - should not happen
-		if (pointStrs.length === 0) return [];
+		// deduplicate points by coordinates (same coordinates = same neuron)
+		const seen = new Map();
+		const uniquePoints = [];
+		for (const point of framePoints) {
+			const coordStr = JSON.stringify(point.coordinates);
+			if (!seen.has(coordStr)) {
+				seen.set(coordStr, true);
+				uniquePoints.push(point);
+			}
+		}
 
-		// deduplicate points and parse them
-		const points = [...new Set(pointStrs)].map(pointStr => JSON.parse(pointStr));
-
-		// bulk insert neurons and get their IDs
-		const neuronIds = await this.createNeurons(points.length);
-		const created = points.map((point, idx) => ({ point, neuron_id: neuronIds[idx] }));
+		// bulk insert neurons with type and channel, get their IDs
+		const neurons = uniquePoints.map(p => [0, p.type, p.channel_id]);
+		const neuronIds = await this.createNeurons(neurons);
+		const created = uniquePoints.map((point, idx) => ({ coordinates: point.coordinates, neuron_id: neuronIds[idx] }));
 
 		// insert coordinates for the created neurons
 		await this.setNeuronCoordinates(created);
 
-		// return the new neuron ids
 		return neuronIds;
 	}
 
 	/**
-	 * matches base neurons from dimensional values for each point - return format: [{ point_str, neuron_id }]
+	 * matches base neurons from dimensional values for each point
+	 * Frame points have structure: { coordinates, channel, channel_id, type }
+	 * Returns: [{ point, neuron_id }]
 	 */
 	async matchFrameNeurons(frame) {
 		if (frame.length === 0) return [];
@@ -544,22 +571,21 @@ export default class Brain {
 	}
 
 	/**
-	 * finds exact neuron matches for each point in the frame
+	 * finds exact neuron matches for each point in the frame	 *  points have structure: { coordinates, channel, channel_id, type }
 	 */
 	findFrameMatches(frame, neuronCoords) {
 		const results = [];
 
 		for (const point of frame) {
-			const pointStr = JSON.stringify(point);
-			const matchedNeuronId = this.findPointMatch(point, neuronCoords);
-			results.push({ point_str: pointStr, neuron_id: matchedNeuronId });
+			const matchedNeuronId = this.findPointMatch(point.coordinates, neuronCoords);
+			results.push({ point, neuron_id: matchedNeuronId });
 		}
 
 		return results;
 	}
 
 	/**
-	 * finds the neuron that exactly matches a single point
+	 * finds the neuron that exactly matches a single point's coordinates
 	 */
 	findPointMatch(point, neuronCoords) {
 		const pointStr = JSON.stringify(point);
@@ -641,6 +667,29 @@ export default class Brain {
 	async determineConsensus(votes) {
 		if (votes.length === 0) return [];
 
+		// Separate base level (0) from pattern levels (1+)
+		// Pattern neurons don't have coordinates and don't compete - they all "win"
+		const baseVotes = votes.filter(v => v.level === 0);
+		const patternVotes = votes.filter(v => v.level > 0);
+
+		// Process base level with per-dimension conflict resolution
+		const baseInferences = await this.determineBaseConsensus(baseVotes);
+
+		// Process pattern levels - all pattern inferences "win" (no conflict resolution)
+		const patternInferences = this.aggregatePatternInferences(patternVotes);
+
+		return [...baseInferences, ...patternInferences];
+	}
+
+	/**
+	 * Determine consensus for base level (level 0) neurons.
+	 * Uses per-dimension conflict resolution.
+	 * @param {Array} votes - Votes for base level neurons only
+	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
+	 */
+	async determineBaseConsensus(votes) {
+		if (votes.length === 0) return [];
+
 		// Aggregate votes: first by source-target pair, then by target neuron
 		const bySourceTarget = this.aggregateVotesBySourceTarget(votes);
 		const aggregated = this.aggregateVotesByTarget(bySourceTarget);
@@ -664,6 +713,40 @@ export default class Brain {
 	}
 
 	/**
+	 * Aggregate pattern level (level > 0) inferences.
+	 * Pattern neurons don't compete with each other - they all "win".
+	 * Their predictions compete at the base level through pattern_future.
+	 * @param {Array} votes - Votes for pattern neurons only
+	 * @returns {Array} Array of inference objects with isWinner=true
+	 */
+	aggregatePatternInferences(votes) {
+		if (votes.length === 0) return [];
+
+		// Aggregate by neuron_id (pattern neurons don't have coordinates)
+		const aggregated = new Map();
+		for (const vote of votes) {
+			if (!aggregated.has(vote.neuron_id))
+				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, level: vote.level, strength: 0, rewardSum: 0, rewardCount: 0, sources: [], sourceNeurons: new Set() });
+
+			const agg = aggregated.get(vote.neuron_id);
+			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level });
+			agg.sourceNeurons.add(vote.from_neuron_id);
+			agg.strength += vote.strength;
+			agg.rewardSum += vote.reward;
+			agg.rewardCount++;
+		}
+
+		// Calculate average reward and mark all as winners
+		const inferences = [];
+		for (const [neuronId, agg] of aggregated) {
+			agg.reward = agg.rewardCount > 0 ? agg.rewardSum / agg.rewardCount : 0;
+			inferences.push({ ...agg, isWinner: true }); // All pattern inferences "win"
+		}
+
+		return inferences;
+	}
+
+	/**
 	 * Aggregate votes by (from_neuron_id, to_neuron_id) so each source neuron votes once per target.
 	 * This prevents a single neuron with multiple distance connections from voting multiple times.
 	 * @param {Array} votes - Raw votes from collectVotes
@@ -675,10 +758,10 @@ export default class Brain {
 		for (const vote of votes) {
 			const key = `${vote.from_neuron_id}:${vote.neuron_id}`;
 			if (!bySourceTarget.has(key))
-				bySourceTarget.set(key, { from_neuron_id: vote.from_neuron_id, neuron_id: vote.neuron_id, strength: 0, rewardSum: 0, rewardCount: 0, sources: [], maxLevel: 0, hasPatternVotes: false, from_dim_type: vote.from_dim_type });
+				bySourceTarget.set(key, { from_neuron_id: vote.from_neuron_id, neuron_id: vote.neuron_id, strength: 0, rewardSum: 0, rewardCount: 0, sources: [], maxLevel: 0, hasPatternVotes: false, from_type: vote.from_type });
 
 			const agg = bySourceTarget.get(key);
-			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level, from_dim_type: vote.from_dim_type });
+			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, level: vote.level, from_type: vote.from_type });
 
 			// Sum strength across distances, average reward
 			agg.strength += vote.strength;
@@ -748,28 +831,31 @@ export default class Brain {
 
 	/**
 	 * Add coordinates to aggregated votes and group by dimension.
+	 * Only called for base level (level 0) neurons which have coordinates.
 	 * @param {Map} aggregated - Map from aggregateVotesByTarget
 	 * @returns {Promise<Map>} Map of dimension name -> array of votes
 	 */
 	async groupVotesByDimension(aggregated) {
 		const neuronIds = [...aggregated.keys()];
-		const coordinates = await this.getNeuronCoordinates(neuronIds);
+		const neuronInfo = await this.getNeuronCoordinates(neuronIds);
 
-		// Add coordinates and determine dimension type for each neuron
+		// Add coordinates and neuron type for each neuron
 		for (const [neuronId, agg] of aggregated) {
-			const coords = coordinates.get(neuronId);
-			if (coords) {
+			const info = neuronInfo.get(neuronId);
+			if (info) {
 				agg.coordinates = {};
-				for (const [dimName, dimInfo] of coords) {
-					agg.coordinates[dimName] = dimInfo.value;
-					agg.dimType = dimInfo.type; // 'action' or 'event'
-				}
-			}
+				for (const [dimName, value] of info.coordinates)
+					agg.coordinates[dimName] = value;
+				agg.type = info.type; // 'action' or 'event' (from neuron)
+				agg.channel = info.channel;
+				agg.channel_id = info.channel_id;
+			} else
+				console.warn(`Warning: Base neuron ${neuronId} not found in getNeuronCoordinates - skipping`);
 		}
 
 		// Group by dimension
 		const byDimension = new Map();
-		for (const [neuronId, agg] of aggregated) {
+		for (const [, agg] of aggregated) {
 			if (!agg.coordinates) continue;
 			for (const dimName of Object.keys(agg.coordinates)) {
 				if (!byDimension.has(dimName)) byDimension.set(dimName, []);
@@ -797,9 +883,8 @@ export default class Brain {
 		const hasPatterns = filtered.some(v => v.hasPatternVotes);
 		if (hasPatterns) filtered = filtered.filter(v => v.hasPatternVotes);
 
-		// Select winner based on dimension type
-		const dimInfo = this.dimensions.get(dimName);
-		const isAction = dimInfo && dimInfo.type === 'action';
+		// Select winner based on neuron type (all votes for same dimension have same type)
+		const isAction = filtered[0]?.type === 'action';
 
 		if (isAction) {
 			// For actions: all voters count in denominator (missing votes = 0 reward)
@@ -1027,11 +1112,11 @@ export default class Brain {
 
 	/**
 	 * Creates new neurons and return their IDs.
-	 * @param {number} count - Number of neurons to create
-	 * @param {number} level - Level of the neurons (0 for base, 1+ for patterns)
+	 * @param {Array} neurons - Array of [level, type, channel_id] tuples
+	 * @returns {Promise<Array<number>>} Array of neuron IDs
 	 */
-	async createNeurons(count, level) {
-		throw new Error('createNeurons(count, level) must be implemented by subclass');
+	async createNeurons(neurons) {
+		throw new Error('createNeurons(neurons) must be implemented by subclass');
 	}
 
 	/**

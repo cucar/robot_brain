@@ -85,7 +85,7 @@ select count(*) from pattern_past;
 select count(*) from pattern_future;
 
 -- 14 = out, 13 = own
-select c.neuron_id, d.name, d.type, c.val 
+select c.neuron_id, d.name, c.val 
 from coordinates c join dimensions d on d.id = c.dimension_id 
 where c.neuron_id <= 16
 order by c.neuron_id;
@@ -130,12 +130,16 @@ FROM inferred_neurons src
 WHERE src.level = 0
 AND src.age = 0;
 
--- dimensions table determines input/output mapping for channels
+-- channels table for efficient storage (neurons reference by id instead of varchar)
+CREATE TABLE IF NOT EXISTS channels (
+    id SMALLINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) UNIQUE NOT NULL
+) ENGINE=MEMORY;
+
+-- dimensions table defines coordinate space (just names, no type/channel - those are on neurons)
 CREATE TABLE IF NOT EXISTS dimensions (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(50) UNIQUE NOT NULL,
-    channel VARCHAR(50) NOT NULL,
-    type ENUM('event', 'action') NOT NULL
+    name VARCHAR(50) UNIQUE NOT NULL
 ) ENGINE=MEMORY;
 
 -- these dimensions can be used for visual processing
@@ -149,10 +153,16 @@ CREATE TABLE IF NOT EXISTS dimensions (
 
 -- neurons table is the core representation of concepts - auto increment
 -- level is an intrinsic property: base neurons are level 0, pattern neurons are level 1+
+-- type: 'event' for observations, 'action' for decisions
+-- channel_id: which channel this neuron belongs to
 CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     level TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    INDEX idx_level (level)
+    type ENUM('event', 'action') NOT NULL,
+    channel_id SMALLINT UNSIGNED NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES channels(id),
+    INDEX idx_level (level),
+    INDEX idx_level_type_channel (level, type, channel_id)
 ) ENGINE=MEMORY;
 
 -- coordinates for base neurons
@@ -226,10 +236,12 @@ CREATE TABLE IF NOT EXISTS pattern_peaks (
 
 -- neurons currently active within the sliding window (MEMORY table)
 -- note that it is possible for the same neuron to be active in different ages or levels
+-- strength: sum of age=0 active connections TO this neuron (for peak detection)
 CREATE TABLE IF NOT EXISTS active_neurons (
     neuron_id BIGINT UNSIGNED,
     level TINYINT NOT NULL,				         -- clustering level
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,     -- how long the neuron has been active - note that higher levels age slower
+    strength DOUBLE NOT NULL DEFAULT 0,          -- peak strength: sum of incoming connection strengths
     PRIMARY KEY (neuron_id, level, age),
     INDEX idx_level_age (level, age),
     INDEX idx_current_active (age, level)
@@ -309,16 +321,22 @@ CREATE TABLE IF NOT EXISTS inference_sources (
 
 -- scratch table for new pattern connections (MEMORY table)
 -- connections FROM peak neurons that should be in pattern_future (from prediction errors or action regret)
+-- type: 'event' for prediction error patterns, 'action' for action regret patterns
 CREATE TABLE IF NOT EXISTS new_pattern_future (
-    connection_id BIGINT UNSIGNED NOT NULL PRIMARY KEY
+    connection_id BIGINT UNSIGNED NOT NULL,
+    type ENUM('event', 'action') NOT NULL,
+    PRIMARY KEY (connection_id, type)
 ) ENGINE=MEMORY;
 
 -- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)
 -- used during bulk pattern creation to track sequential IDs
+-- type: pattern type ('event' or 'action') - one peak can have both types of patterns
 CREATE TABLE IF NOT EXISTS new_patterns (
     seq_id INT AUTO_INCREMENT PRIMARY KEY,
-    peak_neuron_id BIGINT UNSIGNED NOT NULL UNIQUE,
+    peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    type ENUM('event', 'action') NOT NULL,
     pattern_neuron_id BIGINT UNSIGNED,
+    UNIQUE INDEX idx_peak_type (peak_neuron_id, type),
     INDEX idx_peak (peak_neuron_id)
 ) ENGINE=MEMORY;
 

@@ -180,7 +180,7 @@ class ConnectionStore {
  */
 class ActiveNeuronStore {
 	constructor() {
-		// Primary storage: Map<"neuronId:level:age", {neuron_id, level, age}>
+		// Primary storage: Map<"neuronId:level:age", {neuron_id, level, age, strength}>
 		this.byKey = new Map();
 
 		// Index: Map<level, Map<age, Set<neuron_id>>>
@@ -197,11 +197,11 @@ class ActiveNeuronStore {
 	/**
 	 * Add active neuron
 	 */
-	add(neuronId, level, age = 0) {
+	add(neuronId, level, age = 0, strength = 0) {
 		const key = this._key(neuronId, level, age);
 
 		// Add to primary storage
-		this.byKey.set(key, { neuron_id: neuronId, level, age });
+		this.byKey.set(key, { neuron_id: neuronId, level, age, strength });
 
 		// Add to level+age index
 		if (!this.byLevelAge.has(level)) {
@@ -212,6 +212,23 @@ class ActiveNeuronStore {
 			ageMap.set(age, new Set());
 		}
 		ageMap.get(age).add(neuronId);
+	}
+
+	/**
+	 * Update strength for an active neuron
+	 */
+	updateStrength(neuronId, level, age, strength) {
+		const key = this._key(neuronId, level, age);
+		const entry = this.byKey.get(key);
+		if (entry) entry.strength = strength;
+	}
+
+	/**
+	 * Get strength for an active neuron
+	 */
+	getStrength(neuronId, level, age) {
+		const key = this._key(neuronId, level, age);
+		return this.byKey.get(key)?.strength ?? 0;
 	}
 
 	/**
@@ -231,11 +248,10 @@ class ActiveNeuronStore {
 		const neuronIds = ageMap.get(age);
 		if (!neuronIds) return [];
 
-		return Array.from(neuronIds).map(neuronId => ({
-			neuron_id: neuronId,
-			level,
-			age
-		}));
+		return Array.from(neuronIds).map(neuronId => {
+			const entry = this.byKey.get(this._key(neuronId, level, age));
+			return { neuron_id: neuronId, level, age, strength: entry?.strength ?? 0 };
+		});
 	}
 
 	/**
@@ -248,7 +264,8 @@ class ActiveNeuronStore {
 		const result = [];
 		for (const [age, neuronIds] of ageMap) {
 			for (const neuronId of neuronIds) {
-				result.push({ neuron_id: neuronId, level, age });
+				const entry = this.byKey.get(this._key(neuronId, level, age));
+				result.push({ neuron_id: neuronId, level, age, strength: entry?.strength ?? 0 });
 			}
 		}
 		return result;
@@ -549,7 +566,7 @@ class PatternPeakStore {
  */
 class NeuronStore {
 	constructor() {
-		// Map<neuron_id, {id, level}>
+		// Map<neuron_id, {id, level, type, channel_id}>
 		this.neurons = new Map();
 
 		// Map<neuron_id, Map<dimension_id, value>>
@@ -567,24 +584,17 @@ class NeuronStore {
 	}
 
 	/**
-	 * Create a new neuron
-	 * @param {number} level - Level of the neuron (0 for base, 1+ for patterns)
-	 */
-	createNeuron(level = 0) {
-		const id = this.nextId++;
-		this.neurons.set(id, { id, level });
-		return id;
-	}
-
-	/**
 	 * Create multiple neurons in bulk
-	 * @param {number} count - Number of neurons to create
-	 * @param {number} level - Level of the neurons (0 for base, 1+ for patterns)
+	 * @param {Array} neurons - Array of [level, type, channel_id] tuples
+	 * @returns {Array<number>} Array of neuron IDs
 	 */
-	createNeurons(count, level = 0) {
+	createNeurons(neurons) {
 		const ids = [];
-		for (let i = 0; i < count; i++)
-			ids.push(this.createNeuron(level));
+		for (const [level, type, channelId] of neurons) {
+			const id = this.nextId++;
+			this.neurons.set(id, { id, level, type, channel_id: channelId });
+			ids.push(id);
+		}
 		return ids;
 	}
 
@@ -595,6 +605,24 @@ class NeuronStore {
 	 */
 	getLevel(neuronId) {
 		return this.neurons.get(neuronId)?.level;
+	}
+
+	/**
+	 * Get a neuron's type
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {string|undefined} Type ('event' or 'action') or undefined if neuron not found
+	 */
+	getType(neuronId) {
+		return this.neurons.get(neuronId)?.type;
+	}
+
+	/**
+	 * Get a neuron's channel ID
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {number|undefined} Channel ID or undefined if neuron not found
+	 */
+	getChannelId(neuronId) {
+		return this.neurons.get(neuronId)?.channel_id;
 	}
 
 	/**
