@@ -178,10 +178,12 @@ export default class BrainMySQL extends Brain {
 	 * Validate event predictions by comparing inferred_neurons (age=1) to active_neurons (age=0).
 	 * Populates accuracyStats Map with {correct, total} counts per level.
 	 * Only validates event predictions (not actions, which are validated via rewards).
+	 * Only validates winners (is_winner=1) since losers are alternative hypotheses that were rejected.
 	 */
 	async validatePredictions() {
 
 		// Get all event predictions from previous frame (age=1) and check if they came true (age=0)
+		// Only validate winners - losers are just alternative hypotheses rejected during conflict resolution
 		const [rows] = await this.conn.query(`
 			SELECT inf.level, inf.neuron_id, IF(an.neuron_id IS NOT NULL, 1, 0) as is_correct
 			FROM inferred_neurons inf
@@ -189,6 +191,7 @@ export default class BrainMySQL extends Brain {
 			LEFT JOIN active_neurons an ON an.neuron_id = inf.neuron_id AND an.level = inf.level AND an.age = 0
 			WHERE inf.age = 1
 			AND n.type = 'event'
+			AND inf.is_winner = 1
 		`);
 
 		// Aggregate by level
