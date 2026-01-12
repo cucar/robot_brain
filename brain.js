@@ -657,6 +657,36 @@ export default class Brain {
 
 		// Save all inferences
 		await this.saveInferences(inferences);
+
+		// Notify channels about winning event predictions for continuous tracking (e.g., price prediction)
+		this.notifyChannelsOfEventPredictions(inferences);
+	}
+
+	/**
+	 * Notify channels about winning event predictions for continuous tracking.
+	 * Channels can use this to calculate continuous predictions (e.g., price prediction from buckets).
+	 * @param {Array} inferences - Array of inference objects with isWinner flag
+	 */
+	notifyChannelsOfEventPredictions(inferences) {
+
+		// Filter to winning event predictions only
+		const eventWinners = inferences.filter(inf => inf.isWinner && inf.type === 'event');
+		if (eventWinners.length === 0) return;
+
+		// Group by channel
+		const byChannel = new Map();
+		for (const winner of eventWinners) {
+			if (!winner.channel) continue;
+			if (!byChannel.has(winner.channel)) byChannel.set(winner.channel, []);
+			byChannel.get(winner.channel).push(winner);
+		}
+
+		// Notify each channel
+		for (const [channelName, winners] of byChannel) {
+			const channel = this.channels.get(channelName);
+			if (channel && typeof channel.onEventPredictions === 'function')
+				channel.onEventPredictions(winners);
+		}
 	}
 
 	/**
@@ -987,10 +1017,14 @@ export default class Brain {
 
 	/**
 	 * Learn from base level: compare L0 inferences (age=1) to L0 observations (age=0).
+	 * - Validation: track prediction accuracy for events
 	 * - Events: negative reinforcement for wrong predictions (updates strength)
 	 * - Actions: apply rewards based on channel outcomes (updates reward)
 	 */
 	async learnFromBaseLevel() {
+
+		// Validate event predictions and track accuracy stats
+		await this.validatePredictions();
 
 		// Negative reinforcement for failed event predictions (strength decrease)
 		await this.negativeReinforceConnections();
@@ -1131,6 +1165,15 @@ export default class Brain {
 	 */
 	async recognizeLevelPatterns() {
 		throw new Error('recognizeLevelPatterns(level) must be implemented by subclass');
+	}
+
+	/**
+	 * Validate event predictions by comparing inferred_neurons (age=1) to active_neurons (age=0).
+	 * Populates accuracyStats Map with {correct, total} counts per level.
+	 * Only validates event predictions (not actions, which are validated via rewards).
+	 */
+	async validatePredictions() {
+		throw new Error('validatePredictions() must be implemented by subclass');
 	}
 
 	/**
