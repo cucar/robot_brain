@@ -66,11 +66,11 @@ where pattern_neuron_id in (select id from neurons where level > 0 and type = 'a
 order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
 select * from neurons where id in (32);
-select * from neurons where level > 0 and type = 'action';
+select * from neurons where level > 0;
 
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 21 order by to_neuron_id, distance;
+select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 7 order by to_neuron_id, distance;
 select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by distance;
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 35 order by c.distance;
+select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 7 order by c.distance;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by to_neuron_id, distance, from_neuron_id;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
 select count(*) from pattern_peaks;

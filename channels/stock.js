@@ -43,45 +43,52 @@ export default class StockChannel extends Channel {
 		this.currentVolume = null;
 
 		// Unified discretization buckets for percentage changes (used for both price and volume)
+
 		// Fine-grained for typical stock movements (-2% to +2%), exponential for extremes, extended for volume volatility
+		// this.changeBuckets = [
+		// 	{ min: -Infinity, max: -100, value: -20 }, // -100%+
+		// 	{ min: -100, max: -90, value: -19 },       // -100% to -90%
+		// 	{ min: -90, max: -80, value: -18 },        // -90% to -80%
+		// 	{ min: -80, max: -70, value: -17 },        // -80% to -70%
+		// 	{ min: -70, max: -60, value: -16 },        // -70% to -60%
+		// 	{ min: -60, max: -50, value: -15 },        // -60% to -50%
+		// 	{ min: -50, max: -40, value: -14 },        // -50% to -40%
+		// 	{ min: -40, max: -30, value: -13 },        // -40% to -30%
+		// 	{ min: -30, max: -20, value: -12 },        // -30% to -20%
+		// 	{ min: -20, max: -10, value: -11 },        // -20% to -10%
+		// 	{ min: -10, max: -5, value: -9 },          // -10% to -5%
+		// 	{ min: -5, max: -3, value: -8 },           // -5% to -3%
+		// 	{ min: -3, max: -2, value: -7 },           // -3% to -2%
+		// 	{ min: -2, max: -1, value: -6 },           // -2% to -1%
+		// 	{ min: -1, max: -0.5, value: -5 },         // -1% to -0.5%
+		// 	{ min: -0.5, max: -0.2, value: -4 },       // -0.5% to -0.2%
+		// 	{ min: -0.2, max: -0.05, value: -3 },      // -0.2% to -0.05%
+		// 	{ min: -0.05, max: -0.01, value: -2 },     // -0.05% to -0.01%
+		// 	{ min: -0.01, max: 0.01, value: 0 },       // -0.01% to 0.01% (no change)
+		// 	{ min: 0.01, max: 0.05, value: 2 },        // 0.01% to 0.05%
+		// 	{ min: 0.05, max: 0.2, value: 3 },         // 0.05% to 0.2%
+		// 	{ min: 0.2, max: 0.5, value: 4 },          // 0.2% to 0.5%
+		// 	{ min: 0.5, max: 1, value: 5 },            // 0.5% to 1%
+		// 	{ min: 1, max: 2, value: 6 },              // 1% to 2%
+		// 	{ min: 2, max: 3, value: 7 },              // 2% to 3%
+		// 	{ min: 3, max: 5, value: 8 },              // 3% to 5%
+		// 	{ min: 5, max: 10, value: 9 },             // 5% to 10%
+		// 	{ min: 10, max: 20, value: 11 },           // 10% to 20%
+		// 	{ min: 20, max: 30, value: 12 },           // 20% to 30%
+		// 	{ min: 30, max: 40, value: 13 },           // 30% to 40%
+		// 	{ min: 40, max: 50, value: 14 },           // 40% to 50%
+		// 	{ min: 50, max: 60, value: 15 },           // 50% to 60%
+		// 	{ min: 60, max: 70, value: 16 },           // 60% to 70%
+		// 	{ min: 70, max: 80, value: 17 },           // 70% to 80%
+		// 	{ min: 80, max: 90, value: 18 },           // 80% to 90%
+		// 	{ min: 90, max: 100, value: 19 },          // 90% to 100%
+		// 	{ min: 100, max: Infinity, value: 20 }     // 100%+
+		// ];
+
+		// Simple 2-bucket system: down (-1) and up (1), with 0 counting as up
 		this.changeBuckets = [
-			{ min: -Infinity, max: -100, value: -20 }, // -100%+
-			{ min: -100, max: -90, value: -19 },       // -100% to -90%
-			{ min: -90, max: -80, value: -18 },        // -90% to -80%
-			{ min: -80, max: -70, value: -17 },        // -80% to -70%
-			{ min: -70, max: -60, value: -16 },        // -70% to -60%
-			{ min: -60, max: -50, value: -15 },        // -60% to -50%
-			{ min: -50, max: -40, value: -14 },        // -50% to -40%
-			{ min: -40, max: -30, value: -13 },        // -40% to -30%
-			{ min: -30, max: -20, value: -12 },        // -30% to -20%
-			{ min: -20, max: -10, value: -11 },        // -20% to -10%
-			{ min: -10, max: -5, value: -9 },          // -10% to -5%
-			{ min: -5, max: -3, value: -8 },           // -5% to -3%
-			{ min: -3, max: -2, value: -7 },           // -3% to -2%
-			{ min: -2, max: -1, value: -6 },           // -2% to -1%
-			{ min: -1, max: -0.5, value: -5 },         // -1% to -0.5%
-			{ min: -0.5, max: -0.2, value: -4 },       // -0.5% to -0.2%
-			{ min: -0.2, max: -0.05, value: -3 },      // -0.2% to -0.05%
-			{ min: -0.05, max: -0.01, value: -2 },     // -0.05% to -0.01%
-			{ min: -0.01, max: 0.01, value: 0 },       // -0.01% to 0.01% (no change)
-			{ min: 0.01, max: 0.05, value: 2 },        // 0.01% to 0.05%
-			{ min: 0.05, max: 0.2, value: 3 },         // 0.05% to 0.2%
-			{ min: 0.2, max: 0.5, value: 4 },          // 0.2% to 0.5%
-			{ min: 0.5, max: 1, value: 5 },            // 0.5% to 1%
-			{ min: 1, max: 2, value: 6 },              // 1% to 2%
-			{ min: 2, max: 3, value: 7 },              // 2% to 3%
-			{ min: 3, max: 5, value: 8 },              // 3% to 5%
-			{ min: 5, max: 10, value: 9 },             // 5% to 10%
-			{ min: 10, max: 20, value: 11 },           // 10% to 20%
-			{ min: 20, max: 30, value: 12 },           // 20% to 30%
-			{ min: 30, max: 40, value: 13 },           // 30% to 40%
-			{ min: 40, max: 50, value: 14 },           // 40% to 50%
-			{ min: 50, max: 60, value: 15 },           // 50% to 60%
-			{ min: 60, max: 70, value: 16 },           // 60% to 70%
-			{ min: 70, max: 80, value: 17 },           // 70% to 80%
-			{ min: 80, max: 90, value: 18 },           // 80% to 90%
-			{ min: 90, max: 100, value: 19 },          // 90% to 100%
-			{ min: 100, max: Infinity, value: 20 }     // 100%+
+			{ min: -Infinity, max: 0, value: -1 },     // Down (negative change)
+			{ min: 0, max: Infinity, value: 1 }        // Up (zero or positive change)
 		];
 	}
 
