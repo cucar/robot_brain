@@ -1,7 +1,7 @@
 /**
  * Base Job Class - Common functionality for all episodes
  */
-import Brain from '../brain-mysql.js';
+import Brain from '../brain.js';
 
 export default class Job {
 	constructor() {

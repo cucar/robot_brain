@@ -1588,6 +1588,7 @@ export default class Brain {
 	 * connection sources are deleted (biologically, a neuron does one type of inference per frame).
 	 */
 	async populateInferenceSources() {
+
 		// Connection sources: active_neurons that have connections TO the inferred neuron
 		// During inference: c.distance = an.age + 1, now an.age is +1, so c.distance = an.age
 		const [connResult] = await this.conn.query(`
@@ -1778,10 +1779,10 @@ export default class Brain {
 	/**
 	 * Reinforce connections between active neurons.
 	 * Creates connections from all active neurons to newly activated (age=0) neurons at the specified level.
-	 * Cross-level connections allowed: same-level and high→base (for inference to actions/events).
-	 * Base→high connections are not created (patterns are activated through pattern matching, not direct prediction).
-	 * Distance is purely temporal (source neuron's age), regardless of level difference.
-	 * Action neurons can NEVER be sources - only event neurons and interneurons can predict.
+	 * Connection rules:
+	 * - Events connect within their own level only (same level → same level)
+	 * - Actions are always base level, any level event can connect to base actions
+	 * - Action neurons can NEVER be sources - only event neurons can predict
 	 */
 	async reinforceConnections(level) {
 		await this.conn.query(`
@@ -1790,11 +1791,14 @@ export default class Brain {
 			FROM active_neurons f
 			JOIN neurons nf ON nf.id = f.neuron_id
 			CROSS JOIN active_neurons t
-            WHERE t.age = 0  -- target neurons are newly activated
-            AND t.level = :level  -- target neurons are at the specified level
-            AND (f.level = t.level OR t.level = 0)  -- same level or high→base (no base→high)
-            AND f.age > 0 -- only learning connections between different ages for inference
-            AND nf.type = 'event'  -- Action neurons can NEVER be sources
+			JOIN neurons nt ON nt.id = t.neuron_id
+            WHERE t.age = 0 AND t.level = :level -- learning connections to newly activated neurons at the requested level
+            AND nf.type = 'event' AND f.age > 0 -- learning connections from older event neurons
+            AND (
+                (nt.type = 'event' AND f.level = t.level) -- events connect within same level only
+                OR
+                (nt.type = 'action' AND t.level = 0) -- any level event → base actions only
+            )
 			ON DUPLICATE KEY UPDATE connections.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, connections.strength + VALUES(strength)))
 		`, { level, minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
 	}
@@ -1802,21 +1806,17 @@ export default class Brain {
 	/**
 	 * Populate active_connections table for newly activated neurons at the specified level.
 	 * This is called immediately after reinforceConnections in activateNeurons.
-	 * Inserts connections from all active neurons to age=0 neurons at the specified level.
-	 * Cross-level connections allowed: same-level and high→base (no base→high).
-	 * Distance matching is purely temporal: c.distance = f.age.
+	 * Connection validity is enforced at creation time in reinforceConnections.
 	 */
 	async activateConnections(level) {
 		await this.conn.query(`
 			INSERT IGNORE INTO active_connections (connection_id, from_neuron_id, to_neuron_id, age)
 			SELECT c.id as connection_id, c.from_neuron_id, c.to_neuron_id, 0 as age
-			FROM connections c
-			JOIN active_neurons f ON c.from_neuron_id = f.neuron_id
+			FROM active_neurons f
+			-- connections from older neurons to newly activated neurons (distance = age)
+			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = f.age AND c.strength > 0
+			-- connections to newly activated neurons at the given level (age=0)    
 			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0 AND t.level = :level
-			WHERE c.distance = f.age
-			AND (f.level = t.level OR t.level = 0)  -- same level or high→base (no base→high)
-            AND f.age > 0 -- only connections between different ages for inference
-			AND c.strength > 0  -- only connections that are not removed
 		`, { level });
 	}
 
