@@ -56,7 +56,7 @@ export default class SyntheticExtendedTest extends Job {
 				{ price: 7.22, volume: 2742800 },  // Frame 10: price=-1(n5), vol=-1 (n3), OUT (n4)
 				{ price: 7.51, volume: 1510600 }   // Frame 11: price=1 (n1), vol=-1 (n3), OWN (n6)
 			],
-			cycleRepeats: 25 // 4 repeats × 12 frames = 48 frames (reduced for debugging)
+			cycleRepeats: 5 // 5 repeats × 12 frames = 60 frames (reduced for debugging)
 		};
 	}
 
@@ -129,13 +129,14 @@ export default class SyntheticExtendedTest extends Job {
 		while (frameCount < expectedFrames) {
 
 			// this executes the inferred actions from previous frame in the current frame
-			const frame = await this.brain.getFrame();
+			const frame = await this.brain.getFrameAndExecuteActions();
 
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
 			// Enable debug for specific frames we want to investigate
-			// this.brain.debug = [181, 207].includes(frameCount);
+			// this.brain.debug = [8].includes(frameCount);
+			// this.brain.debug2 = [8].includes(frameCount);
 
 			// Calculate price change
 			// const priceChange = stockChannel.previousPrice && stockChannel.currentPrice

@@ -25,15 +25,17 @@ export default class Job {
 			// Apply runner options to channels if provided
 			if (this.runnerOptions?.diagnostic) for (const [_, channel] of this.brain.channels) channel.diagnostic = true;
 
+			// initialize database connection in the brain
+			await this.brain.initDB();
+
+			// Handle brain reset strategy
+			await this.handleBrainReset();
+
 			// initialize brain (this will initialize channels and create dimensions)
-			// console.log('Initializing brain...');
 			await this.brain.init();
 
 			// Allow jobs to configure channels after brain initialization
 			await this.configureChannels();
-
-			// Handle brain reset strategy
-			await this.handleBrainReset();
 
 			// Execute the main job logic
 			await this.executeJob();
@@ -97,8 +99,8 @@ export default class Job {
 	async processFrames() {
 		while (true) {
 
-			// Get combined frame from all channels
-			const frame = await this.brain.getFrame();
+			// Get combined frame from all channels and execute previously inferred actions
+			const frame = await this.brain.getFrameAndExecuteActions();
 
 			// If no input data from any channel, we're done
 			if (!frame || frame.length === 0) {

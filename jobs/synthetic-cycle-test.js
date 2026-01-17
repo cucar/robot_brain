@@ -120,7 +120,7 @@ export default class SyntheticCycleTest extends Job {
 		while (frameCount < expectedFrames) {
 
 			// Get frame
-			const frame = await this.brain.getFrame();
+			const frame = await this.brain.getFrameAndExecuteActions();
 			frameCount++;
 
 			// Track trades with source information

@@ -59,6 +59,7 @@ select * from new_patterns;
 select * from pattern_peaks;
 select * from connections where id in (select connection_id from pattern_future where pattern_neuron_id = 10);
 
+-- action pattern contexts
 select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
 from pattern_past p 
 join connections c on p.connection_id = c.id 
@@ -66,11 +67,11 @@ where pattern_neuron_id in (select id from neurons where level > 0 and type = 'a
 order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
 select * from neurons where id in (32);
-select * from neurons where level > 0;
+select * from neurons where level > 1;
 
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 7 order by to_neuron_id, distance;
+select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 6 order by to_neuron_id, distance;
 select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by distance;
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 7 order by c.distance;
+select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 6 order by c.distance;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by to_neuron_id, distance, from_neuron_id;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
 select count(*) from pattern_peaks;
@@ -263,18 +264,21 @@ CREATE TABLE IF NOT EXISTS active_connections (
 -- tracks which connections or pattern_future records led to each inference (events + actions)
 -- used by learnFromBaseLevel (negativeReinforceConnections, applyRewards) and learnFromInferenceLevel
 -- source_type: 'connection' for connection inference, 'pattern' for pattern inference
--- source_id: connection.id for connection type, pattern_future.id for pattern type
--- ages with inferred_neurons, deleted when age >= baseNeuronMaxAge
+-- source_id: connection.id for connection type, pattern_future.connection_id for pattern type
+-- distance: temporal distance of the prediction (1 = next frame, 2 = 2 frames ahead, etc.)
+-- ages with inferred_neurons, rewards applied when age = distance (prediction outcome observed)
 CREATE TABLE IF NOT EXISTS inference_sources (
     age TINYINT UNSIGNED NOT NULL DEFAULT 0,
     neuron_id BIGINT UNSIGNED NOT NULL,
     source_type ENUM('connection', 'pattern') NOT NULL,
     source_id BIGINT UNSIGNED NOT NULL,
+    distance TINYINT UNSIGNED NOT NULL,
     inference_strength DOUBLE NOT NULL,
     PRIMARY KEY (age, neuron_id, source_type, source_id),
     INDEX idx_neuron_age (neuron_id, age),
     INDEX idx_source_type (source_type, source_id),
-    INDEX idx_age (age)
+    INDEX idx_age (age),
+    INDEX idx_age_distance (age, distance)
 ) ENGINE=MEMORY;
 
 -- scratch table for new pattern connections (MEMORY table)

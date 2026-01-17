@@ -104,7 +104,7 @@ export default class TextTrainingJob extends Job {
 		let frameCount = 0;
 		while (true) {
 			// Get combined frame from all channels
-			const frame = await this.brain.getFrame();
+			const frame = await this.brain.getFrameAndExecuteActions();
 
 			// If no input data from any channel, episode is complete
 			if (!frame || frame.length === 0) break;

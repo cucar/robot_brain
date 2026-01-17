@@ -272,7 +272,7 @@ export default class StockTrainingJob extends Job {
 		while (frameCount < expectedFrames) {
 
 			// Get combined frame from all channels
-			const frame = await this.brain.getFrame();
+			const frame = await this.brain.getFrameAndExecuteActions();
 
 			frameCount++;
 
