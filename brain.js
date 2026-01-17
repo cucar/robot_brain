@@ -255,7 +255,7 @@ export default class Brain {
 		await this.populateInferenceSources();
 
 		// learn from connection event and action inferences
-		await this.learnConnectionInferences(channelRewards);
+		await this.refineConnections(channelRewards);
 
 		// refine the learned pattern definitions from prediction errors and action regret
 		await this.refinePatterns(channelRewards);
@@ -1343,7 +1343,7 @@ export default class Brain {
 	 * Weakens connections that made incorrect predictions when age = distance (outcome observed).
 	 * Uses inference_sources to find which connections made predictions.
 	 */
-	async learnConnectionInferences(channelRewards) {
+	async refineConnections(channelRewards) {
 
 		// Apply negative reinforcement to failed event predictions - Failed = predicted but not observed
 		// Only applies to events/patterns, NOT actions (actions are handled by rewards below)
@@ -1387,19 +1387,6 @@ export default class Brain {
 				AND n.channel_id = (SELECT id FROM channels WHERE name = :channelName)
 			`, { smooth: this.rewardExpSmooth, reward, channelName });
 			totalWinnerConnections += winnerConnResult.affectedRows;
-
-			// Update inferred_neurons.actual_reward for action winners so that we can detect negative rewards for new patterns
-			// Rewards applied when age = distance (prediction outcome just observed)
-			await this.conn.query(`
-				UPDATE inferred_neurons inf
-				JOIN neurons n ON n.id = inf.neuron_id
-				JOIN inference_sources isrc ON isrc.neuron_id = inf.neuron_id AND isrc.age = inf.age
-				SET inf.actual_reward = ?
-				WHERE isrc.age = isrc.distance
-				AND inf.level = 0 AND inf.is_winner = 1
-				AND n.type = 'action'
-				AND n.channel_id = (SELECT id FROM channels WHERE name = ?)
-			`, [reward, channelName]);
 
 			// LOSERS: Leave alone - we don't know what would have happened if they were executed
 		}
@@ -2122,6 +2109,21 @@ export default class Brain {
 	 * Uses determineConsensus to find the best alternative action (same logic as normal inference).
 	 */
 	async populateActionRegretFuture() {
+
+		// Populate actual_reward for action winners so we can detect negative rewards
+		// They are applied when age = distance (prediction outcome just observed)
+		for (const channel of this.channels)
+			await this.conn.query(`
+				UPDATE inferred_neurons inf
+				JOIN neurons n ON n.id = inf.neuron_id
+				JOIN inference_sources isrc ON isrc.neuron_id = inf.neuron_id AND isrc.age = inf.age
+				SET inf.actual_reward = ?
+				WHERE isrc.age = isrc.distance
+				AND inf.level = 0 AND inf.is_winner = 1
+				AND n.type = 'action'
+				AND n.channel_id = ?
+			`, [channel.reward, channel.id]);
+
 		// Step 1: Find bad action inferences with their peaks
 		// Pattern creation happens when age = distance (prediction outcome just observed)
 		const [badActionInferences] = await this.conn.query(`
