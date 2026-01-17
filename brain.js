@@ -1184,15 +1184,14 @@ export default class Brain {
 
 		// POSITIVE REINFORCEMENT FOR ACTION PATTERNS: Strengthen when action was executed (is_winner=1)
 		// Action patterns predict actions, so we strengthen when the predicted action was the winner
+		// Join chain: pattern_future → active_connection (just executed) → active pattern
 		const [actionStrengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
 			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
-			JOIN inference_sources isrc ON isrc.source_id = pf.connection_id AND isrc.source_type = 'pattern'
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age AND inf.level = 0
+			JOIN active_connections ac ON ac.connection_id = pf.connection_id AND ac.age = 0
+			JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id
 			SET pf.strength = LEAST(?, pf.strength + 1)
-			WHERE isrc.age = isrc.distance
-			AND pn.type = 'action'
-			AND inf.is_winner = 1
+			WHERE pn.type = 'action'
 		`, [this.maxConnectionStrength]);
 		if (this.debug) console.log(`Strengthened ${actionStrengthenResult.affectedRows} executed action pattern_future predictions`);
 	}
