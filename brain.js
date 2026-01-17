@@ -261,7 +261,7 @@ export default class Brain {
 		await this.refinePatterns(channelRewards);
 
 		// learn new patterns from failed predictions and action regret
-		await this.learnNewPatterns();
+		await this.learnNewPatterns(channelRewards);
 
 		// do predictions and outputs - what's going to happen next? and what's our best response?
 		await this.inferNeurons();
@@ -1244,6 +1244,7 @@ export default class Brain {
 			// Find action patterns in this channel that made winning predictions with negative rewards
 			// Add the single best untried alternative per failed pattern
 			// Refinement happens when age = distance (prediction outcome just observed)
+			// We're already inside if (reward < actionRegretMinPain) so no need to check actual_reward
 			if (reward < this.actionRegretMinPain) {
 				const [result] = await this.conn.query(`
 					INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength, reward)
@@ -1268,7 +1269,6 @@ export default class Brain {
 						AND n_pattern.type = 'action'
 						AND n_pattern.channel_id = (SELECT id FROM channels WHERE name = ?)
 						AND inf.is_winner = 1
-						AND inf.actual_reward < ?
 						-- Alternative must be in same channel and not the failed action
 						AND n_action.type = 'action'
 						AND n_action.channel_id = n_pattern.channel_id
@@ -1281,7 +1281,7 @@ export default class Brain {
 						)
 					) ranked
 					WHERE rn = 1
-				`, [channelName, this.actionRegretMinPain]);
+				`, [channelName]);
 
 				if (this.debug && result.affectedRows > 0)
 					console.log(`  ${channelName}: action pattern refinement: ${result.affectedRows} alternatives added`);
@@ -1312,15 +1312,16 @@ export default class Brain {
 	/**
 	 * Creates error-driven patterns from failed predictions.
 	 * Processes all levels in bulk, like inferNeurons.
+	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 */
-	async learnNewPatterns() {
+	async learnNewPatterns(channelRewards) {
 
 		// do not start learning new patterns until we had enough frames in the context
 		if (this.frameNumber < this.baseNeuronMaxAge) return;
 
 		// Find connections that should be in pattern_future of new patterns
 		// (prediction errors and action regret, unified in one method)
-		const newPatternFutureCount = await this.populateNewPatternFuture();
+		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
 		// if (newPatternFutureCount > 0) this.waitForUserInput = true;
@@ -2027,11 +2028,12 @@ export default class Brain {
 	 * 2. Action regret: inferred action winner got negative reward → connections from peak to best loser action
 	 *
 	 * Returns the number of new pattern future connections found.
+	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 */
-	async populateNewPatternFuture() {
+	async populateNewPatternFuture(channelRewards) {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
 		await this.populatePredictionErrorFuture();
-		await this.populateActionRegretFuture();
+		await this.populateActionRegretFuture(channelRewards);
 		const [countResult] = await this.conn.query(`SELECT COUNT(*) as count FROM new_pattern_future`);
 		return countResult[0].count;
 	}
@@ -2057,11 +2059,11 @@ export default class Brain {
 			JOIN connections c_inferred ON c_inferred.id = isrc.source_id
 			JOIN neurons n_peak ON n_peak.id = c_inferred.from_neuron_id
 			-- Find active connections FROM the same peak (what actually happened)
-			-- Only distance=1: peak was at age=0 last frame, now at age=1, new observation at age=0
+			-- Match the prediction distance: peak predicted at distance=D, now at age=D, observation at age=0
 			JOIN active_connections ac ON ac.from_neuron_id = c_inferred.from_neuron_id AND ac.age = 0
-			JOIN connections c ON c.id = ac.connection_id AND c.distance = 1
+			JOIN connections c ON c.id = ac.connection_id AND c.distance = isrc.distance
 			JOIN neurons n_target ON n_target.id = c.to_neuron_id
-			WHERE isrc.age = 1
+			WHERE isrc.age = isrc.distance
 			AND isrc.source_type = 'connection'
 			AND isrc.inference_strength >= ?
 			-- The inferred neuron is an event (action errors are handled by action regret)
@@ -2072,18 +2074,18 @@ export default class Brain {
 				WHERE an.neuron_id = isrc.neuron_id
 				AND an.age = 0
 			)
-			-- The peak neuron did NOT use Type 2 inference (pattern already handles this context)
+			-- The peak neuron did NOT use Type 2 inference (check at the distance when inference was made)
 			AND NOT EXISTS (
 				SELECT 1 FROM active_neurons an
 				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
 				WHERE pp.peak_neuron_id = c_inferred.from_neuron_id
-				AND an.age = 1
+				AND an.age = isrc.distance
 			)
-			-- The peak neuron has context (connections TO it from older neurons)
+			-- The peak neuron has context (connections TO it from older neurons at inference time)
 			AND EXISTS (
 				SELECT 1 FROM active_connections context_ac
 				WHERE context_ac.to_neuron_id = c_inferred.from_neuron_id
-				AND context_ac.age = 1
+				AND context_ac.age = isrc.distance
 			)
 			-- Action neurons can NEVER be peaks (only events can be peaks)
 			AND n_peak.type = 'event'
@@ -2107,22 +2109,29 @@ export default class Brain {
 	 * and it leads to pain, create a level 2 pattern.
 	 *
 	 * Uses determineConsensus to find the best alternative action (same logic as normal inference).
+	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 */
-	async populateActionRegretFuture() {
+	async populateActionRegretFuture(channelRewards) {
 
 		// Populate actual_reward for action winners so we can detect negative rewards
 		// They are applied when age = distance (prediction outcome just observed)
-		for (const channel of this.channels)
+		// Build CASE statement for all channels with rewards
+		if (channelRewards.size > 0) {
+			const caseWhen = Array.from(channelRewards.entries())
+				.map(([name, reward]) => `WHEN ${this.channelNameToId[name]} THEN ${reward}`)
+				.join(' ');
+			const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
 			await this.conn.query(`
 				UPDATE inferred_neurons inf
 				JOIN neurons n ON n.id = inf.neuron_id
 				JOIN inference_sources isrc ON isrc.neuron_id = inf.neuron_id AND isrc.age = inf.age
-				SET inf.actual_reward = ?
+				SET inf.actual_reward = CASE n.channel_id ${caseWhen} END
 				WHERE isrc.age = isrc.distance
 				AND inf.level = 0 AND inf.is_winner = 1
 				AND n.type = 'action'
-				AND n.channel_id = ?
-			`, [channel.reward, channel.id]);
+				AND n.channel_id IN (?)
+			`, [channelIds]);
+		}
 
 		// Step 1: Find bad action inferences with their peaks
 		// Pattern creation happens when age = distance (prediction outcome just observed)
@@ -2275,10 +2284,16 @@ export default class Brain {
 		const neurons = peaks.map(p => [p.level + 1, p.pattern_type, p.channel_id]);
 		const neuronIds = await this.createNeurons(neurons);
 
-		// Update new_patterns with pattern neuron IDs
-		for (let i = 0; i < peaks.length; i++)
-			await this.conn.query(`UPDATE new_patterns SET pattern_neuron_id = ? WHERE seq_id = ?`,
-				[neuronIds[i], peaks[i].seq_id]);
+		// Bulk update new_patterns with pattern neuron IDs using CASE statement
+		if (peaks.length > 0) {
+			const caseWhen = peaks.map((p, i) => `WHEN ${p.seq_id} THEN ${neuronIds[i]}`).join(' ');
+			const seqIds = peaks.map(p => p.seq_id);
+			await this.conn.query(`
+				UPDATE new_patterns
+				SET pattern_neuron_id = CASE seq_id ${caseWhen} END
+				WHERE seq_id IN (?)
+			`, [seqIds]);
+		}
 	}
 
 	/**
