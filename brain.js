@@ -254,9 +254,6 @@ export default class Brain {
 		// populate inference sources for executed actions (age=1) using just-created connections
 		await this.populateInferenceSources();
 
-		// update pattern_future for action patterns to strengthen executed action patterns just so that they will not be forgotten
-		await this.strengthenExecutedActionPatterns();
-
 		// learn from connection event and action inferences
 		await this.learnConnectionInferences(channelRewards);
 
@@ -1215,6 +1212,9 @@ export default class Brain {
 	 */
 	async refineActionPatternsFuture(channelRewards) {
 
+		// update pattern_future for action patterns to strengthen executed action patterns just so that they will not be forgotten
+		await this.strengthenExecutedActionPatterns();
+
 		// nothing to update if there are no rewards
 		if (channelRewards.size === 0) return;
 
@@ -1314,6 +1314,9 @@ export default class Brain {
 	 * Processes all levels in bulk, like inferNeurons.
 	 */
 	async learnNewPatterns() {
+
+		// do not start learning new patterns until we had enough frames in the context
+		if (this.frameNumber < this.baseNeuronMaxAge) return;
 
 		// Find connections that should be in pattern_future of new patterns
 		// (prediction errors and action regret, unified in one method)
