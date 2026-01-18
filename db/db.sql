@@ -66,6 +66,13 @@ join connections c on p.connection_id = c.id
 where pattern_neuron_id in (select id from neurons where level > 0 and type = 'action')
 order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
+-- action pattern contexts
+select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
+from pattern_past p 
+join connections c on p.connection_id = c.id 
+where pattern_neuron_id in (select id from neurons where level > 0 and type = 'action')
+order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
+
 select * from neurons where id in (32);
 select * from neurons where level > 1;
 
@@ -169,11 +176,12 @@ CREATE TABLE IF NOT EXISTS pattern_past (
 -- stores connection_id (from peak neuron to target) like pattern_past for consistency
 -- patterns predict what connections from their peak neuron will fire next
 CREATE TABLE IF NOT EXISTS pattern_future (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     connection_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
-    PRIMARY KEY (pattern_neuron_id, connection_id),
+    UNIQUE KEY unique_pattern_connection (pattern_neuron_id, connection_id),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
     INDEX idx_pattern_strength (pattern_neuron_id, strength),
