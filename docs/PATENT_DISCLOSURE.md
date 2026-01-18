@@ -470,17 +470,17 @@ graph TB
 **Innovation**: Connections between neurons span hierarchical levels and encode both temporal and hierarchical relationships through a unified distance metric.
 
 **Technical Details**:
-- **Same-level connections**: Time-dilated temporal distance `FLOOR(age / POW(baseNeuronMaxAge, level))`
+- **Same-level connections**: Time-dilated temporal distance `FLOOR(age / POW(contextLength, level))`
   - Level 0: Exact temporal distance
   - Level 1: Bucketed by 10s for temporal abstraction
   - Level 2: Bucketed by 100s for long-term patterns
-- **Higher→Lower connections**: Distance = `baseNeuronMaxAge - 1` (persistent context)
+- **Higher→Lower connections**: Distance = `contextLength - 1` (persistent context)
   - Higher-level neurons provide stable contextual influence
   - Represents slower timescale influencing faster timescale
 - **Lower→Higher connections**: Distance = 0 (instantaneous co-occurrence)
   - Lower-level events appear simultaneous from higher perspective
   - Represents faster timescale aggregating to slower timescale
-- **Distance-weighted inference**: Linear weighting `(baseNeuronMaxAge - distance) / baseNeuronMaxAge`
+- **Distance-weighted inference**: Linear weighting `(contextLength - distance) / contextLength`
   - Recent connections (distance=0) weighted at 1.0
   - Distant connections (distance=9) weighted at 0.1
   - Prioritizes recent information in peak detection

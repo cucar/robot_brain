@@ -60,7 +60,7 @@ Error Pattern Created at Level 1:
       - B→C (distance=1) - immediate predecessor
       - A→C (distance=2) - 2 frames back
       - X→C (distance=3) - 3 frames back
-      - ... up to distance=9 (baseNeuronMaxAge)
+      - ... up to distance=9 (contextLength)
     - Purpose: Recognize when C appears in this SPECIFIC context again
     - Captures up to 9 frames of temporal history!
 

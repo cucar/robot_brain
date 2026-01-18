@@ -330,7 +330,7 @@ Real sequences have structure:
 
 ### 1. Multiple Distance Connections Capture Long Context
 
-Connections exist at distances 1-9 (up to baseNeuronMaxAge):
+Connections exist at distances 1-9 (up to contextLength):
 - Distance=1: Immediate predecessor
 - Distance=2: 2 frames back
 - Distance=3: 3 frames back

@@ -62,7 +62,7 @@ This document identifies deviations between the brain architecture design and th
 ## ⚠️ Needs Verification
 
 ### 1. Pattern-to-Pattern Connection Inference
-**Architecture**: Patterns can form connections to other patterns, enabling sequences longer than baseNeuronMaxAge.
+**Architecture**: Patterns can form connections to other patterns, enabling sequences longer than contextLength.
 
 **Current code**: Infrastructure exists but commented debug code suggests uncertainty:
 ```javascript

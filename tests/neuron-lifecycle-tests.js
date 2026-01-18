@@ -152,7 +152,7 @@ class NeuronLifecycleTests {
         // Age neurons
         await this.brain.ageNeurons();
         
-        // Check which neurons survived (age < POW(baseNeuronMaxAge, level + 1))
+        // Check which neurons survived (age < POW(contextLength, level + 1))
         const [survivingRows] = await this.brain.conn.query('SELECT neuron_id, level, age FROM active_neurons ORDER BY neuron_id');
         
         // neuronIds[0] at level 0: age 9+1=10, max=POW(10,1)=10, should be deleted (age >= max)

@@ -36,8 +36,8 @@ The current implementation uses a unified schema optimized for spatio-temporal p
 - **`connections(id, from_neuron_id, to_neuron_id, distance, strength)`**
   - **Cross-level directed connections**: Neurons at any level can connect to neurons at any other level
   - **`distance`**: Encodes both temporal and hierarchical relationships:
-    - **Same level**: Time-dilated temporal distance `FLOOR(age / POW(baseNeuronMaxAge, level))`
-    - **Higher → Lower**: `baseNeuronMaxAge - 1` (persistent context from slower timescale)
+    - **Same level**: Time-dilated temporal distance `FLOOR(age / POW(contextLength, level))`
+    - **Higher → Lower**: `contextLength - 1` (persistent context from slower timescale)
     - **Lower → Higher**: `0` (instantaneous from faster timescale perspective)
   - **`strength`**: Connection weight (reinforced by observations, decayed by forgetting)
 
@@ -68,7 +68,7 @@ The current implementation uses a unified schema optimized for spatio-temporal p
 
 ## Hyperparameters (brain.js)
 
-- **`baseNeuronMaxAge`**: Base frames a neuron stays active (default 10, higher levels age slower via POW formula)
+- **`contextLength`**: Base frames a neuron stays active (default 10, higher levels age slower via POW formula)
 - **`forgetCycles`**: Frames between forget cycles (default 1000)
 - **`connectionForgetRate`**: Connection strength decay per forget cycle (default 0.1)
 - **`patternForgetRate`**: Pattern strength decay per forget cycle (default 0.1)
@@ -89,7 +89,7 @@ The system processes input through `await brain.processFrame(frame, globalReward
 
 ### 2. Active Window Management
 - **Age neurons**: Increment age of all `active_neurons` and `inferred_neurons`
-- **Sliding window**: Remove neurons older than `baseNeuronMaxAge * POW(level + 1)` (higher levels age slower)
+- **Sliding window**: Remove neurons older than `contextLength * POW(level + 1)` (higher levels age slower)
 - **Memory cleanup**: Maintain temporal context within level-dependent time windows
 
 ### 3. Output Execution
@@ -118,7 +118,7 @@ For each level from highest to lowest:
 #### Strength Optimization
 - **Calculate neuron strengths**: Compute weighted connection strength totals for predicted neurons
   - **Distance weighting**: Recent connections (distance=0) weighted at 1.0, distant connections (distance=9) weighted at 0.1
-  - Linear interpolation: `weight = (baseNeuronMaxAge - distance) / baseNeuronMaxAge`
+  - Linear interpolation: `weight = (contextLength - distance) / contextLength`
 - **Apply reward factors**: Multiply base strengths by `neuron_rewards` factors to bias toward successful neurons
 - **Peak detection**: Identify neurons stronger than the average strength across all candidates
 
@@ -159,13 +159,13 @@ The system implements a biologically-inspired cross-level connection architectur
 Connections encode both temporal and hierarchical relationships through their distance value:
 
 #### Same-Level Connections
-- **Formula**: `FLOOR(age / POW(baseNeuronMaxAge, level))`
+- **Formula**: `FLOOR(age / POW(contextLength, level))`
 - **Meaning**: Time-dilated temporal distance
 - **Example**: At level 0, distance = exact age; at level 1, distance bucketed by 10s; at level 2, bucketed by 100s
 - **Purpose**: Captures temporal sequences at appropriate timescales for each level
 
 #### Higher → Lower Level Connections
-- **Formula**: `baseNeuronMaxAge - 1` (e.g., 9 if baseNeuronMaxAge=10)
+- **Formula**: `contextLength - 1` (e.g., 9 if contextLength=10)
 - **Meaning**: Persistent context from slower timescale
 - **Rationale**: Higher-level neurons exist for longer periods, acting as stable context for lower-level processing
 - **Example**: A Level 2 market trend neuron provides context for Level 0 price movements
@@ -198,8 +198,8 @@ Connections encode both temporal and hierarchical relationships through their di
 
 To prioritize recent information, connection strengths are weighted by temporal proximity during peak detection:
 
-- **Formula**: `weight = (baseNeuronMaxAge - distance) / baseNeuronMaxAge`
-- **Examples** (baseNeuronMaxAge=10):
+- **Formula**: `weight = (contextLength - distance) / contextLength`
+- **Examples** (contextLength=10):
   - distance=0 → weight=1.0 (100% - most recent)
   - distance=1 → weight=0.9 (90%)
   - distance=5 → weight=0.5 (50%)

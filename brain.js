@@ -16,7 +16,7 @@ export default class Brain {
 		//************************************************************
 
 		// structural limits for the brain
-		this.baseNeuronMaxAge = 5; // number of frames a base neuron stays active - this determines the context length
+		this.contextLength = 5; // number of frames a base neuron stays active - this determines the context length
 		this.minConnectionStrength = 0; // minimum strength value for connections and patterns (clamped to prevent negative values)
 		this.maxConnectionStrength = 100; // maximum strength value for connections and patterns (clamped to prevent overflow)
 
@@ -531,7 +531,7 @@ export default class Brain {
 
 	/**
 	 * Ages all neurons and connections in the context by 1, then deactivates aged-out items.
-	 * With uniform aging, all levels are deactivated at once when age >= baseNeuronMaxAge.
+	 * With uniform aging, all levels are deactivated at once when age >= contextLength.
 	 * Also ages inference source tables for temporal credit assignment.
 	 */
 	async ageNeurons() {
@@ -547,23 +547,23 @@ export default class Brain {
 		await this.conn.query('UPDATE inference_sources SET age = age + 1 ORDER BY age DESC');
 
 		// Skip deletions until we have enough frames
-		if (this.frameNumber < this.baseNeuronMaxAge + 1) return;
+		if (this.frameNumber < this.contextLength + 1) return;
 
 		// Delete aged-out neurons from all levels at once
-		const [neuronResult] = await this.conn.query('DELETE FROM active_neurons WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Deactivated ${neuronResult.affectedRows} aged-out neurons across all levels (age >= ${this.baseNeuronMaxAge})`);
+		const [neuronResult] = await this.conn.query('DELETE FROM active_neurons WHERE age >= ?', [this.contextLength]);
+		if (this.debug) console.log(`Deactivated ${neuronResult.affectedRows} aged-out neurons across all levels (age >= ${this.contextLength})`);
 
 		// Delete aged-out connections from all levels at once
-		const [connectionResult] = await this.conn.query('DELETE FROM active_connections WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Deactivated ${connectionResult.affectedRows} aged-out connections across all levels (age >= ${this.baseNeuronMaxAge})`);
+		const [connectionResult] = await this.conn.query('DELETE FROM active_connections WHERE age >= ?', [this.contextLength]);
+		if (this.debug) console.log(`Deactivated ${connectionResult.affectedRows} aged-out connections across all levels (age >= ${this.contextLength})`);
 
 		// Clean up inferred neurons after execution
-		const [inferredResult] = await this.conn.query('DELETE FROM inferred_neurons WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Cleaned up ${inferredResult.affectedRows} executed inferred neurons (age >= ${this.baseNeuronMaxAge})`);
+		const [inferredResult] = await this.conn.query('DELETE FROM inferred_neurons WHERE age >= ?', [this.contextLength]);
+		if (this.debug) console.log(`Cleaned up ${inferredResult.affectedRows} executed inferred neurons (age >= ${this.contextLength})`);
 
 		// Delete aged-out inference sources (same lifecycle as neurons)
-		const [infSourcesResult] = await this.conn.query('DELETE FROM inference_sources WHERE age >= ?', [this.baseNeuronMaxAge]);
-		if (this.debug) console.log(`Cleaned up ${infSourcesResult.affectedRows} aged-out inference sources (age >= ${this.baseNeuronMaxAge})`);
+		const [infSourcesResult] = await this.conn.query('DELETE FROM inference_sources WHERE age >= ?', [this.contextLength]);
+		if (this.debug) console.log(`Cleaned up ${infSourcesResult.affectedRows} aged-out inference sources (age >= ${this.contextLength})`);
 	}
 
 	/**
@@ -1219,6 +1219,7 @@ export default class Brain {
 	/**
 	 * Add alternative actions to action patterns in painful channels.
 	 * When an action pattern prediction fails (painful reward), find the best untried alternative.
+	 * Creates connections if they don't exist yet.
 	 */
 	async addAlternativeActionsToPatterns(channelRewards) {
 
@@ -1228,42 +1229,114 @@ export default class Brain {
 			if (reward < this.actionRegretMinPain) painfulChannelIds.push(this.channelNameToId[channelName]);
 		if (painfulChannelIds.length === 0) return;
 
-		// Refine action patterns: when action pattern prediction fails, add alternative actions to try
-		// update the action patterns in painful channels that were just executed (age=0)
-		// Add the single best untried alternative per failed pattern
-		const [result] = await this.conn.query(`
-			INSERT INTO pattern_future (pattern_neuron_id, connection_id, strength, reward)
-			SELECT pf.pattern_neuron_id, alt.connection_id, 1.0, 0.0
+		// Query 1: Get failed patterns with their failed action id
+		// Each (pattern, distance) has exactly one failed action since channels execute one action per frame
+		// Same pattern can be active at multiple ages, predicting at different distances
+		// Use EXISTS for active_neurons to avoid row multiplication from multiple (level, age) combinations
+		const [failedPatterns] = await this.conn.query(`
+			SELECT pf.pattern_neuron_id, pp.peak_neuron_id, pn.channel_id, c.distance, ac.to_neuron_id as failed_action_id
 			FROM pattern_future pf
 			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
 			JOIN active_connections ac ON ac.connection_id = pf.connection_id AND ac.age = 0
-			JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id
 			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
 			JOIN connections c ON c.id = pf.connection_id
-			-- LATERAL join: for each row, find the best alternative (rows with no alternative are dropped)
-			JOIN LATERAL (
-				-- Find the best alternative connection from the same peak (same distance as failed)
-				SELECT c_alt.id as connection_id
-				FROM connections c_alt
-				JOIN neurons n_action ON n_action.id = c_alt.to_neuron_id
-				WHERE c_alt.from_neuron_id = pp.peak_neuron_id
-				AND c_alt.distance = c.distance
-				-- Alternative must be in same channel and not the failed action
-				AND n_action.type = 'action'
-				AND n_action.channel_id = pn.channel_id
-				AND c_alt.to_neuron_id != ac.to_neuron_id
-				-- Alternative must not already be in pattern_future
-				AND NOT EXISTS (
-					SELECT 1 FROM pattern_future pf2
-					WHERE pf2.pattern_neuron_id = pf.pattern_neuron_id
-					AND pf2.connection_id = c_alt.id
-				)
-				ORDER BY c_alt.reward DESC, c_alt.id ASC
-				LIMIT 1
-			) alt ON TRUE
 			WHERE pn.type = 'action'
 			AND pn.channel_id IN (${painfulChannelIds.join(',')})
+			AND EXISTS (SELECT 1 FROM active_neurons an WHERE an.neuron_id = pf.pattern_neuron_id)
 		`);
+		if (failedPatterns.length === 0) return;
+
+		// Query 2: Get actions already in pattern_future for these patterns
+		const patternIds = failedPatterns.map(fp => fp.pattern_neuron_id);
+		const [existingFuture] = await this.conn.query(`
+			SELECT pf.pattern_neuron_id, c.to_neuron_id as action_id
+			FROM pattern_future pf
+			JOIN connections c ON c.id = pf.connection_id
+			WHERE pf.pattern_neuron_id IN (?)
+		`, [patternIds]);
+
+		// Build set of existing actions per pattern
+		const existingByPattern = new Map();
+		for (const ef of existingFuture) {
+			if (!existingByPattern.has(ef.pattern_neuron_id)) existingByPattern.set(ef.pattern_neuron_id, new Set());
+			existingByPattern.get(ef.pattern_neuron_id).add(ef.action_id);
+		}
+
+		// Query 3: Get all action neurons per channel with their connection rewards from peaks
+		const channelIds = [...new Set(failedPatterns.map(fp => fp.channel_id))];
+		const peakIds = [...new Set(failedPatterns.map(fp => fp.peak_neuron_id))];
+		const [candidates] = await this.conn.query(`
+			SELECT n.id as action_id, n.channel_id, c.from_neuron_id as peak_neuron_id, c.distance, c.reward
+			FROM neurons n
+			LEFT JOIN connections c ON c.to_neuron_id = n.id AND c.from_neuron_id IN (?)
+			WHERE n.type = 'action' AND n.channel_id IN (?)
+		`, [peakIds, channelIds]);
+
+		// Build map: (peak, channel, distance, action) -> reward
+		const rewardMap = new Map();
+		const actionsByChannel = new Map();
+		for (const c of candidates) {
+			if (!actionsByChannel.has(c.channel_id))
+				actionsByChannel.set(c.channel_id, new Set());
+			actionsByChannel.get(c.channel_id).add(c.action_id);
+
+			if (c.peak_neuron_id !== null)
+				rewardMap.set(`${c.peak_neuron_id}:${c.distance}:${c.action_id}`, c.reward);
+		}
+
+		// In-memory: pick the best alternative per (pattern, distance)
+		const best = [];
+		for (const fp of failedPatterns) {
+			const existingIds = existingByPattern.get(fp.pattern_neuron_id) || new Set();
+			const channelActions = actionsByChannel.get(fp.channel_id) || new Set();
+
+			let bestAlt = null;
+			let bestReward = -Infinity;
+			for (const actionId of channelActions) {
+				if (actionId === fp.failed_action_id || existingIds.has(actionId)) continue;
+				const reward = rewardMap.get(`${fp.peak_neuron_id}:${fp.distance}:${actionId}`) ?? -999;
+				if (reward > bestReward || (reward === bestReward && (!bestAlt || actionId < bestAlt.alt_action_id))) {
+					bestAlt = { ...fp, alt_action_id: actionId };
+					bestReward = reward;
+				}
+			}
+			if (bestAlt) best.push(bestAlt);
+		}
+
+		if (best.length === 0) return;
+
+		// Bulk insert connections (ON DUPLICATE KEY for existing ones)
+		const connValues = best.map(b => [b.peak_neuron_id, b.alt_action_id, b.distance, 1.0, 0.0]);
+		await this.conn.query(`
+			INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward)
+			VALUES ? ON DUPLICATE KEY UPDATE strength = strength
+		`, [connValues]);
+
+		// Query to get connection IDs for the just-created/existing connections
+		const connKeys = best.map(b => [b.peak_neuron_id, b.alt_action_id, b.distance]);
+		const [connRows] = await this.conn.query(`
+			SELECT id, from_neuron_id, to_neuron_id, distance FROM connections
+			WHERE (from_neuron_id, to_neuron_id, distance) IN (?)
+		`, [connKeys]);
+
+		// Map connection keys to IDs
+		const connIdMap = new Map();
+		for (const c of connRows)
+			connIdMap.set(`${c.from_neuron_id}:${c.to_neuron_id}:${c.distance}`, c.id);
+
+		// Build pattern_future inserts
+		const futureValues = [];
+		for (const b of best) {
+			const connId = connIdMap.get(`${b.peak_neuron_id}:${b.alt_action_id}:${b.distance}`);
+			if (connId) futureValues.push([b.pattern_neuron_id, connId, 1.0, 0.0]);
+		}
+
+		if (futureValues.length === 0) return;
+
+		const [result] = await this.conn.query(`
+			INSERT IGNORE INTO pattern_future (pattern_neuron_id, connection_id, strength, reward)
+			VALUES ?
+		`, [futureValues]);
 
 		if (this.debug && result.affectedRows > 0)
 			console.log(`Action pattern refinement: ${result.affectedRows} alternatives added`);
@@ -1294,7 +1367,7 @@ export default class Brain {
 	async learnNewPatterns(channelRewards) {
 
 		// do not start learning new patterns until we had enough frames in the context
-		if (this.frameNumber < this.baseNeuronMaxAge + 1) return;
+		if (this.frameNumber < this.contextLength + 1) return;
 
 		// Find connections that should be in pattern_future of new patterns
 		// (prediction errors and action regret, unified in one method)
@@ -1464,7 +1537,7 @@ export default class Brain {
 			WHERE c.distance = an.age + 1
             AND c.strength > 0
 			AND an.age < :maxAge
-		`, { decay: this.peakTimeDecayFactor, levelMult: this.levelVoteMultiplier, maxAge: this.baseNeuronMaxAge });
+		`, { decay: this.peakTimeDecayFactor, levelMult: this.levelVoteMultiplier, maxAge: this.contextLength });
 
 		// Collect pattern votes from ALL levels and ages
 		// pattern_future stores connections with various distances, patterns predict when distance matches age+1
@@ -1485,7 +1558,7 @@ export default class Brain {
             AND c.strength > 0
             AND pf.strength > 0
 			AND an.age < :maxAge
-		`, { decay: this.peakTimeDecayFactor, levelMult: this.levelVoteMultiplier, maxAge: this.baseNeuronMaxAge });
+		`, { decay: this.peakTimeDecayFactor, levelMult: this.levelVoteMultiplier, maxAge: this.contextLength });
 
 		// Combine all votes
 		const allVotes = [...connectionVotes, ...patternVotes];

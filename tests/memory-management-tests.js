@@ -166,17 +166,17 @@ class MemoryManagementTests {
         await this.brain.conn.query(`
             DELETE FROM connection_inference
             WHERE age >= POW(?, level)
-        `, [this.brain.baseNeuronMaxAge]);
+        `, [this.brain.contextLength]);
 
         await this.brain.conn.query(`
             DELETE FROM pattern_inference
             WHERE age >= POW(?, level + 1)
-        `, [this.brain.baseNeuronMaxAge]);
+        `, [this.brain.contextLength]);
 
         await this.brain.conn.query(`
             DELETE FROM inferred_neurons
             WHERE age >= POW(?, level)
-        `, [this.brain.baseNeuronMaxAge]);
+        `, [this.brain.contextLength]);
 
         // Verify cleanup
         const [finalConnInf] = await this.brain.conn.query('SELECT COUNT(*) as count FROM connection_inference');

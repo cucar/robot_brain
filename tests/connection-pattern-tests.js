@@ -148,7 +148,7 @@ class ConnectionPatternTests {
         console.log('Testing Distance Weighting in Peak Detection:');
 
         // Create test connections with varying distances to test weighting
-        // baseNeuronMaxAge = 10, so weight = (10 - distance) / 10
+        // contextLength = 10, so weight = (10 - distance) / 10
         // distance=0 → weight=1.0, distance=5 → weight=0.5, distance=9 → weight=0.1
         const testConnections = [
             // Neuron 2 receives connections at different distances
@@ -234,7 +234,7 @@ class ConnectionPatternTests {
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 10)', [neuronIds[0], neuronIds[3]]);
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 0, 8)', [neuronIds[1], neuronIds[3]]);
 
-        // 2. Higher → Lower (level 1 → level 0): distance = baseNeuronMaxAge - 1 = 9
+        // 2. Higher → Lower (level 1 → level 0): distance = contextLength - 1 = 9
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 5)', [neuronIds[3], neuronIds[0]]);
         await this.brain.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength) VALUES (?, ?, 9, 6)', [neuronIds[4], neuronIds[0]]);
 
@@ -285,11 +285,11 @@ class ConnectionPatternTests {
         this.assert(strengths.get(neuronIds[1]) === 9.0, 'Neuron 1 should have weighted strength 9.0', strengths.get(neuronIds[1]), 9.0);
 
         // Test that lower→higher connections have full weight (distance=0)
-        const lowerToHigherWeight = (this.brain.baseNeuronMaxAge - 0) / this.brain.baseNeuronMaxAge;
+        const lowerToHigherWeight = (this.brain.contextLength - 0) / this.brain.contextLength;
         this.assert(lowerToHigherWeight === 1.0, 'Lower→higher connections should have full weight (distance=0)', lowerToHigherWeight, 1.0);
 
         // Test that higher→lower connections have minimal weight (distance=9)
-        const higherToLowerWeight = (this.brain.baseNeuronMaxAge - 9) / this.brain.baseNeuronMaxAge;
+        const higherToLowerWeight = (this.brain.contextLength - 9) / this.brain.contextLength;
         this.assert(higherToLowerWeight === 0.1, 'Higher→lower connections should have 0.1 weight (distance=9)', higherToLowerWeight, 0.1);
 
         // Verify that lower→higher connections dominate in peak detection
