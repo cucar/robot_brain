@@ -25,7 +25,7 @@ export default class Brain {
 		this.patternErrorMinStrength = 10.0; // minimum prediction strength to create higher-level pattern from pattern inference error
 		this.actionRegretMinStrength = 1; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
-		this.mergePatternThreshold = 0.80; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
@@ -1982,42 +1982,37 @@ export default class Brain {
 	 * Populate higher-level event prediction errors (from pattern inferences).
 	 * Peak is the pattern neuron that made the prediction.
 	 * Find what actually happened (active neurons) instead of what was predicted.
+	 * Uses same logic as populateNewBaseEventPatterns but for pattern predictions.
 	 */
 	async populateNewHighEventPatterns() {
 		const [patternResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance, type)
 			SELECT pf.pattern_neuron_id, an.neuron_id, 1, 'event'
-			FROM inference_sources isrc
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
-			JOIN neurons n_inferred ON n_inferred.id = inf.neuron_id
-			JOIN pattern_future pf ON pf.id = isrc.source_id
-			JOIN neurons n_pattern ON n_pattern.id = pf.pattern_neuron_id
-			-- Find active neurons in same channel (what actually happened)
+			FROM inferred_neurons inf
+			-- creating event patterns, so the inferred neuron is an event
+			JOIN neurons n_inferred ON n_inferred.id = inf.neuron_id AND n_inferred.type = 'event'
+			-- the inference must have been done with a strength above a threshold to trigger pattern creation
+			-- only create patterns from age=1 peaks to ensure full context
+			-- at this point (frameNumber >= contextLength + 1), age=1 peaks always have full context
+			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id AND inf.age = pf.distance AND pf.strength >= ?
+			JOIN active_neurons an_peak ON an_peak.neuron_id = pf.pattern_neuron_id AND an_peak.age = inf.age AND an_peak.age = 1
+			-- actions cannot learn patterns - only events can learn action/event patterns
+			JOIN neurons n_peak ON n_peak.id = pf.pattern_neuron_id AND n_peak.type = 'event'
+			-- find the active neurons in same channel (what actually happened just now)
+			-- we are creating patterns for events that happened in the same channel
 			JOIN active_neurons an ON an.age = 0 AND an.level = 0
-			JOIN neurons n_target ON n_target.id = an.neuron_id
-			WHERE isrc.age = isrc.distance
-			AND isrc.source_type = 'pattern'
-			AND isrc.inference_strength >= ?
-			AND n_inferred.type = 'event'
-			-- Only create patterns from distance=1 predictions (full context)
-			AND pf.distance = 1
-			AND isrc.distance = 1
-			-- The inference didn't come true (prediction error)
+			JOIN neurons actual ON actual.id = an.neuron_id AND actual.type = 'event' AND actual.channel_id = n_peak.channel_id
+			-- the inference did not come true (prediction error)
+			WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
+			-- don't create a pattern if there is already an active pattern for this peak
+			-- it means the peak recognized this situation - we'll refine it instead in that case
 			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an2
-				WHERE an2.neuron_id = isrc.neuron_id AND an2.age = 0
+				SELECT 1 FROM active_neurons an_pattern
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
+				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
+				AND an_pattern.age = 1
 			)
-			-- The pattern neuron has context (connections TO it from other patterns at same level)
-			AND EXISTS (
-				SELECT 1 FROM active_connections context_ac
-				JOIN neurons context_n ON context_n.id = context_ac.from_neuron_id
-				WHERE context_ac.to_neuron_id = pf.pattern_neuron_id
-				AND context_ac.age = 1
-				AND context_n.level = n_pattern.level
-			)
-			AND n_target.type = 'event'
-			AND n_target.channel_id = n_pattern.channel_id
-		`, [this.patternErrorMinStrength]);
+		`, [this.predictionErrorMinStrength]);
 		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
 	}
 
