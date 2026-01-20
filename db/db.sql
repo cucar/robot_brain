@@ -26,9 +26,9 @@ select * from inferred_neurons where age = 1;
 select * from inference_sources where age = 1;
 select c_inferred.* FROM inference_sources isrc JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age JOIN connections c_inferred ON c_inferred.id = isrc.source_id where inf.age = 1;
 select * from inference_sources where source_type = 'pattern';
-select * from connections where id in (select connection_id from new_pattern_future);
 select * from active_neurons where age in (0,1) order by age, neuron_id;
 select * from new_patterns;
+select * from new_pattern_future;
 
 select * from neurons where level > 0;
 select * from dimensions;
@@ -91,17 +91,47 @@ where pattern_neuron_id in (select id from neurons where level > 0 and type = 'a
 order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
 select * from neurons where id in (32);
-select * from neurons where level > 1;
+select * from neurons where level > 0;
 
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 6 order by to_neuron_id, distance;
-select * from pattern_future p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by distance;
+select * from pattern_future where pattern_neuron_id = 5;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 6 order by c.distance;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by to_neuron_id, distance, from_neuron_id;
-select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
+select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by pattern_neuron_id;
 select * from pattern_future;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
+
+SELECT c.from_neuron_id, an.neuron_id, c.distance, 'event'
+FROM inferred_neurons inf
+-- creating event patterns, so the inferred neuron is an event
+JOIN neurons n_inferred ON n_inferred.id = inf.neuron_id AND n_inferred.type = 'event'
+-- the inference must have been done with a strength above a threshold to trigger pattern creation 
+JOIN connections c ON c.to_neuron_id = inf.neuron_id AND inf.age = c.distance AND c.strength >= 0
+JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = inf.age
+-- actions cannot learn patterns - only events can learn action/event patterns
+JOIN neurons n_peak ON n_peak.id = c.from_neuron_id AND n_peak.type = 'event'
+-- find the active neurons in same channel (what actually happened just now)
+-- we are creating patterns for events that happened in the same channel 
+JOIN active_neurons an ON an.age = 0 AND an.level = 0
+JOIN neurons actual ON actual.id = an.neuron_id AND actual.type = 'event' AND actual.channel_id = n_peak.channel_id
+-- the inference did not come true (prediction error)
+WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
+-- don't create a pattern if there is already an active pattern for this peak 
+-- it means the peak recognized this situation - we'll refine it instead in that case
+AND NOT EXISTS (
+	SELECT 1 FROM active_neurons an_pattern
+	JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
+	WHERE pp.peak_neuron_id = c.from_neuron_id
+	AND an_pattern.age = c.distance
+)
+-- if the peak neuron does not have a context (connections TO it from older neurons at inference time)
+-- then, we can't create a pattern for it because pattern_past would be empty - need more data - wait
+AND EXISTS (
+	SELECT 1 FROM active_connections context_ac
+	WHERE context_ac.to_neuron_id = c.from_neuron_id
+	AND context_ac.age = c.distance
+);
 
 -- 14 = out, 13 = own
 select c.neuron_id, d.name, c.val 
@@ -326,12 +356,14 @@ CREATE TABLE IF NOT EXISTS new_pattern_future (
 -- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)
 -- used during bulk pattern creation to track sequential IDs
 -- type: pattern type ('event' or 'action') - one peak can have both types of patterns
+-- distance: temporal distance when peak made the prediction (determines pattern_past age)
 CREATE TABLE IF NOT EXISTS new_patterns (
     seq_id INT AUTO_INCREMENT PRIMARY KEY,
     peak_neuron_id BIGINT UNSIGNED NOT NULL,
     type ENUM('event', 'action') NOT NULL,
+    distance TINYINT UNSIGNED NOT NULL,
     pattern_neuron_id BIGINT UNSIGNED,
-    UNIQUE INDEX idx_peak_type (peak_neuron_id, type),
+    UNIQUE INDEX idx_peak_type_distance (peak_neuron_id, type, distance),
     INDEX idx_peak (peak_neuron_id)
 ) ENGINE=MEMORY;
 

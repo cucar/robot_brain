@@ -21,7 +21,7 @@ export default class Brain {
 		this.maxConnectionStrength = 100; // maximum strength value for connections and patterns (clamped to prevent overflow)
 
 		// pattern learning parameters
-		this.predictionErrorMinStrength = 10.0; // minimum prediction strength to create error-driven pattern from connection inference
+		this.predictionErrorMinStrength = 0; // minimum prediction strength to create error-driven pattern from connection inference
 		this.patternErrorMinStrength = 10.0; // minimum prediction strength to create higher-level pattern from pattern inference error
 		this.actionRegretMinStrength = 1; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
@@ -1917,73 +1917,74 @@ export default class Brain {
 	 */
 	async populateNewPatternFuture(channelRewards) {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
-		await this.populatePredictionErrorFuture();
-		await this.populateActionRegretFuture(channelRewards);
+		await this.populateNewEventPatterns();
+		await this.populateNewActionPatterns(channelRewards);
 		const [countResult] = await this.conn.query(`SELECT COUNT(*) as count FROM new_pattern_future`);
 		return countResult[0].count;
 	}
 
 	/**
-	 * Populate prediction error neurons into new_pattern_future.
+	 * Populate event prediction error neurons into new_pattern_future.
 	 * Peak predicted X, but X didn't happen and Y happened instead.
 	 * → Create pattern to predict Y from this context.
 	 *
-	 * Only handles connection inference errors (source_type = 'connection').
-	 * Pattern inference errors are handled by refineEventPatternsFuture (strengthen/weaken).
-	 *
+	 * Handles both connection and pattern inference errors.
 	 * Works for all levels: if a level N neuron predicts a base event,
 	 * and it doesn't happen, create a level N+1 pattern to correct the prediction.
 	 */
-	async populatePredictionErrorFuture() {
-		// Connection inference errors: peak is the base neuron that made the prediction
-		// Find what actually happened (active neurons) instead of what was predicted
+	async populateNewEventPatterns() {
+		await this.populateNewBaseEventPatterns();
+		await this.populateNewHighEventPatterns();
+	}
+
+	/**
+	 * Populate base-level event prediction errors (from connection inferences).
+	 * Peak is the base neuron that made the prediction.
+	 * Find what actually happened (active neurons) instead of what was predicted.
+	 */
+	async populateNewBaseEventPatterns() {
 		const [connResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance, type)
-			SELECT c_inferred.from_neuron_id, an.neuron_id, c_inferred.distance, 'event'
-			FROM inference_sources isrc
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
-			JOIN neurons n_inferred ON n_inferred.id = inf.neuron_id
-			JOIN connections c_inferred ON c_inferred.id = isrc.source_id
-			JOIN neurons n_peak ON n_peak.id = c_inferred.from_neuron_id
-			-- Find active neurons in same channel (what actually happened)
-			-- Match the prediction distance: peak predicted at distance=D, now at age=D, observation at age=0
+			SELECT c.from_neuron_id, an.neuron_id, c.distance, 'event'
+			FROM inferred_neurons inf
+            -- creating event patterns, so the inferred neuron is an event
+			JOIN neurons n_inferred ON n_inferred.id = inf.neuron_id AND n_inferred.type = 'event'
+			-- the inference must have been done with a strength above a threshold to trigger pattern creation 
+			JOIN connections c ON c.to_neuron_id = inf.neuron_id AND inf.age = c.distance AND c.strength >= ?
+			JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = inf.age
+            -- actions cannot learn patterns - only events can learn action/event patterns
+			JOIN neurons n_peak ON n_peak.id = c.from_neuron_id AND n_peak.type = 'event'
+			-- find the active neurons in same channel (what actually happened just now)
+            -- we are creating patterns for events that happened in the same channel 
 			JOIN active_neurons an ON an.age = 0 AND an.level = 0
-			JOIN neurons n_target ON n_target.id = an.neuron_id
-			WHERE isrc.age = isrc.distance
-			AND isrc.source_type = 'connection'
-			AND isrc.inference_strength >= ?
-			-- The inferred neuron is an event (action errors are handled by action regret)
-			AND n_inferred.type = 'event'
-			-- The inference didn't come true (prediction error)
+			JOIN neurons actual ON actual.id = an.neuron_id AND actual.type = 'event' AND actual.channel_id = n_peak.channel_id
+			-- the inference did not come true (prediction error)
+            WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
+			-- don't create a pattern if there is already an active pattern for this peak 
+			-- it means the peak recognized this situation - we'll refine it instead in that case
 			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an2
-				WHERE an2.neuron_id = isrc.neuron_id
-				AND an2.age = 0
+				SELECT 1 FROM active_neurons an_pattern
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
+				WHERE pp.peak_neuron_id = c.from_neuron_id
+				AND an_pattern.age = c.distance
 			)
-			-- The peak neuron did NOT use Type 2 inference (check at the distance when inference was made)
-			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an3
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an3.neuron_id
-				WHERE pp.peak_neuron_id = c_inferred.from_neuron_id
-				AND an3.age = isrc.distance
-			)
-			-- The peak neuron has context (connections TO it from older neurons at inference time)
+			-- if the peak neuron does not have a context (connections TO it from older neurons at inference time)
+            -- then, we can't create a pattern for it because pattern_past would be empty - need more data - wait
 			AND EXISTS (
 				SELECT 1 FROM active_connections context_ac
-				WHERE context_ac.to_neuron_id = c_inferred.from_neuron_id
-				AND context_ac.age = isrc.distance
+				WHERE context_ac.to_neuron_id = c.from_neuron_id
+				AND context_ac.age = c.distance
 			)
-			-- Action neurons can NEVER be peaks (only events can be peaks)
-			AND n_peak.type = 'event'
-			-- Only create patterns for event targets (action targets handled by action regret)
-			AND n_target.type = 'event'
-			-- Pattern future must only contain same-channel predictions
-			AND n_target.channel_id = n_peak.channel_id
 		`, [this.predictionErrorMinStrength]);
 		if (this.debug) console.log(`Found ${connResult.affectedRows} connection prediction error neurons`);
+	}
 
-		// Pattern inference errors: peak is the pattern neuron
-		// Find what actually happened (active neurons) instead of what was predicted
+	/**
+	 * Populate higher-level event prediction errors (from pattern inferences).
+	 * Peak is the pattern neuron that made the prediction.
+	 * Find what actually happened (active neurons) instead of what was predicted.
+	 */
+	async populateNewHighEventPatterns() {
 		const [patternResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance, type)
 			SELECT pf.pattern_neuron_id, an.neuron_id, pf.distance, 'event'
@@ -2023,16 +2024,14 @@ export default class Brain {
 	 * Peak predicted action X (winner), but got negative reward.
 	 * → Create pattern to predict the best loser action from this context.
 	 *
-	 * Only handles connection inference errors (source_type = 'connection').
-	 * Pattern inference errors are handled by applyRewards (strengthen/weaken).
-	 *
+	 * Handles both connection and pattern inference errors.
 	 * Works for all levels: if a level 1 pattern predicts an action
 	 * and it leads to pain, create a level 2 pattern.
 	 *
 	 * Uses determineConsensus to find the best alternative action (same logic as normal inference).
 	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 */
-	async populateActionRegretFuture(channelRewards) {
+	async populateNewActionPatterns(channelRewards) {
 
 		// Populate actual_reward for action winners so we can detect negative rewards
 		// They are applied when age = distance (prediction outcome just observed)
@@ -2252,17 +2251,18 @@ export default class Brain {
 
 	/**
 	 * Populate new_patterns table from new_pattern_future.
-	 * Finds unique peak neurons (one pattern per peak).
+	 * Finds unique (peak, type, distance) combinations.
 	 * Peak can be a base neuron (for connection errors) or pattern neuron (for pattern errors).
+	 * Distance determines when the peak was active and thus what context (pattern_past) to capture.
 	 * Returns the number of patterns to create.
 	 */
 	async populateNewPatterns() {
 		await this.conn.query(`TRUNCATE new_patterns`);
-		// Create separate patterns for each (peak_neuron_id, type) combination
-		// peak_neuron_id is now explicit in new_pattern_future
+		// Create separate patterns for each (peak_neuron_id, type, distance) combination
+		// Different distances mean different contexts (age when peak was active)
 		const [insertResult] = await this.conn.query(`
-			INSERT INTO new_patterns (peak_neuron_id, type)
-			SELECT DISTINCT npf.peak_neuron_id, npf.type
+			INSERT INTO new_patterns (peak_neuron_id, type, distance)
+			SELECT DISTINCT npf.peak_neuron_id, npf.type, npf.distance
 			FROM new_pattern_future npf
 		`);
 		return insertResult.affectedRows;
@@ -2275,9 +2275,9 @@ export default class Brain {
 	 */
 	async createPatternNeurons() {
 
-		// Get peak neurons with their levels and channel_id, pattern type from new_patterns
+		// Get peak neurons with their levels, channel_id, pattern type, and distance from new_patterns
 		const [peaks] = await this.conn.query(`
-			SELECT np.seq_id, np.peak_neuron_id, np.type as pattern_type, n.level, n.channel_id
+			SELECT np.seq_id, np.peak_neuron_id, np.type as pattern_type, np.distance, n.level, n.channel_id
 			FROM new_patterns np
 			LEFT JOIN neurons n ON n.id = np.peak_neuron_id
 			ORDER BY n.level, np.seq_id
@@ -2324,8 +2324,9 @@ export default class Brain {
 			FROM new_patterns np
 		`);
 
-		// Create pattern_past entries (active connections at age=1 leading TO the peak)
+		// Create pattern_past entries (active connections at age=distance leading TO the peak)
 		// This captures the context that was present when the peak was active
+		// Distance determines when the peak was active: distance=1 means age=1, distance=4 means age=4
 		// Only same-level connections: pattern identity is determined by same-level context only
 		// Only event neurons in pattern_past: actions shouldn't be part of pattern identity
 		// Works for both base peaks and pattern peaks - the level check ensures correct context
@@ -2337,19 +2338,21 @@ export default class Brain {
 			JOIN active_connections ac ON ac.to_neuron_id = np.peak_neuron_id
 			JOIN connections c ON c.id = ac.connection_id
 			JOIN neurons from_n ON from_n.id = c.from_neuron_id
-			WHERE ac.age = 1
+			WHERE ac.age = np.distance
 			AND from_n.level = peak_n.level
 			AND from_n.type = 'event'
 		`);
 
 		// Create pattern_future entries from new_pattern_future
 		// inferred_neuron_id is always a base-level neuron (event or action)
-		// Join on peak_neuron_id and type to match patterns to their future inferences
+		// Join on peak_neuron_id, type, and distance to match patterns to their future inferences
 		const [futureResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength)
 			SELECT np.pattern_neuron_id, npf.inferred_neuron_id, npf.distance, 1.0
 			FROM new_patterns np
-			JOIN new_pattern_future npf ON npf.peak_neuron_id = np.peak_neuron_id AND npf.type = np.type
+			JOIN new_pattern_future npf ON npf.peak_neuron_id = np.peak_neuron_id
+				AND npf.type = np.type
+				AND npf.distance = np.distance
 		`);
 		if (this.debug) console.log(`Created ${futureResult.affectedRows} pattern_future entries`);
 	}
