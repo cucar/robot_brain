@@ -255,9 +255,6 @@ export default class Brain {
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
 		await this.recognizeNeurons(frame);
 
-		// populate inference sources for executed actions (age=1) using just-created connections
-		await this.populateInferenceSources();
-
 		// learn from connection action inferences
 		await this.rewardConnections(channelRewards);
 
@@ -395,7 +392,7 @@ export default class Brain {
 			type: 'action'
 		}]);
 
-		// Return exploration action - sources populated after execution in populateInferenceSources
+		// Return exploration action
 		// Use low strength (below minErrorPatternThreshold) to avoid triggering error pattern creation
 		// when exploration fails - exploration is random, not a confident prediction that was wrong
 		const exploration = {
@@ -522,7 +519,6 @@ export default class Brain {
 			'matched_patterns',
 			'matched_pattern_connections',
 			'active_connections',
-			'inference_sources',
 			'new_pattern_future',
 			'new_patterns'
 		]);
@@ -550,7 +546,6 @@ export default class Brain {
 			'active_connections',
 			'matched_patterns',
 			'matched_pattern_connections',
-			'inference_sources',
 			'new_pattern_future',
 			'new_patterns',
 			'pattern_peaks',
@@ -590,7 +585,6 @@ export default class Brain {
 
 		// Age inference tables for temporal credit assignment
 		await this.conn.query('UPDATE inferred_neurons SET age = age + 1 ORDER BY age DESC');
-		await this.conn.query('UPDATE inference_sources SET age = age + 1 ORDER BY age DESC');
 
 		// Skip deletions until we have enough frames
 		if (this.frameNumber < this.contextLength + 1) return;
@@ -606,10 +600,6 @@ export default class Brain {
 		// Clean up inferred neurons after execution
 		const [inferredResult] = await this.conn.query('DELETE FROM inferred_neurons WHERE age >= ?', [this.contextLength]);
 		if (this.debug) console.log(`Cleaned up ${inferredResult.affectedRows} executed inferred neurons (age >= ${this.contextLength})`);
-
-		// Delete aged-out inference sources (same lifecycle as neurons)
-		const [infSourcesResult] = await this.conn.query('DELETE FROM inference_sources WHERE age >= ?', [this.contextLength]);
-		if (this.debug) console.log(`Cleaned up ${infSourcesResult.affectedRows} aged-out inference sources (age >= ${this.contextLength})`);
 	}
 
 	/**
@@ -1302,7 +1292,6 @@ export default class Brain {
 	/**
 	 * Refine pattern_future for event patterns with observed connections.
 	 * Called during learning phase after pattern inference.
-	 * Uses inference_sources with source_type='pattern' to know which patterns made predictions.
 	 * Refinement happens when age = distance (prediction outcome just observed).
 	 * pattern_future stores inferred_neuron_id (base neuron that pattern predicts).
 	 * This method only applies to EVENT patterns.
@@ -1430,13 +1419,12 @@ export default class Brain {
 
 	/**
 	 * Save all inferences in one operation.
-	 * Sources are NOT saved here - they are populated after execution in populateInferenceSources.
 	 * @param {Array} inferences - Array of inference objects with isWinner flag
 	 */
 	async saveInferences(inferences) {
 		if (inferences.length === 0) return;
 
-		// Collect neurons only (sources populated later after execution)
+		// Collect neurons
 		const neurons = [];
 
 		for (const inf of inferences) {
@@ -1512,44 +1500,6 @@ export default class Brain {
 			.map(([name, reward]) => `WHEN ${this.channelNameToId[name]} THEN ${reward}`)
 			.join(' ');
 		return `CASE n.channel_id ${caseWhen} END`;
-	}
-
-	/**
-	 * Populate inference_sources for all inferred neurons at age=1.
-	 * Called after recognizeNeurons when connections have been created.
-	 * Reverse-engineers collectVotes to find what would have predicted these neurons.
-	 * Note: one frame later, so active_neurons are +1 age - use distance = an.age (not an.age + 1)
-	 * Saves distance so rewards can be applied when age = distance (prediction outcome observed).
-	 * Both pattern and connection sources are saved (no weighting applied).
-	 */
-	async populateInferenceSources() {
-
-		// Connection sources: active_neurons that have connections TO the inferred neuron
-		// During inference: c.distance = an.age + 1, now an.age is +1, so c.distance = an.age
-		const [connResult] = await this.conn.query(`
-			INSERT INTO inference_sources (age, neuron_id, source_type, source_id, distance, inference_strength)
-			SELECT inf.age, inf.neuron_id, 'connection', c.id, c.distance, c.strength
-			FROM inferred_neurons inf
-			JOIN connections c ON c.to_neuron_id = inf.neuron_id
-			JOIN active_neurons an ON an.neuron_id = c.from_neuron_id
-			WHERE inf.age = 1
-			AND c.distance = an.age
-		`);
-
-		// Pattern sources: active pattern neurons with pattern_future TO the inferred neuron
-		// During inference: pf.distance = an.age + 1, now an.age is +1, so pf.distance = an.age
-		// source_id is pattern_future.id so each pattern prediction is tracked separately
-		const [patternResult] = await this.conn.query(`
-			INSERT INTO inference_sources (age, neuron_id, source_type, source_id, distance, inference_strength)
-			SELECT inf.age, inf.neuron_id, 'pattern', pf.id, pf.distance, pf.strength
-			FROM inferred_neurons inf
-			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id
-			JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id
-			WHERE inf.age = 1
-			AND pf.distance = an.age
-		`);
-
-		if (this.debug) console.log(`Populated ${connResult.affectedRows} connection + ${patternResult.affectedRows} pattern sources`);
 	}
 
 	/**
@@ -2031,33 +1981,69 @@ export default class Brain {
 	async populateNewActionPatterns(channelRewards) {
 
 		// Populate actual_reward for action winners so we can detect negative rewards
-		// They are applied when age = distance (prediction outcome just observed)
+		// Outcome is observed when age = distance (prediction made at distance, now at that age)
 		if (channelRewards.size > 0) {
 			const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
 			const rewardCase = this.buildChannelRewardCase(channelRewards);
+
+			// Update from connection sources
 			await this.conn.query(`
 				UPDATE inferred_neurons inf
 				JOIN neurons n ON n.id = inf.neuron_id
-				JOIN inference_sources isrc ON isrc.neuron_id = inf.neuron_id AND isrc.age = inf.age
+				JOIN connections c ON c.to_neuron_id = inf.neuron_id
+				JOIN active_neurons an ON an.neuron_id = c.from_neuron_id
 				SET inf.actual_reward = ${rewardCase}
-				WHERE isrc.age = isrc.distance
+				WHERE inf.age = c.distance
+				AND c.distance = an.age
+				AND inf.level = 0 AND inf.is_winner = 1
+				AND n.type = 'action'
+				AND n.channel_id IN (?)
+			`, [channelIds]);
+
+			// Update from pattern sources
+			await this.conn.query(`
+				UPDATE inferred_neurons inf
+				JOIN neurons n ON n.id = inf.neuron_id
+				JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id
+				JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id
+				SET inf.actual_reward = ${rewardCase}
+				WHERE inf.age = pf.distance
+				AND pf.distance = an.age
 				AND inf.level = 0 AND inf.is_winner = 1
 				AND n.type = 'action'
 				AND n.channel_id IN (?)
 			`, [channelIds]);
 		}
 
-		// Get loser votes (needed for both connection and pattern regret)
-		const [loserVotes] = await this.conn.query(`
-			SELECT isrc.neuron_id, isrc.source_type, isrc.source_id, isrc.inference_strength as strength,
+		// Get loser votes from connection sources
+		const [connLoserVotes] = await this.conn.query(`
+			SELECT inf.neuron_id, 'connection' as source_type, c.id as source_id, c.strength,
 				inf.expected_reward as reward, inf.level
-			FROM inference_sources isrc
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
-			JOIN neurons n ON n.id = isrc.neuron_id
-			WHERE isrc.age = isrc.distance
+			FROM inferred_neurons inf
+			JOIN neurons n ON n.id = inf.neuron_id
+			JOIN connections c ON c.to_neuron_id = inf.neuron_id
+			JOIN active_neurons an ON an.neuron_id = c.from_neuron_id
+			WHERE inf.age = c.distance
+			AND c.distance = an.age
 			AND inf.is_winner = 0
 			AND n.type = 'action'
 		`);
+
+		// Get loser votes from pattern sources
+		const [patternLoserVotes] = await this.conn.query(`
+			SELECT inf.neuron_id, 'pattern' as source_type, pf.id as source_id, pf.strength,
+				inf.expected_reward as reward, inf.level
+			FROM inferred_neurons inf
+			JOIN neurons n ON n.id = inf.neuron_id
+			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id
+			JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id
+			WHERE inf.age = pf.distance
+			AND pf.distance = an.age
+			AND inf.is_winner = 0
+			AND n.type = 'action'
+		`);
+
+		const loserVotes = [...connLoserVotes, ...patternLoserVotes];
 		if (loserVotes.length === 0) {
 			if (this.debug) console.log('Action regret: no action loser votes found');
 			return;
@@ -2084,32 +2070,32 @@ export default class Brain {
 	 */
 	async populateConnectionActionRegret(bestLoserNeuronIds) {
 		const [badActionInferences] = await this.conn.query(`
-			SELECT c_inferred.from_neuron_id as peak_neuron_id, n_peak.channel_id
-			FROM inference_sources isrc
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
+			SELECT c.from_neuron_id as peak_neuron_id, n_peak.channel_id
+			FROM inferred_neurons inf
 			JOIN neurons n_inferred ON n_inferred.id = inf.neuron_id
-			JOIN connections c_inferred ON c_inferred.id = isrc.source_id
-			JOIN neurons n_peak ON n_peak.id = c_inferred.from_neuron_id
-			WHERE isrc.age = isrc.distance
-			AND isrc.source_type = 'connection'
-			AND isrc.inference_strength >= ?
+			JOIN connections c ON c.to_neuron_id = inf.neuron_id
+			JOIN active_neurons an ON an.neuron_id = c.from_neuron_id
+			JOIN neurons n_peak ON n_peak.id = c.from_neuron_id
+			WHERE inf.age = c.distance
+			AND c.distance = an.age
+			AND c.strength >= ?
 			AND inf.is_winner = 1
 			AND inf.actual_reward < ?
 			-- Only create patterns from distance=1 predictions (full context)
-			AND isrc.distance = 1
+			AND c.distance = 1
 			-- The inferred neuron is an action
 			AND n_inferred.type = 'action'
 			-- The peak neuron did NOT use Type 2 inference (check at the distance when inference was made)
 			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an.neuron_id
-				WHERE pp.peak_neuron_id = c_inferred.from_neuron_id
-				AND an.age = 1
+				SELECT 1 FROM active_neurons an2
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an2.neuron_id
+				WHERE pp.peak_neuron_id = c.from_neuron_id
+				AND an2.age = 1
 			)
 			-- The peak neuron has context (connections TO it from older neurons at inference time)
 			AND EXISTS (
 				SELECT 1 FROM active_connections context_ac
-				WHERE context_ac.to_neuron_id = c_inferred.from_neuron_id
+				WHERE context_ac.to_neuron_id = c.from_neuron_id
 				AND context_ac.age = 1
 			)
 			-- Action neurons can NEVER be peaks (only events can be peaks)
@@ -2162,20 +2148,19 @@ export default class Brain {
 	async populatePatternActionRegret(bestLoserNeuronIds) {
 		const [badPatternInferences] = await this.conn.query(`
 			SELECT pf.pattern_neuron_id, n_pattern.channel_id
-			FROM inference_sources isrc
-			JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age
+			FROM inferred_neurons inf
 			JOIN neurons n_inferred ON n_inferred.id = inf.neuron_id
-			JOIN pattern_future pf ON pf.id = isrc.source_id
+			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id
+			JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id
 			JOIN neurons n_pattern ON n_pattern.id = pf.pattern_neuron_id
-			WHERE isrc.age = isrc.distance
-			AND isrc.source_type = 'pattern'
-			AND isrc.inference_strength >= ?
+			WHERE inf.age = pf.distance
+			AND pf.distance = an.age
+			AND pf.strength >= ?
 			AND inf.is_winner = 1
 			AND inf.actual_reward < ?
 			AND n_inferred.type = 'action'
 			-- Only create patterns from distance=1 predictions (full context)
 			AND pf.distance = 1
-			AND isrc.distance = 1
 			-- The pattern neuron has context (connections TO it from other patterns at same level)
 			AND EXISTS (
 				SELECT 1 FROM active_connections context_ac

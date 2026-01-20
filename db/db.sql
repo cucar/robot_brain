@@ -14,7 +14,6 @@ USE machine_intelligence;
 -- DROP TABLE IF EXISTS pattern_peaks;
 -- DROP TABLE IF EXISTS active_neurons;
 -- DROP TABLE IF EXISTS inferred_neurons;
--- DROP TABLE IF EXISTS inference_sources;
 -- DROP TABLE IF EXISTS active_connections;
 -- DROP TABLE IF EXISTS matched_patterns;
 -- DROP TABLE IF EXISTS matched_pattern_connections;
@@ -23,9 +22,6 @@ USE machine_intelligence;
 
 select * from inferred_neurons where age = 0;
 select * from inferred_neurons where age = 1;
-select * from inference_sources where age = 1;
-select c_inferred.* FROM inference_sources isrc JOIN inferred_neurons inf ON inf.neuron_id = isrc.neuron_id AND inf.age = isrc.age JOIN connections c_inferred ON c_inferred.id = isrc.source_id where inf.age = 1;
-select * from inference_sources where source_type = 'pattern';
 select * from active_neurons where age in (0,1) order by age, neuron_id;
 select * from new_patterns;
 select * from new_pattern_future;
@@ -320,26 +316,7 @@ CREATE TABLE IF NOT EXISTS active_connections (
     INDEX idx_level_age (age)
 ) ENGINE=MEMORY;
 
--- inference sources table (MEMORY table)
--- tracks which connections or pattern_future records led to each inference (events + actions)
--- used by learnFromBaseLevel (negativeReinforceConnections, applyRewards) and learnFromInferenceLevel
--- source_type: 'connection' for connection inference, 'pattern' for pattern inference
--- source_id: connection.id for connection type, pattern_future.connection_id for pattern type
--- distance: temporal distance of the prediction (1 = next frame, 2 = 2 frames ahead, etc.)
--- ages with inferred_neurons, rewards applied when age = distance (prediction outcome observed)
-CREATE TABLE IF NOT EXISTS inference_sources (
-    age TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    neuron_id BIGINT UNSIGNED NOT NULL,
-    source_type ENUM('connection', 'pattern') NOT NULL,
-    source_id BIGINT UNSIGNED NOT NULL,
-    distance TINYINT UNSIGNED NOT NULL,
-    inference_strength DOUBLE NOT NULL,
-    PRIMARY KEY (age, neuron_id, source_type, source_id),
-    INDEX idx_neuron_age (neuron_id, age),
-    INDEX idx_source_type (source_type, source_id),
-    INDEX idx_age (age),
-    INDEX idx_age_distance (age, distance)
-) ENGINE=MEMORY;
+
 
 -- scratch table for new pattern inferences (MEMORY table)
 -- inferred neurons that should be in pattern_future (from prediction errors or action regret)
