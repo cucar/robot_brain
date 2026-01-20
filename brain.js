@@ -70,8 +70,8 @@ export default class Brain {
 		// Debugging info and flags
 		this.frameNumber = 0;
 		this.frameSummary = true; // show frame summary or not
-		this.debug = false;
-		this.debug2 = false; // deeper, more verbose debug level
+		this.debug = true;
+		this.debug2 = true; // deeper, more verbose debug level
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 
 		// Create readline interface for pausing between frames - used when debugging
@@ -1256,7 +1256,7 @@ export default class Brain {
 		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
-		// if (newPatternFutureCount > 0) this.waitForUserInput = true;
+		if (newPatternFutureCount > 0) this.waitForUserInput = true;
 
 		// Populate new_patterns table with peaks from new pattern future inferences
 		const patternCount = await this.populateNewPatterns();
@@ -1267,6 +1267,10 @@ export default class Brain {
 
 		// Create new patterns in pattern_peaks, pattern_past, pattern_future
 		await this.createNewPatterns();
+
+		// Activate newly created pattern neurons so they can be refined in the same frame
+		// and matched in future frames. Age = distance (when the peak was active)
+		await this.activateNewPatterns();
 
 		if (this.debug) console.log(`Created ${patternCount} error patterns`);
 	}
@@ -2355,6 +2359,32 @@ export default class Brain {
 				AND npf.distance = np.distance
 		`);
 		if (this.debug) console.log(`Created ${futureResult.affectedRows} pattern_future entries`);
+	}
+
+	/**
+	 * Activate newly created pattern neurons at the appropriate age.
+	 * Age = distance (when the peak was active that triggered pattern creation).
+	 * This allows the pattern to be refined in the same frame if there are multiple errors,
+	 * and ensures the "already has active pattern" check works correctly in future frames.
+	 */
+	async activateNewPatterns() {
+		// Get pattern neurons with their level and age (distance)
+		const [patterns] = await this.conn.query(`
+			SELECT np.pattern_neuron_id, n.level, np.distance
+			FROM new_patterns np
+			JOIN neurons n ON n.id = np.pattern_neuron_id
+		`);
+
+		if (patterns.length === 0) return;
+
+		// Insert into active_neurons with age = distance
+		const activations = patterns.map(p => [p.pattern_neuron_id, p.level, p.distance]);
+		await this.conn.query(`
+			INSERT INTO active_neurons (neuron_id, level, age)
+			VALUES ?
+		`, [activations]);
+
+		if (this.debug) console.log(`Activated ${patterns.length} new pattern neurons`);
 	}
 
 	/**
