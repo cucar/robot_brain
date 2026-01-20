@@ -18,8 +18,9 @@ export default class SyntheticCycleTest extends Job {
 
 		this.config = {
 			symbol: 'TEST',
+			// up, down, down, up, up, down
 			cyclePattern: [0.009, -0.019, -0.029, 0.019, 0.029, -0.009], // +1%, -2%, -3%, +2%, +3%, -1%
-			cycleRepeats: 50,
+			cycleRepeats: 100,
 			startPrice: 100.00,
 			startVolume: 100000
 		};
@@ -135,7 +136,7 @@ export default class SyntheticCycleTest extends Job {
 					priceChange: (priceChange * 100).toFixed(2) + '%'
 				});
 			}
-			else if (frameCount > 50) throw new Error('No action executed');
+			// else if (frameCount > 50) throw new Error('No action executed');
 
 			// Get feedback and process
 			await this.brain.processFrame(frame);

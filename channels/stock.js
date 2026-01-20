@@ -232,7 +232,7 @@ export default class StockChannel extends Channel {
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange) },
-			{ [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange) }
+			// { [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange) }
 		];
 	}
 

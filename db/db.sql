@@ -33,6 +33,23 @@ select * from new_patterns;
 select * from neurons where level > 0;
 select * from dimensions;
 
+-- connection inferences - 1=up, 2=down, 3=buy, 4=sell
+SELECT an.neuron_id as from_neuron, an.age, c.to_neuron_id, c.distance, c.strength, c.reward
+-- SELECT c.to_neuron_id, avg(c.reward), sum(c.strength), group_concat(an.neuron_id)
+FROM active_neurons an
+JOIN neurons nf ON nf.id = an.neuron_id
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+JOIN neurons n ON n.id = c.to_neuron_id
+WHERE c.distance = an.age + 1
+and n.type = 'action'
+-- group by c.to_neuron_id
+-- order by c.to_neuron_id
+order by c.to_neuron_id, an.age, an.neuron_id, c.distance, c.to_neuron_id, an.age
+;
+
+select if(neuron_id=1,'up','down'), age, strength from active_neurons order by age;
+
+select * from connections;
 select * from connections where to_neuron_id = 4 order by from_neuron_id, distance;
 select * from connections where from_neuron_id in (5,2) and to_neuron_id in (6, 9) and distance = 1 order by to_neuron_id, distance;
 select * from connections where id in (9, 13);            
@@ -81,6 +98,7 @@ select * from pattern_future p join connections c on p.connection_id = c.id wher
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 6 order by c.distance;
 select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 11 order by to_neuron_id, distance, from_neuron_id;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
+select * from pattern_future;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
 select count(*) from pattern_future;
@@ -172,20 +190,22 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
--- pattern_future: connections predicted by the pattern (for inference/voting)
--- stores connection_id (from peak neuron to target) like pattern_past for consistency
--- patterns predict what connections from their peak neuron will fire next
+-- pattern_future: cross-level predictions from patterns to base neurons (for inference/voting)
+-- patterns directly infer base-level neurons (events or actions) at various temporal distances
+-- this is a cross-level connection: pattern neuron (level > 0) → base neuron (level 0)
+-- distance: temporal distance of prediction (1 = next frame, 2 = 2 frames ahead, etc.)
 CREATE TABLE IF NOT EXISTS pattern_future (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
-    connection_id BIGINT UNSIGNED NOT NULL,
+    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
+    distance TINYINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     reward DOUBLE NOT NULL DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
-    UNIQUE KEY unique_pattern_connection (pattern_neuron_id, connection_id),
+    UNIQUE KEY unique_pattern_inference (pattern_neuron_id, inferred_neuron_id, distance),
     FOREIGN KEY (pattern_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
-    FOREIGN KEY (connection_id) REFERENCES connections(id) ON DELETE CASCADE,
+    FOREIGN KEY (inferred_neuron_id) REFERENCES neurons(id) ON DELETE CASCADE,
     INDEX idx_pattern_strength (pattern_neuron_id, strength),
-    INDEX idx_connection (connection_id),
+    INDEX idx_inferred (inferred_neuron_id),
     INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
@@ -289,13 +309,18 @@ CREATE TABLE IF NOT EXISTS inference_sources (
     INDEX idx_age_distance (age, distance)
 ) ENGINE=MEMORY;
 
--- scratch table for new pattern connections (MEMORY table)
--- connections FROM peak neurons that should be in pattern_future (from prediction errors or action regret)
+-- scratch table for new pattern inferences (MEMORY table)
+-- inferred neurons that should be in pattern_future (from prediction errors or action regret)
+-- peak_neuron_id: the neuron that will be the peak of the new pattern (base neuron for connection errors, pattern neuron for pattern errors)
+-- inferred_neuron_id: the base neuron that the pattern should infer
+-- distance: temporal distance of the inference
 -- type: 'event' for prediction error patterns, 'action' for action regret patterns
 CREATE TABLE IF NOT EXISTS new_pattern_future (
-    connection_id BIGINT UNSIGNED NOT NULL,
+    peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    inferred_neuron_id BIGINT UNSIGNED NOT NULL,
+    distance TINYINT UNSIGNED NOT NULL,
     type ENUM('event', 'action') NOT NULL,
-    PRIMARY KEY (connection_id, type)
+    PRIMARY KEY (peak_neuron_id, inferred_neuron_id, distance, type)
 ) ENGINE=MEMORY;
 
 -- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)

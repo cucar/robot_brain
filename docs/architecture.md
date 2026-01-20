@@ -98,18 +98,20 @@ When action pattern inference results in **negative reward**:
 ### Vote Collection
 All active neurons (at all levels) cast votes for what they predict will happen next.
 
-### Vote Weighting
-- **Level weight**: Higher levels have more authority (`POW(levelVoteMultiplier, level)`)
-- **Distance weight**: Further temporal distances have less weight (`POW(peakTimeDecayFactor, distance-1)`)
+### Consensus Determination
+Simple strength-based voting - no weighting schemes:
+
+1. **Vote aggregation**: Each source neuron votes once per target
+   - Sum all vote strengths equally (no distance or level weighting)
+   - Neurons at the right distance for cyclic patterns naturally have stronger connections
+   - Let the learned connection strengths speak for themselves
+
+2. **Per-dimension selection**: Each dimension selects one winner
+   - For events: highest total strength wins (deterministic)
+   - For actions: Boltzmann selection based on total reward (probabilistic)
 
 ### Pattern Override Rule
 When a peak neuron has both connection inferences AND pattern inferences active, **pattern always wins**. The purpose of patterns is to correct connection inference - thresholds only apply during initial pattern creation.
-
-### Consensus Determination
-1. Aggregate votes by target neuron
-2. Group by dimension (each dimension has one winner)
-3. For events: highest strength wins (deterministic)
-4. For actions: Boltzmann selection based on reward (probabilistic)
 
 ---
 
