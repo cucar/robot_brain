@@ -358,14 +358,13 @@ CREATE TABLE IF NOT EXISTS new_pattern_future (
 -- scratch table for mapping peak neurons to new pattern neurons (MEMORY table)
 -- used during bulk pattern creation to track sequential IDs
 -- type: pattern type ('event' or 'action') - one peak can have both types of patterns
--- distance: temporal distance when peak made the prediction (determines pattern_past age)
+-- patterns are always created at distance=1 (full context)
 CREATE TABLE IF NOT EXISTS new_patterns (
     seq_id INT AUTO_INCREMENT PRIMARY KEY,
     peak_neuron_id BIGINT UNSIGNED NOT NULL,
     type ENUM('event', 'action') NOT NULL,
-    distance TINYINT UNSIGNED NOT NULL,
     pattern_neuron_id BIGINT UNSIGNED,
-    UNIQUE INDEX idx_peak_type_distance (peak_neuron_id, type, distance),
+    UNIQUE INDEX idx_peak_type (peak_neuron_id, type),
     INDEX idx_peak (peak_neuron_id)
 ) ENGINE=MEMORY;
 
