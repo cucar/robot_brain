@@ -649,30 +649,57 @@ export default class Brain {
 	/**
 	 * creates base neurons from a given set of frame points and returns their ids
 	 * Frame points have structure: { coordinates, channel, channel_id, type }
+	 * Frame points are assumed to be unique, meaning no two points sent here should have the same coordinates
 	 */
 	async createBaseNeurons(framePoints) {
 		if (framePoints.length === 0) return [];
-
-		// deduplicate points by coordinates (same coordinates = same neuron)
-		const seen = new Map();
-		const uniquePoints = [];
-		for (const point of framePoints) {
-			const coordStr = JSON.stringify(point.coordinates);
-			if (!seen.has(coordStr)) {
-				seen.set(coordStr, true);
-				uniquePoints.push(point);
-			}
-		}
-
-		// bulk insert neurons with type and channel, get their IDs
-		const neurons = uniquePoints.map(p => [0, p.type, p.channel_id]);
-		const neuronIds = await this.createNeurons(neurons);
-		const created = uniquePoints.map((point, idx) => ({ coordinates: point.coordinates, neuron_id: neuronIds[idx] }));
-
-		// insert coordinates for the created neurons
-		await this.setNeuronCoordinates(created);
-
+		const neuronIds = await this.insertNeurons(framePoints.length);
+		await this.insertBaseNeurons(neuronIds, framePoints);
+		await this.setNeuronCoordinates(neuronIds, framePoints);
 		return neuronIds;
+	}
+
+	/**
+	 * Creates new neurons at a given level and return their IDs.
+	 * MySQL guarantees sequential auto-increment IDs.
+	 * @param {number} level
+	 * @param {number} count
+	 * @returns {Promise<Array<number>>} Array of neuron IDs
+	 */
+	async insertNeurons(count, level = 0) {
+		if (count === 0) return [];
+		const rows = Array.from({ length: count }, () => [level]);
+		const [insertResult] = await this.conn.query('INSERT INTO neurons (level) VALUES ?', [rows]);
+		const firstNeuronId = insertResult.insertId;
+		return Array.from({ length: count }, (_, idx) => firstNeuronId + idx);
+	}
+
+	/**
+	 * Insert base neuron metadata into base_neurons table
+	 * @param {Array<number>} neuronIds - Array of neuron IDs
+	 * @param {Array} framePoints - Array of frame points with channel_id and type
+	 */
+	async insertBaseNeurons(neuronIds, framePoints) {
+		const infoValues = framePoints.map((point, idx) => [neuronIds[idx], point.channel_id, point.type]);
+		await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [infoValues]);
+	}
+
+	/**
+	 * Sets coordinates for neurons
+	 * @param {Array<number>} neuronIds - Array of neuron IDs
+	 * @param {Array} framePoints - Array of frame points with coordinates
+	 */
+	async setNeuronCoordinates(neuronIds, framePoints) {
+
+		// Map neuron IDs to coordinates
+		const neurons = framePoints.map((point, idx) => ({ neuron_id: neuronIds[idx], coordinates: point.coordinates }));
+
+		// flatten to rows of [neuron_id, dimension_id, value]
+		const rows = neurons.flatMap(({ neuron_id, coordinates }) =>
+			Object.entries(coordinates).map(([dimName, value]) => [neuron_id, this.dimensionNameToId[dimName], value]));
+
+		// Insert all coordinates in a single batch
+		await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ? ON DUPLICATE KEY UPDATE val = VALUES(val)', [rows]);
 	}
 
 	/**
@@ -1561,37 +1588,6 @@ export default class Brain {
 		}
 
 		return neuronCoords;
-	}
-
-	/**
-	 * Sets coordinates for neurons in batches to avoid query size limits
-	 * @param {Array<{neuron_id: number, coordinates: Object}>} neurons - Array of neuron_id and coordinates pairs
-	 */
-	async setNeuronCoordinates(neurons) {
-
-		// flatten to rows of [neuron_id, dimension_id, value]
-		const rows = neurons.flatMap(({ neuron_id, coordinates }) =>
-			Object.entries(coordinates).map(([dimName, value]) => [neuron_id, this.dimensionNameToId[dimName], value]));
-
-		// Process in batches to avoid query size limits
-		const batchSize = 5000;
-		for (let i = 0; i < rows.length; i += batchSize) {
-			const batch = rows.slice(i, i + batchSize);
-			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ? ON DUPLICATE KEY UPDATE val = VALUES(val)', [batch]);
-		}
-	}
-
-	/**
-	 * Creates new neurons and return their IDs.
-	 * MySQL guarantees sequential auto-increment IDs.
-	 * @param {Array} neurons - Array of [level, type, channel_id] tuples
-	 * @returns {Promise<Array<number>>} Array of neuron IDs
-	 */
-	async createNeurons(neurons) {
-		if (neurons.length === 0) return [];
-		const insertResult = await this.conn.query('INSERT INTO neurons (level, type, channel_id) VALUES ?', [neurons]);
-		const firstNeuronId = insertResult[0].insertId;
-		return Array.from({ length: neurons.length }, (_, idx) => firstNeuronId + idx);
 	}
 
 	/**
