@@ -241,8 +241,6 @@ export default class Brain {
 	async processFrame(frame) {
 		const frameStart = performance.now();
 
-		// if (this.frameNumber === 49) this.waitForUserInput = true;
-
 		// Display diagnostic frame header if enabled
 		if (this.diagnostic) this.displayFrameHeader(frame);
 
@@ -268,7 +266,7 @@ export default class Brain {
 		await this.inferNeurons();
 
 		// at this point the frame is processed - the forget cycle is a periodic cleanup task
-		// run forget cycle periodically and delete dead connections/neurons
+		// used to avoid curse of dimensionality and delete dead connections/neurons
 		await this.runForgetCycle();
 
 		// show frame processing summary
@@ -1915,7 +1913,7 @@ export default class Brain {
 			JOIN active_neurons an ON an.age = 0 AND an.level = 0
 			JOIN neurons actual ON actual.id = an.neuron_id AND actual.type = 'event' AND actual.channel_id = n_peak.channel_id
 			-- the inference did not come true (prediction error)
-            WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
+            WHERE inf.age = 1 AND inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
 			-- don't create a pattern if there is already an active pattern for this peak 
 			-- it means the peak recognized this situation - we'll refine it instead in that case
 			AND NOT EXISTS (
@@ -1953,7 +1951,7 @@ export default class Brain {
 			JOIN active_neurons an ON an.age = 0 AND an.level = 0
 			JOIN neurons actual ON actual.id = an.neuron_id AND actual.type = 'event' AND actual.channel_id = n_peak.channel_id
 			-- the inference did not come true (prediction error)
-			WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
+			WHERE inf.age = 1 AND inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
 			-- don't create a pattern if there is already an active pattern for this peak
 			-- it means the peak recognized this situation - we'll refine it instead in that case
 			AND NOT EXISTS (
@@ -1995,7 +1993,7 @@ export default class Brain {
 				SET inf.actual_reward = ${rewardCase}
 				WHERE inf.age = c.distance
 				AND c.distance = an.age
-				AND inf.level = 0 AND inf.is_winner = 1
+				AND inf.age = 1 AND inf.is_winner = 1
 				AND n.type = 'action'
 				AND n.channel_id IN (?)
 			`, [channelIds]);
@@ -2009,7 +2007,7 @@ export default class Brain {
 				SET inf.actual_reward = ${rewardCase}
 				WHERE inf.age = pf.distance
 				AND pf.distance = an.age
-				AND inf.level = 0 AND inf.is_winner = 1
+				AND inf.age = 1 AND inf.is_winner = 1
 				AND n.type = 'action'
 				AND n.channel_id IN (?)
 			`, [channelIds]);
