@@ -1624,45 +1624,41 @@ export default class Brain {
 	 */
 	async refineEventPatternsFuture() {
 
-		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted neurons (event patterns only)
+		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted event neurons
 		// Neuron is now active at age=0, refinement when age = distance
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
-			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
+            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
 			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
 			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
 			SET pf.strength = LEAST(?, pf.strength + 1)
-			WHERE pn.type = 'event'
+			WHERE b.type = 'event'
 		`, [this.maxConnectionStrength]);
 		if (this.debug) console.log(`Strengthened ${strengthenResult.affectedRows} correct event pattern_future predictions`);
 
-		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted neurons (event patterns only)
+		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted event neurons
 		// Neuron is NOT active, refinement when age = distance
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_future pf
-			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
+            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
 			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
 			SET pf.strength = GREATEST(?, pf.strength - ?)
-			WHERE pn.type = 'event'
+			WHERE b.type = 'event'
 			AND pf.inferred_neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
 		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
 		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed event pattern_future predictions`);
 
-		// 3. ADD NOVEL NEURONS: Active neurons not yet in pattern_future (event patterns only)
+		// 3. ADD NOVEL NEURONS: Active event neurons not yet in pattern_future
 		// Find event patterns that made predictions, find active base neurons in same channel
 		// Pattern future must only contain same-channel predictions
 		// Novel neurons are added at the same distance as the prediction that was made
 		const [novelResult] = await this.conn.query(`
-			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength)
-			SELECT pf.pattern_neuron_id, an.neuron_id, pf.distance, 1.0
+			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
+			SELECT pf.pattern_neuron_id, an.neuron_id, pf.distance
 			FROM pattern_future pf
 			JOIN active_neurons ap ON ap.neuron_id = pf.pattern_neuron_id AND pf.distance = ap.age
-			JOIN neurons p ON p.id = ap.neuron_id
-			JOIN active_neurons an ON an.age = 0 AND an.level = 0
-			JOIN neurons n ON n.id = an.neuron_id
-			WHERE p.type = 'event'
-			AND n.type = 'event'
-			AND n.channel_id = p.channel_id
+			JOIN active_neurons an ON an.age = 0
+            JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
 		`);
 		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel neurons to event pattern_future`);
 	}
