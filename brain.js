@@ -1036,7 +1036,10 @@ export default class Brain {
 
 	/**
 	 * Add alternative actions to action patterns in painful channels.
-	 * When an action pattern prediction fails (painful reward), find the best untried alternative.
+	 * When an action pattern prediction fails (painful reward), add one untried alternative.
+	 *
+	 * Key insight: Same pattern can be active at multiple ages (distances), each inferring different actions.
+	 * We need to find alternatives per (pattern, distance, channel) tuple, not just per pattern.
 	 */
 	async addAlternativeActionsToPatterns(channelRewards) {
 
@@ -1046,80 +1049,30 @@ export default class Brain {
 			if (reward < this.actionRegretMinPain) painfulChannelIds.push(this.channelNameToId[channelName]);
 		if (painfulChannelIds.length === 0) return;
 
-		// Query 1: Get failed patterns with their failed action id
-		// Each (pattern, distance) can have multiple failed actions since patterns can execute multiple actions on different channels per frame
-		// Same pattern can be active at multiple ages, inferring at different distances
-		const [failedPatterns] = await this.conn.query(`
-			SELECT pf.pattern_neuron_id, pf.distance, pf.inferred_neuron_id, b.channel_id
+		// Find one untried action for each (pattern, distance, channel) that was executed in painful channels
+		// Uses MIN(neuron_id) to pick one untried action per (pattern, distance) pair
+		// HAVING clause ensures we only insert when an untried alternative exists
+		const [result] = await this.conn.query(`
+			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
+			SELECT pf.pattern_neuron_id, MIN(b_alt.neuron_id), pf.distance
 			FROM pattern_future pf
-            JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id AND pf.distance = an.age
+			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
+            JOIN active_neurons an_action ON an_action.neuron_id = pf.inferred_neuron_id AND an_action.age = 0
             JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
-			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
+			JOIN base_neurons b_alt ON b_alt.channel_id = b.channel_id AND b_alt.type = 'action'
 			WHERE b.type = 'action'
 			AND b.channel_id IN (${painfulChannelIds.join(',')})
+			AND NOT EXISTS (
+				SELECT 1 FROM pattern_future pf_existing
+				WHERE pf_existing.pattern_neuron_id = pf.pattern_neuron_id
+				AND pf_existing.distance = pf.distance
+				AND pf_existing.inferred_neuron_id = b_alt.neuron_id
+			)
+			GROUP BY pf.pattern_neuron_id, pf.distance
+			HAVING MIN(b_alt.neuron_id) IS NOT NULL
 		`);
-		if (failedPatterns.length === 0) return;
 
-		// Query 2: Get existing actions in pattern_future for the failed patterns
-		const failedPatternIds = [...new Set(failedPatterns.map(fp => fp.pattern_neuron_id))];
-		const [existingFuture] = await this.conn.query(`
-			SELECT pattern_neuron_id, inferred_neuron_id
-			FROM pattern_future
-			WHERE pattern_neuron_id IN (?)
-		`, [failedPatternIds]);
-		const failedPatternActions = new Map();
-		for (const ef of existingFuture) {
-			if (!failedPatternActions.has(ef.pattern_neuron_id)) failedPatternActions.set(ef.pattern_neuron_id, new Set());
-			failedPatternActions.get(ef.pattern_neuron_id).add(ef.inferred_neuron_id);
-		}
-
-		// Query 3: Get all action neurons of failed channels with their pattern_future rewards if they exist for the failed patterns
-		// Get all actions by channel with their rewards in pattern_future
-		const failedChannelIds = [...new Set(failedPatterns.map(fp => fp.channel_id))];
-		const [candidates] = await this.conn.query(`
-			SELECT b.neuron_id, b.channel_id, pf.pattern_neuron_id, pf.distance, pf.reward
-			FROM base_neurons b
-			LEFT JOIN pattern_future pf ON pf.inferred_neuron_id = b.neuron_id AND pf.pattern_neuron_id IN (?)
-			WHERE b.type = 'action' 
-			AND b.channel_id IN (?)
-		`, [failedPatternIds, failedChannelIds]);
-
-		// Build map: (pattern, distance, action) -> reward
-		const rewardMap = new Map();
-		const actionsByChannel = new Map();
-		for (const c of candidates) {
-			if (!actionsByChannel.has(c.channel_id)) actionsByChannel.set(c.channel_id, new Set());
-			actionsByChannel.get(c.channel_id).add(c.inferred_neuron_id);
-			if (c.pattern_neuron_id !== null) rewardMap.set(`${c.pattern_neuron_id}:${c.distance}:${c.inferred_neuron_id}`, c.reward);
-		}
-
-		// In-memory: pick the best alternative per (pattern, distance)
-		const inserts = [];
-		for (const fp of failedPatterns) {
-			let bestAlt = null;
-			let bestReward = -Infinity;
-			for (const actionId of actionsByChannel.get(fp.channel_id)) {
-
-				if (actionId === fp.inferred_neuron_id || failedPatternActions.get(fp.pattern_neuron_id).has(actionId)) continue;
-
-				const reward = rewardMap.get(`${fp.pattern_neuron_id}:${fp.distance}:${actionId}`) ?? -999;
-
-				if (reward > bestReward) {
-					bestAlt = actionId;
-					bestReward = reward;
-				}
-			}
-			if (bestAlt) inserts.push([fp.pattern_neuron_id, bestAlt, fp.distance]);
-		}
-
-		if (inserts.length === 0) return;
-
-		// Build pattern_future inserts
-		const [result] = await this.conn.query(`
-        	INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance) VALUES ?
-    	`, [inserts]);
-
-		if (this.debug) console.log(`Added ${result.affectedRows} alternative actions`);
+		if (this.debug) console.log(`Added ${result.affectedRows} alternative actions to patterns`);
 	}
 
 	/**
