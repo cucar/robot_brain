@@ -95,9 +95,7 @@ export default class TextTrainingJob extends Job {
 		const episodeMetrics = {
 			episode: this.currentEpisode,
 			frames: 0,
-			level0Accuracy: { connection: 0, pattern: 0, resolved: 0 },
-			level1Accuracy: { connection: 0, pattern: 0, resolved: 0 },
-			level2Accuracy: { connection: 0, pattern: 0, resolved: 0 }
+			accuracy: 0
 		};
 
 		// Process all frames until channel is exhausted
@@ -116,22 +114,9 @@ export default class TextTrainingJob extends Job {
 			await this.brain.processFrame(frame, feedback);
 		}
 
-		// Collect accuracy stats
-		for (let level = 0; level <= 2; level++) {
-			if (this.brain.accuracyStats.has(level)) {
-				const stats = this.brain.accuracyStats.get(level);
-				const levelKey = `level${level}Accuracy`;
-				
-				if (stats.connection.total > 0)
-					episodeMetrics[levelKey].connection = (stats.connection.correct / stats.connection.total * 100);
-				
-				if (stats.pattern.total > 0)
-					episodeMetrics[levelKey].pattern = (stats.pattern.correct / stats.pattern.total * 100);
-				
-				if (stats.resolved.total > 0)
-					episodeMetrics[levelKey].resolved = (stats.resolved.correct / stats.resolved.total * 100);
-			}
-		}
+		// Collect accuracy stats (base level only)
+		if (this.brain.accuracyStats.total > 0)
+			episodeMetrics.accuracy = (this.brain.accuracyStats.correct / this.brain.accuracyStats.total * 100);
 
 		const duration = Date.now() - startTime;
 		episodeMetrics.duration = duration;
@@ -140,9 +125,8 @@ export default class TextTrainingJob extends Job {
 		this.episodeResults.push(episodeMetrics);
 		
 		// Show episode summary
-		const l0Acc = episodeMetrics.level0Accuracy.resolved.toFixed(1);
-		const l1Acc = episodeMetrics.level1Accuracy.resolved.toFixed(1);
-		console.log(`L0: ${l0Acc}%, L1: ${l1Acc}% (${frameCount} frames, ${duration}ms)`);
+		const acc = episodeMetrics.accuracy.toFixed(1);
+		console.log(`Accuracy: ${acc}% (${frameCount} frames, ${duration}ms)`);
 	}
 
 	/**
@@ -163,63 +147,43 @@ export default class TextTrainingJob extends Job {
 	showFinalResults() {
 		console.log(`\n🎯 Final Training Results (${this.config.maxEpisodes} episodes):`);
 		console.log('='.repeat(80));
-		
-		// Calculate averages
-		const avgL0Conn = this.episodeResults.reduce((sum, ep) => sum + ep.level0Accuracy.connection, 0) / this.episodeResults.length;
-		const avgL0Pattern = this.episodeResults.reduce((sum, ep) => sum + ep.level0Accuracy.pattern, 0) / this.episodeResults.length;
-		const avgL0Resolved = this.episodeResults.reduce((sum, ep) => sum + ep.level0Accuracy.resolved, 0) / this.episodeResults.length;
-		
-		const avgL1Conn = this.episodeResults.reduce((sum, ep) => sum + ep.level1Accuracy.connection, 0) / this.episodeResults.length;
-		const avgL1Pattern = this.episodeResults.reduce((sum, ep) => sum + ep.level1Accuracy.pattern, 0) / this.episodeResults.length;
-		const avgL1Resolved = this.episodeResults.reduce((sum, ep) => sum + ep.level1Accuracy.resolved, 0) / this.episodeResults.length;
-		
-		console.log(`📊 Average Prediction Accuracy:`);
-		console.log(`   Level 0: Conn=${avgL0Conn.toFixed(1)}%, Pattern=${avgL0Pattern.toFixed(1)}%, Resolved=${avgL0Resolved.toFixed(1)}%`);
-		console.log(`   Level 1: Conn=${avgL1Conn.toFixed(1)}%, Pattern=${avgL1Pattern.toFixed(1)}%, Resolved=${avgL1Resolved.toFixed(1)}%`);
-		
+
+		// Calculate average accuracy
+		const avgAccuracy = this.episodeResults.reduce((sum, ep) => sum + ep.accuracy, 0) / this.episodeResults.length;
+
+		console.log(`📊 Average Prediction Accuracy: ${avgAccuracy.toFixed(1)}%`);
+
 		// Show improvement trend
 		if (this.episodeResults.length >= 4) {
 			const first2 = this.episodeResults.slice(0, 2);
 			const last2 = this.episodeResults.slice(-2);
-			
-			const firstAvgL0 = first2.reduce((sum, ep) => sum + ep.level0Accuracy.resolved, 0) / first2.length;
-			const lastAvgL0 = last2.reduce((sum, ep) => sum + ep.level0Accuracy.resolved, 0) / last2.length;
-			const improvementL0 = lastAvgL0 - firstAvgL0;
-			
-			const firstAvgL1 = first2.reduce((sum, ep) => sum + ep.level1Accuracy.resolved, 0) / first2.length;
-			const lastAvgL1 = last2.reduce((sum, ep) => sum + ep.level1Accuracy.resolved, 0) / last2.length;
-			const improvementL1 = lastAvgL1 - firstAvgL1;
-			
+
+			const firstAvg = first2.reduce((sum, ep) => sum + ep.accuracy, 0) / first2.length;
+			const lastAvg = last2.reduce((sum, ep) => sum + ep.accuracy, 0) / last2.length;
+			const improvement = lastAvg - firstAvg;
+
 			console.log(`\n📈 Learning Progress:`);
-			console.log(`   Level 0: First 2 avg: ${firstAvgL0.toFixed(1)}%, Last 2 avg: ${lastAvgL0.toFixed(1)}%, Improvement: ${improvementL0.toFixed(1)}%`);
-			console.log(`   Level 1: First 2 avg: ${firstAvgL1.toFixed(1)}%, Last 2 avg: ${lastAvgL1.toFixed(1)}%, Improvement: ${improvementL1.toFixed(1)}%`);
+			console.log(`   First 2 avg: ${firstAvg.toFixed(1)}%, Last 2 avg: ${lastAvg.toFixed(1)}%, Improvement: ${improvement.toFixed(1)}%`);
 		}
-		
+
 		// Show best episodes
-		console.log('\n🏆 Best Episodes (Level 0 Accuracy):');
-		const sortedByL0 = [...this.episodeResults].sort((a, b) => b.level0Accuracy.resolved - a.level0Accuracy.resolved);
-		for (let i = 0; i < Math.min(3, sortedByL0.length); i++) {
-			const ep = sortedByL0[i];
-			console.log(`   #${ep.episode}: L0=${ep.level0Accuracy.resolved.toFixed(1)}%, L1=${ep.level1Accuracy.resolved.toFixed(1)}%`);
+		console.log('\n🏆 Best Episodes:');
+		const sortedByAccuracy = [...this.episodeResults].sort((a, b) => b.accuracy - a.accuracy);
+		for (let i = 0; i < Math.min(3, sortedByAccuracy.length); i++) {
+			const ep = sortedByAccuracy[i];
+			console.log(`   #${ep.episode}: ${ep.accuracy.toFixed(1)}%`);
 		}
-		
+
 		console.log('='.repeat(80));
-		
+
 		// Validation
-		const finalL0Acc = this.episodeResults[this.episodeResults.length - 1].level0Accuracy.resolved;
-		const finalL1Acc = this.episodeResults[this.episodeResults.length - 1].level1Accuracy.resolved;
-		
+		const finalAcc = this.episodeResults[this.episodeResults.length - 1].accuracy;
+
 		console.log('\n✅ VALIDATION:');
-		if (finalL0Acc >= 90) {
-			console.log(`   ✓ Level 0 prediction accuracy: ${finalL0Acc.toFixed(1)}% (>= 90%)`);
+		if (finalAcc >= 90) {
+			console.log(`   ✓ Prediction accuracy: ${finalAcc.toFixed(1)}% (>= 90%)`);
 		} else {
-			console.log(`   ✗ Level 0 prediction accuracy: ${finalL0Acc.toFixed(1)}% (< 90%)`);
-		}
-		
-		if (finalL1Acc > 0) {
-			console.log(`   ✓ Level 1 patterns created with ${finalL1Acc.toFixed(1)}% accuracy`);
-		} else {
-			console.log(`   ✗ No level 1 pattern predictions`);
+			console.log(`   ✗ Prediction accuracy: ${finalAcc.toFixed(1)}% (< 90%)`);
 		}
 	}
 }

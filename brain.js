@@ -61,8 +61,8 @@ export default class Brain {
 		// initialize channel registry
 		this.channels = new Map();
 
-		// Prediction accuracy tracking (cumulative stats per level)
-		this.accuracyStats = new Map(); // level -> {correct, total}
+		// Prediction accuracy tracking (cumulative stats for base level only)
+		this.accuracyStats = { correct: 0, total: 0 };
 
 		// Continuous prediction metrics (for channels that support it)
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
@@ -158,7 +158,7 @@ export default class Brain {
 	 * Reset accuracy stats for a new episode
 	 */
 	resetAccuracyStats() {
-		this.accuracyStats.clear();
+		this.accuracyStats = { correct: 0, total: 0 };
 	}
 
 	/**
@@ -669,47 +669,33 @@ export default class Brain {
 
 	/**
 	 * Validate event predictions by comparing inferred_neurons (age=1) to active_neurons (age=0).
-	 * Populates accuracyStats Map with {correct, total} counts per level.
-	 * Only validates event predictions (not actions, which are validated via rewards).
+	 * Only validates base level (level 0) event predictions.
 	 * Only validates winners (is_winner=1) since losers are alternative hypotheses that were rejected.
 	 */
 	async validatePredictions() {
 
-		// Get all event predictions from previous frame and check if they came true (age=0)
+		// Get all base level event predictions from previous frame and check if they came true (age=0)
 		// Only validate winners - losers are just alternative hypotheses rejected during conflict resolution
 		const [rows] = await this.conn.query(`
-			SELECT inf.level, inf.neuron_id, IF(an.neuron_id IS NOT NULL, 1, 0) as is_correct
+			SELECT IF(an.neuron_id IS NOT NULL, 1, 0) as is_correct
 			FROM inferred_neurons inf
-			JOIN neurons n ON n.id = inf.neuron_id
-			LEFT JOIN active_neurons an ON an.neuron_id = inf.neuron_id AND an.level = inf.level AND an.age = 0
-			WHERE n.type = 'event'
+			JOIN base_neurons b ON b.neuron_id = inf.neuron_id
+			LEFT JOIN active_neurons an ON an.neuron_id = inf.neuron_id AND an.age = 0
+			WHERE b.type = 'event'
 			AND inf.is_winner = 1
 		`);
 
-		// Aggregate by level
-		const levelStats = new Map();
-		for (const row of rows) {
-			if (!levelStats.has(row.level)) levelStats.set(row.level, { correct: 0, total: 0 });
-			const stats = levelStats.get(row.level);
-			stats.total++;
-			if (row.is_correct) stats.correct++;
-		}
+		// Count correct and total predictions
+		const total = rows.length;
+		const correct = rows.reduce((sum, row) => sum + row.is_correct, 0);
 
 		// Update accuracyStats (cumulative across frames)
-		for (const [level, stats] of levelStats) {
-			if (!this.accuracyStats.has(level)) this.accuracyStats.set(level, { correct: 0, total: 0 });
-			const cumulative = this.accuracyStats.get(level);
-			cumulative.correct += stats.correct;
-			cumulative.total += stats.total;
-		}
+		this.accuracyStats.correct += correct;
+		this.accuracyStats.total += total;
 
-		if (this.debug && levelStats.size > 0) {
-			const debugParts = [];
-			for (const [level, stats] of levelStats) {
-				const accuracy = stats.total > 0 ? (stats.correct / stats.total * 100).toFixed(1) : 'N/A';
-				debugParts.push(`L${level}: ${stats.correct}/${stats.total} (${accuracy}%)`);
-			}
-			console.log(`Validated predictions: ${debugParts.join(', ')}`);
+		if (this.debug && total > 0) {
+			const accuracy = (correct / total * 100).toFixed(1);
+			console.log(`Validated predictions: ${correct}/${total} (${accuracy}%)`);
 		}
 	}
 
@@ -1043,22 +1029,10 @@ export default class Brain {
 	 */
 	printFrameSummary(frameElapsed) {
 
-		// Get base level (level 0) accuracy - use RESOLVED accuracy (after conflict resolution)
+		// Get base level (level 0) accuracy
 		let baseAccuracy = 'N/A';
-		const baseCumulative = this.accuracyStats.get(0);
-		if (baseCumulative && baseCumulative.total > 0)
-			baseAccuracy = `${(baseCumulative.correct / baseCumulative.total * 100).toFixed(1)}%`;
-
-		// Get higher level accuracy (aggregate all levels > 0)
-		// Include both connection and pattern predictions
-		let higherCorrect = 0;
-		let higherTotal = 0;
-		for (const [level, stats] of this.accuracyStats.entries())
-			if (level > 0) {
-				higherCorrect += stats.correct;
-				higherTotal += stats.total;
-			}
-		const higherAccuracy = higherTotal > 0 ? `${(higherCorrect / higherTotal * 100).toFixed(1)}%` : 'N/A';
+		if (this.accuracyStats.total > 0)
+			baseAccuracy = `${(this.accuracyStats.correct / this.accuracyStats.total * 100).toFixed(1)}%`;
 
 		// Collect continuous prediction metrics from channels (only new errors since last call)
 		for (const [_, channel] of this.channels) {
@@ -1098,7 +1072,7 @@ export default class Brain {
 			}).join(', ');
 		}
 
-		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Base: ${baseAccuracy} | Higher: ${higherAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Accuracy: ${baseAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 	/**

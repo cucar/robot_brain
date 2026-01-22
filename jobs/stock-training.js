@@ -292,19 +292,8 @@ export default class StockTrainingJob extends Job {
 		this.collectEpisodeResults(episodeMetrics);
 
 		// Capture base level accuracy stats
-		const baseStats = this.brain.accuracyStats.get(0);
-		if (baseStats && baseStats.total > 0)
-			episodeMetrics.baseAccuracy = (baseStats.correct / baseStats.total * 100);
-
-		// Capture overall accuracy across all levels
-		let totalCorrect = 0;
-		let totalPredictions = 0;
-		for (const [_, stats] of this.brain.accuracyStats) {
-			totalCorrect += stats.correct;
-			totalPredictions += stats.total;
-		}
-		if (totalPredictions > 0)
-			episodeMetrics.overallAccuracy = (totalCorrect / totalPredictions * 100);
+		if (this.brain.accuracyStats.total > 0)
+			episodeMetrics.baseAccuracy = (this.brain.accuracyStats.correct / this.brain.accuracyStats.total * 100);
 
 		const duration = Date.now() - startTime;
 		episodeMetrics.duration = duration;

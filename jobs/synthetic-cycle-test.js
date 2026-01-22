@@ -160,14 +160,11 @@ export default class SyntheticCycleTest extends Job {
 		console.log('='.repeat(60));
 
 		// Accuracy
-		const baseAccuracy = this.brain.baseAccuracyStats || { correct: 0, total: 0 };
-		const overallAccuracy = this.brain.overallAccuracyStats || { correct: 0, total: 0 };
+		const accuracy = this.brain.accuracyStats || { correct: 0, total: 0 };
 
 		console.log(`\n🎯 Prediction Accuracy:`);
-		if (baseAccuracy.total > 0)
-			console.log(`   Base Level: ${baseAccuracy.correct}/${baseAccuracy.total} = ${(baseAccuracy.correct / baseAccuracy.total * 100).toFixed(2)}%`);
-		if (overallAccuracy.total > 0)
-			console.log(`   Overall: ${overallAccuracy.correct}/${overallAccuracy.total} = ${(overallAccuracy.correct / overallAccuracy.total * 100).toFixed(2)}%`);
+		if (accuracy.total > 0)
+			console.log(`   ${accuracy.correct}/${accuracy.total} = ${(accuracy.correct / accuracy.total * 100).toFixed(2)}%`);
 
 		// Trading performance
 		console.log(`\n💰 Trading Performance:`);
