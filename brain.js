@@ -1133,7 +1133,7 @@ export default class Brain {
 
 	/**
 	 * Determine consensus from votes - sum strengths, strength-weighted average for rewards.
-	 * All votes are for base level neurons (level 0) - pattern neurons are activated via recognizeNeurons.
+	 * All votes are for base level neurons (level 0) - pattern neurons are activated in pattern recognition
 	 * Uses per-dimension conflict resolution.
 	 * For actions: strength-weighted reward average ensures consistent cycle-based connections override noisy probabilistic ones.
 	 * @param {Array} votes - Array of {from_neuron_id, neuron_id, source_type, source_id, strength, reward, distance, source_level}
@@ -1589,23 +1589,25 @@ export default class Brain {
 	 */
 	async rewardConnections(channelRewards) {
 
-		// Apply rewards reinforcement to executed actions via connection inference
-		// Winners were executed and added to frame, then activated in recognizeNeurons
-		// They appear in active_connections at age=0 (just activated)
-		// Exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
-		// LOSERS: Leave alone - we don't know what would have happened if they were executed
+		// nothing to update if there are no rewards
 		if (channelRewards.size === 0) return;
+
+		// apply rewards reinforcement to executed actions via connection inference
+		// winners were executed and added to frame, then activated when recognizing neurons
+		// they appear in active_connections at age=0 (just activated)
+		// exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
+		// leave losers alone - we don't know what would have happened if they were executed
 		const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
 		const rewardCase = this.buildChannelRewardCase(channelRewards);
-		const [winnerConnResult] = await this.conn.query(`
-			UPDATE connections c
-			JOIN active_connections ac ON ac.connection_id = c.id AND ac.age = 0
-			JOIN neurons n ON n.id = c.to_neuron_id
-			SET c.reward = :smooth * (${rewardCase}) + (1 - :smooth) * c.reward
-			WHERE n.type = 'action'
-			AND n.channel_id IN (${channelIds.join(',')})
+		const [result] = await this.conn.query(`
+            UPDATE connections c
+            JOIN active_connections ac ON ac.connection_id = c.id AND ac.age = 0
+            JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
+            SET c.reward = :smooth * (${rewardCase}) + (1 - :smooth) * c.reward
+            WHERE b.type = 'action'
+            AND b.channel_id IN (${channelIds.join(',')})
 		`, { smooth: this.rewardExpSmooth });
-		if (this.debug) console.log(`Total connection rewarded winners=${winnerConnResult.affectedRows}`);
+		if (this.debug) console.log(`Rewarded ${result.affectedRows} connections`);
 	}
 
 	/**
