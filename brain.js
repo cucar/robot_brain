@@ -892,6 +892,237 @@ export default class Brain {
 	}
 
 	/**
+	 * Apply rewards to action connections
+	 */
+	async rewardConnections(channelRewards) {
+
+		// nothing to update if there are no rewards
+		if (channelRewards.size === 0) return;
+
+		// apply rewards reinforcement to executed actions via connection inference
+		// winners were executed and added to frame, then activated when recognizing neurons
+		// they appear in active_connections at age=0 (just activated)
+		// exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
+		// leave losers alone - we don't know what would have happened if they were executed
+		const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
+		const rewardCase = this.buildChannelRewardCase(channelRewards);
+		const [result] = await this.conn.query(`
+            UPDATE connections c
+            JOIN active_connections ac ON ac.connection_id = c.id AND ac.age = 0
+            JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
+            SET c.reward = :smooth * (${rewardCase}) + (1 - :smooth) * c.reward
+            WHERE b.type = 'action'
+            AND b.channel_id IN (${channelIds.join(',')})
+		`, { smooth: this.rewardExpSmooth });
+		if (this.debug) console.log(`Rewarded ${result.affectedRows} connections`);
+	}
+
+	/**
+	 * Build a CASE-WHEN SQL snippet for channel rewards.
+	 * Maps channel_id to reward value for use in UPDATE statements.
+	 * @param {Map} channelRewards - Map of channel_name -> reward value
+	 * @returns {string} SQL CASE statement like "CASE n.channel_id WHEN 1 THEN 0.5 WHEN 2 THEN -0.3 END"
+	 */
+	buildChannelRewardCase(channelRewards) {
+		if (channelRewards.size === 0) return '';
+		const caseWhen = Array.from(channelRewards.entries())
+			.map(([name, reward]) => `WHEN ${this.channelNameToId[name]} THEN ${reward}`)
+			.join(' ');
+		return `CASE b.channel_id ${caseWhen} END`;
+	}
+
+	/**
+	 * Learns patterns from prediction errors and action regret and continues to refine them as they are observed
+	 */
+	async refinePatterns(channelRewards) {
+
+		// update pattern_future for event patterns based on observations
+		await this.refineEventPatternsFuture();
+
+		// apply rewards to action predictions based on channel outcomes
+		await this.rewardExecutedActionPatterns(channelRewards);
+
+		// add alternative actions to action patterns in painful channels
+		await this.addAlternativeActionsToPatterns(channelRewards);
+	}
+
+	/**
+	 * Refine pattern_future for event patterns with observed connections.
+	 * Called during learning phase after pattern inference.
+	 * Refinement happens when age = distance (prediction outcome just observed).
+	 * pattern_future stores inferred_neuron_id (base neuron that pattern predicts).
+	 * This method only applies to EVENT patterns.
+	 * Action pattern refinement happens in applyRewards (both reward-based and trial alternatives).
+	 * Applies three types of reinforcement:
+	 * 1. Positive: Strengthen pattern_future inferences that were correctly predicted (target now active)
+	 * 2. Negative: Weaken pattern_future inferences that were incorrectly predicted (target NOT active)
+	 * 3. Novel: Add new inferences from pattern to newly observed neurons
+	 */
+	async refineEventPatternsFuture() {
+
+		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted event neurons
+		// Neuron is now active at age=0, refinement when age = distance
+		const [strengthenResult] = await this.conn.query(`
+			UPDATE pattern_future pf
+            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
+			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
+			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
+			SET pf.strength = LEAST(?, pf.strength + 1)
+			WHERE b.type = 'event'
+		`, [this.maxConnectionStrength]);
+		if (this.debug) console.log(`Strengthened ${strengthenResult.affectedRows} correct event pattern_future predictions`);
+
+		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted event neurons
+		// Neuron is NOT active, refinement when age = distance
+		const [weakenResult] = await this.conn.query(`
+			UPDATE pattern_future pf
+            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
+			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
+			SET pf.strength = GREATEST(?, pf.strength - ?)
+			WHERE b.type = 'event'
+			AND pf.inferred_neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
+		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
+		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed event pattern_future predictions`);
+
+		// 3. ADD NOVEL NEURONS: Active event neurons not yet in pattern_future
+		// Find event patterns that made predictions, find active base neurons in same channel
+		// Pattern future must only contain same-channel predictions
+		// Novel neurons are added at the same distance as the prediction that was made
+		const [novelResult] = await this.conn.query(`
+			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
+			SELECT pf.pattern_neuron_id, an.neuron_id, pf.distance
+			FROM pattern_future pf
+			JOIN active_neurons ap ON ap.neuron_id = pf.pattern_neuron_id AND pf.distance = ap.age
+			JOIN active_neurons an ON an.age = 0
+            JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
+		`);
+		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel neurons to event pattern_future`);
+	}
+
+	/**
+	 * Strengthen and reward executed action pattern_future predictions.
+	 *
+	 * Channel-Specific Credit Assignment:
+	 * 1. Identify which channel each base-level output belongs to (via output dimensions)
+	 * 2. Use pattern_future (inferred_neuron_id) to find which patterns led to each action
+	 * 3. Apply channel-specific reward via CASE-WHEN on channel_id
+	 *
+	 * Rewards are applied via exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
+	 * This converges to the expected reward for each connection.
+	 * Neutral reward is 0, positive is good, negative is bad
+	 *
+	 * Also strengthens executed action patterns so they won't be forgotten.
+	 */
+	async rewardExecutedActionPatterns(channelRewards) {
+
+		// nothing to do if there are no rewards
+		if (channelRewards.size === 0) return;
+
+		// Strengthen and reward action pattern_future in one query
+		// Join chain: pattern_future → active neuron (just executed) → active pattern
+		// Strength is always incremented; reward is updated only if channel has a reward
+		const rewardCase = this.buildChannelRewardCase(channelRewards);
+		const [result] = await this.conn.query(`
+			UPDATE pattern_future pf
+            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
+			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
+			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
+			SET pf.strength = LEAST(?, pf.strength + 1), pf.reward = CASE ${rewardCase} ELSE pf.reward END
+			WHERE b.type = 'action'
+		`, [this.maxConnectionStrength]);
+
+		if (this.debug) console.log(`Strengthened/rewarded ${result.affectedRows} action pattern_future predictions`);
+	}
+
+	/**
+	 * Add alternative actions to action patterns in painful channels.
+	 * When an action pattern prediction fails (painful reward), find the best untried alternative.
+	 */
+	async addAlternativeActionsToPatterns(channelRewards) {
+
+		// Find channels with negative rewards
+		const painfulChannelIds = [];
+		for (const [channelName, reward] of channelRewards)
+			if (reward < this.actionRegretMinPain) painfulChannelIds.push(this.channelNameToId[channelName]);
+		if (painfulChannelIds.length === 0) return;
+
+		// Query 1: Get failed patterns with their failed action id
+		// Each (pattern, distance) can have multiple failed actions since patterns can execute multiple actions on different channels per frame
+		// Same pattern can be active at multiple ages, inferring at different distances
+		const [failedPatterns] = await this.conn.query(`
+			SELECT pf.pattern_neuron_id, pf.distance, pf.inferred_neuron_id, b.channel_id
+			FROM pattern_future pf
+            JOIN active_neurons an ON an.neuron_id = pf.pattern_neuron_id AND pf.distance = an.age
+            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
+			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
+			WHERE b.type = 'action'
+			AND b.channel_id IN (${painfulChannelIds.join(',')})
+		`);
+		if (failedPatterns.length === 0) return;
+
+		// Query 2: Get existing actions in pattern_future for the failed patterns
+		const failedPatternIds = [...new Set(failedPatterns.map(fp => fp.pattern_neuron_id))];
+		const [existingFuture] = await this.conn.query(`
+			SELECT pattern_neuron_id, inferred_neuron_id
+			FROM pattern_future
+			WHERE pattern_neuron_id IN (?)
+		`, [failedPatternIds]);
+		const failedPatternActions = new Map();
+		for (const ef of existingFuture) {
+			if (!failedPatternActions.has(ef.pattern_neuron_id)) failedPatternActions.set(ef.pattern_neuron_id, new Set());
+			failedPatternActions.get(ef.pattern_neuron_id).add(ef.inferred_neuron_id);
+		}
+
+		// Query 3: Get all action neurons of failed channels with their pattern_future rewards if they exist for the failed patterns
+		// Get all actions by channel with their rewards in pattern_future
+		const failedChannelIds = [...new Set(failedPatterns.map(fp => fp.channel_id))];
+		const [candidates] = await this.conn.query(`
+			SELECT b.neuron_id, b.channel_id, pf.pattern_neuron_id, pf.distance, pf.reward
+			FROM base_neurons b
+			LEFT JOIN pattern_future pf ON pf.inferred_neuron_id = b.neuron_id AND pf.pattern_neuron_id IN (?)
+			WHERE b.type = 'action' 
+			AND b.channel_id IN (?)
+		`, [failedPatternIds, failedChannelIds]);
+
+		// Build map: (pattern, distance, action) -> reward
+		const rewardMap = new Map();
+		const actionsByChannel = new Map();
+		for (const c of candidates) {
+			if (!actionsByChannel.has(c.channel_id)) actionsByChannel.set(c.channel_id, new Set());
+			actionsByChannel.get(c.channel_id).add(c.inferred_neuron_id);
+			if (c.pattern_neuron_id !== null) rewardMap.set(`${c.pattern_neuron_id}:${c.distance}:${c.inferred_neuron_id}`, c.reward);
+		}
+
+		// In-memory: pick the best alternative per (pattern, distance)
+		const inserts = [];
+		for (const fp of failedPatterns) {
+			let bestAlt = null;
+			let bestReward = -Infinity;
+			for (const actionId of actionsByChannel.get(fp.channel_id)) {
+
+				if (actionId === fp.inferred_neuron_id || failedPatternActions.get(fp.pattern_neuron_id).has(actionId)) continue;
+
+				const reward = rewardMap.get(`${fp.pattern_neuron_id}:${fp.distance}:${actionId}`) ?? -999;
+
+				if (reward > bestReward) {
+					bestAlt = actionId;
+					bestReward = reward;
+				}
+			}
+			if (bestAlt) inserts.push([fp.pattern_neuron_id, bestAlt, fp.distance]);
+		}
+
+		if (inserts.length === 0) return;
+
+		// Build pattern_future inserts
+		const [result] = await this.conn.query(`
+        	INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance) VALUES ?
+    	`, [inserts]);
+
+		if (this.debug) console.log(`Added ${result.affectedRows} alternative actions`);
+	}
+
+	/**
 	 * Explore a channel by finding an unexplored action.
 	 * Checks if all actions have been explored at all distances - only returns null if fully explored.
 	 * @param {string} channelName - Channel name
@@ -1400,157 +1631,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Strengthen and reward executed action pattern_future predictions.
-	 *
-	 * Channel-Specific Credit Assignment:
-	 * 1. Identify which channel each base-level output belongs to (via output dimensions)
-	 * 2. Use pattern_future (inferred_neuron_id) to find which patterns led to each action
-	 * 3. Apply channel-specific reward via CASE-WHEN on channel_id
-	 *
-	 * Rewards are applied via exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
-	 * This converges to the expected reward for each connection.
-	 * Neutral reward is 0, positive is good, negative is bad
-	 *
-	 * Also strengthens executed action patterns so they won't be forgotten.
-	 */
-	async rewardExecutedActionPatterns(channelRewards) {
-
-		// Build CASE-WHEN clause for channel rewards (empty string if no rewards)
-		let caseWhen = '';
-		for (const [channelName, reward] of channelRewards) caseWhen += `
-			WHEN n_target.channel_id = ${this.channelNameToId[channelName]}
-			THEN ${this.rewardExpSmooth} * ${reward} + (1 - ${this.rewardExpSmooth}) * pf.reward `;
-
-		// Strengthen and reward action pattern_future in one query
-		// Join chain: pattern_future → active neuron (just executed) → active pattern
-		// Strength is always incremented; reward is updated only if channel has a reward
-		const [result] = await this.conn.query(`
-			UPDATE pattern_future pf
-			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
-			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
-			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id
-			JOIN neurons n_target ON n_target.id = pf.inferred_neuron_id
-			SET pf.strength = LEAST(?, pf.strength + 1),
-			    pf.reward = CASE ${caseWhen} ELSE pf.reward END
-			WHERE pn.type = 'action'
-			AND pf.distance = an_pattern.age
-		`, [this.maxConnectionStrength]);
-
-		if (this.debug) console.log(`Strengthened/rewarded ${result.affectedRows} action pattern_future predictions`);
-	}
-
-	/**
-	 * Add alternative actions to action patterns in painful channels.
-	 * When an action pattern prediction fails (painful reward), find the best untried alternative.
-	 */
-	async addAlternativeActionsToPatterns(channelRewards) {
-
-		// Find channels with negative rewards
-		const painfulChannelIds = [];
-		for (const [channelName, reward] of channelRewards)
-			if (reward < this.actionRegretMinPain) painfulChannelIds.push(this.channelNameToId[channelName]);
-		if (painfulChannelIds.length === 0) return;
-
-		// Query 1: Get failed patterns with their failed action id
-		// Each (pattern, distance) has exactly one failed action since channels execute one action per frame
-		// Same pattern can be active at multiple ages, predicting at different distances
-		// Use EXISTS for active_neurons to avoid row multiplication from multiple (level, age) combinations
-		const [failedPatterns] = await this.conn.query(`
-			SELECT pf.pattern_neuron_id, pp.peak_neuron_id, pn.channel_id, pf.distance, pf.inferred_neuron_id as failed_action_id
-			FROM pattern_future pf
-			JOIN neurons pn ON pn.id = pf.pattern_neuron_id
-			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
-			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pf.pattern_neuron_id
-			WHERE pn.type = 'action'
-			AND pn.channel_id IN (${painfulChannelIds.join(',')})
-			AND EXISTS (SELECT 1 FROM active_neurons an WHERE an.neuron_id = pf.pattern_neuron_id AND pf.distance = an.age)
-		`);
-		if (failedPatterns.length === 0) return;
-
-		// Query 2: Get actions already in pattern_future for these patterns
-		const patternIds = failedPatterns.map(fp => fp.pattern_neuron_id);
-		const [existingFuture] = await this.conn.query(`
-			SELECT pf.pattern_neuron_id, pf.inferred_neuron_id as action_id
-			FROM pattern_future pf
-			WHERE pf.pattern_neuron_id IN (?)
-		`, [patternIds]);
-
-		// Build set of existing actions per pattern
-		const existingByPattern = new Map();
-		for (const ef of existingFuture) {
-			if (!existingByPattern.has(ef.pattern_neuron_id)) existingByPattern.set(ef.pattern_neuron_id, new Set());
-			existingByPattern.get(ef.pattern_neuron_id).add(ef.action_id);
-		}
-
-		// Query 3: Get all action neurons per channel with their pattern_future rewards
-		const channelIds = [...new Set(failedPatterns.map(fp => fp.channel_id))];
-		const patternIds2 = [...new Set(failedPatterns.map(fp => fp.pattern_neuron_id))];
-		const [candidates] = await this.conn.query(`
-			SELECT n.id as action_id, n.channel_id, pf.pattern_neuron_id, pf.distance, pf.reward
-			FROM neurons n
-			LEFT JOIN pattern_future pf ON pf.inferred_neuron_id = n.id AND pf.pattern_neuron_id IN (?)
-			WHERE n.type = 'action' AND n.channel_id IN (?)
-		`, [patternIds2, channelIds]);
-
-		// Build map: (pattern, distance, action) -> reward
-		const rewardMap = new Map();
-		const actionsByChannel = new Map();
-		for (const c of candidates) {
-			if (!actionsByChannel.has(c.channel_id))
-				actionsByChannel.set(c.channel_id, new Set());
-			actionsByChannel.get(c.channel_id).add(c.action_id);
-
-			if (c.pattern_neuron_id !== null)
-				rewardMap.set(`${c.pattern_neuron_id}:${c.distance}:${c.action_id}`, c.reward);
-		}
-
-		// In-memory: pick the best alternative per (pattern, distance)
-		const best = [];
-		for (const fp of failedPatterns) {
-			const existingIds = existingByPattern.get(fp.pattern_neuron_id) || new Set();
-			const channelActions = actionsByChannel.get(fp.channel_id) || new Set();
-
-			let bestAlt = null;
-			let bestReward = -Infinity;
-			for (const actionId of channelActions) {
-				if (actionId === fp.failed_action_id || existingIds.has(actionId)) continue;
-				const reward = rewardMap.get(`${fp.pattern_neuron_id}:${fp.distance}:${actionId}`) ?? -999;
-				if (reward > bestReward || (reward === bestReward && (!bestAlt || actionId < bestAlt.alt_action_id))) {
-					bestAlt = { ...fp, alt_action_id: actionId };
-					bestReward = reward;
-				}
-			}
-			if (bestAlt) best.push(bestAlt);
-		}
-
-		if (best.length === 0) return;
-
-		// Build pattern_future inserts (no need for connections anymore)
-		const futureValues = best.map(b => [b.pattern_neuron_id, b.alt_action_id, b.distance, 1.0, 0.0]);
-
-		const [result] = await this.conn.query(`
-			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward)
-			VALUES ?
-		`, [futureValues]);
-
-		if (this.debug && result.affectedRows > 0)
-			console.log(`Action pattern refinement: ${result.affectedRows} alternatives added`);
-	}
-
-	/**
-	 * Learns patterns from prediction errors and action regret and continues to refine them as they are observed
-	 */
-	async refinePatterns(channelRewards) {
-
-		// update pattern_future for event patterns based on observations
-		await this.refineEventPatternsFuture();
-
-		// apply rewards to action predictions based on channel outcomes
-		await this.rewardExecutedActionPatterns(channelRewards);
-		await this.addAlternativeActionsToPatterns(channelRewards);
-	}
-
-	/**
 	 * Creates error-driven patterns from failed predictions.
 	 * Processes all levels in bulk, like inferNeurons.
 	 * @param {Map} channelRewards - Map of channel_name -> reward value
@@ -1582,85 +1662,6 @@ export default class Brain {
 		await this.activateNewPatterns();
 
 		if (this.debug) console.log(`Created ${patternCount} error patterns`);
-	}
-
-	/**
-	 * Apply rewards to action connections
-	 */
-	async rewardConnections(channelRewards) {
-
-		// nothing to update if there are no rewards
-		if (channelRewards.size === 0) return;
-
-		// apply rewards reinforcement to executed actions via connection inference
-		// winners were executed and added to frame, then activated when recognizing neurons
-		// they appear in active_connections at age=0 (just activated)
-		// exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
-		// leave losers alone - we don't know what would have happened if they were executed
-		const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
-		const rewardCase = this.buildChannelRewardCase(channelRewards);
-		const [result] = await this.conn.query(`
-            UPDATE connections c
-            JOIN active_connections ac ON ac.connection_id = c.id AND ac.age = 0
-            JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
-            SET c.reward = :smooth * (${rewardCase}) + (1 - :smooth) * c.reward
-            WHERE b.type = 'action'
-            AND b.channel_id IN (${channelIds.join(',')})
-		`, { smooth: this.rewardExpSmooth });
-		if (this.debug) console.log(`Rewarded ${result.affectedRows} connections`);
-	}
-
-	/**
-	 * Refine pattern_future for event patterns with observed connections.
-	 * Called during learning phase after pattern inference.
-	 * Refinement happens when age = distance (prediction outcome just observed).
-	 * pattern_future stores inferred_neuron_id (base neuron that pattern predicts).
-	 * This method only applies to EVENT patterns.
-	 * Action pattern refinement happens in applyRewards (both reward-based and trial alternatives).
-	 * Applies three types of reinforcement:
-	 * 1. Positive: Strengthen pattern_future inferences that were correctly predicted (target now active)
-	 * 2. Negative: Weaken pattern_future inferences that were incorrectly predicted (target NOT active)
-	 * 3. Novel: Add new inferences from pattern to newly observed neurons
-	 */
-	async refineEventPatternsFuture() {
-
-		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted event neurons
-		// Neuron is now active at age=0, refinement when age = distance
-		const [strengthenResult] = await this.conn.query(`
-			UPDATE pattern_future pf
-            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
-			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
-			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
-			SET pf.strength = LEAST(?, pf.strength + 1)
-			WHERE b.type = 'event'
-		`, [this.maxConnectionStrength]);
-		if (this.debug) console.log(`Strengthened ${strengthenResult.affectedRows} correct event pattern_future predictions`);
-
-		// 2. NEGATIVE REINFORCEMENT: Weaken incorrectly predicted event neurons
-		// Neuron is NOT active, refinement when age = distance
-		const [weakenResult] = await this.conn.query(`
-			UPDATE pattern_future pf
-            JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
-			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
-			SET pf.strength = GREATEST(?, pf.strength - ?)
-			WHERE b.type = 'event'
-			AND pf.inferred_neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
-		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
-		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed event pattern_future predictions`);
-
-		// 3. ADD NOVEL NEURONS: Active event neurons not yet in pattern_future
-		// Find event patterns that made predictions, find active base neurons in same channel
-		// Pattern future must only contain same-channel predictions
-		// Novel neurons are added at the same distance as the prediction that was made
-		const [novelResult] = await this.conn.query(`
-			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
-			SELECT pf.pattern_neuron_id, an.neuron_id, pf.distance
-			FROM pattern_future pf
-			JOIN active_neurons ap ON ap.neuron_id = pf.pattern_neuron_id AND pf.distance = ap.age
-			JOIN active_neurons an ON an.age = 0
-            JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
-		`);
-		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel neurons to event pattern_future`);
 	}
 
 	/**
@@ -1763,20 +1764,6 @@ export default class Brain {
 			const loserCount = inferences.filter(i => !i.isWinner).length;
 			console.log(`Saved ${inferences.length} inferences (${winnerCount} winners, ${loserCount} losers)`);
 		}
-	}
-
-	/**
-	 * Build a CASE-WHEN SQL snippet for channel rewards.
-	 * Maps channel_id to reward value for use in UPDATE statements.
-	 * @param {Map} channelRewards - Map of channel_name -> reward value
-	 * @returns {string} SQL CASE statement like "CASE n.channel_id WHEN 1 THEN 0.5 WHEN 2 THEN -0.3 END"
-	 */
-	buildChannelRewardCase(channelRewards) {
-		if (channelRewards.size === 0) return '';
-		const caseWhen = Array.from(channelRewards.entries())
-			.map(([name, reward]) => `WHEN ${this.channelNameToId[name]} THEN ${reward}`)
-			.join(' ');
-		return `CASE n.channel_id ${caseWhen} END`;
 	}
 
 	/**
