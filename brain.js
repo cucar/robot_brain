@@ -39,7 +39,6 @@ export default class Brain {
 		this.minExploration = 0.03; // minimum - never stop exploring
 		this.maxExploration = 1.0; // 100% when totalStrength = 0
 		this.explorationScale = 1000; // controls decay rate of exploration probability
-		this.minExploredVotes = 2; // minimum votes to consider an action "explored" (excluding actions)
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
@@ -141,7 +140,7 @@ export default class Brain {
 		await this.truncateTables([
 			'active_neurons',
 			'matched_patterns',
-			'matched_pattern_connections',
+			'matched_pattern_context',
 			'new_pattern_future',
 			'new_patterns',
 			'inferred_neurons'
@@ -735,7 +734,7 @@ export default class Brain {
 
 		// Clear scratch tables
 		await this.conn.query('TRUNCATE matched_patterns');
-		await this.conn.query('TRUNCATE matched_pattern_connections');
+		await this.conn.query('TRUNCATE matched_pattern_context');
 
 		// Determine which patterns matched based on overlap threshold
 		const [result] = await this.conn.query(`
@@ -1408,7 +1407,7 @@ export default class Brain {
 		const [patterns] = await this.conn.query('SELECT pattern_neuron_id FROM new_patterns');
 
 		// Insert into active_neurons with age = 1
-		await this.insertActiveNeurons(patterns.map(p => [p.pattern_neuron_id]), 1);
+		await this.insertActiveNeurons(patterns.map(p => p.pattern_neuron_id), 1);
 		if (this.debug) console.log(`Activated ${patterns.length} new pattern neurons`);
 	}
 
@@ -1484,7 +1483,7 @@ export default class Brain {
 				JOIN neurons pn on pn.id = pf.pattern_neuron_id
 				WHERE pf.distance = an.age + 1
 	            AND pf.strength > 0
-				AND (${patternAges.map((age, i) => `(an.age = ${age} AND an.level = ${patternLevels[i]})`).join(' OR ')})
+				AND (${patternAges.map((age, i) => `(an.age = ${age} AND pn.level = ${patternLevels[i]})`).join(' OR ')})
 			`);
 			allVotes.push(...patternVotes);
 		}
@@ -1770,14 +1769,8 @@ export default class Brain {
 	async exploreChannel(channelName, votedActions) {
 		const channel = this.channels.get(channelName);
 
-		// Collect all actions that have been sufficiently explored (with event votes)
-		const exploredActions = votedActions.filter(a => {
-			if (!a.sources) return false;
-			return a.sources.length >= this.minExploredVotes;
-		});
-
 		// Extract coordinates from explored actions
-		const votedCoordinates = exploredActions.map(a => a.coordinates).filter(c => c);
+		const votedCoordinates = votedActions.map(a => a.coordinates).filter(c => c);
 
 		// Ask channel for an action that wasn't voted for
 		const actionCoordinates = channel.getExplorationAction(votedCoordinates);
@@ -1785,7 +1778,7 @@ export default class Brain {
 			// All actions have been tried - now check if they've been tried at all distances
 			// Group actions by distance
 			const byDistance = new Map();
-			for (const inf of exploredActions) {
+			for (const inf of votedActions) {
 				if (!inf.sources) continue;
 
 				const distances = [...new Set(inf.sources.map(s => s.distance))];
@@ -1865,7 +1858,7 @@ export default class Brain {
 
 		// Collect neurons - is_winner: 1 for winners (highest sum of strength * reward per dimension), 0 for losers
 		const neurons = [];
-		for (const inf of inferences) neurons.push([inf.neuron_id, inf.level || 0, 0, inf.strength, inf.isWinner ? 1 : 0]);
+		for (const inf of inferences) neurons.push([inf.neuron_id, inf.strength, inf.isWinner ? 1 : 0]);
 
 		// Save inferred neurons
 		await this.truncateTables([ 'inferred_neurons' ]);
