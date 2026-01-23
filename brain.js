@@ -1109,7 +1109,7 @@ export default class Brain {
 		// Create pattern neurons and map them to new_patterns
 		await this.createPatternNeurons();
 
-		// Create new patterns in pattern_peaks, pattern_past, pattern_future
+		// Create new patterns in neurons, pattern_peaks, pattern_past, pattern_future
 		await this.createNewPatterns();
 
 		// Activate newly created pattern neurons so they can be refined in the same frame
@@ -1351,16 +1351,12 @@ export default class Brain {
 	}
 
 	/**
-	 * Populate new_patterns table from new_pattern_future.
-	 * Finds unique (peak, type) combinations.
-	 * Peak can be a base neuron (for connection errors) or pattern neuron (for pattern errors).
-	 * All patterns are created at distance=1 (full context).
+	 * Populate new_patterns table from new_pattern_future. Peak can be a base neuron (for connection errors)
+	 * or pattern neuron (for pattern errors). All patterns are created at distance=1 to be able to get the full context.
 	 * Returns the number of patterns to create.
 	 */
 	async populateNewPatterns() {
-		await this.conn.query(`TRUNCATE new_patterns`);
-		// Create separate patterns for each (peak_neuron_id, type) combination
-		// All patterns created at distance=1 for full context
+		await this.truncateTables([ 'new_patterns' ]);
 		const [insertResult] = await this.conn.query(`
 			INSERT INTO new_patterns (peak_neuron_id)
 			SELECT DISTINCT peak_neuron_id
@@ -1370,656 +1366,15 @@ export default class Brain {
 	}
 
 	/**
-	 * Explore a channel by finding an unexplored action.
-	 * Checks if all actions have been explored at all distances - only returns null if fully explored.
-	 * @param {string} channelName - Channel name
-	 * @param {Array} votedActions - All actions that received votes (have connections from current context)
-	 * @returns {Promise<Object|null>} Exploration action or null if all actions explored at all distances
-	 */
-	async exploreChannel(channelName, votedActions) {
-		const channel = this.channels.get(channelName);
-
-		// Collect all actions that have been sufficiently explored (with event votes)
-		const exploredActions = votedActions.filter(a => {
-			if (!a.sources) return false;
-			return a.sources.length >= this.minExploredVotes;
-		});
-
-		// Extract coordinates from explored actions
-		const votedCoordinates = exploredActions.map(a => a.coordinates).filter(c => c);
-
-		// Ask channel for an action that wasn't voted for
-		const actionCoordinates = channel.getExplorationAction(votedCoordinates);
-		if (!actionCoordinates || Object.keys(actionCoordinates).length === 0) {
-			// All actions have been tried - now check if they've been tried at all distances
-			// Group actions by distance
-			const byDistance = new Map();
-			for (const inf of exploredActions) {
-				if (!inf.sources) continue;
-
-				const distances = [...new Set(inf.sources.map(s => s.distance))];
-				for (const distance of distances) {
-					if (!byDistance.has(distance)) byDistance.set(distance, new Set());
-					byDistance.get(distance).add(JSON.stringify(inf.coordinates));
-				}
-			}
-
-			// Check if any distance is missing some actions
-			const allActions = new Set(votedCoordinates.map(c => JSON.stringify(c)));
-			for (const [distance, exploredAtDistance] of byDistance) {
-				if (exploredAtDistance.size < allActions.size) {
-					// This distance hasn't explored all actions - find one to explore
-					for (const actionStr of allActions) {
-						if (!exploredAtDistance.has(actionStr)) {
-							const actionCoords = JSON.parse(actionStr);
-							if (!actionCoords || Object.keys(actionCoords).length === 0) continue;
-
-							const [actionNeuronId] = await this.getFrameNeurons([{
-								coordinates: actionCoords,
-								channel: channelName,
-								channel_id: this.channelNameToId[channelName],
-								type: 'action'
-							}]);
-
-							const exploration = {
-								neuron_id: actionNeuronId,
-								strength: 1,
-								reward: 0,
-								coordinates: actionCoords,
-								type: 'action',
-								isWinner: true
-							};
-
-							if (this.debug) console.log(`Exploration for ${channelName}: re-exploring action at distance ${distance}:`, actionCoords);
-							return exploration;
-						}
-					}
-				}
-			}
-
-			if (this.debug) console.log(`Exploration for ${channelName}: all actions explored at all distances`);
-			return null; // All actions explored at all distances
-		}
-
-		// Find or create neuron for this action - wrap coordinates in frame point structure with channel metadata
-		const [actionNeuronId] = await this.getFrameNeurons([{
-			coordinates: actionCoordinates,
-			channel: channelName,
-			channel_id: this.channelNameToId[channelName],
-			type: 'action'
-		}]);
-
-		// Return exploration action
-		// Use low strength (below minErrorPatternThreshold) to avoid triggering error pattern creation
-		// when exploration fails - exploration is random, not a confident prediction that was wrong
-		const exploration = {
-			neuron_id: actionNeuronId,
-			strength: 1, // Low strength - exploration wins by marking others as losers, not by high strength
-			reward: 0, // Neutral reward (additive: 0 = neutral)
-			coordinates: actionCoordinates,
-			type: 'action',
-			isWinner: true
-		};
-
-		if (this.debug) console.log(`Exploration for ${channelName}:`, actionCoordinates, actionNeuronId);
-		return exploration;
-	}
-
-	/**
-	 * Apply exploration to action inferences.
-	 * Modifies inferences array in place - may add exploration action and update isWinner flags.
-	 * @param {Array} inferences - Array of inference objects (modified in place)
-	 */
-	async applyExploration(inferences) {
-
-		// Group action inferences by channel (using channel from neuron, not dimension)
-		const byChannel = new Map();
-		for (const inf of inferences) {
-			if (!inf.coordinates || inf.type !== 'action') continue;
-			if (!byChannel.has(inf.channel)) byChannel.set(inf.channel, []);
-			byChannel.get(inf.channel).push(inf);
-		}
-
-		// Process each channel
-		for (const [channelName] of this.channels) {
-			const channelInferences = byChannel.get(channelName) || [];
-			const channelWinners = channelInferences.filter(inf => inf.isWinner);
-
-			// Check if we should explore this channel
-			if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
-
-			// Get exploration action - pass all channel inferences so channel knows what's been tried
-			const exploration = await this.exploreChannel(channelName, channelInferences);
-			if (!exploration) continue; // All actions have been tried
-
-			// Mark previous winners as losers
-			for (const winner of channelWinners)
-				if (winner.neuron_id !== exploration.neuron_id)
-					winner.isWinner = false;
-
-			// Add exploration as winner
-			inferences.push(exploration);
-		}
-	}
-
-	/**
-	 * Prints a one-line summary of the frame processing
-	 */
-	printFrameSummary(frameElapsed) {
-
-		// Get base level (level 0) accuracy
-		let baseAccuracy = 'N/A';
-		if (this.accuracyStats.total > 0)
-			baseAccuracy = `${(this.accuracyStats.correct / this.accuracyStats.total * 100).toFixed(1)}%`;
-
-		// Collect continuous prediction metrics from channels (only new errors since last call)
-		for (const [_, channel] of this.channels) {
-			if (typeof channel.getPredictionMetrics === 'function') {
-				const metrics = channel.getPredictionMetrics();
-				if (metrics) {
-					this.continuousPredictionMetrics.totalError += metrics.totalError;
-					this.continuousPredictionMetrics.count += metrics.count;
-				}
-			}
-		}
-
-		// Calculate average MAPE (Mean Absolute Percentage Error) and format with count
-		let mapeDisplay = 'N/A';
-		if (this.continuousPredictionMetrics.count > 0) {
-			const avgMAPE = (this.continuousPredictionMetrics.totalError / this.continuousPredictionMetrics.count).toFixed(2);
-			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
-		}
-
-		// Collect output performance metrics from channels
-		const outputMetrics = [];
-		for (const [_, channel] of this.channels) {
-			if (typeof channel.getOutputPerformanceMetrics === 'function') {
-				const metrics = channel.getOutputPerformanceMetrics();
-				if (metrics) outputMetrics.push(metrics);
-			}
-		}
-
-		// Format output performance display
-		let outputDisplay = 'N/A';
-		if (outputMetrics.length > 0) {
-			outputDisplay = outputMetrics.map(m => {
-				const formatted = m.format === 'currency'
-					? `$${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
-					: m.value.toFixed(2);
-				return outputMetrics.length > 1 ? `${m.label}:${formatted}` : formatted;
-			}).join(', ');
-		}
-
-		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Accuracy: ${baseAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
-	}
-
-	/**
-	 * Infer predictions and outputs using voting architecture.
-	 * All levels vote for both actions and events.
-	 */
-	async inferNeurons() {
-
-		// Collect ALL votes from ALL levels in one query
-		const allVotes = await this.collectVotes();
-
-		// If no votes, wait for more data
-		if (allVotes.length === 0) {
-			if (this.debug) console.log('No votes found. Waiting for more data in future frames.');
-			return;
-		}
-
-		// Determine consensus - pick best per dimension (highest sum of strength * reward)
-		// Returns array of inferences with isWinner flag
-		const inferences = await this.determineConsensus(allVotes);
-
-		// Apply exploration to actions (may override winners)
-		await this.applyExploration(inferences);
-
-		// Save all inferences
-		await this.saveInferences(inferences);
-
-		// Notify channels about winning event predictions for continuous tracking (e.g., price prediction)
-		this.notifyChannelsOfEventPredictions(inferences);
-	}
-
-	/**
-	 * Notify channels about winning event predictions for continuous tracking.
-	 * Channels can use this to calculate continuous predictions (e.g., price prediction from buckets).
-	 * @param {Array} inferences - Array of inference objects with isWinner flag
-	 */
-	notifyChannelsOfEventPredictions(inferences) {
-
-		// Filter to winning event predictions only
-		const eventWinners = inferences.filter(inf => inf.isWinner && inf.type === 'event');
-		if (eventWinners.length === 0) return;
-
-		// Group by channel
-		const byChannel = new Map();
-		for (const winner of eventWinners) {
-			if (!winner.channel) continue;
-			if (!byChannel.has(winner.channel)) byChannel.set(winner.channel, []);
-			byChannel.get(winner.channel).push(winner);
-		}
-
-		// Notify each channel
-		for (const [channelName, winners] of byChannel) {
-			const channel = this.channels.get(channelName);
-			if (channel && typeof channel.onEventPredictions === 'function')
-				channel.onEventPredictions(winners);
-		}
-	}
-
-	/**
-	 * Determine consensus from votes - sum strengths, strength-weighted average for rewards.
-	 * All votes are for base level neurons (level 0) - pattern neurons are activated in pattern recognition
-	 * Uses per-dimension conflict resolution.
-	 * For actions: strength-weighted reward average ensures consistent cycle-based connections override noisy probabilistic ones.
-	 * @param {Array} votes - Array of {from_neuron_id, neuron_id, source_type, source_id, strength, reward, distance, source_level}
-	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
-	 */
-	async determineConsensus(votes) {
-		if (votes.length === 0) return [];
-
-		// Aggregate votes by target neuron - sum strengths, strength-weighted average for rewards
-		const aggregated = new Map();
-		for (const vote of votes) {
-			if (!aggregated.has(vote.neuron_id))
-				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, weightedRewardSum: 0, sources: [], sourceNeurons: new Set() });
-
-			const agg = aggregated.get(vote.neuron_id);
-			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, distance: vote.distance, source_level: vote.source_level });
-			agg.sourceNeurons.add(vote.from_neuron_id);
-
-			// Sum strengths, accumulate strength-weighted rewards
-			agg.strength += vote.strength;
-			agg.weightedRewardSum += vote.strength * vote.reward;
-		}
-
-		// Calculate strength-weighted average reward for each target neuron
-		for (const [_, agg] of aggregated) agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
-
-		// Add coordinates and group by dimension
-		const byDimension = await this.groupVotesByDimension(aggregated);
-
-		// Select winner for each dimension
-		const winners = new Set();
-		for (const [dimName, dimVotes] of byDimension) {
-			const winner = this.selectWinnerForDimension(dimName, dimVotes);
-			if (winner) winners.add(winner.neuron_id);
-		}
-
-		// Build inferences array with isWinner flag
-		const inferences = [];
-		for (const [neuronId, agg] of aggregated)
-			inferences.push({ ...agg, isWinner: winners.has(neuronId) });
-
-		return inferences;
-	}
-
-	/**
-	 * Add coordinates to aggregated votes and group by dimension.
-	 * Only called for base level (level 0) neurons which have coordinates.
-	 * @param {Map} aggregated - Map from aggregateVotesByTarget
-	 * @returns {Promise<Map>} Map of dimension name -> array of votes
-	 */
-	async groupVotesByDimension(aggregated) {
-		const neuronIds = [...aggregated.keys()];
-		const neuronInfo = await this.getNeuronCoordinates(neuronIds);
-
-		// Add coordinates and neuron type for each neuron
-		for (const [neuronId, agg] of aggregated) {
-			const info = neuronInfo.get(neuronId);
-			if (!info) {
-				console.warn(`Warning: Base neuron ${neuronId} not found in getNeuronCoordinates - skipping`);
-				continue;
-			}
-			agg.coordinates = {};
-			for (const [dimName, value] of info.coordinates) agg.coordinates[dimName] = value;
-			agg.type = info.type; // 'action' or 'event' (from neuron)
-			agg.channel = info.channel;
-			agg.channel_id = info.channel_id;
-		}
-
-		// Group by dimension
-		const byDimension = new Map();
-		for (const [, agg] of aggregated) {
-			if (!agg.coordinates) continue;
-			for (const dimName of Object.keys(agg.coordinates)) {
-				if (!byDimension.has(dimName)) byDimension.set(dimName, []);
-				byDimension.get(dimName).push(agg);
-			}
-		}
-
-		return byDimension;
-	}
-
-	/**
-	 * Select winner for a dimension using weighted voting.
-	 * All levels contribute with level weighting (already applied in collectVotes).
-	 * Events: select by highest weighted strength
-	 * Actions: Boltzmann selection on weighted reward
-	 * @param {string} dimName - Dimension name
-	 * @param {Array} dimVotes - Array of aggregated votes for this dimension
-	 * @returns {Object|null} Winning vote or null if no votes
-	 */
-	selectWinnerForDimension(dimName, dimVotes) {
-		if (dimVotes.length === 0) return null;
-
-		// Select winner based on neuron type (all votes for same dimension have same type)
-		const isAction = dimVotes[0]?.type === 'action';
-
-		// For actions: Boltzmann selection on weighted reward (already computed)
-		if (isAction) {
-			const winner = this.boltzmannSelect(dimVotes);
-			if (this.debug) console.log(`Voting: ${dimName} (action) Boltzmann = ${winner.coordinates[dimName]} (n${winner.neuron_id}, rwd=${winner.reward.toFixed(2)}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
-			return winner;
-		}
-
-		// Events: deterministic selection by highest weighted strength
-		dimVotes.sort((a, b) => b.strength - a.strength);
-		const winner = dimVotes[0];
-		if (this.debug) console.log(`Voting: ${dimName} (event) winner = ${winner.coordinates[dimName]} (n${winner.neuron_id}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
-		return winner;
-	}
-
-	/**
-	 * Boltzmann selection from candidates based on reward values.
-	 * Uses exponential Boltzmann where probability is proportional to exp(reward / temperature).
-	 * Lower temperature = more aggressive (favors higher rewards more strongly).
-	 * @param {Array} candidates - Array of objects with reward property
-	 * @returns {Object} - Selected candidate
-	 */
-	boltzmannSelect(candidates) {
-		if (candidates.length === 0) return null;
-		if (candidates.length === 1) return candidates[0];
-
-		// Exponential Boltzmann with temperature: probability proportional to exp(reward / temperature)
-		const expValues = candidates.map(c => Math.exp(c.reward / this.boltzmannTemperature));
-		const sum = expValues.reduce((s, v) => s + v, 0);
-
-		// Calculate probabilities
-		const probabilities = expValues.map(v => v / sum);
-
-		// Sample from distribution
-		const rand = Math.random();
-		let cumulative = 0;
-		for (let i = 0; i < candidates.length; i++) {
-			cumulative += probabilities[i];
-			if (rand < cumulative) return candidates[i];
-		}
-
-		// Fallback (shouldn't happen due to floating point)
-		return candidates[candidates.length - 1];
-	}
-
-	/**
-	 * Decide whether to explore a channel based on inference strength and reward
-	 * Exploration probability is inversely proportional to total effective inference strength (strength * reward)
-	 * Higher confidence predictions = lower exploration probability
-	 * @param {string} channelName - name of the channel to check
-	 * @param {Array} channelBaseInferences - array of channel base inferences with strength and reward
-	 * @returns {boolean} - true if we should explore this channel
-	 */
-	shouldExploreChannel(channelName, channelBaseInferences) {
-
-		// If there are no action inferences, exploration is needed
-		if (!channelBaseInferences.length) return true;
-
-		// Calculate total raw inference strength for this channel
-		// Use raw strength (not strength * reward) because reward can compound to extreme values
-		// that would suppress exploration even when the brain hasn't learned the correct pattern
-		const totalInferenceStrength = channelBaseInferences.reduce((sum, inf) => sum + inf.strength, 0);
-
-		// Linear decay from maxExploration to minExploration as strength increases
-		// explorationScale defines the strength at which exploration reaches minimum
-		const explorationRange = this.maxExploration - this.minExploration;
-		let inferenceScale = totalInferenceStrength / this.explorationScale;
-		if (inferenceScale > 1.0) inferenceScale = 1.0;
-		const explorationProb = this.maxExploration - inferenceScale * explorationRange;
-
-		// Randomly decide if we should explore based on probability
-		const explore = Math.random() < explorationProb;
-		if (this.debug && explore) console.log(`${channelName}: Total raw strength ${totalInferenceStrength.toFixed(2)} → Exploration prob ${explorationProb.toFixed(2)} → Exploring`);
-		return explore;
-	}
-
-	/**
-	 * runs the forget cycle, reducing reward factors, pattern strengths, connection strengths and deleting unused neurons
-	 * also deletes obsolete (negative) connections - very important step that helps the system avoid curse of dimensionality
-	 */
-	async runForgetCycle() {
-
-		// we run the forget cycle periodically for clean up
-		this.forgetCounter++;
-		if (this.forgetCounter % this.forgetCycles !== 0) return;
-		this.forgetCounter = 0;
-
-		// track time spent for the forget cycle
-		const cycleStart = Date.now();
-		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
-
-		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns (clamped between minConnectionStrength and maxConnectionStrength)
-		if (this.debug) console.log('Running forget cycle - pattern_past update...');
-		let stepStart = Date.now();
-		const [patternPastUpdateResult] = await this.conn.query(`UPDATE pattern_past SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
-		if (this.debug) console.log(`  Pattern_past UPDATE took ${Date.now() - stepStart}ms (updated ${patternPastUpdateResult.affectedRows} rows)`);
-
-		if (this.debug) console.log('Running forget cycle - pattern_future update...');
-		stepStart = Date.now();
-		const [patternFutureUpdateResult] = await this.conn.query(`UPDATE pattern_future SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
-		if (this.debug) console.log(`  Pattern_future UPDATE took ${Date.now() - stepStart}ms (updated ${patternFutureUpdateResult.affectedRows} rows)`);
-
-		if (this.debug) console.log('Running forget cycle - pattern_peaks update...');
-		stepStart = Date.now();
-		const [patternPeaksUpdateResult] = await this.conn.query(`UPDATE pattern_peaks SET strength = GREATEST(0, strength - ?) WHERE strength > 0`, [this.patternForgetRate]);
-		if (this.debug) console.log(`  Pattern_peaks UPDATE took ${Date.now() - stepStart}ms (updated ${patternPeaksUpdateResult.affectedRows} rows)`);
-
-		// Delete patterns with zero strength
-		if (this.debug) console.log('Running forget cycle - pattern deletion...');
-		stepStart = Date.now();
-		const [patternPastDeleteResult] = await this.conn.query(`DELETE FROM pattern_past WHERE strength = ?`, [this.minConnectionStrength]);
-		if (this.debug) console.log(`  Pattern_past DELETE took ${Date.now() - stepStart}ms (deleted ${patternPastDeleteResult.affectedRows} rows)`);
-
-		stepStart = Date.now();
-		const [patternFutureDeleteResult] = await this.conn.query(`DELETE FROM pattern_future WHERE strength = ?`, [this.minConnectionStrength]);
-		if (this.debug) console.log(`  Pattern_future DELETE took ${Date.now() - stepStart}ms (deleted ${patternFutureDeleteResult.affectedRows} rows)`);
-
-		stepStart = Date.now();
-		const [patternPeaksDeleteResult] = await this.conn.query(`DELETE FROM pattern_peaks WHERE strength <= 0`);
-		if (this.debug) console.log(`  Pattern_peaks DELETE took ${Date.now() - stepStart}ms (deleted ${patternPeaksDeleteResult.affectedRows} rows)`);
-
-		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped between minConnectionStrength and maxConnectionStrength)
-		if (this.debug) console.log('Running forget cycle - connection update...');
-		stepStart = Date.now();
-		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
-		if (this.debug) console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
-
-		// Delete connections with zero strength
-		if (this.debug) console.log('Running forget cycle - connection deletion...');
-		stepStart = Date.now();
-		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
-		if (this.debug) console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
-
-		// 3. REWARD DECAY: Move reward values back toward 0 (neutral)
-		// Formula: reward = reward * (1 - rewardForgetRate)
-		// reward=+10, rate=0.05 → 10 * 0.95 = 9.5
-		// reward=-10, rate=0.05 → -10 * 0.95 = -9.5
-		if (this.debug) console.log('Running forget cycle - connection reward decay...');
-		stepStart = Date.now();
-		const [connRewardResult] = await this.conn.query(`UPDATE connections SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
-		if (this.debug) console.log(`  Connection reward decay took ${Date.now() - stepStart}ms (updated ${connRewardResult.affectedRows} rows)`);
-
-		if (this.debug) console.log('Running forget cycle - pattern_future reward decay...');
-		stepStart = Date.now();
-		const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
-		if (this.debug) console.log(`  Pattern_future reward decay took ${Date.now() - stepStart}ms (updated ${patternRewardResult.affectedRows} rows)`);
-
-		// 4. PATTERN NEURON CLEANUP: Remove orphaned pattern neurons (level > 0) with no connections or pattern entries
-		// Base neurons (level 0) are NEVER deleted - they are fundamental encoding units with coordinates
-		// MEMORY engine doesn't enforce foreign keys, so deleting base neurons would leave orphaned coordinates
-		// which would cause ghost neurons to be "found" and connections created to non-existent neurons
-		if (this.debug) console.log('Running forget cycle - orphaned pattern neurons cleanup...');
-		stepStart = Date.now();
-		const [neuronDeleteResult] = await this.conn.query(`
-			DELETE
-			FROM neurons n
-			WHERE n.level > 0
-			AND NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
-			AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
-			AND NOT EXISTS (SELECT 1 FROM pattern_past WHERE pattern_neuron_id = n.id)
-			AND NOT EXISTS (SELECT 1 FROM pattern_future WHERE pattern_neuron_id = n.id)
-			AND NOT EXISTS (SELECT 1 FROM pattern_peaks WHERE pattern_neuron_id = n.id)
-			AND NOT EXISTS (SELECT 1 FROM pattern_peaks WHERE peak_neuron_id = n.id)
-			AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
-		`);
-		if (this.debug) console.log(`  Orphaned pattern neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
-
-		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
-	}
-
-	/**
-	 * Collect votes from connections or patterns based on highest level PER AGE.
-	 * For each age value:
-	 *   - If highest level at that age > 0: use ONLY pattern votes from highest level
-	 *   - If highest level at that age = 0: use ONLY connection votes from base level
-	 * This ensures patterns override connections on a per-frame basis.
-	 * Uses sliding window (maxLevelsByAge) to avoid querying max levels every frame.
-	 * Uses this.currentMaxLevel (set by recognizePatternNeurons) for age=0.
-	 * @returns {Promise<Array>} Array of {neuron_id, source_type, source_id, strength, reward, distance, source_level}
-	 */
-	async collectVotes() {
-		const allVotes = [];
-
-		// Update sliding window: remove oldest, shift all, add new age=0 max level
-		// Use currentMaxLevel (set by recognizePatternNeurons) for age=0
-		// Shift window: insert new age=0 at front
-		if (this.maxLevelsByAge.length >= this.contextLength) this.maxLevelsByAge.pop(); // Remove oldest frame
-		this.maxLevelsByAge.unshift(this.currentMaxLevel);
-
-		// Build age groups for pattern and connection queries
-		const patternAges = []; // ages where max_level > 0
-		const patternLevels = []; // corresponding max levels
-		const connectionAges = []; // ages where max_level = 0
-		for (let age = 0; age < this.maxLevelsByAge.length && age < this.contextLength; age++) {
-			const maxLevel = this.maxLevelsByAge[age];
-			if (maxLevel === 0) connectionAges.push(age);
-			else {
-				patternAges.push(age);
-				patternLevels.push(maxLevel);
-			}
-		}
-
-		// Collect all pattern votes in one query (for ages with patterns)
-		if (patternAges.length > 0) {
-			const [patternVotes] = await this.conn.query(`
-				SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id, 'pattern' as source_type, pf.id as source_id,
-					pf.strength, pf.reward, pf.distance, an.level as source_level, an.age
-				FROM active_neurons an
-				JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
-				WHERE pf.distance = an.age + 1
-	            AND pf.strength > 0
-				AND (${patternAges.map((age, i) => `(an.age = ${age} AND an.level = ${patternLevels[i]})`).join(' OR ')})
-			`);
-			allVotes.push(...patternVotes);
-		}
-
-		// Collect all connection votes in one query (for ages without patterns)
-		if (connectionAges.length > 0) {
-			const [connectionVotes] = await this.conn.query(`
-				SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, 'connection' as source_type, c.id as source_id,
-					c.strength, c.reward, c.distance, an.level as source_level, an.age
-				FROM active_neurons an
-				JOIN connections c ON c.from_neuron_id = an.neuron_id
-				WHERE c.distance = an.age + 1
-	            AND c.strength > 0
-				AND an.age IN (${connectionAges.join(',')})
-				AND an.level = 0
-			`);
-			allVotes.push(...connectionVotes);
-		}
-
-		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternAges.length} pattern ages, ${connectionAges.length} connection ages)`);
-
-		if (this.debug2) {
-			await this.debugActionVotes(allVotes);
-			await this.debugEventVotes(allVotes);
-		}
-
-		return allVotes;
-	}
-
-	/**
-	 * Save all inferences in one operation.
-	 * @param {Array} inferences - Array of inference objects with isWinner flag
-	 */
-	async saveInferences(inferences) {
-		if (inferences.length === 0) return;
-
-		// Collect neurons - is_winner: 1 for winners (highest sum of strength * reward per dimension), 0 for losers
-		const neurons = [];
-		for (const inf of inferences) neurons.push([inf.neuron_id, inf.level || 0, 0, inf.strength, inf.isWinner ? 1 : 0]);
-
-		// Save inferred neurons
-		await this.truncateTables([ 'inferred_neurons' ]);
-		await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, strength, is_winner) VALUES ? 
-			ON DUPLICATE KEY UPDATE is_winner = VALUES(is_winner), strength = VALUES(strength)
-		`, [neurons]);
-
-		if (this.debug) {
-			const winnerCount = inferences.filter(i => i.isWinner).length;
-			const loserCount = inferences.filter(i => !i.isWinner).length;
-			console.log(`Saved ${inferences.length} inferences (${winnerCount} winners, ${loserCount} losers)`);
-		}
-	}
-
-	/**
-	 * Get coordinates for a list of neuron IDs with dimension info
-	 * @param {Array<number>} neuronIds - Array of neuron IDs
-	 * @returns {Promise<Map>} Map of neuron_id → {type, channel, channel_id, coordinates: Map of dimension_name → value}
-	 */
-	async getNeuronCoordinates(neuronIds) {
-		if (neuronIds.length === 0) return new Map();
-
-		// Get neuron type and channel from neurons table
-		const [neuronRows] = await this.conn.query(`
-			SELECT n.id as neuron_id, n.type, n.channel_id, ch.name as channel
-			FROM neurons n
-			JOIN channels ch ON ch.id = n.channel_id
-			WHERE n.id IN (?)
-		`, [neuronIds]);
-
-		// Get coordinates from coordinates table
-		const [coordRows] = await this.conn.query(`
-			SELECT c.neuron_id, c.val, d.name as dimension_name
-			FROM coordinates c
-			JOIN dimensions d ON c.dimension_id = d.id
-			WHERE c.neuron_id IN (?)
-		`, [neuronIds]);
-
-		// Build result map
-		const neuronCoords = new Map();
-		for (const row of neuronRows)
-			neuronCoords.set(row.neuron_id, { type: row.type, channel: row.channel, channel_id: row.channel_id, coordinates: new Map() });
-
-		for (const row of coordRows) {
-			const neuron = neuronCoords.get(row.neuron_id);
-			if (neuron) neuron.coordinates.set(row.dimension_name, row.val);
-		}
-
-		return neuronCoords;
-	}
-
-	/**
 	 * Create pattern neurons and map them to new_patterns.
 	 * Creates neurons at peak_level+1 for each peak neuron.
 	 * Pattern neurons use type from new_patterns (event/action) and channel_id from peak neuron.
 	 */
 	async createPatternNeurons() {
 
-		// Get peak neurons with their levels, channel_id, and pattern type from new_patterns
+		// Get peak neurons with their levels from new_patterns
 		const [peaks] = await this.conn.query(`
-			SELECT np.seq_id, np.peak_neuron_id, np.type as pattern_type, n.level, n.channel_id
+			SELECT np.seq_id, np.peak_neuron_id, n.level
 			FROM new_patterns np
 			LEFT JOIN neurons n ON n.id = np.peak_neuron_id
 			ORDER BY n.level, np.seq_id
@@ -2033,8 +1388,8 @@ export default class Brain {
 		}
 
 		// Create pattern neurons with pattern type (from new_patterns) and channel_id (from peak)
-		const neurons = peaks.map(p => [p.level + 1, p.pattern_type, p.channel_id]);
-		const neuronIds = await this.createNeurons(neurons);
+		const neurons = peaks.map(p => [p.level + 1]);
+		const neuronIds = await this.insertNeurons(neurons);
 
 		// Bulk update new_patterns with pattern neuron IDs using CASE statement
 		if (peaks.length > 0) {
@@ -2126,24 +1481,103 @@ export default class Brain {
 	}
 
 	/**
-	 * Populate action neuron cache by querying for OWN and OUT neurons
-	 * Only caches if both neurons exist
+	 * Infer predictions and outputs using voting architecture.
+	 * All levels vote for both actions and events.
 	 */
-	async populateActionNeuronCache() {
-		const [actionNeurons] = await this.conn.query(`
-			SELECT n.id as neuron_id, c.val as activity_value
-			FROM neurons n
-			JOIN coordinates c ON c.neuron_id = n.id
-			JOIN dimensions d ON d.id = c.dimension_id
-			WHERE n.type = 'action'
-			AND c.val IN (1, -1)
-		`);
+	async inferNeurons() {
 
-		const ownNeuronId = actionNeurons.find(n => n.activity_value === 1)?.neuron_id;
-		const outNeuronId = actionNeurons.find(n => n.activity_value === -1)?.neuron_id;
+		// Collect ALL votes from ALL levels in one query
+		const allVotes = await this.collectVotes();
 
-		// Only cache if both neurons exist
-		if (ownNeuronId && outNeuronId) this.actionNeuronCache = { ownNeuronId, outNeuronId };
+		// If no votes, wait for more data
+		if (allVotes.length === 0) {
+			if (this.debug) console.log('No votes found. Waiting for more data in future frames.');
+			return;
+		}
+
+		// Determine consensus - pick best per dimension (highest sum of strength * reward)
+		// Returns array of inferences with isWinner flag
+		const inferences = await this.determineConsensus(allVotes);
+
+		// Apply exploration to actions (may override winners)
+		await this.applyExploration(inferences);
+
+		// Save all inferences
+		await this.saveInferences(inferences);
+
+		// Notify channels about winning event predictions for continuous tracking (e.g., price prediction)
+		this.notifyChannelsOfEventPredictions(inferences);
+	}
+
+	/**
+	 * Collect votes from connections or patterns based on highest level PER AGE.
+	 * For each age value:
+	 *   - If highest level at that age > 0: use ONLY pattern votes from highest level
+	 *   - If highest level at that age = 0: use ONLY connection votes from base level
+	 * This ensures patterns override connections on a per-frame basis.
+	 * Uses sliding window (maxLevelsByAge) to avoid querying max levels every frame.
+	 * Uses this.currentMaxLevel (set by recognizePatternNeurons) for age=0.
+	 * @returns {Promise<Array>} Array of {neuron_id, source_type, source_id, strength, reward, distance, source_level}
+	 */
+	async collectVotes() {
+		const allVotes = [];
+
+		// Update sliding window: remove oldest, shift all, add new age=0 max level
+		// Use currentMaxLevel (set by recognizePatternNeurons) for age=0
+		// Shift window: insert new age=0 at front
+		if (this.maxLevelsByAge.length >= this.contextLength) this.maxLevelsByAge.pop(); // Remove oldest frame
+		this.maxLevelsByAge.unshift(this.currentMaxLevel);
+
+		// Build age groups for pattern and connection queries
+		const patternAges = []; // ages where max_level > 0
+		const patternLevels = []; // corresponding max levels
+		const connectionAges = []; // ages where max_level = 0
+		for (let age = 0; age < this.maxLevelsByAge.length && age < this.contextLength; age++) {
+			const maxLevel = this.maxLevelsByAge[age];
+			if (maxLevel === 0) connectionAges.push(age);
+			else {
+				patternAges.push(age);
+				patternLevels.push(maxLevel);
+			}
+		}
+
+		// Collect all pattern votes in one query (for ages with patterns)
+		if (patternAges.length > 0) {
+			const [patternVotes] = await this.conn.query(`
+				SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id, 'pattern' as source_type, pf.id as source_id,
+					pf.strength, pf.reward, pf.distance, an.level as source_level, an.age
+				FROM active_neurons an
+				JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
+				WHERE pf.distance = an.age + 1
+	            AND pf.strength > 0
+				AND (${patternAges.map((age, i) => `(an.age = ${age} AND an.level = ${patternLevels[i]})`).join(' OR ')})
+			`);
+			allVotes.push(...patternVotes);
+		}
+
+		// Collect all connection votes in one query (for ages without patterns)
+		if (connectionAges.length > 0) {
+			const [connectionVotes] = await this.conn.query(`
+				SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, 'connection' as source_type, c.id as source_id,
+					c.strength, c.reward, c.distance, an.level as source_level, an.age
+				FROM active_neurons an
+				JOIN connections c ON c.from_neuron_id = an.neuron_id
+				WHERE c.distance = an.age + 1
+	            AND c.strength > 0
+				AND an.age IN (${connectionAges.join(',')})
+				AND an.level = 0
+			`);
+			allVotes.push(...connectionVotes);
+		}
+
+		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternAges.length} pattern ages, ${connectionAges.length} connection ages)`);
+
+		if (this.debug2) {
+			await this.debugActionVotes(allVotes);
+			await this.debugEventVotes(allVotes);
+		}
+
+		return allVotes;
 	}
 
 	/**
@@ -2243,6 +1677,27 @@ export default class Brain {
 		console.log(formatAggVotes(outAgg, `OUT (${outAgg.length} voters, str=${outTotal.str.toFixed(1)}, avgRwd=${outTotal.rwd.toFixed(2)}, prob=${(outProb * 100).toFixed(1)}%)`));
 		console.log(`  SELECTION: Boltzmann (OWN ${(ownProb * 100).toFixed(1)}% vs OUT ${(outProb * 100).toFixed(1)}%)`);
 		console.log(`===================\n`);
+	}
+
+	/**
+	 * Populate action neuron cache by querying for OWN and OUT neurons
+	 * Only caches if both neurons exist
+	 */
+	async populateActionNeuronCache() {
+		const [actionNeurons] = await this.conn.query(`
+			SELECT n.id as neuron_id, c.val as activity_value
+			FROM neurons n
+			JOIN coordinates c ON c.neuron_id = n.id
+			JOIN dimensions d ON d.id = c.dimension_id
+			WHERE n.type = 'action'
+			AND c.val IN (1, -1)
+		`);
+
+		const ownNeuronId = actionNeurons.find(n => n.activity_value === 1)?.neuron_id;
+		const outNeuronId = actionNeurons.find(n => n.activity_value === -1)?.neuron_id;
+
+		// Only cache if both neurons exist
+		if (ownNeuronId && outNeuronId) this.actionNeuronCache = { ownNeuronId, outNeuronId };
 	}
 
 	/**
@@ -2424,4 +1879,546 @@ export default class Brain {
 			return part;
 		}).join(', ');
 	}
+
+	/**
+	 * Determine consensus from votes - sum strengths, strength-weighted average for rewards.
+	 * All votes are for base level neurons (level 0) - pattern neurons are activated in pattern recognition
+	 * Uses per-dimension conflict resolution.
+	 * For actions: strength-weighted reward average ensures consistent cycle-based connections override noisy probabilistic ones.
+	 * @param {Array} votes - Array of {from_neuron_id, neuron_id, source_type, source_id, strength, reward, distance, source_level}
+	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
+	 */
+	async determineConsensus(votes) {
+		if (votes.length === 0) return [];
+
+		// Aggregate votes by target neuron - sum strengths, strength-weighted average for rewards
+		const aggregated = new Map();
+		for (const vote of votes) {
+			if (!aggregated.has(vote.neuron_id))
+				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, weightedRewardSum: 0, sources: [], sourceNeurons: new Set() });
+
+			const agg = aggregated.get(vote.neuron_id);
+			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, distance: vote.distance, source_level: vote.source_level });
+			agg.sourceNeurons.add(vote.from_neuron_id);
+
+			// Sum strengths, accumulate strength-weighted rewards
+			agg.strength += vote.strength;
+			agg.weightedRewardSum += vote.strength * vote.reward;
+		}
+
+		// Calculate strength-weighted average reward for each target neuron
+		for (const [_, agg] of aggregated) agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
+
+		// Add coordinates and group by dimension
+		const byDimension = await this.groupVotesByDimension(aggregated);
+
+		// Select winner for each dimension
+		const winners = new Set();
+		for (const [dimName, dimVotes] of byDimension) {
+			const winner = this.selectWinnerForDimension(dimName, dimVotes);
+			if (winner) winners.add(winner.neuron_id);
+		}
+
+		// Build inferences array with isWinner flag
+		const inferences = [];
+		for (const [neuronId, agg] of aggregated)
+			inferences.push({ ...agg, isWinner: winners.has(neuronId) });
+
+		return inferences;
+	}
+
+	/**
+	 * Add coordinates to aggregated votes and group by dimension.
+	 * Only called for base level (level 0) neurons which have coordinates.
+	 * @param {Map} aggregated - Map from aggregateVotesByTarget
+	 * @returns {Promise<Map>} Map of dimension name -> array of votes
+	 */
+	async groupVotesByDimension(aggregated) {
+		const neuronIds = [...aggregated.keys()];
+		const neuronInfo = await this.getNeuronCoordinates(neuronIds);
+
+		// Add coordinates and neuron type for each neuron
+		for (const [neuronId, agg] of aggregated) {
+			const info = neuronInfo.get(neuronId);
+			if (!info) {
+				console.warn(`Warning: Base neuron ${neuronId} not found in getNeuronCoordinates - skipping`);
+				continue;
+			}
+			agg.coordinates = {};
+			for (const [dimName, value] of info.coordinates) agg.coordinates[dimName] = value;
+			agg.type = info.type; // 'action' or 'event' (from neuron)
+			agg.channel = info.channel;
+			agg.channel_id = info.channel_id;
+		}
+
+		// Group by dimension
+		const byDimension = new Map();
+		for (const [, agg] of aggregated) {
+			if (!agg.coordinates) continue;
+			for (const dimName of Object.keys(agg.coordinates)) {
+				if (!byDimension.has(dimName)) byDimension.set(dimName, []);
+				byDimension.get(dimName).push(agg);
+			}
+		}
+
+		return byDimension;
+	}
+
+	/**
+	 * Get coordinates for a list of neuron IDs with dimension info
+	 * @param {Array<number>} neuronIds - Array of neuron IDs
+	 * @returns {Promise<Map>} Map of neuron_id → {type, channel, channel_id, coordinates: Map of dimension_name → value}
+	 */
+	async getNeuronCoordinates(neuronIds) {
+		if (neuronIds.length === 0) return new Map();
+
+		// Get neuron type and channel from neurons table
+		const [neuronRows] = await this.conn.query(`
+			SELECT n.id as neuron_id, n.type, n.channel_id, ch.name as channel
+			FROM neurons n
+			JOIN channels ch ON ch.id = n.channel_id
+			WHERE n.id IN (?)
+		`, [neuronIds]);
+
+		// Get coordinates from coordinates table
+		const [coordRows] = await this.conn.query(`
+			SELECT c.neuron_id, c.val, d.name as dimension_name
+			FROM coordinates c
+			JOIN dimensions d ON c.dimension_id = d.id
+			WHERE c.neuron_id IN (?)
+		`, [neuronIds]);
+
+		// Build result map
+		const neuronCoords = new Map();
+		for (const row of neuronRows)
+			neuronCoords.set(row.neuron_id, { type: row.type, channel: row.channel, channel_id: row.channel_id, coordinates: new Map() });
+
+		for (const row of coordRows) {
+			const neuron = neuronCoords.get(row.neuron_id);
+			if (neuron) neuron.coordinates.set(row.dimension_name, row.val);
+		}
+
+		return neuronCoords;
+	}
+
+	/**
+	 * Select winner for a dimension using weighted voting.
+	 * All levels contribute with level weighting (already applied in collectVotes).
+	 * Events: select by highest weighted strength
+	 * Actions: Boltzmann selection on weighted reward
+	 * @param {string} dimName - Dimension name
+	 * @param {Array} dimVotes - Array of aggregated votes for this dimension
+	 * @returns {Object|null} Winning vote or null if no votes
+	 */
+	selectWinnerForDimension(dimName, dimVotes) {
+		if (dimVotes.length === 0) return null;
+
+		// Select winner based on neuron type (all votes for same dimension have same type)
+		const isAction = dimVotes[0]?.type === 'action';
+
+		// For actions: Boltzmann selection on weighted reward (already computed)
+		if (isAction) {
+			const winner = this.boltzmannSelect(dimVotes);
+			if (this.debug) console.log(`Voting: ${dimName} (action) Boltzmann = ${winner.coordinates[dimName]} (n${winner.neuron_id}, rwd=${winner.reward.toFixed(2)}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
+			return winner;
+		}
+
+		// Events: deterministic selection by highest weighted strength
+		dimVotes.sort((a, b) => b.strength - a.strength);
+		const winner = dimVotes[0];
+		if (this.debug) console.log(`Voting: ${dimName} (event) winner = ${winner.coordinates[dimName]} (n${winner.neuron_id}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
+		return winner;
+	}
+
+	/**
+	 * Boltzmann selection from candidates based on reward values.
+	 * Uses exponential Boltzmann where probability is proportional to exp(reward / temperature).
+	 * Lower temperature = more aggressive (favors higher rewards more strongly).
+	 * @param {Array} candidates - Array of objects with reward property
+	 * @returns {Object} - Selected candidate
+	 */
+	boltzmannSelect(candidates) {
+		if (candidates.length === 0) return null;
+		if (candidates.length === 1) return candidates[0];
+
+		// Exponential Boltzmann with temperature: probability proportional to exp(reward / temperature)
+		const expValues = candidates.map(c => Math.exp(c.reward / this.boltzmannTemperature));
+		const sum = expValues.reduce((s, v) => s + v, 0);
+
+		// Calculate probabilities
+		const probabilities = expValues.map(v => v / sum);
+
+		// Sample from distribution
+		const rand = Math.random();
+		let cumulative = 0;
+		for (let i = 0; i < candidates.length; i++) {
+			cumulative += probabilities[i];
+			if (rand < cumulative) return candidates[i];
+		}
+
+		// Fallback (shouldn't happen due to floating point)
+		return candidates[candidates.length - 1];
+	}
+
+	/**
+	 * Apply exploration to action inferences.
+	 * Modifies inferences array in place - may add exploration action and update isWinner flags.
+	 * @param {Array} inferences - Array of inference objects (modified in place)
+	 */
+	async applyExploration(inferences) {
+
+		// Group action inferences by channel (using channel from neuron, not dimension)
+		const byChannel = new Map();
+		for (const inf of inferences) {
+			if (!inf.coordinates || inf.type !== 'action') continue;
+			if (!byChannel.has(inf.channel)) byChannel.set(inf.channel, []);
+			byChannel.get(inf.channel).push(inf);
+		}
+
+		// Process each channel
+		for (const [channelName] of this.channels) {
+			const channelInferences = byChannel.get(channelName) || [];
+			const channelWinners = channelInferences.filter(inf => inf.isWinner);
+
+			// Check if we should explore this channel
+			if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
+
+			// Get exploration action - pass all channel inferences so channel knows what's been tried
+			const exploration = await this.exploreChannel(channelName, channelInferences);
+			if (!exploration) continue; // All actions have been tried
+
+			// Mark previous winners as losers
+			for (const winner of channelWinners)
+				if (winner.neuron_id !== exploration.neuron_id)
+					winner.isWinner = false;
+
+			// Add exploration as winner
+			inferences.push(exploration);
+		}
+	}
+
+	/**
+	 * Decide whether to explore a channel based on inference strength and reward
+	 * Exploration probability is inversely proportional to total effective inference strength (strength * reward)
+	 * Higher confidence predictions = lower exploration probability
+	 * @param {string} channelName - name of the channel to check
+	 * @param {Array} channelBaseInferences - array of channel base inferences with strength and reward
+	 * @returns {boolean} - true if we should explore this channel
+	 */
+	shouldExploreChannel(channelName, channelBaseInferences) {
+
+		// If there are no action inferences, exploration is needed
+		if (!channelBaseInferences.length) return true;
+
+		// Calculate total raw inference strength for this channel
+		// Use raw strength (not strength * reward) because reward can compound to extreme values
+		// that would suppress exploration even when the brain hasn't learned the correct pattern
+		const totalInferenceStrength = channelBaseInferences.reduce((sum, inf) => sum + inf.strength, 0);
+
+		// Linear decay from maxExploration to minExploration as strength increases
+		// explorationScale defines the strength at which exploration reaches minimum
+		const explorationRange = this.maxExploration - this.minExploration;
+		let inferenceScale = totalInferenceStrength / this.explorationScale;
+		if (inferenceScale > 1.0) inferenceScale = 1.0;
+		const explorationProb = this.maxExploration - inferenceScale * explorationRange;
+
+		// Randomly decide if we should explore based on probability
+		const explore = Math.random() < explorationProb;
+		if (this.debug && explore) console.log(`${channelName}: Total raw strength ${totalInferenceStrength.toFixed(2)} → Exploration prob ${explorationProb.toFixed(2)} → Exploring`);
+		return explore;
+	}
+
+	/**
+	 * Explore a channel by finding an unexplored action.
+	 * Checks if all actions have been explored at all distances - only returns null if fully explored.
+	 * @param {string} channelName - Channel name
+	 * @param {Array} votedActions - All actions that received votes (have connections from current context)
+	 * @returns {Promise<Object|null>} Exploration action or null if all actions explored at all distances
+	 */
+	async exploreChannel(channelName, votedActions) {
+		const channel = this.channels.get(channelName);
+
+		// Collect all actions that have been sufficiently explored (with event votes)
+		const exploredActions = votedActions.filter(a => {
+			if (!a.sources) return false;
+			return a.sources.length >= this.minExploredVotes;
+		});
+
+		// Extract coordinates from explored actions
+		const votedCoordinates = exploredActions.map(a => a.coordinates).filter(c => c);
+
+		// Ask channel for an action that wasn't voted for
+		const actionCoordinates = channel.getExplorationAction(votedCoordinates);
+		if (!actionCoordinates || Object.keys(actionCoordinates).length === 0) {
+			// All actions have been tried - now check if they've been tried at all distances
+			// Group actions by distance
+			const byDistance = new Map();
+			for (const inf of exploredActions) {
+				if (!inf.sources) continue;
+
+				const distances = [...new Set(inf.sources.map(s => s.distance))];
+				for (const distance of distances) {
+					if (!byDistance.has(distance)) byDistance.set(distance, new Set());
+					byDistance.get(distance).add(JSON.stringify(inf.coordinates));
+				}
+			}
+
+			// Check if any distance is missing some actions
+			const allActions = new Set(votedCoordinates.map(c => JSON.stringify(c)));
+			for (const [distance, exploredAtDistance] of byDistance) {
+				if (exploredAtDistance.size < allActions.size) {
+					// This distance hasn't explored all actions - find one to explore
+					for (const actionStr of allActions) {
+						if (!exploredAtDistance.has(actionStr)) {
+							const actionCoords = JSON.parse(actionStr);
+							if (!actionCoords || Object.keys(actionCoords).length === 0) continue;
+
+							const [actionNeuronId] = await this.getFrameNeurons([{
+								coordinates: actionCoords,
+								channel: channelName,
+								channel_id: this.channelNameToId[channelName],
+								type: 'action'
+							}]);
+
+							const exploration = {
+								neuron_id: actionNeuronId,
+								strength: 1,
+								reward: 0,
+								coordinates: actionCoords,
+								type: 'action',
+								isWinner: true
+							};
+
+							if (this.debug) console.log(`Exploration for ${channelName}: re-exploring action at distance ${distance}:`, actionCoords);
+							return exploration;
+						}
+					}
+				}
+			}
+
+			if (this.debug) console.log(`Exploration for ${channelName}: all actions explored at all distances`);
+			return null; // All actions explored at all distances
+		}
+
+		// Find or create neuron for this action - wrap coordinates in frame point structure with channel metadata
+		const [actionNeuronId] = await this.getFrameNeurons([{
+			coordinates: actionCoordinates,
+			channel: channelName,
+			channel_id: this.channelNameToId[channelName],
+			type: 'action'
+		}]);
+
+		// Return exploration action
+		// Use low strength (below minErrorPatternThreshold) to avoid triggering error pattern creation
+		// when exploration fails - exploration is random, not a confident prediction that was wrong
+		const exploration = {
+			neuron_id: actionNeuronId,
+			strength: 1, // Low strength - exploration wins by marking others as losers, not by high strength
+			reward: 0, // Neutral reward (additive: 0 = neutral)
+			coordinates: actionCoordinates,
+			type: 'action',
+			isWinner: true
+		};
+
+		if (this.debug) console.log(`Exploration for ${channelName}:`, actionCoordinates, actionNeuronId);
+		return exploration;
+	}
+
+	/**
+	 * Save all inferences in one operation.
+	 * @param {Array} inferences - Array of inference objects with isWinner flag
+	 */
+	async saveInferences(inferences) {
+		if (inferences.length === 0) return;
+
+		// Collect neurons - is_winner: 1 for winners (highest sum of strength * reward per dimension), 0 for losers
+		const neurons = [];
+		for (const inf of inferences) neurons.push([inf.neuron_id, inf.level || 0, 0, inf.strength, inf.isWinner ? 1 : 0]);
+
+		// Save inferred neurons
+		await this.truncateTables([ 'inferred_neurons' ]);
+		await this.conn.query(`
+			INSERT INTO inferred_neurons (neuron_id, strength, is_winner) VALUES ? 
+			ON DUPLICATE KEY UPDATE is_winner = VALUES(is_winner), strength = VALUES(strength)
+		`, [neurons]);
+
+		if (this.debug) {
+			const winnerCount = inferences.filter(i => i.isWinner).length;
+			const loserCount = inferences.filter(i => !i.isWinner).length;
+			console.log(`Saved ${inferences.length} inferences (${winnerCount} winners, ${loserCount} losers)`);
+		}
+	}
+
+	/**
+	 * Notify channels about winning event predictions for continuous tracking.
+	 * Channels can use this to calculate continuous predictions (e.g., price prediction from buckets).
+	 * @param {Array} inferences - Array of inference objects with isWinner flag
+	 */
+	notifyChannelsOfEventPredictions(inferences) {
+
+		// Filter to winning event predictions only
+		const eventWinners = inferences.filter(inf => inf.isWinner && inf.type === 'event');
+		if (eventWinners.length === 0) return;
+
+		// Group by channel
+		const byChannel = new Map();
+		for (const winner of eventWinners) {
+			if (!winner.channel) continue;
+			if (!byChannel.has(winner.channel)) byChannel.set(winner.channel, []);
+			byChannel.get(winner.channel).push(winner);
+		}
+
+		// Notify each channel
+		for (const [channelName, winners] of byChannel) {
+			const channel = this.channels.get(channelName);
+			if (channel && typeof channel.onEventPredictions === 'function')
+				channel.onEventPredictions(winners);
+		}
+	}
+
+	/**
+	 * runs the forget cycle, reducing reward factors, pattern strengths, connection strengths and deleting unused neurons
+	 * also deletes obsolete (negative) connections - very important step that helps the system avoid curse of dimensionality
+	 */
+	async runForgetCycle() {
+
+		// we run the forget cycle periodically for clean up
+		this.forgetCounter++;
+		if (this.forgetCounter % this.forgetCycles !== 0) return;
+		this.forgetCounter = 0;
+
+		// track time spent for the forget cycle
+		const cycleStart = Date.now();
+		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
+
+		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns (clamped between minConnectionStrength and maxConnectionStrength)
+		if (this.debug) console.log('Running forget cycle - pattern_past update...');
+		let stepStart = Date.now();
+		const [patternPastUpdateResult] = await this.conn.query(`UPDATE pattern_past SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
+		if (this.debug) console.log(`  Pattern_past UPDATE took ${Date.now() - stepStart}ms (updated ${patternPastUpdateResult.affectedRows} rows)`);
+
+		if (this.debug) console.log('Running forget cycle - pattern_future update...');
+		stepStart = Date.now();
+		const [patternFutureUpdateResult] = await this.conn.query(`UPDATE pattern_future SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
+		if (this.debug) console.log(`  Pattern_future UPDATE took ${Date.now() - stepStart}ms (updated ${patternFutureUpdateResult.affectedRows} rows)`);
+
+		if (this.debug) console.log('Running forget cycle - pattern_peaks update...');
+		stepStart = Date.now();
+		const [patternPeaksUpdateResult] = await this.conn.query(`UPDATE pattern_peaks SET strength = GREATEST(0, strength - ?) WHERE strength > 0`, [this.patternForgetRate]);
+		if (this.debug) console.log(`  Pattern_peaks UPDATE took ${Date.now() - stepStart}ms (updated ${patternPeaksUpdateResult.affectedRows} rows)`);
+
+		// Delete patterns with zero strength
+		if (this.debug) console.log('Running forget cycle - pattern deletion...');
+		stepStart = Date.now();
+		const [patternPastDeleteResult] = await this.conn.query(`DELETE FROM pattern_past WHERE strength = ?`, [this.minConnectionStrength]);
+		if (this.debug) console.log(`  Pattern_past DELETE took ${Date.now() - stepStart}ms (deleted ${patternPastDeleteResult.affectedRows} rows)`);
+
+		stepStart = Date.now();
+		const [patternFutureDeleteResult] = await this.conn.query(`DELETE FROM pattern_future WHERE strength = ?`, [this.minConnectionStrength]);
+		if (this.debug) console.log(`  Pattern_future DELETE took ${Date.now() - stepStart}ms (deleted ${patternFutureDeleteResult.affectedRows} rows)`);
+
+		stepStart = Date.now();
+		const [patternPeaksDeleteResult] = await this.conn.query(`DELETE FROM pattern_peaks WHERE strength <= 0`);
+		if (this.debug) console.log(`  Pattern_peaks DELETE took ${Date.now() - stepStart}ms (deleted ${patternPeaksDeleteResult.affectedRows} rows)`);
+
+		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped between minConnectionStrength and maxConnectionStrength)
+		if (this.debug) console.log('Running forget cycle - connection update...');
+		stepStart = Date.now();
+		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
+		if (this.debug) console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
+
+		// Delete connections with zero strength
+		if (this.debug) console.log('Running forget cycle - connection deletion...');
+		stepStart = Date.now();
+		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
+		if (this.debug) console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
+
+		// 3. REWARD DECAY: Move reward values back toward 0 (neutral)
+		// Formula: reward = reward * (1 - rewardForgetRate)
+		// reward=+10, rate=0.05 → 10 * 0.95 = 9.5
+		// reward=-10, rate=0.05 → -10 * 0.95 = -9.5
+		if (this.debug) console.log('Running forget cycle - connection reward decay...');
+		stepStart = Date.now();
+		const [connRewardResult] = await this.conn.query(`UPDATE connections SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
+		if (this.debug) console.log(`  Connection reward decay took ${Date.now() - stepStart}ms (updated ${connRewardResult.affectedRows} rows)`);
+
+		if (this.debug) console.log('Running forget cycle - pattern_future reward decay...');
+		stepStart = Date.now();
+		const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
+		if (this.debug) console.log(`  Pattern_future reward decay took ${Date.now() - stepStart}ms (updated ${patternRewardResult.affectedRows} rows)`);
+
+		// 4. PATTERN NEURON CLEANUP: Remove orphaned pattern neurons (level > 0) with no connections or pattern entries
+		// Base neurons (level 0) are NEVER deleted - they are fundamental encoding units with coordinates
+		// MEMORY engine doesn't enforce foreign keys, so deleting base neurons would leave orphaned coordinates
+		// which would cause ghost neurons to be "found" and connections created to non-existent neurons
+		if (this.debug) console.log('Running forget cycle - orphaned pattern neurons cleanup...');
+		stepStart = Date.now();
+		const [neuronDeleteResult] = await this.conn.query(`
+			DELETE
+			FROM neurons n
+			WHERE n.level > 0
+			AND NOT EXISTS (SELECT 1 FROM connections WHERE from_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM connections WHERE to_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM pattern_past WHERE pattern_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM pattern_future WHERE pattern_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM pattern_peaks WHERE pattern_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM pattern_peaks WHERE peak_neuron_id = n.id)
+			AND NOT EXISTS (SELECT 1 FROM active_neurons WHERE neuron_id = n.id)
+		`);
+		if (this.debug) console.log(`  Orphaned pattern neurons DELETE took ${Date.now() - stepStart}ms (deleted ${neuronDeleteResult.affectedRows} rows)`);
+
+		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
+	}
+
+	/**
+	 * Prints a one-line summary of the frame processing
+	 */
+	printFrameSummary(frameElapsed) {
+
+		// Get base level (level 0) accuracy
+		let baseAccuracy = 'N/A';
+		if (this.accuracyStats.total > 0)
+			baseAccuracy = `${(this.accuracyStats.correct / this.accuracyStats.total * 100).toFixed(1)}%`;
+
+		// Collect continuous prediction metrics from channels (only new errors since last call)
+		for (const [_, channel] of this.channels) {
+			if (typeof channel.getPredictionMetrics === 'function') {
+				const metrics = channel.getPredictionMetrics();
+				if (metrics) {
+					this.continuousPredictionMetrics.totalError += metrics.totalError;
+					this.continuousPredictionMetrics.count += metrics.count;
+				}
+			}
+		}
+
+		// Calculate average MAPE (Mean Absolute Percentage Error) and format with count
+		let mapeDisplay = 'N/A';
+		if (this.continuousPredictionMetrics.count > 0) {
+			const avgMAPE = (this.continuousPredictionMetrics.totalError / this.continuousPredictionMetrics.count).toFixed(2);
+			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
+		}
+
+		// Collect output performance metrics from channels
+		const outputMetrics = [];
+		for (const [_, channel] of this.channels) {
+			if (typeof channel.getOutputPerformanceMetrics === 'function') {
+				const metrics = channel.getOutputPerformanceMetrics();
+				if (metrics) outputMetrics.push(metrics);
+			}
+		}
+
+		// Format output performance display
+		let outputDisplay = 'N/A';
+		if (outputMetrics.length > 0) {
+			outputDisplay = outputMetrics.map(m => {
+				const formatted = m.format === 'currency'
+					? `$${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
+					: m.value.toFixed(2);
+				return outputMetrics.length > 1 ? `${m.label}:${formatted}` : formatted;
+			}).join(', ');
+		}
+
+		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Accuracy: ${baseAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+	}
+
 }
