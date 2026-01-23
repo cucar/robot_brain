@@ -68,8 +68,8 @@ export default class Brain {
 		// Debugging info and flags
 		this.frameNumber = 0;
 		this.frameSummary = true; // show frame summary or not
-		this.debug = true;
-		this.debug2 = true; // deeper, more verbose debug level
+		this.debug = false;
+		this.debug2 = false; // deeper, more verbose debug level
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 
 		// Create readline interface for pausing between frames - used when debugging
@@ -822,7 +822,7 @@ export default class Brain {
 
 	/**
 	 * Refine matched patterns using pre-analyzed connection sets.
-	 * Uses matched_pattern_connections table populated by matchObservedPatterns:
+	 * Uses matched_pattern_context table populated by matchObservedPatterns:
 	 * 1. Add novel connections (status='novel')
 	 * 2. Strengthen common connections (status='common')
 	 * 3. Weaken missing connections (status='missing')
@@ -878,7 +878,7 @@ export default class Brain {
 		// exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
 		// leave losers alone - we don't know what would have happened if they were executed
 		const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
-		const rewardCase = this.buildChannelRewardCase(channelRewards);
+		const rewardCase = this.buildChannelRewardCase(channelRewards, 'c.reward');
 		const [result] = await this.conn.query(`
             UPDATE connections c
             JOIN active_neurons an_to ON c.to_neuron_id = an_to.neuron_id AND an_to.age = 0
@@ -895,14 +895,15 @@ export default class Brain {
 	 * Build a CASE-WHEN SQL snippet for channel rewards.
 	 * Maps channel_id to reward value for use in UPDATE statements.
 	 * @param {Map} channelRewards - Map of channel_name -> reward value
-	 * @returns {string} SQL CASE statement like "CASE n.channel_id WHEN 1 THEN 0.5 WHEN 2 THEN -0.3 END"
+	 * @param {string} rewardColumn - The column to use in ELSE clause (e.g., 'c.reward' or 'pf.reward')
+	 * @returns {string} SQL CASE statement like "CASE b.channel_id WHEN 1 THEN 0.5 WHEN 2 THEN -0.3 ELSE c.reward END"
 	 */
-	buildChannelRewardCase(channelRewards) {
+	buildChannelRewardCase(channelRewards, rewardColumn) {
 		if (channelRewards.size === 0) return '';
 		const caseWhen = Array.from(channelRewards.entries())
 			.map(([name, reward]) => `WHEN ${this.channelNameToId[name]} THEN ${reward}`)
 			.join(' ');
-		return `CASE b.channel_id ${caseWhen} END`;
+		return `CASE b.channel_id ${caseWhen} ELSE ${rewardColumn} END`;
 	}
 
 	/**
@@ -1007,13 +1008,13 @@ export default class Brain {
 		// Strengthen and reward action pattern_future in one query
 		// Join chain: pattern_future → active neuron (just executed) → active pattern
 		// Strength is always incremented; reward is updated only if channel has a reward
-		const rewardCase = this.buildChannelRewardCase(channelRewards);
+		const rewardCase = this.buildChannelRewardCase(channelRewards, 'pf.reward');
 		const [result] = await this.conn.query(`
 			UPDATE pattern_future pf
             JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
 			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
 			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
-			SET pf.strength = LEAST(?, pf.strength + 1), pf.reward = CASE ${rewardCase} ELSE pf.reward END
+			SET pf.strength = LEAST(?, pf.strength + 1), pf.reward = ${rewardCase}
 			WHERE b.type = 'action'
 		`, [this.maxConnectionStrength]);
 
@@ -1074,7 +1075,7 @@ export default class Brain {
 		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
-		if (newPatternFutureCount > 0) this.waitForUserInput = true;
+		// if (newPatternFutureCount > 0) this.waitForUserInput = true;
 
 		// Populate new_patterns table with peaks from new pattern future inferences
 		const patternCount = await this.populateNewPatterns();
@@ -1761,68 +1762,21 @@ export default class Brain {
 
 	/**
 	 * Explore a channel by finding an unexplored action.
-	 * Checks if all actions have been explored at all distances - only returns null if fully explored.
 	 * @param {string} channelName - Channel name
 	 * @param {Array} votedActions - All actions that received votes (have connections from current context)
-	 * @returns {Promise<Object|null>} Exploration action or null if all actions explored at all distances
+	 * @returns {Promise<Object|null>} Exploration action or null if all actions explored
 	 */
 	async exploreChannel(channelName, votedActions) {
 		const channel = this.channels.get(channelName);
 
-		// Extract coordinates from explored actions
+		// Extract coordinates from voted actions
 		const votedCoordinates = votedActions.map(a => a.coordinates).filter(c => c);
 
 		// Ask channel for an action that wasn't voted for
 		const actionCoordinates = channel.getExplorationAction(votedCoordinates);
 		if (!actionCoordinates || Object.keys(actionCoordinates).length === 0) {
-			// All actions have been tried - now check if they've been tried at all distances
-			// Group actions by distance
-			const byDistance = new Map();
-			for (const inf of votedActions) {
-				if (!inf.sources) continue;
-
-				const distances = [...new Set(inf.sources.map(s => s.distance))];
-				for (const distance of distances) {
-					if (!byDistance.has(distance)) byDistance.set(distance, new Set());
-					byDistance.get(distance).add(JSON.stringify(inf.coordinates));
-				}
-			}
-
-			// Check if any distance is missing some actions
-			const allActions = new Set(votedCoordinates.map(c => JSON.stringify(c)));
-			for (const [distance, exploredAtDistance] of byDistance) {
-				if (exploredAtDistance.size < allActions.size) {
-					// This distance hasn't explored all actions - find one to explore
-					for (const actionStr of allActions) {
-						if (!exploredAtDistance.has(actionStr)) {
-							const actionCoords = JSON.parse(actionStr);
-							if (!actionCoords || Object.keys(actionCoords).length === 0) continue;
-
-							const [actionNeuronId] = await this.getFrameNeurons([{
-								coordinates: actionCoords,
-								channel: channelName,
-								channel_id: this.channelNameToId[channelName],
-								type: 'action'
-							}]);
-
-							const exploration = {
-								neuron_id: actionNeuronId,
-								strength: 1,
-								reward: 0,
-								coordinates: actionCoords,
-								type: 'action',
-								isWinner: true
-							};
-
-							if (this.debug) console.log(`Exploration for ${channelName}: re-exploring action at distance ${distance}:`, actionCoords);
-							return exploration;
-						}
-					}
-				}
-			}
-
-			if (this.debug) console.log(`Exploration for ${channelName}: all actions explored at all distances`);
-			return null; // All actions explored at all distances
+			if (this.debug) console.log(`Exploration for ${channelName}: all actions explored`);
+			return null; // All actions explored
 		}
 
 		// Find or create neuron for this action - wrap coordinates in frame point structure with channel metadata
