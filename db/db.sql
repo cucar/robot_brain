@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS matched_pattern_context (
 CREATE TABLE IF NOT EXISTS new_pattern_future (
     peak_neuron_id BIGINT UNSIGNED, -- the neuron that will be the peak of the new pattern (base event neuron for connection errors, pattern neuron for pattern errors)
     inferred_neuron_id BIGINT UNSIGNED, -- the base neuron that the pattern should infer
+    distance TINYINT UNSIGNED,
     PRIMARY KEY (peak_neuron_id, inferred_neuron_id)
 ) ENGINE=MEMORY;
 
