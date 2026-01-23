@@ -1955,22 +1955,16 @@ export default class Brain {
 	async saveInferences(inferences) {
 		if (inferences.length === 0) return;
 
-		// Collect neurons
+		// Collect neurons - is_winner: 1 for winners (highest sum of strength * reward per dimension), 0 for losers
 		const neurons = [];
+		for (const inf of inferences) neurons.push([inf.neuron_id, inf.level || 0, 0, inf.strength, inf.isWinner ? 1 : 0]);
 
-		for (const inf of inferences) {
-			// is_winner: 1 for winners (highest sum of strength * reward per dimension), 0 for losers
-			const isWinner = inf.isWinner ? 1 : 0;
-			// expected_reward is weighted average from connection/pattern sources at inference time
-			// actual_reward is NULL until channel reward is applied
-			neurons.push([inf.neuron_id, inf.level || 0, 0, inf.strength, inf.reward, isWinner]);
-		}
-
-		// Save neurons only
-		await this.conn.query(
-			'INSERT INTO inferred_neurons (neuron_id, level, age, strength, expected_reward, is_winner) VALUES ? ON DUPLICATE KEY UPDATE is_winner = VALUES(is_winner), strength = VALUES(strength)',
-			[neurons]
-		);
+		// Save inferred neurons
+		await this.truncateTables([ 'inferred_neurons' ]);
+		await this.conn.query(`
+			INSERT INTO inferred_neurons (neuron_id, strength, is_winner) VALUES ? 
+			ON DUPLICATE KEY UPDATE is_winner = VALUES(is_winner), strength = VALUES(strength)
+		`, [neurons]);
 
 		if (this.debug) {
 			const winnerCount = inferences.filter(i => i.isWinner).length;

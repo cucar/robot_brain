@@ -296,8 +296,6 @@ CREATE TABLE IF NOT EXISTS new_patterns (
 CREATE TABLE IF NOT EXISTS inferred_neurons (
     neuron_id BIGINT UNSIGNED,
     strength FLOAT,
-    expected_reward FLOAT, -- reward from connection/pattern sources at inference time
-    actual_reward FLOAT, -- channel reward applied after action execution (NULL until reward applied)
     is_winner TINYINT UNSIGNED, -- NULL for events, 1 for winning action votes, 0 for losing action votes
     PRIMARY KEY (neuron_id),
     INDEX idx_is_winner (is_winner)
