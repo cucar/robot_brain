@@ -180,13 +180,12 @@ CREATE TABLE coordinates (
 -- connections between base-level neurons (level=0 to level=0)
 -- DROP TABLE IF EXISTS connections;
 CREATE TABLE IF NOT EXISTS connections (
-    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     from_neuron_id BIGINT UNSIGNED,
     to_neuron_id BIGINT UNSIGNED,
     distance TINYINT UNSIGNED NOT NULL,
     strength FLOAT DEFAULT 1.0,
     reward FLOAT DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
-    UNIQUE INDEX (from_neuron_id, to_neuron_id, distance),
+    PRIMARY KEY (from_neuron_id, to_neuron_id, distance),
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength)
 ) ENGINE=MEMORY;
@@ -198,15 +197,6 @@ CREATE TABLE IF NOT EXISTS active_neurons (
     neuron_id BIGINT UNSIGNED,
     age TINYINT UNSIGNED DEFAULT 0, -- how long the neuron has been active
     PRIMARY KEY (neuron_id, age),
-    INDEX idx_level_age (age)
-) ENGINE=MEMORY;
-
--- active base-level connections - just a scratch table for faster processing - it temporarily holds the active connections for the current frame
--- DROP TABLE IF EXISTS active_connections;
-CREATE TABLE IF NOT EXISTS active_connections (
-    connection_id BIGINT UNSIGNED NOT NULL,
-    age TINYINT NOT NULL DEFAULT 0,
-    PRIMARY KEY (connection_id, age),  -- same connection may be active at different ages
     INDEX idx_level_age (age)
 ) ENGINE=MEMORY;
 

@@ -45,7 +45,6 @@ export default class Brain {
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
 		this.connectionForgetRate = 0.1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 0.1; // how much pattern strengths decay per forget cycle
-		this.rewardForgetRate = 0.05; // how much reward values decay toward 0 per forget cycle (0.05 = 5% decay toward neutral)
 
 		// sliding window for max levels per age (for efficient voting)
 		// maxLevelsByAge[0] = max level at age 0 (current frame)
@@ -120,7 +119,6 @@ export default class Brain {
 			'coordinates',
 			'connections',
 			'active_neurons',
-			'active_connections',
 			'pattern_peaks',
 			'pattern_past',
 			'pattern_future',
@@ -142,7 +140,6 @@ export default class Brain {
 		console.log('Resetting brain (memory tables)...');
 		await this.truncateTables([
 			'active_neurons',
-			'active_connections',
 			'matched_patterns',
 			'matched_pattern_connections',
 			'new_pattern_future',
@@ -422,10 +419,9 @@ export default class Brain {
 	async ageNeurons() {
 		if (this.debug2) console.log('Aging active neurons, connections, and inferred neurons...');
 
-		// age all neurons and connections - ORDER BY age DESC to avoid primary key collisions
+		// age all neurons - ORDER BY age DESC to avoid primary key collisions
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
 		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
-		await this.conn.query('UPDATE active_connections SET age = age + 1 ORDER BY age DESC');
 
 		// Skip deletions until we have enough frames
 		if (this.frameNumber < this.contextLength + 1) return;
@@ -433,10 +429,6 @@ export default class Brain {
 		// Delete aged-out neurons from all levels at once
 		const [neuronResult] = await this.conn.query('DELETE FROM active_neurons WHERE age >= ?', [this.contextLength]);
 		if (this.debug) console.log(`Deactivated ${neuronResult.affectedRows} aged-out neurons across all levels (age >= ${this.contextLength})`);
-
-		// Delete aged-out connections from all levels at once
-		const [connectionResult] = await this.conn.query('DELETE FROM active_connections WHERE age >= ?', [this.contextLength]);
-		if (this.debug) console.log(`Deactivated ${connectionResult.affectedRows} aged-out connections across all levels (age >= ${this.contextLength})`);
 	}
 
 	/**
@@ -454,9 +446,6 @@ export default class Brain {
 
 		// reinforce connections between active neurons in the base level
 		await this.reinforceConnections();
-
-		// activate connections for the newly activated neurons at the base level
-		await this.activateConnections();
 
 		// Validate event predictions and track accuracy stats
 		await this.validatePredictions();
@@ -653,21 +642,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Populate active_connections table for newly activated neurons at the base level
-	 */
-	async activateConnections() {
-		await this.conn.query(`
-			INSERT IGNORE INTO active_connections (connection_id, age)
-			SELECT c.id as connection_id, 0 as age
-			FROM active_neurons f
-			-- connections from older base neurons to newly activated neurons (distance = age)
-			JOIN connections c ON c.from_neuron_id = f.neuron_id AND c.distance = f.age AND c.strength > 0
-			-- connections to newly activated base neurons (age=0)    
-			JOIN active_neurons t ON c.to_neuron_id = t.neuron_id AND t.age = 0
-		`);
-	}
-
-	/**
 	 * Validate event predictions by comparing inferred_neurons (age=1) to active_neurons (age=0).
 	 * Only validates base level (level 0) event predictions.
 	 * Only validates winners (is_winner=1) since losers are alternative hypotheses that were rejected.
@@ -775,7 +749,7 @@ export default class Brain {
             LEFT JOIN active_neurons an_ctx ON an_ctx.neuron_id = p.context_neuron_id AND an_ctx.age = p.context_age
 			WHERE an_peak.age = 0
 			GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
-			-- pattern matches if at least some percentage of its pattern_past connections are in active_connections
+			-- pattern matches if at least some percentage of its pattern_past neurons are active
 			HAVING SUM(IF(an_ctx.neuron_id IS NOT NULL, 1, 0)) >= COUNT(*) * ?
 		`, [level, this.mergePatternThreshold]);
 
@@ -901,14 +875,15 @@ export default class Brain {
 
 		// apply rewards reinforcement to executed actions via connection inference
 		// winners were executed and added to frame, then activated when recognizing neurons
-		// they appear in active_connections at age=0 (just activated)
+		// they appear in active_neurons at age=0 (just activated)
 		// exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
 		// leave losers alone - we don't know what would have happened if they were executed
 		const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
 		const rewardCase = this.buildChannelRewardCase(channelRewards);
 		const [result] = await this.conn.query(`
             UPDATE connections c
-            JOIN active_connections ac ON ac.connection_id = c.id AND ac.age = 0
+            JOIN active_neurons an_to ON c.to_neuron_id = an_to.neuron_id AND an_to.age = 0
+            JOIN active_neurons an_from ON c.from_neuron_id = an_from.neuron_id AND c.distance = an_from.age
             JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
             SET c.reward = :smooth * (${rewardCase}) + (1 - :smooth) * c.reward
             WHERE b.type = 'action'
@@ -1474,7 +1449,7 @@ export default class Brain {
 	 * This ensures patterns override connections on a per-frame basis.
 	 * Uses sliding window (maxLevelsByAge) to avoid querying max levels every frame.
 	 * Uses this.currentMaxLevel (set by recognizePatternNeurons) for age=0.
-	 * @returns {Promise<Array>} Array of {neuron_id, source_type, source_id, strength, reward, distance, source_level}
+	 * @returns {Promise<Array>} Array of {from_neuron_id, neuron_id, source_type, strength, reward, distance, source_level, age}
 	 */
 	async collectVotes() {
 		const allVotes = [];
@@ -1501,11 +1476,9 @@ export default class Brain {
 		// Collect all pattern votes in one query (for ages with patterns)
 		if (patternAges.length > 0) {
 			const [patternVotes] = await this.conn.query(`
-				SELECT pf.pattern_neuron_id as from_neuron_id, 
-				       pf.inferred_neuron_id as neuron_id, 
-				       'pattern' as source_type, 
-				       pf.id as source_id,
-						pf.strength, pf.reward, pf.distance, pn.level as source_level, an.age
+				SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id,
+                       pf.strength, pf.reward, pf.distance, pn.level as source_level, an.age,
+				       'pattern' as source_type
 				FROM active_neurons an
 				JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
 				JOIN neurons pn on pn.id = pf.pattern_neuron_id
@@ -1519,326 +1492,26 @@ export default class Brain {
 		// Collect all connection votes in one query (for ages without patterns)
 		if (connectionAges.length > 0) {
 			const [connectionVotes] = await this.conn.query(`
-				SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, 'connection' as source_type, c.id as source_id,
-					c.strength, c.reward, c.distance, 0 as source_level, an.age
+				SELECT c.from_neuron_id, c.to_neuron_id as neuron_id,
+					   c.strength, c.reward, c.distance, 0 as source_level, an.age, 
+					   'connection' as source_type
 				FROM active_neurons an
 				JOIN connections c ON c.from_neuron_id = an.neuron_id
 				WHERE c.distance = an.age + 1
 	            AND c.strength > 0
 				AND an.age IN (${connectionAges.join(',')})
-				AND an.level = 0
 			`);
 			allVotes.push(...connectionVotes);
 		}
 
 		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternAges.length} pattern ages, ${connectionAges.length} connection ages)`);
 
-		if (this.debug2) {
-			await this.debugActionVotes(allVotes);
-			await this.debugEventVotes(allVotes);
-		}
+		// Call channel-specific debug methods if debug2 is enabled
+		if (this.debug2)
+			for (const [_, channel] of this.channels)
+				await channel.debugVotes(allVotes, this);
 
 		return allVotes;
-	}
-
-	/**
-	 * Debug helper: show votes for OWN and OUT action neurons
-	 * Shows which price/volume changes are voting for which action
-	 * @param {Array} allVotes - Array of all votes
-	 */
-	async debugActionVotes(allVotes) {
-
-		// Populate cache if needed
-		if (!this.actionNeuronCache) await this.populateActionNeuronCache();
-		if (!this.actionNeuronCache) return;
-
-		const { ownNeuronId, outNeuronId } = this.actionNeuronCache;
-
-		// Get source neuron coordinates for each vote
-		const sourceNeuronIds = [...new Set(allVotes.map(v => v.source_id))];
-		if (sourceNeuronIds.length === 0) return;
-
-		// Query connections to get from_neuron coordinates
-		const [connections] = await this.conn.query(`
-			SELECT c.id, c.from_neuron_id, c.distance, c.strength as conn_strength, c.reward as conn_reward,
-				GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as from_coords
-			FROM connections c
-			JOIN coordinates coord ON coord.neuron_id = c.from_neuron_id
-			JOIN dimensions d ON d.id = coord.dimension_id
-			WHERE c.id IN (?)
-			GROUP BY c.id
-		`, [sourceNeuronIds]);
-
-		const connMap = new Map(connections.map(c => [c.id, c]));
-
-		// Get bucket-to-percentage mapping from stock channel if available
-		const stockChannel = this.channels.get('TEST');
-		const bucketToPercent = stockChannel ? this.buildBucketPercentMap(stockChannel) : null;
-
-		// Calculate cycle frame (1-6) based on frame number
-		const cycleFrame = ((this.frameNumber - 1) % 6) + 1;
-
-		// Step 1: Aggregate by source neuron - sum strengths, strength-weighted average reward
-		// This matches determineConsensus logic
-		const aggregateBySource = (votes) => {
-			const bySource = new Map();
-			for (const v of votes) {
-				const conn = connMap.get(v.source_id);
-				if (!conn) continue;
-				const key = conn.from_neuron_id;
-				if (!bySource.has(key))
-					bySource.set(key, { from_neuron_id: key, strength: 0, weightedRewardSum: 0, from_coords: conn.from_coords, distances: [] });
-				const agg = bySource.get(key);
-				agg.strength += v.strength;
-				agg.weightedRewardSum += v.strength * v.reward;
-				agg.distances.push(conn.distance);
-			}
-			// Calculate strength-weighted average reward per source (matches determineConsensus)
-			for (const [_, agg] of bySource)
-				agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
-			return [...bySource.values()];
-		};
-
-		const ownAgg = aggregateBySource(allVotes.filter(v => v.neuron_id === ownNeuronId));
-		const outAgg = aggregateBySource(allVotes.filter(v => v.neuron_id === outNeuronId));
-
-		// Format aggregated votes with source info
-		const formatAggVotes = (aggVotes, label) => {
-			if (aggVotes.length === 0) return `  ${label}: no votes`;
-			const lines = [`  ${label}:`];
-			for (const agg of aggVotes) {
-				const coordsWithPercent = this.formatCoordsWithPercent(agg.from_coords, bucketToPercent);
-				const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
-				lines.push(`    ${coordsWithPercent} (${distStr}) → str=${agg.strength.toFixed(1)}, avgRwd=${agg.reward.toFixed(2)}`);
-			}
-			return lines.join('\n');
-		};
-
-		// Step 2: Calculate totals - sum strengths, strength-weighted average reward (matches determineConsensus)
-		const ownTotal = {
-			str: ownAgg.reduce((s, a) => s + a.strength, 0),
-			weightedRewardSum: ownAgg.reduce((s, a) => s + a.weightedRewardSum, 0)
-		};
-		const outTotal = {
-			str: outAgg.reduce((s, a) => s + a.strength, 0),
-			weightedRewardSum: outAgg.reduce((s, a) => s + a.weightedRewardSum, 0)
-		};
-		ownTotal.rwd = ownTotal.str > 0 ? ownTotal.weightedRewardSum / ownTotal.str : 0;
-		outTotal.rwd = outTotal.str > 0 ? outTotal.weightedRewardSum / outTotal.str : 0;
-
-		// Calculate Boltzmann probabilities (exponential with temperature) - matches boltzmannSelect
-		const ownExp = Math.exp(ownTotal.rwd / this.boltzmannTemperature);
-		const outExp = Math.exp(outTotal.rwd / this.boltzmannTemperature);
-		const sumExp = ownExp + outExp;
-		const ownProb = ownExp / sumExp;
-		const outProb = outExp / sumExp;
-
-		console.log(`\n=== ACTION VOTES (Cycle ${cycleFrame}/6) ===`);
-		console.log(formatAggVotes(ownAgg, `OWN (${ownAgg.length} voters, str=${ownTotal.str.toFixed(1)}, avgRwd=${ownTotal.rwd.toFixed(2)}, prob=${(ownProb * 100).toFixed(1)}%)`));
-		console.log(formatAggVotes(outAgg, `OUT (${outAgg.length} voters, str=${outTotal.str.toFixed(1)}, avgRwd=${outTotal.rwd.toFixed(2)}, prob=${(outProb * 100).toFixed(1)}%)`));
-		console.log(`  SELECTION: Boltzmann (OWN ${(ownProb * 100).toFixed(1)}% vs OUT ${(outProb * 100).toFixed(1)}%)`);
-		console.log(`===================\n`);
-	}
-
-	/**
-	 * Populate action neuron cache by querying for OWN and OUT neurons
-	 * Only caches if both neurons exist
-	 */
-	async populateActionNeuronCache() {
-		const [actionNeurons] = await this.conn.query(`
-			SELECT n.id as neuron_id, c.val as activity_value
-			FROM neurons n
-			JOIN coordinates c ON c.neuron_id = n.id
-			JOIN dimensions d ON d.id = c.dimension_id
-			WHERE n.type = 'action'
-			AND c.val IN (1, -1)
-		`);
-
-		const ownNeuronId = actionNeurons.find(n => n.activity_value === 1)?.neuron_id;
-		const outNeuronId = actionNeurons.find(n => n.activity_value === -1)?.neuron_id;
-
-		// Only cache if both neurons exist
-		if (ownNeuronId && outNeuronId) this.actionNeuronCache = { ownNeuronId, outNeuronId };
-	}
-
-	/**
-	 * Debug helper: show votes for event neurons (price_change, volume_change, etc.)
-	 * Shows which patterns/connections are voting for which event predictions
-	 * @param {Array} allVotes - Array of all votes
-	 */
-	async debugEventVotes(allVotes) {
-
-		// Get all event neuron IDs from votes
-		const eventNeuronIds = [...new Set(allVotes.map(v => v.neuron_id))];
-		if (eventNeuronIds.length === 0) return;
-
-		// Get neuron info to identify event neurons and parse coordinates into dimensions
-		const [neurons] = await this.conn.query(`
-			SELECT n.id, n.type, n.channel_id,
-				GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as coords,
-				d.name as dim_name, coord.val as dim_val
-			FROM neurons n
-			LEFT JOIN coordinates coord ON coord.neuron_id = n.id
-			LEFT JOIN dimensions d ON d.id = coord.dimension_id
-			WHERE n.id IN (?)
-			GROUP BY n.id, d.name, coord.val
-		`, [eventNeuronIds]);
-
-		// Filter to event neurons only
-		const eventNeurons = neurons.filter(n => n.type === 'event');
-		if (eventNeurons.length === 0) return;
-
-		// Get source neuron coordinates for each vote
-		const sourceNeuronIds = [...new Set(allVotes.map(v => v.source_id))];
-		if (sourceNeuronIds.length === 0) return;
-
-		// Query connections to get from_neuron coordinates
-		const [connections] = await this.conn.query(`
-			SELECT c.id, c.from_neuron_id, c.distance, c.strength as conn_strength, c.reward as conn_reward,
-				GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as from_coords
-			FROM connections c
-			JOIN coordinates coord ON coord.neuron_id = c.from_neuron_id
-			JOIN dimensions d ON d.id = coord.dimension_id
-			WHERE c.id IN (?)
-			GROUP BY c.id
-		`, [sourceNeuronIds]);
-
-		const connMap = new Map(connections.map(c => [c.id, c]));
-
-		// Build neuron map with dimension info
-		const neuronMap = new Map();
-		for (const n of eventNeurons) {
-			if (!neuronMap.has(n.id))
-				neuronMap.set(n.id, { id: n.id, type: n.type, coords: n.coords, dimensions: new Map() });
-			if (n.dim_name)
-				neuronMap.get(n.id).dimensions.set(n.dim_name, n.dim_val);
-		}
-
-		// Get bucket-to-percentage mapping from stock channel if available
-		const stockChannel = this.channels.get('TEST');
-		const bucketToPercent = stockChannel ? this.buildBucketPercentMap(stockChannel) : null;
-
-		// Calculate cycle frame (1-6) based on frame number
-		const cycleFrame = ((this.frameNumber - 1) % 6) + 1;
-
-		// Group votes by event neuron
-		const votesByEvent = new Map();
-		for (const vote of allVotes) {
-			const neuron = neuronMap.get(vote.neuron_id);
-			if (!neuron) continue; // Skip non-event neurons
-
-			if (!votesByEvent.has(vote.neuron_id))
-				votesByEvent.set(vote.neuron_id, []);
-			votesByEvent.get(vote.neuron_id).push(vote);
-		}
-
-		if (votesByEvent.size === 0) return;
-
-		// Aggregate by source neuron for each event - matches determineConsensus aggregation
-		const aggregateBySource = (votes) => {
-			const bySource = new Map();
-			for (const v of votes) {
-				const conn = connMap.get(v.source_id);
-				if (!conn) continue;
-				const key = conn.from_neuron_id;
-				if (!bySource.has(key))
-					bySource.set(key, { from_neuron_id: key, strength: 0, from_coords: conn.from_coords, distances: [] });
-				const agg = bySource.get(key);
-				agg.strength += v.strength;
-				agg.distances.push(conn.distance);
-			}
-			return [...bySource.values()];
-		};
-
-		// Group by dimension to find winners - sum all vote strengths per neuron (matches determineConsensus)
-		const byDimension = new Map();
-		for (const [neuronId, votes] of votesByEvent) {
-			const neuron = neuronMap.get(neuronId);
-			const totalStrength = votes.reduce((sum, v) => sum + v.strength, 0);
-
-			for (const [dimName, dimVal] of neuron.dimensions) {
-				if (!byDimension.has(dimName))
-					byDimension.set(dimName, []);
-				byDimension.get(dimName).push({ neuronId, neuron, votes, totalStrength, dimVal });
-			}
-		}
-
-		// Format aggregated votes with source info
-		const formatAggVotes = (aggVotes) => {
-			if (aggVotes.length === 0) return '    no votes';
-			const lines = [];
-			for (const agg of aggVotes) {
-				const coordsWithPercent = this.formatCoordsWithPercent(agg.from_coords, bucketToPercent);
-				const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
-				lines.push(`    ${coordsWithPercent} (${distStr}) → str=${agg.strength.toFixed(1)}`);
-			}
-			return lines.join('\n');
-		};
-
-		console.log(`\n=== EVENT VOTES (Cycle ${cycleFrame}/6) ===`);
-
-		// Show votes per dimension with winner highlighted
-		for (const [dimName, candidates] of byDimension) {
-			// Sort by strength to find winner
-			candidates.sort((a, b) => b.totalStrength - a.totalStrength);
-			const winner = candidates[0];
-
-			console.log(`  ${dimName} (${candidates.length} candidates):`);
-
-			for (const cand of candidates) {
-				const isWinner = cand.neuronId === winner.neuronId;
-				const marker = isWinner ? '★ WINNER' : '';
-				const coordsWithPercent = this.formatCoordsWithPercent(cand.neuron.coords, bucketToPercent);
-				const aggVotes = aggregateBySource(cand.votes);
-
-				console.log(`    ${coordsWithPercent} (n${cand.neuronId}) str=${cand.totalStrength.toFixed(1)} ${marker}`);
-				console.log(formatAggVotes(aggVotes));
-			}
-		}
-
-		console.log(`===================\n`);
-	}
-
-	/**
-	 * Build a map from bucket values to percentage ranges for price/volume dimensions
-	 */
-	buildBucketPercentMap(stockChannel) {
-		const map = new Map();
-		if (stockChannel.priceBuckets)
-			for (const b of stockChannel.priceBuckets)
-				map.set(`price_change:${b.value}`, this.formatBucketRange(b.min, b.max));
-		if (stockChannel.volumeBuckets)
-			for (const b of stockChannel.volumeBuckets)
-				map.set(`volume_change:${b.value}`, this.formatBucketRange(b.min, b.max));
-		return map;
-	}
-
-	/**
-	 * Format bucket range as readable string
-	 */
-	formatBucketRange(min, max) {
-		if (min === -Infinity) return `<${max}%`;
-		if (max === Infinity) return `>${min}%`;
-		return `${min}%~${max}%`;
-	}
-
-	/**
-	 * Format coordinates string with percentage ranges where applicable
-	 */
-	formatCoordsWithPercent(coordsStr, bucketToPercent) {
-		if (!bucketToPercent) return coordsStr;
-		// Parse "TEST_price_change=5, TEST_volume_change=0" format
-		return coordsStr.split(', ').map(part => {
-			const [dimName, valStr] = part.split('=');
-			const val = parseFloat(valStr);
-			// Extract dimension type (price_change or volume_change)
-			const dimType = dimName.includes('price_change') ? 'price_change' : dimName.includes('volume_change') ? 'volume_change' : null;
-			if (dimType) {
-				const percentRange = bucketToPercent.get(`${dimType}:${val}`);
-				if (percentRange) return `${dimName}=${val}(${percentRange})`;
-			}
-			return part;
-		}).join(', ');
 	}
 
 	/**
@@ -1846,7 +1519,7 @@ export default class Brain {
 	 * All votes are for base level neurons (level 0) - pattern neurons are activated in pattern recognition
 	 * Uses per-dimension conflict resolution.
 	 * For actions: strength-weighted reward average ensures consistent cycle-based connections override noisy probabilistic ones.
-	 * @param {Array} votes - Array of {from_neuron_id, neuron_id, source_type, source_id, strength, reward, distance, source_level}
+	 * @param {Array} votes - Array of {from_neuron_id, neuron_id, source_type, strength, reward, distance, source_level}
 	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async determineConsensus(votes) {
@@ -1856,11 +1529,9 @@ export default class Brain {
 		const aggregated = new Map();
 		for (const vote of votes) {
 			if (!aggregated.has(vote.neuron_id))
-				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, weightedRewardSum: 0, sources: [], sourceNeurons: new Set() });
+				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, weightedRewardSum: 0 });
 
 			const agg = aggregated.get(vote.neuron_id);
-			agg.sources.push({ source_type: vote.source_type, source_id: vote.source_id, strength: vote.strength, reward: vote.reward, distance: vote.distance, source_level: vote.source_level });
-			agg.sourceNeurons.add(vote.from_neuron_id);
 
 			// Sum strengths, accumulate strength-weighted rewards
 			agg.strength += vote.strength;
@@ -1935,10 +1606,10 @@ export default class Brain {
 
 		// Get neuron type and channel from neurons table
 		const [neuronRows] = await this.conn.query(`
-			SELECT n.id as neuron_id, n.type, n.channel_id, ch.name as channel
-			FROM neurons n
+			SELECT n.neuron_id, n.type, n.channel_id, ch.name as channel
+			FROM base_neurons n
 			JOIN channels ch ON ch.id = n.channel_id
-			WHERE n.id IN (?)
+			WHERE n.neuron_id IN (?)
 		`, [neuronIds]);
 
 		// Get coordinates from coordinates table
@@ -2255,12 +1926,12 @@ export default class Brain {
 		// 1. PATTERN FORGETTING: Reduce pattern strengths and remove dead patterns (clamped between minConnectionStrength and maxConnectionStrength)
 		if (this.debug) console.log('Running forget cycle - pattern_past update...');
 		let stepStart = Date.now();
-		const [patternPastUpdateResult] = await this.conn.query(`UPDATE pattern_past SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
+		const [patternPastUpdateResult] = await this.conn.query(`UPDATE pattern_past SET strength = GREATEST(?, strength - ?) WHERE strength > 0`, [this.minConnectionStrength, this.patternForgetRate]);
 		if (this.debug) console.log(`  Pattern_past UPDATE took ${Date.now() - stepStart}ms (updated ${patternPastUpdateResult.affectedRows} rows)`);
 
 		if (this.debug) console.log('Running forget cycle - pattern_future update...');
 		stepStart = Date.now();
-		const [patternFutureUpdateResult] = await this.conn.query(`UPDATE pattern_future SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.patternForgetRate]);
+		const [patternFutureUpdateResult] = await this.conn.query(`UPDATE pattern_future SET strength = GREATEST(?, strength - ?) WHERE strength > 0`, [this.minConnectionStrength, this.patternForgetRate]);
 		if (this.debug) console.log(`  Pattern_future UPDATE took ${Date.now() - stepStart}ms (updated ${patternFutureUpdateResult.affectedRows} rows)`);
 
 		if (this.debug) console.log('Running forget cycle - pattern_peaks update...');
@@ -2285,7 +1956,7 @@ export default class Brain {
 		// 2. CONNECTION FORGETTING: Reduce connection strengths and remove dead connections (clamped between minConnectionStrength and maxConnectionStrength)
 		if (this.debug) console.log('Running forget cycle - connection update...');
 		stepStart = Date.now();
-		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, LEAST(?, strength - ?)) WHERE strength > 0`, [this.minConnectionStrength, this.maxConnectionStrength, this.connectionForgetRate]);
+		const [connectionUpdateResult] = await this.conn.query(`UPDATE connections SET strength = GREATEST(?, strength - ?) WHERE strength > 0`, [this.minConnectionStrength, this.connectionForgetRate]);
 		if (this.debug) console.log(`  Connection UPDATE took ${Date.now() - stepStart}ms (updated ${connectionUpdateResult.affectedRows} rows)`);
 
 		// Delete connections with zero strength
@@ -2294,21 +1965,7 @@ export default class Brain {
 		const [connectionDeleteResult] = await this.conn.query(`DELETE FROM connections WHERE strength = ?`, [this.minConnectionStrength]);
 		if (this.debug) console.log(`  Connection DELETE took ${Date.now() - stepStart}ms (deleted ${connectionDeleteResult.affectedRows} rows)`);
 
-		// 3. REWARD DECAY: Move reward values back toward 0 (neutral)
-		// Formula: reward = reward * (1 - rewardForgetRate)
-		// reward=+10, rate=0.05 → 10 * 0.95 = 9.5
-		// reward=-10, rate=0.05 → -10 * 0.95 = -9.5
-		if (this.debug) console.log('Running forget cycle - connection reward decay...');
-		stepStart = Date.now();
-		const [connRewardResult] = await this.conn.query(`UPDATE connections SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
-		if (this.debug) console.log(`  Connection reward decay took ${Date.now() - stepStart}ms (updated ${connRewardResult.affectedRows} rows)`);
-
-		if (this.debug) console.log('Running forget cycle - pattern_future reward decay...');
-		stepStart = Date.now();
-		const [patternRewardResult] = await this.conn.query(`UPDATE pattern_future SET reward = reward * (1 - ?)`, [this.rewardForgetRate]);
-		if (this.debug) console.log(`  Pattern_future reward decay took ${Date.now() - stepStart}ms (updated ${patternRewardResult.affectedRows} rows)`);
-
-		// 4. PATTERN NEURON CLEANUP: Remove orphaned pattern neurons (level > 0) with no connections or pattern entries
+		// 3. PATTERN NEURON CLEANUP: Remove orphaned pattern neurons (level > 0) with no connections or pattern entries
 		// Base neurons (level 0) are NEVER deleted - they are fundamental encoding units with coordinates
 		// MEMORY engine doesn't enforce foreign keys, so deleting base neurons would leave orphaned coordinates
 		// which would cause ghost neurons to be "found" and connections created to non-existent neurons
