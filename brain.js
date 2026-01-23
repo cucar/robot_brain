@@ -1037,7 +1037,6 @@ export default class Brain {
 	/**
 	 * Add alternative actions to action patterns in painful channels.
 	 * When an action pattern prediction fails (painful reward), add one untried alternative.
-	 *
 	 * Key insight: Same pattern can be active at multiple ages (distances), each inferring different actions.
 	 * We need to find alternatives per (pattern, distance, channel) tuple, not just per pattern.
 	 */
@@ -1050,11 +1049,12 @@ export default class Brain {
 		if (painfulChannelIds.length === 0) return;
 
 		// Find one untried action for each (pattern, distance, channel) that was executed in painful channels
-		// Uses MIN(neuron_id) to pick one untried action per (pattern, distance) pair
-		// HAVING clause ensures we only insert when an untried alternative exists
+		// Uses MIN(neuron_id) to pick one untried action per (pattern, distance, channel) tuple
+		// NOT EXISTS filters out already-tried actions; if all actions tried, no rows remain for that group
+		// INSERT IGNORE handles case where this alternative was already added in a previous frame
 		const [result] = await this.conn.query(`
-			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
-			SELECT pf.pattern_neuron_id, MIN(b_alt.neuron_id), pf.distance
+			INSERT IGNORE INTO pattern_future (pattern_neuron_id, distance, inferred_neuron_id)
+			SELECT pf.pattern_neuron_id, pf.distance, MIN(b_alt.neuron_id)
 			FROM pattern_future pf
 			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
             JOIN active_neurons an_action ON an_action.neuron_id = pf.inferred_neuron_id AND an_action.age = 0
@@ -1068,8 +1068,7 @@ export default class Brain {
 				AND pf_existing.distance = pf.distance
 				AND pf_existing.inferred_neuron_id = b_alt.neuron_id
 			)
-			GROUP BY pf.pattern_neuron_id, pf.distance
-			HAVING MIN(b_alt.neuron_id) IS NOT NULL
+			GROUP BY pf.pattern_neuron_id, pf.distance, b.channel_id
 		`);
 
 		if (this.debug) console.log(`Added ${result.affectedRows} alternative actions to patterns`);
