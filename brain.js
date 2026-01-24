@@ -910,13 +910,13 @@ export default class Brain {
 	async refinePatterns(channelRewards) {
 
 		// update pattern_future for event patterns based on observations
-		await this.refineEventPatternsFuture();
+		await this.refinePatternEventsFuture();
 
 		// apply rewards to action predictions based on channel outcomes
-		await this.rewardExecutedActionPatterns(channelRewards);
+		await this.rewardExecutedPatternActions(channelRewards);
 
 		// add alternative actions to action patterns in painful channels
-		await this.addAlternativeActionsToPatterns(channelRewards);
+		await this.addPatternAlternativeActions(channelRewards);
 	}
 
 	/**
@@ -931,7 +931,7 @@ export default class Brain {
 	 * 2. Negative: Weaken pattern_future inferences that were incorrectly predicted (target NOT active)
 	 * 3. Novel: Add new inferences from pattern to newly observed neurons
 	 */
-	async refineEventPatternsFuture() {
+	async refinePatternEventsFuture() {
 
 		// 1. POSITIVE REINFORCEMENT: Strengthen correctly predicted event neurons
 		// Neuron is now active at age=0, refinement when age = distance
@@ -986,7 +986,7 @@ export default class Brain {
 	 *
 	 * Also strengthens executed action patterns so they won't be forgotten.
 	 */
-	async rewardExecutedActionPatterns(channelRewards) {
+	async rewardExecutedPatternActions(channelRewards) {
 
 		// nothing to do if there are no rewards
 		if (channelRewards.size === 0) return;
@@ -1000,9 +1000,10 @@ export default class Brain {
             JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
 			JOIN active_neurons an_target ON an_target.neuron_id = pf.inferred_neuron_id AND an_target.age = 0
 			JOIN active_neurons an_pattern ON an_pattern.neuron_id = pf.pattern_neuron_id AND pf.distance = an_pattern.age
-			SET pf.strength = LEAST(?, pf.strength + 1), pf.reward = ${rewardCase}
+			SET pf.strength = LEAST(?, pf.strength + 1), 
+			    pf.reward = ? * (${rewardCase}) + ? * pf.reward
 			WHERE b.type = 'action'
-		`, [this.maxConnectionStrength]);
+		`, [this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
 
 		if (this.debug) console.log(`Strengthened/rewarded ${result.affectedRows} action pattern_future predictions`);
 	}
@@ -1013,7 +1014,7 @@ export default class Brain {
 	 * Key insight: Same pattern can be active at multiple ages (distances), each inferring different actions.
 	 * We need to find alternatives per (pattern, distance, channel) tuple, not just per pattern.
 	 */
-	async addAlternativeActionsToPatterns(channelRewards) {
+	async addPatternAlternativeActions(channelRewards) {
 
 		// get the channels that executed painful actions - we will add alternative actions for them
 		// if there are no painful channels, we don't need to add alternatives
@@ -1100,8 +1101,8 @@ export default class Brain {
 	 */
 	async populateNewPatternFuture(channelRewards) {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
-		const eventCount = await this.populateNewEventPatterns();
-		const actionCount = await this.populateNewActionPatterns(channelRewards);
+		const eventCount = await this.populateNewPatternEvents();
+		const actionCount = await this.populateNewPatternActions(channelRewards);
 		return eventCount + actionCount;
 	}
 
@@ -1115,9 +1116,9 @@ export default class Brain {
 	 * and it doesn't happen, create a level N+1 pattern to correct the prediction.
 	 * @returns {Promise<number>} Number of event pattern futures created
 	 */
-	async populateNewEventPatterns() {
-		const baseCount = await this.populateNewBaseEventPatterns();
-		const highCount = await this.populateNewHighEventPatterns();
+	async populateNewPatternEvents() {
+		const baseCount = await this.populateNewPatternBaseEvents();
+		const highCount = await this.populateNewPatternHighEvents();
 		return baseCount + highCount;
 	}
 
@@ -1127,7 +1128,7 @@ export default class Brain {
 	 * Find what actually happened (active neurons) instead of what was predicted.
 	 * @returns {Promise<number>} Number of base event pattern futures created
 	 */
-	async populateNewBaseEventPatterns() {
+	async populateNewPatternBaseEvents() {
 		const [connResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT c.from_neuron_id, an.neuron_id, 1
@@ -1166,10 +1167,10 @@ export default class Brain {
 	 * Populate higher-level event prediction errors (from pattern inferences).
 	 * Peak is the pattern neuron that made the prediction.
 	 * Find what actually happened (active neurons) instead of what was predicted.
-	 * Uses same logic as populateNewBaseEventPatterns but for pattern predictions.
+	 * Uses same logic as populateNewPatternBaseEvents but for pattern predictions.
 	 * @returns {Promise<number>} Number of high event pattern futures created
 	 */
-	async populateNewHighEventPatterns() {
+	async populateNewPatternHighEvents() {
 		const [patternResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT pf.pattern_neuron_id, an.neuron_id, 1
@@ -1204,11 +1205,11 @@ export default class Brain {
 	 * Populate action regret neurons into new_pattern_future.
 	 * When a connection or pattern predicts an action at distance=1 (full context),
 	 * and it leads to pain, add one untried alternative action.
-	 * Same logic as addAlternativeActionsToPatterns - just find something different to try.
+	 * Same logic as addPatternAlternativeActions - just find something different to try.
 	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 * @returns {Promise<number>} Number of action pattern futures created
 	 */
-	async populateNewActionPatterns(channelRewards) {
+	async populateNewPatternActions(channelRewards) {
 
 		// get the channels that executed painful actions - we will add alternative actions for them
 		// if there are no painful channels, we don't need to create any action regret patterns
@@ -1217,11 +1218,11 @@ export default class Brain {
 
 		// process connection action inference regret: find connections that made painful predictions
 		// and need to create a new pattern with an alternative action
-		const baseCount = await this.populateNewBaseActionPatterns(painfulChannelIds);
+		const baseCount = await this.populateNewPatternBaseActions(painfulChannelIds);
 
 		// Process pattern inference regret: find patterns that made painful predictions
 		// and need to create a higher-level pattern with an alternative action
-		const highCount = await this.populateNewHighActionPatterns(painfulChannelIds);
+		const highCount = await this.populateNewPatternHighActions(painfulChannelIds);
 
 		return baseCount + highCount;
 	}
@@ -1230,13 +1231,13 @@ export default class Brain {
 	 * Handle action regret for connection inferences.
 	 * Find connections that made painful action predictions and add one untried alternative action.
 	 * Peak is the base neuron that made the wrong prediction.
-	 * Uses same structure as populateNewBaseEventPatterns but for actions:
+	 * Uses same structure as populateNewPatternBaseEvents but for actions:
 	 * - Events: write what actually happened (active neurons) instead of what was predicted
 	 * - Actions: write an alternative action instead of what was executed (winner in painful channel)
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of base action pattern futures created
 	 */
-	async populateNewBaseActionPatterns(painfulChannelIds) {
+	async populateNewPatternBaseActions(painfulChannelIds) {
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT c.from_neuron_id, MIN(b_alt.neuron_id), 1
@@ -1274,13 +1275,13 @@ export default class Brain {
 	 * Handle action regret for pattern inferences.
 	 * Find patterns that made painful action predictions and add one untried alternative action.
 	 * Peak is the pattern neuron that made the wrong prediction.
-	 * Uses same structure as populateNewHighEventPatterns but for actions:
+	 * Uses same structure as populateNewPatternHighEvents but for actions:
 	 * - Events: write what actually happened (active neurons) instead of what was predicted
 	 * - Actions: write an alternative action instead of what was executed (winner in painful channel)
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of high action pattern futures created
 	 */
-	async populateNewHighActionPatterns(painfulChannelIds) {
+	async populateNewPatternHighActions(painfulChannelIds) {
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT pf.pattern_neuron_id, MIN(b_alt.neuron_id), 1
@@ -1359,7 +1360,7 @@ export default class Brain {
 		// this works for both level 1 and higher patterns - the level check ensures correct context
 		await this.conn.query(`
 			INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age)
-            SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age
+            SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - 1
 			FROM new_patterns np
             -- capture same-level active, but older neurons: pattern context is determined by same-level context only
             JOIN active_neurons ctx ON ctx.age > 0
@@ -1395,6 +1396,10 @@ export default class Brain {
 
 		// Insert into active_neurons with age = 1
 		await this.insertActiveNeurons(patterns.map(p => p.pattern_neuron_id), 1);
+
+		// increase current level for inference
+		this.currentMaxLevel++;
+
 		if (this.debug) console.log(`Activated ${patterns.length} new pattern neurons`);
 	}
 
