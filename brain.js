@@ -790,6 +790,8 @@ export default class Brain {
 			LEFT JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id 
 			    AND p.context_neuron_id = an_context.neuron_id AND p.context_age = an_context.age
 			WHERE p.pattern_neuron_id IS NULL
+		    -- exclude actions from context - note that this may be a stock specific thing - actions can learn patterns in robotics context
+			AND NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = an_context.neuron_id AND b.type = 'action')			
 		`);
 	}
 
@@ -957,17 +959,18 @@ export default class Brain {
 		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
 		if (this.debug) console.log(`Weakened ${weakenResult.affectedRows} failed event pattern_future predictions`);
 
-		// 3. ADD NOVEL NEURONS: Active event neurons not yet in pattern_future
-		// Find event patterns that made predictions, find active base neurons in same channel
-		// Pattern future must only contain same-channel predictions
-		// Novel neurons are added at the same distance as the prediction that was made
+		// 3. ADD NOVEL NEURONS: Active event neurons not yet in pattern_future at this distance
+		// When a pattern is active at age X, add currently active (age=0) event neurons at distance X
+		// Patterns are cross-channel, so add all active event neurons regardless of channel
+		// INSERT IGNORE prevents duplicates for (pattern_neuron_id, inferred_neuron_id, distance)
 		const [novelResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
-			SELECT pf.pattern_neuron_id, an.neuron_id, pf.distance
-			FROM pattern_future pf
-			JOIN active_neurons ap ON ap.neuron_id = pf.pattern_neuron_id AND pf.distance = ap.age
+			SELECT ap.neuron_id, an.neuron_id, ap.age
+			FROM active_neurons ap
+			JOIN neurons n_pattern ON n_pattern.id = ap.neuron_id AND n_pattern.level > 0
 			JOIN active_neurons an ON an.age = 0
-            JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
+			JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
+			WHERE ap.age > 0
 		`);
 		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel neurons to event pattern_future`);
 	}
@@ -1103,7 +1106,8 @@ export default class Brain {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
 		const eventCount = await this.populateNewPatternEvents();
 		const actionCount = await this.populateNewPatternActions(channelRewards);
-		return eventCount + actionCount;
+		const explorationCount = await this.populateNewPatternExplorationActions();
+		return eventCount + actionCount + explorationCount;
 	}
 
 	/**
@@ -1313,6 +1317,45 @@ export default class Brain {
 	}
 
 	/**
+	 * Seed new patterns with default exploratory actions at multiple distances.
+	 *
+	 * Problem: When a pattern is created from event prediction errors only, it has no actions
+	 * in pattern_future. Without actions, it can't make action predictions, so it never gets
+	 * reinforced or learns which actions work. This creates a cold-start problem.
+	 *
+	 * Solution: For each new pattern, add one default action per channel at distances 1 through
+	 * (contextLength - 1). INSERT IGNORE handles duplicates if action already exists (from action regret).
+	 *
+	 * @returns {Promise<number>} Number of exploration actions added
+	 */
+	async populateNewPatternExplorationActions() {
+
+		// Build distance values for UNION ALL
+		const distances = [];
+		for (let d = 1; d < this.contextLength; d++) distances.push(d);
+		if (distances.length === 0) return 0;
+
+		const distanceUnion = distances.map(d => `SELECT ${d} AS distance`).join(' UNION ALL ');
+
+		// Insert exploration actions: cross product of (peaks × distances × channel_actions)
+		const [result] = await this.conn.query(`
+			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
+			SELECT peaks.peak_neuron_id, actions.neuron_id, dist.distance
+			FROM (SELECT DISTINCT peak_neuron_id FROM new_pattern_future) peaks
+			CROSS JOIN (${distanceUnion}) dist
+			CROSS JOIN (
+				SELECT channel_id, MIN(neuron_id) as neuron_id
+				FROM base_neurons
+				WHERE type = 'action'
+				GROUP BY channel_id
+			) actions
+		`);
+
+		if (this.debug) console.log(`Added ${result.affectedRows} exploration actions to new patterns`);
+		return result.affectedRows;
+	}
+
+	/**
 	 * Populate new_patterns table from new_pattern_future. Peak can be a base neuron (for connection errors)
 	 * or pattern neuron (for pattern errors). All patterns are created at distance=1 to be able to get the full context.
 	 * Returns the number of patterns to create.
@@ -1363,7 +1406,7 @@ export default class Brain {
             SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - 1
 			FROM new_patterns np
             -- capture same-level active, but older neurons: pattern context is determined by same-level context only
-            JOIN active_neurons ctx ON ctx.age > 0
+            JOIN active_neurons ctx ON ctx.age > 1
             JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = ?
             -- exclude actions from context in base level
             -- note that this may be a stock specific thing - actions can learn patterns in robotics context
@@ -1372,8 +1415,8 @@ export default class Brain {
 
 		// Create pattern_future entries from new_pattern_future for cross-channel inferences
 		// inferred_neuron_id is always a base-level neuron (event or action)
-		// Join on peak_neuron_id and type to match patterns to their future inferences
-		// All entries in new_pattern_future have distance=1
+		// Join on peak_neuron_id to match patterns to their future inferences
+		// Entries can have various distances: distance=1 from errors/regret, distances 1-(contextLength-1) from exploration
 		const [futureResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
 			SELECT np.pattern_neuron_id, npf.inferred_neuron_id, npf.distance
@@ -1394,11 +1437,11 @@ export default class Brain {
 		// Get pattern neurons with their level
 		const [patterns] = await this.conn.query('SELECT pattern_neuron_id FROM new_patterns');
 
-		// Insert into active_neurons with age = 1
+		// Insert into active_neurons with age=1
 		await this.insertActiveNeurons(patterns.map(p => p.pattern_neuron_id), 1);
 
-		// increase current level for inference
-		this.currentMaxLevel++;
+		// increase the level age=1 frame for inference
+		this.maxLevelsByAge[1]++;
 
 		if (this.debug) console.log(`Activated ${patterns.length} new pattern neurons`);
 	}

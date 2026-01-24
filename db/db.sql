@@ -8,12 +8,12 @@ USE machine_intelligence;
 select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id = c.dimension_id;
 select * from dimensions;
 select * from neurons;
-select * from active_neurons;
+select * from active_neurons order by age;
 select * from base_neurons;
 select * from connections;
 select * from pattern_peaks;
-select * from pattern_past;
-select * from pattern_future;
+select * from pattern_past order by pattern_neuron_id, context_age;
+select * from pattern_future order by pattern_neuron_id, distance;
 select * from new_patterns;
 select * from new_pattern_future;
 select * from matched_patterns;
@@ -26,7 +26,7 @@ FROM active_neurons an
 JOIN connections c ON c.from_neuron_id = an.neuron_id
 WHERE c.distance = an.age + 1
 AND c.strength > 0
-AND an.age IN (0);
+AND an.age IN (0,1,2,3,4);
 
 select * from inferred_neurons where age = 0;
 select * from inferred_neurons where age = 1;
@@ -62,36 +62,16 @@ select * from coordinates where dimension_id = 16;
 select * from coordinates where neuron_id in (1,2,11,12,13);
 select * from coordinates where neuron_id = 5;
 
-select * from active_neurons;
-
-select * from matched_patterns;
-select * from matched_pattern_connections;
-
-select * from connections where id in (select connection_id from new_pattern_future);
-select * from new_patterns;
-
-select * from pattern_peaks;
-select * from connections where id in (select connection_id from pattern_future where pattern_neuron_id = 10);
-
 -- action pattern contexts
-select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
+select *
 from pattern_past p 
-join connections c on p.connection_id = c.id 
-where pattern_neuron_id in (select id from neurons where level > 0 and type = 'action')
-order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
-
--- action pattern contexts
-select p.pattern_neuron_id, c.to_neuron_id as peak_neuron_id, c.from_neuron_id, c.distance, c.id
-from pattern_past p 
-join connections c on p.connection_id = c.id 
-where pattern_neuron_id in (select id from neurons where level > 0 and type = 'action')
-order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
+order by pattern_neuron_id, context_age;
 
 select * from neurons where id in (32);
 
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 5 order by c.distance;
-select * from pattern_future where pattern_neuron_id = 10;
-select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by pattern_neuron_id;
+select * from pattern_past p where pattern_neuron_id = 5 order by context_age;
+select * from pattern_future where pattern_neuron_id = 5 order by distance;
+select pattern_neuron_id, peak_neuron_id, strength from pattern_peaks order by pattern_neuron_id;
 select * from pattern_past;
 select * from pattern_future;
 select count(*) from pattern_peaks;
@@ -266,14 +246,15 @@ CREATE TABLE IF NOT EXISTS matched_pattern_past (
     INDEX idx_pattern_status (pattern_neuron_id, status)
 ) ENGINE=MEMORY;
 
--- scratch table for new pattern creation 
--- temporal distance of the inference from the point of pattern activation is always 1 at pattern creation to avoid partial pattern contexts
+-- scratch table for new pattern creation
+-- New patterns can have inferences at multiple distances (1 to contextLength-1)
+-- to enable learning from exploration at all temporal horizons
 -- DROP TABLE IF EXISTS new_pattern_future;
 CREATE TABLE IF NOT EXISTS new_pattern_future (
     peak_neuron_id BIGINT UNSIGNED, -- the neuron that will be the peak of the new pattern (base event neuron for connection errors, pattern neuron for pattern errors)
     inferred_neuron_id BIGINT UNSIGNED, -- the base neuron that the pattern should infer
     distance TINYINT UNSIGNED,
-    PRIMARY KEY (peak_neuron_id, inferred_neuron_id)
+    PRIMARY KEY (peak_neuron_id, inferred_neuron_id, distance)
 ) ENGINE=MEMORY;
 
 -- scratch table for mapping peak neurons to new pattern neurons - used during bulk pattern creation to track sequential IDs

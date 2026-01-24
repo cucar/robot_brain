@@ -56,7 +56,7 @@ export default class SyntheticExtendedTest extends Job {
 				{ price: 7.22, volume: 2742800 },  // Frame 10: price=-1(n5), vol=-1 (n3), OUT (n4)
 				{ price: 7.51, volume: 1510600 }   // Frame 11: price=1 (n1), vol=-1 (n3), OWN (n6)
 			],
-			cycleRepeats: 5 // 5 repeats × 12 frames = 60 frames (reduced for debugging)
+			cycleRepeats: 20 // 5 repeats × 12 frames = 60 frames (reduced for debugging)
 		};
 	}
 
