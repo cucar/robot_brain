@@ -85,7 +85,7 @@ export default class StockChannel extends Channel {
 		// 	{ min: 100, max: Infinity, value: 20 }     // 100%+
 		// ];
 
-		// Simple 2-bucket system: down (-1) and up (1), with 0 counting as up
+		// Simple 2-bucket system: down (-1) and up (1), with 0 counting as down - we're looking for upside
 		this.changeBuckets = [
 			{ min: -Infinity, max: 0, value: -1 },     // Down (negative change)
 			{ min: 0, max: Infinity, value: 1 }        // Up (zero or positive change)

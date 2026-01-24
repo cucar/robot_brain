@@ -4,21 +4,124 @@
 CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
--- 1 = up, 2 = down, 3 = sell, 4 = buy
+-- 1 = up, 2 = down, 3 = buy, 4 = sell
 select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id = c.dimension_id;
 select * from dimensions;
+select * from channels;
 select * from neurons;
 select * from active_neurons order by age;
 select * from base_neurons;
 select * from connections;
 select * from pattern_peaks;
 select * from pattern_past order by pattern_neuron_id, context_age;
-select * from pattern_future order by pattern_neuron_id, distance;
+select * from pattern_future order by pattern_neuron_id, distance, inferred_neuron_id;
 select * from new_patterns;
 select * from new_pattern_future;
 select * from matched_patterns;
 select * from matched_pattern_past;
 select * from inferred_neurons;
+
+-- new observed pattern_future event connections
+SELECT ap.neuron_id as pattern_neuron_id, an.neuron_id as inferred_neuron_id, ap.age
+FROM active_neurons ap
+JOIN neurons n_pattern ON n_pattern.id = ap.neuron_id AND n_pattern.level > 0
+JOIN active_neurons an ON an.age = 0
+JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
+WHERE ap.age > 0;
+
+-- new level 1 pattern events
+SELECT c.from_neuron_id, an.neuron_id as inferred_neuron_id, 1 as distance
+FROM inferred_neurons inf
+-- creating event patterns, so the inferred neuron is an event
+JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'event'
+-- the inference must have been done with a strength above a threshold to trigger pattern creation 
+-- only peak neurons at age=1 learn the patterns, to ensure full context
+-- at this point (frameNumber >= contextLength + 1), age=1 peaks always have full context
+-- they will have additional distances as we observe them as added in when refining patterns
+JOIN connections c ON c.to_neuron_id = inf.neuron_id AND c.distance = 1 AND c.strength >= 10
+JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = 1
+-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
+-- note that this may be a stock specific thing - actions can learn patterns in robotics context    
+JOIN base_neurons b_peak ON b_peak.neuron_id = c.from_neuron_id AND b_peak.type = 'event'
+-- find the active neurons in same channel (what actually happened just now)
+-- we are creating patterns for events that happened in ANY channel to be able to generalize 
+JOIN active_neurons an ON an.age = 0
+JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event' 
+-- the inference did not come true (prediction error)
+WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
+-- don't create a pattern if there is already an active pattern for this peak 
+-- it means the peak recognized this situation - we'll refine it instead in that case
+AND NOT EXISTS (
+	SELECT 1 FROM active_neurons an_pattern
+	JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
+	WHERE pp.peak_neuron_id = c.from_neuron_id
+	AND an_pattern.age = 1
+);
+
+-- new level 1 pattern actions
+SELECT c.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, 1 as distance
+FROM inferred_neurons inf
+-- creating action patterns, so the inferred neuron is an action that was executed (winner)
+JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'action'
+-- the inference must have been done with a strength above a threshold to trigger pattern creation
+-- only peak neurons at age=1 learn the patterns, to ensure full context
+JOIN connections c ON c.to_neuron_id = inf.neuron_id AND c.distance = 1 AND c.strength >= 1
+JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = 1
+-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
+-- note that this may be a stock specific thing - actions can learn patterns in robotics context    
+JOIN base_neurons b_peak ON b_peak.neuron_id = c.from_neuron_id AND b_peak.type = 'event'
+-- find alternative actions in the same channel (what we should try instead)
+JOIN base_neurons b_alt ON b_alt.channel_id = b_inf.channel_id AND b_alt.type = 'action'
+-- the action was executed (winner) and resulted in pain
+WHERE inf.is_winner = 1
+AND b_inf.channel_id IN (1)
+AND b_alt.neuron_id != inf.neuron_id  -- don't suggest the same action that just failed
+-- don't create a pattern if there is already an active pattern for this peak 
+-- it means the peak recognized this situation - we'll refine it instead in that case
+AND NOT EXISTS (
+	SELECT 1 FROM active_neurons an_pattern
+	JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
+	WHERE pp.peak_neuron_id = c.from_neuron_id
+	AND an_pattern.age = 1
+)
+GROUP BY c.from_neuron_id, b_inf.channel_id;
+
+-- max levels by age - age=1 level=0 - age=0,2,3,4 level=1
+select age, max(level) from active_neurons a join neurons n on n.id = a.neuron_id group by age order by age;
+
+-- previous age level
+select max(level) from active_neurons a join neurons n on n.id = a.neuron_id where age = 1;
+
+-- pattern inference votes
+SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id, pf.strength, pf.reward, pf.distance, pn.level as source_level, an.age
+FROM active_neurons an
+JOIN neurons pn ON pn.id = an.neuron_id
+JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
+JOIN (SELECT age, MAX(level) as max_level FROM active_neurons a JOIN neurons n ON n.id = a.neuron_id GROUP BY age) max_levels ON max_levels.age = an.age AND pn.level = max_levels.max_level
+WHERE pf.distance = an.age + 1
+AND pf.strength > 0
+AND max_levels.max_level > 0;
+
+select * from active_neurons order by age;
+
+select * 
+from active_neurons an 
+JOIN neurons pn ON pn.id = an.neuron_id
+JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
+WHERE pf.distance = an.age + 1
+and an.age in (0,2,3,4)
+and pn.level = 1
+AND pf.strength > 0
+;
+
+-- connection inference votes
+SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, c.strength, c.reward, c.distance, 0 as source_level, an.age
+FROM active_neurons an
+JOIN (SELECT age, MAX(level) as max_level FROM active_neurons a JOIN neurons n ON n.id = a.neuron_id GROUP BY age) max_levels ON max_levels.age = an.age
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+WHERE c.distance = an.age + 1
+AND c.strength > 0
+AND max_levels.max_level = 0;
 
 -- connection inferences - 1 = up, 2 = down, 3 = sell, 4 = buy
 SELECT c.from_neuron_id, c.to_neuron_id, c.strength, c.reward, c.distance, an.age

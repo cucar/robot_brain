@@ -45,14 +45,6 @@ export default class Brain {
 		this.connectionForgetRate = 0.1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 0.1; // how much pattern strengths decay per forget cycle
 
-		// sliding window for max levels per age (for efficient voting)
-		// maxLevelsByAge[0] = max level at age 0 (current frame)
-		// maxLevelsByAge[1] = max level at age 1 (previous frame), etc.
-		this.maxLevelsByAge = [];
-
-		// current frame's highest active level (set by recognizePatternNeurons)
-		this.currentMaxLevel = 0;
-
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
 
@@ -547,22 +539,21 @@ export default class Brain {
 	 */
 	async createBaseNeurons(framePoints) {
 		if (framePoints.length === 0) return [];
-		const neuronIds = await this.insertNeurons(framePoints.length);
-		await this.insertBaseNeurons(neuronIds, framePoints);
+		const neuronIds = await this.insertBaseNeurons(framePoints.length);
+		await this.insertBaseNeuronMetadata(neuronIds, framePoints);
 		await this.setNeuronCoordinates(neuronIds, framePoints);
 		return neuronIds;
 	}
 
 	/**
-	 * Creates new neurons at a given level and return their IDs.
+	 * Creates new base neurons (level 0) in bulk and returns their IDs.
 	 * MySQL guarantees sequential auto-increment IDs.
-	 * @param {number} level
-	 * @param {number} count
+	 * @param {number} count - Number of neurons to create
 	 * @returns {Promise<Array<number>>} Array of neuron IDs
 	 */
-	async insertNeurons(count, level = 0) {
+	async insertBaseNeurons(count) {
 		if (count === 0) return [];
-		const rows = Array.from({ length: count }, () => [level]);
+		const rows = Array.from({ length: count }, () => [0]);
 		const [insertResult] = await this.conn.query('INSERT INTO neurons (level) VALUES ?', [rows]);
 		const firstNeuronId = insertResult.insertId;
 		return Array.from({ length: count }, (_, idx) => firstNeuronId + idx);
@@ -573,7 +564,7 @@ export default class Brain {
 	 * @param {Array<number>} neuronIds - Array of neuron IDs
 	 * @param {Array} framePoints - Array of frame points with channel_id and type
 	 */
-	async insertBaseNeurons(neuronIds, framePoints) {
+	async insertBaseNeuronMetadata(neuronIds, framePoints) {
 		const infoValues = framePoints.map((point, idx) => [neuronIds[idx], point.channel_id, point.type]);
 		await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [infoValues]);
 	}
@@ -660,23 +651,22 @@ export default class Brain {
 
 	/**
 	 * detects all spatial levels in age=0 neurons using unified connections - start from base level and go as high as possible
-	 * Saves the highest activated level to this.currentMaxLevel for use by collectVotes
 	 */
 	async recognizePatternNeurons() {
-		this.currentMaxLevel = 0; // contains the max level of neurons we were able to recognize and activate
+		let level = 0; // contains the max level of neurons we were able to recognize and activate
 		while (true) {
 
 			// process the level to detect patterns - returns if there are patterns found or not
-			const patternsFound = await this.recognizeLevelPatterns(this.currentMaxLevel);
+			const patternsFound = await this.recognizeLevelPatterns(level);
 
 			// if no patterns are found in the level, nothing to do
 			if (!patternsFound) break;
 
 			// increment the level to start processing it
-			this.currentMaxLevel++;
+			level++;
 
 			// if we exceeded the max level, give warning and stop
-			if (this.currentMaxLevel >= this.maxLevels) {
+			if (level >= this.maxLevels) {
 				console.error('Max level exceeded.');
 				break;
 			}
@@ -729,9 +719,10 @@ export default class Brain {
             FROM active_neurons an_peak
             JOIN neurons n_peak ON n_peak.id = an_peak.neuron_id AND n_peak.level = ?    
 			JOIN pattern_peaks pp ON an_peak.neuron_id = pp.peak_neuron_id
-            -- pattern_past only contains same-level connections (pattern identity is determined by same-level context)
+            -- pattern_past only contains lower-level active neurons (pattern identity is determined by lower-level context)
             JOIN pattern_past p ON pp.pattern_neuron_id = p.pattern_neuron_id
             LEFT JOIN active_neurons an_ctx ON an_ctx.neuron_id = p.context_neuron_id AND an_ctx.age = p.context_age
+            LEFT JOIN neurons n_ctx ON n_ctx.id = an_ctx.neuron_id AND n_ctx.level = n_peak.level
 			WHERE an_peak.age = 0
 			GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
 			-- pattern matches if at least some percentage of its pattern_past neurons are active
@@ -775,8 +766,10 @@ export default class Brain {
 			SELECT p.pattern_neuron_id, p.context_neuron_id, p.context_age, 'missing'
 			FROM matched_patterns mp
 			JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id
-			LEFT JOIN active_neurons an ON an.neuron_id = p.context_neuron_id AND an.age = p.context_age
-			WHERE an.neuron_id IS NULL
+			WHERE NOT EXISTS (
+				SELECT 1 FROM active_neurons an
+				WHERE an.neuron_id = p.context_neuron_id AND an.age = p.context_age
+			)
 		`);
 
 		// Novel: active neurons at same level, not in pattern_past (all channels)
@@ -787,11 +780,15 @@ export default class Brain {
 			JOIN neurons n_peak ON n_peak.id = mp.peak_neuron_id
 			JOIN active_neurons an_context ON an_context.age > 0
             JOIN neurons n_context ON n_context.id = an_context.neuron_id AND n_context.level = n_peak.level
-			LEFT JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id 
-			    AND p.context_neuron_id = an_context.neuron_id AND p.context_age = an_context.age
-			WHERE p.pattern_neuron_id IS NULL
+			-- pick the context neurons that are not already in the context in the age they are observed
+			WHERE NOT EXISTS (
+				SELECT 1 FROM pattern_past p
+				WHERE p.pattern_neuron_id = mp.pattern_neuron_id
+			    AND p.context_neuron_id = an_context.neuron_id
+			    AND p.context_age = an_context.age
+			)
 		    -- exclude actions from context - note that this may be a stock specific thing - actions can learn patterns in robotics context
-			AND NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = an_context.neuron_id AND b.type = 'action')			
+			AND NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = an_context.neuron_id AND b.type = 'action')
 		`);
 	}
 
@@ -965,7 +962,7 @@ export default class Brain {
 		// INSERT IGNORE prevents duplicates for (pattern_neuron_id, inferred_neuron_id, distance)
 		const [novelResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
-			SELECT ap.neuron_id, an.neuron_id, ap.age
+			SELECT ap.neuron_id as pattern_neuron_id, an.neuron_id as inferred_neuron_id, ap.age
 			FROM active_neurons ap
 			JOIN neurons n_pattern ON n_pattern.id = ap.neuron_id AND n_pattern.level > 0
 			JOIN active_neurons an ON an.age = 0
@@ -1065,7 +1062,10 @@ export default class Brain {
 		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
-		// if (newPatternFutureCount > 0) this.waitForUserInput = true;
+		if (newPatternFutureCount > 0) {
+			this.waitForUserInput = true;
+			await this.waitForUser('New pattern future count > 0');
+		}
 
 		// Populate new_patterns table with peaks from new pattern future inferences
 		const patternCount = await this.populateNewPatterns();
@@ -1106,8 +1106,8 @@ export default class Brain {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
 		const eventCount = await this.populateNewPatternEvents();
 		const actionCount = await this.populateNewPatternActions(channelRewards);
-		const explorationCount = await this.populateNewPatternExplorationActions();
-		return eventCount + actionCount + explorationCount;
+		// const explorationCount = await this.populateNewPatternExplorationActions();
+		return eventCount + actionCount; //  + explorationCount;
 	}
 
 	/**
@@ -1122,7 +1122,7 @@ export default class Brain {
 	 */
 	async populateNewPatternEvents() {
 		const baseCount = await this.populateNewPatternBaseEvents();
-		const highCount = await this.populateNewPatternHighEvents();
+		const highCount = 0; // await this.populateNewPatternHighEvents();
 		return baseCount + highCount;
 	}
 
@@ -1135,7 +1135,7 @@ export default class Brain {
 	async populateNewPatternBaseEvents() {
 		const [connResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT c.from_neuron_id, an.neuron_id, 1
+			SELECT c.from_neuron_id, an.neuron_id as inferred_neuron_id, 1 as distance
 			FROM inferred_neurons inf
             -- creating event patterns, so the inferred neuron is an event
 			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'event'
@@ -1200,7 +1200,7 @@ export default class Brain {
 				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
 				AND an_pattern.age = 1
 			)
-		`, [this.predictionErrorMinStrength]);
+		`, [this.patternErrorMinStrength]);
 		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
 		return patternResult.affectedRows;
 	}
@@ -1226,7 +1226,7 @@ export default class Brain {
 
 		// Process pattern inference regret: find patterns that made painful predictions
 		// and need to create a higher-level pattern with an alternative action
-		const highCount = await this.populateNewPatternHighActions(painfulChannelIds);
+		const highCount = 0; // await this.populateNewPatternHighActions(painfulChannelIds);
 
 		return baseCount + highCount;
 	}
@@ -1244,7 +1244,7 @@ export default class Brain {
 	async populateNewPatternBaseActions(painfulChannelIds) {
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT c.from_neuron_id, MIN(b_alt.neuron_id), 1
+			SELECT c.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, 1 as distance
 			FROM inferred_neurons inf
 			-- creating action patterns, so the inferred neuron is an action that was executed (winner)
 			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'action'
@@ -1311,7 +1311,7 @@ export default class Brain {
 				AND an_pattern.age = 1
 			)
 			GROUP BY pf.pattern_neuron_id, b_inf.channel_id
-		`, [this.patternErrorMinStrength]);
+		`, [this.actionRegretMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} pattern action regret inferences`);
 		return result.affectedRows;
 	}
@@ -1371,15 +1371,25 @@ export default class Brain {
 	}
 
 	/**
-	 * Creates pattern neurons from new_patterns at max recognized level + 1 for each peak neuron
+	 * Creates pattern neurons from new_patterns at peak neuron level + 1
 	 */
 	async createPatternNeurons() {
 
 		// Get peak neurons with their levels from new_patterns
-		const [peaks] = await this.conn.query('SELECT * FROM new_patterns ORDER BY seq_id');
+		const [peaks] = await this.conn.query(`
+			SELECT np.seq_id, np.peak_neuron_id, n.level as peak_level
+			FROM new_patterns np
+			JOIN neurons n ON n.id = np.peak_neuron_id
+			ORDER BY np.seq_id
+		`);
 
-		// Create pattern neurons from new_patterns - they must be at the maximum recognized level + 1
-		const neuronIds = await this.insertNeurons(peaks.length, this.currentMaxLevel + 1);
+		if (peaks.length === 0) return;
+
+		// Bulk insert pattern neurons - each at its peak neuron's level + 1
+		const rows = peaks.map(p => [p.peak_level + 1]);
+		const [insertResult] = await this.conn.query('INSERT INTO neurons (level) VALUES ?', [rows]);
+		const firstNeuronId = insertResult.insertId;
+		const neuronIds = Array.from({ length: peaks.length }, (_, idx) => firstNeuronId + idx);
 
 		// Bulk update new_patterns with pattern neuron IDs using CASE statement
 		const caseWhen = peaks.map((p, i) => `WHEN ${p.seq_id} THEN ${neuronIds[i]}`).join(' ');
@@ -1400,18 +1410,19 @@ export default class Brain {
 		`);
 
 		// create pattern_past entries - all patterns created at distance=1 to capture full cross-channel context
-		// this works for both level 1 and higher patterns - the level check ensures correct context
+		// pattern context neurons must be at the same level as the peak neuron (one level lower than the pattern)
 		await this.conn.query(`
 			INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age)
             SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - 1
 			FROM new_patterns np
+			JOIN neurons n_peak ON n_peak.id = np.peak_neuron_id
             -- capture same-level active, but older neurons: pattern context is determined by same-level context only
             JOIN active_neurons ctx ON ctx.age > 1
-            JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = ?
+            JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
             -- exclude actions from context in base level
             -- note that this may be a stock specific thing - actions can learn patterns in robotics context
             WHERE NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = ctx.neuron_id AND b.type = 'action')
-		`, [this.currentMaxLevel]);
+		`);
 
 		// Create pattern_future entries from new_pattern_future for cross-channel inferences
 		// inferred_neuron_id is always a base-level neuron (event or action)
@@ -1439,9 +1450,6 @@ export default class Brain {
 
 		// Insert into active_neurons with age=1
 		await this.insertActiveNeurons(patterns.map(p => p.pattern_neuron_id), 1);
-
-		// increase the level age=1 frame for inference
-		this.maxLevelsByAge[1]++;
 
 		if (this.debug) console.log(`Activated ${patterns.length} new pattern neurons`);
 	}
@@ -1481,64 +1489,51 @@ export default class Brain {
 	 *   - If highest level at that age > 0: use ONLY pattern votes from highest level
 	 *   - If highest level at that age = 0: use ONLY connection votes from base level
 	 * This ensures patterns override connections on a per-frame basis.
-	 * Uses sliding window (maxLevelsByAge) to avoid querying max levels every frame.
-	 * Uses this.currentMaxLevel (set by recognizePatternNeurons) for age=0.
+	 * Max levels per age are calculated directly in SQL.
 	 * @returns {Promise<Array>} Array of {from_neuron_id, neuron_id, source_type, strength, reward, distance, source_level, age}
 	 */
 	async collectVotes() {
-		const allVotes = [];
+		
+		// Collect pattern votes (from ages where max level > 0)
+		const [patternVotes] = await this.conn.query(`
+			SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id,
+                   pf.strength, pf.reward, pf.distance, pn.level as source_level, an.age,
+			       'pattern' as source_type
+			FROM active_neurons an
+			JOIN neurons pn ON pn.id = an.neuron_id
+            JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
+			JOIN (
+				SELECT age, MAX(level) as max_level
+				FROM active_neurons a
+				JOIN neurons n ON n.id = a.neuron_id
+				GROUP BY age
+			) max_levels ON max_levels.age = an.age AND pn.level = max_levels.max_level
+			WHERE pf.distance = an.age + 1
+            AND pf.strength > 0
+			AND max_levels.max_level > 0
+		`);
 
-		// Update sliding window: remove oldest, shift all, add new age=0 max level
-		// Use currentMaxLevel (set by recognizePatternNeurons) for age=0
-		// Shift window: insert new age=0 at front
-		if (this.maxLevelsByAge.length >= this.contextLength) this.maxLevelsByAge.pop(); // Remove oldest frame
-		this.maxLevelsByAge.unshift(this.currentMaxLevel);
+		// Collect connection votes (from ages where max level = 0)
+		const [connectionVotes] = await this.conn.query(`
+			SELECT c.from_neuron_id, c.to_neuron_id as neuron_id,
+				   c.strength, c.reward, c.distance, 0 as source_level, an.age,
+				   'connection' as source_type
+			FROM active_neurons an
+			JOIN (
+				SELECT age, MAX(level) as max_level
+				FROM active_neurons a
+				JOIN neurons n ON n.id = a.neuron_id
+				GROUP BY age
+			) max_levels ON max_levels.age = an.age
+			JOIN connections c ON c.from_neuron_id = an.neuron_id
+			WHERE c.distance = an.age + 1
+            AND c.strength > 0
+			AND max_levels.max_level = 0
+		`);
 
-		// Build age groups for pattern and connection queries
-		const patternAges = []; // ages where max_level > 0
-		const patternLevels = []; // corresponding max levels
-		const connectionAges = []; // ages where max_level = 0
-		for (let age = 0; age < this.maxLevelsByAge.length && age < this.contextLength; age++) {
-			const maxLevel = this.maxLevelsByAge[age];
-			if (maxLevel === 0) connectionAges.push(age);
-			else {
-				patternAges.push(age);
-				patternLevels.push(maxLevel);
-			}
-		}
+		const allVotes = [...patternVotes, ...connectionVotes];
 
-		// Collect all pattern votes in one query (for ages with patterns)
-		if (patternAges.length > 0) {
-			const [patternVotes] = await this.conn.query(`
-				SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id,
-                       pf.strength, pf.reward, pf.distance, pn.level as source_level, an.age,
-				       'pattern' as source_type
-				FROM active_neurons an
-				JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
-				JOIN neurons pn on pn.id = pf.pattern_neuron_id
-				WHERE pf.distance = an.age + 1
-	            AND pf.strength > 0
-				AND (${patternAges.map((age, i) => `(an.age = ${age} AND pn.level = ${patternLevels[i]})`).join(' OR ')})
-			`);
-			allVotes.push(...patternVotes);
-		}
-
-		// Collect all connection votes in one query (for ages without patterns)
-		if (connectionAges.length > 0) {
-			const [connectionVotes] = await this.conn.query(`
-				SELECT c.from_neuron_id, c.to_neuron_id as neuron_id,
-					   c.strength, c.reward, c.distance, 0 as source_level, an.age, 
-					   'connection' as source_type
-				FROM active_neurons an
-				JOIN connections c ON c.from_neuron_id = an.neuron_id
-				WHERE c.distance = an.age + 1
-	            AND c.strength > 0
-				AND an.age IN (${connectionAges.join(',')})
-			`);
-			allVotes.push(...connectionVotes);
-		}
-
-		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternAges.length} pattern ages, ${connectionAges.length} connection ages ${connectionAges.join(',')})`);
+		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternVotes.length} pattern, ${connectionVotes.length} connection)`);
 
 		// Call channel-specific debug methods if debug2 is enabled
 		if (this.debug2) for (const [_, channel] of this.channels) await channel.debugVotes(allVotes, this);
