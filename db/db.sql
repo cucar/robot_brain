@@ -4,16 +4,35 @@
 CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
+-- 1 = up, 2 = down, 3 = sell, 4 = buy
+select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id = c.dimension_id;
+select * from dimensions;
+select * from neurons;
+select * from active_neurons;
+select * from base_neurons;
+select * from connections;
+select * from pattern_peaks;
+select * from pattern_past;
+select * from pattern_future;
+select * from new_patterns;
+select * from new_pattern_future;
+select * from matched_patterns;
+select * from matched_pattern_past;
+select * from inferred_neurons;
+
+-- connection inferences - 1 = up, 2 = down, 3 = sell, 4 = buy
+SELECT c.from_neuron_id, c.to_neuron_id, c.strength, c.reward, c.distance, an.age
+FROM active_neurons an
+JOIN connections c ON c.from_neuron_id = an.neuron_id
+WHERE c.distance = an.age + 1
+AND c.strength > 0
+AND an.age IN (0);
+
 select * from inferred_neurons where age = 0;
 select * from inferred_neurons where age = 1;
 select * from active_neurons where age in (0,1) order by age, neuron_id;
-select * from new_patterns;
-select * from new_pattern_future;
-
 select * from neurons where level > 0;
-select * from dimensions;
 
--- connection inferences - 1=up, 2=down, 3=buy, 4=sell
 SELECT an.neuron_id as from_neuron, an.age, c.to_neuron_id, c.distance, c.strength, c.reward
 -- SELECT c.to_neuron_id, avg(c.reward), sum(c.strength), group_concat(an.neuron_id)
 FROM active_neurons an
@@ -44,8 +63,6 @@ select * from coordinates where neuron_id in (1,2,11,12,13);
 select * from coordinates where neuron_id = 5;
 
 select * from active_neurons;
-select * from active_connections;
-select * from active_connections where to_neuron_id = 6;
 
 select * from matched_patterns;
 select * from matched_pattern_connections;
@@ -71,11 +88,8 @@ where pattern_neuron_id in (select id from neurons where level > 0 and type = 'a
 order by p.pattern_neuron_id, c.distance, c.from_neuron_id;
 
 select * from neurons where id in (32);
-select * from neurons where level > 0;
 
-select * from active_neurons;
-
-select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 10 order by c.distance;
+select * from pattern_past p join connections c on p.connection_id = c.id where pattern_neuron_id = 5 order by c.distance;
 select * from pattern_future where pattern_neuron_id = 10;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by pattern_neuron_id;
 select * from pattern_past;
@@ -114,12 +128,6 @@ AND EXISTS (
 	WHERE context_ac.to_neuron_id = c.from_neuron_id
 	AND context_ac.age = c.distance
 );
-
--- 14 = out, 13 = own
-select c.neuron_id, d.name, c.val 
-from coordinates c join dimensions d on d.id = c.dimension_id 
--- where c.neuron_id <= 16
-order by c.neuron_id;
 
 SELECT src.neuron_id, src.level, src.strength
 FROM inferred_neurons src
@@ -248,8 +256,8 @@ CREATE TABLE IF NOT EXISTS matched_patterns (
 
 -- scratch table for pattern connection analysis
 -- status: 'common' = in both pattern and active (strengthen), 'novel' = in active only (add), 'missing' = in pattern only (weaken)
--- DROP TABLE IF EXISTS matched_pattern_context;
-CREATE TABLE IF NOT EXISTS matched_pattern_context (
+-- DROP TABLE IF EXISTS matched_pattern_past;
+CREATE TABLE IF NOT EXISTS matched_pattern_past (
     pattern_neuron_id BIGINT UNSIGNED,
     context_neuron_id BIGINT UNSIGNED,
     context_age TINYINT UNSIGNED,

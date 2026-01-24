@@ -90,6 +90,13 @@ export default class StockChannel extends Channel {
 			{ min: -Infinity, max: 0, value: -1 },     // Down (negative change)
 			{ min: 0, max: Infinity, value: 1 }        // Up (zero or positive change)
 		];
+
+		// Build bucket-to-percentage mapping once (used in debug output)
+		this.bucketToPercent = this.buildBucketPercentMap();
+
+		// Cache for action neuron IDs (populated after neurons are created)
+		this.ownNeuronId = null;
+		this.outNeuronId = null;
 	}
 
 	/**
@@ -625,114 +632,8 @@ export default class StockChannel extends Channel {
 	 * @param {Object} brain - Reference to brain instance for accessing neuron data
 	 */
 	async debugVotes(allVotes, brain) {
-		await this.debugActionVotes(allVotes, brain);
 		await this.debugEventVotes(allVotes, brain);
-	}
-
-	/**
-	 * Debug helper: show votes for OWN and OUT action neurons
-	 * Shows which price/volume changes are voting for which action
-	 */
-	async debugActionVotes(allVotes, brain) {
-
-		// Get OWN and OUT neuron IDs for this channel
-		const [actionNeurons] = await brain.conn.query(`
-			SELECT n.neuron_id, c.val as activity_value
-			FROM base_neurons n
-			JOIN coordinates c ON c.neuron_id = n.neuron_id
-			JOIN dimensions d ON d.id = c.dimension_id
-			WHERE n.type = 'action'
-			AND n.channel_id = (SELECT id FROM channels WHERE name = ?)
-			AND c.val IN (1, -1)
-		`, [this.symbol]);
-
-		const ownNeuronId = actionNeurons.find(n => n.activity_value === 1)?.neuron_id;
-		const outNeuronId = actionNeurons.find(n => n.activity_value === -1)?.neuron_id;
-
-		if (!ownNeuronId || !outNeuronId) return;
-
-		// Filter votes for this channel's action neurons
-		const channelVotes = allVotes.filter(v => v.neuron_id === ownNeuronId || v.neuron_id === outNeuronId);
-		if (channelVotes.length === 0) return;
-
-		// Get source neuron coordinates
-		const sourceNeuronIds = [...new Set(channelVotes.map(v => v.from_neuron_id))];
-		const [neurons] = await brain.conn.query(`
-			SELECT n.id, GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as coords
-			FROM neurons n
-			JOIN coordinates coord ON coord.neuron_id = n.id
-			JOIN dimensions d ON d.id = coord.dimension_id
-			WHERE n.id IN (?)
-			GROUP BY n.id
-		`, [sourceNeuronIds]);
-
-		const neuronMap = new Map(neurons.map(n => [n.id, n]));
-
-		// Build bucket-to-percentage mapping
-		const bucketToPercent = this.buildBucketPercentMap();
-
-		// Calculate cycle frame (1-6) based on frame number
-		const cycleFrame = ((brain.frameNumber - 1) % 6) + 1;
-
-		// Aggregate by source neuron - sum strengths, strength-weighted average reward
-		const aggregateBySource = (votes) => {
-			const bySource = new Map();
-			for (const v of votes) {
-				const neuron = neuronMap.get(v.from_neuron_id);
-				if (!neuron) continue;
-				const key = v.from_neuron_id;
-				if (!bySource.has(key))
-					bySource.set(key, { from_neuron_id: key, strength: 0, weightedRewardSum: 0, coords: neuron.coords, distances: [] });
-				const agg = bySource.get(key);
-				agg.strength += v.strength;
-				agg.weightedRewardSum += v.strength * v.reward;
-				agg.distances.push(v.distance);
-			}
-			// Calculate strength-weighted average reward per source
-			for (const [_, agg] of bySource)
-				agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
-			return [...bySource.values()];
-		};
-
-		const ownAgg = aggregateBySource(channelVotes.filter(v => v.neuron_id === ownNeuronId));
-		const outAgg = aggregateBySource(channelVotes.filter(v => v.neuron_id === outNeuronId));
-
-		// Format aggregated votes with source info
-		const formatAggVotes = (aggVotes, label) => {
-			if (aggVotes.length === 0) return `  ${label}: no votes`;
-			const lines = [`  ${label}:`];
-			for (const agg of aggVotes) {
-				const coordsWithPercent = this.formatCoordsWithPercent(agg.coords, bucketToPercent);
-				const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
-				lines.push(`    ${coordsWithPercent} (${distStr}) → str=${agg.strength.toFixed(1)}, avgRwd=${agg.reward.toFixed(2)}`);
-			}
-			return lines.join('\n');
-		};
-
-		// Calculate totals - sum strengths, strength-weighted average reward
-		const ownTotal = {
-			str: ownAgg.reduce((s, a) => s + a.strength, 0),
-			weightedRewardSum: ownAgg.reduce((s, a) => s + a.weightedRewardSum, 0)
-		};
-		const outTotal = {
-			str: outAgg.reduce((s, a) => s + a.strength, 0),
-			weightedRewardSum: outAgg.reduce((s, a) => s + a.weightedRewardSum, 0)
-		};
-		ownTotal.rwd = ownTotal.str > 0 ? ownTotal.weightedRewardSum / ownTotal.str : 0;
-		outTotal.rwd = outTotal.str > 0 ? outTotal.weightedRewardSum / outTotal.str : 0;
-
-		// Calculate Boltzmann probabilities (exponential with temperature)
-		const ownExp = Math.exp(ownTotal.rwd / brain.boltzmannTemperature);
-		const outExp = Math.exp(outTotal.rwd / brain.boltzmannTemperature);
-		const sumExp = ownExp + outExp;
-		const ownProb = ownExp / sumExp;
-		const outProb = outExp / sumExp;
-
-		console.log(`\n=== ${this.symbol} ACTION VOTES (Cycle ${cycleFrame}/6) ===`);
-		console.log(formatAggVotes(ownAgg, `OWN (${ownAgg.length} voters, str=${ownTotal.str.toFixed(1)}, avgRwd=${ownTotal.rwd.toFixed(2)}, prob=${(ownProb * 100).toFixed(1)}%)`));
-		console.log(formatAggVotes(outAgg, `OUT (${outAgg.length} voters, str=${outTotal.str.toFixed(1)}, avgRwd=${outTotal.rwd.toFixed(2)}, prob=${(outProb * 100).toFixed(1)}%)`));
-		console.log(`  SELECTION: Boltzmann (OWN ${(ownProb * 100).toFixed(1)}% vs OUT ${(outProb * 100).toFixed(1)}%)`);
-		console.log(`===================\n`);
+		await this.debugActionVotes(allVotes, brain);
 	}
 
 	/**
@@ -762,33 +663,14 @@ export default class StockChannel extends Channel {
 		const eventNeurons = neurons.filter(n => n.type === 'event');
 		if (eventNeurons.length === 0) return;
 
-		// Get source neuron coordinates
-		const sourceNeuronIds = [...new Set(allVotes.map(v => v.from_neuron_id))];
-		const [sourceNeurons] = await brain.conn.query(`
-			SELECT n.id, GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as coords
-			FROM neurons n
-			JOIN coordinates coord ON coord.neuron_id = n.id
-			JOIN dimensions d ON d.id = coord.dimension_id
-			WHERE n.id IN (?)
-			GROUP BY n.id
-		`, [sourceNeuronIds]);
-
-		const sourceNeuronMap = new Map(sourceNeurons.map(n => [n.id, n]));
-
-		// Build neuron map with dimension info
+		// Build neuron map with dimension info - key is neuron_id not id
 		const neuronMap = new Map();
 		for (const n of eventNeurons) {
-			if (!neuronMap.has(n.id))
-				neuronMap.set(n.id, { id: n.neuron_id, type: n.type, coords: n.coords, dimensions: new Map() });
+			if (!neuronMap.has(n.neuron_id))
+				neuronMap.set(n.neuron_id, { id: n.neuron_id, type: n.type, coords: n.coords, dimensions: new Map() });
 			if (n.dim_name)
-				neuronMap.get(n.id).dimensions.set(n.dim_name, n.dim_val);
+				neuronMap.get(n.neuron_id).dimensions.set(n.dim_name, n.dim_val);
 		}
-
-		// Build bucket-to-percentage mapping
-		const bucketToPercent = this.buildBucketPercentMap();
-
-		// Calculate cycle frame (1-6) based on frame number
-		const cycleFrame = ((brain.frameNumber - 1) % 6) + 1;
 
 		// Group votes by event neuron
 		const votesByEvent = new Map();
@@ -803,21 +685,10 @@ export default class StockChannel extends Channel {
 
 		if (votesByEvent.size === 0) return;
 
-		// Aggregate by source neuron for each event
-		const aggregateBySource = (votes) => {
-			const bySource = new Map();
-			for (const v of votes) {
-				const neuron = sourceNeuronMap.get(v.from_neuron_id);
-				if (!neuron) continue;
-				const key = v.from_neuron_id;
-				if (!bySource.has(key))
-					bySource.set(key, { from_neuron_id: key, strength: 0, coords: neuron.coords, distances: [] });
-				const agg = bySource.get(key);
-				agg.strength += v.strength;
-				agg.distances.push(v.distance);
-			}
-			return [...bySource.values()];
-		};
+		// Aggregate votes by source neuron for each event
+		const aggregatedByEvent = new Map();
+		for (const [neuronId, votes] of votesByEvent)
+			aggregatedByEvent.set(neuronId, await this.aggregateVotesBySource(votes, brain));
 
 		// Group by dimension to find winners
 		const byDimension = new Map();
@@ -832,17 +703,8 @@ export default class StockChannel extends Channel {
 			}
 		}
 
-		// Format aggregated votes with source info
-		const formatAggVotes = (aggVotes) => {
-			if (aggVotes.length === 0) return '    no votes';
-			const lines = [];
-			for (const agg of aggVotes) {
-				const coordsWithPercent = this.formatCoordsWithPercent(agg.coords, bucketToPercent);
-				const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
-				lines.push(`    ${coordsWithPercent} (${distStr}) → str=${agg.strength.toFixed(1)}`);
-			}
-			return lines.join('\n');
-		};
+		// Calculate cycle frame (1-6) based on frame number
+		const cycleFrame = ((this.frameNumber - 1) % 6) + 1;
 
 		console.log(`\n=== ${this.symbol} EVENT VOTES (Cycle ${cycleFrame}/6) ===`);
 
@@ -857,15 +719,149 @@ export default class StockChannel extends Channel {
 			for (const cand of candidates) {
 				const isWinner = cand.neuronId === winner.neuronId;
 				const marker = isWinner ? '★ WINNER' : '';
-				const coordsWithPercent = this.formatCoordsWithPercent(cand.neuron.coords, bucketToPercent);
-				const aggVotes = aggregateBySource(cand.votes);
+				const coordsWithPercent = this.formatCoordsWithPercent(cand.neuron.coords, this.bucketToPercent);
+				const aggVotes = aggregatedByEvent.get(cand.neuronId);
 
 				console.log(`    ${coordsWithPercent} (n${cand.neuronId}) str=${cand.totalStrength.toFixed(1)} ${marker}`);
-				console.log(formatAggVotes(aggVotes));
+				console.log(this.formatAggregatedVotes(aggVotes, null, false));
 			}
 		}
 
 		console.log(`===================\n`);
+	}
+
+	/**
+	 * Populate cache of OWN and OUT action neuron IDs for this channel
+	 * Called once when first needed
+	 */
+	async populateActionNeuronCache(brain) {
+		const [actionNeurons] = await brain.conn.query(`
+			SELECT n.neuron_id, c.val
+			FROM base_neurons n
+			JOIN coordinates c ON c.neuron_id = n.neuron_id
+			JOIN dimensions d ON d.id = c.dimension_id
+			WHERE n.type = 'action'
+			AND n.channel_id = (SELECT id FROM channels WHERE name = ?)
+			AND c.val IN (1, -1)
+		`, [this.symbol]);
+
+		this.ownNeuronId = actionNeurons.find(n => n.val === POSITION_OWN)?.neuron_id;
+		this.outNeuronId = actionNeurons.find(n => n.val === POSITION_OUT)?.neuron_id;
+	}
+
+	/**
+	 * Debug helper: show votes for OWN and OUT action neurons
+	 * Shows which price/volume changes are voting for which action
+	 */
+	async debugActionVotes(allVotes, brain) {
+
+		// Populate action neuron cache if not already done
+		if (!this.ownNeuronId || !this.outNeuronId) await this.populateActionNeuronCache(brain);
+
+		// If we still don't have action neuron IDs, we can't do anything
+		if (!this.ownNeuronId || !this.outNeuronId) return;
+
+		// Filter votes for this channel's action neurons
+		const channelVotes = allVotes.filter(v => v.neuron_id === this.ownNeuronId || v.neuron_id === this.outNeuronId);
+		if (channelVotes.length === 0) return;
+
+		// Aggregate votes by source neuron
+		const ownAgg = await this.aggregateVotesBySource(channelVotes.filter(v => v.neuron_id === this.ownNeuronId), brain);
+		const outAgg = await this.aggregateVotesBySource(channelVotes.filter(v => v.neuron_id === this.outNeuronId), brain);
+
+		// Calculate totals - sum strengths, strength-weighted average reward
+		const ownTotal = {
+			str: ownAgg.reduce((s, a) => s + a.strength, 0),
+			weightedRewardSum: ownAgg.reduce((s, a) => s + a.weightedRewardSum, 0)
+		};
+		const outTotal = {
+			str: outAgg.reduce((s, a) => s + a.strength, 0),
+			weightedRewardSum: outAgg.reduce((s, a) => s + a.weightedRewardSum, 0)
+		};
+		ownTotal.rwd = ownTotal.str > 0 ? ownTotal.weightedRewardSum / ownTotal.str : 0;
+		outTotal.rwd = outTotal.str > 0 ? outTotal.weightedRewardSum / outTotal.str : 0;
+
+		// Calculate Boltzmann probabilities (exponential with temperature)
+		const ownExp = Math.exp(ownTotal.rwd / brain.boltzmannTemperature);
+		const outExp = Math.exp(outTotal.rwd / brain.boltzmannTemperature);
+		const sumExp = ownExp + outExp;
+		const ownProb = ownExp / sumExp;
+		const outProb = outExp / sumExp;
+
+		// Calculate cycle frame (1-6) based on frame number
+		const cycleFrame = ((this.frameNumber - 1) % 6) + 1;
+
+		console.log(`\n=== ${this.symbol} ACTION VOTES (Cycle ${cycleFrame}/6) ===`);
+		console.log(this.formatAggregatedVotes(ownAgg, `OWN (${ownAgg.length} voters, str=${ownTotal.str.toFixed(1)}, avgRwd=${ownTotal.rwd.toFixed(2)}, prob=${(ownProb * 100).toFixed(1)}%)`, true));
+		console.log(this.formatAggregatedVotes(outAgg, `OUT (${outAgg.length} voters, str=${outTotal.str.toFixed(1)}, avgRwd=${outTotal.rwd.toFixed(2)}, prob=${(outProb * 100).toFixed(1)}%)`, true));
+		console.log(`  SELECTION: Boltzmann (OWN ${(ownProb * 100).toFixed(1)}% vs OUT ${(outProb * 100).toFixed(1)}%)`);
+		console.log(`===================\n`);
+	}
+
+	/**
+	 * Aggregate votes by source neuron - sum strengths, strength-weighted average reward
+	 * @param {Array} votes - Array of votes to aggregate
+	 * @param {Object} brain - Brain instance for database queries
+	 * @returns {Promise<Array>} Array of aggregated votes by source
+	 */
+	async aggregateVotesBySource(votes, brain) {
+		if (votes.length === 0) return [];
+
+		// Get source neuron coordinates
+		const sourceNeuronIds = [...new Set(votes.map(v => v.from_neuron_id))];
+		const [neurons] = await brain.conn.query(`
+			SELECT n.id, GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as coords
+			FROM neurons n
+			JOIN coordinates coord ON coord.neuron_id = n.id
+			JOIN dimensions d ON d.id = coord.dimension_id
+			WHERE n.id IN (?)
+			GROUP BY n.id
+		`, [sourceNeuronIds]);
+
+		const neuronMap = new Map(neurons.map(n => [n.id, n]));
+
+		// Aggregate by source neuron
+		const bySource = new Map();
+		for (const v of votes) {
+			const neuron = neuronMap.get(v.from_neuron_id);
+			if (!neuron) continue;
+			const key = v.from_neuron_id;
+			if (!bySource.has(key))
+				bySource.set(key, { from_neuron_id: key, strength: 0, weightedRewardSum: 0, coords: neuron.coords, distances: [] });
+			const agg = bySource.get(key);
+			agg.strength += v.strength;
+			agg.weightedRewardSum += v.strength * v.reward;
+			agg.distances.push(v.distance);
+		}
+
+		// Calculate strength-weighted average reward per source
+		for (const [_, agg] of bySource)
+			agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
+
+		return [...bySource.values()];
+	}
+
+	/**
+	 * Format aggregated votes with source info
+	 * @param {Array} aggVotes - Array of aggregated votes
+	 * @param {string} label - Optional label for the section
+	 * @param {boolean} includeReward - Whether to include reward in output
+	 * @returns {string} Formatted string
+	 */
+	formatAggregatedVotes(aggVotes, label, includeReward) {
+		if (aggVotes.length === 0) {
+			if (label) return `  ${label}: no votes`;
+			return '    no votes';
+		}
+
+		const lines = label ? [`  ${label}:`] : [];
+		for (const agg of aggVotes) {
+			const coordsWithPercent = this.formatCoordsWithPercent(agg.coords, this.bucketToPercent);
+			const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
+			const rewardStr = includeReward ? `, avgRwd=${agg.reward.toFixed(2)}` : '';
+			lines.push(`    ${coordsWithPercent} (${distStr}) → str=${agg.strength.toFixed(1)}${rewardStr}`);
+		}
+		return lines.join('\n');
 	}
 
 	/**

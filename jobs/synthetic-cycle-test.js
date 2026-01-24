@@ -20,7 +20,7 @@ export default class SyntheticCycleTest extends Job {
 			symbol: 'TEST',
 			// up, down, down, up, up, down
 			cyclePattern: [0.009, -0.019, -0.029, 0.019, 0.029, -0.009], // +1%, -2%, -3%, +2%, +3%, -1%
-			cycleRepeats: 100,
+			cycleRepeats: 10,
 			startPrice: 100.00,
 			startVolume: 100000
 		};

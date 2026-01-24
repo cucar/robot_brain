@@ -75,9 +75,6 @@ export default class Brain {
 		// Create readline interface for pausing between frames - used when debugging
 		this.waitForUserInput = false;
 		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-
-		// Cache for action neuron IDs (for debug output)
-		this.actionNeuronCache = null;
 	}
 
 	/**
@@ -105,10 +102,26 @@ export default class Brain {
 	}
 
 	/**
+	 * Reset brain memory state for a clean episode start
+	 */
+	async resetContext() {
+		console.log('Resetting brain (memory tables)...');
+		await this.truncateTables([
+			'active_neurons',
+			'matched_patterns',
+			'matched_pattern_past',
+			'new_pattern_future',
+			'new_patterns',
+			'inferred_neurons'
+		]);
+	}
+
+	/**
 	 * Hard reset: clears ALL learned data (used mainly for tests)
 	 * Note: dimensions table is NOT truncated as it's schema-level configuration
 	 */
 	async resetBrain() {
+		await this.resetContext();
 		console.log('Hard resetting brain (all learned data)...');
 		await this.truncateTables([
 			'channels',
@@ -117,37 +130,10 @@ export default class Brain {
 			'base_neurons',
 			'coordinates',
 			'connections',
-			'active_neurons',
 			'pattern_peaks',
 			'pattern_past',
-			'pattern_future',
-			'matched_patterns',
-			'matched_pattern_context',
-			'new_pattern_future',
-			'new_patterns',
-			'inferred_neurons'
+			'pattern_future'
 		]);
-
-		// Clear action neuron cache since all neurons were deleted
-		this.actionNeuronCache = null;
-	}
-
-	/**
-	 * Reset brain memory state for a clean episode start
-	 */
-	async resetContext() {
-		console.log('Resetting brain (memory tables)...');
-		await this.truncateTables([
-			'active_neurons',
-			'matched_patterns',
-			'matched_pattern_context',
-			'new_pattern_future',
-			'new_patterns',
-			'inferred_neurons'
-		]);
-
-		// Clear action neuron cache since neurons may have been recreated
-		this.actionNeuronCache = null;
 	}
 
 	/**
@@ -734,7 +720,7 @@ export default class Brain {
 
 		// Clear scratch tables
 		await this.conn.query('TRUNCATE matched_patterns');
-		await this.conn.query('TRUNCATE matched_pattern_context');
+		await this.conn.query('TRUNCATE matched_pattern_past');
 
 		// Determine which patterns matched based on overlap threshold
 		const [result] = await this.conn.query(`
@@ -770,13 +756,13 @@ export default class Brain {
 	}
 
 	/**
-	 * Populates the matched_pattern_context table with the context of the matched patterns
+	 * Populates the matched_pattern_past table with the context of the matched patterns
 	 */
 	async populateMatchedPatternContext() {
 
 		// Common: context neurons that ARE active at correct age
 		await this.conn.query(`
-			INSERT INTO matched_pattern_context (pattern_neuron_id, context_neuron_id, context_age, status)
+			INSERT INTO matched_pattern_past (pattern_neuron_id, context_neuron_id, context_age, status)
 			SELECT p.pattern_neuron_id, p.context_neuron_id, p.context_age, 'common'
 			FROM matched_patterns mp
 			JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id
@@ -785,7 +771,7 @@ export default class Brain {
 
 		// Missing: context neurons NOT active at correct age
 		await this.conn.query(`
-			INSERT INTO matched_pattern_context (pattern_neuron_id, context_neuron_id, context_age, status)
+			INSERT INTO matched_pattern_past (pattern_neuron_id, context_neuron_id, context_age, status)
 			SELECT p.pattern_neuron_id, p.context_neuron_id, p.context_age, 'missing'
 			FROM matched_patterns mp
 			JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id
@@ -795,7 +781,7 @@ export default class Brain {
 
 		// Novel: active neurons at same level, not in pattern_past (all channels)
 		await this.conn.query(`
-			INSERT INTO matched_pattern_context (pattern_neuron_id, context_neuron_id, context_age, status)
+			INSERT INTO matched_pattern_past (pattern_neuron_id, context_neuron_id, context_age, status)
 			SELECT mp.pattern_neuron_id, an_context.neuron_id, an_context.age, 'novel'
 			FROM matched_patterns mp
 			JOIN neurons n_peak ON n_peak.id = mp.peak_neuron_id
@@ -822,7 +808,7 @@ export default class Brain {
 
 	/**
 	 * Refine matched patterns using pre-analyzed connection sets.
-	 * Uses matched_pattern_context table populated by matchObservedPatterns:
+	 * Uses matched_pattern_past table populated by matchObservedPatterns:
 	 * 1. Add novel connections (status='novel')
 	 * 2. Strengthen common connections (status='common')
 	 * 3. Weaken missing connections (status='missing')
@@ -834,14 +820,14 @@ export default class Brain {
 		const [novelResult] = await this.conn.query(`
 			INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength)
 			SELECT pattern_neuron_id, context_neuron_id, context_age, 1.0
-			FROM matched_pattern_context
+			FROM matched_pattern_past
 			WHERE status = 'novel'
 		`);
 
 		// Strengthen common context
 		const [strengthenResult] = await this.conn.query(`
 			UPDATE pattern_past p
-			JOIN matched_pattern_context mpc 
+			JOIN matched_pattern_past mpc 
 				ON p.pattern_neuron_id = mpc.pattern_neuron_id
 				AND p.context_neuron_id = mpc.context_neuron_id
 				AND p.context_age = mpc.context_age
@@ -852,7 +838,7 @@ export default class Brain {
 		// Weaken missing context
 		const [weakenResult] = await this.conn.query(`
 			UPDATE pattern_past p
-			JOIN matched_pattern_context mpc
+			JOIN matched_pattern_past mpc
 				ON p.pattern_neuron_id = mpc.pattern_neuron_id
 				AND p.context_neuron_id = mpc.context_neuron_id
 				AND p.context_age = mpc.context_age
@@ -1504,12 +1490,10 @@ export default class Brain {
 			allVotes.push(...connectionVotes);
 		}
 
-		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternAges.length} pattern ages, ${connectionAges.length} connection ages)`);
+		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternAges.length} pattern ages, ${connectionAges.length} connection ages ${connectionAges.join(',')})`);
 
 		// Call channel-specific debug methods if debug2 is enabled
-		if (this.debug2)
-			for (const [_, channel] of this.channels)
-				await channel.debugVotes(allVotes, this);
+		if (this.debug2) for (const [_, channel] of this.channels) await channel.debugVotes(allVotes, this);
 
 		return allVotes;
 	}
