@@ -4,7 +4,7 @@
 CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
--- 1 = up, 2 = down, 3 = buy, 4 = sell
+-- 1 = up, 2 = down, 3 = sell, 4 = buy
 select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id = c.dimension_id;
 select * from dimensions;
 select * from channels;
@@ -393,6 +393,28 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
     is_winner TINYINT UNSIGNED, -- NULL for events, 1 for winning action votes, 0 for losing action votes
     PRIMARY KEY (neuron_id),
     INDEX idx_is_winner (is_winner)
+) ENGINE=MEMORY;
+
+-- scratch table for vote collection during inference
+-- contains all votes (connection and pattern) with full neuron info for consensus determination
+-- pattern votes override their peak's connection votes for dimensions the pattern covers
+-- DROP TABLE IF EXISTS inference_votes;
+CREATE TABLE IF NOT EXISTS inference_votes (
+    from_neuron_id BIGINT UNSIGNED,     -- the voter (base neuron for connections, pattern neuron for patterns)
+    neuron_id BIGINT UNSIGNED,          -- the target (always base neuron)
+    dimension_id SMALLINT UNSIGNED,     -- dimension of the target neuron
+    dimension_name VARCHAR(50),         -- dimension name for grouping
+    val FLOAT,                          -- coordinate value in this dimension
+    type ENUM('event', 'action'),       -- neuron type for winner selection logic
+    channel_id SMALLINT UNSIGNED,       -- channel id for exploration
+    channel VARCHAR(50),                -- channel name for debug output
+    strength FLOAT,
+    reward FLOAT,
+    distance TINYINT UNSIGNED,
+    source_level TINYINT UNSIGNED,      -- 0 for connections, pattern level for patterns
+    source_type ENUM('connection', 'pattern'),
+    INDEX idx_from_dim (from_neuron_id, dimension_id),
+    INDEX idx_neuron (neuron_id)
 ) ENGINE=MEMORY;
 
 -- increase the amount of records that can be stored in memory tables

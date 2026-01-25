@@ -24,8 +24,8 @@ export default class Brain {
 		this.rewardExpSmooth = 0.9; // exponential smoothing for rewards: new = smooth * observed + (1 - smooth) * old
 
 		// pattern learning parameters
-		this.eventErrorMinStrength = 1.0; // minimum prediction strength to create error-driven patterns
-		this.actionRegretMinStrength = 1.0; // minimum inference strength to create action regret pattern
+		this.eventErrorMinStrength = 2.0; // minimum prediction strength to create error-driven patterns
+		this.actionRegretMinStrength = 2.0; // minimum inference strength to create action regret pattern
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -37,7 +37,7 @@ export default class Brain {
 		// exploration parameters - probability inversely proportional to inference strength
 		this.minExploration = 0.03; // minimum - never stop exploring
 		this.maxExploration = 1.0; // 100% when totalStrength = 0
-		this.explorationScale = 1000; // controls decay rate of exploration probability
+		this.explorationScale = 10; // controls decay rate of exploration probability
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
@@ -103,7 +103,8 @@ export default class Brain {
 			'matched_pattern_past',
 			'new_pattern_future',
 			'new_patterns',
-			'inferred_neurons'
+			'inferred_neurons',
+			'inference_votes'
 		]);
 	}
 
@@ -1014,13 +1015,111 @@ export default class Brain {
 		`, [this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
 
 		if (this.debug) console.log(`Strengthened/rewarded ${result.affectedRows} action pattern_future predictions`);
+
+		// Learn from executed actions that pattern didn't predict
+		await this.learnUnpredictedPatternActions(channelRewards);
+	}
+
+	/**
+	 * Learn from executed actions that active patterns didn't predict.
+	 * When a pattern is active but didn't predict the executed action:
+	 * - If positive reward: add the action to pattern_future with that reward
+	 * - If negative reward: add an alternative action to pattern_future
+	 */
+	async learnUnpredictedPatternActions(channelRewards) {
+		if (channelRewards.size === 0) return;
+
+		// Get positive and negative channel IDs
+		const positiveChannelIds = [];
+		const negativeChannelIds = [];
+		for (const [channelName, reward] of channelRewards) {
+			const channelId = this.channelNameToId[channelName];
+			if (channelId === undefined) continue;
+			if (reward > 0) positiveChannelIds.push(channelId);
+			else if (reward < 0) negativeChannelIds.push(channelId);
+		}
+
+		// Positive reward: add the executed action to pattern_future
+		// Only for patterns at age > 0 (distance=0 doesn't make sense)
+		if (positiveChannelIds.length > 0) {
+			const rewardCase = this.buildChannelRewardCase(channelRewards, '0');
+			const [result] = await this.conn.query(`
+				INSERT INTO pattern_future (pattern_neuron_id, distance, inferred_neuron_id, reward)
+				SELECT an_pattern.neuron_id, an_pattern.age, an_action.neuron_id, (${rewardCase})
+				FROM active_neurons an_pattern
+				JOIN neurons n_pattern ON n_pattern.id = an_pattern.neuron_id AND n_pattern.level > 0
+				JOIN active_neurons an_action ON an_action.age = 0
+				JOIN base_neurons b ON b.neuron_id = an_action.neuron_id AND b.type = 'action'
+				WHERE an_pattern.age > 0
+				AND b.channel_id IN (${positiveChannelIds.join(',')})
+				AND NOT EXISTS (
+					SELECT 1 FROM pattern_future pf_existing
+					WHERE pf_existing.pattern_neuron_id = an_pattern.neuron_id
+					AND pf_existing.distance = an_pattern.age
+					AND pf_existing.inferred_neuron_id = an_action.neuron_id
+				)
+				ON DUPLICATE KEY UPDATE
+					strength = LEAST(?, strength + 1),
+					reward = ? * VALUES(reward) + ? * reward
+			`, [this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
+			if (this.debug) console.log(`Learned ${result.affectedRows} positive unpredicted actions for patterns`);
+		}
+
+		// Negative reward: first record the failed action with its negative reward
+		// Only for patterns at age > 0 (distance=0 doesn't make sense)
+		if (negativeChannelIds.length > 0) {
+			const rewardCase = this.buildChannelRewardCase(channelRewards, '0');
+			const [failedResult] = await this.conn.query(`
+				INSERT INTO pattern_future (pattern_neuron_id, distance, inferred_neuron_id, reward)
+				SELECT an_pattern.neuron_id, an_pattern.age, an_action.neuron_id, (${rewardCase})
+				FROM active_neurons an_pattern
+				JOIN neurons n_pattern ON n_pattern.id = an_pattern.neuron_id AND n_pattern.level > 0
+				JOIN active_neurons an_action ON an_action.age = 0
+				JOIN base_neurons b ON b.neuron_id = an_action.neuron_id AND b.type = 'action'
+				WHERE an_pattern.age > 0
+				AND b.channel_id IN (${negativeChannelIds.join(',')})
+				AND NOT EXISTS (
+					SELECT 1 FROM pattern_future pf_existing
+					WHERE pf_existing.pattern_neuron_id = an_pattern.neuron_id
+					AND pf_existing.distance = an_pattern.age
+					AND pf_existing.inferred_neuron_id = an_action.neuron_id
+				)
+				ON DUPLICATE KEY UPDATE
+					strength = LEAST(?, strength + 1),
+					reward = ? * VALUES(reward) + ? * reward
+			`, [this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
+			if (this.debug) console.log(`Learned ${failedResult.affectedRows} failed actions for patterns (negative reward)`);
+
+			// Then add an alternative action to try next time (with neutral reward)
+			const [altResult] = await this.conn.query(`
+				INSERT IGNORE INTO pattern_future (pattern_neuron_id, distance, inferred_neuron_id)
+				SELECT an_pattern.neuron_id, an_pattern.age, MIN(b_alt.neuron_id)
+				FROM active_neurons an_pattern
+				JOIN neurons n_pattern ON n_pattern.id = an_pattern.neuron_id AND n_pattern.level > 0
+				JOIN active_neurons an_action ON an_action.age = 0
+				JOIN base_neurons b ON b.neuron_id = an_action.neuron_id AND b.type = 'action'
+				JOIN base_neurons b_alt ON b_alt.channel_id = b.channel_id AND b_alt.type = 'action'
+				WHERE an_pattern.age > 0
+				AND b.channel_id IN (${negativeChannelIds.join(',')})
+				AND b_alt.neuron_id != an_action.neuron_id
+				AND NOT EXISTS (
+					SELECT 1 FROM pattern_future pf_existing
+					WHERE pf_existing.pattern_neuron_id = an_pattern.neuron_id
+					AND pf_existing.distance = an_pattern.age
+					AND pf_existing.inferred_neuron_id = b_alt.neuron_id
+				)
+				GROUP BY an_pattern.neuron_id, an_pattern.age, b.channel_id
+			`);
+			if (this.debug) console.log(`Learned ${altResult.affectedRows} alternative actions for patterns (to try next)`);
+		}
 	}
 
 	/**
 	 * Add alternative actions to action patterns in painful channels.
-	 * When an action pattern prediction fails (painful reward), add one untried alternative.
+	 * When a pattern predicted an action that failed, add one untried alternative.
 	 * Key insight: Same pattern can be active at multiple ages (distances), each inferring different actions.
 	 * We need to find alternatives per (pattern, distance, channel) tuple, not just per pattern.
+	 * Note: Cases where pattern didn't predict any action are handled by learnUnpredictedPatternActions.
 	 */
 	async addPatternAlternativeActions(channelRewards) {
 
@@ -1114,8 +1213,7 @@ export default class Brain {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
 		const eventCount = await this.populateNewPatternEvents();
 		const actionCount = await this.populateNewPatternActions(channelRewards);
-		const explorationCount = await this.populateNewPatternExplorationActions();
-		return eventCount + actionCount + explorationCount;
+		return eventCount + actionCount;
 	}
 
 	/**
@@ -1325,45 +1423,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Seed new patterns with default exploratory actions at multiple distances.
-	 *
-	 * Problem: When a pattern is created from event prediction errors only, it has no actions
-	 * in pattern_future. Without actions, it can't make action predictions, so it never gets
-	 * reinforced or learns which actions work. This creates a cold-start problem.
-	 *
-	 * Solution: For each new pattern, add one default action per channel at distances 1 through
-	 * (contextLength - 1). INSERT IGNORE handles duplicates if action already exists (from action regret).
-	 *
-	 * @returns {Promise<number>} Number of exploration actions added
-	 */
-	async populateNewPatternExplorationActions() {
-
-		// Build distance values for UNION ALL
-		const distances = [];
-		for (let d = 1; d < this.contextLength; d++) distances.push(d);
-		if (distances.length === 0) return 0;
-
-		const distanceUnion = distances.map(d => `SELECT ${d} AS distance`).join(' UNION ALL ');
-
-		// Insert exploration actions: cross product of (peaks × distances × channel_actions)
-		const [result] = await this.conn.query(`
-			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT peaks.peak_neuron_id, actions.neuron_id, dist.distance
-			FROM (SELECT DISTINCT peak_neuron_id FROM new_pattern_future) peaks
-			CROSS JOIN (${distanceUnion}) dist
-			CROSS JOIN (
-				SELECT channel_id, MIN(neuron_id) as neuron_id
-				FROM base_neurons
-				WHERE type = 'action'
-				GROUP BY channel_id
-			) actions
-		`);
-
-		if (this.debug) console.log(`Added ${result.affectedRows} exploration actions to new patterns`);
-		return result.affectedRows;
-	}
-
-	/**
 	 * Populate new_patterns table from new_pattern_future. Peak can be a base neuron (for connection errors)
 	 * or pattern neuron (for pattern errors). All patterns are created at distance=1 to be able to get the full context.
 	 * Returns the number of patterns to create.
@@ -1492,61 +1551,68 @@ export default class Brain {
 	}
 
 	/**
-	 * Collect votes from connections or patterns based on highest level PER AGE.
-	 * For each age value:
-	 *   - If highest level at that age > 0: use ONLY pattern votes from highest level
-	 *   - If highest level at that age = 0: use ONLY connection votes from base level
-	 * This ensures patterns override connections on a per-frame basis.
-	 * Max levels per age are calculated directly in SQL.
-	 * @returns {Promise<Array>} Array of {from_neuron_id, neuron_id, source_type, strength, reward, distance, source_level, age}
+	 * Collect votes from connections and patterns into inference_votes table.
+	 * Pattern votes override their peak's connection votes for dimensions the pattern covers.
+	 * Uses NOT EXISTS to filter out votes from peaks that have an active pattern voting for the same dimension.
+	 * @returns {Promise<Array>} Array of votes with full neuron info for consensus determination
 	 */
 	async collectVotes() {
-		
-		// Collect pattern votes (from ages where max level > 0)
-		const [patternVotes] = await this.conn.query(`
-			SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id,
-                   pf.strength, pf.reward, pf.distance, pn.level as source_level, an.age,
-			       'pattern' as source_type
-			FROM active_neurons an
-			JOIN neurons pn ON pn.id = an.neuron_id
-            JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
-			JOIN (
-				SELECT age, MAX(level) as max_level
-				FROM active_neurons a
-				JOIN neurons n ON n.id = a.neuron_id
-				GROUP BY age
-			) max_levels ON max_levels.age = an.age AND pn.level = max_levels.max_level
-			WHERE pf.distance = an.age + 1
-            AND pf.strength > 0
-			AND max_levels.max_level > 0
-		`);
+		await this.conn.query('TRUNCATE inference_votes');
 
-		// Collect connection votes (from ages where max level = 0)
-		const [connectionVotes] = await this.conn.query(`
-			SELECT c.from_neuron_id, c.to_neuron_id as neuron_id,
-				   c.strength, c.reward, c.distance, 0 as source_level, an.age,
-				   'connection' as source_type
+		// Insert connection votes (from base level neurons)
+		const [connResult] = await this.conn.query(`
+			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, channel_id, channel, strength, reward, distance, source_level, source_type)
+			SELECT c.from_neuron_id, c.to_neuron_id, coord.dimension_id, d.name, coord.val,
+			       b.type, b.channel_id, ch.name, c.strength, c.reward, c.distance, 0, 'connection'
 			FROM active_neurons an
-			JOIN (
-				SELECT age, MAX(level) as max_level
-				FROM active_neurons a
-				JOIN neurons n ON n.id = a.neuron_id
-				GROUP BY age
-			) max_levels ON max_levels.age = an.age
+			JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
-			WHERE c.distance = an.age + 1
-            AND c.strength > 0
-			AND max_levels.max_level = 0
+			JOIN coordinates coord ON coord.neuron_id = c.to_neuron_id
+			JOIN dimensions d ON d.id = coord.dimension_id
+			JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
+			JOIN channels ch ON ch.id = b.channel_id
+			WHERE c.distance = an.age + 1 AND c.strength > 0
 		`);
 
-		const allVotes = [...patternVotes, ...connectionVotes];
+		// Insert pattern votes (from pattern neurons at any level)
+		const [patternResult] = await this.conn.query(`
+			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, channel_id, channel, strength, reward, distance, source_level, source_type)
+			SELECT pf.pattern_neuron_id, pf.inferred_neuron_id, coord.dimension_id, d.name, coord.val,
+			       b.type, b.channel_id, ch.name, pf.strength, pf.reward, pf.distance, pn.level, 'pattern'
+			FROM active_neurons an
+			JOIN neurons pn ON pn.id = an.neuron_id AND pn.level > 0
+			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
+			JOIN coordinates coord ON coord.neuron_id = pf.inferred_neuron_id
+			JOIN dimensions d ON d.id = coord.dimension_id
+			JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
+			JOIN channels ch ON ch.id = b.channel_id
+			WHERE pf.distance = an.age + 1 AND pf.strength > 0
+		`);
 
-		if (this.debug) console.log(`Collected ${allVotes.length} votes (${patternVotes.length} pattern, ${connectionVotes.length} connection)`);
+		if (this.debug) console.log(`Inserted ${connResult.affectedRows} connection votes, ${patternResult.affectedRows} pattern votes`);
+
+		// Query surviving votes: filter out votes from peaks that have an active pattern voting for the same dimension
+		// A vote is overridden if its from_neuron_id is the peak_neuron_id of a pattern that also votes for the same dimension
+		const [votes] = await this.conn.query(`
+			SELECT v.from_neuron_id, v.neuron_id, v.dimension_id, v.dimension_name, v.val,
+			       v.type, v.channel_id, v.channel, v.strength, v.reward, v.distance, v.source_level, v.source_type
+			FROM inference_votes v
+			WHERE NOT EXISTS (
+				SELECT 1
+				FROM inference_votes pv
+				JOIN pattern_peaks pp ON pp.pattern_neuron_id = pv.from_neuron_id
+				WHERE pv.source_type = 'pattern'
+				AND pp.peak_neuron_id = v.from_neuron_id
+				AND pv.dimension_id = v.dimension_id
+			)
+		`);
+
+		if (this.debug) console.log(`Collected ${votes.length} votes after pattern override filtering`);
 
 		// Call channel-specific debug methods if debug2 is enabled
-		if (this.debug2) for (const [_, channel] of this.channels) await channel.debugVotes(allVotes, this);
+		if (this.debug2) for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
 
-		return allVotes;
+		return votes;
 	}
 
 	/**
@@ -1554,30 +1620,43 @@ export default class Brain {
 	 * All votes are for base level neurons (level 0) - pattern neurons are activated in pattern recognition
 	 * Uses per-dimension conflict resolution.
 	 * For actions: strength-weighted reward average ensures consistent cycle-based connections override noisy probabilistic ones.
-	 * @param {Array} votes - Array of {from_neuron_id, neuron_id, source_type, strength, reward, distance, source_level}
+	 * @param {Array} votes - Array of vote objects with full neuron info from collectVotes
 	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async determineConsensus(votes) {
 		if (votes.length === 0) return [];
 
 		// Aggregate votes by target neuron - sum strengths, strength-weighted average for rewards
+		// Also collect coordinates, type, channel from votes (all votes for same neuron have same info)
 		const aggregated = new Map();
 		for (const vote of votes) {
-			if (!aggregated.has(vote.neuron_id))
-				aggregated.set(vote.neuron_id, { neuron_id: vote.neuron_id, strength: 0, weightedRewardSum: 0 });
+			if (!aggregated.has(vote.neuron_id)) {
+				aggregated.set(vote.neuron_id, {
+					neuron_id: vote.neuron_id,
+					strength: 0,
+					weightedRewardSum: 0,
+					type: vote.type,
+					channel: vote.channel,
+					channel_id: vote.channel_id,
+					coordinates: {}
+				});
+			}
 
 			const agg = aggregated.get(vote.neuron_id);
 
 			// Sum strengths, accumulate strength-weighted rewards
 			agg.strength += vote.strength;
 			agg.weightedRewardSum += vote.strength * vote.reward;
+
+			// Collect coordinate for this dimension
+			agg.coordinates[vote.dimension_name] = vote.val;
 		}
 
 		// Calculate strength-weighted average reward for each target neuron
 		for (const [_, agg] of aggregated) agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
 
-		// Add coordinates and group by dimension
-		const byDimension = await this.groupVotesByDimension(aggregated);
+		// Group by dimension
+		const byDimension = this.groupVotesByDimension(aggregated);
 
 		// Select winner for each dimension
 		const winners = new Set();
@@ -1595,30 +1674,11 @@ export default class Brain {
 	}
 
 	/**
-	 * Add coordinates to aggregated votes and group by dimension.
-	 * Only called for base level (level 0) neurons which have coordinates.
-	 * @param {Map} aggregated - Map from aggregateVotesByTarget
-	 * @returns {Promise<Map>} Map of dimension name -> array of votes
+	 * Group aggregated votes by dimension.
+	 * @param {Map} aggregated - Map of neuron_id -> aggregated vote with coordinates
+	 * @returns {Map} Map of dimension name -> array of aggregated votes
 	 */
-	async groupVotesByDimension(aggregated) {
-		const neuronIds = [...aggregated.keys()];
-		const neuronInfo = await this.getNeuronCoordinates(neuronIds);
-
-		// Add coordinates and neuron type for each neuron
-		for (const [neuronId, agg] of aggregated) {
-			const info = neuronInfo.get(neuronId);
-			if (!info) {
-				console.warn(`Warning: Base neuron ${neuronId} not found in getNeuronCoordinates - skipping`);
-				continue;
-			}
-			agg.coordinates = {};
-			for (const [dimName, value] of info.coordinates) agg.coordinates[dimName] = value;
-			agg.type = info.type; // 'action' or 'event' (from neuron)
-			agg.channel = info.channel;
-			agg.channel_id = info.channel_id;
-		}
-
-		// Group by dimension
+	groupVotesByDimension(aggregated) {
 		const byDimension = new Map();
 		for (const [, agg] of aggregated) {
 			if (!agg.coordinates) continue;
@@ -1627,45 +1687,7 @@ export default class Brain {
 				byDimension.get(dimName).push(agg);
 			}
 		}
-
 		return byDimension;
-	}
-
-	/**
-	 * Get coordinates for a list of neuron IDs with dimension info
-	 * @param {Array<number>} neuronIds - Array of neuron IDs
-	 * @returns {Promise<Map>} Map of neuron_id → {type, channel, channel_id, coordinates: Map of dimension_name → value}
-	 */
-	async getNeuronCoordinates(neuronIds) {
-		if (neuronIds.length === 0) return new Map();
-
-		// Get neuron type and channel from neurons table
-		const [neuronRows] = await this.conn.query(`
-			SELECT n.neuron_id, n.type, n.channel_id, ch.name as channel
-			FROM base_neurons n
-			JOIN channels ch ON ch.id = n.channel_id
-			WHERE n.neuron_id IN (?)
-		`, [neuronIds]);
-
-		// Get coordinates from coordinates table
-		const [coordRows] = await this.conn.query(`
-			SELECT c.neuron_id, c.val, d.name as dimension_name
-			FROM coordinates c
-			JOIN dimensions d ON c.dimension_id = d.id
-			WHERE c.neuron_id IN (?)
-		`, [neuronIds]);
-
-		// Build result map
-		const neuronCoords = new Map();
-		for (const row of neuronRows)
-			neuronCoords.set(row.neuron_id, { type: row.type, channel: row.channel, channel_id: row.channel_id, coordinates: new Map() });
-
-		for (const row of coordRows) {
-			const neuron = neuronCoords.get(row.neuron_id);
-			if (neuron) neuron.coordinates.set(row.dimension_name, row.val);
-		}
-
-		return neuronCoords;
 	}
 
 	/**

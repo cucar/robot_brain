@@ -93,10 +93,6 @@ export default class StockChannel extends Channel {
 
 		// Build bucket-to-percentage mapping once (used in debug output)
 		this.bucketToPercent = this.buildBucketPercentMap();
-
-		// Cache for action neuron IDs (populated after neurons are created)
-		this.ownNeuronId = null;
-		this.outNeuronId = null;
 	}
 
 	/**
@@ -639,51 +635,37 @@ export default class StockChannel extends Channel {
 	/**
 	 * Debug helper: show votes for event neurons (price_change, volume_change, etc.)
 	 * Shows which patterns/connections are voting for which event predictions
+	 * Votes now contain all neuron info directly (type, channel, dimension_name, val)
 	 */
 	async debugEventVotes(allVotes, brain) {
 
-		// Get all event neuron IDs for this channel from votes
-		const eventNeuronIds = [...new Set(allVotes.map(v => v.neuron_id))];
-		if (eventNeuronIds.length === 0) return;
+		// Filter to event votes for this channel
+		const eventVotes = allVotes.filter(v => v.type === 'event' && v.channel === this.symbol);
+		if (eventVotes.length === 0) return;
 
-		// Get neuron info to identify event neurons for this channel
-		const [neurons] = await brain.conn.query(`
-			SELECT n.neuron_id, n.type, n.channel_id,
-				GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as coords,
-				d.name as dim_name, coord.val as dim_val
-			FROM base_neurons n
-			LEFT JOIN coordinates coord ON coord.neuron_id = n.neuron_id
-			LEFT JOIN dimensions d ON d.id = coord.dimension_id
-			WHERE n.neuron_id IN (?)
-			AND n.channel_id = (SELECT id FROM channels WHERE name = ?)
-			GROUP BY n.neuron_id, d.name, coord.val
-		`, [eventNeuronIds, this.symbol]);
-
-		// Filter to event neurons only
-		const eventNeurons = neurons.filter(n => n.type === 'event');
-		if (eventNeurons.length === 0) return;
-
-		// Build neuron map with dimension info - key is neuron_id not id
+		// Build neuron map with dimension info from votes
 		const neuronMap = new Map();
-		for (const n of eventNeurons) {
-			if (!neuronMap.has(n.neuron_id))
-				neuronMap.set(n.neuron_id, { id: n.neuron_id, type: n.type, coords: n.coords, dimensions: new Map() });
-			if (n.dim_name)
-				neuronMap.get(n.neuron_id).dimensions.set(n.dim_name, n.dim_val);
+		for (const v of eventVotes) {
+			if (!neuronMap.has(v.neuron_id))
+				neuronMap.set(v.neuron_id, { id: v.neuron_id, type: v.type, dimensions: new Map() });
+			neuronMap.get(v.neuron_id).dimensions.set(v.dimension_name, v.val);
+		}
+
+		// Build coords string for each neuron
+		for (const [_, neuron] of neuronMap) {
+			const coordParts = [];
+			for (const [dimName, dimVal] of neuron.dimensions)
+				coordParts.push(`${dimName}=${dimVal}`);
+			neuron.coords = coordParts.sort().join(', ');
 		}
 
 		// Group votes by event neuron
 		const votesByEvent = new Map();
-		for (const vote of allVotes) {
-			const neuron = neuronMap.get(vote.neuron_id);
-			if (!neuron) continue; // Skip non-event neurons or other channels
-
+		for (const vote of eventVotes) {
 			if (!votesByEvent.has(vote.neuron_id))
 				votesByEvent.set(vote.neuron_id, []);
 			votesByEvent.get(vote.neuron_id).push(vote);
 		}
-
-		if (votesByEvent.size === 0) return;
 
 		// Aggregate votes by source neuron for each event
 		const aggregatedByEvent = new Map();
@@ -731,43 +713,23 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Populate cache of OWN and OUT action neuron IDs for this channel
-	 * Called once when first needed
-	 */
-	async populateActionNeuronCache(brain) {
-		const [actionNeurons] = await brain.conn.query(`
-			SELECT n.neuron_id, c.val
-			FROM base_neurons n
-			JOIN coordinates c ON c.neuron_id = n.neuron_id
-			JOIN dimensions d ON d.id = c.dimension_id
-			WHERE n.type = 'action'
-			AND n.channel_id = (SELECT id FROM channels WHERE name = ?)
-			AND c.val IN (1, -1)
-		`, [this.symbol]);
-
-		this.ownNeuronId = actionNeurons.find(n => n.val === POSITION_OWN)?.neuron_id;
-		this.outNeuronId = actionNeurons.find(n => n.val === POSITION_OUT)?.neuron_id;
-	}
-
-	/**
 	 * Debug helper: show votes for OWN and OUT action neurons
 	 * Shows which price/volume changes are voting for which action
+	 * Votes now contain all neuron info directly (type, channel, val)
 	 */
 	async debugActionVotes(allVotes, brain) {
 
-		// Populate action neuron cache if not already done
-		if (!this.ownNeuronId || !this.outNeuronId) await this.populateActionNeuronCache(brain);
+		// Filter to action votes for this channel
+		const actionVotes = allVotes.filter(v => v.type === 'action' && v.channel === this.symbol);
+		if (actionVotes.length === 0) return;
 
-		// If we still don't have action neuron IDs, we can't do anything
-		if (!this.ownNeuronId || !this.outNeuronId) return;
-
-		// Filter votes for this channel's action neurons
-		const channelVotes = allVotes.filter(v => v.neuron_id === this.ownNeuronId || v.neuron_id === this.outNeuronId);
-		if (channelVotes.length === 0) return;
+		// Split by OWN (val=1) vs OUT (val=-1)
+		const ownVotes = actionVotes.filter(v => v.val === POSITION_OWN);
+		const outVotes = actionVotes.filter(v => v.val === POSITION_OUT);
 
 		// Aggregate votes by source neuron
-		const ownAgg = await this.aggregateVotesBySource(channelVotes.filter(v => v.neuron_id === this.ownNeuronId), brain);
-		const outAgg = await this.aggregateVotesBySource(channelVotes.filter(v => v.neuron_id === this.outNeuronId), brain);
+		const ownAgg = await this.aggregateVotesBySource(ownVotes, brain);
+		const outAgg = await this.aggregateVotesBySource(outVotes, brain);
 
 		// Calculate totals - sum strengths, strength-weighted average reward
 		const ownTotal = {
@@ -807,15 +769,24 @@ export default class StockChannel extends Channel {
 	async aggregateVotesBySource(votes, brain) {
 		if (votes.length === 0) return [];
 
-		// Get source neuron coordinates
+		// Get source neuron coordinates for base neurons (level 0)
+		// Pattern neurons (level > 0) don't have coordinates, so we get their peak's coordinates
 		const sourceNeuronIds = [...new Set(votes.map(v => v.from_neuron_id))];
 		const [neurons] = await brain.conn.query(`
-			SELECT n.id, GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ') as coords
+			SELECT n.id, n.level,
+				COALESCE(
+					(SELECT GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ')
+					 FROM coordinates coord
+					 JOIN dimensions d ON d.id = coord.dimension_id
+					 WHERE coord.neuron_id = n.id),
+					(SELECT GROUP_CONCAT(CONCAT(d.name, '=', coord.val) ORDER BY d.name SEPARATOR ', ')
+					 FROM pattern_peaks pp
+					 JOIN coordinates coord ON coord.neuron_id = pp.peak_neuron_id
+					 JOIN dimensions d ON d.id = coord.dimension_id
+					 WHERE pp.pattern_neuron_id = n.id)
+				) as coords
 			FROM neurons n
-			JOIN coordinates coord ON coord.neuron_id = n.id
-			JOIN dimensions d ON d.id = coord.dimension_id
 			WHERE n.id IN (?)
-			GROUP BY n.id
 		`, [sourceNeuronIds]);
 
 		const neuronMap = new Map(neurons.map(n => [n.id, n]));
@@ -824,10 +795,11 @@ export default class StockChannel extends Channel {
 		const bySource = new Map();
 		for (const v of votes) {
 			const neuron = neuronMap.get(v.from_neuron_id);
-			if (!neuron) continue;
+			const coords = neuron ? neuron.coords : `pattern_n${v.from_neuron_id}`;
+			const level = neuron ? neuron.level : 0;
 			const key = v.from_neuron_id;
 			if (!bySource.has(key))
-				bySource.set(key, { from_neuron_id: key, strength: 0, weightedRewardSum: 0, coords: neuron.coords, distances: [] });
+				bySource.set(key, { from_neuron_id: key, strength: 0, weightedRewardSum: 0, coords, level, distances: [], source_type: v.source_type });
 			const agg = bySource.get(key);
 			agg.strength += v.strength;
 			agg.weightedRewardSum += v.strength * v.reward;
@@ -859,7 +831,9 @@ export default class StockChannel extends Channel {
 			const coordsWithPercent = this.formatCoordsWithPercent(agg.coords, this.bucketToPercent);
 			const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
 			const rewardStr = includeReward ? `, avgRwd=${agg.reward.toFixed(2)}` : '';
-			lines.push(`    ${coordsWithPercent} (${distStr}) → str=${agg.strength.toFixed(1)}${rewardStr}`);
+			const levelStr = agg.level > 0 ? ` L${agg.level}` : '';
+			const typeStr = agg.source_type === 'pattern' ? ' [P]' : '';
+			lines.push(`    ${coordsWithPercent}${levelStr}${typeStr} (${distStr}) → str=${agg.strength.toFixed(1)}${rewardStr}`);
 		}
 		return lines.join('\n');
 	}
@@ -889,6 +863,7 @@ export default class StockChannel extends Channel {
 	 * Format coordinates string with percentage ranges where applicable
 	 */
 	formatCoordsWithPercent(coordsStr, bucketToPercent) {
+		if (!coordsStr) return '(no coords)';
 		if (!bucketToPercent) return coordsStr;
 		// Parse "TEST_price_change=5, TEST_volume_change=0" format
 		return coordsStr.split(', ').map(part => {
