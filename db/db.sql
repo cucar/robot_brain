@@ -21,6 +21,18 @@ select * from matched_patterns;
 select * from matched_pattern_past;
 select * from inferred_neurons;
 
+-- new patterns pattern_past entries
+SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - 1
+FROM new_patterns np
+JOIN neurons n_peak ON n_peak.id = np.peak_neuron_id
+-- capture same-level active, but older neurons: pattern context is determined by same-level context only
+JOIN active_neurons ctx ON ctx.age > 1
+JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
+-- exclude actions from context in base level
+-- note that this may be a stock specific thing - actions can learn patterns in robotics context
+WHERE NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = ctx.neuron_id AND b.type = 'action')
+order by ctx.age;
+
 -- new observed pattern_future event connections
 SELECT ap.neuron_id as pattern_neuron_id, an.neuron_id as inferred_neuron_id, ap.age
 FROM active_neurons ap
@@ -59,7 +71,7 @@ AND NOT EXISTS (
 );
 
 -- new level 1 pattern actions
-SELECT c.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, 1 as distance
+SELECT * /* c.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, 1 as distance */
 FROM inferred_neurons inf
 -- creating action patterns, so the inferred neuron is an action that was executed (winner)
 JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'action'
@@ -75,7 +87,7 @@ JOIN base_neurons b_alt ON b_alt.channel_id = b_inf.channel_id AND b_alt.type = 
 -- the action was executed (winner) and resulted in pain
 WHERE inf.is_winner = 1
 AND b_inf.channel_id IN (1)
-AND b_alt.neuron_id != inf.neuron_id  -- don't suggest the same action that just failed
+-- AND b_alt.neuron_id != inf.neuron_id  -- don't suggest the same action that just failed
 -- don't create a pattern if there is already an active pattern for this peak 
 -- it means the peak recognized this situation - we'll refine it instead in that case
 AND NOT EXISTS (

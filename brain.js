@@ -24,9 +24,8 @@ export default class Brain {
 		this.rewardExpSmooth = 0.9; // exponential smoothing for rewards: new = smooth * observed + (1 - smooth) * old
 
 		// pattern learning parameters
-		this.predictionErrorMinStrength = 10.0; // minimum prediction strength to create error-driven pattern from connection inference
-		this.patternErrorMinStrength = 10.0; // minimum prediction strength to create higher-level pattern from pattern inference error
-		this.actionRegretMinStrength = 1; // minimum prediction strength to create action regret pattern (0 = always capture painful actions)
+		this.eventErrorMinStrength = 1.0; // minimum prediction strength to create error-driven patterns
+		this.actionRegretMinStrength = 1.0; // minimum inference strength to create action regret pattern
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
 		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
@@ -712,22 +711,31 @@ export default class Brain {
 		await this.conn.query('TRUNCATE matched_patterns');
 		await this.conn.query('TRUNCATE matched_pattern_past');
 
-		// Determine which patterns matched based on overlap threshold
+		// Determine which patterns matched based on how well the pattern covers the observed situation
+		// Pattern can match at most (context_length - 1) slots since age=0 is the peak
+		// A pattern matches if it covers at least X% of those available slots
 		const [result] = await this.conn.query(`
 			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
 			SELECT pp.peak_neuron_id, pp.pattern_neuron_id
             FROM active_neurons an_peak
             JOIN neurons n_peak ON n_peak.id = an_peak.neuron_id AND n_peak.level = ?    
 			JOIN pattern_peaks pp ON an_peak.neuron_id = pp.peak_neuron_id
-            -- pattern_past only contains lower-level active neurons (pattern identity is determined by lower-level context)
-            JOIN pattern_past p ON pp.pattern_neuron_id = p.pattern_neuron_id
-            LEFT JOIN active_neurons an_ctx ON an_ctx.neuron_id = p.context_neuron_id AND an_ctx.age = p.context_age
-            LEFT JOIN neurons n_ctx ON n_ctx.id = an_ctx.neuron_id AND n_ctx.level = n_peak.level
 			WHERE an_peak.age = 0
-			GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
-			-- pattern matches if at least some percentage of its pattern_past neurons are active
-			HAVING SUM(IF(an_ctx.neuron_id IS NOT NULL, 1, 0)) >= COUNT(*) * ?
-		`, [level, this.mergePatternThreshold]);
+			-- Pattern matches if it covers enough of the available context slots
+			AND (
+				SELECT COUNT(DISTINCT an_ctx.age)
+				FROM active_neurons an_ctx
+				JOIN neurons n_ctx ON n_ctx.id = an_ctx.neuron_id AND n_ctx.level = n_peak.level
+				WHERE an_ctx.age > 0
+                -- Check if pattern has this observed neuron at this distance
+				AND EXISTS (
+					SELECT 1 FROM pattern_past p
+					WHERE p.pattern_neuron_id = pp.pattern_neuron_id
+					AND p.context_neuron_id = an_ctx.neuron_id
+					AND p.context_age = an_ctx.age
+				)
+			) >= ?
+		`, [level, (this.contextLength - 1) * this.mergePatternThreshold]);
 
 		// show matched pattern details for debugging
 		if (this.debug) {
@@ -1062,10 +1070,10 @@ export default class Brain {
 		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
-		if (newPatternFutureCount > 0) {
-			this.waitForUserInput = true;
-			await this.waitForUser('New pattern future count > 0');
-		}
+		// if (newPatternFutureCount > 0) {
+		// 	this.waitForUserInput = true;
+		// 	await this.waitForUser('New pattern future count > 0');
+		// }
 
 		// Populate new_patterns table with peaks from new pattern future inferences
 		const patternCount = await this.populateNewPatterns();
@@ -1106,8 +1114,8 @@ export default class Brain {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
 		const eventCount = await this.populateNewPatternEvents();
 		const actionCount = await this.populateNewPatternActions(channelRewards);
-		// const explorationCount = await this.populateNewPatternExplorationActions();
-		return eventCount + actionCount; //  + explorationCount;
+		const explorationCount = await this.populateNewPatternExplorationActions();
+		return eventCount + actionCount + explorationCount;
 	}
 
 	/**
@@ -1122,7 +1130,7 @@ export default class Brain {
 	 */
 	async populateNewPatternEvents() {
 		const baseCount = await this.populateNewPatternBaseEvents();
-		const highCount = 0; // await this.populateNewPatternHighEvents();
+		const highCount = await this.populateNewPatternHighEvents();
 		return baseCount + highCount;
 	}
 
@@ -1162,7 +1170,7 @@ export default class Brain {
 				WHERE pp.peak_neuron_id = c.from_neuron_id
 				AND an_pattern.age = 1
 			)
-		`, [this.predictionErrorMinStrength]);
+		`, [this.eventErrorMinStrength]);
 		if (this.debug) console.log(`Found ${connResult.affectedRows} connection prediction error neurons`);
 		return connResult.affectedRows;
 	}
@@ -1200,7 +1208,7 @@ export default class Brain {
 				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
 				AND an_pattern.age = 1
 			)
-		`, [this.patternErrorMinStrength]);
+		`, [this.eventErrorMinStrength]);
 		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
 		return patternResult.affectedRows;
 	}
@@ -1226,7 +1234,7 @@ export default class Brain {
 
 		// Process pattern inference regret: find patterns that made painful predictions
 		// and need to create a higher-level pattern with an alternative action
-		const highCount = 0; // await this.populateNewPatternHighActions(painfulChannelIds);
+		const highCount = await this.populateNewPatternHighActions(painfulChannelIds);
 
 		return baseCount + highCount;
 	}
