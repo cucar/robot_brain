@@ -41,8 +41,8 @@ export default class Brain {
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
-		this.connectionForgetRate = 0.1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
-		this.patternForgetRate = 0.1; // how much pattern strengths decay per forget cycle
+		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
+		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
@@ -726,27 +726,34 @@ export default class Brain {
 		// Determine which patterns matched based on how well the pattern covers the observed situation
 		// Pattern can match at most (context_length - 1) slots since age=0 is the peak
 		// A pattern matches if it covers at least X% of those available slots
+		// Only ONE pattern per peak neuron is activated - the strongest one wins
+		// This creates natural selection: winner gets reinforced, losers decay via forget cycle
 		const [result] = await this.conn.query(`
 			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
-			SELECT pp.peak_neuron_id, pp.pattern_neuron_id
-            FROM active_neurons an_peak
-            JOIN neurons n_peak ON n_peak.id = an_peak.neuron_id AND n_peak.level = ?    
-			JOIN pattern_peaks pp ON an_peak.neuron_id = pp.peak_neuron_id
-			WHERE an_peak.age = 0
-			-- Pattern matches if it covers enough of the available context slots
-			AND (
-				SELECT COUNT(DISTINCT an_ctx.age)
-				FROM active_neurons an_ctx
-				JOIN neurons n_ctx ON n_ctx.id = an_ctx.neuron_id AND n_ctx.level = n_peak.level
-				WHERE an_ctx.age > 0
-                -- Check if pattern has this observed neuron at this distance
-				AND EXISTS (
-					SELECT 1 FROM pattern_past p
-					WHERE p.pattern_neuron_id = pp.pattern_neuron_id
-					AND p.context_neuron_id = an_ctx.neuron_id
-					AND p.context_age = an_ctx.age
-				)
-			) >= ?
+			SELECT m.peak_neuron_id, m.pattern_neuron_id
+			FROM (
+				SELECT pp.peak_neuron_id, pp.pattern_neuron_id, pp.strength,
+					ROW_NUMBER() OVER (PARTITION BY pp.peak_neuron_id ORDER BY pp.strength DESC, pp.pattern_neuron_id) as rn
+				FROM active_neurons an_peak
+				JOIN neurons n_peak ON n_peak.id = an_peak.neuron_id AND n_peak.level = ?
+				JOIN pattern_peaks pp ON an_peak.neuron_id = pp.peak_neuron_id
+				WHERE an_peak.age = 0
+				-- Pattern matches if it covers enough of the available context slots
+				AND (
+					SELECT COUNT(DISTINCT an_ctx.age)
+					FROM active_neurons an_ctx
+					JOIN neurons n_ctx ON n_ctx.id = an_ctx.neuron_id AND n_ctx.level = n_peak.level
+					WHERE an_ctx.age > 0
+					-- Check if pattern has this observed neuron at this distance
+					AND EXISTS (
+						SELECT 1 FROM pattern_past p
+						WHERE p.pattern_neuron_id = pp.pattern_neuron_id
+						AND p.context_neuron_id = an_ctx.neuron_id
+						AND p.context_age = an_ctx.age
+					)
+				) >= ?
+			) m
+			WHERE m.rn = 1
 		`, [level, (this.contextLength - 1) * this.mergePatternThreshold]);
 
 		// show matched pattern details for debugging
