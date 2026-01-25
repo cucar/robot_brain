@@ -59,8 +59,8 @@ export default class Brain {
 		// Debugging info and flags
 		this.frameNumber = 0;
 		this.frameSummary = true; // show frame summary or not
-		this.debug = false;
-		this.debug2 = false; // deeper, more verbose debug level
+		this.debug = true;
+		this.debug2 = true; // deeper, more verbose debug level
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 
 		// Create readline interface for pausing between frames - used when debugging
@@ -303,6 +303,7 @@ export default class Brain {
 		const channelRewards = await this.getChannelRewards();
 
 		// age the active neurons in memory context - sliding the temporal window
+		// deletion of aged-out neurons is deferred to after pattern learning
 		await this.ageNeurons();
 
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
@@ -316,6 +317,9 @@ export default class Brain {
 
 		// learn new patterns from failed predictions and action regret
 		await this.learnNewPatterns(channelRewards);
+
+		// deactivate aged-out neurons AFTER pattern learning captured full context
+		await this.deactivateOldNeurons();
 
 		// do predictions and outputs - what's going to happen next? and what's our best response?
 		await this.inferNeurons();
@@ -389,17 +393,23 @@ export default class Brain {
 	}
 
 	/**
-	 * Ages all neurons and connections in the context by 1, then deactivates aged-out items.
-	 * With uniform aging, all levels are deactivated at once when age >= contextLength.
-	 * Also ages inference source tables for temporal credit assignment.
+	 * Ages all neurons in the context by 1.
+	 * Deletion of aged-out neurons is deferred to deactivateOldNeurons() at end of frame,
+	 * so that pattern creation can capture the full context before neurons are deleted.
 	 */
 	async ageNeurons() {
-		if (this.debug2) console.log('Aging active neurons, connections, and inferred neurons...');
+		if (this.debug2) console.log('Aging active neurons...');
 
 		// age all neurons - ORDER BY age DESC to avoid primary key collisions
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
 		await this.conn.query('UPDATE active_neurons SET age = age + 1 ORDER BY age DESC');
+	}
 
+	/**
+	 * Deactivates neurons that have aged out of the context window.
+	 * Called at end of frame after pattern learning, so patterns can capture full context.
+	 */
+	async deactivateOldNeurons() {
 		// Skip deletions until we have enough frames
 		if (this.frameNumber < this.contextLength + 1) return;
 
@@ -1169,10 +1179,10 @@ export default class Brain {
 		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
-		// if (newPatternFutureCount > 0) {
-		// 	this.waitForUserInput = true;
-		// 	await this.waitForUser('New pattern future count > 0');
-		// }
+		if (newPatternFutureCount > 0) {
+			this.waitForUserInput = true;
+			// await this.waitForUser('New pattern future count > 0');
+		}
 
 		// Populate new_patterns table with peaks from new pattern future inferences
 		const patternCount = await this.populateNewPatterns();

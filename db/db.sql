@@ -4,7 +4,7 @@
 CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
--- 1 = up, 2 = down, 3 = sell, 4 = buy
+-- 1 = up, 2 = buy, 3 = down, 4 = sell
 select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id = c.dimension_id;
 select * from dimensions;
 select * from channels;
