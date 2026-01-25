@@ -104,28 +104,6 @@ select age, max(level) from active_neurons a join neurons n on n.id = a.neuron_i
 -- previous age level
 select max(level) from active_neurons a join neurons n on n.id = a.neuron_id where age = 1;
 
--- pattern inference votes
-SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id, pf.strength, pf.reward, pf.distance, pn.level as source_level, an.age
-FROM active_neurons an
-JOIN neurons pn ON pn.id = an.neuron_id
-JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
-JOIN (SELECT age, MAX(level) as max_level FROM active_neurons a JOIN neurons n ON n.id = a.neuron_id GROUP BY age) max_levels ON max_levels.age = an.age AND pn.level = max_levels.max_level
-WHERE pf.distance = an.age + 1
-AND pf.strength > 0
-AND max_levels.max_level > 0;
-
-select * from active_neurons order by age;
-
-select * 
-from active_neurons an 
-JOIN neurons pn ON pn.id = an.neuron_id
-JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
-WHERE pf.distance = an.age + 1
-and an.age in (0,2,3,4)
-and pn.level = 1
-AND pf.strength > 0
-;
-
 -- connection inference votes
 SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, c.strength, c.reward, c.distance, 0 as source_level, an.age
 FROM active_neurons an

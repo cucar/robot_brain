@@ -621,10 +621,11 @@ export default class Brain {
 			CROSS JOIN active_neurons t
 			JOIN neurons nt ON nt.id = t.neuron_id AND nt.level = 0
             WHERE f.age > 0 -- build connections from event neurons in base level that are already active
+            AND f.age < :contextLength -- exclude neurons about to be deleted (kept for pattern context only)
             AND t.age = 0 -- build connections from base neurons that are just activated
             -- if the connection already exists, increment its strength 
-			ON DUPLICATE KEY UPDATE connections.strength = GREATEST(:minConnectionStrength, LEAST(:maxConnectionStrength, connections.strength + VALUES(strength)))
-		`, { minConnectionStrength: this.minConnectionStrength, maxConnectionStrength: this.maxConnectionStrength });
+			ON DUPLICATE KEY UPDATE connections.strength = LEAST(:maxConnectionStrength, connections.strength + VALUES(strength))
+		`, { maxConnectionStrength: this.maxConnectionStrength, contextLength: this.contextLength });
 	}
 
 	/**
@@ -792,12 +793,13 @@ export default class Brain {
 		`);
 
 		// Novel: active neurons at same level, not in pattern_past (all channels)
+		// Exclude neurons at age >= contextLength (kept for pattern context only, not for learning new context)
 		await this.conn.query(`
 			INSERT INTO matched_pattern_past (pattern_neuron_id, context_neuron_id, context_age, status)
 			SELECT mp.pattern_neuron_id, an_context.neuron_id, an_context.age, 'novel'
 			FROM matched_patterns mp
 			JOIN neurons n_peak ON n_peak.id = mp.peak_neuron_id
-			JOIN active_neurons an_context ON an_context.age > 0
+			JOIN active_neurons an_context ON an_context.age > 0 AND an_context.age < ?
             JOIN neurons n_context ON n_context.id = an_context.neuron_id AND n_context.level = n_peak.level
 			-- pick the context neurons that are not already in the context in the age they are observed
 			WHERE NOT EXISTS (
@@ -808,7 +810,7 @@ export default class Brain {
 			)
 		    -- exclude actions from context - note that this may be a stock specific thing - actions can learn patterns in robotics context
 			AND NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = an_context.neuron_id AND b.type = 'action')
-		`);
+		`, [this.contextLength]);
 	}
 
 	/**
@@ -979,6 +981,7 @@ export default class Brain {
 		// When a pattern is active at age X, add currently active (age=0) event neurons at distance X
 		// Patterns are cross-channel, so add all active event neurons regardless of channel
 		// INSERT IGNORE prevents duplicates for (pattern_neuron_id, inferred_neuron_id, distance)
+		// Exclude patterns at age >= contextLength (kept for pattern context only, not for learning new futures)
 		const [novelResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
 			SELECT ap.neuron_id as pattern_neuron_id, an.neuron_id as inferred_neuron_id, ap.age
@@ -986,8 +989,8 @@ export default class Brain {
 			JOIN neurons n_pattern ON n_pattern.id = ap.neuron_id AND n_pattern.level > 0
 			JOIN active_neurons an ON an.age = 0
 			JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
-			WHERE ap.age > 0
-		`);
+			WHERE ap.age > 0 AND ap.age < ?
+		`, [this.contextLength]);
 		if (this.debug) console.log(`Added ${novelResult.affectedRows} novel neurons to event pattern_future`);
 	}
 
@@ -1050,7 +1053,7 @@ export default class Brain {
 		}
 
 		// Positive reward: add the executed action to pattern_future
-		// Only for patterns at age > 0 (distance=0 doesn't make sense)
+		// Only for patterns at age > 0 and < contextLength (exclude neurons kept for pattern context only)
 		if (positiveChannelIds.length > 0) {
 			const rewardCase = this.buildChannelRewardCase(channelRewards, '0');
 			const [result] = await this.conn.query(`
@@ -1060,7 +1063,7 @@ export default class Brain {
 				JOIN neurons n_pattern ON n_pattern.id = an_pattern.neuron_id AND n_pattern.level > 0
 				JOIN active_neurons an_action ON an_action.age = 0
 				JOIN base_neurons b ON b.neuron_id = an_action.neuron_id AND b.type = 'action'
-				WHERE an_pattern.age > 0
+				WHERE an_pattern.age > 0 AND an_pattern.age < ?
 				AND b.channel_id IN (${positiveChannelIds.join(',')})
 				AND NOT EXISTS (
 					SELECT 1 FROM pattern_future pf_existing
@@ -1071,12 +1074,12 @@ export default class Brain {
 				ON DUPLICATE KEY UPDATE
 					strength = LEAST(?, strength + 1),
 					reward = ? * VALUES(reward) + ? * reward
-			`, [this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
+			`, [this.contextLength, this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
 			if (this.debug) console.log(`Learned ${result.affectedRows} positive unpredicted actions for patterns`);
 		}
 
 		// Negative reward: first record the failed action with its negative reward
-		// Only for patterns at age > 0 (distance=0 doesn't make sense)
+		// Only for patterns at age > 0 and < contextLength (exclude neurons kept for pattern context only)
 		if (negativeChannelIds.length > 0) {
 			const rewardCase = this.buildChannelRewardCase(channelRewards, '0');
 			const [failedResult] = await this.conn.query(`
@@ -1086,7 +1089,7 @@ export default class Brain {
 				JOIN neurons n_pattern ON n_pattern.id = an_pattern.neuron_id AND n_pattern.level > 0
 				JOIN active_neurons an_action ON an_action.age = 0
 				JOIN base_neurons b ON b.neuron_id = an_action.neuron_id AND b.type = 'action'
-				WHERE an_pattern.age > 0
+				WHERE an_pattern.age > 0 AND an_pattern.age < ?
 				AND b.channel_id IN (${negativeChannelIds.join(',')})
 				AND NOT EXISTS (
 					SELECT 1 FROM pattern_future pf_existing
@@ -1097,7 +1100,7 @@ export default class Brain {
 				ON DUPLICATE KEY UPDATE
 					strength = LEAST(?, strength + 1),
 					reward = ? * VALUES(reward) + ? * reward
-			`, [this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
+			`, [this.contextLength, this.maxConnectionStrength, this.rewardExpSmooth, 1 - this.rewardExpSmooth]);
 			if (this.debug) console.log(`Learned ${failedResult.affectedRows} failed actions for patterns (negative reward)`);
 
 			// Then add an alternative action to try next time (with neutral reward)
@@ -1109,7 +1112,7 @@ export default class Brain {
 				JOIN active_neurons an_action ON an_action.age = 0
 				JOIN base_neurons b ON b.neuron_id = an_action.neuron_id AND b.type = 'action'
 				JOIN base_neurons b_alt ON b_alt.channel_id = b.channel_id AND b_alt.type = 'action'
-				WHERE an_pattern.age > 0
+				WHERE an_pattern.age > 0 AND an_pattern.age < ?
 				AND b.channel_id IN (${negativeChannelIds.join(',')})
 				AND b_alt.neuron_id != an_action.neuron_id
 				AND NOT EXISTS (
@@ -1119,7 +1122,7 @@ export default class Brain {
 					AND pf_existing.inferred_neuron_id = b_alt.neuron_id
 				)
 				GROUP BY an_pattern.neuron_id, an_pattern.age, b.channel_id
-			`);
+			`, [this.contextLength]);
 			if (this.debug) console.log(`Learned ${altResult.affectedRows} alternative actions for patterns (to try next)`);
 		}
 	}
@@ -1142,6 +1145,7 @@ export default class Brain {
 		// Uses MIN(neuron_id) to pick one untried action per (pattern, distance, channel) tuple
 		// NOT EXISTS filters out already-tried actions; if all actions tried, no rows remain for that group
 		// INSERT IGNORE handles case where this alternative was already added in a previous frame
+		// Exclude patterns at age >= contextLength (kept for pattern context only)
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, distance, inferred_neuron_id)
 			SELECT pf.pattern_neuron_id, pf.distance, MIN(b_alt.neuron_id)
@@ -1151,6 +1155,7 @@ export default class Brain {
             JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
 			JOIN base_neurons b_alt ON b_alt.channel_id = b.channel_id AND b_alt.type = 'action'
 			WHERE b.type = 'action'
+			AND an_pattern.age < ?
 			AND b.channel_id IN (${painfulChannelIds.join(',')})
 			AND NOT EXISTS (
 				SELECT 1 FROM pattern_future pf_existing
@@ -1159,7 +1164,7 @@ export default class Brain {
 				AND pf_existing.inferred_neuron_id = b_alt.neuron_id
 			)
 			GROUP BY pf.pattern_neuron_id, pf.distance, b.channel_id
-		`);
+		`, [this.contextLength]);
 
 		if (this.debug) console.log(`Added ${result.affectedRows} alternative actions to patterns`);
 	}
