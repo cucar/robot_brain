@@ -104,23 +104,38 @@ select age, max(level) from active_neurons a join neurons n on n.id = a.neuron_i
 -- previous age level
 select max(level) from active_neurons a join neurons n on n.id = a.neuron_id where age = 1;
 
+-- inference votes
+-- 1 = up, 2 = buy, 3 = down, 4 = sell
+SELECT v.dimension_id, v.dimension_name, v.neuron_id as inferred_neuron_id, v.from_neuron_id as inferring_neuron_id, v.distance, v.val, v.type, 
+	v.channel_id, v.channel, v.strength, v.reward, v.source_level, v.source_type
+FROM inference_votes v
+WHERE NOT EXISTS (
+	SELECT 1
+	FROM inference_votes pv
+	JOIN pattern_peaks pp ON pp.pattern_neuron_id = pv.from_neuron_id
+	WHERE pv.source_type = 'pattern'
+	AND pp.peak_neuron_id = v.from_neuron_id
+	AND pv.dimension_id = v.dimension_id
+)
+and type = 'action'
+order by dimension_id, inferred_neuron_id, inferring_neuron_id, distance;
+
+select * from dimensions;
+
 -- connection inference votes
-SELECT c.from_neuron_id, c.to_neuron_id as neuron_id, c.strength, c.reward, c.distance, 0 as source_level, an.age
+SELECT c.from_neuron_id, c.to_neuron_id, coord.dimension_id, d.name, coord.val,
+	   b.type, b.channel_id, ch.name, c.strength, c.reward, c.distance, 0, 'connection'
 FROM active_neurons an
-JOIN (SELECT age, MAX(level) as max_level FROM active_neurons a JOIN neurons n ON n.id = a.neuron_id GROUP BY age) max_levels ON max_levels.age = an.age
+JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
 JOIN connections c ON c.from_neuron_id = an.neuron_id
-WHERE c.distance = an.age + 1
-AND c.strength > 0
-AND max_levels.max_level = 0;
-
--- connection inferences - 1 = up, 2 = down, 3 = sell, 4 = buy
-SELECT c.from_neuron_id, c.to_neuron_id, c.strength, c.reward, c.distance, an.age
-FROM active_neurons an
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-WHERE c.distance = an.age + 1
-AND c.strength > 0
-AND an.age IN (0,1,2,3,4);
-
+JOIN coordinates coord ON coord.neuron_id = c.to_neuron_id
+JOIN dimensions d ON d.id = coord.dimension_id
+JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
+JOIN channels ch ON ch.id = b.channel_id
+WHERE c.distance = an.age + 1 AND c.strength > 0
+and c.from_neuron_id = 1
+order by distance;
+            
 select * from inferred_neurons where age = 0;
 select * from inferred_neurons where age = 1;
 select * from active_neurons where age in (0,1) order by age, neuron_id;

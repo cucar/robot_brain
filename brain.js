@@ -1641,12 +1641,12 @@ export default class Brain {
 	async determineConsensus(votes) {
 		if (votes.length === 0) return [];
 
-		// Aggregate votes by target neuron - sum strengths, strength-weighted average for rewards
+		// Aggregate votes by target neuron (candidates) - sum strengths, strength-weighted average for rewards
 		// Also collect coordinates, type, channel from votes (all votes for same neuron have same info)
-		const aggregated = new Map();
+		const candidates = new Map();
 		for (const vote of votes) {
-			if (!aggregated.has(vote.neuron_id)) {
-				aggregated.set(vote.neuron_id, {
+			if (!candidates.has(vote.neuron_id))
+				candidates.set(vote.neuron_id, {
 					neuron_id: vote.neuron_id,
 					strength: 0,
 					weightedRewardSum: 0,
@@ -1655,51 +1655,50 @@ export default class Brain {
 					channel_id: vote.channel_id,
 					coordinates: {}
 				});
-			}
 
-			const agg = aggregated.get(vote.neuron_id);
+			// Sum strengths, accumulate strength-weighted rewards for the candidates
+			const candidate = candidates.get(vote.neuron_id);
+			candidate.strength += vote.strength;
+			candidate.weightedRewardSum += vote.strength * vote.reward;
 
-			// Sum strengths, accumulate strength-weighted rewards
-			agg.strength += vote.strength;
-			agg.weightedRewardSum += vote.strength * vote.reward;
-
+			// TODO: this is going to break if a neuron has multiple dimensions - fix it later
 			// Collect coordinate for this dimension
-			agg.coordinates[vote.dimension_name] = vote.val;
+			candidate.coordinates[vote.dimension_name] = vote.val;
 		}
 
-		// Calculate strength-weighted average reward for each target neuron
-		for (const [_, agg] of aggregated) agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
+		// Calculate strength-weighted average reward for each candidate neuron
+		for (const [_, agg] of candidates) agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
 
-		// Group by dimension
-		const byDimension = this.groupVotesByDimension(aggregated);
+		// Group by candidates dimension
+		const byDimension = this.groupCandidatesByDimension(candidates);
 
 		// Select winner for each dimension
 		const winners = new Set();
-		for (const [dimName, dimVotes] of byDimension) {
-			const winner = this.selectWinnerForDimension(dimName, dimVotes);
+		for (const [dimName, dimCandidates] of byDimension) {
+			const winner = this.selectWinnerForDimension(dimName, dimCandidates);
 			if (winner) winners.add(winner.neuron_id);
 		}
 
 		// Build inferences array with isWinner flag
 		const inferences = [];
-		for (const [neuronId, agg] of aggregated)
-			inferences.push({ ...agg, isWinner: winners.has(neuronId) });
+		for (const [neuronId, candidate] of candidates)
+			inferences.push({ ...candidate, isWinner: winners.has(neuronId) });
 
 		return inferences;
 	}
 
 	/**
-	 * Group aggregated votes by dimension.
-	 * @param {Map} aggregated - Map of neuron_id -> aggregated vote with coordinates
+	 * Group candidates by dimension.
+	 * @param {Map} candidates - Map of neuron_id -> aggregated vote with coordinates
 	 * @returns {Map} Map of dimension name -> array of aggregated votes
 	 */
-	groupVotesByDimension(aggregated) {
+	groupCandidatesByDimension(candidates) {
 		const byDimension = new Map();
-		for (const [, agg] of aggregated) {
-			if (!agg.coordinates) continue;
-			for (const dimName of Object.keys(agg.coordinates)) {
+		for (const [, candidate] of candidates) {
+			if (!candidate.coordinates) continue;
+			for (const dimName of Object.keys(candidate.coordinates)) {
 				if (!byDimension.has(dimName)) byDimension.set(dimName, []);
-				byDimension.get(dimName).push(agg);
+				byDimension.get(dimName).push(candidate);
 			}
 		}
 		return byDimension;
@@ -1707,7 +1706,7 @@ export default class Brain {
 
 	/**
 	 * Select winner for a dimension using weighted voting.
-	 * All levels contribute with level weighting (already applied in collectVotes).
+	 * All levels contribute with level weighting.
 	 * Events: select by highest weighted strength
 	 * Actions: Boltzmann selection on weighted reward
 	 * @param {string} dimName - Dimension name
