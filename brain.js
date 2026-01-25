@@ -27,7 +27,7 @@ export default class Brain {
 		this.eventErrorMinStrength = 2.0; // minimum prediction strength to create error-driven patterns
 		this.actionRegretMinStrength = 2.0; // minimum inference strength to create action regret pattern
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
-		this.mergePatternThreshold = 0.66; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.8; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
@@ -59,8 +59,8 @@ export default class Brain {
 		// Debugging info and flags
 		this.frameNumber = 0;
 		this.frameSummary = true; // show frame summary or not
-		this.debug = true;
-		this.debug2 = true; // deeper, more verbose debug level
+		this.debug = false;
+		this.debug2 = false; // deeper, more verbose debug level
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 
 		// Create readline interface for pausing between frames - used when debugging
@@ -1185,7 +1185,7 @@ export default class Brain {
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
 		if (newPatternFutureCount > 0) {
-			this.waitForUserInput = true;
+			// this.waitForUserInput = true;
 			// await this.waitForUser('New pattern future count > 0');
 		}
 
@@ -1293,6 +1293,10 @@ export default class Brain {
 	 * Peak is the pattern neuron that made the prediction.
 	 * Find what actually happened (active neurons) instead of what was predicted.
 	 * Uses same logic as populateNewPatternBaseEvents but for pattern predictions.
+	 *
+	 * For higher-level patterns, requires full context: peak at age=1 needs context at ages 2,3,4,...,contextLength
+	 * at the same level to build pattern_past. Without full context, the pattern would be incomplete.
+	 *
 	 * @returns {Promise<number>} Number of high event pattern futures created
 	 */
 	async populateNewPatternHighEvents() {
@@ -1307,8 +1311,9 @@ export default class Brain {
 			-- at this point (frameNumber >= contextLength + 1), age=1 peaks always have full context
 			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id AND pf.distance = 1 AND pf.strength >= ?
 			JOIN active_neurons an_peak ON an_peak.neuron_id = pf.pattern_neuron_id AND an_peak.age = 1
+			JOIN neurons n_peak ON n_peak.id = pf.pattern_neuron_id
 			-- find the active neurons in same channel (what actually happened just now)
-            -- we are creating patterns for events that happened in ANY channel to be able to generalize 
+            -- we are creating patterns for events that happened in ANY channel to be able to generalize
 			JOIN active_neurons an ON an.age = 0
             JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
             -- the inference did not come true (prediction error)
@@ -1321,7 +1326,15 @@ export default class Brain {
 				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
 				AND an_pattern.age = 1
 			)
-		`, [this.eventErrorMinStrength]);
+			-- require full context: need neurons at ALL ages from 2 to contextLength at the same level
+			-- count distinct ages and ensure we have contextLength-1 ages (2,3,4,...,contextLength)
+			AND (
+				SELECT COUNT(DISTINCT ctx.age)
+				FROM active_neurons ctx
+				JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
+				WHERE ctx.age > 1
+			) >= ?
+		`, [this.eventErrorMinStrength, this.contextLength - 1]);
 		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
 		return patternResult.affectedRows;
 	}
@@ -1403,6 +1416,10 @@ export default class Brain {
 	 * Uses same structure as populateNewPatternHighEvents but for actions:
 	 * - Events: write what actually happened (active neurons) instead of what was predicted
 	 * - Actions: write an alternative action instead of what was executed (winner in painful channel)
+	 *
+	 * For higher-level patterns, requires full context: peak at age=1 needs context at ages 2,3,4,...,contextLength
+	 * at the same level to build pattern_past. Without full context, the pattern would be incomplete.
+	 *
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of high action pattern futures created
 	 */
@@ -1417,6 +1434,7 @@ export default class Brain {
 			-- only create patterns from age=1 peaks to ensure full context
 			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id AND pf.distance = 1 AND pf.strength >= ?
 			JOIN active_neurons an_peak ON an_peak.neuron_id = pf.pattern_neuron_id AND an_peak.age = 1
+			JOIN neurons n_peak ON n_peak.id = pf.pattern_neuron_id
 			-- find alternative actions in the same channel (what we should try instead)
 			JOIN base_neurons b_alt ON b_alt.channel_id = b_inf.channel_id AND b_alt.type = 'action'
 			-- the action was executed (winner) and resulted in pain
@@ -1431,8 +1449,16 @@ export default class Brain {
 				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
 				AND an_pattern.age = 1
 			)
+			-- require full context: need neurons at ALL ages from 2 to contextLength at the same level
+			-- count distinct ages and ensure we have contextLength-1 ages (2,3,4,...,contextLength)
+			AND (
+				SELECT COUNT(DISTINCT ctx.age)
+				FROM active_neurons ctx
+				JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
+				WHERE ctx.age > 1
+			) >= ?
 			GROUP BY pf.pattern_neuron_id, b_inf.channel_id
-		`, [this.actionRegretMinStrength]);
+		`, [this.actionRegretMinStrength, this.contextLength - 1]);
 		if (this.debug) console.log(`Found ${result.affectedRows} pattern action regret inferences`);
 		return result.affectedRows;
 	}
