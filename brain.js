@@ -32,8 +32,8 @@ export default class Brain {
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// voting parameters
-		this.levelVoteMultiplier = 1.5; // how much to weight votes from higher levels
-		this.timeDecay = 0.9; // how much to weight votes from older neurons
+		this.levelVoteMultiplier = 3; // how much to weight votes from higher levels
+		this.timeDecay = 0.2; // how much to weight votes from older neurons
 		this.boltzmannTemperature = 0.1; // temperature for Boltzmann selection (lower = more aggressive, 1.0 = standard)
 
 		// exploration parameters - probability inversely proportional to inference strength
@@ -1586,8 +1586,8 @@ export default class Brain {
 			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, 
 			                             channel_id, channel, reward, distance, source_level, source_type, strength)
 			SELECT c.from_neuron_id, c.to_neuron_id, coord.dimension_id, d.name, coord.val, b.type, 
-			       b.channel_id, ch.name, c.reward, c.distance, 0, 'connection', 
-                   POW(?, n.level) * POW(?, c.distance - 1) * c.strength as effective_strength 
+			       b.channel_id, ch.name, c.reward, c.distance, 0, 'connection',
+                   (1 + n.level * ?) * (1 - (c.distance - 1) * ?) * c.strength as effective_strength 
 			FROM active_neurons an
 			JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
@@ -1604,7 +1604,7 @@ export default class Brain {
 			                             channel_id, channel, reward, distance, source_level, source_type, strength)
 			SELECT pf.pattern_neuron_id, pf.inferred_neuron_id, coord.dimension_id, d.name, coord.val,
 			       b.type, b.channel_id, ch.name, pf.reward, pf.distance, pn.level, 'pattern',
-                   POW(?, pn.level) * POW(?, pf.distance - 1) * pf.strength as effective_strength
+                   (1 + pn.level * ?) * (1 - (pf.distance - 1) * ?) * pf.strength as effective_strength
 			FROM active_neurons an
 			JOIN neurons pn ON pn.id = an.neuron_id AND pn.level > 0
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
