@@ -723,38 +723,32 @@ export default class Brain {
 		await this.conn.query('TRUNCATE matched_patterns');
 		await this.conn.query('TRUNCATE matched_pattern_past');
 
-		// Determine which patterns matched based on how well the pattern covers the observed situation
-		// Pattern can match at most (context_length - 1) slots since age=0 is the peak
-		// A pattern matches if it covers at least X% of those available slots
-		// Only ONE pattern per peak neuron is activated - the strongest one wins
-		// This creates natural selection: winner gets reinforced, losers decay via forget cycle
+		// Dynamic-length pattern matching (like words in text):
+		// 1. Threshold check: pattern matches if matched_count / pattern_past_count >= threshold
+		// 2. Winner selection: among matched patterns for a peak, pick highest total strength of matching context
+		// This builds a branching structure of switch statements - longer, more specific patterns win
 		const [result] = await this.conn.query(`
 			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
 			SELECT m.peak_neuron_id, m.pattern_neuron_id
 			FROM (
-				SELECT pp.peak_neuron_id, pp.pattern_neuron_id, pp.strength,
-					ROW_NUMBER() OVER (PARTITION BY pp.peak_neuron_id ORDER BY pp.strength DESC, pp.pattern_neuron_id) as rn
+				SELECT pp.peak_neuron_id, pp.pattern_neuron_id,
+					ROW_NUMBER() OVER (
+						PARTITION BY pp.peak_neuron_id
+						ORDER BY SUM(IF(an_ctx.neuron_id IS NOT NULL, p.strength, 0)) DESC, pp.pattern_neuron_id
+					) as rn
 				FROM active_neurons an_peak
 				JOIN neurons n_peak ON n_peak.id = an_peak.neuron_id AND n_peak.level = ?
 				JOIN pattern_peaks pp ON an_peak.neuron_id = pp.peak_neuron_id
+				JOIN pattern_past p ON pp.pattern_neuron_id = p.pattern_neuron_id
+				LEFT JOIN active_neurons an_ctx ON an_ctx.neuron_id = p.context_neuron_id AND an_ctx.age = p.context_age
+				LEFT JOIN neurons n_ctx ON n_ctx.id = an_ctx.neuron_id AND n_ctx.level = n_peak.level
 				WHERE an_peak.age = 0
-				-- Pattern matches if it covers enough of the available context slots
-				AND (
-					SELECT COUNT(DISTINCT an_ctx.age)
-					FROM active_neurons an_ctx
-					JOIN neurons n_ctx ON n_ctx.id = an_ctx.neuron_id AND n_ctx.level = n_peak.level
-					WHERE an_ctx.age > 0
-					-- Check if pattern has this observed neuron at this distance
-					AND EXISTS (
-						SELECT 1 FROM pattern_past p
-						WHERE p.pattern_neuron_id = pp.pattern_neuron_id
-						AND p.context_neuron_id = an_ctx.neuron_id
-						AND p.context_age = an_ctx.age
-					)
-				) >= ?
+				GROUP BY pp.peak_neuron_id, pp.pattern_neuron_id
+				-- pattern matches if at least threshold percentage of its pattern_past neurons are active
+				HAVING SUM(IF(an_ctx.neuron_id IS NOT NULL, 1, 0)) >= COUNT(*) * ?
 			) m
 			WHERE m.rn = 1
-		`, [level, (this.contextLength - 1) * this.mergePatternThreshold]);
+		`, [level, this.mergePatternThreshold]);
 
 		// show matched pattern details for debugging
 		if (this.debug) {
@@ -1183,9 +1177,6 @@ export default class Brain {
 	 */
 	async learnNewPatterns(channelRewards) {
 
-		// do not start learning new patterns until we had enough frames in the context
-		if (this.frameNumber < this.contextLength + 1) return;
-
 		// Find the neurons that should be in pattern_future of new patterns
 		// (prediction errors and action regret, unified in one method)
 		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
@@ -1268,9 +1259,9 @@ export default class Brain {
             -- creating event patterns, so the inferred neuron is an event
 			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'event'
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation 
-            -- only peak neurons at age=1 learn the patterns, to ensure full context
-            -- at this point (frameNumber >= contextLength + 1), age=1 peaks always have full context
-			-- they will have additional distances as we observe them as added in when refining patterns
+            -- only peak neurons at age=1 learn the patterns for now
+			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
+			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
 			JOIN connections c ON c.to_neuron_id = inf.neuron_id AND c.distance = 1 AND c.strength >= ?
 			JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = 1
             -- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
@@ -1300,10 +1291,6 @@ export default class Brain {
 	 * Peak is the pattern neuron that made the prediction.
 	 * Find what actually happened (active neurons) instead of what was predicted.
 	 * Uses same logic as populateNewPatternBaseEvents but for pattern predictions.
-	 *
-	 * For higher-level patterns, requires full context: peak at age=1 needs context at ages 2,3,4,...,contextLength
-	 * at the same level to build pattern_past. Without full context, the pattern would be incomplete.
-	 *
 	 * @returns {Promise<number>} Number of high event pattern futures created
 	 */
 	async populateNewPatternHighEvents() {
@@ -1314,8 +1301,9 @@ export default class Brain {
 			-- creating event patterns, so the inferred neuron is an event
 			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'event'
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			-- only create patterns from age=1 peaks to ensure full context
-			-- at this point (frameNumber >= contextLength + 1), age=1 peaks always have full context
+			-- only create patterns from age=1 peaks for now
+			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
+			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
 			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id AND pf.distance = 1 AND pf.strength >= ?
 			JOIN active_neurons an_peak ON an_peak.neuron_id = pf.pattern_neuron_id AND an_peak.age = 1
 			JOIN neurons n_peak ON n_peak.id = pf.pattern_neuron_id
@@ -1333,15 +1321,7 @@ export default class Brain {
 				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
 				AND an_pattern.age = 1
 			)
-			-- require full context: need neurons at ALL ages from 2 to contextLength at the same level
-			-- count distinct ages and ensure we have contextLength-1 ages (2,3,4,...,contextLength)
-			AND (
-				SELECT COUNT(DISTINCT ctx.age)
-				FROM active_neurons ctx
-				JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
-				WHERE ctx.age > 1
-			) >= ?
-		`, [this.eventErrorMinStrength, this.contextLength - 1]);
+		`, [this.eventErrorMinStrength]);
 		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
 		return patternResult.affectedRows;
 	}
@@ -1390,7 +1370,9 @@ export default class Brain {
 			-- creating action patterns, so the inferred neuron is an action that was executed (winner)
 			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'action'
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			-- only peak neurons at age=1 learn the patterns, to ensure full context
+			-- only peak neurons at age=1 learn the patterns for now
+			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
+			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
 			JOIN connections c ON c.to_neuron_id = inf.neuron_id AND c.distance = 1 AND c.strength >= ?
 			JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = 1
 			-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
@@ -1423,10 +1405,6 @@ export default class Brain {
 	 * Uses same structure as populateNewPatternHighEvents but for actions:
 	 * - Events: write what actually happened (active neurons) instead of what was predicted
 	 * - Actions: write an alternative action instead of what was executed (winner in painful channel)
-	 *
-	 * For higher-level patterns, requires full context: peak at age=1 needs context at ages 2,3,4,...,contextLength
-	 * at the same level to build pattern_past. Without full context, the pattern would be incomplete.
-	 *
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of high action pattern futures created
 	 */
@@ -1438,7 +1416,9 @@ export default class Brain {
 			-- creating action patterns, so the inferred neuron is an action that was executed (winner)
 			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'action'
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			-- only create patterns from age=1 peaks to ensure full context
+			-- only create patterns from age=1 peaks for now
+			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
+			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
 			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id AND pf.distance = 1 AND pf.strength >= ?
 			JOIN active_neurons an_peak ON an_peak.neuron_id = pf.pattern_neuron_id AND an_peak.age = 1
 			JOIN neurons n_peak ON n_peak.id = pf.pattern_neuron_id
@@ -1456,16 +1436,8 @@ export default class Brain {
 				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
 				AND an_pattern.age = 1
 			)
-			-- require full context: need neurons at ALL ages from 2 to contextLength at the same level
-			-- count distinct ages and ensure we have contextLength-1 ages (2,3,4,...,contextLength)
-			AND (
-				SELECT COUNT(DISTINCT ctx.age)
-				FROM active_neurons ctx
-				JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
-				WHERE ctx.age > 1
-			) >= ?
 			GROUP BY pf.pattern_neuron_id, b_inf.channel_id
-		`, [this.actionRegretMinStrength, this.contextLength - 1]);
+		`, [this.actionRegretMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} pattern action regret inferences`);
 		return result.affectedRows;
 	}

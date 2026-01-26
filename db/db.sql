@@ -13,7 +13,7 @@ select * from active_neurons order by age;
 select * from base_neurons;
 select * from connections;
 select * from pattern_peaks;
-select * from pattern_past order by pattern_neuron_id, context_age;
+select context_neuron_id from pattern_past where pattern_neuron_id = 24 order by pattern_neuron_id, context_age;
 select * from pattern_future order by pattern_neuron_id, distance, inferred_neuron_id;
 select * from new_patterns;
 select * from new_pattern_future;
