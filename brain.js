@@ -31,7 +31,9 @@ export default class Brain {
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
-		// voting parameters - simple strength-based voting, no weighting
+		// voting parameters
+		this.levelVoteMultiplier = 1.5; // how much to weight votes from higher levels
+		this.timeDecay = 0.9; // how much to weight votes from older neurons
 		this.boltzmannTemperature = 0.1; // temperature for Boltzmann selection (lower = more aggressive, 1.0 = standard)
 
 		// exploration parameters - probability inversely proportional to inference strength
@@ -1581,9 +1583,11 @@ export default class Brain {
 
 		// Insert connection votes (from base level neurons)
 		const [connResult] = await this.conn.query(`
-			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, channel_id, channel, strength, reward, distance, source_level, source_type)
-			SELECT c.from_neuron_id, c.to_neuron_id, coord.dimension_id, d.name, coord.val,
-			       b.type, b.channel_id, ch.name, c.strength, c.reward, c.distance, 0, 'connection'
+			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, 
+			                             channel_id, channel, reward, distance, source_level, source_type, strength)
+			SELECT c.from_neuron_id, c.to_neuron_id, coord.dimension_id, d.name, coord.val, b.type, 
+			       b.channel_id, ch.name, c.reward, c.distance, 0, 'connection', 
+                   POW(?, n.level) * POW(?, c.distance - 1) * c.strength as effective_strength 
 			FROM active_neurons an
 			JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
@@ -1592,13 +1596,15 @@ export default class Brain {
 			JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
 			JOIN channels ch ON ch.id = b.channel_id
 			WHERE c.distance = an.age + 1 AND c.strength > 0
-		`);
+		`,[this.levelVoteMultiplier, this.timeDecay]);
 
 		// Insert pattern votes (from pattern neurons at any level)
 		const [patternResult] = await this.conn.query(`
-			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, channel_id, channel, strength, reward, distance, source_level, source_type)
+			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, 
+			                             channel_id, channel, reward, distance, source_level, source_type, strength)
 			SELECT pf.pattern_neuron_id, pf.inferred_neuron_id, coord.dimension_id, d.name, coord.val,
-			       b.type, b.channel_id, ch.name, pf.strength, pf.reward, pf.distance, pn.level, 'pattern'
+			       b.type, b.channel_id, ch.name, pf.reward, pf.distance, pn.level, 'pattern',
+                   POW(?, pn.level) * POW(?, pf.distance - 1) * pf.strength as effective_strength
 			FROM active_neurons an
 			JOIN neurons pn ON pn.id = an.neuron_id AND pn.level > 0
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
@@ -1607,12 +1613,13 @@ export default class Brain {
 			JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
 			JOIN channels ch ON ch.id = b.channel_id
 			WHERE pf.distance = an.age + 1 AND pf.strength > 0
-		`);
+		`,[this.levelVoteMultiplier, this.timeDecay]);
 
 		if (this.debug) console.log(`Inserted ${connResult.affectedRows} connection votes, ${patternResult.affectedRows} pattern votes`);
 
 		// Query surviving votes: filter out votes from peaks that have an active pattern voting for the same dimension
 		// A vote is overridden if its from_neuron_id is the peak_neuron_id of a pattern that also votes for the same dimension
+		// if the active neuron is a peak neuron for an active pattern neuron, its inference for that type of pattern is suppressed
 		const [votes] = await this.conn.query(`
 			SELECT v.from_neuron_id, v.neuron_id, v.dimension_id, v.dimension_name, v.val,
 			       v.type, v.channel_id, v.channel, v.strength, v.reward, v.distance, v.source_level, v.source_type

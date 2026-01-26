@@ -12,8 +12,8 @@ select * from neurons order by level desc;
 select * from active_neurons order by age;
 select * from base_neurons;
 select * from connections;
-select * from pattern_peaks;
-select context_neuron_id from pattern_past where pattern_neuron_id = 24 order by pattern_neuron_id, context_age;
+select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
+select * from pattern_past where pattern_neuron_id = 17 order by pattern_neuron_id, context_age;
 select * from pattern_future order by pattern_neuron_id, distance, inferred_neuron_id;
 select * from new_patterns;
 select * from new_pattern_future;
@@ -141,21 +141,6 @@ select * from inferred_neurons where age = 1;
 select * from active_neurons where age in (0,1) order by age, neuron_id;
 select * from neurons where level > 0;
 
-SELECT an.neuron_id as from_neuron, an.age, c.to_neuron_id, c.distance, c.strength, c.reward
--- SELECT c.to_neuron_id, avg(c.reward), sum(c.strength), group_concat(an.neuron_id)
-FROM active_neurons an
-JOIN neurons nf ON nf.id = an.neuron_id
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-JOIN neurons n ON n.id = c.to_neuron_id
-WHERE c.distance = an.age + 1
-and n.type = 'action'
--- group by c.to_neuron_id
--- order by c.to_neuron_id
-order by c.to_neuron_id, an.age, an.neuron_id, c.distance, c.to_neuron_id, an.age
-;
-
-select if(neuron_id=1,'up','down'), age, strength from active_neurons order by age;
-
 select * from connections;
 select * from connections where to_neuron_id = 4 order by from_neuron_id, distance;
 select * from connections where from_neuron_id in (5,2) and to_neuron_id in (6, 9) and distance = 1 order by to_neuron_id, distance;
@@ -170,17 +155,10 @@ select * from coordinates where dimension_id = 16;
 select * from coordinates where neuron_id in (1,2,11,12,13);
 select * from coordinates where neuron_id = 5;
 
--- action pattern contexts
-select *
-from pattern_past p 
-order by pattern_neuron_id, context_age;
-
-select * from neurons where id in (32);
-
 select * from pattern_past p where pattern_neuron_id = 5 order by context_age;
 select * from pattern_future where pattern_neuron_id = 5 order by distance;
-select pattern_neuron_id, peak_neuron_id, strength from pattern_peaks order by pattern_neuron_id;
-select * from pattern_past;
+select pattern_neuron_id, peak_neuron_id, strength from pattern_peaks order by strength desc;
+select * from pattern_past where pattern_neuron_id = 1554;
 select * from pattern_future;
 select count(*) from pattern_peaks;
 select count(*) from pattern_past;
