@@ -261,7 +261,8 @@ CREATE TABLE IF NOT EXISTS connections (
     reward FLOAT DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
     PRIMARY KEY (from_neuron_id, to_neuron_id, distance),
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
-    INDEX idx_to_distance_strength (to_neuron_id, distance, strength)
+    INDEX idx_to_distance_strength (to_neuron_id, distance, strength),
+    INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
 -- neurons currently active within the context sliding window (all levels)
@@ -292,7 +293,8 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     context_neuron_id BIGINT UNSIGNED,
     context_age TINYINT UNSIGNED,
     strength FLOAT NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (pattern_neuron_id, context_neuron_id, context_age)
+    PRIMARY KEY (pattern_neuron_id, context_neuron_id, context_age),
+    INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
 -- pattern_future: cross-level predictions from patterns to base neurons for inference/voting (cross-channel)
@@ -307,7 +309,9 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     strength FLOAT NOT NULL DEFAULT 1.0,
     reward FLOAT NOT NULL DEFAULT 0, -- additive reward (0 = neutral, positive = good, negative = bad)
     PRIMARY KEY (pattern_neuron_id, inferred_neuron_id, distance),
-    INDEX idx_pattern_distance_strength (pattern_neuron_id, distance, strength)
+    INDEX idx_pattern_distance_strength (pattern_neuron_id, distance, strength),
+    INDEX idx_inferred_distance_strength (inferred_neuron_id, distance, strength),
+    INDEX idx_strength (strength)
 ) ENGINE=MEMORY;
 
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
@@ -385,7 +389,8 @@ CREATE TABLE IF NOT EXISTS inference_votes (
     source_level TINYINT UNSIGNED,      -- 0 for connections, pattern level for patterns
     source_type ENUM('connection', 'pattern'),
     INDEX idx_from_dim (from_neuron_id, dimension_id),
-    INDEX idx_neuron (neuron_id)
+    INDEX idx_neuron (neuron_id),
+    INDEX idx_source_type (source_type)
 ) ENGINE=MEMORY;
 
 -- increase the amount of records that can be stored in memory tables
