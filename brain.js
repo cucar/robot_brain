@@ -253,7 +253,7 @@ export default class Brain {
 
 	/**
 	 * Get frame outputs for all channels from inferred_neurons table (MySQL implementation)
-	 * Reads winning action neurons (age=0, level=0, is_winner=1) grouped by channel
+	 * Reads winning action neurons (is_winner=1) grouped by channel
 	 * @returns {Promise<Map>} - Map of channel names to array of output coordinates
 	 */
 	async getFrameOutputs() {
@@ -346,7 +346,7 @@ export default class Brain {
 		// Build observation string from frame
 		const observations = [];
 		for (const point of frame)
-			for (const [dim, val] of Object.entries(point))
+			for (const [dim, val] of Object.entries(point.coordinates))
 				observations.push(`${dim}=${val}`);
 
 		console.log(`\nF${this.frameNumber} | Obs: ${observations.join(', ')}`);
@@ -1813,8 +1813,8 @@ export default class Brain {
 	}
 
 	/**
-	 * Decide whether to explore a channel based on inference strength and reward
-	 * Exploration probability is inversely proportional to total effective inference strength (strength * reward)
+	 * Decide whether to explore a channel based on inference strength
+	 * Exploration probability is inversely proportional to total effective inference strength
 	 * Higher confidence predictions = lower exploration probability
 	 * @param {string} channelName - name of the channel to check
 	 * @param {Array} channelBaseInferences - array of channel base inferences with strength and reward
@@ -1871,7 +1871,7 @@ export default class Brain {
 		}]);
 
 		// Return exploration action
-		// Use low strength (below minErrorPatternThreshold) to avoid triggering error pattern creation
+		// Use low strength (below eventErrorMinStrength) to avoid triggering error pattern creation
 		// when exploration fails - exploration is random, not a confident prediction that was wrong
 		const exploration = {
 			neuron_id: actionNeuronId,
