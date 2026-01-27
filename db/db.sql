@@ -13,7 +13,9 @@ select * from active_neurons order by age;
 select * from base_neurons;
 select * from connections;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
-select * from pattern_past where pattern_neuron_id = 17 order by pattern_neuron_id, context_age;
+select * from pattern_past order by pattern_neuron_id, context_age;
+select * from pattern_peaks where pattern_neuron_id = 8;
+select * from pattern_past where pattern_neuron_id in (8, 9) order by pattern_neuron_id, context_age;
 select * from pattern_future order by pattern_neuron_id, distance, inferred_neuron_id;
 select * from new_patterns;
 select * from new_pattern_future;
@@ -348,14 +350,13 @@ CREATE TABLE IF NOT EXISTS new_pattern_future (
 ) ENGINE=MEMORY;
 
 -- scratch table for mapping peak neurons to new pattern neurons - used during bulk pattern creation to track sequential IDs
--- type: pattern type ('event' or 'action') - one peak can have both types of patterns
--- patterns are always created at distance=1 (full context)
+-- one pattern per peak - combines contexts from all ages where the peak was active
 -- DROP TABLE IF EXISTS new_patterns;
 CREATE TABLE IF NOT EXISTS new_patterns (
     seq_id INT AUTO_INCREMENT PRIMARY KEY,
     peak_neuron_id BIGINT UNSIGNED,
     pattern_neuron_id BIGINT UNSIGNED,
-    UNIQUE INDEX idx_peak_type (peak_neuron_id)
+    UNIQUE INDEX idx_peak (peak_neuron_id)
 ) ENGINE=MEMORY;
 
 -- inferred neurons from connection/pattern inference or exploration

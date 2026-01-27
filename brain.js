@@ -600,11 +600,11 @@ export default class Brain {
 	}
 
 	/**
-	 * inserts active neurons at a given age
+	 * Inserts active neurons at age 0
 	 */
-	async insertActiveNeurons(neuronIds, age= 0) {
+	async insertActiveNeurons(neuronIds) {
 		if (neuronIds.length === 0) return;
-		const activations = neuronIds.map(neuronId => [neuronId, age]);
+		const activations = neuronIds.map(neuronId => [neuronId, 0]);
 		await this.conn.query(`INSERT INTO active_neurons (neuron_id, age) VALUES ?`, [activations]);
 	}
 
@@ -705,12 +705,21 @@ export default class Brain {
 		// update pattern_past for matched patterns - add/strengthen observed connections, weaken unobserved connections
 		await this.refinePatternPast();
 
-		// Activate all matched pattern neurons from matched_patterns table
-		const [patternNeurons] = await this.conn.query('SELECT pattern_neuron_id FROM matched_patterns');
-		const patternNeuronIds = patternNeurons.map(row => row.pattern_neuron_id);
-		await this.insertActiveNeurons(patternNeuronIds);
+		// Activate all matched pattern neurons
+		await this.activateMatchedPatterns();
 
 		return true; // patterns found
+	}
+
+	/**
+	 * Activate matched pattern neurons at age 0
+	 */
+	async activateMatchedPatterns() {
+		await this.conn.query(`
+			INSERT INTO active_neurons (neuron_id, age)
+			SELECT pattern_neuron_id, 0
+			FROM matched_patterns
+		`);
 	}
 
 	/**
@@ -1249,40 +1258,28 @@ export default class Brain {
 
 	/**
 	 * Populate base-level event prediction errors (from connection inferences).
-	 * Peak is the base neuron that made the prediction.
-	 * Find what actually happened (active neurons) instead of what was predicted.
+	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Peak predicted X, but X didn't happen and Y happened instead.
 	 * @returns {Promise<number>} Number of base event pattern futures created
 	 */
 	async populateNewPatternBaseEvents() {
 		const [connResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT c.from_neuron_id, an.neuron_id as inferred_neuron_id, 1 as distance
-			FROM inferred_neurons inf
-            -- creating event patterns, so the inferred neuron is an event
-			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'event'
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation 
-            -- only peak neurons at age=1 learn the patterns for now
-			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
-			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
-			JOIN connections c ON c.to_neuron_id = inf.neuron_id AND c.distance = 1 AND c.strength >= ?
-			JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = 1
-            -- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
-			-- note that this may be a stock specific thing - actions can learn patterns in robotics context    
-            JOIN base_neurons b_peak ON b_peak.neuron_id = c.from_neuron_id AND b_peak.type = 'event'
-			-- find the active neurons in same channel (what actually happened just now)
-            -- we are creating patterns for events that happened in ANY channel to be able to generalize 
+			SELECT v.from_neuron_id, an.neuron_id as inferred_neuron_id, v.distance
+			FROM inference_votes v
+			-- find the active neurons (what actually happened just now) - create pattern to predict these
 			JOIN active_neurons an ON an.age = 0
-			JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event' 
+			JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
+			-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
+			JOIN base_neurons b_peak ON b_peak.neuron_id = v.from_neuron_id AND b_peak.type = 'event'
+			-- only connection votes (base level peaks)
+			WHERE v.source_type = 'connection'
+			-- only event predictions
+			AND v.type = 'event'
+			-- the inference must have been done with a strength above a threshold to trigger pattern creation
+			AND v.strength >= ?
 			-- the inference did not come true (prediction error)
-            WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
-			-- don't create a pattern if there is already an active pattern for this peak 
-			-- it means the peak recognized this situation - we'll refine it instead in that case
-			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an_pattern
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
-				WHERE pp.peak_neuron_id = c.from_neuron_id
-				AND an_pattern.age = 1
-			)
+			AND v.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
 		`, [this.eventErrorMinStrength]);
 		if (this.debug) console.log(`Found ${connResult.affectedRows} connection prediction error neurons`);
 		return connResult.affectedRows;
@@ -1290,39 +1287,26 @@ export default class Brain {
 
 	/**
 	 * Populate higher-level event prediction errors (from pattern inferences).
-	 * Peak is the pattern neuron that made the prediction.
-	 * Find what actually happened (active neurons) instead of what was predicted.
-	 * Uses same logic as populateNewPatternBaseEvents but for pattern predictions.
+	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Peak predicted X, but X didn't happen and Y happened instead.
 	 * @returns {Promise<number>} Number of high event pattern futures created
 	 */
 	async populateNewPatternHighEvents() {
 		const [patternResult] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT pf.pattern_neuron_id, an.neuron_id, 1
-			FROM inferred_neurons inf
-			-- creating event patterns, so the inferred neuron is an event
-			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'event'
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			-- only create patterns from age=1 peaks for now
-			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
-			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
-			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id AND pf.distance = 1 AND pf.strength >= ?
-			JOIN active_neurons an_peak ON an_peak.neuron_id = pf.pattern_neuron_id AND an_peak.age = 1
-			JOIN neurons n_peak ON n_peak.id = pf.pattern_neuron_id
-			-- find the active neurons in same channel (what actually happened just now)
-            -- we are creating patterns for events that happened in ANY channel to be able to generalize
+			SELECT v.from_neuron_id, an.neuron_id, v.distance
+			FROM inference_votes v
+			-- find the active neurons (what actually happened just now) - create pattern to predict these
 			JOIN active_neurons an ON an.age = 0
-            JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
-            -- the inference did not come true (prediction error)
-			WHERE inf.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
-			-- don't create a pattern if there is already an active pattern for this peak
-			-- it means the peak recognized this situation - we'll refine it instead in that case
-			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an_pattern
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
-				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
-				AND an_pattern.age = 1
-			)
+			JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
+			-- only pattern votes (higher level peaks)
+			WHERE v.source_type = 'pattern'
+			-- only event predictions
+			AND v.type = 'event'
+			-- the inference must have been done with a strength above a threshold to trigger pattern creation
+			AND v.strength >= ?
+			-- the inference did not come true (prediction error)
+			AND v.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
 		`, [this.eventErrorMinStrength]);
 		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
 		return patternResult.affectedRows;
@@ -1356,45 +1340,32 @@ export default class Brain {
 
 	/**
 	 * Handle action regret for connection inferences.
-	 * Find connections that made painful action predictions and add one untried alternative action.
-	 * Peak is the base neuron that made the wrong prediction.
-	 * Uses same structure as populateNewPatternBaseEvents but for actions:
-	 * - Events: write what actually happened (active neurons) instead of what was predicted
-	 * - Actions: write an alternative action instead of what was executed (winner in painful channel)
+	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Find an alternative action to try instead of the one that led to pain.
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of base action pattern futures created
 	 */
 	async populateNewPatternBaseActions(painfulChannelIds) {
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT c.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, 1 as distance
-			FROM inferred_neurons inf
-			-- creating action patterns, so the inferred neuron is an action that was executed (winner)
-			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'action'
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			-- only peak neurons at age=1 learn the patterns for now
-			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
-			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
-			JOIN connections c ON c.to_neuron_id = inf.neuron_id AND c.distance = 1 AND c.strength >= ?
-			JOIN active_neurons an_peak ON an_peak.neuron_id = c.from_neuron_id AND an_peak.age = 1
+			SELECT v.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, v.distance
+			FROM inference_votes v
+			-- find alternative actions in the same channel (what we should try instead)
+			JOIN base_neurons b_alt ON b_alt.channel_id = v.channel_id AND b_alt.type = 'action'
 			-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
-            -- note that this may be a stock specific thing - actions can learn patterns in robotics context    
-			JOIN base_neurons b_peak ON b_peak.neuron_id = c.from_neuron_id AND b_peak.type = 'event'
-            -- find alternative actions in the same channel (what we should try instead)
-			JOIN base_neurons b_alt ON b_alt.channel_id = b_inf.channel_id AND b_alt.type = 'action'
-			-- the action was executed (winner) and resulted in pain
-			WHERE inf.is_winner = 1
-			AND b_inf.channel_id IN (${painfulChannelIds.join(',')})
-			AND b_alt.neuron_id != inf.neuron_id  -- don't suggest the same action that just failed
-		    -- don't create a pattern if there is already an active pattern for this peak 
-		    -- it means the peak recognized this situation - we'll refine it instead in that case
-			AND NOT EXISTS (
-                SELECT 1 FROM active_neurons an_pattern
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
-                WHERE pp.peak_neuron_id = c.from_neuron_id
-                AND an_pattern.age = 1
-			)
-			GROUP BY c.from_neuron_id, b_inf.channel_id
+			JOIN base_neurons b_peak ON b_peak.neuron_id = v.from_neuron_id AND b_peak.type = 'event'
+			-- only connection votes (base level peaks)
+			WHERE v.source_type = 'connection'
+			-- only action predictions that were executed (winners) in painful channels
+			AND v.type = 'action'
+			AND v.channel_id IN (${painfulChannelIds.join(',')})
+			-- the inference must have been done with a strength above a threshold to trigger pattern creation
+			AND v.strength >= ?
+			-- check if this was the winning action (need to verify it was executed)
+			AND EXISTS (SELECT 1 FROM inferred_neurons inf WHERE inf.neuron_id = v.neuron_id AND inf.is_winner = 1)
+			-- don't suggest the same action that just failed
+			AND b_alt.neuron_id != v.neuron_id
+			GROUP BY v.from_neuron_id, v.channel_id, v.distance
 		`, [this.actionRegretMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} connection action regret inferences`);
 		return result.affectedRows;
@@ -1402,43 +1373,30 @@ export default class Brain {
 
 	/**
 	 * Handle action regret for pattern inferences.
-	 * Find patterns that made painful action predictions and add one untried alternative action.
-	 * Peak is the pattern neuron that made the wrong prediction.
-	 * Uses same structure as populateNewPatternHighEvents but for actions:
-	 * - Events: write what actually happened (active neurons) instead of what was predicted
-	 * - Actions: write an alternative action instead of what was executed (winner in painful channel)
+	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Find an alternative action to try instead of the one that led to pain.
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of high action pattern futures created
 	 */
 	async populateNewPatternHighActions(painfulChannelIds) {
 		const [result] = await this.conn.query(`
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT pf.pattern_neuron_id, MIN(b_alt.neuron_id), 1
-			FROM inferred_neurons inf
-			-- creating action patterns, so the inferred neuron is an action that was executed (winner)
-			JOIN base_neurons b_inf ON b_inf.neuron_id = inf.neuron_id AND b_inf.type = 'action'
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			-- only create patterns from age=1 peaks for now
-			-- TODO: test allowing older peaks now that pattern matching is dynamic-length
-			-- This could improve learning but may cause pattern proliferation. Currently restricted to age=1.    
-			JOIN pattern_future pf ON pf.inferred_neuron_id = inf.neuron_id AND pf.distance = 1 AND pf.strength >= ?
-			JOIN active_neurons an_peak ON an_peak.neuron_id = pf.pattern_neuron_id AND an_peak.age = 1
-			JOIN neurons n_peak ON n_peak.id = pf.pattern_neuron_id
+			SELECT v.from_neuron_id, MIN(b_alt.neuron_id), v.distance
+			FROM inference_votes v
 			-- find alternative actions in the same channel (what we should try instead)
-			JOIN base_neurons b_alt ON b_alt.channel_id = b_inf.channel_id AND b_alt.type = 'action'
-			-- the action was executed (winner) and resulted in pain
-			WHERE inf.is_winner = 1
-			AND b_inf.channel_id IN (${painfulChannelIds.join(',')})
-			AND b_alt.neuron_id != inf.neuron_id  -- don't suggest the same action that just failed
-			-- don't create a pattern if there is already an active pattern for this peak
-			-- it means the peak recognized this situation - we'll refine it instead in that case
-			AND NOT EXISTS (
-				SELECT 1 FROM active_neurons an_pattern
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = an_pattern.neuron_id
-				WHERE pp.peak_neuron_id = pf.pattern_neuron_id
-				AND an_pattern.age = 1
-			)
-			GROUP BY pf.pattern_neuron_id, b_inf.channel_id
+			JOIN base_neurons b_alt ON b_alt.channel_id = v.channel_id AND b_alt.type = 'action'
+			-- only pattern votes (higher level peaks)
+			WHERE v.source_type = 'pattern'
+			-- only action predictions that were executed (winners) in painful channels
+			AND v.type = 'action'
+			AND v.channel_id IN (${painfulChannelIds.join(',')})
+			-- the inference must have been done with a strength above a threshold to trigger pattern creation
+			AND v.strength >= ?
+			-- check if this was the winning action (need to verify it was executed)
+			AND EXISTS (SELECT 1 FROM inferred_neurons inf WHERE inf.neuron_id = v.neuron_id AND inf.is_winner = 1)
+			-- don't suggest the same action that just failed
+			AND b_alt.neuron_id != v.neuron_id
+			GROUP BY v.from_neuron_id, v.channel_id, v.distance
 		`, [this.actionRegretMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} pattern action regret inferences`);
 		return result.affectedRows;
@@ -1446,7 +1404,8 @@ export default class Brain {
 
 	/**
 	 * Populate new_patterns table from new_pattern_future. Peak can be a base neuron (for connection errors)
-	 * or pattern neuron (for pattern errors). All patterns are created at distance=1 to be able to get the full context.
+	 * or pattern neuron (for pattern errors). One pattern per peak - combines contexts from all ages where
+	 * the peak was active and made bad predictions.
 	 * Returns the number of patterns to create.
 	 */
 	async populateNewPatterns() {
@@ -1498,25 +1457,34 @@ export default class Brain {
 			FROM new_patterns
 		`);
 
-		// create pattern_past entries - all patterns created at distance=1 to capture full cross-channel context
-		// pattern context neurons must be at the same level as the peak neuron (one level lower than the pattern)
+		// create pattern_past entries - combine contexts from ALL ages where the peak was active
+		// If peak is active at ages 1, 4, 7 with contextLength=10:
+		//   Age 1 context: neurons at ages 2-9 (relative ages 1-8)
+		//   Age 4 context: neurons at ages 5-9 (relative ages 1-5)
+		//   Age 7 context: neurons at ages 8-9 (relative ages 1-2)
+		// All these (neuron, relative_age) tuples get combined into ONE pattern
+		// the pattern context neurons must be at the same level as the peak neuron (one level lower than the pattern)
+		// Get distinct peak ages that were actually voting (from new_pattern_future via inference_votes)
+		// distance in new_pattern_future = peak age when it made the bad prediction
 		await this.conn.query(`
-			INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age)
-            SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - 1
+			INSERT IGNORE INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age)
+            SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - npf.distance as context_age
 			FROM new_patterns np
 			JOIN neurons n_peak ON n_peak.id = np.peak_neuron_id
-            -- capture same-level active, but older neurons: pattern context is determined by same-level context only
-            JOIN active_neurons ctx ON ctx.age > 1
+			-- only use ages where the peak was actually voting (not overridden by a pattern)
+			JOIN (SELECT DISTINCT peak_neuron_id, distance FROM new_pattern_future) npf ON npf.peak_neuron_id = np.peak_neuron_id
+            -- capture same-level active, but older neurons for each voting age
+            -- context_age must be 1 to contextLength-1 (relative to peak age)
+            JOIN active_neurons ctx ON ctx.age > npf.distance AND ctx.age < npf.distance + ?
             JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
             -- exclude actions from context in base level
             -- note that this may be a stock specific thing - actions can learn patterns in robotics context
             WHERE NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = ctx.neuron_id AND b.type = 'action')
-		`);
+		`, [this.contextLength]);
 
 		// Create pattern_future entries from new_pattern_future for cross-channel inferences
 		// inferred_neuron_id is always a base-level neuron (event or action)
-		// Join on peak_neuron_id to match patterns to their future inferences
-		// Entries can have various distances: distance=1 from errors/regret, distances 1-(contextLength-1) from exploration
+		// Join on peak_neuron_id to get all future inferences for this peak
 		const [futureResult] = await this.conn.query(`
 			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
 			SELECT np.pattern_neuron_id, npf.inferred_neuron_id, npf.distance
@@ -1527,20 +1495,19 @@ export default class Brain {
 	}
 
 	/**
-	 * Activate newly created pattern neurons at age=1.
-	 * All patterns are created at distance=1 (full context).
+	 * Activate newly created pattern neurons at ALL ages where the peak was active.
+	 * If peak was active at ages 1, 4, 7, the pattern is activated at ages 1, 4, and 7.
 	 * This allows the pattern to be refined in the same frame if there are multiple errors,
 	 * and ensures the "already has active pattern" check works correctly in future frames.
 	 */
 	async activateNewPatterns() {
-
-		// Get pattern neurons with their level
-		const [patterns] = await this.conn.query('SELECT pattern_neuron_id FROM new_patterns');
-
-		// Insert into active_neurons with age=1
-		await this.insertActiveNeurons(patterns.map(p => p.pattern_neuron_id), 1);
-
-		if (this.debug) console.log(`Activated ${patterns.length} new pattern neurons`);
+		const [result] = await this.conn.query(`
+			INSERT INTO active_neurons (neuron_id, age)
+			SELECT DISTINCT np.pattern_neuron_id, npf.distance
+			FROM new_patterns np
+			JOIN new_pattern_future npf ON npf.peak_neuron_id = np.peak_neuron_id
+		`);
+		if (this.debug) console.log(`Activated ${result.affectedRows} new pattern neuron instances`);
 	}
 
 	/**
@@ -1617,21 +1584,20 @@ export default class Brain {
 
 		if (this.debug) console.log(`Inserted ${connResult.affectedRows} connection votes, ${patternResult.affectedRows} pattern votes`);
 
-		// Query surviving votes: filter out votes from peaks that have an active pattern voting for the same dimension
-		// A vote is overridden if its from_neuron_id is the peak_neuron_id of a pattern that also votes for the same dimension
-		// if the active neuron is a peak neuron for an active pattern neuron, its inference for that type of pattern is suppressed
+		// Delete overridden votes: connection votes from peaks that have an active pattern voting for the same dimension
+		const [deleteResult] = await this.conn.query(`
+			DELETE v FROM inference_votes v
+			JOIN inference_votes pv ON pv.source_type = 'pattern' AND pv.dimension_id = v.dimension_id
+			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pv.from_neuron_id AND pp.peak_neuron_id = v.from_neuron_id
+		`);
+
+		if (this.debug) console.log(`Deleted ${deleteResult.affectedRows} overridden votes`);
+
+		// Query remaining votes
 		const [votes] = await this.conn.query(`
 			SELECT v.from_neuron_id, v.neuron_id, v.dimension_id, v.dimension_name, v.val,
 			       v.type, v.channel_id, v.channel, v.strength, v.reward, v.distance, v.source_level, v.source_type
 			FROM inference_votes v
-			WHERE NOT EXISTS (
-				SELECT 1
-				FROM inference_votes pv
-				JOIN pattern_peaks pp ON pp.pattern_neuron_id = pv.from_neuron_id
-				WHERE pv.source_type = 'pattern'
-				AND pp.peak_neuron_id = v.from_neuron_id
-				AND pv.dimension_id = v.dimension_id
-			)
 		`);
 
 		if (this.debug) console.log(`Collected ${votes.length} votes after pattern override filtering`);
