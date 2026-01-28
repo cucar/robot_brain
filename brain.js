@@ -34,7 +34,6 @@ export default class Brain {
 		// voting parameters
 		this.levelVoteMultiplier = 3; // how much to weight votes from higher levels
 		this.timeDecay = 0.2; // how much to weight votes from older neurons
-		this.boltzmannTemperature = 0.1; // temperature for Boltzmann selection (lower = more aggressive, 1.0 = standard)
 
 		// exploration parameters - probability inversely proportional to inference strength
 		this.minExploration = 0.03; // minimum - never stop exploring
@@ -1710,8 +1709,8 @@ export default class Brain {
 	/**
 	 * Select winner for a dimension using weighted voting.
 	 * All levels contribute with level weighting.
-	 * Events: select by highest weighted strength
-	 * Actions: Boltzmann selection on weighted reward
+	 * Events: deterministic selection by highest weighted strength
+	 * Actions: deterministic selection by highest weighted reward
 	 * @param {string} dimName - Dimension name
 	 * @param {Array} dimVotes - Array of aggregated votes for this dimension
 	 * @returns {Object|null} Winning vote or null if no votes
@@ -1722,10 +1721,11 @@ export default class Brain {
 		// Select winner based on neuron type (all votes for same dimension have same type)
 		const isAction = dimVotes[0]?.type === 'action';
 
-		// For actions: Boltzmann selection on weighted reward (already computed)
+		// For actions: deterministic selection by highest weighted reward
 		if (isAction) {
-			const winner = this.boltzmannSelect(dimVotes);
-			if (this.debug) console.log(`Voting: ${dimName} (action) Boltzmann = ${winner.coordinates[dimName]} (n${winner.neuron_id}, rwd=${winner.reward.toFixed(2)}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
+			dimVotes.sort((a, b) => b.reward - a.reward);
+			const winner = dimVotes[0];
+			if (this.debug) console.log(`Voting: ${dimName} (action) winner = ${winner.coordinates[dimName]} (n${winner.neuron_id}, rwd=${winner.reward.toFixed(2)}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
 			return winner;
 		}
 
@@ -1734,36 +1734,6 @@ export default class Brain {
 		const winner = dimVotes[0];
 		if (this.debug) console.log(`Voting: ${dimName} (event) winner = ${winner.coordinates[dimName]} (n${winner.neuron_id}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
 		return winner;
-	}
-
-	/**
-	 * Boltzmann selection from candidates based on reward values.
-	 * Uses exponential Boltzmann where probability is proportional to exp(reward / temperature).
-	 * Lower temperature = more aggressive (favors higher rewards more strongly).
-	 * @param {Array} candidates - Array of objects with reward property
-	 * @returns {Object} - Selected candidate
-	 */
-	boltzmannSelect(candidates) {
-		if (candidates.length === 0) return null;
-		if (candidates.length === 1) return candidates[0];
-
-		// Exponential Boltzmann with temperature: probability proportional to exp(reward / temperature)
-		const expValues = candidates.map(c => Math.exp(c.reward / this.boltzmannTemperature));
-		const sum = expValues.reduce((s, v) => s + v, 0);
-
-		// Calculate probabilities
-		const probabilities = expValues.map(v => v / sum);
-
-		// Sample from distribution
-		const rand = Math.random();
-		let cumulative = 0;
-		for (let i = 0; i < candidates.length; i++) {
-			cumulative += probabilities[i];
-			if (rand < cumulative) return candidates[i];
-		}
-
-		// Fallback (shouldn't happen due to floating point)
-		return candidates[candidates.length - 1];
 	}
 
 	/**
