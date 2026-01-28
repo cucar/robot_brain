@@ -1531,18 +1531,14 @@ export default class Brain {
 	 */
 	async inferNeurons() {
 
-		// Collect ALL votes from ALL levels in one query
-		const allVotes = await this.collectVotes();
+		// Collect votes and determine consensus (all in SQL)
+		const inferences = await this.collectVotes();
 
-		// If no votes, wait for more data
-		if (allVotes.length === 0) {
-			if (this.debug) console.log('No votes found. Waiting for more data in future frames.');
+		// If no inferences, wait for more data
+		if (inferences.length === 0) {
+			if (this.debug) console.log('No inferences found. Waiting for more data in future frames.');
 			return;
 		}
-
-		// Determine consensus - pick best per dimension (highest sum of strength * reward)
-		// Returns array of inferences with isWinner flag
-		const inferences = await this.determineConsensus(allVotes);
 
 		// Apply exploration to actions (may override winners)
 		await this.applyExploration(inferences);
@@ -1555,9 +1551,10 @@ export default class Brain {
 	}
 
 	/**
-	 * Collect votes from connections and patterns into inference_votes table.
-	 * Pattern votes override their peak's connection votes for dimensions the pattern covers.
-	 * @returns {Promise<Array>} Array of votes with full neuron info for consensus determination
+	 * Collect votes and determine consensus in SQL.
+	 * Pattern votes override their peak's connection votes.
+	 * Aggregates by neuron, picks winners per dimension (highest strength for events, highest reward for actions).
+	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async collectVotes() {
 		await this.conn.query('TRUNCATE inference_votes');
@@ -1597,79 +1594,63 @@ export default class Brain {
 
 		if (this.debug) console.log(`Deleted ${deleteResult.affectedRows} overridden votes`);
 
-		// Query remaining votes with denormalized fields via joins
-		// Coordinates are aggregated as "dim1|val1,dim2|val2,..." string
-		const [votes] = await this.conn.query(`
-			SELECT v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance,
-			       b.type, b.channel_id, ch.name as channel,
-			       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
-			FROM inference_votes v
-			JOIN base_neurons b ON b.neuron_id = v.neuron_id
-			JOIN channels ch ON ch.id = b.channel_id
-			JOIN coordinates coord ON coord.neuron_id = v.neuron_id
-			JOIN dimensions d ON d.id = coord.dimension_id
-			GROUP BY v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance, b.type, b.channel_id, ch.name
+		// Call channel-specific debug methods if debug2 is enabled
+		if (this.debug2) {
+			const [votes] = await this.conn.query(`
+				SELECT v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance,
+				       b.type, b.channel_id, ch.name as channel,
+				       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
+				FROM inference_votes v
+				JOIN base_neurons b ON b.neuron_id = v.neuron_id
+				JOIN channels ch ON ch.id = b.channel_id
+				JOIN coordinates coord ON coord.neuron_id = v.neuron_id
+				JOIN dimensions d ON d.id = coord.dimension_id
+				GROUP BY v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance, b.type, b.channel_id, ch.name
+			`);
+			for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
+		}
+
+		// Aggregate votes by neuron and determine winners per dimension
+		const [inferences] = await this.conn.query(`
+			-- aggregate votes for each candidate neuron
+            WITH candidates AS (
+            	SELECT v.neuron_id, SUM(v.strength) as strength, SUM(v.strength * v.reward) / SUM(v.strength) as reward,
+					   b.type, b.channel_id, ch.name as channel,
+					   GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
+				FROM inference_votes v
+                JOIN base_neurons b ON b.neuron_id = v.neuron_id
+                JOIN channels ch ON ch.id = b.channel_id
+                JOIN coordinates coord ON coord.neuron_id = v.neuron_id
+                JOIN dimensions d ON d.id = coord.dimension_id
+                GROUP BY v.neuron_id, b.type, b.channel_id, ch.name
+            ),
+            -- join to coordinates and rank within each dimension (events by strength, actions by reward)
+            ranked AS (
+            	SELECT c.neuron_id, coord.dimension_id,
+					RANK() OVER (PARTITION BY coord.dimension_id ORDER BY IF(c.type = 'action', c.reward, c.strength) DESC) as dim_rank
+				FROM candidates c
+                JOIN coordinates coord ON coord.neuron_id = c.neuron_id
+			),
+			-- collect neurons that are rank 1 in any dimension
+            winners AS (
+            	SELECT DISTINCT neuron_id
+                FROM ranked
+                WHERE dim_rank = 1
+            )
+            -- join candidates with winners to set is_winner flag
+            SELECT c.*, IF(w.neuron_id IS NOT NULL, 1, 0) as is_winner
+            FROM candidates c
+            LEFT JOIN winners w ON w.neuron_id = c.neuron_id
 		`);
 
-		if (this.debug) console.log(`Collected ${votes.length} votes after pattern override filtering`);
+		if (this.debug) console.log(`Collected ${inferences.length} inferences after consensus`);
 
-		// Call channel-specific debug methods if debug2 is enabled
-		if (this.debug2) for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
-
-		return votes;
-	}
-
-	/**
-	 * Determine consensus from votes - sum strengths, strength-weighted average for rewards.
-	 * All votes are for base level neurons (level 0) - pattern neurons are activated in pattern recognition
-	 * Uses per-dimension conflict resolution.
-	 * For actions: strength-weighted reward average ensures consistent cycle-based connections override noisy probabilistic ones.
-	 * @param {Array} votes - Array of vote objects with full neuron info from collectVotes
-	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
-	 */
-	async determineConsensus(votes) {
-		if (votes.length === 0) return [];
-
-		// Aggregate votes by target neuron (candidates) - sum strengths, strength-weighted average for rewards
-		// Coordinates come as "dim1|val1,dim2|val2,..." string from GROUP_CONCAT
-		const candidates = new Map();
-		for (const vote of votes) {
-			if (!candidates.has(vote.neuron_id))
-				candidates.set(vote.neuron_id, {
-					neuron_id: vote.neuron_id,
-					strength: 0,
-					weightedRewardSum: 0,
-					type: vote.type,
-					channel: vote.channel,
-					channel_id: vote.channel_id,
-					coordinates: this.parseCoordinates(vote.coordinates)
-				});
-
-			// Sum strengths, accumulate strength-weighted rewards for the candidates
-			const candidate = candidates.get(vote.neuron_id);
-			candidate.strength += vote.strength;
-			candidate.weightedRewardSum += vote.strength * vote.reward;
-		}
-
-		// Calculate strength-weighted average reward for each candidate neuron
-		for (const [_, agg] of candidates) agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
-
-		// Group by candidates dimension
-		const byDimension = this.groupCandidatesByDimension(candidates);
-
-		// Select winner for each dimension
-		const winners = new Set();
-		for (const [dimName, dimCandidates] of byDimension) {
-			const winner = this.selectWinnerForDimension(dimName, dimCandidates);
-			if (winner) winners.add(winner.neuron_id);
-		}
-
-		// Build inferences array with isWinner flag
-		const inferences = [];
-		for (const [neuronId, candidate] of candidates)
-			inferences.push({ ...candidate, isWinner: winners.has(neuronId) });
-
-		return inferences;
+		// Parse coordinates and convert is_winner to boolean
+		return inferences.map(inf => ({
+			...inf,
+			coordinates: this.parseCoordinates(inf.coordinates),
+			isWinner: inf.is_winner === 1
+		}));
 	}
 
 	/**
@@ -1687,53 +1668,6 @@ export default class Brain {
 			coords[dim] = parseFloat(val);
 		}
 		return coords;
-	}
-
-	/**
-	 * Group candidates by dimension.
-	 * @param {Map} candidates - Map of neuron_id -> aggregated vote with coordinates
-	 * @returns {Map} Map of dimension name -> array of aggregated votes
-	 */
-	groupCandidatesByDimension(candidates) {
-		const byDimension = new Map();
-		for (const [, candidate] of candidates) {
-			if (!candidate.coordinates) continue;
-			for (const dimName of Object.keys(candidate.coordinates)) {
-				if (!byDimension.has(dimName)) byDimension.set(dimName, []);
-				byDimension.get(dimName).push(candidate);
-			}
-		}
-		return byDimension;
-	}
-
-	/**
-	 * Select winner for a dimension using weighted voting.
-	 * All levels contribute with level weighting.
-	 * Events: deterministic selection by highest weighted strength
-	 * Actions: deterministic selection by highest weighted reward
-	 * @param {string} dimName - Dimension name
-	 * @param {Array} dimVotes - Array of aggregated votes for this dimension
-	 * @returns {Object|null} Winning vote or null if no votes
-	 */
-	selectWinnerForDimension(dimName, dimVotes) {
-		if (dimVotes.length === 0) return null;
-
-		// Select winner based on neuron type (all votes for same dimension have same type)
-		const isAction = dimVotes[0]?.type === 'action';
-
-		// For actions: deterministic selection by highest weighted reward
-		if (isAction) {
-			dimVotes.sort((a, b) => b.reward - a.reward);
-			const winner = dimVotes[0];
-			if (this.debug) console.log(`Voting: ${dimName} (action) winner = ${winner.coordinates[dimName]} (n${winner.neuron_id}, rwd=${winner.reward.toFixed(2)}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
-			return winner;
-		}
-
-		// Events: deterministic selection by highest weighted strength
-		dimVotes.sort((a, b) => b.strength - a.strength);
-		const winner = dimVotes[0];
-		if (this.debug) console.log(`Voting: ${dimName} (event) winner = ${winner.coordinates[dimName]} (n${winner.neuron_id}, str=${winner.strength.toFixed(2)}, ${dimVotes.length} cand)`);
-		return winner;
 	}
 
 	/**
