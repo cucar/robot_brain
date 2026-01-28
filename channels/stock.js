@@ -235,7 +235,7 @@ export default class StockChannel extends Channel {
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange) },
-			// { [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange) }
+			{ [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange) }
 		];
 	}
 
@@ -254,6 +254,18 @@ export default class StockChannel extends Channel {
 	 */
 	getOutputDimensions() {
 		return [ `${this.symbol}_activity` ];
+	}
+
+	/**
+	 * Returns all possible action neurons for this channel.
+	 * These are pre-created during brain init so exploration can find them.
+	 */
+	getActionNeurons() {
+		const activityDim = `${this.symbol}_activity`;
+		return [
+			{ [activityDim]: POSITION_OUT },
+			{ [activityDim]: POSITION_OWN }
+		];
 	}
 
 	/**
@@ -739,20 +751,16 @@ export default class StockChannel extends Channel {
 		ownTotal.rwd = ownTotal.str > 0 ? ownTotal.weightedRewardSum / ownTotal.str : 0;
 		outTotal.rwd = outTotal.str > 0 ? outTotal.weightedRewardSum / outTotal.str : 0;
 
-		// Calculate Boltzmann probabilities (exponential with temperature)
-		const ownExp = Math.exp(ownTotal.rwd / brain.boltzmannTemperature);
-		const outExp = Math.exp(outTotal.rwd / brain.boltzmannTemperature);
-		const sumExp = ownExp + outExp;
-		const ownProb = ownExp / sumExp;
-		const outProb = outExp / sumExp;
+		// Determine winner by highest reward (deterministic selection)
+		const winner = ownTotal.rwd >= outTotal.rwd ? 'OWN' : 'OUT';
 
 		// Calculate cycle frame (1-6) based on frame number
 		const cycleFrame = ((this.frameNumber - 1) % 6) + 1;
 
 		console.log(`\n=== ${this.symbol} ACTION VOTES (Cycle ${cycleFrame}/6) ===`);
-		console.log(this.formatAggregatedVotes(ownAgg, `OWN (${ownAgg.length} voters, str=${ownTotal.str.toFixed(1)}, avgRwd=${ownTotal.rwd.toFixed(2)}, prob=${(ownProb * 100).toFixed(1)}%)`, true));
-		console.log(this.formatAggregatedVotes(outAgg, `OUT (${outAgg.length} voters, str=${outTotal.str.toFixed(1)}, avgRwd=${outTotal.rwd.toFixed(2)}, prob=${(outProb * 100).toFixed(1)}%)`, true));
-		console.log(`  SELECTION: Boltzmann (OWN ${(ownProb * 100).toFixed(1)}% vs OUT ${(outProb * 100).toFixed(1)}%)`);
+		console.log(this.formatAggregatedVotes(ownAgg, `OWN (${ownAgg.length} voters, str=${ownTotal.str.toFixed(1)}, avgRwd=${ownTotal.rwd.toFixed(2)})${winner === 'OWN' ? ' ★' : ''}`, true));
+		console.log(this.formatAggregatedVotes(outAgg, `OUT (${outAgg.length} voters, str=${outTotal.str.toFixed(1)}, avgRwd=${outTotal.rwd.toFixed(2)})${winner === 'OUT' ? ' ★' : ''}`, true));
+		console.log(`  SELECTION: ${winner} (highest reward)`);
 		console.log(`===================\n`);
 	}
 

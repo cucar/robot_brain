@@ -4,7 +4,7 @@
 CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
--- 1 = up, 2 = buy, 3 = down, 4 = sell
+-- 1 = up, 2 = down, 3 = buy, 4 = sell (not created yet)
 select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id = c.dimension_id;
 select * from dimensions;
 select * from channels;
@@ -22,6 +22,7 @@ select * from new_pattern_future;
 select * from matched_patterns;
 select * from matched_pattern_past;
 select * from inferred_neurons;
+select * from inference_votes;
 
 -- new patterns pattern_past entries
 SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - 1

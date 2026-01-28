@@ -53,6 +53,15 @@ export default class Channel {
 	}
 
 	/**
+	 * Get all possible action neurons for this channel - override in subclasses
+	 * Returns array of coordinate objects: [{ [action-dim]: value }, ...]
+	 * These neurons are pre-created during brain init so exploration can find them
+	 */
+	getActionNeurons() {
+		return []; // Default: no predefined actions
+	}
+
+	/**
 	 * Get frame events data - override in subclasses
 	 * Returns array of input neuron objects: [{ [input-dim]: value }]
 	 */

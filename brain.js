@@ -35,11 +35,6 @@ export default class Brain {
 		this.levelVoteMultiplier = 3; // how much to weight votes from higher levels
 		this.timeDecay = 0.2; // how much to weight votes from older neurons
 
-		// exploration parameters - probability inversely proportional to inference strength
-		this.minExploration = 0.03; // minimum - never stop exploring
-		this.maxExploration = 1.0; // 100% when totalStrength = 0
-		this.explorationScale = 10; // controls decay rate of exploration probability
-
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
@@ -160,8 +155,35 @@ export default class Brain {
 		// load the dimensions
 		await this.loadDimensions();
 
+		// pre-create action neurons for all channels
+		await this.initializeActionNeurons();
+
 		// initialize all registered channels (channel-specific setup)
 		for (const [, channel] of this.channels) await channel.initialize();
+	}
+
+	/**
+	 * Pre-create action neurons for all channels.
+	 * This ensures exploration can find action neurons even before any connections exist.
+	 */
+	async initializeActionNeurons() {
+		for (const [channelName, channel] of this.channels) {
+			const actionCoords = channel.getActionNeurons();
+			if (actionCoords.length === 0) continue;
+
+			// Build frame points for action neurons
+			const framePoints = actionCoords.map(coords => ({
+				coordinates: coords,
+				channel: channelName,
+				channel_id: this.channelNameToId[channelName],
+				type: 'action'
+			}));
+
+			// Create neurons (getFrameNeurons will create if they don't exist)
+			await this.getFrameNeurons(framePoints);
+
+			if (this.debug) console.log(`Created ${actionCoords.length} action neurons for ${channelName}`);
+		}
 	}
 
 	/**
@@ -1708,34 +1730,15 @@ export default class Brain {
 	}
 
 	/**
-	 * Decide whether to explore a channel based on inference strength
-	 * Exploration probability is inversely proportional to total effective inference strength
-	 * Higher confidence predictions = lower exploration probability
+	 * Decide whether to explore a channel. Only explore when there are no action winners for the channel.
 	 * @param {string} channelName - name of the channel to check
-	 * @param {Array} channelBaseInferences - array of channel base inferences with strength and reward
+	 * @param {Array} channelWinners - array of winning action inferences for this channel
 	 * @returns {boolean} - true if we should explore this channel
 	 */
-	shouldExploreChannel(channelName, channelBaseInferences) {
-
-		// If there are no action inferences, exploration is needed
-		if (!channelBaseInferences.length) return true;
-
-		// Calculate total raw inference strength for this channel
-		// Use raw strength (not strength * reward) because reward can compound to extreme values
-		// that would suppress exploration even when the brain hasn't learned the correct pattern
-		const totalInferenceStrength = channelBaseInferences.reduce((sum, inf) => sum + inf.strength, 0);
-
-		// Linear decay from maxExploration to minExploration as strength increases
-		// explorationScale defines the strength at which exploration reaches minimum
-		const explorationRange = this.maxExploration - this.minExploration;
-		let inferenceScale = totalInferenceStrength / this.explorationScale;
-		if (inferenceScale > 1.0) inferenceScale = 1.0;
-		const explorationProb = this.maxExploration - inferenceScale * explorationRange;
-
-		// Randomly decide if we should explore based on probability
-		const explore = Math.random() < explorationProb;
-		if (this.debug && explore) console.log(`${channelName}: Total raw strength ${totalInferenceStrength.toFixed(2)} → Exploration prob ${explorationProb.toFixed(2)} → Exploring`);
-		return explore;
+	shouldExploreChannel(channelName, channelWinners) {
+		const shouldExplore = channelWinners.length === 0;
+		if (this.debug && shouldExplore) console.log(`${channelName}: No action winners, exploring`);
+		return shouldExplore;
 	}
 
 	/**
