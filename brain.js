@@ -1267,15 +1267,19 @@ export default class Brain {
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT v.from_neuron_id, an.neuron_id as inferred_neuron_id, v.distance
 			FROM inference_votes v
+			-- get neuron info for the inferred neuron (target)
+			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
+			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
+			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
 			-- find the active neurons (what actually happened just now) - create pattern to predict these
 			JOIN active_neurons an ON an.age = 0
 			JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
 			-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
 			JOIN base_neurons b_peak ON b_peak.neuron_id = v.from_neuron_id AND b_peak.type = 'event'
 			-- only connection votes (base level peaks)
-			WHERE v.source_type = 'connection'
+			WHERE n_voter.level = 0
 			-- only event predictions
-			AND v.type = 'event'
+			AND b_target.type = 'event'
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation
 			AND v.strength >= ?
 			-- the inference did not come true (prediction error)
@@ -1296,13 +1300,17 @@ export default class Brain {
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT v.from_neuron_id, an.neuron_id, v.distance
 			FROM inference_votes v
+			-- get neuron info for the inferred neuron (target)
+			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
+			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
+			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
 			-- find the active neurons (what actually happened just now) - create pattern to predict these
 			JOIN active_neurons an ON an.age = 0
 			JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
 			-- only pattern votes (higher level peaks)
-			WHERE v.source_type = 'pattern'
+			WHERE n_voter.level > 0
 			-- only event predictions
-			AND v.type = 'event'
+			AND b_target.type = 'event'
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation
 			AND v.strength >= ?
 			-- the inference did not come true (prediction error)
@@ -1350,22 +1358,26 @@ export default class Brain {
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT v.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, v.distance
 			FROM inference_votes v
+			-- get neuron info for the inferred neuron (target)
+			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
+			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
+			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
 			-- find alternative actions in the same channel (what we should try instead)
-			JOIN base_neurons b_alt ON b_alt.channel_id = v.channel_id AND b_alt.type = 'action'
+			JOIN base_neurons b_alt ON b_alt.channel_id = b_target.channel_id AND b_alt.type = 'action'
 			-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
 			JOIN base_neurons b_peak ON b_peak.neuron_id = v.from_neuron_id AND b_peak.type = 'event'
 			-- only connection votes (base level peaks)
-			WHERE v.source_type = 'connection'
+			WHERE n_voter.level = 0
 			-- only action predictions that were executed (winners) in painful channels
-			AND v.type = 'action'
-			AND v.channel_id IN (${painfulChannelIds.join(',')})
+			AND b_target.type = 'action'
+			AND b_target.channel_id IN (${painfulChannelIds.join(',')})
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation
 			AND v.strength >= ?
 			-- check if this was the winning action (need to verify it was executed)
 			AND EXISTS (SELECT 1 FROM inferred_neurons inf WHERE inf.neuron_id = v.neuron_id AND inf.is_winner = 1)
 			-- don't suggest the same action that just failed
 			AND b_alt.neuron_id != v.neuron_id
-			GROUP BY v.from_neuron_id, v.channel_id, v.distance
+			GROUP BY v.from_neuron_id, b_target.channel_id, v.distance
 		`, [this.actionRegretMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} connection action regret inferences`);
 		return result.affectedRows;
@@ -1383,20 +1395,24 @@ export default class Brain {
 			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
 			SELECT v.from_neuron_id, MIN(b_alt.neuron_id), v.distance
 			FROM inference_votes v
+			-- get neuron info for the inferred neuron (target)
+			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
+			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
+			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
 			-- find alternative actions in the same channel (what we should try instead)
-			JOIN base_neurons b_alt ON b_alt.channel_id = v.channel_id AND b_alt.type = 'action'
+			JOIN base_neurons b_alt ON b_alt.channel_id = b_target.channel_id AND b_alt.type = 'action'
 			-- only pattern votes (higher level peaks)
-			WHERE v.source_type = 'pattern'
+			WHERE n_voter.level > 0
 			-- only action predictions that were executed (winners) in painful channels
-			AND v.type = 'action'
-			AND v.channel_id IN (${painfulChannelIds.join(',')})
+			AND b_target.type = 'action'
+			AND b_target.channel_id IN (${painfulChannelIds.join(',')})
 			-- the inference must have been done with a strength above a threshold to trigger pattern creation
 			AND v.strength >= ?
 			-- check if this was the winning action (need to verify it was executed)
 			AND EXISTS (SELECT 1 FROM inferred_neurons inf WHERE inf.neuron_id = v.neuron_id AND inf.is_winner = 1)
 			-- don't suggest the same action that just failed
 			AND b_alt.neuron_id != v.neuron_id
-			GROUP BY v.from_neuron_id, v.channel_id, v.distance
+			GROUP BY v.from_neuron_id, b_target.channel_id, v.distance
 		`, [this.actionRegretMinStrength]);
 		if (this.debug) console.log(`Found ${result.affectedRows} pattern action regret inferences`);
 		return result.affectedRows;
@@ -1542,7 +1558,6 @@ export default class Brain {
 	/**
 	 * Collect votes from connections and patterns into inference_votes table.
 	 * Pattern votes override their peak's connection votes for dimensions the pattern covers.
-	 * Uses NOT EXISTS to filter out votes from peaks that have an active pattern voting for the same dimension.
 	 * @returns {Promise<Array>} Array of votes with full neuron info for consensus determination
 	 */
 	async collectVotes() {
@@ -1550,54 +1565,51 @@ export default class Brain {
 
 		// Insert connection votes (from base level neurons)
 		const [connResult] = await this.conn.query(`
-			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, 
-			                             channel_id, channel, reward, distance, source_level, source_type, strength)
-			SELECT c.from_neuron_id, c.to_neuron_id, coord.dimension_id, d.name, coord.val, b.type, 
-			       b.channel_id, ch.name, c.reward, c.distance, 0, 'connection',
-                   (1 + n.level * ?) * (1 - (c.distance - 1) * ?) * c.strength as effective_strength 
+			INSERT INTO inference_votes (from_neuron_id, neuron_id, strength, reward, distance)
+			SELECT c.from_neuron_id, c.to_neuron_id,
+			       (1 + n.level * ?) * (1 - (c.distance - 1) * ?) * c.strength as effective_strength,
+			       c.reward, c.distance
 			FROM active_neurons an
 			JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
-			JOIN coordinates coord ON coord.neuron_id = c.to_neuron_id
-			JOIN dimensions d ON d.id = coord.dimension_id
-			JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
-			JOIN channels ch ON ch.id = b.channel_id
 			WHERE c.distance = an.age + 1 AND c.strength > 0
 		`,[this.levelVoteMultiplier, this.timeDecay]);
 
 		// Insert pattern votes (from pattern neurons at any level)
 		const [patternResult] = await this.conn.query(`
-			INSERT INTO inference_votes (from_neuron_id, neuron_id, dimension_id, dimension_name, val, type, 
-			                             channel_id, channel, reward, distance, source_level, source_type, strength)
-			SELECT pf.pattern_neuron_id, pf.inferred_neuron_id, coord.dimension_id, d.name, coord.val,
-			       b.type, b.channel_id, ch.name, pf.reward, pf.distance, pn.level, 'pattern',
-                   (1 + pn.level * ?) * (1 - (pf.distance - 1) * ?) * pf.strength as effective_strength
+			INSERT INTO inference_votes (from_neuron_id, neuron_id, strength, reward, distance)
+			SELECT pf.pattern_neuron_id, pf.inferred_neuron_id,
+			       (1 + pn.level * ?) * (1 - (pf.distance - 1) * ?) * pf.strength as effective_strength,
+			       pf.reward, pf.distance
 			FROM active_neurons an
 			JOIN neurons pn ON pn.id = an.neuron_id AND pn.level > 0
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
-			JOIN coordinates coord ON coord.neuron_id = pf.inferred_neuron_id
-			JOIN dimensions d ON d.id = coord.dimension_id
-			JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
-			JOIN channels ch ON ch.id = b.channel_id
 			WHERE pf.distance = an.age + 1 AND pf.strength > 0
 		`,[this.levelVoteMultiplier, this.timeDecay]);
 
 		if (this.debug) console.log(`Inserted ${connResult.affectedRows} connection votes, ${patternResult.affectedRows} pattern votes`);
 
-		// Delete overridden votes: connection votes from peaks that have an active pattern voting for the same dimension
+		// Delete overridden votes: votes from neurons that are peaks of other voting patterns
 		const [deleteResult] = await this.conn.query(`
 			DELETE v FROM inference_votes v
-			JOIN inference_votes pv ON pv.source_type = 'pattern' AND pv.dimension_id = v.dimension_id
-			JOIN pattern_peaks pp ON pp.pattern_neuron_id = pv.from_neuron_id AND pp.peak_neuron_id = v.from_neuron_id
+			JOIN pattern_peaks pp ON pp.peak_neuron_id = v.from_neuron_id
+			JOIN inference_votes pv ON pv.from_neuron_id = pp.pattern_neuron_id
 		`);
 
 		if (this.debug) console.log(`Deleted ${deleteResult.affectedRows} overridden votes`);
 
-		// Query remaining votes
+		// Query remaining votes with denormalized fields via joins
+		// Coordinates are aggregated as "dim1|val1,dim2|val2,..." string
 		const [votes] = await this.conn.query(`
-			SELECT v.from_neuron_id, v.neuron_id, v.dimension_id, v.dimension_name, v.val,
-			       v.type, v.channel_id, v.channel, v.strength, v.reward, v.distance, v.source_level, v.source_type
+			SELECT v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance,
+			       b.type, b.channel_id, ch.name as channel,
+			       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
 			FROM inference_votes v
+			JOIN base_neurons b ON b.neuron_id = v.neuron_id
+			JOIN channels ch ON ch.id = b.channel_id
+			JOIN coordinates coord ON coord.neuron_id = v.neuron_id
+			JOIN dimensions d ON d.id = coord.dimension_id
+			GROUP BY v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance, b.type, b.channel_id, ch.name
 		`);
 
 		if (this.debug) console.log(`Collected ${votes.length} votes after pattern override filtering`);
@@ -1620,7 +1632,7 @@ export default class Brain {
 		if (votes.length === 0) return [];
 
 		// Aggregate votes by target neuron (candidates) - sum strengths, strength-weighted average for rewards
-		// Also collect coordinates, type, channel from votes (all votes for same neuron have same info)
+		// Coordinates come as "dim1|val1,dim2|val2,..." string from GROUP_CONCAT
 		const candidates = new Map();
 		for (const vote of votes) {
 			if (!candidates.has(vote.neuron_id))
@@ -1631,17 +1643,13 @@ export default class Brain {
 					type: vote.type,
 					channel: vote.channel,
 					channel_id: vote.channel_id,
-					coordinates: {}
+					coordinates: this.parseCoordinates(vote.coordinates)
 				});
 
 			// Sum strengths, accumulate strength-weighted rewards for the candidates
 			const candidate = candidates.get(vote.neuron_id);
 			candidate.strength += vote.strength;
 			candidate.weightedRewardSum += vote.strength * vote.reward;
-
-			// TODO: this is going to break if a neuron has multiple dimensions - fix it later
-			// Collect coordinate for this dimension
-			candidate.coordinates[vote.dimension_name] = vote.val;
 		}
 
 		// Calculate strength-weighted average reward for each candidate neuron
@@ -1663,6 +1671,23 @@ export default class Brain {
 			inferences.push({ ...candidate, isWinner: winners.has(neuronId) });
 
 		return inferences;
+	}
+
+	/**
+	 * Parse coordinates string from GROUP_CONCAT into object.
+	 * Input format: "dim1|val1,dim2|val2,..."
+	 * Output format: { dim1: val1, dim2: val2, ... }
+	 * @param {string} coordStr - Coordinates string from SQL
+	 * @returns {Object} Coordinates object with dimension names as keys
+	 */
+	parseCoordinates(coordStr) {
+		if (!coordStr) return {};
+		const coords = {};
+		for (const pair of coordStr.split(',')) {
+			const [dim, val] = pair.split('|');
+			coords[dim] = parseFloat(val);
+		}
+		return coords;
 	}
 
 	/**

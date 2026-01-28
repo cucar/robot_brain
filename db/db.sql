@@ -106,37 +106,18 @@ select age, max(level) from active_neurons a join neurons n on n.id = a.neuron_i
 -- previous age level
 select max(level) from active_neurons a join neurons n on n.id = a.neuron_id where age = 1;
 
--- inference votes
--- 1 = up, 2 = buy, 3 = down, 4 = sell
-SELECT v.dimension_id, v.dimension_name, v.neuron_id as inferred_neuron_id, v.from_neuron_id as inferring_neuron_id, v.distance, v.val, v.type, 
-	v.channel_id, v.channel, v.strength, v.reward, v.source_level, v.source_type
+-- inference votes (after pattern override filtering)
+SELECT v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance,
+       b.type, b.channel_id, ch.name as channel,
+       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
 FROM inference_votes v
-WHERE NOT EXISTS (
-	SELECT 1
-	FROM inference_votes pv
-	JOIN pattern_peaks pp ON pp.pattern_neuron_id = pv.from_neuron_id
-	WHERE pv.source_type = 'pattern'
-	AND pp.peak_neuron_id = v.from_neuron_id
-	AND pv.dimension_id = v.dimension_id
-)
-and type = 'action'
-order by dimension_id, inferred_neuron_id, inferring_neuron_id, distance;
+JOIN base_neurons b ON b.neuron_id = v.neuron_id
+JOIN channels ch ON ch.id = b.channel_id
+JOIN coordinates coord ON coord.neuron_id = v.neuron_id
+JOIN dimensions d ON d.id = coord.dimension_id
+GROUP BY v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance, b.type, b.channel_id, ch.name;
 
 select * from dimensions;
-
--- connection inference votes
-SELECT c.from_neuron_id, c.to_neuron_id, coord.dimension_id, d.name, coord.val,
-	   b.type, b.channel_id, ch.name, c.strength, c.reward, c.distance, 0, 'connection'
-FROM active_neurons an
-JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
-JOIN connections c ON c.from_neuron_id = an.neuron_id
-JOIN coordinates coord ON coord.neuron_id = c.to_neuron_id
-JOIN dimensions d ON d.id = coord.dimension_id
-JOIN base_neurons b ON b.neuron_id = c.to_neuron_id
-JOIN channels ch ON ch.id = b.channel_id
-WHERE c.distance = an.age + 1 AND c.strength > 0
-and c.from_neuron_id = 1
-order by distance;
             
 select * from inferred_neurons where age = 0;
 select * from inferred_neurons where age = 1;
@@ -372,26 +353,18 @@ CREATE TABLE IF NOT EXISTS inferred_neurons (
 ) ENGINE=MEMORY;
 
 -- scratch table for vote collection during inference
--- contains all votes (connection and pattern) with full neuron info for consensus determination
--- pattern votes override their peak's connection votes for dimensions the pattern covers
+-- contains all votes (connection and pattern) for consensus determination
+-- pattern votes override their peak's votes (at any level)
+-- denormalized fields (type, channel, coordinates, etc.) are obtained via joins in collectVotes output
 -- DROP TABLE IF EXISTS inference_votes;
 CREATE TABLE IF NOT EXISTS inference_votes (
     from_neuron_id BIGINT UNSIGNED,     -- the voter (base neuron for connections, pattern neuron for patterns)
     neuron_id BIGINT UNSIGNED,          -- the target (always base neuron)
-    dimension_id SMALLINT UNSIGNED,     -- dimension of the target neuron
-    dimension_name VARCHAR(50),         -- dimension name for grouping
-    val FLOAT,                          -- coordinate value in this dimension
-    type ENUM('event', 'action'),       -- neuron type for winner selection logic
-    channel_id SMALLINT UNSIGNED,       -- channel id for exploration
-    channel VARCHAR(50),                -- channel name for debug output
     strength FLOAT,
     reward FLOAT,
     distance TINYINT UNSIGNED,
-    source_level TINYINT UNSIGNED,      -- 0 for connections, pattern level for patterns
-    source_type ENUM('connection', 'pattern'),
-    INDEX idx_from_dim (from_neuron_id, dimension_id),
-    INDEX idx_neuron (neuron_id),
-    INDEX idx_source_type (source_type)
+    INDEX idx_from (from_neuron_id),
+    INDEX idx_neuron (neuron_id)
 ) ENGINE=MEMORY;
 
 -- increase the amount of records that can be stored in memory tables

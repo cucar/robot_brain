@@ -635,7 +635,7 @@ export default class StockChannel extends Channel {
 	/**
 	 * Debug helper: show votes for event neurons (price_change, volume_change, etc.)
 	 * Shows which patterns/connections are voting for which event predictions
-	 * Votes now contain all neuron info directly (type, channel, dimension_name, val)
+	 * Votes contain coordinates as "dim1|val1,dim2|val2,..." string
 	 */
 	async debugEventVotes(allVotes, brain) {
 
@@ -643,20 +643,14 @@ export default class StockChannel extends Channel {
 		const eventVotes = allVotes.filter(v => v.type === 'event' && v.channel === this.symbol);
 		if (eventVotes.length === 0) return;
 
-		// Build neuron map with dimension info from votes
+		// Build neuron map with parsed coordinates from votes
 		const neuronMap = new Map();
 		for (const v of eventVotes) {
-			if (!neuronMap.has(v.neuron_id))
-				neuronMap.set(v.neuron_id, { id: v.neuron_id, type: v.type, dimensions: new Map() });
-			neuronMap.get(v.neuron_id).dimensions.set(v.dimension_name, v.val);
-		}
-
-		// Build coords string for each neuron
-		for (const [_, neuron] of neuronMap) {
-			const coordParts = [];
-			for (const [dimName, dimVal] of neuron.dimensions)
-				coordParts.push(`${dimName}=${dimVal}`);
-			neuron.coords = coordParts.sort().join(', ');
+			if (!neuronMap.has(v.neuron_id)) {
+				const coords = brain.parseCoordinates(v.coordinates);
+				const coordsStr = Object.entries(coords).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join(', ');
+				neuronMap.set(v.neuron_id, { id: v.neuron_id, type: v.type, coords: coordsStr, dimensions: coords });
+			}
 		}
 
 		// Group votes by event neuron
@@ -678,7 +672,7 @@ export default class StockChannel extends Channel {
 			const neuron = neuronMap.get(neuronId);
 			const totalStrength = votes.reduce((sum, v) => sum + v.strength, 0);
 
-			for (const [dimName, dimVal] of neuron.dimensions) {
+			for (const [dimName, dimVal] of Object.entries(neuron.dimensions)) {
 				if (!byDimension.has(dimName))
 					byDimension.set(dimName, []);
 				byDimension.get(dimName).push({ neuronId, neuron, votes, totalStrength, dimVal });
@@ -715,7 +709,7 @@ export default class StockChannel extends Channel {
 	/**
 	 * Debug helper: show votes for OWN and OUT action neurons
 	 * Shows which price/volume changes are voting for which action
-	 * Votes now contain all neuron info directly (type, channel, val)
+	 * Votes contain coordinates as "dim1|val1,dim2|val2,..." string
 	 */
 	async debugActionVotes(allVotes, brain) {
 
@@ -723,9 +717,11 @@ export default class StockChannel extends Channel {
 		const actionVotes = allVotes.filter(v => v.type === 'action' && v.channel === this.symbol);
 		if (actionVotes.length === 0) return;
 
-		// Split by OWN (val=1) vs OUT (val=-1)
-		const ownVotes = actionVotes.filter(v => v.val === POSITION_OWN);
-		const outVotes = actionVotes.filter(v => v.val === POSITION_OUT);
+		// Parse coordinates and split by OWN (val=1) vs OUT (val=-1)
+		const activityDim = `${this.symbol}_activity`;
+		const getActivityVal = v => brain.parseCoordinates(v.coordinates)[activityDim];
+		const ownVotes = actionVotes.filter(v => getActivityVal(v) === POSITION_OWN);
+		const outVotes = actionVotes.filter(v => getActivityVal(v) === POSITION_OUT);
 
 		// Aggregate votes by source neuron
 		const ownAgg = await this.aggregateVotesBySource(ownVotes, brain);
@@ -799,7 +795,7 @@ export default class StockChannel extends Channel {
 			const level = neuron ? neuron.level : 0;
 			const key = v.from_neuron_id;
 			if (!bySource.has(key))
-				bySource.set(key, { from_neuron_id: key, strength: 0, weightedRewardSum: 0, coords, level, distances: [], source_type: v.source_type });
+				bySource.set(key, { from_neuron_id: key, strength: 0, weightedRewardSum: 0, coords, level, distances: [] });
 			const agg = bySource.get(key);
 			agg.strength += v.strength;
 			agg.weightedRewardSum += v.strength * v.reward;
@@ -832,7 +828,7 @@ export default class StockChannel extends Channel {
 			const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
 			const rewardStr = includeReward ? `, avgRwd=${agg.reward.toFixed(2)}` : '';
 			const levelStr = agg.level > 0 ? ` L${agg.level}` : '';
-			const typeStr = agg.source_type === 'pattern' ? ' [P]' : '';
+			const typeStr = agg.level > 0 ? ' [P]' : '';
 			lines.push(`    ${coordsWithPercent}${levelStr}${typeStr} (${distStr}) → str=${agg.strength.toFixed(1)}${rewardStr}`);
 		}
 		return lines.join('\n');
