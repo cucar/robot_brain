@@ -57,6 +57,9 @@ export default class Brain {
 		// Prediction accuracy tracking (cumulative stats for base level only)
 		this.accuracyStats = { correct: 0, total: 0 };
 
+		// Action reward tracking (cumulative stats for base level only)
+		this.rewardStats = { totalReward: 0, count: 0 };
+
 		// Continuous prediction metrics (for channels that support it)
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
 
@@ -133,10 +136,11 @@ export default class Brain {
 	}
 
 	/**
-	 * Reset accuracy stats for a new episode
+	 * Reset accuracy and reward stats for a new episode
 	 */
 	resetAccuracyStats() {
 		this.accuracyStats = { correct: 0, total: 0 };
+		this.rewardStats = { totalReward: 0, count: 0 };
 	}
 
 	/**
@@ -502,8 +506,11 @@ export default class Brain {
 		// learn from connection action inferences
 		await this.rewardConnections();
 
-		// Validate event predictions and track accuracy stats
-		await this.validatePredictions();
+		// Track event prediction accuracy
+		await this.trackEventAccuracy();
+
+		// Track action reward stats
+		await this.trackActionRewards();
 	}
 
 	/**
@@ -746,11 +753,11 @@ export default class Brain {
 	}
 
 	/**
-	 * Validate event predictions by comparing inferred_neurons (age=1) to active_neurons (age=0).
+	 * Track event prediction accuracy by comparing inferred_neurons (age=1) to active_neurons (age=0).
 	 * Only validates base level (level 0) event predictions.
 	 * Only validates winners (is_winner=1) since losers are alternative hypotheses that were rejected.
 	 */
-	async validatePredictions() {
+	async trackEventAccuracy() {
 
 		// Get all base level event predictions from previous frame and check if they came true (age=0)
 		// Only validate winners - losers are just alternative hypotheses rejected during conflict resolution
@@ -775,6 +782,40 @@ export default class Brain {
 			const accuracy = (correct / total * 100).toFixed(1);
 			console.log(`Validated predictions: ${correct}/${total} (${accuracy}%)`);
 		}
+	}
+
+	/**
+	 * Track action reward stats by summing rewards for executed action winners.
+	 * Only tracks base level (level 0) action inferences.
+	 * Only tracks winners (is_winner=1) since losers were not executed.
+	 */
+	async trackActionRewards() {
+		if (this.rewards.size === 0) return;
+
+		// Count action winners that were executed (now active at age=0)
+		const [rows] = await this.conn.query(`
+			SELECT COUNT(*) as count
+			FROM inferred_neurons inf
+			JOIN base_neurons b ON b.neuron_id = inf.neuron_id
+			JOIN active_neurons an ON an.neuron_id = inf.neuron_id AND an.age = 0
+			WHERE b.type = 'action'
+			AND inf.is_winner = 1
+		`);
+
+		const actionCount = rows[0].count;
+		if (actionCount === 0) return;
+
+		// Sum rewards from all channels for this frame
+		let frameReward = 0;
+		for (const [_, reward] of this.rewards)
+			frameReward += reward;
+
+		// Update rewardStats (cumulative across frames)
+		this.rewardStats.totalReward += frameReward;
+		this.rewardStats.count += actionCount;
+
+		if (this.debug && actionCount > 0)
+			console.log(`Action rewards: ${frameReward.toFixed(3)} for ${actionCount} actions`);
 	}
 
 	/**
@@ -1908,6 +1949,11 @@ export default class Brain {
 		if (this.accuracyStats.total > 0)
 			baseAccuracy = `${(this.accuracyStats.correct / this.accuracyStats.total * 100).toFixed(1)}%`;
 
+		// Get average action reward
+		let avgReward = 'N/A';
+		if (this.rewardStats.count > 0)
+			avgReward = `${(this.rewardStats.totalReward / this.rewardStats.count).toFixed(3)} (${this.rewardStats.count})`;
+
 		// Collect continuous prediction metrics from channels (only new errors since last call)
 		for (const [_, channel] of this.channels) {
 			if (typeof channel.getPredictionMetrics === 'function') {
@@ -1946,7 +1992,7 @@ export default class Brain {
 			}).join(', ');
 		}
 
-		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Accuracy: ${baseAccuracy} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 }
