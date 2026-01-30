@@ -198,14 +198,14 @@ AND src.age = 0;
 CREATE TABLE IF NOT EXISTS channels (
     id SMALLINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(50) UNIQUE NOT NULL
-) ENGINE=MEMORY;
+);
 
 -- dimensions table defines coordinate space (just names, no type/channel)
 -- DROP TABLE IF EXISTS dimensions;
 CREATE TABLE IF NOT EXISTS dimensions (
     id SMALLINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(50) UNIQUE NOT NULL
-) ENGINE=MEMORY;
+);
 
 -- neurons table is the core representation of concepts - auto increment
 -- level is an intrinsic property: base neurons are level 0, pattern neurons are level 1+
@@ -214,26 +214,26 @@ CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     level TINYINT UNSIGNED NOT NULL DEFAULT 0,
     INDEX idx_level (level)
-) ENGINE=MEMORY;
+);
 
 -- base neuron attributes (level=0 neurons)
 -- DROP TABLE IF EXISTS base_neurons;
-CREATE TABLE base_neurons (
+CREATE TABLE IF NOT EXISTS base_neurons (
     neuron_id BIGINT PRIMARY KEY,
     channel_id SMALLINT UNSIGNED NOT NULL,
     type ENUM('event', 'action') NOT NULL,
     INDEX idx_channel_type (channel_id, type)
-) ENGINE=MEMORY;
+);
 
 -- Base neuron coordinates (only level=0 neurons)
 -- DROP TABLE IF EXISTS coordinates;
-CREATE TABLE coordinates (
+CREATE TABLE IF NOT EXISTS coordinates (
     neuron_id BIGINT UNSIGNED,
     dimension_id SMALLINT UNSIGNED,
     val FLOAT,
     PRIMARY KEY (neuron_id, dimension_id),
     INDEX (dimension_id, val)
-) ENGINE=MEMORY;
+);
 
 -- connections between base-level neurons (level=0 to level=0)
 -- DROP TABLE IF EXISTS connections;
@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS connections (
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength),
     INDEX idx_strength (strength)
-) ENGINE=MEMORY;
+);
 
 -- neurons currently active within the context sliding window (all levels)
 -- note that it is possible for the same neuron to be active in different ages
@@ -268,7 +268,7 @@ CREATE TABLE IF NOT EXISTS pattern_peaks (
     strength FLOAT NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id),
     INDEX idx_peak (peak_neuron_id)
-) ENGINE=MEMORY;
+);
 
 -- pattern_past: pattern contexts for recognition/matching (cross-channel)
 -- DROP TABLE IF EXISTS pattern_past;
@@ -279,7 +279,7 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     strength FLOAT NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id, context_neuron_id, context_age),
     INDEX idx_strength (strength)
-) ENGINE=MEMORY;
+);
 
 -- pattern_future: cross-level predictions from patterns to base neurons for inference/voting (cross-channel)
 -- patterns directly infer base-level neurons (events or actions) at various temporal distances
@@ -296,7 +296,7 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     INDEX idx_pattern_distance_strength (pattern_neuron_id, distance, strength),
     INDEX idx_inferred_distance_strength (inferred_neuron_id, distance, strength),
     INDEX idx_strength (strength)
-) ENGINE=MEMORY;
+);
 
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
 -- this just a scratch table for faster processing - it temporarily holds the matched patterns for the current level in the frame

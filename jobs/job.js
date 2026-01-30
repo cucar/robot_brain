@@ -2,11 +2,13 @@
  * Base Job Class - Common functionality for all episodes
  */
 import Brain from '../brain.js';
+import BrainMySQL from '../brain-mysql.js';
 
 export default class Job {
 	constructor() {
 		// console.log('starting new job...');
-		this.brain = new Brain();
+		// Brain instance will be created in run() based on options
+		this.brain = null;
 		this.hardReset = false;
 	}
 
@@ -15,6 +17,9 @@ export default class Job {
 	 */
 	async run() {
 		try {
+			// Create brain instance based on mysql option
+			this.brain = this.runnerOptions?.mysql ? new BrainMySQL() : new Brain();
+
 			// Allow jobs to show custom startup info
 			await this.showStartupInfo();
 

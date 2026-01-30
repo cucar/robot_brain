@@ -39,7 +39,8 @@ class BrainRunner {
 if (process.argv[2]) {
 	const jobName = process.argv[2];
 	const options = {
-		diagnostic: process.argv.includes('--diagnostic')
+		diagnostic: process.argv.includes('--diagnostic'),
+		mysql: process.argv.includes('--mysql')
 	};
 
 	const runner = new BrainRunner();
