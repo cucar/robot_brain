@@ -271,17 +271,13 @@ export default class StockTrainingJob extends Job {
 		let frameCount = 0;
 		while (frameCount < expectedFrames) {
 
-			// Get combined frame from all channels
-			const frame = await this.brain.getFrameAndExecuteActions();
-
+			// Process frame
+			await this.brain.processFrame();
 			frameCount++;
 
 			// Show progress every 100 frames
 			if (frameCount % 100 === 0)
 				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${expectedFrames}... `);
-
-			// Get feedback and process frame
-			await this.brain.processFrame(frame);
 		}
 
 		// Clear progress line

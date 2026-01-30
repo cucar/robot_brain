@@ -91,21 +91,8 @@ export default class StockPredictionJob extends Job {
 
 		// Process all frames until all channels are exhausted
 		let frameCount = 0;
-		while (true) {
-			// Get combined frame from all channels
-			const frame = await this.brain.getFrameAndExecuteActions();
-
-			// If no input data from any channel, prediction is complete
-			if (!frame || frame.length === 0) {
-				break;
-			}
-
+		while (await this.brain.processFrame())
 			frameCount++;
-
-			// Get feedback and process frame
-			const feedback = await this.brain.getRewards();
-			await this.brain.processFrame(frame, feedback);
-		}
 
 		// Collect prediction results from all channels
 		this.collectPredictionResults();

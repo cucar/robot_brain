@@ -120,8 +120,8 @@ export default class SyntheticCycleTest extends Job {
 		// Process all frames
 		while (frameCount < expectedFrames) {
 
-			// Get frame
-			const frame = await this.brain.getFrameAndExecuteActions();
+			// Process frame
+			await this.brain.processFrame();
 			frameCount++;
 
 			// Track trades with source information
@@ -136,10 +136,6 @@ export default class SyntheticCycleTest extends Job {
 					priceChange: (priceChange * 100).toFixed(2) + '%'
 				});
 			}
-			// else if (frameCount > 50) throw new Error('No action executed');
-
-			// Get feedback and process
-			await this.brain.processFrame(frame);
 
 			// Show progress every 25 frames
 			if (frameCount % 25 === 0) console.log(`\rFrame ${frameCount}/${expectedFrames}... `);

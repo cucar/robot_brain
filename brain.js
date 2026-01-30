@@ -40,6 +40,14 @@ export default class Brain {
 		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
 		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 
+		//************************************************************
+		// operational properties
+		//************************************************************
+
+		// Frame state - populated by processFrameIO methods
+		this.frame = []; // current frame data from all channels
+		this.rewards = new Map(); // channel rewards for current frame
+
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
 
@@ -235,11 +243,12 @@ export default class Brain {
 	}
 
 	/**
-	 * returns the current frame combined from all registered channels and executes previously inferred actions
+	 * Returns the current frame combined from all registered channels
 	 * Each frame point includes: coordinates, channel, type
+	 * Populates this.frame with events from channels and actions from previous inference
 	 */
-	async getFrameAndExecuteActions() {
-		const frame = [];
+	async getFrame() {
+		this.frame = [];
 
 		// Increment frame counter to be able to track inactivity
 		this.frameNumber++;
@@ -249,27 +258,47 @@ export default class Brain {
 		// Get all frame outputs from previous frame's inference (one query for all channels)
 		const frameOutputs = await this.getFrameOutputs();
 
-		// Process each channel: get inputs from channel, get outputs from brain tables, execute
+		// Process each channel: get inputs from channel, get outputs from brain tables
 		for (const [channelName, channel] of this.channels) {
 			const channelId = this.channelNameToId[channelName];
 
 			// Get the frame event inputs from the channel (current state before any outputs are executed)
 			const channelEvents = await channel.getFrameEvents();
 			for (const event of channelEvents)
-				frame.push({ coordinates: event, channel: channelName, channel_id: channelId, type: 'event' });
+				this.frame.push({ coordinates: event, channel: channelName, channel_id: channelId, type: 'event' });
 
 			// Get last inferred actions to be executed in this frame (from brain's inference tables)
 			const channelActions = frameOutputs.get(channelName) || [];
 			for (const action of channelActions)
-				frame.push({ coordinates: action, channel: channelName, channel_id: channelId, type: 'action' });
-
-			// Execute actions - this updates channel state
-			await channel.executeOutputs(channelActions);
+				this.frame.push({ coordinates: action, channel: channelName, channel_id: channelId, type: 'action' });
 		}
 
-		if (this.debug) console.log(`frame points: ${JSON.stringify(frame)}`);
+		if (this.debug) console.log(`Processing frame: ${this.frame.length} neurons`);
+		if (this.debug) console.log(`frame points: ${JSON.stringify(this.frame)}`);
 		if (this.debug) console.log('******************************************************************');
-		return frame;
+	}
+
+	/**
+	 * Extract action outputs from this.frame grouped by channel
+	 * @returns {Map} - Map of channel names to array of action coordinate objects
+	 */
+	getFrameActions() {
+		const channelActions = new Map();
+		for (const point of this.frame)
+			if (point.type === 'action') {
+				if (!channelActions.has(point.channel)) channelActions.set(point.channel, []);
+				channelActions.get(point.channel).push(point.coordinates);
+			}
+		return channelActions;
+	}
+
+	/**
+	 * Execute previously inferred actions for all channels
+	 */
+	async executeActions() {
+		const channelActions = this.getFrameActions();
+		for (const [channelName, channel] of this.channels)
+			await channel.executeOutputs(channelActions.get(channelName) || []);
 	}
 
 	/**
@@ -313,33 +342,53 @@ export default class Brain {
 	}
 
 	/**
+	 * Handles all frame I/O: get frame, execute actions, get rewards, display header
+	 * @returns Promise<boolean> - true if frame data available, false if no more data
+	 */
+	async processFrameIO() {
+
+		// get the current frame from all channels - includes events and previously inferred actions
+		await this.getFrame();
+		if (!this.frame || this.frame.length === 0) return false;
+
+		// execute the previously inferred actions in all channels
+		await this.executeActions();
+
+		// get rewards from all channels based on executed actions
+		await this.getRewards();
+
+		// display diagnostic frame header if enabled
+		this.displayFrameHeader();
+
+		return true;
+	}
+
+	/**
 	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
 	 * and channel-specific rewards (Map of channel_name -> reward)
+	 * @returns Promise<boolean> - true if frame was processed, false if no more data available
 	 */
-	async processFrame(frame) {
+	async processFrame() {
 		const frameStart = performance.now();
 
-		// Display diagnostic frame header if enabled
-		if (this.diagnostic) this.displayFrameHeader(frame);
-
-		// get channel rewards
-		const channelRewards = await this.getChannelRewards();
+		// Handle all frame I/O: get frame, execute actions, get rewards, display header
+		if (!await this.processFrameIO()) return false;
 
 		// age the active neurons in memory context - sliding the temporal window
 		// deletion of aged-out neurons is deferred to after pattern learning
 		await this.ageNeurons();
 
 		// activate base neurons from the frame along with higher level patterns from them - what's happening right now?
-		await this.recognizeNeurons(frame);
+		await this.recognizeNeurons();
 
 		// learn from connection action inferences
-		await this.rewardConnections(channelRewards);
+		await this.rewardConnections();
 
 		// refine the learned pattern definitions from prediction errors and action regret
-		await this.refinePatterns(channelRewards);
+		await this.refinePatterns();
 
 		// learn new patterns from failed predictions and action regret
-		await this.learnNewPatterns(channelRewards);
+		await this.learnNewPatterns();
 
 		// deactivate aged-out neurons AFTER pattern learning captured full context
 		await this.deactivateOldNeurons();
@@ -356,17 +405,20 @@ export default class Brain {
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
+
+		// return true to indicate that we have processed the frame successfully
+		return true;
 	}
 
 	/**
 	 * Display diagnostic frame header with frame number and observations
 	 */
-	displayFrameHeader(frame) {
+	displayFrameHeader() {
 		if (!this.diagnostic) return;
 
 		// Build observation string from frame
 		const observations = [];
-		for (const point of frame)
+		for (const point of this.frame)
 			for (const [dim, val] of Object.entries(point.coordinates))
 				observations.push(`${dim}=${val}`);
 
@@ -377,16 +429,16 @@ export default class Brain {
 	 * Get channel-specific feedback as a Map of channel_name -> reward
 	 * Each channel provides its own reward signal based on its objectives
 	 */
-	async getChannelRewards() {
+	async getRewards() {
 		if (this.debug2) console.log('Getting rewards feedback from all channels...');
-		const channelRewards = new Map();
+		this.rewards = new Map();
 		let feedbackCount = 0;
 
 		for (const [channelName, channel] of this.channels) {
 			const reward = await channel.getRewards();
 			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
 				if (this.debug2) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
-				channelRewards.set(channelName, reward);
+				this.rewards.set(channelName, reward);
 				feedbackCount++;
 			}
 		}
@@ -396,21 +448,19 @@ export default class Brain {
 			else console.log('No rewards from any channels');
 		}
 		if (this.debug2 && feedbackCount > 0)
-			console.log(`Channel rewards:`, Array.from(channelRewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
+			console.log(`Channel rewards:`, Array.from(this.rewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 
 		// Display reward information if diagnostic mode enabled
-		if (this.diagnostic && channelRewards.size > 0) this.displayRewards(channelRewards);
-
-		return channelRewards;
+		if (this.diagnostic && this.rewards.size > 0) this.displayRewards();
 	}
 
 	/**
 	 * Display reward information for diagnostic output
 	 */
-	displayRewards(channelRewards) {
+	displayRewards() {
 		if (!this.diagnostic) return;
 		const rewardParts = [];
-		for (const [channelName, reward] of channelRewards)
+		for (const [channelName, reward] of this.rewards)
 			rewardParts.push(`${channelName}:${reward.toFixed(3)}x`);
 		console.log(`  Rewards: ${rewardParts.join(', ')}`);
 	}
@@ -445,10 +495,10 @@ export default class Brain {
 	 * Recognizes and activates neurons from frame
 	 * Common implementation for both MySQL and Memory backends
 	 */
-	async recognizeNeurons(frame) {
+	async recognizeNeurons() {
 
 		// bulk find/create neurons for all input points
-		const neuronIds = await this.getFrameNeurons(frame);
+		const neuronIds = await this.getFrameNeurons(this.frame);
 		if (this.debug) console.log('frame neurons', neuronIds);
 
 		// insert the new base neurons to the active neurons table
@@ -906,18 +956,18 @@ export default class Brain {
 	/**
 	 * Apply rewards to action connections
 	 */
-	async rewardConnections(channelRewards) {
+	async rewardConnections() {
 
 		// nothing to update if there are no rewards
-		if (channelRewards.size === 0) return;
+		if (this.rewards.size === 0) return;
 
 		// apply rewards reinforcement to executed actions via connection inference
 		// winners were executed and added to frame, then activated when recognizing neurons
 		// they appear in active_neurons at age=0 (just activated)
 		// exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
 		// leave losers alone - we don't know what would have happened if they were executed
-		const channelIds = Array.from(channelRewards.keys()).map(name => this.channelNameToId[name]);
-		const rewardCase = this.buildChannelRewardCase(channelRewards, 'c.reward');
+		const channelIds = Array.from(this.rewards.keys()).map(name => this.channelNameToId[name]);
+		const rewardCase = this.buildChannelRewardCase('c.reward');
 		const [result] = await this.conn.query(`
             UPDATE connections c
             JOIN active_neurons an_to ON c.to_neuron_id = an_to.neuron_id AND an_to.age = 0
@@ -933,13 +983,12 @@ export default class Brain {
 	/**
 	 * Build a CASE-WHEN SQL snippet for channel rewards.
 	 * Maps channel_id to reward value for use in UPDATE statements.
-	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 * @param {string} rewardColumn - The column to use in ELSE clause (e.g., 'c.reward' or 'pf.reward')
 	 * @returns {string} SQL CASE statement like "CASE b.channel_id WHEN 1 THEN 0.5 WHEN 2 THEN -0.3 ELSE c.reward END"
 	 */
-	buildChannelRewardCase(channelRewards, rewardColumn) {
-		if (channelRewards.size === 0) return '';
-		const caseWhen = Array.from(channelRewards.entries())
+	buildChannelRewardCase(rewardColumn) {
+		if (this.rewards.size === 0) return '';
+		const caseWhen = Array.from(this.rewards.entries())
 			.map(([name, reward]) => `WHEN ${this.channelNameToId[name]} THEN ${reward}`)
 			.join(' ');
 		return `CASE b.channel_id ${caseWhen} ELSE ${rewardColumn} END`;
@@ -947,12 +996,11 @@ export default class Brain {
 
 	/**
 	 * Get channel IDs with painful rewards (below actionRegretMinPain threshold).
-	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 * @returns {Array<number>} Array of channel IDs with negative rewards
 	 */
-	getPainfulChannelIds(channelRewards) {
+	getPainfulChannelIds() {
 		const painfulChannelIds = [];
-		for (const [channelName, reward] of channelRewards)
+		for (const [channelName, reward] of this.rewards)
 			if (reward < this.actionRegretMinPain) painfulChannelIds.push(this.channelNameToId[channelName]);
 		return painfulChannelIds;
 	}
@@ -960,16 +1008,16 @@ export default class Brain {
 	/**
 	 * Learns patterns from prediction errors and action regret and continues to refine them as they are observed
 	 */
-	async refinePatterns(channelRewards) {
+	async refinePatterns() {
 
 		// update pattern_future for event patterns based on observations
 		await this.refinePatternEventsFuture();
 
 		// apply rewards to action predictions based on channel outcomes
-		await this.rewardExecutedPatternActions(channelRewards);
+		await this.rewardExecutedPatternActions();
 
 		// add alternative actions to action patterns in painful channels
-		await this.addPatternAlternativeActions(channelRewards);
+		await this.addPatternAlternativeActions();
 	}
 
 	/**
@@ -1041,15 +1089,15 @@ export default class Brain {
 	 *
 	 * Also strengthens executed action patterns so they won't be forgotten.
 	 */
-	async rewardExecutedPatternActions(channelRewards) {
+	async rewardExecutedPatternActions() {
 
 		// nothing to do if there are no rewards
-		if (channelRewards.size === 0) return;
+		if (this.rewards.size === 0) return;
 
 		// Strengthen and reward action pattern_future in one query
 		// Join chain: pattern_future → active neuron (just executed) → active pattern
 		// Strength is always incremented; reward is updated only if channel has a reward
-		const rewardCase = this.buildChannelRewardCase(channelRewards, 'pf.reward');
+		const rewardCase = this.buildChannelRewardCase('pf.reward');
 		const [result] = await this.conn.query(`
 			UPDATE pattern_future pf
             JOIN base_neurons b ON b.neuron_id = pf.inferred_neuron_id
@@ -1063,7 +1111,7 @@ export default class Brain {
 		if (this.debug) console.log(`Strengthened/rewarded ${result.affectedRows} action pattern_future predictions`);
 
 		// Learn from executed actions that pattern didn't predict
-		await this.learnUnpredictedPatternActions(channelRewards);
+		await this.learnUnpredictedPatternActions();
 	}
 
 	/**
@@ -1072,13 +1120,13 @@ export default class Brain {
 	 * - If positive reward: add the action to pattern_future with that reward
 	 * - If negative reward: add an alternative action to pattern_future
 	 */
-	async learnUnpredictedPatternActions(channelRewards) {
-		if (channelRewards.size === 0) return;
+	async learnUnpredictedPatternActions() {
+		if (this.rewards.size === 0) return;
 
 		// Get positive and negative channel IDs
 		const positiveChannelIds = [];
 		const negativeChannelIds = [];
-		for (const [channelName, reward] of channelRewards) {
+		for (const [channelName, reward] of this.rewards) {
 			const channelId = this.channelNameToId[channelName];
 			if (channelId === undefined) continue;
 			if (reward > 0) positiveChannelIds.push(channelId);
@@ -1088,7 +1136,7 @@ export default class Brain {
 		// Positive reward: add the executed action to pattern_future
 		// Only for patterns at age > 0 and < contextLength (exclude neurons kept for pattern context only)
 		if (positiveChannelIds.length > 0) {
-			const rewardCase = this.buildChannelRewardCase(channelRewards, '0');
+			const rewardCase = this.buildChannelRewardCase('0');
 			const [result] = await this.conn.query(`
 				INSERT INTO pattern_future (pattern_neuron_id, distance, inferred_neuron_id, reward)
 				SELECT an_pattern.neuron_id, an_pattern.age, an_action.neuron_id, (${rewardCase})
@@ -1114,7 +1162,7 @@ export default class Brain {
 		// Negative reward: first record the failed action with its negative reward
 		// Only for patterns at age > 0 and < contextLength (exclude neurons kept for pattern context only)
 		if (negativeChannelIds.length > 0) {
-			const rewardCase = this.buildChannelRewardCase(channelRewards, '0');
+			const rewardCase = this.buildChannelRewardCase('0');
 			const [failedResult] = await this.conn.query(`
 				INSERT INTO pattern_future (pattern_neuron_id, distance, inferred_neuron_id, reward)
 				SELECT an_pattern.neuron_id, an_pattern.age, an_action.neuron_id, (${rewardCase})
@@ -1167,11 +1215,11 @@ export default class Brain {
 	 * We need to find alternatives per (pattern, distance, channel) tuple, not just per pattern.
 	 * Note: Cases where pattern didn't predict any action are handled by learnUnpredictedPatternActions.
 	 */
-	async addPatternAlternativeActions(channelRewards) {
+	async addPatternAlternativeActions() {
 
 		// get the channels that executed painful actions - we will add alternative actions for them
 		// if there are no painful channels, we don't need to add alternatives
-		const painfulChannelIds = this.getPainfulChannelIds(channelRewards);
+		const painfulChannelIds = this.getPainfulChannelIds();
 		if (painfulChannelIds.length === 0) return;
 
 		// Find one untried action for each (pattern, distance, channel) that was executed in painful channels
@@ -1205,13 +1253,12 @@ export default class Brain {
 	/**
 	 * Creates error-driven patterns from failed predictions.
 	 * Processes all levels in bulk, like inferNeurons.
-	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 */
-	async learnNewPatterns(channelRewards) {
+	async learnNewPatterns() {
 
 		// Find the neurons that should be in pattern_future of new patterns
 		// (prediction errors and action regret, unified in one method)
-		const newPatternFutureCount = await this.populateNewPatternFuture(channelRewards);
+		const newPatternFutureCount = await this.populateNewPatternFuture();
 		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
 		if (newPatternFutureCount === 0) return;
 		if (newPatternFutureCount > 0) {
@@ -1252,12 +1299,11 @@ export default class Brain {
 	 * 2. Action regret: inferred action winner got negative reward → pattern should infer another action
 	 *
 	 * Returns the number of new pattern future inferences found.
-	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 */
-	async populateNewPatternFuture(channelRewards) {
+	async populateNewPatternFuture() {
 		await this.conn.query(`TRUNCATE new_pattern_future`);
 		const eventCount = await this.populateNewPatternEvents();
-		const actionCount = await this.populateNewPatternActions(channelRewards);
+		const actionCount = await this.populateNewPatternActions();
 		return eventCount + actionCount;
 	}
 
@@ -1346,14 +1392,13 @@ export default class Brain {
 	 * When a connection or pattern predicts an action at distance=1 (full context),
 	 * and it leads to pain, add one untried alternative action.
 	 * Same logic as addPatternAlternativeActions - just find something different to try.
-	 * @param {Map} channelRewards - Map of channel_name -> reward value
 	 * @returns {Promise<number>} Number of action pattern futures created
 	 */
-	async populateNewPatternActions(channelRewards) {
+	async populateNewPatternActions() {
 
 		// get the channels that executed painful actions - we will add alternative actions for them
 		// if there are no painful channels, we don't need to create any action regret patterns
-		const painfulChannelIds = this.getPainfulChannelIds(channelRewards);
+		const painfulChannelIds = this.getPainfulChannelIds();
 		if (painfulChannelIds.length === 0) return 0;
 
 		// process connection action inference regret: find connections that made painful predictions

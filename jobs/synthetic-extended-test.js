@@ -128,25 +128,11 @@ export default class SyntheticExtendedTest extends Job {
 
 		while (frameCount < expectedFrames) {
 
-			// this executes the inferred actions from previous frame in the current frame
-			const frame = await this.brain.getFrameAndExecuteActions();
+			// Process frame (includes getFrame, executeActions, getRewards, and all brain processing)
+			await this.brain.processFrame();
 
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
-
-			// Enable debug for specific frames we want to investigate
-			// this.brain.debug = [8].includes(frameCount);
-			// this.brain.debug2 = [8].includes(frameCount);
-
-			// Calculate price change
-			// const priceChange = stockChannel.previousPrice && stockChannel.currentPrice
-			// 	? ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice * 100)
-			// 	: 0;
-
-			// Calculate volume change
-			// const volumeChange = stockChannel.previousVolume && stockChannel.currentVolume
-			// 	? ((stockChannel.currentVolume - stockChannel.previousVolume) / stockChannel.previousVolume * 100)
-			// 	: 0;
 
 			// Get actual position (what we owned DURING this frame's price change)
 			const actualOwned = stockChannel.owned;
@@ -160,12 +146,6 @@ export default class SyntheticExtendedTest extends Job {
 				decisionStats[cycleFrame].suboptimal++;
 				decisionStats[cycleFrame].details.push({ frame: frameCount, actual: actualOwned, optimal: optimalOwned });
 			}
-
-			// const match = isOptimal ? '✓' : '✗';
-			// const realizedPL = stockChannel.totalProfit - stockChannel.totalLoss;
-			// console.log(`${String(frameCount).padStart(5)} | ${String(cycleFrame).padStart(10)} | ${priceChange.toFixed(2).padStart(12)}% | ${volumeChange.toFixed(2).padStart(13)}% | ${optimalOwned ? 'OWN' : 'OUT'.padStart(7)} | ${actualOwned ? 'OWN' : 'OUT'.padStart(6)} | ${match.padStart(5)} | $${realizedPL.toFixed(2)}`);
-
-			await this.brain.processFrame(frame);
 		}
 
 		console.log(`\n✅ Completed ${frameCount} frames\n`);

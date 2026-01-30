@@ -97,22 +97,9 @@ export default class Job {
 	 * Channels execute their own outputs and provide feedback based on state changes
 	 */
 	async processFrames() {
-		while (true) {
-
-			// Get combined frame from all channels and execute previously inferred actions
-			const frame = await this.brain.getFrameAndExecuteActions();
-
-			// If no input data from any channel, we're done
-			if (!frame || frame.length === 0) {
-				console.log('Completed processing. no more channel data.');
-				return;
-			}
-
-			console.log(`Processing frame: ${frame.length} neurons`);
-
-			// Process the frame through the brain with feedback (executes outputs internally)
-			await this.brain.processFrame(frame);
-		}
+		let continueProcessing = true;
+		while (continueProcessing) continueProcessing = await this.brain.processFrame();
+		console.log('Completed processing. no more channel data.');
 	}
 
 	/**

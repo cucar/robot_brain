@@ -100,19 +100,8 @@ export default class TextTrainingJob extends Job {
 
 		// Process all frames until channel is exhausted
 		let frameCount = 0;
-		while (true) {
-			// Get combined frame from all channels
-			const frame = await this.brain.getFrameAndExecuteActions();
-
-			// If no input data from any channel, episode is complete
-			if (!frame || frame.length === 0) break;
-
+		while (await this.brain.processFrame())
 			frameCount++;
-
-			// Get feedback and process frame
-			const feedback = await this.brain.getRewards();
-			await this.brain.processFrame(frame, feedback);
-		}
 
 		// Collect accuracy stats (base level only)
 		if (this.brain.accuracyStats.total > 0)

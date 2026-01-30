@@ -103,17 +103,10 @@ export default class PatternDisambiguationTest extends Job {
 		}
 	}
 
-	async processFrame(data) {
-		const frame = [
-			{ char_input: data.s1_price },
-			{ char_input: data.s1_vol },
-			{ char_input: data.s2_price },
-			{ char_input: data.s2_vol },
-			{ char_input: data.s3_price },
-			{ char_input: data.s3_vol }
-		];
-		const feedback = await this.brain.getRewards();
-		await this.brain.processFrame(frame, feedback);
+	async processFrame() {
+		// NOTE: This test needs refactoring to work with channel-based frame processing
+		// The manual frame construction was already being ignored by the brain
+		await this.brain.processFrame();
 	}
 
 	resetChannelStates() {
