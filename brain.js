@@ -27,13 +27,12 @@ export default class Brain {
 		this.eventErrorMinStrength = 2.0; // minimum prediction strength to create error-driven patterns
 		this.actionRegretMinStrength = 2.0; // minimum inference strength to create action regret pattern
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
-		this.mergePatternThreshold = 0.8; // minimum percentage of matching neurons for an observed pattern to match a known pattern
+		this.mergePatternThreshold = 0.5; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// voting parameters
 		this.levelVoteMultiplier = 3; // how much to weight votes from higher levels
-		this.timeDecay = 0.2; // how much to weight votes from older neurons
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
@@ -1602,6 +1601,7 @@ export default class Brain {
 	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async collectVotes() {
+		const timeDecay = 1 / this.contextLength;
 		await this.conn.query('TRUNCATE inference_votes');
 
 		// Insert connection votes (from base level neurons)
@@ -1614,7 +1614,7 @@ export default class Brain {
 			JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE c.distance = an.age + 1 AND c.strength > 0
-		`,[this.levelVoteMultiplier, this.timeDecay]);
+		`,[this.levelVoteMultiplier, timeDecay]);
 
 		// Insert pattern votes (from pattern neurons at any level)
 		const [patternResult] = await this.conn.query(`
@@ -1626,7 +1626,7 @@ export default class Brain {
 			JOIN neurons pn ON pn.id = an.neuron_id AND pn.level > 0
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
 			WHERE pf.distance = an.age + 1 AND pf.strength > 0
-		`,[this.levelVoteMultiplier, this.timeDecay]);
+		`,[this.levelVoteMultiplier, timeDecay]);
 
 		if (this.debug) console.log(`Inserted ${connResult.affectedRows} connection votes, ${patternResult.affectedRows} pattern votes`);
 
