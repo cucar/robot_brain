@@ -24,8 +24,8 @@ export default class Brain {
 		this.rewardExpSmooth = 0.9; // exponential smoothing for rewards: new = smooth * observed + (1 - smooth) * old
 
 		// pattern learning parameters
-		this.eventErrorMinStrength = 2.0; // minimum prediction strength to create error-driven patterns
-		this.actionRegretMinStrength = 2.0; // minimum inference strength to create action regret pattern
+		this.eventErrorMinStrength = 2; // minimum prediction strength to create error-driven patterns
+		this.actionRegretMinStrength = 2; // minimum inference strength to create action regret pattern
 		this.actionRegretMinPain = 0; // minimum pain (negative reward magnitude) to create action regret pattern (0 = any negative reward triggers regret)
 		this.mergePatternThreshold = 0.5; // minimum percentage of matching neurons for an observed pattern to match a known pattern
 		this.patternNegativeReinforcement = 0.1; // how much to weaken pattern connections that were not observed

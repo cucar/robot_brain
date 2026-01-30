@@ -18,60 +18,66 @@ The system represents a significant advancement over existing AI approaches by p
 
 ### 1. Unified Neural Representation
 - **Single neuron storage system** that handles both sensory inputs and abstract patterns
-- **Coordinate-based encoding** where each neuron represents a point in multi-dimensional space
+- **Coordinate-based encoding** where base neurons represent points in multi-dimensional space
 - **Automatic dimension discovery** from input channels (vision, audio, motor, financial, etc.)
+- **Type-aware neurons** distinguishing events (observations) from actions (decisions)
 
-### 2. Cross-Level Temporal Connection Architecture
-- **Cross-hierarchical connections** between neurons at any level, not just within levels
-- **Multi-scale distance encoding** that captures temporal, spatial, and hierarchical relationships:
-  - Same-level: Time-dilated temporal sequences
-  - Higher→Lower: Persistent contextual influence
-  - Lower→Higher: Instantaneous co-occurrence from higher perspective
+### 2. Temporal Connection Architecture
+- **Distance-encoded connections** between base neurons capturing temporal sequences
 - **Strength-based learning** where frequently observed connections become stronger
+- **Reward-based learning** for action connections using exponential smoothing
 - **Distance-weighted inference** where recent connections have greater influence than distant ones
+- **Event-only sources** - only event neurons can predict; actions cannot be connection sources
 
 ### 3. Hierarchical Pattern Discovery
-- **Automatic pattern detection** using peak detection algorithms in connection neighborhoods
+- **Error-driven pattern creation** - patterns emerge only when confident predictions fail
 - **Multi-level abstraction** where patterns of patterns form higher-level concepts
-- **Heterogeneous multi-scale patterns** that can include connections across multiple hierarchical levels
-- **Connection-based patterns** that capture relationships rather than just static features
-- **Contextual pattern encoding** where higher-level context influences lower-level pattern interpretation
+- **Context-based patterns** using pattern_past (context neurons with relative ages)
+- **Prediction-based patterns** using pattern_future (predicted base neurons with distances)
+- **Pattern override mechanism** where pattern votes supersede connection votes from peak neurons
 
 ### 4. Temporal Separation Architecture
 - **Decision-Action separation** where decisions made in frame N are executed in frame N+1
 - **Prediction validation** system that tracks whether predictions come true
-- **Sliding window memory** that maintains context while preventing information overload
+- **Sliding window memory** (active_neurons with ages) that maintains context while preventing overload
 
 ### 5. Channel-Based Integration
 - **Modular sensory/motor interfaces** that can be combined for complex behaviors
 - **Automatic dimension registration** where each channel defines its input/output space
-- **Unified feedback system** where all channels contribute to learning signals
+- **Per-channel reward system** where each channel provides its own feedback signal
+- **Exploration mechanism** that triggers when no action winners exist for a channel
 
 ## Technical Architecture Overview
 
 The system consists of several key components working together:
 
 ### Core Database Schema
-- **Neurons Table**: Universal storage for all neural entities
-- **Coordinates Table**: Multi-dimensional position data for each neuron
-- **Connections Table**: Directed temporal relationships between neurons
-- **Patterns Table**: Higher-level abstractions linking pattern neurons to connection signatures
-- **Active Memory Tables**: Sliding window of currently relevant information
+- **Neurons Table**: Universal storage for all neural entities (base and pattern neurons)
+- **Base Neurons Table**: Metadata for base neurons (channel, type: event/action)
+- **Coordinates Table**: Multi-dimensional position data for base neurons
+- **Connections Table**: Directed temporal relationships between base neurons (with distance, strength, reward)
+- **Pattern Tables**: Higher-level abstractions:
+  - **pattern_peaks**: Maps pattern neurons to their peak neurons
+  - **pattern_past**: Context neurons with relative ages (defines when pattern activates)
+  - **pattern_future**: Predicted base neurons with distances (defines what pattern predicts)
+- **Active Memory Tables**: Sliding window of currently relevant information (active_neurons, matched_patterns, inference_votes, inferred_neurons)
 
 ### Processing Pipeline
-1. **Input Processing**: Channels provide multi-dimensional coordinate data
-2. **Recognition**: System finds/creates neurons matching input patterns
-3. **Connection Learning**: Temporal relationships are reinforced between active neurons
-4. **Pattern Discovery**: Peak detection identifies significant connection clusters
-5. **Prediction Generation**: System predicts future states based on learned patterns
-6. **Action Execution**: Predicted outputs are executed through appropriate channels
-7. **Feedback Integration**: Results modify future behavior through reward signals
+1. **Frame I/O**: Get events from channels, execute previous actions, collect rewards
+2. **Aging**: Increment ages of all active neurons (sliding temporal window)
+3. **Base Neuron Processing**: Find/create neurons, reinforce connections, apply rewards
+4. **Pattern Recognition**: Match and activate patterns level by level
+5. **Pattern Refinement**: Update pattern_past and pattern_future based on observations
+6. **Pattern Learning**: Create new patterns from prediction errors and action regret
+7. **Inference**: Collect votes, apply pattern override, determine winners, explore
+8. **Forget Cycle**: Periodic decay and cleanup of unused connections/patterns
 
 ### Learning Mechanisms
-- **Reinforcement Learning**: Successful predictions strengthen associated patterns
-- **Negative Learning**: Failed predictions weaken associated patterns  
-- **Reward Optimization**: Performance feedback biases future decision-making
-- **Forgetting Cycles**: Unused patterns decay to prevent overfitting
+- **Hebbian Learning**: Observed connections strengthen through co-occurrence
+- **Error-Driven Learning**: Failed predictions create new patterns to correct future behavior
+- **Reward Learning**: Action connections/patterns update rewards via exponential smoothing
+- **Negative Reinforcement**: Missing context weakens pattern_past entries
+- **Forgetting Cycles**: Unused connections and patterns decay to prevent overfitting
 
 ## Competitive Advantages
 
@@ -120,22 +126,23 @@ The system consists of several key components working together:
 The following aspects represent potentially patentable innovations:
 
 ### System Architecture Claims
-1. **Unified neural storage system** with coordinate-based multi-dimensional representation
-2. **Cross-level temporal connection architecture** with multi-scale distance encoding
-   - Connections span hierarchical levels with distance encoding temporal and hierarchical relationships
-   - Higher-level neurons provide persistent context, lower-level neurons appear instantaneous
-3. **Hierarchical pattern discovery** using connection neighborhood analysis with distance-weighted peak detection
-4. **Heterogeneous multi-scale patterns** that encode relationships across multiple hierarchical levels
-5. **Temporal separation mechanism** between decision-making and action execution
-6. **Channel-based integration system** for multi-modal learning
+1. **Unified neural storage system** with coordinate-based multi-dimensional representation for base neurons
+2. **Temporal connection architecture** with distance-encoded connections between base neurons
+   - Connections store strength (observation frequency) and reward (expected outcome)
+   - Only event neurons can be connection sources; actions cannot predict
+3. **Error-driven pattern discovery** creating patterns only when confident predictions fail
+4. **Context-based pattern matching** using pattern_past with relative ages and threshold-based matching
+5. **Pattern override mechanism** where pattern votes supersede connection votes from peak neurons
+6. **Temporal separation mechanism** between decision-making and action execution
+7. **Channel-based integration system** for multi-modal learning with per-channel rewards
 
 ### Method Claims
-1. **Process for automatic pattern discovery** in cross-level temporal neural networks using distance-weighted peak detection
-2. **Method for hierarchical abstraction** through recursive pattern formation with heterogeneous multi-scale patterns
-3. **Technique for cross-level connection formation** with unified distance encoding for temporal and hierarchical relationships
-4. **Method for distance-weighted inference** with linear temporal proximity weighting
-5. **Technique for reward-based neural optimization** with temporal decay
-6. **Process for autonomous exploration** in multi-modal learning systems
+1. **Process for error-driven pattern creation** from prediction failures and action regret
+2. **Method for hierarchical abstraction** through recursive pattern formation at increasing levels
+3. **Technique for voting-based inference** with level weighting and time decay
+4. **Method for pattern override** deleting connection votes from neurons that are peaks of voting patterns
+5. **Technique for reward-based optimization** using exponential smoothing for action connections/patterns
+6. **Process for autonomous exploration** when no action winners exist for a channel
 7. **Method for real-time adaptation** in continuous learning environments
 
 ### Application Claims
@@ -245,35 +252,29 @@ graph TB
 - Illustrates the feedback loop that enables continuous learning
 - Demonstrates multi-modal integration capabilities
 
-### Cross-Level Temporal Connection Learning
+### Temporal Connection Learning
 
 ```mermaid
 graph TB
-    subgraph "Level 2 (Age 5)"
-        N1[Neuron A<br/>Market Trend<br/>Level: 2, Age: 5]
+    subgraph "Active Neurons (Base Level)"
+        N1[Neuron A<br/>Price Up<br/>Age: 3]
+        N2[Neuron B<br/>Volume High<br/>Age: 2]
+        N3[Neuron C<br/>Price Down<br/>Age: 1]
     end
 
-    subgraph "Level 1 (Age 2)"
-        N2[Neuron B<br/>Daily Pattern<br/>Level: 1, Age: 2]
+    subgraph "New Observation (Age 0)"
+        N4[Neuron D<br/>Price Flat<br/>Age: 0]
     end
 
-    subgraph "Level 0 (Age 1)"
-        N3[Neuron C<br/>Price Movement<br/>Level: 0, Age: 1]
+    subgraph "Connections Created"
+        C1[A → D<br/>Distance: 3<br/>Strength: 1]
+        C2[B → D<br/>Distance: 2<br/>Strength: 1]
+        C3[C → D<br/>Distance: 1<br/>Strength: 1]
     end
 
-    subgraph "Level 0 (Age 0 - New)"
-        N4[Neuron D<br/>New Price Point<br/>Level: 0, Age: 0]
-    end
-
-    subgraph "Cross-Level Connections Formed"
-        C1[A → D<br/>Higher→Lower<br/>Distance: 9<br/>Context]
-        C2[B → D<br/>Higher→Lower<br/>Distance: 9<br/>Context]
-        C3[C → D<br/>Same Level<br/>Distance: 1<br/>Temporal]
-    end
-
-    N1 -.->|"Persistent Context"| N4
-    N2 -.->|"Persistent Context"| N4
-    N3 -.->|"Temporal Sequence"| N4
+    N1 -.->|"3 frames ago"| N4
+    N2 -.->|"2 frames ago"| N4
+    N3 -.->|"1 frame ago"| N4
 
     N1 --> C1
     N2 --> C2
@@ -291,81 +292,62 @@ graph TB
     style C3 fill:#b2ebf2
 ```
 
-- Shows how neurons at different hierarchical levels form cross-level connections
-- **Higher→Lower connections** (distance=9): Provide persistent contextual influence
-- **Same-level connections** (distance=1): Capture temporal sequences at appropriate timescale
-- **Lower→Higher connections** (distance=0, not shown): Would represent instantaneous aggregation
-- Demonstrates multi-scale pattern learning where context and detail interact across levels
+- Shows how base neurons form connections at multiple temporal distances
+- **Distance encoding**: Connection distance = source neuron age when target activated
+- **Strength learning**: Each co-occurrence increments connection strength
+- Connections from event neurons to both event and action neurons
 
-### Hierarchical Pattern Discovery
+### Error-Driven Pattern Discovery
 
 ```mermaid
 graph TB
     subgraph "Level 0 - Base Neurons"
-        N1[Neuron 1<br/>visual_x: 0.1]
-        N2[Neuron 2<br/>visual_y: 0.2]
-        N3[Neuron 3<br/>visual_r: 1.0]
-        N4[Neuron 4<br/>visual_x: 0.15]
-        N5[Neuron 5<br/>visual_y: 0.25]
-        N6[Neuron 6<br/>visual_g: 1.0]
+        N1[Neuron A<br/>Price Up]
+        N2[Neuron B<br/>Volume High]
+        N3[Neuron C<br/>Price Down]
+        N4[Neuron D<br/>Predicted]
+        N5[Neuron E<br/>Actual]
     end
 
-    subgraph "Level 0 Connections"
-        C1[Connection 1<br/>N1→N2, strength: 5.2]
-        C2[Connection 2<br/>N2→N3, strength: 4.8]
-        C3[Connection 3<br/>N4→N5, strength: 5.1]
-        C4[Connection 4<br/>N5→N6, strength: 4.9]
-        C5[Connection 5<br/>N1→N4, strength: 3.2]
+    subgraph "Prediction Error"
+        ERR[C predicted D<br/>but E happened<br/>strength >= threshold]
     end
 
-    subgraph "Level 1 - Pattern Neurons"
-        P1[Pattern Neuron A<br/>Red Object Pattern<br/>Connections: C1, C2]
-        P2[Pattern Neuron B<br/>Green Object Pattern<br/>Connections: C3, C4]
+    subgraph "Level 1 - Pattern Created"
+        P1[Pattern Neuron<br/>Level: 1]
     end
 
-    subgraph "Level 1 Connections"
-        PC1[Pattern Connection<br/>A→B, strength: 2.1<br/>Red followed by Green]
+    subgraph "Pattern Structure"
+        PP[pattern_peaks<br/>peak = C]
+        PAST[pattern_past<br/>A at age=2<br/>B at age=1]
+        FUT[pattern_future<br/>E at distance=1]
     end
 
-    subgraph "Level 2 - Higher Pattern"
-        P3[Meta-Pattern<br/>Color Sequence<br/>Connection: PC1]
-    end
+    N1 -.->|"context"| N3
+    N2 -.->|"context"| N3
+    N3 -->|"predicted"| N4
+    N3 -.->|"actual"| N5
 
-    N1 --> C1
-    N2 --> C1
-    N2 --> C2
-    N3 --> C2
-    N4 --> C3
-    N5 --> C3
-    N5 --> C4
-    N6 --> C4
-    N1 --> C5
-    N4 --> C5
+    N3 --> ERR
+    ERR --> P1
 
-    C1 --> P1
-    C2 --> P1
-    C3 --> P2
-    C4 --> P2
-
-    P1 --> PC1
-    P2 --> PC1
-
-    PC1 --> P3
+    P1 --> PP
+    P1 --> PAST
+    P1 --> FUT
 
     style N1 fill:#e3f2fd
     style N2 fill:#e3f2fd
     style N3 fill:#e3f2fd
-    style N4 fill:#e3f2fd
-    style N5 fill:#e3f2fd
-    style N6 fill:#e3f2fd
+    style N4 fill:#ffcdd2
+    style N5 fill:#c8e6c9
+    style ERR fill:#fff3e0
     style P1 fill:#f3e5f5
-    style P2 fill:#f3e5f5
-    style P3 fill:#fff3e0
 ```
 
-- Shows how base neurons (Level 0) form connections that become patterns (Level 1)
-- Illustrates recursive pattern formation where patterns of patterns create higher abstractions (Level 2+)
-- Demonstrates the connection-based pattern representation that captures relationships rather than static features
+- Shows how prediction errors trigger pattern creation
+- Pattern captures the context (pattern_past) when the error occurred
+- Pattern stores the correct prediction (pattern_future) for future use
+- Patterns form a hierarchy where pattern errors create higher-level patterns
 
 ### Temporal Separation Architecture
 
@@ -403,41 +385,35 @@ graph TB
         A3[Financial Channel<br/>Execute trade]
     end
 
-    subgraph "Outcome Measurement"
-        O1[Vision: Target acquired?<br/>Reward: 1.2 or 0.8]
-        O2[Motor: Goal reached?<br/>Reward: 1.3 or 0.7]
-        O3[Financial: Profit made?<br/>Reward: 1.5 or 0.6]
+    subgraph "Per-Channel Rewards"
+        O1[Vision: Target acquired?<br/>Reward: +0.5 or -0.3]
+        O2[Motor: Goal reached?<br/>Reward: +0.8 or -0.2]
+        O3[Financial: Profit made?<br/>Reward: +1.0 or -0.5]
     end
 
-    subgraph "Reward Aggregation"
-        G[Global Reward<br/>Multiplicative combination<br/>Example: 1.2 × 1.3 × 0.6 = 0.936]
+    subgraph "Connection Reward Updates"
+        C1[Connection A→Action<br/>Exponential smoothing<br/>new = 0.9×observed + 0.1×old]
+        C2[Pattern→Action<br/>pattern_future.reward<br/>same smoothing formula]
     end
 
-    subgraph "Neuron Reward Updates"
-        N1[Neuron A<br/>Previous reward: 1.0<br/>New reward: 1.0 × 0.936 = 0.936]
-        N2[Neuron B<br/>Previous reward: 1.2<br/>New reward: 1.2 × 0.936 = 1.123]
-        N3[Neuron C<br/>Previous reward: 0.8<br/>New reward: 0.8 × 0.936 = 0.749]
-    end
-
-    subgraph "Future Decision Bias"
-        D1[Next inference:<br/>Neuron A strength × 0.936<br/>Neuron B strength × 1.123<br/>Neuron C strength × 0.749]
+    subgraph "Future Action Selection"
+        D1[Winner selection:<br/>Highest weighted reward<br/>strength × reward]
     end
 
     A1 --> O1
     A2 --> O2
     A3 --> O3
 
-    O1 --> G
-    O2 --> G
-    O3 --> G
+    O1 --> C1
+    O2 --> C1
+    O3 --> C1
 
-    G --> N1
-    G --> N2
-    G --> N3
+    O1 --> C2
+    O2 --> C2
+    O3 --> C2
 
-    N1 --> D1
-    N2 --> D1
-    N3 --> D1
+    C1 --> D1
+    C2 --> D1
 
     style A1 fill:#e3f2fd
     style A2 fill:#e3f2fd
@@ -445,64 +421,64 @@ graph TB
     style O1 fill:#fff3e0
     style O2 fill:#fff3e0
     style O3 fill:#fff3e0
-    style G fill:#f3e5f5
+    style C1 fill:#f3e5f5
+    style C2 fill:#f3e5f5
     style D1 fill:#e8f5e8
 ```
 
-- Shows how multiple channels provide individual reward signals
-- Illustrates multiplicative reward aggregation across channels
-- Demonstrates how reward factors bias future decision-making through strength optimization
+- Shows how each channel provides its own reward signal (additive, 0 = neutral)
+- Illustrates exponential smoothing for reward updates on connections and patterns
+- Demonstrates how reward-weighted selection picks the best action
 
 ## Detailed Technical Innovations
 
 ### 1. Coordinate-Based Neural Representation
-**Innovation**: Unlike traditional neural networks that use abstract weight matrices, this system represents each neuron as a point in multi-dimensional coordinate space.
+**Innovation**: Unlike traditional neural networks that use abstract weight matrices, this system represents base neurons as points in multi-dimensional coordinate space.
 
 **Technical Details**:
-- Each neuron has explicit coordinates in named dimensions (e.g., visual_x=0.1, visual_y=0.2, visual_r=1.0)
+- Each base neuron has explicit coordinates in named dimensions (e.g., price_change=0.5, volume_change=-0.2)
 - Dimensions are automatically registered by channels during system initialization
-- Same neuron storage system handles both sensory inputs and abstract pattern representations
+- Base neurons are typed as 'event' (observations) or 'action' (decisions)
+- Pattern neurons (level > 0) have no coordinates - they represent learned contexts
 - Enables direct mapping between neural activations and real-world coordinate systems
 
 **Patent Significance**: This coordinate-based approach enables explainable AI where decisions can be traced back to specific coordinate patterns, unlike black-box neural networks.
 
-### 2. Cross-Level Distance-Encoded Connections
-**Innovation**: Connections between neurons span hierarchical levels and encode both temporal and hierarchical relationships through a unified distance metric.
+### 2. Temporal Connection Architecture
+**Innovation**: Connections between base neurons encode temporal relationships with distance, strength, and reward.
 
 **Technical Details**:
-- **Same-level connections**: Time-dilated temporal distance `FLOOR(age / POW(contextLength, level))`
-  - Level 0: Exact temporal distance
-  - Level 1: Bucketed by 10s for temporal abstraction
-  - Level 2: Bucketed by 100s for long-term patterns
-- **Higher→Lower connections**: Distance = `contextLength - 1` (persistent context)
-  - Higher-level neurons provide stable contextual influence
-  - Represents slower timescale influencing faster timescale
-- **Lower→Higher connections**: Distance = 0 (instantaneous co-occurrence)
-  - Lower-level events appear simultaneous from higher perspective
-  - Represents faster timescale aggregating to slower timescale
-- **Distance-weighted inference**: Linear weighting `(contextLength - distance) / contextLength`
-  - Recent connections (distance=0) weighted at 1.0
-  - Distant connections (distance=9) weighted at 0.1
-  - Prioritizes recent information in peak detection
+- **Distance encoding**: Connections store the temporal gap between source and target activation
+  - Distance = source neuron age when target was activated
+  - Enables prediction at specific temporal offsets
+- **Strength learning**: Connections strengthen through Hebbian-style observation
+  - Each co-occurrence increments strength by 1
+  - Clamped between minConnectionStrength and maxConnectionStrength
+- **Reward learning**: Action connections track expected outcomes via exponential smoothing
+  - `new_reward = smooth * observed + (1 - smooth) * old_reward`
+  - Enables reward-weighted action selection
+- **Event-only sources**: Only event neurons can be connection sources
+  - Actions cannot predict - they are predicted by events
+- **Distance-weighted inference**: Linear weighting `1 - (distance - 1) * (1 / contextLength)`
+  - Recent predictions weighted more than distant ones
 
-**Patent Significance**: This multi-scale distance encoding enables the system to learn patterns that span multiple hierarchical levels simultaneously, capturing both temporal sequences and contextual relationships. The cross-level architecture allows higher-level context to influence lower-level processing (top-down) while lower-level details aggregate to higher-level abstractions (bottom-up), mimicking biological neural hierarchies.
+**Patent Significance**: This temporal connection architecture enables learning of multi-step sequences with reward-based action optimization, combining Hebbian learning for events with reinforcement learning for actions.
 
-### 3. Distance-Weighted Peak Detection Pattern Discovery
-**Innovation**: Automatic pattern discovery using neighborhood analysis and distance-weighted peak detection algorithms that work across hierarchical levels.
+### 3. Error-Driven Pattern Discovery
+**Innovation**: Patterns are created only when confident predictions fail, not during normal recognition.
 
 **Technical Details**:
-- Builds bidirectional connectivity graphs from cross-level temporal connections
-- Applies distance weighting to connection strengths before aggregation
-- Calculates average strength across all candidate neurons
-- Identifies "peak" neurons whose weighted strength exceeds average by a ratio threshold
-- Groups peak connections into pattern signatures (can include cross-level connections)
-- Matches observed patterns to existing patterns using overlap thresholds (default 66%)
-- Creates new pattern neurons for novel connection signatures
-- **Heterogeneous patterns**: Patterns can encode connections across multiple levels
-  - Example: Level 2 pattern = Level 1 connections + Level 0 connections
-  - Enables multi-scale compositional representations
+- **Error detection**: Predictions with strength >= threshold that don't come true trigger pattern creation
+- **Action regret**: Painful action outcomes (negative reward) trigger alternative action patterns
+- **Pattern structure**:
+  - pattern_peaks: Maps pattern neuron to peak neuron (the predictor that made the error)
+  - pattern_past: Context neurons with relative ages (what was active when peak appeared)
+  - pattern_future: Predicted base neurons with distances (what the pattern predicts)
+- **Pattern matching**: Threshold-based matching (default 50% of context must match)
+- **Winner selection**: Among matching patterns for a peak, highest total strength wins
+- **Pattern refinement**: Matched patterns update pattern_past (novel/common/missing) and pattern_future
 
-**Patent Significance**: This enables unsupervised learning of hierarchical abstractions that span multiple timescales without requiring pre-defined pattern templates or training data. The cross-level pattern capability allows the system to discover relationships between fast and slow dynamics, such as "this rapid price movement pattern only occurs during this long-term market trend."
+**Patent Significance**: Error-driven pattern creation produces sparse, meaningful patterns focused on prediction failures rather than noise. This mimics biological error-driven learning and enables efficient hierarchical abstraction.
 
 ### 4. Temporal Separation Mechanism
 **Innovation**: Separates decision-making from action execution by one time frame to enable stable learning.
@@ -520,44 +496,44 @@ graph TB
 **Innovation**: Unified architecture that seamlessly integrates multiple sensory and motor modalities.
 
 **Technical Details**:
-- Each channel defines input dimensions (sensors) and output dimensions (actuators)
+- Each channel defines input dimensions (events) and output dimensions (actions)
 - Channels automatically register dimensions with brain during initialization
 - Single neural representation handles all modalities simultaneously
 - Cross-modal pattern discovery enables sensorimotor integration
-- Unified reward system aggregates feedback from all channels
+- Per-channel reward system where each channel provides its own feedback signal
+- Exploration mechanism triggers when no action winners exist for a channel
 
 **Patent Significance**: This enables single systems to learn complex behaviors spanning multiple modalities (vision + motor + audio) without requiring separate training for each modality.
 
-### 6. Cross-Level Connection Architecture
-**Innovation**: A biologically-inspired architecture where neurons at different hierarchical levels can form direct connections, enabling multi-scale pattern recognition and contextual learning.
+### 6. Voting-Based Inference with Pattern Override
+**Innovation**: A distributed voting architecture where all active neurons contribute predictions, with pattern votes overriding connection votes.
 
 **Technical Details**:
-- **Unrestricted connectivity**: Neurons at any level can connect to neurons at any other level
-  - Traditional hierarchical networks restrict connections to adjacent levels
-  - This system allows skip connections across multiple levels
-- **Unified distance metric**: Single distance value encodes both temporal and hierarchical relationships
-  - Same-level: Temporal sequence distance
-  - Cross-level: Fixed distances based on hierarchical relationship
-- **Biological motivation**: Mimics cortical connectivity where neurons don't respect strict layer boundaries
-  - Higher cortical areas provide context to lower areas (top-down)
-  - Lower areas aggregate to higher areas (bottom-up)
-  - Direct connections enable faster information flow
-- **Multi-scale context integration**:
-  - Higher-level patterns provide persistent context for lower-level processing
-  - Lower-level details can directly influence higher-level abstractions
-  - Same low-level pattern can have different meanings in different high-level contexts
-- **Heterogeneous pattern composition**:
-  - Patterns can include connections from multiple hierarchical levels
-  - Enables richer compositional representations
-  - Example: "This intraday price pattern (Level 0) only occurs during bull markets (Level 2)"
+- **Vote collection**: Both connection votes (from base neurons) and pattern votes (from pattern neurons)
+- **Level weighting**: Higher-level patterns have more influence: `1 + level * levelVoteMultiplier`
+- **Time decay**: Recent predictions weighted more: `1 - (distance - 1) * (1 / contextLength)`
+- **Pattern override**: Connection votes from neurons that are peaks of voting patterns are deleted
+  - Patterns exist to correct connection predictions
+  - When a pattern is active, its predictions supersede the peak's connection predictions
+- **Winner selection**:
+  - Events: Highest total strength wins (deterministic)
+  - Actions: Highest weighted reward wins (reward-based selection)
+- **Exploration**: When no action winners exist, channel provides unexplored action
 
-**Patent Significance**: This cross-level architecture represents a significant departure from traditional hierarchical neural networks and enables the system to learn contextual relationships that span multiple timescales. The ability to form heterogeneous multi-scale patterns allows the system to capture complex real-world phenomena where fast and slow dynamics interact, such as:
-- Financial markets: Intraday patterns influenced by long-term trends
-- Robotics: Rapid motor adjustments guided by high-level goals
-- Autonomous vehicles: Immediate reactions contextualized by route planning
-- Industrial control: Fast control loops influenced by slow process dynamics
+**Patent Significance**: This voting architecture enables distributed decision-making where multiple levels of abstraction contribute to predictions. The pattern override mechanism ensures that learned corrections take precedence over raw connection predictions, enabling hierarchical error correction.
 
-This innovation addresses a fundamental limitation of traditional deep learning architectures where information must flow sequentially through layers, and provides a more brain-like architecture where context and detail interact bidirectionally across scales.
+### 7. Hierarchical Pattern Architecture
+**Innovation**: Patterns form a hierarchy where patterns of patterns create higher-level abstractions.
+
+**Technical Details**:
+- **Level progression**: Base neurons at level 0, patterns at level 1+
+- **Recursive recognition**: After matching level N patterns, check for level N+1 patterns
+- **Context at each level**: pattern_past contains same-level context neurons
+- **Predictions to base**: pattern_future always predicts base neurons (events or actions)
+- **Error propagation**: Pattern prediction errors create patterns at the next level up
+- **Maximum depth**: Configurable maxLevels prevents infinite recursion
+
+**Patent Significance**: This hierarchical pattern architecture enables the system to learn abstractions at multiple timescales. Higher-level patterns represent longer temporal contexts and more abstract concepts, while lower-level patterns capture immediate sequences.
 
 ## Commercial Applications and Market Potential
 
@@ -583,13 +559,14 @@ This innovation addresses a fundamental limitation of traditional deep learning 
 
 ## Conclusion
 
-This Artificial Brain Architecture represents a significant advancement in machine learning and artificial intelligence, providing a unified approach to multi-modal learning, temporal prediction, and adaptive behavior. The system's novel combination of hierarchical pattern recognition, temporal sequence learning, and reward-based adaptation creates new possibilities for autonomous systems across multiple domains.
+This Artificial Brain Architecture represents a significant advancement in machine learning and artificial intelligence, providing a unified approach to multi-modal learning, temporal prediction, and adaptive behavior. The system's novel combination of error-driven pattern learning, temporal sequence modeling, and reward-based adaptation creates new possibilities for autonomous systems across multiple domains.
 
-The architecture's key innovations in neural representation, connection modeling, pattern discovery, and multi-modal integration provide strong foundations for patent protection while offering substantial commercial value across robotics, finance, industrial control, and human-computer interaction applications.
+The architecture's key innovations in neural representation, temporal connections, error-driven pattern discovery, voting-based inference, and multi-modal integration provide strong foundations for patent protection while offering substantial commercial value across robotics, finance, industrial control, and human-computer interaction applications.
 
 **Key Patent Strengths**:
-1. **Novel technical approach** that differs significantly from existing neural network and AI architectures
-2. **Broad applicability** across multiple high-value commercial markets
-3. **Demonstrable technical advantages** over current state-of-the-art systems
-4. **Clear implementation pathway** with working prototype demonstrating feasibility
-5. **Strong defensive value** against competitors in autonomous systems markets
+1. **Novel technical approach** - error-driven pattern creation differs from traditional neural networks
+2. **Unified learning** - combines Hebbian learning for events with reinforcement learning for actions
+3. **Hierarchical abstraction** - patterns of patterns enable multi-scale temporal reasoning
+4. **Pattern override mechanism** - learned corrections supersede raw predictions
+5. **Broad applicability** across multiple high-value commercial markets
+6. **Clear implementation pathway** with working prototype demonstrating feasibility
