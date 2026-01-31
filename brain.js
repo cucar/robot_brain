@@ -1,5 +1,6 @@
 import readline from 'node:readline';
 import getMySQLConnection from './db/db.js';
+import { SensoryNeuron, PatternNeuron } from './neurons/index.js';
 
 /**
  * Brain Class
@@ -42,6 +43,22 @@ export default class Brain {
 		//************************************************************
 		// operational properties
 		//************************************************************
+
+		// All neurons for save/load (index becomes ID during serialization)
+		this.neurons = new Set()
+
+		// Fast lookup for sensory neurons by coordinates
+		this.neuronsByValue = new Map() // Map<valueKey, SensoryNeuron>
+
+		// Active context: Map<Neuron, Set<age>> - neurons currently in sliding window
+		this.activeNeurons = new Map()
+
+		// Current frame inference results: Map<Neuron, {strength, isWinner}>
+		this.inferredNeurons = new Map()
+
+		// Inference votes for current frame: Array<{from, to, strength, reward, distance}>
+		// Used by collectVotes() and read by populateNewPatternFuture()
+		this.inferenceVotes = []
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
