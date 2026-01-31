@@ -121,16 +121,16 @@ export default class Brain {
 	async resetContext() {
 		console.log('Resetting brain (memory tables)...');
 
-		// In-memory scratch data for pattern matching (replaces MEMORY tables)
+		// In-memory scratch data (replaces MEMORY tables)
 		this.matchedPatterns = [];      // Array of {peakNeuronId, patternNeuronId}
 		this.matchedPatternPast = [];   // Array of {patternNeuronId, contextNeuronId, contextAge, status}
+		this.inferenceVotes = [];       // Array of {fromNeuronId, neuronId, strength, reward, distance}
 
 		await this.truncateTables([
 			'active_neurons',
 			'new_pattern_future',
 			'new_patterns',
-			'inferred_neurons',
-			'inference_votes'
+			'inferred_neurons'
 		]);
 	}
 
@@ -1354,64 +1354,123 @@ export default class Brain {
 
 	/**
 	 * Populate base-level event prediction errors (from connection inferences).
-	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Reads from this.inferenceVotes which already excludes peaks with active patterns.
 	 * Peak predicted X, but X didn't happen and Y happened instead.
 	 * @returns {Promise<number>} Number of base event pattern futures created
 	 */
 	async populateNewPatternBaseEvents() {
-		const [connResult] = await this.conn.query(`
-			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT v.from_neuron_id, an.neuron_id as inferred_neuron_id, v.distance
-			FROM inference_votes v
-			-- get neuron info for the inferred neuron (target)
-			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
-			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
-			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
-			-- find the active neurons (what actually happened just now) - create pattern to predict these
-			JOIN active_neurons an ON an.age = 0
-			JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
-			-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
-			JOIN base_neurons b_peak ON b_peak.neuron_id = v.from_neuron_id AND b_peak.type = 'event'
-			-- only connection votes (base level peaks)
-			WHERE n_voter.level = 0
-			-- only event predictions
-			AND b_target.type = 'event'
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			AND v.strength >= ?
-			-- the inference did not come true (prediction error)
-			AND v.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
-		`, [this.eventErrorMinStrength]);
+		// Filter votes by strength threshold
+		const strongVotes = this.inferenceVotes.filter(v => v.strength >= this.eventErrorMinStrength);
+		if (strongVotes.length === 0) return 0;
+
+		// Get voter neuron IDs to check their levels and types
+		const voterIds = [...new Set(strongVotes.map(v => v.fromNeuronId))];
+		const targetIds = [...new Set(strongVotes.map(v => v.neuronId))];
+
+		// Get base-level event voters (peaks)
+		const [voterInfo] = await this.conn.query(`
+			SELECT n.id as neuron_id, n.level, b.type
+			FROM neurons n
+			LEFT JOIN base_neurons b ON b.neuron_id = n.id
+			WHERE n.id IN (?) AND n.level = 0 AND b.type = 'event'
+		`, [voterIds]);
+		const validVoters = new Set(voterInfo.map(v => v.neuron_id));
+
+		// Get event targets
+		const [targetInfo] = await this.conn.query(`
+			SELECT neuron_id FROM base_neurons WHERE neuron_id IN (?) AND type = 'event'
+		`, [targetIds]);
+		const eventTargets = new Set(targetInfo.map(t => t.neuron_id));
+
+		// Get active neurons at age=0 (what actually happened)
+		const [activeNow] = await this.conn.query(`
+			SELECT an.neuron_id FROM active_neurons an
+			JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
+			WHERE an.age = 0
+		`);
+		const activeNowIds = new Set(activeNow.map(a => a.neuron_id));
+
+		// Filter to valid votes: base-level event voter, event target, prediction error
+		const errorVotes = strongVotes.filter(v =>
+			validVoters.has(v.fromNeuronId) &&
+			eventTargets.has(v.neuronId) &&
+			!activeNowIds.has(v.neuronId)
+		);
+
+		if (errorVotes.length === 0 || activeNowIds.size === 0) return 0;
+
+		// Create pattern futures: for each error vote, pair with each actual event
+		const futures = [];
+		for (const v of errorVotes)
+			for (const actualId of activeNowIds)
+				futures.push([v.fromNeuronId, actualId, v.distance]);
+
+		if (futures.length === 0) return 0;
+
+		const [connResult] = await this.conn.query(
+			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
+			[futures]
+		);
 		if (this.debug) console.log(`Found ${connResult.affectedRows} connection prediction error neurons`);
 		return connResult.affectedRows;
 	}
 
 	/**
 	 * Populate higher-level event prediction errors (from pattern inferences).
-	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Reads from this.inferenceVotes which already excludes peaks with active patterns.
 	 * Peak predicted X, but X didn't happen and Y happened instead.
 	 * @returns {Promise<number>} Number of high event pattern futures created
 	 */
 	async populateNewPatternHighEvents() {
-		const [patternResult] = await this.conn.query(`
-			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT v.from_neuron_id, an.neuron_id, v.distance
-			FROM inference_votes v
-			-- get neuron info for the inferred neuron (target)
-			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
-			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
-			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
-			-- find the active neurons (what actually happened just now) - create pattern to predict these
-			JOIN active_neurons an ON an.age = 0
-			JOIN base_neurons b_actual ON b_actual.neuron_id = an.neuron_id AND b_actual.type = 'event'
-			-- only pattern votes (higher level peaks)
-			WHERE n_voter.level > 0
-			-- only event predictions
-			AND b_target.type = 'event'
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			AND v.strength >= ?
-			-- the inference did not come true (prediction error)
-			AND v.neuron_id NOT IN (SELECT neuron_id FROM active_neurons WHERE age = 0)
-		`, [this.eventErrorMinStrength]);
+		// Filter votes by strength threshold
+		const strongVotes = this.inferenceVotes.filter(v => v.strength >= this.eventErrorMinStrength);
+		if (strongVotes.length === 0) return 0;
+
+		// Get voter neuron IDs to check their levels (pattern neurons have level > 0)
+		const voterIds = [...new Set(strongVotes.map(v => v.fromNeuronId))];
+		const targetIds = [...new Set(strongVotes.map(v => v.neuronId))];
+
+		// Get higher-level voters (patterns)
+		const [voterInfo] = await this.conn.query(`
+			SELECT id as neuron_id FROM neurons WHERE id IN (?) AND level > 0
+		`, [voterIds]);
+		const validVoters = new Set(voterInfo.map(v => v.neuron_id));
+
+		// Get event targets
+		const [targetInfo] = await this.conn.query(`
+			SELECT neuron_id FROM base_neurons WHERE neuron_id IN (?) AND type = 'event'
+		`, [targetIds]);
+		const eventTargets = new Set(targetInfo.map(t => t.neuron_id));
+
+		// Get active neurons at age=0 (what actually happened)
+		const [activeNow] = await this.conn.query(`
+			SELECT an.neuron_id FROM active_neurons an
+			JOIN base_neurons b ON b.neuron_id = an.neuron_id AND b.type = 'event'
+			WHERE an.age = 0
+		`);
+		const activeNowIds = new Set(activeNow.map(a => a.neuron_id));
+
+		// Filter to valid votes: higher-level voter, event target, prediction error
+		const errorVotes = strongVotes.filter(v =>
+			validVoters.has(v.fromNeuronId) &&
+			eventTargets.has(v.neuronId) &&
+			!activeNowIds.has(v.neuronId)
+		);
+
+		if (errorVotes.length === 0 || activeNowIds.size === 0) return 0;
+
+		// Create pattern futures: for each error vote, pair with each actual event
+		const futures = [];
+		for (const v of errorVotes)
+			for (const actualId of activeNowIds)
+				futures.push([v.fromNeuronId, actualId, v.distance]);
+
+		if (futures.length === 0) return 0;
+
+		const [patternResult] = await this.conn.query(
+			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
+			[futures]
+		);
 		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
 		return patternResult.affectedRows;
 	}
@@ -1443,72 +1502,150 @@ export default class Brain {
 
 	/**
 	 * Handle action regret for connection inferences.
-	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Reads from this.inferenceVotes which already excludes peaks with active patterns.
 	 * Find an alternative action to try instead of the one that led to pain.
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of base action pattern futures created
 	 */
 	async populateNewPatternBaseActions(painfulChannelIds) {
-		const [result] = await this.conn.query(`
-			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT v.from_neuron_id, MIN(b_alt.neuron_id) as inferred_neuron_id, v.distance
-			FROM inference_votes v
-			-- get neuron info for the inferred neuron (target)
-			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
-			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
-			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
-			-- find alternative actions in the same channel (what we should try instead)
-			JOIN base_neurons b_alt ON b_alt.channel_id = b_target.channel_id AND b_alt.type = 'action'
-			-- actions cannot learn patterns - only events can learn action/event patterns - so, peak must be an event
-			JOIN base_neurons b_peak ON b_peak.neuron_id = v.from_neuron_id AND b_peak.type = 'event'
-			-- only connection votes (base level peaks)
-			WHERE n_voter.level = 0
-			-- only action predictions that were executed (winners) in painful channels
-			AND b_target.type = 'action'
-			AND b_target.channel_id IN (${painfulChannelIds.join(',')})
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			AND v.strength >= ?
-			-- check if this was the winning action (need to verify it was executed)
-			AND EXISTS (SELECT 1 FROM inferred_neurons inf WHERE inf.neuron_id = v.neuron_id AND inf.is_winner = 1)
-			-- don't suggest the same action that just failed
-			AND b_alt.neuron_id != v.neuron_id
-			GROUP BY v.from_neuron_id, b_target.channel_id, v.distance
-		`, [this.actionRegretMinStrength]);
+		// Filter votes by strength threshold
+		const strongVotes = this.inferenceVotes.filter(v => v.strength >= this.actionRegretMinStrength);
+		if (strongVotes.length === 0) return 0;
+
+		const voterIds = [...new Set(strongVotes.map(v => v.fromNeuronId))];
+		const targetIds = [...new Set(strongVotes.map(v => v.neuronId))];
+
+		// Get base-level event voters (peaks must be events at level 0)
+		const [voterInfo] = await this.conn.query(`
+			SELECT n.id as neuron_id FROM neurons n
+			JOIN base_neurons b ON b.neuron_id = n.id AND b.type = 'event'
+			WHERE n.id IN (?) AND n.level = 0
+		`, [voterIds]);
+		const validVoters = new Set(voterInfo.map(v => v.neuron_id));
+
+		// Get action targets in painful channels
+		const [targetInfo] = await this.conn.query(`
+			SELECT neuron_id, channel_id FROM base_neurons
+			WHERE neuron_id IN (?) AND type = 'action' AND channel_id IN (?)
+		`, [targetIds, painfulChannelIds]);
+		const actionTargets = new Map(targetInfo.map(t => [t.neuron_id, t.channel_id]));
+
+		// Get winning actions from inferred_neurons
+		const [winners] = await this.conn.query(`
+			SELECT neuron_id FROM inferred_neurons WHERE is_winner = 1
+		`);
+		const winnerIds = new Set(winners.map(w => w.neuron_id));
+
+		// Filter to valid votes: base-level event voter, action target in painful channel, was winner
+		const regretVotes = strongVotes.filter(v =>
+			validVoters.has(v.fromNeuronId) &&
+			actionTargets.has(v.neuronId) &&
+			winnerIds.has(v.neuronId)
+		);
+
+		if (regretVotes.length === 0) return 0;
+
+		// Get alternative actions for each channel
+		const channelIds = [...new Set([...actionTargets.values()])];
+		const [altActions] = await this.conn.query(`
+			SELECT neuron_id, channel_id FROM base_neurons
+			WHERE type = 'action' AND channel_id IN (?)
+		`, [channelIds]);
+		const altsByChannel = new Map();
+		for (const a of altActions) {
+			if (!altsByChannel.has(a.channel_id)) altsByChannel.set(a.channel_id, []);
+			altsByChannel.get(a.channel_id).push(a.neuron_id);
+		}
+
+		// Create pattern futures: for each regret vote, pick one alternative action
+		const futures = [];
+		for (const v of regretVotes) {
+			const channelId = actionTargets.get(v.neuronId);
+			const alts = altsByChannel.get(channelId) || [];
+			const altId = alts.find(a => a !== v.neuronId);
+			if (altId) futures.push([v.fromNeuronId, altId, v.distance]);
+		}
+
+		if (futures.length === 0) return 0;
+
+		const [result] = await this.conn.query(
+			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
+			[futures]
+		);
 		if (this.debug) console.log(`Found ${result.affectedRows} connection action regret inferences`);
 		return result.affectedRows;
 	}
 
 	/**
 	 * Handle action regret for pattern inferences.
-	 * Uses inference_votes which already excludes peaks with active patterns.
+	 * Reads from this.inferenceVotes which already excludes peaks with active patterns.
 	 * Find an alternative action to try instead of the one that led to pain.
 	 * @param {Array} painfulChannelIds - Channel IDs with negative rewards
 	 * @returns {Promise<number>} Number of high action pattern futures created
 	 */
 	async populateNewPatternHighActions(painfulChannelIds) {
-		const [result] = await this.conn.query(`
-			INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance)
-			SELECT v.from_neuron_id, MIN(b_alt.neuron_id), v.distance
-			FROM inference_votes v
-			-- get neuron info for the inferred neuron (target)
-			JOIN base_neurons b_target ON b_target.neuron_id = v.neuron_id
-			-- get neuron level for the voting neuron (to distinguish connection vs pattern)
-			JOIN neurons n_voter ON n_voter.id = v.from_neuron_id
-			-- find alternative actions in the same channel (what we should try instead)
-			JOIN base_neurons b_alt ON b_alt.channel_id = b_target.channel_id AND b_alt.type = 'action'
-			-- only pattern votes (higher level peaks)
-			WHERE n_voter.level > 0
-			-- only action predictions that were executed (winners) in painful channels
-			AND b_target.type = 'action'
-			AND b_target.channel_id IN (${painfulChannelIds.join(',')})
-			-- the inference must have been done with a strength above a threshold to trigger pattern creation
-			AND v.strength >= ?
-			-- check if this was the winning action (need to verify it was executed)
-			AND EXISTS (SELECT 1 FROM inferred_neurons inf WHERE inf.neuron_id = v.neuron_id AND inf.is_winner = 1)
-			-- don't suggest the same action that just failed
-			AND b_alt.neuron_id != v.neuron_id
-			GROUP BY v.from_neuron_id, b_target.channel_id, v.distance
-		`, [this.actionRegretMinStrength]);
+		// Filter votes by strength threshold
+		const strongVotes = this.inferenceVotes.filter(v => v.strength >= this.actionRegretMinStrength);
+		if (strongVotes.length === 0) return 0;
+
+		const voterIds = [...new Set(strongVotes.map(v => v.fromNeuronId))];
+		const targetIds = [...new Set(strongVotes.map(v => v.neuronId))];
+
+		// Get higher-level voters (patterns have level > 0)
+		const [voterInfo] = await this.conn.query(`
+			SELECT id as neuron_id FROM neurons WHERE id IN (?) AND level > 0
+		`, [voterIds]);
+		const validVoters = new Set(voterInfo.map(v => v.neuron_id));
+
+		// Get action targets in painful channels
+		const [targetInfo] = await this.conn.query(`
+			SELECT neuron_id, channel_id FROM base_neurons
+			WHERE neuron_id IN (?) AND type = 'action' AND channel_id IN (?)
+		`, [targetIds, painfulChannelIds]);
+		const actionTargets = new Map(targetInfo.map(t => [t.neuron_id, t.channel_id]));
+
+		// Get winning actions from inferred_neurons
+		const [winners] = await this.conn.query(`
+			SELECT neuron_id FROM inferred_neurons WHERE is_winner = 1
+		`);
+		const winnerIds = new Set(winners.map(w => w.neuron_id));
+
+		// Filter to valid votes: higher-level voter, action target in painful channel, was winner
+		const regretVotes = strongVotes.filter(v =>
+			validVoters.has(v.fromNeuronId) &&
+			actionTargets.has(v.neuronId) &&
+			winnerIds.has(v.neuronId)
+		);
+
+		if (regretVotes.length === 0) return 0;
+
+		// Get alternative actions for each channel
+		const channelIds = [...new Set([...actionTargets.values()])];
+		const [altActions] = await this.conn.query(`
+			SELECT neuron_id, channel_id FROM base_neurons
+			WHERE type = 'action' AND channel_id IN (?)
+		`, [channelIds]);
+		const altsByChannel = new Map();
+		for (const a of altActions) {
+			if (!altsByChannel.has(a.channel_id)) altsByChannel.set(a.channel_id, []);
+			altsByChannel.get(a.channel_id).push(a.neuron_id);
+		}
+
+		// Create pattern futures: for each regret vote, pick one alternative action
+		const futures = [];
+		for (const v of regretVotes) {
+			const channelId = actionTargets.get(v.neuronId);
+			const alts = altsByChannel.get(channelId) || [];
+			const altId = alts.find(a => a !== v.neuronId);
+			if (altId) futures.push([v.fromNeuronId, altId, v.distance]);
+		}
+
+		if (futures.length === 0) return 0;
+
+		const [result] = await this.conn.query(
+			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
+			[futures]
+		);
 		if (this.debug) console.log(`Found ${result.affectedRows} pattern action regret inferences`);
 		return result.affectedRows;
 	}
@@ -1575,7 +1712,7 @@ export default class Brain {
 		//   Age 7 context: neurons at ages 8-9 (relative ages 1-2)
 		// All these (neuron, relative_age) tuples get combined into ONE pattern
 		// the pattern context neurons must be at the same level as the peak neuron (one level lower than the pattern)
-		// Get distinct peak ages that were actually voting (from new_pattern_future via inference_votes)
+		// Get distinct peak ages that were actually voting (from new_pattern_future via inference votes)
 		// distance in new_pattern_future = peak age when it made the bad prediction
 		await this.conn.query(`
 			INSERT IGNORE INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age)
@@ -1647,106 +1784,147 @@ export default class Brain {
 	}
 
 	/**
-	 * Collect votes and determine consensus in SQL.
+	 * Collect votes and determine consensus.
 	 * Pattern votes override their peak's connection votes.
 	 * Aggregates by neuron, picks winners per dimension (highest strength for events, highest reward for actions).
+	 * Populates this.inferenceVotes array for use by pattern creation.
 	 * @returns {Promise<Array>} Array of inference objects with isWinner flag
 	 */
 	async collectVotes() {
 		const timeDecay = 1 / this.contextLength;
-		await this.conn.query('TRUNCATE inference_votes');
 
-		// Insert connection votes (from base level neurons)
-		const [connResult] = await this.conn.query(`
-			INSERT INTO inference_votes (from_neuron_id, neuron_id, strength, reward, distance)
-			SELECT c.from_neuron_id, c.to_neuron_id,
-			       (1 + n.level * ?) * (1 - (c.distance - 1) * ?) * c.strength as effective_strength,
+		// Clear in-memory votes array
+		this.inferenceVotes = [];
+
+		// Get connection votes (from base level neurons)
+		const [connVotes] = await this.conn.query(`
+			SELECT c.from_neuron_id, c.to_neuron_id as neuron_id,
+			       (1 + n.level * ?) * (1 - (c.distance - 1) * ?) * c.strength as strength,
 			       c.reward, c.distance
 			FROM active_neurons an
 			JOIN neurons n ON n.id = an.neuron_id AND n.level = 0
 			JOIN connections c ON c.from_neuron_id = an.neuron_id
 			WHERE c.distance = an.age + 1 AND c.strength > 0
-		`,[this.levelVoteMultiplier, timeDecay]);
+		`, [this.levelVoteMultiplier, timeDecay]);
 
-		// Insert pattern votes (from pattern neurons at any level)
-		const [patternResult] = await this.conn.query(`
-			INSERT INTO inference_votes (from_neuron_id, neuron_id, strength, reward, distance)
-			SELECT pf.pattern_neuron_id, pf.inferred_neuron_id,
-			       (1 + pn.level * ?) * (1 - (pf.distance - 1) * ?) * pf.strength as effective_strength,
+		// Get pattern votes (from pattern neurons at any level)
+		const [patternVotes] = await this.conn.query(`
+			SELECT pf.pattern_neuron_id as from_neuron_id, pf.inferred_neuron_id as neuron_id,
+			       (1 + pn.level * ?) * (1 - (pf.distance - 1) * ?) * pf.strength as strength,
 			       pf.reward, pf.distance
 			FROM active_neurons an
 			JOIN neurons pn ON pn.id = an.neuron_id AND pn.level > 0
 			JOIN pattern_future pf ON pf.pattern_neuron_id = an.neuron_id
 			WHERE pf.distance = an.age + 1 AND pf.strength > 0
-		`,[this.levelVoteMultiplier, timeDecay]);
+		`, [this.levelVoteMultiplier, timeDecay]);
 
-		if (this.debug) console.log(`Inserted ${connResult.affectedRows} connection votes, ${patternResult.affectedRows} pattern votes`);
+		// Combine votes into in-memory array
+		for (const v of connVotes)
+			this.inferenceVotes.push({ fromNeuronId: v.from_neuron_id, neuronId: v.neuron_id, strength: v.strength, reward: v.reward, distance: v.distance });
+		for (const v of patternVotes)
+			this.inferenceVotes.push({ fromNeuronId: v.from_neuron_id, neuronId: v.neuron_id, strength: v.strength, reward: v.reward, distance: v.distance });
 
-		// Delete overridden votes: votes from neurons that are peaks of other voting patterns
-		const [deleteResult] = await this.conn.query(`
-			DELETE v FROM inference_votes v
-			JOIN pattern_peaks pp ON pp.peak_neuron_id = v.from_neuron_id
-			JOIN inference_votes pv ON pv.from_neuron_id = pp.pattern_neuron_id
-		`);
+		if (this.debug) console.log(`Collected ${connVotes.length} connection votes, ${patternVotes.length} pattern votes`);
 
-		if (this.debug) console.log(`Deleted ${deleteResult.affectedRows} overridden votes`);
+		// Filter out overridden votes: votes from neurons that are peaks of other voting patterns
+		const votingPatternIds = new Set(patternVotes.map(v => v.from_neuron_id));
+		if (votingPatternIds.size > 0) {
+			const [peakRows] = await this.conn.query(
+				'SELECT peak_neuron_id FROM pattern_peaks WHERE pattern_neuron_id IN (?)',
+				[[...votingPatternIds]]
+			);
+			const overriddenPeaks = new Set(peakRows.map(r => r.peak_neuron_id));
+			const beforeCount = this.inferenceVotes.length;
+			this.inferenceVotes = this.inferenceVotes.filter(v => !overriddenPeaks.has(v.fromNeuronId));
+			if (this.debug) console.log(`Filtered ${beforeCount - this.inferenceVotes.length} overridden votes`);
+		}
 
 		// Call channel-specific debug methods if debug2 is enabled
 		if (this.debug2) {
-			const [votes] = await this.conn.query(`
-				SELECT v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance,
-				       b.type, b.channel_id, ch.name as channel,
-				       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
-				FROM inference_votes v
-				JOIN base_neurons b ON b.neuron_id = v.neuron_id
-				JOIN channels ch ON ch.id = b.channel_id
-				JOIN coordinates coord ON coord.neuron_id = v.neuron_id
-				JOIN dimensions d ON d.id = coord.dimension_id
-				GROUP BY v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance, b.type, b.channel_id, ch.name
-			`);
-			for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
+			const neuronIds = [...new Set(this.inferenceVotes.map(v => v.neuronId))];
+			if (neuronIds.length > 0) {
+				const [metadata] = await this.conn.query(`
+					SELECT b.neuron_id, b.type, b.channel_id, ch.name as channel,
+					       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
+					FROM base_neurons b
+					JOIN channels ch ON ch.id = b.channel_id
+					JOIN coordinates coord ON coord.neuron_id = b.neuron_id
+					JOIN dimensions d ON d.id = coord.dimension_id
+					WHERE b.neuron_id IN (?)
+					GROUP BY b.neuron_id, b.type, b.channel_id, ch.name
+				`, [neuronIds]);
+				const metaMap = new Map(metadata.map(m => [m.neuron_id, m]));
+				const votes = this.inferenceVotes.map(v => {
+					const meta = metaMap.get(v.neuronId) || {};
+					return { from_neuron_id: v.fromNeuronId, neuron_id: v.neuronId, strength: v.strength, reward: v.reward, distance: v.distance, ...meta };
+				});
+				for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
+			}
 		}
 
-		// Aggregate votes by neuron and determine winners per dimension
-		const [inferences] = await this.conn.query(`
-			-- aggregate votes for each candidate neuron
-            WITH candidates AS (
-            	SELECT v.neuron_id, SUM(v.strength) as strength, SUM(v.strength * v.reward) / SUM(v.strength) as reward,
-					   b.type, b.channel_id, ch.name as channel,
-					   GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
-				FROM inference_votes v
-                JOIN base_neurons b ON b.neuron_id = v.neuron_id
-                JOIN channels ch ON ch.id = b.channel_id
-                JOIN coordinates coord ON coord.neuron_id = v.neuron_id
-                JOIN dimensions d ON d.id = coord.dimension_id
-                GROUP BY v.neuron_id, b.type, b.channel_id, ch.name
-            ),
-            -- join to coordinates and rank within each dimension (events by strength, actions by reward)
-            ranked AS (
-            	SELECT c.neuron_id, coord.dimension_id,
-					RANK() OVER (PARTITION BY coord.dimension_id ORDER BY IF(c.type = 'action', c.reward, c.strength) DESC) as dim_rank
-				FROM candidates c
-                JOIN coordinates coord ON coord.neuron_id = c.neuron_id
-			),
-			-- collect neurons that are rank 1 in any dimension
-            winners AS (
-            	SELECT DISTINCT neuron_id
-                FROM ranked
-                WHERE dim_rank = 1
-            )
-            -- join candidates with winners to set is_winner flag
-            SELECT c.*, IF(w.neuron_id IS NOT NULL, 1, 0) as is_winner
-            FROM candidates c
-            LEFT JOIN winners w ON w.neuron_id = c.neuron_id
-		`);
+		// Aggregate votes by neuron
+		const aggregated = new Map(); // neuronId -> {strength, weightedReward}
+		for (const v of this.inferenceVotes) {
+			if (!aggregated.has(v.neuronId))
+				aggregated.set(v.neuronId, { strength: 0, weightedReward: 0 });
+			const agg = aggregated.get(v.neuronId);
+			agg.strength += v.strength;
+			agg.weightedReward += v.strength * v.reward;
+		}
 
-		if (this.debug) console.log(`Collected ${inferences.length} inferences after consensus`);
+		if (aggregated.size === 0) return [];
 
-		// Parse coordinates and convert is_winner to boolean
-		return inferences.map(inf => ({
-			...inf,
-			coordinates: this.parseCoordinates(inf.coordinates),
-			isWinner: inf.is_winner === 1
+		// Get metadata for aggregated neurons
+		const neuronIds = [...aggregated.keys()];
+		const [metadata] = await this.conn.query(`
+			SELECT b.neuron_id, b.type, b.channel_id, ch.name as channel,
+			       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
+			FROM base_neurons b
+			JOIN channels ch ON ch.id = b.channel_id
+			JOIN coordinates coord ON coord.neuron_id = b.neuron_id
+			JOIN dimensions d ON d.id = coord.dimension_id
+			WHERE b.neuron_id IN (?)
+			GROUP BY b.neuron_id, b.type, b.channel_id, ch.name
+		`, [neuronIds]);
+
+		// Build candidates with aggregated strength and reward
+		const candidates = metadata.map(m => {
+			const agg = aggregated.get(m.neuron_id);
+			return {
+				neuron_id: m.neuron_id,
+				strength: agg.strength,
+				reward: agg.weightedReward / agg.strength,
+				type: m.type,
+				channel_id: m.channel_id,
+				channel: m.channel,
+				coordinates: m.coordinates
+			};
+		});
+
+		// Determine winners per dimension
+		const [dimInfo] = await this.conn.query(
+			'SELECT neuron_id, dimension_id FROM coordinates WHERE neuron_id IN (?)',
+			[neuronIds]
+		);
+
+		// Group by dimension and find winner (events by strength, actions by reward)
+		const dimBest = new Map(); // dimensionId -> {neuronId, score}
+		for (const d of dimInfo) {
+			const cand = candidates.find(c => c.neuron_id === d.neuron_id);
+			if (!cand) continue;
+			const score = cand.type === 'action' ? cand.reward : cand.strength;
+			if (!dimBest.has(d.dimension_id) || score > dimBest.get(d.dimension_id).score)
+				dimBest.set(d.dimension_id, { neuronId: d.neuron_id, score });
+		}
+
+		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
+
+		if (this.debug) console.log(`Collected ${candidates.length} inferences after consensus`);
+
+		return candidates.map(c => ({
+			...c,
+			coordinates: this.parseCoordinates(c.coordinates),
+			isWinner: winnerIds.has(c.neuron_id)
 		}));
 	}
 

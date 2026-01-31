@@ -19,10 +19,7 @@ select * from pattern_past where pattern_neuron_id in (8, 9) order by pattern_ne
 select * from pattern_future order by pattern_neuron_id, distance, inferred_neuron_id;
 select * from new_patterns;
 select * from new_pattern_future;
-select * from matched_patterns;
-select * from matched_pattern_past;
 select * from inferred_neurons;
-select * from inference_votes;
 
 -- new patterns pattern_past entries
 SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - 1
