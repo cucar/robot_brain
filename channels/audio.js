@@ -1,4 +1,5 @@
 import Channel from './channel.js';
+import { Dimension } from '../dimensions/dimension.js';
 
 /**
  * Ears Channel - Handles audio input and ear movement output (auriculomotor)
@@ -10,7 +11,7 @@ export default class EarsChannel extends Channel {
 
 	constructor(name) {
 		super(name);
-		
+
 		// Sample audio data - frequencies, amplitudes, and durations
 		this.audioData = [
 			{ frequency: 440, amplitude: 0.8, duration: 0.5, direction: 0.2 }, // A note from right
@@ -22,18 +23,20 @@ export default class EarsChannel extends Channel {
 		this.currentDataIndex = 0;
 		this.earOrientation = 0.0; // Current ear orientation (-1 left, +1 right)
 		this.lastMovement = null;
+
+		// Create dimension objects for this channel
+		this.audioFrequencyDim = new Dimension('audio_frequency');
+		this.audioAmplitudeDim = new Dimension('audio_amplitude');
+		this.audioDurationDim = new Dimension('audio_duration');
+		this.earOrientationDim = new Dimension('ear_orientation');
 	}
 
 	getEventDimensions() {
-		return [
-			'audio_frequency', 'audio_amplitude', 'audio_duration'
-		];
+		return [ this.audioFrequencyDim, this.audioAmplitudeDim, this.audioDurationDim ];
 	}
 
 	getOutputDimensions() {
-		return [
-			'ear_orientation' // Ear movement direction
-		];
+		return [ this.earOrientationDim ];
 	}
 
 	/**

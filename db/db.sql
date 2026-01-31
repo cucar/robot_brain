@@ -194,16 +194,18 @@ AND src.age = 0;
 -- INSERT IGNORE INTO dimensions (name) VALUES ('d0'), ('d1'), ('d2'), ('d3'), ('d4'), ('d5'), ('d6'), ('d7'), ('d8'), ('d9'), ('d10'), ('d11'), ('d12'), ('d13'), ('d14'), ('d15'), ('d16'), ('d17'), ('d18'), ('d19');
 
 -- channels table for efficient storage (neurons reference by id instead of varchar)
+-- IDs come from static class counters in Channel class (not auto-increment)
 -- DROP TABLE IF EXISTS channels;
 CREATE TABLE IF NOT EXISTS channels (
-    id SMALLINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    id SMALLINT UNSIGNED PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL
 );
 
 -- dimensions table defines coordinate space (just names, no type/channel)
+-- IDs come from static class counters in Dimension class (not auto-increment)
 -- DROP TABLE IF EXISTS dimensions;
 CREATE TABLE IF NOT EXISTS dimensions (
-    id SMALLINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    id SMALLINT UNSIGNED PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL
 );
 

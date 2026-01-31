@@ -1,4 +1,5 @@
 import Channel from './channel.js';
+import { Dimension } from '../dimensions/dimension.js';
 
 /**
  * Tongue Channel - Handles taste input and tongue movement output
@@ -10,7 +11,7 @@ export default class TongueChannel extends Channel {
 
 	constructor(name) {
 		super(name);
-		
+
 		// Sample taste data - different flavors and intensities
 		this.tasteData = [
 			{ sweet: 0.8, sour: 0.1, salty: 0.2, bitter: 0.0, umami: 0.1, preference: 0.9 }, // Sweet treat
@@ -22,18 +23,23 @@ export default class TongueChannel extends Channel {
 		this.currentDataIndex = 0;
 		this.tonguePosition = { x: 0.0, y: 0.0 }; // Current tongue position
 		this.lastMovement = null;
+
+		// Create dimension objects for this channel
+		this.tasteSweetDim = new Dimension('taste_sweet');
+		this.tasteSourDim = new Dimension('taste_sour');
+		this.tasteSaltyDim = new Dimension('taste_salty');
+		this.tasteBitterDim = new Dimension('taste_bitter');
+		this.tasteUmamiDim = new Dimension('taste_umami');
+		this.tongueXDim = new Dimension('tongue_x');
+		this.tongueYDim = new Dimension('tongue_y');
 	}
 
 	getEventDimensions() {
-		return [
-			'taste_sweet', 'taste_sour', 'taste_salty', 'taste_bitter', 'taste_umami'
-		];
+		return [ this.tasteSweetDim, this.tasteSourDim, this.tasteSaltyDim, this.tasteBitterDim, this.tasteUmamiDim ];
 	}
 
 	getOutputDimensions() {
-		return [
-			'tongue_x', 'tongue_y' // Tongue movement directions
-		];
+		return [ this.tongueXDim, this.tongueYDim ];
 	}
 
 	/**

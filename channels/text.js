@@ -1,4 +1,5 @@
 import Channel from './channel.js';
+import { Dimension } from '../dimensions/dimension.js';
 
 /**
  * Text Channel - Handles character input and character output (like typing/speaking)
@@ -18,13 +19,16 @@ export default class TextChannel extends Channel {
 		this.patternIterations = 0;
 		this.maxIterations = 10;
 		this.lastPredictedChar = null;
+
+		// Create dimension objects for this channel
+		this.charInputDim = new Dimension('char_input');
 	}
 
 	/**
 	 * we only have one character input at a time
 	 */
 	getEventDimensions() {
-		return [ 'char_input' ];
+		return [ this.charInputDim ];
 	}
 
 	/**

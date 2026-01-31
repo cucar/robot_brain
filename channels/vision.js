@@ -1,4 +1,5 @@
 import Channel from './channel.js';
+import { Dimension } from '../dimensions/dimension.js';
 
 /**
  * Eyes Channel - Handles visual input and eye movement output (saccades)
@@ -7,10 +8,10 @@ import Channel from './channel.js';
  * Feedback: visual attention rewards
  */
 export default class EyesChannel extends Channel {
-	
+
 	constructor(name) {
 		super(name);
-		
+
 		// Sample visual data - in real implementation this would come from camera/image processing
 		this.visualData = [
 			{ x: 0.1, y: 0.2, r: 1.0, g: 0.0, b: 0.0 }, // Red dot at 10,20
@@ -22,18 +23,23 @@ export default class EyesChannel extends Channel {
 		this.currentDataIndex = 0;
 		this.eyePosition = { x: 0.0, y: 0.0 }; // Current eye position
 		this.lastSaccade = null;
+
+		// Create dimension objects for this channel
+		this.visualXDim = new Dimension('visual_x');
+		this.visualYDim = new Dimension('visual_y');
+		this.visualRDim = new Dimension('visual_r');
+		this.visualGDim = new Dimension('visual_g');
+		this.visualBDim = new Dimension('visual_b');
+		this.saccadeXDim = new Dimension('saccade_x');
+		this.saccadeYDim = new Dimension('saccade_y');
 	}
 
 	getEventDimensions() {
-		return [
-			'visual_x', 'visual_y', 'visual_r', 'visual_g', 'visual_b'
-		];
+		return [ this.visualXDim, this.visualYDim, this.visualRDim, this.visualGDim, this.visualBDim ];
 	}
 
 	getOutputDimensions() {
-		return [
-			'saccade_x', 'saccade_y' // Eye movement directions
-		];
+		return [ this.saccadeXDim, this.saccadeYDim ];
 	}
 
 	/**

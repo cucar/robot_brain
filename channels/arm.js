@@ -1,4 +1,5 @@
 import Channel from './channel.js';
+import { Dimension } from '../dimensions/dimension.js';
 
 /**
  * Arm Channel - Handles touch/proprioception input and motor output
@@ -7,15 +8,15 @@ import Channel from './channel.js';
  * Feedback: movement success rewards
  */
 export default class ArmChannel extends Channel {
-	
+
 	constructor(name) {
 		super(name);
-		
+
 		// Arm state tracking
 		this.currentPosition = { shoulder: 0.0, elbow: 0.0, wrist: 0.0 }; // Current joint positions
 		this.targetPosition = null;
 		this.lastMovement = null;
-		
+
 		// Sample reaching sequence data from main.js motor control example
 		this.reachSequence = [
 			{ shoulder: 0.0, elbow: 0.0, wrist: 0.0 }, // Rest position
@@ -27,19 +28,28 @@ export default class ArmChannel extends Channel {
 		this.currentSequenceIndex = 0;
 		this.sequenceTrials = 0;
 		this.maxTrials = 5;
+
+		// Create dimension objects for this channel
+		this.touchShoulderDim = new Dimension('touch_shoulder');
+		this.touchElbowDim = new Dimension('touch_elbow');
+		this.touchWristDim = new Dimension('touch_wrist');
+		this.jointShoulderDim = new Dimension('joint_shoulder');
+		this.jointElbowDim = new Dimension('joint_elbow');
+		this.jointWristDim = new Dimension('joint_wrist');
+		this.motorShoulderDim = new Dimension('motor_shoulder');
+		this.motorElbowDim = new Dimension('motor_elbow');
+		this.motorWristDim = new Dimension('motor_wrist');
 	}
 
 	getEventDimensions() {
 		return [
-			'touch_shoulder', 'touch_elbow', 'touch_wrist', // Touch/proprioception inputs
-			'joint_shoulder', 'joint_elbow', 'joint_wrist'  // Current joint positions
+			this.touchShoulderDim, this.touchElbowDim, this.touchWristDim,
+			this.jointShoulderDim, this.jointElbowDim, this.jointWristDim
 		];
 	}
 
 	getOutputDimensions() {
-		return [
-			'motor_shoulder', 'motor_elbow', 'motor_wrist' // Motor command outputs
-		];
+		return [ this.motorShoulderDim, this.motorElbowDim, this.motorWristDim ];
 	}
 
 	/**

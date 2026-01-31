@@ -1,4 +1,5 @@
 import Channel from './channel.js';
+import { Dimension } from '../dimensions/dimension.js';
 import { createReadStream, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
@@ -16,6 +17,11 @@ export default class StockChannel extends Channel {
 
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
+
+		// Create dimension objects for this channel
+		this.priceChangeDim = new Dimension(`${this.symbol}_price_change`);
+		this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
+		this.activityDim = new Dimension(`${this.symbol}_activity`);
 
 		// Hyperparameters
 		this.rewardAmplification = 1; // Power to raise reward ratios to (higher = stronger rewards/penalties)
@@ -243,17 +249,14 @@ export default class StockChannel extends Channel {
 	 * returns the input dimensions for the channel
 	 */
 	getEventDimensions() {
-		return [
-			`${this.symbol}_price_change`,
-			`${this.symbol}_volume_change`
-		];
+		return [ this.priceChangeDim, this.volumeChangeDim ];
 	}
 
 	/**
 	 * returns the output dimensions for the channel
 	 */
 	getOutputDimensions() {
-		return [ `${this.symbol}_activity` ];
+		return [ this.activityDim ];
 	}
 
 	/**

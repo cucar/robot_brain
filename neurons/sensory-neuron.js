@@ -25,8 +25,7 @@ export class SensoryNeuron extends Neuron {
 	 * @returns {string} JSON string key for Map lookup
 	 */
 	static makeValueKey(coordinates) {
-		// Sort keys for consistent ordering
-		const sorted = Object.keys(coordinates).sort();
+		const sorted = Object.keys(coordinates).sort(); // Sort keys for consistent ordering
 		const obj = {};
 		for (const k of sorted) obj[k] = coordinates[k];
 		return JSON.stringify(obj);

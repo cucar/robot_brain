@@ -216,49 +216,54 @@ export default class Brain {
 
 	/**
 	 * Initialize channels in DB and load channel IDs
+	 * IDs come from static Channel.nextId counter (not auto-increment)
 	 */
 	async initializeChannels() {
 		this.channelNameToId = {};
 		this.channelIdToName = {};
 
-		// Insert channels into DB
-		for (const [channelName] of this.channels)
-			await this.conn.query('INSERT IGNORE INTO channels (name) VALUES (?)', [channelName]);
-
-		// Load channel IDs
-		const [rows] = await this.conn.query('SELECT id, name FROM channels');
-		rows.forEach(row => {
-			this.channelNameToId[row.name] = row.id;
-			this.channelIdToName[row.id] = row.name;
-		});
+		// Insert channels into DB with explicit IDs from Channel objects
+		for (const [channelName, channel] of this.channels) {
+			await this.conn.query('INSERT IGNORE INTO channels (id, name) VALUES (?, ?)', [channel.id, channelName]);
+			this.channelNameToId[channelName] = channel.id;
+			this.channelIdToName[channel.id] = channelName;
+		}
 		if (this.debug2) console.log('Channels loaded:', this.channelNameToId);
 	}
 
 	/**
 	 * Initialize dimensions for all registered channels
+	 * IDs come from static Dimension.nextId counter (not auto-increment)
 	 */
 	async initializeDimensions() {
 		if (this.debug2) console.log('Initializing dimensions for registered channels...');
 		for (const [, channel] of this.channels) {
-			for (const dimName of channel.getEventDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (name) VALUES (?)', [dimName]);
-			for (const dimName of channel.getOutputDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (name) VALUES (?)', [dimName]);
+			for (const dim of channel.getEventDimensions())
+				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
+			for (const dim of channel.getOutputDimensions())
+				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
 		}
 	}
 
 	/**
 	 * loads the dimensions to memory (just id and name, no channel/type)
+	 * Populates mappings from Dimension objects owned by channels
 	 */
 	async loadDimensions() {
 		this.dimensionNameToId = {};
 		this.dimensionIdToName = {};
 
-		const [rows] = await this.conn.query('SELECT id, name FROM dimensions');
-		rows.forEach(row => {
-			this.dimensionNameToId[row.name] = row.id;
-			this.dimensionIdToName[row.id] = row.name;
-		});
+		// Build mappings from Dimension objects (no need to query DB)
+		for (const [, channel] of this.channels) {
+			for (const dim of channel.getEventDimensions()) {
+				this.dimensionNameToId[dim.name] = dim.id;
+				this.dimensionIdToName[dim.id] = dim.name;
+			}
+			for (const dim of channel.getOutputDimensions()) {
+				this.dimensionNameToId[dim.name] = dim.id;
+				this.dimensionIdToName[dim.id] = dim.name;
+			}
+		}
 		if (this.debug2) console.log('Dimensions loaded:', this.dimensionNameToId);
 	}
 
