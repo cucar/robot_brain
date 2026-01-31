@@ -120,10 +120,13 @@ export default class Brain {
 	 */
 	async resetContext() {
 		console.log('Resetting brain (memory tables)...');
+
+		// In-memory scratch data for pattern matching (replaces MEMORY tables)
+		this.matchedPatterns = [];      // Array of {peakNeuronId, patternNeuronId}
+		this.matchedPatternPast = [];   // Array of {patternNeuronId, contextNeuronId, contextAge, status}
+
 		await this.truncateTables([
 			'active_neurons',
-			'matched_patterns',
-			'matched_pattern_past',
 			'new_pattern_future',
 			'new_patterns',
 			'inferred_neurons',
@@ -884,7 +887,7 @@ export default class Brain {
 	async recognizeLevelPatterns(level) {
 		if (this.debug2) console.log(`Processing level ${level} for pattern recognition`);
 
-		// Match active connections to known patterns and write to matched_patterns table
+		// Match active connections to known patterns and populate this.matchedPatterns array
 		const matchCount = await this.matchObservedPatterns(level);
 		if (matchCount === 0) {
 			if (this.debug2) console.log(`No pattern matches found at level ${level}`);
@@ -904,23 +907,22 @@ export default class Brain {
 	}
 
 	/**
-	 * Match active neurons to known pattern contexts and saves them in matched_patterns table.
+	 * Match active neurons to known pattern contexts and populates this.matchedPatterns array.
 	 * @param {number} level - The level to match patterns for (peak neuron level)
 	 * @returns {Promise<number>} - Number of matched patterns
 	 */
 	async matchObservedPatterns(level) {
 		if (this.debug2) console.log('Matching active connections to known patterns');
 
-		// Clear scratch tables
-		await this.conn.query('TRUNCATE matched_patterns');
-		await this.conn.query('TRUNCATE matched_pattern_past');
+		// Clear in-memory scratch arrays
+		this.matchedPatterns = [];
+		this.matchedPatternPast = [];
 
 		// Dynamic-length pattern matching (like words in text):
 		// 1. Threshold check: pattern matches if matched_count / pattern_past_count >= threshold
 		// 2. Winner selection: among matched patterns for a peak, pick highest total strength of matching context
 		// This builds a branching structure of switch statements - longer, more specific patterns win
-		const [result] = await this.conn.query(`
-			INSERT INTO matched_patterns (peak_neuron_id, pattern_neuron_id)
+		const [rows] = await this.conn.query(`
 			SELECT m.peak_neuron_id, m.pattern_neuron_id
 			FROM (
 				SELECT pp.peak_neuron_id, pp.pattern_neuron_id,
@@ -942,86 +944,106 @@ export default class Brain {
 			WHERE m.rn = 1
 		`, [level, this.mergePatternThreshold]);
 
+		// Populate in-memory array
+		this.matchedPatterns = rows.map(r => ({ peakNeuronId: r.peak_neuron_id, patternNeuronId: r.pattern_neuron_id }));
+
 		// show matched pattern details for debugging
-		if (this.debug) {
-			const [matchedPairs] = await this.conn.query('SELECT * FROM matched_patterns');
-			console.log(`Matched ${result.affectedRows} pattern-peak pairs:`,
-				matchedPairs.map(p => `peak=${p.peak_neuron_id}, pattern=${p.pattern_neuron_id}`).join('; '));
-		}
+		if (this.debug)
+			console.log(`Matched ${this.matchedPatterns.length} pattern-peak pairs:`,
+				this.matchedPatterns.map(p => `peak=${p.peakNeuronId}, pattern=${p.patternNeuronId}`).join('; '));
 
 		// if no patterns matched, nothing to do
-		if (result.affectedRows === 0) return 0;
+		if (this.matchedPatterns.length === 0) return 0;
 
 		// populate context analysis for refinement of matched patterns
 		await this.populateMatchedPatternContext();
 
 		// return the number of matched patterns
-		return result.affectedRows;
+		return this.matchedPatterns.length;
 	}
 
 	/**
-	 * Populates the matched_pattern_past table with the context of the matched patterns
+	 * Populates this.matchedPatternPast array with the context of the matched patterns
 	 */
 	async populateMatchedPatternContext() {
+		if (this.matchedPatterns.length === 0) return;
+
+		// Build pattern neuron ID list for SQL IN clause
+		const patternIds = this.matchedPatterns.map(m => m.patternNeuronId);
+		const peakToPattern = new Map(this.matchedPatterns.map(m => [m.peakNeuronId, m.patternNeuronId]));
 
 		// Common: context neurons that ARE active at correct age
-		await this.conn.query(`
-			INSERT INTO matched_pattern_past (pattern_neuron_id, context_neuron_id, context_age, status)
-			SELECT p.pattern_neuron_id, p.context_neuron_id, p.context_age, 'common'
-			FROM matched_patterns mp
-			JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id
+		const [commonRows] = await this.conn.query(`
+			SELECT p.pattern_neuron_id, p.context_neuron_id, p.context_age
+			FROM pattern_past p
 			JOIN active_neurons an ON an.neuron_id = p.context_neuron_id AND an.age = p.context_age
-		`);
+			WHERE p.pattern_neuron_id IN (?)
+		`, [patternIds]);
+		for (const r of commonRows)
+			this.matchedPatternPast.push({ patternNeuronId: r.pattern_neuron_id, contextNeuronId: r.context_neuron_id, contextAge: r.context_age, status: 'common' });
 
 		// Missing: context neurons NOT active at correct age
-		await this.conn.query(`
-			INSERT INTO matched_pattern_past (pattern_neuron_id, context_neuron_id, context_age, status)
-			SELECT p.pattern_neuron_id, p.context_neuron_id, p.context_age, 'missing'
-			FROM matched_patterns mp
-			JOIN pattern_past p ON p.pattern_neuron_id = mp.pattern_neuron_id
-			WHERE NOT EXISTS (
+		const [missingRows] = await this.conn.query(`
+			SELECT p.pattern_neuron_id, p.context_neuron_id, p.context_age
+			FROM pattern_past p
+			WHERE p.pattern_neuron_id IN (?)
+			AND NOT EXISTS (
 				SELECT 1 FROM active_neurons an
 				WHERE an.neuron_id = p.context_neuron_id AND an.age = p.context_age
 			)
-		`);
+		`, [patternIds]);
+		for (const r of missingRows)
+			this.matchedPatternPast.push({ patternNeuronId: r.pattern_neuron_id, contextNeuronId: r.context_neuron_id, contextAge: r.context_age, status: 'missing' });
 
 		// Novel: active neurons at same level, not in pattern_past (all channels)
 		// Exclude neurons at age >= contextLength (kept for pattern context only, not for learning new context)
-		await this.conn.query(`
-			INSERT INTO matched_pattern_past (pattern_neuron_id, context_neuron_id, context_age, status)
-			SELECT mp.pattern_neuron_id, an_context.neuron_id, an_context.age, 'novel'
-			FROM matched_patterns mp
-			JOIN neurons n_peak ON n_peak.id = mp.peak_neuron_id
+		// Build set of existing pattern_past entries for quick lookup
+		const [existingPatternPast] = await this.conn.query(
+			'SELECT pattern_neuron_id, context_neuron_id, context_age FROM pattern_past WHERE pattern_neuron_id IN (?)',
+			[patternIds]
+		);
+		const existingContext = new Set(existingPatternPast.map(r => `${r.pattern_neuron_id}-${r.context_neuron_id}-${r.context_age}`));
+
+		// Get candidate novel neurons for each peak
+		const peakIds = this.matchedPatterns.map(m => m.peakNeuronId);
+		const [novelRows] = await this.conn.query(`
+			SELECT n_peak.id as peak_neuron_id, an_context.neuron_id as context_neuron_id, an_context.age as context_age
+			FROM neurons n_peak
 			JOIN active_neurons an_context ON an_context.age > 0 AND an_context.age < ?
-            JOIN neurons n_context ON n_context.id = an_context.neuron_id AND n_context.level = n_peak.level
-			-- pick the context neurons that are not already in the context in the age they are observed
-			WHERE NOT EXISTS (
-				SELECT 1 FROM pattern_past p
-				WHERE p.pattern_neuron_id = mp.pattern_neuron_id
-			    AND p.context_neuron_id = an_context.neuron_id
-			    AND p.context_age = an_context.age
-			)
-		    -- exclude actions from context - note that this may be a stock specific thing - actions can learn patterns in robotics context
+			JOIN neurons n_context ON n_context.id = an_context.neuron_id AND n_context.level = n_peak.level
+			WHERE n_peak.id IN (?)
+			-- exclude actions from context
 			AND NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = an_context.neuron_id AND b.type = 'action')
-		`, [this.contextLength]);
+		`, [this.contextLength, peakIds]);
+
+		// For each novel row, map to the correct pattern and check if already in pattern_past
+		for (const r of novelRows) {
+			const patternNeuronId = peakToPattern.get(r.peak_neuron_id);
+			if (!patternNeuronId) continue;
+			const key = `${patternNeuronId}-${r.context_neuron_id}-${r.context_age}`;
+			if (!existingContext.has(key))
+				this.matchedPatternPast.push({ patternNeuronId, contextNeuronId: r.context_neuron_id, contextAge: r.context_age, status: 'novel' });
+		}
 	}
 
 	/**
 	 * update pattern_peaks that are just activated
 	 */
 	async strengthenActivePatterns() {
+		if (this.matchedPatterns.length === 0) return;
 
 		// Reinforce pattern_peaks strength for matched patterns
+		const patternIds = this.matchedPatterns.map(m => m.patternNeuronId);
 		await this.conn.query(`
-			UPDATE pattern_peaks pp
-			JOIN matched_patterns mp ON pp.pattern_neuron_id = mp.pattern_neuron_id
-			SET pp.strength = LEAST(?, pp.strength + 1)
-		`, [this.maxConnectionStrength]);
+			UPDATE pattern_peaks
+			SET strength = LEAST(?, strength + 1)
+			WHERE pattern_neuron_id IN (?)
+		`, [this.maxConnectionStrength, patternIds]);
 	}
 
 	/**
 	 * Refine matched patterns using pre-analyzed connection sets.
-	 * Uses matched_pattern_past table populated by matchObservedPatterns:
+	 * Uses this.matchedPatternPast array populated by matchObservedPatterns:
 	 * 1. Add novel connections (status='novel')
 	 * 2. Strengthen common connections (status='common')
 	 * 3. Weaken missing connections (status='missing')
@@ -1029,49 +1051,57 @@ export default class Brain {
 	async refinePatternPast() {
 		if (this.debug) console.log('refining pattern_past...');
 
-		// Add novel context neurons
-		const [novelResult] = await this.conn.query(`
-			INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength)
-			SELECT pattern_neuron_id, context_neuron_id, context_age, 1.0
-			FROM matched_pattern_past
-			WHERE status = 'novel'
-		`);
+		const novel = this.matchedPatternPast.filter(m => m.status === 'novel');
+		const common = this.matchedPatternPast.filter(m => m.status === 'common');
+		const missing = this.matchedPatternPast.filter(m => m.status === 'missing');
 
-		// Strengthen common context
-		const [strengthenResult] = await this.conn.query(`
-			UPDATE pattern_past p
-			JOIN matched_pattern_past mpc 
-				ON p.pattern_neuron_id = mpc.pattern_neuron_id
-				AND p.context_neuron_id = mpc.context_neuron_id
-				AND p.context_age = mpc.context_age
-			SET p.strength = LEAST(?, p.strength + 1)
-			WHERE mpc.status = 'common'
-		`, [this.maxConnectionStrength]);
+		// Add novel context neurons
+		let novelCount = 0;
+		if (novel.length > 0) {
+			const values = novel.map(m => [m.patternNeuronId, m.contextNeuronId, m.contextAge, 1.0]);
+			const [result] = await this.conn.query(
+				'INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?',
+				[values]
+			);
+			novelCount = result.affectedRows;
+		}
+
+		// Strengthen common context - batch update using CASE
+		let strengthenCount = 0;
+		if (common.length > 0) {
+			// Group by pattern to build efficient update
+			for (const m of common) {
+				const [result] = await this.conn.query(`
+					UPDATE pattern_past SET strength = LEAST(?, strength + 1)
+					WHERE pattern_neuron_id = ? AND context_neuron_id = ? AND context_age = ?
+				`, [this.maxConnectionStrength, m.patternNeuronId, m.contextNeuronId, m.contextAge]);
+				strengthenCount += result.affectedRows;
+			}
+		}
 
 		// Weaken missing context
-		const [weakenResult] = await this.conn.query(`
-			UPDATE pattern_past p
-			JOIN matched_pattern_past mpc
-				ON p.pattern_neuron_id = mpc.pattern_neuron_id
-				AND p.context_neuron_id = mpc.context_neuron_id
-				AND p.context_age = mpc.context_age
-			SET p.strength = GREATEST(?, p.strength - ?)
-			WHERE mpc.status = 'missing'
-		`, [this.minConnectionStrength, this.patternNegativeReinforcement]);
+		let weakenCount = 0;
+		if (missing.length > 0) {
+			for (const m of missing) {
+				const [result] = await this.conn.query(`
+					UPDATE pattern_past SET strength = GREATEST(?, strength - ?)
+					WHERE pattern_neuron_id = ? AND context_neuron_id = ? AND context_age = ?
+				`, [this.minConnectionStrength, this.patternNegativeReinforcement, m.patternNeuronId, m.contextNeuronId, m.contextAge]);
+				weakenCount += result.affectedRows;
+			}
+		}
 
-		if (this.debug) console.log(`Pattern context: +${novelResult.affectedRows} novel, ` +
-			`↑${strengthenResult.affectedRows} strengthened, ↓${weakenResult.affectedRows} weakened`);
+		if (this.debug) console.log(`Pattern context: +${novelCount} novel, ↑${strengthenCount} strengthened, ↓${weakenCount} weakened`);
 	}
 
 	/**
 	 * Activate matched pattern neurons at age 0
 	 */
 	async activateMatchedPatterns() {
-		await this.conn.query(`
-			INSERT INTO active_neurons (neuron_id, age)
-			SELECT pattern_neuron_id, 0
-			FROM matched_patterns
-		`);
+		if (this.matchedPatterns.length === 0) return;
+
+		const values = this.matchedPatterns.map(m => [m.patternNeuronId, 0]);
+		await this.conn.query('INSERT INTO active_neurons (neuron_id, age) VALUES ?', [values]);
 	}
 
 	/**
