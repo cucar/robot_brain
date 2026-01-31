@@ -10,12 +10,16 @@ export default class Job {
 		// Brain instance will be created in run() based on options
 		this.brain = null;
 		this.hardReset = false;
+		this.isShuttingDown = false;
 	}
 
 	/**
 	 * Main run method - template method pattern with hooks for customization
 	 */
 	async run() {
+		// Set up signal handlers for graceful shutdown
+		this.setupSignalHandlers();
+
 		try {
 			// Create brain instance based on mysql option
 			this.brain = this.runnerOptions?.mysql ? new BrainMySQL() : new Brain();
@@ -47,11 +51,41 @@ export default class Job {
 
 			// Allow jobs to show custom results
 			await this.showResults();
+
+			// Backup brain state to MySQL before exiting
+			await this.shutdown();
 		}
 		catch (error) {
 			console.error('Job execution failed:', error);
+			await this.shutdown(); // try to back up on error
 			throw error;
 		}
+	}
+
+	/**
+	 * Set up signal handlers for graceful shutdown (Ctrl+C, kill, etc.)
+	 */
+	setupSignalHandlers() {
+		const handleSignal = async (signal) => {
+			console.log(`\nReceived ${signal}, shutting down gracefully...`);
+			await this.shutdown();
+			process.exit(0);
+		};
+
+		// SIGINT = Ctrl+C (works on Windows and Unix)
+		process.on('SIGINT', () => handleSignal('SIGINT'));
+
+		// SIGTERM = kill command (Unix only, ignored on Windows)
+		process.on('SIGTERM', () => handleSignal('SIGTERM'));
+	}
+
+	/**
+	 * Graceful shutdown - backup brain state
+	 */
+	async shutdown() {
+		if (this.isShuttingDown) return;
+		this.isShuttingDown = true;
+		if (this.brain) await this.brain.backupBrain();
 	}
 
 	/**
