@@ -251,16 +251,6 @@ CREATE TABLE IF NOT EXISTS connections (
     INDEX idx_strength (strength)
 );
 
--- neurons currently active within the context sliding window (all levels)
--- note that it is possible for the same neuron to be active in different ages
--- DROP TABLE IF EXISTS active_neurons;
-CREATE TABLE IF NOT EXISTS active_neurons (
-    neuron_id BIGINT UNSIGNED,
-    age TINYINT UNSIGNED DEFAULT 0, -- how long the neuron has been active
-    PRIMARY KEY (neuron_id, age),
-    INDEX idx_level_age (age)
-) ENGINE=MEMORY;
-
 -- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
 -- patterns are learned by peak neurons to differentiate between sequences leading to them
 -- DROP TABLE IF EXISTS pattern_peaks;
@@ -299,6 +289,16 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     INDEX idx_inferred_distance_strength (inferred_neuron_id, distance, strength),
     INDEX idx_strength (strength)
 );
+
+-- neurons currently active within the context sliding window (all levels)
+-- note that it is possible for the same neuron to be active in different ages
+-- DROP TABLE IF EXISTS active_neurons;
+CREATE TABLE IF NOT EXISTS active_neurons (
+    neuron_id BIGINT UNSIGNED,
+    age TINYINT UNSIGNED DEFAULT 0, -- how long the neuron has been active
+    PRIMARY KEY (neuron_id, age),
+    INDEX idx_level_age (age)
+) ENGINE=MEMORY;
 
 -- mapping table for matched patterns - peak neurons and their matched pattern neurons (MEMORY table)
 -- this just a scratch table for faster processing - it temporarily holds the matched patterns for the current level in the frame
