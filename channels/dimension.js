@@ -12,3 +12,4 @@ export class Dimension {
 		this.name = name; // for debugging
 	}
 }
+

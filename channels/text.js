@@ -1,5 +1,5 @@
 import Channel from './channel.js';
-import { Dimension } from '../dimensions/dimension.js';
+import { Dimension } from './dimension.js';
 
 /**
  * Text Channel - Handles character input and character output (like typing/speaking)

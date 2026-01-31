@@ -1,5 +1,5 @@
 import Channel from './channel.js';
-import { Dimension } from '../dimensions/dimension.js';
+import { Dimension } from './dimension.js';
 
 /**
  * Tongue Channel - Handles taste input and tongue movement output

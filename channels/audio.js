@@ -1,5 +1,5 @@
 import Channel from './channel.js';
-import { Dimension } from '../dimensions/dimension.js';
+import { Dimension } from './dimension.js';
 
 /**
  * Ears Channel - Handles audio input and ear movement output (auriculomotor)

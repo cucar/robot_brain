@@ -1,5 +1,5 @@
 import Channel from './channel.js';
-import { Dimension } from '../dimensions/dimension.js';
+import { Dimension } from './dimension.js';
 
 /**
  * Eyes Channel - Handles visual input and eye movement output (saccades)

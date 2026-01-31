@@ -1,5 +1,5 @@
 import Channel from './channel.js';
-import { Dimension } from '../dimensions/dimension.js';
+import { Dimension } from './dimension.js';
 import { createReadStream, mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
