@@ -126,11 +126,11 @@ export default class Brain {
 		this.matchedPatternPast = [];   // Array of {patternNeuronId, contextNeuronId, contextAge, status}
 		this.inferenceVotes = [];       // Array of {fromNeuronId, neuronId, strength, reward, distance}
 		this.inferredNeurons = new Map(); // Map<neuronId, {strength, isWinner}>
+		this.newPatternFuture = [];     // Array of {peakNeuronId, inferredNeuronId, distance}
+		this.newPatterns = [];          // Array of {peakNeuronId, patternNeuronId}
 
 		await this.truncateTables([
-			'active_neurons',
-			'new_pattern_future',
-			'new_patterns'
+			'active_neurons'
 		]);
 	}
 
@@ -1343,7 +1343,7 @@ export default class Brain {
 	 * Returns the number of new pattern future inferences found.
 	 */
 	async populateNewPatternFuture() {
-		await this.conn.query(`TRUNCATE new_pattern_future`);
+		this.newPatternFuture = [];
 		const eventCount = await this.populateNewPatternEvents();
 		const actionCount = await this.populateNewPatternActions();
 		return eventCount + actionCount;
@@ -1413,19 +1413,15 @@ export default class Brain {
 		if (errorVotes.length === 0 || activeNowIds.size === 0) return 0;
 
 		// Create pattern futures: for each error vote, pair with each actual event
-		const futures = [];
+		let count = 0;
 		for (const v of errorVotes)
-			for (const actualId of activeNowIds)
-				futures.push([v.fromNeuronId, actualId, v.distance]);
+			for (const actualId of activeNowIds) {
+				this.newPatternFuture.push({ peakNeuronId: v.fromNeuronId, inferredNeuronId: actualId, distance: v.distance });
+				count++;
+			}
 
-		if (futures.length === 0) return 0;
-
-		const [connResult] = await this.conn.query(
-			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
-			[futures]
-		);
-		if (this.debug) console.log(`Found ${connResult.affectedRows} connection prediction error neurons`);
-		return connResult.affectedRows;
+		if (this.debug) console.log(`Found ${count} connection prediction error neurons`);
+		return count;
 	}
 
 	/**
@@ -1473,19 +1469,15 @@ export default class Brain {
 		if (errorVotes.length === 0 || activeNowIds.size === 0) return 0;
 
 		// Create pattern futures: for each error vote, pair with each actual event
-		const futures = [];
+		let count = 0;
 		for (const v of errorVotes)
-			for (const actualId of activeNowIds)
-				futures.push([v.fromNeuronId, actualId, v.distance]);
+			for (const actualId of activeNowIds) {
+				this.newPatternFuture.push({ peakNeuronId: v.fromNeuronId, inferredNeuronId: actualId, distance: v.distance });
+				count++;
+			}
 
-		if (futures.length === 0) return 0;
-
-		const [patternResult] = await this.conn.query(
-			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
-			[futures]
-		);
-		if (this.debug) console.log(`Found ${patternResult.affectedRows} pattern prediction error neurons`);
-		return patternResult.affectedRows;
+		if (this.debug) console.log(`Found ${count} pattern prediction error neurons`);
+		return count;
 	}
 
 	/**
@@ -1570,22 +1562,19 @@ export default class Brain {
 		}
 
 		// Create pattern futures: for each regret vote, pick one alternative action
-		const futures = [];
+		let count = 0;
 		for (const v of regretVotes) {
 			const channelId = actionTargets.get(v.neuronId);
 			const alts = altsByChannel.get(channelId) || [];
 			const altId = alts.find(a => a !== v.neuronId);
-			if (altId) futures.push([v.fromNeuronId, altId, v.distance]);
+			if (altId) {
+				this.newPatternFuture.push({ peakNeuronId: v.fromNeuronId, inferredNeuronId: altId, distance: v.distance });
+				count++;
+			}
 		}
 
-		if (futures.length === 0) return 0;
-
-		const [result] = await this.conn.query(
-			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
-			[futures]
-		);
-		if (this.debug) console.log(`Found ${result.affectedRows} connection action regret inferences`);
-		return result.affectedRows;
+		if (this.debug) console.log(`Found ${count} connection action regret inferences`);
+		return count;
 	}
 
 	/**
@@ -1643,64 +1632,55 @@ export default class Brain {
 		}
 
 		// Create pattern futures: for each regret vote, pick one alternative action
-		const futures = [];
+		let count = 0;
 		for (const v of regretVotes) {
 			const channelId = actionTargets.get(v.neuronId);
 			const alts = altsByChannel.get(channelId) || [];
 			const altId = alts.find(a => a !== v.neuronId);
-			if (altId) futures.push([v.fromNeuronId, altId, v.distance]);
+			if (altId) {
+				this.newPatternFuture.push({ peakNeuronId: v.fromNeuronId, inferredNeuronId: altId, distance: v.distance });
+				count++;
+			}
 		}
 
-		if (futures.length === 0) return 0;
-
-		const [result] = await this.conn.query(
-			'INSERT IGNORE INTO new_pattern_future (peak_neuron_id, inferred_neuron_id, distance) VALUES ?',
-			[futures]
-		);
-		if (this.debug) console.log(`Found ${result.affectedRows} pattern action regret inferences`);
-		return result.affectedRows;
+		if (this.debug) console.log(`Found ${count} pattern action regret inferences`);
+		return count;
 	}
 
 	/**
-	 * Populate new_patterns table from new_pattern_future. Peak can be a base neuron (for connection errors)
+	 * Populate new_patterns from new_pattern_future. Peak can be a base neuron (for connection errors)
 	 * or pattern neuron (for pattern errors). One pattern per peak - combines contexts from all ages where
 	 * the peak was active and made bad predictions.
 	 * Returns the number of patterns to create.
 	 */
-	async populateNewPatterns() {
-		await this.truncateTables([ 'new_patterns' ]);
-		const [insertResult] = await this.conn.query(`
-			INSERT INTO new_patterns (peak_neuron_id)
-			SELECT DISTINCT peak_neuron_id
-			FROM new_pattern_future
-		`);
-		return insertResult.affectedRows;
+	populateNewPatterns() {
+		// Get distinct peak neuron IDs from newPatternFuture
+		const distinctPeaks = [...new Set(this.newPatternFuture.map(f => f.peakNeuronId))];
+		this.newPatterns = distinctPeaks.map(peakNeuronId => ({ peakNeuronId, patternNeuronId: null }));
+		return this.newPatterns.length;
 	}
 
 	/**
-	 * Creates pattern neurons from new_patterns at peak neuron level + 1
+	 * Creates pattern neurons from this.newPatterns at peak neuron level + 1
 	 */
 	async createPatternNeurons() {
+		if (this.newPatterns.length === 0) return;
 
-		// Get peak neurons with their levels from new_patterns
-		const [peaks] = await this.conn.query(`
-			SELECT np.seq_id, np.peak_neuron_id, n.level as peak_level
-			FROM new_patterns np
-			JOIN neurons n ON n.id = np.peak_neuron_id
-			ORDER BY np.seq_id
-		`);
-
-		if (peaks.length === 0) return;
+		// Get peak neuron levels from MySQL
+		const peakIds = this.newPatterns.map(p => p.peakNeuronId);
+		const [peakLevels] = await this.conn.query(`
+			SELECT id, level FROM neurons WHERE id IN (?)
+		`, [peakIds]);
+		const levelMap = new Map(peakLevels.map(p => [p.id, p.level]));
 
 		// Bulk insert pattern neurons - each at its peak neuron's level + 1
-		const rows = peaks.map(p => [p.peak_level + 1]);
+		const rows = this.newPatterns.map(p => [levelMap.get(p.peakNeuronId) + 1]);
 		const [insertResult] = await this.conn.query('INSERT INTO neurons (level) VALUES ?', [rows]);
 		const firstNeuronId = insertResult.insertId;
-		const neuronIds = Array.from({ length: peaks.length }, (_, idx) => firstNeuronId + idx);
 
-		// Bulk update new_patterns with pattern neuron IDs using CASE statement
-		const caseWhen = peaks.map((p, i) => `WHEN ${p.seq_id} THEN ${neuronIds[i]}`).join(' ');
-		await this.conn.query(`UPDATE new_patterns SET pattern_neuron_id = CASE seq_id ${caseWhen} END`);
+		// Update in-memory newPatterns with pattern neuron IDs
+		for (let i = 0; i < this.newPatterns.length; i++)
+			this.newPatterns[i].patternNeuronId = firstNeuronId + i;
 	}
 
 	/**
@@ -1708,49 +1688,68 @@ export default class Brain {
 	 * Handles both base-level peaks (connection errors) and pattern-level peaks (pattern errors).
 	 */
 	async createNewPatterns() {
+		if (this.newPatterns.length === 0) return;
 
-		// create pattern_peaks entries
-		await this.conn.query(`
-			INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id)
-			SELECT pattern_neuron_id, peak_neuron_id
-			FROM new_patterns
-		`);
+		// Create pattern_peaks entries from in-memory newPatterns
+		const peakRows = this.newPatterns.map(p => [p.patternNeuronId, p.peakNeuronId]);
+		await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES ?', [peakRows]);
 
-		// create pattern_past entries - combine contexts from ALL ages where the peak was active
-		// If peak is active at ages 1, 4, 7 with contextLength=10:
-		//   Age 1 context: neurons at ages 2-9 (relative ages 1-8)
-		//   Age 4 context: neurons at ages 5-9 (relative ages 1-5)
-		//   Age 7 context: neurons at ages 8-9 (relative ages 1-2)
-		// All these (neuron, relative_age) tuples get combined into ONE pattern
-		// the pattern context neurons must be at the same level as the peak neuron (one level lower than the pattern)
-		// Get distinct peak ages that were actually voting (from new_pattern_future via inference votes)
-		// distance in new_pattern_future = peak age when it made the bad prediction
-		await this.conn.query(`
-			INSERT IGNORE INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age)
-            SELECT np.pattern_neuron_id, ctx.neuron_id, ctx.age - npf.distance as context_age
-			FROM new_patterns np
-			JOIN neurons n_peak ON n_peak.id = np.peak_neuron_id
-			-- only use ages where the peak was actually voting (not overridden by a pattern)
-			JOIN (SELECT DISTINCT peak_neuron_id, distance FROM new_pattern_future) npf ON npf.peak_neuron_id = np.peak_neuron_id
-            -- capture same-level active, but older neurons for each voting age
-            -- context_age must be 1 to contextLength-1 (relative to peak age)
-            JOIN active_neurons ctx ON ctx.age > npf.distance AND ctx.age < npf.distance + ?
-            JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = n_peak.level
-            -- exclude actions from context in base level
-            -- note that this may be a stock specific thing - actions can learn patterns in robotics context
-            WHERE NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = ctx.neuron_id AND b.type = 'action')
-		`, [this.contextLength]);
+		// Build map of peakNeuronId -> patternNeuronId for lookups
+		const peakToPattern = new Map(this.newPatterns.map(p => [p.peakNeuronId, p.patternNeuronId]));
 
-		// Create pattern_future entries from new_pattern_future for cross-channel inferences
-		// inferred_neuron_id is always a base-level neuron (event or action)
-		// Join on peak_neuron_id to get all future inferences for this peak
-		const [futureResult] = await this.conn.query(`
-			INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance)
-			SELECT np.pattern_neuron_id, npf.inferred_neuron_id, npf.distance
-			FROM new_patterns np
-			JOIN new_pattern_future npf ON npf.peak_neuron_id = np.peak_neuron_id
-		`);
-		if (this.debug) console.log(`Created ${futureResult.affectedRows} pattern_future entries`);
+		// Get distinct (peakNeuronId, distance) pairs from newPatternFuture
+		const peakDistances = new Map();
+		for (const f of this.newPatternFuture) {
+			const key = `${f.peakNeuronId}:${f.distance}`;
+			if (!peakDistances.has(key)) peakDistances.set(key, { peakNeuronId: f.peakNeuronId, distance: f.distance });
+		}
+
+		// Get peak neuron levels
+		const peakIds = [...new Set(this.newPatterns.map(p => p.peakNeuronId))];
+		const [peakLevels] = await this.conn.query('SELECT id, level FROM neurons WHERE id IN (?)', [peakIds]);
+		const levelMap = new Map(peakLevels.map(p => [p.id, p.level]));
+
+		// Create pattern_past entries - combine contexts from ALL ages where the peak was active
+		// Query active_neurons for context neurons at each peak's voting ages
+		const pastEntries = new Set();
+		for (const { peakNeuronId, distance } of peakDistances.values()) {
+			const patternNeuronId = peakToPattern.get(peakNeuronId);
+			const peakLevel = levelMap.get(peakNeuronId);
+			// Get context neurons: same level as peak, age > distance and < distance + contextLength, not actions
+			const [ctxRows] = await this.conn.query(`
+				SELECT ctx.neuron_id, ctx.age - ? as context_age
+				FROM active_neurons ctx
+				JOIN neurons ctx_n ON ctx_n.id = ctx.neuron_id AND ctx_n.level = ?
+				WHERE ctx.age > ? AND ctx.age < ?
+				AND NOT EXISTS (SELECT 1 FROM base_neurons b WHERE b.neuron_id = ctx.neuron_id AND b.type = 'action')
+			`, [distance, peakLevel, distance, distance + this.contextLength]);
+			for (const row of ctxRows)
+				pastEntries.add(`${patternNeuronId}:${row.neuron_id}:${row.context_age}`);
+		}
+
+		if (pastEntries.size > 0) {
+			const pastRows = [...pastEntries].map(key => {
+				const [patternNeuronId, contextNeuronId, contextAge] = key.split(':').map(Number);
+				return [patternNeuronId, contextNeuronId, contextAge];
+			});
+			await this.conn.query('INSERT IGNORE INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age) VALUES ?', [pastRows]);
+		}
+
+		// Create pattern_future entries from in-memory newPatternFuture
+		const futureEntries = new Set();
+		for (const f of this.newPatternFuture) {
+			const patternNeuronId = peakToPattern.get(f.peakNeuronId);
+			futureEntries.add(`${patternNeuronId}:${f.inferredNeuronId}:${f.distance}`);
+		}
+
+		if (futureEntries.size > 0) {
+			const futureRows = [...futureEntries].map(key => {
+				const [patternNeuronId, inferredNeuronId, distance] = key.split(':').map(Number);
+				return [patternNeuronId, inferredNeuronId, distance];
+			});
+			const [futureResult] = await this.conn.query('INSERT IGNORE INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance) VALUES ?', [futureRows]);
+			if (this.debug) console.log(`Created ${futureResult.affectedRows} pattern_future entries`);
+		}
 	}
 
 	/**
@@ -1760,12 +1759,25 @@ export default class Brain {
 	 * and ensures the "already has active pattern" check works correctly in future frames.
 	 */
 	async activateNewPatterns() {
-		const [result] = await this.conn.query(`
-			INSERT INTO active_neurons (neuron_id, age)
-			SELECT DISTINCT np.pattern_neuron_id, npf.distance
-			FROM new_patterns np
-			JOIN new_pattern_future npf ON npf.peak_neuron_id = np.peak_neuron_id
-		`);
+		if (this.newPatterns.length === 0) return;
+
+		// Build map of peakNeuronId -> patternNeuronId
+		const peakToPattern = new Map(this.newPatterns.map(p => [p.peakNeuronId, p.patternNeuronId]));
+
+		// Get distinct (patternNeuronId, distance) pairs
+		const activations = new Set();
+		for (const f of this.newPatternFuture) {
+			const patternNeuronId = peakToPattern.get(f.peakNeuronId);
+			activations.add(`${patternNeuronId}:${f.distance}`);
+		}
+
+		if (activations.size === 0) return;
+
+		const rows = [...activations].map(key => {
+			const [neuronId, age] = key.split(':').map(Number);
+			return [neuronId, age];
+		});
+		const [result] = await this.conn.query('INSERT INTO active_neurons (neuron_id, age) VALUES ?', [rows]);
 		if (this.debug) console.log(`Activated ${result.affectedRows} new pattern neuron instances`);
 	}
 
