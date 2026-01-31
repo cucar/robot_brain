@@ -125,12 +125,12 @@ export default class Brain {
 		this.matchedPatterns = [];      // Array of {peakNeuronId, patternNeuronId}
 		this.matchedPatternPast = [];   // Array of {patternNeuronId, contextNeuronId, contextAge, status}
 		this.inferenceVotes = [];       // Array of {fromNeuronId, neuronId, strength, reward, distance}
+		this.inferredNeurons = new Map(); // Map<neuronId, {strength, isWinner}>
 
 		await this.truncateTables([
 			'active_neurons',
 			'new_pattern_future',
-			'new_patterns',
-			'inferred_neurons'
+			'new_patterns'
 		]);
 	}
 
@@ -271,24 +271,28 @@ export default class Brain {
 	}
 
 	/**
-	 * Get frame outputs for all channels from inferred_neurons table (MySQL implementation)
-	 * Reads winning action neurons (is_winner=1) grouped by channel
+	 * Get frame outputs for all channels from in-memory inferredNeurons Map.
+	 * Reads winning action neurons (isWinner=true) grouped by channel.
 	 * @returns {Promise<Map>} - Map of channel names to array of output coordinates
 	 */
 	async getFrameOutputs() {
+		// Get winning neuron IDs from in-memory map
+		const winnerIds = [];
+		for (const [neuronId, inf] of this.inferredNeurons)
+			if (inf.isWinner) winnerIds.push(neuronId);
 
-		// Get all winning action neurons from inferred_neurons table
-		// Only return neurons that are action type (from neurons table)
+		if (winnerIds.length === 0) return new Map();
+
+		// Query metadata for winning neurons (only actions)
 		const [rows] = await this.conn.query(`
-			SELECT inf.neuron_id, c.dimension_id, c.val, d.name as dimension_name, ch.name as channel
-			FROM inferred_neurons inf
-			JOIN base_neurons b ON b.neuron_id = inf.neuron_id
+			SELECT b.neuron_id, c.dimension_id, c.val, d.name as dimension_name, ch.name as channel
+			FROM base_neurons b
 			JOIN channels ch ON ch.id = b.channel_id
-			JOIN coordinates c ON c.neuron_id = inf.neuron_id
+			JOIN coordinates c ON c.neuron_id = b.neuron_id
 			JOIN dimensions d ON d.id = c.dimension_id
-			WHERE inf.is_winner = 1 AND b.type = 'action'
-			ORDER BY ch.name, inf.neuron_id
-		`);
+			WHERE b.neuron_id IN (?) AND b.type = 'action'
+			ORDER BY ch.name, b.neuron_id
+		`, [winnerIds]);
 
 		// Group by channel, then by neuron_id to build complete output objects
 		const channelOutputs = new Map();
@@ -777,22 +781,26 @@ export default class Brain {
 	}
 
 	/**
-	 * Track event prediction accuracy by comparing inferred_neurons (age=1) to active_neurons (age=0).
+	 * Track event prediction accuracy by comparing inferredNeurons to active_neurons (age=0).
 	 * Only validates base level (level 0) event predictions.
-	 * Only validates winners (is_winner=1) since losers are alternative hypotheses that were rejected.
+	 * Only validates winners (isWinner=true) since losers are alternative hypotheses that were rejected.
 	 */
 	async trackEventAccuracy() {
 
-		// Get all base level event predictions from previous frame and check if they came true (age=0)
-		// Only validate winners - losers are just alternative hypotheses rejected during conflict resolution
+		// Get winning neuron IDs from in-memory map
+		const winnerIds = [];
+		for (const [neuronId, inf] of this.inferredNeurons)
+			if (inf.isWinner) winnerIds.push(neuronId);
+
+		if (winnerIds.length === 0) return;
+
+		// Get event winners and check if they're active at age=0
 		const [rows] = await this.conn.query(`
-			SELECT IF(an.neuron_id IS NOT NULL, 1, 0) as is_correct
-			FROM inferred_neurons inf
-			JOIN base_neurons b ON b.neuron_id = inf.neuron_id
-			LEFT JOIN active_neurons an ON an.neuron_id = inf.neuron_id AND an.age = 0
-			WHERE b.type = 'event'
-			AND inf.is_winner = 1
-		`);
+			SELECT b.neuron_id, IF(an.neuron_id IS NOT NULL, 1, 0) as is_correct
+			FROM base_neurons b
+			LEFT JOIN active_neurons an ON an.neuron_id = b.neuron_id AND an.age = 0
+			WHERE b.neuron_id IN (?) AND b.type = 'event'
+		`, [winnerIds]);
 
 		// Count correct and total predictions
 		const total = rows.length;
@@ -811,20 +819,25 @@ export default class Brain {
 	/**
 	 * Track action reward stats by summing rewards for executed action winners.
 	 * Only tracks base level (level 0) action inferences.
-	 * Only tracks winners (is_winner=1) since losers were not executed.
+	 * Only tracks winners (isWinner=true) since losers were not executed.
 	 */
 	async trackActionRewards() {
 		if (this.rewards.size === 0) return;
 
-		// Count action winners that were executed (now active at age=0)
+		// Get winning neuron IDs from in-memory map
+		const winnerIds = [];
+		for (const [neuronId, inf] of this.inferredNeurons)
+			if (inf.isWinner) winnerIds.push(neuronId);
+
+		if (winnerIds.length === 0) return;
+
+		// Count action winners that are active at age=0
 		const [rows] = await this.conn.query(`
 			SELECT COUNT(*) as count
-			FROM inferred_neurons inf
-			JOIN base_neurons b ON b.neuron_id = inf.neuron_id
-			JOIN active_neurons an ON an.neuron_id = inf.neuron_id AND an.age = 0
-			WHERE b.type = 'action'
-			AND inf.is_winner = 1
-		`);
+			FROM base_neurons b
+			JOIN active_neurons an ON an.neuron_id = b.neuron_id AND an.age = 0
+			WHERE b.neuron_id IN (?) AND b.type = 'action'
+		`, [winnerIds]);
 
 		const actionCount = rows[0].count;
 		if (actionCount === 0) return;
@@ -1530,11 +1543,10 @@ export default class Brain {
 		`, [targetIds, painfulChannelIds]);
 		const actionTargets = new Map(targetInfo.map(t => [t.neuron_id, t.channel_id]));
 
-		// Get winning actions from inferred_neurons
-		const [winners] = await this.conn.query(`
-			SELECT neuron_id FROM inferred_neurons WHERE is_winner = 1
-		`);
-		const winnerIds = new Set(winners.map(w => w.neuron_id));
+		// Get winning actions from in-memory inferredNeurons
+		const winnerIds = new Set();
+		for (const [neuronId, inf] of this.inferredNeurons)
+			if (inf.isWinner) winnerIds.add(neuronId);
 
 		// Filter to valid votes: base-level event voter, action target in painful channel, was winner
 		const regretVotes = strongVotes.filter(v =>
@@ -1604,11 +1616,10 @@ export default class Brain {
 		`, [targetIds, painfulChannelIds]);
 		const actionTargets = new Map(targetInfo.map(t => [t.neuron_id, t.channel_id]));
 
-		// Get winning actions from inferred_neurons
-		const [winners] = await this.conn.query(`
-			SELECT neuron_id FROM inferred_neurons WHERE is_winner = 1
-		`);
-		const winnerIds = new Set(winners.map(w => w.neuron_id));
+		// Get winning actions from in-memory inferredNeurons
+		const winnerIds = new Set();
+		for (const [neuronId, inf] of this.inferredNeurons)
+			if (inf.isWinner) winnerIds.add(neuronId);
 
 		// Filter to valid votes: higher-level voter, action target in painful channel, was winner
 		const regretVotes = strongVotes.filter(v =>
@@ -1777,7 +1788,7 @@ export default class Brain {
 		await this.applyExploration(inferences);
 
 		// Save all inferences
-		await this.saveInferences(inferences);
+		this.saveInferences(inferences);
 
 		// Notify channels about winning event predictions for continuous tracking (e.g., price prediction)
 		this.notifyChannelsOfEventPredictions(inferences);
@@ -2038,22 +2049,15 @@ export default class Brain {
 	}
 
 	/**
-	 * Save all inferences in one operation.
+	 * Save all inferences to in-memory Map.
 	 * @param {Array} inferences - Array of inference objects with isWinner flag
 	 */
-	async saveInferences(inferences) {
-		if (inferences.length === 0) return;
+	saveInferences(inferences) {
 
-		// Collect neurons - is_winner: 1 for winners (highest sum of strength * reward per dimension), 0 for losers
-		const neurons = [];
-		for (const inf of inferences) neurons.push([inf.neuron_id, inf.strength, inf.isWinner ? 1 : 0]);
-
-		// Save inferred neurons
-		await this.truncateTables([ 'inferred_neurons' ]);
-		await this.conn.query(`
-			INSERT INTO inferred_neurons (neuron_id, strength, is_winner) VALUES ? 
-			ON DUPLICATE KEY UPDATE is_winner = VALUES(is_winner), strength = VALUES(strength)
-		`, [neurons]);
+		// Clear and populate in-memory map
+		this.inferredNeurons.clear();
+		for (const inf of inferences)
+			this.inferredNeurons.set(inf.neuron_id, { strength: inf.strength, isWinner: inf.isWinner });
 
 		if (this.debug) {
 			const winnerCount = inferences.filter(i => i.isWinner).length;
