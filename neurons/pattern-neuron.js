@@ -207,7 +207,7 @@ export class PatternNeuron extends Neuron {
 				// Track if this is painful
 				if (prediction.reward < PatternNeuron.actionRegretMinPain) painfulChannels.add(actionNeuron.channel);
 			}
-			// 2. Learn new action (not in future, has non-zero reward)
+			// 2. Learn new action (not in the future, has non-zero reward)
 			else if (reward !== 0) {
 				distanceMap.set(actionNeuron, { strength: 1, reward });
 				actionNeuron.incomingCount++;

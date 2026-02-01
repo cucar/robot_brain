@@ -9,7 +9,7 @@ export class Neuron {
 	static nextId = 1;
 
 	// Hyperparameters shared by all neurons
-	static maxStrength = 1000;
+	static maxStrength = 100;
 	static minStrength = 0;
 	static rewardSmoothing = 0.9; // exponential smoothing: new = smooth * observed + (1 - smooth) * old
 

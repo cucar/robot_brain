@@ -20,8 +20,8 @@ export default class Brain {
 		this.contextLength = 5; // number of frames a base neuron stays active - this determines the context length
 
 		// pattern learning parameters
-		this.eventErrorMinStrength = 2; // minimum prediction strength to create error-driven patterns
-		this.actionRegretMinStrength = 2; // minimum inference strength to create action regret pattern
+		this.eventErrorMinStrength = 10; // minimum prediction strength to create error-driven patterns
+		this.actionRegretMinStrength = 1; // minimum inference strength to create action regret pattern
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// voting parameters
@@ -56,12 +56,6 @@ export default class Brain {
 
 		// Inference votes for current frame: Array of {from, to, strength, reward, distance}
 		this.inferenceVotes = [];
-
-		// Matched patterns for current level: Array of {peak, pattern}
-		this.matchedPatterns = [];
-
-		// Matched pattern context analysis: Array of {pattern, contextNeuron, contextAge, status}
-		this.matchedPatternPast = [];
 
 		// New pattern futures: Array of {peak, inferred, distance}
 		this.newPatternFuture = [];
@@ -130,12 +124,16 @@ export default class Brain {
 	async resetContext() {
 		console.log('Resetting brain context...');
 
-		// Clear active neurons (in-memory)
+		// Reset frame counter for proper context window handling
+		this.frameNumber = 0;
+
+		// Clear activeAges on all neurons that were active
+		for (const neuron of this.activeNeurons) neuron.activeAges = null;
+
+		// Clear active neurons set
 		this.activeNeurons.clear();
 
 		// In-memory scratch data
-		this.matchedPatterns = [];      // Array of {peak, pattern} (Neuron objects)
-		this.matchedPatternPast = [];   // Array of {pattern, contextNeuron, contextAge, status}
 		this.inferenceVotes = [];       // Array of {from, to, strength, reward, distance} (Neuron objects)
 		this.inferredNeurons = new Map(); // Map<Neuron, {strength, isWinner}>
 		this.newPatternFuture = [];     // Array of {peak, inferred, distance} (Neuron objects)
