@@ -223,10 +223,10 @@ export default class BrainMySQL {
 	async initializeDimensions() {
 		if (this.debug) console.log('Initializing dimensions for registered channels...');
 		for (const [, channel] of this.channels) {
-			for (const dimName of channel.getEventDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (name) VALUES (?)', [dimName]);
-			for (const dimName of channel.getOutputDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (name) VALUES (?)', [dimName]);
+			for (const dim of channel.getEventDimensions())
+				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
+			for (const dim of channel.getOutputDimensions())
+				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
 		}
 	}
 
