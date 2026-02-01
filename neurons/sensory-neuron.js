@@ -82,5 +82,37 @@ export class SensoryNeuron extends Neuron {
 	canDelete() {
 		return false; // Sensory neurons persist forever
 	}
+
+	/**
+	 * Create/strengthen incoming connections from context neurons.
+	 * Called when this neuron is newly activated (age=0).
+	 * @param {Array<{neuron: SensoryNeuron, age: number}>} contextNeurons - Active event neurons at age > 0
+	 */
+	reinforceConnections(contextNeurons) {
+		for (const { neuron: fromNeuron, age: distance } of contextNeurons) {
+			const conn = fromNeuron.getOrCreateConnection(distance, this);
+			conn.strength = Math.min(Neuron.maxStrength, conn.strength + 1);
+		}
+	}
+
+	/**
+	 * Apply reward to incoming connections from context neurons.
+	 * Called when this neuron is a newly activated action with a reward.
+	 * @param {Array<{neuron: SensoryNeuron, age: number}>} contextNeurons - Active event neurons at age > 0
+	 * @param {number} reward - Reward value to apply
+	 */
+	applyReward(contextNeurons, reward) {
+		const smoothing = Neuron.rewardSmoothing;
+		for (const { neuron: fromNeuron, age: distance } of contextNeurons) {
+			// Check if connection exists at this distance to this neuron
+			const distanceMap = fromNeuron.connections.get(distance);
+			if (!distanceMap) continue;
+			const conn = distanceMap.get(this);
+			if (!conn) continue;
+
+			// Exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
+			conn.reward = smoothing * reward + (1 - smoothing) * conn.reward;
+		}
+	}
 }
 
