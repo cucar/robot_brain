@@ -40,7 +40,10 @@ if (process.argv[2]) {
 	const jobName = process.argv[2];
 	const options = {
 		diagnostic: process.argv.includes('--diagnostic'),
-		mysql: process.argv.includes('--mysql')
+		mysql: process.argv.includes('--mysql'),
+		database: process.argv.includes('--database'),
+		debug: process.argv.includes('--debug'),
+		noSummary: process.argv.includes('--no-summary')
 	};
 
 	const runner = new BrainRunner();

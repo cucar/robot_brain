@@ -67,7 +67,6 @@ export default class BrainMySQL {
 		this.frameNumber = 0;
 		this.frameSummary = true; // show frame summary or not
 		this.debug = false;
-		this.debug2 = false; // deeper, more verbose debug level
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 
 		// Create readline interface for pausing between frames - used when debugging
@@ -89,7 +88,7 @@ export default class BrainMySQL {
 	registerChannel(name, channelClass) {
 		const channel = new channelClass(name);
 		this.channels.set(name, channel);
-		if (this.debug2) console.log(`Registered channel: ${name} (${channelClass.name})`);
+		if (this.debug) console.log(`Registered channel: ${name} (${channelClass.name})`);
 	}
 
 	/**
@@ -215,14 +214,14 @@ export default class BrainMySQL {
 			this.channelNameToId[row.name] = row.id;
 			this.channelIdToName[row.id] = row.name;
 		});
-		if (this.debug2) console.log('Channels loaded:', this.channelNameToId);
+		if (this.debug) console.log('Channels loaded:', this.channelNameToId);
 	}
 
 	/**
 	 * Initialize dimensions for all registered channels
 	 */
 	async initializeDimensions() {
-		if (this.debug2) console.log('Initializing dimensions for registered channels...');
+		if (this.debug) console.log('Initializing dimensions for registered channels...');
 		for (const [, channel] of this.channels) {
 			for (const dimName of channel.getEventDimensions())
 				await this.conn.query('INSERT IGNORE INTO dimensions (name) VALUES (?)', [dimName]);
@@ -243,7 +242,7 @@ export default class BrainMySQL {
 			this.dimensionNameToId[row.name] = row.id;
 			this.dimensionIdToName[row.id] = row.name;
 		});
-		if (this.debug2) console.log('Dimensions loaded:', this.dimensionNameToId);
+		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
 	}
 
 	/**
@@ -413,24 +412,24 @@ export default class BrainMySQL {
 	 * Each channel provides its own reward signal based on its objectives
 	 */
 	async getRewards() {
-		if (this.debug2) console.log('Getting rewards feedback from all channels...');
+		if (this.debug) console.log('Getting rewards feedback from all channels...');
 		this.rewards = new Map();
 		let feedbackCount = 0;
 
 		for (const [channelName, channel] of this.channels) {
 			const reward = await channel.getRewards();
 			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
-				if (this.debug2) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
+				if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
 				this.rewards.set(channelName, reward);
 				feedbackCount++;
 			}
 		}
 
-		if (this.debug2) {
+		if (this.debug) {
 			if (feedbackCount > 0) console.log(`Received rewards from ${feedbackCount} channels`);
 			else console.log('No rewards from any channels');
 		}
-		if (this.debug2 && feedbackCount > 0)
+		if (this.debug && feedbackCount > 0)
 			console.log(`Channel rewards:`, Array.from(this.rewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 	}
 
@@ -468,7 +467,7 @@ export default class BrainMySQL {
 	 * so that pattern creation can capture the full context before neurons are deleted.
 	 */
 	async ageNeurons() {
-		if (this.debug2) console.log('Aging active neurons...');
+		if (this.debug) console.log('Aging active neurons...');
 
 		// age all neurons - ORDER BY age DESC to avoid primary key collisions
 		// (update highest ages first so age+1 doesn't collide with existing lower age+1 row)
@@ -521,7 +520,7 @@ export default class BrainMySQL {
 		// try to get all the neurons that have coordinates matching each point
 		// return format: [{ point, neuron_id }] where point is the full frame point
 		const matches = await this.matchFrameNeurons(frame);
-		if (this.debug2) console.log('pointNeuronMatches', matches.map(match => JSON.stringify(match)).join('\n'));
+		if (this.debug) console.log('pointNeuronMatches', matches.map(match => JSON.stringify(match)).join('\n'));
 
 		// matching neuron ids to be returned for each point of the frame
 		const neuronIds = matches.filter(p => p.neuron_id).map(p => p.neuron_id);
@@ -529,7 +528,7 @@ export default class BrainMySQL {
 		// create neurons for points with no matching neurons
 		const pointsNeedingNeurons = matches.filter(p => !p.neuron_id);
 		if (pointsNeedingNeurons.length > 0) {
-			if (this.debug2) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
+			if (this.debug) console.log(`${pointsNeedingNeurons.length} points need new neurons. Creating neurons once with dedupe.`);
 			const createdNeuronIds = await this.createBaseNeurons(pointsNeedingNeurons.map(p => p.point));
 			neuronIds.push(...createdNeuronIds);
 		}
@@ -861,12 +860,12 @@ export default class BrainMySQL {
 	 * Processes a level to detect patterns and activate them. Returns true if patterns were found, false otherwise.
 	 */
 	async recognizeLevelPatterns(level) {
-		if (this.debug2) console.log(`Processing level ${level} for pattern recognition`);
+		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 		// Match active connections to known patterns and write to matched_patterns table
 		const matchCount = await this.matchObservedPatterns(level);
 		if (matchCount === 0) {
-			if (this.debug2) console.log(`No pattern matches found at level ${level}`);
+			if (this.debug) console.log(`No pattern matches found at level ${level}`);
 			return false;
 		}
 
@@ -888,7 +887,7 @@ export default class BrainMySQL {
 	 * @returns {Promise<number>} - Number of matched patterns
 	 */
 	async matchObservedPatterns(level) {
-		if (this.debug2) console.log('Matching active connections to known patterns');
+		if (this.debug) console.log('Matching active connections to known patterns');
 
 		// Clear scratch tables
 		await this.conn.query('TRUNCATE matched_patterns');
@@ -1640,8 +1639,8 @@ export default class BrainMySQL {
 
 		if (this.debug) console.log(`Deleted ${deleteResult.affectedRows} overridden votes`);
 
-		// Call channel-specific debug methods if debug2 is enabled
-		if (this.debug2) {
+		// Call channel-specific debug methods if debug is enabled
+		if (this.debug) {
 			const [votes] = await this.conn.query(`
 				SELECT v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance,
 				       b.type, b.channel_id, ch.name as channel,

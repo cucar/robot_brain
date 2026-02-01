@@ -141,7 +141,7 @@ export default class StockChannel extends Channel {
 			this.allRows.push({ price, volume });
 		}
 
-		if (this.debug2) console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
+		if (this.debug) console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
 	}
 
 	/**
@@ -161,7 +161,7 @@ export default class StockChannel extends Channel {
 		}
 
 		this.currentRowIndex = 0;
-		if (this.debug2) console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
+		if (this.debug) console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
 	}
 
 	/**
@@ -234,7 +234,7 @@ export default class StockChannel extends Channel {
 			// Calculate average error for this channel
 			const avgError = this.pricePredictionErrors.reduce((sum, err) => sum + err, 0) / this.pricePredictionErrors.length;
 
-			if (this.debug2) console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
+			if (this.debug) console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
 			this.lastPredictedPrice = null;
 		}
 
@@ -385,7 +385,7 @@ export default class StockChannel extends Channel {
 		// Amplify the reward signal
 		const amplifiedReward = reward * this.rewardAmplification;
 
-		if (this.debug2) {
+		if (this.debug) {
 			if (this.owned) {
 				const totalChange = this.currentPrice - this.entryPrice;
 				const totalPercentChange = (totalChange / this.entryPrice) * 100;
@@ -479,7 +479,7 @@ export default class StockChannel extends Channel {
 
 		this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
 
-		if (this.lastPredictedPrice !== null && this.debug2) {
+		if (this.lastPredictedPrice !== null && this.debug) {
 			const predictedChange = ((this.lastPredictedPrice - this.previousPrice) / this.previousPrice) * 100;
 			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.previousPrice.toFixed(2)}`);
 		}

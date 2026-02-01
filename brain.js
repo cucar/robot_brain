@@ -86,7 +86,7 @@ export default class Brain {
 		this.frameNumber = 0;
 		this.frameSummary = true; // show frame summary or not
 		this.debug = false;
-		this.debug2 = false; // deeper, more verbose debug level
+		this.noDatabase = false; // skip database backup/restore for tests
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 
 		// Create readline interface for pausing between frames - used when debugging
@@ -108,7 +108,7 @@ export default class Brain {
 	registerChannel(name, channelClass) {
 		const channel = new channelClass(name);
 		this.channels.set(name, channel);
-		if (this.debug2) console.log(`Registered channel: ${name} (${channelClass.name})`);
+		if (this.debug) console.log(`Registered channel: ${name} (${channelClass.name})`);
 	}
 
 	/**
@@ -439,8 +439,8 @@ export default class Brain {
 		// load the dimensions
 		await this.loadDimensions();
 
-		// load learned data from MySQL into in-memory structures
-		await this.loadNeurons();
+		// load learned data from MySQL into in-memory structures (skip if noDatabase flag set)
+		if (!this.noDatabase) await this.loadNeurons();
 
 		// pre-create action neurons for all channels
 		await this.initializeActionNeurons();
@@ -487,7 +487,7 @@ export default class Brain {
 			this.channelNameToId[channelName] = channel.id;
 			this.channelIdToName[channel.id] = channelName;
 		}
-		if (this.debug2) console.log('Channels loaded:', this.channelNameToId);
+		if (this.debug) console.log('Channels loaded:', this.channelNameToId);
 	}
 
 	/**
@@ -495,7 +495,7 @@ export default class Brain {
 	 * IDs come from static Dimension.nextId counter (not auto-increment)
 	 */
 	async initializeDimensions() {
-		if (this.debug2) console.log('Initializing dimensions for registered channels...');
+		if (this.debug) console.log('Initializing dimensions for registered channels...');
 		for (const [, channel] of this.channels) {
 			for (const dim of channel.getEventDimensions())
 				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
@@ -523,7 +523,7 @@ export default class Brain {
 				this.dimensionIdToName[dim.id] = dim.name;
 			}
 		}
-		if (this.debug2) console.log('Dimensions loaded:', this.dimensionNameToId);
+		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
 	}
 
 	/**
@@ -674,24 +674,24 @@ export default class Brain {
 	 * Each channel provides its own reward signal based on its objectives
 	 */
 	async getRewards() {
-		if (this.debug2) console.log('Getting rewards feedback from all channels...');
+		if (this.debug) console.log('Getting rewards feedback from all channels...');
 		this.rewards = new Map();
 		let feedbackCount = 0;
 
 		for (const [channelName, channel] of this.channels) {
 			const reward = await channel.getRewards();
 			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
-				if (this.debug2) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
+				if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
 				this.rewards.set(channelName, reward);
 				feedbackCount++;
 			}
 		}
 
-		if (this.debug2) {
+		if (this.debug) {
 			if (feedbackCount > 0) console.log(`Received rewards from ${feedbackCount} channels`);
 			else console.log('No rewards from any channels');
 		}
-		if (this.debug2 && feedbackCount > 0)
+		if (this.debug && feedbackCount > 0)
 			console.log(`Channel rewards:`, Array.from(this.rewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 	}
 
@@ -729,7 +729,7 @@ export default class Brain {
 	 * so that pattern creation can capture the full context before neurons are deleted.
 	 */
 	ageNeurons() {
-		if (this.debug2) console.log('Aging active neurons...');
+		if (this.debug) console.log('Aging active neurons...');
 
 		for (const neuron of this.activeNeurons)
 			neuron.age();
@@ -794,7 +794,7 @@ export default class Brain {
 				const neuronId = neuron.id;
 				this.neurons.set(neuronId, neuron);
 				this.neuronsByValue.set(valueKey, neuron);
-				if (this.debug2) console.log(`Created new sensory neuron ${neuronId} for ${valueKey}`);
+				if (this.debug) console.log(`Created new sensory neuron ${neuronId} for ${valueKey}`);
 			}
 
 			neuronIds.push(neuron.id);
@@ -996,12 +996,12 @@ export default class Brain {
 	 * Processes a level to detect patterns and activate them. Returns true if patterns were found, false otherwise.
 	 */
 	recognizeLevelPatterns(level) {
-		if (this.debug2) console.log(`Processing level ${level} for pattern recognition`);
+		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 		// get the peaks and context for this level
 		const { peaks, context } = this.getPeaksAndContext(level);
 		if (peaks.length === 0) {
-			if (this.debug2) console.log(`No newly activated neurons at level ${level}`);
+			if (this.debug) console.log(`No newly activated neurons at level ${level}`);
 			return false;
 		}
 

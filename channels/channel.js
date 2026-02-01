@@ -20,7 +20,6 @@ export default class Channel {
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
 		this.debug = false; // controls verbosity of channel output
-		this.debug2 = false; // more detailed, verbose debug mode
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 	}
 
@@ -115,7 +114,7 @@ export default class Channel {
 
 	/**
 	 * Debug votes for this channel - override in subclasses for channel-specific debugging
-	 * Called when debug2 is enabled to show detailed vote information
+	 * Called when debug is enabled to show detailed vote information
 	 * @param {Array} allVotes - Array of all votes from collectVotes
 	 * @param {Object} brain - Reference to brain instance for accessing neuron data
 	 */

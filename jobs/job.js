@@ -11,6 +11,7 @@ export default class Job {
 		this.brain = null;
 		this.hardReset = false;
 		this.isShuttingDown = false;
+		this.noDatabase = true; // Default: skip database backup/restore for jobs (tests) - set to false for production
 	}
 
 	/**
@@ -31,8 +32,19 @@ export default class Job {
 			// console.log('Registering channels with brain...');
 			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
 
-			// Apply runner options to channels if provided
+			// Apply runner options to brain and channels if provided
 			if (this.runnerOptions?.diagnostic) for (const [_, channel] of this.brain.channels) channel.diagnostic = true;
+			if (this.runnerOptions?.debug) {
+				this.brain.debug = true;
+				for (const [_, channel] of this.brain.channels) channel.debug = true;
+			}
+			if (this.runnerOptions?.noSummary) this.brain.frameSummary = false;
+
+			// Apply database option if provided (overrides default)
+			if (this.runnerOptions?.database !== undefined) this.noDatabase = !this.runnerOptions.database;
+
+			// Pass noDatabase flag to brain
+			this.brain.noDatabase = this.noDatabase;
 
 			// initialize database connection in the brain
 			await this.brain.initDB();
@@ -85,7 +97,7 @@ export default class Job {
 	async shutdown() {
 		if (this.isShuttingDown) return;
 		this.isShuttingDown = true;
-		if (this.brain) await this.brain.backupBrain();
+		if (this.brain && !this.noDatabase) await this.brain.backupBrain();
 	}
 
 	/**
