@@ -77,7 +77,7 @@ export class SensoryNeuron extends Neuron {
 	}
 
 	/**
-	 * Refine outgoing connections at this distance based on newly active neurons.
+	 * Updates outgoing connections at this distance based on newly active neurons.
 	 * Called when this neuron is active at age > 0 (context neuron doing the learning).
 	 * Only event neurons have outgoing connections.
 	 * @param {number} distance - The distance to refine (this neuron's current age)
@@ -86,7 +86,7 @@ export class SensoryNeuron extends Neuron {
 	 * @param {Map<string, Set<Neuron>>} channelActions - Unused, for interface compatibility with PatternNeuron
 	 * @returns {{strengthened: number, rewarded: number}}
 	 */
-	refineInferences(distance, newlyActiveNeurons, rewards, channelActions) {
+	updateInferences(distance, newlyActiveNeurons, rewards, channelActions) {
 
 		// Only event neurons have outgoing connections
 		if (this.type !== 'event') return { strengthened: 0, rewarded: 0 };

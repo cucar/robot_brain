@@ -133,7 +133,7 @@ export class PatternNeuron extends Neuron {
 	}
 
 	/**
-	 * Refine future predictions based on newly active neurons and rewards.
+	 * Update future predictions based on newly active neurons and rewards.
 	 * Called when pattern is active at age > 0 (distance = age).
 	 * Combines event refinement (strengthen/weaken/add) and action refinement (reward/learn/alternatives).
 	 * @param {number} distance - The distance to refine (pattern's current age)
@@ -142,7 +142,7 @@ export class PatternNeuron extends Neuron {
 	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
 	 * @returns {{strengthened: number, weakened: number, novel: number, rewarded: number, learned: number, alternatives: number}}
 	 */
-	refineInferences(distance, newlyActiveNeurons, rewards, channelActions) {
+	updateInferences(distance, newlyActiveNeurons, rewards, channelActions) {
 		let strengthened = 0, weakened = 0, novel = 0;
 		let rewarded = 0, learned = 0, alternatives = 0;
 
