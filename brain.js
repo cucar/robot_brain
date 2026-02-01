@@ -593,7 +593,7 @@ export default class Brain {
 		// activate neurons that represent the current situation in age=0 - what's happening right now?
 		this.recognizeNeurons();
 
-		// update the neuron inferences based on observations
+		// update the age>0 neuron inferences based on observations in age=0
 		this.updateInferences();
 
 		// learn from previous inferences and create new patterns for them
@@ -624,11 +624,8 @@ export default class Brain {
 	 */
 	learnFromInferences() {
 
-		// Track event prediction accuracy
-		this.trackEventAccuracy();
-
-		// Track action reward stats
-		this.trackActionRewards();
+		// Track inference performance (event accuracy and action rewards)
+		this.trackInferencePerformance();
 
 		// learn new patterns from failed predictions and action regret
 		this.learnNewPatterns();
@@ -864,73 +861,54 @@ export default class Brain {
 	}
 
 	/**
-	 * Get newly activated sensory neurons (age = 0).
-	 * @param {string} [type] - Optional filter: 'event' or 'action'
-	 * @returns {Array<SensoryNeuron>}
-	 */
-	getNewlyActivatedSensory(type) {
-		const result = [];
-		for (const neuron of this.activeNeurons) {
-			if (neuron.level !== 0) continue;
-			if (!neuron.isNewlyActive) continue;
-			if (type && neuron.type !== type) continue;
-			result.push(neuron);
-		}
-		return result;
-	}
-
-	/**
-	 * Track event prediction accuracy by comparing inferredNeurons to activeNeurons (age=0).
-	 * Only validates base level (level 0) event predictions.
+	 * Track inference performance for both events and actions.
 	 * Only validates winners (isWinner=true) since losers are alternative hypotheses that were rejected.
+	 * Events: checks if prediction was correct (neuron became active)
+	 * Actions: accumulates reward from the action's channel
 	 */
-	trackEventAccuracy() {
-		let correct = 0;
-		let total = 0;
+	trackInferencePerformance() {
+		let eventCorrect = 0;
+		let eventTotal = 0;
+		let actionReward = 0;
+		let actionCount = 0;
 
 		for (const [neuronId, inf] of this.inferredNeurons) {
+
+			// Only track winners - the final inferences that were actually used
 			if (!inf.isWinner) continue;
 
+			// get the inferred neuron
 			const neuron = this.neurons.get(neuronId);
-			if (neuron.level !== 0 || neuron.type !== 'event') continue;
 
-			total++;
-
-			// Check if this neuron is active at age=0
-			if (neuron.isNewlyActive) correct++;
+			// Track event prediction accuracy
+			if (neuron.type === 'event') {
+				eventTotal++;
+				if (neuron.isNewlyActive) eventCorrect++;
+			}
+			// Track action reward from the action's channel
+			else if (neuron.type === 'action') {
+				const reward = this.rewards.get(neuron.channel);
+				if (reward !== undefined) {
+					actionReward += reward;
+					actionCount++;
+				}
+			}
 		}
 
-		// Update accuracyStats (cumulative across frames)
-		this.accuracyStats.correct += correct;
-		this.accuracyStats.total += total;
-
-		if (this.debug && total > 0) {
-			const accuracy = (correct / total * 100).toFixed(1);
-			console.log(`Validated predictions: ${correct}/${total} (${accuracy}%)`);
-		}
-	}
-
-	/**
-	 * Track action reward stats by summing rewards for executed actions.
-	 * Counts action neurons active at age=0 (just executed).
-	 */
-	trackActionRewards() {
-		if (this.rewards.size === 0) return;
-
-		const actionCount = this.getNewlyActivatedSensory('action').length;
-		if (actionCount === 0) return;
-
-		// Sum rewards from all channels for this frame
-		let frameReward = 0;
-		for (const [_, reward] of this.rewards)
-			frameReward += reward;
-
-		// Update rewardStats (cumulative across frames)
-		this.rewardStats.totalReward += frameReward;
+		// Update cumulative stats
+		this.accuracyStats.correct += eventCorrect;
+		this.accuracyStats.total += eventTotal;
+		this.rewardStats.totalReward += actionReward;
 		this.rewardStats.count += actionCount;
 
-		if (this.debug && actionCount > 0)
-			console.log(`Action rewards: ${frameReward.toFixed(3)} for ${actionCount} actions`);
+		if (this.debug) {
+			if (eventTotal > 0) {
+				const accuracy = (eventCorrect / eventTotal * 100).toFixed(1);
+				console.log(`Event predictions: ${eventCorrect}/${eventTotal} (${accuracy}%)`);
+			}
+			if (actionCount > 0)
+				console.log(`Action rewards: ${actionReward.toFixed(3)} for ${actionCount} actions`);
+		}
 	}
 
 	/**
