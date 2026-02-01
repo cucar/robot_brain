@@ -179,16 +179,7 @@ export default class SyntheticExtendedTest extends Job {
 	 * Get neuron ID for a specific dimension and value
 	 */
 	async getNeuronIdForDimensionValue(dimensionName, value) {
-		const dimensionId = this.brain.dimensionNameToId[dimensionName];
-		if (!dimensionId) return null;
-
-		const [rows] = await this.brain.conn.query(`
-			SELECT neuron_id FROM coordinates
-			WHERE dimension_id = ? AND val = ?
-			LIMIT 1
-		`, [dimensionId, value]);
-
-		return rows.length > 0 ? rows[0].neuron_id : null;
+		return this.brain.getNeuronIdByDimensionValue(dimensionName, value);
 	}
 
 	/**

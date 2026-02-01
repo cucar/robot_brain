@@ -115,7 +115,7 @@ export default class Brain {
 	 * initializes the database connection and loads dimensions
 	 */
 	async initDB() {
-		this.conn = await getMySQLConnection();
+		if (!this.noDatabase) this.conn = await getMySQLConnection();
 	}
 
 	/**
@@ -153,8 +153,8 @@ export default class Brain {
 		this.neuronsByValue.clear();
 		Neuron.nextId = 1;
 
-		// Clear MySQL tables
-		await this.truncateTables([
+		// Clear MySQL tables if using a database
+		if (!this.noDatabase) await this.truncateTables([
 			'channels',
 			'dimensions',
 			'neurons',
@@ -180,6 +180,7 @@ export default class Brain {
 	 * Called during initialization to load previously learned data.
 	 */
 	async loadNeurons() {
+		if (this.noDatabase) return;
 		console.log('Loading neurons from MySQL...');
 
 		// Clear all in-memory structures
@@ -440,7 +441,7 @@ export default class Brain {
 		await this.loadDimensions();
 
 		// load learned data from MySQL into in-memory structures (skip if noDatabase flag set)
-		if (!this.noDatabase) await this.loadNeurons();
+		await this.loadNeurons();
 
 		// pre-create action neurons for all channels
 		await this.initializeActionNeurons();
@@ -483,7 +484,8 @@ export default class Brain {
 
 		// Insert channels into DB with explicit IDs from Channel objects
 		for (const [channelName, channel] of this.channels) {
-			await this.conn.query('INSERT IGNORE INTO channels (id, name) VALUES (?, ?)', [channel.id, channelName]);
+			if (!this.noDatabase)
+				await this.conn.query('INSERT IGNORE INTO channels (id, name) VALUES (?, ?)', [channel.id, channelName]);
 			this.channelNameToId[channelName] = channel.id;
 			this.channelIdToName[channel.id] = channelName;
 		}
@@ -495,6 +497,7 @@ export default class Brain {
 	 * IDs come from static Dimension.nextId counter (not auto-increment)
 	 */
 	async initializeDimensions() {
+		if (this.noDatabase) return;
 		if (this.debug) console.log('Initializing dimensions for registered channels...');
 		for (const [, channel] of this.channels) {
 			for (const dim of channel.getEventDimensions())
@@ -524,6 +527,21 @@ export default class Brain {
 			}
 		}
 		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
+	}
+
+	/**
+	 * Get neuron ID by dimension name and value.
+	 * Used for diagnostic output to show which neurons correspond to which values.
+	 * @param {string} dimensionName - The dimension name
+	 * @param {number|string} value - The value to look up
+	 * @returns {number|null} - Neuron ID or null if not found
+	 */
+	getNeuronIdByDimensionValue(dimensionName, value) {
+		// Search through all sensory neurons for one with this dimension value
+		for (const [neuronId, neuron] of this.neurons)
+			if (neuron.level === 0 && neuron.coordinates[dimensionName] === value)
+				return neuronId;
+		return null;
 	}
 
 	/**
@@ -562,11 +580,14 @@ export default class Brain {
 		// deletion of aged-out neurons is deferred to after pattern learning
 		this.ageNeurons();
 
-		// activate base level neurons from the frame - what's happening right now?
-		this.processBaseNeurons();
+		// activate neurons that represent the current situation in age=0 - what's happening right now?
+		this.recognizeNeurons();
 
-		// recognize, refine and learn patterns from the base neurons
-		this.processPatternNeurons();
+		// refine the neuron inferences based on observations
+		this.refineInferences();
+
+		// learn from previous inferences and create new patterns for them
+		this.learnInferences();
 
 		// deactivate aged-out neurons AFTER pattern learning captured full context
 		this.deactivateOldNeurons();
@@ -586,6 +607,22 @@ export default class Brain {
 
 		// return true to indicate that we have processed the frame successfully
 		return true;
+	}
+
+	/**
+	 * learn from previous inferences
+	 */
+	learnInferences() {
+
+		// Track event prediction accuracy
+		this.trackEventAccuracy();
+
+		// Track action reward stats
+		this.trackActionRewards();
+
+		// learn new patterns from failed predictions and action regret
+		this.learnNewPatterns();
+
 	}
 
 	/**
@@ -755,7 +792,7 @@ export default class Brain {
 	/**
 	 * recognizes and activates base level neurons from frame
 	 */
-	processBaseNeurons() {
+	recognizeNeurons() {
 
 		// bulk find/create neurons for all input points
 		const neuronIds = this.getFrameNeurons(this.frame);
@@ -764,17 +801,8 @@ export default class Brain {
 		// activate the neurons in the in-memory context
 		this.activateNeurons(neuronIds);
 
-		// reinforce connections between active neurons in the base level
-		this.reinforceConnections();
-
-		// learn from connection action inferences
-		this.rewardConnections();
-
-		// Track event prediction accuracy
-		this.trackEventAccuracy();
-
-		// Track action reward stats
-		this.trackActionRewards();
+		// discover and activate patterns using connections - start recursion from base level
+		this.recognizePatterns();
 	}
 
 	/**
@@ -859,11 +887,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Get active neurons at a specific level (all ages).
-	 * @param {number} level - The level to filter by
-	 * @returns {Array<{neuron: Neuron, age: number}>}
-	 */
-	/**
 	 * Reinforce connections between base level active neurons - from age > 0 to age = 0
 	 */
 	reinforceConnections() {
@@ -890,20 +913,6 @@ export default class Brain {
 			const reward = this.rewards.get(neuron.channel);
 			neuron.applyReward(contextNeurons, reward);
 		}
-	}
-
-	/**
-	 * Build a CASE-WHEN SQL snippet for channel rewards.
-	 * Maps channel_id to reward value for use in UPDATE statements.
-	 * @param {string} rewardColumn - The column to use in ELSE clause (e.g., 'c.reward' or 'pf.reward')
-	 * @returns {string} SQL CASE statement like "CASE b.channel_id WHEN 1 THEN 0.5 WHEN 2 THEN -0.3 ELSE c.reward END"
-	 */
-	buildChannelRewardCase(rewardColumn) {
-		if (this.rewards.size === 0) return '';
-		const caseWhen = Array.from(this.rewards.entries())
-			.map(([name, reward]) => `WHEN ${this.channelNameToId[name]} THEN ${reward}`)
-			.join(' ');
-		return `CASE b.channel_id ${caseWhen} ELSE ${rewardColumn} END`;
 	}
 
 	/**
@@ -961,18 +970,27 @@ export default class Brain {
 	}
 
 	/**
-	 * recognize, refine and learn patterns from the base neurons
+	 * refine the neuron inferences based on observations
 	 */
-	processPatternNeurons() {
+	refineInferences() {
 
-		// discover and activate patterns using connections - start recursion from base level
-		this.recognizePatterns();
+		// build and refine connections between sensory neurons
+		this.refineSensoryInferences();
 
 		// refine the learned pattern definitions from prediction errors and action regret
-		this.refinePatterns();
+		this.refinePatternInferences();
+	}
 
-		// learn new patterns from failed predictions and action regret
-		this.learnNewPatterns();
+	/**
+	 * learns connections between sensory neurons
+	 */
+	refineSensoryInferences() {
+
+		// reinforce connections between active neurons in the base level
+		this.reinforceConnections();
+
+		// learn from connection action inferences
+		this.rewardConnections();
 	}
 
 	/**
@@ -1042,7 +1060,7 @@ export default class Brain {
 	/**
 	 * Learns patterns from prediction errors and action regret and continues to refine them as they are observed
 	 */
-	refinePatterns() {
+	refinePatternInferences() {
 
 		// update pattern_future with current events based on observations
 		this.refinePatternEventsFuture();

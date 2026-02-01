@@ -246,6 +246,26 @@ export default class BrainMySQL {
 	}
 
 	/**
+	 * Get neuron ID by dimension name and value.
+	 * Used for diagnostic output to show which neurons correspond to which values.
+	 * @param {string} dimensionName - The dimension name
+	 * @param {number|string} value - The value to look up
+	 * @returns {Promise<number|null>} - Neuron ID or null if not found
+	 */
+	async getNeuronIdByDimensionValue(dimensionName, value) {
+		const dimensionId = this.dimensionNameToId[dimensionName];
+		if (!dimensionId) return null;
+
+		const [rows] = await this.conn.query(`
+			SELECT neuron_id FROM coordinates
+			WHERE dimension_id = ? AND val = ?
+			LIMIT 1
+		`, [dimensionId, value]);
+
+		return rows.length > 0 ? rows[0].neuron_id : null;
+	}
+
+	/**
 	 * Get frame outputs for all channels from inferred_neurons table (MySQL implementation)
 	 * Reads winning action neurons (is_winner=1) grouped by channel
 	 * @returns {Promise<Map>} - Map of channel names to array of output coordinates
