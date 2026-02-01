@@ -70,13 +70,6 @@ export class SensoryNeuron extends Neuron {
 	}
 
 	/**
-	 * Check if this neuron has any outgoing connections
-	 */
-	hasOutgoingConnections() {
-		return this.connections.size > 0;
-	}
-
-	/**
 	 * Override canDelete - sensory neurons are never deleted (they have coordinates)
 	 */
 	canDelete() {
@@ -84,35 +77,41 @@ export class SensoryNeuron extends Neuron {
 	}
 
 	/**
-	 * Create/strengthen incoming connections from context neurons.
-	 * Called when this neuron is newly activated (age=0).
-	 * @param {Array<{neuron: SensoryNeuron, age: number}>} contextNeurons - Active event neurons at age > 0
+	 * Refine outgoing connections at this distance based on newly active neurons.
+	 * Called when this neuron is active at age > 0 (context neuron doing the learning).
+	 * Only event neurons have outgoing connections.
+	 * @param {number} distance - The distance to refine (this neuron's current age)
+	 * @param {Set<Neuron>} newlyActiveNeurons - Currently active neurons at age=0
+	 * @param {Map<string, number>} rewards - Map of channel name to reward value
+	 * @param {Map<string, Set<Neuron>>} channelActions - Unused, for interface compatibility with PatternNeuron
+	 * @returns {{strengthened: number, rewarded: number}}
 	 */
-	reinforceConnections(contextNeurons) {
-		for (const { neuron: fromNeuron, age: distance } of contextNeurons) {
-			const conn = fromNeuron.getOrCreateConnection(distance, this);
+	refineInferences(distance, newlyActiveNeurons, rewards, channelActions) {
+
+		// Only event neurons have outgoing connections
+		if (this.type !== 'event') return { strengthened: 0, rewarded: 0 };
+
+		let strengthened = 0, rewarded = 0;
+
+		for (const targetNeuron of newlyActiveNeurons) {
+			// Skip non-base neurons
+			if (targetNeuron.level !== 0) continue;
+
+			// Strengthen connection to this target
+			const conn = this.getOrCreateConnection(distance, targetNeuron);
 			conn.strength = Math.min(Neuron.maxStrength, conn.strength + 1);
-		}
-	}
+			strengthened++;
 
-	/**
-	 * Apply reward to incoming connections from context neurons.
-	 * Called when this neuron is a newly activated action with a reward.
-	 * @param {Array<{neuron: SensoryNeuron, age: number}>} contextNeurons - Active event neurons at age > 0
-	 * @param {number} reward - Reward value to apply
-	 */
-	applyReward(contextNeurons, reward) {
-		const smoothing = Neuron.rewardSmoothing;
-		for (const { neuron: fromNeuron, age: distance } of contextNeurons) {
-			// Check if connection exists at this distance to this neuron
-			const distanceMap = fromNeuron.connections.get(distance);
-			if (!distanceMap) continue;
-			const conn = distanceMap.get(this);
-			if (!conn) continue;
-
-			// Exponential smoothing: new_reward = smooth * observed + (1 - smooth) * old_reward
-			conn.reward = smoothing * reward + (1 - smoothing) * conn.reward;
+			// Apply reward if this is an action with a reward
+			if (targetNeuron.type === 'action') {
+				const reward = rewards.get(targetNeuron.channel);
+				if (reward !== undefined)
+					conn.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * conn.reward;
+				rewarded++;
+			}
 		}
+
+		return { strengthened, rewarded };
 	}
 }
 

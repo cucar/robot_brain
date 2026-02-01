@@ -86,8 +86,20 @@ export class Neuron {
 			}
 		}
 
-		if (bestPattern) bestPattern.refine(bestMatch);
+		if (bestPattern) bestPattern.refinePast(bestMatch);
 
 		return bestPattern;
+	}
+
+	/**
+	 * Refine inferences for the neuron at the given distance.
+	 * @param {number} distance - The distance to refine (pattern's current age)
+	 * @param {Set<Neuron>} newlyActiveNeurons - Currently active neurons at age=0
+	 * @param {Map<string, number>} rewards - Map of channel name to reward value
+	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
+	 * @returns {{strengthened: number, weakened: number, novel: number, rewarded: number, learned: number, alternatives: number}}
+	 */
+	refineInferences(distance, newlyActiveNeurons, rewards, channelActions) {
+
 	}
 }

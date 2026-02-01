@@ -20,8 +20,8 @@ export default class Brain {
 		this.contextLength = 5; // number of frames a base neuron stays active - this determines the context length
 
 		// pattern learning parameters
-		this.eventErrorMinStrength = 10; // minimum prediction strength to create error-driven patterns
-		this.actionRegretMinStrength = 1; // minimum inference strength to create action regret pattern
+		this.eventErrorMinStrength = 2; // minimum prediction strength to create error-driven patterns
+		this.actionRegretMinStrength = 2; // minimum inference strength to create action regret pattern
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// voting parameters
@@ -72,6 +72,9 @@ export default class Brain {
 
 		// initialize channel registry
 		this.channels = new Map();
+
+		// Map of channel name -> Set of action neurons (built once in initializeActionNeurons)
+		this.channelActions = new Map();
 
 		// Prediction accuracy tracking (cumulative stats for base level only)
 		this.accuracyStats = { correct: 0, total: 0 };
@@ -453,6 +456,7 @@ export default class Brain {
 	/**
 	 * Pre-create action neurons for all channels.
 	 * This ensures exploration can find action neurons even before any connections exist.
+	 * Also builds the channelActions map for pattern refinement.
 	 */
 	async initializeActionNeurons() {
 		for (const [channelName, channel] of this.channels) {
@@ -468,7 +472,13 @@ export default class Brain {
 			}));
 
 			// Create neurons (getFrameNeurons will create if they don't exist)
-			this.getFrameNeurons(framePoints);
+			const neuronIds = this.getFrameNeurons(framePoints);
+
+			// Build channelActions map for pattern refinement
+			const actionSet = new Set();
+			for (const neuronId of neuronIds)
+				actionSet.add(this.neurons.get(neuronId));
+			this.channelActions.set(channelName, actionSet);
 
 			if (this.debug) console.log(`Created ${actionCoords.length} action neurons for ${channelName}`);
 		}
@@ -583,11 +593,11 @@ export default class Brain {
 		// activate neurons that represent the current situation in age=0 - what's happening right now?
 		this.recognizeNeurons();
 
-		// refine the neuron inferences based on observations
-		this.refineInferences();
+		// update the neuron inferences based on observations
+		this.updateInferences();
 
 		// learn from previous inferences and create new patterns for them
-		this.learnInferences();
+		this.learnFromInferences();
 
 		// deactivate aged-out neurons AFTER pattern learning captured full context
 		this.deactivateOldNeurons();
@@ -612,7 +622,7 @@ export default class Brain {
 	/**
 	 * learn from previous inferences
 	 */
-	learnInferences() {
+	learnFromInferences() {
 
 		// Track event prediction accuracy
 		this.trackEventAccuracy();
@@ -622,7 +632,6 @@ export default class Brain {
 
 		// learn new patterns from failed predictions and action regret
 		this.learnNewPatterns();
-
 	}
 
 	/**
@@ -855,22 +864,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Get active sensory neurons as context (age > 0).
-	 * @param {boolean} includeAgedOut - If true, include neurons at age >= contextLength (for pattern learning)
-	 * @returns {Array<{neuron: SensoryNeuron, age: number}>}
-	 */
-	getSensoryContext(includeAgedOut = false) {
-		const result = [];
-		for (const neuron of this.activeNeurons) {
-			if (neuron.level !== 0) continue;
-			for (const age of neuron.activeAges)
-				if (age > 0 && (includeAgedOut || age < this.contextLength))
-					result.push({ neuron, age });
-		}
-		return result;
-	}
-
-	/**
 	 * Get newly activated sensory neurons (age = 0).
 	 * @param {string} [type] - Optional filter: 'event' or 'action'
 	 * @returns {Array<SensoryNeuron>}
@@ -884,35 +877,6 @@ export default class Brain {
 			result.push(neuron);
 		}
 		return result;
-	}
-
-	/**
-	 * Reinforce connections between base level active neurons - from age > 0 to age = 0
-	 */
-	reinforceConnections() {
-		// Get event context (age > 0, < contextLength)
-		const contextNeurons = this.getSensoryContext().filter(c => c.neuron.type === 'event');
-
-		// Each newly activated sensory neuron reinforces its own incoming connections
-		for (const neuron of this.getNewlyActivatedSensory())
-			neuron.reinforceConnections(contextNeurons);
-	}
-
-	/**
-	 * Apply rewards to action connections
-	 */
-	rewardConnections() {
-		if (this.rewards.size === 0) return;
-
-		// Get full sensory context (includes age=0 for self-connections if any)
-		const contextNeurons = this.getSensoryContext();
-
-		// Each newly activated action neuron applies its reward to incoming connections
-		for (const neuron of this.getNewlyActivatedSensory('action')) {
-			if (!this.rewards.has(neuron.channel)) continue;
-			const reward = this.rewards.get(neuron.channel);
-			neuron.applyReward(contextNeurons, reward);
-		}
 	}
 
 	/**
@@ -970,27 +934,18 @@ export default class Brain {
 	}
 
 	/**
-	 * refine the neuron inferences based on observations
+	 * updates neuron inferences based on observations.
+	 * Context neurons (age > 0) learn about newly active neurons (age = 0).
 	 */
-	refineInferences() {
+	updateInferences() {
 
-		// build and refine connections between sensory neurons
-		this.refineSensoryInferences();
+		// get the peaks and context
+		const { peaks, context } = this.getPeaksAndContext();
+		if (peaks.length === 0) return;
 
-		// refine the learned pattern definitions from prediction errors and action regret
-		this.refinePatternInferences();
-	}
-
-	/**
-	 * learns connections between sensory neurons
-	 */
-	refineSensoryInferences() {
-
-		// reinforce connections between active neurons in the base level
-		this.reinforceConnections();
-
-		// learn from connection action inferences
-		this.rewardConnections();
+		// context neurons will update inferences
+		for (const { neuron, age } of context)
+			neuron.updateInferences(age, peaks, this.rewards, this.channelActions);
 	}
 
 	/**
@@ -1040,130 +995,22 @@ export default class Brain {
 	}
 
 	/**
-	 * Get peaks (age=0) and context (age>0) neurons at a specific level.
+	 * Get peaks (age=0) and context (age>0) neurons.
 	 * Single traversal over activeNeurons.
-	 * @param {number} level - The level to filter by
-	 * @returns {{peaks: Array<Neuron>, context: Set<Neuron>}}
+	 * @param {number} [level] - Optional level to filter by. If omitted, includes all levels.
+	 * @returns {{peaks: Array<Neuron>, context: Array<{neuron: Neuron, age: number}>}}
 	 */
 	getPeaksAndContext(level) {
+		const filterByLevel = level !== undefined;
 		const peaks = [];
-		const context = new Set();
+		const context = [];
 		for (const neuron of this.activeNeurons) {
-			if (neuron.level !== level) continue;
+			if (filterByLevel && neuron.level !== level) continue;
 			for (const age of neuron.activeAges)
 				if (age === 0) peaks.push(neuron);
-				else if (age < this.contextLength) context.add(neuron);
+				else if (age < this.contextLength) context.push({ neuron, age });
 		}
 		return { peaks, context };
-	}
-
-	/**
-	 * Learns patterns from prediction errors and action regret and continues to refine them as they are observed
-	 */
-	refinePatternInferences() {
-
-		// update pattern_future with current events based on observations
-		this.refinePatternEventsFuture();
-
-		// update pattern_future with actions based on rewards
-		this.refinePatternActionsFuture();
-	}
-
-	/**
-	 * Refine pattern_future for event patterns with observed connections.
-	 * Called during learning phase after pattern inference.
-	 * Refinement happens when age = distance (prediction outcome just observed).
-	 * This method only applies to EVENT patterns.
-	 * Action pattern refinement happens in refinePatternActionsFuture.
-	 * Applies three types of reinforcement:
-	 * 1. Positive: Strengthen pattern_future inferences that were correctly predicted (target now active)
-	 * 2. Negative: Weaken pattern_future inferences that were incorrectly predicted (target NOT active)
-	 * 3. Novel: Add new inferences from pattern to newly observed neurons
-	 */
-	refinePatternEventsFuture() {
-
-		// Get active event neurons at age=0
-		const activeEventNeurons = new Set();
-		for (const neuron of this.activeNeurons)
-			if (neuron.level === 0 && neuron.type === 'event' && neuron.activeAges.has(0))
-				activeEventNeurons.add(neuron);
-
-		if (activeEventNeurons.size === 0) return;
-
-		// Aggregate results
-		let totalStrengthened = 0, totalWeakened = 0, totalNovel = 0;
-
-		// Iterate active pattern neurons (level > 0, age > 0, age < contextLength)
-		for (const neuron of this.activeNeurons) {
-			if (neuron.level === 0) continue;
-
-			for (const age of neuron.activeAges) {
-				if (age === 0 || age >= this.contextLength) continue;
-
-				// Refine this pattern's future predictions at this distance
-				const result = neuron.refineEventFuture(age, activeEventNeurons);
-				totalStrengthened += result.strengthened;
-				totalWeakened += result.weakened;
-				totalNovel += result.novel;
-			}
-		}
-
-		if (this.debug) {
-			console.log(`Strengthened ${totalStrengthened} correct event pattern_future predictions`);
-			console.log(`Weakened ${totalWeakened} failed event pattern_future predictions`);
-			console.log(`Added ${totalNovel} novel neurons to event pattern_future`);
-		}
-	}
-
-	/**
-	 * Refine pattern action predictions based on executed actions and rewards.
-	 * Combines three operations:
-	 * 1. Reward existing action predictions that were executed
-	 * 2. Learn new actions that weren't predicted but were executed
-	 * 3. Add alternative actions for painful outcomes
-	 */
-	refinePatternActionsFuture() {
-		if (this.rewards.size === 0) return;
-
-		// Get active action neurons at age=0
-		const activeActionNeurons = new Set();
-		for (const neuron of this.activeNeurons)
-			if (neuron.level === 0 && neuron.type === 'action' && neuron.activeAges.has(0))
-				activeActionNeurons.add(neuron);
-
-		if (activeActionNeurons.size === 0) return;
-
-		// Build map of channel -> all action neurons (for alternatives)
-		const channelActions = new Map();
-		for (const neuron of this.neurons.values())
-			if (neuron.level === 0 && neuron.type === 'action') {
-				if (!channelActions.has(neuron.channel)) channelActions.set(neuron.channel, new Set());
-				channelActions.get(neuron.channel).add(neuron);
-			}
-
-		// Aggregate results
-		let totalRewarded = 0, totalLearned = 0, totalAlternatives = 0;
-
-		// Iterate active pattern neurons (level > 0, age > 0, age < contextLength)
-		for (const neuron of this.activeNeurons) {
-			if (neuron.level === 0) continue;
-
-			for (const age of neuron.activeAges) {
-				if (age === 0 || age >= this.contextLength) continue;
-
-				// Refine this pattern's action predictions at this distance
-				const result = neuron.refineActionFuture(age, activeActionNeurons, this.rewards, channelActions);
-				totalRewarded += result.rewarded;
-				totalLearned += result.learned;
-				totalAlternatives += result.alternatives;
-			}
-		}
-
-		if (this.debug) {
-			console.log(`Rewarded ${totalRewarded} inferred actions`);
-			console.log(`Learned ${totalLearned} new actions`);
-			console.log(`Added ${totalAlternatives} alternative actions`);
-		}
 	}
 
 	/**
@@ -1283,14 +1130,6 @@ export default class Brain {
 		for (const [neuronId, inf] of this.inferredNeurons)
 			if (inf.isWinner) winnerIds.add(neuronId);
 
-		// Build map of channel -> all action neurons (for alternatives)
-		const channelActions = new Map();
-		for (const neuron of this.neurons.values())
-			if (neuron.level === 0 && neuron.type === 'action') {
-				if (!channelActions.has(neuron.channel)) channelActions.set(neuron.channel, []);
-				channelActions.get(neuron.channel).push(neuron);
-			}
-
 		// Filter to valid regret votes:
 		// - Voter: base events (level 0, type event) or patterns (level > 0)
 		// - Target: action in painful channel that was a winner
@@ -1311,8 +1150,9 @@ export default class Brain {
 		let count = 0;
 		for (const v of regretVotes) {
 			const target = this.neurons.get(v.neuronId);
-			const alts = channelActions.get(target.channel) || [];
-			const altNeuron = alts.find(n => n.id !== v.neuronId);
+			const alts = this.channelActions.get(target.channel);
+			if (!alts) continue;
+			const altNeuron = [...alts].find(n => n.id !== v.neuronId);
 			if (altNeuron) {
 				this.newPatternFuture.push({ peakNeuronId: v.fromNeuronId, inferredNeuronId: altNeuron.id, distance: v.distance });
 				count++;
