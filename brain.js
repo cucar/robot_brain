@@ -1,6 +1,8 @@
-import readline from 'node:readline';
+import { createInterface } from 'node:readline';
+import { stdin, stdout } from 'node:process';
 import getMySQLConnection from './db/db.js';
-import { Neuron, SensoryNeuron, PatternNeuron } from './neurons/index.js';
+import { Neuron } from './neurons/neuron.js';
+import { Context } from './neurons/context.js';
 
 /**
  * Brain Class
@@ -20,12 +22,7 @@ export default class Brain {
 		this.contextLength = 5; // number of frames a base neuron stays active - this determines the context length
 
 		// pattern learning parameters
-		this.eventErrorMinStrength = 2; // minimum prediction strength to create error-driven patterns
-		this.actionRegretMinStrength = 2; // minimum inference strength to create action regret pattern
 		this.maxLevels = 10; // just to prevent against infinite recursion
-
-		// voting parameters
-		this.levelVoteMultiplier = 3; // how much to weight votes from higher levels
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
@@ -53,15 +50,6 @@ export default class Brain {
 
 		// Current frame inference results: Neuron -> {strength, isWinner}
 		this.inferredNeurons = new Map();
-
-		// Inference votes for current frame: Array of {from, to, strength, reward, distance}
-		this.inferenceVotes = [];
-
-		// New pattern futures: Array of {peak, inferred, distance}
-		this.newPatternFuture = [];
-
-		// New patterns being created: Array of {peak, pattern}
-		this.newPatterns = [];
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
@@ -94,7 +82,7 @@ export default class Brain {
 
 		// Create readline interface for pausing between frames - used when debugging
 		this.waitForUserInput = false;
-		this.rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+		this.rl = createInterface({ input: stdin, output: stdout });
 	}
 
 	/**
@@ -137,10 +125,7 @@ export default class Brain {
 		this.activeNeurons.clear();
 
 		// In-memory scratch data
-		this.inferenceVotes = [];       // Array of {from, to, strength, reward, distance} (Neuron objects)
 		this.inferredNeurons = new Map(); // Map<Neuron, {strength, isWinner}>
-		this.newPatternFuture = [];     // Array of {peak, inferred, distance} (Neuron objects)
-		this.newPatterns = [];          // Array of {peak, pattern} (Neuron objects)
 	}
 
 	/**
@@ -200,11 +185,11 @@ export default class Brain {
 			FROM base_neurons b
 			JOIN channels c ON c.id = b.channel_id
 		`);
-		const [coordRows] = await this.conn.query('SELECT neuron_id, dimension_id, val FROM coordinates');
+		const [valueRows] = await this.conn.query('SELECT neuron_id, dimension_id, val FROM coordinates');
 
 		// Group coordinates by neuron_id
 		const coordsByNeuron = new Map();
-		for (const row of coordRows) {
+		for (const row of valueRows) {
 			if (!coordsByNeuron.has(row.neuron_id))
 				coordsByNeuron.set(row.neuron_id, {});
 			// Convert dimension_id to dimension name for SensoryNeuron
@@ -212,10 +197,10 @@ export default class Brain {
 			if (dimName) coordsByNeuron.get(row.neuron_id)[dimName] = row.val;
 		}
 
-		// Create SensoryNeuron objects
+		// Create sensory neuron objects
 		for (const row of baseRows) {
 			const coords = coordsByNeuron.get(row.neuron_id) || {};
-			const neuron = new SensoryNeuron(row.channel_name, row.type, coords);
+			const neuron = Neuron.createSensory(row.channel_name, row.type, coords);
 			this.neurons.set(row.neuron_id, neuron);
 			this.neuronsByValue.set(neuron.valueKey, neuron);
 			if (row.neuron_id > maxId) maxId = row.neuron_id;
@@ -224,7 +209,7 @@ export default class Brain {
 
 		// 2. Load pattern neurons with their peaks
 		// ORDER BY level ASC ensures lower-level patterns are created before higher-level ones
-		// This matters because a pattern's peak can be another pattern (e.g., level 2 pattern's peak is level 1)
+		// This matters because a pattern's peak can be another pattern (e.g., level 2 pattern peak is level 1)
 		// so the peak must exist in this.neurons before we can reference it
 		const [patternRows] = await this.conn.query(`
             SELECT n.id, n.level, pp.peak_neuron_id, pp.strength
@@ -241,14 +226,14 @@ export default class Brain {
 				console.warn(`  Warning: Pattern ${row.id} references missing peak ${row.peak_neuron_id}`);
 				continue;
 			}
-			const pattern = new PatternNeuron(row.level, peak);
+			const pattern = Neuron.createPattern(row.level, peak);
 			pattern.peakStrength = row.strength;
 			this.neurons.set(row.id, pattern);
 			if (row.id > maxId) maxId = row.id;
 		}
 		console.log(`  Loaded ${patternRows.length} pattern neurons`);
 
-		// 3. Load connections into SensoryNeuron.connections
+		// 3. Load connections into sensory neuron connections
 		const [connRows] = await this.conn.query('SELECT from_neuron_id, to_neuron_id, distance, strength, reward FROM connections');
 		let connCount = 0;
 		for (const row of connRows) {
@@ -268,7 +253,7 @@ export default class Brain {
 		}
 		console.log(`  Loaded ${connCount} connections`);
 
-		// 4. Load pattern_past into PatternNeuron.past
+		// 4. Load pattern_past into peak's contexts routing table
 		const [pastRows] = await this.conn.query('SELECT pattern_neuron_id, context_neuron_id, context_age, strength FROM pattern_past');
 		let pastCount = 0;
 		for (const row of pastRows) {
@@ -277,16 +262,16 @@ export default class Brain {
 			if (!pattern || !contextNeuron) continue;
 			if (pattern.level === 0) continue;
 
-			if (!pattern.past.has(contextNeuron)) {
-				pattern.past.set(contextNeuron, new Map());
-				contextNeuron.incomingCount++;
-			}
-			pattern.past.get(contextNeuron).set(row.context_age, row.strength);
+			// Context is stored on the peak's routing table, not on the pattern
+			const peak = pattern.peak;
+			if (!peak) continue;
+			const context = peak.getOrCreateContext(pattern);
+			context.add(contextNeuron, row.context_age, row.strength);
 			pastCount++;
 		}
-		console.log(`  Loaded ${pastCount} pattern_past entries`);
+		console.log(`  Loaded ${pastCount} pattern context entries (from pattern_past)`);
 
-		// 5. Load pattern_future into PatternNeuron.future
+		// 5. Load pattern_future into pattern.connections (future is now merged into connections)
 		const [futureRows] = await this.conn.query('SELECT pattern_neuron_id, inferred_neuron_id, distance, strength, reward FROM pattern_future');
 		let futureCount = 0;
 		for (const row of futureRows) {
@@ -295,16 +280,16 @@ export default class Brain {
 			if (!pattern || !inferredNeuron) continue;
 			if (pattern.level === 0) continue;
 
-			if (!pattern.future.has(row.distance))
-				pattern.future.set(row.distance, new Map());
-			pattern.future.get(row.distance).set(inferredNeuron, {
+			if (!pattern.connections.has(row.distance))
+				pattern.connections.set(row.distance, new Map());
+			pattern.connections.get(row.distance).set(inferredNeuron, {
 				strength: row.strength,
 				reward: row.reward
 			});
 			inferredNeuron.incomingCount++;
 			futureCount++;
 		}
-		console.log(`  Loaded ${futureCount} pattern_future entries`);
+		console.log(`  Loaded ${futureCount} pattern connections (from pattern_future)`);
 
 		// Set next ID for new neuron creation
 		Neuron.nextId = maxId + 1;
@@ -338,7 +323,7 @@ export default class Brain {
 		await this.conn.query('TRUNCATE base_neurons');
 		await this.conn.query('TRUNCATE coordinates');
 		const baseRows = [];
-		const coordRows = [];
+		const valueRows = [];
 		for (const [id, neuron] of this.neurons) {
 			if (neuron.level !== 0) continue;
 			const channelId = this.channelNameToId[neuron.channel];
@@ -346,14 +331,14 @@ export default class Brain {
 			for (const [dimName, val] of Object.entries(neuron.coordinates)) {
 				const dimId = this.dimensionNameToId[dimName];
 				if (dimId !== undefined)
-					coordRows.push([id, dimId, val]);
+					valueRows.push([id, dimId, val]);
 			}
 		}
 		if (baseRows.length > 0)
 			await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [baseRows]);
-		if (coordRows.length > 0)
-			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [coordRows]);
-		console.log(`  Saved ${baseRows.length} base neurons, ${coordRows.length} coordinates`);
+		if (valueRows.length > 0)
+			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [valueRows]);
+		console.log(`  Saved ${baseRows.length} base neurons, ${valueRows.length} coordinates`);
 
 		// 3. Backup connections
 		await this.conn.query('TRUNCATE connections');
@@ -384,28 +369,29 @@ export default class Brain {
 			await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id, strength) VALUES ?', [peakRows]);
 		console.log(`  Saved ${peakRows.length} pattern peaks`);
 
-		// 5. Backup pattern_past
+		// 5. Backup pattern context (from peak's routing table to pattern_past)
 		await this.conn.query('TRUNCATE pattern_past');
 		const pastRows = [];
-		for (const [patternId, neuron] of this.neurons) {
-			if (neuron.level === 0) continue;
-			for (const [contextNeuron, ageMap] of neuron.past) {
-				const contextId = neuronToId.get(contextNeuron);
-				if (!contextId) continue;
-				for (const [age, strength] of ageMap)
-					pastRows.push([patternId, contextId, age, strength]);
+		for (const [_, neuron] of this.neurons)
+			for (const { context, pattern } of neuron.contexts) {
+				const patternId = neuronToId.get(pattern);
+				if (!patternId) continue;
+				for (const { neuron: ctxNeuron, distance, strength } of context.entries) {
+					const contextId = neuronToId.get(ctxNeuron);
+					if (contextId)
+						pastRows.push([patternId, contextId, distance, strength]);
+				}
 			}
-		}
 		if (pastRows.length > 0)
 			await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
-		console.log(`  Saved ${pastRows.length} pattern_past entries`);
+		console.log(`  Saved ${pastRows.length} pattern context entries (to pattern_past)`);
 
-		// 6. Backup pattern_future
+		// 6. Backup pattern connections (to pattern_future table for compatibility)
 		await this.conn.query('TRUNCATE pattern_future');
 		const futureRows = [];
 		for (const [patternId, neuron] of this.neurons) {
 			if (neuron.level === 0) continue;
-			for (const [distance, targets] of neuron.future)
+			for (const [distance, targets] of neuron.connections)
 				for (const [inferredNeuron, pred] of targets) {
 					const inferredId = neuronToId.get(inferredNeuron);
 					if (inferredId)
@@ -414,7 +400,7 @@ export default class Brain {
 		}
 		if (futureRows.length > 0)
 			await this.conn.query('INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward) VALUES ?', [futureRows]);
-		console.log(`  Saved ${futureRows.length} pattern_future entries`);
+		console.log(`  Saved ${futureRows.length} pattern connections (to pattern_future)`);
 
 		console.log('Brain backed up to MySQL.');
 	}
@@ -485,8 +471,7 @@ export default class Brain {
 	}
 
 	/**
-	 * Initialize channels in DB and load channel IDs
-	 * IDs come from static Channel.nextId counter (not auto-increment)
+	 * Initialize channels in DB and load channel IDs, which come from static Channel.nextId counter
 	 */
 	async initializeChannels() {
 		this.channelNameToId = {};
@@ -593,11 +578,11 @@ export default class Brain {
 		// activate neurons that represent the current situation in age=0 - what's happening right now?
 		this.recognizeNeurons();
 
-		// update the age>0 neuron inferences based on observations in age=0
-		this.updateInferences();
+		// update the age>0 neuron connections based on observations in age=0
+		this.updateConnections();
 
-		// learn from previous inferences and create new patterns for them
-		this.learnFromInferences();
+		// learn new patterns from failed predictions and action regret
+		this.learnNewPatterns();
 
 		// deactivate aged-out neurons AFTER pattern learning captured full context
 		this.deactivateOldNeurons();
@@ -617,18 +602,6 @@ export default class Brain {
 
 		// return true to indicate that we have processed the frame successfully
 		return true;
-	}
-
-	/**
-	 * learn from previous inferences
-	 */
-	learnFromInferences() {
-
-		// Track inference performance (event accuracy and action rewards)
-		this.trackInferencePerformance();
-
-		// learn new patterns from failed predictions and action regret
-		this.learnNewPatterns();
 	}
 
 	/**
@@ -809,6 +782,9 @@ export default class Brain {
 
 		// discover and activate patterns using connections - start recursion from base level
 		this.recognizePatterns();
+
+		// Track inference performance (event accuracy and action rewards)
+		this.trackInferencePerformance();
 	}
 
 	/**
@@ -819,12 +795,12 @@ export default class Brain {
 		const neuronIds = [];
 
 		for (const point of frame) {
-			const valueKey = SensoryNeuron.makeValueKey(point.coordinates);
+			const valueKey = Neuron.makeValueKey(point.coordinates);
 			let neuron = this.neuronsByValue.get(valueKey);
 
 			// Create new neuron if not found
 			if (!neuron) {
-				neuron = new SensoryNeuron(point.channel, point.type, point.coordinates);
+				neuron = Neuron.createSensory(point.channel, point.type, point.coordinates);
 				const neuronId = neuron.id;
 				this.neurons.set(neuronId, neuron);
 				this.neuronsByValue.set(valueKey, neuron);
@@ -843,8 +819,7 @@ export default class Brain {
 	 * @param {Neuron} neuron - The neuron to activate
 	 */
 	activateNeuron(neuron) {
-		if (!neuron.activeAges) neuron.activeAges = new Set();
-		neuron.activeAges.add(0);
+		neuron.activate();
 		this.activeNeurons.add(neuron);
 	}
 
@@ -912,18 +887,24 @@ export default class Brain {
 	}
 
 	/**
-	 * updates neuron inferences based on observations.
+	 * updates neuron connections based on observations.
 	 * Context neurons (age > 0) learn about newly active neurons (age = 0).
 	 */
-	updateInferences() {
+	updateConnections() {
 
-		// get the peaks and context
-		const { peaks, context } = this.getPeaksAndContext();
-		if (peaks.length === 0) return;
+		// Get newly active sensory neurons (age=0, level=0 - events and actions)
+		const newEventNeurons = new Set();
+		const newActionNeurons = new Set();
+		for (const neuron of this.activeNeurons) {
+			if (!neuron.isNewlyActive || neuron.level > 0) continue;
+			if (neuron.type === 'event') newEventNeurons.add(neuron);
+			else if (neuron.type === 'action') newActionNeurons.add(neuron);
+		}
+		if (newEventNeurons.size === 0 && newActionNeurons.size === 0) return;
 
-		// context neurons will update inferences
-		for (const { neuron, age } of context)
-			neuron.updateInferences(age, peaks, this.rewards, this.channelActions);
+		// Each neuron updates connections for its ages > 0
+		for (const neuron of this.activeNeurons)
+			neuron.updateConnections(newEventNeurons, newActionNeurons, this.rewards, this.channelActions);
 	}
 
 	/**
@@ -950,23 +931,21 @@ export default class Brain {
 		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 		// get the peaks and context for this level
-		const { peaks, context } = this.getPeaksAndContext(level);
+		const {peaks, context} = this.getPeaksAndContext(level);
 		if (peaks.length === 0) {
 			if (this.debug) console.log(`No newly activated neurons at level ${level}`);
 			return false;
 		}
 
-		// Match patterns (parallelizable) - collect results without activating
-		const matchedPatterns = peaks
-			.map(peak => peak.matchBestPattern(context))
-			.filter(pattern => pattern !== null);
+		// Match patterns (parallelizable) - collect results with peak reference
+		const matchedPatterns = peaks.map(peak => peak.matchBestPattern(context)).filter(pattern => pattern);
 
-		// Activate matched patterns (sequential) - for next level processing
+		// activate the returned pattern neurons
 		for (const pattern of matchedPatterns) this.activateNeuron(pattern);
 
 		if (this.debug && matchedPatterns.length > 0)
 			console.log(`Matched ${matchedPatterns.length} patterns at level ${level}:`,
-				matchedPatterns.map(p => `peak=${p.peak.id}, pattern=${p.id}`).join('; '));
+				matchedPatterns.map(m => `peak=${m.peak.id}, pattern=${m.pattern.id}`).join('; '));
 
 		// return true to indicate patterns found
 		return matchedPatterns.length > 0;
@@ -976,276 +955,72 @@ export default class Brain {
 	 * Get peaks (age=0) and context (age>0) neurons.
 	 * Single traversal over activeNeurons.
 	 * @param {number} [level] - Optional level to filter by. If omitted, includes all levels.
-	 * @returns {{peaks: Array<Neuron>, context: Array<{neuron: Neuron, age: number}>}}
+	 * @returns {{peaks: Array<Neuron>, context: Context}}
 	 */
 	getPeaksAndContext(level) {
 		const filterByLevel = level !== undefined;
 		const peaks = [];
-		const context = [];
+		const context = new Context();
 		for (const neuron of this.activeNeurons) {
 			if (filterByLevel && neuron.level !== level) continue;
-			for (const age of neuron.activeAges)
+			if (!neuron.activeAges) continue;
+			for (const age of neuron.activeAges.keys())
 				if (age === 0) peaks.push(neuron);
-				else if (age < this.contextLength) context.push({ neuron, age });
+				else if (age < this.contextLength) context.add(neuron, age, 1);
 		}
 		return { peaks, context };
 	}
 
 	/**
-	 * Creates error-driven patterns from failed predictions.
-	 * Processes all levels in bulk, like inferNeurons.
+	 * Learn new patterns from prediction errors and action regret.
+	 * For each active neuron at ages where no pattern was activated, call learnNewPattern.
 	 */
 	learnNewPatterns() {
 
-		// Find the neurons that should be in pattern_future of new patterns
-		// (prediction errors and action regret, unified in one method)
-		const newPatternFutureCount = this.populateNewPatternFuture();
-		if (this.debug) console.log(`New pattern future count: ${newPatternFutureCount}`);
-		if (newPatternFutureCount === 0) return;
-
-		// Populate new_patterns table with peaks from new pattern future inferences
-		const patternCount = this.populateNewPatterns();
-		if (this.debug) console.log(`Creating ${patternCount} error patterns`);
-
-		// Create pattern neurons and map them to new_patterns
-		this.createPatternNeurons();
-
-		// Create new patterns: populate pattern past and future
-		this.createNewPatterns();
-
-		// Activate newly created pattern neurons so they can be refined in the same frame
-		// and matched in future frames. Age = distance (when the peak was active)
-		this.activateNewPatterns();
-
-		if (this.debug) console.log(`Created ${patternCount} error patterns`);
-	}
-
-	/**
-	 * Populate new_pattern_future with neurons that should be in pattern_future of new patterns.
-	 * Unified method that handles both prediction errors and action regret.
-	 *
-	 * Two cases:
-	 * 1. Prediction errors: inferred neuron NOT active at age=0 → pattern to predict what actually happened
-	 * 2. Action regret: inferred action winner got negative reward → pattern to infer alternative action
-	 *
-	 * Returns the number of new pattern future inferences found.
-	 */
-	populateNewPatternFuture() {
-		this.newPatternFuture = [];
-		const eventCount = this.populateNewPatternEvents();
-		const actionCount = this.populateNewPatternActions();
-		return eventCount + actionCount;
-	}
-
-	/**
-	 * Populate event prediction error neurons into new_pattern_future.
-	 * Peak predicted X, but X didn't happen and Y happened instead.
-	 * → Create pattern to predict Y from this context.
-	 *
-	 * Handles both connection and pattern inference errors.
-	 * Works for all levels: if a level N neuron predicts a base event,
-	 * and it doesn't happen, create a level N+1 pattern to correct the prediction.
-	 * @returns {number} Number of event pattern futures created
-	 */
-	populateNewPatternEvents() {
-		// Filter votes by strength threshold
-		const strongVotes = this.inferenceVotes.filter(v => v.strength >= this.eventErrorMinStrength);
-		if (strongVotes.length === 0) return 0;
-
-		// Get active event neurons at age=0 (what actually happened)
-		const activeEventNeurons = new Set();
+		// Get newly active neurons (age=0)
+		const newlyActiveNeurons = new Set();
 		for (const neuron of this.activeNeurons)
-			if (neuron.level === 0 && neuron.type === 'event' && neuron.activeAges.has(0))
-				activeEventNeurons.add(neuron);
+			if (neuron.activeAges.has(0))
+				newlyActiveNeurons.add(neuron);
 
-		if (activeEventNeurons.size === 0) return 0;
+		let patternCount = 0;
 
-		// Filter to valid votes: any level voter, event target, prediction error
-		// Base voters (level 0) must be events; pattern voters (level > 0) can be any type
-		const errorVotes = strongVotes.filter(v => {
-			const voter = this.neurons.get(v.fromNeuronId);
-			const target = this.neurons.get(v.neuronId);
-			if (!voter || !target) return false;
-			if (target.level > 0 || target.type !== 'event') return false;
-			if (target.activeAges?.has(0)) return false;  // Not an error if target is active
-			// Base voters must be events, pattern voters can be any type
-			return voter.level > 0 || voter.type === 'event';
-		});
+		// For each active neuron that has votes
+		for (const neuron of this.activeNeurons) {
+			if (neuron.votes.size === 0) continue;
 
-		if (errorVotes.length === 0) return 0;
+			// For each age where no pattern was activated
+			for (const [age, pattern] of neuron.activeAges) {
+				if (age === 0) continue; // Only context neurons (age > 0) can learn patterns
+				if (pattern !== null) continue; // Pattern was activated, skip
 
-		// Create pattern futures: for each error vote, pair with each actual event
-		let count = 0;
-		for (const v of errorVotes)
-			for (const actualNeuron of activeEventNeurons) {
-				this.newPatternFuture.push({ peakNeuronId: v.fromNeuronId, inferredNeuronId: actualNeuron.id, distance: v.distance });
-				count++;
-			}
+				// Build context array with distances relative to this age
+				const context = [];
+				for (const ctxNeuron of this.activeNeurons)
+					for (const ctxAge of ctxNeuron.activeAges.keys()) {
+						const distance = ctxAge - age;
+						if (distance > 0 && distance < this.contextLength)
+							context.push({ neuron: ctxNeuron, distance });
+					}
 
-		if (this.debug) console.log(`Found ${count} event prediction error neurons`);
-		return count;
-	}
+				// Try to learn a pattern at this age
+				const newPattern = neuron.learnNewPattern(
+					age,
+					newlyActiveNeurons,
+					this.rewards,
+					this.channelActions,
+					context
+				);
 
-	/**
-	 * Populate action regret neurons into new_pattern_future.
-	 * When a connection or pattern predicts an action and it leads to pain,
-	 * add one untried alternative action.
-	 * @returns {number} Number of action pattern futures created
-	 */
-	populateNewPatternActions() {
-		// Filter votes by strength threshold
-		const strongVotes = this.inferenceVotes.filter(v => v.strength >= this.actionRegretMinStrength);
-		if (strongVotes.length === 0) return 0;
-
-		// Get painful channels - if none, no regret patterns needed
-		const painfulChannels = new Set();
-		for (const [channelName, reward] of this.rewards)
-			if (reward < PatternNeuron.actionRegretMinPain) painfulChannels.add(channelName);
-		if (painfulChannels.size === 0) return 0;
-
-		// Get winning action neuron IDs
-		const winnerIds = new Set();
-		for (const [neuronId, inf] of this.inferredNeurons)
-			if (inf.isWinner) winnerIds.add(neuronId);
-
-		// Filter to valid regret votes:
-		// - Voter: base events (level 0, type event) or patterns (level > 0)
-		// - Target: action in painful channel that was a winner
-		const regretVotes = strongVotes.filter(v => {
-			const voter = this.neurons.get(v.fromNeuronId);
-			const target = this.neurons.get(v.neuronId);
-			if (!voter || !target) return false;
-			if (target.level !== 0 || target.type !== 'action') return false;
-			if (!painfulChannels.has(target.channel)) return false;
-			if (!winnerIds.has(v.neuronId)) return false;
-			// Base voters must be events, pattern voters can be any type
-			return voter.level > 0 || voter.type === 'event';
-		});
-
-		if (regretVotes.length === 0) return 0;
-
-		// Create pattern futures: for each regret vote, pick one alternative action
-		let count = 0;
-		for (const v of regretVotes) {
-			const target = this.neurons.get(v.neuronId);
-			const alts = this.channelActions.get(target.channel);
-			if (!alts) continue;
-			const altNeuron = [...alts].find(n => n.id !== v.neuronId);
-			if (altNeuron) {
-				this.newPatternFuture.push({ peakNeuronId: v.fromNeuronId, inferredNeuronId: altNeuron.id, distance: v.distance });
-				count++;
-			}
-		}
-
-		if (this.debug) console.log(`Found ${count} action regret inferences`);
-		return count;
-	}
-
-	/**
-	 * Populate new_patterns from new_pattern_future. Peak can be a base neuron (for connection errors)
-	 * or pattern neuron (for pattern errors). One pattern per peak - combines contexts from all ages where
-	 * the peak was active and made bad predictions.
-	 * Returns the number of patterns to create.
-	 */
-	populateNewPatterns() {
-		// Get distinct peak neuron IDs from newPatternFuture
-		const distinctPeaks = [...new Set(this.newPatternFuture.map(f => f.peakNeuronId))];
-		this.newPatterns = distinctPeaks.map(peakNeuronId => ({ peakNeuronId, patternNeuronId: null }));
-		return this.newPatterns.length;
-	}
-
-	/**
-	 * Creates pattern neurons from this.newPatterns at peak neuron level + 1
-	 */
-	createPatternNeurons() {
-		if (this.newPatterns.length === 0) return;
-
-		for (const p of this.newPatterns) {
-			const peakNeuron = this.neurons.get(p.peakNeuronId);
-			const pattern = new PatternNeuron(peakNeuron.level + 1, peakNeuron);
-			this.neurons.set(pattern.id, pattern);
-			p.patternNeuronId = pattern.id;
-		}
-	}
-
-	/**
-	 * Populate pattern past and future for newly created patterns.
-	 * Peak is already set in PatternNeuron constructor.
-	 */
-	createNewPatterns() {
-		if (this.newPatterns.length === 0) return;
-
-		// Build map of peakNeuronId -> pattern for lookups
-		const peakToPattern = new Map();
-		for (const p of this.newPatterns)
-			peakToPattern.set(p.peakNeuronId, this.neurons.get(p.patternNeuronId));
-
-		// Get distinct (peakNeuronId, distance) pairs from newPatternFuture
-		const peakDistances = new Map();
-		for (const f of this.newPatternFuture) {
-			const key = `${f.peakNeuronId}:${f.distance}`;
-			if (!peakDistances.has(key)) peakDistances.set(key, { peakNeuronId: f.peakNeuronId, distance: f.distance });
-		}
-
-		// Populate pattern past - context neurons at appropriate ages
-		for (const { peakNeuronId, distance } of peakDistances.values()) {
-			const pattern = peakToPattern.get(peakNeuronId);
-			const peakLevel = pattern.peak.level;
-
-			// Get context neurons: same level as peak, age > distance and < distance + contextLength, not actions
-			for (const neuron of this.activeNeurons) {
-				if (neuron.level !== peakLevel) continue;
-				if (neuron.level === 0 && neuron.type === 'action') continue;
-
-				for (const age of neuron.activeAges) {
-					if (age <= distance || age >= distance + this.contextLength) continue;
-					const contextAge = age - distance;
-					pattern.addContext(neuron, contextAge);
+				if (newPattern) {
+					this.neurons.set(newPattern.id, newPattern);
+					this.activeNeurons.add(newPattern);
+					patternCount++;
 				}
 			}
 		}
 
-		// Populate pattern future from newPatternFuture
-		for (const f of this.newPatternFuture) {
-			const pattern = peakToPattern.get(f.peakNeuronId);
-			const inferredNeuron = this.neurons.get(f.inferredNeuronId);
-			pattern.getOrCreateFuture(f.distance, inferredNeuron);
-		}
-
-		if (this.debug) console.log(`Created ${this.newPatternFuture.length} pattern_future entries`);
-	}
-
-	/**
-	 * Activate newly created pattern neurons at ALL ages where the peak was active.
-	 * If peak was active at ages 1, 4, 7, the pattern is activated at ages 1, 4, and 7.
-	 * This allows the pattern to be refined in the same frame if there are multiple errors,
-	 * and ensures the "already has active pattern" check works correctly in future frames.
-	 */
-	activateNewPatterns() {
-		if (this.newPatterns.length === 0) return;
-
-		// Build map of peakNeuronId -> pattern
-		const peakToPattern = new Map();
-		for (const p of this.newPatterns)
-			peakToPattern.set(p.peakNeuronId, this.neurons.get(p.patternNeuronId));
-
-		// Collect distinct (pattern, distance) pairs
-		const patternAges = new Map();  // pattern -> Set of ages
-		for (const f of this.newPatternFuture) {
-			const pattern = peakToPattern.get(f.peakNeuronId);
-			if (!patternAges.has(pattern)) patternAges.set(pattern, new Set());
-			patternAges.get(pattern).add(f.distance);
-		}
-
-		// Activate each pattern at its ages
-		let count = 0;
-		for (const [pattern, ages] of patternAges) {
-			pattern.activeAges = ages;
-			this.activeNeurons.add(pattern);
-			count += ages.size;
-		}
-
-		if (this.debug) console.log(`Activated ${count} new pattern neuron instances`);
+		if (this.debug && patternCount > 0) console.log(`Created ${patternCount} error patterns`);
 	}
 
 	/**
@@ -1254,14 +1029,11 @@ export default class Brain {
 	 */
 	inferNeurons() {
 
-		// Collect votes from active neurons
-		this.collectVotes();
-
-		// Filter out votes from peaks that have active patterns voting
-		this.suppressOverriddenVotes();
+		// Collect votes from active neurons (suppression handled during collection)
+		const votes = this.collectVotes();
 
 		// Aggregate votes and determine winners
-		const inferences = this.determineConsensus();
+		const inferences = this.determineConsensus(votes);
 
 		// If no inferences, wait for more data
 		if (inferences.length === 0) {
@@ -1281,88 +1053,43 @@ export default class Brain {
 
 	/**
 	 * Collect votes from active neurons.
-	 * Connection votes from base neurons, pattern votes from pattern neurons.
-	 * Populates this.inferenceVotes array for use by pattern creation.
+	 * Each neuron calculates and remembers its own votes.
+	 * @returns {Array} Array of vote objects for consensus
 	 */
 	collectVotes() {
-		this.inferenceVotes = [];
-		const timeDecay = 1 / this.contextLength;
-
-		let connCount = 0, patternCount = 0;
+		const votes = [];
+		let baseCount = 0, patternCount = 0;
 
 		for (const neuron of this.activeNeurons) {
-			for (const age of neuron.activeAges) {
-				const distance = age + 1;
-				const levelWeight = 1 + neuron.level * this.levelVoteMultiplier;
-				const timeWeight = 1 - (distance - 1) * timeDecay;
-
-				// Connection votes from base neurons
-				if (neuron.level === 0) {
-					const distanceMap = neuron.connections.get(distance);
-					if (!distanceMap) continue;
-					for (const [toNeuron, conn] of distanceMap) {
-						if (conn.strength <= 0) continue;
-						this.inferenceVotes.push({
-							fromNeuronId: neuron.id,
-							neuronId: toNeuron.id,
-							strength: levelWeight * timeWeight * conn.strength,
-							reward: conn.reward,
-							distance
-						});
-						connCount++;
-					}
-				}
-				// Pattern votes from pattern neurons
-				else {
-					const distanceMap = neuron.future.get(distance);
-					if (!distanceMap) continue;
-					for (const [inferredNeuron, pred] of distanceMap) {
-						if (pred.strength <= 0) continue;
-						this.inferenceVotes.push({
-							fromNeuronId: neuron.id,
-							neuronId: inferredNeuron.id,
-							strength: levelWeight * timeWeight * pred.strength,
-							reward: pred.reward,
-							distance
-						});
-						patternCount++;
-					}
-				}
+			const neuronVotes = neuron.collectVotes(this.contextLength);
+			for (const v of neuronVotes) {
+				votes.push({
+					fromNeuronId: neuron.id,
+					neuronId: v.toNeuron.id,
+					strength: v.strength,
+					reward: v.reward,
+					distance: v.distance
+				});
+				if (neuron.isPattern) patternCount++;
+				else baseCount++;
 			}
 		}
 
-		if (this.debug) console.log(`Collected ${connCount} connection votes, ${patternCount} pattern votes`);
-	}
-
-	/**
-	 * Filter out votes from neurons that are peaks of active voting patterns.
-	 * Pattern votes override their peak's connection votes.
-	 */
-	suppressOverriddenVotes() {
-		// Find peaks of all voting patterns
-		const overriddenPeaks = new Set();
-		for (const v of this.inferenceVotes) {
-			const voter = this.neurons.get(v.fromNeuronId);
-			if (voter.level > 0) overriddenPeaks.add(voter.peak.id);
-		}
-
-		if (overriddenPeaks.size === 0) return;
-
-		const beforeCount = this.inferenceVotes.length;
-		this.inferenceVotes = this.inferenceVotes.filter(v => !overriddenPeaks.has(v.fromNeuronId));
-		if (this.debug) console.log(`Filtered ${beforeCount - this.inferenceVotes.length} overridden votes`);
+		if (this.debug) console.log(`Collected ${baseCount} base votes, ${patternCount} pattern votes`);
+		return votes;
 	}
 
 	/**
 	 * Aggregate votes and determine winners per dimension.
 	 * Events win by strength, actions win by reward.
+	 * @param {Array} votes - Array of vote objects from collectVotes
 	 * @returns {Array} Array of inference objects with isWinner flag
 	 */
-	determineConsensus() {
+	determineConsensus(votes) {
 
 		// Aggregate votes by neuron
 		const aggregated = new Map(); // neuronId -> {neuron, strength, weightedReward}
-		for (const v of this.inferenceVotes) {
+		for (const v of votes) {
 			const neuron = this.neurons.get(v.neuronId);
 			if (!aggregated.has(v.neuronId))
 				aggregated.set(v.neuronId, { neuron, strength: 0, weightedReward: 0 });
@@ -1391,10 +1118,9 @@ export default class Brain {
 		const dimBest = new Map(); // dimension -> {neuronId, score}
 		for (const c of candidates) {
 			const score = c.type === 'action' ? c.reward : c.strength;
-			for (const dim of Object.keys(c.coordinates)) {
+			for (const dim of Object.keys(c.coordinates))
 				if (!dimBest.has(dim) || score > dimBest.get(dim).score)
 					dimBest.set(dim, { neuronId: c.neuron_id, score });
-			}
 		}
 
 		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
@@ -1561,7 +1287,7 @@ export default class Brain {
 
 		// 2. Pattern forgetting
 		const patternStats = this.forgetPatterns();
-		if (this.debug) console.log(`  Patterns: past ${patternStats.pastDeleted}, future ${patternStats.futureDeleted}, peaks ${patternStats.peaksDeleted}`);
+		if (this.debug) console.log(`  Patterns: context ${patternStats.contextDeleted}, connections ${patternStats.connectionsDeleted}, peaks ${patternStats.peaksDeleted}`);
 
 		// 3. Orphan cleanup
 		const orphanCount = this.deleteOrphanedPatterns();
@@ -1600,53 +1326,50 @@ export default class Brain {
 
 	/**
 	 * Reduce pattern strengths and delete dead pattern entries.
-	 * @returns {{pastDeleted: number, futureDeleted: number, peaksDeleted: number}} Stats
+	 * @returns {{contextDeleted: number, connectionsDeleted: number, peaksDeleted: number}} Stats
 	 */
 	forgetPatterns() {
-		let pastDeleted = 0, futureDeleted = 0, peaksDeleted = 0;
+		let contextDeleted = 0, connectionsDeleted = 0, peaksDeleted = 0;
 
 		for (const neuron of this.neurons.values()) {
-			if (neuron.level === 0) continue;
-
-			// Forget pattern past
-			const pastToDelete = [];
-			for (const [contextNeuron, ageMap] of neuron.past) {
-				for (const [age, strength] of ageMap) {
-					const newStrength = Math.max(Neuron.minStrength, strength - this.patternForgetRate);
-					if (newStrength <= Neuron.minStrength)
-						pastToDelete.push({ contextNeuron, age });
-					else
-						ageMap.set(age, newStrength);
+			// Forget context entries (on peak neurons' routing tables)
+			for (const { context } of neuron.contexts) {
+				const toDelete = [];
+				for (const entry of context.entries) {
+					entry.strength = Math.max(Context.minStrength, entry.strength - this.patternForgetRate);
+					if (entry.strength <= Context.minStrength)
+						toDelete.push(entry);
+				}
+				for (const entry of toDelete) {
+					context.remove(entry.neuron, entry.distance);
+					contextDeleted++;
 				}
 			}
-			for (const { contextNeuron, age } of pastToDelete) {
-				neuron.removeContext(contextNeuron, age);
-				pastDeleted++;
-			}
 
-			// Forget pattern future
-			const futureToDelete = [];
-			for (const [distance, distanceMap] of neuron.future) {
-				for (const [inferredNeuron, pred] of distanceMap) {
-					if (pred.strength <= 0) continue;
-					pred.strength = Math.max(Neuron.minStrength, pred.strength - this.patternForgetRate);
-					if (pred.strength <= Neuron.minStrength)
-						futureToDelete.push({ distance, inferredNeuron });
+			// Forget pattern connections (only for pattern neurons)
+			if (neuron.level > 0) {
+				const toDelete = [];
+				for (const [distance, distanceMap] of neuron.connections)
+					for (const [inferredNeuron, pred] of distanceMap) {
+						if (pred.strength <= 0) continue;
+						pred.strength = Math.max(Neuron.minStrength, pred.strength - this.patternForgetRate);
+						if (pred.strength <= Neuron.minStrength)
+							toDelete.push({ distance, inferredNeuron });
+					}
+				for (const { distance, inferredNeuron } of toDelete) {
+					neuron.deleteConnection(distance, inferredNeuron);
+					connectionsDeleted++;
 				}
-			}
-			for (const { distance, inferredNeuron } of futureToDelete) {
-				neuron.deleteFuture(distance, inferredNeuron);
-				futureDeleted++;
-			}
 
-			// Forget peak strength
-			if (neuron.peakStrength > 0) {
-				neuron.peakStrength = Math.max(0, neuron.peakStrength - this.patternForgetRate);
-				if (neuron.peakStrength <= 0) peaksDeleted++;
+				// Forget peak strength
+				if (neuron.peakStrength > 0) {
+					neuron.peakStrength = Math.max(0, neuron.peakStrength - this.patternForgetRate);
+					if (neuron.peakStrength <= 0) peaksDeleted++;
+				}
 			}
 		}
 
-		return { pastDeleted, futureDeleted, peaksDeleted };
+		return { contextDeleted, connectionsDeleted, peaksDeleted };
 	}
 
 	/**
