@@ -297,49 +297,7 @@ export default class StockTrainingJob extends Job {
 
 		this.episodeResults.push(episodeMetrics);
 
-		// Print brain stats for debugging
-		this.printBrainStats();
-
 		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
-	}
-
-	/**
-	 * Print brain stats for debugging learning progress
-	 */
-	printBrainStats() {
-		const brain = this.brain;
-
-		// Count neurons by level
-		const neuronsByLevel = new Map();
-		let totalConnections = 0;
-		let totalPatternPast = 0;
-		let totalPatternFuture = 0;
-
-		for (const neuron of brain.neurons.values()) {
-			const level = neuron.level;
-			neuronsByLevel.set(level, (neuronsByLevel.get(level) || 0) + 1);
-
-			if (level === 0) {
-				// Count connections
-				for (const [, targets] of neuron.connections)
-					totalConnections += targets.size;
-			}
-			else {
-				// Count pattern past and future
-				for (const [, ageMap] of neuron.past)
-					totalPatternPast += ageMap.size;
-				for (const [, targets] of neuron.future)
-					totalPatternFuture += targets.size;
-			}
-		}
-
-		// Build level summary
-		const levelSummary = [...neuronsByLevel.entries()]
-			.sort((a, b) => a[0] - b[0])
-			.map(([level, count]) => `L${level}:${count}`)
-			.join(', ');
-
-		console.log(`   Brain: ${brain.neurons.size} neurons (${levelSummary}), ${totalConnections} connections, ${totalPatternPast} pattern_past, ${totalPatternFuture} pattern_future`);
 	}
 
 	/**
