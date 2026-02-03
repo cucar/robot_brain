@@ -6,10 +6,12 @@ import { Context } from './context.js';
  * All neurons have:
  * - connections: Map<distance, Map<toNeuron, {strength, reward}>> - predictions
  * - contexts: Array<{context: Context, pattern: Neuron}> - routing table
- * - activeAges: Map<age, patternNeuron|null> - active ages and which pattern (if any) was activated
  *
  * Level 0 (sensory) neurons additionally have: channel, type, coordinates
  * Level > 0 (pattern) neurons additionally have: peak, peakStrength
+ *
+ * Note: Active state (which neurons are active at which ages) and votes are managed
+ * by the Brain, not stored on neurons. This allows efficient age-indexed queries.
  */
 export class Neuron {
 
@@ -62,18 +64,12 @@ export class Neuron {
 		this.id = Neuron.nextId++;
 		this.level = level;
 		this.incomingCount = 0;
-		// Active ages: Map<age, patternNeuron|null> - null means no pattern activated at that age
-		this.activeAges = null;
 		// Predictions: Map<distance, Map<toNeuron, {strength, reward}>>
 		this.connections = new Map();
 		// Routing table: Array<{context: Context, pattern: Neuron}>
 		this.contexts = [];
-		// Votes made this frame: Map<distance, Array<{target, strength, reward}>>
-		this.votes = new Map();
 	}
 
-	get isActive() { return this.activeAges !== null && this.activeAges.size > 0; }
-	get isNewlyActive() { return this.activeAges?.has(0) ?? false; }
 	get isSensory() { return this.level === 0; }
 	get isPattern() { return this.level > 0; }
 
@@ -83,45 +79,10 @@ export class Neuron {
 	}
 
 	/**
-	 * Age this neuron by incrementing all active ages by 1.
-	 * @returns {Map<number, Neuron|null>} The new activeAges Map
+	 * Called when this pattern neuron is activated via match.
+	 * Increases peak strength.
 	 */
-	age() {
-		if (!this.activeAges) return null;
-		const newAges = new Map();
-		for (const [a, pattern] of this.activeAges)
-			newAges.set(a + 1, pattern);
-		this.activeAges = newAges;
-		return newAges;
-	}
-
-	/**
-	 * Remove ages that have exceeded the context window.
-	 * @param {number} contextLength - Maximum age before deactivation
-	 * @returns {number} Number of ages removed
-	 */
-	deactivateAgedOut(contextLength) {
-		if (!this.activeAges) return 0;
-		let removed = 0;
-		for (const a of this.activeAges.keys())
-			if (a >= contextLength) {
-				this.activeAges.delete(a);
-				removed++;
-			}
-		if (this.activeAges.size === 0) this.activeAges = null;
-		return removed;
-	}
-
-	/**
-	 * Activate this neuron at age 0 with optional pattern.
-	 */
-	activate() {
-
-		// activate this neuron at age 0
-		if (!this.activeAges) this.activeAges = new Map();
-		this.activeAges.set(0, null); // pattern will be activated later if there is a match
-
-		// if this is a pattern, increase its peak strength since it must have been activated via match
+	strengthenPeak() {
 		if (this.level > 0) this.peakStrength = Math.min(Neuron.maxStrength, this.peakStrength + 1);
 	}
 
@@ -151,39 +112,29 @@ export class Neuron {
 	}
 
 	/**
-	 * Collect votes from this neuron for inference.
-	 * Skips ages where a pattern was activated (pattern votes for itself).
+	 * Collect votes from this neuron at a specific age.
+	 * @param {number} age - The age at which this neuron is active
 	 * @param {number} contextLength - Context window length for time decay
 	 * @returns {Array} Array of vote objects {toNeuron, strength, reward, distance}
 	 */
-	collectVotes(contextLength) {
-		this.votes.clear();
-		if (!this.activeAges) return [];
+	collectVotesAtAge(age, contextLength) {
 
-		const result = [];
+		// use connections of distance one more than the age to get the inferences for the next frame
+		const distance = age + 1;
+
+		// level and age adjustments to the vote strength
 		const timeDecay = 1 / contextLength;
+		const levelWeight = 1 + this.level * Neuron.levelVoteMultiplier;
+		const timeWeight = 1 - (distance - 1) * timeDecay;
 
-		for (const [age, activatedPattern] of this.activeAges) {
-			// If a pattern was activated at this age, skip - the pattern votes when we iterate over it
-			if (activatedPattern !== null) continue;
+		// get connections at the distance - if there are none, no votes
+		const distanceMap = this.connections.get(distance);
+		if (!distanceMap) return [];
 
-			const distance = age + 1;
-			const levelWeight = 1 + this.level * Neuron.levelVoteMultiplier;
-			const timeWeight = 1 - (distance - 1) * timeDecay;
-
-			const distanceMap = this.connections.get(distance);
-			if (!distanceMap) continue;
-
-			for (const [toNeuron, conn] of distanceMap) {
-				if (conn.strength <= 0) continue;
-				const weightedStrength = levelWeight * timeWeight * conn.strength;
-				result.push({ toNeuron, strength: weightedStrength, reward: conn.reward, distance });
-				// Store vote for pattern learning
-				if (!this.votes.has(distance)) this.votes.set(distance, []);
-				this.votes.get(distance).push({ target: toNeuron, strength: weightedStrength, reward: conn.reward });
-			}
-		}
-
+		// create votes for all connections at the distance and return them
+		const result = [];
+		for (const [toNeuron, conn] of distanceMap)
+			result.push({ toNeuron, strength: levelWeight * timeWeight * conn.strength, reward: conn.reward, distance });
 		return result;
 	}
 
@@ -204,7 +155,7 @@ export class Neuron {
 	/**
 	 * Find the best matching pattern for this peak neuron given the observed context.
 	 * @param {Context} observed - The observed context from brain
-	 * @returns {Neuron|null} The matched pattern, or null if no match
+	 * @returns {{peak: Neuron, pattern: Neuron}|null} The matched pattern with peak reference, or null if no match
 	 */
 	matchBestPattern(observed) {
 
@@ -216,110 +167,140 @@ export class Neuron {
 		}
 		if (!best) return null; // if there are no matches, return null
 
-		// set the best matching pattern as active at age 0 - it will be aged later
-		this.activeAges.set(0, best.pattern);
-
 		// refine the context of the best matching pattern based on observed context
 		best.context.refine(best.common, best.novel, best.missing);
 
-		// return the best matched pattern
-		return best.pattern;
+		// return the matched pattern with peak reference (brain will set activated pattern)
+		return { peak: this, pattern: best.pattern };
 	}
 
 	/**
-	 * Update connections based on observations at a distance.
+	 * Update connections at a specific age based on observations.
 	 * Events: strengthen correct, weaken incorrect, add novel.
 	 * Actions: update with rewards, add alternatives for painful actions.
+	 * @param {number} age - The age at which this neuron is active
+	 * @param {Set<Neuron>} newEventNeurons - Newly active event neurons at age=0
+	 * @param {Set<Neuron>} newActionNeurons - Newly active action neurons at age=0
+	 * @param {Map<string, number>} rewards - Map of channel name to reward value
+	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
 	 */
-	updateConnections(newEventNeurons, newActionNeurons, rewards, channelActions) {
+	learnConnectionsAtAge(age, newEventNeurons, newActionNeurons, rewards, channelActions) {
 
-		// Only active neurons can update connections
-		if (!this.activeAges) throw new Error(`Neuron ${this.id} in activeNeurons has no activeAges`);
-
-		// Only event neurons (level 0) or pattern neurons can update connections
+		// Only event neurons (level 0) or pattern neurons can learn connections
 		if (this.level === 0 && this.type !== 'event') return;
 
-		// Update connections at each active age > 0
-		for (const age of this.activeAges.keys()) {
+		// get existing connections at the distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
+		const distance = age;
+		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
+		const distanceMap = this.connections.get(distance);
 
-			// if the neuron is active at age=0, nothing to learn from that - no future connections from it yet
-			// that said, if it was also active in older ages, it can update connections from those ages
-			if (age === 0) continue;
+		// refine existing event predictions and add novel event predictions
+		this.learnEvents(distanceMap, newEventNeurons, distance);
 
-			const distance = age;
-			if (!this.connections.has(distance)) this.connections.set(distance, new Map());
-			const distanceMap = this.connections.get(distance);
-			const painfulChannels = new Set();
+		// learn action inferences and add alternative actions for painful channels
+		this.learnActions(distanceMap, newActionNeurons, rewards, channelActions);
+	}
 
-			// Refine existing event predictions
-			for (const [inferredNeuron, prediction] of distanceMap) {
-				if (inferredNeuron.level !== 0 || inferredNeuron.type !== 'event') continue;
-				if (newEventNeurons.has(inferredNeuron)) {
-					prediction.strength = Math.min(Neuron.maxStrength, prediction.strength + 1);
-				}
-				else {
-					prediction.strength -= Neuron.negativeReinforcement;
-					if (prediction.strength <= Neuron.minStrength) this.deleteConnection(distance, inferredNeuron);
-				}
+	/**
+	 * Refine existing event predictions and add novel event predictions.
+	 * @param {Map<Neuron, {strength, reward}>} distanceMap - Connections at this distance
+	 * @param {Set<Neuron>} newEventNeurons - Newly active event neurons at age=0
+	 * @param {number} distance - Temporal distance for these connections
+	 */
+	learnEvents(distanceMap, newEventNeurons, distance) {
+
+		// refine existing event predictions (collect deletions to avoid modifying map while iterating)
+		const toDelete = [];
+		for (const [inferredNeuron, prediction] of distanceMap) {
+
+			// refining event predictions
+			if (inferredNeuron.level !== 0 || inferredNeuron.type !== 'event') continue;
+
+			// if the predicted neuron did not come true, weaken the connection, and delete if it falls below min strength
+			if (!newEventNeurons.has(inferredNeuron)) {
+				prediction.strength -= Neuron.negativeReinforcement;
+				if (prediction.strength <= Neuron.minStrength) toDelete.push(inferredNeuron);
+				continue;
 			}
 
-			// Add novel event predictions
-			for (const eventNeuron of newEventNeurons)
-				if (!distanceMap.has(eventNeuron)) {
-					distanceMap.set(eventNeuron, { strength: 1, reward: 0 });
-					eventNeuron.incomingCount++;
-				}
+			// if the predicted neuron is active at age=0, strengthen the connection
+			prediction.strength = Math.min(Neuron.maxStrength, prediction.strength + 1);
+		}
+		for (const inferredNeuron of toDelete) this.deleteConnection(distance, inferredNeuron);
 
-			// Reward/learn action predictions
-			for (const actionNeuron of newActionNeurons) {
-				const reward = rewards.get(actionNeuron.channel);
-				if (reward === undefined) continue;
+		// Add novel event predictions
+		for (const eventNeuron of newEventNeurons)
+			if (!distanceMap.has(eventNeuron)) {
+				distanceMap.set(eventNeuron, { strength: 1, reward: 0 });
+				eventNeuron.incomingCount++;
+			}
+	}
 
-				if (distanceMap.has(actionNeuron)) {
-					const prediction = distanceMap.get(actionNeuron);
-					prediction.strength = Math.min(Neuron.maxStrength, prediction.strength + 1);
-					prediction.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * prediction.reward;
-					if (prediction.reward < Neuron.actionRegretMinPain) painfulChannels.add(actionNeuron.channel);
-				}
-				else if (reward !== 0) {
-					distanceMap.set(actionNeuron, { strength: 1, reward });
-					actionNeuron.incomingCount++;
-					if (reward < Neuron.actionRegretMinPain) painfulChannels.add(actionNeuron.channel);
-				}
+	/**
+	 * Learn action inferences and add alternative actions for painful channels.
+	 * @param {Map<Neuron, {strength, reward}>} distanceMap - Connections at this distance
+	 * @param {Set<Neuron>} newActionNeurons - Newly active action neurons at age=0
+	 * @param {Map<string, number>} rewards - Map of channel name to reward value
+	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
+	 */
+	learnActions(distanceMap, newActionNeurons, rewards, channelActions) {
+
+		// learn action inferences
+		for (const actionNeuron of newActionNeurons) {
+
+			// get the current rewards for the action - if there are no rewards for it, it's not worth learning
+			const reward = rewards.get(actionNeuron.channel);
+			if (reward === undefined) continue;
+
+			// if the action was already known, strengthen the connection and update the reward
+			if (distanceMap.has(actionNeuron)) {
+				const prediction = distanceMap.get(actionNeuron);
+				prediction.strength = Math.min(Neuron.maxStrength, prediction.strength + 1);
+				prediction.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * prediction.reward;
+				continue;
 			}
 
-			// Add alternative actions for painful channels
-			for (const channel of painfulChannels) {
-				const allActions = channelActions.get(channel);
-				if (!allActions) continue;
-				for (const altNeuron of allActions)
-					if (!distanceMap.has(altNeuron)) {
-						distanceMap.set(altNeuron, { strength: 1, reward: 0 });
-						altNeuron.incomingCount++;
-						break;
-					}
-			}
+			// if the action was not known, add it to the connections with the current reward (learning from observation)
+			distanceMap.set(actionNeuron, { strength: 1, reward });
+			actionNeuron.incomingCount++;
+		}
+
+		// get painful channels
+		const painfulChannels = new Set();
+		for (const actionNeuron of newActionNeurons) {
+			const reward = rewards.get(actionNeuron.channel);
+			if (reward !== undefined && reward < Neuron.actionRegretMinPain) painfulChannels.add(actionNeuron.channel);
+		}
+
+		// Add alternative actions for painful channels
+		for (const channel of painfulChannels) {
+
+			// get all possible actions for the channel
+			const allActions = channelActions.get(channel);
+			if (!allActions) continue;
+
+			// add the first unknown action to try next time with reward 0
+			for (const altNeuron of allActions)
+				if (!distanceMap.has(altNeuron)) {
+					distanceMap.set(altNeuron, { strength: 1, reward: 0 });
+					altNeuron.incomingCount++;
+					break;
+				}
 		}
 	}
 
 	/**
 	 * Learn new pattern from prediction errors and action regret at a specific age.
-	 * Only called for ages where no pattern was activated (activeAges.get(age) === null).
+	 * Only called for ages where no pattern was activated.
 	 * @param {number} age - The age at which this neuron made a bad inference
+	 * @param {Array<{toNeuron, strength, reward}>} votes - Votes made by this neuron at this age
 	 * @param {Set<Neuron>} newlyActiveNeurons - Currently active neurons at age=0
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
 	 * @param {Array<{neuron: Neuron, distance: number}>} context - Active context neurons with distances
 	 * @returns {Neuron|null} Newly created pattern, or null if no pattern needed
 	 */
-	learnNewPattern(age, newlyActiveNeurons, rewards, channelActions, context) {
-
-		// Only event neurons (level 0) or pattern neurons can create patterns
-		if (this.level === 0 && this.type !== 'event') return null;
-
-		// Get votes at this age (distance = age)
-		const votes = this.votes.get(age);
-		if (!votes || votes.length === 0) return null;
+	learnNewPattern(age, votes, newlyActiveNeurons, rewards, channelActions, context) {
 
 		// Get active event neurons at age=0 (what actually happened)
 		const activeEventNeurons = new Set();
@@ -339,58 +320,48 @@ export class Neuron {
 			if (neuron.level === 0 && neuron.type === 'action')
 				winnerActions.add(neuron);
 
-		// Collect errors at this distance
-		const patternConnections = []; // Array of {inferredNeuron}
-		let hasError = false;
-
+		// Collect errors at this distance (use Set to avoid duplicates)
+		const patternConnections = new Set();
 		for (const vote of votes) {
-			const target = vote.target;
-			if (target.level !== 0) continue;
 
-			// Event error: predicted event didn't happen
-			if (target.type === 'event' && vote.strength >= Neuron.eventErrorMinStrength)
-				if (!target.activeAges?.has(0)) {
-					for (const actualNeuron of activeEventNeurons)
-						patternConnections.push({ inferredNeuron: actualNeuron });
-					hasError = true;
+			// Event error: predicted event didn't happen (target not in newlyActiveNeurons)
+			// Find actual events with exactly the same dimensions as the failed prediction
+			if (vote.toNeuron.type === 'event' && vote.strength >= Neuron.eventErrorMinStrength && !newlyActiveNeurons.has(vote.toNeuron)) {
+				const failedDims = Object.keys(vote.toNeuron.coordinates).sort().join(',');
+				for (const actualNeuron of activeEventNeurons) {
+					const actualDims = Object.keys(actualNeuron.coordinates).sort().join(',');
+					if (failedDims === actualDims) patternConnections.add(actualNeuron);
 				}
+			}
 
 			// Action regret: predicted action was executed and was painful
-			if (target.type === 'action' && vote.strength >= Neuron.actionRegretMinStrength)
-				if (winnerActions.has(target) && painfulChannels.has(target.channel)) {
-					const alts = channelActions.get(target.channel);
+			if (vote.toNeuron.type === 'action' && vote.strength >= Neuron.actionRegretMinStrength)
+				if (winnerActions.has(vote.toNeuron) && painfulChannels.has(vote.toNeuron.channel)) {
+					const alts = channelActions.get(vote.toNeuron.channel);
 					if (alts) {
-						const altNeuron = [...alts].find(n => n !== target);
-						if (altNeuron) {
-							patternConnections.push({ inferredNeuron: altNeuron });
-							hasError = true;
-						}
+						const altNeuron = [...alts].find(n => n !== vote.toNeuron);
+						if (altNeuron) patternConnections.add(altNeuron);
 					}
 				}
 		}
 
-		if (!hasError) return null;
+		if (patternConnections.size === 0) return null;
 
-		// Create pattern
-		const pattern = Neuron.createPattern(this.level + 1, this);
-
-		// Add context to peak's routing table
-		const patternContext = this.getOrCreateContext(pattern);
+		// Add context to peak's routing table - only include context neurons at same level
+		const patternContext = new Context();
 		for (const { neuron, distance } of context) {
-			// Only include context neurons at same level, not actions
 			if (neuron.level !== this.level) continue;
-			if (neuron.level === 0 && neuron.type === 'action') continue;
 			patternContext.add(neuron, distance, 1);
 		}
 
-		// Add connections to pattern (at distance = age)
-		for (const { inferredNeuron } of patternConnections)
-			pattern.getOrCreateConnection(age, inferredNeuron);
+		// Create pattern - add connections to pattern (at distance = age)
+		const pattern = Neuron.createPattern(this.level + 1, this);
+		for (const inferredNeuron of patternConnections) pattern.getOrCreateConnection(age, inferredNeuron);
 
-		// Activate pattern at current age
-		this.activeAges.set(age, pattern);
-		pattern.activate(null);
+		// add the context to the peak's routing table for the pattern
+		this.contexts.push({ context: patternContext, pattern });
 
+		// Return pattern - brain will handle activation
 		return pattern;
 	}
 
@@ -401,7 +372,7 @@ export class Neuron {
 		if (this.isSensory) return false;
 		return this.incomingCount === 0 &&
 			this.connections.size === 0 &&
-			!brain.activeNeurons.has(this);
+			!brain.isNeuronActive(this);
 	}
 
 	/**

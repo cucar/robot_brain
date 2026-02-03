@@ -18,8 +18,9 @@ export class Context {
 
 	/**
 	 * Add or update an entry.
+	 * @param {boolean} trackReference - If true, increments neuron.incomingCount (default: true for stored contexts, false for temporary)
 	 */
-	add(neuron, distance, strength = 1) {
+	add(neuron, distance, strength = 1, trackReference = true) {
 		const existing = this.find(neuron, distance);
 		if (existing) {
 			existing.strength = Math.min(Context.maxStrength, existing.strength + strength);
@@ -27,7 +28,7 @@ export class Context {
 		}
 		const entry = { neuron, distance, strength };
 		this.entries.push(entry);
-		neuron.incomingCount++;
+		if (trackReference) neuron.incomingCount++;
 		return entry;
 	}
 
