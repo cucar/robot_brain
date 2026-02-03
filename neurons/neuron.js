@@ -367,12 +367,13 @@ export class Neuron {
 
 	/**
 	 * Check if neuron can be deleted
+	 * @param {boolean} isActive - Whether the neuron is currently active in memory
 	 */
-	canDelete(brain) {
+	canDelete(isActive) {
 		if (this.isSensory) return false;
 		return this.incomingCount === 0 &&
 			this.connections.size === 0 &&
-			!brain.isNeuronActive(this);
+			!isActive;
 	}
 
 	/**
