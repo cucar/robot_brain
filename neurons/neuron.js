@@ -27,6 +27,9 @@ export class Neuron {
 	static actionRegretMinStrength = 2;
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 3;
+	static connectionForgetRate = 1;
+	static contextForgetRate = 1;
+	static patternForgetRate = 1;
 
 	/**
 	 * Create a sensory neuron (level 0)
@@ -366,14 +369,60 @@ export class Neuron {
 	}
 
 	/**
-	 * Check if neuron can be deleted
-	 * @param {boolean} isActive - Whether the neuron is currently active in memory
+	 * Run forget cycle for this neuron - decay strengths and delete dead entries.
+	 * @returns {{connectionsUpdated: number, connectionsDeleted: number, contextDeleted: number, peakDeleted: boolean}}
 	 */
-	canDelete(isActive) {
+	forget() {
+		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0, peakDeleted = false;
+
+		// Forget context entries (on peak neurons' routing tables) - uses contextForgetRate
+		for (const { context } of this.contexts) {
+			const toDelete = [];
+			for (const entry of context.entries) {
+				entry.strength = Math.max(Context.minStrength, entry.strength - Neuron.contextForgetRate);
+				if (entry.strength <= Context.minStrength)
+					toDelete.push(entry);
+			}
+			for (const entry of toDelete) {
+				context.remove(entry.neuron, entry.distance);
+				contextDeleted++;
+			}
+		}
+
+		// Forget connections - uses connectionForgetRate for all levels
+		for (const [distance, distanceMap] of this.connections) {
+			const toDelete = [];
+			for (const [toNeuron, conn] of distanceMap) {
+				if (conn.strength <= Neuron.minStrength) {
+					toDelete.push(toNeuron);
+					continue;
+				}
+				conn.strength = Math.max(Neuron.minStrength, conn.strength - Neuron.connectionForgetRate);
+				connectionsUpdated++;
+				if (conn.strength <= Neuron.minStrength)
+					toDelete.push(toNeuron);
+			}
+			for (const toNeuron of toDelete) {
+				this.deleteConnection(distance, toNeuron);
+				connectionsDeleted++;
+			}
+		}
+
+		// Forget peak strength (pattern neurons only)
+		if (this.level > 0 && this.peakStrength > 0) {
+			this.peakStrength = Math.max(0, this.peakStrength - Neuron.patternForgetRate);
+			if (this.peakStrength <= 0) peakDeleted = true;
+		}
+
+		return { connectionsUpdated, connectionsDeleted, contextDeleted, peakDeleted };
+	}
+
+	/**
+	 * Check if neuron can be deleted
+	 */
+	canDelete() {
 		if (this.isSensory) return false;
-		return this.incomingCount === 0 &&
-			this.connections.size === 0 &&
-			!isActive;
+		return this.incomingCount === 0 && this.connections.size === 0;
 	}
 
 	/**

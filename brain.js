@@ -24,8 +24,6 @@ export default class Brain {
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
-		this.connectionForgetRate = 1; // how much connection strengths decay per forget cycle (reduced to preserve learned connections)
-		this.patternForgetRate = 1; // how much pattern strengths decay per forget cycle
 
 		//************************************************************
 		// persistent data structures (loaded from MySQL, saved on backup)
@@ -1241,101 +1239,23 @@ export default class Brain {
 		const cycleStart = Date.now();
 		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
 
-		// 1. Connection forgetting
-		const connStats = this.forgetConnections();
-		if (this.debug) console.log(`  Connections: ${connStats.updated} weakened, ${connStats.deleted} deleted`);
+		// 1. Single parallelizable loop - each neuron handles its own forgetting
+		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0, peaksDeleted = 0;
+		for (const neuron of this.neurons.values()) {
+			const stats = neuron.forget();
+			connectionsUpdated += stats.connectionsUpdated;
+			connectionsDeleted += stats.connectionsDeleted;
+			contextDeleted += stats.contextDeleted;
+			if (stats.peakDeleted) peaksDeleted++;
+		}
+		if (this.debug) console.log(`  Connections: ${connectionsUpdated} weakened, ${connectionsDeleted} deleted`);
+		if (this.debug) console.log(`  Patterns: context ${contextDeleted}, peaks ${peaksDeleted}`);
 
-		// 2. Pattern forgetting
-		const patternStats = this.forgetPatterns();
-		if (this.debug) console.log(`  Patterns: context ${patternStats.contextDeleted}, connections ${patternStats.connectionsDeleted}, peaks ${patternStats.peaksDeleted}`);
-
-		// 3. Orphan cleanup
+		// 2. Orphan cleanup (must be done after all neurons finish forgetting)
 		const orphanCount = this.deleteOrphanedPatterns();
 		if (this.debug) console.log(`  Orphaned patterns deleted: ${orphanCount}`);
 
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
-	}
-
-	/**
-	 * Reduce connection strengths and delete dead connections.
-	 * @returns {{updated: number, deleted: number}} Stats
-	 */
-	forgetConnections() {
-		let updated = 0, deleted = 0;
-
-		for (const neuron of this.neurons.values()) {
-			if (neuron.level !== 0) continue;
-
-			for (const [distance, distanceMap] of neuron.connections) {
-				const toDelete = [];
-				for (const [toNeuron, conn] of distanceMap) {
-					if (conn.strength <= Neuron.minStrength) {
-						toDelete.push(toNeuron);
-						continue;
-					}
-					conn.strength = Math.max(Neuron.minStrength, conn.strength - this.connectionForgetRate);
-					updated++;
-					if (conn.strength <= Neuron.minStrength) toDelete.push(toNeuron);
-				}
-				for (const toNeuron of toDelete) {
-					neuron.deleteConnection(distance, toNeuron);
-					deleted++;
-				}
-			}
-		}
-
-		return { updated, deleted };
-	}
-
-	/**
-	 * Reduce pattern strengths and delete dead pattern entries.
-	 * @returns {{contextDeleted: number, connectionsDeleted: number, peaksDeleted: number}} Stats
-	 */
-	forgetPatterns() {
-		let contextDeleted = 0, connectionsDeleted = 0, peaksDeleted = 0;
-
-		for (const neuron of this.neurons.values()) {
-			// Forget context entries (on peak neurons' routing tables)
-			for (const { context } of neuron.contexts) {
-				const toDelete = [];
-				for (const entry of context.entries) {
-					entry.strength = Math.max(Context.minStrength, entry.strength - this.patternForgetRate);
-					if (entry.strength <= Context.minStrength)
-						toDelete.push(entry);
-				}
-				for (const entry of toDelete) {
-					context.remove(entry.neuron, entry.distance);
-					contextDeleted++;
-				}
-			}
-
-			// Forget pattern connections (only for pattern neurons)
-			if (neuron.level > 0) {
-				const toDelete = [];
-				for (const [distance, distanceMap] of neuron.connections)
-					for (const [inferredNeuron, pred] of distanceMap) {
-						if (pred.strength <= Neuron.minStrength) {
-							toDelete.push({ distance, inferredNeuron });
-							continue;
-						}
-						pred.strength = Math.max(Neuron.minStrength, pred.strength - this.patternForgetRate);
-						if (pred.strength <= Neuron.minStrength)
-							toDelete.push({ distance, inferredNeuron });
-					}
-				for (const { distance, inferredNeuron } of toDelete) {
-					neuron.deleteConnection(distance, inferredNeuron);
-					connectionsDeleted++;
-				}
-
-				// Forget peak strength
-				if (neuron.peakStrength > 0) {
-					neuron.peakStrength = Math.max(0, neuron.peakStrength - this.patternForgetRate);
-					if (neuron.peakStrength <= 0) peaksDeleted++;
-				}
-			}
-		}
-
-		return { contextDeleted, connectionsDeleted, peaksDeleted };
 	}
 
 	/**
@@ -1347,7 +1267,7 @@ export default class Brain {
 
 		for (const neuron of this.neurons.values()) {
 			if (neuron.level === 0) continue;
-			if (neuron.canDelete(this.memory.isNeuronActive(neuron))) toDelete.push(neuron);
+			if (!this.memory.isNeuronActive(neuron) && neuron.canDelete()) toDelete.push(neuron);
 		}
 
 		for (const neuron of toDelete) {
