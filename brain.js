@@ -1,9 +1,9 @@
 import { createInterface } from 'node:readline';
 import { stdin, stdout } from 'node:process';
-import getMySQLConnection from './db/db.js';
 import { Neuron } from './neurons/neuron.js';
 import { Context } from './neurons/context.js';
 import { Memory } from './memory.js';
+import { BrainDB } from './brain-db.js';
 
 /**
  * Brain Class
@@ -76,6 +76,9 @@ export default class Brain {
 		// Create readline interface for pausing between frames - used when debugging
 		this.waitForUserInput = false;
 		this.rl = createInterface({ input: stdin, output: stdout });
+
+		// Database operations handler
+		this.db = new BrainDB();
 	}
 
 	/**
@@ -99,7 +102,7 @@ export default class Brain {
 	 * initializes the database connection and loads dimensions
 	 */
 	async initDB() {
-		if (!this.noDatabase) this.conn = await getMySQLConnection();
+		if (!this.noDatabase) await this.db.initDB();
 	}
 
 	/**
@@ -129,7 +132,7 @@ export default class Brain {
 		Neuron.nextId = 1;
 
 		// Clear MySQL tables if using a database
-		if (!this.noDatabase) await this.truncateTables([
+		if (!this.noDatabase) await this.db.truncateTables([
 			'channels',
 			'dimensions',
 			'neurons',
@@ -151,254 +154,12 @@ export default class Brain {
 	}
 
 	/**
-	 * Load neurons from MySQL into in-memory Neuron objects.
-	 * Called during initialization to load previously learned data.
-	 */
-	async loadNeurons() {
-		if (this.noDatabase) return;
-		console.log('Loading neurons from MySQL...');
-
-		// Clear all in-memory structures
-		this.neurons.clear();
-		this.neuronsByValue.clear();
-		Neuron.nextId = 1;
-
-		// Track max ID to set Neuron.nextId after restore
-		let maxId = 0;
-
-		// 1. Load base neurons (SensoryNeurons) with their coordinates
-		const [baseRows] = await this.conn.query(`
-			SELECT b.neuron_id, b.channel_id, b.type, c.name as channel_name
-			FROM base_neurons b
-			JOIN channels c ON c.id = b.channel_id
-		`);
-		const [valueRows] = await this.conn.query('SELECT neuron_id, dimension_id, val FROM coordinates');
-
-		// Group coordinates by neuron_id
-		const coordsByNeuron = new Map();
-		for (const row of valueRows) {
-			if (!coordsByNeuron.has(row.neuron_id))
-				coordsByNeuron.set(row.neuron_id, {});
-			// Convert dimension_id to dimension name for SensoryNeuron
-			const dimName = this.dimensionIdToName[row.dimension_id];
-			if (dimName) coordsByNeuron.get(row.neuron_id)[dimName] = row.val;
-		}
-
-		// Create sensory neuron objects
-		for (const row of baseRows) {
-			const coords = coordsByNeuron.get(row.neuron_id) || {};
-			const neuron = Neuron.createSensory(row.channel_name, row.type, coords);
-			this.neurons.set(row.neuron_id, neuron);
-			this.neuronsByValue.set(neuron.valueKey, neuron);
-			if (row.neuron_id > maxId) maxId = row.neuron_id;
-		}
-		console.log(`  Loaded ${baseRows.length} sensory neurons`);
-
-		// 2. Load pattern neurons with their peaks
-		// ORDER BY level ASC ensures lower-level patterns are created before higher-level ones
-		// This matters because a pattern's peak can be another pattern (e.g., level 2 pattern peak is level 1)
-		// so the peak must exist in this.neurons before we can reference it
-		const [patternRows] = await this.conn.query(`
-            SELECT n.id, n.level, pp.peak_neuron_id, pp.strength
-            FROM neurons n
-            JOIN pattern_peaks pp ON pp.pattern_neuron_id = n.id
-            WHERE n.level > 0
-            ORDER BY n.level
-		`);
-
-		// Create PatternNeuron objects
-		for (const row of patternRows) {
-			const peak = this.neurons.get(row.peak_neuron_id);
-			if (!peak) {
-				console.warn(`  Warning: Pattern ${row.id} references missing peak ${row.peak_neuron_id}`);
-				continue;
-			}
-			const pattern = Neuron.createPattern(row.level, peak);
-			pattern.peakStrength = row.strength;
-			this.neurons.set(row.id, pattern);
-			if (row.id > maxId) maxId = row.id;
-		}
-		console.log(`  Loaded ${patternRows.length} pattern neurons`);
-
-		// 3. Load connections into sensory neuron connections
-		const [connRows] = await this.conn.query('SELECT from_neuron_id, to_neuron_id, distance, strength, reward FROM connections');
-		let connCount = 0;
-		for (const row of connRows) {
-			const fromNeuron = this.neurons.get(row.from_neuron_id);
-			const toNeuron = this.neurons.get(row.to_neuron_id);
-			if (!fromNeuron || !toNeuron) continue;
-			if (fromNeuron.level !== 0) continue;
-
-			if (!fromNeuron.connections.has(row.distance))
-				fromNeuron.connections.set(row.distance, new Map());
-			fromNeuron.connections.get(row.distance).set(toNeuron, {
-				strength: row.strength,
-				reward: row.reward
-			});
-			toNeuron.incomingCount++;
-			connCount++;
-		}
-		console.log(`  Loaded ${connCount} connections`);
-
-		// 4. Load pattern_past into peak's contexts routing table
-		const [pastRows] = await this.conn.query('SELECT pattern_neuron_id, context_neuron_id, context_age, strength FROM pattern_past');
-		let pastCount = 0;
-		for (const row of pastRows) {
-			const pattern = this.neurons.get(row.pattern_neuron_id);
-			const contextNeuron = this.neurons.get(row.context_neuron_id);
-			if (!pattern || !contextNeuron) continue;
-			if (pattern.level === 0) continue;
-
-			// Context is stored on the peak's routing table, not on the pattern
-			const peak = pattern.peak;
-			if (!peak) continue;
-			const context = peak.getOrCreateContext(pattern);
-			context.add(contextNeuron, row.context_age, row.strength);
-			pastCount++;
-		}
-		console.log(`  Loaded ${pastCount} pattern context entries (from pattern_past)`);
-
-		// 5. Load pattern_future into pattern.connections (future is now merged into connections)
-		const [futureRows] = await this.conn.query('SELECT pattern_neuron_id, inferred_neuron_id, distance, strength, reward FROM pattern_future');
-		let futureCount = 0;
-		for (const row of futureRows) {
-			const pattern = this.neurons.get(row.pattern_neuron_id);
-			const inferredNeuron = this.neurons.get(row.inferred_neuron_id);
-			if (!pattern || !inferredNeuron) continue;
-			if (pattern.level === 0) continue;
-
-			if (!pattern.connections.has(row.distance))
-				pattern.connections.set(row.distance, new Map());
-			pattern.connections.get(row.distance).set(inferredNeuron, {
-				strength: row.strength,
-				reward: row.reward
-			});
-			inferredNeuron.incomingCount++;
-			futureCount++;
-		}
-		console.log(`  Loaded ${futureCount} pattern connections (from pattern_future)`);
-
-		// Set next ID for new neuron creation
-		Neuron.nextId = maxId + 1;
-
-		console.log(`Neurons loaded: ${this.neurons.size} total, next ID: ${Neuron.nextId}`);
-	}
-
-	/**
 	 * Backup brain state from in-memory Neuron objects to MySQL.
 	 * Called on shutdown or when job is interrupted.
 	 */
 	async backupBrain() {
-		console.log('Backing up brain to MySQL...');
-
-		// Build neuron -> ID reverse mapping for connections/patterns
-		const neuronToId = new Map();
-		for (const [id, neuron] of this.neurons)
-			neuronToId.set(neuron, id);
-
-		// 1. Backup neurons table
-		await this.conn.query('TRUNCATE neurons');
-		if (this.neurons.size > 0) {
-			const rows = [];
-			for (const [id, neuron] of this.neurons)
-				rows.push([id, neuron.level]);
-			await this.conn.query('INSERT INTO neurons (id, level) VALUES ?', [rows]);
-		}
-		console.log(`  Saved ${this.neurons.size} neurons`);
-
-		// 2. Backup base_neurons and coordinates
-		await this.conn.query('TRUNCATE base_neurons');
-		await this.conn.query('TRUNCATE coordinates');
-		const baseRows = [];
-		const valueRows = [];
-		for (const [id, neuron] of this.neurons) {
-			if (neuron.level !== 0) continue;
-			const channelId = this.channelNameToId[neuron.channel];
-			baseRows.push([id, channelId, neuron.type]);
-			for (const [dimName, val] of Object.entries(neuron.coordinates)) {
-				const dimId = this.dimensionNameToId[dimName];
-				if (dimId !== undefined)
-					valueRows.push([id, dimId, val]);
-			}
-		}
-		if (baseRows.length > 0)
-			await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [baseRows]);
-		if (valueRows.length > 0)
-			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [valueRows]);
-		console.log(`  Saved ${baseRows.length} base neurons, ${valueRows.length} coordinates`);
-
-		// 3. Backup connections
-		await this.conn.query('TRUNCATE connections');
-		const connRows = [];
-		for (const [fromId, neuron] of this.neurons) {
-			if (neuron.level !== 0) continue;
-			for (const [distance, targets] of neuron.connections)
-				for (const [toNeuron, conn] of targets) {
-					const toId = neuronToId.get(toNeuron);
-					if (toId)
-						connRows.push([fromId, toId, distance, conn.strength, conn.reward]);
-				}
-		}
-		if (connRows.length > 0)
-			await this.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward) VALUES ?', [connRows]);
-		console.log(`  Saved ${connRows.length} connections`);
-
-		// 4. Backup pattern_peaks
-		await this.conn.query('TRUNCATE pattern_peaks');
-		const peakRows = [];
-		for (const [patternId, neuron] of this.neurons) {
-			if (neuron.level === 0) continue;
-			const peakId = neuronToId.get(neuron.peak);
-			if (peakId)
-				peakRows.push([patternId, peakId, neuron.peakStrength]);
-		}
-		if (peakRows.length > 0)
-			await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id, strength) VALUES ?', [peakRows]);
-		console.log(`  Saved ${peakRows.length} pattern peaks`);
-
-		// 5. Backup pattern context (from peak's routing table to pattern_past)
-		await this.conn.query('TRUNCATE pattern_past');
-		const pastRows = [];
-		for (const [_, neuron] of this.neurons)
-			for (const { context, pattern } of neuron.contexts) {
-				const patternId = neuronToId.get(pattern);
-				if (!patternId) continue;
-				for (const { neuron: ctxNeuron, distance, strength } of context.entries) {
-					const contextId = neuronToId.get(ctxNeuron);
-					if (contextId)
-						pastRows.push([patternId, contextId, distance, strength]);
-				}
-			}
-		if (pastRows.length > 0)
-			await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
-		console.log(`  Saved ${pastRows.length} pattern context entries (to pattern_past)`);
-
-		// 6. Backup pattern connections (to pattern_future table for compatibility)
-		await this.conn.query('TRUNCATE pattern_future');
-		const futureRows = [];
-		for (const [patternId, neuron] of this.neurons) {
-			if (neuron.level === 0) continue;
-			for (const [distance, targets] of neuron.connections)
-				for (const [inferredNeuron, pred] of targets) {
-					const inferredId = neuronToId.get(inferredNeuron);
-					if (inferredId)
-						futureRows.push([patternId, inferredId, distance, pred.strength, pred.reward]);
-				}
-		}
-		if (futureRows.length > 0)
-			await this.conn.query('INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward) VALUES ?', [futureRows]);
-		console.log(`  Saved ${futureRows.length} pattern connections (to pattern_future)`);
-
-		console.log('Brain backed up to MySQL.');
-	}
-
-	/**
-	 * truncates given tables for database reset
-	 */
-	async truncateTables(tables) {
-		await this.conn.query('SET FOREIGN_KEY_CHECKS = 0');
-		await Promise.all(tables.map(table => this.conn.query(`TRUNCATE ${table}`)));
-		await this.conn.query('SET FOREIGN_KEY_CHECKS = 1');
+		if (!this.noDatabase)
+			await this.db.backupBrain(this.neurons, this.channelNameToId, this.dimensionNameToId);
 	}
 
 	/**
@@ -417,7 +178,20 @@ export default class Brain {
 		await this.loadDimensions();
 
 		// load learned data from MySQL into in-memory structures (skip if noDatabase flag set)
-		await this.loadNeurons();
+		if (!this.noDatabase) {
+			this.neurons.clear();
+			this.neuronsByValue.clear();
+			Neuron.nextId = 1;
+
+			const { neurons, maxId } = await this.db.loadNeurons(this.dimensionIdToName);
+
+			this.neurons = neurons;
+			for (const neuron of neurons.values())
+				if (neuron.level === 0)
+					this.neuronsByValue.set(neuron.valueKey, neuron);
+
+			Neuron.nextId = maxId + 1;
+		}
 
 		// pre-create action neurons for all channels
 		await this.initializeActionNeurons();
@@ -465,9 +239,10 @@ export default class Brain {
 		this.channelIdToName = {};
 
 		// Insert channels into DB with explicit IDs from Channel objects
+		if (!this.noDatabase)
+			await this.db.initializeChannels(this.channels);
+
 		for (const [channelName, channel] of this.channels) {
-			if (!this.noDatabase)
-				await this.conn.query('INSERT IGNORE INTO channels (id, name) VALUES (?, ?)', [channel.id, channelName]);
 			this.channelNameToId[channelName] = channel.id;
 			this.channelIdToName[channel.id] = channelName;
 		}
@@ -479,14 +254,8 @@ export default class Brain {
 	 * IDs come from static Dimension.nextId counter (not auto-increment)
 	 */
 	async initializeDimensions() {
-		if (this.noDatabase) return;
-		if (this.debug) console.log('Initializing dimensions for registered channels...');
-		for (const [, channel] of this.channels) {
-			for (const dim of channel.getEventDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
-			for (const dim of channel.getOutputDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
-		}
+		if (!this.noDatabase)
+			await this.db.initializeDimensions(this.channels);
 	}
 
 	/**
@@ -553,8 +322,22 @@ export default class Brain {
 	async processFrame() {
 		const frameStart = performance.now();
 
-		// Handle all frame I/O: get frame, execute actions, get rewards, display header
-		if (!await this.processFrameIO()) return false;
+		// ---------------------------- FRAME I/O ----------------------------------
+
+		// get the current frame from all channels - includes events and previously inferred actions
+		await this.getFrame();
+		if (!this.frame || this.frame.length === 0) return false;
+
+		// execute the previously inferred actions in all channels
+		await this.executeActions();
+
+		// get rewards from all channels based on executed actions
+		await this.getRewards();
+
+		// display diagnostic frame header if enabled
+		this.displayFrameHeader();
+
+		// ---------------------------- FIRST LOOP ----------------------------------
 
 		// age the active neurons in memory context - sliding the temporal window
 		// deletion of aged-out neurons is deferred to after pattern learning
@@ -562,6 +345,8 @@ export default class Brain {
 
 		// activate sensory neurons in age=0, level=0 - inputs from the world
 		this.activateSensors();
+
+		// ---------------------------- SECOND LOOP ----------------------------------
 
 		// discover and activate patterns using connections - start recursion from base level
 		this.recognizePatterns();
@@ -582,6 +367,9 @@ export default class Brain {
 		// used to avoid curse of dimensionality and delete dead connections/neurons
 		this.runForgetCycle();
 
+		// orphan cleanup (must be done after all neurons finish forgetting)
+		this.deleteOrphanedPatterns();
+
 		// show frame processing summary
 		this.printFrameSummary(performance.now() - frameStart);
 
@@ -589,28 +377,6 @@ export default class Brain {
 		await this.waitForUser('Press Enter to continue to next frame');
 
 		// return true to indicate that we have processed the frame successfully
-		return true;
-	}
-
-	/**
-	 * Handles all frame I/O: get frame, execute actions, get rewards, display header
-	 * @returns Promise<boolean> - true if frame data available, false if no more data
-	 */
-	async processFrameIO() {
-
-		// get the current frame from all channels - includes events and previously inferred actions
-		await this.getFrame();
-		if (!this.frame || this.frame.length === 0) return false;
-
-		// execute the previously inferred actions in all channels
-		await this.executeActions();
-
-		// get rewards from all channels based on executed actions
-		await this.getRewards();
-
-		// display diagnostic frame header if enabled
-		this.displayFrameHeader();
-
 		return true;
 	}
 
@@ -1166,7 +932,7 @@ export default class Brain {
 		const cycleStart = Date.now();
 		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
 
-		// 1. Single parallelizable loop - each neuron handles its own forgetting
+		// Single parallelizable loop - each neuron handles its own forgetting
 		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0, peaksDeleted = 0;
 		for (const neuron of this.neurons.values()) {
 			const stats = neuron.forget();
@@ -1177,11 +943,6 @@ export default class Brain {
 		}
 		if (this.debug) console.log(`  Connections: ${connectionsUpdated} weakened, ${connectionsDeleted} deleted`);
 		if (this.debug) console.log(`  Patterns: context ${contextDeleted}, peaks ${peaksDeleted}`);
-
-		// 2. Orphan cleanup (must be done after all neurons finish forgetting)
-		const orphanCount = this.deleteOrphanedPatterns();
-		if (this.debug) console.log(`  Orphaned patterns deleted: ${orphanCount}`);
-
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}
 
@@ -1202,7 +963,8 @@ export default class Brain {
 			this.neurons.delete(neuron.id);
 		}
 
-		return toDelete.length;
+		const orphanCount = toDelete.length;
+		if (this.debug) console.log(`  Orphaned patterns deleted: ${orphanCount}`);
 	}
 
 	/**
