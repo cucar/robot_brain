@@ -21,7 +21,7 @@ export default class StockTrainingJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
-			maxEpisodes: 10,                      // Number of training episodes
+			maxEpisodes: 1,                      // Number of training episodes
 			holdoutRows: 50                     // Number of rows to hold out for prediction testing
 		};
 

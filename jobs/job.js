@@ -38,7 +38,10 @@ export default class Job {
 				this.brain.debug = true;
 				for (const [_, channel] of this.brain.channels) channel.debug = true;
 			}
-			if (this.runnerOptions?.noSummary) this.brain.frameSummary = false;
+			if (this.runnerOptions?.noSummary) {
+				this.brain.frameSummary = false;
+				if (this.brain.diagnostics) this.brain.diagnostics.frameSummary = false;
+			}
 
 			// Apply database option if provided (overrides default)
 			if (this.runnerOptions?.database !== undefined) this.noDatabase = !this.runnerOptions.database;

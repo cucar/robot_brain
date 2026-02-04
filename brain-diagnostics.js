@@ -7,6 +7,7 @@ import { stdin, stdout } from 'node:process';
  */
 export class BrainDiagnostics {
 	constructor(debug) {
+
 		// Diagnostic state
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
@@ -14,6 +15,7 @@ export class BrainDiagnostics {
 
 		// Flags
 		this.debug = debug;
+		this.frameSummary = true;
 
 		// Readline interface for debugging
 		this.rl = createInterface({ input: stdin, output: stdout });
