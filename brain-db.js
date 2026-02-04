@@ -38,17 +38,22 @@ export class BrainDB {
 	}
 
 	/**
-	 * Load neurons from MySQL.
-	 * Returns loaded neurons and max ID - Brain handles updating its own state.
+	 * Load neurons from MySQL and populate Brain's neuron maps.
+	 * Clears existing neurons, loads from DB, and updates Neuron.nextId.
 	 * @param {Map<string, number>} dimensionIdToName - Dimension ID to name mapping
-	 * @returns {Promise<{neurons: Map, maxId: number}>}
+	 * @param {Map} neurons - Brain's neurons map to populate
+	 * @param {Map} neuronsByValue - Brain's neuronsByValue map to populate
+	 * @returns {Promise<{neurons: Map, neuronsByValue: Map}>}
 	 */
-	async loadNeurons(dimensionIdToName) {
+	async loadAndPopulateNeurons(dimensionIdToName, neurons, neuronsByValue) {
+		// Clear existing neurons
+		neurons.clear();
+		neuronsByValue.clear();
+		Neuron.nextId = 1;
+
 		console.log('Loading neurons from MySQL...');
 
-		const neurons = new Map();
-
-		// Track max ID to return
+		// Track max ID
 		let maxId = 0;
 
 		// Load all components
@@ -58,8 +63,16 @@ export class BrainDB {
 		await this.loadPatternContext(neurons);
 		await this.loadPatternConnections(neurons);
 
+		// Populate neuronsByValue for base level neurons
+		for (const neuron of neurons.values())
+			if (neuron.level === 0)
+				neuronsByValue.set(neuron.valueKey, neuron);
+
+		// Update Neuron.nextId
+		Neuron.nextId = maxId + 1;
+
 		console.log(`Neurons loaded: ${neurons.size} total, max ID: ${maxId}`);
-		return { neurons, maxId };
+		return { neurons, neuronsByValue };
 	}
 
 	/**

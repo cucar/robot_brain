@@ -1,9 +1,9 @@
-import { createInterface } from 'node:readline';
-import { stdin, stdout } from 'node:process';
 import { Neuron } from './neurons/neuron.js';
 import { Context } from './neurons/context.js';
 import { Memory } from './memory.js';
 import { BrainDB } from './brain-db.js';
+import { BrainInit } from './brain-init.js';
+import { BrainDiagnostics } from './brain-diagnostics.js';
 
 /**
  * Brain Class
@@ -57,28 +57,17 @@ export default class Brain {
 		// initialize the counter for forget cycle
 		this.forgetCounter = 0;
 
-		// Prediction accuracy tracking (cumulative stats for base level only)
-		this.accuracyStats = { correct: 0, total: 0 };
-
-		// Action reward tracking (cumulative stats for base level only)
-		this.rewardStats = { totalReward: 0, count: 0 };
-
-		// Continuous prediction metrics (for channels that support it)
-		this.continuousPredictionMetrics = { totalError: 0, count: 0 }; // Cumulative MAE across all channels
-
 		// Debugging info and flags
 		this.frameNumber = 0;
-		this.frameSummary = true; // show frame summary or not
 		this.debug = false;
 		this.noDatabase = false; // skip database backup/restore for tests
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
-
-		// Create readline interface for pausing between frames - used when debugging
 		this.waitForUserInput = false;
-		this.rl = createInterface({ input: stdin, output: stdout });
 
-		// Database operations handler
+		// Helper classes
 		this.db = new BrainDB();
+		this.initializer = new BrainInit(this.debug);
+		this.diagnostics = new BrainDiagnostics(this.debug);
 	}
 
 	/**
@@ -86,16 +75,15 @@ export default class Brain {
 	 */
 	waitForUser(message) {
 		if (!this.waitForUserInput) return Promise.resolve();
-		return new Promise(resolve => this.rl.question(`\n${message}...`, resolve));
+		return this.diagnostics.waitForUser(message);
 	}
 
 	/**
 	 * Register a channel with the brain
 	 */
 	registerChannel(name, channelClass) {
-		const channel = new channelClass(name);
+		const channel = this.initializer.registerChannel(name, channelClass);
 		this.channels.set(name, channel);
-		if (this.debug) console.log(`Registered channel: ${name} (${channelClass.name})`);
 	}
 
 	/**
@@ -149,8 +137,7 @@ export default class Brain {
 	 * Reset accuracy and reward stats for a new episode
 	 */
 	resetAccuracyStats() {
-		this.accuracyStats = { correct: 0, total: 0 };
-		this.rewardStats = { totalReward: 0, count: 0 };
+		this.diagnostics.resetAccuracyStats();
 	}
 
 	/**
@@ -166,118 +153,26 @@ export default class Brain {
 	 * initializes the brain and loads dimensions
 	 */
 	async init() {
-		// console.log('Initializing brain...');
 
-		// register channels in DB and load channel IDs
-		await this.initializeChannels();
+		// Initialize channels in DB and get mappings
+		if (!this.noDatabase) await this.db.initializeChannels(this.channels);
+		Object.assign(this, this.initializer.initializeChannels(this.channels));
 
-		// create dimensions for all registered channels
-		await this.initializeDimensions();
+		// Initialize dimensions in DB
+		if (!this.noDatabase) await this.db.initializeDimensions(this.channels);
 
-		// load the dimensions
-		await this.loadDimensions();
+		// Load dimension mappings
+		Object.assign(this, this.initializer.loadDimensions(this.channels));
 
-		// load learned data from MySQL into in-memory structures (skip if noDatabase flag set)
-		if (!this.noDatabase) {
-			this.neurons.clear();
-			this.neuronsByValue.clear();
-			Neuron.nextId = 1;
-
-			const { neurons, maxId } = await this.db.loadNeurons(this.dimensionIdToName);
-
-			this.neurons = neurons;
-			for (const neuron of neurons.values())
-				if (neuron.level === 0)
-					this.neuronsByValue.set(neuron.valueKey, neuron);
-
-			Neuron.nextId = maxId + 1;
-		}
-
-		// pre-create action neurons for all channels
-		await this.initializeActionNeurons();
-
-		// initialize all registered channels (channel-specific setup)
-		for (const [, channel] of this.channels) await channel.initialize();
-	}
-
-	/**
-	 * Pre-create action neurons for all channels.
-	 * This ensures exploration can find action neurons even before any connections exist.
-	 * Also builds the channelActions map for pattern refinement.
-	 */
-	async initializeActionNeurons() {
-		for (const [channelName, channel] of this.channels) {
-			const actionCoords = channel.getActionNeurons();
-			if (actionCoords.length === 0) continue;
-
-			// Build frame points for action neurons
-			const framePoints = actionCoords.map(coords => ({
-				coordinates: coords,
-				channel: channelName,
-				channel_id: this.channelNameToId[channelName],
-				type: 'action'
-			}));
-
-			// Create neurons (getFrameNeurons will create if they don't exist)
-			const neuronIds = this.getFrameNeurons(framePoints);
-
-			// Build channelActions map for pattern refinement
-			const actionSet = new Set();
-			for (const neuronId of neuronIds)
-				actionSet.add(this.neurons.get(neuronId));
-			this.channelActions.set(channelName, actionSet);
-
-			if (this.debug) console.log(`Created ${actionCoords.length} action neurons for ${channelName}`);
-		}
-	}
-
-	/**
-	 * Initialize channels in DB and load channel IDs, which come from static Channel.nextId counter
-	 */
-	async initializeChannels() {
-		this.channelNameToId = {};
-		this.channelIdToName = {};
-
-		// Insert channels into DB with explicit IDs from Channel objects
+		// Load learned data from MySQL
 		if (!this.noDatabase)
-			await this.db.initializeChannels(this.channels);
+			Object.assign(this, await this.db.loadAndPopulateNeurons(this.dimensionIdToName, this.neurons, this.neuronsByValue));
 
-		for (const [channelName, channel] of this.channels) {
-			this.channelNameToId[channelName] = channel.id;
-			this.channelIdToName[channel.id] = channelName;
-		}
-		if (this.debug) console.log('Channels loaded:', this.channelNameToId);
-	}
+		// Pre-create action neurons for all channels
+		this.channelActions = this.initializer.initializeActionNeurons(this.channels, this.channelNameToId, this.neurons, this.neuronsByValue);
 
-	/**
-	 * Initialize dimensions for all registered channels
-	 * IDs come from static Dimension.nextId counter (not auto-increment)
-	 */
-	async initializeDimensions() {
-		if (!this.noDatabase)
-			await this.db.initializeDimensions(this.channels);
-	}
-
-	/**
-	 * loads the dimensions to memory (just id and name, no channel/type)
-	 * Populates mappings from Dimension objects owned by channels
-	 */
-	async loadDimensions() {
-		this.dimensionNameToId = {};
-		this.dimensionIdToName = {};
-
-		// Build mappings from Dimension objects (no need to query DB)
-		for (const [, channel] of this.channels) {
-			for (const dim of channel.getEventDimensions()) {
-				this.dimensionNameToId[dim.name] = dim.id;
-				this.dimensionIdToName[dim.id] = dim.name;
-			}
-			for (const dim of channel.getOutputDimensions()) {
-				this.dimensionNameToId[dim.name] = dim.id;
-				this.dimensionIdToName[dim.id] = dim.name;
-			}
-		}
-		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
+		// Initialize all registered channels (channel-specific setup)
+		await this.initializer.initializeAllChannels(this.channels);
 	}
 
 	/**
@@ -288,11 +183,7 @@ export default class Brain {
 	 * @returns {number|null} - Neuron ID or null if not found
 	 */
 	getNeuronIdByDimensionValue(dimensionName, value) {
-		// Search through all sensory neurons for one with this dimension value
-		for (const [neuronId, neuron] of this.neurons)
-			if (neuron.level === 0 && neuron.coordinates[dimensionName] === value)
-				return neuronId;
-		return null;
+		return this.diagnostics.getNeuronIdByDimensionValue(dimensionName, value, this.neurons);
 	}
 
 	/**
@@ -335,7 +226,7 @@ export default class Brain {
 		await this.getRewards();
 
 		// display diagnostic frame header if enabled
-		this.displayFrameHeader();
+		this.diagnostics.displayFrameHeader(this.frameNumber, this.rewards, this.frame);
 
 		// ---------------------------- FIRST LOOP ----------------------------------
 
@@ -371,7 +262,7 @@ export default class Brain {
 		this.deleteOrphanedPatterns();
 
 		// show frame processing summary
-		this.printFrameSummary(performance.now() - frameStart);
+		this.diagnostics.printFrameSummary(this.frameNumber, performance.now() - frameStart, this.channels);
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
@@ -406,8 +297,8 @@ export default class Brain {
 				this.frame.push({ coordinates: event, channel: channelName, channel_id: channelId, type: 'event' });
 
 			// Get inferred actions or explore if none
-			const inferredActions = frameActions.get(channelName) || [];
-			const channelActions = this.applyExploration(channelName, inferredActions);
+			let channelActions = frameActions.get(channelName) || [];
+			if (channelActions.length === 0) channelActions = [this.channelActions.get(channelName).values().next().value.coordinates];
 			for (const action of channelActions)
 				this.frame.push({ coordinates: action, channel: channelName, channel_id: channelId, type: 'action' });
 		}
@@ -467,34 +358,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Display diagnostic frame header with frame number and observations
-	 */
-	displayFrameHeader() {
-		if (!this.diagnostic) return;
-
-		// Display reward information
-		if (this.rewards.size > 0) this.displayRewards();
-
-		// Build observation string from frame
-		const observations = [];
-		for (const point of this.frame)
-			for (const [dim, val] of Object.entries(point.coordinates))
-				observations.push(`${dim}=${val}`);
-
-		console.log(`\nF${this.frameNumber} | Obs: ${observations.join(', ')}`);
-	}
-
-	/**
-	 * Display reward information for diagnostic output
-	 */
-	displayRewards() {
-		const rewardParts = [];
-		for (const [channelName, reward] of this.rewards)
-			rewardParts.push(`${channelName}:${reward.toFixed(3)}x`);
-		console.log(`  Rewards: ${rewardParts.join(', ')}`);
-	}
-
-	/**
 	 * Ages all neurons in the context by 1.
 	 * Deletion of aged-out neurons is deferred to deactivateOldNeurons() at end of frame,
 	 * so that pattern creation can capture the full context before neurons are deleted.
@@ -525,7 +388,7 @@ export default class Brain {
 		this.activateNeurons(neuronIds);
 
 		// Track inference performance (event accuracy and action rewards)
-		this.trackInferencePerformance();
+		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.neurons);
 	}
 
 	/**
@@ -564,52 +427,6 @@ export default class Brain {
 			const neuron = this.neurons.get(neuronId);
 			if (!neuron) throw new Error(`Neuron ${neuronId} not found in this.neurons`);
 			this.memory.activateNeuron(neuron);
-		}
-	}
-
-	/**
-	 * Track inference performance for both events and actions.
-	 * All entries in inferredNeurons are winners.
-	 * Events: checks if prediction was correct (neuron became active)
-	 * Actions: accumulates reward from the action's channel
-	 */
-	trackInferencePerformance() {
-		let eventCorrect = 0;
-		let eventTotal = 0;
-		let actionReward = 0;
-		let actionCount = 0;
-
-		for (const [neuronId] of this.memory.getInferences()) {
-			const neuron = this.neurons.get(neuronId);
-
-			// Track event prediction accuracy
-			if (neuron.type === 'event') {
-				eventTotal++;
-				if (this.memory.getNeuronsAtAge(0).has(neuron)) eventCorrect++;
-			}
-			// Track action reward from the action's channel
-			else if (neuron.type === 'action') {
-				const reward = this.rewards.get(neuron.channel);
-				if (reward !== undefined) {
-					actionReward += reward;
-					actionCount++;
-				}
-			}
-		}
-
-		// Update cumulative stats
-		this.accuracyStats.correct += eventCorrect;
-		this.accuracyStats.total += eventTotal;
-		this.rewardStats.totalReward += actionReward;
-		this.rewardStats.count += actionCount;
-
-		if (this.debug) {
-			if (eventTotal > 0) {
-				const accuracy = (eventCorrect / eventTotal * 100).toFixed(1);
-				console.log(`Event predictions: ${eventCorrect}/${eventTotal} (${accuracy}%)`);
-			}
-			if (actionCount > 0)
-				console.log(`Action rewards: ${actionReward.toFixed(3)} for ${actionCount} actions`);
 		}
 	}
 
@@ -844,27 +661,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Apply exploration to a channel's inferred actions.
-	 * Returns inferred actions unchanged if any exist, otherwise returns an exploration action.
-	 * @param {string} channelName - Channel name
-	 * @param {Array} inferredActions - Array of inferred action coordinates for this channel
-	 * @returns {Array} - Action coordinates to use (either inferred or exploration)
-	 */
-	applyExploration(channelName, inferredActions) {
-		if (inferredActions.length > 0)
-			return inferredActions;
-
-		// No inference - pick first action from channelActions
-		const allActions = this.channelActions.get(channelName);
-		if (!allActions || allActions.size === 0)
-			return [];
-
-		const firstAction = allActions.values().next().value;
-		if (this.debug) console.log(`Exploration for ${channelName}:`, firstAction.coordinates);
-		return [firstAction.coordinates];
-	}
-
-	/**
 	 * Save winning inferences to in-memory structures.
 	 * Only winners are saved - losers are discarded.
 	 * Also filters inferringNeurons to only keep votes that led to winners.
@@ -965,62 +761,6 @@ export default class Brain {
 
 		const orphanCount = toDelete.length;
 		if (this.debug) console.log(`  Orphaned patterns deleted: ${orphanCount}`);
-	}
-
-	/**
-	 * Prints a one-line summary of the frame processing
-	 */
-	printFrameSummary(frameElapsed) {
-
-		// Get base level (level 0) accuracy
-		let baseAccuracy = 'N/A';
-		if (this.accuracyStats.total > 0)
-			baseAccuracy = `${(this.accuracyStats.correct / this.accuracyStats.total * 100).toFixed(1)}%`;
-
-		// Get average action reward
-		let avgReward = 'N/A';
-		if (this.rewardStats.count > 0)
-			avgReward = `${(this.rewardStats.totalReward / this.rewardStats.count).toFixed(3)} (${this.rewardStats.count})`;
-
-		// Collect continuous prediction metrics from channels (only new errors since last call)
-		for (const [_, channel] of this.channels) {
-			if (typeof channel.getPredictionMetrics === 'function') {
-				const metrics = channel.getPredictionMetrics();
-				if (metrics) {
-					this.continuousPredictionMetrics.totalError += metrics.totalError;
-					this.continuousPredictionMetrics.count += metrics.count;
-				}
-			}
-		}
-
-		// Calculate average MAPE (Mean Absolute Percentage Error) and format with count
-		let mapeDisplay = 'N/A';
-		if (this.continuousPredictionMetrics.count > 0) {
-			const avgMAPE = (this.continuousPredictionMetrics.totalError / this.continuousPredictionMetrics.count).toFixed(2);
-			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
-		}
-
-		// Collect output performance metrics from channels
-		const outputMetrics = [];
-		for (const [_, channel] of this.channels) {
-			if (typeof channel.getOutputPerformanceMetrics === 'function') {
-				const metrics = channel.getOutputPerformanceMetrics();
-				if (metrics) outputMetrics.push(metrics);
-			}
-		}
-
-		// Format output performance display
-		let outputDisplay = 'N/A';
-		if (outputMetrics.length > 0) {
-			outputDisplay = outputMetrics.map(m => {
-				const formatted = m.format === 'currency'
-					? `$${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
-					: m.value.toFixed(2);
-				return outputMetrics.length > 1 ? `${m.label}:${formatted}` : formatted;
-			}).join(', ');
-		}
-
-		if (this.frameSummary) console.log(`Frame ${this.frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 
 }
