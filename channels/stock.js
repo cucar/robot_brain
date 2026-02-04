@@ -301,28 +301,15 @@ export default class StockChannel extends Channel {
 	 * Returns an unexplored action given what's already been explored.
 	 * The brain tells us what actions have connections from the current context,
 	 * and we return something different.
-	 * @param {Array} exploredActions - Array of action coordinate objects already explored
 	 * @returns {Object|null} Action coordinates to explore, or null if all explored
 	 */
-	getExplorationAction(exploredActions = []) {
-
+	getExplorationAction() {
 		const activityDim = `${this.symbol}_activity`;
 		const allActions = [
 			{ [activityDim]: POSITION_OUT },
 			{ [activityDim]: POSITION_OWN }
 		];
-
-		// Filter out already explored actions
-		const unexplored = allActions.filter(action => {
-			const actionVal = action[activityDim];
-			return !exploredActions.some(explored => explored[activityDim] === actionVal);
-		});
-
-		// If all actions explored, return null
-		if (unexplored.length === 0) return null;
-
-		// Return a random unexplored action
-		return unexplored[Math.floor(Math.random() * unexplored.length)];
+		return allActions[Math.floor(Math.random() * allActions.length)]; // Return a random action
 	}
 
 	/**
