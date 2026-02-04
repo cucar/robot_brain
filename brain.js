@@ -560,8 +560,11 @@ export default class Brain {
 		// deletion of aged-out neurons is deferred to after pattern learning
 		this.ageNeurons();
 
-		// activate neurons that represent the current situation in age=0 - what's happening right now?
-		this.recognizeNeurons();
+		// activate sensory neurons in age=0, level=0 - inputs from the world
+		this.activateSensors();
+
+		// discover and activate patterns using connections - start recursion from base level
+		this.recognizePatterns();
 
 		// update the age>0 neuron connections based on observations in age=0
 		this.updateConnections();
@@ -743,9 +746,9 @@ export default class Brain {
 	}
 
 	/**
-	 * recognizes and activates base level neurons from frame
+	 * activates base level neurons from frame coordinates
 	 */
-	recognizeNeurons() {
+	activateSensors() {
 
 		// bulk find/create neurons for all input points
 		const neuronIds = this.getFrameNeurons(this.frame);
@@ -753,9 +756,6 @@ export default class Brain {
 
 		// activate the neurons in the in-memory context
 		this.activateNeurons(neuronIds);
-
-		// discover and activate patterns using connections - start recursion from base level
-		this.recognizePatterns();
 
 		// Track inference performance (event accuracy and action rewards)
 		this.trackInferencePerformance();
@@ -873,7 +873,7 @@ export default class Brain {
 	recognizePatterns() {
 		let level = 0;
 		while (true) {
-			const patternsFound = this.recognizeLevelPatterns(level);
+			const patternsFound = this.recognizeLevel(level);
 			if (!patternsFound) break;
 
 			level++;
@@ -887,7 +887,7 @@ export default class Brain {
 	/**
 	 * Processes a level to detect patterns and activate them. Returns true if patterns were found, false otherwise.
 	 */
-	recognizeLevelPatterns(level) {
+	recognizeLevel(level) {
 		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 		// get the peaks and context for this level
@@ -897,7 +897,7 @@ export default class Brain {
 			return false;
 		}
 
-		// Match patterns (parallelizable) - collect results with peak reference
+		// Match patterns (parallelizable) - collect results with peak reference - this is parallelizable
 		const matchedPatterns = peaks.map(peak => peak.matchBestPattern(context)).filter(m => m);
 
 		// If no patterns matched, stop here
