@@ -1085,15 +1085,17 @@ export default class Brain {
 	 * @returns {Array} - Action coordinates to use (either inferred or exploration)
 	 */
 	applyExploration(channelName, inferredActions) {
+		if (inferredActions.length > 0)
+			return inferredActions;
 
-		// if there are inferred actions already, use them - do not explore
-		if (inferredActions.length > 0) return inferredActions;
+		// No inference - pick first action from channelActions
+		const allActions = this.channelActions.get(channelName);
+		if (!allActions || allActions.size === 0)
+			return [];
 
-		// No inference - explore
-		const channel = this.channels.get(channelName);
-		const explorationCoords = channel.getExplorationAction();
-		if (this.debug) console.log(`Exploration for ${channelName}:`, explorationCoords);
-		return [explorationCoords];
+		const firstAction = allActions.values().next().value;
+		if (this.debug) console.log(`Exploration for ${channelName}:`, firstAction.coordinates);
+		return [firstAction.coordinates];
 	}
 
 	/**

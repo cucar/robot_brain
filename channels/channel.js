@@ -80,18 +80,7 @@ export default class Channel {
 		return 1.0; // Neutral feedback by default
 	}
 
-	/**
-	 * Returns an exploration action based on current channel state
-	 * Child classes should override this to provide context-aware exploration
-	 * Examples:
-	 * - Stock: Can't sell if not owned
-	 * - Arm: Can't move beyond joint limits
-	 * - Eyes: Can't saccade outside visual field
-	 */
-	getExplorationAction() {
-		// Child classes must implement this with state-aware logic
-		throw new Error('Channel must implement getExplorationAction() method');
-	}
+
 
 	/**
 	 * Called when brain determines winning event predictions via voting.

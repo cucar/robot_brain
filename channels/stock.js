@@ -298,21 +298,6 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Returns an unexplored action given what's already been explored.
-	 * The brain tells us what actions have connections from the current context,
-	 * and we return something different.
-	 * @returns {Object|null} Action coordinates to explore, or null if all explored
-	 */
-	getExplorationAction() {
-		const activityDim = `${this.symbol}_activity`;
-		const allActions = [
-			{ [activityDim]: POSITION_OUT },
-			{ [activityDim]: POSITION_OWN }
-		];
-		return allActions[Math.floor(Math.random() * allActions.length)]; // Return a random action
-	}
-
-	/**
 	 * Get frame input data for this stock channel
 	 */
 	getFrameEvents() {

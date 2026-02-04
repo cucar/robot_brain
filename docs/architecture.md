@@ -217,7 +217,6 @@ Channels are adapters between the brain and external devices (eyes, ears, tradin
 - `getFrameEvents()`: Current observations
 - `executeOutputs(actions)`: Execute brain's decisions
 - `getRewards()`: Feedback on action outcomes (0 = neutral)
-- `getExplorationAction(votedActions)`: Provide unexplored action for trial
 - `initialize()`: Channel-specific setup
 
 ### Optional Methods

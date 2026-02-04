@@ -73,13 +73,6 @@ export default class TextChannel extends Channel {
 	}
 
 	/**
-	 * Get valid exploration action
-	 */
-	getExplorationAction() {
-		return null; // return empty array since this is input-only - for now
-	}
-
-	/**
 	 * Called when brain determines winning event predictions via voting.
 	 * Used for channel-specific tracking (e.g., character prediction logging).
 	 * @param {Array} winners - winning event predictions from voting

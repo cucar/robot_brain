@@ -54,6 +54,9 @@ export default class BrainMySQL {
 		// initialize channel registry
 		this.channels = new Map();
 
+		// Map of channel name -> Set of action neurons (for exploration)
+		this.channelActions = new Map();
+
 		// Prediction accuracy tracking (cumulative stats for base level only)
 		this.accuracyStats = { correct: 0, total: 0 };
 
@@ -176,6 +179,7 @@ export default class BrainMySQL {
 	/**
 	 * Pre-create action neurons for all channels.
 	 * This ensures exploration can find action neurons even before any connections exist.
+	 * Also builds the channelActions map for exploration.
 	 */
 	async initializeActionNeurons() {
 		for (const [channelName, channel] of this.channels) {
@@ -191,7 +195,13 @@ export default class BrainMySQL {
 			}));
 
 			// Create neurons (getFrameNeurons will create if they don't exist)
-			await this.getFrameNeurons(framePoints);
+			const neuronIds = await this.getFrameNeurons(framePoints);
+
+			// Build channelActions map for exploration
+			const actionSet = new Set();
+			for (let i = 0; i < neuronIds.length; i++)
+				actionSet.add({ id: neuronIds[i], coordinates: actionCoords[i] });
+			this.channelActions.set(channelName, actionSet);
 
 			if (this.debug) console.log(`Created ${actionCoords.length} action neurons for ${channelName}`);
 		}
@@ -393,8 +403,9 @@ export default class BrainMySQL {
 			for (const event of channelEvents)
 				this.frame.push({ coordinates: event, channel: channelName, channel_id: channelId, type: 'event' });
 
-			// Get last inferred actions to be executed in this frame (from brain's inference tables)
-			const channelActions = frameOutputs.get(channelName) || [];
+			// Get inferred actions or explore if none
+			const inferredActions = frameOutputs.get(channelName) || [];
+			const channelActions = this.applyExploration(channelName, inferredActions);
 			for (const action of channelActions)
 				this.frame.push({ coordinates: action, channel: channelName, channel_id: channelId, type: 'action' });
 		}
@@ -1604,9 +1615,6 @@ export default class BrainMySQL {
 			return;
 		}
 
-		// Apply exploration to actions (may override winners)
-		await this.applyExploration(inferences);
-
 		// Save all inferences
 		await this.saveInferences(inferences);
 
@@ -1736,95 +1744,24 @@ export default class BrainMySQL {
 	}
 
 	/**
-	 * Apply exploration to action inferences.
-	 * Modifies inferences array in place - may add exploration action and update isWinner flags.
-	 * @param {Array} inferences - Array of inference objects (modified in place)
-	 */
-	async applyExploration(inferences) {
-
-		// Group action inferences by channel (using channel from neuron, not dimension)
-		const byChannel = new Map();
-		for (const inf of inferences) {
-			if (!inf.coordinates || inf.type !== 'action') continue;
-			if (!byChannel.has(inf.channel)) byChannel.set(inf.channel, []);
-			byChannel.get(inf.channel).push(inf);
-		}
-
-		// Process each channel
-		for (const [channelName] of this.channels) {
-			const channelInferences = byChannel.get(channelName) || [];
-			const channelWinners = channelInferences.filter(inf => inf.isWinner);
-
-			// Check if we should explore this channel
-			if (!this.shouldExploreChannel(channelName, channelWinners)) continue;
-
-			// Get exploration action - pass all channel inferences so channel knows what's been tried
-			const exploration = await this.exploreChannel(channelName, channelInferences);
-			if (!exploration) continue; // All actions have been tried
-
-			// Mark previous winners as losers
-			for (const winner of channelWinners)
-				if (winner.neuron_id !== exploration.neuron_id)
-					winner.isWinner = false;
-
-			// Add exploration as winner
-			inferences.push(exploration);
-		}
-	}
-
-	/**
-	 * Decide whether to explore a channel. Only explore when there are no action winners for the channel.
-	 * @param {string} channelName - name of the channel to check
-	 * @param {Array} channelWinners - array of winning action inferences for this channel
-	 * @returns {boolean} - true if we should explore this channel
-	 */
-	shouldExploreChannel(channelName, channelWinners) {
-		const shouldExplore = channelWinners.length === 0;
-		if (this.debug && shouldExplore) console.log(`${channelName}: No action winners, exploring`);
-		return shouldExplore;
-	}
-
-	/**
-	 * Explore a channel by finding an unexplored action.
+	 * Apply exploration to a channel's inferred actions.
+	 * Returns inferred actions unchanged if any exist, otherwise returns an exploration action.
 	 * @param {string} channelName - Channel name
-	 * @param {Array} votedActions - All actions that received votes (have connections from current context)
-	 * @returns {Promise<Object|null>} Exploration action or null if all actions explored
+	 * @param {Array} inferredActions - Array of inferred action coordinates for this channel
+	 * @returns {Array} - Action coordinates to use (either inferred or exploration)
 	 */
-	async exploreChannel(channelName, votedActions) {
-		const channel = this.channels.get(channelName);
+	applyExploration(channelName, inferredActions) {
+		if (inferredActions.length > 0)
+			return inferredActions;
 
-		// Extract coordinates from voted actions
-		const votedCoordinates = votedActions.map(a => a.coordinates).filter(c => c);
+		// No inference - pick first action from channelActions
+		const allActions = this.channelActions.get(channelName);
+		if (!allActions || allActions.size === 0)
+			return [];
 
-		// Ask channel for an action that wasn't voted for
-		const actionCoordinates = channel.getExplorationAction(votedCoordinates);
-		if (!actionCoordinates || Object.keys(actionCoordinates).length === 0) {
-			if (this.debug) console.log(`Exploration for ${channelName}: all actions explored`);
-			return null; // All actions explored
-		}
-
-		// Find or create neuron for this action - wrap coordinates in frame point structure with channel metadata
-		const [actionNeuronId] = await this.getFrameNeurons([{
-			coordinates: actionCoordinates,
-			channel: channelName,
-			channel_id: this.channelNameToId[channelName],
-			type: 'action'
-		}]);
-
-		// Return exploration action
-		// Use low strength (below eventErrorMinStrength) to avoid triggering error pattern creation
-		// when exploration fails - exploration is random, not a confident prediction that was wrong
-		const exploration = {
-			neuron_id: actionNeuronId,
-			strength: 1, // Low strength - exploration wins by marking others as losers, not by high strength
-			reward: 0, // Neutral reward (additive: 0 = neutral)
-			coordinates: actionCoordinates,
-			type: 'action',
-			isWinner: true
-		};
-
-		if (this.debug) console.log(`Exploration for ${channelName}:`, actionCoordinates, actionNeuronId);
-		return exploration;
+		const firstAction = allActions.values().next().value;
+		if (this.debug) console.log(`Exploration for ${channelName}:`, firstAction.coordinates);
+		return [firstAction.coordinates];
 	}
 
 	/**

@@ -129,7 +129,6 @@ Channels connect the brain to external systems (sensors, actuators, trading APIs
 - `getFrameEvents()`: Current observations
 - `executeOutputs(actions)`: Execute brain's decisions
 - `getRewards()`: Feedback on outcomes (0 = neutral)
-- `getExplorationAction(votedActions)`: Provide unexplored action
 
 **Available Channels:**
 - `TextChannel` - Character sequence learning
