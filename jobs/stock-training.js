@@ -21,8 +21,8 @@ export default class StockTrainingJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
-			maxEpisodes: 20,                      // Number of training episodes
-			holdoutRows: 5000                     // Number of rows to hold out for prediction testing
+			maxEpisodes: 10,                      // Number of training episodes
+			holdoutRows: 50                     // Number of rows to hold out for prediction testing
 		};
 
 		// Training metrics
@@ -288,8 +288,8 @@ export default class StockTrainingJob extends Job {
 		this.collectEpisodeResults(episodeMetrics);
 
 		// Capture base level accuracy stats
-		if (this.brain.accuracyStats.total > 0)
-			episodeMetrics.baseAccuracy = (this.brain.accuracyStats.correct / this.brain.accuracyStats.total * 100);
+		if (this.brain.diagnostics.accuracyStats.total > 0)
+			episodeMetrics.baseAccuracy = (this.brain.diagnostics.accuracyStats.correct / this.brain.diagnostics.accuracyStats.total * 100);
 
 		const duration = Date.now() - startTime;
 		episodeMetrics.duration = duration;

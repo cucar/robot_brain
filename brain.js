@@ -215,12 +215,12 @@ export default class Brain {
 
 		// ---------------------------- FRAME I/O ----------------------------------
 
-		// get the current frame from all channels - includes events and previously inferred actions
+		// execute the inferred actions in all channels
+		await this.executeActions();
+
+		// get the current frame from all channels - includes events and previously executed actions
 		await this.getFrame();
 		if (!this.frame || this.frame.length === 0) return false;
-
-		// execute the previously inferred actions in all channels
-		await this.executeActions();
 
 		// get rewards from all channels based on executed actions
 		await this.getRewards();
@@ -239,24 +239,25 @@ export default class Brain {
 
 		// ---------------------------- SECOND LOOP ----------------------------------
 
-		// discover and activate patterns using connections - start recursion from base level
+		// discover and activate patterns using connections in age=0 - start recursion from base level
 		this.recognizePatterns();
 
-		// update the age>0 neuron connections based on observations in age=0
+		// update the (age>0 and age<=contextLength) neurons connections based on observations in age=0
 		this.updateConnections();
 
-		// learn new patterns from failed predictions and action regret
+		// learn new patterns in (age>0 and age<=contextLength) neurons from failed predictions and action regret
 		this.learnNewPatterns();
 
-		// deactivate aged-out neurons AFTER pattern learning captured full context
+		// deactivate aged-out neurons AFTER pattern learning captured full context (age>contextLength)
 		this.deactivateOldNeurons();
 
-		// do predictions and outputs - what's going to happen next? and what's our best response?
+		// do predictions and outputs in (age>0 and age<=contextLength) neurons - what's going to happen next? and what's our best response?
 		this.inferNeurons();
 
-		// at this point the frame is processed - the forget cycle is a periodic cleanup task
-		// used to avoid curse of dimensionality and delete dead connections/neurons
-		this.runForgetCycle();
+		// forget connections and patterns in (age>0 and age<=contextLength) neurons to avoid curse of dimensionality
+		this.forgetNeurons();
+
+		// ---------------------------- END PROCESSING ----------------------------------
 
 		// orphan cleanup (must be done after all neurons finish forgetting)
 		this.deleteOrphanedPatterns();
@@ -287,18 +288,17 @@ export default class Brain {
 		// Get all frame actions from previous frame's inference (from in-memory inferredNeurons)
 		const frameActions = this.getInferredActions();
 
-		// Process each channel: get inputs from channel, get outputs from brain tables
+		// Process each channel: get inputs from channel, get outputs from previous inference
 		for (const [channelName, channel] of this.channels) {
 			const channelId = this.channelNameToId[channelName];
 
-			// Get the frame event inputs from the channel (current state before any outputs are executed)
+			// Get the frame event inputs from the channel
 			const channelEvents = await channel.getFrameEvents();
 			for (const event of channelEvents)
 				this.frame.push({ coordinates: event, channel: channelName, channel_id: channelId, type: 'event' });
 
-			// Get inferred actions or explore if none
-			let channelActions = frameActions.get(channelName) || [];
-			if (channelActions.length === 0) channelActions = [this.channelActions.get(channelName).values().next().value.coordinates];
+			// Get actions from previous inference (guaranteed to exist after first frame)
+			const channelActions = frameActions.get(channelName) || [];
 			for (const action of channelActions)
 				this.frame.push({ coordinates: action, channel: channelName, channel_id: channelId, type: 'action' });
 		}
@@ -309,26 +309,14 @@ export default class Brain {
 	}
 
 	/**
-	 * Execute previously inferred actions for all channels
+	 * Execute inferred actions for all channels
 	 */
 	async executeActions() {
-		const channelActions = this.getFrameActions();
-		for (const [channelName, channel] of this.channels)
-			await channel.executeOutputs(channelActions.get(channelName) || []);
-	}
-
-	/**
-	 * Extract action outputs from this.frame grouped by channel
-	 * @returns {Map} - Map of channel names to array of action coordinate objects
-	 */
-	getFrameActions() {
-		const channelActions = new Map();
-		for (const point of this.frame)
-			if (point.type === 'action') {
-				if (!channelActions.has(point.channel)) channelActions.set(point.channel, []);
-				channelActions.get(point.channel).push(point.coordinates);
-			}
-		return channelActions;
+		const channelActions = this.getInferredActions();
+		for (const [channelName, channel] of this.channels) {
+			const actions = channelActions.get(channelName) || [];
+			await channel.executeOutputs(actions);
+		}
 	}
 
 	/**
@@ -562,11 +550,39 @@ export default class Brain {
 			return;
 		}
 
-		// Save all inferences to memory
+		// Ensure every channel has an action - explore if none inferred
+		this.ensureChannelActions(inferences);
+
+		// Save inferences to memory (clears old inferences first)
 		this.saveInferences(inferences);
 
 		// Notify channels about winning event predictions for continuous tracking (e.g., price prediction)
 		this.notifyChannelsOfEventPredictions(inferences);
+	}
+
+	/**
+	 * Ensure every channel has an action in the inferences array.
+	 * If a channel has no inferred action, add an exploration action.
+	 * @param {Array} inferences - Array of inference objects to modify
+	 */
+	ensureChannelActions(inferences) {
+
+		// Find which channels already have an action inferred
+		const channelsWithActions = new Set();
+		for (const inf of inferences) {
+			if (!inf.isWinner) continue;
+			const neuron = this.neurons.get(inf.neuron_id);
+			if (neuron && neuron.level === 0 && neuron.type === 'action')
+				channelsWithActions.add(neuron.channel);
+		}
+
+		// Add exploration action for channels without one
+		for (const [channelName] of this.channels) {
+			if (channelsWithActions.has(channelName)) continue;
+			// No action inferred for this channel - use first action as exploration
+			const explorationAction = this.channelActions.get(channelName).values().next().value;
+			inferences.push({ neuron_id: explorationAction.id, strength: 0, isWinner: true });
+		}
 	}
 
 	/**
@@ -718,7 +734,7 @@ export default class Brain {
 	 * Runs the forget cycle, reducing strengths and deleting unused connections/patterns/neurons.
 	 * Critical for avoiding curse of dimensionality.
 	 */
-	runForgetCycle() {
+	forgetNeurons() {
 
 		// Run periodically for cleanup
 		this.forgetCounter++;
