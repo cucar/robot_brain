@@ -182,12 +182,11 @@ export class Neuron {
 	 * Events: strengthen correct, weaken incorrect, add novel.
 	 * Actions: update with rewards, add alternatives for painful actions.
 	 * @param {number} age - The age at which this neuron is active
-	 * @param {Set<Neuron>} newEventNeurons - Newly active event neurons at age=0
-	 * @param {Set<Neuron>} newActionNeurons - Newly active action neurons at age=0
+	 * @param {Set<Neuron>} newActiveNeurons - Newly active action neurons at age=0
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
 	 */
-	learnConnectionsAtAge(age, newEventNeurons, newActionNeurons, rewards, channelActions) {
+	learnConnectionsAtAge(age, newActiveNeurons, rewards, channelActions) {
 
 		// Only event neurons (level 0) or pattern neurons can learn connections
 		if (this.level === 0 && this.type !== 'event') return;
@@ -197,98 +196,33 @@ export class Neuron {
 		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
 		const distanceMap = this.connections.get(distance);
 
-		// refine existing event predictions and add novel event predictions
-		this.learnEvents(distanceMap, newEventNeurons, distance);
+		// learn events and actions
+		for (const neuron of newActiveNeurons) {
 
-		// learn action inferences and add alternative actions for painful channels
-		this.learnActions(distanceMap, newActionNeurons, rewards, channelActions);
-	}
+			// get the reward for the neuron if it is an action
+			const reward = neuron.type === 'action' ? rewards.get(neuron.channel) : undefined;
 
-	/**
-	 * Refine existing event predictions and add novel event predictions.
-	 * @param {Map<Neuron, {strength, reward}>} distanceMap - Connections at this distance
-	 * @param {Set<Neuron>} newEventNeurons - Newly active event neurons at age=0
-	 * @param {number} distance - Temporal distance for these connections
-	 */
-	learnEvents(distanceMap, newEventNeurons, distance) {
-
-		// refine existing event predictions (collect deletions to avoid modifying map while iterating)
-		const toDelete = [];
-		for (const [inferredNeuron, prediction] of distanceMap) {
-
-			// refining event predictions
-			if (inferredNeuron.level !== 0 || inferredNeuron.type !== 'event') continue;
-
-			// if the predicted neuron did not come true, weaken the connection, and delete if it falls below min strength
-			if (!newEventNeurons.has(inferredNeuron)) {
-				prediction.strength -= Neuron.negativeReinforcement;
-				if (prediction.strength <= Neuron.minStrength) toDelete.push(inferredNeuron);
-				continue;
+			// if the event/action was already known, strengthen the connection and update the reward
+			if (distanceMap.has(neuron)) {
+				const connection = distanceMap.get(neuron);
+				connection.strength = Math.min(Neuron.maxStrength, connection.strength + 1);
+				if (reward !== undefined) connection.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * connection.reward;
+			}
+			// if the event/action was not known, add it to the connections with the current reward (learning from observation)
+			else {
+				distanceMap.set(neuron, { strength: 1, reward });
+				neuron.incomingCount++;
 			}
 
-			// if the predicted neuron is active at age=0, strengthen the connection
-			prediction.strength = Math.min(Neuron.maxStrength, prediction.strength + 1);
-		}
-		for (const inferredNeuron of toDelete) this.deleteConnection(distance, inferredNeuron);
-
-		// Add novel event predictions
-		for (const eventNeuron of newEventNeurons)
-			if (!distanceMap.has(eventNeuron)) {
-				distanceMap.set(eventNeuron, { strength: 1, reward: 0 });
-				eventNeuron.incomingCount++;
-			}
-	}
-
-	/**
-	 * Learn action inferences and add alternative actions for painful channels.
-	 * @param {Map<Neuron, {strength, reward}>} distanceMap - Connections at this distance
-	 * @param {Set<Neuron>} newActionNeurons - Newly active action neurons at age=0
-	 * @param {Map<string, number>} rewards - Map of channel name to reward value
-	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
-	 */
-	learnActions(distanceMap, newActionNeurons, rewards, channelActions) {
-
-		// learn action inferences
-		for (const actionNeuron of newActionNeurons) {
-
-			// get the current rewards for the action - if there are no rewards for it, it's not worth learning
-			const reward = rewards.get(actionNeuron.channel);
-			if (reward === undefined) continue;
-
-			// if the action was already known, strengthen the connection and update the reward
-			if (distanceMap.has(actionNeuron)) {
-				const prediction = distanceMap.get(actionNeuron);
-				prediction.strength = Math.min(Neuron.maxStrength, prediction.strength + 1);
-				prediction.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * prediction.reward;
-				continue;
-			}
-
-			// if the action was not known, add it to the connections with the current reward (learning from observation)
-			distanceMap.set(actionNeuron, { strength: 1, reward });
-			actionNeuron.incomingCount++;
-		}
-
-		// get painful channels
-		const painfulChannels = new Set();
-		for (const actionNeuron of newActionNeurons) {
-			const reward = rewards.get(actionNeuron.channel);
-			if (reward !== undefined && reward < Neuron.actionRegretMinPain) painfulChannels.add(actionNeuron.channel);
-		}
-
-		// Add alternative actions for painful channels
-		for (const channel of painfulChannels) {
-
-			// get all possible actions for the channel
-			const allActions = channelActions.get(channel);
-			if (!allActions) continue;
-
+			// if the neuron is an action and the reward is below a threshold, add an alternative action for the channel
 			// add the first unknown action to try next time with reward 0
-			for (const altNeuron of allActions)
-				if (!distanceMap.has(altNeuron)) {
-					distanceMap.set(altNeuron, { strength: 1, reward: 0 });
-					altNeuron.incomingCount++;
-					break;
-				}
+			if (reward !== undefined && reward < Neuron.actionRegretMinPain)
+				for (const altNeuron of channelActions.get(neuron.channel))
+					if (!distanceMap.has(altNeuron)) {
+						distanceMap.set(altNeuron, { strength: 1, reward: 0 });
+						altNeuron.incomingCount++;
+						break;
+					}
 		}
 	}
 

@@ -393,18 +393,14 @@ export default class Brain {
 	updateConnections() {
 
 		// Get newly active sensory neurons (age=0, level=0 - events and actions)
-		const newEventNeurons = new Set();
-		const newActionNeurons = new Set();
-		for (const neuron of this.memory.getNeuronsAtAge(0).keys()) {
-			if (neuron.level > 0) continue;
-			if (neuron.type === 'event') newEventNeurons.add(neuron);
-			else if (neuron.type === 'action') newActionNeurons.add(neuron);
-		}
-		if (newEventNeurons.size === 0 && newActionNeurons.size === 0) return;
+		const newActiveNeurons = new Set();
+		for (const neuron of this.memory.getNeuronsAtAge(0).keys())
+			if (neuron.level === 0) newActiveNeurons.add(neuron);
+		if (newActiveNeurons.size === 0) return;
 
 		// Each context neuron learns connections at its own distance
 		for (const { neuron, age } of this.memory.getContextNeurons())
-			neuron.learnConnectionsAtAge(age, newEventNeurons, newActionNeurons, this.rewards, this.channelActions);
+			neuron.learnConnectionsAtAge(age, newActiveNeurons, this.rewards, this.channelActions);
 	}
 
 	/**
