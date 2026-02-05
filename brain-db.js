@@ -369,9 +369,20 @@ export class BrainDB {
 	}
 
 	/**
-	 * Truncate given tables for database reset
+	 * Truncate the brain tables for database reset
 	 */
-	async truncateTables(tables) {
+	async truncateTables() {
+		const tables = [
+			'channels',
+			'dimensions',
+			'neurons',
+			'base_neurons',
+			'coordinates',
+			'connections',
+			'pattern_peaks',
+			'pattern_past',
+			'pattern_future'
+		];
 		await this.conn.query('SET FOREIGN_KEY_CHECKS = 0');
 		await Promise.all(tables.map(table => this.conn.query(`TRUNCATE ${table}`)));
 		await this.conn.query('SET FOREIGN_KEY_CHECKS = 1');

@@ -6,7 +6,8 @@ import { Context } from './neurons/context.js';
  */
 export class Memory {
 
-	constructor() {
+	constructor(debug) {
+
 		// memory hyperparameters
 		this.contextLength = 5; // number of frames a base neuron stays active
 
@@ -21,6 +22,9 @@ export class Memory {
 		// Inferring neurons indexed by age (winners only): Array<Map<Neuron, Array<{toNeuron, strength, reward}>>>
 		// inferringNeurons[age] = Map of neurons to their votes at that age
 		this.inferringNeurons = [];
+
+		// carry over the debug flag
+		this.debug = debug;
 	}
 
 	/**
@@ -36,20 +40,19 @@ export class Memory {
 	 * Age all neurons by shifting the age arrays
 	 */
 	age() {
+		if (this.debug) console.log('Aging neurons...');
 		this.activeNeurons.unshift(new Map());
 		this.inferringNeurons.unshift(new Map());
 	}
 
 	/**
 	 * Deactivate neurons that have aged out of the context window
-	 * @param {boolean} debug - Whether to log debug information
 	 */
-	deactivateOld(debug = false) {
+	deactivateOld() {
 		if (this.activeNeurons.length <= this.contextLength) return;
 		this.inferringNeurons.pop();
 		const removed = this.activeNeurons.pop();
-		if (debug && removed.size > 0)
-			console.log(`Deactivated ${removed.size} aged-out neurons`);
+		if (this.debug && removed.size > 0) console.log(`Deactivated ${removed.size} aged-out neurons`);
 	}
 
 	/**
@@ -173,7 +176,7 @@ export class Memory {
 	 */
 	getVotingNeurons() {
 		const result = [];
-		for (let age = 0; age < this.activeNeurons.length && age < this.contextLength - 1; age++)
+		for (let age = 0; age < this.activeNeurons.length && age < this.contextLength; age++)
 			for (const [neuron, activatedPattern] of (this.activeNeurons[age] ?? new Map()))
 				result.push({ neuron, age, activatedPattern });
 		return result;
@@ -226,5 +229,31 @@ export class Memory {
 			}
 			for (const neuron of toDelete) ageMap.delete(neuron);
 		}
+	}
+
+	/**
+	 * Save winning inferences to in-memory structures.
+	 * Only winners are saved - losers are discarded.
+	 * Also filters inferringNeurons to only keep votes that led to winners.
+	 * @param {Array} inferences - Array of inference objects with isWinner flag
+	 */
+	saveInferences(inferences) {
+
+		// Get set of winning neuron IDs
+		const winnerIds = new Set();
+		for (const inf of inferences)
+			if (inf.isWinner)
+				winnerIds.add(inf.neuron_id);
+
+		// Save only winners to inferredNeurons
+		this.clearInferences();
+		for (const inf of inferences)
+			if (inf.isWinner)
+				this.addInference(inf.neuron_id, inf.strength);
+
+		// Filter inferringNeurons to only keep votes that led to winners
+		this.filterInferringByWinners(winnerIds);
+
+		if (this.debug) console.log(`Saved ${winnerIds.size} winning inferences`);
 	}
 }

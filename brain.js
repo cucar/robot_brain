@@ -1,5 +1,4 @@
 import { Neuron } from './neurons/neuron.js';
-import { Context } from './neurons/context.js';
 import { Memory } from './memory.js';
 import { BrainDB } from './brain-db.js';
 import { BrainInit } from './brain-init.js';
@@ -47,22 +46,22 @@ export default class Brain {
 		// frame processing scratch data (reset each frame or episode)
 		//************************************************************
 
-		// Memory - manages temporal sliding window and inferred neurons
-		this.memory = new Memory();
-
-		// Frame state - populated by processFrameIO methods
-		this.frame = []; // current frame data from all channels
-		this.rewards = new Map(); // channel rewards for current frame
-
-		// initialize the counter for forget cycle
-		this.forgetCounter = 0;
-
 		// Debugging info and flags
 		this.frameNumber = 0;
 		this.debug = false;
 		this.noDatabase = false; // skip database backup/restore for tests
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 		this.waitForUserInput = false;
+
+		// initialize the counter for forget cycle
+		this.forgetCounter = 0;
+
+		// Memory - manages temporal sliding window and inferred neurons
+		this.memory = new Memory(this.debug);
+
+		// Frame state - populated by processFrameIO methods
+		this.frame = []; // current frame data from all channels
+		this.rewards = new Map(); // channel rewards for current frame
 
 		// Helper classes
 		this.db = new BrainDB();
@@ -120,17 +119,7 @@ export default class Brain {
 		Neuron.nextId = 1;
 
 		// Clear MySQL tables if using a database
-		if (!this.noDatabase) await this.db.truncateTables([
-			'channels',
-			'dimensions',
-			'neurons',
-			'base_neurons',
-			'coordinates',
-			'connections',
-			'pattern_peaks',
-			'pattern_past',
-			'pattern_future'
-		]);
+		if (!this.noDatabase) await this.db.truncateTables();
 	}
 
 	/**
@@ -215,12 +204,12 @@ export default class Brain {
 
 		// ---------------------------- FRAME I/O ----------------------------------
 
-		// execute the inferred actions in all channels
-		await this.executeActions();
-
 		// get the current frame from all channels - includes events and previously executed actions
 		await this.getFrame();
 		if (!this.frame || this.frame.length === 0) return false;
+
+		// execute the inferred actions in all channels
+		await this.executeActions();
 
 		// get rewards from all channels based on executed actions
 		await this.getRewards();
@@ -232,7 +221,7 @@ export default class Brain {
 
 		// age the active neurons in memory context - sliding the temporal window
 		// deletion of aged-out neurons is deferred to after pattern learning
-		this.ageNeurons();
+		this.memory.age();
 
 		// activate sensory neurons in age=0, level=0 - inputs from the world
 		this.activateSensors();
@@ -249,18 +238,15 @@ export default class Brain {
 		this.learnNewPatterns();
 
 		// deactivate aged-out neurons AFTER pattern learning captured full context (age>contextLength)
-		this.deactivateOldNeurons();
+		this.memory.deactivateOld();
 
 		// do predictions and outputs in (age>0 and age<=contextLength) neurons - what's going to happen next? and what's our best response?
 		this.inferNeurons();
 
-		// forget connections and patterns in (age>0 and age<=contextLength) neurons to avoid curse of dimensionality
-		this.forgetNeurons();
-
 		// ---------------------------- END PROCESSING ----------------------------------
 
-		// orphan cleanup (must be done after all neurons finish forgetting)
-		this.deleteOrphanedPatterns();
+		// forget connections and patterns in (age>0 and age<=contextLength) neurons to avoid curse of dimensionality
+		this.forgetNeurons();
 
 		// show frame processing summary
 		this.diagnostics.printFrameSummary(this.frameNumber, performance.now() - frameStart, this.channels);
@@ -343,24 +329,6 @@ export default class Brain {
 		}
 		if (this.debug && feedbackCount > 0)
 			console.log(`Channel rewards:`, Array.from(this.rewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
-	}
-
-	/**
-	 * Ages all neurons in the context by 1.
-	 * Deletion of aged-out neurons is deferred to deactivateOldNeurons() at end of frame,
-	 * so that pattern creation can capture the full context before neurons are deleted.
-	 */
-	ageNeurons() {
-		if (this.debug) console.log('Aging neurons...');
-		this.memory.age();
-	}
-
-	/**
-	 * Deactivates neurons that have aged out of the context window.
-	 * Called at end of frame after pattern learning, so patterns can capture full context.
-	 */
-	deactivateOldNeurons() {
-		this.memory.deactivateOld(this.debug);
 	}
 
 	/**
@@ -463,7 +431,7 @@ export default class Brain {
 		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 		// get the peaks and context for this level
-		const {peaks, context} = this.getPeaksAndContext(level);
+		const {peaks, context} = this.memory.getPeaksAndContext(level);
 		if (peaks.length === 0) {
 			if (this.debug) console.log(`No newly activated neurons at level ${level}`);
 			return false;
@@ -491,15 +459,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Get peaks (age=0) and context (age>0) neurons.
-	 * @param {number} [level] - Optional level to filter by. If omitted, includes all levels.
-	 * @returns {{peaks: Array<Neuron>, context: Context}}
-	 */
-	getPeaksAndContext(level) {
-		return this.memory.getPeaksAndContext(level);
-	}
-
-	/**
 	 * Learn new patterns from prediction errors and action regret.
 	 * Iterates over inferringNeurons (neurons that voted for winners) to find prediction errors.
 	 * Note: inferringNeurons is aged along with activeNeurons, so ages are aligned.
@@ -509,9 +468,8 @@ export default class Brain {
 		// Get new activated neurons (age=0)
 		const newActiveNeurons = new Set(this.memory.getNeuronsAtAge(0).keys());
 
-		let patternCount = 0;
-
 		// For each inferring neuron with its context
+		let patternCount = 0;
 		for (const { neuron, age, votes, context } of this.memory.getInferringNeuronsWithContext()) {
 
 			// Try to learn a pattern at this age
@@ -528,7 +486,6 @@ export default class Brain {
 
 			patternCount++;
 		}
-
 		if (this.debug && patternCount > 0) console.log(`Created ${patternCount} error patterns`);
 	}
 
@@ -554,7 +511,7 @@ export default class Brain {
 		this.ensureChannelActions(inferences);
 
 		// Save inferences to memory (clears old inferences first)
-		this.saveInferences(inferences);
+		this.memory.saveInferences(inferences);
 
 		// Notify channels about winning event predictions for continuous tracking (e.g., price prediction)
 		this.notifyChannelsOfEventPredictions(inferences);
@@ -677,33 +634,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Save winning inferences to in-memory structures.
-	 * Only winners are saved - losers are discarded.
-	 * Also filters inferringNeurons to only keep votes that led to winners.
-	 * @param {Array} inferences - Array of inference objects with isWinner flag
-	 */
-	saveInferences(inferences) {
-
-		// Get set of winning neuron IDs
-		const winnerIds = new Set();
-		for (const inf of inferences)
-			if (inf.isWinner)
-				winnerIds.add(inf.neuron_id);
-
-		// Save only winners to inferredNeurons
-		this.memory.clearInferences();
-		for (const inf of inferences)
-			if (inf.isWinner)
-				this.memory.addInference(inf.neuron_id, inf.strength);
-
-		// Filter inferringNeurons to only keep votes that led to winners
-		this.memory.filterInferringByWinners(winnerIds);
-
-		if (this.debug)
-			console.log(`Saved ${winnerIds.size} winning inferences`);
-	}
-
-	/**
 	 * Notify channels about winning event predictions for continuous tracking.
 	 * Channels can use this to calculate continuous predictions (e.g., price prediction from buckets).
 	 * @param {Array} inferences - Array of inference objects with isWinner flag
@@ -755,6 +685,10 @@ export default class Brain {
 		}
 		if (this.debug) console.log(`  Connections: ${connectionsUpdated} weakened, ${connectionsDeleted} deleted`);
 		if (this.debug) console.log(`  Patterns: context ${contextDeleted}, peaks ${peaksDeleted}`);
+
+		// orphan cleanup (must be done after all neurons finish forgetting)
+		this.deleteOrphanedPatterns();
+
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}
 
