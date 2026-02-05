@@ -121,8 +121,6 @@ export default class StockChannel extends Channel {
 		this.totalTrades = 0; // Total number of trades in current episode
 		this.profitableTrades = 0; // Number of profitable trades in current episode
 		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
-		this.lastPredictedPrice = null; // Predicted price from previous frame
-		this.pricePredictionErrors = []; // Array of price prediction errors for calculating metrics
 	}
 
 	/**
@@ -221,23 +219,6 @@ export default class StockChannel extends Channel {
 	computeChangeInputs() {
 		const priceChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
 		const volumeChange = ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
-
-		// Calculate prediction error if we had a price prediction from previous frame
-		if (this.lastPredictedPrice !== null) {
-			const actualChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
-			const predictedChange = ((this.lastPredictedPrice - this.previousPrice) / this.previousPrice) * 100;
-
-			// Error is the absolute difference between predicted and actual percentage changes
-			const error = Math.abs(actualChange - predictedChange);
-			this.pricePredictionErrors.push(error);
-
-			// Calculate average error for this channel
-			const avgError = this.pricePredictionErrors.reduce((sum, err) => sum + err, 0) / this.pricePredictionErrors.length;
-
-			if (this.debug) console.log(`${this.symbol}: Actual ${actualChange.toFixed(2)}% change → $${this.currentPrice.toFixed(2)}, Error ${error.toFixed(2)}pp, Avg Error ${avgError.toFixed(2)}pp`);
-			this.lastPredictedPrice = null;
-		}
-
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange) },
@@ -380,23 +361,41 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Called when brain determines winning event predictions via voting.
-	 * Used for channel-specific tracking (e.g., continuous price prediction).
-	 * @param {Array} winners - winning event predictions from voting
+	 * Calculate continuous prediction error for price predictions.
+	 * Compares weighted predicted percentage change to actual percentage change.
+	 * @param {Array} predictions - Array of {neuron, strength} for predicted event neurons
+	 * @param {Array} actuals - Array of neurons that actually occurred
+	 * @returns {number|null} - Absolute error in percentage points, or null if no price predictions
 	 */
-	onEventPredictions(winners) {
-		if (winners.length === 0) {
-			this.lastPredictedPrice = null;
-			return;
-		}
-
-		// Group by dimension for tracking
-		const byDimension = this.groupByDimension(winners);
-
-		// Calculate continuous price prediction for accuracy tracking
+	calculatePredictionError(predictions, actuals) {
 		const priceChangeDim = `${this.symbol}_price_change`;
-		if (byDimension.has(priceChangeDim)) this.calculateContinuousPricePrediction(byDimension.get(priceChangeDim));
-		else this.lastPredictedPrice = null;
+
+		// Filter to price change predictions only
+		const pricePredictions = predictions.filter(p => p.neuron.coordinates[priceChangeDim] !== undefined);
+		if (pricePredictions.length === 0) return null;
+
+		// Calculate weighted predicted percentage change
+		let totalWeightedChange = 0;
+		let totalStrength = 0;
+		for (const pred of pricePredictions) {
+			const bucketValue = pred.neuron.coordinates[priceChangeDim];
+			const percentageChange = this.bucketValueToPercentage(bucketValue);
+			totalWeightedChange += percentageChange * pred.strength;
+			totalStrength += pred.strength;
+		}
+		if (totalStrength === 0) return null;
+		const predictedChange = totalWeightedChange / totalStrength;
+
+		// Find actual price change from actuals
+		const actualNeuron = actuals.find(n => n.coordinates[priceChangeDim] !== undefined);
+		if (!actualNeuron) return null;
+		const actualChange = this.bucketValueToPercentage(actualNeuron.coordinates[priceChangeDim]);
+
+		// Return absolute error in percentage points
+		const error = Math.abs(predictedChange - actualChange);
+		if (this.debug)
+			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}%, Actual ${actualChange.toFixed(2)}%, Error ${error.toFixed(2)}pp`);
+		return error;
 	}
 
 	/**
@@ -406,80 +405,6 @@ export default class StockChannel extends Channel {
 		if (activityValue === POSITION_OWN) return 'POSITION_OWN';
 		if (activityValue === POSITION_OUT) return 'POSITION_OUT';
 		return 'UNKNOWN';
-	}
-
-	/**
-	 * Group inferences by dimension
-	 * @param {Array} inferences - list of inferences
-	 * @returns {Map} - Map of dimension name to array of inferences
-	 */
-	groupByDimension(inferences) {
-		const groups = new Map();
-		for (const inf of inferences)
-			for (const dim of Object.keys(inf.coordinates)) {
-				if (!groups.has(dim)) groups.set(dim, []);
-				groups.get(dim).push(inf);
-			}
-		return groups;
-	}
-
-	/**
-	 * Calculate continuous price prediction as weighted average
-	 * Uses previousPrice as base for predicting next frame
-	 * @param {Array} pricePredictions - predictions for price_change dimension
-	 */
-	calculateContinuousPricePrediction(pricePredictions) {
-		if (pricePredictions.length === 0 || this.previousPrice === null) {
-			this.lastPredictedPrice = null;
-			return;
-		}
-
-		const priceChangeDim = `${this.symbol}_price_change`;
-		let totalWeightedPrice = 0;
-		let totalStrength = 0;
-		const bucketDetails = [];
-
-		for (const pred of pricePredictions) {
-			const bucketValue = pred.coordinates[priceChangeDim];
-			const percentageChange = this.bucketValueToPercentage(bucketValue);
-			const predictedPrice = this.previousPrice * (1 + percentageChange / 100);
-
-			totalWeightedPrice += predictedPrice * pred.strength;
-			totalStrength += pred.strength;
-			bucketDetails.push(`B${bucketValue}(${percentageChange.toFixed(2)}%):${pred.strength.toFixed(1)}`);
-		}
-
-		this.lastPredictedPrice = totalStrength > 0 ? totalWeightedPrice / totalStrength : null;
-
-		if (this.lastPredictedPrice !== null && this.debug) {
-			const predictedChange = ((this.lastPredictedPrice - this.previousPrice) / this.previousPrice) * 100;
-			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}% change (${bucketDetails.join(', ')}) → $${this.lastPredictedPrice.toFixed(2)} from $${this.previousPrice.toFixed(2)}`);
-		}
-	}
-
-	/**
-	 * Boltzmann selection from a list of inferences
-	 * Selects probabilistically using Boltzmann (softmax) distribution
-	/**
-	 * Get continuous prediction error metrics for price predictions since last call
-	 * Returns only NEW errors since last call, then clears the array
-	 * @returns {Object} - { totalError: number, count: number } or null if no predictions
-	 */
-	getPredictionMetrics() {
-		if (this.pricePredictionErrors.length === 0) return null;
-
-		// Calculate total error for all predictions since last call
-		const totalError = this.pricePredictionErrors.reduce((sum, err) => sum + err, 0);
-		const count = this.pricePredictionErrors.length;
-
-		// Clear the array so next call only returns new errors
-		this.pricePredictionErrors = [];
-
-		return {
-			totalError,
-			count,
-			symbol: this.symbol
-		};
 	}
 
 	/**

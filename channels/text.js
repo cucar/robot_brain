@@ -18,7 +18,6 @@ export default class TextChannel extends Channel {
 		this.currentLetterIndex = 0;
 		this.patternIterations = 0;
 		this.maxIterations = 10;
-		this.lastPredictedChar = null;
 
 		// Create dimension objects for this channel
 		this.charInputDim = new Dimension('char_input');
@@ -70,47 +69,6 @@ export default class TextChannel extends Channel {
 	 */
 	async getRewards() {
 		return 1.0; // Neutral - no feedback for now since this is simply mimicking the input
-	}
-
-	/**
-	 * Called when brain determines winning event predictions via voting.
-	 * Used for channel-specific tracking (e.g., character prediction logging).
-	 * @param {Array} winners - winning event predictions from voting
-	 */
-	onEventPredictions(winners) {
-		if (winners.length === 0) {
-			this.lastPredictedChar = null;
-			return;
-		}
-
-		// Find the character prediction (should be exactly one winner per dimension)
-		const charPrediction = winners.find(w => w.coordinates && w.coordinates.char_input !== undefined);
-		if (!charPrediction) {
-			this.lastPredictedChar = null;
-			return;
-		}
-
-		// Store and log prediction
-		this.storePrediction(charPrediction);
-		this.logPrediction(charPrediction);
-	}
-
-	/**
-	 * Store prediction for feedback calculation
-	 * @param {Object} prediction - the prediction to store
-	 */
-	storePrediction(prediction) {
-		this.lastPredictedChar = prediction.coordinates.char_input;
-	}
-
-	/**
-	 * Log prediction for debugging
-	 * @param {Object} prediction - the prediction to log
-	 */
-	logPrediction(prediction) {
-		const asciiCode = Math.round(prediction.coordinates.char_input);
-		const predictedChar = String.fromCharCode(asciiCode);
-		console.log(`text: Predicted '${predictedChar}' (ASCII: ${asciiCode}, strength: ${prediction.strength.toFixed(1)})`);
 	}
 
 	/**

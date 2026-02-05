@@ -83,12 +83,13 @@ export default class Channel {
 
 
 	/**
-	 * Called when brain determines winning event predictions via voting.
-	 * Override in subclasses for channel-specific tracking (e.g., continuous price prediction).
-	 * @param {Array} winners - winning event predictions from voting
+	 * Calculate continuous prediction error for this channel.
+	 * Called by diagnostics to get channel-specific error metrics (e.g., price prediction MAPE).
+	 * Override in subclasses that have continuous prediction tracking.
+	 * @returns {number|null} - Error value or null if no continuous error calculation
 	 */
-	onEventPredictions(winners) {
-		// Default: no-op. Override in subclasses for tracking.
+	calculatePredictionError() {
+		return null; // Default: no continuous error tracking
 	}
 
 	/**

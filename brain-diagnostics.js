@@ -40,24 +40,35 @@ export class BrainDiagnostics {
 
 	/**
 	 * Track inference performance for both events and actions.
-	 * @param {Map} inferences - Map of inferred neuron IDs
+	 * Also calculates continuous prediction errors via channel callbacks.
+	 * @param {Map} inferences - Map of inferred neuron IDs to {strength}
 	 * @param {Map} neuronsAtAge0 - Map of neurons active at age 0 (reality)
 	 * @param {Map} rewards - Map of channel name to reward value
 	 * @param {Map} neurons - Map of all neurons
+	 * @param {Map} channels - Map of channel name to channel instance
 	 */
-	trackInferencePerformance(inferences, neuronsAtAge0, rewards, neurons) {
+	trackInferencePerformance(inferences, neuronsAtAge0, rewards, neurons, channels) {
 		let eventCorrect = 0;
 		let eventTotal = 0;
 		let actionReward = 0;
 		let actionCount = 0;
 
-		for (const [neuronId] of inferences) {
+		// Group event predictions by channel for continuous error calculation
+		const predictionsByChannel = new Map();
+		const actualsByChannel = new Map();
+
+		for (const [neuronId, { strength }] of inferences) {
 			const neuron = neurons.get(neuronId);
 
 			// Track event prediction accuracy
 			if (neuron.type === 'event') {
 				eventTotal++;
 				if (neuronsAtAge0.has(neuron)) eventCorrect++;
+
+				// Group for continuous error calculation
+				if (!predictionsByChannel.has(neuron.channel))
+					predictionsByChannel.set(neuron.channel, []);
+				predictionsByChannel.get(neuron.channel).push({ neuron, strength });
 			}
 			// Track action reward from the action's channel
 			else if (neuron.type === 'action') {
@@ -66,6 +77,27 @@ export class BrainDiagnostics {
 					actionReward += reward;
 					actionCount++;
 				}
+			}
+		}
+
+		// Group actual event neurons by channel
+		for (const [neuron] of neuronsAtAge0) {
+			if (neuron.type !== 'event') continue;
+			if (!actualsByChannel.has(neuron.channel))
+				actualsByChannel.set(neuron.channel, []);
+			actualsByChannel.get(neuron.channel).push(neuron);
+		}
+
+		// Calculate continuous prediction errors for each channel
+		for (const [channelName, channel] of channels) {
+			const predictions = predictionsByChannel.get(channelName) || [];
+			const actuals = actualsByChannel.get(channelName) || [];
+			if (predictions.length === 0) continue;
+
+			const error = channel.calculatePredictionError(predictions, actuals);
+			if (error !== null) {
+				this.continuousPredictionMetrics.totalError += error;
+				this.continuousPredictionMetrics.count++;
 			}
 		}
 
@@ -141,17 +173,6 @@ export class BrainDiagnostics {
 		let avgReward = 'N/A';
 		if (this.rewardStats.count > 0)
 			avgReward = `${(this.rewardStats.totalReward / this.rewardStats.count).toFixed(3)} (${this.rewardStats.count})`;
-
-		// Collect continuous prediction metrics from channels (only new errors since last call)
-		for (const [_, channel] of channels) {
-			if (typeof channel.getPredictionMetrics === 'function') {
-				const metrics = channel.getPredictionMetrics();
-				if (metrics) {
-					this.continuousPredictionMetrics.totalError += metrics.totalError;
-					this.continuousPredictionMetrics.count += metrics.count;
-				}
-			}
-		}
 
 		// Calculate average MAPE (Mean Absolute Percentage Error) and format with count
 		let mapeDisplay = 'N/A';

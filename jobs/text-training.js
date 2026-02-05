@@ -126,7 +126,6 @@ export default class TextTrainingJob extends Job {
 			channel.currentLetterIndex = 0;
 			channel.patternIterations = 0;
 			channel.currentPosition = 0;
-			channel.lastPredictedChar = null;
 		}
 	}
 

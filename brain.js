@@ -343,8 +343,8 @@ export default class Brain {
 		// activate the neurons in the in-memory context
 		this.activateNeurons(neuronIds);
 
-		// Track inference performance (event accuracy and action rewards)
-		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.neurons);
+		// Track inference performance (event accuracy, action rewards, and continuous prediction errors)
+		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.neurons, this.channels);
 	}
 
 	/**
@@ -512,9 +512,6 @@ export default class Brain {
 
 		// Save inferences to memory (clears old inferences first)
 		this.memory.saveInferences(inferences);
-
-		// Notify channels about winning event predictions for continuous tracking (e.g., price prediction)
-		this.notifyChannelsOfEventPredictions(inferences);
 	}
 
 	/**
@@ -631,33 +628,6 @@ export default class Brain {
 		if (this.debug) console.log(`Determined consensus: ${candidates.length} candidates, ${winnerIds.size} winners`);
 
 		return candidates.map(c => ({ ...c, isWinner: winnerIds.has(c.neuron_id) }));
-	}
-
-	/**
-	 * Notify channels about winning event predictions for continuous tracking.
-	 * Channels can use this to calculate continuous predictions (e.g., price prediction from buckets).
-	 * @param {Array} inferences - Array of inference objects with isWinner flag
-	 */
-	notifyChannelsOfEventPredictions(inferences) {
-
-		// Filter to winning event predictions only
-		const eventWinners = inferences.filter(inf => inf.isWinner && inf.type === 'event');
-		if (eventWinners.length === 0) return;
-
-		// Group by channel
-		const byChannel = new Map();
-		for (const winner of eventWinners) {
-			if (!winner.channel) continue;
-			if (!byChannel.has(winner.channel)) byChannel.set(winner.channel, []);
-			byChannel.get(winner.channel).push(winner);
-		}
-
-		// Notify each channel
-		for (const [channelName, winners] of byChannel) {
-			const channel = this.channels.get(channelName);
-			if (channel && typeof channel.onEventPredictions === 'function')
-				channel.onEventPredictions(winners);
-		}
 	}
 
 	/**
