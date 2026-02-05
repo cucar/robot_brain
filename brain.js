@@ -246,6 +246,7 @@ export default class Brain {
 		// ---------------------------- END PROCESSING ----------------------------------
 
 		// forget connections and patterns in (age>0 and age<=contextLength) neurons to avoid curse of dimensionality
+		// this should normally not be part of the frame processing and instead should be a separate thread
 		this.forgetNeurons();
 
 		// show frame processing summary
@@ -387,23 +388,6 @@ export default class Brain {
 	}
 
 	/**
-	 * updates neuron connections based on observations.
-	 * Context neurons (age > 0) learn about newly active neurons (age = 0).
-	 */
-	updateConnections() {
-
-		// Get newly active sensory neurons (age=0, level=0 - events and actions)
-		const newActiveNeurons = new Set();
-		for (const neuron of this.memory.getNeuronsAtAge(0).keys())
-			if (neuron.level === 0) newActiveNeurons.add(neuron);
-		if (newActiveNeurons.size === 0) return;
-
-		// Each context neuron learns connections at its own distance
-		for (const { neuron, age } of this.memory.getContextNeurons())
-			neuron.learnConnectionsAtAge(age, newActiveNeurons, this.rewards, this.channelActions);
-	}
-
-	/**
 	 * Detects patterns at all levels starting from base - goes as high as possible until no patterns found.
 	 */
 	recognizePatterns() {
@@ -455,14 +439,34 @@ export default class Brain {
 	}
 
 	/**
+	 * updates neuron connections based on observations.
+	 * Context neurons (age > 0) learn about newly active neurons (age = 0).
+	 */
+	updateConnections() {
+
+		// Get newly active sensory neurons (age=0, level=0 - events and actions)
+		const newActiveNeurons = new Set();
+		for (const neuron of this.memory.getNeuronsAtAge(0).keys())
+			if (neuron.level === 0) newActiveNeurons.add(neuron);
+		if (newActiveNeurons.size === 0) return;
+
+		// Each context neuron learns connections at its own distance
+		for (const { neuron, age } of this.memory.getContextNeurons())
+			neuron.learnConnectionsAtAge(age, newActiveNeurons, this.rewards, this.channelActions);
+	}
+
+	/**
 	 * Learn new patterns from prediction errors and action regret.
 	 * Iterates over inferringNeurons (neurons that voted for winners) to find prediction errors.
 	 * Note: inferringNeurons is aged along with activeNeurons, so ages are aligned.
 	 */
 	learnNewPatterns() {
 
-		// Get new activated neurons (age=0)
-		const newActiveNeurons = new Set(this.memory.getNeuronsAtAge(0).keys());
+		// Get newly active sensory neurons (age=0, level=0 - events and actions)
+		const newActiveNeurons = new Set();
+		for (const neuron of this.memory.getNeuronsAtAge(0).keys())
+			if (neuron.level === 0) newActiveNeurons.add(neuron);
+		if (newActiveNeurons.size === 0) return;
 
 		// For each inferring neuron with its context
 		let patternCount = 0;

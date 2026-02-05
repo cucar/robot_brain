@@ -242,20 +242,20 @@ export class Neuron {
 		// Get active event neurons at age=0 (what actually happened)
 		const activeEventNeurons = new Set();
 		for (const neuron of newlyActiveNeurons)
-			if (neuron.level === 0 && neuron.type === 'event')
+			if (neuron.type === 'event')
 				activeEventNeurons.add(neuron);
+
+		// Get winning action neurons
+		const winnerActions = new Set();
+		for (const neuron of newlyActiveNeurons)
+			if (neuron.type === 'action')
+				winnerActions.add(neuron);
 
 		// Get painful channels
 		const painfulChannels = new Set();
 		for (const [channelName, reward] of rewards)
 			if (reward < Neuron.actionRegretMinPain)
 				painfulChannels.add(channelName);
-
-		// Get winning action neurons
-		const winnerActions = new Set();
-		for (const neuron of newlyActiveNeurons)
-			if (neuron.level === 0 && neuron.type === 'action')
-				winnerActions.add(neuron);
 
 		// Collect errors at this distance (use Set to avoid duplicates)
 		const patternConnections = new Set();
