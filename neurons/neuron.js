@@ -115,18 +115,17 @@ export class Neuron {
 	}
 
 	/**
-	 * Collect votes from this neuron at a specific age.
+	 * returns votes from this neuron at a specific age.
 	 * @param {number} age - The age at which this neuron is active
-	 * @param {number} contextLength - Context window length for time decay
+	 * @param {number} timeDecay - Context window length for time decay
 	 * @returns {Array} Array of vote objects {toNeuron, strength, reward, distance}
 	 */
-	collectVotesAtAge(age, contextLength) {
+	vote(age, timeDecay) {
 
 		// use connections of distance one more than the age to get the inferences for the next frame
 		const distance = age + 1;
 
 		// level and age adjustments to the vote strength
-		const timeDecay = 1 / contextLength;
 		const levelWeight = 1 + this.level * Neuron.levelVoteMultiplier;
 		const timeWeight = 1 - (distance - 1) * timeDecay;
 
@@ -186,7 +185,7 @@ export class Neuron {
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
 	 */
-	learnConnectionsAtAge(age, newActiveNeurons, rewards, channelActions) {
+	learnConnections(age, newActiveNeurons, rewards, channelActions) {
 
 		// Only event neurons (level 0) or pattern neurons can learn connections
 		if (this.level === 0 && this.type !== 'event') return;

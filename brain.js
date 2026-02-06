@@ -220,7 +220,7 @@ export default class Brain {
 		// ---------------------------- FIRST LOOP ----------------------------------
 
 		// age the active neurons in memory context - sliding the temporal window
-		// deletion of aged-out neurons is deferred to after pattern learning
+		// also deactivates aged-out neurons (now that context was saved with votes in previous frame)
 		this.memory.age();
 
 		// activate sensory neurons in age=0, level=0 - inputs from the world
@@ -231,16 +231,13 @@ export default class Brain {
 		// discover and activate patterns using connections in age=0 - start recursion from base level
 		this.recognizePatterns();
 
-		// update the (age>0 and age<=contextLength) neurons connections based on observations in age=0
+		// update the age>0 neurons connections based on observations in age=0
 		this.updateConnections();
 
-		// learn new patterns in (age>0 and age<=contextLength) neurons from failed predictions and action regret
+		// learn new patterns in age>0 neurons from failed predictions and action regret
 		this.learnNewPatterns();
 
-		// deactivate aged-out neurons AFTER pattern learning captured full context (age>contextLength)
-		this.memory.deactivateOld();
-
-		// do predictions and outputs in (age>0 and age<=contextLength) neurons - what's going to happen next? and what's our best response?
+		// do inferences with age>0 neurons - what's going to happen next? and what's our best response?
 		this.inferNeurons();
 
 		// ---------------------------- END PROCESSING ----------------------------------
@@ -445,32 +442,25 @@ export default class Brain {
 	updateConnections() {
 
 		// Get newly active sensory neurons (age=0, level=0 - events and actions)
-		const newActiveNeurons = new Set();
-		for (const neuron of this.memory.getNeuronsAtAge(0).keys())
-			if (neuron.level === 0) newActiveNeurons.add(neuron);
-		if (newActiveNeurons.size === 0) return;
+		const newActiveNeurons = this.memory.getNewSensoryNeurons();
 
 		// Each context neuron learns connections at its own distance
 		for (const { neuron, age } of this.memory.getContextNeurons())
-			neuron.learnConnectionsAtAge(age, newActiveNeurons, this.rewards, this.channelActions);
+			neuron.learnConnections(age, newActiveNeurons, this.rewards, this.channelActions);
 	}
 
 	/**
 	 * Learn new patterns from prediction errors and action regret.
-	 * Iterates over inferringNeurons (neurons that voted for winners) to find prediction errors.
-	 * Note: inferringNeurons is aged along with activeNeurons, so ages are aligned.
+	 * Iterates over neurons that voted to find prediction errors.
 	 */
 	learnNewPatterns() {
 
 		// Get newly active sensory neurons (age=0, level=0 - events and actions)
-		const newActiveNeurons = new Set();
-		for (const neuron of this.memory.getNeuronsAtAge(0).keys())
-			if (neuron.level === 0) newActiveNeurons.add(neuron);
-		if (newActiveNeurons.size === 0) return;
+		const newActiveNeurons = this.memory.getNewSensoryNeurons();
 
-		// For each inferring neuron with its context
+		// For each neuron that voted with its context
 		let patternCount = 0;
-		for (const { neuron, age, votes, context } of this.memory.getInferringNeuronsWithContext()) {
+		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext()) {
 
 			// Try to learn a pattern at this age
 			const newPattern = neuron.learnNewPattern(age, votes, newActiveNeurons, this.rewards, this.channelActions, context);
@@ -517,14 +507,13 @@ export default class Brain {
 	/**
 	 * Ensure every channel has an action in the inferences array.
 	 * If a channel has no inferred action, add an exploration action.
-	 * @param {Array} inferences - Array of inference objects to modify
+	 * @param {Array} inferences - Array of winning inference objects to modify
 	 */
 	ensureChannelActions(inferences) {
 
 		// Find which channels already have an action inferred
 		const channelsWithActions = new Set();
 		for (const inf of inferences) {
-			if (!inf.isWinner) continue;
 			const neuron = this.neurons.get(inf.neuron_id);
 			if (neuron && neuron.level === 0 && neuron.type === 'action')
 				channelsWithActions.add(neuron.channel);
@@ -535,47 +524,38 @@ export default class Brain {
 			if (channelsWithActions.has(channelName)) continue;
 			// No action inferred for this channel - use first action as exploration
 			const explorationAction = this.channelActions.get(channelName).values().next().value;
-			inferences.push({ neuron_id: explorationAction.id, strength: 0, isWinner: true });
+			inferences.push({ neuron_id: explorationAction.id, strength: 0 });
 		}
 	}
 
 	/**
-	 * Collect votes from active neurons.
-	 * Populates inferringNeurons array for pattern learning.
+	 * Collect votes from active neurons. Stores votes and context in activeNeurons for pattern learning.
 	 * @returns {Array} Array of vote objects for consensus
 	 */
 	collectVotes() {
 		const votes = [];
-		let baseCount = 0, patternCount = 0;
-
-		// Clear inferring neurons array
-		this.memory.clearInferringNeurons();
 
 		// Collect votes from neurons that can vote
-		for (const { neuron, age, activatedPattern } of this.memory.getVotingNeurons()) {
-
-			// Only event neurons (level 0) or pattern neurons can create patterns
-			if (neuron.level === 0 && neuron.type !== 'event') continue;
+		for (const { neuron, age, state } of this.memory.getVotingNeurons()) {
 
 			// if a pattern was activated by the neuron, its inference is suppressed - skip
-			if (activatedPattern !== null) continue;
+			if (state.activatedPattern !== null) continue;
 
 			// get the votes of the neuron
-			const neuronVotes = neuron.collectVotesAtAge(age, this.memory.contextLength);
-			if (neuronVotes.length === 0) continue;
+			const neuronVotes = neuron.vote(age, 1 / this.memory.contextLength);
 
-			// Store votes in inferringNeurons for pattern learning
-			this.memory.addVote(neuron, age, neuronVotes);
+			// capture context at voting time for pattern learning
+			const context = this.memory.getContextForAge(age, neuron.level);
+
+			// store votes and context in activeNeurons for learning if the inference ends up being bad (wrong/painful)
+			this.memory.setVotes(neuron, age, neuronVotes, context);
 
 			// add the votes to the returned array
-			for (const v of neuronVotes) {
-				votes.push({ fromNeuronId: neuron.id, neuronId: v.toNeuron.id, strength: v.strength, reward: v.reward, distance: v.distance });
-				if (neuron.isPattern) patternCount++;
-				else baseCount++;
-			}
+			for (const v of neuronVotes)
+				votes.push({ neuronId: v.toNeuron.id, strength: v.strength, reward: v.reward });
 		}
 
-		if (this.debug) console.log(`Collected ${baseCount} base votes, ${patternCount} pattern votes`);
+		if (this.debug) console.log(`Collected ${votes.length} votes`);
 		return votes;
 	}
 
@@ -583,51 +563,37 @@ export default class Brain {
 	 * Aggregate votes and determine winners per dimension.
 	 * Events win by strength, actions win by reward.
 	 * @param {Array} votes - Array of vote objects from collectVotes
-	 * @returns {Array} Array of inference objects with isWinner flag
+	 * @returns {Array} Array of winning inference objects {neuron_id, strength}
 	 */
 	determineConsensus(votes) {
 
-		// Aggregate votes by neuron
-		const aggregated = new Map(); // neuronId -> {neuron, strength, weightedReward}
+		// Aggregate candidate neurons
+		const candidates = new Map(); // neuronId -> {neuron, strength, weightedReward}
 		for (const v of votes) {
 			const neuron = this.neurons.get(v.neuronId);
-			if (!aggregated.has(v.neuronId))
-				aggregated.set(v.neuronId, { neuron, strength: 0, weightedReward: 0 });
-			const agg = aggregated.get(v.neuronId);
-			agg.strength += v.strength;
-			agg.weightedReward += v.strength * v.reward;
-		}
-
-		if (aggregated.size === 0) return [];
-
-		// Build candidates with aggregated strength and reward
-		const candidates = [];
-		for (const [neuronId, agg] of aggregated) {
-			const n = agg.neuron;
-			candidates.push({
-				neuron_id: neuronId,
-				strength: agg.strength,
-				reward: agg.weightedReward / agg.strength,
-				type: n.type,
-				channel: n.channel,
-				coordinates: n.coordinates
-			});
+			if (!candidates.has(v.neuronId)) candidates.set(v.neuronId, { neuron, strength: 0, weightedReward: 0 });
+			const candidate = candidates.get(v.neuronId);
+			candidate.strength += v.strength;
+			candidate.weightedReward += v.strength * v.reward;
 		}
 
 		// Determine winners per dimension (events by strength, actions by reward)
 		const dimBest = new Map(); // dimension -> {neuronId, score}
-		for (const c of candidates) {
-			const score = c.type === 'action' ? c.reward : c.strength;
-			for (const dim of Object.keys(c.coordinates))
+		for (const [neuronId, candidate] of candidates) {
+			const reward = candidate.weightedReward / candidate.strength;
+			const score = candidate.neuron.type === 'action' ? reward : candidate.strength;
+			for (const dim of Object.keys(candidate.neuron.coordinates))
 				if (!dimBest.has(dim) || score > dimBest.get(dim).score)
-					dimBest.set(dim, { neuronId: c.neuron_id, score });
+					dimBest.set(dim, { neuronId, score });
 		}
 
+		// Return only winners with minimal fields
 		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
-
-		if (this.debug) console.log(`Determined consensus: ${candidates.length} candidates, ${winnerIds.size} winners`);
-
-		return candidates.map(c => ({ ...c, isWinner: winnerIds.has(c.neuron_id) }));
+		if (this.debug) console.log(`Determined consensus: ${candidates.size} candidates, ${winnerIds.size} winners`);
+		const winners = [];
+		for (const neuronId of winnerIds)
+			winners.push({ neuron_id: neuronId, strength: candidates.get(neuronId).strength });
+		return winners;
 	}
 
 	/**

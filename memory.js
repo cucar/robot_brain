@@ -1,7 +1,7 @@
 import { Context } from './neurons/context.js';
 
 /**
- * Memory - manages the temporal sliding window of active, inferred, and inferring neurons.
+ * Memory - manages the temporal sliding window of active and inferred neurons.
  * Encapsulates all access to the brain's short-term memory structures.
  */
 export class Memory {
@@ -11,53 +11,45 @@ export class Memory {
 		// memory hyperparameters
 		this.contextLength = 5; // number of frames a base neuron stays active
 
-		// Active context indexed by age: Array<Map<Neuron, pattern|null>>
+		// Active context indexed by age: Array<Map<Neuron, {activatedPattern, votes, context}>>
 		// activeNeurons[0] = age 0 (newest), activeNeurons[n] = age n (older)
-		// pattern is the pattern neuron activated at that age, or null if no pattern
+		// activatedPattern: pattern neuron activated by this neuron, or null
+		// votes: array of votes cast by this neuron, or null if hasn't voted yet
+		// context: array of context neurons at voting time, or null if hasn't voted yet
 		this.activeNeurons = [];
 		
 		// Current frame winning inferences: neuronId -> {strength}
 		this.inferredNeurons = new Map();
-		
-		// Inferring neurons indexed by age (winners only): Array<Map<Neuron, Array<{toNeuron, strength, reward}>>>
-		// inferringNeurons[age] = Map of neurons to their votes at that age
-		this.inferringNeurons = [];
 
 		// carry over the debug flag
 		this.debug = debug;
 	}
 
 	/**
-	 * Reset context (active neurons, inferred neurons, inferring neurons)
+	 * Reset context (active neurons, inferred neurons)
 	 */
 	reset() {
 		this.activeNeurons = [];
 		this.inferredNeurons = new Map();
-		this.inferringNeurons = [];
 	}
 
 	/**
-	 * Age all neurons by shifting the age arrays
+	 * Age all neurons by shifting the age arrays and deactivate aged-out neurons
 	 */
 	age() {
 		if (this.debug) console.log('Aging neurons...');
 		this.activeNeurons.unshift(new Map());
-		this.inferringNeurons.unshift(new Map());
-	}
 
-	/**
-	 * Deactivate neurons that have aged out of the context window
-	 */
-	deactivateOld() {
-		if (this.activeNeurons.length <= this.contextLength) return;
-		this.inferringNeurons.pop();
-		const removed = this.activeNeurons.pop();
-		if (this.debug && removed.size > 0) console.log(`Deactivated ${removed.size} aged-out neurons`);
+		// Deactivate neurons that have aged out of the context window
+		if (this.activeNeurons.length > this.contextLength) {
+			const removed = this.activeNeurons.pop();
+			if (this.debug && removed.size > 0) console.log(`Deactivated ${removed.size} aged-out neurons`);
+		}
 	}
 
 	/**
 	 * Get neurons at a specific age
-	 * @returns {Map<Neuron, pattern|null>} Map of neurons to their activated pattern (or null)
+	 * @returns {Map<Neuron, {activatedPattern, votes, context}>}
 	 */
 	getNeuronsAtAge(age) {
 		return this.activeNeurons[age] ?? new Map();
@@ -75,7 +67,7 @@ export class Memory {
 	 */
 	activateNeuronAtAge(neuron, age) {
 		if (!this.activeNeurons[age]) this.activeNeurons[age] = new Map();
-		this.activeNeurons[age].set(neuron, null);
+		this.activeNeurons[age].set(neuron, { activatedPattern: null, votes: null, context: null });
 	}
 
 	/**
@@ -96,23 +88,19 @@ export class Memory {
 	activatePattern(pattern, peak, age) {
 		this.activateNeuronAtAge(pattern, age);
 		const neuronsAtAge = this.activeNeurons[age];
-		if (neuronsAtAge?.has(peak)) neuronsAtAge.set(peak, pattern);
+		const state = neuronsAtAge.get(peak);
+		state.activatedPattern = pattern;
 		pattern.strengthenPeak();
 	}
 
 	/**
-	 * Add a vote from an inferring neuron at a specific age
+	 * Set votes and context for a neuron at a specific age
 	 */
-	addVote(neuron, age, votes) {
-		if (!this.inferringNeurons[age]) this.inferringNeurons[age] = new Map();
-		this.inferringNeurons[age].set(neuron, votes);
-	}
-
-	/**
-	 * Clear all inferring neurons
-	 */
-	clearInferringNeurons() {
-		this.inferringNeurons = [];
+	setVotes(neuron, age, votes, context) {
+		const neuronsAtAge = this.activeNeurons[age];
+		const state = neuronsAtAge.get(neuron);
+		state.votes = votes;
+		state.context = context;
 	}
 
 	/**
@@ -137,14 +125,28 @@ export class Memory {
 	}
 
 	/**
-	 * Get context neurons (age > 0, age < contextLength) for connection learning
-	 * @returns {Array<{neuron, age}>}
+	 * Get newly active sensory neurons (age=0, level=0 - events and actions)
+	 * @returns {Set} Set of newly active sensory neurons
 	 */
-	getContextNeurons() {
+	getNewSensoryNeurons() {
+		const newActiveNeurons = new Set();
+		for (const neuron of this.getNeuronsAtAge(0).keys())
+			if (neuron.level === 0) newActiveNeurons.add(neuron);
+		return newActiveNeurons;
+	}
+
+	/**
+	 * returns context array for a given age (older neurons relative to this age)
+	 * @param {number} age - The age to build context for
+	 * @param {number} level - The level to filter context neurons by (same level as peak neuron)
+	 * @returns {Array<{neuron, distance}>}
+	 */
+	getContextForAge(age, level) {
 		const result = [];
-		for (let age = 1; age < this.activeNeurons.length && age < this.contextLength; age++)
-			for (const neuron of (this.activeNeurons[age] ?? new Map()).keys())
-				result.push({ neuron, age });
+		for (let ctxAge = age + 1; ctxAge < this.activeNeurons.length; ctxAge++)
+			for (const neuron of (this.activeNeurons[ctxAge] ?? new Map()).keys())
+				if (neuron.level === level && (neuron.level > 0 || neuron.type !== 'action'))
+					result.push({ neuron: neuron, distance: ctxAge - age });
 		return result;
 	}
 
@@ -171,89 +173,53 @@ export class Memory {
 	}
 
 	/**
-	 * Get neurons that can vote (age < contextLength - 1, not suppressed by pattern)
-	 * @returns {Array<{neuron, age, activatedPattern}>}
+	 * Get neurons that can vote (within context window)
+	 * @returns {Array<{neuron, age, state}>}
 	 */
 	getVotingNeurons() {
 		const result = [];
-		for (let age = 0; age < this.activeNeurons.length && age < this.contextLength; age++)
-			for (const [neuron, activatedPattern] of (this.activeNeurons[age] ?? new Map()))
-				result.push({ neuron, age, activatedPattern });
+		// Iterate through all active neurons except the oldest (which don't have distance+1 connections)
+		for (let age = 0; age < this.activeNeurons.length - 1; age++)
+			for (const [neuron, state] of this.activeNeurons[age])
+				if (neuron.level > 0 || neuron.type !== 'action') // action neurons cannot vote - their inferences are too erratic
+					result.push({ neuron, age, state });
 		return result;
 	}
 
 	/**
-	 * Get inferring neurons with their context for pattern learning
+	 * Get context neurons (age > 0, age < contextLength) for connection learning
+	 * @returns {Array<{neuron, age}>}
+	 */
+	getContextNeurons() {
+		const result = [];
+		for (let age = 1; age < this.activeNeurons.length; age++)
+			for (const neuron of this.activeNeurons[age].keys())
+				if (neuron.level > 0 || neuron.type !== 'action') // action neurons cannot learn connections - they are predicted by events
+					result.push({ neuron, age });
+		return result;
+	}
+
+	/**
+	 * get neurons that voted with their context for pattern learning.
+	 * Returns neurons that voted in the previous frame with their pre-saved context.
 	 * @returns {Array<{neuron, age, votes, context}>}
 	 */
-	getInferringNeuronsWithContext() {
+	getVotersWithContext() {
 		const result = [];
-		for (let age = 1; age < this.inferringNeurons.length; age++) {
-			const votesAtAge = this.inferringNeurons[age];
-			if (!votesAtAge || votesAtAge.size === 0) continue;
-
-			// Build context array with distances relative to this age
-			const context = [];
-			for (let ctxAge = age + 1; ctxAge < this.activeNeurons.length; ctxAge++) {
-				const ctxNeurons = this.activeNeurons[ctxAge];
-				if (!ctxNeurons) continue;
-				const distance = ctxAge - age;
-				if (distance < this.contextLength)
-					for (const ctxNeuron of ctxNeurons.keys())
-						if (ctxNeuron.level > 0 || ctxNeuron.type !== 'action')
-							context.push({ neuron: ctxNeuron, distance });
-			}
-
-			for (const [neuron, votes] of votesAtAge)
-				result.push({ neuron, age, votes, context });
-		}
+		for (let age = 1; age < this.activeNeurons.length; age++)
+			for (const [neuron, state] of this.activeNeurons[age])
+				if (state.votes && state.votes.length > 0)
+					result.push({ neuron, age, votes: state.votes, context: state.context });
 		return result;
-	}
-
-	/**
-	 * Filter inferring neurons to only keep votes that led to winners
-	 * @param {Set} winnerIds - Set of winning neuron IDs
-	 */
-	filterInferringByWinners(winnerIds) {
-		for (let age = 0; age < this.inferringNeurons.length; age++) {
-			const ageMap = this.inferringNeurons[age];
-			if (!ageMap) continue;
-
-			const toDelete = [];
-			for (const [neuron, votes] of ageMap) {
-				const winningVotes = votes.filter(v => winnerIds.has(v.toNeuron.id));
-				if (winningVotes.length === 0)
-					toDelete.push(neuron);
-				else
-					ageMap.set(neuron, winningVotes);
-			}
-			for (const neuron of toDelete) ageMap.delete(neuron);
-		}
 	}
 
 	/**
 	 * Save winning inferences to in-memory structures.
-	 * Only winners are saved - losers are discarded.
-	 * Also filters inferringNeurons to only keep votes that led to winners.
-	 * @param {Array} inferences - Array of inference objects with isWinner flag
+	 * @param {Array} inferences - Array of winning inference objects
 	 */
 	saveInferences(inferences) {
-
-		// Get set of winning neuron IDs
-		const winnerIds = new Set();
-		for (const inf of inferences)
-			if (inf.isWinner)
-				winnerIds.add(inf.neuron_id);
-
-		// Save only winners to inferredNeurons
 		this.clearInferences();
-		for (const inf of inferences)
-			if (inf.isWinner)
-				this.addInference(inf.neuron_id, inf.strength);
-
-		// Filter inferringNeurons to only keep votes that led to winners
-		this.filterInferringByWinners(winnerIds);
-
-		if (this.debug) console.log(`Saved ${winnerIds.size} winning inferences`);
+		for (const inf of inferences) this.addInference(inf.neuron_id, inf.strength);
+		if (this.debug) console.log(`Saved ${this.inferredNeurons.size} inferences`);
 	}
 }

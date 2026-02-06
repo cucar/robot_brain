@@ -360,7 +360,7 @@ export class BrainDB {
 				for (const [inferredNeuron, pred] of targets) {
 					const inferredId = neuronToId.get(inferredNeuron);
 					if (inferredId)
-						futureRows.push([patternId, inferredId, distance, pred.strength, pred.reward]);
+						futureRows.push([patternId, inferredId, distance, pred.strength, pred.reward || 0]);
 				}
 		}
 		if (futureRows.length > 0)
