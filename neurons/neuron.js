@@ -65,7 +65,6 @@ export class Neuron {
 	constructor(level = 0) {
 		this.id = Neuron.nextId++;
 		this.level = level;
-		this.incomingCount = 0;
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
 		this.contexts = []; // Routing table: Array<{context: Context, pattern: Neuron}>
 	}
@@ -92,7 +91,6 @@ export class Neuron {
 	createConnection(distance, toNeuron, reward) {
 		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
 		this.connections.get(distance).set(toNeuron, { strength: 1, reward });
-		toNeuron.incomingCount++;
 	}
 
 	/**
@@ -112,7 +110,6 @@ export class Neuron {
 		const distanceMap = this.connections.get(distance);
 		if (!distanceMap || !distanceMap.has(toNeuron)) return false;
 		distanceMap.delete(toNeuron);
-		toNeuron.incomingCount--;
 		if (distanceMap.size === 0) this.connections.delete(distance);
 		return true;
 	}
@@ -418,7 +415,6 @@ export class Neuron {
 	 */
 	canDelete() {
 		return this.level > 0 && // sensory neurons cannot be deleted
-			this.incomingCount === 0 && // no incoming connections (no pattern context)
 			this.connections.size === 0 && // no outgoing connections (no pattern future)
 			this.contexts.length === 0; // no contexts (no known pattern)
 	}
