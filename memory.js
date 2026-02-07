@@ -90,7 +90,6 @@ export class Memory {
 		const neuronsAtAge = this.activeNeurons[age];
 		const state = neuronsAtAge.get(peak);
 		state.activatedPattern = pattern;
-		pattern.strengthenPeak();
 	}
 
 	/**

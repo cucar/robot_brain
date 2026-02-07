@@ -163,8 +163,8 @@ export default class Brain {
 		// get rewards from all channels based on executed actions
 		await this.getRewards();
 
-		// display diagnostic frame header if enabled
-		this.diagnostics.displayFrameHeader(this.frameNumber, this.rewards, this.frame);
+		// display diagnostic frame start if enabled
+		this.diagnostics.startFrame(this.frameNumber, this.rewards, this.frame);
 
 		// ---------------------------- FIRST LOOP ----------------------------------
 
@@ -193,7 +193,7 @@ export default class Brain {
 
 		// forget connections and patterns in all neurons to avoid curse of dimensionality
 		// this should normally not be part of the frame processing and instead should be a separate thread
-		this.forgetNeurons();
+		this.runForgetCycle();
 
 		// show frame processing summary
 		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getAllChannels());
@@ -204,8 +204,6 @@ export default class Brain {
 		// return true to indicate that we have processed the frame successfully
 		return true;
 	}
-
-
 
 	/**
 	 * Returns the current frame combined from all registered channels
@@ -420,14 +418,14 @@ export default class Brain {
 		// Collect votes from active neurons (suppression handled during collection)
 		const votes = this.collectVotes();
 
-		// Aggregate votes and determine winners
-		const inferences = this.determineConsensus(votes);
-
-		// If no inferences, wait for more data
-		if (inferences.length === 0) {
+		// If no inference votes, wait for more data
+		if (votes.length === 0) {
 			if (this.debug) console.log('No inferences found. Waiting for more data in future frames.');
 			return;
 		}
+
+		// Aggregate votes and determine winners
+		const inferences = this.determineConsensus(votes);
 
 		// Ensure every channel has an action - explore if none inferred
 		this.ensureChannelActions(inferences);
@@ -530,7 +528,7 @@ export default class Brain {
 	 * Runs the forget cycle, reducing strengths and deleting unused connections/patterns/neurons.
 	 * Critical for avoiding curse of dimensionality.
 	 */
-	forgetNeurons() {
+	runForgetCycle() {
 
 		// Run periodically for cleanup
 		this.forgetCounter++;
@@ -540,17 +538,8 @@ export default class Brain {
 		const cycleStart = Date.now();
 		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
 
-		// Single parallelizable loop - each neuron handles its own forgetting
-		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0, peaksDeleted = 0;
-		for (const neuron of this.thalamus.neurons.values()) {
-			const stats = neuron.forget();
-			connectionsUpdated += stats.connectionsUpdated;
-			connectionsDeleted += stats.connectionsDeleted;
-			contextDeleted += stats.contextDeleted;
-			if (stats.peakDeleted) peaksDeleted++;
-		}
-		if (this.debug) console.log(`  Connections: ${connectionsUpdated} weakened, ${connectionsDeleted} deleted`);
-		if (this.debug) console.log(`  Patterns: context ${contextDeleted}, peaks ${peaksDeleted}`);
+		// run forget on all neurons and collect patterns to be deleted after forgetting
+		const patterns = this.thalamus.forgetNeurons();
 
 		// orphan cleanup (must be done after all neurons finish forgetting)
 		this.deleteOrphanedPatterns();

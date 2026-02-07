@@ -24,10 +24,6 @@ export class Thalamus {
 		// Dimension mappings
 		this.dimensionNameToId = {}; // dimensionName -> dimensionId
 		this.dimensionIdToName = {}; // dimensionId -> dimensionName
-
-		// Forget cycle parameters - fights curse of dimensionality
-		this.forgetCycles = 100; // number of frames between forget cycles
-		this.forgetCounter = 0; // counter for forget cycle
 	}
 
 	// ============ NEURON OPERATIONS ============
@@ -316,53 +312,14 @@ export class Thalamus {
 	// ============ FORGET CYCLE ============
 
 	/**
-	 * Runs the forget cycle, reducing strengths and deleting unused connections/patterns/neurons.
-	 * Critical for avoiding curse of dimensionality.
-	 */
-	runForgetCycle() {
-
-		// Run periodically for cleanup
-		this.forgetCounter++;
-		if (this.forgetCounter % this.forgetCycles !== 0) return;
-		this.forgetCounter = 0;
-
-		const cycleStart = Date.now();
-		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
-
-		// run forget on all neurons and collect patterns to be deleted after forgetting
-		const patterns = this.forgetNeurons();
-
-		// delete pattern neurons - must be done after all neurons finish forgetting
-		this.deletePatterns(patterns);
-
-		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
-	}
-
-	/**
 	 * Run forget cycle on all neurons and collect orphaned patterns.
+	 * forget neuron patterns and connections and then delete if it can be deleted
 	 * @returns {Array<Neuron>} - Array of neurons that can be deleted
 	 */
 	forgetNeurons() {
 		const patterns = [];
-		for (const neuron of this.neurons.values()) {
-
-			// forget neuron patterns and connections - returns if the neuron can now be deleted as a result of it
-			const canDelete = neuron.forget();
-
-			// Check if this neuron can now be deleted
-			if (canDelete) patterns.push(neuron);
-		}
+		for (const neuron of this.neurons.values()) if (neuron.forget()) patterns.push(neuron);
 		return patterns;
-	}
-
-	/**
-	 * Delete orphaned pattern neurons (no content, no references, no children).
-	 * The hierarchy is deleted bottom-up over multiple forget cycles.
-	 * @param {Array<Neuron>} patterns - Array of neurons to delete (collected during forget cycle)
-	 */
-	deletePatterns(patterns) {
-		for (const pattern of patterns) this.deletePattern(pattern);
-		if (this.debug) console.log(`  Orphaned patterns deleted: ${patterns.length}`);
 	}
 
 	/**

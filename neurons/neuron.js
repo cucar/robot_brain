@@ -8,7 +8,7 @@ import { Context } from './context.js';
  * - contexts: Array<{context: Context, pattern: Neuron}> - routing table
  *
  * Level 0 (sensory) neurons additionally have: channel, type, coordinates
- * Level > 0 (pattern) neurons additionally have: peak, peakStrength
+ * Level > 0 (pattern) neurons additionally have: peak
  *
  * Note: Active state (which neurons are active at which ages) and votes are managed
  * by the Brain, not stored on neurons. This allows efficient age-indexed queries.
@@ -22,14 +22,15 @@ export class Neuron {
 	static maxStrength = 100;
 	static minStrength = 0;
 	static rewardSmoothing = 0.9;
-	static negativeReinforcement = 0.1;
 	static eventErrorMinStrength = 2;
 	static actionRegretMinStrength = 2;
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 3;
 	static connectionForgetRate = 1;
 	static contextForgetRate = 1;
-	static patternForgetRate = 1;
+
+	// static debug flag for the neuron
+	static debug = false;
 
 	/**
 	 * Create a sensory neuron (level 0)
@@ -48,7 +49,6 @@ export class Neuron {
 	static createPattern(level, peak) {
 		const neuron = new Neuron(level);
 		neuron.peak = peak;
-		neuron.peakStrength = 1.0;
 		peak.incomingCount++;
 		return neuron;
 	}
@@ -67,36 +67,28 @@ export class Neuron {
 		this.id = Neuron.nextId++;
 		this.level = level;
 		this.incomingCount = 0;
-		// Predictions: Map<distance, Map<toNeuron, {strength, reward}>>
-		this.connections = new Map();
-		// Routing table: Array<{context: Context, pattern: Neuron}>
-		this.contexts = [];
+		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
+		this.contexts = []; // Routing table: Array<{context: Context, pattern: Neuron}>
 	}
 
 	get isSensory() { return this.level === 0; }
 	get isPattern() { return this.level > 0; }
 
-	/** Get value key for this neuron (sensory only) */
+	/**
+	 * Get value key for this neuron (sensory only)
+	 */
 	get valueKey() {
 		return Neuron.makeValueKey(this.coordinates);
 	}
 
 	/**
-	 * Called when this pattern neuron is activated via match.
-	 * Increases peak strength.
-	 */
-	strengthenPeak() {
-		if (this.level > 0) this.peakStrength = Math.min(Neuron.maxStrength, this.peakStrength + 1);
-	}
-
-	/**
 	 * Get or create connection at distance to target neuron
 	 */
-	getOrCreateConnection(distance, toNeuron) {
+	getOrCreateConnection(distance, toNeuron, reward = 0) {
 		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
 		const distanceMap = this.connections.get(distance);
 		if (!distanceMap.has(toNeuron)) {
-			distanceMap.set(toNeuron, { strength: 1, reward: 0 });
+			distanceMap.set(toNeuron, { strength: 1, reward });
 			toNeuron.incomingCount++;
 		}
 		return distanceMap.get(toNeuron);
@@ -306,7 +298,7 @@ export class Neuron {
 	 * @returns {{connectionsUpdated: number, connectionsDeleted: number, contextDeleted: number, peakDeleted: boolean}}
 	 */
 	forget() {
-		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0, peakDeleted = false;
+		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0;
 
 		// Forget context entries (on peak neurons' routing tables) - uses contextForgetRate
 		for (const { context } of this.contexts) {
@@ -340,29 +332,31 @@ export class Neuron {
 				connectionsDeleted++;
 			}
 		}
-
-		// Forget peak strength (pattern neurons only)
-		if (this.level > 0 && this.peakStrength > 0) {
-			this.peakStrength = Math.max(0, this.peakStrength - Neuron.patternForgetRate);
-			if (this.peakStrength <= 0) peakDeleted = true;
-		}
-
-		return { connectionsUpdated, connectionsDeleted, contextDeleted, peakDeleted };
+		if (Neuron.debug) console.log(`  Connections: ${connectionsUpdated} weakened, ${connectionsDeleted} deleted`);
 	}
 
 	/**
 	 * Check if neuron can be deleted
 	 */
 	canDelete() {
-		if (this.isSensory) return false;
+		if (this.isSensory) return false; // sensory neurons cannot be deleted
 		return this.incomingCount === 0 && this.connections.size === 0;
+	}
+
+	/**
+	 * Remove a pattern from this neuron's contexts (routing table).
+	 * Called by thalamus when deleting a child pattern neuron.
+	 * @param {Neuron} pattern - The pattern neuron to remove
+	 */
+	removePattern(pattern) {
+		const idx = this.contexts.findIndex(e => e.pattern === pattern);
+		if (idx !== -1) this.contexts.splice(idx, 1);
 	}
 
 	/**
 	 * Clean up all references when deleting this pattern
 	 */
 	cleanup() {
-		if (!this.isPattern) return;
 
 		// Remove from peak's routing table
 		const idx = this.peak.contexts.findIndex(e => e.pattern === this);
@@ -380,4 +374,5 @@ export class Neuron {
 			for (const toNeuron of distanceMap.keys())
 				toNeuron.incomingCount--;
 	}
+
 }

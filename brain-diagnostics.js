@@ -121,8 +121,8 @@ export class BrainDiagnostics {
 	 * @param {Map} rewards - Map of channel name to reward value
 	 * @param {Array} frame - Frame data points
 	 */
-	displayFrameHeader(frameNumber, rewards, frame) {
-		if (!this.diagnostic) return;
+	startFrame(frameNumber, rewards, frame) {
+		if (!this.debug) return;
 
 		// Display reward information
 		if (rewards.size > 0) {
@@ -139,20 +139,6 @@ export class BrainDiagnostics {
 				observations.push(`${dim}=${val}`);
 
 		console.log(`\nF${frameNumber} | Obs: ${observations.join(', ')}`);
-	}
-
-	/**
-	 * Get neuron ID by dimension name and value (for diagnostic output)
-	 * @param {string} dimensionName - The dimension name
-	 * @param {number|string} value - The value to look up
-	 * @param {Map} neurons - Map of neuron ID to neuron object
-	 * @returns {number|null} - Neuron ID or null if not found
-	 */
-	getNeuronIdByDimensionValue(dimensionName, value, neurons) {
-		for (const [neuronId, neuron] of neurons)
-			if (neuron.level === 0 && neuron.coordinates[dimensionName] === value)
-				return neuronId;
-		return null;
 	}
 
 	/**
