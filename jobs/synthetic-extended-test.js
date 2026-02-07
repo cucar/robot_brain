@@ -128,6 +128,9 @@ export default class SyntheticExtendedTest extends Job {
 
 		while (frameCount < expectedFrames) {
 
+			// Capture ownership BEFORE processing frame (this is what we owned during the price change)
+			const ownedBeforeFrame = stockChannel.owned;
+
 			// Process frame (includes getFrame, executeActions, getRewards, and all brain processing)
 			await this.brain.processFrame();
 
@@ -135,7 +138,7 @@ export default class SyntheticExtendedTest extends Job {
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
 			// Get actual position (what we owned DURING this frame's price change)
-			const actualOwned = stockChannel.owned;
+			const actualOwned = ownedBeforeFrame;
 			const optimalOwned = optimalOwnership[cycleFrame];
 			const isOptimal = actualOwned === optimalOwned;
 

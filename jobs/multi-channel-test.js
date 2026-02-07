@@ -119,13 +119,19 @@ export default class MultiChannelTest extends Job {
 
 		let frameCount = 0;
 		while (frameCount < expectedFrames) {
+
+			// Capture ownership BEFORE processing frame for all channels
+			const ownedBeforeFrame = new Map();
+			for (const [channelName, channel] of this.brain.thalamus.getAllChannels())
+				ownedBeforeFrame.set(channelName, channel.owned);
+
 			await this.brain.processFrame();
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
 			// Track optimality for each channel
-			for (const [channelName, channel] of this.brain.thalamus.getAllChannels()) {
-				const actualOwned = channel.owned;
+			for (const [channelName, _] of this.brain.thalamus.getAllChannels()) {
+				const actualOwned = ownedBeforeFrame.get(channelName);
 				const optimalOwned = optimalOwnership.get(channelName)[cycleFrame];
 				const stats = decisionStats.get(channelName);
 
