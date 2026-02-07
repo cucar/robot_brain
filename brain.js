@@ -393,7 +393,7 @@ export default class Brain {
 		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext()) {
 
 			// Try to learn a pattern at this age
-			const newPattern = neuron.learnNewPattern(age, votes, newActiveNeurons, this.rewards, channelActions, context);
+			const newPattern = neuron.learnNewPattern(age, context, votes, newActiveNeurons, this.rewards, channelActions);
 
 			// if no pattern was learned, move on to the next neuron
 			if (!newPattern) continue;

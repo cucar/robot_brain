@@ -219,72 +219,30 @@ export class Neuron {
 	 * Learn new pattern from prediction errors and action regret at a specific age.
 	 * Only called for ages where no pattern was activated.
 	 * @param {number} age - The age at which this neuron made a bad inference
-	 * @param {Array<{toNeuron, strength, reward}>} votes - Votes made by this neuron at this age
-	 * @param {Set<Neuron>} newlyActiveNeurons - Currently active neurons at age=0
+	 * @param {Array<{neuron: Neuron, distance: number}>} context - Active context neurons with distances
+	 * @param {Array<{toNeuron, strength, reward}>} inferences - Inferences made by this neuron at this age
+	 * @param {Set<Neuron>} actualNeurons - What actually happened at age=0
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
-	 * @param {Array<{neuron: Neuron, distance: number}>} context - Active context neurons with distances
 	 * @returns {Neuron|null} Newly created pattern, or null if no pattern needed
 	 */
-	learnNewPattern(age, votes, newlyActiveNeurons, rewards, channelActions, context) {
+	learnNewPattern(age, context, inferences, actualNeurons, rewards, channelActions) {
 
-		// Get active event neurons at age=0 (what actually happened)
-		const activeEventNeurons = new Set();
-		for (const neuron of newlyActiveNeurons)
-			if (neuron.type === 'event')
-				activeEventNeurons.add(neuron);
+		// Find corrections for prediction errors and action regret
+		const errorCorrections = this.findErrorCorrections(inferences, actualNeurons, rewards, channelActions);
 
-		// Get winning action neurons
-		const winnerActions = new Set();
-		for (const neuron of newlyActiveNeurons)
-			if (neuron.type === 'action')
-				winnerActions.add(neuron);
+		// No errors to learn from
+		if (errorCorrections.size === 0) return null;
 
-		// Get painful channels
-		const painfulChannels = new Set();
-		for (const [channelName, reward] of rewards)
-			if (reward < Neuron.actionRegretMinPain)
-				painfulChannels.add(channelName);
+		// Build context for the new pattern (only same-level neurons)
+		const patternContext = this.buildPatternContext(context);
 
-		// Collect errors at this distance (use Set to avoid duplicates)
-		const patternConnections = new Set();
-		for (const vote of votes) {
-
-			// Event error: predicted event didn't happen (target not in newlyActiveNeurons)
-			// Find actual events with exactly the same dimensions as the failed prediction
-			if (vote.toNeuron.type === 'event' && vote.strength >= Neuron.eventErrorMinStrength && !newlyActiveNeurons.has(vote.toNeuron)) {
-				const failedDims = Object.keys(vote.toNeuron.coordinates).sort().join(',');
-				for (const actualNeuron of activeEventNeurons) {
-					const actualDims = Object.keys(actualNeuron.coordinates).sort().join(',');
-					if (failedDims === actualDims) patternConnections.add(actualNeuron);
-				}
-			}
-
-			// Action regret: predicted action was executed and was painful
-			if (vote.toNeuron.type === 'action' && vote.strength >= Neuron.actionRegretMinStrength)
-				if (winnerActions.has(vote.toNeuron) && painfulChannels.has(vote.toNeuron.channel)) {
-					const alts = channelActions.get(vote.toNeuron.channel);
-					if (alts) {
-						const altNeuron = [...alts].find(n => n !== vote.toNeuron);
-						if (altNeuron) patternConnections.add(altNeuron);
-					}
-				}
-		}
-
-		if (patternConnections.size === 0) return null;
-
-		// Add context to peak's routing table - only include context neurons at same level
-		const patternContext = new Context();
-		for (const { neuron, distance } of context) {
-			if (neuron.level !== this.level) continue;
-			patternContext.add(neuron, distance, 1);
-		}
-
-		// Create pattern - add connections to pattern (at distance = age)
+		// Create pattern neuron at next level up
 		const pattern = Neuron.createPattern(this.level + 1, this);
-		for (const inferredNeuron of patternConnections) pattern.createConnection(age, inferredNeuron, 0);
+		for (const correctionNeuron of errorCorrections)
+			pattern.createConnection(age, correctionNeuron, 0);
 
-		// add the context to the peak's routing table for the pattern
+		// Add the context to the peak's routing table for the pattern
 		this.contexts.push({ context: patternContext, pattern });
 
 		// Return pattern - brain will handle activation
@@ -292,8 +250,120 @@ export class Neuron {
 	}
 
 	/**
-	 * run forget cycle for this neuron - decay connections and patterns
-	 * returns if it can be deleted after the forgetting
+	 * Find corrections for prediction errors and action regret.
+	 */
+	findErrorCorrections(inferences, actualNeurons, rewards, channelActions) {
+		const errorCorrections = new Set();
+
+		// Categorize what actually happened into events and actions
+		const { events: actualEvents, actions: executedActions } = this.categorizeActualNeurons(actualNeurons);
+
+		// Identify channels with painful outcomes
+		const painfulChannels = this.identifyPainfulChannels(rewards);
+
+		// Pre-compute dimension signatures for fast lookup (performance optimization)
+		const eventsByDimensions = this.groupEventsByDimensions(actualEvents);
+
+		// Process each inference to find error corrections
+		for (const inference of inferences) {
+
+			// Handle event prediction errors
+			this.findEventErrorCorrections(inference, actualNeurons, eventsByDimensions, errorCorrections);
+
+			// Handle action regret
+			this.findActionRegretCorrections(inference, executedActions, painfulChannels, channelActions, errorCorrections);
+		}
+
+		return errorCorrections;
+	}
+
+	/**
+	 * Categorize actual neurons into events and actions.
+	 */
+	categorizeActualNeurons(actualNeurons) {
+		const events = new Set();
+		const actions = new Set();
+		for (const neuron of actualNeurons) {
+			if (neuron.type === 'event') events.add(neuron);
+			if (neuron.type === 'action') actions.add(neuron);
+		}
+		return { events, actions };
+	}
+
+	/**
+	 * Identify channels that had painful outcomes.
+	 */
+	identifyPainfulChannels(rewards) {
+		const painfulChannels = new Set();
+		for (const [channelName, reward] of rewards)
+			if (reward < Neuron.actionRegretMinPain) painfulChannels.add(channelName);
+		return painfulChannels;
+	}
+
+	/**
+	 * Group event neurons by their dimension signatures for fast lookup.
+	 */
+	groupEventsByDimensions(events) {
+		const eventsByDimensions = new Map();
+		for (const neuron of events) {
+			const dimensionKey = Object.keys(neuron.coordinates).sort().join(',');
+			if (!eventsByDimensions.has(dimensionKey))
+				eventsByDimensions.set(dimensionKey, []);
+			eventsByDimensions.get(dimensionKey).push(neuron);
+		}
+		return eventsByDimensions;
+	}
+
+	/**
+	 * Find corrections for event prediction errors.
+	 * When a confident prediction didn't happen, find what actually happened with the same dimensions.
+	 */
+	findEventErrorCorrections(prediction, actualNeurons, eventsByDimensions, errorCorrections) {
+
+		// Only process event predictions that were confident but didn't happen
+		if (prediction.toNeuron.type !== 'event') return;
+		if (prediction.strength < Neuron.eventErrorMinStrength) return;
+		if (actualNeurons.has(prediction.toNeuron)) return;
+
+		// Find actual events with the same dimensions as the failed prediction
+		const failedDimensions = Object.keys(prediction.toNeuron.coordinates).sort().join(',');
+		const matchingEvents = eventsByDimensions.get(failedDimensions);
+		if (matchingEvents)
+			for (const actualEvent of matchingEvents)
+				errorCorrections.add(actualEvent);
+	}
+
+	/**
+	 * When a confident action was executed and resulted in pain, suggest an alternative.
+	 */
+	findActionRegretCorrections(prediction, executedActions, painfulChannels, channelActions, errorCorrections) {
+
+		// Only process action predictions that were confident, executed, and painful
+		if (prediction.toNeuron.type !== 'action') return;
+		if (prediction.strength < Neuron.actionRegretMinStrength) return;
+		if (!executedActions.has(prediction.toNeuron)) return;
+		if (!painfulChannels.has(prediction.toNeuron.channel)) return;
+
+		// Find an alternative action for this channel
+		const channelAlternatives = channelActions.get(prediction.toNeuron.channel);
+		if (!channelAlternatives) return;
+
+		const alternativeAction = [...channelAlternatives].find(n => n !== prediction.toNeuron);
+		if (alternativeAction) errorCorrections.add(alternativeAction);
+	}
+
+	/**
+	 * Build pattern context from observed context, filtering to same-level neurons only.
+	 */
+	buildPatternContext(context) {
+		const patternContext = new Context();
+		for (const { neuron, distance } of context)
+			if (neuron.level === this.level) patternContext.add(neuron, distance, 1);
+		return patternContext;
+	}
+
+	/**
+	 * forget cycle - decay connections and patterns - returns if it can be deleted after the forgetting
 	 */
 	forget() {
 		this.forgetPatterns();
