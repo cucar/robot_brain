@@ -78,16 +78,31 @@ export class Neuron {
 	}
 
 	/**
-	 * Get or create connection at distance to target neuron
+	 * returns if there is a connection at distance to a target neuron
 	 */
-	getOrCreateConnection(distance, toNeuron, reward = 0) {
-		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
+	hasConnection(distance, toNeuron) {
+		if (!this.connections.has(distance)) return false;
 		const distanceMap = this.connections.get(distance);
-		if (!distanceMap.has(toNeuron)) {
-			distanceMap.set(toNeuron, { strength: 1, reward });
-			toNeuron.incomingCount++;
-		}
-		return distanceMap.get(toNeuron);
+		return distanceMap.has(toNeuron);
+	}
+
+	/**
+	 * creates a connection at distance to target neuron
+	 */
+	createConnection(distance, toNeuron, reward) {
+		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
+		this.connections.get(distance).set(toNeuron, { strength: 1, reward });
+		toNeuron.incomingCount++;
+	}
+
+	/**
+	 * updates the connection at distance to target neuron - increments strength and updates reward
+	 */
+	updateConnection(distance, toNeuron, reward) {
+		if (!this.connections.has(distance)) throw new Error('Unknown connection'); // should not happen
+		const connection = this.connections.get(distance).get(toNeuron);
+		connection.strength = Math.min(Neuron.maxStrength, connection.strength + 1);
+		if (reward !== undefined) connection.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * connection.reward;
 	}
 
 	/**
@@ -178,36 +193,23 @@ export class Neuron {
 		// Only event neurons (level 0) or pattern neurons can learn connections
 		if (this.level === 0 && this.type !== 'event') return;
 
-		// get existing connections at the distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
-		const distance = age;
-		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
-		const distanceMap = this.connections.get(distance);
-
-		// learn events and actions
+		// learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
 		for (const neuron of newActiveNeurons) {
 
 			// get the reward for the neuron if it is an action
 			const reward = neuron.type === 'action' ? rewards.get(neuron.channel) : undefined;
 
 			// if the event/action was already known, strengthen the connection and update the reward
-			if (distanceMap.has(neuron)) {
-				const connection = distanceMap.get(neuron);
-				connection.strength = Math.min(Neuron.maxStrength, connection.strength + 1);
-				if (reward !== undefined) connection.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * connection.reward;
-			}
+			if (this.hasConnection(age, neuron)) this.updateConnection(age, neuron, reward);
 			// if the event/action was not known, add it to the connections with the current reward (learning from observation)
-			else {
-				distanceMap.set(neuron, { strength: 1, reward });
-				neuron.incomingCount++;
-			}
+			else this.createConnection(age, neuron, reward);
 
 			// if the neuron is an action and the reward is below a threshold, add an alternative action for the channel
 			// add the first unknown action to try next time with reward 0
 			if (reward !== undefined && reward < Neuron.actionRegretMinPain)
 				for (const altNeuron of channelActions.get(neuron.channel))
-					if (!distanceMap.has(altNeuron)) {
-						distanceMap.set(altNeuron, { strength: 1, reward: 0 });
-						altNeuron.incomingCount++;
+					if (!this.hasConnection(age, altNeuron)) {
+						this.createConnection(age, altNeuron, 0);
 						break;
 					}
 		}
@@ -280,7 +282,7 @@ export class Neuron {
 
 		// Create pattern - add connections to pattern (at distance = age)
 		const pattern = Neuron.createPattern(this.level + 1, this);
-		for (const inferredNeuron of patternConnections) pattern.getOrCreateConnection(age, inferredNeuron);
+		for (const inferredNeuron of patternConnections) pattern.createConnection(age, inferredNeuron, 0);
 
 		// add the context to the peak's routing table for the pattern
 		this.contexts.push({ context: patternContext, pattern });
