@@ -201,7 +201,7 @@ export default class StockTrainingJob extends Job {
 	 */
 	async configureChannels() {
 		// Set holdout rows for all channels
-		for (const [_, channel] of this.brain.channels) {
+		for (const [_, channel] of this.brain.thalamus.getAllChannels()) {
 			channel.holdoutRows = this.config.holdoutRows;
 		}
 	}
@@ -239,7 +239,7 @@ export default class StockTrainingJob extends Job {
 		await this.brain.resetContext();
 
 		// reset the stock channels owned flags
-		for (const [, channel] of this.brain.channels) {
+		for (const [, channel] of this.brain.thalamus.getAllChannels()) {
 			channel.inferredActions = [];
 			channel.owned = false;
 		}
@@ -264,7 +264,7 @@ export default class StockTrainingJob extends Job {
 		};
 
 		// Calculate expected number of frames based on data rows
-		const stockChannel = this.brain.channels.values().next().value;
+		const stockChannel = [...this.brain.thalamus.getAllChannels()][0][1];
 		const expectedFrames = stockChannel.dataRows.length - 1; // -1 because first frame reads 2 rows
 
 		// Process all frames for the episode duration
@@ -304,14 +304,14 @@ export default class StockTrainingJob extends Job {
 	 * Reset all channel states for a new episode
 	 */
 	resetChannelStates() {
-		for (const [_, channel] of this.brain.channels) channel.resetEpisode();
+		for (const [_, channel] of this.brain.thalamus.getAllChannels()) channel.resetEpisode();
 	}
 
 	/**
 	 * Collect profit/loss results from all channels
 	 */
 	collectEpisodeResults(episodeMetrics) {
-		for (const [channelName, channel] of this.brain.channels) {
+		for (const [channelName, channel] of this.brain.thalamus.getAllChannels()) {
 			const channelResult = {
 				symbol: channelName,
 				profit: channel.totalProfit || 0,

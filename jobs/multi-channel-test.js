@@ -98,7 +98,7 @@ export default class MultiChannelTest extends Job {
 
 		this.brain.resetAccuracyStats();
 
-		const firstChannel = this.brain.channels.values().next().value;
+		const firstChannel = [...this.brain.thalamus.getAllChannels()][0][1];
 		const expectedFrames = firstChannel.dataRows.length - 1;
 		const cycleLength = this.config.sourceRows;
 
@@ -124,7 +124,7 @@ export default class MultiChannelTest extends Job {
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
 			// Track optimality for each channel
-			for (const [channelName, channel] of this.brain.channels) {
+			for (const [channelName, channel] of this.brain.thalamus.getAllChannels()) {
 				const actualOwned = channel.owned;
 				const optimalOwned = optimalOwnership.get(channelName)[cycleFrame];
 				const stats = decisionStats.get(channelName);
@@ -179,7 +179,7 @@ export default class MultiChannelTest extends Job {
 
 		for (const symbol of this.config.symbols) {
 			const channelName = `${symbol}_TEST`;
-			const channel = this.brain.channels.get(channelName);
+			const channel = this.brain.thalamus.getChannel(channelName);
 			const stats = decisionStats.get(channelName);
 			const data = this.sourceData.get(symbol);
 
@@ -222,7 +222,7 @@ export default class MultiChannelTest extends Job {
 
 		// Calculate total P&L across all channels
 		let totalPL = 0;
-		for (const [, channel] of this.brain.channels)
+		for (const [, channel] of this.brain.thalamus.getAllChannels())
 			totalPL += channel.totalProfit - channel.totalLoss;
 		console.log(`💰 Total P&L: $${totalPL.toFixed(2)}`);
 		console.log('='.repeat(80));

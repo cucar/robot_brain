@@ -1,8 +1,7 @@
-import { Neuron } from './neurons/neuron.js';
 import { Memory } from './memory.js';
 import { BrainDB } from './brain-db.js';
-import { BrainInit } from './brain-init.js';
 import { BrainDiagnostics } from './brain-diagnostics.js';
+import { Thalamus } from './thalamus.js';
 
 /**
  * Brain Class
@@ -14,37 +13,12 @@ export default class Brain {
 	 */
 	constructor() {
 
-		//************************************************************
-		// hyperparameters
-		//************************************************************
-
 		// pattern learning parameters
 		this.maxLevels = 10; // just to prevent against infinite recursion
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
-
-		//************************************************************
-		// persistent data structures (loaded from MySQL, saved on backup)
-		//************************************************************
-
-		// All neurons: Map of neuronId -> Neuron object (SensoryNeuron or PatternNeuron)
-		// Each neuron contains its own connections/patterns as properties
-		// Note: IDs are temporary during transition - will be removed later
-		this.neurons = new Map();
-
-		// Fast lookup for sensory neurons by coordinates: valueKey -> SensoryNeuron
-		this.neuronsByValue = new Map();
-
-		// initialize channel registry
-		this.channels = new Map();
-
-		// Map of channel name -> Set of action neurons (built once in initializeActionNeurons)
-		this.channelActions = new Map();
-
-		//************************************************************
-		// frame processing scratch data (reset each frame or episode)
-		//************************************************************
+		this.forgetCounter = 0; // initialize the counter for forget cycle
 
 		// Debugging info and flags
 		this.frameNumber = 0;
@@ -53,20 +27,21 @@ export default class Brain {
 		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
 		this.waitForUserInput = false;
 
-		// initialize the counter for forget cycle
-		this.forgetCounter = 0;
-
-		// Memory - manages temporal sliding window and inferred neurons
-		this.memory = new Memory(this.debug);
-
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
 		this.rewards = new Map(); // channel rewards for current frame
 
-		// Helper classes
+		// Database - used for persistent storage - backup and restore
 		this.db = new BrainDB();
-		this.initializer = new BrainInit(this.debug);
-		this.diagnostics = new BrainDiagnostics(this.debug);
+
+		// Diagnostics - used for debug methods and performance tracking
+		this.diagnostics = new BrainDiagnostics(this.diagnostic);
+
+		// Thalamus - relay station for neuron/channel/dimension mappings
+		this.thalamus = new Thalamus(this.debug);
+
+		// Memory - manages temporal sliding window and inferred neurons
+		this.memory = new Memory(this.debug);
 	}
 
 	/**
@@ -81,8 +56,7 @@ export default class Brain {
 	 * Register a channel with the brain
 	 */
 	registerChannel(name, channelClass) {
-		const channel = this.initializer.registerChannel(name, channelClass);
-		this.channels.set(name, channel);
+		this.thalamus.registerChannel(name, channelClass);
 	}
 
 	/**
@@ -107,19 +81,18 @@ export default class Brain {
 
 	/**
 	 * Hard reset: clears ALL learned data (used mainly for tests)
-	 * Note: dimensions table is NOT truncated as it's schema-level configuration
 	 */
 	async resetBrain() {
-		await this.resetContext();
 		console.log('Hard resetting brain (all learned data)...');
 
-		// Clear in-memory neuron structures
-		this.neurons.clear();
-		this.neuronsByValue.clear();
-		Neuron.nextId = 1;
+		// reset active memory
+		await this.resetContext();
+
+		// reset all neurons, channels, dimensions in thalamus
+		this.thalamus.reset();
 
 		// Clear MySQL tables if using a database
-		if (!this.noDatabase) await this.db.truncateTables();
+		if (!this.noDatabase) await this.db.reset();
 	}
 
 	/**
@@ -134,8 +107,7 @@ export default class Brain {
 	 * Called on shutdown or when job is interrupted.
 	 */
 	async backupBrain() {
-		if (!this.noDatabase)
-			await this.db.backupBrain(this.neurons, this.channelNameToId, this.dimensionNameToId);
+		if (!this.noDatabase) await this.db.backupBrain(this.thalamus);
 	}
 
 	/**
@@ -143,55 +115,32 @@ export default class Brain {
 	 */
 	async init() {
 
-		// Initialize channels in DB and get mappings
-		if (!this.noDatabase) await this.db.initializeChannels(this.channels);
-		Object.assign(this, this.initializer.initializeChannels(this.channels));
-
-		// Initialize dimensions in DB
-		if (!this.noDatabase) await this.db.initializeDimensions(this.channels);
-
-		// Load dimension mappings
-		Object.assign(this, this.initializer.loadDimensions(this.channels));
-
-		// Load learned data from MySQL
-		if (!this.noDatabase)
-			Object.assign(this, await this.db.loadAndPopulateNeurons(this.dimensionIdToName, this.neurons, this.neuronsByValue));
-
-		// Pre-create action neurons for all channels
-		this.channelActions = this.initializer.initializeActionNeurons(this.channels, this.channelNameToId, this.neurons, this.neuronsByValue);
-
-		// Initialize all registered channels (channel-specific setup)
-		await this.initializer.initializeAllChannels(this.channels);
-	}
-
-	/**
-	 * Get neuron ID by dimension name and value.
-	 * Used for diagnostic output to show which neurons correspond to which values.
-	 * @param {string} dimensionName - The dimension name
-	 * @param {number|string} value - The value to look up
-	 * @returns {number|null} - Neuron ID or null if not found
-	 */
-	getNeuronIdByDimensionValue(dimensionName, value) {
-		return this.diagnostics.getNeuronIdByDimensionValue(dimensionName, value, this.neurons);
-	}
-
-	/**
-	 * Get frame actions for all channels from in-memory inferredNeurons Map.
-	 * All entries in inferredNeurons are winners, so just filter by action type.
-	 * @returns {Map} - Map of channel names to array of output coordinates
-	 */
-	getInferredActions() {
-		const channelOutputs = new Map();
-
-		for (const [neuronId] of this.memory.getInferences()) {
-			const neuron = this.neurons.get(neuronId);
-			if (!neuron || neuron.level !== 0 || neuron.type !== 'action') continue;
-
-			if (!channelOutputs.has(neuron.channel)) channelOutputs.set(neuron.channel, []);
-			channelOutputs.get(neuron.channel).push(neuron.coordinates);
+		// if database is enabled, load dimensions, channels and neurons from database
+		if (!this.noDatabase) {
+			await this.db.initializeChannels(this.thalamus);
+			await this.db.initializeDimensions(this.thalamus);
+			await this.db.loadAndPopulateNeurons(this.thalamus);
 		}
 
-		return channelOutputs;
+		// Load channels and dimensions to thalamus
+		this.thalamus.initializeChannels();
+		this.thalamus.loadDimensions();
+
+		// Pre-create action neurons for all channels so that we can explore
+		this.thalamus.initializeActionNeurons();
+
+		// Initialize all registered channels (channel-specific setup)
+		await this.thalamus.initializeAllChannels();
+	}
+
+	/**
+	 * Get neuron ID by coordinates.
+	 * Used for diagnostic output to show which neurons correspond to which values.
+	 * @param {object} coordinates - Coordinate object with dimension-value pairs
+	 * @returns {number|null} - Neuron ID or null if not found
+	 */
+	getNeuronIdByCoordinates(coordinates) {
+		return this.thalamus.getNeuronIdByCoordinates(coordinates);
 	}
 
 	/**
@@ -242,12 +191,12 @@ export default class Brain {
 
 		// ---------------------------- END PROCESSING ----------------------------------
 
-		// forget connections and patterns in (age>0 and age<=contextLength) neurons to avoid curse of dimensionality
+		// forget connections and patterns in all neurons to avoid curse of dimensionality
 		// this should normally not be part of the frame processing and instead should be a separate thread
 		this.forgetNeurons();
 
 		// show frame processing summary
-		this.diagnostics.printFrameSummary(this.frameNumber, performance.now() - frameStart, this.channels);
+		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getAllChannels());
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
@@ -255,6 +204,8 @@ export default class Brain {
 		// return true to indicate that we have processed the frame successfully
 		return true;
 	}
+
+
 
 	/**
 	 * Returns the current frame combined from all registered channels
@@ -270,11 +221,10 @@ export default class Brain {
 		if (this.debug) console.log(`OBSERVING FRAME ${this.frameNumber}`);
 
 		// Get all frame actions from previous frame's inference (from in-memory inferredNeurons)
-		const frameActions = this.getInferredActions();
+		const frameActions = this.memory.getInferredActions();
 
 		// Process each channel: get inputs from channel, get outputs from previous inference
-		for (const [channelName, channel] of this.channels) {
-			const channelId = this.channelNameToId[channelName];
+		for (const { name: channelName, id: channelId, channel } of this.thalamus.getAllChannelsWithIds()) {
 
 			// Get the frame event inputs from the channel
 			const channelEvents = await channel.getFrameEvents();
@@ -296,11 +246,7 @@ export default class Brain {
 	 * Execute inferred actions for all channels
 	 */
 	async executeActions() {
-		const channelActions = this.getInferredActions();
-		for (const [channelName, channel] of this.channels) {
-			const actions = channelActions.get(channelName) || [];
-			await channel.executeOutputs(actions);
-		}
+		await this.thalamus.executeChannelActions(this.memory.getInferredActions());
 	}
 
 	/**
@@ -312,7 +258,7 @@ export default class Brain {
 		this.rewards = new Map();
 		let feedbackCount = 0;
 
-		for (const [channelName, channel] of this.channels) {
+		for (const [channelName, channel] of this.thalamus.getAllChannels()) {
 			const reward = await channel.getRewards();
 			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
 				if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
@@ -336,13 +282,12 @@ export default class Brain {
 
 		// bulk find/create neurons for all input points
 		const neuronIds = this.getFrameNeurons(this.frame);
-		if (this.debug) console.log('frame neurons', neuronIds);
 
 		// activate the neurons in the in-memory context
 		this.activateNeurons(neuronIds);
 
 		// Track inference performance (event accuracy, action rewards, and continuous prediction errors)
-		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.neurons, this.channels);
+		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.thalamus.getAllChannels());
 	}
 
 	/**
@@ -351,24 +296,9 @@ export default class Brain {
 	 */
 	getFrameNeurons(frame) {
 		const neuronIds = [];
-
-		for (const point of frame) {
-			const valueKey = Neuron.makeValueKey(point.coordinates);
-			let neuron = this.neuronsByValue.get(valueKey);
-
-			// Create new neuron if not found
-			if (!neuron) {
-				neuron = Neuron.createSensory(point.channel, point.type, point.coordinates);
-				const neuronId = neuron.id;
-				this.neurons.set(neuronId, neuron);
-				this.neuronsByValue.set(valueKey, neuron);
-				if (this.debug) console.log(`Created new sensory neuron ${neuronId} for ${valueKey}`);
-			}
-
-			neuronIds.push(neuron.id);
-		}
-
+		for (const point of frame) neuronIds.push(this.thalamus.getNeuronIdForPoint(point));
 		if (neuronIds.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
+		if (this.debug) console.log('frame neurons', neuronIds);
 		return neuronIds;
 	}
 
@@ -378,8 +308,8 @@ export default class Brain {
 	 */
 	activateNeurons(neuronIds) {
 		for (const neuronId of neuronIds) {
-			const neuron = this.neurons.get(neuronId);
-			if (!neuron) throw new Error(`Neuron ${neuronId} not found in this.neurons`);
+			const neuron = this.thalamus.getNeuron(neuronId);
+			if (!neuron) throw new Error(`Neuron ${neuronId} not found in thalamus`);
 			this.memory.activateNeuron(neuron);
 		}
 	}
@@ -445,8 +375,9 @@ export default class Brain {
 		const newActiveNeurons = this.memory.getNewSensoryNeurons();
 
 		// Each context neuron learns connections at its own distance
+		const channelActions = this.thalamus.getAllChannelActions();
 		for (const { neuron, age } of this.memory.getContextNeurons())
-			neuron.learnConnections(age, newActiveNeurons, this.rewards, this.channelActions);
+			neuron.learnConnections(age, newActiveNeurons, this.rewards, channelActions);
 	}
 
 	/**
@@ -459,17 +390,18 @@ export default class Brain {
 		const newActiveNeurons = this.memory.getNewSensoryNeurons();
 
 		// For each neuron that voted with its context
+		const channelActions = this.thalamus.getAllChannelActions();
 		let patternCount = 0;
 		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext()) {
 
 			// Try to learn a pattern at this age
-			const newPattern = neuron.learnNewPattern(age, votes, newActiveNeurons, this.rewards, this.channelActions, context);
+			const newPattern = neuron.learnNewPattern(age, votes, newActiveNeurons, this.rewards, channelActions, context);
 
 			// if no pattern was learned, move on to the next neuron
 			if (!newPattern) continue;
 
 			// index the new neuron with its id
-			this.neurons.set(newPattern.id, newPattern);
+			this.thalamus.addNeuron(newPattern);
 
 			// activate the pattern neuron at the peak's age
 			this.memory.activatePattern(newPattern, neuron, age);
@@ -513,18 +445,15 @@ export default class Brain {
 
 		// Find which channels already have an action inferred
 		const channelsWithActions = new Set();
-		for (const inf of inferences) {
-			const neuron = this.neurons.get(inf.neuron_id);
-			if (neuron && neuron.level === 0 && neuron.type === 'action')
-				channelsWithActions.add(neuron.channel);
-		}
+		for (const inf of inferences)
+			if (inf.neuron.type === 'action') channelsWithActions.add(inf.neuron.channel);
 
 		// Add exploration action for channels without one
-		for (const [channelName] of this.channels) {
+		for (const [channelName] of this.thalamus.getAllChannels()) {
 			if (channelsWithActions.has(channelName)) continue;
 			// No action inferred for this channel - use first action as exploration
-			const explorationAction = this.channelActions.get(channelName).values().next().value;
-			inferences.push({ neuron_id: explorationAction.id, strength: 0 });
+			const explorationAction = this.thalamus.getChannelActions(channelName).values().next().value;
+			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0 });
 		}
 	}
 
@@ -551,8 +480,7 @@ export default class Brain {
 			this.memory.setVotes(neuron, age, neuronVotes, context);
 
 			// add the votes to the returned array
-			for (const v of neuronVotes)
-				votes.push({ neuronId: v.toNeuron.id, strength: v.strength, reward: v.reward });
+			for (const v of neuronVotes) votes.push({ neuronId: v.toNeuron.id, strength: v.strength, reward: v.reward });
 		}
 
 		if (this.debug) console.log(`Collected ${votes.length} votes`);
@@ -563,14 +491,14 @@ export default class Brain {
 	 * Aggregate votes and determine winners per dimension.
 	 * Events win by strength, actions win by reward.
 	 * @param {Array} votes - Array of vote objects from collectVotes
-	 * @returns {Array} Array of winning inference objects {neuron_id, strength}
+	 * @returns {Array} Array of winning inference objects {neuron_id, neuron, strength}
 	 */
 	determineConsensus(votes) {
 
 		// Aggregate candidate neurons
 		const candidates = new Map(); // neuronId -> {neuron, strength, weightedReward}
 		for (const v of votes) {
-			const neuron = this.neurons.get(v.neuronId);
+			const neuron = this.thalamus.getNeuron(v.neuronId);
 			if (!candidates.has(v.neuronId)) candidates.set(v.neuronId, { neuron, strength: 0, weightedReward: 0 });
 			const candidate = candidates.get(v.neuronId);
 			candidate.strength += v.strength;
@@ -587,12 +515,14 @@ export default class Brain {
 					dimBest.set(dim, { neuronId, score });
 		}
 
-		// Return only winners with minimal fields
+		// Return winners with neuron object reference
 		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
 		if (this.debug) console.log(`Determined consensus: ${candidates.size} candidates, ${winnerIds.size} winners`);
 		const winners = [];
-		for (const neuronId of winnerIds)
-			winners.push({ neuron_id: neuronId, strength: candidates.get(neuronId).strength });
+		for (const neuronId of winnerIds) {
+			const candidate = candidates.get(neuronId);
+			winners.push({ neuron_id: neuronId, neuron: candidate.neuron, strength: candidate.strength });
+		}
 		return winners;
 	}
 
@@ -612,7 +542,7 @@ export default class Brain {
 
 		// Single parallelizable loop - each neuron handles its own forgetting
 		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0, peaksDeleted = 0;
-		for (const neuron of this.neurons.values()) {
+		for (const neuron of this.thalamus.neurons.values()) {
 			const stats = neuron.forget();
 			connectionsUpdated += stats.connectionsUpdated;
 			connectionsDeleted += stats.connectionsDeleted;
@@ -635,14 +565,14 @@ export default class Brain {
 	deleteOrphanedPatterns() {
 		const toDelete = [];
 
-		for (const neuron of this.neurons.values()) {
+		for (const neuron of this.thalamus.neurons.values()) {
 			if (neuron.level === 0) continue;
 			if (!this.memory.isNeuronActive(neuron) && neuron.canDelete()) toDelete.push(neuron);
 		}
 
 		for (const neuron of toDelete) {
 			neuron.cleanup();
-			this.neurons.delete(neuron.id);
+			this.thalamus.neurons.delete(neuron.id);
 		}
 
 		const orphanCount = toDelete.length;

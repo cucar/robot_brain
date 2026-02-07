@@ -59,7 +59,7 @@ export default class Channel {
 	 * Returns array of coordinate objects: [{ [action-dim]: value }, ...]
 	 * These neurons are pre-created during brain init so exploration can find them
 	 */
-	getActionNeurons() {
+	getActions() {
 		return []; // Default: no predefined actions
 	}
 

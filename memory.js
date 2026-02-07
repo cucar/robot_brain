@@ -17,9 +17,9 @@ export class Memory {
 		// votes: array of votes cast by this neuron, or null if hasn't voted yet
 		// context: array of context neurons at voting time, or null if hasn't voted yet
 		this.activeNeurons = [];
-		
-		// Current frame winning inferences: neuronId -> {strength}
-		this.inferredNeurons = new Map();
+
+		// Current frame winning inferences: Array<{neuron, strength}>
+		this.inferredNeurons = [];
 
 		// carry over the debug flag
 		this.debug = debug;
@@ -30,7 +30,7 @@ export class Memory {
 	 */
 	reset() {
 		this.activeNeurons = [];
-		this.inferredNeurons = new Map();
+		this.inferredNeurons = [];
 	}
 
 	/**
@@ -106,8 +106,8 @@ export class Memory {
 	/**
 	 * Add an inferred neuron
 	 */
-	addInference(neuronId, strength) {
-		this.inferredNeurons.set(neuronId, { strength });
+	addInference(neuron, strength) {
+		this.inferredNeurons.push({ neuron, strength });
 	}
 
 	/**
@@ -118,10 +118,24 @@ export class Memory {
 	}
 
 	/**
+	 * Get inferred actions grouped by channel
+	 * @returns {Map<string, Array>} - Map of channel names to array of output coordinates
+	 */
+	getInferredActions() {
+		const channelOutputs = new Map();
+		for (const { neuron } of this.inferredNeurons) {
+			if (neuron.type !== 'action') continue;
+			if (!channelOutputs.has(neuron.channel)) channelOutputs.set(neuron.channel, []);
+			channelOutputs.get(neuron.channel).push(neuron.coordinates);
+		}
+		return channelOutputs;
+	}
+
+	/**
 	 * Clear all inferred neurons
 	 */
 	clearInferences() {
-		this.inferredNeurons.clear();
+		this.inferredNeurons = [];
 	}
 
 	/**
@@ -219,7 +233,7 @@ export class Memory {
 	 */
 	saveInferences(inferences) {
 		this.clearInferences();
-		for (const inf of inferences) this.addInference(inf.neuron_id, inf.strength);
-		if (this.debug) console.log(`Saved ${this.inferredNeurons.size} inferences`);
+		for (const inf of inferences) this.addInference(inf.neuron, inf.strength);
+		if (this.debug) console.log(`Saved ${this.inferredNeurons.length} inferences`);
 	}
 }

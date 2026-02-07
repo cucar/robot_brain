@@ -241,15 +241,12 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Returns all possible action neurons for this channel.
+	 * Returns all possible actions for this channel.
 	 * These are pre-created during brain init so exploration can find them.
 	 */
-	getActionNeurons() {
+	getActions() {
 		const activityDim = `${this.symbol}_activity`;
-		return [
-			{ [activityDim]: POSITION_OUT },
-			{ [activityDim]: POSITION_OWN }
-		];
+		return [ { [activityDim]: POSITION_OUT }, { [activityDim]: POSITION_OWN } ];
 	}
 
 	/**

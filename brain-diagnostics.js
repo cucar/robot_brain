@@ -41,13 +41,12 @@ export class BrainDiagnostics {
 	/**
 	 * Track inference performance for both events and actions.
 	 * Also calculates continuous prediction errors via channel callbacks.
-	 * @param {Map} inferences - Map of inferred neuron IDs to {strength}
+	 * @param {Array} inferences - Array of inferred neurons {neuron, strength}
 	 * @param {Map} neuronsAtAge0 - Map of neurons active at age 0 (reality)
 	 * @param {Map} rewards - Map of channel name to reward value
-	 * @param {Map} neurons - Map of all neurons
-	 * @param {Map} channels - Map of channel name to channel instance
+	 * @param {IterableIterator<[string, object]>} channels - Iterator of [channelName, channel] pairs
 	 */
-	trackInferencePerformance(inferences, neuronsAtAge0, rewards, neurons, channels) {
+	trackInferencePerformance(inferences, neuronsAtAge0, rewards, channels) {
 		let eventCorrect = 0;
 		let eventTotal = 0;
 		let actionReward = 0;
@@ -57,8 +56,7 @@ export class BrainDiagnostics {
 		const predictionsByChannel = new Map();
 		const actualsByChannel = new Map();
 
-		for (const [neuronId, { strength }] of inferences) {
-			const neuron = neurons.get(neuronId);
+		for (const { neuron, strength } of inferences) {
 
 			// Track event prediction accuracy
 			if (neuron.type === 'event') {
@@ -161,9 +159,9 @@ export class BrainDiagnostics {
 	 * Print one-line summary of frame processing
 	 * @param {number} frameNumber - Current frame number
 	 * @param {number} frameElapsed - Time elapsed for frame processing (ms)
-	 * @param {Map} channels - Map of channel name to channel instance
+	 * @param {IterableIterator<[string, object]>} channels - Iterator of [channelName, channel] pairs
 	 */
-	printFrameSummary(frameNumber, frameElapsed, channels) {
+	endFrame(frameNumber, frameElapsed, channels) {
 		// Get base level (level 0) accuracy
 		let baseAccuracy = 'N/A';
 		if (this.accuracyStats.total > 0)

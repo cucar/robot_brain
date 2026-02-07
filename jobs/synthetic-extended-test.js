@@ -103,7 +103,7 @@ export default class SyntheticExtendedTest extends Job {
 	async executeJob() {
 		console.log('🚀 Running extended continuous episode...\n');
 
-		const stockChannel = this.brain.channels.get(this.config.symbol);
+		const stockChannel = this.brain.thalamus.getChannel(this.config.symbol);
 
 		this.brain.resetAccuracyStats();
 
@@ -179,7 +179,7 @@ export default class SyntheticExtendedTest extends Job {
 	 * Get neuron ID for a specific dimension and value
 	 */
 	async getNeuronIdForDimensionValue(dimensionName, value) {
-		return this.brain.getNeuronIdByDimensionValue(dimensionName, value);
+		return this.brain.getNeuronIdByCoordinates({ [dimensionName]: value });
 	}
 
 	/**
