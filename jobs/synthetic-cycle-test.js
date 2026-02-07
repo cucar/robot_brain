@@ -106,12 +106,13 @@ export default class SyntheticCycleTest extends Job {
 		console.log('🚀 Running single episode...\n');
 
 		// Get the stock channel
-		const stockChannel = this.brain.channels.get(this.config.symbol);
+		const stockChannel = this.brain.thalamus.getChannel(this.config.symbol);
 
 		// Reset accuracy stats
 		this.brain.resetAccuracyStats();
 
-		const expectedFrames = stockChannel.dataRows.length - 1;
+		// expected frames count is one less than the number of rows - first row is skipped to be able to start detecting changes
+		const expectedFrames = stockChannel.dataRows.length - 2;
 
 		// Track trades
 		let trades = [];
@@ -128,7 +129,7 @@ export default class SyntheticCycleTest extends Job {
 			if (stockChannel.lastAction !== null && stockChannel.lastAction !== 0) {
 				const action = stockChannel.getActionName(stockChannel.lastAction);
 				const priceChange = ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice);
-				const cycleFrame = ((frameCount - 1) % this.config.cyclePattern.length) + 1;
+				const cycleFrame = (frameCount % this.config.cyclePattern.length) + 1;
 				trades.push({
 					frame: frameCount,
 					cycleFrame: cycleFrame,

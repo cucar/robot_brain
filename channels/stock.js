@@ -29,7 +29,6 @@ export default class StockChannel extends Channel {
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
 		this.entryPrice = null; // Price when we bought (for owned) or sold (for sold)
-		this.holdOutFrames = 0; // How long we've been in not-owned state (for trigger-to-action)
 		this.holdInFrames = 0; // How long we've been in owned state (for trigger-to-action)
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
@@ -170,7 +169,6 @@ export default class StockChannel extends Channel {
 		// Reset trading state
 		this.owned = false;
 		this.entryPrice = null;
-		this.holdOutFrames = 0;
 		this.holdInFrames = 0;
 		this.previousPrice = null;
 		this.previousVolume = null;
@@ -332,29 +330,32 @@ export default class StockChannel extends Channel {
 		// For not owned: negative change = positive reward (good timing on selling)
 		const reward = this.owned ? percentChange : -percentChange;
 
-		// Amplify the reward signal
+		// Amplify the reward signal and return it
 		const amplifiedReward = reward * this.rewardAmplification;
-
-		if (this.debug) {
-			if (this.owned) {
-				const totalChange = this.currentPrice - this.entryPrice;
-				const totalPercentChange = (totalChange / this.entryPrice) * 100;
-				const recentChange = this.currentPrice - this.previousPrice;
-
-				console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-				console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Total P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
-			}
-			else {
-				const totalChange = this.entryPrice - this.currentPrice; // Profit from selling high and price going lower
-				const totalPercentChange = (totalChange / this.entryPrice) * 100;
-				const recentChange = this.currentPrice - this.previousPrice;
-
-				console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-				console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
-			}
-		}
-
+		if (this.debug) this.debugRewards(amplifiedReward);
 		return amplifiedReward;
+	}
+
+	/**
+	 * Debug output for reward calculation
+	 */
+	debugRewards(amplifiedReward) {
+		if (this.owned) {
+			const totalChange = this.currentPrice - this.entryPrice;
+			const totalPercentChange = (totalChange / this.entryPrice) * 100;
+			const recentChange = this.currentPrice - this.previousPrice;
+
+			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Total P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+		}
+		else {
+			const totalChange = this.entryPrice - this.currentPrice; // Profit from selling high and price going lower
+			const totalPercentChange = (totalChange / this.entryPrice) * 100;
+			const recentChange = this.currentPrice - this.previousPrice;
+
+			console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+		}
 	}
 
 	/**
@@ -447,8 +448,8 @@ export default class StockChannel extends Channel {
 		// Determine action type: After conflict resolution, these should be position-appropriate
 		if (activityValue === POSITION_OWN && !this.owned) this.executeBuy(activityValue);
 		if (activityValue === POSITION_OWN && this.owned) this.executeHoldIn(activityValue);
-		if (activityValue === POSITION_OUT && !this.owned) this.executeHoldOut(activityValue);
 		if (activityValue === POSITION_OUT && this.owned) this.executeSell(activityValue);
+		if (activityValue === POSITION_OUT && !this.owned) this.executeHoldOut(activityValue);
 
 		// show current status
 		if (this.diagnostic) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice?.toFixed(2) ?? 'N/A'}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
@@ -464,17 +465,28 @@ export default class StockChannel extends Channel {
 
 		// buy stock per request coming from the brain
 		this.owned = true;
-		this.entryPrice = this.previousPrice; // prices are the end of day prices. we buy in the morning, at the close price of the previous day
-		this.holdOutFrames = 0; // Reset hold-out counter (trigger-to-action)
+
+		// prices are from inputs at the start of frame - we take action at the end of the frame as reaction to them
+		this.entryPrice = this.currentPrice;
 
 		// Reset unrealized profit tracking for new position
 		this.unrealizedProfit = 0;
+		this.holdInFrames = 0; // Reset hold-in counter (for profit reporting)
 
 		// Track trade metrics
 		this.totalTrades++;
 		this.lastAction = POSITION_OWN;
 
 		if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${this.previousPrice} (activity: ${activityValue})`);
+	}
+
+	/**
+	 * Execute a hold-in action
+	 */
+	executeHoldIn() {
+		this.holdInFrames++; // Increment hold-in counter (for profit reporting)
+		if (this.debug) console.log(`${this.symbol}: HOLD IN SIGNAL (Owned, ${this.holdInFrames} frames)`);
+		this.lastAction = POSITION_OWN;
 	}
 
 	/**
@@ -485,8 +497,8 @@ export default class StockChannel extends Channel {
 		// Safety check - should never happen since conflict resolution filters invalid actions
 		if (!this.owned) throw new Error(`${this.symbol}: SELL received when not owned - conflict resolution failed`);
 
-		// Sell owned stock - calculate realized profit/loss - assume we are selling at the end of day price of yesterday (beginning price of today)
-		const profit = this.previousPrice - this.entryPrice;
+		// Sell owned stock - calculate realized profit/loss - we are selling at the end of the frame with the price that was assumed valid throughout the frame
+		const profit = this.currentPrice - this.entryPrice;
 		const percentReturn = (profit / this.entryPrice) * 100;
 
 		// Add realized profit/loss to totals
@@ -508,26 +520,15 @@ export default class StockChannel extends Channel {
 
 		// Switch to sold state
 		this.owned = false;
-		this.entryPrice = this.previousPrice; // Track sell price for sold position feedback
-		this.holdInFrames = 0; // Reset hold-in counter (trigger-to-action)
+		this.entryPrice = this.currentPrice; // Track sell price for sold position feedback
 		this.lastAction = POSITION_OUT;
-	}
-
-	/**
-	 * Execute a hold-in action
-	 */
-	executeHoldIn() {
-		this.holdInFrames++; // Increment hold-in counter (trigger-to-action)
-		if (this.debug) console.log(`${this.symbol}: HOLD IN SIGNAL (Owned, ${this.holdInFrames} frames)`);
-		this.lastAction = POSITION_OWN;
 	}
 
 	/**
 	 * Execute a hold-out action
 	 */
 	executeHoldOut() {
-		this.holdOutFrames++; // Increment hold-out counter (trigger-to-action)
-		if (this.debug) console.log(`${this.symbol}: HOLD OUT SIGNAL (Not Owned, ${this.holdOutFrames} frames)`);
+		if (this.debug) console.log(`${this.symbol}: HOLD OUT SIGNAL (Not Owned)`);
 		this.lastAction = POSITION_OUT;
 	}
 

@@ -232,7 +232,7 @@ export default class CustomJob extends Job {
 
     async configureChannels() {
         // Custom channel configuration
-        this.brain.channels.get('vision').setTargetObject({x: 0.5, y: 0.5});
+        this.brain.thalamus.getChannel('vision').setTargetObject({x: 0.5, y: 0.5});
     }
 }
 ```

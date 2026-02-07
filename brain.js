@@ -103,6 +103,13 @@ export default class Brain {
 	}
 
 	/**
+	 * Get accuracy stats (for compatibility with jobs)
+	 */
+	get accuracyStats() {
+		return this.diagnostics.accuracyStats;
+	}
+
+	/**
 	 * Backup brain state from in-memory Neuron objects to MySQL.
 	 * Called on shutdown or when job is interrupted.
 	 */
@@ -157,9 +164,6 @@ export default class Brain {
 		await this.getFrame();
 		if (!this.frame || this.frame.length === 0) return false;
 
-		// execute the inferred actions in all channels
-		await this.executeActions();
-
 		// get rewards from all channels based on executed actions
 		await this.getRewards();
 
@@ -190,6 +194,9 @@ export default class Brain {
 		this.inferNeurons();
 
 		// ---------------------------- END PROCESSING ----------------------------------
+
+		// execute the inferred actions in all channels
+		await this.executeActions();
 
 		// forget connections and patterns in all neurons to avoid curse of dimensionality
 		// this should normally not be part of the frame processing and instead should be a separate thread

@@ -53,7 +53,7 @@ export default class StockPredictionJob extends Job {
 	 */
 	async configureChannels() {
 		// Configure channels for prediction mode
-		for (const [_, channel] of this.brain.channels) {
+		for (const [_, channel] of this.brain.thalamus.getAllChannels()) {
 			channel.holdoutRows = this.config.holdoutRows;
 			channel.setPredictionMode(); // Use only holdout rows
 		}
@@ -105,7 +105,7 @@ export default class StockPredictionJob extends Job {
 	 * Collect profit/loss results from all channels
 	 */
 	collectPredictionResults() {
-		for (const [channelName, channel] of this.brain.channels) {
+		for (const [channelName, channel] of this.brain.thalamus.getAllChannels()) {
 			const channelResult = {
 				symbol: channelName,
 				profit: channel.totalProfit || 0,
