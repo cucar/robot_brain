@@ -49,7 +49,6 @@ export class Neuron {
 	static createPattern(level, peak) {
 		const neuron = new Neuron(level);
 		neuron.peak = peak;
-		peak.incomingCount++;
 		return neuron;
 	}
 
@@ -70,9 +69,6 @@ export class Neuron {
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
 		this.contexts = []; // Routing table: Array<{context: Context, pattern: Neuron}>
 	}
-
-	get isSensory() { return this.level === 0; }
-	get isPattern() { return this.level > 0; }
 
 	/**
 	 * Get value key for this neuron (sensory only)
@@ -294,38 +290,48 @@ export class Neuron {
 	}
 
 	/**
-	 * Run forget cycle for this neuron - decay strengths and delete dead entries.
-	 * @returns {{connectionsUpdated: number, connectionsDeleted: number, contextDeleted: number, peakDeleted: boolean}}
+	 * run forget cycle for this neuron - decay connections and patterns
+	 * returns if it can be deleted after the forgetting
 	 */
 	forget() {
-		let connectionsUpdated = 0, connectionsDeleted = 0, contextDeleted = 0;
+		this.forgetPatterns();
+		this.forgetConnections();
+		return this.canDelete();
+	}
 
-		// Forget context entries (on peak neurons' routing tables) - uses contextForgetRate
+	/**
+	 * Forget context entries (routing tables) - decay strengths and delete weak entries.
+	 */
+	forgetPatterns() {
+		let contextsDeleted = 0, contextsUpdated = 0;
 		for (const { context } of this.contexts) {
 			const toDelete = [];
 			for (const entry of context.entries) {
+				const oldStrength = entry.strength;
 				entry.strength = Math.max(Context.minStrength, entry.strength - Neuron.contextForgetRate);
-				if (entry.strength <= Context.minStrength)
-					toDelete.push(entry);
+				if (entry.strength < oldStrength) contextsUpdated++;
+				if (entry.strength <= Context.minStrength) toDelete.push(entry);
 			}
 			for (const entry of toDelete) {
 				context.remove(entry.neuron, entry.distance);
-				contextDeleted++;
+				contextsDeleted++;
 			}
 		}
+		if (Neuron.debug) console.log(`  Contexts: ${contextsUpdated} weakened, ${contextsDeleted} deleted`);
+	}
 
-		// Forget connections - uses connectionForgetRate for all levels
+	/**
+	 * Forget connections - decay strengths and delete weak connections.
+	 */
+	forgetConnections() {
+		let connectionsUpdated = 0, connectionsDeleted = 0;
 		for (const [distance, distanceMap] of this.connections) {
 			const toDelete = [];
 			for (const [toNeuron, conn] of distanceMap) {
-				if (conn.strength <= Neuron.minStrength) {
-					toDelete.push(toNeuron);
-					continue;
-				}
+				const oldStrength = conn.strength;
 				conn.strength = Math.max(Neuron.minStrength, conn.strength - Neuron.connectionForgetRate);
-				connectionsUpdated++;
-				if (conn.strength <= Neuron.minStrength)
-					toDelete.push(toNeuron);
+				if (conn.strength < oldStrength) connectionsUpdated++;
+				if (conn.strength <= Neuron.minStrength) toDelete.push(toNeuron);
 			}
 			for (const toNeuron of toDelete) {
 				this.deleteConnection(distance, toNeuron);
@@ -339,8 +345,10 @@ export class Neuron {
 	 * Check if neuron can be deleted
 	 */
 	canDelete() {
-		if (this.isSensory) return false; // sensory neurons cannot be deleted
-		return this.incomingCount === 0 && this.connections.size === 0;
+		return this.level > 0 && // sensory neurons cannot be deleted
+			this.incomingCount === 0 && // no incoming connections (no pattern context)
+			this.connections.size === 0 && // no outgoing connections (no pattern future)
+			this.contexts.length === 0; // no contexts (no known pattern)
 	}
 
 	/**
@@ -352,27 +360,4 @@ export class Neuron {
 		const idx = this.contexts.findIndex(e => e.pattern === pattern);
 		if (idx !== -1) this.contexts.splice(idx, 1);
 	}
-
-	/**
-	 * Clean up all references when deleting this pattern
-	 */
-	cleanup() {
-
-		// Remove from peak's routing table
-		const idx = this.peak.contexts.findIndex(e => e.pattern === this);
-		if (idx !== -1) {
-			const entry = this.peak.contexts[idx];
-			// Decrement incoming counts for context neurons
-			for (const { neuron } of entry.context.entries)
-				neuron.incomingCount--;
-			this.peak.contexts.splice(idx, 1);
-		}
-		this.peak.incomingCount--;
-
-		// Decrement incoming counts for connection targets
-		for (const distanceMap of this.connections.values())
-			for (const toNeuron of distanceMap.keys())
-				toNeuron.incomingCount--;
-	}
-
 }

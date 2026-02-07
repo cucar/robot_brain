@@ -148,6 +148,7 @@ export class BrainDiagnostics {
 	 * @param {IterableIterator<[string, object]>} channels - Iterator of [channelName, channel] pairs
 	 */
 	endFrame(frameNumber, frameElapsed, channels) {
+
 		// Get base level (level 0) accuracy
 		let baseAccuracy = 'N/A';
 		if (this.accuracyStats.total > 0)

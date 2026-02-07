@@ -541,31 +541,19 @@ export default class Brain {
 		// run forget on all neurons and collect patterns to be deleted after forgetting
 		const patterns = this.thalamus.forgetNeurons();
 
-		// orphan cleanup (must be done after all neurons finish forgetting)
-		this.deleteOrphanedPatterns();
+		// dead pattern cleanup (must be done after all neurons finish forgetting)
+		this.deletePatterns(patterns);
 
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}
 
 	/**
-	 * Delete orphaned pattern neurons (no content, no references, not active).
+	 * Delete dead pattern neurons (no content, no references, not active)
 	 * @returns {number} Number of patterns deleted
 	 */
-	deleteOrphanedPatterns() {
-		const toDelete = [];
-
-		for (const neuron of this.thalamus.neurons.values()) {
-			if (neuron.level === 0) continue;
-			if (!this.memory.isNeuronActive(neuron) && neuron.canDelete()) toDelete.push(neuron);
-		}
-
-		for (const neuron of toDelete) {
-			neuron.cleanup();
-			this.thalamus.neurons.delete(neuron.id);
-		}
-
-		const orphanCount = toDelete.length;
-		if (this.debug) console.log(`  Orphaned patterns deleted: ${orphanCount}`);
+	deletePatterns(patterns) {
+		for (const pattern of patterns) if (!this.memory.isNeuronActive(pattern)) this.thalamus.deletePattern(pattern);
+		if (this.debug) console.log(`  Patterns deleted: ${patterns.length}`);
 	}
 
 }
