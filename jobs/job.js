@@ -5,10 +5,9 @@ import Brain from '../brain.js';
 import BrainMySQL from '../brain-mysql.js';
 
 export default class Job {
+
 	constructor() {
-		// console.log('starting new job...');
-		// Brain instance will be created in run() based on options
-		this.brain = null;
+		this.brain = null; // Brain instance will be created in run() based on options
 		this.hardReset = false;
 		this.isShuttingDown = false;
 		this.noDatabase = true; // Default: skip database backup/restore for jobs (tests) - set to false for production
@@ -18,12 +17,16 @@ export default class Job {
 	 * Main run method - template method pattern with hooks for customization
 	 */
 	async run() {
+
 		// Set up signal handlers for graceful shutdown
 		this.setupSignalHandlers();
 
 		try {
 			// Create brain instance based on mysql option
-			this.brain = this.runnerOptions?.mysql ? new BrainMySQL() : new Brain();
+			this.brain = this.runnerOptions?.mysql ? new BrainMySQL() : new Brain(this.runnerOptions);
+
+			// Apply database option if provided (overrides default)
+			if (this.runnerOptions?.database !== undefined) this.noDatabase = !this.runnerOptions.database;
 
 			// Allow jobs to show custom startup info
 			await this.showStartupInfo();
@@ -31,23 +34,6 @@ export default class Job {
 			// get channels defined by child class and register them with brain
 			// console.log('Registering channels with brain...');
 			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
-
-			// Apply runner options to brain and channels if provided
-			if (this.runnerOptions?.diagnostic) for (const [_, channel] of this.brain.channels) channel.diagnostic = true;
-			if (this.runnerOptions?.debug) {
-				this.brain.debug = true;
-				for (const [_, channel] of this.brain.channels) channel.debug = true;
-			}
-			if (this.runnerOptions?.noSummary) {
-				this.brain.frameSummary = false;
-				if (this.brain.diagnostics) this.brain.diagnostics.frameSummary = false;
-			}
-
-			// Apply database option if provided (overrides default)
-			if (this.runnerOptions?.database !== undefined) this.noDatabase = !this.runnerOptions.database;
-
-			// Pass noDatabase flag to brain
-			this.brain.noDatabase = this.noDatabase;
 
 			// initialize database connection in the brain
 			await this.brain.initDB();

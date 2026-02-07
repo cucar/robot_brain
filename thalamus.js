@@ -100,7 +100,7 @@ export class Thalamus {
 	 * @returns {object} - Channel instance
 	 */
 	registerChannel(name, channelClass) {
-		this.channels.set(name, new channelClass(name));
+		this.channels.set(name, new channelClass(name, this.debug));
 		if (this.debug) console.log(`Registered channel: ${name} (${channelClass.name})`);
 	}
 

@@ -183,7 +183,7 @@ export default class BrainMySQL {
 	 */
 	async initializeActionNeurons() {
 		for (const [channelName, channel] of this.channels) {
-			const actionCoords = channel.getActionNeurons();
+			const actionCoords = channel.getActions();
 			if (actionCoords.length === 0) continue;
 
 			// Build frame points for action neurons

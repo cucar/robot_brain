@@ -16,9 +16,6 @@ class BrainRunner {
 			// Create job and apply options to brain before running
 			const job = new JobClass();
 
-			// Apply options to brain
-			if (options.diagnostic) job.brain.diagnostic = true;
-
 			// Store options on job so it can apply them to channels after they're registered
 			job.runnerOptions = options;
 

@@ -127,7 +127,7 @@ export class Neuron {
 
 		// level and age adjustments to the vote strength
 		const levelWeight = 1 + this.level * Neuron.levelVoteMultiplier;
-		const timeWeight = 1 - (distance - 1) * timeDecay;
+		const timeWeight = 1 - age * timeDecay;
 
 		// get connections at the distance - if there are none, no votes
 		const distanceMap = this.connections.get(distance);

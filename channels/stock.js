@@ -452,7 +452,7 @@ export default class StockChannel extends Channel {
 		if (activityValue === POSITION_OUT && !this.owned) this.executeHoldOut(activityValue);
 
 		// show current status
-		if (this.diagnostic) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice?.toFixed(2) ?? 'N/A'}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
+		if (this.debug) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice?.toFixed(2) ?? 'N/A'}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
 	}
 
 	/**

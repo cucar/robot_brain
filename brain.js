@@ -11,7 +11,7 @@ export default class Brain {
 	/**
 	 * returns new brain instance
 	 */
-	constructor() {
+	constructor(options) {
 
 		// pattern learning parameters
 		this.maxLevels = 10; // just to prevent against infinite recursion
@@ -22,10 +22,11 @@ export default class Brain {
 
 		// Debugging info and flags
 		this.frameNumber = 0;
-		this.debug = false;
-		this.noDatabase = false; // skip database backup/restore for tests
-		this.diagnostic = false; // diagnostic mode - shows detailed inference/conflict resolution info
-		this.waitForUserInput = false;
+		this.debug = options.debug;
+		this.noDatabase = options.database !== undefined; // skip database backup/restore for tests
+		this.diagnostic = options.diagnostic; // diagnostic mode - shows detailed inference/conflict resolution info
+		this.frameSummary = !options.noSummary; // show frame summary or not
+		this.waitForUserInput = options.debug;
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
@@ -35,7 +36,7 @@ export default class Brain {
 		this.db = new BrainDB();
 
 		// Diagnostics - used for debug methods and performance tracking
-		this.diagnostics = new BrainDiagnostics(this.diagnostic);
+		this.diagnostics = new BrainDiagnostics(this.diagnostic, this.frameSummary);
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
 		this.thalamus = new Thalamus(this.debug);
@@ -481,14 +482,17 @@ export default class Brain {
 			// capture context at voting time for pattern learning
 			const context = this.memory.getContextForAge(age, neuron.level);
 
-			// store votes and context in activeNeurons for learning if the inference ends up being bad (wrong/painful)
+			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
 			this.memory.setVotes(neuron, age, neuronVotes, context);
 
 			// add the votes to the returned array
 			for (const v of neuronVotes) votes.push({ neuronId: v.toNeuron.id, strength: v.strength, reward: v.reward });
 		}
 
+		// call thalamus and diagnostics to show the debug logs for votes
 		if (this.debug) console.log(`Collected ${votes.length} votes`);
+		// for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
+
 		return votes;
 	}
 
