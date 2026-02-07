@@ -12,6 +12,7 @@ export class Context {
 
 	constructor() {
 		this.entries = []; // Array<{neuron, distance, strength}>
+		this.keys = new Set(); // Maintained incrementally for fast matching
 	}
 
 	get size() { return this.entries.length; }
@@ -27,6 +28,7 @@ export class Context {
 		}
 		const entry = { neuron, distance, strength };
 		this.entries.push(entry);
+		this.keys.add(this.buildKey(neuron, distance));
 		return entry;
 	}
 
@@ -44,6 +46,7 @@ export class Context {
 		const idx = this.entries.findIndex(e => e.neuron === neuron && e.distance === distance);
 		if (idx === -1) return false;
 		this.entries.splice(idx, 1);
+		this.keys.delete(this.buildKey(neuron, distance));
 		return true;
 	}
 
@@ -55,13 +58,10 @@ export class Context {
 	}
 
 	/**
-	 * Build a lookup set from entries for fast matching.
+	 * Check if a key exists in this context.
 	 */
-	buildLookupSet() {
-		const set = new Set();
-		for (const { neuron, distance } of this.entries)
-			set.add(this.buildKey(neuron, distance));
-		return set;
+	hasKey(neuron, distance) {
+		return this.keys.has(this.buildKey(neuron, distance));
 	}
 
 	/**
@@ -74,13 +74,12 @@ export class Context {
 	match(observed, pattern) {
 		if (this.entries.length === 0) return null;
 
-		const observedSet = observed.buildLookupSet();
 		const common = [];
 		const missing = [];
 
 		// Check each entry in this known context and add to common or missing
 		for (const entry of this.entries)
-			if (observedSet.has(this.buildKey(entry.neuron, entry.distance))) common.push(entry);
+			if (observed.hasKey(entry.neuron, entry.distance)) common.push(entry);
 			else missing.push(entry);
 
 		// Check match threshold - if it's below the threshold, not matched at all
@@ -88,9 +87,8 @@ export class Context {
 
 		// Find novel (in observed but not in this known context)
 		const novel = [];
-		const knownSet = this.buildLookupSet();
 		for (const entry of observed.entries)
-			if (!knownSet.has(this.buildKey(entry.neuron, entry.distance)))
+			if (!this.hasKey(entry.neuron, entry.distance))
 				novel.push(entry);
 
 		// Calculate score as sum of strengths of common entries
