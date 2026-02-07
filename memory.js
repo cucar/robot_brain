@@ -172,16 +172,12 @@ export class Memory {
 		const filterByLevel = level !== undefined;
 		const peaks = [];
 		const context = new Context();
-
-		for (let age = 0; age < this.activeNeurons.length; age++) {
-			const neurons = this.activeNeurons[age];
-			if (!neurons) continue;
-			for (const neuron of neurons.keys()) {
+		for (let age = 0; age < this.activeNeurons.length; age++)
+			for (const neuron of this.activeNeurons[age].keys()) {
 				if (filterByLevel && neuron.level !== level) continue;
 				if (age === 0) peaks.push(neuron);
-				else if (age < this.contextLength) context.add(neuron, age, 1, false);
+				else if (age < this.contextLength) context.add(neuron, age, 1);
 			}
-		}
 		return { peaks, context };
 	}
 
