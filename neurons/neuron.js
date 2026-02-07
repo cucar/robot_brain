@@ -135,8 +135,8 @@ export class Neuron {
 
 		// create votes for all connections at the distance and return them
 		const result = [];
-		for (const [toNeuron, conn] of distanceMap)
-			result.push({ toNeuron, strength: levelWeight * timeWeight * conn.strength, reward: conn.reward, distance });
+		for (const [neuron, conn] of distanceMap)
+			result.push({ neuron, strength: levelWeight * timeWeight * conn.strength, reward: conn.reward, distance });
 		return result;
 	}
 
@@ -318,12 +318,12 @@ export class Neuron {
 	findEventErrorCorrections(prediction, actualNeurons, eventsByDimensions, errorCorrections) {
 
 		// Only process event predictions that were confident but didn't happen
-		if (prediction.toNeuron.type !== 'event') return;
+		if (prediction.neuron.type !== 'event') return;
 		if (prediction.strength < Neuron.eventErrorMinStrength) return;
-		if (actualNeurons.has(prediction.toNeuron)) return;
+		if (actualNeurons.has(prediction.neuron)) return;
 
 		// Find actual events with the same dimensions as the failed prediction
-		const failedDimensions = Object.keys(prediction.toNeuron.coordinates).sort().join(',');
+		const failedDimensions = Object.keys(prediction.neuron.coordinates).sort().join(',');
 		const matchingEvents = eventsByDimensions.get(failedDimensions);
 		if (matchingEvents)
 			for (const actualEvent of matchingEvents)
@@ -336,16 +336,16 @@ export class Neuron {
 	findActionRegretCorrections(prediction, executedActions, painfulChannels, channelActions, errorCorrections) {
 
 		// Only process action predictions that were confident, executed, and painful
-		if (prediction.toNeuron.type !== 'action') return;
+		if (prediction.neuron.type !== 'action') return;
 		if (prediction.strength < Neuron.actionRegretMinStrength) return;
-		if (!executedActions.has(prediction.toNeuron)) return;
-		if (!painfulChannels.has(prediction.toNeuron.channel)) return;
+		if (!executedActions.has(prediction.neuron)) return;
+		if (!painfulChannels.has(prediction.neuron.channel)) return;
 
 		// Find an alternative action for this channel
-		const channelAlternatives = channelActions.get(prediction.toNeuron.channel);
+		const channelAlternatives = channelActions.get(prediction.neuron.channel);
 		if (!channelAlternatives) return;
 
-		const alternativeAction = [...channelAlternatives].find(n => n !== prediction.toNeuron);
+		const alternativeAction = [...channelAlternatives].find(n => n !== prediction.neuron);
 		if (alternativeAction) errorCorrections.add(alternativeAction);
 	}
 

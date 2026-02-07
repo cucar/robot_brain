@@ -121,6 +121,13 @@ export default class SyntheticCycleTest extends Job {
 		// Process all frames
 		while (frameCount < expectedFrames) {
 
+			// Show cycle-specific debug info before processing frame
+			if (this.brain.debug) {
+				const cycleFrame = (frameCount % this.config.cyclePattern.length) + 1;
+				const expectedChange = this.config.cyclePattern[cycleFrame - 1];
+				console.log(`\n📍 Cycle Position: Frame ${cycleFrame}/6 (expecting ${(expectedChange * 100).toFixed(1)}% change)`);
+			}
+
 			// Process frame
 			await this.brain.processFrame();
 			frameCount++;

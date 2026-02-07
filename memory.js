@@ -189,9 +189,9 @@ export class Memory {
 		const result = [];
 		// Iterate through all active neurons except the oldest (which don't have distance+1 connections)
 		for (let age = 0; age < this.activeNeurons.length - 1; age++)
-			for (const [neuron, state] of this.activeNeurons[age])
-				if (neuron.level > 0 || neuron.type !== 'action') // action neurons cannot vote - their inferences are too erratic
-					result.push({ neuron, age, state });
+			for (const [voter, state] of this.activeNeurons[age])
+				if (voter.level > 0 || voter.type !== 'action') // action neurons cannot vote - their inferences are too erratic
+					result.push({ voter, age, state });
 		return result;
 	}
 

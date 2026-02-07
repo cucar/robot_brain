@@ -341,7 +341,7 @@ export default class BrainMySQL {
 		await this.processBaseNeurons();
 
 		// recognize, refine and learn patterns from the base neurons
-		// await this.processPatternNeurons();
+		await this.processPatternNeurons();
 
 		// deactivate aged-out neurons AFTER pattern learning captured full context
 		await this.deactivateOldNeurons();
@@ -1673,22 +1673,6 @@ export default class BrainMySQL {
 		`);
 
 		if (this.debug) console.log(`Deleted ${deleteResult.affectedRows} overridden votes`);
-
-		// Call channel-specific debug methods if debug is enabled
-		if (this.debug) {
-			const [votes] = await this.conn.query(`
-				SELECT v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance,
-				       b.type, b.channel_id, ch.name as channel,
-				       GROUP_CONCAT(CONCAT(d.name, '|', coord.val) ORDER BY d.name SEPARATOR ',') as coordinates
-				FROM inference_votes v
-				JOIN base_neurons b ON b.neuron_id = v.neuron_id
-				JOIN channels ch ON ch.id = b.channel_id
-				JOIN coordinates coord ON coord.neuron_id = v.neuron_id
-				JOIN dimensions d ON d.id = coord.dimension_id
-				GROUP BY v.from_neuron_id, v.neuron_id, v.strength, v.reward, v.distance, b.type, b.channel_id, ch.name
-			`);
-			for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
-		}
 
 		// Aggregate votes by neuron and determine winners per dimension
 		const [inferences] = await this.conn.query(`

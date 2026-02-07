@@ -101,13 +101,4 @@ export default class Channel {
 		return null; // Default: no output performance tracking
 	}
 
-	/**
-	 * Debug votes for this channel - override in subclasses for channel-specific debugging
-	 * Called when debug is enabled to show detailed vote information
-	 * @param {Array} allVotes - Array of all votes from collectVotes
-	 * @param {Object} brain - Reference to brain instance for accessing neuron data
-	 */
-	async debugVotes(allVotes, brain) {
-		// Default: no-op. Override in subclasses for channel-specific vote debugging.
-	}
 }

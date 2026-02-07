@@ -39,6 +39,288 @@ export class BrainDiagnostics {
 	}
 
 	/**
+	 * Show debug information for the inference votes
+	 */
+	debugVotes(votes, winners, channels) {
+
+		if (votes.length === 0) return;
+		console.log(`Collected ${votes.length} votes`);
+
+		// Build winner set for quick lookup
+		const winnerIds = new Set(winners.map(w => w.neuron_id));
+
+		// Group votes by channel
+		const votesByChannel = new Map();
+		for (const vote of votes) {
+			const channelName = vote.neuron.channel;
+			if (!votesByChannel.has(channelName)) votesByChannel.set(channelName, []);
+			votesByChannel.get(channelName).push(vote);
+		}
+
+		// Debug votes for each channel
+		for (const [channelName, channelVotes] of votesByChannel) {
+			const channel = channels.get(channelName);
+			if (!channel) continue;
+
+			// Debug event votes and action votes separately
+			this.debugEventVotes(channelVotes, winnerIds, channel);
+			this.debugActionVotes(channelVotes, winnerIds, channel);
+		}
+	}
+
+	/**
+	 * Debug helper: show votes for event neurons
+	 * Shows which patterns/connections are voting for which event predictions
+	 * @param {Array} allVotes - Array of all votes for this channel
+	 * @param {Set} winnerIds - Set of winning neuron IDs from determineConsensus
+	 * @param {Object} channel - Channel instance for formatting
+	 */
+	debugEventVotes(allVotes, winnerIds, channel) {
+		const eventVotes = allVotes.filter(v => v.neuron.type === 'event');
+		if (eventVotes.length === 0) return;
+
+		// Group votes by event neuron and build metadata
+		const votesByNeuron = this.groupVotesByNeuron(eventVotes);
+
+		// Aggregate votes by voter for each neuron
+		const aggregatedByNeuron = new Map();
+		for (const [neuronId, data] of votesByNeuron)
+			aggregatedByNeuron.set(neuronId, this.aggregateVotesBySource(data.votes));
+
+		// Group by dimension
+		const byDimension = this.groupByDimension(votesByNeuron);
+
+		// Display results
+		console.log(`\n=== ${channel.name} EVENT VOTES ===`);
+		for (const [dimName, candidates] of byDimension) {
+			candidates.sort((a, b) => b.totalStrength - a.totalStrength);
+			console.log(`  ${dimName} (${candidates.length} candidates):`);
+
+			for (const candidate of candidates) {
+				const marker = winnerIds.has(candidate.neuronId) ? '★ WINNER' : '';
+				const coordsFormatted = this.formatCoordinates(candidate.coordsStr, channel);
+				const aggVotes = aggregatedByNeuron.get(candidate.neuronId);
+				console.log(`    ${coordsFormatted} (n${candidate.neuronId}) str=${candidate.totalStrength.toFixed(1)} ${marker}`);
+				console.log(this.formatAggregatedVotes(aggVotes, null, false, channel));
+			}
+		}
+		console.log(`===================\n`);
+	}
+
+	/**
+	 * Group votes by neuron ID and build metadata for each neuron
+	 * @param {Array} votes - Array of votes to group
+	 * @returns {Map} Map of neuronId -> {neuronId, coordsStr, dimensions, votes, totalStrength}
+	 */
+	groupVotesByNeuron(votes) {
+		const votesByNeuron = new Map();
+		for (const v of votes) {
+			if (!votesByNeuron.has(v.neuron.id)) {
+				const coords = v.neuron.coordinates;
+				const coordsStr = Object.entries(coords).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join(', ');
+				votesByNeuron.set(v.neuron.id, {
+					neuronId: v.neuron.id,
+					coordsStr,
+					dimensions: coords,
+					votes: [],
+					totalStrength: 0
+				});
+			}
+			const data = votesByNeuron.get(v.neuron.id);
+			data.votes.push(v);
+			data.totalStrength += v.strength;
+		}
+		return votesByNeuron;
+	}
+
+	/**
+	 * Group neurons by dimension for winner determination
+	 * @param {Map} votesByNeuron - Map from groupVotesByNeuron
+	 * @returns {Map} Map of dimension -> array of candidates
+	 */
+	groupByDimension(votesByNeuron) {
+		const byDimension = new Map();
+		for (const [_, data] of votesByNeuron) {
+			for (const [dimName, _] of Object.entries(data.dimensions)) {
+				if (!byDimension.has(dimName))
+					byDimension.set(dimName, []);
+				byDimension.get(dimName).push(data);
+			}
+		}
+		return byDimension;
+	}
+
+	/**
+	 * Debug helper: show votes for action neurons
+	 * Shows which patterns/connections are voting for which actions
+	 * @param {Array} allVotes - Array of all votes for this channel
+	 * @param {Set} winnerIds - Set of winning neuron IDs from determineConsensus
+	 * @param {Object} channel - Channel instance for formatting
+	 */
+	debugActionVotes(allVotes, winnerIds, channel) {
+		const actionVotes = allVotes.filter(v => v.neuron.type === 'action');
+		if (actionVotes.length === 0) return;
+
+		// Group by action label and aggregate
+		const actionGroups = this.groupActionsByLabel(actionVotes, channel);
+		const aggregatedByAction = new Map();
+		const totalsByAction = new Map();
+
+		for (const [label, votes] of actionGroups) {
+			const aggregated = this.aggregateVotesBySource(votes);
+			aggregatedByAction.set(label, aggregated);
+			totalsByAction.set(label, this.calculateActionTotals(aggregated));
+		}
+
+		// Find which action label won (check if any neuron in the group is a winner)
+		const winningLabel = this.findWinningActionLabel(actionGroups, winnerIds);
+
+		// Display results
+		console.log(`\n=== ${channel.name} ACTION VOTES ===`);
+		for (const [label, aggregated] of aggregatedByAction) {
+			const total = totalsByAction.get(label);
+			const winnerMarker = label === winningLabel ? ' ★' : '';
+			const header = `${label} (${aggregated.length} voters, str=${total.str.toFixed(1)}, avgRwd=${total.rwd.toFixed(2)})${winnerMarker}`;
+			console.log(this.formatAggregatedVotes(aggregated, header, true, channel));
+		}
+		console.log(`  SELECTION: ${winningLabel} (highest reward)`);
+		console.log(`===================\n`);
+	}
+
+	/**
+	 * Group action votes by action label
+	 * @param {Array} actionVotes - Array of action votes
+	 * @param {Object} channel - Channel instance for formatting
+	 * @returns {Map} Map of label -> votes array
+	 */
+	groupActionsByLabel(actionVotes, channel) {
+		const actionGroups = new Map();
+		for (const v of actionVotes) {
+			const coords = v.neuron.coordinates;
+			const label = channel.formatActionLabel ? channel.formatActionLabel(coords) : JSON.stringify(coords);
+			if (!actionGroups.has(label))
+				actionGroups.set(label, []);
+			actionGroups.get(label).push(v);
+		}
+		return actionGroups;
+	}
+
+	/**
+	 * Calculate totals for an action group
+	 * @param {Array} aggregated - Aggregated votes
+	 * @returns {Object} {str, weightedRewardSum, rwd}
+	 */
+	calculateActionTotals(aggregated) {
+		const total = {
+			str: aggregated.reduce((s, a) => s + a.strength, 0),
+			weightedRewardSum: aggregated.reduce((s, a) => s + a.weightedRewardSum, 0)
+		};
+		total.rwd = total.str > 0 ? total.weightedRewardSum / total.str : 0;
+		return total;
+	}
+
+	/**
+	 * Find which action label won based on winner IDs
+	 * @param {Map} actionGroups - Map of label -> votes array
+	 * @param {Set} winnerIds - Set of winning neuron IDs
+	 * @returns {string} Winning label
+	 */
+	findWinningActionLabel(actionGroups, winnerIds) {
+		for (const [label, votes] of actionGroups)
+			for (const vote of votes)
+				if (winnerIds.has(vote.neuron.id)) return label;
+		return null;
+	}
+
+	/**
+	 * Aggregate votes by source neuron - sum strengths, strength-weighted average reward
+	 * @param {Array} votes - Array of votes to aggregate
+	 * @returns {Array} Array of aggregated votes by source
+	 */
+	aggregateVotesBySource(votes) {
+		if (votes.length === 0) return [];
+
+		// Aggregate by voter neuron
+		const bySource = new Map();
+		for (const v of votes) {
+			const coords = this.formatNeuronCoords(v.voter);
+			const level = v.voter.level;
+			const key = v.voter.id;
+			if (!bySource.has(key))
+				bySource.set(key, { voterId: key, strength: 0, weightedRewardSum: 0, coords, level, distances: [] });
+			const agg = bySource.get(key);
+			agg.strength += v.strength;
+			agg.weightedRewardSum += v.strength * v.reward;
+			agg.distances.push(v.distance);
+		}
+
+		// Calculate strength-weighted average reward per source
+		for (const [_, agg] of bySource)
+			agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
+
+		return [...bySource.values()];
+	}
+
+	/**
+	 * Format neuron coordinates for display (brain.js version)
+	 * @param {Object} neuron - Neuron object
+	 * @returns {string} Formatted coordinates string
+	 */
+	formatNeuronCoords(neuron) {
+
+		// Pattern neurons (level > 0) have a peak neuron instead of direct coordinates
+		if (neuron.level > 0 && neuron.peak)
+			return this.formatNeuronCoords(neuron.peak);
+
+		// Sensory neurons (level 0) have coordinates
+		if (!neuron.coordinates) return `n${neuron.id}`;
+		return Object.entries(neuron.coordinates)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([k, v]) => `${k}=${v}`)
+			.join(', ');
+	}
+
+	/**
+	 * Format aggregated votes with source info
+	 * @param {Array} aggVotes - Array of aggregated votes
+	 * @param {string} label - Optional label for the section
+	 * @param {boolean} includeReward - Whether to include reward in output
+	 * @param {Object} channel - Channel instance for formatting
+	 * @returns {string} Formatted string
+	 */
+	formatAggregatedVotes(aggVotes, label, includeReward, channel) {
+		if (aggVotes.length === 0) {
+			if (label) return `  ${label}: no votes`;
+			return '    no votes';
+		}
+
+		const lines = label ? [`  ${label}:`] : [];
+		for (const agg of aggVotes) {
+			const coordsFormatted = this.formatCoordinates(agg.coords, channel);
+			const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
+			const rewardStr = includeReward ? `, avgRwd=${agg.reward.toFixed(2)}` : '';
+			const levelStr = agg.level > 0 ? ` L${agg.level}` : '';
+			const typeStr = agg.level > 0 ? ' [P]' : '';
+			lines.push(`    ${coordsFormatted}${levelStr}${typeStr} (${distStr}) → str=${agg.strength.toFixed(1)}${rewardStr}`);
+		}
+		return lines.join('\n');
+	}
+
+	/**
+	 * Format coordinates string with channel-specific formatting if available
+	 * @param {string} coordsStr - Coordinates string (e.g., "dim1=val1, dim2=val2")
+	 * @param {Object} channel - Channel instance
+	 * @returns {string} Formatted coordinates
+	 */
+	formatCoordinates(coordsStr, channel) {
+		if (!coordsStr) return '(no coords)';
+		// Use channel's formatCoordinates if available, otherwise return as-is
+		if (channel && typeof channel.formatCoordinates === 'function')
+			return channel.formatCoordinates(coordsStr);
+		return coordsStr;
+	}
+
+	/**
 	 * Track inference performance for both events and actions.
 	 * Also calculates continuous prediction errors via channel callbacks.
 	 * @param {Array} inferences - Array of inferred neurons {neuron, strength}

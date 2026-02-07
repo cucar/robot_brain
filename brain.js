@@ -190,13 +190,13 @@ export default class Brain {
 		// ---------------------------- SECOND LOOP ----------------------------------
 
 		// discover and activate patterns using connections in age=0 - start recursion from base level
-		// this.recognizePatterns();
+		this.recognizePatterns();
 
 		// update the age>0 neurons connections based on observations in age=0
 		this.updateConnections();
 
 		// learn new patterns in age>0 neurons from failed predictions and action regret
-		// this.learnNewPatterns();
+		this.learnNewPatterns();
 
 		// do inferences with age>0 neurons - what's going to happen next? and what's our best response?
 		this.inferNeurons();
@@ -445,6 +445,9 @@ export default class Brain {
 		// Ensure every channel has an action - explore if none inferred
 		this.ensureChannelActions(inferences);
 
+		// call diagnostics to show the debug logs for votes
+		if (this.debug) this.diagnostics.debugVotes(votes, inferences, this.thalamus.channels);
+
 		// Save inferences to memory (clears old inferences first)
 		this.memory.saveInferences(inferences);
 	}
@@ -478,27 +481,23 @@ export default class Brain {
 		const votes = [];
 
 		// Collect votes from neurons that can vote
-		for (const { neuron, age, state } of this.memory.getVotingNeurons()) {
+		for (const { voter, age, state } of this.memory.getVotingNeurons()) {
 
 			// if a pattern was activated by the neuron, its inference is suppressed - skip
 			if (state.activatedPattern !== null) continue;
 
 			// get the votes of the neuron
-			const neuronVotes = neuron.vote(age, 1 / this.memory.contextLength);
+			const neuronVotes = voter.vote(age, 1 / this.memory.contextLength);
 
 			// capture context at voting time for pattern learning
-			const context = this.memory.getContextForAge(age, neuron.level);
+			const context = this.memory.getContextForAge(age, voter.level);
 
 			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
-			this.memory.setVotes(neuron, age, neuronVotes, context);
+			this.memory.setVotes(voter, age, votes, context);
 
 			// add the votes to the returned array
-			for (const v of neuronVotes) votes.push({ neuronId: v.toNeuron.id, strength: v.strength, reward: v.reward });
+			for (const vote of neuronVotes) votes.push({ voter: voter, ...vote });
 		}
-
-		// call thalamus and diagnostics to show the debug logs for votes
-		if (this.debug) console.log(`Collected ${votes.length} votes`);
-		// for (const [_, channel] of this.channels) await channel.debugVotes(votes, this);
 
 		return votes;
 	}
@@ -514,9 +513,8 @@ export default class Brain {
 		// Aggregate candidate neurons
 		const candidates = new Map(); // neuronId -> {neuron, strength, weightedReward}
 		for (const v of votes) {
-			const neuron = this.thalamus.getNeuron(v.neuronId);
-			if (!candidates.has(v.neuronId)) candidates.set(v.neuronId, { neuron, strength: 0, weightedReward: 0 });
-			const candidate = candidates.get(v.neuronId);
+			if (!candidates.has(v.neuron.id)) candidates.set(v.neuron.id, { neuron: v.neuron, strength: 0, weightedReward: 0 });
+			const candidate = candidates.get(v.neuron.id);
 			candidate.strength += v.strength;
 			candidate.weightedReward += v.strength * v.reward;
 		}
