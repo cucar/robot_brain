@@ -106,7 +106,7 @@ export default class SyntheticCycleTest extends Job {
 		console.log('🚀 Running single episode...\n');
 
 		// Get the stock channel
-		const stockChannel = this.brain.thalamus.getChannel(this.config.symbol);
+		const stockChannel = this.brain.getChannel(this.config.symbol);
 
 		// Reset accuracy stats
 		this.brain.resetAccuracyStats();

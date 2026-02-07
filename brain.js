@@ -61,6 +61,13 @@ export default class Brain {
 	}
 
 	/**
+	 * Get channel by name
+	 */
+	getChannel(channelName) {
+		return this.thalamus.getChannel(channelName);
+	}
+
+	/**
 	 * initializes the database connection and loads dimensions
 	 */
 	async initDB() {
@@ -183,13 +190,13 @@ export default class Brain {
 		// ---------------------------- SECOND LOOP ----------------------------------
 
 		// discover and activate patterns using connections in age=0 - start recursion from base level
-		this.recognizePatterns();
+		// this.recognizePatterns();
 
 		// update the age>0 neurons connections based on observations in age=0
 		this.updateConnections();
 
 		// learn new patterns in age>0 neurons from failed predictions and action regret
-		this.learnNewPatterns();
+		// this.learnNewPatterns();
 
 		// do inferences with age>0 neurons - what's going to happen next? and what's our best response?
 		this.inferNeurons();

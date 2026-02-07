@@ -95,6 +95,13 @@ export default class BrainMySQL {
 	}
 
 	/**
+	 * Get channel instance by name
+	 */
+	getChannel(channelName) {
+		return this.channels.get(channelName);
+	}
+
+	/**
 	 * initializes the database connection and loads dimensions
 	 */
 	async initDB() {
@@ -334,7 +341,7 @@ export default class BrainMySQL {
 		await this.processBaseNeurons();
 
 		// recognize, refine and learn patterns from the base neurons
-		await this.processPatternNeurons();
+		// await this.processPatternNeurons();
 
 		// deactivate aged-out neurons AFTER pattern learning captured full context
 		await this.deactivateOldNeurons();
