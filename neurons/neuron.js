@@ -66,7 +66,7 @@ export class Neuron {
 		this.id = Neuron.nextId++;
 		this.level = level;
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
-		this.contexts = []; // Routing table: Array<{context: Context, pattern: Neuron}>
+		this.contexts = []; // Routing table: Array<{context: Context, pattern: Neuron, strength: number}>
 	}
 
 	/**

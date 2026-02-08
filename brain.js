@@ -18,10 +18,9 @@ export default class Brain {
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
-		this.forgetCounter = 0; // initialize the counter for forget cycle
+		this.frameNumber = 0;
 
 		// Debugging info and flags
-		this.frameNumber = 0;
 		this.debug = options.debug;
 		this.noDatabase = options.database !== undefined; // skip database backup/restore for tests
 		this.diagnostic = options.diagnostic; // diagnostic mode - shows detailed inference/conflict resolution info
@@ -547,9 +546,7 @@ export default class Brain {
 	runForgetCycle() {
 
 		// Run periodically for cleanup
-		this.forgetCounter++;
-		if (this.forgetCounter % this.forgetCycles !== 0) return;
-		this.forgetCounter = 0;
+		if (this.frameNumber % this.forgetCycles !== 0) return;
 
 		const cycleStart = Date.now();
 		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
