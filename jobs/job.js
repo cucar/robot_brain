@@ -10,7 +10,7 @@ export default class Job {
 		this.brain = null; // Brain instance will be created in run() based on options
 		this.hardReset = false;
 		this.isShuttingDown = false;
-		this.noDatabase = true; // Default: skip database backup/restore for jobs (tests) - set to false for production
+		this.database = false; // Default: skip database backup/restore for jobs (tests)
 	}
 
 	/**
@@ -26,7 +26,7 @@ export default class Job {
 			this.brain = this.runnerOptions?.mysql ? new BrainMySQL() : new Brain(this.runnerOptions);
 
 			// Apply database option if provided (overrides default)
-			if (this.runnerOptions?.database !== undefined) this.noDatabase = !this.runnerOptions.database;
+			if (this.runnerOptions?.database !== undefined) this.database = this.runnerOptions.database;
 
 			// Allow jobs to show custom startup info
 			await this.showStartupInfo();
@@ -86,7 +86,7 @@ export default class Job {
 	async shutdown() {
 		if (this.isShuttingDown) return;
 		this.isShuttingDown = true;
-		if (this.brain && !this.noDatabase) await this.brain.backupBrain();
+		if (this.brain && this.database) await this.brain.backupBrain();
 	}
 
 	/**
