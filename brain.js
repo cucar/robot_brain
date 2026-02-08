@@ -22,7 +22,7 @@ export default class Brain {
 
 		// Debugging info and flags
 		this.debug = options.debug;
-		this.noDatabase = options.database !== undefined; // skip database backup/restore for tests
+		this.database = options.database; // skip database backup/restore for tests
 		this.diagnostic = options.diagnostic; // diagnostic mode - shows detailed inference/conflict resolution info
 		this.frameSummary = !options.noSummary; // show frame summary or not
 		this.waitForUserInput = options.debug;
@@ -32,7 +32,7 @@ export default class Brain {
 		this.rewards = new Map(); // channel rewards for current frame
 
 		// Database - used for persistent storage - backup and restore
-		this.db = new BrainDB();
+		this.db = this.database ? new BrainDB() : null;
 
 		// Diagnostics - used for debug methods and performance tracking
 		this.diagnostics = new BrainDiagnostics(this.diagnostic, this.frameSummary);
@@ -70,7 +70,7 @@ export default class Brain {
 	 * initializes the database connection and loads dimensions
 	 */
 	async initDB() {
-		if (!this.noDatabase) await this.db.initDB();
+		if (this.database) await this.db.initDB();
 	}
 
 	/**
@@ -99,7 +99,7 @@ export default class Brain {
 		this.thalamus.reset();
 
 		// Clear MySQL tables if using a database
-		if (!this.noDatabase) await this.db.reset();
+		if (this.database) await this.db.reset();
 	}
 
 	/**
@@ -121,7 +121,7 @@ export default class Brain {
 	 * Called on shutdown or when job is interrupted.
 	 */
 	async backupBrain() {
-		if (!this.noDatabase) await this.db.backupBrain(this.thalamus);
+		if (this.database) await this.db.backupBrain(this.thalamus);
 	}
 
 	/**
@@ -130,7 +130,7 @@ export default class Brain {
 	async init() {
 
 		// if database is enabled, load dimensions, channels and neurons from database
-		if (!this.noDatabase) {
+		if (this.database) {
 			await this.db.initializeChannels(this.thalamus);
 			await this.db.initializeDimensions(this.thalamus);
 			await this.db.loadAndPopulateNeurons(this.thalamus);

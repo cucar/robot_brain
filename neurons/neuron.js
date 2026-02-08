@@ -33,10 +33,10 @@ export class Neuron {
 	static debug = false;
 
 	/**
-	 * Create a sensory neuron (level 0)
+	 * Create a sensory neuron (level 0) - id optional for loading from database
 	 */
-	static createSensory(channel, type, coordinates) {
-		const neuron = new Neuron(0);
+	static createSensory(channel, type, coordinates, id = null) {
+		const neuron = new Neuron(0, id);
 		neuron.channel = channel;
 		neuron.type = type;
 		neuron.coordinates = coordinates;
@@ -44,10 +44,10 @@ export class Neuron {
 	}
 
 	/**
-	 * Create a pattern neuron (level > 0)
+	 * Create a pattern neuron (level > 0) - id optional for loading from database
 	 */
-	static createPattern(level, peak) {
-		const neuron = new Neuron(level);
+	static createPattern(level, peak, id = null) {
+		const neuron = new Neuron(level, id);
 		neuron.peak = peak;
 		return neuron;
 	}
@@ -62,11 +62,17 @@ export class Neuron {
 		return JSON.stringify(obj);
 	}
 
-	constructor(level = 0) {
-		this.id = Neuron.nextId++;
+	/**
+	 * constructor - id optional for loading from database
+	 */
+	constructor(level = 0, id = null) {
+		this.id = id !== null ? id : Neuron.nextId++;
 		this.level = level;
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
 		this.contexts = []; // Routing table: Array<{context: Context, pattern: Neuron, strength: number}>
+
+		// Update nextId if we're loading a neuron with a specific ID
+		if (id !== null && id >= Neuron.nextId) Neuron.nextId = id + 1;
 	}
 
 	/**

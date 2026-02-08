@@ -50,20 +50,14 @@ export class BrainDB {
 
 		console.log('Loading neurons from MySQL...');
 
-		// Track max ID
-		let maxId = 0;
-
-		// Load all components
-		maxId = Math.max(maxId, await this.loadBaseNeurons(thalamus));
-		maxId = Math.max(maxId, await this.loadPatternNeurons(thalamus));
+		// Load all components (Neuron.nextId is updated automatically during loading)
+		await this.loadBaseNeurons(thalamus);
+		await this.loadPatternNeurons(thalamus);
 		await this.loadConnections(thalamus);
 		await this.loadPatternContext(thalamus);
 		await this.loadPatternConnections(thalamus);
 
-		// Update Neuron.nextId
-		Neuron.nextId = maxId + 1;
-
-		console.log(`Neurons loaded: ${thalamus.getNeuronCount()} total, max ID: ${maxId}`);
+		console.log(`Neurons loaded: ${thalamus.getNeuronCount()} total, next ID: ${Neuron.nextId}`);
 	}
 
 	/**
@@ -88,11 +82,11 @@ export class BrainDB {
 			if (dimName) coordsByNeuron.get(row.neuron_id)[dimName] = row.val;
 		}
 
-		// Create sensory neuron objects
+		// Create sensory neuron objects with their database IDs
 		let maxId = 0;
 		for (const row of baseRows) {
 			const coords = coordsByNeuron.get(row.neuron_id) || {};
-			const neuron = Neuron.createSensory(row.channel_name, row.type, coords);
+			const neuron = Neuron.createSensory(row.channel_name, row.type, coords, row.neuron_id);
 			thalamus.addNeuron(neuron);
 			if (row.neuron_id > maxId) maxId = row.neuron_id;
 		}
@@ -115,17 +109,19 @@ export class BrainDB {
 		`);
 
 		let maxId = 0;
+		let skipped = 0;
 		for (const row of patternRows) {
 			const peak = thalamus.getNeuron(row.peak_neuron_id);
 			if (!peak) {
 				console.warn(`  Warning: Pattern ${row.id} references missing peak ${row.peak_neuron_id}`);
+				skipped++;
 				continue;
 			}
-			const pattern = Neuron.createPattern(row.level, peak);
+			const pattern = Neuron.createPattern(row.level, peak, row.id);
 			thalamus.addNeuron(pattern);
 			if (row.id > maxId) maxId = row.id;
 		}
-		console.log(`  Loaded ${patternRows.length} pattern neurons`);
+		console.log(`  Loaded ${patternRows.length - skipped} pattern neurons (${skipped} skipped due to missing peaks)`);
 		return maxId;
 	}
 
