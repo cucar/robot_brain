@@ -9,7 +9,6 @@ export default class StockPredictionJob extends Job {
 
 	constructor() {
 		super();
-		this.hardReset = false; // Don't reset - use trained patterns
 		
 		// Configuration - should match training job
 		this.config = {
@@ -57,15 +56,6 @@ export default class StockPredictionJob extends Job {
 			channel.holdoutRows = this.config.holdoutRows;
 			channel.setPredictionMode(); // Use only holdout rows
 		}
-	}
-
-	/**
-	 * Hook: Handle brain reset strategy
-	 */
-	async handleBrainReset() {
-		// Reset context but keep learned patterns
-		console.log('🧠 Resetting context (keeping learned patterns)...');
-		await this.brain.resetContext();
 	}
 
 	/**

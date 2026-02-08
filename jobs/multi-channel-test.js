@@ -16,7 +16,6 @@ export default class MultiChannelTest extends Job {
 
 	constructor() {
 		super();
-		this.hardReset = true;
 
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],

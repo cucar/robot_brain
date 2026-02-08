@@ -5,7 +5,6 @@ export default class StocksJob1 extends Job {
 
 	constructor() {
 		super();
-		this.hardReset = true; // do a hard reset before running the job - this is for consistent testing
 	}
 
 	/**

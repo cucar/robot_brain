@@ -8,7 +8,6 @@ export default class Job {
 
 	constructor() {
 		this.brain = null; // Brain instance will be created in run() based on options
-		this.hardReset = false;
 		this.isShuttingDown = false;
 		this.database = false; // Default: skip database backup/restore for jobs (tests)
 	}
@@ -107,13 +106,15 @@ export default class Job {
 	 * Hook: Handle brain reset strategy (override in subclasses)
 	 */
 	async handleBrainReset() {
-		// if job requests a hard reset (mainly for tests), perform before init
-		if (this.hardReset) {
-			console.log('Job requests hard reset. Clearing all tables...');
+		// Check command-line flags for reset strategy
+		if (this.runnerOptions?.hardReset) {
+			console.log('Hard reset requested. Clearing all tables...');
 			await this.brain.resetBrain();
 		}
-		// otherwise, just reset brain memory for clean episode
-		else await this.brain.resetContext();
+		if (this.runnerOptions?.softReset) {
+			console.log('Soft reset requested. Resetting context only...');
+			await this.brain.resetContext();
+		}
 	}
 
 	/**

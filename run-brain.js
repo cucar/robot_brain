@@ -1,6 +1,6 @@
 /**
  * Job Runner - Entry point for running brain episodes
- * Usage: node run-brain.js <job-name> [--diagnostic]
+ * Usage: node run-brain.js <job-name> <options>
  */
 
 class BrainRunner {
@@ -40,7 +40,9 @@ if (process.argv[2]) {
 		mysql: process.argv.includes('--mysql'),
 		database: process.argv.includes('--database'),
 		debug: process.argv.includes('--debug'),
-		noSummary: process.argv.includes('--no-summary')
+		noSummary: process.argv.includes('--no-summary'),
+		hardReset: process.argv.includes('--hard-reset'),
+		softReset: process.argv.includes('--soft-reset')
 	};
 
 	const runner = new BrainRunner();

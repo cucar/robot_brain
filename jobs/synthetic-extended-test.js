@@ -17,7 +17,6 @@ export default class SyntheticExtendedTest extends Job {
 
 	constructor() {
 		super();
-		this.hardReset = true;
 
 		this.config = {
 			symbol: 'TEST',

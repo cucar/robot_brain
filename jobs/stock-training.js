@@ -16,7 +16,6 @@ export default class StockTrainingJob extends Job {
 
 	constructor() {
 		super();
-		this.hardReset = true; // Hard reset before first episode
 
 		// Simple configuration - edit these values as needed
 		this.config = {
