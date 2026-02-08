@@ -129,18 +129,20 @@ export default class Brain {
 	 */
 	async init() {
 
-		// if database is enabled, load dimensions, channels and neurons from database
+		// Instantiate channels (either from DB or from registered classes)
 		if (this.database) {
-			await this.db.initializeChannels(this.thalamus);
-			await this.db.initializeDimensions(this.thalamus);
+			// Load channels from database (also instantiates new channels not in DB)
+			await this.db.loadChannels(this.thalamus);
+		} else {
+			// Instantiate all registered channel classes
+			this.thalamus.instantiateChannels();
 		}
 
-		// Load channels and dimensions to thalamus (must be done before loading neurons)
-		this.thalamus.initializeChannels();
-		this.thalamus.loadDimensions();
+		// Load dimension mappings BEFORE loading neurons (neurons need dimension name lookups)
+		this.thalamus.loadDimensionMaps();
 
-		// Load neurons from database (requires dimension mappings to be loaded first)
-		if (this.database) await this.db.loadAndPopulateNeurons(this.thalamus);
+		// Load neurons from database (if enabled)
+		if (this.database) await this.db.loadNeurons(this.thalamus);
 
 		// Pre-create action neurons for all channels so that we can explore
 		this.thalamus.initializeActionNeurons();

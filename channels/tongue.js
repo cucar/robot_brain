@@ -9,7 +9,7 @@ import { Dimension } from './dimension.js';
  */
 export default class TongueChannel extends Channel {
 
-	constructor(name) {
+	constructor(name, dimensions = null) {
 		super(name);
 
 		// Sample taste data - different flavors and intensities
@@ -24,14 +24,30 @@ export default class TongueChannel extends Channel {
 		this.tonguePosition = { x: 0.0, y: 0.0 }; // Current tongue position
 		this.lastMovement = null;
 
-		// Create dimension objects for this channel
-		this.tasteSweetDim = new Dimension('taste_sweet');
-		this.tasteSourDim = new Dimension('taste_sour');
-		this.tasteSaltyDim = new Dimension('taste_salty');
-		this.tasteBitterDim = new Dimension('taste_bitter');
-		this.tasteUmamiDim = new Dimension('taste_umami');
-		this.tongueXDim = new Dimension('tongue_x');
-		this.tongueYDim = new Dimension('tongue_y');
+		// Create or use provided dimension objects for this channel
+		if (dimensions) {
+			// Loading from database - use provided dimensions
+			this.tasteSweetDim = dimensions.find(d => d.name === 'taste_sweet');
+			this.tasteSourDim = dimensions.find(d => d.name === 'taste_sour');
+			this.tasteSaltyDim = dimensions.find(d => d.name === 'taste_salty');
+			this.tasteBitterDim = dimensions.find(d => d.name === 'taste_bitter');
+			this.tasteUmamiDim = dimensions.find(d => d.name === 'taste_umami');
+			this.tongueXDim = dimensions.find(d => d.name === 'tongue_x');
+			this.tongueYDim = dimensions.find(d => d.name === 'tongue_y');
+
+			// Validate all required dimensions exist
+			if (!this.tasteSweetDim || !this.tasteSourDim || !this.tasteSaltyDim || !this.tasteBitterDim || !this.tasteUmamiDim || !this.tongueXDim || !this.tongueYDim)
+				throw new Error(`TongueChannel ${name}: Missing required dimensions in database`);
+		} else {
+			// New channel - create dimensions with auto-increment IDs
+			this.tasteSweetDim = new Dimension('taste_sweet');
+			this.tasteSourDim = new Dimension('taste_sour');
+			this.tasteSaltyDim = new Dimension('taste_salty');
+			this.tasteBitterDim = new Dimension('taste_bitter');
+			this.tasteUmamiDim = new Dimension('taste_umami');
+			this.tongueXDim = new Dimension('tongue_x');
+			this.tongueYDim = new Dimension('tongue_y');
+		}
 	}
 
 	getEventDimensions() {

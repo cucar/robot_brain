@@ -9,7 +9,7 @@ import { Dimension } from './dimension.js';
  */
 export default class EarsChannel extends Channel {
 
-	constructor(name) {
+	constructor(name, dimensions = null) {
 		super(name);
 
 		// Sample audio data - frequencies, amplitudes, and durations
@@ -24,11 +24,24 @@ export default class EarsChannel extends Channel {
 		this.earOrientation = 0.0; // Current ear orientation (-1 left, +1 right)
 		this.lastMovement = null;
 
-		// Create dimension objects for this channel
-		this.audioFrequencyDim = new Dimension('audio_frequency');
-		this.audioAmplitudeDim = new Dimension('audio_amplitude');
-		this.audioDurationDim = new Dimension('audio_duration');
-		this.earOrientationDim = new Dimension('ear_orientation');
+		// Create or use provided dimension objects for this channel
+		if (dimensions) {
+			// Loading from database - use provided dimensions
+			this.audioFrequencyDim = dimensions.find(d => d.name === 'audio_frequency');
+			this.audioAmplitudeDim = dimensions.find(d => d.name === 'audio_amplitude');
+			this.audioDurationDim = dimensions.find(d => d.name === 'audio_duration');
+			this.earOrientationDim = dimensions.find(d => d.name === 'ear_orientation');
+
+			// Validate all required dimensions exist
+			if (!this.audioFrequencyDim || !this.audioAmplitudeDim || !this.audioDurationDim || !this.earOrientationDim)
+				throw new Error(`EarsChannel ${name}: Missing required dimensions in database`);
+		} else {
+			// New channel - create dimensions with auto-increment IDs
+			this.audioFrequencyDim = new Dimension('audio_frequency');
+			this.audioAmplitudeDim = new Dimension('audio_amplitude');
+			this.audioDurationDim = new Dimension('audio_duration');
+			this.earOrientationDim = new Dimension('ear_orientation');
+		}
 	}
 
 	getEventDimensions() {

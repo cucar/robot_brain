@@ -9,7 +9,7 @@ import { Dimension } from './dimension.js';
  */
 export default class TextChannel extends Channel {
 
-	constructor(name, pattern = 'cats') {
+	constructor(name, pattern = 'cats', dimensions = null) {
 		super(name);
 
 		// Pattern to learn (can be set from job)
@@ -19,8 +19,18 @@ export default class TextChannel extends Channel {
 		this.patternIterations = 0;
 		this.maxIterations = 10;
 
-		// Create dimension objects for this channel
-		this.charInputDim = new Dimension('char_input');
+		// Create or use provided dimension objects for this channel
+		if (dimensions) {
+			// Loading from database - use provided dimensions
+			this.charInputDim = dimensions.find(d => d.name === 'char_input');
+
+			// Validate all required dimensions exist
+			if (!this.charInputDim)
+				throw new Error(`TextChannel ${name}: Missing required dimensions in database`);
+		} else {
+			// New channel - create dimensions with auto-increment IDs
+			this.charInputDim = new Dimension('char_input');
+		}
 	}
 
 	/**

@@ -7,9 +7,12 @@ export class Dimension {
 
 	static nextId = 1; // Start at 1 to match typical DB conventions
 
-	constructor(name) {
-		this.id = Dimension.nextId++;
+	constructor(name, id = null) {
+		this.id = id !== null ? id : Dimension.nextId++;
 		this.name = name; // for debugging
+
+		// Update nextId if we're loading a dimension with a specific ID
+		if (id !== null && id >= Dimension.nextId) Dimension.nextId = id + 1;
 	}
 }
 

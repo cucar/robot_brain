@@ -9,7 +9,7 @@ import { Dimension } from './dimension.js';
  */
 export default class EyesChannel extends Channel {
 
-	constructor(name) {
+	constructor(name, dimensions = null) {
 		super(name);
 
 		// Sample visual data - in real implementation this would come from camera/image processing
@@ -24,14 +24,30 @@ export default class EyesChannel extends Channel {
 		this.eyePosition = { x: 0.0, y: 0.0 }; // Current eye position
 		this.lastSaccade = null;
 
-		// Create dimension objects for this channel
-		this.visualXDim = new Dimension('visual_x');
-		this.visualYDim = new Dimension('visual_y');
-		this.visualRDim = new Dimension('visual_r');
-		this.visualGDim = new Dimension('visual_g');
-		this.visualBDim = new Dimension('visual_b');
-		this.saccadeXDim = new Dimension('saccade_x');
-		this.saccadeYDim = new Dimension('saccade_y');
+		// Create or use provided dimension objects for this channel
+		if (dimensions) {
+			// Loading from database - use provided dimensions
+			this.visualXDim = dimensions.find(d => d.name === 'visual_x');
+			this.visualYDim = dimensions.find(d => d.name === 'visual_y');
+			this.visualRDim = dimensions.find(d => d.name === 'visual_r');
+			this.visualGDim = dimensions.find(d => d.name === 'visual_g');
+			this.visualBDim = dimensions.find(d => d.name === 'visual_b');
+			this.saccadeXDim = dimensions.find(d => d.name === 'saccade_x');
+			this.saccadeYDim = dimensions.find(d => d.name === 'saccade_y');
+
+			// Validate all required dimensions exist
+			if (!this.visualXDim || !this.visualYDim || !this.visualRDim || !this.visualGDim || !this.visualBDim || !this.saccadeXDim || !this.saccadeYDim)
+				throw new Error(`EyesChannel ${name}: Missing required dimensions in database`);
+		} else {
+			// New channel - create dimensions with auto-increment IDs
+			this.visualXDim = new Dimension('visual_x');
+			this.visualYDim = new Dimension('visual_y');
+			this.visualRDim = new Dimension('visual_r');
+			this.visualGDim = new Dimension('visual_g');
+			this.visualBDim = new Dimension('visual_b');
+			this.saccadeXDim = new Dimension('saccade_x');
+			this.saccadeYDim = new Dimension('saccade_y');
+		}
 	}
 
 	getEventDimensions() {

@@ -15,11 +15,14 @@ export default class Channel {
 
 	static nextId = 1; // Start at 1 to match typical DB conventions
 
-	constructor(name, debug) {
-		this.id = Channel.nextId++;
+	constructor(name, debug, id = null) {
+		this.id = id !== null ? id : Channel.nextId++;
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
 		this.debug = debug; // controls verbosity of channel output
+
+		// Update nextId if we're loading a channel with a specific ID
+		if (id !== null && id >= Channel.nextId) Channel.nextId = id + 1;
 	}
 
 	/**
@@ -78,8 +81,6 @@ export default class Channel {
 	async getRewards() {
 		return 1.0; // Neutral feedback by default
 	}
-
-
 
 	/**
 	 * Calculate continuous prediction error for this channel.

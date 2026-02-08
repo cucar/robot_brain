@@ -12,16 +12,28 @@ const POSITION_OUT = -1;
  */
 export default class StockChannel extends Channel {
 
-	constructor(name) {
+	constructor(name, dimensions = null) {
 		super(name);
 
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
 
-		// Create dimension objects for this channel
-		this.priceChangeDim = new Dimension(`${this.symbol}_price_change`);
-		this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
-		this.activityDim = new Dimension(`${this.symbol}_activity`);
+		// Create or use provided dimension objects for this channel
+		if (dimensions) {
+			// Loading from database - use provided dimensions
+			this.priceChangeDim = dimensions.find(d => d.name === `${this.symbol}_price_change`);
+			this.volumeChangeDim = dimensions.find(d => d.name === `${this.symbol}_volume_change`);
+			this.activityDim = dimensions.find(d => d.name === `${this.symbol}_activity`);
+
+			// Validate all required dimensions exist
+			if (!this.priceChangeDim || !this.volumeChangeDim || !this.activityDim)
+				throw new Error(`StockChannel ${name}: Missing required dimensions in database`);
+		} else {
+			// New channel - create dimensions with auto-increment IDs
+			this.priceChangeDim = new Dimension(`${this.symbol}_price_change`);
+			this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
+			this.activityDim = new Dimension(`${this.symbol}_activity`);
+		}
 
 		// Hyperparameters
 		this.rewardAmplification = 1; // Power to raise reward ratios to (higher = stronger rewards/penalties)

@@ -16,6 +16,7 @@ export class Thalamus {
 		this.neuronsByValue = new Map(); // valueKey -> SensoryNeuron
 
 		// Channel registry
+		this.channelClasses = new Map(); // channelName -> Channel class (not instantiated)
 		this.channels = new Map(); // channelName -> Channel instance
 		this.channelActions = new Map(); // channelName -> Set<Neuron>
 		this.channelNameToId = {}; // channelName -> channelId
@@ -94,14 +95,48 @@ export class Thalamus {
 	// ============ CHANNEL OPERATIONS ============
 
 	/**
-	 * Register a channel
+	 * Register a channel class (not instantiated yet)
 	 * @param {string} name - Channel name
-	 * @param {Channel} channelClass - Channel class constructor
-	 * @returns {object} - Channel instance
+	 * @param {Class} channelClass - Channel class constructor
 	 */
 	registerChannel(name, channelClass) {
-		this.channels.set(name, new channelClass(name, this.debug));
-		if (this.debug) console.log(`Registered channel: ${name} (${channelClass.name})`);
+		this.channelClasses.set(name, channelClass);
+		if (this.debug) console.log(`Registered channel class: ${name} (${channelClass.name})`);
+	}
+
+	/**
+	 * Add an instantiated channel to the thalamus
+	 * @param {string} name - Channel name
+	 * @param {Channel} channelInstance - Instantiated channel object
+	 */
+	addChannel(name, channelInstance) {
+		this.channels.set(name, channelInstance);
+		if (this.debug) console.log(`Added channel instance: ${name}`);
+	}
+
+	/**
+	 * Instantiate all registered channel classes (for non-database mode)
+	 * This creates channel instances from the registered classes
+	 */
+	instantiateChannels() {
+		for (const [channelName, channelClass] of this.channelClasses) {
+			// Skip if already instantiated
+			if (this.channels.has(channelName)) continue;
+
+			// Instantiate channel without dimensions (will create new ones with auto-increment IDs)
+			const channelInstance = new channelClass(channelName);
+			this.addChannel(channelName, channelInstance);
+		}
+
+		// Set up channel name/id mappings
+		const channelNameToId = {};
+		const channelIdToName = {};
+		for (const [channelName, channel] of this.getAllChannels()) {
+			channelNameToId[channelName] = channel.id;
+			channelIdToName[channel.id] = channelName;
+		}
+		this.setChannelMappings(channelNameToId, channelIdToName);
+		if (this.debug) console.log('Channels instantiated:', channelNameToId);
 	}
 
 	/**
@@ -203,25 +238,9 @@ export class Thalamus {
 	// ============ INITIALIZATION ============
 
 	/**
-	 * Initialize channels and set mappings
+	 * Load dimension name/id mappings from instantiated channels
 	 */
-	initializeChannels() {
-		const channelNameToId = {};
-		const channelIdToName = {};
-
-		for (const [channelName, channel] of this.getAllChannels()) {
-			channelNameToId[channelName] = channel.id;
-			channelIdToName[channel.id] = channelName;
-		}
-
-		this.setChannelMappings(channelNameToId, channelIdToName);
-		if (this.debug) console.log('Channels loaded:', channelNameToId);
-	}
-
-	/**
-	 * Load dimensions and set mappings
-	 */
-	loadDimensions() {
+	loadDimensionMaps() {
 		const dimensionNameToId = {};
 		const dimensionIdToName = {};
 

@@ -1,5 +1,7 @@
 import getMySQLConnection from './db/db.js';
 import { Neuron } from './neurons/neuron.js';
+import { Dimension } from './channels/dimension.js';
+import Channel from './channels/channel.js';
 
 /**
  * BrainDB - Database backup and restore operations for Brain
@@ -18,25 +20,74 @@ export class BrainDB {
 	}
 
 	/**
-	 * Initialize channels in DB
-	 * @param {Thalamus} thalamus - Thalamus instance
+	 * loads channels and dimensions between code and database.
+	 * Loads channels from DB, validates against registered classes, instantiates channels,
+	 * handles new channels, and updates thalamus with reconciled channels.
+	 * @param {Thalamus} thalamus - Thalamus instance with registered channel classes
 	 */
-	async initializeChannels(thalamus) {
-		for (const [channelName, channel] of thalamus.getAllChannels())
-			await this.conn.query('INSERT IGNORE INTO channels (id, name) VALUES (?, ?)', [channel.id, channelName]);
-	}
+	async loadChannels(thalamus) {
 
-	/**
-	 * Initialize dimensions for all registered channels
-	 * @param {Thalamus} thalamus - Thalamus instance
-	 */
-	async initializeDimensions(thalamus) {
-		for (const [, channel] of thalamus.getAllChannels()) {
-			for (const dim of channel.getEventDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
-			for (const dim of channel.getOutputDimensions())
-				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
+		// Load channels and dimensions from database
+		const [channelRows] = await this.conn.query('SELECT id, name FROM channels');
+		const [dimensionRows] = await this.conn.query('SELECT id, name FROM dimensions');
+
+		// load all dimensions and let each channel pick what it needs
+		const dbDimensions = dimensionRows.map(row => new Dimension(row.name, row.id));
+
+		// Track which channels have been processed
+		const processedChannels = new Set();
+
+		// Process each DB channel
+		for (const channelRow of channelRows) {
+			const channelName = channelRow.name;
+			const channelId = channelRow.id;
+			const channelClass = thalamus.channelClasses.get(channelName);
+
+			// Fatal error if channel class not found
+			if (!channelClass) throw new Error(`Channel class not found: ${channelName}. Code not compatible.`);
+
+			// Instantiate channel with DB dimensions
+			const channelInstance = new channelClass(channelName, dbDimensions);
+
+			// Restore the channel ID from database
+			channelInstance.id = channelId;
+			if (channelId >= Channel.nextId) Channel.nextId = channelId + 1;
+
+			// Add instantiated channel to thalamus
+			thalamus.addChannel(channelName, channelInstance);
+			processedChannels.add(channelName);
+
+			if (thalamus.debug) console.log(`Loaded channel from DB: ${channelName} (id: ${channelId})`);
 		}
+
+		// Process new channels (registered but not in DB)
+		for (const [channelName, channelClass] of thalamus.channelClasses) {
+			if (processedChannels.has(channelName)) continue;
+
+			// New channel - instantiate without dimensions (will create new ones)
+			const channelInstance = new channelClass(channelName);
+			thalamus.addChannel(channelName, channelInstance);
+
+			// Save new channel to database
+			await this.conn.query('INSERT INTO channels (id, name) VALUES (?, ?)', [channelInstance.id, channelName]);
+
+			// Save new dimensions to database
+			const dimensions = channelInstance.getEventDimensions().concat(channelInstance.getOutputDimensions());
+			for (const dim of dimensions)
+				await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES (?, ?)', [dim.id, dim.name]);
+
+			if (thalamus.debug) console.log(`Added new channel to DB: ${channelName} (id: ${channelInstance.id})`);
+		}
+
+		// Set up channel name/id mappings (replaces old initializeChannels functionality)
+		const channelNameToId = {};
+		const channelIdToName = {};
+		for (const [channelName, channel] of thalamus.getAllChannels()) {
+			channelNameToId[channelName] = channel.id;
+			channelIdToName[channel.id] = channelName;
+		}
+		thalamus.setChannelMappings(channelNameToId, channelIdToName);
+		if (thalamus.debug) console.log('Channels reconciled:', channelNameToId);
 	}
 
 	/**
@@ -44,7 +95,8 @@ export class BrainDB {
 	 * Clears existing neurons, loads from DB, and updates Neuron.nextId.
 	 * @param {Thalamus} thalamus - Thalamus instance
 	 */
-	async loadAndPopulateNeurons(thalamus) {
+	async loadNeurons(thalamus) {
+
 		// Clear existing neurons
 		thalamus.reset();
 

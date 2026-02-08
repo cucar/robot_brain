@@ -9,7 +9,7 @@ import { Dimension } from './dimension.js';
  */
 export default class ArmChannel extends Channel {
 
-	constructor(name) {
+	constructor(name, dimensions = null) {
 		super(name);
 
 		// Arm state tracking
@@ -29,16 +29,36 @@ export default class ArmChannel extends Channel {
 		this.sequenceTrials = 0;
 		this.maxTrials = 5;
 
-		// Create dimension objects for this channel
-		this.touchShoulderDim = new Dimension('touch_shoulder');
-		this.touchElbowDim = new Dimension('touch_elbow');
-		this.touchWristDim = new Dimension('touch_wrist');
-		this.jointShoulderDim = new Dimension('joint_shoulder');
-		this.jointElbowDim = new Dimension('joint_elbow');
-		this.jointWristDim = new Dimension('joint_wrist');
-		this.motorShoulderDim = new Dimension('motor_shoulder');
-		this.motorElbowDim = new Dimension('motor_elbow');
-		this.motorWristDim = new Dimension('motor_wrist');
+		// Create or use provided dimension objects for this channel
+		if (dimensions) {
+			// Loading from database - use provided dimensions
+			this.touchShoulderDim = dimensions.find(d => d.name === 'touch_shoulder');
+			this.touchElbowDim = dimensions.find(d => d.name === 'touch_elbow');
+			this.touchWristDim = dimensions.find(d => d.name === 'touch_wrist');
+			this.jointShoulderDim = dimensions.find(d => d.name === 'joint_shoulder');
+			this.jointElbowDim = dimensions.find(d => d.name === 'joint_elbow');
+			this.jointWristDim = dimensions.find(d => d.name === 'joint_wrist');
+			this.motorShoulderDim = dimensions.find(d => d.name === 'motor_shoulder');
+			this.motorElbowDim = dimensions.find(d => d.name === 'motor_elbow');
+			this.motorWristDim = dimensions.find(d => d.name === 'motor_wrist');
+
+			// Validate all required dimensions exist
+			if (!this.touchShoulderDim || !this.touchElbowDim || !this.touchWristDim ||
+			    !this.jointShoulderDim || !this.jointElbowDim || !this.jointWristDim ||
+			    !this.motorShoulderDim || !this.motorElbowDim || !this.motorWristDim)
+				throw new Error(`ArmChannel ${name}: Missing required dimensions in database`);
+		} else {
+			// New channel - create dimensions with auto-increment IDs
+			this.touchShoulderDim = new Dimension('touch_shoulder');
+			this.touchElbowDim = new Dimension('touch_elbow');
+			this.touchWristDim = new Dimension('touch_wrist');
+			this.jointShoulderDim = new Dimension('joint_shoulder');
+			this.jointElbowDim = new Dimension('joint_elbow');
+			this.jointWristDim = new Dimension('joint_wrist');
+			this.motorShoulderDim = new Dimension('motor_shoulder');
+			this.motorElbowDim = new Dimension('motor_elbow');
+			this.motorWristDim = new Dimension('motor_wrist');
+		}
 	}
 
 	getEventDimensions() {
