@@ -130,13 +130,8 @@ export default class Brain {
 	async init() {
 
 		// Instantiate channels (either from DB or from registered classes)
-		if (this.database) {
-			// Load channels from database (also instantiates new channels not in DB)
-			await this.db.loadChannels(this.thalamus);
-		} else {
-			// Instantiate all registered channel classes
-			this.thalamus.instantiateChannels();
-		}
+		if (this.database) await this.db.loadChannels(this.thalamus);
+		else this.thalamus.instantiateChannels();
 
 		// Load dimension mappings BEFORE loading neurons (neurons need dimension name lookups)
 		this.thalamus.loadDimensionMaps();
