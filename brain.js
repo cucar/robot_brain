@@ -465,8 +465,9 @@ export default class Brain {
 		// Add exploration action for channels without one
 		for (const [channelName] of this.thalamus.getAllChannels()) {
 			if (channelsWithActions.has(channelName)) continue;
-			// No action inferred for this channel - use first action as exploration
-			const explorationAction = this.thalamus.getChannelActions(channelName).values().next().value;
+			// No action inferred for this channel - use the lowest ID action for deterministic exploration
+			const actions = this.thalamus.getChannelActions(channelName);
+			const explorationAction = [...actions].sort((a, b) => a.id - b.id)[0];
 			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0 });
 		}
 	}

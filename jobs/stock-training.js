@@ -20,13 +20,21 @@ export default class StockTrainingJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
-			maxEpisodes: 1,                      // Number of training episodes
-			holdoutRows: 50                     // Number of rows to hold out for prediction testing
+			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
+			holdoutRows: 50                     // Number of rows to hold out for prediction testing (can be overridden with --holdout)
 		};
 
 		// Training metrics
 		this.episodeResults = [];
 		this.currentEpisode = 0;
+	}
+
+	/**
+	 * Apply command line options to config
+	 */
+	applyOptions(options) {
+		if (options.episodes !== null && options.episodes !== undefined) this.config.maxEpisodes = options.episodes;
+		if (options.holdout !== null && options.holdout !== undefined) this.config.holdoutRows = options.holdout;
 	}
 
 	/**
@@ -232,16 +240,13 @@ export default class StockTrainingJob extends Job {
 	 */
 	async runEpisode() {
 		const startTime = Date.now();
-		process.stdout.write(`📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes}... `);
+		console.log(`📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes}... `);
 
 		// Reset context but keep learned patterns
 		await this.brain.resetContext();
 
 		// reset the stock channels owned flags
-		for (const [, channel] of this.brain.thalamus.getAllChannels()) {
-			channel.inferredActions = [];
-			channel.owned = false;
-		}
+		for (const [, channel] of this.brain.thalamus.getAllChannels()) channel.owned = false;
 
 		// Reset accuracy stats for this episode
 		this.brain.resetAccuracyStats();
@@ -279,9 +284,11 @@ export default class StockTrainingJob extends Job {
 				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${expectedFrames}... `);
 		}
 
-		// Clear progress line
-		process.stdout.write(`\r`);
-		process.stdout.clearLine(0);
+		// Clear progress line (only if stdout is a TTY)
+		if (process.stdout.isTTY) {
+			process.stdout.write(`\r`);
+			process.stdout.clearLine(0);
+		} else process.stdout.write(`\n`);
 
 		// Collect episode results from all channels
 		this.collectEpisodeResults(episodeMetrics);

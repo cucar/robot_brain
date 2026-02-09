@@ -35,6 +35,17 @@ class BrainRunner {
 // Run if called directly
 if (process.argv[2]) {
 	const jobName = process.argv[2];
+
+	// Parse --episodes parameter
+	let episodes = null;
+	const episodesIndex = process.argv.indexOf('--episodes');
+	if (episodesIndex !== -1 && process.argv[episodesIndex + 1]) episodes = parseInt(process.argv[episodesIndex + 1]);
+
+	// Parse --holdout parameter
+	let holdout = null;
+	const holdoutIndex = process.argv.indexOf('--holdout');
+	if (holdoutIndex !== -1 && process.argv[holdoutIndex + 1]) holdout = parseInt(process.argv[holdoutIndex + 1]);
+
 	const options = {
 		diagnostic: process.argv.includes('--diagnostic'),
 		mysql: process.argv.includes('--mysql'),
@@ -42,7 +53,9 @@ if (process.argv[2]) {
 		debug: process.argv.includes('--debug'),
 		noSummary: process.argv.includes('--no-summary'),
 		hardReset: process.argv.includes('--hard-reset'),
-		softReset: process.argv.includes('--soft-reset')
+		softReset: process.argv.includes('--soft-reset'),
+		episodes,
+		holdout
 	};
 
 	const runner = new BrainRunner();

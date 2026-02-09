@@ -21,6 +21,9 @@ export default class Job {
 		this.setupSignalHandlers();
 
 		try {
+			// Apply command line options to job config (if job has applyOptions method)
+			if (this.applyOptions && this.runnerOptions) this.applyOptions(this.runnerOptions);
+
 			// Create brain instance based on mysql option
 			this.brain = this.runnerOptions?.mysql ? new BrainMySQL() : new Brain(this.runnerOptions);
 

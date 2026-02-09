@@ -196,7 +196,6 @@ export class BrainDB {
 				strength: row.strength,
 				reward: row.reward
 			});
-			toNeuron.incomingCount++;
 			connCount++;
 		}
 		console.log(`  Loaded ${connCount} connections`);
@@ -245,7 +244,6 @@ export class BrainDB {
 				strength: row.strength,
 				reward: row.reward
 			});
-			inferredNeuron.incomingCount++;
 			futureCount++;
 		}
 		console.log(`  Loaded ${futureCount} pattern connections (from pattern_future)`);
