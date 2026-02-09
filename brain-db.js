@@ -223,8 +223,6 @@ export class BrainDB {
 		console.log(`  Loaded ${pastCount} pattern context entries (from pattern_past)`);
 	}
 
-
-
 	/**
 	 * Load pattern_future into pattern.connections
 	 * @param {Thalamus} thalamus - Thalamus instance
@@ -251,152 +249,112 @@ export class BrainDB {
 
 	/**
 	 * Backup brain state to MySQL.
-	 * @param {Thalamus} thalamus - Thalamus instance
 	 */
-	async backupBrain(thalamus) {
+	async backupBrain(neurons, channelNameToId, dimensionNameToId) {
 		console.log('Backing up brain to MySQL...');
 
-		// Build neuron -> ID reverse mapping for connections/patterns
-		const neuronToId = new Map();
-		for (const [id, neuron] of thalamus.getAllNeuronEntries())
-			neuronToId.set(neuron, id);
+		if (neurons.length === 0) return;
 
-		// Backup all components
-		await this.backupNeuronsTable(thalamus);
-		await this.backupBaseNeurons(thalamus);
-		await this.backupConnections(thalamus, neuronToId);
-		await this.backupPatternPeaks(thalamus, neuronToId);
-		await this.backupPatternContext(thalamus, neuronToId);
-		await this.backupPatternConnections(thalamus, neuronToId);
+		await this.backupNeurons(neurons);
+		await this.backupBaseNeurons(neurons, channelNameToId, dimensionNameToId);
+		await this.backupConnections(neurons);
+		await this.backupPatternPeaks(neurons);
+		await this.backupPatternContext(neurons);
+		await this.backupPatternConnections(neurons);
 
 		console.log('Brain backed up to MySQL.');
 	}
 
 	/**
-	 * Backup neurons table
-	 * @param {Thalamus} thalamus - Thalamus instance
+	 * Backup neurons
 	 */
-	async backupNeuronsTable(thalamus) {
+	async backupNeurons(neurons) {
 		await this.conn.query('TRUNCATE neurons');
-		const neuronCount = thalamus.getNeuronCount();
-		if (neuronCount > 0) {
-			const rows = [];
-			for (const [id, neuron] of thalamus.getAllNeuronEntries())
-				rows.push([id, neuron.level]);
-			await this.conn.query('INSERT INTO neurons (id, level) VALUES ?', [rows]);
-		}
-		console.log(`  Saved ${neuronCount} neurons`);
+		const rows = [];
+		for (const neuron of neurons) rows.push([neuron.id, neuron.level]);
+		await this.conn.query('INSERT INTO neurons (id, level) VALUES ?', [rows]);
+		console.log(`  Saved ${rows.length} neurons`);
 	}
 
 	/**
 	 * Backup base_neurons and coordinates
-	 * @param {Thalamus} thalamus - Thalamus instance
 	 */
-	async backupBaseNeurons(thalamus) {
+	async backupBaseNeurons(neurons, channelNameToId, dimensionNameToId) {
 		await this.conn.query('TRUNCATE base_neurons');
 		await this.conn.query('TRUNCATE coordinates');
 		const baseRows = [];
 		const valueRows = [];
-		for (const [id, neuron] of thalamus.getAllNeuronEntries()) {
+		for (const neuron of neurons) {
 			if (neuron.level !== 0) continue;
-			const channelId = thalamus.getChannelId(neuron.channel);
-			baseRows.push([id, channelId, neuron.type]);
-			for (const [dimName, val] of Object.entries(neuron.coordinates)) {
-				const dimId = thalamus.getDimensionId(dimName);
-				if (dimId !== undefined)
-					valueRows.push([id, dimId, val]);
-			}
+			baseRows.push([neuron.id, channelNameToId[neuron.channel], neuron.type]);
+			for (const [dimName, val] of Object.entries(neuron.coordinates))
+				valueRows.push([neuron.id, dimensionNameToId[dimName], val]);
 		}
-		if (baseRows.length > 0)
-			await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [baseRows]);
-		if (valueRows.length > 0)
-			await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [valueRows]);
+		await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [baseRows]);
+		await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [valueRows]);
 		console.log(`  Saved ${baseRows.length} base neurons, ${valueRows.length} coordinates`);
 	}
 
 	/**
 	 * Backup connections
-	 * @param {Thalamus} thalamus - Thalamus instance
-	 * @param {Map} neuronToId - Map of neuron object to ID
 	 */
-	async backupConnections(thalamus, neuronToId) {
+	async backupConnections(neurons) {
 		await this.conn.query('TRUNCATE connections');
 		const connRows = [];
-		for (const [fromId, neuron] of thalamus.getAllNeuronEntries()) {
+		for (const neuron of neurons) {
 			if (neuron.level !== 0) continue;
 			for (const [distance, targets] of neuron.connections)
-				for (const [toNeuron, conn] of targets) {
-					const toId = neuronToId.get(toNeuron);
-					if (toId)
-						connRows.push([fromId, toId, distance, conn.strength, conn.reward]);
-				}
+				for (const [toNeuron, conn] of targets)
+					connRows.push([neuron.id, toNeuron.id, distance, conn.strength, conn.reward]);
 		}
-		if (connRows.length > 0)
-			await this.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward) VALUES ?', [connRows]);
+		await this.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward) VALUES ?', [connRows]);
 		console.log(`  Saved ${connRows.length} connections`);
 	}
 
 	/**
 	 * Backup pattern_peaks
-	 * @param {Thalamus} thalamus - Thalamus instance
-	 * @param {Map} neuronToId - Map of neuron object to ID
 	 */
-	async backupPatternPeaks(thalamus, neuronToId) {
+	async backupPatternPeaks(neurons) {
 		await this.conn.query('TRUNCATE pattern_peaks');
 		const peakRows = [];
-		for (const [patternId, neuron] of thalamus.getAllNeuronEntries()) {
-			if (neuron.level === 0) continue;
-			const peakId = neuronToId.get(neuron.peak);
-			if (peakId)
-				peakRows.push([patternId, peakId]);
+		for (const neuron of neurons) {
+			if (!neuron.peak) continue;
+			peakRows.push([neuron.id, neuron.peak.id]);
 		}
-		if (peakRows.length > 0)
-			await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES ?', [peakRows]);
+		if (peakRows.length === 0) return;
+		await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id) VALUES ?', [peakRows]);
 		console.log(`  Saved ${peakRows.length} pattern peaks`);
 	}
 
 	/**
 	 * Backup pattern context (from peak's routing table to pattern_past)
-	 * @param {Thalamus} thalamus - Thalamus instance
-	 * @param {Map} neuronToId - Map of neuron object to ID
 	 */
-	async backupPatternContext(thalamus, neuronToId) {
+	async backupPatternContext(neurons) {
 		await this.conn.query('TRUNCATE pattern_past');
 		const pastRows = [];
-		for (const [_, neuron] of thalamus.getAllNeuronEntries())
-			for (const { context, pattern } of neuron.contexts) {
-				const patternId = neuronToId.get(pattern);
-				if (!patternId) continue;
-				for (const { neuron: ctxNeuron, distance, strength } of context.entries) {
-					const contextId = neuronToId.get(ctxNeuron);
-					if (contextId)
-						pastRows.push([patternId, contextId, distance, strength]);
-				}
-			}
-		if (pastRows.length > 0)
-			await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
+		for (const neuron of neurons)
+			for (const { context, pattern } of neuron.contexts)
+				for (const { neuron: ctxNeuron, distance, strength } of context.entries)
+					pastRows.push([pattern.id, ctxNeuron.id, distance, strength]);
+		if (pastRows.length === 0) return;
+		await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
 		console.log(`  Saved ${pastRows.length} pattern context entries (to pattern_past)`);
 	}
 
 	/**
 	 * Backup pattern connections (to pattern_future table for compatibility)
-	 * @param {Thalamus} thalamus - Thalamus instance
-	 * @param {Map} neuronToId - Map of neuron object to ID
 	 */
-	async backupPatternConnections(thalamus, neuronToId) {
+	async backupPatternConnections(neurons) {
 		await this.conn.query('TRUNCATE pattern_future');
 		const futureRows = [];
-		for (const [patternId, neuron] of thalamus.getAllNeuronEntries()) {
+		for (const neuron of neurons) {
 			if (neuron.level === 0) continue;
 			for (const [distance, targets] of neuron.connections)
-				for (const [inferredNeuron, pred] of targets) {
-					const inferredId = neuronToId.get(inferredNeuron);
-					if (inferredId)
-						futureRows.push([patternId, inferredId, distance, pred.strength, pred.reward || 0]);
-				}
+				for (const [inferredNeuron, pred] of targets)
+					futureRows.push([neuron.id, inferredNeuron.id, distance, pred.strength, pred.reward || 0]);
 		}
-		if (futureRows.length > 0)
-			await this.conn.query('INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward) VALUES ?', [futureRows]);
+		if (futureRows.length === 0) return;
+		await this.conn.query('INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward) VALUES ?', [futureRows]);
 		console.log(`  Saved ${futureRows.length} pattern connections (to pattern_future)`);
 	}
 

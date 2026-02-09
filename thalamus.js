@@ -57,11 +57,10 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get all neuron entries (id and neuron) for iteration
-	 * @returns {IterableIterator<[number, Neuron]>} - Iterator of [neuronId, neuron] pairs
+	 * returns all neurons as an array
 	 */
-	getAllNeuronEntries() {
-		return this.neurons.entries();
+	getAllNeurons() {
+		return Array.from(this.neurons.values());
 	}
 
 	/**
@@ -164,12 +163,10 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get channel ID by name
-	 * @param {string} channelName - Channel name
-	 * @returns {number|undefined} - Channel ID or undefined
+	 * returns channel name map to id
 	 */
-	getChannelId(channelName) {
-		return this.channelNameToId[channelName];
+	getChannelNameToIdMap() {
+		return this.channelNameToId;
 	}
 
 	/**
@@ -208,12 +205,10 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get dimension ID by name
-	 * @param {string} dimensionName - Dimension name
-	 * @returns {number|undefined} - Dimension ID or undefined
+	 * returns dimension name map to id
 	 */
-	getDimensionId(dimensionName) {
-		return this.dimensionNameToId[dimensionName];
+	getDimensionNameToIdMap() {
+		return this.dimensionNameToId;
 	}
 
 	/**
@@ -325,7 +320,7 @@ export class Thalamus {
 	 */
 	forgetNeurons() {
 		const patterns = [];
-		for (const neuron of this.neurons.values()) if (neuron.forget()) patterns.push(neuron);
+		for (const neuron of this.getAllNeurons()) if (neuron.forget()) patterns.push(neuron);
 		return patterns;
 	}
 

@@ -127,7 +127,11 @@ export default class Brain {
 	 * Called on shutdown or when job is interrupted.
 	 */
 	async backupBrain() {
-		if (this.database) await this.db.backupBrain(this.thalamus);
+		if (!this.database) return;
+		const neurons = this.thalamus.getAllNeurons();
+		const channelNameToId = this.thalamus.getChannelNameToIdMap();
+		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
+		await this.db.backupBrain(neurons, channelNameToId, dimensionNameToId);
 	}
 
 	/**
