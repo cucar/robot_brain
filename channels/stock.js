@@ -35,9 +35,6 @@ export default class StockChannel extends Channel {
 			this.activityDim = new Dimension(`${this.symbol}_activity`);
 		}
 
-		// Hyperparameters
-		this.rewardAmplification = 1; // Power to raise reward ratios to (higher = stronger rewards/penalties)
-
 		// State tracking
 		this.owned = false; // true = owned, false = sold (after first buy)
 		this.entryPrice = null; // Price when we bought (for owned) or sold (for sold)
@@ -176,7 +173,7 @@ export default class StockChannel extends Channel {
 	/**
 	 * Reset channel state for new episode (keeps learned patterns but resets trading state)
 	 */
-	resetEpisode() {
+	resetContext() {
 
 		// Reset trading state
 		this.owned = false;
@@ -341,11 +338,8 @@ export default class StockChannel extends Channel {
 		// For owned stocks: positive change = positive reward
 		// For not owned: negative change = positive reward (good timing on selling)
 		const reward = this.owned ? percentChange : -percentChange;
-
-		// Amplify the reward signal and return it
-		const amplifiedReward = reward * this.rewardAmplification;
-		if (this.debug) this.debugRewards(amplifiedReward);
-		return amplifiedReward;
+		if (this.debug) this.debugRewards(reward);
+		return reward;
 	}
 
 	/**
@@ -358,7 +352,7 @@ export default class StockChannel extends Channel {
 			const recentChange = this.currentPrice - this.previousPrice;
 
 			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Total P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} | Total P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 		}
 		else {
 			const totalChange = this.entryPrice - this.currentPrice; // Profit from selling high and price going lower
@@ -366,7 +360,7 @@ export default class StockChannel extends Channel {
 			const recentChange = this.currentPrice - this.previousPrice;
 
 			console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} (amp=${this.rewardAmplification}) | Opportunity P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} | Opportunity P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
 		}
 	}
 

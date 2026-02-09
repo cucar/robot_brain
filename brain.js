@@ -82,8 +82,14 @@ export default class Brain {
 		// Reset frame counter for proper context window handling
 		this.frameNumber = 0;
 
+		// Reset accuracy stats
+		this.resetAccuracyStats();
+
 		// Clear memory
 		this.memory.reset();
+
+		// Reset all channel states
+		for (const [, channel] of this.thalamus.getAllChannels()) channel.resetContext();
 	}
 
 	/**

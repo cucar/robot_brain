@@ -217,14 +217,14 @@ export default class StockTrainingJob extends Job {
 	 * Hook: Execute main job logic - multi-episode training
 	 */
 	async executeJob() {
-		// Run training episodes
 		for (this.currentEpisode = 1; this.currentEpisode <= this.config.maxEpisodes; this.currentEpisode++) {
+
+			// Run episode
 			await this.runEpisode();
 
 			// Show progress every 10 episodes or on last episode
-			if (this.currentEpisode % 10 === 0 || this.currentEpisode === this.config.maxEpisodes) {
+			if (this.currentEpisode % 10 === 0 || this.currentEpisode === this.config.maxEpisodes)
 				this.showProgress();
-			}
 		}
 	}
 
@@ -245,15 +245,6 @@ export default class StockTrainingJob extends Job {
 		// Reset context but keep learned patterns
 		await this.brain.resetContext();
 
-		// reset the stock channels owned flags
-		for (const [, channel] of this.brain.thalamus.getAllChannels()) channel.owned = false;
-
-		// Reset accuracy stats for this episode
-		this.brain.resetAccuracyStats();
-		
-		// Reset all channel states for new episode
-		this.resetChannelStates();
-		
 		// Initialize episode metrics
 		const episodeMetrics = {
 			episode: this.currentEpisode,
@@ -304,13 +295,6 @@ export default class StockTrainingJob extends Job {
 		this.episodeResults.push(episodeMetrics);
 
 		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
-	}
-
-	/**
-	 * Reset all channel states for a new episode
-	 */
-	resetChannelStates() {
-		for (const [_, channel] of this.brain.thalamus.getAllChannels()) channel.resetEpisode();
 	}
 
 	/**
