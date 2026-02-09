@@ -27,8 +27,6 @@ export class Thalamus {
 		this.dimensionIdToName = {}; // dimensionId -> dimensionName
 	}
 
-	// ============ NEURON OPERATIONS ============
-
 	/**
 	 * Get or create a sensory neuron ID from a frame point
 	 * @param {object} point - Frame point with {coordinates, channel, type}
@@ -91,8 +89,6 @@ export class Thalamus {
 		this.neuronsByValue.clear();
 		Neuron.nextId = 1;
 	}
-
-	// ============ CHANNEL OPERATIONS ============
 
 	/**
 	 * Register a channel class (not instantiated yet)
@@ -202,8 +198,6 @@ export class Thalamus {
 			await this.channels.get(channelName).executeOutputs(actions);
 	}
 
-	// ============ DIMENSION OPERATIONS ============
-
 	/**
 	 * Get dimension name by ID
 	 * @param {number} dimensionId - Dimension ID
@@ -222,8 +216,6 @@ export class Thalamus {
 		return this.dimensionNameToId[dimensionName];
 	}
 
-	// ============ DIAGNOSTIC OPERATIONS ============
-
 	/**
 	 * returns neuron ID by coordinates (for diagnostics)
 	 * @param {object} coordinates - Coordinate object with dimension-value pairs
@@ -234,8 +226,6 @@ export class Thalamus {
 		const neuron = this.neuronsByValue.get(valueKey);
 		return neuron ? neuron.id : null;
 	}
-
-	// ============ INITIALIZATION ============
 
 	/**
 	 * Load dimension name/id mappings from instantiated channels
@@ -327,8 +317,6 @@ export class Thalamus {
 	setChannelActions(channelActions) {
 		this.channelActions = channelActions;
 	}
-
-	// ============ FORGET CYCLE ============
 
 	/**
 	 * Run forget cycle on all neurons and collect orphaned patterns.
