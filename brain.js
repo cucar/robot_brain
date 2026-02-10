@@ -586,7 +586,7 @@ export default class Brain {
 	 * @returns {number} Number of patterns deleted
 	 */
 	deletePatterns(patterns) {
-		for (const pattern of patterns) if (!this.memory.isNeuronActive(pattern)) this.thalamus.deletePattern(pattern);
+		for (const pattern of patterns) if (!this.memory.isNeuronActive(pattern)) this.thalamus.deleteNeuron(pattern);
 		if (this.debug) console.log(`  Patterns deleted: ${patterns.length}`);
 	}
 

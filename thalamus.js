@@ -316,23 +316,30 @@ export class Thalamus {
 	}
 
 	/**
-	 * Delete a pattern neuron.
-	 * Since canDelete() requires contexts.length === 0, the pattern has no children.
-	 * @param {Neuron} pattern - Pattern neuron to delete
+	 * Delete a pattern neuron. canDelete() requires contexts.length=0 - neuron has no patterns - no need for cleanup
 	 */
-	deletePattern(pattern) {
+	deleteNeuron(neuron) {
 
-		// remove all context references for this pattern
-		// for (const [peak, peakRefs] of pattern.contextRefs)
-		// 	for (const [peakPattern, distanceSet] of peakRefs)
-		// 		for (const distance of distanceSet)
-		// 			peak.removePatternContext(peakPattern, pattern, distance);
+		// remove all context references for this neuron
+		const toDelete = [];
+		for (const [peak, peakRefs] of neuron.contextRefs) {
+			console.log('delete context ref in peak pattern route', peak.id, peakRefs.size);
+			for (const [pattern, distanceSet] of peakRefs) {
+				for (const distance of distanceSet)
+					toDelete.push({peak, pattern, distance});
+			}
+		}
+
+		for (const { peak, pattern, distance } of toDelete) {
+			console.log('removing pattern context');
+			peak.removePatternContext(pattern, neuron, distance);
+		}
 
 		// Remove pattern from its peak's routing table (if peak still exists)
 		// Peak might have been deleted already if both were in the deletion list
-		if (pattern.peak && this.neurons.has(pattern.peak.id)) pattern.peak.removePattern(pattern);
+		if (neuron.peak && this.neurons.has(neuron.peak.id)) neuron.peak.removePattern(neuron);
 
 		// Delete this pattern neuron from the index
-		this.neurons.delete(pattern.id);
+		this.neurons.delete(neuron.id);
 	}
 }

@@ -163,12 +163,21 @@ export class Neuron {
 	}
 
 	/**
+	 * increments strength for a pattern in the routing table
+	 */
+	strengthenPattern(pattern) {
+		const route = this.patterns.get(pattern);
+		if (!route) throw new Error('Pattern not found in route for strengthening');
+		route.strength = Math.min(Neuron.maxStrength, route.strength + 1);
+	}
+
+	/**
 	 * adds a new entry to a pattern context
 	 */
 	addPatternContext(pattern, neuron, distance, strength) {
-		const entry = this.patterns.get(pattern);
-		if (!entry) throw new Error('Pattern not found in context');
-		entry.context.addNeuron(neuron, distance, strength);
+		const route = this.patterns.get(pattern);
+		if (!route) throw new Error('Pattern not found in route for adding context');
+		route.context.addNeuron(neuron, distance, strength);
 		neuron.addContextRef(this, pattern, distance);
 	}
 
@@ -176,9 +185,10 @@ export class Neuron {
 	 * removes an entry from a pattern context
 	 */
 	removePatternContext(pattern, neuron, distance) {
-		const entry = this.patterns.get(pattern);
-		if (!entry) throw new Error('Pattern not found in context');
-		entry.context.remove(neuron, distance);
+		const route = this.patterns.get(pattern);
+		if (!route) throw new Error('Pattern not found in route for removing context');
+		route.context.remove(neuron, distance);
+		neuron.removeContextRef(this, pattern, distance);
 	}
 
 	/**
@@ -196,9 +206,12 @@ export class Neuron {
 	 */
 	removeContextRef(peak, pattern, distance) {
 		const peakRefs = this.contextRefs.get(peak);
-		if (!peakRefs) return;
+		if (!peakRefs) throw new Error('Peak not found in context references');
 		const distanceSet = peakRefs.get(pattern);
-		if (distanceSet) distanceSet.delete(distance);
+		if (!distanceSet) throw new Error('Distance not found in context references');
+		distanceSet.delete(distance);
+		if (distanceSet.size === 0) peakRefs.delete(pattern);
+		if (peakRefs.size === 0) this.contextRefs.delete(peak);
 	}
 
 	/**
@@ -217,13 +230,13 @@ export class Neuron {
 	 */
 	removePattern(pattern) {
 
-		// get the pattern entry from the routing table
-		const entry = this.patterns.get(pattern);
-		if (!entry) throw new Error('Pattern not found in context for deletion');
+		// get the pattern route from the routing table
+		const route = this.patterns.get(pattern);
+		if (!route) throw new Error('Pattern not found in context for deletion');
 
-		// decrement the context reference counter of every neuron that's used in the context of the pattern
-		for (const ctxEntry of entry.context.entries)
-			ctxEntry.neuron.removeContextRef(this, pattern, ctxEntry.distance);
+		// remove contexts that was part of detecting this pattern
+		for (const entry of route.context.entries)
+			this.removePatternContext(pattern, entry.neuron, entry.distance);
 
 		// remove the pattern from the routing table
 		this.patterns.delete(pattern);
@@ -240,30 +253,26 @@ export class Neuron {
 		let best = null; // { context, pattern, score, common, missing, novel }
 		for (const [pattern, route] of this.patterns) {
 			const match = route.context.match(observed);
-			if (match && (!best || match.score > best.score)) best = { ...match, pattern, route };
+			if (match && (!best || match.score > best.score)) best = { ...match, pattern };
 		}
 		if (!best) return null; // if there are no matches, return null
 
 		// strengthen the best matching pattern - it will be activated
-		best.route.strength = Math.min(Neuron.maxStrength, best.route.strength + 1);
+		this.strengthenPattern(best.pattern);
 
 		// strengthen common context neurons
 		for (const entry of best.common)
 			entry.strength = Math.min(Context.maxStrength, entry.strength + 1);
 
 		// add novel context neurons
-		for (const { neuron, distance } of best.novel) {
-			best.route.context.addNeuron(neuron, distance, 1);
-			neuron.addContextRef(this, best.pattern, distance);
-		}
+		for (const entry of best.novel)
+			this.addPatternContext(best.pattern, entry.neuron, entry.distance, 1);
 
 		// Weaken missing and delete if necessary
 		for (const entry of best.missing) {
 			entry.strength -= Context.negativeReinforcement;
-			if (entry.strength <= Context.minStrength) {
-				best.route.context.remove(entry.neuron, entry.distance);
-				entry.neuron.removeContextRef(this, best.pattern, entry.distance);
-			}
+			if (entry.strength <= Context.minStrength)
+				this.removePatternContext(best.pattern, entry.neuron, entry.distance);
 		}
 
 		// return the matched pattern with peak reference (brain will set activated pattern)
@@ -469,7 +478,7 @@ export class Neuron {
 	 */
 	forgetPatterns() {
 		let contextsDeleted = 0, contextsUpdated = 0;
-		for (const route of this.patterns.values()) {
+		for (const [pattern, route] of this.patterns) {
 
 			// decay the pattern strength
 			route.strength = Math.max(Neuron.minStrength, route.strength - Neuron.patternForgetRate);
@@ -485,8 +494,7 @@ export class Neuron {
 
 			// delete the weak context entries
 			for (const entry of toDelete) {
-				route.context.remove(entry.neuron, entry.distance);
-				entry.neuron.removeContextRef(this, entry.pattern, entry.distance);
+				this.removePatternContext(pattern, entry.neuron, entry.distance);
 				contextsDeleted++;
 			}
 		}
