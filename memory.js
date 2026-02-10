@@ -176,7 +176,7 @@ export class Memory {
 			for (const neuron of this.activeNeurons[age].keys()) {
 				if (filterByLevel && neuron.level !== level) continue;
 				if (age === 0) peaks.push(neuron);
-				else if (age < this.contextLength) context.add(neuron, age, 1);
+				else context.addNeuron(neuron, age, 1);
 			}
 		return { peaks, context };
 	}

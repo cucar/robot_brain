@@ -73,11 +73,11 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get neuron count
-	 * @returns {number} - Number of neurons
+	 * Set neurons from a Map (used when loading from database)
+	 * @param {Map<number, Neuron>} neurons - Map of neuron ID to neuron object
 	 */
-	getNeuronCount() {
-		return this.neurons.size;
+	setNeurons(neurons) {
+		this.neurons = neurons;
 	}
 
 	/**
@@ -106,38 +106,26 @@ export class Thalamus {
 	 */
 	addChannel(name, channelInstance) {
 		this.channels.set(name, channelInstance);
+		this.channelNameToId[name] = channelInstance.id;
+		this.channelIdToName[channelInstance.id] = name;
 		if (this.debug) console.log(`Added channel instance: ${name}`);
 	}
 
 	/**
-	 * Instantiate all registered channel classes (for non-database mode)
-	 * This creates channel instances from the registered classes
+	 * Instantiate new channels (those registered but not yet in thalamus).
+	 * Called after loadChannels (if DB) or standalone (if no DB).
 	 */
 	instantiateChannels() {
 		for (const [channelName, channelClass] of this.channelClasses) {
-			// Skip if already instantiated
 			if (this.channels.has(channelName)) continue;
-
-			// Instantiate channel without dimensions (will create new ones with auto-increment IDs)
-			const channelInstance = new channelClass(channelName);
-			this.addChannel(channelName, channelInstance);
+			const channel = new channelClass(channelName, this.debug);
+			this.addChannel(channelName, channel);
+			if (this.debug) console.log(`Created new channel: ${channelName} (id: ${channel.id})`);
 		}
-
-		// Set up channel name/id mappings
-		const channelNameToId = {};
-		const channelIdToName = {};
-		for (const [channelName, channel] of this.getAllChannels()) {
-			channelNameToId[channelName] = channel.id;
-			channelIdToName[channel.id] = channelName;
-		}
-		this.setChannelMappings(channelNameToId, channelIdToName);
-		if (this.debug) console.log('Channels instantiated:', channelNameToId);
 	}
 
 	/**
 	 * Get channel instance by name
-	 * @param {string} channelName - Channel name
-	 * @returns {object|undefined} - Channel instance or undefined
 	 */
 	getChannel(channelName) {
 		return this.channels.get(channelName);
@@ -145,10 +133,9 @@ export class Thalamus {
 
 	/**
 	 * Get all channels for iteration
-	 * @returns {IterableIterator<[string, object]>} - Iterator of [channelName, channel] pairs
 	 */
 	getAllChannels() {
-		return this.channels.entries();
+		return Array.from(this.channels.entries());
 	}
 
 	/**
@@ -167,6 +154,13 @@ export class Thalamus {
 	 */
 	getChannelNameToIdMap() {
 		return this.channelNameToId;
+	}
+
+	/**
+	 * returns channel id map to name
+	 */
+	getChannelIdToNameMap() {
+		return this.channelIdToName;
 	}
 
 	/**
@@ -212,6 +206,13 @@ export class Thalamus {
 	}
 
 	/**
+	 * returns dimension id map to name
+	 */
+	getDimensionIdToNameMap() {
+		return this.dimensionIdToName;
+	}
+
+	/**
 	 * returns neuron ID by coordinates (for diagnostics)
 	 * @param {object} coordinates - Coordinate object with dimension-value pairs
 	 * @returns {number|null} - Neuron ID or null if not found
@@ -245,24 +246,24 @@ export class Thalamus {
 	}
 
 	/**
-	 * Pre-create action neurons for all channels
+	 * Pre-create action neurons for all channels if they don't exist, so that we
 	 */
 	initializeActionNeurons() {
 		const channelActions = new Map();
 
 		for (const { name: channelName, id: channelId, channel } of this.getAllChannelsWithIds()) {
 
+			// get points for the channel's action neurons
 			const actionCoords = channel.getActions();
 
-			// Build action points for action neurons
-			const actionPoints = channel.getActions().map(coords => ({
+			const actionPoints = actionCoords.map(coords => ({
 				coordinates: coords,
 				channel: channelName,
 				channel_id: channelId,
 				type: 'action'
 			}));
 
-			// Create neurons using thalamus
+			// Get action neurons and add them
 			const actionNeurons = new Set();
 			for (const point of actionPoints) {
 				const neuronId = this.getNeuronIdForPoint(point);
@@ -283,16 +284,6 @@ export class Thalamus {
 	async initializeAllChannels() {
 		for (const [, channel] of this.getAllChannels())
 			await channel.initialize();
-	}
-
-	/**
-	 * Set channel mappings (called during init)
-	 * @param {object} nameToId - Channel name to ID mapping
-	 * @param {object} idToName - Channel ID to name mapping
-	 */
-	setChannelMappings(nameToId, idToName) {
-		this.channelNameToId = nameToId;
-		this.channelIdToName = idToName;
 	}
 
 	/**
@@ -330,6 +321,12 @@ export class Thalamus {
 	 * @param {Neuron} pattern - Pattern neuron to delete
 	 */
 	deletePattern(pattern) {
+
+		// remove all context references for this pattern
+		// for (const [peak, peakRefs] of pattern.contextRefs)
+		// 	for (const [peakPattern, distanceSet] of peakRefs)
+		// 		for (const distance of distanceSet)
+		// 			peak.removePatternContext(peakPattern, pattern, distance);
 
 		// Remove pattern from its peak's routing table (if peak still exists)
 		// Peak might have been deleted already if both were in the deletion list

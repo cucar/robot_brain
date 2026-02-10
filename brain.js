@@ -32,7 +32,7 @@ export default class Brain {
 		this.rewards = new Map(); // channel rewards for current frame
 
 		// Database - used for persistent storage - backup and restore
-		this.db = this.database ? new BrainDB() : null;
+		this.db = this.database ? new BrainDB(this.debug) : null;
 
 		// Diagnostics - used for debug methods and performance tracking
 		this.diagnostics = new BrainDiagnostics(this.diagnostic, this.frameSummary);
@@ -126,12 +126,15 @@ export default class Brain {
 	 * Backup brain state from in-memory Neuron objects to MySQL.
 	 * Called on shutdown or when job is interrupted.
 	 */
-	async backupBrain() {
+	async backup() {
 		if (!this.database) return;
 		const neurons = this.thalamus.getAllNeurons();
 		const channelNameToId = this.thalamus.getChannelNameToIdMap();
 		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
-		await this.db.backupBrain(neurons, channelNameToId, dimensionNameToId);
+		const channels = this.thalamus.getAllChannels();
+		await this.db.backupChannels(channels);
+		await this.db.backupDimensions(channels);
+		await this.db.backupNeurons(neurons, channelNameToId, dimensionNameToId);
 	}
 
 	/**
@@ -139,15 +142,22 @@ export default class Brain {
 	 */
 	async init() {
 
-		// Instantiate channels (either from DB or from registered classes)
+		// Load channels and dimensions from DB (if enabled)
 		if (this.database) await this.db.loadChannels(this.thalamus);
-		else this.thalamus.instantiateChannels();
+
+		// Instantiate channels that did not come from the database
+		this.thalamus.instantiateChannels();
 
 		// Load dimension mappings BEFORE loading neurons (neurons need dimension name lookups)
 		this.thalamus.loadDimensionMaps();
 
 		// Load neurons from database (if enabled)
-		if (this.database) await this.db.loadNeurons(this.thalamus);
+		if (this.database) {
+			const channelIdToName = this.thalamus.getChannelIdToNameMap();
+			const dimensionIdToName = this.thalamus.getDimensionIdToNameMap();
+			const neurons = await this.db.loadNeurons(channelIdToName, dimensionIdToName);
+			this.thalamus.setNeurons(neurons);
+		}
 
 		// Pre-create action neurons for all channels so that we can explore
 		this.thalamus.initializeActionNeurons();
@@ -366,7 +376,8 @@ export default class Brain {
 		}
 
 		// Match patterns (parallelizable) - collect results with peak reference - this is parallelizable
-		const matchedPatterns = peaks.map(peak => peak.matchBestPattern(context)).filter(m => m);
+		const matchedPeaks = peaks.map(peak => ({ peak, pattern: peak.matchPattern(context) }));
+		const matchedPatterns = matchedPeaks.filter(p => p.pattern);
 
 		// If no patterns matched, stop here
 		if (matchedPatterns.length === 0) {

@@ -88,7 +88,7 @@ export default class Job {
 	async shutdown() {
 		if (this.isShuttingDown) return;
 		this.isShuttingDown = true;
-		if (this.brain && this.database) await this.brain.backupBrain();
+		if (this.brain && this.database) await this.brain.backup();
 	}
 
 	/**

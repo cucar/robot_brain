@@ -20,16 +20,11 @@ export class Context {
 	/**
 	 * Add or update an entry.
 	 */
-	add(neuron, distance, strength = 1) {
+	addNeuron(neuron, distance, strength = 1) {
 		const existing = this.find(neuron, distance);
-		if (existing) {
-			existing.strength = Math.min(Context.maxStrength, existing.strength + strength);
-			return existing;
-		}
-		const entry = { neuron, distance, strength };
-		this.entries.push(entry);
+		if (existing) throw new Error('Context entry already exists');
+		this.entries.push({ neuron, distance, strength });
 		this.keys.add(this.buildKey(neuron, distance));
-		return entry;
 	}
 
 	/**
@@ -68,10 +63,9 @@ export class Context {
 	 * Match this known context against an observed context.
 	 * Returns match result with score, or null if below threshold.
 	 * @param {Context} observed - The observed context to match against
-	 * @param {Neuron} pattern - The pattern this context maps to
-	 * @returns {Object|null} { context, pattern, score, common, missing, novel } or null
+	 * @returns {Object|null} { score, common, missing, novel } or null
 	 */
-	match(observed, pattern) {
+	match(observed) {
 		if (this.entries.length === 0) return null;
 
 		const common = [];
@@ -95,25 +89,6 @@ export class Context {
 		const score = common.reduce((sum, e) => sum + e.strength, 0);
 
 		// return the matched context with pattern and score
-		return { pattern, score, common, missing, novel };
-	}
-
-	/**
-	 * Refine this context based on a match result.
-	 * Strengthens common, adds novel, weakens missing.
-	 */
-	refine(common, novel, missing) {
-
-		// Strengthen common context neurons
-		for (const entry of common) entry.strength = Math.min(Context.maxStrength, entry.strength + 1);
-
-		// Add novel context neurons
-		for (const { neuron, distance } of novel) this.add(neuron, distance, 1);
-
-		// Weaken missing and delete if necessary
-		for (const entry of missing) {
-			entry.strength -= Context.negativeReinforcement;
-			if (entry.strength <= Context.minStrength) this.remove(entry.neuron, entry.distance);
-		}
+		return { score, common, missing, novel };
 	}
 }

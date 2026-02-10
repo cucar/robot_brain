@@ -5,7 +5,7 @@ import { Context } from './context.js';
  *
  * All neurons have:
  * - connections: Map<distance, Map<toNeuron, {strength, reward}>> - predictions
- * - contexts: Array<{context: Context, pattern: Neuron}> - routing table
+ * - patterns: Map<pattern, {context: Context, strength: number}> - routing table
  *
  * Level 0 (sensory) neurons additionally have: channel, type, coordinates
  * Level > 0 (pattern) neurons additionally have: peak
@@ -28,6 +28,7 @@ export class Neuron {
 	static levelVoteMultiplier = 3;
 	static connectionForgetRate = 1;
 	static contextForgetRate = 1;
+	static patternForgetRate = 1;
 
 	// static debug flag for the neuron
 	static debug = false;
@@ -69,7 +70,8 @@ export class Neuron {
 		this.id = id !== null ? id : Neuron.nextId++;
 		this.level = level;
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
-		this.contexts = []; // Routing table: Array<{context: Context, pattern: Neuron, strength: number}>
+		this.patterns = new Map(); // Routing table: Map<pattern, {context: Context, strength: number}>
+		this.contextRefs = new Map(); // pattern neurons that use this neuron as a context neuron Map<distance, Map<neuron, pattern>>
 
 		// Update nextId if we're loading a neuron with a specific ID
 		if (id !== null && id >= Neuron.nextId) Neuron.nextId = id + 1;
@@ -94,9 +96,9 @@ export class Neuron {
 	/**
 	 * creates a connection at distance to target neuron
 	 */
-	createConnection(distance, toNeuron, reward) {
+	createConnection(distance, toNeuron, strength, reward) {
 		if (!this.connections.has(distance)) this.connections.set(distance, new Map());
-		this.connections.get(distance).set(toNeuron, { strength: 1, reward });
+		this.connections.get(distance).set(toNeuron, { strength, reward });
 	}
 
 	/**
@@ -147,39 +149,125 @@ export class Neuron {
 	}
 
 	/**
-	 * Get or create context for a pattern in the routing table.
-	 * @param {Neuron} pattern - The pattern neuron
-	 * @returns {Context} The context for this pattern
+	 * returns all known patterns with their contexts
 	 */
-	getOrCreateContext(pattern) {
-		let entry = this.contexts.find(e => e.pattern === pattern);
-		if (!entry) {
-			entry = { context: new Context(), pattern };
-			this.contexts.push(entry);
-		}
-		return entry.context;
+	getPatterns() {
+		return Array.from(this.patterns.entries()).map(([pattern, { context, strength }]) => ({ pattern, context, strength }));
+	}
+
+	/**
+	 * add a new pattern to the routing table without context (used for load - it will be added later)
+	 */
+	addPattern(pattern, strength) {
+		this.patterns.set(pattern, { strength, context: new Context() });
+	}
+
+	/**
+	 * adds a new entry to a pattern context
+	 */
+	addPatternContext(pattern, neuron, distance, strength) {
+		const entry = this.patterns.get(pattern);
+		if (!entry) throw new Error('Pattern not found in context');
+		entry.context.addNeuron(neuron, distance, strength);
+		neuron.addContextRef(this, pattern, distance);
+	}
+
+	/**
+	 * removes an entry from a pattern context
+	 */
+	removePatternContext(pattern, neuron, distance) {
+		const entry = this.patterns.get(pattern);
+		if (!entry) throw new Error('Pattern not found in context');
+		entry.context.remove(neuron, distance);
+	}
+
+	/**
+	 * adds a context reference - used to track patterns that use this neuron as a context neuron
+	 */
+	addContextRef(peak, pattern, distance) {
+		if (!this.contextRefs.has(peak)) this.contextRefs.set(peak, new Map());
+		const peakRefs = this.contextRefs.get(peak);
+		if (!peakRefs.has(pattern)) peakRefs.set(pattern, new Set());
+		peakRefs.get(pattern).add(distance);
+	}
+
+	/**
+	 * Remove a context reference - used when deleting a pattern neuron
+	 */
+	removeContextRef(peak, pattern, distance) {
+		const peakRefs = this.contextRefs.get(peak);
+		if (!peakRefs) return;
+		const distanceSet = peakRefs.get(pattern);
+		if (distanceSet) distanceSet.delete(distance);
+	}
+
+	/**
+	 * returns pattern strength
+	 */
+	getPatternStrength(pattern) {
+		const entry = this.patterns.get(pattern);
+		if (!entry) throw new Error('Pattern not found in context for strength lookup');
+		return entry.strength;
+	}
+
+	/**
+	 * Remove a pattern from this neuron's patterns (routing table).
+	 * Called by thalamus when deleting a child pattern neuron.
+	 * @param {Neuron} pattern - The pattern neuron to remove
+	 */
+	removePattern(pattern) {
+
+		// get the pattern entry from the routing table
+		const entry = this.patterns.get(pattern);
+		if (!entry) throw new Error('Pattern not found in context for deletion');
+
+		// decrement the context reference counter of every neuron that's used in the context of the pattern
+		for (const ctxEntry of entry.context.entries)
+			ctxEntry.neuron.removeContextRef(this, pattern, ctxEntry.distance);
+
+		// remove the pattern from the routing table
+		this.patterns.delete(pattern);
 	}
 
 	/**
 	 * Find the best matching pattern for this peak neuron given the observed context.
 	 * @param {Context} observed - The observed context from brain
-	 * @returns {{peak: Neuron, pattern: Neuron}|null} The matched pattern with peak reference, or null if no match
+	 * @returns Neuron The matched pattern, or null if no match
 	 */
-	matchBestPattern(observed) {
+	matchPattern(observed) {
 
 		// try to match the observed context to known patterns
 		let best = null; // { context, pattern, score, common, missing, novel }
-		for (const { context, pattern } of this.contexts) {
-			const match = context.match(observed, pattern);
-			if (match && (!best || match.score > best.score)) best = { ...match, context };
+		for (const [pattern, route] of this.patterns) {
+			const match = route.context.match(observed);
+			if (match && (!best || match.score > best.score)) best = { ...match, pattern, route };
 		}
 		if (!best) return null; // if there are no matches, return null
 
-		// refine the context of the best matching pattern based on observed context
-		best.context.refine(best.common, best.novel, best.missing);
+		// strengthen the best matching pattern - it will be activated
+		best.route.strength = Math.min(Neuron.maxStrength, best.route.strength + 1);
+
+		// strengthen common context neurons
+		for (const entry of best.common)
+			entry.strength = Math.min(Context.maxStrength, entry.strength + 1);
+
+		// add novel context neurons
+		for (const { neuron, distance } of best.novel) {
+			best.route.context.addNeuron(neuron, distance, 1);
+			neuron.addContextRef(this, best.pattern, distance);
+		}
+
+		// Weaken missing and delete if necessary
+		for (const entry of best.missing) {
+			entry.strength -= Context.negativeReinforcement;
+			if (entry.strength <= Context.minStrength) {
+				best.route.context.remove(entry.neuron, entry.distance);
+				entry.neuron.removeContextRef(this, best.pattern, entry.distance);
+			}
+		}
 
 		// return the matched pattern with peak reference (brain will set activated pattern)
-		return { peak: this, pattern: best.pattern };
+		return best.pattern;
 	}
 
 	/**
@@ -205,17 +293,29 @@ export class Neuron {
 			// if the event/action was already known, strengthen the connection and update the reward
 			if (this.hasConnection(age, neuron)) this.updateConnection(age, neuron, reward);
 			// if the event/action was not known, add it to the connections with the current reward (learning from observation)
-			else this.createConnection(age, neuron, reward);
+			else this.createConnection(age, neuron, 1, reward);
 
 			// if the neuron is an action and the reward is below a threshold, add an alternative action for the channel
-			// add the first unknown action to try next time with reward 0
-			if (reward !== undefined && reward < Neuron.actionRegretMinPain)
-				for (const altNeuron of channelActions.get(neuron.channel))
-					if (!this.hasConnection(age, altNeuron)) {
-						this.createConnection(age, altNeuron, 0);
-						break;
-					}
+			if (reward !== undefined && reward < Neuron.actionRegretMinPain) {
+				const altNeuron = this.findAlternativeAction(age, neuron.channel, neuron, channelActions);
+				if (altNeuron) this.createConnection(age, altNeuron, 1, 0);
+			}
 		}
+	}
+
+	/**
+	 * Find an alternative action for a channel that hasn't been tried yet.
+	 * @param {number} age - The age at which to check for existing connections
+	 * @param {string} channel - The channel name
+	 * @param {Neuron} currentAction - The action to find an alternative to
+	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
+	 * @returns {Neuron|null} An alternative action neuron, or null if none available
+	 */
+	findAlternativeAction(age, channel, currentAction, channelActions) {
+		for (const altNeuron of channelActions.get(channel))
+			if (altNeuron !== currentAction && !this.hasConnection(age, altNeuron))
+				return altNeuron;
+		return null;
 	}
 
 	/**
@@ -237,16 +337,16 @@ export class Neuron {
 		// No errors to learn from
 		if (errorCorrections.size === 0) return null;
 
-		// Build context for the new pattern (only same-level neurons)
-		const patternContext = this.buildPatternContext(context);
-
 		// Create pattern neuron at next level up
 		const pattern = Neuron.createPattern(this.level + 1, this);
 		for (const correctionNeuron of errorCorrections)
-			pattern.createConnection(age, correctionNeuron, 0);
+			pattern.createConnection(age, correctionNeuron, 1, 0);
 
-		// Add the context to the peak's routing table for the pattern
-		this.contexts.push({ context: patternContext, pattern });
+		// Add the context to the peak's routing table for the pattern (only same-level neurons)
+		this.addPattern(pattern, 1);
+		for (const { neuron, distance } of context)
+			if (neuron.level === this.level)
+				this.addPatternContext(pattern, neuron, distance, 1);
 
 		// Return pattern - brain will handle activation
 		return pattern;
@@ -356,16 +456,6 @@ export class Neuron {
 	}
 
 	/**
-	 * Build pattern context from observed context, filtering to same-level neurons only.
-	 */
-	buildPatternContext(context) {
-		const patternContext = new Context();
-		for (const { neuron, distance } of context)
-			if (neuron.level === this.level) patternContext.add(neuron, distance, 1);
-		return patternContext;
-	}
-
-	/**
 	 * forget cycle - decay connections and patterns - returns if it can be deleted after the forgetting
 	 */
 	forget() {
@@ -379,16 +469,24 @@ export class Neuron {
 	 */
 	forgetPatterns() {
 		let contextsDeleted = 0, contextsUpdated = 0;
-		for (const { context } of this.contexts) {
+		for (const route of this.patterns.values()) {
+
+			// decay the pattern strength
+			route.strength = Math.max(Neuron.minStrength, route.strength - Neuron.patternForgetRate);
+
+			// decay the context strengths
 			const toDelete = [];
-			for (const entry of context.entries) {
+			for (const entry of route.context.entries) {
 				const oldStrength = entry.strength;
 				entry.strength = Math.max(Context.minStrength, entry.strength - Neuron.contextForgetRate);
 				if (entry.strength < oldStrength) contextsUpdated++;
 				if (entry.strength <= Context.minStrength) toDelete.push(entry);
 			}
+
+			// delete the weak context entries
 			for (const entry of toDelete) {
-				context.remove(entry.neuron, entry.distance);
+				route.context.remove(entry.neuron, entry.distance);
+				entry.neuron.removeContextRef(this, entry.pattern, entry.distance);
 				contextsDeleted++;
 			}
 		}
@@ -421,17 +519,10 @@ export class Neuron {
 	 */
 	canDelete() {
 		return this.level > 0 && // sensory neurons cannot be deleted
+			// not sure about these 2 criteria - tests are non-conclusive
+			// this.peak.getPatternStrength(this) === 0 && // pattern has not been activated in some time
+			// this.contextRefs.size === 0 && // no context references (no pattern past)
 			this.connections.size === 0 && // no outgoing connections (no pattern future)
-			this.contexts.length === 0; // no contexts (no known pattern)
-	}
-
-	/**
-	 * Remove a pattern from this neuron's contexts (routing table).
-	 * Called by thalamus when deleting a child pattern neuron.
-	 * @param {Neuron} pattern - The pattern neuron to remove
-	 */
-	removePattern(pattern) {
-		const idx = this.contexts.findIndex(e => e.pattern === pattern);
-		if (idx !== -1) this.contexts.splice(idx, 1);
+			this.patterns.size === 0; // no patterns (no known pattern)
 	}
 }

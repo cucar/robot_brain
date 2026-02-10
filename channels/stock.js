@@ -12,14 +12,15 @@ const POSITION_OUT = -1;
  */
 export default class StockChannel extends Channel {
 
-	constructor(name, dimensions = null) {
-		super(name);
+	constructor(name, debug, id = null, dimensions = null) {
+		super(name, debug, id, dimensions);
 
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
 
 		// Create or use provided dimension objects for this channel
-		if (dimensions) {
+		if (dimensions && dimensions.length > 0) {
+
 			// Loading from database - use provided dimensions
 			this.priceChangeDim = dimensions.find(d => d.name === `${this.symbol}_price_change`);
 			this.volumeChangeDim = dimensions.find(d => d.name === `${this.symbol}_volume_change`);
@@ -28,8 +29,9 @@ export default class StockChannel extends Channel {
 			// Validate all required dimensions exist
 			if (!this.priceChangeDim || !this.volumeChangeDim || !this.activityDim)
 				throw new Error(`StockChannel ${name}: Missing required dimensions in database`);
-		} else {
-			// New channel - create dimensions with auto-increment IDs
+		}
+		// New channel - create dimensions with auto-increment IDs
+		else {
 			this.priceChangeDim = new Dimension(`${this.symbol}_price_change`);
 			this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
 			this.activityDim = new Dimension(`${this.symbol}_activity`);

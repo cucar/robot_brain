@@ -15,7 +15,7 @@ export default class Channel {
 
 	static nextId = 1; // Start at 1 to match typical DB conventions
 
-	constructor(name, debug, id = null) {
+	constructor(name, debug, id = null, dimensions = null) {
 		this.id = id !== null ? id : Channel.nextId++;
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
