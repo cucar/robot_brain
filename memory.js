@@ -68,6 +68,7 @@ export class Memory {
 	activateNeuronAtAge(neuron, age) {
 		if (!this.activeNeurons[age]) this.activeNeurons[age] = new Map();
 		this.activeNeurons[age].set(neuron, { activatedPattern: null, votes: null, context: null });
+		neuron.strengthenActivation();
 	}
 
 	/**

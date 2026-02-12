@@ -42,9 +42,8 @@ export class Thalamus {
 		const neuron = Neuron.createSensory(point.channel, point.type, point.coordinates);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronsByValue.set(neuron.valueKey, neuron);
-		neuronId = neuron.id;
-		if (this.debug) console.log(`Created new sensory neuron ${neuronId} for ${neuron.valueKey}`);
-		return neuronId;
+		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${neuron.valueKey}`);
+		return neuron.id;
 	}
 
 	/**
@@ -190,15 +189,6 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get dimension name by ID
-	 * @param {number} dimensionId - Dimension ID
-	 * @returns {string|undefined} - Dimension name or undefined
-	 */
-	getDimensionName(dimensionId) {
-		return this.dimensionIdToName[dimensionId];
-	}
-
-	/**
 	 * returns dimension name map to id
 	 */
 	getDimensionNameToIdMap() {
@@ -310,9 +300,15 @@ export class Thalamus {
 	 * @returns {Array<Neuron>} - Array of neurons that can be deleted
 	 */
 	forgetNeurons() {
-		const patterns = [];
-		for (const neuron of this.getAllNeurons()) if (neuron.forget()) patterns.push(neuron);
-		return patterns;
+		return this.getAllNeurons().filter(neuron => neuron.forget());
+	}
+
+	/**
+	 * Run cleanup on all neurons and collect orphaned contexts and delete if it can be deleted
+	 * @returns {Array<Neuron>} - Array of neurons that can be deleted
+	 */
+	cleanupNeurons() {
+		return this.getAllNeurons().filter(neuron => neuron.cleanup(this.neurons));
 	}
 
 	/**
@@ -320,26 +316,16 @@ export class Thalamus {
 	 */
 	deleteNeuron(neuron) {
 
-		// remove all context references for this neuron
-		const toDelete = [];
-		for (const [peak, peakRefs] of neuron.contextRefs) {
-			console.log('delete context ref in peak pattern route', peak.id, peakRefs.size);
-			for (const [pattern, distanceSet] of peakRefs) {
-				for (const distance of distanceSet)
-					toDelete.push({peak, pattern, distance});
-			}
-		}
-
-		for (const { peak, pattern, distance } of toDelete) {
-			console.log('removing pattern context');
-			peak.removePatternContext(pattern, neuron, distance);
-		}
-
 		// Remove pattern from its peak's routing table (if peak still exists)
 		// Peak might have been deleted already if both were in the deletion list
 		if (neuron.peak && this.neurons.has(neuron.peak.id)) neuron.peak.removePattern(neuron);
 
 		// Delete this pattern neuron from the index
 		this.neurons.delete(neuron.id);
+
+		// memory cleanup
+		delete neuron.context;
+		delete neuron.patterns;
+		delete neuron.connections;
 	}
 }

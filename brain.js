@@ -573,12 +573,28 @@ export default class Brain {
 		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
 
 		// run forget on all neurons and collect patterns to be deleted after forgetting
-		const patterns = this.thalamus.forgetNeurons();
+		let deadPatterns = this.excludeActiveNeurons(this.thalamus.forgetNeurons());
 
 		// dead pattern cleanup (must be done after all neurons finish forgetting)
-		this.deletePatterns(patterns);
+		let loops = 0; // max loop protector
+		while (deadPatterns.length > 0 && loops < 10) {
+
+			// delete dead patterns
+			this.deletePatterns(deadPatterns);
+
+			// run cleanup on all neurons and collect patterns to be deleted after forgetting
+			// deadPatterns = this.excludeActiveNeurons(this.thalamus.cleanupNeurons());
+			deadPatterns = [];
+		}
 
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
+	}
+
+	/**
+	 * excludes active neurons from delete list
+	 */
+	excludeActiveNeurons(neurons) {
+		return neurons.filter(neuron => !this.memory.isNeuronActive(neuron));
 	}
 
 	/**
@@ -586,8 +602,13 @@ export default class Brain {
 	 * @returns {number} Number of patterns deleted
 	 */
 	deletePatterns(patterns) {
-		for (const pattern of patterns) if (!this.memory.isNeuronActive(pattern)) this.thalamus.deleteNeuron(pattern);
-		if (this.debug) console.log(`  Patterns deleted: ${patterns.length}`);
+		let deleted = 0;
+		for (const pattern of patterns)
+			if (!this.memory.isNeuronActive(pattern)) {
+				this.thalamus.deleteNeuron(pattern);
+				deleted++;
+			}
+		if (this.debug) console.log(`  Patterns deleted: ${deleted}`);
 	}
 
 }

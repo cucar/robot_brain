@@ -188,8 +188,11 @@ export class BrainDB {
 			const pattern = neurons.get(row.pattern_neuron_id);
 			pattern.peak = neurons.get(row.peak_neuron_id);
 
+			// set activation strength of the pattern
+			pattern.setActivationStrength(row.strength);
+
 			// add the pattern to the peak's contexts array without any context for now - will be loaded later
-			pattern.peak.addPattern(pattern, row.strength);
+			pattern.peak.addPattern(pattern);
 		}
 	}
 
@@ -209,7 +212,7 @@ export class BrainDB {
 			const pattern = neurons.get(row.pattern_neuron_id);
 			const contextNeuron = neurons.get(row.context_neuron_id);
 			if (!contextNeuron) throw new Error(`contextNeuron null: ${row.context_neuron_id}`);
-			pattern.peak.addPatternContext(pattern, contextNeuron, row.context_age, row.strength);
+			pattern.addPatternContext(contextNeuron, row.context_age, row.strength);
 		}
 		console.log(`  Loaded ${rows.length} pattern_past entries from table`);
 	}
@@ -312,7 +315,7 @@ export class BrainDB {
 		const peakRows = [];
 		for (const pattern of neurons) {
 			if (!pattern.peak) continue;
-			peakRows.push([pattern.id, pattern.peak.id, pattern.peak.getPatternStrength(pattern)]);
+			peakRows.push([pattern.id, pattern.peak.id, pattern.activationStrength]);
 		}
 		if (peakRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id, strength) VALUES ?', [peakRows]);
@@ -326,9 +329,9 @@ export class BrainDB {
 		await this.conn.query('TRUNCATE pattern_past');
 		const pastRows = [];
 		for (const neuron of neurons)
-			for (const { context, pattern } of neuron.getPatterns())
-				for (const { neuron: ctxNeuron, distance, strength } of context.entries)
-					pastRows.push([pattern.id, ctxNeuron.id, distance, strength]);
+			if (neuron.level > 0)
+				for (const { neuron: ctxNeuron, distance, strength } of neuron.context.entries)
+					pastRows.push([neuron.id, ctxNeuron.id, distance, strength]);
 		if (pastRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
 		console.log(`  Saved ${pastRows.length} pattern context entries (to pattern_past)`);

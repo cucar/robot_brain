@@ -28,6 +28,25 @@ export class Context {
 	}
 
 	/**
+	 * increases the strength of an entry.
+	 */
+	strengthenNeuron(neuron, distance) {
+		const entry = this.find(neuron, distance);
+		if (!entry) throw new Error('Context entry not found for strengthening');
+		entry.strength = Math.min(Context.maxStrength, entry.strength + 1);
+	}
+
+	/**
+	 * reduces the strength of an entry - returns if it can be deleted
+	 */
+	weakenNeuron(neuron, distance) {
+		const entry = this.find(neuron, distance);
+		if (!entry) throw new Error('Context entry not found for weakening');
+		entry.strength -= Context.negativeReinforcement;
+		return entry.strength <= Context.minStrength; // return if the entry can be deleted or not
+	}
+
+	/**
 	 * Find an entry by neuron and distance.
 	 */
 	find(neuron, distance) {
@@ -39,7 +58,7 @@ export class Context {
 	 */
 	remove(neuron, distance) {
 		const idx = this.entries.findIndex(e => e.neuron === neuron && e.distance === distance);
-		if (idx === -1) return false;
+		if (idx === -1) throw new Error('Context entry not found for deletion');
 		this.entries.splice(idx, 1);
 		this.keys.delete(this.buildKey(neuron, distance));
 		return true;

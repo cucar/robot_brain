@@ -15,7 +15,13 @@ select * from active_neurons order by age;
 select * from base_neurons;
 select * from connections;
 select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
+select * from pattern_peaks where pattern_neuron_id = 159;
+select * from pattern_past where context_neuron_id = 159;
+select * from pattern_past where context_neuron_id = 1632;
+select * from pattern_peaks where pattern_neuron_id = 1632;
+
 select * from pattern_past order by pattern_neuron_id, context_age;
+select * from pattern_past where context_neuron_id not in (select id from neurons);
 select * from pattern_peaks where pattern_neuron_id = 8;
 select * from pattern_past where pattern_neuron_id in (8, 9) order by pattern_neuron_id, context_age;
 select * from pattern_future order by pattern_neuron_id, distance, inferred_neuron_id;
