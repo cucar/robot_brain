@@ -532,10 +532,10 @@ export class Neuron {
 		if (this.level === 0) return false;
 
 		// if the pattern has not been activated in some time, die!
-		// if (this.activationStrength === 0) return true;
+		if (this.activationStrength === 0) return true;
 
 		// if a pattern does not have any contexts (cannot be recognized), it cannot be activated - it needs to be deleted
-		// if (this.context.size === 0) return true;
+		if (this.context.size === 0) return true;
 
 		// if as a result of the forget or cleanup operation, we don't have any connections or patterns
 		// we don't serve a purpose - it's detrimental - need to be deleted
