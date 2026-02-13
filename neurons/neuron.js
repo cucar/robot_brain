@@ -178,6 +178,13 @@ export class Neuron {
 	}
 
 	/**
+	 * returns pattern context entries
+	 */
+	getPatternContext() {
+		return this.context.entries;
+	}
+
+	/**
 	 * adds a new entry to a pattern context
 	 */
 	addPatternContext(neuron, distance, strength) {
@@ -442,14 +449,6 @@ export class Neuron {
 
 		// forget connections
 		this.forgetConnections();
-
-		// if the pattern has no context, it cannot be matched
-		// set its activation strength to zero in that case so that it can be deleted
-		// if (this.level > 0 && this.context.size === 0) this.activationStrength = 0;
-
-		// if a pattern has no known patterns and no connections, it's detrimental
-		// set its activation strength to zero in that case so that it can be deleted
-		// if (this.level > 0 && this.connections.size === 0 && this.patterns.size === 0) this.activationStrength = 0;
 
 		// return if the neuron can be deleted or not
 		return this.canDelete();

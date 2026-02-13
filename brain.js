@@ -577,7 +577,7 @@ export default class Brain {
 
 		// dead pattern cleanup (must be done after all neurons finish forgetting)
 		let loops = 0; // max loop protector
-		while (deadPatterns.length > 0 && loops < 10) {
+		while (deadPatterns.length > 0 && loops++ < 10) {
 
 			// delete dead patterns
 			this.thalamus.deletePatterns(deadPatterns);

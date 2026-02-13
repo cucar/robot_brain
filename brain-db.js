@@ -330,7 +330,7 @@ export class BrainDB {
 		const pastRows = [];
 		for (const neuron of neurons)
 			if (neuron.level > 0)
-				for (const { neuron: ctxNeuron, distance, strength } of neuron.context.entries)
+				for (const { neuron: ctxNeuron, distance, strength } of neuron.getPatternContext())
 					pastRows.push([neuron.id, ctxNeuron.id, distance, strength]);
 		if (pastRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);

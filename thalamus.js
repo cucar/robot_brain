@@ -335,6 +335,7 @@ export class Thalamus {
 		this.neurons.delete(pattern.id);
 
 		// memory cleanup
+		pattern.peak = null;
 		delete pattern.context;
 		delete pattern.patterns;
 		delete pattern.connections;
