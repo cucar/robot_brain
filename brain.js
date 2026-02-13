@@ -580,7 +580,7 @@ export default class Brain {
 		while (deadPatterns.length > 0 && loops < 10) {
 
 			// delete dead patterns
-			this.deletePatterns(deadPatterns);
+			this.thalamus.deletePatterns(deadPatterns);
 
 			// run cleanup on all neurons and collect patterns to be deleted after forgetting
 			// deadPatterns = this.excludeActiveNeurons(this.thalamus.cleanupNeurons());
@@ -596,19 +596,4 @@ export default class Brain {
 	excludeActiveNeurons(neurons) {
 		return neurons.filter(neuron => !this.memory.isNeuronActive(neuron));
 	}
-
-	/**
-	 * Delete dead pattern neurons (no content, no references, not active)
-	 * @returns {number} Number of patterns deleted
-	 */
-	deletePatterns(patterns) {
-		let deleted = 0;
-		for (const pattern of patterns)
-			if (!this.memory.isNeuronActive(pattern)) {
-				this.thalamus.deleteNeuron(pattern);
-				deleted++;
-			}
-		if (this.debug) console.log(`  Patterns deleted: ${deleted}`);
-	}
-
 }

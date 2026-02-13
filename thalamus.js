@@ -295,7 +295,6 @@ export class Thalamus {
 	}
 
 	/**
-	 * Run forget cycle on all neurons and collect orphaned patterns.
 	 * forget neuron patterns and connections and then delete if it can be deleted
 	 * @returns {Array<Neuron>} - Array of neurons that can be deleted
 	 */
@@ -312,20 +311,32 @@ export class Thalamus {
 	}
 
 	/**
+	 * Delete dead pattern neurons (no content, no references, not active)
+	 */
+	deletePatterns(patterns) {
+		let deleted = 0;
+		for (const pattern of patterns) {
+			this.deletePattern(pattern);
+			deleted++;
+		}
+		if (this.debug) console.log(`  Patterns deleted: ${deleted}`);
+	}
+
+	/**
 	 * Delete a pattern neuron. canDelete() requires contexts.length=0 - neuron has no patterns - no need for cleanup
 	 */
-	deleteNeuron(neuron) {
+	deletePattern(pattern) {
 
 		// Remove pattern from its peak's routing table (if peak still exists)
 		// Peak might have been deleted already if both were in the deletion list
-		if (neuron.peak && this.neurons.has(neuron.peak.id)) neuron.peak.removePattern(neuron);
+		if (pattern.peak && this.neurons.has(pattern.peak.id)) pattern.peak.removePattern(pattern);
 
 		// Delete this pattern neuron from the index
-		this.neurons.delete(neuron.id);
+		this.neurons.delete(pattern.id);
 
 		// memory cleanup
-		delete neuron.context;
-		delete neuron.patterns;
-		delete neuron.connections;
+		delete pattern.context;
+		delete pattern.patterns;
+		delete pattern.connections;
 	}
 }

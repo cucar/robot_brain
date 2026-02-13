@@ -75,8 +75,8 @@ export class Memory {
 	 * Check if a neuron is active at any age
 	 */
 	isNeuronActive(neuron) {
-		for (const neurons of this.activeNeurons)
-			if (neurons.has(neuron)) return true;
+		for (const neuronsAtAge of this.activeNeurons)
+			if (neuronsAtAge.has(neuron)) return true;
 		return false;
 	}
 

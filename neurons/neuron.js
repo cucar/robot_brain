@@ -512,15 +512,11 @@ export class Neuron {
 		// get the context entries that are no longer valid
 		const toDelete = [];
 		for (const entry of this.context.entries)
-			if (!neurons.has(entry.neuron)) toDelete.push({ neuron: entry.neuron, distance: entry.distance });
+			if (!neurons.has(entry.neuron.id)) toDelete.push({ neuron: entry.neuron, distance: entry.distance });
 
 		// delete the invalid context entries
-		let contextsDeleted = 0;
-		for (const { neuron, distance } of toDelete) {
-			this.removePatternContext(neuron, distance);
-			contextsDeleted++;
-		}
-		if (Neuron.debug) console.log(`  Cleanup: ${contextsDeleted} deleted`);
+		for (const { neuron, distance } of toDelete) this.removePatternContext(neuron, distance);
+		if (Neuron.debug) console.log(`  Cleanup: ${toDelete.length} deleted`);
 
 		// return if the neuron can be deleted or not
 		return this.canDelete();
@@ -540,11 +536,8 @@ export class Neuron {
 		// if a pattern does not have any contexts (cannot be recognized), it cannot be activated - it needs to be deleted
 		// if (this.context.size === 0) return true;
 
-		// or patterns as a result of the forget or cleanup operation,
-		// it does not serve a purpose - it's detrimental - it needs to be deleted
-
-		// no outgoing connections
-		// no patterns (no known pattern)
+		// if as a result of the forget or cleanup operation, we don't have any connections or patterns
+		// we don't serve a purpose - it's detrimental - need to be deleted
 		return this.connections.size === 0 && this.patterns.size === 0;
 	}
 }
