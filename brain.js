@@ -573,19 +573,13 @@ export default class Brain {
 		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
 
 		// run forget on all neurons and collect patterns to be deleted after forgetting
-		let deadPatterns = this.excludeActiveNeurons(this.thalamus.forgetNeurons());
+		const deadPatterns = this.excludeActiveNeurons(this.thalamus.forgetNeurons());
 
-		// dead pattern cleanup (must be done after all neurons finish forgetting)
-		let loops = 0; // max loop protector
-		while (deadPatterns.length > 0 && loops++ < 10) {
+		// delete dead patterns (with recursive cleanup of context references)
+		const deletedPatterns = this.thalamus.deletePatterns(deadPatterns);
 
-			// delete dead patterns
-			this.thalamus.deletePatterns(deadPatterns);
-
-			// run cleanup on all neurons and collect patterns to be deleted after forgetting
-			// deadPatterns = this.excludeActiveNeurons(this.thalamus.cleanupNeurons());
-			deadPatterns = [];
-		}
+		// clean up deleted patterns from active memory contexts
+		for (const pattern of deletedPatterns) this.memory.cleanupDeletedNeuron(pattern);
 
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}

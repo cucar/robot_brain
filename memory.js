@@ -232,4 +232,16 @@ export class Memory {
 		for (const inf of inferences) this.addInference(inf.neuron, inf.strength);
 		if (this.debug) console.log(`Saved ${this.inferredNeurons.length} inferences`);
 	}
+
+	/**
+	 * Clean up a deleted neuron from all active contexts.
+	 * This prevents learnNewPattern from creating patterns with zombie references.
+	 * @param {Neuron} deletedNeuron - The neuron being deleted
+	 */
+	cleanupDeletedNeuron(deletedNeuron) {
+		for (const neuronsAtAge of this.activeNeurons)
+			for (const state of neuronsAtAge.values())
+				if (state.context)
+					state.context = state.context.filter(entry => entry.neuron !== deletedNeuron);
+	}
 }

@@ -72,6 +72,7 @@ export class Neuron {
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
 		this.patterns = new Set(); // known patterns by this peak/parent neuron - children
 		this.context = new Context();  // the context that activated this pattern - not used by sensory neurons
+		this.contextRefs = new Map(); // context references: Map<Neuron, Set<distance>>
 		this.activationStrength = 0; // incremented with activation, forgotten over time
 
 		// Update nextId if we're loading a neuron with a specific ID
@@ -188,14 +189,47 @@ export class Neuron {
 	 * adds a new entry to a pattern context
 	 */
 	addPatternContext(neuron, distance, strength) {
-		this.context.addNeuron(neuron, distance, strength);
+		this.addContext(neuron, distance, strength);
+		neuron.addContextRef(this, distance);
 	}
 
 	/**
 	 * removes an entry from the pattern context
 	 */
 	removePatternContext(neuron, distance) {
+		this.removeContext(neuron, distance);
+		neuron.removeContextRef(this, distance);
+	}
+
+	/**
+	 * adds an entry from the pattern context
+	 */
+	addContext(neuron, distance, strength) {
+		this.context.addNeuron(neuron, distance, strength);
+	}
+
+	/**
+	 * removes an entry from the pattern context
+	 */
+	removeContext(neuron, distance) {
 		this.context.remove(neuron, distance);
+	}
+
+	/**
+	 * Add a context reference from another neuron to this neuron
+	 * Called when this neuron is added to another neuron's context
+	 */
+	addContextRef(referencingNeuron, distance) {
+		this.contextRefs.set(referencingNeuron, (this.contextRefs.get(referencingNeuron) ?? new Set()).add(distance));
+	}
+
+	/**
+	 * Remove a context reference from another neuron to this neuron
+	 * Called when this neuron is removed from another neuron's context
+	 */
+	removeContextRef(referencingNeuron, distance) {
+		this.contextRefs.get(referencingNeuron).delete(distance);
+		if (this.contextRefs.get(referencingNeuron).size === 0) this.contextRefs.delete(referencingNeuron);
 	}
 
 	/**
@@ -502,24 +536,6 @@ export class Neuron {
 		}
 
 		if (Neuron.debug) console.log(`  Connections: ${connectionsUpdated} weakened, ${connectionsDeleted} deleted`);
-	}
-
-	/**
-	 * deletes the context entries that are no longer valid - returns if it can be deleted after the operation
-	 */
-	cleanup(neurons) {
-
-		// get the context entries that are no longer valid
-		const toDelete = [];
-		for (const entry of this.context.entries)
-			if (!neurons.has(entry.neuron.id)) toDelete.push({ neuron: entry.neuron, distance: entry.distance });
-
-		// delete the invalid context entries
-		for (const { neuron, distance } of toDelete) this.removePatternContext(neuron, distance);
-		if (Neuron.debug) console.log(`  Cleanup: ${toDelete.length} deleted`);
-
-		// return if the neuron can be deleted or not
-		return this.canDelete();
 	}
 
 	/**
