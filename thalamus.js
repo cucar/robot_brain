@@ -77,6 +77,12 @@ export class Thalamus {
 	 */
 	setNeurons(neurons) {
 		this.neurons = neurons;
+
+		// Rebuild neuronsByValue map for base neurons
+		this.neuronsByValue.clear();
+		for (const neuron of neurons.values())
+			if (neuron.level === 0 && neuron.coordinates)
+				this.neuronsByValue.set(neuron.valueKey, neuron);
 	}
 
 	/**
