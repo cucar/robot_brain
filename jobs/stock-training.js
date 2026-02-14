@@ -279,10 +279,11 @@ export default class StockTrainingJob extends Job {
 		}
 
 		// Clear progress line (only if stdout is a TTY)
-		if (process.stdout.isTTY) {
+		if (!process.stdout.isTTY) process.stdout.write(`\n`);
+		else {
 			process.stdout.write(`\r`);
 			process.stdout.clearLine(0);
-		} else process.stdout.write(`\n`);
+		}
 
 		// Collect episode results from all channels
 		this.collectEpisodeResults(episodeMetrics);
@@ -296,6 +297,9 @@ export default class StockTrainingJob extends Job {
 		episodeMetrics.frames = frameCount;
 
 		this.episodeResults.push(episodeMetrics);
+
+		// Dump brain data at the beginning of each episode for debugging
+		this.brain.createDump();
 
 		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
 	}

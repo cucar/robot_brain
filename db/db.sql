@@ -248,8 +248,8 @@ CREATE TABLE IF NOT EXISTS connections (
     from_neuron_id BIGINT UNSIGNED,
     to_neuron_id BIGINT UNSIGNED,
     distance TINYINT UNSIGNED NOT NULL,
-    strength FLOAT DEFAULT 1.0,
-    reward FLOAT DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
+    strength DOUBLE DEFAULT 1.0,
+    reward DOUBLE DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
     PRIMARY KEY (from_neuron_id, to_neuron_id, distance),
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength),
@@ -262,7 +262,7 @@ CREATE TABLE IF NOT EXISTS connections (
 CREATE TABLE IF NOT EXISTS pattern_peaks (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     peak_neuron_id BIGINT UNSIGNED NOT NULL,
-    strength FLOAT NOT NULL DEFAULT 1.0,
+    strength DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id),
     INDEX idx_peak (peak_neuron_id)
 );
@@ -273,7 +273,7 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     pattern_neuron_id BIGINT UNSIGNED,
     context_neuron_id BIGINT UNSIGNED,
     context_age TINYINT UNSIGNED,
-    strength FLOAT NOT NULL DEFAULT 1.0,
+    strength DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id, context_neuron_id, context_age),
     INDEX idx_strength (strength)
 );
@@ -287,8 +287,8 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     pattern_neuron_id BIGINT UNSIGNED,
     inferred_neuron_id BIGINT UNSIGNED,
     distance TINYINT UNSIGNED,
-    strength FLOAT NOT NULL DEFAULT 1.0,
-    reward FLOAT NOT NULL DEFAULT 0, -- additive reward (0 = neutral, positive = good, negative = bad)
+    strength DOUBLE NOT NULL DEFAULT 1.0,
+    reward DOUBLE NOT NULL DEFAULT 0, -- additive reward (0 = neutral, positive = good, negative = bad)
     PRIMARY KEY (pattern_neuron_id, inferred_neuron_id, distance),
     INDEX idx_pattern_distance_strength (pattern_neuron_id, distance, strength),
     INDEX idx_inferred_distance_strength (inferred_neuron_id, distance, strength),
@@ -369,7 +369,7 @@ CREATE TABLE IF NOT EXISTS inference_votes (
     from_neuron_id BIGINT UNSIGNED,     -- the voter (base neuron for connections, pattern neuron for patterns)
     neuron_id BIGINT UNSIGNED,          -- the target (always base neuron)
     strength FLOAT,
-    reward FLOAT,
+    reward DOUBLE,
     distance TINYINT UNSIGNED,
     INDEX idx_from (from_neuron_id),
     INDEX idx_neuron (neuron_id)

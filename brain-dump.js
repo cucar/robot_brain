@@ -109,11 +109,14 @@ export class BrainDump {
 					distance,
 					toNeuronId: toNeuron.id,
 					strength: conn.strength,
-					reward: conn.reward != null ? parseFloat(conn.reward.toFixed(2)) : 0
+					reward: conn.reward || 0
 				});
 			}
 		}
-		connections.sort((a, b) => a.toNeuronId - b.toNeuronId);
+		connections.sort((a, b) => {
+			if (a.toNeuronId !== b.toNeuronId) return a.toNeuronId - b.toNeuronId;
+			return a.distance - b.distance;
+		});
 		return connections;
 	}
 
