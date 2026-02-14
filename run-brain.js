@@ -46,6 +46,11 @@ if (process.argv[2]) {
 	const holdoutIndex = process.argv.indexOf('--holdout');
 	if (holdoutIndex !== -1 && process.argv[holdoutIndex + 1]) holdout = parseInt(process.argv[holdoutIndex + 1]);
 
+	// Parse --offset parameter
+	let offset = null;
+	const offsetIndex = process.argv.indexOf('--offset');
+	if (offsetIndex !== -1 && process.argv[offsetIndex + 1]) offset = parseInt(process.argv[offsetIndex + 1]);
+
 	const options = {
 		diagnostic: process.argv.includes('--diagnostic'),
 		mysql: process.argv.includes('--mysql'),
@@ -55,7 +60,8 @@ if (process.argv[2]) {
 		hardReset: process.argv.includes('--hard-reset'),
 		softReset: process.argv.includes('--soft-reset'),
 		episodes,
-		holdout
+		holdout,
+		offset
 	};
 
 	const runner = new BrainRunner();

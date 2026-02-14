@@ -47,10 +47,10 @@ export default class StockChannel extends Channel {
 		// Episode metrics tracking
 		this.initializeEpisodeMetrics();
 
-		// Holdout configuration
-		this.holdoutRows = 0; // Number of rows to hold out from training (set by job)
-		this.isTrainingMode = true; // true = training (skip holdout rows), false = prediction (use only holdout rows)
-		this.allRows = []; // Store all CSV rows for holdout management
+		// Holdout and offset configuration
+		this.holdoutRows = 0; // Number of rows to hold out from end (set by job)
+		this.offsetRows = 0; // Number of rows to skip from start (set by job)
+		this.allRows = []; // Store all CSV rows for holdout/offset management
 
 		// CSV reading state
 		this.csvPath = null;
@@ -153,23 +153,18 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Prepare data iterator based on training/prediction mode
+	 * Prepare data iterator based on offset and holdout configuration
 	 */
 	prepareDataIterator() {
+		// Calculate start and end indices
+		const startIndex = this.offsetRows;
+		const endIndex = this.holdoutRows > 0 ? this.allRows.length - this.holdoutRows : this.allRows.length;
 
-		// Training: use all rows except holdout
-		if (this.isTrainingMode) {
-			if (this.holdoutRows > 0) this.dataRows = this.allRows.slice(0, -this.holdoutRows);
-			else this.dataRows = this.allRows; // Use all rows if no holdout
-		}
-		// Prediction: use only holdout rows
-		else {
-			if (this.holdoutRows > 0) this.dataRows = this.allRows.slice(-this.holdoutRows);
-			else this.dataRows = []; // No prediction data if no holdout
-		}
+		// Extract the slice
+		this.dataRows = this.allRows.slice(startIndex, endIndex);
 
 		this.currentRowIndex = 0;
-		if (this.debug) console.log(`${this.symbol}: ${this.isTrainingMode ? 'Training' : 'Prediction'} mode - using ${this.dataRows.length} rows`);
+		if (this.debug) console.log(`${this.symbol}: Using rows ${startIndex} to ${endIndex - 1} (${this.dataRows.length} rows)`);
 	}
 
 	/**
@@ -190,14 +185,6 @@ export default class StockChannel extends Channel {
 		this.initializeEpisodeMetrics();
 
 		// Reset data iterator to start from beginning
-		this.prepareDataIterator();
-	}
-
-	/**
-	 * Set prediction mode (uses only holdout rows)
-	 */
-	setPredictionMode() {
-		this.isTrainingMode = false;
 		this.prepareDataIterator();
 	}
 

@@ -2,15 +2,15 @@
 
 /**
  * Job Setup Runner
- * 
+ *
  * Runs the setup() method for a job to download/prepare data.
  * This is separate from run-brain.js which runs the actual job.
- * 
+ *
  * Usage:
  *   node run-setup.js <job-name>
- * 
+ *
  * Example:
- *   node run-setup.js stock-training
+ *   node run-setup.js stock-test
  */
 
 import fs from 'node:fs';

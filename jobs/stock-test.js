@@ -9,10 +9,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Stock Training Job - Trains the brain on multiple stock symbols over many episodes
- * Each episode runs through the entire historical data, then resets context but keeps learned patterns
+ * Stock Test Job - Trains or tests the brain on stock symbols
+ * Can be used for both training (with holdout) and prediction (with offset)
+ * Each episode runs through the data, then resets context but keeps learned patterns
  */
-export default class StockTrainingJob extends Job {
+export default class StockTestJob extends Job {
 
 	constructor() {
 		super();
@@ -21,7 +22,8 @@ export default class StockTrainingJob extends Job {
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
-			holdoutRows: 50                     // Number of rows to hold out for prediction testing (can be overridden with --holdout)
+			holdoutRows: 50,                     // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
+			offsetRows: 0                        // Number of rows to skip from start (can be overridden with --offset)
 		};
 
 		// Training metrics
@@ -35,11 +37,12 @@ export default class StockTrainingJob extends Job {
 	applyOptions(options) {
 		if (options.episodes !== null && options.episodes !== undefined) this.config.maxEpisodes = options.episodes;
 		if (options.holdout !== null && options.holdout !== undefined) this.config.holdoutRows = options.holdout;
+		if (options.offset !== null && options.offset !== undefined) this.config.offsetRows = options.offset;
 	}
 
 	/**
 	 * Setup method - Downloads historical data from Alpha Vantage and processes it
-	 * Run this with: node run-setup.js stock-training
+	 * Run this with: node run-setup.js stock-test
 	 */
 	async setup() {
 		console.log('📥 Downloading historical stock data from Alpha Vantage...');
@@ -139,6 +142,8 @@ export default class StockTrainingJob extends Job {
 		});
 	}
 
+
+
 	/**
 	 * Find all dates that exist in ALL symbols' data (intersection)
 	 */
@@ -196,10 +201,11 @@ export default class StockTrainingJob extends Job {
 	 * Hook: Show startup information
 	 */
 	async showStartupInfo() {
-		console.log(`🚀 Starting Stock Training Job`);
+		console.log(`🚀 Starting Stock Test Job`);
 		console.log(`📊 Symbols: ${this.config.symbols.join(', ')}`);
 		console.log(`🔄 Max Episodes: ${this.config.maxEpisodes}`);
 		console.log(`📋 Holdout Rows: ${this.config.holdoutRows}`);
+		console.log(`📋 Offset Rows: ${this.config.offsetRows}`);
 		console.log('');
 	}
 
@@ -207,9 +213,10 @@ export default class StockTrainingJob extends Job {
 	 * Hook: Configure channels after brain initialization
 	 */
 	async configureChannels() {
-		// Set holdout rows for all channels
+		// Set holdout and offset rows for all channels
 		for (const [_, channel] of this.brain.thalamus.getAllChannels()) {
 			channel.holdoutRows = this.config.holdoutRows;
+			channel.offsetRows = this.config.offsetRows;
 		}
 	}
 
@@ -316,16 +323,16 @@ export default class StockTrainingJob extends Job {
 				trades: channel.totalTrades || 0,
 				profitableTrades: channel.profitableTrades || 0
 			};
-			
+
 			channelResult.netProfit = channelResult.profit - channelResult.loss;
-			
+
 			episodeMetrics.channelResults.set(channelName, channelResult);
 			episodeMetrics.totalProfit += channelResult.profit;
 			episodeMetrics.totalLoss += channelResult.loss;
 			episodeMetrics.totalTrades += channelResult.trades;
 			episodeMetrics.profitableTrades += channelResult.profitableTrades;
 		}
-		
+
 		episodeMetrics.netProfit = episodeMetrics.totalProfit - episodeMetrics.totalLoss;
 	}
 
@@ -408,3 +415,4 @@ export default class StockTrainingJob extends Job {
 		console.log('='.repeat(60));
 	}
 }
+

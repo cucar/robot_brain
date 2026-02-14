@@ -196,18 +196,25 @@ node run-brain.js arm1
 ```
 Learns arm movement patterns with proprioceptive feedback.
 
-#### **Financial Trading (Stock Training)**
+#### **Financial Trading (Stock Test)**
 ```bash
 # First, download historical stock data
-node run-setup.js stock-training
+node run-setup.js stock-test
 
-# Then run the training job
-node run-brain.js stock-training
+# Then run the training job (trains on all data except last 50 rows)
+node run-brain.js stock-test
+
+# Or test on specific data range using offset and holdout
+node run-brain.js stock-test --offset 100 --holdout 50
 ```
-Trains on historical stock data for KGC (Kinross Gold), GLD (Gold ETF), and SPY (S&P 500).
-- **Setup**: Downloads full historical daily data from Alpha Vantage API
-- **Training**: Runs 50 episodes through historical data, learning patterns and trading strategies
+Trains or tests on historical stock data for KGC (Kinross Gold), GLD (Gold ETF), and SPY (S&P 500).
+- **Setup**: Downloads full historical daily data from Yahoo Finance API
+- **Training**: Runs episodes through historical data, learning patterns and trading strategies
 - **Data location**: `data/stock/KGC.csv`, `data/stock/GLD.csv`, `data/stock/SPY.csv`
+- **Parameters**:
+  - `--holdout N`: Hold out last N rows from training (default: 50)
+  - `--offset N`: Skip first N rows (default: 0)
+  - `--episodes N`: Number of training episodes (default: 1)
 
 #### **Multi-Modal Learning**
 ```bash
