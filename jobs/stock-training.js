@@ -245,6 +245,9 @@ export default class StockTrainingJob extends Job {
 		// Reset context but keep learned patterns
 		await this.brain.resetContext();
 
+		// Dump brain data at the beginning of each episode for debugging
+		this.brain.createDump();
+
 		// Initialize episode metrics
 		const episodeMetrics = {
 			episode: this.currentEpisode,

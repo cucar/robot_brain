@@ -1,6 +1,7 @@
 import { Memory } from './memory.js';
 import { BrainDB } from './brain-db.js';
 import { BrainDiagnostics } from './brain-diagnostics.js';
+import { BrainDump } from './brain-dump.js';
 import { Thalamus } from './thalamus.js';
 
 /**
@@ -36,6 +37,9 @@ export default class Brain {
 
 		// Diagnostics - used for debug methods and performance tracking
 		this.diagnostics = new BrainDiagnostics(this.diagnostic, this.frameSummary);
+
+		// Dump - used for creating brain state dumps for debugging
+		this.dump = new BrainDump();
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
 		this.thalamus = new Thalamus(this.debug);
@@ -135,6 +139,17 @@ export default class Brain {
 		await this.db.backupChannels(channels);
 		await this.db.backupDimensions(channels);
 		await this.db.backupNeurons(neurons, channelNameToId, dimensionNameToId);
+	}
+
+	/**
+	 * Create a dump file with current brain state for debugging and comparison
+	 */
+	createDump() {
+		const neurons = this.thalamus.getAllNeurons();
+		const channelNameToId = this.thalamus.getChannelNameToIdMap();
+		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
+		const channels = this.thalamus.getAllChannels();
+		return this.dump.createDumpFile(neurons, channels, channelNameToId, dimensionNameToId);
 	}
 
 	/**
