@@ -246,7 +246,7 @@ export default class StockTrainingJob extends Job {
 		await this.brain.resetContext();
 
 		// Dump brain data at the beginning of each episode for debugging
-		this.brain.createDump();
+		// this.brain.createDump();
 
 		// Initialize episode metrics
 		const episodeMetrics = {
@@ -299,7 +299,7 @@ export default class StockTrainingJob extends Job {
 		this.episodeResults.push(episodeMetrics);
 
 		// Dump brain data at the beginning of each episode for debugging
-		this.brain.createDump();
+		// this.brain.createDump();
 
 		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
 	}

@@ -21,7 +21,7 @@ export class Neuron {
 	// Hyperparameters
 	static maxStrength = 100;
 	static minStrength = 0;
-	static rewardSmoothing = 0.9;
+	static rewardSmoothing = 1;
 	static eventErrorMinStrength = 2;
 	static actionRegretMinStrength = 2;
 	static actionRegretMinPain = 0;
