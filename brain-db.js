@@ -27,8 +27,8 @@ export class BrainDB {
 	async loadChannels(thalamus) {
 
 		// Load channels and dimensions from database
-		const [channelRows] = await this.conn.query('SELECT id, name FROM channels');
-		const [dimensionRows] = await this.conn.query('SELECT id, name FROM dimensions');
+		const [channelRows] = await this.conn.query('SELECT id, name FROM channels order by id');
+		const [dimensionRows] = await this.conn.query('SELECT id, name FROM dimensions order by id');
 
 		// load all dimensions and let each channel pick what it needs
 		const dbDimensions = dimensionRows.map(row => new Dimension(row.name, row.id));
