@@ -297,12 +297,10 @@ export class BrainDB {
 	async backupConnections(neurons) {
 		await this.conn.query('TRUNCATE connections');
 		const connRows = [];
-		for (const neuron of neurons) {
-			if (neuron.level !== 0) continue;
+		for (const neuron of neurons)
 			for (const [distance, targets] of neuron.connections)
 				for (const [toNeuron, conn] of targets)
-					connRows.push([neuron.id, toNeuron.id, distance, conn.strength, conn.reward]);
-		}
+					connRows.push([neuron.id, toNeuron.id, distance, conn.strength, conn.reward || 0]);
 		await this.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward) VALUES ?', [connRows]);
 		console.log(`  Saved ${connRows.length} connections`);
 	}
@@ -313,10 +311,9 @@ export class BrainDB {
 	async backupPatternPeaks(neurons) {
 		await this.conn.query('TRUNCATE pattern_peaks');
 		const peakRows = [];
-		for (const pattern of neurons) {
-			if (!pattern.peak) continue;
-			peakRows.push([pattern.id, pattern.peak.id, pattern.activationStrength]);
-		}
+		for (const pattern of neurons)
+			if (pattern.level > 0)
+				peakRows.push([pattern.id, pattern.peak.id, pattern.activationStrength]);
 		if (peakRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id, strength) VALUES ?', [peakRows]);
 		console.log(`  Saved ${peakRows.length} pattern peaks`);
@@ -343,12 +340,11 @@ export class BrainDB {
 	async backupPatternConnections(neurons) {
 		await this.conn.query('TRUNCATE pattern_future');
 		const futureRows = [];
-		for (const neuron of neurons) {
-			if (neuron.level === 0) continue;
-			for (const [distance, targets] of neuron.connections)
-				for (const [inferredNeuron, pred] of targets)
-					futureRows.push([neuron.id, inferredNeuron.id, distance, pred.strength, pred.reward || 0]);
-		}
+		for (const neuron of neurons)
+			if (neuron.level > 0)
+				for (const [distance, targets] of neuron.connections)
+					for (const [inferredNeuron, pred] of targets)
+						futureRows.push([neuron.id, inferredNeuron.id, distance, pred.strength, pred.reward || 0]);
 		if (futureRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward) VALUES ?', [futureRows]);
 		console.log(`  Saved ${futureRows.length} pattern connections (to pattern_future)`);
