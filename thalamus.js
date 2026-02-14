@@ -309,35 +309,15 @@ export class Thalamus {
 	}
 
 	/**
-	 * Delete dead pattern neurons (no content, no references, not active)
-	 * Recursively deletes patterns that become deletable after cleanup
-	 * @param {Array<Neuron>} patterns - Initial list of patterns to delete
-	 * @returns {Array<Neuron>} - All deleted patterns (for memory cleanup)
-	 */
-	deletePatterns(patterns) {
-		const toDelete = [...patterns];
-
-		while (toDelete.length > 0) {
-			const pattern = toDelete.shift();
-
-			// Clean up context references and get newly deletable patterns
-			const newlyDeletable = this.deletePattern(pattern);
-
-			// Add newly deletable patterns to the queue
-			toDelete.push(...newlyDeletable);
-		}
-
-		if (this.debug) console.log(`  Patterns deleted: ${patterns.length}`);
-		return patterns;
-	}
-
-	/**
 	 * Delete a pattern neuron and clean up all references to it.
 	 * Returns patterns that became deletable as a result of cleanup.
 	 * @param {Neuron} pattern - Pattern to delete
 	 * @returns {Array<Neuron>} - Patterns that became deletable after cleanup
 	 */
 	deletePattern(pattern) {
+
+		// ignore double delete requests
+		if (!this.neurons.has(pattern.id)) return [];
 
 		// Clean up this pattern from other patterns' contexts
 		const newlyDeletable = this.cleanupContextReferences(pattern);
@@ -351,6 +331,7 @@ export class Thalamus {
 		// memory cleanup
 		pattern.peak = null;
 		delete pattern.context;
+		delete pattern.contextRefs;
 		delete pattern.patterns;
 		delete pattern.connections;
 

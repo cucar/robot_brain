@@ -576,12 +576,35 @@ export default class Brain {
 		const deadPatterns = this.excludeActiveNeurons(this.thalamus.forgetNeurons());
 
 		// delete dead patterns (with recursive cleanup of context references)
-		const deletedPatterns = this.thalamus.deletePatterns(deadPatterns);
+		const deletedPatterns = this.deletePatterns(deadPatterns);
 
 		// clean up deleted patterns from active memory contexts
 		for (const pattern of deletedPatterns) this.memory.cleanupDeletedNeuron(pattern);
 
 		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
+	}
+
+	/**
+	 * Delete dead pattern neurons (no content, no references, not active)
+	 * Recursively deletes patterns that become deletable after cleanup
+	 * @param {Array<Neuron>} patterns - Initial list of patterns to delete
+	 * @returns {Array<Neuron>} - All deleted patterns (for memory cleanup)
+	 */
+	deletePatterns(patterns) {
+		const toDelete = [...patterns];
+
+		while (toDelete.length > 0) {
+			const pattern = toDelete.shift();
+
+			// Clean up context references and get newly deletable patterns
+			const newlyDeletable = this.excludeActiveNeurons(this.thalamus.deletePattern(pattern));
+
+			// Add newly deletable patterns to the queue
+			toDelete.push(...newlyDeletable);
+		}
+
+		if (this.debug) console.log(`  Patterns deleted: ${patterns.length}`);
+		return patterns;
 	}
 
 	/**

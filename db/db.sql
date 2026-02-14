@@ -9,7 +9,7 @@ select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id =
 select * from dimensions;
 select * from channels;
 select * from neurons where id = 100848;
-select * from pattern_past where context_neuron_id = 100848;
+select * from pattern_past where context_neuron_id = 106110;
 select * from neurons order by level desc;
 select * from active_neurons order by age;
 select * from base_neurons;
