@@ -36,6 +36,7 @@ export class BrainDiagnostics {
 	resetAccuracyStats() {
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
+		this.continuousPredictionMetrics = { totalError: 0, count: 0 };
 	}
 
 	/**
