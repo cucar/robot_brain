@@ -175,6 +175,7 @@ export class Memory {
 		const context = new Context();
 		for (let age = 0; age < this.activeNeurons.length; age++)
 			for (const neuron of this.activeNeurons[age].keys()) {
+				if (neuron.level === 0 && neuron.type === 'action') continue; // actions cannot be in contexts and cannot be peaks
 				if (filterByLevel && neuron.level !== level) continue;
 				if (age === 0) peaks.push(neuron);
 				else context.addNeuron(neuron, age, 1);
