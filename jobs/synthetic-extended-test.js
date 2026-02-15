@@ -243,11 +243,14 @@ export default class SyntheticExtendedTest extends Job {
 		const totalCycles = Math.floor((totalOptimal + totalSuboptimal) / cycleLength);
 		const theoreticalOptimal = optimalProfit * totalCycles;
 
+		// Get portfolio metrics for actual P&L
+		const portfolioMetrics = StockChannel.getPortfolioMetrics(this.brain.thalamus.getAllChannels());
+
 		console.log(`\n💰 Profit Analysis:`);
-		console.log(`   Actual P&L: $${(stockChannel.totalProfit - stockChannel.totalLoss).toFixed(2)}`);
+		console.log(`   Actual P&L: $${portfolioMetrics.totalProfit.toFixed(2)}`);
 		console.log(`   Per-cycle optimal: $${optimalProfit.toFixed(2)}`);
 		console.log(`   Theoretical optimal (${totalCycles} cycles): $${theoreticalOptimal.toFixed(2)}`);
-		console.log(`   Efficiency: ${((stockChannel.totalProfit - stockChannel.totalLoss) / theoreticalOptimal * 100).toFixed(1)}%`);
+		console.log(`   Efficiency: ${(portfolioMetrics.totalProfit / theoreticalOptimal * 100).toFixed(1)}%`);
 
 		// Show action neuron IDs
 		console.log(`\n🎯 Action Neuron IDs:`);

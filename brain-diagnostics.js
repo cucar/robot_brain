@@ -460,17 +460,24 @@ export class BrainDiagnostics {
 
 		// Format output performance display
 		let outputDisplay = 'N/A';
-		if (outputMetrics.length > 0) {
+		if (outputMetrics.length > 0)
 			outputDisplay = outputMetrics.map(m => {
 				const formatted = m.format === 'currency'
 					? `${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
 					: m.value.toFixed(2);
 				return outputMetrics.length > 1 ? `${m.label}:${formatted}` : formatted;
 			}).join(', ');
+
+		// Get portfolio metrics if any stock channels exist
+		let portfolioDisplay = '';
+		const channelsArray = Array.from(channels);
+		if (channelsArray.length > 0 && channelsArray[0][1].constructor.getPortfolioMetrics) {
+			const portfolioMetrics = channelsArray[0][1].constructor.getPortfolioMetrics(channels);
+			portfolioDisplay = ` | Portfolio: Cash:${portfolioMetrics.cash.toFixed(0)} Inv:${portfolioMetrics.totalInvestments.toFixed(0)} Val:${portfolioMetrics.totalValue.toFixed(0)} P&L:${portfolioMetrics.totalProfit >= 0 ? '+' : ''}${portfolioMetrics.totalProfit.toFixed(2)}`;
 		}
 
 		if (this.frameSummary)
-			console.log(`Frame ${frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+			console.log(`Frame ${frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay}${portfolioDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 }
 

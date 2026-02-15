@@ -184,7 +184,6 @@ export default class MultiChannelTest extends Job {
 
 		for (const symbol of this.config.symbols) {
 			const channelName = `${symbol}_TEST`;
-			const channel = this.brain.thalamus.getChannel(channelName);
 			const stats = decisionStats.get(channelName);
 			const data = this.sourceData.get(symbol);
 
@@ -215,7 +214,6 @@ export default class MultiChannelTest extends Job {
 
 			const overallRate = (totalOptimal / (totalOptimal + totalSuboptimal) * 100).toFixed(1);
 			console.log(`   ${symbol} Optimal Rate: ${totalOptimal}/${totalOptimal + totalSuboptimal} = ${overallRate}%`);
-			console.log(`   ${symbol} P&L: $${(channel.totalProfit - channel.totalLoss).toFixed(2)}`);
 
 			grandTotalOptimal += totalOptimal;
 			grandTotalSuboptimal += totalSuboptimal;
@@ -225,11 +223,9 @@ export default class MultiChannelTest extends Job {
 		console.log('\n' + '='.repeat(80));
 		console.log(`🎯 Overall Optimal Rate: ${grandTotalOptimal}/${grandTotalOptimal + grandTotalSuboptimal} = ${grandOverallRate}%`);
 
-		// Calculate total P&L across all channels
-		let totalPL = 0;
-		for (const [, channel] of this.brain.thalamus.getAllChannels())
-			totalPL += channel.totalProfit - channel.totalLoss;
-		console.log(`💰 Total P&L: $${totalPL.toFixed(2)}`);
+		// Calculate total P&L using portfolio metrics
+		const portfolioMetrics = StockChannel.getPortfolioMetrics(this.brain.thalamus.getAllChannels());
+		console.log(`💰 Total P&L: $${portfolioMetrics.totalProfit.toFixed(2)}`);
 		console.log('='.repeat(80));
 	}
 }

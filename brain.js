@@ -92,8 +92,16 @@ export default class Brain {
 		// Clear memory
 		this.memory.reset();
 
-		// Reset all channel states
-		for (const [, channel] of this.thalamus.getAllChannels()) channel.resetContext();
+		// Reset channel class static state (once per class)
+		const channelClasses = new Set();
+		for (const [, channel] of this.thalamus.getAllChannels())
+			channelClasses.add(channel.constructor);
+		for (const ChannelClass of channelClasses)
+			ChannelClass.resetChannelContext();
+
+		// Reset all channel instance states
+		for (const [, channel] of this.thalamus.getAllChannels())
+			channel.resetContext();
 	}
 
 	/**

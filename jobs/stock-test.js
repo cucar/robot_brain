@@ -258,11 +258,8 @@ export default class StockTestJob extends Job {
 		// Initialize episode metrics
 		const episodeMetrics = {
 			episode: this.currentEpisode,
-			totalProfit: 0,
-			totalLoss: 0,
 			netProfit: 0,
 			totalTrades: 0,
-			profitableTrades: 0,
 			channelResults: new Map(),
 			baseAccuracy: null,
 			overallAccuracy: null
@@ -315,25 +312,28 @@ export default class StockTestJob extends Job {
 	 * Collect profit/loss results from all channels
 	 */
 	collectEpisodeResults(episodeMetrics) {
+		// Get portfolio-level metrics
+		const portfolioMetrics = StockChannel.getPortfolioMetrics(this.brain.thalamus.getAllChannels());
+
+		// Store portfolio profit
+		episodeMetrics.netProfit = portfolioMetrics.totalProfit;
+
+		// Collect per-channel results
 		for (const [channelName, channel] of this.brain.thalamus.getAllChannels()) {
+			const currentValue = channel.currentPrice * channel.shares;
+			const unrealizedProfit = currentValue - channel.investment;
+
 			const channelResult = {
 				symbol: channelName,
-				profit: channel.totalProfit || 0,
-				loss: channel.totalLoss || 0,
-				trades: channel.totalTrades || 0,
-				profitableTrades: channel.profitableTrades || 0
+				investment: channel.investment,
+				currentValue: currentValue,
+				unrealizedProfit: unrealizedProfit,
+				trades: channel.totalTrades || 0
 			};
 
-			channelResult.netProfit = channelResult.profit - channelResult.loss;
-
 			episodeMetrics.channelResults.set(channelName, channelResult);
-			episodeMetrics.totalProfit += channelResult.profit;
-			episodeMetrics.totalLoss += channelResult.loss;
 			episodeMetrics.totalTrades += channelResult.trades;
-			episodeMetrics.profitableTrades += channelResult.profitableTrades;
 		}
-
-		episodeMetrics.netProfit = episodeMetrics.totalProfit - episodeMetrics.totalLoss;
 	}
 
 	/**

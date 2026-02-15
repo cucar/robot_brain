@@ -35,6 +35,16 @@ export default class Channel {
 	}
 
 	/**
+	 * Static method to reset channel-level context (shared state across all instances)
+	 * Called once per episode reset before individual channel resetContext calls
+	 * Override in subclasses if they have static/shared state to reset
+	 */
+	static resetChannelContext() {
+		// Default implementation does nothing
+		// Child classes can override for channel-specific static state reset
+	}
+
+	/**
 	 * Static method called by Thalamus to execute actions for all channels of this type
 	 * Default implementation: call each channel's executeOutputs individually
 	 * Override in subclasses for coordinated execution (e.g., portfolio management)
