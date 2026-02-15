@@ -16,9 +16,6 @@ export default class StockChannel extends Channel {
 	static initialCapital = 1000;
 	static cash = StockChannel.initialCapital;
 
-	// Static total capital shared across all stock channel instances
-	static totalCapital = 1000;
-
 	/**
 	 * constructor for the stock channel - dimensions are given when loading from database
 	 */
@@ -159,6 +156,7 @@ export default class StockChannel extends Channel {
 	 * Initialize episode metrics to zero
 	 */
 	initializeEpisodeMetrics() {
+		this.investment = 0; // Total amount invested in current position
 		this.totalProfit = 0; // Total profit from all trades in current episode
 		this.totalLoss = 0; // Total loss from all trades in current episode
 		this.totalTrades = 0; // Total number of trades in current episode
@@ -276,18 +274,49 @@ export default class StockChannel extends Channel {
 		// Calculate portfolio allocations
 		const allocations = this.getAllocations(channels, actionsMap);
 
-		// Execute ALL channels (not just ones with actions) to update unrealized profit
-		for (const [channelName, channel] of channels)
-			await channel.executeOutput(allocations.get(channelName));
+		// FIRST PASS: Execute sells to free up cash
+		for (const [channelName, allocation] of allocations) {
+			const channel = channels.get(channelName);
+
+			// brain wants out - sell all shares if we have any
+			if (allocation.action === POSITION_OUT) {
+				if (channel.shares > 0) await channel.executeSell(channel.shares);
+				continue;
+			}
+
+			// brain wants to own the stock, but how many shares? sell excess shares if current value exceeds target
+			const targetShares = Math.floor(allocation.amount / channel.currentPrice);
+			const sharesToSell = channel.shares - targetShares;
+			if (sharesToSell > 0) await channel.executeSell(sharesToSell);
+		}
+
+		// SECOND PASS: Execute buys using freed cash
+		for (const [channelName, allocation] of allocations) {
+			const channel = channels.get(channelName);
+
+			// only buy if we want to own the stock
+			if (allocation.action !== POSITION_OWN) continue;
+
+			// Buy additional shares if current value is below target
+			const targetShares = Math.floor(allocation.amount / channel.currentPrice);
+			const sharesToBuy = targetShares - channel.shares;
+			if (sharesToBuy > 0) await channel.executeBuy(sharesToBuy);
+		}
 	}
 
 	/**
-	 * Calculate portfolio allocations for stock actions
+	 * Calculate portfolio allocations for stock actions based on total portfolio value
+	 * Uses softmax (exponential) weighting to handle negative rewards naturally
 	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
 	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
-	 * @returns {Map} - Map of channel name to dollar amount allocated
+	 * @returns {Map} - Map of channel name to { action, amount } allocation
 	 */
 	static getAllocations(channels, actionsMap) {
+
+		// Calculate total portfolio value (cash + all current holdings)
+		let totalPortfolioValue = this.cash;
+		for (const [, channel] of channels)
+			totalPortfolioValue += channel.shares * channel.currentPrice;
 
 		// Collect all actions with their expected rewards
 		const allActions = [];
@@ -305,30 +334,59 @@ export default class StockChannel extends Channel {
 		// Filter to only POSITION_OWN actions for allocation
 		const ownActions = allActions.filter(a => a.isOwn);
 
-		// Normalize rewards: find minimum and shift all rewards up if any are negative
-		const minReward = ownActions.length > 0 ? Math.min(...ownActions.map(a => a.reward)) : 0;
-		const normalizedRewards = ownActions.map(a => ({
-			...a,
-			normalizedReward: minReward < 0 ? a.reward + Math.abs(minReward) : a.reward
-		}));
+		// Calculate softmax weights - exp(reward[i]) / sum(exp(reward[j]))
+		const expRewards = ownActions.map(a => ({ ...a, expReward: Math.exp(a.reward) }));
+		const totalExpReward = expRewards.reduce((sum, a) => sum + a.expReward, 0);
 
-		// Calculate total normalized reward
-		const totalNormalizedReward = normalizedRewards.reduce((sum, a) => sum + a.normalizedReward, 0);
-
-		// Allocate capital proportional to normalized rewards
+		// Allocate portfolio value proportional to softmax weights
 		const allocations = new Map();
 		for (const action of allActions) {
 			if (action.isOwn) {
-				const normalized = normalizedRewards.find(n => n.channelName === action.channelName);
-				const amount = totalNormalizedReward > 0
-					? (normalized.normalizedReward / totalNormalizedReward) * this.totalCapital
-					: (this.totalCapital / normalizedRewards.length);
+				const expAction = expRewards.find(e => e.channelName === action.channelName);
+				const amount = totalExpReward > 0
+					? (expAction.expReward / totalExpReward) * totalPortfolioValue
+					: (totalPortfolioValue / ownActions.length);
 				allocations.set(action.channelName, { action: POSITION_OWN, amount });
 			}
 			// POSITION_OUT gets 0 allocation
 			else allocations.set(action.channelName, { action: POSITION_OUT, amount: 0 });
 		}
+
+		// Set OUT allocation for channels not in actionsMap (no brain prediction)
+		for (const [channelName] of channels)
+			if (!allocations.has(channelName))
+				allocations.set(channelName, { action: POSITION_OUT, amount: 0 });
+
 		return allocations;
+	}
+
+	/**
+	 * Get portfolio-level metrics across all stock channels
+	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
+	 * @returns {Object} - Portfolio metrics
+	 */
+	static getPortfolioMetrics(channels) {
+		let totalInvestments = 0;
+		let totalValue = 0;
+		let totalProfit = 0;
+
+		for (const [, channel] of channels) {
+			const currentValue = channel.shares * channel.currentPrice;
+			totalInvestments += channel.investment || 0;
+			totalValue += currentValue;
+
+			// Calculate realized + unrealized profit
+			const realizedPL = (channel.totalProfit || 0) - (channel.totalLoss || 0);
+			const unrealizedPL = channel.unrealizedProfit || 0;
+			totalProfit += realizedPL + unrealizedPL;
+		}
+
+		return {
+			cash: this.cash,
+			totalInvestments,
+			totalValue,
+			totalProfit
+		};
 	}
 
 	/**
@@ -530,71 +588,52 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Execute stock actions based on brain output coordinates
-	 * Conflict resolution ensures actions are position-aware, so we should only receive valid actions
+	 * Execute a buy action
+	 * @param {number} sharesToBuy - Number of shares to buy
 	 */
-	async executeOutput(allocation) {
+	async executeBuy(sharesToBuy) {
 
-		// Extract coordinates from outputs array
-		const activityValue = allocation.action;
+		const cost = sharesToBuy * this.currentPrice;
 
-		// Determine action type: After conflict resolution, these should be position-appropriate
-		if (activityValue === POSITION_OWN && !this.owned) this.executeBuy(activityValue);
-		if (activityValue === POSITION_OWN && this.owned) this.executeHoldIn(activityValue);
-		if (activityValue === POSITION_OUT && this.owned) this.executeSell(activityValue);
-		if (activityValue === POSITION_OUT && !this.owned) this.executeHoldOut(activityValue);
+		// Check if we have enough cash
+		if (StockChannel.cash < cost)
+			throw new Error(`${this.symbol}: Insufficient cash to buy ${sharesToBuy} shares at $${this.currentPrice} (need $${cost.toFixed(2)}, have $${StockChannel.cash.toFixed(2)})`);
 
-		// show current status
-		if (this.debug) console.log(`   ${this.symbol}: Owned: ${this.owned}, Entry Price: $${this.entryPrice?.toFixed(2) ?? 'N/A'}, Unrealized P&L: $${this.unrealizedProfit.toFixed(2)}`);
-	}
+		// Deduct cash
+		StockChannel.cash -= cost;
 
-	/**
-	 * Execute a buy action - should only be called when not already owned (filtered in conflict resolution)
-	 */
-	executeBuy(activityValue) {
+		// Add shares
+		this.shares += sharesToBuy;
+		this.investment += cost;
 
-		// Safety check - should never happen since conflict resolution filters invalid actions
-		if (this.owned) throw new Error(`${this.symbol}: BUY received when already owned - conflict resolution failed`);
-
-		// buy stock per request coming from the brain
-		this.shares = 1;
-
-		// prices are from inputs at the start of frame - we take action at the end of the frame as reaction to them
-		this.entryPrice = this.currentPrice;
-
-		// Reset unrealized profit tracking for new position
-		this.unrealizedProfit = 0;
-		this.holdInFrames = 0; // Reset hold-in counter (for profit reporting)
-
-		// Track trade metrics
+		// Track trade
 		this.totalTrades++;
-		this.lastAction = POSITION_OWN;
 
-		if (this.debug) console.log(`${this.symbol}: EXECUTED BUY at $${this.previousPrice} (activity: ${activityValue})`);
+		if (this.debug)
+			console.log(`${this.symbol}: BOUGHT ${sharesToBuy} shares @ $${this.currentPrice.toFixed(2)} = $${cost.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
 	}
 
 	/**
-	 * Execute a hold-in action
+	 * Execute a sell action
+	 * @param {number} sharesToSell - Number of shares to sell
 	 */
-	executeHoldIn() {
-		this.holdInFrames++; // Increment hold-in counter (for profit reporting)
-		if (this.debug) console.log(`${this.symbol}: HOLD IN SIGNAL (Owned, ${this.holdInFrames} frames)`);
-		this.lastAction = POSITION_OWN;
-	}
+	async executeSell(sharesToSell) {
 
-	/**
-	 * Execute a sell action - should only be called when owned (filtered in conflict resolution)
-	 */
-	executeSell(activityValue) {
+		if (sharesToSell > this.shares)
+			throw new Error(`${this.symbol}: Cannot sell ${sharesToSell} shares, only have ${this.shares}`);
 
-		// Safety check - should never happen since conflict resolution filters invalid actions
-		if (!this.owned) throw new Error(`${this.symbol}: SELL received when not owned - conflict resolution failed`);
+		const proceeds = sharesToSell * this.currentPrice;
+		const costBasis = (this.investment / this.shares) * sharesToSell;
+		const profit = proceeds - costBasis;
 
-		// Sell owned stock - calculate realized profit/loss - we are selling at the end of the frame with the price that was assumed valid throughout the frame
-		const profit = this.currentPrice - this.entryPrice;
-		const percentReturn = (profit / this.entryPrice) * 100;
+		// Add cash
+		StockChannel.cash += proceeds;
 
-		// Add realized profit/loss to totals
+		// Reduce shares and investment
+		this.shares -= sharesToSell;
+		this.investment -= costBasis;
+
+		// Track profit/loss
 		if (profit > 0) {
 			this.totalProfit += profit;
 			this.profitableTrades++;
@@ -602,27 +641,11 @@ export default class StockChannel extends Channel {
 		else if (profit < 0)
 			this.totalLoss += Math.abs(profit);
 
-		if (this.debug) {
-			console.log(`${this.symbol}: EXECUTED SELL at $${this.previousPrice} (activity: ${activityValue})`);
-			console.log(`${this.symbol}: Realized Profit/Loss: $${profit.toFixed(2)} (${percentReturn.toFixed(2)}%) over ${this.holdInFrames} frames`);
-			console.log(`${this.symbol}: Episode totals: Profit $${this.totalProfit.toFixed(2)}, Loss $${this.totalLoss.toFixed(2)}, Net $${(this.totalProfit - this.totalLoss).toFixed(2)}`);
-		}
+		// Track trade
+		this.totalTrades++;
 
-		// Reset unrealized profit tracking since position is closed
-		this.unrealizedProfit = 0;
-
-		// Switch to sold state
-		this.shares = 0;
-		this.entryPrice = this.currentPrice; // Track sell price for sold position feedback
-		this.lastAction = POSITION_OUT;
-	}
-
-	/**
-	 * Execute a hold-out action
-	 */
-	executeHoldOut() {
-		if (this.debug) console.log(`${this.symbol}: HOLD OUT SIGNAL (Not Owned)`);
-		this.lastAction = POSITION_OUT;
+		if (this.debug)
+			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.currentPrice.toFixed(2)} = $${proceeds.toFixed(2)} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
 	}
 
 	/**
