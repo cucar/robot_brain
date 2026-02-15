@@ -153,18 +153,6 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Initialize episode metrics to zero
-	 */
-	initializeEpisodeMetrics() {
-		this.investment = 0; // Total amount invested in current position
-		this.totalProfit = 0; // Total profit from all trades in current episode
-		this.totalLoss = 0; // Total loss from all trades in current episode
-		this.totalTrades = 0; // Total number of trades in current episode
-		this.profitableTrades = 0; // Number of profitable trades in current episode
-		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
-	}
-
-	/**
 	 * Static method to reset channel-level context (shared state across all instances)
 	 * Called once per episode reset before individual channel resetContext calls
 	 */
@@ -213,14 +201,12 @@ export default class StockChannel extends Channel {
 
 		// Reset trading state
 		this.shares = 0;
-		this.entryPrice = null;
+		this.investment = 0; // Total amount invested in current position
+		this.totalTrades = 0; // Total number of trades in current episode
 		this.previousPrice = null;
 		this.previousVolume = null;
 		this.currentPrice = null;
 		this.currentVolume = null;
-
-		// Reset episode metrics
-		this.initializeEpisodeMetrics();
 
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
@@ -363,29 +349,29 @@ export default class StockChannel extends Channel {
 	/**
 	 * Get portfolio-level metrics across all stock channels
 	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
-	 * @returns {Object} - Portfolio metrics
+	 * @returns {Object} - Portfolio metrics including total profit and per-channel unrealized profit
 	 */
 	static getPortfolioMetrics(channels) {
 		let totalInvestments = 0;
-		let totalValue = 0;
-		let totalProfit = 0;
+		const channelProfits = new Map();
 
-		for (const [, channel] of channels) {
+		for (const [channelName, channel] of channels) {
 			const currentValue = channel.shares * channel.currentPrice;
 			totalInvestments += channel.investment || 0;
-			totalValue += currentValue;
 
-			// Calculate realized + unrealized profit
-			const realizedPL = (channel.totalProfit || 0) - (channel.totalLoss || 0);
-			const unrealizedPL = channel.unrealizedProfit || 0;
-			totalProfit += realizedPL + unrealizedPL;
+			// Channel unrealized profit: current value - amount invested
+			const channelProfit = currentValue - (channel.investment || 0);
+			channelProfits.set(channelName, channelProfit);
 		}
+
+		// Total profit: (current cash + current investments) - original capital
+		const totalProfit = (this.cash + totalInvestments) - this.initialCapital;
 
 		return {
 			cash: this.cash,
 			totalInvestments,
-			totalValue,
-			totalProfit
+			totalProfit,
+			channelProfits
 		};
 	}
 
@@ -454,39 +440,15 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Update unrealized profit/loss metrics for owned positions
-	 * This is just for display/tracking purposes - actual profit/loss is recorded when selling
-	 */
-	updateUnrealizedProfitLoss() {
-
-		// if we have not bought anything yet, initialize
-		if (!this.owned || !this.entryPrice || !this.currentPrice) {
-			this.unrealizedProfit = 0;
-			return;
-		}
-
-		// Calculate current unrealized profit/loss (for display only)
-		this.unrealizedProfit = this.currentPrice - this.entryPrice;
-	}
-
-	/**
-	 * Get feedback based on price movement using multiplicative reward factor
-	 * For owned stocks: multiply by (new_price / old_price)
-	 * For sold stocks: multiply by (old_price / new_price) - inverse relationship
-	 * Returns 1.0 for no feedback (neutral)
-	 *
+	 * Get feedback based on price movement
 	 * Returns additive reward (0 = neutral, positive = good, negative = bad):
 	 * - Owned: positive if price went up, negative if price went down
 	 * - Not owned: positive if price went down (good timing), negative if price went up (missed opportunity)
-	 * Applies rewardAmplification to scale the reward signal.
 	 */
 	async getRewards() {
 
 		// Need both current and previous price for calculation
 		if (this.currentPrice === null || this.previousPrice === null) return 0;
-
-		// Update unrealized profit/loss metrics every frame
-		this.updateUnrealizedProfitLoss();
 
 		// Calculate percentage change
 		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
@@ -501,22 +463,18 @@ export default class StockChannel extends Channel {
 	/**
 	 * Debug output for reward calculation
 	 */
-	debugRewards(amplifiedReward) {
-		if (this.owned) {
-			const totalChange = this.currentPrice - this.entryPrice;
-			const totalPercentChange = (totalChange / this.entryPrice) * 100;
-			const recentChange = this.currentPrice - this.previousPrice;
+	debugRewards(reward) {
+		const recentChange = this.currentPrice - this.previousPrice;
+		const currentValue = this.shares * this.currentPrice;
+		const channelProfit = currentValue - this.investment;
 
+		if (this.owned) {
 			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} | Total P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward: ${reward.toFixed(2)} | Unrealized P&L: ${channelProfit >= 0 ? '+' : ''}$${channelProfit.toFixed(2)}`);
 		}
 		else {
-			const totalChange = this.entryPrice - this.currentPrice; // Profit from selling high and price going lower
-			const totalPercentChange = (totalChange / this.entryPrice) * 100;
-			const recentChange = this.currentPrice - this.previousPrice;
-
 			console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${amplifiedReward.toFixed(2)} | Opportunity P&L: ${totalPercentChange.toFixed(2)}% (${totalChange >= 0 ? '+' : ''}$${totalChange.toFixed(2)})`);
+			console.log(`${this.symbol}: Reward: ${reward.toFixed(2)}`);
 		}
 	}
 
@@ -568,20 +526,18 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get current profit/loss for performance tracking
-	 * Returns net P&L including both realized and unrealized gains/losses
+	 * Get current unrealized profit/loss for this channel
+	 * Channel profit = current value - amount invested
 	 * @returns {Object} - { value: number, label: string, format: string }
 	 */
 	getOutputPerformanceMetrics() {
 
-		// Net realized P&L from closed trades
-		const realizedPL = this.totalProfit - this.totalLoss;
-
-		// Add unrealized P&L from current open position
-		const totalPL = realizedPL + this.unrealizedProfit;
+		// Channel unrealized profit: current value - investment
+		const currentValue = this.shares * this.currentPrice;
+		const channelProfit = currentValue - this.investment;
 
 		return {
-			value: totalPL,
+			value: channelProfit,
 			label: this.symbol,
 			format: 'currency'
 		};
@@ -602,11 +558,11 @@ export default class StockChannel extends Channel {
 		// Deduct cash
 		StockChannel.cash -= cost;
 
-		// Add shares
+		// Add shares and track investment
 		this.shares += sharesToBuy;
 		this.investment += cost;
 
-		// Track trade
+		// Track trade count
 		this.totalTrades++;
 
 		if (this.debug)
@@ -624,7 +580,6 @@ export default class StockChannel extends Channel {
 
 		const proceeds = sharesToSell * this.currentPrice;
 		const costBasis = (this.investment / this.shares) * sharesToSell;
-		const profit = proceeds - costBasis;
 
 		// Add cash
 		StockChannel.cash += proceeds;
@@ -633,19 +588,11 @@ export default class StockChannel extends Channel {
 		this.shares -= sharesToSell;
 		this.investment -= costBasis;
 
-		// Track profit/loss
-		if (profit > 0) {
-			this.totalProfit += profit;
-			this.profitableTrades++;
-		}
-		else if (profit < 0)
-			this.totalLoss += Math.abs(profit);
-
-		// Track trade
+		// Track trade count
 		this.totalTrades++;
 
 		if (this.debug)
-			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.currentPrice.toFixed(2)} = $${proceeds.toFixed(2)} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
+			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.currentPrice.toFixed(2)} = $${proceeds.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
 	}
 
 	/**

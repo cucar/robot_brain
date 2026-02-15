@@ -473,7 +473,8 @@ export class BrainDiagnostics {
 		const channelsArray = Array.from(channels);
 		if (channelsArray.length > 0 && channelsArray[0][1].constructor.getPortfolioMetrics) {
 			const portfolioMetrics = channelsArray[0][1].constructor.getPortfolioMetrics(channels);
-			portfolioDisplay = ` | Portfolio: Cash:${portfolioMetrics.cash.toFixed(0)} Inv:${portfolioMetrics.totalInvestments.toFixed(0)} Val:${portfolioMetrics.totalValue.toFixed(0)} P&L:${portfolioMetrics.totalProfit >= 0 ? '+' : ''}${portfolioMetrics.totalProfit.toFixed(2)}`;
+			const totalValue = portfolioMetrics.cash + portfolioMetrics.totalInvestments;
+			portfolioDisplay = ` | Portfolio: Cash:${portfolioMetrics.cash.toFixed(0)} Inv:${portfolioMetrics.totalInvestments.toFixed(0)} Val:${totalValue.toFixed(0)} P&L:${portfolioMetrics.totalProfit >= 0 ? '+' : ''}${portfolioMetrics.totalProfit.toFixed(2)}`;
 		}
 
 		if (this.frameSummary)
