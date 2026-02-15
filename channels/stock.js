@@ -12,14 +12,39 @@ const POSITION_OUT = -1;
  */
 export default class StockChannel extends Channel {
 
+	// total cash shared across all stock channel instances
+	static initialCapital = 1000;
+	static cash = StockChannel.initialCapital;
+
 	// Static total capital shared across all stock channel instances
 	static totalCapital = 1000;
-	
+
+	/**
+	 * constructor for the stock channel - dimensions are given when loading from database
+	 */
 	constructor(name, debug, id = null, dimensions = null) {
 		super(name, debug, id, dimensions);
 
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
+
+		// initialize dimensions
+		this.initializeDimensions(dimensions);
+
+		// initialize data to be read
+		this.initializeData();
+
+		// initialize buckets to be used for discretizing price and volume changes
+		this.initializeBuckets();
+
+		// initialize context
+		this.resetContext(false);
+	}
+
+	/**
+	 * initialize dimensions - dimensions are given when loading from database
+	 */
+	initializeDimensions(dimensions) {
 
 		// Create or use provided dimension objects for this channel
 		if (dimensions && dimensions.length > 0) {
@@ -39,15 +64,12 @@ export default class StockChannel extends Channel {
 			this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
 			this.activityDim = new Dimension(`${this.symbol}_activity`);
 		}
+	}
 
-		// State tracking
-		this.shares = 0; // Number of shares currently owned
-		this.entryPrice = null; // Price when we bought (for owned) or sold (for sold)
-		this.previousPrice = null; // Track previous price for change calculation
-		this.previousVolume = null; // Track previous volume for change calculation
-
-		// Episode metrics tracking
-		this.initializeEpisodeMetrics();
+	/**
+	 * initialize data to be read from CSV file
+	 */
+	initializeData() {
 
 		// Holdout and offset configuration
 		this.holdoutRows = 0; // Number of rows to hold out from end (set by job)
@@ -57,10 +79,12 @@ export default class StockChannel extends Channel {
 		// CSV reading state
 		this.csvPath = null;
 		this.rl = null;
-		this.currentPrice = null;
-		this.currentVolume = null;
+	}
 
-		// Unified discretization buckets for percentage changes (used for both price and volume)
+	/**
+	 * initialize buckets to be used for discretizing price and volume changes
+	 */
+	initializeBuckets() {
 
 		// Fine-grained for typical stock movements (-2% to +2%), exponential for extremes, extended for volume volatility
 		// this.changeBuckets = [
@@ -140,6 +164,14 @@ export default class StockChannel extends Channel {
 		this.totalTrades = 0; // Total number of trades in current episode
 		this.profitableTrades = 0; // Number of profitable trades in current episode
 		this.unrealizedProfit = 0; // Current unrealized profit/loss from open position
+	}
+
+	/**
+	 * Static method to reset channel-level context (shared state across all instances)
+	 * Called once per episode reset before individual channel resetContext calls
+	 */
+	static resetChannelContext() {
+		StockChannel.cash = StockChannel.initialCapital;
 	}
 
 	/**
