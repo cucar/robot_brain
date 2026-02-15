@@ -106,8 +106,8 @@ export class Memory {
 	/**
 	 * Add an inferred neuron
 	 */
-	addInference(neuron, strength) {
-		this.inferredNeurons.push({ neuron, strength });
+	addInference(neuron, strength, reward) {
+		this.inferredNeurons.push({ neuron, strength, reward });
 	}
 
 	/**
@@ -119,14 +119,14 @@ export class Memory {
 
 	/**
 	 * Get inferred actions grouped by channel
-	 * @returns {Map<string, Array>} - Map of channel names to array of output coordinates
+	 * @returns {Map<string, Array>} - Map of channel names to array of action data {coordinates, strength, reward}
 	 */
 	getInferredActions() {
 		const channelOutputs = new Map();
-		for (const { neuron } of this.inferredNeurons) {
+		for (const { neuron, strength, reward } of this.inferredNeurons) {
 			if (neuron.type !== 'action') continue;
 			if (!channelOutputs.has(neuron.channel)) channelOutputs.set(neuron.channel, []);
-			channelOutputs.get(neuron.channel).push(neuron.coordinates);
+			channelOutputs.get(neuron.channel).push({ coordinates: neuron.coordinates, strength, reward });
 		}
 		return channelOutputs;
 	}
@@ -230,7 +230,7 @@ export class Memory {
 	 */
 	saveInferences(inferences) {
 		this.clearInferences();
-		for (const inf of inferences) this.addInference(inf.neuron, inf.strength);
+		for (const inf of inferences) this.addInference(inf.neuron, inf.strength, inf.reward);
 		if (this.debug) console.log(`Saved ${this.inferredNeurons.length} inferences`);
 	}
 

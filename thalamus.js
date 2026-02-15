@@ -187,11 +187,32 @@ export class Thalamus {
 
 	/**
 	 * Execute actions for channels that have them
-	 * @param {Map<string, Array>} channelActions - Map of channel name to action coordinates
+	 * Groups channels by type and calls static executeChannelActions on each channel class
+	 * @param {Map<string, Array>} channelActions - Map of channel name to action data
 	 */
 	async executeChannelActions(channelActions) {
-		for (const [channelName, actions] of channelActions)
-			await this.channels.get(channelName).executeOutputs(actions);
+
+		// Group channels by their class constructor
+		const channelsByType = new Map(); // ChannelClass → Map(channelName → actions)
+		for (const [channelName, actions] of channelActions) {
+			const channel = this.channels.get(channelName);
+			const ChannelClass = channel.constructor;
+			if (!channelsByType.has(ChannelClass)) channelsByType.set(ChannelClass, new Map());
+			channelsByType.get(ChannelClass).set(channelName, actions);
+		}
+
+		// Call static executeChannelActions on each channel class
+		for (const [ChannelClass, channelActionsMap] of channelsByType) {
+
+			// Get actual channel objects for this type
+			const channelsOfType = new Map();
+			for (const channelName of channelActionsMap.keys())
+				channelsOfType.set(channelName, this.channels.get(channelName));
+
+			// call channel static method to execute actions
+			// this will do the internal channel coordination if needed (like stock allocations)
+			await ChannelClass.executeChannelActions(channelsOfType, channelActionsMap);
+		}
 	}
 
 	/**

@@ -35,6 +35,20 @@ export default class Channel {
 	}
 
 	/**
+	 * Static method called by Thalamus to execute actions for all channels of this type
+	 * Default implementation: call each channel's executeOutputs individually
+	 * Override in subclasses for coordinated execution (e.g., portfolio management)
+	 * @param {Map<string, Channel>} channels - Map of channel name to channel instance
+	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
+	 */
+	static async executeChannelActions(channels, actionsMap) {
+		for (const [channelName, actions] of actionsMap) {
+			const channel = channels.get(channelName);
+			await channel.executeOutputs(actions);
+		}
+	}
+
+	/**
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * Invalid actions should be filtered during conflict resolution, so only valid actions should be received
 	 */

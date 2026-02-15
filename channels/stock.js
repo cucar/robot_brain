@@ -12,6 +12,9 @@ const POSITION_OUT = -1;
  */
 export default class StockChannel extends Channel {
 
+	// Static total capital shared across all stock channel instances
+	static totalCapital = 1000;
+	
 	constructor(name, debug, id = null, dimensions = null) {
 		super(name, debug, id, dimensions);
 
@@ -38,9 +41,8 @@ export default class StockChannel extends Channel {
 		}
 
 		// State tracking
-		this.owned = false; // true = owned, false = sold (after first buy)
+		this.shares = 0; // Number of shares currently owned
 		this.entryPrice = null; // Price when we bought (for owned) or sold (for sold)
-		this.holdInFrames = 0; // How long we've been in owned state (for trigger-to-action)
 		this.previousPrice = null; // Track previous price for change calculation
 		this.previousVolume = null; // Track previous volume for change calculation
 
@@ -112,6 +114,13 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
+	 * owned shorthand property
+	 */
+	get owned() {
+		return this.shares > 0;
+	}
+
+	/**
 	 * initialize this stock channel: open CSV and prepare iterator
 	 */
 	async initialize() {
@@ -173,9 +182,8 @@ export default class StockChannel extends Channel {
 	resetContext() {
 
 		// Reset trading state
-		this.owned = false;
+		this.shares = 0;
 		this.entryPrice = null;
-		this.holdInFrames = 0;
 		this.previousPrice = null;
 		this.previousVolume = null;
 		this.currentPrice = null;
@@ -220,6 +228,75 @@ export default class StockChannel extends Channel {
 			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange) },
 			{ [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange) }
 		];
+	}
+
+	/**
+	 * Static method for coordinated execution across all stock channels
+	 * Handles portfolio allocation before executing individual channel actions
+	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
+	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
+	 */
+	static async executeChannelActions(channels, actionsMap) {
+
+		// nothing to do if there are no actions
+		if (actionsMap.size === 0) return;
+
+		// Calculate portfolio allocations
+		const allocations = this.getAllocations(channels, actionsMap);
+
+		// Execute ALL channels (not just ones with actions) to update unrealized profit
+		for (const [channelName, channel] of channels)
+			await channel.executeOutput(allocations.get(channelName));
+	}
+
+	/**
+	 * Calculate portfolio allocations for stock actions
+	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
+	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
+	 * @returns {Map} - Map of channel name to dollar amount allocated
+	 */
+	static getAllocations(channels, actionsMap) {
+
+		// Collect all actions with their expected rewards
+		const allActions = [];
+		for (const [channelName, actions] of actionsMap) {
+			const channel = channels.get(channelName);
+			const actionData = actions[0]; // Single action per stock channel
+			const action = actionData.coordinates[`${channel.symbol}_activity`];
+			allActions.push({
+				channelName: channelName,
+				reward: actionData.reward,
+				isOwn: action === POSITION_OWN
+			});
+		}
+
+		// Filter to only POSITION_OWN actions for allocation
+		const ownActions = allActions.filter(a => a.isOwn);
+
+		// Normalize rewards: find minimum and shift all rewards up if any are negative
+		const minReward = ownActions.length > 0 ? Math.min(...ownActions.map(a => a.reward)) : 0;
+		const normalizedRewards = ownActions.map(a => ({
+			...a,
+			normalizedReward: minReward < 0 ? a.reward + Math.abs(minReward) : a.reward
+		}));
+
+		// Calculate total normalized reward
+		const totalNormalizedReward = normalizedRewards.reduce((sum, a) => sum + a.normalizedReward, 0);
+
+		// Allocate capital proportional to normalized rewards
+		const allocations = new Map();
+		for (const action of allActions) {
+			if (action.isOwn) {
+				const normalized = normalizedRewards.find(n => n.channelName === action.channelName);
+				const amount = totalNormalizedReward > 0
+					? (normalized.normalizedReward / totalNormalizedReward) * this.totalCapital
+					: (this.totalCapital / normalizedRewards.length);
+				allocations.set(action.channelName, { action: POSITION_OWN, amount });
+			}
+			// POSITION_OUT gets 0 allocation
+			else allocations.set(action.channelName, { action: POSITION_OUT, amount: 0 });
+		}
+		return allocations;
 	}
 
 	/**
@@ -406,6 +483,7 @@ export default class StockChannel extends Channel {
 	 * @returns {Object} - { value: number, label: string, format: string }
 	 */
 	getOutputPerformanceMetrics() {
+
 		// Net realized P&L from closed trades
 		const realizedPL = this.totalProfit - this.totalLoss;
 
@@ -422,23 +500,11 @@ export default class StockChannel extends Channel {
 	/**
 	 * Execute stock actions based on brain output coordinates
 	 * Conflict resolution ensures actions are position-aware, so we should only receive valid actions
-	 * @param {Array} outputs - Frame outputs from getFrameOutputs()
 	 */
-	async executeOutputs(outputs) {
-
-		// if no outputs, nothing to execute
-		if (!outputs || outputs.length === 0) {
-			this.lastAction = null;
-			return;
-		}
+	async executeOutput(allocation) {
 
 		// Extract coordinates from outputs array
-		const output = outputs[0]; // should be single action neuron for stock channel - cannot be multiple - conflict resolution ensures it
-		if (!output || Object.keys(output).length === 0) throw new Error('No coordinates in outputs');
-
-		// extract activity value
-		const activityValue = output[`${this.symbol}_activity`];
-		if (activityValue === undefined) throw new Error('No activity found in outputs');
+		const activityValue = allocation.action;
 
 		// Determine action type: After conflict resolution, these should be position-appropriate
 		if (activityValue === POSITION_OWN && !this.owned) this.executeBuy(activityValue);
@@ -459,7 +525,7 @@ export default class StockChannel extends Channel {
 		if (this.owned) throw new Error(`${this.symbol}: BUY received when already owned - conflict resolution failed`);
 
 		// buy stock per request coming from the brain
-		this.owned = true;
+		this.shares = 1;
 
 		// prices are from inputs at the start of frame - we take action at the end of the frame as reaction to them
 		this.entryPrice = this.currentPrice;
@@ -514,7 +580,7 @@ export default class StockChannel extends Channel {
 		this.unrealizedProfit = 0;
 
 		// Switch to sold state
-		this.owned = false;
+		this.shares = 0;
 		this.entryPrice = this.currentPrice; // Track sell price for sold position feedback
 		this.lastAction = POSITION_OUT;
 	}

@@ -280,7 +280,7 @@ export default class Brain {
 			// Get actions from previous inference (guaranteed to exist after first frame)
 			const channelActions = frameActions.get(channelName) || [];
 			for (const action of channelActions)
-				this.frame.push({ coordinates: action, channel: channelName, channel_id: channelId, type: 'action' });
+				this.frame.push({ coordinates: action.coordinates, channel: channelName, channel_id: channelId, type: 'action' });
 		}
 
 		if (this.debug) console.log(`Processing frame: ${this.frame.length} neurons`);
@@ -504,7 +504,7 @@ export default class Brain {
 			// No action inferred for this channel - use the lowest ID action for deterministic exploration
 			const actions = this.thalamus.getChannelActions(channelName);
 			const explorationAction = [...actions].sort((a, b) => a.id - b.id)[0];
-			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0 });
+			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0, reward: 0 });
 		}
 	}
 
@@ -541,7 +541,7 @@ export default class Brain {
 	 * Aggregate votes and determine winners per dimension.
 	 * Events win by strength, actions win by reward.
 	 * @param {Array} votes - Array of vote objects from collectVotes
-	 * @returns {Array} Array of winning inference objects {neuron_id, neuron, strength}
+	 * @returns {Array} Array of winning inference objects {neuron_id, neuron, strength, reward}
 	 */
 	determineConsensus(votes) {
 
@@ -557,20 +557,25 @@ export default class Brain {
 		// Determine winners per dimension (events by strength, actions by reward)
 		const dimBest = new Map(); // dimension -> {neuronId, score}
 		for (const [neuronId, candidate] of candidates) {
-			const reward = candidate.weightedReward / candidate.strength;
-			const score = candidate.neuron.type === 'action' ? reward : candidate.strength;
+			candidate.reward = candidate.weightedReward / candidate.strength;
+			const score = candidate.neuron.type === 'action' ? candidate.reward : candidate.strength;
 			for (const dim of Object.keys(candidate.neuron.coordinates))
 				if (!dimBest.has(dim) || score > dimBest.get(dim).score)
 					dimBest.set(dim, { neuronId, score });
 		}
 
-		// Return winners with neuron object reference
+		// Return winners with neuron object reference and reward
 		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
 		if (this.debug) console.log(`Determined consensus: ${candidates.size} candidates, ${winnerIds.size} winners`);
 		const winners = [];
 		for (const neuronId of winnerIds) {
 			const candidate = candidates.get(neuronId);
-			winners.push({ neuron_id: neuronId, neuron: candidate.neuron, strength: candidate.strength });
+			winners.push({
+				neuron_id: neuronId,
+				neuron: candidate.neuron,
+				strength: candidate.strength,
+				reward: candidate.reward
+			});
 		}
 		return winners;
 	}
