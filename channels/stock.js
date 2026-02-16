@@ -328,7 +328,7 @@ export default class StockChannel extends Channel {
 		const ownActions = allActions.filter(a => a.isOwn);
 
 		// Calculate softmax weights - exp(reward[i]) / sum(exp(reward[j]))
-		const expRewards = ownActions.map(a => ({ ...a, expReward: Math.exp(a.reward) }));
+		const expRewards = ownActions.map(a => ({ ...a, expReward: a.strength * Math.exp(a.reward) }));
 		const totalExpReward = expRewards.reduce((sum, a) => sum + a.expReward, 0);
 
 		// Allocate portfolio value proportional to softmax weights
