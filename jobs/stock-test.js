@@ -292,23 +292,28 @@ export default class StockTestJob extends Job {
 			process.stdout.clearLine(0);
 		}
 
-		// Collect episode results from all channels
+		// Set frame count and duration first (needed for ROI calculation)
+		const duration = Date.now() - startTime;
+		episodeMetrics.duration = duration;
+		episodeMetrics.frames = frameCount;
+
+		// Collect episode results from all channels (includes ROI calculation)
 		this.collectEpisodeResults(episodeMetrics);
 
 		// Capture base level accuracy stats
 		if (this.brain.diagnostics.accuracyStats.total > 0)
 			episodeMetrics.baseAccuracy = (this.brain.diagnostics.accuracyStats.correct / this.brain.diagnostics.accuracyStats.total * 100);
 
-		const duration = Date.now() - startTime;
-		episodeMetrics.duration = duration;
-		episodeMetrics.frames = frameCount;
-
 		this.episodeResults.push(episodeMetrics);
 
 		// Dump brain data at the beginning of each episode for debugging
 		// this.brain.createDump();
 
-		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
+		// Format ROI output
+		const roiStr = episodeMetrics.totalROIPercent >= 0 ? `+${episodeMetrics.totalROIPercent.toFixed(2)}%` : `${episodeMetrics.totalROIPercent.toFixed(2)}%`;
+		const perFrameROIStr = episodeMetrics.perFrameROI !== undefined ? `, ${(episodeMetrics.perFrameROIPercent >= 0 ? '+' : '')}${episodeMetrics.perFrameROIPercent.toFixed(6)}%/frame` : '';
+
+		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} | ROI: ${roiStr} over ${episodeMetrics.frames} frames${perFrameROIStr} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
 	}
 
 	/**
@@ -320,6 +325,19 @@ export default class StockTestJob extends Job {
 
 		// Store portfolio profit
 		episodeMetrics.netProfit = portfolioMetrics.totalProfit;
+
+		// Calculate ROI metrics
+		const finalValue = StockChannel.initialCapital + portfolioMetrics.totalProfit;
+		const totalROI = finalValue / StockChannel.initialCapital;
+		episodeMetrics.totalROI = totalROI;
+		episodeMetrics.totalROIPercent = (totalROI - 1) * 100;
+
+		// Calculate per-frame ROI (assuming compounding returns)
+		if (episodeMetrics.frames > 0) {
+			const perFrameROI = Math.pow(totalROI, 1 / episodeMetrics.frames) - 1;
+			episodeMetrics.perFrameROI = perFrameROI;
+			episodeMetrics.perFrameROIPercent = perFrameROI * 100;
+		}
 
 		// Collect per-channel results
 		for (const [channelName, channel] of this.brain.thalamus.getAllChannels()) {
@@ -373,16 +391,26 @@ export default class StockTestJob extends Job {
 		const totalTrades = this.episodeResults.reduce((sum, ep) => sum + ep.totalTrades, 0);
 		const avgTrades = totalTrades / this.episodeResults.length;
 
+		// Calculate average ROI metrics
+		const avgTotalROI = this.episodeResults.reduce((sum, ep) => sum + (ep.totalROIPercent || 0), 0) / this.episodeResults.length;
+		const avgPerFrameROI = this.episodeResults.reduce((sum, ep) => sum + (ep.perFrameROIPercent || 0), 0) / this.episodeResults.length;
+
 		console.log(`📈 Overall Performance:`);
+		console.log(`   Starting Capital: $${StockChannel.initialCapital.toFixed(2)}`);
 		console.log(`   Total Net Profit: $${totalNetProfit.toFixed(2)}`);
 		console.log(`   Average per Episode: $${avgNetProfit.toFixed(2)}`);
+		console.log(`   Average ROI: ${avgTotalROI >= 0 ? '+' : ''}${avgTotalROI.toFixed(2)}%`);
+		console.log(`   Average Per-Frame ROI: ${avgPerFrameROI >= 0 ? '+' : ''}${avgPerFrameROI.toFixed(6)}%`);
 		console.log(`   Total Trades: ${totalTrades}`);
 		console.log(`   Average Trades per Episode: ${avgTrades.toFixed(1)}`);
 
-		// Show net profit per episode
-		console.log(`\n💰 Net Profit by Episode:`);
-		for (const ep of this.episodeResults)
-			console.log(`   Episode ${ep.episode}: $${ep.netProfit.toFixed(2)} (${ep.totalTrades} trades)`);
+		// Show net profit and ROI per episode
+		console.log(`\n💰 Net Profit & ROI by Episode:`);
+		for (const ep of this.episodeResults) {
+			const roiStr = ep.totalROIPercent >= 0 ? `+${ep.totalROIPercent.toFixed(2)}%` : `${ep.totalROIPercent.toFixed(2)}%`;
+			const perFrameROIStr = ep.perFrameROI !== undefined ? `, ${(ep.perFrameROIPercent >= 0 ? '+' : '')}${ep.perFrameROIPercent.toFixed(6)}%/frame` : '';
+			console.log(`   Episode ${ep.episode}: $${ep.netProfit.toFixed(2)} | ROI: ${roiStr}${perFrameROIStr} (${ep.totalTrades} trades)`);
+		}
 
 		// Show base level accuracy per episode
 		console.log(`\n📊 Base Level Accuracy by Episode:`);
@@ -402,17 +430,22 @@ export default class StockTestJob extends Job {
 			const lastAvg = last10.reduce((sum, ep) => sum + ep.netProfit, 0) / last10.length;
 			const improvement = lastAvg - firstAvg;
 
+			const firstROI = first10.reduce((sum, ep) => sum + (ep.totalROIPercent || 0), 0) / first10.length;
+			const lastROI = last10.reduce((sum, ep) => sum + (ep.totalROIPercent || 0), 0) / last10.length;
+			const roiImprovement = lastROI - firstROI;
+
 			console.log(`\n📊 Learning Progress:`);
-			console.log(`   First 10 episodes avg: $${firstAvg.toFixed(2)}`);
-			console.log(`   Last 10 episodes avg: $${lastAvg.toFixed(2)}`);
-			console.log(`   Improvement: $${improvement.toFixed(2)} (${improvement >= 0 ? '📈' : '📉'})`);
+			console.log(`   First 10 episodes avg: $${firstAvg.toFixed(2)} (${firstROI >= 0 ? '+' : ''}${firstROI.toFixed(2)}% ROI)`);
+			console.log(`   Last 10 episodes avg: $${lastAvg.toFixed(2)} (${lastROI >= 0 ? '+' : ''}${lastROI.toFixed(2)}% ROI)`);
+			console.log(`   Improvement: $${improvement.toFixed(2)}, ${roiImprovement >= 0 ? '+' : ''}${roiImprovement.toFixed(2)}pp ROI (${improvement >= 0 ? '📈' : '📉'})`);
 		}
 
-		console.log('\n🏆 Best Episodes:');
-		const sortedByProfit = [...this.episodeResults].sort((a, b) => b.netProfit - a.netProfit);
-		for (let i = 0; i < Math.min(5, sortedByProfit.length); i++) {
-			const ep = sortedByProfit[i];
-			console.log(`   #${ep.episode}: $${ep.netProfit.toFixed(2)} (${ep.totalTrades} trades)`);
+		console.log('\n🏆 Best Episodes (by ROI):');
+		const sortedByROI = [...this.episodeResults].sort((a, b) => (b.totalROIPercent || 0) - (a.totalROIPercent || 0));
+		for (let i = 0; i < Math.min(5, sortedByROI.length); i++) {
+			const ep = sortedByROI[i];
+			const roiStr = ep.totalROIPercent >= 0 ? `+${ep.totalROIPercent.toFixed(2)}%` : `${ep.totalROIPercent.toFixed(2)}%`;
+			console.log(`   #${ep.episode}: ${roiStr} ROI ($${ep.netProfit.toFixed(2)}, ${ep.totalTrades} trades)`);
 		}
 
 		console.log('='.repeat(60));
