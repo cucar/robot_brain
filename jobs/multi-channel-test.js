@@ -97,7 +97,7 @@ export default class MultiChannelTest extends Job {
 
 		this.brain.resetAccuracyStats();
 
-		const firstChannel = [...this.brain.thalamus.getAllChannels()][0][1];
+		const firstChannel = [...this.brain.getChannels()][0][1];
 		const expectedFrames = firstChannel.dataRows.length - 1;
 		const cycleLength = this.config.sourceRows;
 
@@ -121,15 +121,15 @@ export default class MultiChannelTest extends Job {
 
 			// Capture ownership BEFORE processing frame for all channels
 			const ownedBeforeFrame = new Map();
-			for (const [channelName, channel] of this.brain.thalamus.getAllChannels())
-				ownedBeforeFrame.set(channelName, channel.owned);
+			for (const [channelName, channel] of this.brain.getChannels())
+				ownedBeforeFrame.set(channelName, channel.shares > 0);
 
 			await this.brain.processFrame();
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
 			// Track optimality for each channel
-			for (const [channelName, _] of this.brain.thalamus.getAllChannels()) {
+			for (const [channelName, _] of this.brain.getChannels()) {
 				const actualOwned = ownedBeforeFrame.get(channelName);
 				const optimalOwned = optimalOwnership.get(channelName)[cycleFrame];
 				const stats = decisionStats.get(channelName);
@@ -224,8 +224,10 @@ export default class MultiChannelTest extends Job {
 		console.log(`🎯 Overall Optimal Rate: ${grandTotalOptimal}/${grandTotalOptimal + grandTotalSuboptimal} = ${grandOverallRate}%`);
 
 		// Calculate total P&L using portfolio metrics
-		const portfolioMetrics = StockChannel.getPortfolioMetrics(this.brain.thalamus.getAllChannels());
-		console.log(`💰 Total P&L: $${portfolioMetrics.totalProfit.toFixed(2)}`);
+		const allPortfolioMetrics = this.brain.getEpisodeSummary().portfolioMetrics;
+		const portfolioMetrics = allPortfolioMetrics ? allPortfolioMetrics.StockChannel : null;
+		if (portfolioMetrics)
+			console.log(`💰 Total P&L: $${portfolioMetrics.totalProfit.toFixed(2)}`);
 		console.log('='.repeat(80));
 	}
 }

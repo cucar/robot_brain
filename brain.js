@@ -197,6 +197,26 @@ export default class Brain {
 	}
 
 	/**
+	 * Get all channels (public interface)
+	 */
+	getChannels() {
+		return this.thalamus.getAllChannels();
+	}
+
+	/**
+	 * Get episode summary with all diagnostic information
+	 * @returns {Object} - Episode summary with accuracy, channel metrics, and portfolio metrics
+	 */
+	getEpisodeSummary() {
+		return {
+			frameNumber: this.frameNumber,
+			accuracy: this.diagnostics.accuracyStats,
+			channelMetrics: this.thalamus.getChannelMetrics(),
+			portfolioMetrics: this.thalamus.getPortfolioMetrics()
+		};
+	}
+
+	/**
 	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
 	 * and channel-specific rewards (Map of channel_name -> reward)
 	 * @returns Promise<boolean> - true if frame was processed, false if no more data available

@@ -127,4 +127,16 @@ export default class Channel {
 		return null; // Default: no output performance tracking
 	}
 
+	/**
+	 * Get channel metrics for diagnostic reporting
+	 * Returns channel-specific state and performance metrics
+	 * Override in subclasses to provide channel-specific metrics
+	 * @returns {Object} - Channel metrics object
+	 */
+	getMetrics() {
+		return {
+			name: this.name
+		};
+	}
+
 }

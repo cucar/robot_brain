@@ -266,7 +266,7 @@ export default class StockTestJob extends Job {
 		};
 
 		// Calculate expected number of frames based on data rows
-		const stockChannel = [...this.brain.thalamus.getAllChannels()][0][1];
+		const stockChannel = [...this.brain.getChannels()][0][1];
 		const expectedFrames = stockChannel.dataRows.length - 1; // -1 because first frame reads 2 rows
 
 		// Process all frames for the episode duration
@@ -301,8 +301,9 @@ export default class StockTestJob extends Job {
 		this.collectEpisodeResults(episodeMetrics);
 
 		// Capture base level accuracy stats
-		if (this.brain.diagnostics.accuracyStats.total > 0)
-			episodeMetrics.baseAccuracy = (this.brain.diagnostics.accuracyStats.correct / this.brain.diagnostics.accuracyStats.total * 100);
+		const summary = this.brain.getEpisodeSummary();
+		if (summary.accuracy.total > 0)
+			episodeMetrics.baseAccuracy = (summary.accuracy.correct / summary.accuracy.total * 100);
 		this.episodeResults.push(episodeMetrics);
 
 		// Dump brain data at the beginning of each episode for debugging
@@ -319,8 +320,17 @@ export default class StockTestJob extends Job {
 	 * Collect profit/loss results from all channels
 	 */
 	collectEpisodeResults(episodeMetrics) {
-		// Get portfolio-level metrics
-		const portfolioMetrics = StockChannel.getPortfolioMetrics(this.brain.thalamus.getAllChannels());
+		// Get portfolio-level metrics from brain (via thalamus)
+		const allPortfolioMetrics = this.brain.getEpisodeSummary().portfolioMetrics;
+		const portfolioMetrics = allPortfolioMetrics ? allPortfolioMetrics.StockChannel : null;
+
+		if (!portfolioMetrics) {
+			console.error('Warning: getPortfolioMetrics returned null');
+			episodeMetrics.netProfit = 0;
+			episodeMetrics.totalROI = 1;
+			episodeMetrics.totalROIPercent = 0;
+			return;
+		}
 
 		// Store portfolio profit
 		episodeMetrics.netProfit = portfolioMetrics.totalProfit;
@@ -338,17 +348,16 @@ export default class StockTestJob extends Job {
 			episodeMetrics.perFrameROIPercent = perFrameROI * 100;
 		}
 
-		// Collect per-channel results
-		for (const [channelName, channel] of this.brain.thalamus.getAllChannels()) {
-			const currentValue = channel.currentPrice * channel.shares;
-			const unrealizedProfit = currentValue - channel.investment;
+		// Collect per-channel results from channel metrics
+		for (const [channelName, channel] of this.brain.getChannels()) {
+			const metrics = channel.getMetrics();
 
 			const channelResult = {
 				symbol: channelName,
-				investment: channel.investment,
-				currentValue: currentValue,
-				unrealizedProfit: unrealizedProfit,
-				trades: channel.totalTrades || 0
+				investment: metrics.investment,
+				currentValue: metrics.currentValue,
+				unrealizedProfit: metrics.unrealizedProfit,
+				trades: metrics.trades
 			};
 
 			episodeMetrics.channelResults.set(channelName, channelResult);

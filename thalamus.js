@@ -163,6 +163,44 @@ export class Thalamus {
 	}
 
 	/**
+	 * Get channel metrics for all channels
+	 * @returns {Array<Object>} - Array of channel metrics
+	 */
+	getChannelMetrics() {
+		const metrics = [];
+		for (const [, channel] of this.channels)
+			metrics.push(channel.getMetrics());
+		return metrics;
+	}
+
+	/**
+	 * Get portfolio metrics by detecting distinct channel classes and calling their static methods
+	 * @returns {Object|null} - Portfolio metrics or null if not applicable
+	 */
+	getPortfolioMetrics() {
+		if (this.channels.size === 0) return null;
+
+		// Group channels by their class constructor
+		const channelsByClass = new Map(); // ChannelClass → Map(channelName → channel)
+		for (const [channelName, channel] of this.channels) {
+			const ChannelClass = channel.constructor;
+			if (!channelsByClass.has(ChannelClass)) channelsByClass.set(ChannelClass, new Map());
+			channelsByClass.get(ChannelClass).set(channelName, channel);
+		}
+
+		// Call static getPortfolioMetrics on each channel class that has it
+		const portfolioMetrics = {};
+		for (const [ChannelClass, channelsOfType] of channelsByClass) {
+			if (ChannelClass.getPortfolioMetrics) {
+				const className = ChannelClass.name;
+				portfolioMetrics[className] = ChannelClass.getPortfolioMetrics(channelsOfType);
+			}
+		}
+
+		return Object.keys(portfolioMetrics).length > 0 ? portfolioMetrics : null;
+	}
+
+	/**
 	 * returns channel name map to id
 	 */
 	getChannelNameToIdMap() {

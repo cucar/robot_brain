@@ -47,7 +47,7 @@ export default class TextTrainingJob extends Job {
 	 * Hook: Configure text channel after brain initialization
 	 */
 	async configureChannels() {
-		const textChannel = this.brain.thalamus.getChannel('text'); // the single text channel we set up
+		const textChannel = this.brain.getChannel('text'); // the single text channel we set up
 		// Pattern will be set per episode in runEpisode()
 		textChannel.maxIterations = this.config.iterationsPerEpisode;
 	}
@@ -87,7 +87,7 @@ export default class TextTrainingJob extends Job {
 
 		// Reset channel state for new episode and set pattern
 		this.resetChannelStates();
-		const textChannel = this.brain.thalamus.getChannel('text');
+		const textChannel = this.brain.getChannel('text');
 		textChannel.pattern = currentPattern;
 		
 		// Initialize episode metrics
@@ -121,7 +121,7 @@ export default class TextTrainingJob extends Job {
 	 * Reset all channel states for a new episode
 	 */
 	resetChannelStates() {
-		for (const [_, channel] of this.brain.thalamus.getAllChannels()) {
+		for (const [_, channel] of this.brain.getChannels()) {
 			channel.currentLetterIndex = 0;
 			channel.patternIterations = 0;
 			channel.currentPosition = 0;

@@ -89,4 +89,19 @@ export default class TextChannel extends Channel {
 		// Text channel has no outputs - just return inputs as-is
 		return inputs;
 	}
+
+	/**
+	 * Get channel metrics for diagnostic reporting
+	 * @returns {Object} - Text channel metrics
+	 */
+	getMetrics() {
+		return {
+			...super.getMetrics(),
+			pattern: this.pattern,
+			currentLetterIndex: this.currentLetterIndex,
+			patternIterations: this.patternIterations,
+			maxIterations: this.maxIterations,
+			progress: `${this.patternIterations}/${this.maxIterations} iterations`
+		};
+	}
 }

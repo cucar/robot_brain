@@ -786,4 +786,25 @@ export default class StockChannel extends Channel {
 			return part;
 		}).join(', ');
 	}
+
+	/**
+	 * Get channel metrics for diagnostic reporting
+	 * @returns {Object} - Stock channel metrics
+	 */
+	getMetrics() {
+		const currentValue = this.shares * this.currentPrice;
+		const unrealizedProfit = currentValue - this.investment;
+
+		return {
+			...super.getMetrics(),
+			symbol: this.symbol,
+			investment: this.investment,
+			currentValue: currentValue,
+			unrealizedProfit: unrealizedProfit,
+			shares: this.shares,
+			currentPrice: this.currentPrice,
+			trades: this.totalTrades || 0,
+			position: this.shares > 0 ? 'OWNED' : 'NOT OWNED'
+		};
+	}
 }

@@ -102,7 +102,7 @@ export default class SyntheticExtendedTest extends Job {
 	async executeJob() {
 		console.log('🚀 Running extended continuous episode...\n');
 
-		const stockChannel = this.brain.thalamus.getChannel(this.config.symbol);
+		const stockChannel = this.brain.getChannel(this.config.symbol);
 
 		this.brain.resetAccuracyStats();
 
@@ -232,25 +232,19 @@ export default class SyntheticExtendedTest extends Job {
 		console.log('');
 		console.log(`Overall Optimal Rate: ${totalOptimal}/${totalOptimal + totalSuboptimal} = ${overallRate}%`);
 
-		// Calculate theoretical optimal profit
-		let optimalProfit = 0;
+		// Calculate theoretical optimal profit based on percentage returns
+		let capitalMultiplier = 1.0;
 		for (let i = 0; i < data.length; i++) {
 			const currentPrice = data[i].price;
 			const nextPrice = data[(i + 1) % data.length].price;
-			if (nextPrice > currentPrice)
-				optimalProfit += nextPrice - currentPrice;
+			const priceChange = (nextPrice - currentPrice) / currentPrice;
+			if (priceChange > 0) capitalMultiplier *= (1 + priceChange);
 		}
-		const totalCycles = Math.floor((totalOptimal + totalSuboptimal) / cycleLength);
-		const theoreticalOptimal = optimalProfit * totalCycles;
 
 		// Get portfolio metrics for actual P&L
-		const portfolioMetrics = StockChannel.getPortfolioMetrics(this.brain.thalamus.getAllChannels());
-
+		const allPortfolioMetrics = this.brain.getEpisodeSummary().portfolioMetrics;
 		console.log(`\n💰 Profit Analysis:`);
-		console.log(`   Actual P&L: $${portfolioMetrics.totalProfit.toFixed(2)}`);
-		console.log(`   Per-cycle optimal: $${optimalProfit.toFixed(2)}`);
-		console.log(`   Theoretical optimal (${totalCycles} cycles): $${theoreticalOptimal.toFixed(2)}`);
-		console.log(`   Efficiency: ${(portfolioMetrics.totalProfit / theoreticalOptimal * 100).toFixed(1)}%`);
+		console.log(`   Actual P&L: $${allPortfolioMetrics.StockChannel.totalProfit.toFixed(2)}`);
 
 		// Show action neuron IDs
 		console.log(`\n🎯 Action Neuron IDs:`);

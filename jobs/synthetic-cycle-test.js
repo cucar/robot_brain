@@ -116,6 +116,7 @@ export default class SyntheticCycleTest extends Job {
 		// Track trades
 		let trades = [];
 		let frameCount = 0;
+		let previousShares = 0;
 
 		// Process all frames
 		while (frameCount < expectedFrames) {
@@ -131,9 +132,9 @@ export default class SyntheticCycleTest extends Job {
 			await this.brain.processFrame();
 			frameCount++;
 
-			// Track trades with source information
-			if (stockChannel.lastAction !== null && stockChannel.lastAction !== 0) {
-				const action = stockChannel.getActionName(stockChannel.lastAction);
+			// Track trades by detecting changes in shares
+			if (stockChannel.shares !== previousShares) {
+				const action = stockChannel.shares > 0 ? 'POSITION_OWN' : 'POSITION_OUT';
 				const priceChange = ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice);
 				const cycleFrame = (frameCount % this.config.cyclePattern.length) + 1;
 				trades.push({
@@ -142,6 +143,7 @@ export default class SyntheticCycleTest extends Job {
 					action: action,
 					priceChange: (priceChange * 100).toFixed(2) + '%'
 				});
+				previousShares = stockChannel.shares;
 			}
 
 			// Show progress every 25 frames
@@ -162,18 +164,20 @@ export default class SyntheticCycleTest extends Job {
 		console.log('📊 Test Results');
 		console.log('='.repeat(60));
 
-		// Accuracy
-		const accuracy = this.brain.accuracyStats || { correct: 0, total: 0 };
+		// Get episode summary from brain
+		const summary = this.brain.getEpisodeSummary();
+		const channelMetrics = stockChannel.getMetrics();
 
+		// Accuracy
 		console.log(`\n🎯 Prediction Accuracy:`);
-		if (accuracy.total > 0)
-			console.log(`   ${accuracy.correct}/${accuracy.total} = ${(accuracy.correct / accuracy.total * 100).toFixed(2)}%`);
+		if (summary.accuracy.total > 0)
+			console.log(`   ${summary.accuracy.correct}/${summary.accuracy.total} = ${(summary.accuracy.correct / summary.accuracy.total * 100).toFixed(2)}%`);
 
 		// Trading performance
 		console.log(`\n💰 Trading Performance:`);
 		console.log(`   Total Trades: ${trades.length}`);
-		console.log(`   Net Profit: $${(stockChannel.netProfit || 0).toFixed(2)}`);
-		console.log(`   Position: ${stockChannel.position ? 'OWNED' : 'NOT OWNED'}`);
+		console.log(`   Net Profit: $${channelMetrics.unrealizedProfit.toFixed(2)}`);
+		console.log(`   Position: ${channelMetrics.position}`);
 
 		// Show all trades
 		console.log(`\n📋 Trade History:`);
