@@ -288,24 +288,79 @@ export default class StockChannel extends Channel {
 	static getActionPlan(channels, allocations) {
 		const sells = [];
 		const buys = [];
+		const state = { remainingCash: this.cash, cheapestOwnChannel: null };
 
 		for (const [channelName, allocation] of allocations) {
 			const channel = channels.get(channelName);
 
 			// brain wants out - sell all shares if we have any
 			if (allocation.action === POSITION_OUT) {
-				if (channel.shares > 0) sells.push({ channel, shares: channel.shares });
+				if (channel.shares > 0) this.planSellAll(channel, sells, state);
 				continue;
 			}
 
+			// track the cheapest stock we want to own so that we can fill leftover cash
+			this.trackCheapestOwnChannel(channel, state);
+
 			// brain wants to own the stock - calculate differential between target and current
-			const targetShares = Math.floor(allocation.amount / channel.currentPrice);
-			const sharesDiff = targetShares - channel.shares;
-			if (sharesDiff < 0) sells.push({ channel, shares: -sharesDiff });
-			else if (sharesDiff > 0) buys.push({ channel, shares: sharesDiff });
+			this.planPositionAdjustment(channel, allocation, sells, buys, state);
 		}
 
+		// use leftover cash to buy additional shares of the cheapest stock we want to own
+		this.fillLeftoverCash(buys, state);
+
+		// return the planned actions
 		return { sells, buys };
+	}
+
+	/**
+	 * called when the brain wants out - sell all shares if we have any
+	 */
+	static planSellAll(channel, sells, state) {
+		sells.push({ channel, shares: channel.shares });
+		state.remainingCash += channel.shares * channel.currentPrice;
+	}
+
+	/**
+	 * track the cheapest stock we want to own so that we can fill leftover cash
+	 */
+	static trackCheapestOwnChannel(channel, state) {
+		if (!state.cheapestOwnChannel || channel.currentPrice < state.cheapestOwnChannel.currentPrice)
+			state.cheapestOwnChannel = channel;
+	}
+
+	/**
+	 * brain wants to own the stock - calculate differential between target and current
+	 */
+	static planPositionAdjustment(channel, allocation, sells, buys, state) {
+		const targetShares = Math.floor(allocation.amount / channel.currentPrice);
+		const sharesDiff = targetShares - channel.shares;
+		if (sharesDiff < 0) {
+			sells.push({ channel, shares: -sharesDiff });
+			state.remainingCash += (-sharesDiff) * channel.currentPrice;
+		}
+		else if (sharesDiff > 0) {
+			buys.push({ channel, shares: sharesDiff });
+			state.remainingCash -= sharesDiff * channel.currentPrice;
+		}
+	}
+
+	/**
+	 * Use leftover cash to buy additional shares of the cheapest stock we want to own
+	 */
+	static fillLeftoverCash(buys, state) {
+
+		// if there is no cash to fill or no stock to buy, we can't fill left over cash
+		if (!state.cheapestOwnChannel || state.remainingCash <= 0) return;
+
+		// get the number of additional shares we can buy with the remaining cash - if none, nothing we can do
+		const additionalShares = Math.floor(state.remainingCash / state.cheapestOwnChannel.currentPrice);
+		if (additionalShares <= 0) return;
+
+		// Find existing buy for this channel and increment it, or add new buy
+		const existingBuy = buys.find(b => b.channel === state.cheapestOwnChannel);
+		if (existingBuy) existingBuy.shares += additionalShares;
+		else buys.push({ channel: state.cheapestOwnChannel, shares: additionalShares });
 	}
 
 	/**
