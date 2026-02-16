@@ -183,6 +183,7 @@ export default class StockChannel extends Channel {
 	 * Prepare data iterator based on offset and holdout configuration
 	 */
 	prepareDataIterator() {
+
 		// Calculate start and end indices
 		const startIndex = this.offsetRows;
 		const endIndex = this.holdoutRows > 0 ? this.allRows.length - this.holdoutRows : this.allRows.length;
@@ -207,6 +208,7 @@ export default class StockChannel extends Channel {
 		this.previousVolume = null;
 		this.currentPrice = null;
 		this.currentVolume = null;
+		this.lastAction = null;
 
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
@@ -288,6 +290,11 @@ export default class StockChannel extends Channel {
 			const sharesToBuy = targetShares - channel.shares;
 			if (sharesToBuy > 0) await channel.executeBuy(sharesToBuy);
 		}
+
+		// mark last action taken - that's what will get rewarded - reward last action, not whether we own or not
+		// the allocation may decide not to buy any if there are not enough funds - we should still reward the same
+		for (const [channelName, allocation] of allocations)
+			channels.get(channelName).lastAction = allocation.action;
 	}
 
 	/**
@@ -450,12 +457,15 @@ export default class StockChannel extends Channel {
 		// Need both current and previous price for calculation
 		if (this.currentPrice === null || this.previousPrice === null) return 0;
 
+		// if there were no actions, nothing to reward
+		if (this.lastAction !== POSITION_OWN && this.lastAction !== POSITION_OUT) return 0;
+
 		// Calculate percentage change
 		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
 
 		// For owned stocks: positive change = positive reward
 		// For not owned: negative change = positive reward (good timing on selling)
-		const reward = this.owned ? percentChange : -percentChange;
+		const reward = (this.lastAction === POSITION_OWN) ? percentChange : -percentChange;
 		if (this.debug) this.debugRewards(reward);
 		return reward;
 	}
