@@ -272,34 +272,55 @@ export default class StockChannel extends Channel {
 		// Calculate portfolio allocations
 		const allocations = this.getAllocations(channels, actionsMap);
 
-		// FIRST PASS: Execute sells to free up cash
+		// Generate action plan based on differential between ideal and current allocations
+		const actionPlan = this.getActionPlan(channels, allocations);
+
+		// Execute the action plan
+		await this.executeActionPlan(actionPlan);
+	}
+
+	/**
+	 * Generate action plan based on differential between ideal allocations and current holdings
+	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
+	 * @param {Map} allocations - Map of channel name to { action, amount } allocation
+	 * @returns {Object} - Action plan with { sells: [...], buys: [...] }
+	 */
+	static getActionPlan(channels, allocations) {
+		const sells = [];
+		const buys = [];
+
 		for (const [channelName, allocation] of allocations) {
 			const channel = channels.get(channelName);
 
 			// brain wants out - sell all shares if we have any
 			if (allocation.action === POSITION_OUT) {
-				if (channel.shares > 0) await channel.executeSell(channel.shares);
+				if (channel.shares > 0) sells.push({ channel, shares: channel.shares });
 				continue;
 			}
 
-			// brain wants to own the stock, but how many shares? sell excess shares if current value exceeds target
+			// brain wants to own the stock - calculate differential between target and current
 			const targetShares = Math.floor(allocation.amount / channel.currentPrice);
-			const sharesToSell = channel.shares - targetShares;
-			if (sharesToSell > 0) await channel.executeSell(sharesToSell);
+			const sharesDiff = targetShares - channel.shares;
+			if (sharesDiff < 0) sells.push({ channel, shares: -sharesDiff });
+			else if (sharesDiff > 0) buys.push({ channel, shares: sharesDiff });
 		}
+
+		return { sells, buys };
+	}
+
+	/**
+	 * Execute action plan by performing sells first, then buys
+	 * @param {Object} actionPlan - Action plan with { sells: [...], buys: [...] }
+	 */
+	static async executeActionPlan(actionPlan) {
+
+		// FIRST PASS: Execute sells to free up cash
+		for (const sell of actionPlan.sells)
+			await sell.channel.executeSell(sell.shares);
 
 		// SECOND PASS: Execute buys using freed cash
-		for (const [channelName, allocation] of allocations) {
-			const channel = channels.get(channelName);
-
-			// only buy if we want to own the stock
-			if (allocation.action !== POSITION_OWN) continue;
-
-			// Buy additional shares if current value is below target
-			const targetShares = Math.floor(allocation.amount / channel.currentPrice);
-			const sharesToBuy = targetShares - channel.shares;
-			if (sharesToBuy > 0) await channel.executeBuy(sharesToBuy);
-		}
+		for (const buy of actionPlan.buys)
+			await buy.channel.executeBuy(buy.shares);
 	}
 
 	/**
