@@ -17,8 +17,8 @@ export class BrainDiagnostics {
 		this.debug = debug;
 		this.frameSummary = frameSummary;
 
-		// Readline interface for debugging
-		this.rl = createInterface({ input: stdin, output: stdout });
+		// Readline interface for debugging (created lazily only when needed)
+		this.rl = null;
 	}
 
 	/**
@@ -27,6 +27,8 @@ export class BrainDiagnostics {
 	 * @returns {Promise}
 	 */
 	waitForUser(message) {
+		// Create readline interface lazily only when actually needed
+		if (!this.rl) this.rl = createInterface({ input: stdin, output: stdout });
 		return new Promise(resolve => this.rl.question(`\n${message}...`, resolve));
 	}
 
@@ -481,4 +483,3 @@ export class BrainDiagnostics {
 			console.log(`Frame ${frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay}${portfolioDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 }
-

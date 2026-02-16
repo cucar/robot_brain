@@ -254,6 +254,9 @@ export default class Brain {
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
 
+		// give a chance to the event loop to run other tasks
+		await new Promise(resolve => setImmediate(resolve));
+
 		// return true to indicate that we have processed the frame successfully
 		return true;
 	}

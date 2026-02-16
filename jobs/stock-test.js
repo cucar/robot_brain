@@ -222,6 +222,9 @@ export default class StockTestJob extends Job {
 			// Run episode
 			await this.runEpisode();
 
+			// if interrupt is received, stop processing
+			if (this.isShuttingDown) return;
+
 			// Show progress every 10 episodes or on last episode
 			if (this.currentEpisode % 10 === 0 || this.currentEpisode === this.config.maxEpisodes)
 				this.showProgress();
@@ -277,6 +280,9 @@ export default class StockTestJob extends Job {
 			// Show progress every 100 frames
 			if (frameCount % 100 === 0)
 				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${expectedFrames}... `);
+
+			// if interrupt is received, stop processing
+			if (this.isShuttingDown) return;
 		}
 
 		// Clear progress line (only if stdout is a TTY)

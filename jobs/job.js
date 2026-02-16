@@ -1,6 +1,7 @@
 /**
  * Base Job Class - Common functionality for all episodes
  */
+import process from 'node:process';
 import Brain from '../brain.js';
 import BrainMySQL from '../brain-mysql.js';
 
@@ -69,17 +70,21 @@ export default class Job {
 	 * Set up signal handlers for graceful shutdown (Ctrl+C, kill, etc.)
 	 */
 	setupSignalHandlers() {
-		const handleSignal = async (signal) => {
-			console.log(`\nReceived ${signal}, shutting down gracefully...`);
-			await this.shutdown();
-			process.exit(0);
-		};
 
 		// SIGINT = Ctrl+C (works on Windows and Unix)
-		process.on('SIGINT', () => handleSignal('SIGINT'));
+		process.on('SIGINT', () => this.handleInterrupt('SIGINT'));
 
 		// SIGTERM = kill command (Unix only, ignored on Windows)
-		process.on('SIGTERM', () => handleSignal('SIGTERM'));
+		process.on('SIGTERM', () => this.handleInterrupt('SIGTERM'));
+	}
+
+	/**
+	 * event handler for interrupt signals
+	 */
+	async handleInterrupt(signal) {
+		console.log(`\nReceived ${signal}, shutting down gracefully...`);
+		await this.shutdown();
+		process.exit(0);
 	}
 
 	/**
@@ -142,8 +147,10 @@ export default class Job {
 	 */
 	async processFrames() {
 		let continueProcessing = true;
-		while (continueProcessing) continueProcessing = await this.brain.processFrame();
-		console.log('Completed processing. no more channel data.');
+		while (continueProcessing && !this.isShuttingDown)
+			continueProcessing = await this.brain.processFrame();
+		if (this.isShuttingDown) console.log('Processing interrupted by shutdown signal.');
+		else console.log('Completed processing. no more channel data.');
 	}
 
 	/**
