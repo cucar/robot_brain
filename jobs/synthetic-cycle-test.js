@@ -113,10 +113,9 @@ export default class SyntheticCycleTest extends Job {
 		// expected frames count is one less than the number of rows - first row is skipped to be able to start detecting changes
 		const expectedFrames = stockChannel.dataRows.length - 2;
 
-		// Track trades
-		let trades = [];
+		// Track actions
+		let actions = [];
 		let frameCount = 0;
-		let previousShares = 0;
 
 		// Process all frames
 		while (frameCount < expectedFrames) {
@@ -132,18 +131,17 @@ export default class SyntheticCycleTest extends Job {
 			await this.brain.processFrame();
 			frameCount++;
 
-			// Track trades by detecting changes in shares
-			if (stockChannel.shares !== previousShares) {
-				const action = stockChannel.shares > 0 ? 'POSITION_OWN' : 'POSITION_OUT';
+			// Track all actions (not just trades)
+			if (stockChannel.lastAction !== null) {
+				const action = stockChannel.getActionName(stockChannel.lastAction);
 				const priceChange = ((stockChannel.currentPrice - stockChannel.previousPrice) / stockChannel.previousPrice);
 				const cycleFrame = (frameCount % this.config.cyclePattern.length) + 1;
-				trades.push({
+				actions.push({
 					frame: frameCount,
 					cycleFrame: cycleFrame,
 					action: action,
 					priceChange: (priceChange * 100).toFixed(2) + '%'
 				});
-				previousShares = stockChannel.shares;
 			}
 
 			// Show progress every 25 frames
@@ -153,13 +151,13 @@ export default class SyntheticCycleTest extends Job {
 		console.log(`\r✅ Completed ${frameCount} frames\n`);
 
 		// Show results
-		this.showTestResults(trades, stockChannel);
+		this.showTestResults(actions, stockChannel);
 	}
 
 	/**
 	 * Show test results
 	 */
-	showTestResults(trades, stockChannel) {
+	showTestResults(actions, stockChannel) {
 		console.log('='.repeat(60));
 		console.log('📊 Test Results');
 		console.log('='.repeat(60));
@@ -175,14 +173,15 @@ export default class SyntheticCycleTest extends Job {
 
 		// Trading performance
 		console.log(`\n💰 Trading Performance:`);
-		console.log(`   Total Trades: ${trades.length}`);
+		console.log(`   Total Actions: ${actions.length}`);
+		console.log(`   Actual Trades: ${channelMetrics.trades}`);
 		console.log(`   Net Profit: $${channelMetrics.unrealizedProfit.toFixed(2)}`);
 		console.log(`   Position: ${channelMetrics.position}`);
 
-		// Show all trades
-		console.log(`\n📋 Trade History:`);
-		if (trades.length === 0) console.log('   No trades executed');
-		else for (const trade of trades) console.log(`   Frame ${trade.frame} (Cycle ${trade.cycleFrame}): ${trade.action} at ${trade.priceChange}`);
+		// Show all actions
+		console.log(`\n📋 Action History:`);
+		if (actions.length === 0) console.log('   No actions executed');
+		else for (const action of actions) console.log(`   Frame ${action.frame} (Cycle ${action.cycleFrame}): ${action.action} at ${action.priceChange}`);
 	}
 }
 

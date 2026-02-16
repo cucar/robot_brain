@@ -219,6 +219,7 @@ export default class StockChannel extends Channel {
 		this.previousVolume = null;
 		this.currentPrice = null;
 		this.currentVolume = null;
+		this.lastAction = null; // Last action taken by brain
 
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
@@ -269,6 +270,9 @@ export default class StockChannel extends Channel {
 		// nothing to do if there are no actions
 		if (actionsMap.size === 0) return;
 
+		// Save last actions for tracking
+		this.saveLastActions(channels, actionsMap);
+
 		// Calculate portfolio allocations
 		const allocations = this.getAllocations(channels, actionsMap);
 
@@ -277,6 +281,18 @@ export default class StockChannel extends Channel {
 
 		// Execute the action plan
 		await this.executeActionPlan(actionPlan);
+	}
+
+	/**
+	 * Save last action for each channel for tracking purposes
+	 */
+	static saveLastActions(channels, actionsMap) {
+		for (const [channelName, actions] of actionsMap) {
+			if (actions.length === 0) continue;
+			const channel = channels.get(channelName);
+			const actionData = actions[0];
+			channel.lastAction = actionData.coordinates[`${channel.symbol}_activity`];
+		}
 	}
 
 	/**
