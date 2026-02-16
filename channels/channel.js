@@ -51,8 +51,6 @@ export default class Channel {
 	 * Static method called by Thalamus to execute actions for all channels of this type
 	 * Default implementation: call each channel's executeOutputs individually
 	 * Override in subclasses for coordinated execution (e.g., portfolio management)
-	 * @param {Map<string, Channel>} channels - Map of channel name to channel instance
-	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
 	 */
 	static async executeChannelActions(channels, actionsMap) {
 		for (const [channelName, actions] of actionsMap) {
@@ -106,7 +104,7 @@ export default class Channel {
 	 * This factor will be multiplied with existing neuron reward factors
 	 */
 	async getRewards() {
-		return 1.0; // Neutral feedback by default
+		return 0; // Neutral feedback by default
 	}
 
 	/**

@@ -309,8 +309,10 @@ export default class Brain {
 		this.rewards = new Map();
 		let feedbackCount = 0;
 
+		const frameActions = this.memory.getInferredActions();
 		for (const [channelName, channel] of this.thalamus.getAllChannels()) {
-			const reward = await channel.getRewards();
+			const actions = frameActions.get(channelName) || [];
+			const reward = await channel.getRewards(actions);
 			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
 				if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
 				this.rewards.set(channelName, reward);

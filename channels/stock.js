@@ -219,7 +219,6 @@ export default class StockChannel extends Channel {
 		this.previousVolume = null;
 		this.currentPrice = null;
 		this.currentVolume = null;
-		this.lastAction = null;
 
 		// Reset data iterator to start from beginning
 		this.prepareDataIterator();
@@ -301,11 +300,6 @@ export default class StockChannel extends Channel {
 			const sharesToBuy = targetShares - channel.shares;
 			if (sharesToBuy > 0) await channel.executeBuy(sharesToBuy);
 		}
-
-		// mark last action taken - that's what will get rewarded - reward last action, not whether we own or not
-		// the allocation may decide not to buy any if there are not enough funds - we should still reward the same
-		for (const [channelName, allocation] of allocations)
-			channels.get(channelName).lastAction = allocation.action;
 	}
 
 	/**
@@ -463,20 +457,22 @@ export default class StockChannel extends Channel {
 	 * - Owned: positive if price went up, negative if price went down
 	 * - Not owned: positive if price went down (good timing), negative if price went up (missed opportunity)
 	 */
-	async getRewards() {
+	async getRewards(actions) {
 
 		// Need both current and previous price for calculation
 		if (this.currentPrice === null || this.previousPrice === null) return 0;
 
 		// if there were no actions, nothing to reward
-		if (this.lastAction !== POSITION_OWN && this.lastAction !== POSITION_OUT) return 0;
+		if (actions.length === 0) return 0;
 
 		// Calculate percentage change
 		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
 
 		// For owned stocks: positive change = positive reward
 		// For not owned: negative change = positive reward (good timing on selling)
-		const reward = (this.lastAction === POSITION_OWN) ? percentChange : -percentChange;
+		const actionData = actions[0]; // Single action per stock channel
+		const lastAction = actionData.coordinates[`${this.symbol}_activity`];
+		const reward = (lastAction === POSITION_OWN) ? percentChange : -percentChange;
 		if (this.debug) this.debugRewards(reward);
 		return reward;
 	}
