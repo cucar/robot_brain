@@ -15,7 +15,10 @@ export default class Channel {
 
 	static nextId = 1; // Start at 1 to match typical DB conventions
 
-	constructor(name, debug, id = null, dimensions = null) {
+	/**
+	 * dimensions are given as a 4th argument when loading from database - children may use them
+	 */
+	constructor(name, debug, id = null) {
 		this.id = id !== null ? id : Channel.nextId++;
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
@@ -26,10 +29,10 @@ export default class Channel {
 	}
 
 	/**
-	 * Initialize channel - override in subclasses if needed
+	 * Initialize channel type - override in subclasses as needed
 	 * Called once during brain initialization
 	 */
-	async initialize() {
+	static initialize() {
 		// Default implementation does nothing
 		// Child classes can override for channel-specific initialization
 	}

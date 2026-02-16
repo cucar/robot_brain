@@ -1,7 +1,6 @@
 import Channel from './channel.js';
 import { Dimension } from './dimension.js';
-import { createReadStream, mkdirSync } from 'node:fs';
-import { createInterface } from 'node:readline';
+import { readFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
 const POSITION_OWN = 1;
@@ -15,6 +14,10 @@ export default class StockChannel extends Channel {
 	// total cash shared across all stock channel instances
 	static initialCapital = 1000;
 	static cash = StockChannel.initialCapital;
+
+	// data configuration shared across all stock channel instances
+	static holdoutRows = 0; // Number of rows to hold out from end (set by runtime options)
+	static offsetRows = 0; // Number of rows to skip from start (set by runtime options)
 
 	/**
 	 * constructor for the stock channel - dimensions are given when loading from database
@@ -64,18 +67,34 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
+	 * Static method to initialize channel class with runtime options
+	 * Called once before any channel instances are created
+	 */
+	static initialize(options = {}) {
+		if (options.holdoutRows !== undefined) StockChannel.holdoutRows = options.holdoutRows;
+		if (options.offsetRows !== undefined) StockChannel.offsetRows = options.offsetRows;
+	}
+
+	/**
 	 * initialize data to be read from CSV file
 	 */
 	initializeData() {
 
-		// Holdout and offset configuration
-		this.holdoutRows = 0; // Number of rows to hold out from end (set by job)
-		this.offsetRows = 0; // Number of rows to skip from start (set by job)
-		this.allRows = []; // Store all CSV rows for holdout/offset management
+		// Store all CSV rows for holdout/offset management
+		this.allRows = [];
 
 		// CSV reading state
 		this.csvPath = null;
 		this.rl = null;
+
+		// Load CSV data
+		const baseDir = path.resolve(process.cwd(), 'data', 'stock');
+		try { mkdirSync(baseDir, { recursive: true }); } catch {}
+		this.csvPath = path.resolve(baseDir, `${this.symbol}.csv`);
+		this.loadAllRows();
+
+		// Prepare data iterator
+		this.prepareDataIterator();
 	}
 
 	/**
@@ -142,17 +161,6 @@ export default class StockChannel extends Channel {
 	}
 
 	/**
-	 * initialize this stock channel: open CSV and prepare iterator
-	 */
-	async initialize() {
-		const baseDir = path.resolve(process.cwd(), 'data', 'stock');
-		try { mkdirSync(baseDir, { recursive: true }); } catch {}
-		this.csvPath = path.resolve(baseDir, `${this.symbol}.csv`);
-		await this.loadAllRows();
-		this.prepareDataIterator();
-	}
-
-	/**
 	 * Static method to reset channel-level context (shared state across all instances)
 	 * Called once per episode reset before individual channel resetContext calls
 	 */
@@ -163,16 +171,19 @@ export default class StockChannel extends Channel {
 	/**
 	 * Load all CSV rows into memory for holdout management
 	 */
-	async loadAllRows() {
+	loadAllRows() {
 		this.allRows = [];
-		const rl = createInterface({ input: createReadStream(this.csvPath), crlfDelay: Infinity });
+		const content = readFileSync(this.csvPath, 'utf-8');
+		const lines = content.split('\n');
 
-		for await (const line of rl) {
-			const parts = String(line).trim().split(',');
-			if (parts.length < 2) throw new Error(`${this.symbol}: Invalid CSV line: ${value}`);
+		for (const line of lines) {
+			const trimmed = String(line).trim();
+			if (!trimmed) continue;
+			const parts = trimmed.split(',');
+			if (parts.length < 2) throw new Error(`${this.symbol}: Invalid CSV line: ${line}`);
 			const price = parseFloat(parts[0]);
 			const volume = parseFloat(parts[1]);
-			if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${value}'`);
+			if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${line}'`);
 			this.allRows.push({ price, volume });
 		}
 
@@ -184,9 +195,9 @@ export default class StockChannel extends Channel {
 	 */
 	prepareDataIterator() {
 
-		// Calculate start and end indices
-		const startIndex = this.offsetRows;
-		const endIndex = this.holdoutRows > 0 ? this.allRows.length - this.holdoutRows : this.allRows.length;
+		// Calculate start and end indices using static properties
+		const startIndex = StockChannel.offsetRows;
+		const endIndex = StockChannel.holdoutRows > 0 ? this.allRows.length - StockChannel.holdoutRows : this.allRows.length;
 
 		// Extract the slice
 		this.dataRows = this.allRows.slice(startIndex, endIndex);

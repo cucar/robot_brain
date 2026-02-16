@@ -42,7 +42,7 @@ export default class Brain {
 		this.dump = new BrainDump();
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
-		this.thalamus = new Thalamus(this.debug);
+		this.thalamus = new Thalamus(this.debug, options);
 
 		// Memory - manages temporal sliding window and inferred neurons
 		this.memory = new Memory(this.debug);
@@ -113,7 +113,7 @@ export default class Brain {
 		// reset active memory
 		await this.resetContext();
 
-		// reset all neurons, channels, dimensions in thalamus
+		// reset all neurons
 		this.thalamus.reset();
 
 		// Clear MySQL tables if using a database
@@ -184,9 +184,6 @@ export default class Brain {
 
 		// Pre-create action neurons for all channels so that we can explore
 		this.thalamus.initializeActionNeurons();
-
-		// Initialize all registered channels (channel-specific setup)
-		await this.thalamus.initializeAllChannels();
 	}
 
 	/**

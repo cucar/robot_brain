@@ -38,6 +38,10 @@ export default class StockTestJob extends Job {
 		if (options.episodes !== null && options.episodes !== undefined) this.config.maxEpisodes = options.episodes;
 		if (options.holdout !== null && options.holdout !== undefined) this.config.holdoutRows = options.holdout;
 		if (options.offset !== null && options.offset !== undefined) this.config.offsetRows = options.offset;
+
+		// Pass stock channel options to brain via runnerOptions
+		options.holdoutRows = this.config.holdoutRows;
+		options.offsetRows = this.config.offsetRows;
 	}
 
 	/**
@@ -210,17 +214,6 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Hook: Configure channels after brain initialization
-	 */
-	async configureChannels() {
-		// Set holdout and offset rows for all channels
-		for (const [_, channel] of this.brain.thalamus.getAllChannels()) {
-			channel.holdoutRows = this.config.holdoutRows;
-			channel.offsetRows = this.config.offsetRows;
-		}
-	}
-
-	/**
 	 * Hook: Execute main job logic - multi-episode training
 	 */
 	async executeJob() {
@@ -251,6 +244,10 @@ export default class StockTestJob extends Job {
 
 		// Reset context but keep learned patterns
 		await this.brain.resetContext();
+
+		// to test hard resets between episodes:
+		// this.brain.thalamus.reset();
+		// this.brain.thalamus.initializeActionNeurons();
 
 		// Dump brain data at the beginning of each episode for debugging
 		// this.brain.createDump();

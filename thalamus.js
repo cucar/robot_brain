@@ -8,8 +8,9 @@ import { Neuron } from './neurons/neuron.js';
  * Named after the biological thalamus which routes sensory signals and translates reference frames.
  */
 export class Thalamus {
-	constructor(debug = false) {
+	constructor(debug = false, options = {}) {
 		this.debug = debug;
+		this.options = options; // Runtime options to pass to channel classes
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
@@ -122,7 +123,14 @@ export class Thalamus {
 	 */
 	instantiateChannels() {
 		for (const [channelName, channelClass] of this.channelClasses) {
+
+			// protection to not instantiate channels that already exist - should not happen - just in case
 			if (this.channels.has(channelName)) continue;
+
+			// initialize channel class with runtime options
+			channelClass.initialize(this.options);
+
+			// create new channel instance and add it to the thalamus
 			const channel = new channelClass(channelName, this.debug);
 			this.addChannel(channelName, channel);
 			if (this.debug) console.log(`Created new channel: ${channelName} (id: ${channel.id})`);
@@ -293,14 +301,6 @@ export class Thalamus {
 		}
 
 		this.setChannelActions(channelActions);
-	}
-
-	/**
-	 * Initialize all channels (channel-specific setup)
-	 */
-	async initializeAllChannels() {
-		for (const [, channel] of this.getAllChannels())
-			await channel.initialize();
 	}
 
 	/**
