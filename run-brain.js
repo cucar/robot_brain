@@ -57,8 +57,7 @@ if (process.argv[2]) {
 		database: process.argv.includes('--database'),
 		debug: process.argv.includes('--debug'),
 		noSummary: process.argv.includes('--no-summary'),
-		hardReset: process.argv.includes('--hard-reset'),
-		softReset: process.argv.includes('--soft-reset'),
+		reset: process.argv.includes('--reset'),
 		episodes,
 		holdout,
 		offset

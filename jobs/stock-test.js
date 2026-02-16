@@ -246,7 +246,7 @@ export default class StockTestJob extends Job {
 		console.log(`📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes}... `);
 
 		// Reset context but keep learned patterns
-		await this.brain.resetContext();
+		this.brain.resetContext();
 
 		// to test hard resets between episodes:
 		// this.brain.thalamus.reset();
@@ -303,7 +303,6 @@ export default class StockTestJob extends Job {
 		// Capture base level accuracy stats
 		if (this.brain.diagnostics.accuracyStats.total > 0)
 			episodeMetrics.baseAccuracy = (this.brain.diagnostics.accuracyStats.correct / this.brain.diagnostics.accuracyStats.total * 100);
-
 		this.episodeResults.push(episodeMetrics);
 
 		// Dump brain data at the beginning of each episode for debugging

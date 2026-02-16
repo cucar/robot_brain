@@ -115,13 +115,9 @@ export default class Job {
 	 */
 	async handleBrainReset() {
 		// Check command-line flags for reset strategy
-		if (this.runnerOptions?.hardReset) {
+		if (this.runnerOptions?.reset) {
 			console.log('Hard reset requested. Clearing all tables...');
 			await this.brain.resetBrain();
-		}
-		if (this.runnerOptions?.softReset) {
-			console.log('Soft reset requested. Resetting context only...');
-			await this.brain.resetContext();
 		}
 	}
 

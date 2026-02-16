@@ -80,7 +80,7 @@ export default class Brain {
 	/**
 	 * Reset brain memory state for a clean episode start
 	 */
-	async resetContext() {
+	resetContext() {
 		console.log('Resetting brain context...');
 
 		// Reset frame counter for proper context window handling
@@ -111,7 +111,7 @@ export default class Brain {
 		console.log('Hard resetting brain (all learned data)...');
 
 		// reset active memory
-		await this.resetContext();
+		this.resetContext();
 
 		// reset all neurons
 		this.thalamus.reset();

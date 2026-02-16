@@ -83,7 +83,7 @@ export default class TextTrainingJob extends Job {
 		process.stdout.write(`📝 Episode ${this.currentEpisode}/${this.config.maxEpisodes} (pattern: "${currentPattern}")... `);
 
 		// Reset context but keep learned patterns
-		await this.brain.resetContext();
+		this.brain.resetContext();
 
 		// Reset channel state for new episode and set pattern
 		this.resetChannelStates();
