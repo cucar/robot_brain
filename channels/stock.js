@@ -388,33 +388,66 @@ export default class StockChannel extends Channel {
 	static getAllocations(channels, actionsMap) {
 
 		// Calculate total portfolio value (cash + all current holdings)
+		const totalValue = this.getTotalValue(channels);
+
+		// Collect all actions with their expected rewards
+		const actions = this.getActionsExpectedRewards(channels, actionsMap);
+
+		// Filter to only POSITION_OWN actions for allocation
+		const ownActions = actions.filter(a => a.isOwn);
+
+		// Calculate softmax weights - exp(reward[i]) / sum(exp(reward[j]))
+		const { expRewards, totalExpReward } = this.getActionsRewardWeights(ownActions);
+
+		// Allocate portfolio value proportional to softmax weights
+		const allocations = this.distributeAllocations(actions, ownActions, expRewards, totalExpReward, totalValue);
+
+		// Set OUT allocation for channels not in actionsMap (no brain prediction)
+		this.setMissingChannelAllocations(channels, allocations);
+
+		return allocations;
+	}
+
+	/**
+	 * returns total portfolio value (cash + all current holdings)
+	 */
+	static getTotalValue(channels) {
 		let totalPortfolioValue = this.cash;
 		for (const [, channel] of channels)
 			totalPortfolioValue += channel.shares * channel.currentPrice;
+		return totalPortfolioValue;
+	}
 
-		// Collect all actions with their expected rewards
+	/**
+	 * returns all actions with their expected rewards
+	 */
+	static getActionsExpectedRewards(channels, actionsMap) {
 		const allActions = [];
 		for (const [channelName, actions] of actionsMap) {
 			const channel = channels.get(channelName);
 			const actionData = actions[0]; // Single action per stock channel
 			const action = actionData.coordinates[`${channel.symbol}_activity`];
-			allActions.push({
-				channelName: channelName,
-				reward: actionData.reward,
-				isOwn: action === POSITION_OWN
-			});
+			allActions.push({ channelName, reward: actionData.reward, isOwn: action === POSITION_OWN });
 		}
+		return allActions;
+	}
 
-		// Filter to only POSITION_OWN actions for allocation
-		const ownActions = allActions.filter(a => a.isOwn);
-
-		// Calculate softmax weights - exp(reward[i]) / sum(exp(reward[j]))
+	/**
+	 * returns actions with rewards softmax weights - exp(reward[i]) / sum(exp(reward[j]))
+	 */
+	static getActionsRewardWeights(ownActions) {
 		const expRewards = ownActions.map(a => ({ ...a, expReward: a.strength * Math.exp(a.reward) }));
 		const totalExpReward = expRewards.reduce((sum, a) => sum + a.expReward, 0);
+		return { expRewards, totalExpReward };
+	}
 
-		// Allocate portfolio value proportional to softmax weights
+	/**
+	 * Allocate portfolio value proportional to softmax weights
+	 */
+	static distributeAllocations(allActions, ownActions, expRewards, totalExpReward, totalPortfolioValue) {
 		const allocations = new Map();
 		for (const action of allActions) {
+			// POSITION_OWN gets reward based allocation
 			if (action.isOwn) {
 				const expAction = expRewards.find(e => e.channelName === action.channelName);
 				const amount = totalExpReward > 0
@@ -425,13 +458,16 @@ export default class StockChannel extends Channel {
 			// POSITION_OUT gets 0 allocation
 			else allocations.set(action.channelName, { action: POSITION_OUT, amount: 0 });
 		}
+		return allocations;
+	}
 
-		// Set OUT allocation for channels not in actionsMap (no brain prediction)
+	/**
+	 * Set OUT allocation for channels not in actionsMap (no brain prediction)
+	 */
+	static setMissingChannelAllocations(channels, allocations) {
 		for (const [channelName] of channels)
 			if (!allocations.has(channelName))
 				allocations.set(channelName, { action: POSITION_OUT, amount: 0 });
-
-		return allocations;
 	}
 
 	/**
