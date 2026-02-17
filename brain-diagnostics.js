@@ -104,7 +104,7 @@ export class BrainDiagnostics {
 				const coordsFormatted = this.formatCoordinates(candidate.coordsStr, channel);
 				const aggVotes = aggregatedByNeuron.get(candidate.neuronId);
 				console.log(`    ${coordsFormatted} (n${candidate.neuronId}) str=${candidate.totalStrength.toFixed(1)} ${marker}`);
-				console.log(this.formatAggregatedVotes(aggVotes, null, false, channel));
+				console.log(this.formatAggregatedVotes(aggVotes, '', false, channel));
 			}
 		}
 		console.log(`===================\n`);
@@ -224,7 +224,7 @@ export class BrainDiagnostics {
 
 	/**
 	 * Find which action label won based on winner IDs
-	 * @param {Map} actionGroups - Map of label -> votes array
+	 * @param {Map<string, Array>} actionGroups - Map of label -> votes array
 	 * @param {Set} winnerIds - Set of winning neuron IDs
 	 * @returns {string} Winning label
 	 */
@@ -232,7 +232,7 @@ export class BrainDiagnostics {
 		for (const [label, votes] of actionGroups)
 			for (const vote of votes)
 				if (winnerIds.has(vote.neuron.id)) return label;
-		return null;
+		throw new Error('Cannot find winning action label');
 	}
 
 	/**
@@ -430,7 +430,7 @@ export class BrainDiagnostics {
 	 * Print one-line summary of frame processing
 	 * @param {number} frameNumber - Current frame number
 	 * @param {number} frameElapsed - Time elapsed for frame processing (ms)
-	 * @param {IterableIterator<[string, object]>} channels - Iterator of [channelName, channel] pairs
+	 * @param {Array<Channel>} channels - array of [channelName, channel]
 	 */
 	endFrame(frameNumber, frameElapsed, channels) {
 
@@ -472,9 +472,8 @@ export class BrainDiagnostics {
 
 		// Get portfolio metrics if any stock channels exist
 		let portfolioDisplay = '';
-		const channelsArray = Array.from(channels);
-		if (channelsArray.length > 0 && channelsArray[0][1].constructor.getPortfolioMetrics) {
-			const portfolioMetrics = channelsArray[0][1].constructor.getPortfolioMetrics(channels);
+		if (channels.length > 0 && channels[0][1].constructor.getPortfolioMetrics) {
+			const portfolioMetrics = channels[0][1].constructor.getPortfolioMetrics(channels);
 			const totalValue = portfolioMetrics.cash + portfolioMetrics.totalInvestments;
 			portfolioDisplay = ` | Portfolio: Cash:${portfolioMetrics.cash.toFixed(0)} Inv:${portfolioMetrics.totalInvestments.toFixed(0)} Val:${totalValue.toFixed(0)} P&L:${portfolioMetrics.totalProfit >= 0 ? '+' : ''}${portfolioMetrics.totalProfit.toFixed(2)}`;
 		}

@@ -23,7 +23,7 @@ export class BrainDB {
 	/**
 	 * Load channels and dimensions from database and return instantiated channel objects.
 	 * @param {Map} channelClasses - Map of channel name to channel class
-	 * @returns {Promise<Map<string, Channel>>} Map of channel name to channel instance
+	 * @returns {Promise<Map>} Map of channel name to channel instance
 	 */
 	async loadChannels(channelClasses) {
 

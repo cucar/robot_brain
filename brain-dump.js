@@ -9,7 +9,7 @@ export class BrainDump {
 	/**
 	 * Create a dump file with brain state data from Thalamus
 	 * @param {Array} neurons - All neurons from Thalamus
-	 * @param {Map} channels - All channels from Thalamus
+	 * @param {Array} channels - All channels from Thalamus
 	 * @param {Object} channelNameToId - Channel name to ID mapping
 	 * @param {Object} dimensionNameToId - Dimension name to ID mapping
 	 */

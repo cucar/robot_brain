@@ -94,14 +94,11 @@ export default class Brain {
 
 		// Reset channel class static state (once per class)
 		const channelClasses = new Set();
-		for (const [, channel] of this.thalamus.getChannels())
-			channelClasses.add(channel.constructor);
-		for (const ChannelClass of channelClasses)
-			ChannelClass.resetChannelContext();
+		for (const [, channel] of this.thalamus.getChannels()) channelClasses.add(channel.constructor);
+		for (const ChannelClass of channelClasses) ChannelClass.resetChannelContext();
 
 		// Reset all channel instance states
-		for (const [, channel] of this.thalamus.getChannels())
-			channel.resetContext();
+		for (const [, channel] of this.thalamus.getChannels()) channel.resetContext();
 	}
 
 	/**

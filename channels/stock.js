@@ -488,7 +488,7 @@ export default class StockChannel extends Channel {
 
 	/**
 	 * Get portfolio-level metrics across all stock channels
-	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
+	 * @param {Array} channels - array of channel name to channel instance
 	 * @returns {Object} - Portfolio metrics including total profit and per-channel unrealized profit
 	 */
 	static getPortfolioMetrics(channels) {
