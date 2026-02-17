@@ -1,4 +1,4 @@
-import Channel from './channel.js';
+import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 
 /**
@@ -7,7 +7,7 @@ import { Dimension } from './dimension.js';
  * Output: motor commands (muscle activations)
  * Feedback: movement success rewards
  */
-export default class ArmChannel extends Channel {
+export class ArmChannel extends Channel {
 
 	constructor(name, dimensions = null) {
 		super(name);

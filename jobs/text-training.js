@@ -1,5 +1,5 @@
-import Job from './job.js';
-import TextChannel from '../channels/text.js';
+import { Job } from './job.js';
+import { TextChannel } from '../channels/text.js';
 
 /**
  * Text Training Job - Trains the brain on repeating text patterns

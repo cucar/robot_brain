@@ -1,5 +1,5 @@
 import readline from 'node:readline';
-import getMySQLConnection from './db/db.js';
+import getMySQLConnection from '../db/db.js';
 
 /**
  * BrainMySQL Class - MySQL-based brain implementation

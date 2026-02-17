@@ -17,7 +17,7 @@ class BrainRunner {
 			const job = new JobClass();
 
 			// Store options on job so it can apply them to channels after they're registered
-			job.runnerOptions = options;
+			job.options = options;
 
 			await job.run();
 
@@ -53,7 +53,6 @@ if (process.argv[2]) {
 
 	const options = {
 		diagnostic: process.argv.includes('--diagnostic'),
-		mysql: process.argv.includes('--mysql'),
 		database: process.argv.includes('--database'),
 		debug: process.argv.includes('--debug'),
 		noSummary: process.argv.includes('--no-summary'),

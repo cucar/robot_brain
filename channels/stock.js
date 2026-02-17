@@ -1,4 +1,4 @@
-import Channel from './channel.js';
+import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 import { readFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -9,7 +9,7 @@ const POSITION_OUT = -1;
 /**
  * Stock Channel Implementation - this channel is used for buying/selling stocks based on their values
  */
-export default class StockChannel extends Channel {
+export class StockChannel extends Channel {
 
 	// total cash shared across all stock channel instances
 	static initialCapital = 1000;

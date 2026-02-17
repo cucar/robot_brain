@@ -1,5 +1,5 @@
-import Job from './job.js';
-import EarsChannel from '../channels/audio.js'; // Will be renamed from audio.js to ears.js
+import { Job } from './job.js';
+import { EarsChannel } from '../channels/audio.js';
 
 export default class EarsJob1 extends Job {
 

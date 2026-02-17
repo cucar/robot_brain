@@ -1,4 +1,4 @@
-import Channel from './channel.js';
+import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 
 /**
@@ -7,7 +7,7 @@ import { Dimension } from './dimension.js';
  * Output: characters to type/speak
  * Feedback: language comprehension/generation rewards
  */
-export default class TextChannel extends Channel {
+export class TextChannel extends Channel {
 
 	constructor(name, pattern = 'cats', dimensions = null) {
 		super(name);

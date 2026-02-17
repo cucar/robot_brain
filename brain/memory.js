@@ -1,4 +1,4 @@
-import { Context } from './neurons/context.js';
+import { Context } from './context.js';
 
 /**
  * Memory - manages the temporal sliding window of active and inferred neurons.

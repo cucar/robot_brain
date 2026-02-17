@@ -1,4 +1,4 @@
-import { Neuron } from './neurons/neuron.js';
+import { Neuron } from './neuron.js';
 
 /**
  * Thalamus - Brain's relay station for reference frame transfers

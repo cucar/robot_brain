@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /**
- * BrainDump - Handles dumping brain state to JSON files for debugging and comparison
+ * Handles dumping brain state to JSON files for debugging and comparison
  */
-export class BrainDump {
+export class Dump {
 
 	/**
 	 * Create a dump file with brain state data from Thalamus

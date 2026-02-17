@@ -1,6 +1,6 @@
-# Machine Intelligence Engine
+# ARCHIVE: Original MySQL-based implementation
 
-A prediction-driven learning system that learns cause and effect through error correction.
+This code is frozen in time. The current implementation uses a custom database engine and is much faster. DO NOT CHANGE IT!
 
 ## Overview
 
@@ -37,9 +37,9 @@ The brain is fundamentally a **prediction machine**. Every neuron and pattern ex
 
 ### Connections
 - **`connections`** - Links between base neurons with distance, strength, and reward
-  - `distance`: Temporal gap between source and target activation
-  - `strength`: How often this connection has been observed
-  - `reward`: Expected outcome for action connections (exponential smoothing)
+    - `distance`: Temporal gap between source and target activation
+    - `strength`: How often this connection has been observed
+    - `reward`: Expected outcome for action connections (exponential smoothing)
 
 ### Patterns
 - **`pattern_peaks`** - Maps pattern neuron to its peak neuron
@@ -212,9 +212,9 @@ Trains or tests on historical stock data for KGC (Kinross Gold), GLD (Gold ETF),
 - **Training**: Runs episodes through historical data, learning patterns and trading strategies
 - **Data location**: `data/stock/KGC.csv`, `data/stock/GLD.csv`, `data/stock/SPY.csv`
 - **Parameters**:
-  - `--holdout N`: Hold out last N rows from training (default: 50)
-  - `--offset N`: Skip first N rows (default: 0)
-  - `--episodes N`: Number of training episodes (default: 1)
+    - `--holdout N`: Hold out last N rows from training (default: 50)
+    - `--offset N`: Skip first N rows (default: 0)
+    - `--episodes N`: Number of training episodes (default: 1)
 
 #### **Multi-Modal Learning**
 ```bash
@@ -225,9 +225,9 @@ Integrates multiple channels (vision, audio, motor) for complex sensorimotor lea
 ### Creating Custom Jobs
 
 ```javascript
-import { Job } from './jobs/job.js';
-import { VisionChannel } from './channels/vision.js';
-import { ArmChannel } from './channels/arm.js';
+import Job from './jobs/job.js';
+import VisionChannel from './channels/vision.js';
+import ArmChannel from './channels/arm.js';
 
 export default class CustomJob extends Job {
     getChannels() {

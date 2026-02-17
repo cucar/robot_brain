@@ -1,7 +1,7 @@
 import { Memory } from './memory.js';
-import { BrainDB } from './brain-db.js';
-import { BrainDiagnostics } from './brain-diagnostics.js';
-import { BrainDump } from './brain-dump.js';
+import { Database } from './database.js';
+import { Diagnostics } from './diagnostics.js';
+import { Dump } from './dump.js';
 import { Thalamus } from './thalamus.js';
 
 /**
@@ -33,13 +33,13 @@ export default class Brain {
 		this.rewards = new Map(); // channel rewards for current frame
 
 		// Database - used for persistent storage - backup and restore
-		this.db = this.database ? new BrainDB(this.debug) : null;
+		this.db = this.database ? new Database(this.debug) : null;
 
 		// Diagnostics - used for debug methods and performance tracking
-		this.diagnostics = new BrainDiagnostics(this.diagnostic, this.frameSummary);
+		this.diagnostics = new Diagnostics(this.diagnostic, this.frameSummary);
 
 		// Dump - used for creating brain state dumps for debugging
-		this.dump = new BrainDump();
+		this.dump = new Dump();
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
 		this.thalamus = new Thalamus(this.debug, options);

@@ -2,10 +2,10 @@ import { createInterface } from 'node:readline';
 import { stdin, stdout } from 'node:process';
 
 /**
- * BrainDiagnostics - Handles diagnostic output and metrics for Brain
+ * Diagnostics - Handles diagnostic output and metrics for Brain
  * Receives data as parameters and returns formatted output
  */
-export class BrainDiagnostics {
+export class Diagnostics {
 	constructor(debug, frameSummary) {
 
 		// Diagnostic state

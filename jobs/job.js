@@ -2,10 +2,9 @@
  * Base Job Class - Common functionality for all episodes
  */
 import process from 'node:process';
-import Brain from '../brain.js';
-import BrainMySQL from '../brain-mysql.js';
+import Brain from '../brain/brain.js';
 
-export default class Job {
+export class Job {
 
 	constructor() {
 		this.brain = null; // Brain instance will be created in run() based on options
@@ -23,13 +22,13 @@ export default class Job {
 
 		try {
 			// Apply command line options to job config (if job has applyOptions method)
-			if (this.applyOptions && this.runnerOptions) this.applyOptions(this.runnerOptions);
+			if (this.applyOptions && this.options) this.applyOptions(this.options);
 
-			// Create brain instance based on mysql option
-			this.brain = this.runnerOptions?.mysql ? new BrainMySQL() : new Brain(this.runnerOptions);
+			// Create brain instance
+			this.brain = new Brain(this.options);
 
 			// Apply database option if provided (overrides default)
-			if (this.runnerOptions?.database !== undefined) this.database = this.runnerOptions.database;
+			if (this.options?.database !== undefined) this.database = this.options.database;
 
 			// Allow jobs to show custom startup info
 			await this.showStartupInfo();
@@ -115,7 +114,7 @@ export default class Job {
 	 */
 	async handleBrainReset() {
 		// Check command-line flags for reset strategy
-		if (this.runnerOptions?.reset) {
+		if (this.options?.reset) {
 			console.log('Hard reset requested. Clearing all tables...');
 			await this.brain.resetBrain();
 		}

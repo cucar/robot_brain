@@ -1,5 +1,5 @@
-import Job from './job.js';
-import EyesChannel from '../channels/vision.js'; // Will be renamed from vision.js to eyes.js
+import { Job } from './job.js';
+import { EyesChannel } from '../channels/vision.js'; // Will be renamed from vision.js to eyes.js
 
 export default class VisionJob1 extends Job {
 

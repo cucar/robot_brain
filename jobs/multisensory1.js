@@ -1,8 +1,8 @@
-import Job from './job.js';
-import EyesChannel from '../channels/vision.js';
-import EarsChannel from '../channels/audio.js';
-import ArmChannel from '../channels/arm.js';
-import TextChannel from '../channels/text.js';
+import { Job } from './job.js';
+import { EyesChannel } from '../channels/vision.js';
+import { EarsChannel } from '../channels/audio.js';
+import { ArmChannel } from '../channels/arm.js';
+import { TextChannel } from '../channels/text.js';
 
 export default class MultiSensoryJob1 extends Job {
 

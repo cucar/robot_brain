@@ -1,5 +1,5 @@
-import Job from './job.js';
-import TongueChannel from '../channels/tongue.js';
+import { Job } from './job.js';
+import { TongueChannel } from '../channels/tongue.js';
 
 export default class TongueJob1 extends Job {
 

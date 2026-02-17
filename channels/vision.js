@@ -1,4 +1,4 @@
-import Channel from './channel.js';
+import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 
 /**
@@ -7,7 +7,7 @@ import { Dimension } from './dimension.js';
  * Output: eye movements (saccade directions)
  * Feedback: visual attention rewards
  */
-export default class EyesChannel extends Channel {
+export class EyesChannel extends Channel {
 
 	constructor(name, dimensions = null) {
 		super(name);

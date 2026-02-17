@@ -1,4 +1,4 @@
-import Channel from './channel.js';
+import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 
 /**
@@ -7,7 +7,7 @@ import { Dimension } from './dimension.js';
  * Output: ear movements (orientation towards sound)
  * Feedback: sound localization rewards
  */
-export default class EarsChannel extends Channel {
+export class EarsChannel extends Channel {
 
 	constructor(name, dimensions = null) {
 		super(name);

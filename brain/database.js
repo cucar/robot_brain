@@ -1,13 +1,13 @@
-import getMySQLConnection from './db/db.js';
-import { Neuron } from './neurons/neuron.js';
-import { Dimension } from './channels/dimension.js';
-import Channel from './channels/channel.js';
+import getMySQLConnection from '../db/db.js';
+import { Neuron } from './neuron.js';
+import { Dimension } from '../channels/dimension.js';
+import { Channel } from '../channels/channel.js';
 
 /**
- * BrainDB - Database backup and restore operations for Brain
+ * Database backup and restore operations for Brain
  * Handles persistence of neurons, connections, and patterns to MySQL
  */
-export class BrainDB {
+export class Database {
 	constructor(debug) {
 		this.conn = null;
 		this.debug = debug;

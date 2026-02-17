@@ -1,5 +1,5 @@
-import Job from './job.js';
-import ArmChannel from '../channels/arm.js';
+import { Job } from './job.js';
+import { ArmChannel } from '../channels/arm.js';
 
 export default class ArmJob1 extends Job {
 

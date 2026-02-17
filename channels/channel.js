@@ -11,7 +11,7 @@
  * they do that by translating the streaming inputs and returning streaming outputs translated from brain action neurons.
  * this is the base class for all such channels. child classes implement different mediums like vision, audio, etc.
  */
-export default class Channel {
+export class Channel {
 
 	static nextId = 1; // Start at 1 to match typical DB conventions
 

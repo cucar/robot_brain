@@ -1,4 +1,4 @@
-import Channel from './channel.js';
+import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 
 /**
@@ -7,7 +7,7 @@ import { Dimension } from './dimension.js';
  * Output: tongue movements (positioning, licking)
  * Feedback: taste preference rewards
  */
-export default class TongueChannel extends Channel {
+export class TongueChannel extends Channel {
 
 	constructor(name, dimensions = null) {
 		super(name);
