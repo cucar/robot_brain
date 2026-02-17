@@ -45,7 +45,7 @@ export class TextChannel extends Channel {
 	 * in the future, we may want to generate text based on conscious thoughts - we would add it then
 	 * @returns {*[]}
 	 */
-	getOutputDimensions() {
+	getActionDimensions() {
 		return [];
 	}
 

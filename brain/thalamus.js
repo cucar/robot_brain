@@ -48,18 +48,18 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get neuron object by ID
-	 * @param {number} neuronId - Neuron ID
-	 * @returns {Neuron|undefined} - Neuron object or undefined
+	 * returns neuron ID by coordinates (for diagnostics)
+	 * @param {object} coordinates - Coordinate object with dimension-value pairs
+	 * @returns {Neuron|null} - Neuron or null if not found
 	 */
-	getNeuron(neuronId) {
-		return this.neurons.get(neuronId);
+	getNeuronByCoordinates(coordinates) {
+		return this.neuronsByValue.get(Neuron.makeValueKey(coordinates));
 	}
 
 	/**
 	 * returns all neurons as an array
 	 */
-	getAllNeurons() {
+	getNeurons() {
 		return Array.from(this.neurons.values());
 	}
 
@@ -270,51 +270,6 @@ export class Thalamus {
 	}
 
 	/**
-	 * returns dimension name map to id
-	 */
-	getDimensionNameToIdMap() {
-		return this.dimensionNameToId;
-	}
-
-	/**
-	 * returns dimension id map to name
-	 */
-	getDimensionIdToNameMap() {
-		return this.dimensionIdToName;
-	}
-
-	/**
-	 * returns neuron ID by coordinates (for diagnostics)
-	 * @param {object} coordinates - Coordinate object with dimension-value pairs
-	 * @returns {Neuron|null} - Neuron or null if not found
-	 */
-	getNeuronByCoordinates(coordinates) {
-		return this.neuronsByValue.get(Neuron.makeValueKey(coordinates));
-	}
-
-	/**
-	 * Load dimension name/id mappings from instantiated channels
-	 */
-	loadDimensionMaps() {
-		const dimensionNameToId = {};
-		const dimensionIdToName = {};
-
-		for (const [, channel] of this.getChannels()) {
-			for (const dim of channel.getEventDimensions()) {
-				dimensionNameToId[dim.name] = dim.id;
-				dimensionIdToName[dim.id] = dim.name;
-			}
-			for (const dim of channel.getOutputDimensions()) {
-				dimensionNameToId[dim.name] = dim.id;
-				dimensionIdToName[dim.id] = dim.name;
-			}
-		}
-
-		this.setDimensionMappings(dimensionNameToId, dimensionIdToName);
-		if (this.debug) console.log('Dimensions loaded:', dimensionNameToId);
-	}
-
-	/**
 	 * Pre-create action neurons for all channels if they don't exist, so that we
 	 */
 	initializeActionNeurons() {
@@ -334,7 +289,43 @@ export class Thalamus {
 		}
 
 		// set channel actions for exploration
-		this.setChannelActions(channelActions);
+		this.channelActions = channelActions;
+	}
+
+	/**
+	 * returns dimension name map to id
+	 */
+	getDimensionNameToIdMap() {
+		return this.dimensionNameToId;
+	}
+
+	/**
+	 * returns dimension id map to name
+	 */
+	getDimensionIdToNameMap() {
+		return this.dimensionIdToName;
+	}
+
+	/**
+	 * Load dimension name/id mappings from instantiated channels
+	 */
+	loadDimensionMaps() {
+		const dimensionNameToId = {};
+		const dimensionIdToName = {};
+
+		for (const [, channel] of this.getChannels()) {
+			for (const dim of channel.getEventDimensions()) {
+				dimensionNameToId[dim.name] = dim.id;
+				dimensionIdToName[dim.id] = dim.name;
+			}
+			for (const dim of channel.getActionDimensions()) {
+				dimensionNameToId[dim.name] = dim.id;
+				dimensionIdToName[dim.id] = dim.name;
+			}
+		}
+
+		this.setDimensionMappings(dimensionNameToId, dimensionIdToName);
+		if (this.debug) console.log('Dimensions loaded:', dimensionNameToId);
 	}
 
 	/**
@@ -348,19 +339,11 @@ export class Thalamus {
 	}
 
 	/**
-	 * Set channel actions (called during init)
-	 * @param {Map} channelActions - Map of channel name to Set of action neurons
-	 */
-	setChannelActions(channelActions) {
-		this.channelActions = channelActions;
-	}
-
-	/**
 	 * forget neuron children and connections and then delete if it can be deleted
 	 * @returns {Array<Neuron>} - Array of neurons that can be deleted
 	 */
 	forgetNeurons() {
-		return this.getAllNeurons().filter(neuron => neuron.forget());
+		return this.getNeurons().filter(neuron => neuron.forget());
 	}
 
 	/**

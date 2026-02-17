@@ -68,7 +68,7 @@ export class ArmChannel extends Channel {
 		];
 	}
 
-	getOutputDimensions() {
+	getActionDimensions() {
 		return [ this.motorShoulderDim, this.motorElbowDim, this.motorWristDim ];
 	}
 

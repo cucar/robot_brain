@@ -146,8 +146,6 @@ export default class StockTestJob extends Job {
 		});
 	}
 
-
-
 	/**
 	 * Find all dates that exist in ALL symbols' data (intersection)
 	 */
@@ -459,4 +457,3 @@ export default class StockTestJob extends Job {
 		console.log('='.repeat(60));
 	}
 }
-

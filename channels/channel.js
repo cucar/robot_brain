@@ -77,8 +77,8 @@ export class Channel {
 	/**
 	 * Get output dimension names - override in subclasses
 	 */
-	getOutputDimensions() {
-		throw new Error('Channel must implement getOutputDimensions() method');
+	getActionDimensions() {
+		throw new Error('Channel must implement getActionDimensions() method');
 	}
 
 	/**

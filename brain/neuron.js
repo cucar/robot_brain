@@ -179,6 +179,14 @@ export class Neuron {
 	}
 
 	/**
+	 * Remove a child pattern from this neuron's routing table.
+	 * Called by thalamus when deleting a child pattern neuron.
+	 */
+	removeChild(pattern) {
+		this.children.delete(pattern);
+	}
+
+	/**
 	 * returns pattern context entries
 	 */
 	getPatternContext() {
@@ -230,14 +238,6 @@ export class Neuron {
 	removeContextRef(referencingNeuron, distance) {
 		this.contextRefs.get(referencingNeuron).delete(distance);
 		if (this.contextRefs.get(referencingNeuron).size === 0) this.contextRefs.delete(referencingNeuron);
-	}
-
-	/**
-	 * Remove a child pattern from this neuron's routing table.
-	 * Called by thalamus when deleting a child pattern neuron.
-	 */
-	removeChild(pattern) {
-		this.children.delete(pattern);
 	}
 
 	/**

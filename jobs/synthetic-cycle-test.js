@@ -184,4 +184,3 @@ export default class SyntheticCycleTest extends Job {
 		else for (const action of actions) console.log(`   Frame ${action.frame} (Cycle ${action.cycleFrame}): ${action.action} at ${action.priceChange}`);
 	}
 }
-

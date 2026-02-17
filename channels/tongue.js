@@ -54,7 +54,7 @@ export class TongueChannel extends Channel {
 		return [ this.tasteSweetDim, this.tasteSourDim, this.tasteSaltyDim, this.tasteBitterDim, this.tasteUmamiDim ];
 	}
 
-	getOutputDimensions() {
+	getActionDimensions() {
 		return [ this.tongueXDim, this.tongueYDim ];
 	}
 

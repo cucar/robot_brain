@@ -243,7 +243,7 @@ export class Database {
 	async backupDimensions(channels) {
 		const rows = [];
 		for (const [, channel] of channels) {
-			const dimensions = channel.getEventDimensions().concat(channel.getOutputDimensions());
+			const dimensions = channel.getEventDimensions().concat(channel.getActionDimensions());
 			for (const dim of dimensions) rows.push([dim.id, dim.name]);
 		}
 		if (rows.length === 0) return;

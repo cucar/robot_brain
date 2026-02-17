@@ -48,7 +48,7 @@ export class EarsChannel extends Channel {
 		return [ this.audioFrequencyDim, this.audioAmplitudeDim, this.audioDurationDim ];
 	}
 
-	getOutputDimensions() {
+	getActionDimensions() {
 		return [ this.earOrientationDim ];
 	}
 

@@ -15,6 +15,10 @@ const __dirname = path.dirname(__filename);
  */
 export default class SyntheticExtendedTest extends Job {
 
+	/**
+	 * Constructor - Initialize synthetic extended test configuration
+	 * Sets up source data with actual KGC training rows and cycle repeats
+	 */
 	constructor() {
 		super();
 
@@ -59,6 +63,10 @@ export default class SyntheticExtendedTest extends Job {
 		};
 	}
 
+	/**
+	 * Setup method - Generate extended test data by repeating source data pattern
+	 * Creates a CSV file with the source data repeated cycleRepeats times
+	 */
 	async setup() {
 		console.log('📊 Generating extended data from KGC training rows...');
 		console.log(`   Source rows: ${this.config.sourceData.length}`);
@@ -86,6 +94,10 @@ export default class SyntheticExtendedTest extends Job {
 		console.log(`   Saved to: ${csvPath}`);
 	}
 
+	/**
+	 * Hook: Show startup information
+	 * Displays test configuration including symbol, cycles, and total frames
+	 */
 	async showStartupInfo() {
 		const cycleLength = this.config.sourceData.length - 1; // 11 frames per cycle
 		console.log(`🧪 Synthetic Extended Test (KGC training data pattern)`);
@@ -95,10 +107,18 @@ export default class SyntheticExtendedTest extends Job {
 		console.log('');
 	}
 
+	/**
+	 * Returns the channels for the job - single stock channel for synthetic test
+	 * @returns {Array<Object>} Array with single {name, channelClass} object
+	 */
 	getChannels() {
 		return [{ name: this.config.symbol, channelClass: StockChannel }];
 	}
 
+	/**
+	 * Hook: Execute main job logic - Run extended test with optimality analysis
+	 * Processes frames continuously and tracks whether brain makes optimal buy/sell decisions
+	 */
 	async executeJob() {
 		console.log('🚀 Running extended continuous episode...\n');
 
@@ -157,8 +177,9 @@ export default class SyntheticExtendedTest extends Job {
 	}
 
 	/**
-	 * Calculate optimal ownership for each cycle frame
-	 * Optimal = own if price will go UP during this frame
+	 * Calculate optimal buy/sell decisions for each cycle frame based on price movements
+	 * Optimal = own if price will go UP during this frame, out if price will go DOWN
+	 * @returns {Object} Map of cycle frame number to boolean (true = own, false = out)
 	 */
 	calculateOptimalOwnership() {
 		const ownership = {};
@@ -179,13 +200,21 @@ export default class SyntheticExtendedTest extends Job {
 
 	/**
 	 * Get neuron ID for a specific dimension and value
+	 * Used for displaying which neurons represent specific price/volume/activity changes
+	 * @param {string} dimensionName - Name of the dimension (e.g., "TEST_price_change")
+	 * @param {number} value - Value of the dimension
+	 * @returns {number|null} Neuron ID or null if not found
 	 */
 	async getNeuronIdForDimensionValue(dimensionName, value) {
 		return this.brain.getNeuronByCoordinates({ [dimensionName]: value }).id;
 	}
 
 	/**
-	 * Show detailed optimality analysis
+	 * Display detailed optimality analysis showing how often brain made correct buy/sell decisions
+	 * Compares actual decisions against optimal decisions for each cycle frame
+	 * @param {Object} decisionStats - Decision statistics by cycle frame
+	 * @param {number} cycleLength - Number of frames in each cycle
+	 * @param {StockChannel} stockChannel - Stock channel instance for discretization
 	 */
 	async showOptimalityAnalysis(decisionStats, cycleLength, stockChannel) {
 		console.log('='.repeat(70));
@@ -254,4 +283,3 @@ export default class SyntheticExtendedTest extends Job {
 		console.log(`   OUT (activity=-1): Neuron ${outNeuronId || 'N/A'}`);
 	}
 }
-

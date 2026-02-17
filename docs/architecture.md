@@ -488,7 +488,7 @@ Channels are adapters between the brain and external devices (eyes, ears, tradin
 class Channel {
   // Define coordinate space
   getEventDimensions()    // Returns: Array<Dimension>
-  getOutputDimensions()   // Returns: Array<Dimension>
+  getActionDimensions()   // Returns: Array<Dimension>
 
   // Pre-create action neurons
   getActions()            // Returns: Array<coordinates>
@@ -532,7 +532,7 @@ class StockChannel extends Channel {
     ]
   }
 
-  getOutputDimensions() {
+  getActionDimensions() {
     return [new Dimension('action', this.id, 'action')]
   }
 

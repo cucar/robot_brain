@@ -211,7 +211,7 @@ Channels are adapters between the brain and external devices (sensors, actuators
 ### Required Methods
 
 - **`getEventDimensions()`** - Returns array of Dimension objects for sensory inputs
-- **`getOutputDimensions()`** - Returns array of Dimension objects for motor outputs
+- **`getActionDimensions()`** - Returns array of Dimension objects for motor outputs
 - **`getActions()`** - Returns array of all possible action coordinates (for pre-creation)
 - **`getFrameEvents()`** - Returns array of current observations as coordinate objects
 - **`executeOutputs(actions)`** - Executes brain's action decisions

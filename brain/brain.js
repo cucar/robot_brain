@@ -137,7 +137,7 @@ export default class Brain {
 	 */
 	async backup() {
 		if (!this.database) return;
-		const neurons = this.thalamus.getAllNeurons();
+		const neurons = this.thalamus.getNeurons();
 		const channelNameToId = this.thalamus.getChannelNameToIdMap();
 		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
 		const channels = this.thalamus.getChannels();
@@ -150,7 +150,7 @@ export default class Brain {
 	 * Create a dump file with current brain state for debugging and comparison
 	 */
 	createDump() {
-		const neurons = this.thalamus.getAllNeurons();
+		const neurons = this.thalamus.getNeurons();
 		const channelNameToId = this.thalamus.getChannelNameToIdMap();
 		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
 		const channels = this.thalamus.getChannels();
@@ -315,13 +315,6 @@ export default class Brain {
 		if (this.debug) console.log(`Processing frame: ${this.frame.length} neurons`);
 		if (this.debug) console.log(`frame points: ${JSON.stringify(this.frame)}`);
 		if (this.debug) console.log('******************************************************************');
-	}
-
-	/**
-	 * Execute inferred actions for all channels
-	 */
-	async executeActions() {
-		await this.thalamus.executeChannelActions(this.memory.getInferredActions());
 	}
 
 	/**
@@ -515,29 +508,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Ensure every channel has an action in the inferences array.
-	 * If a channel has no inferred action, add an exploration action.
-	 * @param {Array} inferences - Array of winning inference objects to modify
-	 */
-	ensureChannelActions(inferences) {
-
-		// Find which channels already have an action inferred
-		const channelsWithActions = new Set();
-		for (const inf of inferences)
-			if (inf.neuron.type === 'action') channelsWithActions.add(inf.neuron.channel);
-
-		// Add exploration action for channels without one
-		for (const [channelName] of this.thalamus.getChannels()) {
-			if (channelsWithActions.has(channelName)) continue;
-
-			// No action inferred for this channel - use the lowest ID action for deterministic exploration
-			const actions = this.thalamus.getChannelActions(channelName);
-			const explorationAction = [...actions].sort((a, b) => a.id - b.id)[0];
-			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0, reward: 0 });
-		}
-	}
-
-	/**
 	 * Collect votes from active neurons. Stores votes and context in activeNeurons for pattern learning.
 	 * @returns {Array} Array of vote objects for consensus
 	 */
@@ -607,6 +577,36 @@ export default class Brain {
 			});
 		}
 		return winners;
+	}
+
+	/**
+	 * Ensure every channel has an action in the inferences array.
+	 * If a channel has no inferred action, add an exploration action.
+	 * @param {Array} inferences - Array of winning inference objects to modify
+	 */
+	ensureChannelActions(inferences) {
+
+		// Find which channels already have an action inferred
+		const channelsWithActions = new Set();
+		for (const inf of inferences)
+			if (inf.neuron.type === 'action') channelsWithActions.add(inf.neuron.channel);
+
+		// Add exploration action for channels without one
+		for (const [channelName] of this.thalamus.getChannels()) {
+			if (channelsWithActions.has(channelName)) continue;
+
+			// No action inferred for this channel - use the lowest ID action for deterministic exploration
+			const actions = this.thalamus.getChannelActions(channelName);
+			const explorationAction = [...actions].sort((a, b) => a.id - b.id)[0];
+			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0, reward: 0 });
+		}
+	}
+
+	/**
+	 * Execute inferred actions for all channels
+	 */
+	async executeActions() {
+		await this.thalamus.executeChannelActions(this.memory.getInferredActions());
 	}
 
 	/**

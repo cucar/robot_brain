@@ -124,7 +124,7 @@ All active neurons vote on what happens next. Votes are weighted by:
 Channels connect the brain to external systems (sensors, actuators, trading APIs).
 
 **Required Methods:**
-- `getEventDimensions()` / `getOutputDimensions()`: Define coordinate space
+- `getEventDimensions()` / `getActionDimensions()`: Define coordinate space
 - `getActionNeurons()`: All possible actions (for pre-creation)
 - `getFrameEvents()`: Current observations
 - `executeOutputs(actions)`: Execute brain's decisions

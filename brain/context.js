@@ -28,6 +28,20 @@ export class Context {
 	}
 
 	/**
+	 * Find an entry by neuron and distance.
+	 */
+	find(neuron, distance) {
+		return this.entries.find(e => e.neuron === neuron && e.distance === distance) ?? null;
+	}
+
+	/**
+	 * Build a lookup key for fast matching.
+	 */
+	buildKey(neuron, distance) {
+		return `${neuron.id}:${distance}`;
+	}
+
+	/**
 	 * increases the strength of an entry.
 	 */
 	strengthenNeuron(neuron, distance) {
@@ -47,13 +61,6 @@ export class Context {
 	}
 
 	/**
-	 * Find an entry by neuron and distance.
-	 */
-	find(neuron, distance) {
-		return this.entries.find(e => e.neuron === neuron && e.distance === distance) ?? null;
-	}
-
-	/**
 	 * Remove an entry.
 	 */
 	remove(neuron, distance) {
@@ -62,13 +69,6 @@ export class Context {
 		this.entries.splice(idx, 1);
 		this.keys.delete(this.buildKey(neuron, distance));
 		return true;
-	}
-
-	/**
-	 * Build a lookup key for fast matching.
-	 */
-	buildKey(neuron, distance) {
-		return `${neuron.id}:${distance}`;
 	}
 
 	/**

@@ -14,6 +14,10 @@ const __dirname = path.dirname(__filename);
  */
 export default class MultiChannelTest extends Job {
 
+	/**
+	 * Constructor - Initialize multi-channel test configuration
+	 * Sets up symbols, cycle repeats, and source data storage
+	 */
 	constructor() {
 		super();
 
@@ -27,6 +31,11 @@ export default class MultiChannelTest extends Job {
 		this.sourceData = new Map(); // symbol -> array of {price, volume}
 	}
 
+	/**
+	 * Setup method - Load source data from CSV files and generate test data with repeated cycles
+	 * Creates _TEST.csv files with the source data repeated cycleRepeats times
+	 * @throws {Error} If CSV file not found for any symbol
+	 */
 	async setup() {
 		console.log('📊 Loading first 12 rows from each stock CSV...');
 		console.log(`   Symbols: ${this.config.symbols.join(', ')}`);
@@ -71,6 +80,22 @@ export default class MultiChannelTest extends Job {
 		console.log(`\n✅ Total Frames: ${this.config.cycleRepeats * (this.config.sourceRows - 1)}`);
 	}
 
+	/**
+	 * Returns the channels for the job - one channel per stock symbol with _TEST suffix
+	 * @returns {Array<Object>} Array of {name, channelClass} objects
+	 */
+	getChannels() {
+		// Use _TEST suffix for the generated test files
+		return this.config.symbols.map(symbol => ({
+			name: `${symbol}_TEST`,
+			channelClass: StockChannel
+		}));
+	}
+
+	/**
+	 * Hook: Show startup information
+	 * Displays test configuration including symbols, cycles, and total frames
+	 */
 	async showStartupInfo() {
 		const cycleLength = this.config.sourceRows - 1;
 		console.log(`🧪 Multi-Channel Test (${this.config.symbols.length} stocks)`);
@@ -80,14 +105,10 @@ export default class MultiChannelTest extends Job {
 		console.log('');
 	}
 
-	getChannels() {
-		// Use _TEST suffix for the generated test files
-		return this.config.symbols.map(symbol => ({
-			name: `${symbol}_TEST`,
-			channelClass: StockChannel
-		}));
-	}
-
+	/**
+	 * Hook: Execute main job logic - Run multi-channel test with optimality analysis
+	 * Processes frames and tracks whether brain makes optimal buy/sell decisions
+	 */
 	async executeJob() {
 		console.log('🚀 Running multi-channel continuous test...\n');
 
@@ -147,6 +168,10 @@ export default class MultiChannelTest extends Job {
 		await this.showOptimalityAnalysis(decisionStats, cycleLength);
 	}
 
+	/**
+	 * Load source data from CSV files into memory
+	 * Reads the first sourceRows from each symbol's CSV file
+	 */
 	async loadSourceData() {
 		const dataDir = path.join(__dirname, '..', 'data', 'stock');
 		for (const symbol of this.config.symbols) {
@@ -161,6 +186,12 @@ export default class MultiChannelTest extends Job {
 		}
 	}
 
+	/**
+	 * Calculate optimal buy/sell decisions for a symbol based on price movements
+	 * Determines whether to own the stock at each cycle frame based on next price
+	 * @param {string} symbol - Stock symbol to analyze
+	 * @returns {Object} Map of cycle frame number to boolean (true = own, false = out)
+	 */
 	calculateOptimalOwnership(symbol) {
 		const ownership = {};
 		const data = this.sourceData.get(symbol);
@@ -175,6 +206,12 @@ export default class MultiChannelTest extends Job {
 		return ownership;
 	}
 
+	/**
+	 * Display detailed optimality analysis showing how often brain made correct buy/sell decisions
+	 * Compares actual decisions against optimal decisions for each cycle frame and symbol
+	 * @param {Map} decisionStats - Map of channel name to decision statistics by cycle frame
+	 * @param {number} cycleLength - Number of frames in each cycle
+	 */
 	async showOptimalityAnalysis(decisionStats, cycleLength) {
 		console.log('='.repeat(80));
 		console.log('📊 Optimality Analysis by Channel and Cycle Frame');
@@ -231,4 +268,3 @@ export default class MultiChannelTest extends Job {
 		console.log('='.repeat(80));
 	}
 }
-

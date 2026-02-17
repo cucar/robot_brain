@@ -54,7 +54,7 @@ export class EyesChannel extends Channel {
 		return [ this.visualXDim, this.visualYDim, this.visualRDim, this.visualGDim, this.visualBDim ];
 	}
 
-	getOutputDimensions() {
+	getActionDimensions() {
 		return [ this.saccadeXDim, this.saccadeYDim ];
 	}
 
