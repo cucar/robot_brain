@@ -76,7 +76,7 @@ Database schema for backup/restore (not used during frame processing):
 - **`base_neurons`** - Sensory neuron metadata (channel, type)
 - **`coordinates`** - Sensory neuron coordinate values
 - **`connections`** - Base neuron connections (distance, strength, reward)
-- **`pattern_peaks`** - Pattern-to-peak mappings with strength
+- **`patterns`** - Pattern-to-parent mappings with strength
 - **`pattern_past`** - Pattern contexts (context neurons with ages and strengths)
 - **`pattern_future`** - Pattern predictions (inferred neurons with distances, strengths, rewards)
 
@@ -128,7 +128,7 @@ The brain processes each frame through a series of steps:
 5. recognizePatterns()
    - For each level (0, 1, 2, ...) until no patterns found:
      - Get peaks (age=0) and context (age>0) at this level
-     - Match patterns: peak.matchPattern(context)
+     - Match patterns: parent.matchPattern(context)
      - Activate matched patterns at age 0
    - Enables hierarchical pattern recognition
 
@@ -142,12 +142,12 @@ The brain processes each frame through a series of steps:
    - For each neuron that voted in previous frame:
      - Check for prediction errors (strong prediction, wrong outcome)
      - Check for action regret (negative reward)
-     - Create pattern with peak=predictor, context=active neurons, prediction=actual outcome
-     - Activate new pattern at peak's age
+     - Create pattern with parent=predictor, context=active neurons, prediction=actual outcome
+     - Activate new pattern at parent's age
 
 8. inferNeurons()
    - collectVotes(): Active neurons vote for next frame
-     - Suppress votes from peaks with activated patterns
+     - Suppress votes from parents with activated patterns
      - Weight votes by level and time decay
      - Save votes and context for learning
    - determineConsensus(): Aggregate votes and select winners
@@ -202,7 +202,7 @@ Each vote is weighted by two factors:
 
 ### Pattern Override
 
-When a pattern activates on a peak neuron, the peak's connection votes are suppressed. This is implemented by checking `state.activatedPattern` during vote collection - if not null, the neuron doesn't vote. This is how patterns correct connection predictions.
+When a pattern activates on a parent neuron, the parent's connection votes are suppressed. This is implemented by checking `state.activatedPattern` during vote collection - if not null, the neuron doesn't vote. This is how patterns correct connection predictions.
 
 ## Channel Interface
 

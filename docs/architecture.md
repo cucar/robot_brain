@@ -12,8 +12,8 @@ The brain continuously predicts future events and actions. Learning occurs when 
 ### 2. Abstraction Emerges from Failure
 When a prediction fails, a **pattern** is created to remember the specific context where the failure occurred. Higher levels of abstraction don't exist by design - they emerge because lower levels made mistakes that needed correction.
 
-### 3. Peak Neurons are Decision Points
-A **peak neuron** is a neuron that has learned something. It encountered a situation where its simple connections weren't sufficient, so it created a pattern to remember "in THIS context, predict THAT instead."
+### 3. Parent Neurons are Decision Points
+A **parent neuron** is a neuron that has learned something. It encountered a situation where its simple connections weren't sufficient, so it created a pattern to remember "in THIS context, predict THAT instead."
 
 ### 4. Cause and Effect Interweave
 Events predict events. Events predict actions. Patterns of events predict patterns. Actions feed back as observations. Two hierarchies dance together:
@@ -90,7 +90,7 @@ When a neuron is active at age > 0 and a new neuron appears at age 0:
 #### Pattern Learning for Events
 
 When a neuron makes a strong prediction that fails:
-- Create pattern with peak = predictor neuron
+- Create pattern with parent = predictor neuron
 - Context = all active neurons at time of prediction
 - Prediction = actual outcome (not the failed prediction)
 - Pattern activates when context matches in future
@@ -175,13 +175,13 @@ Each vote is weighted by two factors:
 
 ### Pattern Override Rule
 
-When a pattern activates on a peak neuron, the peak's connection votes are suppressed.
+When a pattern activates on a parent neuron, the parent's connection votes are suppressed.
 
 **Implementation**:
 - During pattern recognition, matched patterns are activated
-- `memory.activatePattern(pattern, peak, age)` sets `state.activatedPattern = pattern`
+- `memory.activatePattern(pattern, parent, age)` sets `state.activatedPattern = pattern`
 - During vote collection, neurons with `state.activatedPattern !== null` are skipped
-- This prevents the peak from voting via its connections when a pattern is active
+- This prevents the parent from voting via its connections when a pattern is active
 
 **Why**: Patterns exist to correct connection predictions. When a pattern matches, it knows better than the raw connections.
 
@@ -342,10 +342,10 @@ while (true) {
   {peaks, context} = memory.getPeaksAndContext(level)
   if (peaks.length === 0) break
 
-  // Match patterns for each peak
-  for (peak of peaks) {
-    pattern = peak.matchPattern(context)
-    if (pattern) memory.activatePattern(pattern, peak, 0)
+  // Match patterns for each parent
+  for (parent of peaks) {
+    pattern = parent.matchPattern(context)
+    if (pattern) memory.activatePattern(pattern, parent, 0)
   }
 
   level++
@@ -386,7 +386,7 @@ for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
   newPattern = neuron.learnNewPattern(age, context, votes, newActiveNeurons, rewards, channelActions)
   if (newPattern) {
     thalamus.addNeuron(newPattern)
-    memory.activatePattern(newPattern, neuron, age)
+    memory.activatePattern(newPattern, neuron, age)  // neuron becomes parent
   }
 }
 ```

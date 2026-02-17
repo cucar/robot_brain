@@ -356,7 +356,7 @@ export class Thalamus {
 	}
 
 	/**
-	 * forget neuron patterns and connections and then delete if it can be deleted
+	 * forget neuron children and connections and then delete if it can be deleted
 	 * @returns {Array<Neuron>} - Array of neurons that can be deleted
 	 */
 	forgetNeurons() {
@@ -377,17 +377,17 @@ export class Thalamus {
 		// Clean up this pattern from other patterns' contexts
 		const newlyDeletable = this.cleanupContextReferences(pattern);
 
-		// Remove pattern from its peak's routing table (if peak still exists)
-		if (pattern.peak && this.neurons.has(pattern.peak.id)) pattern.peak.removePattern(pattern);
+		// Remove pattern from its parent's routing table (if parent still exists)
+		if (pattern.parent && this.neurons.has(pattern.parent.id)) pattern.parent.removeChild(pattern);
 
 		// Delete this pattern neuron from the index
 		this.neurons.delete(pattern.id);
 
 		// memory cleanup
-		pattern.peak = null;
+		pattern.parent = null;
 		delete pattern.context;
 		delete pattern.contextRefs;
-		delete pattern.patterns;
+		delete pattern.children;
 		delete pattern.connections;
 
 		return newlyDeletable;

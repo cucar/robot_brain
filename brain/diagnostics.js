@@ -271,9 +271,9 @@ export class Diagnostics {
 	 */
 	formatNeuronCoords(neuron) {
 
-		// Pattern neurons (level > 0) have a peak neuron instead of direct coordinates
-		if (neuron.level > 0 && neuron.peak)
-			return this.formatNeuronCoords(neuron.peak);
+		// Pattern neurons (level > 0) have a parent neuron instead of direct coordinates
+		if (neuron.level > 0 && neuron.parent)
+			return this.formatNeuronCoords(neuron.parent);
 
 		// Sensory neurons (level 0) have coordinates
 		if (!neuron.coordinates) return `n${neuron.id}`;

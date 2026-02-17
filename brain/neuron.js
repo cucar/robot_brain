@@ -5,10 +5,10 @@ import { Context } from './context.js';
  *
  * All neurons have:
  * - connections: Map<distance, Map<toNeuron, {strength, reward}>> - predictions
- * - patterns: Map<pattern, {context: Context, strength: number}> - routing table
+ * - children: Set<Neuron> - child pattern neurons (routing table)
  *
  * Level 0 (sensory) neurons additionally have: channel, type, coordinates
- * Level > 0 (pattern) neurons additionally have: peak
+ * Level > 0 (pattern) neurons additionally have: parent
  *
  * Note: Active state (which neurons are active at which ages) and votes are managed
  * by the Brain, not stored on neurons. This allows efficient age-indexed queries.
@@ -47,9 +47,9 @@ export class Neuron {
 	/**
 	 * Create a pattern neuron (level > 0) - id optional for loading from database
 	 */
-	static createPattern(level, peak, id = null) {
+	static createPattern(level, parent, id = null) {
 		const neuron = new Neuron(level, id);
-		neuron.peak = peak;
+		neuron.parent = parent;
 		return neuron;
 	}
 
@@ -70,7 +70,7 @@ export class Neuron {
 		this.id = id !== null ? id : Neuron.nextId++;
 		this.level = level;
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
-		this.patterns = new Set(); // known patterns by this peak/parent neuron - children
+		this.children = new Set(); // child pattern neurons (routing table)
 		this.context = new Context();  // the context that activated this pattern - not used by sensory neurons
 		this.contextRefs = new Map(); // context references: Map<Neuron, Set<distance>>
 		this.activationStrength = 0; // incremented with activation, forgotten over time
@@ -172,10 +172,10 @@ export class Neuron {
 	}
 
 	/**
-	 * add a new pattern to the routing table without context (used for load - it will be added later)
+	 * add a child pattern to the routing table without context (used for load - it will be added later)
 	 */
-	addPattern(pattern) {
-		this.patterns.add(pattern);
+	addChild(pattern) {
+		this.children.add(pattern);
 	}
 
 	/**
@@ -233,15 +233,15 @@ export class Neuron {
 	}
 
 	/**
-	 * Remove a pattern from this neuron's patterns (routing table).
+	 * Remove a child pattern from this neuron's routing table.
 	 * Called by thalamus when deleting a child pattern neuron.
 	 */
-	removePattern(pattern) {
-		this.patterns.delete(pattern);
+	removeChild(pattern) {
+		this.children.delete(pattern);
 	}
 
 	/**
-	 * Find the best matching pattern for this peak neuron given the observed context.
+	 * Find the best matching pattern for this parent neuron given the observed context.
 	 * @param {Context} observed - The observed context from brain
 	 * @returns Neuron The matched pattern, or null if no match
 	 */
@@ -249,7 +249,7 @@ export class Neuron {
 
 		// try to match the observed context to known patterns
 		let best = null; // { pattern, score, common, missing, novel }
-		for (const pattern of this.patterns) {
+		for (const pattern of this.children) {
 			if (pattern.activationStrength === 0) continue;
 			const match = pattern.context.match(observed);
 			if (match && (!best || match.score > best.score)) best = { ...match, pattern };
@@ -259,7 +259,7 @@ export class Neuron {
 		// call the pattern to refine its context based on the observed context
 		best.pattern.refineContext(best.common, best.novel, best.missing);
 
-		// return the matched pattern with peak reference (brain will set activated pattern)
+		// return the matched pattern with parent reference (brain will set activated pattern)
 		return best.pattern;
 	}
 
@@ -356,7 +356,7 @@ export class Neuron {
 			pattern.createConnection(age, correctionNeuron, 1, 0);
 
 		// add the new pattern to the routing table
-		this.addPattern(pattern);
+		this.addChild(pattern);
 
 		// Add the context to the new pattern (only same-level neurons)
 		for (const { neuron, distance } of context)
@@ -552,8 +552,8 @@ export class Neuron {
 		// if a pattern does not have any contexts (cannot be recognized), it cannot be activated - it needs to be deleted
 		if (this.context.size === 0) return true;
 
-		// if as a result of the forget or cleanup operation, we don't have any connections or patterns
+		// if as a result of the forget or cleanup operation, we don't have any connections or children
 		// we don't serve a purpose - it's detrimental - need to be deleted
-		return this.connections.size === 0 && this.patterns.size === 0;
+		return this.connections.size === 0 && this.children.size === 0;
 	}
 }

@@ -78,7 +78,7 @@ export class Database {
 		await this.loadConnections(neurons);
 
 		// update patterns used for pattern matching
-		await this.loadPatternPeaks(neurons);
+		await this.loadPatterns(neurons);
 		await this.loadPatternContexts(neurons);
 
 		// return the neurons to be loaded to thalamus
@@ -182,25 +182,25 @@ export class Database {
 	}
 
 	/**
-	 * Load pattern_peaks table
+	 * Load patterns table
 	 */
-	async loadPatternPeaks(neurons) {
+	async loadPatterns(neurons) {
 
-		// get the pattern peaks
-		const [rows] = await this.conn.query('SELECT pattern_neuron_id, peak_neuron_id, strength FROM pattern_peaks');
+		// get the patterns
+		const [rows] = await this.conn.query('SELECT pattern_neuron_id, parent_neuron_id, strength FROM patterns');
 
-		// create the pattern to peak mappings in neurons
+		// create the pattern to parent mappings in neurons
 		for (const row of rows) {
 
-			// map the pattern to its parent/peak
+			// map the pattern to its parent
 			const pattern = neurons.get(row.pattern_neuron_id);
-			pattern.peak = neurons.get(row.peak_neuron_id);
+			pattern.parent = neurons.get(row.parent_neuron_id);
 
 			// set activation strength of the pattern
 			pattern.setActivationStrength(row.strength);
 
-			// add the pattern to the peak's contexts array without any context for now - will be loaded later
-			pattern.peak.addPattern(pattern);
+			// add the pattern to the parent's children array without any context for now - will be loaded later
+			pattern.parent.addChild(pattern);
 		}
 	}
 
@@ -215,7 +215,7 @@ export class Database {
 			FROM pattern_past
 		`);
 
-		// load the pattern contexts in the peak
+		// load the pattern contexts in the parent
 		for (const row of rows) {
 			const pattern = neurons.get(row.pattern_neuron_id);
 			const contextNeuron = neurons.get(row.context_neuron_id);
@@ -262,7 +262,7 @@ export class Database {
 		await this.backupNeuronsTable(neurons);
 		await this.backupBaseNeurons(neurons, channelNameToId, dimensionNameToId);
 		await this.backupConnections(neurons);
-		await this.backupPatternPeaks(neurons);
+		await this.backupPatterns(neurons);
 		await this.backupPatternContext(neurons);
 		await this.backupPatternConnections(neurons);
 
@@ -314,17 +314,17 @@ export class Database {
 	}
 
 	/**
-	 * Backup pattern_peaks
+	 * Backup patterns
 	 */
-	async backupPatternPeaks(neurons) {
-		await this.conn.query('TRUNCATE pattern_peaks');
-		const peakRows = [];
+	async backupPatterns(neurons) {
+		await this.conn.query('TRUNCATE patterns');
+		const patternRows = [];
 		for (const pattern of neurons)
 			if (pattern.level > 0)
-				peakRows.push([pattern.id, pattern.peak.id, pattern.activationStrength]);
-		if (peakRows.length === 0) return;
-		await this.conn.query('INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id, strength) VALUES ?', [peakRows]);
-		console.log(`  Saved ${peakRows.length} pattern peaks`);
+				patternRows.push([pattern.id, pattern.parent.id, pattern.activationStrength]);
+		if (patternRows.length === 0) return;
+		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id, strength) VALUES ?', [patternRows]);
+		console.log(`  Saved ${patternRows.length} patterns`);
 	}
 
 	/**
@@ -369,7 +369,7 @@ export class Database {
 			'base_neurons',
 			'coordinates',
 			'connections',
-			'pattern_peaks',
+			'patterns',
 			'pattern_past',
 			'pattern_future'
 		];

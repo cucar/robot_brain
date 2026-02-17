@@ -418,9 +418,9 @@ export default class Brain {
 			return false;
 		}
 
-		// Match patterns (parallelizable) - collect results with peak reference - this is parallelizable
-		const matchedPeaks = peaks.map(peak => ({ peak, pattern: peak.matchPattern(context) }));
-		const matchedPatterns = matchedPeaks.filter(p => p.pattern);
+		// Match patterns (parallelizable) - collect results with parent reference - this is parallelizable
+		const matchedParents = peaks.map(parent => ({ parent, pattern: parent.matchPattern(context) }));
+		const matchedPatterns = matchedParents.filter(p => p.pattern);
 
 		// If no patterns matched, stop here
 		if (matchedPatterns.length === 0) {
@@ -429,12 +429,12 @@ export default class Brain {
 		}
 
 		// activate the matched pattern neurons
-		for (const { peak, pattern } of matchedPatterns)
-			this.memory.activatePattern(pattern, peak, 0);
+		for (const { parent, pattern } of matchedPatterns)
+			this.memory.activatePattern(pattern, parent, 0);
 
 		if (this.debug)
 			console.log(`Matched ${matchedPatterns.length} patterns at level ${level}:`,
-				matchedPatterns.map(m => `peak=${m.peak.id}, pattern=${m.pattern.id}`).join('; '));
+				matchedPatterns.map(m => `parent=${m.parent.id}, pattern=${m.pattern.id}`).join('; '));
 
 		// return true to indicate patterns found
 		return true;
@@ -478,7 +478,7 @@ export default class Brain {
 			// index the new neuron with its id
 			this.thalamus.addNeuron(newPattern);
 
-			// activate the pattern neuron at the peak's age
+			// activate the pattern neuron at the parent's age
 			this.memory.activatePattern(newPattern, neuron, age);
 
 			patternCount++;

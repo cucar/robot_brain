@@ -81,15 +81,15 @@ export class Memory {
 	}
 
 	/**
-	 * Activate a pattern neuron and link it to its peak
+	 * Activate a pattern neuron and link it to its parent
 	 * @param {Neuron} pattern - The pattern neuron to activate
-	 * @param {Neuron} peak - The peak neuron that triggered the pattern
+	 * @param {Neuron} parent - The parent neuron that triggered the pattern
 	 * @param {number} age - The age at which to activate
 	 */
-	activatePattern(pattern, peak, age) {
+	activatePattern(pattern, parent, age) {
 		this.activateNeuronAtAge(pattern, age);
 		const neuronsAtAge = this.activeNeurons[age];
-		const state = neuronsAtAge.get(peak);
+		const state = neuronsAtAge.get(parent);
 		state.activatedPattern = pattern;
 	}
 
@@ -152,7 +152,7 @@ export class Memory {
 	/**
 	 * returns context array for a given age (older neurons relative to this age)
 	 * @param {number} age - The age to build context for
-	 * @param {number} level - The level to filter context neurons by (same level as peak neuron)
+	 * @param {number} level - The level to filter context neurons by (same level as parent neuron)
 	 * @returns {Array<{neuron, distance}>}
 	 */
 	getContextForAge(age, level) {

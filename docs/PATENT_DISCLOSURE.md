@@ -30,7 +30,7 @@ This architecture **beats neural networks** in robotics, autonomous systems, per
 - **Unified neuron storage** handling both sensory inputs and abstract patterns
 - **Coordinate-based encoding** where base neurons represent points in multi-dimensional space
 - **Spatial connection encoding** with dx, dy distances alongside temporal distance
-- **Recursive spatial pooling** applying same peak/pattern detection to spatial neighborhoods
+- **Recursive spatial pooling** applying same parent/pattern detection to spatial neighborhoods
 - **Spatio-temporal integration** enabling motion tracking and object recognition
 - **Type-aware neurons** distinguishing events (observations) from actions (decisions)
 - **Automatic dimension discovery** from input channels (vision, audio, motor, financial, text, etc.)
@@ -52,7 +52,7 @@ This architecture **beats neural networks** in robotics, autonomous systems, per
 - **Multi-level hierarchical abstraction** where patterns of patterns form higher-level concepts
 - **Context-based pattern matching** using pattern_past (context neurons with relative ages)
 - **Prediction-based pattern outputs** using pattern_future (predicted base neurons with distances)
-- **Pattern override mechanism** where pattern votes supersede connection votes from peak neurons
+- **Pattern override mechanism** where pattern votes supersede connection votes from parent neurons
 - **Fuzzy context matching** with configurable threshold (default 50% overlap)
 
 ### 4. Temporal Separation Architecture
@@ -99,7 +99,7 @@ The system consists of several key components working together:
 - **Coordinates Table**: Multi-dimensional position data for base neurons
 - **Connections Table**: Directed temporal relationships between base neurons (with distance, strength, reward)
 - **Pattern Tables**: Higher-level abstractions:
-  - **pattern_peaks**: Maps pattern neurons to their peak neurons
+  - **patterns**: Maps pattern neurons to their parent neurons
   - **pattern_past**: Context neurons with relative ages (defines when pattern activates)
   - **pattern_future**: Predicted base neurons with distances (defines what pattern predicts)
 - **Active Memory Tables**: Sliding window of currently relevant information (active_neurons, matched_patterns, inference_votes, inferred_neurons)
@@ -305,7 +305,7 @@ The following aspects represent **highly patentable innovations** with strong co
 1. **Spatio-Temporal Neural Architecture**
    - Unified neuron storage with coordinate-based multi-dimensional representation
    - Spatial connection encoding with dx, dy distances alongside temporal distance
-   - Recursive spatial pooling applying peak/pattern detection to spatial neighborhoods
+   - Recursive spatial pooling applying parent/pattern detection to spatial neighborhoods
    - Spatio-temporal integration enabling motion tracking and object recognition
    - **Novelty**: No existing system combines spatial and temporal pooling in a unified hierarchy
 
@@ -354,7 +354,7 @@ The following aspects represent **highly patentable innovations** with strong co
 
 1. **Method for Spatio-Temporal Pattern Recognition**
    - Process for spatial pooling within-frame before temporal pooling across-frame
-   - Recursive peak detection algorithm applied to both spatial and temporal dimensions
+   - Recursive parent detection algorithm applied to both spatial and temporal dimensions
    - Spatio-temporal connection creation with dx, dy, and temporal distance
    - **Novelty**: Unified algorithm for space and time
 
@@ -368,7 +368,7 @@ The following aspects represent **highly patentable innovations** with strong co
 3. **Method for Voting-Based Inference with Pattern Override**
    - Vote collection from both connections and patterns
    - Level weighting (1 + level × multiplier) and time decay
-   - Pattern override deleting connection votes from peak neurons
+   - Pattern override deleting connection votes from parent neurons
    - Winner selection: strength for events, weighted reward for actions
    - **Novelty**: Distributed decision-making with hierarchical error correction
 
@@ -478,7 +478,7 @@ graph TB
         end
 
         subgraph "Pattern Discovery"
-            P[Peak Detection<br/>Neighborhood analysis]
+            P[Parent Detection<br/>Neighborhood analysis]
             H[Hierarchical Patterns<br/>Patterns of patterns]
         end
 
@@ -603,7 +603,7 @@ graph TB
     end
 
     subgraph "Pattern Structure"
-        PP[pattern_peaks<br/>peak = C]
+        PP[patterns<br/>parent = C]
         PAST[pattern_past<br/>A at age=2<br/>B at age=1]
         FUT[pattern_future<br/>E at distance=1]
     end
@@ -804,8 +804,8 @@ graph TB
   - Alternative neuron DID activate (for events)
   - OR action produced painful outcome (for actions)
 - **Pattern structure** (three-table design):
-  - **pattern_peaks**: Maps pattern neuron to peak neuron (the predictor that made the error)
-  - **pattern_past**: Context neurons with relative ages (what was active when peak appeared)
+  - **patterns**: Maps pattern neuron to parent neuron (the predictor that made the error)
+  - **pattern_past**: Context neurons with relative ages (what was active when parent appeared)
     - Stores neuron, distance (relative age), and strength
     - Defines WHEN the pattern activates (context matching)
   - **pattern_future**: Predicted base neurons with distances and rewards
@@ -816,7 +816,7 @@ graph TB
   - Categorizes context entries as: common (in both), novel (in observed only), missing (in pattern only)
   - Match score = common / (common + missing + novel)
   - Pattern matches if score >= mergeThreshold
-- **Winner selection**: Among matching patterns for a peak, highest total strength wins
+- **Winner selection**: Among matching patterns for a parent, highest total strength wins
 - **Pattern refinement** (when pattern matches):
   - **Common entries**: Strengthen in pattern_past (positive reinforcement)
   - **Novel entries**: Add to pattern_past (pattern generalization)
@@ -827,7 +827,7 @@ graph TB
   - Recursive abstraction up to maxLevels (default 10)
   - Higher levels represent longer temporal contexts
 - **Pattern override mechanism**:
-  - When pattern votes, connection votes from its peak neuron are deleted
+  - When pattern votes, connection votes from its parent neuron are deleted
   - Ensures learned corrections supersede raw connection predictions
   - Implements hierarchical error correction
 
@@ -876,9 +876,9 @@ graph TB
 - **Vote collection**: Both connection votes (from base neurons) and pattern votes (from pattern neurons)
 - **Level weighting**: Higher-level patterns have more influence: `1 + level * levelVoteMultiplier`
 - **Time decay**: Recent predictions weighted more: `1 - (distance - 1) * (1 / contextLength)`
-- **Pattern override**: Connection votes from neurons that are peaks of voting patterns are deleted
+- **Pattern override**: Connection votes from neurons that are parents of voting patterns are deleted
   - Patterns exist to correct connection predictions
-  - When a pattern is active, its predictions supersede the peak's connection predictions
+  - When a pattern is active, its predictions supersede the parent's connection predictions
 - **Winner selection**:
   - Events: Highest total strength wins (deterministic)
   - Actions: Highest weighted reward wins (reward-based selection)
@@ -987,7 +987,7 @@ graph TB
   - Enables parallel neuron creation
 - **Independent neuron processing**:
   - Each neuron processes its connections independently
-  - Pattern matching parallelizable across all peaks
+  - Pattern matching parallelizable across all parents
   - Voting aggregation parallelizable by dimension
   - No locks or synchronization needed
 - **Unified processing pipeline**:

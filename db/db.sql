@@ -11,11 +11,11 @@ select * from pattern_past where context_neuron_id = 106110;
 select * from neurons order by level desc;
 select * from base_neurons;
 select * from connections;
-select peak_neuron_id, pattern_neuron_id, strength from pattern_peaks order by peak_neuron_id, pattern_neuron_id;
-select * from pattern_peaks where pattern_neuron_id = 159;
+select parent_neuron_id, pattern_neuron_id, strength from patterns order by parent_neuron_id, pattern_neuron_id;
+select * from patterns where pattern_neuron_id = 159;
 select * from pattern_past where context_neuron_id = 159;
 select * from pattern_past where context_neuron_id = 1632;
-select * from pattern_peaks where pattern_neuron_id = 1632;
+select * from patterns where pattern_neuron_id = 1632;
 
 select * from pattern_past order by pattern_neuron_id, context_age;
 select * from pattern_past where context_neuron_id not in (select id from neurons);
@@ -74,22 +74,22 @@ CREATE TABLE IF NOT EXISTS connections (
     to_neuron_id BIGINT UNSIGNED,
     distance TINYINT UNSIGNED NOT NULL,
     strength DOUBLE DEFAULT 1.0,
-    reward DOUBLE DEFAULT 0,  -- additive reward (0 = neutral, positive = good, negative = bad)
+    reward DOUBLE DEFAULT 0,
     PRIMARY KEY (from_neuron_id, to_neuron_id, distance),
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength),
     INDEX idx_strength (strength)
 );
 
--- pattern peaks - maps each pattern neuron to its peak neuron (the decision node that owns the pattern)
--- patterns are learned by peak neurons to differentiate between sequences leading to them
--- DROP TABLE IF EXISTS pattern_peaks;
-CREATE TABLE IF NOT EXISTS pattern_peaks (
+-- patterns - maps each pattern neuron to its parent neuron (the decision node that owns the pattern)
+-- patterns are learned by parent neurons to differentiate between sequences leading to them
+-- DROP TABLE IF EXISTS patterns;
+CREATE TABLE IF NOT EXISTS patterns (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
-    peak_neuron_id BIGINT UNSIGNED NOT NULL,
+    parent_neuron_id BIGINT UNSIGNED NOT NULL,
     strength DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id),
-    INDEX idx_peak (peak_neuron_id)
+    INDEX idx_parent (parent_neuron_id)
 );
 
 -- pattern_past: pattern contexts for recognition/matching (cross-channel)
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS pattern_future (
     inferred_neuron_id BIGINT UNSIGNED,
     distance TINYINT UNSIGNED,
     strength DOUBLE NOT NULL DEFAULT 1.0,
-    reward DOUBLE NOT NULL DEFAULT 0, -- additive reward (0 = neutral, positive = good, negative = bad)
+    reward DOUBLE NOT NULL DEFAULT 0,
     PRIMARY KEY (pattern_neuron_id, inferred_neuron_id, distance),
     INDEX idx_pattern_distance_strength (pattern_neuron_id, distance, strength),
     INDEX idx_inferred_distance_strength (inferred_neuron_id, distance, strength),
