@@ -106,6 +106,25 @@ export class Thalamus {
 	}
 
 	/**
+	 * Get registered channel classes
+	 * @returns {Map} Map of channel name to channel class
+	 */
+	getChannelClasses() {
+		return this.channelClasses;
+	}
+
+	/**
+	 * Set channels from a Map (used when loading from database)
+	 * @param {Map<string, Channel>} channels - Map of channel name to channel instance
+	 */
+	setChannels(channels) {
+		for (const [channelName, channel] of channels) {
+			this.addChannel(channelName, channel);
+			if (this.debug) console.log(`Loaded channel from DB: ${channelName} (id: ${channel.id})`);
+		}
+	}
+
+	/**
 	 * Add an instantiated channel to the thalamus
 	 * @param {string} name - Channel name
 	 * @param {Channel} channelInstance - Instantiated channel object

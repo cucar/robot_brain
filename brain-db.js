@@ -21,34 +21,42 @@ export class BrainDB {
 	}
 
 	/**
-	 * Load channels and dimensions from database and instantiate them in thalamus.
-	 * @param {Thalamus} thalamus - Thalamus instance with registered channel classes
+	 * Load channels and dimensions from database and return instantiated channel objects.
+	 * @param {Map} channelClasses - Map of channel name to channel class
+	 * @returns {Promise<Map<string, Channel>>} Map of channel name to channel instance
 	 */
-	async loadChannels(thalamus) {
+	async loadChannels(channelClasses) {
 
 		// Load channels and dimensions from database
 		const [channelRows] = await this.conn.query('SELECT id, name FROM channels order by id');
 		const [dimensionRows] = await this.conn.query('SELECT id, name FROM dimensions order by id');
 
-		// load all dimensions and let each channel pick what it needs
+		// Create dimension objects
 		const dbDimensions = dimensionRows.map(row => new Dimension(row.name, row.id));
 
-		// Process each DB channel
-		for (const channel of channelRows) {
+		// Create channel instances
+		const channels = new Map();
+		let maxChannelId = 0;
+		for (const row of channelRows) {
 
-			// Fatal error if channel class not found
-			const channelClass = thalamus.channelClasses.get(channel.name);
-			if (!channelClass) throw new Error(`Channel class not found: ${channel.name}. Code not compatible.`);
+			// Validate that channel class exists
+			const channelClass = channelClasses.get(row.name);
+			if (!channelClass)
+				throw new Error(`Channel class not found: ${row.name}. Code not compatible.`);
 
-			// Add instantiated channel to thalamus
-			thalamus.addChannel(channel.name, new channelClass(channel.name, this.debug, channel.id, dbDimensions));
+			// Instantiate channel with DB id and dimensions
+			const channel = new channelClass(row.name, this.debug, row.id, dbDimensions);
+			channels.set(row.name, channel);
 
-			// after this load, the channel next id counter should be one more than the max channel id
-			// after this, new channels may be added, so they will use this when assigning channel ids
-			if (channel.id >= Channel.nextId) Channel.nextId = channel.id + 1;
-
-			if (thalamus.debug) console.log(`Loaded channel from DB: ${channel.name} (id: ${channel.id})`);
+			// Track max channel id
+			if (row.id > maxChannelId) maxChannelId = row.id;
 		}
+
+		// Update Channel.nextId for new channels to be created after this
+		if (maxChannelId >= Channel.nextId) Channel.nextId = maxChannelId + 1;
+
+		console.log(`Channels loaded: ${channels.size} total, next ID: ${Channel.nextId}`);
+		return channels;
 	}
 
 	/**

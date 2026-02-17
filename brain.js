@@ -165,8 +165,12 @@ export default class Brain {
 	 */
 	async init() {
 
-		// Load channels and dimensions from DB (if enabled)
-		if (this.database) await this.db.loadChannels(this.thalamus);
+		// Load channels from DB (if enabled)
+		if (this.database) {
+			const channelClasses = this.thalamus.getChannelClasses();
+			const channels = await this.db.loadChannels(channelClasses);
+			this.thalamus.setChannels(channels);
+		}
 
 		// Instantiate channels that did not come from the database
 		this.thalamus.instantiateChannels();
