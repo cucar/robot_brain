@@ -31,20 +31,20 @@ export class Thalamus {
 	/**
 	 * Get or create a sensory neuron ID from a frame point
 	 * @param {object} point - Frame point with {coordinates, channel, type}
-	 * @returns {number} - Neuron ID
+	 * @returns {Neuron} - Neuron
 	 */
-	getNeuronIdForPoint(point) {
+	getNeuronForPoint(point) {
 
 		// Try to find existing neuron - if found, return it
-		let neuronId = this.getNeuronIdByCoordinates(point.coordinates);
-		if (neuronId) return neuronId;
+		let neuron = this.getNeuronByCoordinates(point.coordinates);
+		if (neuron) return neuron;
 
 		// Create new neuron if not found
-		const neuron = Neuron.createSensory(point.channel, point.type, point.coordinates);
+		neuron = Neuron.createSensory(point.channel, point.type, point.coordinates);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronsByValue.set(neuron.valueKey, neuron);
 		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${neuron.valueKey}`);
-		return neuron.id;
+		return neuron;
 	}
 
 	/**
@@ -147,19 +147,8 @@ export class Thalamus {
 	/**
 	 * Get all channels for iteration
 	 */
-	getAllChannels() {
+	getChannels() {
 		return Array.from(this.channels.entries());
-	}
-
-	/**
-	 * Get all channels with their IDs for iteration
-	 * @returns {Array<{name: string, id: number, channel: object}>} - Array of channel objects
-	 */
-	getAllChannelsWithIds() {
-		const result = [];
-		for (const [channelName, channel] of this.channels)
-			result.push({ name: channelName, id: this.channelNameToId[channelName], channel });
-		return result;
 	}
 
 	/**
@@ -278,12 +267,10 @@ export class Thalamus {
 	/**
 	 * returns neuron ID by coordinates (for diagnostics)
 	 * @param {object} coordinates - Coordinate object with dimension-value pairs
-	 * @returns {number|null} - Neuron ID or null if not found
+	 * @returns {Neuron|null} - Neuron or null if not found
 	 */
-	getNeuronIdByCoordinates(coordinates) {
-		const valueKey = Neuron.makeValueKey(coordinates);
-		const neuron = this.neuronsByValue.get(valueKey);
-		return neuron ? neuron.id : null;
+	getNeuronByCoordinates(coordinates) {
+		return this.neuronsByValue.get(Neuron.makeValueKey(coordinates));
 	}
 
 	/**
@@ -293,7 +280,7 @@ export class Thalamus {
 		const dimensionNameToId = {};
 		const dimensionIdToName = {};
 
-		for (const [, channel] of this.getAllChannels()) {
+		for (const [, channel] of this.getChannels()) {
 			for (const dim of channel.getEventDimensions()) {
 				dimensionNameToId[dim.name] = dim.id;
 				dimensionIdToName[dim.id] = dim.name;
@@ -312,32 +299,22 @@ export class Thalamus {
 	 * Pre-create action neurons for all channels if they don't exist, so that we
 	 */
 	initializeActionNeurons() {
+
+		// get points for the channel's action neurons and add them to the channel's action set for exploration
 		const channelActions = new Map();
+		for (const [channelName, channel] of this.getChannels()) {
 
-		for (const { name: channelName, id: channelId, channel } of this.getAllChannelsWithIds()) {
-
-			// get points for the channel's action neurons
-			const actionCoords = channel.getActions();
-
-			const actionPoints = actionCoords.map(coords => ({
-				coordinates: coords,
-				channel: channelName,
-				channel_id: channelId,
-				type: 'action'
-			}));
-
-			// Get action neurons and add them
+			// get action neurons for this channel
 			const actionNeurons = new Set();
-			for (const point of actionPoints) {
-				const neuronId = this.getNeuronIdForPoint(point);
-				const neuron = this.getNeuron(neuronId);
-				actionNeurons.add(neuron);
-			}
+			for (const coordinates of channel.getActions())
+				actionNeurons.add(this.getNeuronForPoint({ coordinates, channel: channelName, type: 'action' }));
 
+			// add channel's action neurons to the channelActions map
 			channelActions.set(channelName, actionNeurons);
-			if (this.debug) console.log(`Created ${actionCoords.length} action neurons for ${channelName}`);
+			if (this.debug) console.log(`Created ${actionNeurons.length} action neurons for ${channelName}`);
 		}
 
+		// set channel actions for exploration
 		this.setChannelActions(channelActions);
 	}
 

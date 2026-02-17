@@ -181,7 +181,7 @@ export default class SyntheticExtendedTest extends Job {
 	 * Get neuron ID for a specific dimension and value
 	 */
 	async getNeuronIdForDimensionValue(dimensionName, value) {
-		return this.brain.getNeuronIdByCoordinates({ [dimensionName]: value });
+		return this.brain.getNeuronByCoordinates({ [dimensionName]: value }).id;
 	}
 
 	/**

@@ -94,13 +94,13 @@ export default class Brain {
 
 		// Reset channel class static state (once per class)
 		const channelClasses = new Set();
-		for (const [, channel] of this.thalamus.getAllChannels())
+		for (const [, channel] of this.thalamus.getChannels())
 			channelClasses.add(channel.constructor);
 		for (const ChannelClass of channelClasses)
 			ChannelClass.resetChannelContext();
 
 		// Reset all channel instance states
-		for (const [, channel] of this.thalamus.getAllChannels())
+		for (const [, channel] of this.thalamus.getChannels())
 			channel.resetContext();
 	}
 
@@ -143,7 +143,7 @@ export default class Brain {
 		const neurons = this.thalamus.getAllNeurons();
 		const channelNameToId = this.thalamus.getChannelNameToIdMap();
 		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
-		const channels = this.thalamus.getAllChannels();
+		const channels = this.thalamus.getChannels();
 		await this.db.backupChannels(channels);
 		await this.db.backupDimensions(channels);
 		await this.db.backupNeurons(neurons, channelNameToId, dimensionNameToId);
@@ -156,7 +156,7 @@ export default class Brain {
 		const neurons = this.thalamus.getAllNeurons();
 		const channelNameToId = this.thalamus.getChannelNameToIdMap();
 		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
-		const channels = this.thalamus.getAllChannels();
+		const channels = this.thalamus.getChannels();
 		return this.dump.createDumpFile(neurons, channels, channelNameToId, dimensionNameToId);
 	}
 
@@ -190,17 +190,17 @@ export default class Brain {
 	 * Get neuron ID by coordinates.
 	 * Used for diagnostic output to show which neurons correspond to which values.
 	 * @param {object} coordinates - Coordinate object with dimension-value pairs
-	 * @returns {number|null} - Neuron ID or null if not found
+	 * @returns {Neuron|null} - Neuron or null if not found
 	 */
-	getNeuronIdByCoordinates(coordinates) {
-		return this.thalamus.getNeuronIdByCoordinates(coordinates);
+	getNeuronByCoordinates(coordinates) {
+		return this.thalamus.getNeuronByCoordinates(coordinates);
 	}
 
 	/**
 	 * Get all channels (public interface)
 	 */
 	getChannels() {
-		return this.thalamus.getAllChannels();
+		return this.thalamus.getChannels();
 	}
 
 	/**
@@ -269,7 +269,7 @@ export default class Brain {
 		this.runForgetCycle();
 
 		// show frame processing summary
-		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getAllChannels());
+		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getChannels());
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
@@ -298,17 +298,17 @@ export default class Brain {
 		const frameActions = this.memory.getInferredActions();
 
 		// Process each channel: get inputs from channel, get outputs from previous inference
-		for (const { name: channelName, id: channelId, channel } of this.thalamus.getAllChannelsWithIds()) {
+		for (const [channelName, channel] of this.thalamus.getChannels()) {
 
 			// Get the frame event inputs from the channel
 			const channelEvents = await channel.getFrameEvents();
 			for (const event of channelEvents)
-				this.frame.push({ coordinates: event, channel: channelName, channel_id: channelId, type: 'event' });
+				this.frame.push({ coordinates: event, channel: channelName, type: 'event' });
 
 			// Get actions from previous inference (guaranteed to exist after first frame)
 			const channelActions = frameActions.get(channelName) || [];
 			for (const action of channelActions)
-				this.frame.push({ coordinates: action.coordinates, channel: channelName, channel_id: channelId, type: 'action' });
+				this.frame.push({ coordinates: action.coordinates, channel: channelName, type: 'action' });
 		}
 
 		if (this.debug) console.log(`Processing frame: ${this.frame.length} neurons`);
@@ -333,7 +333,7 @@ export default class Brain {
 		let feedbackCount = 0;
 
 		const frameActions = this.memory.getInferredActions();
-		for (const [channelName, channel] of this.thalamus.getAllChannels()) {
+		for (const [channelName, channel] of this.thalamus.getChannels()) {
 			const actions = frameActions.get(channelName) || [];
 			const reward = await channel.getRewards(actions);
 			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
@@ -357,37 +357,34 @@ export default class Brain {
 	activateSensors() {
 
 		// bulk find/create neurons for all input points
-		const neuronIds = this.getFrameNeurons(this.frame);
+		const neurons = this.getFrameNeurons(this.frame);
 
 		// activate the neurons in the in-memory context
-		this.activateNeurons(neuronIds);
+		this.activateNeurons(neurons);
 
 		// Track inference performance (event accuracy, action rewards, and continuous prediction errors)
-		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.thalamus.getAllChannels());
+		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.thalamus.getChannels());
 	}
 
 	/**
-	 * Returns neuron IDs for given frame points, creating new neurons as needed.
+	 * Returns neurons for given frame points, creating new neurons as needed.
 	 * Points have structure: { coordinates, channel, channel_id, type }
 	 */
 	getFrameNeurons(frame) {
-		const neuronIds = [];
-		for (const point of frame) neuronIds.push(this.thalamus.getNeuronIdForPoint(point));
-		if (neuronIds.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
-		if (this.debug) console.log('frame neurons', neuronIds);
-		return neuronIds;
+		const neurons = [];
+		for (const point of frame) neurons.push(this.thalamus.getNeuronForPoint(point));
+		if (neurons.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
+		if (this.debug) console.log('frame neurons', neurons);
+		return neurons;
 	}
 
 	/**
 	 * Activate neurons by ID at age 0.
-	 * @param {Array<number>} neuronIds - Array of neuron IDs to activate
+	 * @param {Array<Neuron>} neurons - Array of neurons to activate
 	 */
-	activateNeurons(neuronIds) {
-		for (const neuronId of neuronIds) {
-			const neuron = this.thalamus.getNeuron(neuronId);
-			if (!neuron) throw new Error(`Neuron ${neuronId} not found in thalamus`);
+	activateNeurons(neurons) {
+		for (const neuron of neurons)
 			this.memory.activateNeuron(neuron);
-		}
 	}
 
 	/**
@@ -529,8 +526,9 @@ export default class Brain {
 			if (inf.neuron.type === 'action') channelsWithActions.add(inf.neuron.channel);
 
 		// Add exploration action for channels without one
-		for (const [channelName] of this.thalamus.getAllChannels()) {
+		for (const [channelName] of this.thalamus.getChannels()) {
 			if (channelsWithActions.has(channelName)) continue;
+
 			// No action inferred for this channel - use the lowest ID action for deterministic exploration
 			const actions = this.thalamus.getChannelActions(channelName);
 			const explorationAction = [...actions].sort((a, b) => a.id - b.id)[0];
