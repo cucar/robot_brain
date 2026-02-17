@@ -388,7 +388,7 @@ export class Thalamus {
 
 		// clean up forward references (neurons this pattern referenced)
 		// most of the time, this should be empty if the neuron is getting deleted, but it's possible for some left over
-		for (const entry of neuron.context.entries)
+		for (const entry of neuron.context.getEntries())
 			entry.neuron.removeContextRef(neuron, entry.distance);
 
 		// for each pattern that has this neuron in their context, clean them up

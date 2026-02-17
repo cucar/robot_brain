@@ -190,7 +190,7 @@ export class Neuron {
 	 * returns pattern context entries
 	 */
 	getPatternContext() {
-		return this.context.entries;
+		return this.context.getEntries();
 	}
 
 	/**
@@ -277,7 +277,7 @@ export class Neuron {
 
 		// Weaken missing and delete if necessary
 		for (const entry of missing) {
-			const canDelete = this.context.weakenNeuron(entry.neuron, entry.distance);
+			const canDelete = this.context.weakenNeuron(entry.neuron, entry.distance, Context.negativeReinforcement);
 			if (canDelete) this.removePatternContext(entry.neuron, entry.distance);
 		}
 	}
@@ -492,15 +492,13 @@ export class Neuron {
 	 * Forget context entries (routing tables) - decay strengths and delete weak entries.
 	 */
 	forgetContexts() {
-		let contextsDeleted = 0, contextsUpdated = 0;
+		let contextsDeleted = 0;
 
 		// decay the context strengths
 		const toDelete = [];
-		for (const entry of this.context.entries) {
-			const oldStrength = entry.strength;
-			entry.strength = Math.max(Context.minStrength, entry.strength - Neuron.contextForgetRate);
-			if (entry.strength < oldStrength) contextsUpdated++;
-			if (entry.strength <= Context.minStrength) toDelete.push(entry);
+		for (const entry of this.context.getEntries()) {
+			const canDelete = this.context.weakenNeuron(entry.neuron, entry.distance, Neuron.contextForgetRate);
+			if (canDelete) toDelete.push(entry);
 		}
 
 		// delete the weak context entries
@@ -509,7 +507,7 @@ export class Neuron {
 			contextsDeleted++;
 		}
 
-		if (Neuron.debug) console.log(`  Contexts: ${contextsUpdated} weakened, ${contextsDeleted} deleted`);
+		if (Neuron.debug) console.log(`  Contexts: ${contextsDeleted} deleted`);
 	}
 
 	/**
