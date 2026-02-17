@@ -15,21 +15,58 @@ Error-driven learning is the mechanism by which the brain creates patterns. Patt
 
 ## When Patterns Are Created
 
-Patterns are created by `learnNewPatterns()` in two scenarios:
+Patterns are created by `brain.learnNewPatterns()` which calls `neuron.learnNewPattern()` in two scenarios:
 
 ### 1. Event Prediction Errors
 
-When a connection confidently predicted an event that didn't happen:
-- Connection strength >= `eventErrorMinStrength` (default: 2.0)
-- The predicted neuron did NOT appear
+When a neuron confidently predicted an event that didn't happen:
+- Neuron voted in previous frame (has saved votes and context)
+- Vote strength >= `eventErrorMinStrength` (default: 2.0)
+- Vote type is 'event'
+- The predicted neuron did NOT appear in current frame
 - Create a pattern with the predictor as peak
+
+**Implementation**:
+```javascript
+for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
+  for (vote of votes) {
+    if (vote.neuron.type === 'event' &&
+        vote.strength >= eventErrorMinStrength &&
+        !newActiveNeurons.has(vote.neuron)) {
+      // Strong prediction failed - create error pattern
+      pattern = neuron.createPattern(context, newActiveNeurons)
+      return pattern
+    }
+  }
+}
+```
 
 ### 2. Action Regret
 
 When an action resulted in negative reward:
-- Pattern strength >= `actionRegretMinStrength` (default: 2.0)
-- The action's reward was negative
+- Neuron voted for an action in previous frame
+- Vote strength >= `actionRegretMinStrength` (default: 2.0)
+- Vote type is 'action'
+- The action's reward < `actionRegretMinPain` (default: 0)
 - Create a pattern to try alternative actions
+
+**Implementation**:
+```javascript
+for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
+  for (vote of votes) {
+    if (vote.neuron.type === 'action' &&
+        vote.strength >= actionRegretMinStrength) {
+      reward = rewards.get(vote.neuron.channel)
+      if (reward < actionRegretMinPain) {
+        // Painful action - create regret pattern
+        alternativeActions = getAlternativeActions(vote.neuron, channelActions)
+        pattern = neuron.createPattern(context, alternativeActions)
+        return pattern
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -37,22 +74,54 @@ When an action resulted in negative reward:
 
 When neuron C predicts D but E appears instead:
 
+### In-Memory Structure
+
+```javascript
+// Pattern neuron created at level 1
+pattern = Neuron.createPattern(level=1, peak=C)
+
+// Peak neuron C adds pattern to its routing table
+C.patterns.add(pattern)
+
+// Pattern stores context (neurons active when C voted)
+pattern.context = new Context()
+pattern.context.addNeuron(B, distance=1, strength=1)  // B was at age=1
+pattern.context.addNeuron(A, distance=2, strength=1)  // A was at age=2
+pattern.context.addNeuron(X, distance=3, strength=1)  // X was at age=3
+
+// Pattern stores predictions (what actually happened)
+pattern.connections.set(distance=1, new Map([
+  [E, {strength: 1, reward: 0}]  // E appeared at distance=1
+]))
+
+// Reverse references for cleanup
+B.contextRefs.set(pattern, new Set([1]))
+A.contextRefs.set(pattern, new Set([2]))
+X.contextRefs.set(pattern, new Set([3]))
 ```
-Pattern Created at Level 1:
 
-  Peak Neuron: C (the predictor, not D the failed prediction)
+### MySQL Persistence (Optional)
 
-  pattern_past (context for recognition):
-    - B at context_age=1 (was at age=1 when C appeared)
-    - A at context_age=2 (was at age=2 when C appeared)
-    - X at context_age=3 (was at age=3 when C appeared)
-    - Captures up to contextLength-1 frames of temporal history
+When backed up to database:
 
-  pattern_future (predictions):
-    - E at distance=1 (the actual outcome)
+```sql
+-- Pattern neuron
+INSERT INTO neurons (id, level) VALUES (pattern.id, 1)
 
-  pattern_peaks:
-    - Maps pattern_neuron_id → peak_neuron_id (C)
+-- Peak mapping
+INSERT INTO pattern_peaks (pattern_neuron_id, peak_neuron_id, strength)
+VALUES (pattern.id, C.id, 1.0)
+
+-- Context (pattern_past)
+INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength)
+VALUES
+  (pattern.id, B.id, 1, 1.0),
+  (pattern.id, A.id, 2, 1.0),
+  (pattern.id, X.id, 3, 1.0)
+
+-- Predictions (pattern_future)
+INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward)
+VALUES (pattern.id, E.id, 1, 1.0, 0)
 ```
 
 **Why the predictor is the peak:** The predictor neuron made the error, so it needs to learn. When C appears again in a similar context, the pattern activates and provides the corrected prediction.
@@ -126,34 +195,100 @@ Over time, two patterns emerge for B:
 
 ### Recognition Phase
 
-When a peak neuron appears, `matchObservedPatterns()` checks if any patterns match:
+When a peak neuron appears at age 0, `brain.recognizePatterns()` checks if any patterns match:
 
+**Implementation** (`neuron.matchPattern()`):
+```javascript
+// Called during recognizeLevel(level)
+{peaks, context} = memory.getPeaksAndContext(level)
+
+for (peak of peaks) {
+  // Get best matching pattern from peak's routing table
+  bestPattern = null
+  bestScore = 0
+
+  for (pattern of peak.patterns) {
+    match = pattern.context.match(context)
+    if (match && match.score > bestScore) {
+      bestPattern = pattern
+      bestScore = match.score
+    }
+  }
+
+  if (bestPattern) {
+    memory.activatePattern(bestPattern, peak, age=0)
+  }
+}
 ```
-Active neurons: Y (age=3), A (age=2), B (age=1), C (age=0)
 
-Pattern for peak C:
-  pattern_past: {B at context_age=1, A at context_age=2, X at context_age=3}
+**Context Matching** (`context.match()`):
+```javascript
+// Active neurons: Y (age=3), A (age=2), B (age=1), C (age=0)
+// Pattern context: {B at distance=1, A at distance=2, X at distance=3}
 
-Matching:
-  - B at context_age=1? B is at age=1 ✓
-  - A at context_age=2? A is at age=2 ✓
-  - X at context_age=3? Y is at age=3 ✗
+common = []
+missing = []
 
-Match ratio: 2/3 = 67% >= mergePatternThreshold (50%)
-Pattern activates!
+for (entry of pattern.context.entries) {
+  if (observed.hasKey(entry.neuron, entry.distance)) {
+    common.push(entry)  // B at 1 ✓, A at 2 ✓
+  } else {
+    missing.push(entry)  // X at 3 ✗ (Y is there instead)
+  }
+}
+
+matchRatio = common.length / pattern.context.entries.length
+// matchRatio = 2/3 = 67% >= mergeThreshold (50%)
+
+if (matchRatio >= mergeThreshold) {
+  score = sum(common.map(e => e.strength))
+  return {score, common, missing, novel}
+}
+
+return null  // No match
 ```
 
 Among matching patterns for the same peak, the one with highest total strength wins.
 
 ### Inference Phase
 
-When a pattern is active, `collectVotes()` gathers its predictions:
+When a pattern is active, it votes via its connections:
 
-1. Get pattern_future entries where `distance = pattern.age + 1`
-2. Cast votes weighted by level and time decay
-3. Pattern votes **override** connection votes from the peak neuron
+**Implementation** (`neuron.vote()`):
+```javascript
+// Pattern neuron at age 0 votes for distance = 0 + 1 = 1
+distance = age + 1
+levelWeight = 1 + level * levelVoteMultiplier  // e.g., 1 + 1*3 = 4
+timeWeight = 1 - age / contextLength           // e.g., 1 - 0/5 = 1.0
 
-This override is the key mechanism: patterns exist to correct connection predictions.
+distanceMap = connections.get(distance)
+if (!distanceMap) return []
+
+votes = []
+for ([neuron, conn] of distanceMap) {
+  votes.push({
+    neuron: neuron,
+    strength: levelWeight * timeWeight * conn.strength,
+    reward: conn.reward,
+    distance: distance
+  })
+}
+return votes
+```
+
+**Pattern Override**:
+```javascript
+// During vote collection
+for ({voter, age, state} of memory.getVotingNeurons()) {
+  // If a pattern was activated by this neuron, skip its votes
+  if (state.activatedPattern !== null) continue
+
+  // Otherwise, collect votes normally
+  votes.push(...voter.vote(age, timeDecay))
+}
+```
+
+This override is the key mechanism: patterns exist to correct connection predictions. When a pattern matches, the peak neuron doesn't vote via its connections - the pattern votes instead.
 
 ---
 
@@ -200,19 +335,68 @@ When B appears with F at age=2:
 
 ## Pattern Evolution
 
-Patterns refine over time through `refinePatterns()`:
+Patterns refine over time through connection learning and pattern matching:
 
-**pattern_past refinement:**
-- Common neurons (in both pattern and observation): strengthen
-- Novel neurons (only in observation): add with strength 1
-- Missing neurons (only in pattern): weaken
+### Context Refinement (Implicit)
 
-**pattern_future refinement:**
-- Correct predictions: strengthen
-- Failed predictions: weaken
-- Novel observations: add
+Pattern contexts evolve through the matching process:
 
-Over many cycles, patterns converge to accurate predictions for their specific contexts.
+**During matching** (`context.match()`):
+- Common neurons: contribute to match score
+- Missing neurons: reduce match ratio
+- Novel neurons: identified but not added automatically
+
+**During learning** (`neuron.learnConnections()`):
+- When pattern is active and makes correct predictions, its connections strengthen
+- When pattern makes incorrect predictions, new patterns may be created
+- Pattern context remains stable unless explicitly modified
+
+### Prediction Refinement (Explicit)
+
+Pattern predictions evolve through connection updates:
+
+**When pattern predicts correctly**:
+```javascript
+// Pattern is active at age > 0
+// Predicted neuron appears at age 0
+// updateConnections() strengthens the connection
+
+for ({neuron, age} of memory.getContextNeurons()) {
+  if (neuron.level > 0) {  // Pattern neuron
+    neuron.learnConnections(age, newActiveNeurons, rewards, channelActions)
+  }
+}
+
+// In neuron.learnConnections()
+for (newNeuron of newActiveNeurons) {
+  if (hasConnection(distance, newNeuron)) {
+    updateConnection(distance, newNeuron, reward)  // strength++
+  }
+}
+```
+
+**When pattern predicts incorrectly**:
+```javascript
+// Pattern votes for neuron D
+// Neuron E appears instead
+// learnNewPatterns() may create a new pattern
+
+for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
+  // neuron is the pattern that voted
+  for (vote of votes) {
+    if (vote.strength >= eventErrorMinStrength &&
+        !newActiveNeurons.has(vote.neuron)) {
+      // Create new pattern at level+1
+      newPattern = neuron.createPattern(context, newActiveNeurons)
+    }
+  }
+}
+```
+
+Over many cycles, patterns converge to accurate predictions for their specific contexts through:
+1. **Strengthening** correct predictions (connection updates)
+2. **Creating higher-level patterns** for persistent errors (pattern learning)
+3. **Forgetting** weak predictions (forget cycles)
 
 ---
 
@@ -232,10 +416,55 @@ For truly random sequences (A→B→C 50%, A→B→E 50% with no correlation to 
 
 A single neuron can be the peak of multiple patterns:
 
+**In-Memory Structure**:
+```javascript
+// Neuron B has multiple patterns in its routing table
+B.patterns = Set([pattern1, pattern2, pattern3])
+
+// Pattern 1: context includes D at distance=2
+pattern1.peak = B
+pattern1.context.entries = [
+  {neuron: A, distance: 1, strength: 5},
+  {neuron: D, distance: 2, strength: 8},
+  {neuron: X, distance: 3, strength: 3}
+]
+pattern1.connections.get(1) = Map([[C, {strength: 10, reward: 0}]])
+
+// Pattern 2: context includes F at distance=2
+pattern2.peak = B
+pattern2.context.entries = [
+  {neuron: A, distance: 1, strength: 4},
+  {neuron: F, distance: 2, strength: 7},
+  {neuron: Y, distance: 3, strength: 2}
+]
+pattern2.connections.get(1) = Map([[E, {strength: 9, reward: 0}]])
+
+// Pattern 3: context includes X at distance=3
+pattern3.peak = B
+pattern3.context.entries = [
+  {neuron: A, distance: 1, strength: 6},
+  {neuron: Z, distance: 2, strength: 5},
+  {neuron: X, distance: 3, strength: 8}
+]
+pattern3.connections.get(1) = Map([[Y, {strength: 7, reward: 0}]])
 ```
-Pattern_1: peak=B, context includes D at age=2 → predicts C
-Pattern_2: peak=B, context includes F at age=2 → predicts E
-Pattern_3: peak=B, context includes X at age=3 → predicts Y
+
+**Pattern Selection**:
+```javascript
+// When B appears at age 0, match all patterns
+bestPattern = null
+bestScore = 0
+
+for (pattern of B.patterns) {
+  match = pattern.context.match(observedContext)
+  if (match && match.score > bestScore) {
+    bestPattern = pattern
+    bestScore = match.score
+  }
+}
+
+// Activate the best-matching pattern
+if (bestPattern) memory.activatePattern(bestPattern, B, 0)
 ```
 
 Each pattern learns independently. When B appears, the pattern with the best-matching context activates.
@@ -244,28 +473,128 @@ Each pattern learns independently. When B appears, the pattern with the best-mat
 
 ## Hierarchical Patterns
 
-If contextLength frames isn't enough context:
+If contextLength frames isn't enough context, patterns can form hierarchies:
 
-- Level 1 patterns capture sequences of base neurons
-- Level 2 patterns capture sequences of Level 1 patterns
-- Each level extends the effective temporal context
-- Higher levels can represent patterns spanning many more frames
+### Level Progression
 
-Pattern errors at level N create patterns at level N+1.
+**Level 0 (Base neurons)**:
+- Sensory inputs and actions
+- Learn connections to other base neurons
+- Vote for next frame predictions
+
+**Level 1 (First-order patterns)**:
+- Created when base neurons make prediction errors
+- Context: base neurons at various distances
+- Predictions: base neurons at distance 1
+- Vote with 4x weight (1 + 1*3)
+
+**Level 2 (Second-order patterns)**:
+- Created when level 1 patterns make prediction errors
+- Context: level 1 patterns at various distances
+- Predictions: base neurons at distance 1
+- Vote with 7x weight (1 + 2*3)
+
+**Level N**:
+- Created when level N-1 patterns make prediction errors
+- Context: level N-1 patterns at various distances
+- Predictions: base neurons at distance 1
+- Vote with (1 + N*3)x weight
+
+### Hierarchical Recognition
+
+**Implementation** (`brain.recognizePatterns()`):
+```javascript
+level = 0
+while (true) {
+  // Get peaks and context at this level
+  {peaks, context} = memory.getPeaksAndContext(level)
+  if (peaks.length === 0) break
+
+  // Match patterns for each peak
+  patternsFound = false
+  for (peak of peaks) {
+    pattern = peak.matchPattern(context)
+    if (pattern) {
+      memory.activatePattern(pattern, peak, 0)
+      patternsFound = true
+    }
+  }
+
+  if (!patternsFound) break
+
+  level++
+  if (level >= maxLevels) break
+}
+```
+
+### Temporal Extension
+
+Each level extends the effective temporal context:
+- **Level 0**: contextLength frames (e.g., 5 frames)
+- **Level 1**: contextLength * contextLength frames (e.g., 25 frames)
+- **Level 2**: contextLength^3 frames (e.g., 125 frames)
+- **Level N**: contextLength^(N+1) frames
+
+This exponential growth allows the system to capture long-term dependencies without increasing contextLength.
+
+### Example: Multi-Level Learning
+
+```
+Sequence: A B C D E F G H (repeating)
+
+Level 0: Base neurons learn A→B, B→C, C→D, etc.
+
+If context is too short to predict correctly:
+  Frame 10: C appears, predicts D, but X appears instead
+  → Create Level 1 pattern with peak=C, context={A, B, ...}, prediction=X
+
+Level 1: Pattern neurons learn sequences of base patterns
+
+If level 1 context is too short:
+  Frame 50: Pattern_5 appears, predicts Pattern_6, but Pattern_7 appears
+  → Create Level 2 pattern with peak=Pattern_5, context={Pattern_3, Pattern_4, ...}, prediction=base neurons
+
+Level 2: Pattern neurons learn sequences of level 1 patterns
+```
+
+Pattern errors at level N create patterns at level N+1, enabling hierarchical abstraction.
 
 ---
 
 ## Summary
 
-| Concept | Description |
-|---------|-------------|
-| **Pattern creation** | Only on confident prediction errors |
-| **Peak neuron** | The predictor that made the error |
-| **pattern_past** | Context neurons with relative ages |
-| **pattern_future** | Corrected predictions |
-| **Pattern matching** | Threshold-based (default 50%) |
-| **Pattern override** | Pattern votes replace connection votes |
-| **Context differentiation** | Different histories → different patterns |
-| **Hierarchical extension** | Pattern errors create higher-level patterns |
+### Key Concepts
+
+| Concept | Description | Implementation |
+|---------|-------------|----------------|
+| **Pattern creation** | Only on confident prediction errors | `neuron.learnNewPattern()` checks vote strength and outcome |
+| **Peak neuron** | The predictor that made the error | Pattern stored in peak's routing table (`peak.patterns`) |
+| **Pattern context** | Context neurons with relative distances | `pattern.context` (Context class with entries) |
+| **Pattern predictions** | Corrected predictions | `pattern.connections` (same as base neurons) |
+| **Pattern matching** | Threshold-based (default 50%) | `context.match()` compares observed vs known context |
+| **Pattern override** | Pattern votes replace connection votes | `state.activatedPattern` suppresses peak's votes |
+| **Context differentiation** | Different histories → different patterns | Multiple patterns per peak, best match wins |
+| **Hierarchical extension** | Pattern errors create higher-level patterns | `recognizePatterns()` processes levels recursively |
+
+### Implementation Highlights
+
+**In-Memory Structure**:
+- Patterns are Neuron objects (level > 0)
+- Context stored in Context class (fast matching)
+- Predictions stored in connections Map (same as base neurons)
+- Peak's routing table (patterns Set) enables multiple patterns per peak
+
+**Pattern Lifecycle**:
+1. **Creation**: Prediction error triggers `neuron.learnNewPattern()`
+2. **Activation**: Context match triggers `memory.activatePattern()`
+3. **Voting**: Pattern votes via `neuron.vote()` with level weighting
+4. **Learning**: Connections strengthen/weaken via `neuron.learnConnections()`
+5. **Forgetting**: Weak patterns deleted via `neuron.forget()` and `thalamus.deletePattern()`
+
+**Key Differences from Original Design**:
+- No separate pattern_past/pattern_future tables (in-memory Context and connections)
+- No explicit pattern refinement method (happens through connection learning)
+- Pattern override via activation state (not vote deletion)
+- Unified neuron class (patterns and base neurons share code)
 
 The algorithm memorizes any sequence with learnable temporal structure, while correctly refusing to memorize true randomness.

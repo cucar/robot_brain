@@ -22,7 +22,7 @@ export default class StockTestJob extends Job {
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
-			holdoutRows: 50,                     // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
+			holdoutRows: 0,                     // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
 			offsetRows: 0                        // Number of rows to skip from start (can be overridden with --offset)
 		};
 

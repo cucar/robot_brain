@@ -28,42 +28,85 @@ Temporal distance is built into connections. The frame-by-frame processing and d
 
 ---
 
+## Implementation Architecture
+
+### Core Classes
+
+The system uses an **in-memory architecture** with optional MySQL persistence:
+
+#### Brain (`brain/brain.js`)
+Main orchestrator that coordinates all components:
+- Frame processing loop
+- Pattern recognition and learning
+- Inference and voting
+- Forget cycles
+- Backup/restore to MySQL
+
+#### Thalamus (`brain/thalamus.js`)
+Relay station for reference frame transfers (named after biological thalamus):
+- **Neuron registry**: Maps neuron IDs to Neuron objects
+- **Neuron lookup**: Fast coordinate-based lookup for sensory neurons
+- **Channel management**: Instantiates and coordinates channels
+- **Dimension mappings**: Translates dimension names to IDs
+- **Action execution**: Coordinates multi-channel action execution
+
+#### Memory (`brain/memory.js`)
+Temporal sliding window for short-term memory:
+- **Active neurons**: Indexed by age (0 = newest, contextLength-1 = oldest)
+- **Inferred neurons**: Winning predictions from previous frame
+- **Context retrieval**: Gets context for pattern matching and learning
+- **Aging**: Shifts temporal window each frame
+
+#### Neuron (`brain/neuron.js`)
+Unified class for all neurons (sensory and pattern):
+- **Connections**: Map<distance, Map<toNeuron, {strength, reward}>>
+- **Patterns**: Set of pattern neurons (for peak neurons)
+- **Context**: Context object (for pattern neurons)
+- **Voting**: Generates votes weighted by level and time
+- **Learning**: Creates connections and patterns from observations
+
+#### Context (`brain/context.js`)
+Pattern context representation and matching:
+- **Entries**: Array of {neuron, distance, strength}
+- **Keys**: Set for fast O(1) lookup during matching
+- **Matching**: Threshold-based pattern recognition
+- **Merging**: Strengthens common, adds novel, weakens missing
+
+---
+
 ## Two Hierarchies: Events and Actions
 
 ### Event Hierarchy (Passive Learning)
 
 Event neurons observe what happens in the world. They learn by **association** - when events co-occur or follow each other, connections form and strengthen.
 
-#### Inference Mechanisms
+#### Connection Learning
 
-**Connection Inference**: Active event neurons predict future events via their connections.
-- When prediction comes true → connection naturally strengthens through observation
-- When prediction fails with high confidence → create a pattern to correct future predictions
-
-**Pattern Inference**: When a pattern matches the current context, it overrides connection inference.
-- Pattern_past defines the context (neurons active when the peak was observed)
-- Pattern_future defines the prediction (what the pattern predicts will happen)
+When a neuron is active at age > 0 and a new neuron appears at age 0:
+- Create or strengthen connection at distance = age
+- Increment strength (clamped to maxStrength)
+- Connections predict: "when I appear, this other neuron appears N frames later"
 
 #### Pattern Learning for Events
 
-When a pattern is observed (matched to current context):
-1. **Pattern_past merges with observation**:
-   - Neurons in both pattern and observation → strengthen
-   - Neurons only in observation → add with strength 1 (novel context)
-   - Neurons only in pattern → weaken (missing context)
-2. Pattern definition remains fluid, adapting to what's actually observed
+When a neuron makes a strong prediction that fails:
+- Create pattern with peak = predictor neuron
+- Context = all active neurons at time of prediction
+- Prediction = actual outcome (not the failed prediction)
+- Pattern activates when context matches in future
 
-When pattern inference succeeds:
-- Pattern_future strength for that event increases
+When a pattern matches and predicts correctly:
+- Pattern context strengthens (common neurons)
+- Pattern prediction strengthens
+- Pattern learns to predict better
 
-When pattern inference fails:
-- Pattern_future adds the actual outcome (novel neurons)
-- Pattern_future weakens the failed prediction
-- The pattern learns to predict the correct neuron next time
+When a pattern matches but predicts incorrectly:
+- Pattern context adapts (add novel, weaken missing)
+- Pattern prediction adapts (add actual, weaken failed)
 
 ### Action Hierarchy (Active Learning)
 
-Actions are always at the **base level**. All event neurons (at any level) vote on which actions to take. Actions learn by **trial-and-error** with rewards, not by association.
+Actions are always at the **base level** (level 0). All neurons (at any level) vote on which actions to take. Actions learn by **trial-and-error** with rewards, not by association.
 
 #### Key Differences from Events
 
@@ -72,41 +115,48 @@ Actions are always at the **base level**. All event neurons (at any level) vote 
 | Learning signal | Strength (observation) | Reward (feedback) |
 | Ground truth | What actually happened | None - only reward signals |
 | Winner selection | Highest total strength | Highest weighted reward |
-| Pattern_future learning | Merge with ground truth | Explore alternatives on pain |
+| Connection learning | Strengthen when observed | Update reward via smoothing |
+| Pattern learning | Created on prediction error | Created on negative reward (regret) |
 
 #### Exploration
 
-Exploration kick-starts the search for optimal actions:
-- When **no action winners exist** for a channel, explore randomly
-- Exploration asks the channel for an unexplored action
-- Exploration builds connections between event neurons/patterns and actions
+Exploration ensures all channels have actions:
+- When **no action inferred** for a channel, use deterministic exploration
+- Select lowest-ID action from channel's action set
+- Builds connections between active neurons and exploration actions
+- Enables learning from random exploration
 
 #### Action Pattern Learning
 
-When action pattern inference results in **positive reward**:
-- Pattern_future strength for that action increases
-- Reward is updated via exponential smoothing
+When action connection/pattern results in **positive reward**:
+- Connection/pattern strength increases
+- Reward updates via exponential smoothing
+- Action becomes more likely in similar contexts
 
-When action pattern inference results in **negative reward** (pain):
-- Pattern finds another valid action in the channel
-- Adds it to pattern_future with neutral reward
-- Continues until all possible actions are in pattern_future
-- Over time, reward-weighted selection favors the best-rewarding action
+When action connection/pattern results in **negative reward** (regret):
+- If strength >= actionRegretMinStrength, create regret pattern
+- Pattern learns alternative actions for this context
+- Over time, reward-weighted selection favors best action
 
 ---
 
 ## Voting Architecture
 
 ### Vote Collection
+
 All active neurons (at all levels) cast votes for what they predict will happen next.
 
-**Connection votes** (from base level neurons):
-- Source: active base neurons with connections to target neurons
-- Condition: `connection.distance = neuron.age + 1` (predicting next frame)
+**Implementation** (`brain.collectVotes()`):
+1. Iterate through active neurons at ages 0 to contextLength-2
+2. Skip neurons with activated patterns (pattern override)
+3. Call `neuron.vote(age, timeDecay)` to get votes
+4. Save votes and context in memory for pattern learning
+5. Return all votes for consensus
 
-**Pattern votes** (from pattern neurons at any level):
-- Source: active pattern neurons with pattern_future entries
-- Condition: `pattern_future.distance = pattern.age + 1` (predicting next frame)
+**Vote Generation** (`neuron.vote()`):
+- Get connections at distance = age + 1 (predicting next frame)
+- Weight each connection by level and time
+- Return array of {neuron, strength, reward, distance}
 
 ### Vote Weighting
 
@@ -115,93 +165,315 @@ Each vote is weighted by two factors:
 1. **Level weight**: `1 + level * levelVoteMultiplier`
    - Higher-level patterns have more influence (they represent more context)
    - Default multiplier: 3x per level
+   - Example: level 0 = 1x, level 1 = 4x, level 2 = 7x
 
-2. **Time decay**: `1 - (distance - 1) * (1 / contextLength)`
+2. **Time decay**: `1 - age / contextLength`
    - Recent predictions weighted more than distant ones
-   - Distance 1 gets full weight, distance 9 gets ~10% weight
+   - Age 0 gets full weight (1.0), age 4 gets 20% weight (0.2) with contextLength=5
 
-**Effective strength** = `levelWeight * timeDecay * rawStrength`
+**Effective strength** = `levelWeight * timeWeight * rawStrength`
 
 ### Pattern Override Rule
-When a peak neuron has both connection votes AND pattern votes active, **pattern votes override connection votes**. This is implemented by deleting connection votes from neurons that are peaks of voting patterns.
+
+When a pattern activates on a peak neuron, the peak's connection votes are suppressed.
+
+**Implementation**:
+- During pattern recognition, matched patterns are activated
+- `memory.activatePattern(pattern, peak, age)` sets `state.activatedPattern = pattern`
+- During vote collection, neurons with `state.activatedPattern !== null` are skipped
+- This prevents the peak from voting via its connections when a pattern is active
+
+**Why**: Patterns exist to correct connection predictions. When a pattern matches, it knows better than the raw connections.
 
 ### Consensus Determination
 
-1. **Vote aggregation**: Sum effective strengths per target neuron
-2. **Reward calculation**: Weighted average of rewards (for actions)
-3. **Per-dimension ranking**:
+**Implementation** (`brain.determineConsensus()`):
+
+1. **Aggregate votes**: Sum effective strengths per target neuron
+2. **Calculate rewards**: Weighted average of vote rewards (for actions)
+3. **Select winners per dimension**:
    - Events: highest total strength wins
    - Actions: highest weighted reward wins
-4. **Winner selection**: Neurons ranked #1 in any dimension become winners
+4. **Return winners**: Neurons that won in any dimension
+
+**Example**:
+```
+Votes: [
+  {neuron: price_up, strength: 10, reward: 0.5},
+  {neuron: price_up, strength: 5, reward: 0.3},
+  {neuron: price_down, strength: 8, reward: -0.2}
+]
+
+Aggregation:
+  price_up: strength=15, reward=(10*0.5 + 5*0.3)/15 = 0.43
+  price_down: strength=8, reward=-0.2
+
+Winner (event): price_up (highest strength)
+Winner (action): price_up (highest reward)
+```
 
 ---
 
 ## Data Structures
 
-### Neurons
-- **Base neurons (level 0)**: Have coordinates, represent specific observations/actions
-- **Pattern neurons (level 1+)**: No coordinates, represent learned contexts
-- **Type**: 'event' (observations) or 'action' (decisions)
-- **Channel**: Which sensory/motor channel this neuron belongs to
+### In-Memory Structures
 
-### Connections
-- Link base neurons across time (`distance` = temporal gap)
-- Store `strength` (how often observed) and `reward` (expected outcome for actions)
-- Only event neurons can be sources - actions cannot predict
-- Rewards updated via exponential smoothing: `new = smooth * observed + (1 - smooth) * old`
+#### Neuron Class
+```javascript
+class Neuron {
+  id: number                    // Unique ID
+  level: number                 // 0 = sensory, 1+ = pattern
 
-### Patterns
-- **pattern_peaks**: Maps pattern neuron to its peak neuron (the decision node)
-- **pattern_past**: Context neurons active when peak was observed (with relative ages)
-- **pattern_future**: Predictions from the pattern (base neurons with distances)
+  // Sensory neurons (level 0)
+  channel: string               // Channel name
+  type: 'event' | 'action'      // Neuron type
+  coordinates: object           // {dimension: value}
 
-### Active Memory Tables
-- **active_neurons**: Currently active neurons with their ages (sliding window)
-- **matched_patterns**: Patterns that matched in current frame
-- **matched_pattern_past**: Context analysis for matched patterns (common/novel/missing)
-- **inference_votes**: All votes before and after pattern override
-- **inferred_neurons**: Final predictions with winner flags
+  // Pattern neurons (level > 0)
+  peak: Neuron                  // Peak neuron reference
+
+  // All neurons
+  connections: Map<distance, Map<Neuron, {strength, reward}>>
+  patterns: Set<Neuron>         // Pattern neurons (for peaks)
+  context: Context              // Pattern context (for patterns)
+  contextRefs: Map<Neuron, Set<distance>>  // Reverse references
+  activationStrength: number    // Incremented on activation
+}
+```
+
+#### Memory Class
+```javascript
+class Memory {
+  activeNeurons: Array<Map<Neuron, {activatedPattern, votes, context}>>
+  inferredNeurons: Array<{neuron, strength, reward}>
+  contextLength: number
+}
+```
+
+#### Context Class
+```javascript
+class Context {
+  entries: Array<{neuron, distance, strength}>
+  keys: Set<string>  // For fast O(1) lookup
+}
+```
+
+### MySQL Persistence (Optional)
+
+Used for backup/restore between episodes, not during frame processing:
+
+- **`channels`** - Channel registry with IDs
+- **`dimensions`** - Dimension names with IDs
+- **`neurons`** - All neurons with level
+- **`base_neurons`** - Sensory neuron metadata (channel, type)
+- **`coordinates`** - Sensory neuron coordinate values
+- **`connections`** - Base neuron connections (distance, strength, reward)
+- **`pattern_peaks`** - Pattern-to-peak mappings with strength
+- **`pattern_past`** - Pattern contexts (context neurons with ages and strengths)
+- **`pattern_future`** - Pattern predictions (inferred neurons with distances, strengths, rewards)
 
 ---
 
 ## Frame Processing Flow
 
+The brain processes each frame through a coordinated sequence:
+
+### 1. getFrame()
+**Purpose**: Collect sensory inputs and previous actions
+
+```javascript
+// Get events from all channels
+for (channel of channels) {
+  events = channel.getFrameEvents()
+  frame.push({coordinates, channel, type: 'event'})
+}
+
+// Get actions from previous inference
+actions = memory.getInferredActions()
+for (action of actions) {
+  frame.push({coordinates, channel, type: 'action'})
+}
 ```
-1. processFrameIO()
-   - Get frame events from all channels
-   - Get previous frame's action winners from inferred_neurons
-   - Execute actions in channels
-   - Get rewards from channels
 
-2. ageNeurons()
-   - Increment age of all active neurons
+### 2. getRewards()
+**Purpose**: Get feedback on executed actions
 
-3. processBaseNeurons()
-   - Find/create neurons for frame points
-   - Insert as active neurons at age 0
-   - Reinforce connections (event→event, event→action)
-   - Apply rewards to action connections
-   - Track prediction accuracy
+```javascript
+for (channel of channels) {
+  reward = channel.getRewards(actions)
+  if (reward !== 0) rewards.set(channel, reward)
+}
+```
 
-4. processPatternNeurons()
-   - recognizePatterns(): Match and activate patterns level by level
-   - refinePatterns(): Update pattern_future based on observations/rewards
-   - learnNewPatterns(): Create patterns from prediction errors and action regret
+### 3. memory.age()
+**Purpose**: Shift temporal window
 
-5. deactivateOldNeurons()
-   - Remove neurons that aged out of context window
+```javascript
+// Shift ages: 0→1, 1→2, ..., contextLength-1→deleted
+activeNeurons.unshift(new Map())
+if (activeNeurons.length > contextLength) {
+  removed = activeNeurons.pop()  // Deactivate aged-out neurons
+}
+```
 
-6. inferNeurons()
-   - collectVotes(): Gather connection and pattern votes
-   - Delete overridden votes (pattern override rule)
-   - Aggregate and rank to determine winners
-   - applyExploration(): Add exploration actions if no winners
-   - saveInferences(): Store for next frame
+### 4. activateSensors()
+**Purpose**: Activate sensory neurons for current frame
 
-7. runForgetCycle() (periodic)
-   - Decay connection and pattern strengths
-   - Delete zero-strength entries
-   - Clean up orphaned pattern neurons
+```javascript
+// Find or create neurons for frame points
+neurons = getFrameNeurons(frame)  // via Thalamus
+
+// Activate at age 0
+for (neuron of neurons) {
+  memory.activateNeuron(neuron)
+  neuron.strengthenActivation()
+}
+
+// Track inference accuracy
+diagnostics.trackInferencePerformance(...)
+```
+
+### 5. recognizePatterns()
+**Purpose**: Detect and activate patterns hierarchically
+
+```javascript
+level = 0
+while (true) {
+  {peaks, context} = memory.getPeaksAndContext(level)
+  if (peaks.length === 0) break
+
+  // Match patterns for each peak
+  for (peak of peaks) {
+    pattern = peak.matchPattern(context)
+    if (pattern) memory.activatePattern(pattern, peak, 0)
+  }
+
+  level++
+  if (level >= maxLevels) break
+}
+```
+
+### 6. updateConnections()
+**Purpose**: Learn connections from observations
+
+```javascript
+newActiveNeurons = memory.getNewSensoryNeurons()  // age=0, level=0
+
+for ({neuron, age} of memory.getContextNeurons()) {
+  neuron.learnConnections(age, newActiveNeurons, rewards, channelActions)
+}
+```
+
+**Neuron.learnConnections()**:
+```javascript
+distance = age
+for (newNeuron of newActiveNeurons) {
+  if (hasConnection(distance, newNeuron)) {
+    updateConnection(distance, newNeuron, reward)  // increment strength, smooth reward
+  } else {
+    createConnection(distance, newNeuron, 1, reward)
+  }
+}
+```
+
+### 7. learnNewPatterns()
+**Purpose**: Create patterns from prediction errors and regret
+
+```javascript
+newActiveNeurons = memory.getNewSensoryNeurons()
+
+for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
+  newPattern = neuron.learnNewPattern(age, context, votes, newActiveNeurons, rewards, channelActions)
+  if (newPattern) {
+    thalamus.addNeuron(newPattern)
+    memory.activatePattern(newPattern, neuron, age)
+  }
+}
+```
+
+**Neuron.learnNewPattern()**:
+```javascript
+// Check for prediction errors (events)
+for (vote of votes) {
+  if (vote.neuron.type === 'event' && vote.strength >= eventErrorMinStrength) {
+    if (!newActiveNeurons.has(vote.neuron)) {
+      // Strong prediction failed - create error pattern
+      return createPattern(context, newActiveNeurons)
+    }
+  }
+}
+
+// Check for action regret
+for (vote of votes) {
+  if (vote.neuron.type === 'action' && vote.strength >= actionRegretMinStrength) {
+    reward = rewards.get(vote.neuron.channel)
+    if (reward < actionRegretMinPain) {
+      // Painful action - create regret pattern
+      return createPattern(context, alternativeActions)
+    }
+  }
+}
+```
+
+### 8. inferNeurons()
+**Purpose**: Predict next frame via voting
+
+```javascript
+// Collect votes from active neurons
+votes = collectVotes()
+
+// Determine consensus
+inferences = determineConsensus(votes)
+
+// Ensure all channels have actions
+ensureChannelActions(inferences)
+
+// Save for next frame
+memory.saveInferences(inferences)
+```
+
+### 9. executeActions()
+**Purpose**: Execute inferred actions
+
+```javascript
+channelActions = memory.getInferredActions()
+thalamus.executeChannelActions(channelActions)
+```
+
+### 10. runForgetCycle() (periodic)
+**Purpose**: Prevent curse of dimensionality
+
+```javascript
+if (frameNumber % forgetCycles !== 0) return
+
+// Forget connections and patterns
+deadPatterns = thalamus.forgetNeurons()
+
+// Delete dead patterns recursively
+deletePatterns(deadPatterns)
+```
+
+**Neuron.forget()**:
+```javascript
+// Decay connections
+for (distanceMap of connections.values()) {
+  for (connection of distanceMap.values()) {
+    connection.strength -= connectionForgetRate
+    if (connection.strength <= 0) delete connection
+  }
+}
+
+// Decay pattern context
+for (entry of context.entries) {
+  entry.strength -= contextForgetRate
+  if (entry.strength <= 0) remove entry
+}
+
+// Decay pattern predictions
+// (stored in pattern neurons, not shown here)
+
+// Return true if pattern can be deleted (no content, no references)
+return canDelete()
 ```
 
 ---
@@ -211,43 +483,120 @@ When a peak neuron has both connection votes AND pattern votes active, **pattern
 Channels are adapters between the brain and external devices (eyes, ears, trading systems, etc.).
 
 ### Required Methods
-- `getEventDimensions()`: Input dimension names
-- `getOutputDimensions()`: Output dimension names
-- `getActionNeurons()`: All possible action coordinates (for pre-creation)
-- `getFrameEvents()`: Current observations
-- `executeOutputs(actions)`: Execute brain's decisions
-- `getRewards()`: Feedback on action outcomes (0 = neutral)
-- `initialize()`: Channel-specific setup
+
+```javascript
+class Channel {
+  // Define coordinate space
+  getEventDimensions()    // Returns: Array<Dimension>
+  getOutputDimensions()   // Returns: Array<Dimension>
+
+  // Pre-create action neurons
+  getActions()            // Returns: Array<coordinates>
+
+  // Frame processing
+  getFrameEvents()        // Returns: Array<coordinates>
+  executeOutputs(actions) // Execute brain's decisions
+  getRewards(actions)     // Returns: number (0 = neutral, + = good, - = bad)
+}
+```
 
 ### Optional Methods
-- `debugVotes(votes, brain)`: Display vote details for debugging
-- `onEventPredictions(winners)`: Receive winning event predictions
-- `getPredictionMetrics()`: Return continuous prediction error metrics
-- `getOutputPerformanceMetrics()`: Return channel-specific performance (e.g., P&L)
+
+```javascript
+class Channel {
+  // Initialization
+  static initialize(options)           // Channel-level setup
+  static resetChannelContext()         // Reset shared state
+
+  // Coordinated execution
+  static executeChannelActions(channels, actionsMap)  // Multi-channel coordination
+  static getPortfolioMetrics(channels)                // Aggregate metrics
+
+  // Instance methods
+  resetContext()                       // Reset instance state
+  calculatePredictionError()           // Continuous error (e.g., MAPE)
+  getOutputPerformanceMetrics()        // Channel performance (e.g., P&L)
+  getMetrics()                         // Diagnostic metrics
+}
+```
+
+### Example: Stock Channel
+
+```javascript
+class StockChannel extends Channel {
+  getEventDimensions() {
+    return [
+      new Dimension('price_change', this.id, 'event'),
+      new Dimension('volume_change', this.id, 'event'),
+      new Dimension('position', this.id, 'event')
+    ]
+  }
+
+  getOutputDimensions() {
+    return [new Dimension('action', this.id, 'action')]
+  }
+
+  getActions() {
+    return [
+      {action: 'buy'},
+      {action: 'sell'},
+      {action: 'hold'}
+    ]
+  }
+
+  async getFrameEvents() {
+    // Return current price/volume changes and position
+    return [{
+      price_change: this.discretize(priceChange),
+      volume_change: this.discretize(volumeChange),
+      position: this.position
+    }]
+  }
+
+  async executeOutputs(actions) {
+    // Execute trade decision
+    if (actions[0].coordinates.action === 'buy') this.position = 1
+    else if (actions[0].coordinates.action === 'sell') this.position = -1
+  }
+
+  async getRewards(actions) {
+    // Return profit/loss from trade
+    return this.position * this.priceChange
+  }
+}
+```
 
 ---
 
 ## Key Hyperparameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| contextLength | 5 | Frames a neuron stays active |
-| levelVoteMultiplier | 3 | Weight increase per level |
-| rewardExpSmooth | 0.9 | Exponential smoothing for rewards |
-| eventErrorMinStrength | 2.0 | Min strength to create error pattern |
-| actionRegretMinStrength | 2.0 | Min strength to create regret pattern |
-| mergePatternThreshold | 0.5 | Min match ratio for pattern recognition |
-| patternNegativeReinforcement | 0.1 | Weakening rate for missing context |
-| forgetCycles | 100 | Frames between forget cycles |
-| connectionForgetRate | 1 | Strength decay per forget cycle |
-| patternForgetRate | 1 | Pattern strength decay per forget cycle |
-| maxLevels | 10 | Maximum pattern hierarchy depth |
+Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
+
+| Parameter | Default | Location | Description |
+|-----------|---------|----------|-------------|
+| contextLength | 5 | Memory | Frames a neuron stays active |
+| maxStrength | 100 | Neuron/Context | Maximum connection/pattern strength |
+| minStrength | 0 | Neuron/Context | Minimum strength before deletion |
+| levelVoteMultiplier | 3 | Neuron | Weight increase per pattern level |
+| rewardSmoothing | 1 | Neuron | Exponential smoothing for rewards (1 = full replacement) |
+| eventErrorMinStrength | 2 | Neuron | Min strength to create error pattern |
+| actionRegretMinStrength | 2 | Neuron | Min strength to create regret pattern |
+| actionRegretMinPain | 0 | Neuron | Min negative reward to trigger regret |
+| mergeThreshold | 0.5 | Context | Min match ratio for pattern recognition |
+| negativeReinforcement | 0.1 | Context | Weakening rate for missing context |
+| connectionForgetRate | 1 | Neuron | Connection strength decay per forget cycle |
+| contextForgetRate | 1 | Neuron | Pattern context strength decay per forget cycle |
+| patternForgetRate | 1 | Neuron | Pattern prediction strength decay per forget cycle |
+| forgetCycles | 100 | Brain | Frames between forget cycles |
+| maxLevels | 10 | Brain | Maximum pattern hierarchy depth |
 
 ---
 
 ## Summary
 
 This architecture implements a theory of how minds work:
+
+### Core Principles
 - **Prediction** drives all learning
 - **Failure** creates structure (patterns)
 - **Events** learn passively through association
@@ -255,6 +604,14 @@ This architecture implements a theory of how minds work:
 - **Voting** enables distributed decision-making with level and time weighting
 - **Time** is built into the representation
 - **Patterns override connections** to correct prediction errors
+
+### Implementation Highlights
+- **In-memory processing**: All learning in JavaScript objects (no DB queries during frames)
+- **Unified neuron class**: Sensory and pattern neurons share common functionality
+- **Thalamus relay**: Centralizes neuron registry and channel coordination
+- **Temporal sliding window**: Memory manages active neurons by age
+- **Context matching**: Fast threshold-based pattern recognition
+- **Optional persistence**: MySQL backup/restore between episodes
 
 The code is just the implementation. The architecture is a model of intelligence.
 
