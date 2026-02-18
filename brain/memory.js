@@ -1,5 +1,3 @@
-import { Context } from './context.js';
-
 /**
  * Memory - manages the temporal sliding window of active and inferred neurons.
  * Encapsulates all access to the brain's short-term memory structures.
@@ -173,22 +171,16 @@ export class Memory {
 	}
 
 	/**
-	 * Get peaks (age=0) and context (age>0) neurons, optionally filtered by level
-	 * @param {number} [level] - Optional level to filter by
-	 * @returns {{peaks: Array<Neuron>, context: Context}}
+	 * returns newly activated non-action neurons at age=0 (recognizers), filtered by level
 	 */
-	getPeaksAndContext(level) {
-		const filterByLevel = level !== undefined;
-		const peaks = [];
-		const context = new Context();
-		for (let age = 0; age < this.activeNeurons.length; age++)
-			for (const neuron of this.activeNeurons[age].keys()) {
-				if (neuron.level === 0 && neuron.type === 'action') continue; // actions cannot be in contexts and cannot be peaks
-				if (filterByLevel && neuron.level !== level) continue;
-				if (age === 0) peaks.push(neuron);
-				else context.addNeuron(neuron, age, 1);
-			}
-		return { peaks, context };
+	getRecognizerNeurons(level) {
+		const newNeurons = [];
+		for (const neuron of this.activeNeurons[0].keys()) {
+			if (neuron.level === 0 && neuron.type === 'action') continue; // actions cannot be peaks
+			if (neuron.level !== level) continue;
+			newNeurons.push(neuron);
+		}
+		return newNeurons;
 	}
 
 	/**
@@ -206,15 +198,19 @@ export class Memory {
 	}
 
 	/**
-	 * Get context neurons (age > 0, age < contextLength) for connection learning
+	 * Get context neurons (age > 0, age < contextLength), optionally filtered by level
+	 * @param {number} [level] - Optional level to filter by
 	 * @returns {Array<{neuron, age}>}
 	 */
-	getContextNeurons() {
+	getContextNeurons(level) {
+		const filterByLevel = level !== undefined;
 		const result = [];
 		for (let age = 1; age < this.activeNeurons.length; age++)
-			for (const neuron of this.activeNeurons[age].keys())
-				if (neuron.level > 0 || neuron.type !== 'action') // action neurons cannot learn connections - they are predicted by events
-					result.push({ neuron, age });
+			for (const neuron of this.activeNeurons[age].keys()) {
+				if (neuron.level === 0 && neuron.type === 'action') continue; // actions cannot be in contexts
+				if (filterByLevel && neuron.level !== level) continue;
+				result.push({ neuron, age });
+			}
 		return result;
 	}
 

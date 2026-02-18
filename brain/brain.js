@@ -1,4 +1,5 @@
 import { Memory } from './memory.js';
+import { Context } from './context.js';
 import { Database } from './database.js';
 import { Diagnostics } from './diagnostics.js';
 import { Dump } from './dump.js';
@@ -404,15 +405,20 @@ export default class Brain {
 	recognizeLevel(level) {
 		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
-		// get the peaks and context for this level
-		const {peaks, context} = this.memory.getPeaksAndContext(level);
-		if (peaks.length === 0) {
+		// get newly activated recognizing neurons at this level
+		const recognizers = this.memory.getRecognizerNeurons(level);
+		if (recognizers.length === 0) {
 			if (this.debug) console.log(`No newly activated neurons at level ${level}`);
 			return false;
 		}
 
-		// Match patterns (parallelizable) - collect results with parent reference - this is parallelizable
-		const matchedParents = peaks.map(parent => ({ parent, pattern: parent.matchPattern(context) }));
+		// build context from context neurons at this level
+		const context = new Context();
+		for (const { neuron, age } of this.memory.getContextNeurons(level))
+			context.addNeuron(neuron, age, 1);
+
+		// Match patterns (parallelizable) - collect results with parent reference
+		const matchedParents = recognizers.map(parent => ({ parent, pattern: parent.matchPattern(context) }));
 		const matchedPatterns = matchedParents.filter(p => p.pattern);
 
 		// If no patterns matched, stop here

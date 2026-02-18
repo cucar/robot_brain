@@ -339,11 +339,15 @@ diagnostics.trackInferencePerformance(...)
 ```javascript
 level = 0
 while (true) {
-  {peaks, context} = memory.getPeaksAndContext(level)
-  if (peaks.length === 0) break
+  newNeurons = memory.getNewNeurons(level)
+  if (newNeurons.length === 0) break
+
+  context = new Context()
+  for ({neuron, age} of memory.getContextNeurons(level))
+    context.addNeuron(neuron, age, 1)
 
   // Match patterns for each parent
-  for (parent of peaks) {
+  for (parent of newNeurons) {
     pattern = parent.matchPattern(context)
     if (pattern) memory.activatePattern(pattern, parent, 0)
   }
