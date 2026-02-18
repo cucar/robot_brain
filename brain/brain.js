@@ -514,6 +514,9 @@ export default class Brain {
 	collectVotes() {
 		const votes = [];
 
+		// Build all contexts once for all ages/levels
+		const contexts = this.memory.getContexts();
+
 		// Collect votes from neurons that can vote
 		for (const { voter, age, state } of this.memory.getVotingNeurons()) {
 
@@ -523,11 +526,8 @@ export default class Brain {
 			// get the votes of the neuron
 			const neuronVotes = voter.vote(age, 1 / this.memory.contextLength);
 
-			// capture context at voting time for pattern learning
-			const context = this.memory.getContextForAge(age, voter.level);
-
 			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
-			this.memory.setVotes(voter, age, neuronVotes, context);
+			this.memory.setVotes(voter, age, neuronVotes, contexts.get(`${age}:${voter.level}`));
 
 			// add the votes to the returned array
 			for (const vote of neuronVotes) votes.push({ voter: voter, ...vote });
@@ -595,9 +595,8 @@ export default class Brain {
 		for (const [channelName] of this.thalamus.getChannels()) {
 			if (channelsWithActions.has(channelName)) continue;
 
-			// No action inferred for this channel - use the lowest ID action for deterministic exploration
-			const actions = this.thalamus.getChannelActions(channelName);
-			const explorationAction = [...actions].sort((a, b) => a.id - b.id)[0];
+			// No action inferred for this channel - use the default action for deterministic exploration
+			const explorationAction = this.thalamus.getChannelDefaultAction(channelName);
 			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0, reward: 0 });
 		}
 	}

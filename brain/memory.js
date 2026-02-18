@@ -150,18 +150,26 @@ export class Memory {
 	}
 
 	/**
-	 * returns context array for a given age (older neurons relative to this age)
-	 * @param {number} age - The age to build context for
-	 * @param {number} level - The level to filter context neurons by (same level as parent neuron)
-	 * @returns {Array<{neuron, distance}>}
+	 * Build all contexts for all ages and levels in a single pass.
+	 * Returns a map indexed by 'age:level' for O(1) lookup.
+	 * @returns {Map<string, Array<{neuron, distance}>>} - Map of 'age:level' to context array
 	 */
-	getContextForAge(age, level) {
-		const result = [];
-		for (let ctxAge = age + 1; ctxAge < this.activeNeurons.length; ctxAge++)
-			for (const neuron of (this.activeNeurons[ctxAge] ?? new Map()).keys())
-				if (neuron.level === level && (neuron.level > 0 || neuron.type !== 'action'))
-					result.push({ neuron: neuron, distance: ctxAge - age });
-		return result;
+	getContexts() {
+		const contexts = new Map();
+		for (let ctxAge = 1; ctxAge < this.activeNeurons.length; ctxAge++)
+			for (const neuron of (this.activeNeurons[ctxAge] ?? new Map()).keys()) {
+
+				// actions cannot be in contexts
+				if (neuron.level === 0 && neuron.type === 'action') continue;
+
+				// Add this neuron to context for all ages before it
+				for (let age = 0; age < ctxAge; age++) {
+					const key = `${age}:${neuron.level}`;
+					if (!contexts.has(key)) contexts.set(key, []);
+					contexts.get(key).push({ neuron, distance: ctxAge - age });
+				}
+			}
+		return contexts;
 	}
 
 	/**

@@ -121,7 +121,6 @@ export class Neuron {
 		if (!distanceMap || !distanceMap.has(toNeuron)) return false;
 		distanceMap.delete(toNeuron);
 		if (distanceMap.size === 0) this.connections.delete(distance);
-		return true;
 	}
 
 	/**
@@ -425,8 +424,7 @@ export class Neuron {
 		const eventsByDimensions = new Map();
 		for (const neuron of events) {
 			const dimensionKey = Object.keys(neuron.coordinates).sort().join(',');
-			if (!eventsByDimensions.has(dimensionKey))
-				eventsByDimensions.set(dimensionKey, []);
+			if (!eventsByDimensions.has(dimensionKey)) eventsByDimensions.set(dimensionKey, []);
 			eventsByDimensions.get(dimensionKey).push(neuron);
 		}
 		return eventsByDimensions;
@@ -514,26 +512,19 @@ export class Neuron {
 	 * Forget connections - decay strengths and delete weak connections.
 	 */
 	forgetConnections() {
-		let connectionsUpdated = 0, connectionsDeleted = 0;
-		const toDelete = [];
 
-		// decay the connection strengths
-		for (const [distance, distanceMap] of this.connections) {
+		// decay the connection strengths and collect the connections to be deleted
+		const toDelete = [];
+		for (const [distance, distanceMap] of this.connections)
 			for (const [toNeuron, conn] of distanceMap) {
-				const oldStrength = conn.strength;
 				conn.strength = Math.max(Neuron.minStrength, conn.strength - Neuron.connectionForgetRate);
-				if (conn.strength < oldStrength) connectionsUpdated++;
 				if (conn.strength <= Neuron.minStrength) toDelete.push({ toNeuron, distance });
 			}
-		}
 
 		// delete the weak connections
-		for (const { toNeuron, distance } of toDelete) {
-			this.deleteConnection(distance, toNeuron);
-			connectionsDeleted++;
-		}
+		for (const { toNeuron, distance } of toDelete) this.deleteConnection(distance, toNeuron);
 
-		if (Neuron.debug) console.log(`  Connections: ${connectionsUpdated} weakened, ${connectionsDeleted} deleted`);
+		if (Neuron.debug) console.log(`  Connections: ${toDelete.length} deleted`);
 	}
 
 	/**

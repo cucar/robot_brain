@@ -20,6 +20,7 @@ export class Thalamus {
 		this.channelClasses = new Map(); // channelName -> Channel class (not instantiated)
 		this.channels = new Map(); // channelName -> Channel instance
 		this.channelActions = new Map(); // channelName -> Set<Neuron>
+		this.channelDefaultActions = new Map(); // channelName -> Neuron
 		this.channelNameToId = {}; // channelName -> channelId
 		this.channelIdToName = {}; // channelId -> channelName
 
@@ -82,7 +83,7 @@ export class Thalamus {
 		// Rebuild neuronsByValue map for base neurons
 		this.neuronsByValue.clear();
 		for (const neuron of neurons.values())
-			if (neuron.level === 0 && neuron.coordinates)
+			if (neuron.level === 0)
 				this.neuronsByValue.set(neuron.valueKey, neuron);
 	}
 
@@ -225,10 +226,10 @@ export class Thalamus {
 	/**
 	 * Get action neurons for a channel
 	 * @param {string} channelName - Channel name
-	 * @returns {Set<Neuron>|undefined} - Set of action neurons or undefined
+	 * @returns {Neuron} - Set of action neurons or undefined
 	 */
-	getChannelActions(channelName) {
-		return this.channelActions.get(channelName);
+	getChannelDefaultAction(channelName) {
+		return this.channelDefaultActions.get(channelName);
 	}
 
 	/**
@@ -280,8 +281,16 @@ export class Thalamus {
 
 			// get action neurons for this channel
 			const actionNeurons = new Set();
-			for (const coordinates of channel.getActions())
-				actionNeurons.add(this.getNeuronForPoint({ coordinates, channel: channelName, type: 'action' }));
+			for (const coordinates of channel.getActions()) {
+
+				// get or create the action neuron for the channel
+				const actionNeuron = this.getNeuronForPoint({ coordinates, channel: channelName, type: 'action' });
+				actionNeurons.add(actionNeuron);
+
+				// set the default action for the channel if not already set
+				if (!this.channelDefaultActions.get(channelName))
+					this.channelDefaultActions.set(channelName, actionNeuron);
+			}
 
 			// add channel's action neurons to the channelActions map
 			channelActions.set(channelName, actionNeurons);
