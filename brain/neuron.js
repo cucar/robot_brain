@@ -307,8 +307,8 @@ export class Neuron {
 			else this.createConnection(age, neuron, 1, reward);
 
 			// if the neuron is an action and the reward is below a threshold, add an alternative action for the channel
-			const neuronReward = this.connections.get(age).get(neuron);
-			if (neuronReward !== undefined && (neuronReward.reward || 0) < Neuron.actionRegretMinPain) {
+			const conn = this.connections.get(age).get(neuron);
+			if (conn !== undefined && (conn.reward || 0) < Neuron.actionRegretMinPain) {
 				const altNeuron = this.findAlternativeAction(age, neuron.channel, neuron, channelActions);
 				if (altNeuron) this.createConnection(age, altNeuron, 1, 0);
 			}

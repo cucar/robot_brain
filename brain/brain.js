@@ -562,7 +562,7 @@ export default class Brain {
 		// Determine winners per dimension (events by strength, actions by reward)
 		const dimBest = new Map(); // dimension -> {neuronId, score}
 		for (const [neuronId, candidate] of candidates) {
-			candidate.reward = candidate.weightedReward / candidate.strength;
+			candidate.reward = candidate.strength > 0 ? (candidate.weightedReward / candidate.strength) : 0;
 			const score = candidate.neuron.type === 'action' ? candidate.reward : candidate.strength;
 			for (const dim of Object.keys(candidate.neuron.coordinates))
 				if (!dimBest.has(dim) || score > dimBest.get(dim).score)
