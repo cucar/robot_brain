@@ -88,9 +88,9 @@ export class Dump {
 			if (neuron.level > 0 && neuron.peak) neuronData.peak = neuron.peak.id;
 
 			neuronData.connections = this.collectConnectionsData(neuron);
-			neuronData.patterns = this.collectPatternsData(neuron);
+			neuronData.children = this.collectPatternsData(neuron);
 			neuronData.contextRefs = this.collectContextRefsData(neuron);
-			neuronData.activationStrength = neuron.level === 0 ? 0 : neuron.activationStrength;
+			neuronData.activationStrength = neuron.activationStrength;
 
 			neuronsData.push(neuronData);
 		}
@@ -125,7 +125,7 @@ export class Dump {
 	 */
 	collectPatternsData(neuron) {
 		const patterns = [];
-		for (const pattern of neuron.patterns) patterns.push(pattern.id);
+		for (const pattern of neuron.children) patterns.push(pattern.id);
 		patterns.sort((a, b) => a - b);
 		return patterns;
 	}

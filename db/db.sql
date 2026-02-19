@@ -21,7 +21,6 @@ select * from pattern_past order by pattern_neuron_id, context_age;
 select * from pattern_past where context_neuron_id not in (select id from neurons);
 select * from pattern_peaks where pattern_neuron_id = 8;
 select * from pattern_past where pattern_neuron_id in (8, 9) order by pattern_neuron_id, context_age;
-select * from pattern_future order by pattern_neuron_id, distance, inferred_neuron_id;
 
 -- channels table for efficient storage (neurons reference by id instead of varchar)
 -- IDs come from static class counters in Channel class (not auto-increment)
@@ -45,6 +44,7 @@ CREATE TABLE IF NOT EXISTS dimensions (
 CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     level TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    strength DECIMAL(30,18) NOT NULL DEFAULT 1.0,
     INDEX idx_level (level)
 );
 
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS connections (
     from_neuron_id BIGINT UNSIGNED,
     to_neuron_id BIGINT UNSIGNED,
     distance TINYINT UNSIGNED NOT NULL,
-    strength DOUBLE DEFAULT 1.0,
-    reward DOUBLE DEFAULT 0,
+    strength DECIMAL(30,18) DEFAULT 1.0,
+    reward DECIMAL(30,18) DEFAULT 0,
     PRIMARY KEY (from_neuron_id, to_neuron_id, distance),
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength),
@@ -87,7 +87,6 @@ CREATE TABLE IF NOT EXISTS connections (
 CREATE TABLE IF NOT EXISTS patterns (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     parent_neuron_id BIGINT UNSIGNED NOT NULL,
-    strength DOUBLE NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id),
     INDEX idx_parent (parent_neuron_id)
 );
@@ -98,24 +97,7 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     pattern_neuron_id BIGINT UNSIGNED,
     context_neuron_id BIGINT UNSIGNED,
     context_age TINYINT UNSIGNED,
-    strength DOUBLE NOT NULL DEFAULT 1.0,
+    strength DECIMAL(30,18) NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id, context_neuron_id, context_age),
-    INDEX idx_strength (strength)
-);
-
--- pattern_future: cross-level predictions from patterns to base neurons for inference/voting (cross-channel)
--- patterns directly infer base-level neurons (events or actions) at various temporal distances
--- this is a cross-level connection: pattern neuron (level > 0) → base neuron (level 0)
--- distance: temporal distance of prediction (1 = next frame, 2 = 2 frames ahead, etc.)
--- DROP TABLE IF EXISTS pattern_future;
-CREATE TABLE IF NOT EXISTS pattern_future (
-    pattern_neuron_id BIGINT UNSIGNED,
-    inferred_neuron_id BIGINT UNSIGNED,
-    distance TINYINT UNSIGNED,
-    strength DOUBLE NOT NULL DEFAULT 1.0,
-    reward DOUBLE NOT NULL DEFAULT 0,
-    PRIMARY KEY (pattern_neuron_id, inferred_neuron_id, distance),
-    INDEX idx_pattern_distance_strength (pattern_neuron_id, distance, strength),
-    INDEX idx_inferred_distance_strength (inferred_neuron_id, distance, strength),
     INDEX idx_strength (strength)
 );

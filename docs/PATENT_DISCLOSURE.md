@@ -51,7 +51,7 @@ This architecture **beats neural networks** in robotics, autonomous systems, per
 - **Action regret patterns** - created when actions produce painful outcomes
 - **Multi-level hierarchical abstraction** where patterns of patterns form higher-level concepts
 - **Context-based pattern matching** using pattern_past (context neurons with relative ages)
-- **Prediction-based pattern outputs** using pattern_future (predicted base neurons with distances)
+- **Prediction-based pattern outputs** using connections (predicted base neurons with distances)
 - **Pattern override mechanism** where pattern votes supersede connection votes from parent neurons
 - **Fuzzy context matching** with configurable threshold (default 50% overlap)
 
@@ -97,11 +97,10 @@ The system consists of several key components working together:
 - **Neurons Table**: Universal storage for all neural entities (base and pattern neurons)
 - **Base Neurons Table**: Metadata for base neurons (channel, type: event/action)
 - **Coordinates Table**: Multi-dimensional position data for base neurons
-- **Connections Table**: Directed temporal relationships between base neurons (with distance, strength, reward)
+- **Connections Table**: Directed temporal relationships to base neurons (with distance, strength, reward)
 - **Pattern Tables**: Higher-level abstractions:
   - **patterns**: Maps pattern neurons to their parent neurons
   - **pattern_past**: Context neurons with relative ages (defines when pattern activates)
-  - **pattern_future**: Predicted base neurons with distances (defines what pattern predicts)
 - **Active Memory Tables**: Sliding window of currently relevant information (active_neurons, matched_patterns, inference_votes, inferred_neurons)
 
 ### Processing Pipeline
@@ -109,7 +108,7 @@ The system consists of several key components working together:
 2. **Aging**: Increment ages of all active neurons (sliding temporal window)
 3. **Base Neuron Processing**: Find/create neurons, reinforce connections, apply rewards
 4. **Pattern Recognition**: Match and activate patterns level by level
-5. **Pattern Refinement**: Update pattern_past and pattern_future based on observations
+5. **Pattern Refinement**: Update pattern_past and connections based on observations
 6. **Pattern Learning**: Create new patterns from prediction errors and action regret
 7. **Inference**: Collect votes, apply pattern override, determine winners, explore
 8. **Forget Cycle**: Periodic decay and cleanup of unused connections/patterns
@@ -605,7 +604,7 @@ graph TB
     subgraph "Pattern Structure"
         PP[patterns<br/>parent = C]
         PAST[pattern_past<br/>A at age=2<br/>B at age=1]
-        FUT[pattern_future<br/>E at distance=1]
+        FUT[connections<br/>E at distance=1]
     end
 
     N1 -.->|"context"| N3
@@ -631,7 +630,7 @@ graph TB
 
 - Shows how prediction errors trigger pattern creation
 - Pattern captures the context (pattern_past) when the error occurred
-- Pattern stores the correct prediction (pattern_future) for future use
+- Pattern stores the correct prediction (connections) for future use
 - Patterns form a hierarchy where pattern errors create higher-level patterns
 
 ### Temporal Separation Architecture
@@ -678,7 +677,7 @@ graph TB
 
     subgraph "Connection Reward Updates"
         C1[Connection A→Action<br/>Exponential smoothing<br/>new = 0.9×observed + 0.1×old]
-        C2[Pattern→Action<br/>pattern_future.reward<br/>same smoothing formula]
+        C2[Pattern→Action<br/>connections.reward<br/>same smoothing formula]
     end
 
     subgraph "Future Action Selection"
@@ -808,7 +807,7 @@ graph TB
   - **pattern_past**: Context neurons with relative ages (what was active when parent appeared)
     - Stores neuron, distance (relative age), and strength
     - Defines WHEN the pattern activates (context matching)
-  - **pattern_future**: Predicted base neurons with distances and rewards
+  - **connections**: Predicted base neurons with distances and rewards
     - Stores neuron, distance (prediction offset), strength, reward, habituation
     - Defines WHAT the pattern predicts (error correction)
 - **Pattern matching algorithm**:
@@ -821,7 +820,7 @@ graph TB
   - **Common entries**: Strengthen in pattern_past (positive reinforcement)
   - **Novel entries**: Add to pattern_past (pattern generalization)
   - **Missing entries**: Weaken in pattern_past (negative reinforcement)
-  - **Predicted neurons**: Update pattern_future with observed outcomes
+  - **Predicted neurons**: Update connections with observed outcomes
 - **Hierarchical pattern creation**:
   - Pattern errors at level N create patterns at level N+1
   - Recursive abstraction up to maxLevels (default 10)
@@ -893,7 +892,7 @@ graph TB
 - **Level progression**: Base neurons at level 0, patterns at level 1+
 - **Recursive recognition**: After matching level N patterns, check for level N+1 patterns
 - **Context at each level**: pattern_past contains same-level context neurons
-- **Predictions to base**: pattern_future always predicts base neurons (events or actions)
+- **Predictions to base**: connections always predicts base neurons (events or actions)
 - **Error propagation**: Pattern prediction errors create patterns at the next level up
 - **Maximum depth**: Configurable maxLevels (default 10, vs. biological cortex 6 layers)
 - **Variable time dilation**: Patterns stay active as long as their connections are active

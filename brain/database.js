@@ -8,9 +8,10 @@ import { Channel } from '../channels/channel.js';
  * Handles persistence of neurons, connections, and patterns to MySQL
  */
 export class Database {
-	constructor(debug) {
+	constructor(options) {
 		this.conn = null;
-		this.debug = debug;
+		this.debug = options.debug;
+		this.options = options;
 	}
 
 	/**
@@ -43,6 +44,9 @@ export class Database {
 			const channelClass = channelClasses.get(row.name);
 			if (!channelClass)
 				throw new Error(`Channel class not found: ${row.name}. Code not compatible.`);
+
+			// initialize channel class with runtime options
+			channelClass.initialize(this.options);
 
 			// Instantiate channel with DB id and dimensions
 			const channel = new channelClass(row.name, this.debug, row.id, dbDimensions);
@@ -91,15 +95,16 @@ export class Database {
 	async loadNeuronsTable() {
 
 		// get the neurons from the database
-		const [rows] = await this.conn.query('SELECT id, level FROM neurons');
+		const [rows] = await this.conn.query('SELECT id, level, strength FROM neurons');
 
 		// create all neurons
 		let maxId = 0;
 		const neurons = new Map();
 		for (const row of rows) {
 
-			// create the neuron
+			// create the neuron with its activation strength
 			const neuron = new Neuron(row.level, row.id);
+			neuron.setActivationStrength(Number(row.strength));
 			neurons.set(row.id, neuron);
 
 			// update max id
@@ -149,7 +154,7 @@ export class Database {
 	}
 
 	/**
-	 * Load connections from connections and pattern_future tables
+	 * Load connections from connections table
 	 */
 	async loadConnections(neurons) {
 
@@ -157,9 +162,6 @@ export class Database {
 		const [rows] = await this.conn.query(`
 			SELECT from_neuron_id, to_neuron_id, distance, strength, reward 
 			FROM connections
-			UNION ALL
-            SELECT pattern_neuron_id as from_neuron_id, inferred_neuron_id as to_neuron_id, distance, strength, reward
-            FROM pattern_future
 		`);
 
 		// update all connections
@@ -174,7 +176,7 @@ export class Database {
 			if (!toNeuron) throw new Error('Connection target neuron not found');
 
 			// add the connection
-			fromNeuron.createConnection(row.distance, toNeuron, row.strength, row.reward);
+			fromNeuron.createConnection(row.distance, toNeuron, Number(row.strength), Number(row.reward));
 		}
 
 		console.log(`  Loaded ${rows.length} connections from table`);
@@ -187,7 +189,7 @@ export class Database {
 	async loadPatterns(neurons) {
 
 		// get the patterns
-		const [rows] = await this.conn.query('SELECT pattern_neuron_id, parent_neuron_id, strength FROM patterns');
+		const [rows] = await this.conn.query('SELECT pattern_neuron_id, parent_neuron_id FROM patterns');
 
 		// create the pattern to parent mappings in neurons
 		for (const row of rows) {
@@ -195,9 +197,6 @@ export class Database {
 			// map the pattern to its parent
 			const pattern = neurons.get(row.pattern_neuron_id);
 			pattern.parent = neurons.get(row.parent_neuron_id);
-
-			// set activation strength of the pattern
-			pattern.setActivationStrength(row.strength);
 
 			// add the pattern to the parent's children array without any context for now - will be loaded later
 			pattern.parent.addChild(pattern);
@@ -220,7 +219,7 @@ export class Database {
 			const pattern = neurons.get(row.pattern_neuron_id);
 			const contextNeuron = neurons.get(row.context_neuron_id);
 			if (!contextNeuron) throw new Error(`contextNeuron null: ${row.context_neuron_id}`);
-			pattern.addPatternContext(contextNeuron, row.context_age, row.strength);
+			pattern.addPatternContext(contextNeuron, row.context_age, Number(row.strength));
 		}
 		console.log(`  Loaded ${rows.length} pattern_past entries from table`);
 	}
@@ -264,7 +263,6 @@ export class Database {
 		await this.backupConnections(neurons);
 		await this.backupPatterns(neurons);
 		await this.backupPatternContext(neurons);
-		await this.backupPatternConnections(neurons);
 
 		console.log('Brain backed up to MySQL.');
 	}
@@ -275,8 +273,8 @@ export class Database {
 	async backupNeuronsTable(neurons) {
 		await this.conn.query('TRUNCATE neurons');
 		const rows = [];
-		for (const neuron of neurons) rows.push([neuron.id, neuron.level]);
-		await this.conn.query('INSERT INTO neurons (id, level) VALUES ?', [rows]);
+		for (const neuron of neurons) rows.push([neuron.id, neuron.level, neuron.activationStrength]);
+		await this.conn.query('INSERT INTO neurons (id, level, strength) VALUES ?', [rows]);
 		console.log(`  Saved ${rows.length} neurons`);
 	}
 
@@ -309,6 +307,7 @@ export class Database {
 			for (const [distance, targets] of neuron.connections)
 				for (const [toNeuron, conn] of targets)
 					connRows.push([neuron.id, toNeuron.id, distance, conn.strength, conn.reward || 0]);
+		if (connRows.length === 0) return;
 		await this.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward) VALUES ?', [connRows]);
 		console.log(`  Saved ${connRows.length} connections`);
 	}
@@ -321,9 +320,9 @@ export class Database {
 		const patternRows = [];
 		for (const pattern of neurons)
 			if (pattern.level > 0)
-				patternRows.push([pattern.id, pattern.parent.id, pattern.activationStrength]);
+				patternRows.push([pattern.id, pattern.parent.id]);
 		if (patternRows.length === 0) return;
-		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id, strength) VALUES ?', [patternRows]);
+		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id) VALUES ?', [patternRows]);
 		console.log(`  Saved ${patternRows.length} patterns`);
 	}
 
@@ -334,28 +333,11 @@ export class Database {
 		await this.conn.query('TRUNCATE pattern_past');
 		const pastRows = [];
 		for (const neuron of neurons)
-			if (neuron.level > 0)
-				for (const { neuron: ctxNeuron, distance, strength } of neuron.getPatternContext())
-					pastRows.push([neuron.id, ctxNeuron.id, distance, strength]);
+			for (const { neuron: ctxNeuron, distance, strength } of neuron.getPatternContext())
+				pastRows.push([neuron.id, ctxNeuron.id, distance, strength]);
 		if (pastRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
 		console.log(`  Saved ${pastRows.length} pattern context entries (to pattern_past)`);
-	}
-
-	/**
-	 * Backup pattern connections (to pattern_future table for compatibility)
-	 */
-	async backupPatternConnections(neurons) {
-		await this.conn.query('TRUNCATE pattern_future');
-		const futureRows = [];
-		for (const neuron of neurons)
-			if (neuron.level > 0)
-				for (const [distance, targets] of neuron.connections)
-					for (const [inferredNeuron, pred] of targets)
-						futureRows.push([neuron.id, inferredNeuron.id, distance, pred.strength, pred.reward || 0]);
-		if (futureRows.length === 0) return;
-		await this.conn.query('INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward) VALUES ?', [futureRows]);
-		console.log(`  Saved ${futureRows.length} pattern connections (to pattern_future)`);
 	}
 
 	/**
@@ -370,8 +352,7 @@ export class Database {
 			'coordinates',
 			'connections',
 			'patterns',
-			'pattern_past',
-			'pattern_future'
+			'pattern_past'
 		];
 		await this.conn.query('SET FOREIGN_KEY_CHECKS = 0');
 		await Promise.all(tables.map(table => this.conn.query(`TRUNCATE ${table}`)));

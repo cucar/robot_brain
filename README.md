@@ -78,7 +78,6 @@ Database schema for backup/restore (not used during frame processing):
 - **`connections`** - Base neuron connections (distance, strength, reward)
 - **`patterns`** - Pattern-to-parent mappings with strength
 - **`pattern_past`** - Pattern contexts (context neurons with ages and strengths)
-- **`pattern_future`** - Pattern predictions (inferred neurons with distances, strengths, rewards)
 
 ## Hyperparameters
 

@@ -119,8 +119,8 @@ VALUES
   (pattern.id, A.id, 2, 1.0),
   (pattern.id, X.id, 3, 1.0)
 
--- Predictions (pattern_future)
-INSERT INTO pattern_future (pattern_neuron_id, inferred_neuron_id, distance, strength, reward)
+-- Predictions (connections)
+INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward)
 VALUES (pattern.id, E.id, 1, 1.0, 0)
 ```
 
@@ -148,7 +148,7 @@ Cycle 2: A → B → E → F
     ERROR → Create Pattern_1:
       Parent: B
       pattern_past: {A at age=1, D at age=2, C at age=3}
-      pattern_future: {E at distance=1}
+      connections: {E at distance=1}
 ```
 
 ### Pattern Recognition in Future Cycles
@@ -590,11 +590,5 @@ Pattern errors at level N create patterns at level N+1, enabling hierarchical ab
 3. **Voting**: Pattern votes via `neuron.vote()` with level weighting
 4. **Learning**: Connections strengthen/weaken via `neuron.learnConnections()`
 5. **Forgetting**: Weak patterns deleted via `neuron.forget()` and `thalamus.deletePattern()`
-
-**Key Differences from Original Design**:
-- No separate pattern_past/pattern_future tables (in-memory Context and connections)
-- No explicit pattern refinement method (happens through connection learning)
-- Pattern override via activation state (not vote deletion)
-- Unified neuron class (patterns and base neurons share code)
 
 The algorithm memorizes any sequence with learnable temporal structure, while correctly refusing to memorize true randomness.

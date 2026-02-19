@@ -8,9 +8,9 @@ import { Neuron } from './neuron.js';
  * Named after the biological thalamus which routes sensory signals and translates reference frames.
  */
 export class Thalamus {
-	constructor(debug = false, options = {}) {
-		this.debug = debug;
+	constructor(options = {}) {
 		this.options = options; // Runtime options to pass to channel classes
+		this.debug = options.debug;
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron

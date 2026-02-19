@@ -34,7 +34,7 @@ export default class Brain {
 		this.rewards = new Map(); // channel rewards for current frame
 
 		// Database - used for persistent storage - backup and restore
-		this.db = this.database ? new Database(this.debug) : null;
+		this.db = this.database ? new Database(options) : null;
 
 		// Diagnostics - used for debug methods and performance tracking
 		this.diagnostics = new Diagnostics(this.diagnostic, this.frameSummary);
@@ -43,7 +43,7 @@ export default class Brain {
 		this.dump = new Dump();
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
-		this.thalamus = new Thalamus(this.debug, options);
+		this.thalamus = new Thalamus(options);
 
 		// Memory - manages temporal sliding window and inferred neurons
 		this.memory = new Memory(this.debug);

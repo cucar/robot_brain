@@ -270,7 +270,6 @@ Used for backup/restore between episodes, not during frame processing:
 - **`connections`** - Base neuron connections (distance, strength, reward)
 - **`pattern_peaks`** - Pattern-to-peak mappings with strength
 - **`pattern_past`** - Pattern contexts (context neurons with ages and strengths)
-- **`pattern_future`** - Pattern predictions (inferred neurons with distances, strengths, rewards)
 
 ---
 
