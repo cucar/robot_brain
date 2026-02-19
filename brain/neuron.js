@@ -299,7 +299,7 @@ export class Neuron {
 		for (const neuron of newActiveNeurons) {
 
 			// get the reward for the neuron if it is an action
-			const reward = neuron.type === 'action' ? rewards.get(neuron.channel) : undefined;
+			const reward = neuron.type === 'action' ? (rewards.get(neuron.channel) || 0) : 0;
 
 			// if the event/action was already known, strengthen the connection and update the reward
 			if (this.hasConnection(age, neuron)) this.updateConnection(age, neuron, reward);

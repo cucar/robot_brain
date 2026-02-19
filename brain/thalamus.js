@@ -294,7 +294,7 @@ export class Thalamus {
 
 			// add channel's action neurons to the channelActions map
 			channelActions.set(channelName, actionNeurons);
-			if (this.debug) console.log(`Created ${actionNeurons.length} action neurons for ${channelName}`);
+			if (this.debug) console.log(`Created ${actionNeurons.size} action neurons for ${channelName}`);
 		}
 
 		// set channel actions for exploration
