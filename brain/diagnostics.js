@@ -355,11 +355,9 @@ export class Diagnostics {
 			}
 			// Track action reward from the action's channel
 			else if (neuron.type === 'action') {
-				const reward = rewards.get(neuron.channel);
-				if (reward !== undefined) {
-					actionReward += reward;
-					actionCount++;
-				}
+				const reward = rewards.get(neuron.channel) || 0;
+				actionReward += reward;
+				actionCount++;
 			}
 		}
 

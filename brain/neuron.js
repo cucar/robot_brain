@@ -110,7 +110,7 @@ export class Neuron {
 		if (!this.connections.has(distance)) throw new Error('Unknown connection'); // should not happen
 		const connection = this.connections.get(distance).get(toNeuron);
 		connection.strength = Math.min(Neuron.maxStrength, connection.strength + 1);
-		if (reward !== undefined) connection.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * connection.reward;
+		connection.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * connection.reward;
 	}
 
 	/**
