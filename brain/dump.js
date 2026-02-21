@@ -90,6 +90,7 @@ export class Dump {
 			neuronData.connections = this.collectConnectionsData(neuron);
 			neuronData.children = this.collectPatternsData(neuron);
 			neuronData.contextRefs = this.collectContextRefsData(neuron);
+			neuronData.patternContext = this.collectPatternContextData(neuron);
 			neuronData.activationStrength = neuron.activationStrength;
 
 			neuronsData.push(neuronData);
@@ -143,5 +144,24 @@ export class Dump {
 		}
 		contextRefs.sort((a, b) => a.neuronId - b.neuronId);
 		return contextRefs;
+	}
+
+	/**
+	 * Collect and format pattern context data for a pattern neuron
+	 */
+	collectPatternContextData(neuron) {
+		const patternContext = [];
+		for (const { neuron: ctxNeuron, distance, strength } of neuron.getPatternContext()) {
+			patternContext.push({
+				neuronId: ctxNeuron.id,
+				distance,
+				strength
+			});
+		}
+		patternContext.sort((a, b) => {
+			if (a.neuronId !== b.neuronId) return a.neuronId - b.neuronId;
+			return a.distance - b.distance;
+		});
+		return patternContext;
 	}
 }

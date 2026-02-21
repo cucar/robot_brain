@@ -124,7 +124,8 @@ export class Context {
 					novel.push({ neuron, distance, strength });
 
 		// Calculate score as sum of strengths of common entries
-		const score = common.reduce((sum, e) => sum + e.strength, 0);
+		// Round to 14 decimal places to avoid floating-point precision issues
+		const score = Math.round(common.reduce((sum, e) => sum + e.strength, 0) * 1e14) / 1e14;
 
 		// return the matched context with pattern and score
 		return { score, common, missing, novel };

@@ -247,8 +247,10 @@ export class Neuron {
 	matchPattern(observed) {
 
 		// try to match the observed context to known patterns
+		// sort children by id for deterministic ordering
+		const sortedChildren = Array.from(this.children).sort((a, b) => a.id - b.id);
 		let best = null; // { pattern, score, common, missing, novel }
-		for (const pattern of this.children) {
+		for (const pattern of sortedChildren) {
 			if (pattern.activationStrength === 0) continue;
 			const match = pattern.context.match(observed);
 			if (match && (!best || match.score > best.score)) best = { ...match, pattern };

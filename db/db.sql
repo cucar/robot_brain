@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS dimensions (
 CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     level TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    strength DECIMAL(30,18) NOT NULL DEFAULT 1.0,
+    strength DECIMAL(30,20) NOT NULL DEFAULT 1.0,
     INDEX idx_level (level)
 );
 
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS connections (
     from_neuron_id BIGINT UNSIGNED,
     to_neuron_id BIGINT UNSIGNED,
     distance TINYINT UNSIGNED NOT NULL,
-    strength DECIMAL(30,18) DEFAULT 1.0,
-    reward DECIMAL(30,18) DEFAULT 0,
+    strength DECIMAL(30,20) DEFAULT 1.0,
+    reward DECIMAL(30,20) DEFAULT 0,
     PRIMARY KEY (from_neuron_id, to_neuron_id, distance),
     INDEX idx_from_distance_strength (from_neuron_id, distance, strength),
     INDEX idx_to_distance_strength (to_neuron_id, distance, strength),
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     pattern_neuron_id BIGINT UNSIGNED,
     context_neuron_id BIGINT UNSIGNED,
     context_age TINYINT UNSIGNED,
-    strength DECIMAL(30,18) NOT NULL DEFAULT 1.0,
+    strength DECIMAL(30,20) NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id, context_neuron_id, context_age),
     INDEX idx_strength (strength)
 );
