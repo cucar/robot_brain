@@ -367,7 +367,7 @@ export default class Brain {
 	 */
 	getFrameNeurons(frame) {
 		const neurons = [];
-		for (const point of frame) neurons.push(this.thalamus.getNeuronForPoint(point));
+		for (const point of frame) neurons.push(this.thalamus.getNeuronForPoint(point.coordinates, point.channel, point.type));
 		if (neurons.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
 		if (this.debug) console.log('frame neurons', neurons);
 		return neurons;

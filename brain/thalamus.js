@@ -31,17 +31,16 @@ export class Thalamus {
 
 	/**
 	 * Get or create a sensory neuron ID from a frame point
-	 * @param {object} point - Frame point with {coordinates, channel, type}
 	 * @returns {Neuron} - Neuron
 	 */
-	getNeuronForPoint(point) {
+	getNeuronForPoint(coordinates, channel, type) {
 
 		// Try to find existing neuron - if found, return it
-		let neuron = this.getNeuronByCoordinates(point.coordinates);
+		let neuron = this.getNeuronByCoordinates(coordinates);
 		if (neuron) return neuron;
 
 		// Create new neuron if not found
-		neuron = Neuron.createSensory(point.channel, point.type, point.coordinates);
+		neuron = Neuron.createSensory(channel, type, coordinates);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronsByValue.set(neuron.valueKey, neuron);
 		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${neuron.valueKey}`);
@@ -279,22 +278,18 @@ export class Thalamus {
 		const channelActions = new Map();
 		for (const [channelName, channel] of this.getChannels()) {
 
-			// get action neurons for this channel
+			// get or create the action neurons for the channel
 			const actionNeurons = new Set();
-			for (const coordinates of channel.getActions()) {
-
-				// get or create the action neuron for the channel
-				const actionNeuron = this.getNeuronForPoint({ coordinates, channel: channelName, type: 'action' });
-				actionNeurons.add(actionNeuron);
-
-				// set the default action for the channel if not already set
-				if (!this.channelDefaultActions.get(channelName))
-					this.channelDefaultActions.set(channelName, actionNeuron);
-			}
+			for (const coordinates of channel.getActions())
+				actionNeurons.add(this.getNeuronForPoint(coordinates, channelName, 'action'));
 
 			// add channel's action neurons to the channelActions map
 			channelActions.set(channelName, actionNeurons);
 			if (this.debug) console.log(`Created ${actionNeurons.size} action neurons for ${channelName}`);
+
+			// set the default action for the channel
+			const defaultAction = this.getNeuronForPoint(channel.getDefaultAction(), channelName, 'action');
+			this.channelDefaultActions.set(channelName, defaultAction);
 		}
 
 		// set channel actions for exploration

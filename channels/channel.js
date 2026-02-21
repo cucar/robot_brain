@@ -91,6 +91,14 @@ export class Channel {
 	}
 
 	/**
+	 * returns the coordinates of the channel default action - to be implemented by child classes
+	 * this should correspond to an action that does nothing - trigger doing something when doing nothing is negatively rewarded
+	 */
+	getDefaultAction() {
+		return null;
+	}
+
+	/**
 	 * Get frame events data - override in subclasses
 	 * Returns array of input neuron objects: [{ [input-dim]: value }]
 	 */

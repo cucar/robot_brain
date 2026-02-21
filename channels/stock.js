@@ -44,6 +44,7 @@ export class StockChannel extends Channel {
 
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
+		this.activityDimName = `${this.symbol}_activity`;
 
 		// initialize dimensions
 		this.initializeDimensions(dimensions);
@@ -69,7 +70,7 @@ export class StockChannel extends Channel {
 			// Loading from database - use provided dimensions
 			this.priceChangeDim = dimensions.find(d => d.name === `${this.symbol}_price_change`);
 			this.volumeChangeDim = dimensions.find(d => d.name === `${this.symbol}_volume_change`);
-			this.activityDim = dimensions.find(d => d.name === `${this.symbol}_activity`);
+			this.activityDim = dimensions.find(d => d.name === this.activityDimName);
 
 			// Validate all required dimensions exist
 			if (!this.priceChangeDim || !this.volumeChangeDim || !this.activityDim)
@@ -79,7 +80,7 @@ export class StockChannel extends Channel {
 		else {
 			this.priceChangeDim = new Dimension(`${this.symbol}_price_change`);
 			this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
-			this.activityDim = new Dimension(`${this.symbol}_activity`);
+			this.activityDim = new Dimension(this.activityDimName);
 		}
 	}
 
@@ -309,8 +310,14 @@ export class StockChannel extends Channel {
 	 * These are pre-created during brain init so exploration can find them.
 	 */
 	getActions() {
-		const activityDim = `${this.symbol}_activity`;
-		return [ { [activityDim]: POSITION_OUT }, { [activityDim]: POSITION_OWN } ];
+		return [ { [this.activityDimName]: POSITION_OUT }, { [this.activityDimName]: POSITION_OWN } ];
+	}
+
+	/**
+	 * returns the coordinates of the channel default action - for stock channels, this is "do nothing"
+	 */
+	getDefaultAction() {
+		return { [this.activityDimName]: POSITION_OUT };
 	}
 
 	/**
@@ -348,7 +355,7 @@ export class StockChannel extends Channel {
 		// For owned stocks: positive change = positive reward
 		// For not owned: negative change = positive reward (good timing on selling)
 		const actionData = actions[0]; // Single action per stock channel
-		const lastAction = actionData.coordinates[`${this.symbol}_activity`];
+		const lastAction = actionData.coordinates[this.activityDimName];
 		const reward = (lastAction === POSITION_OWN) ? percentChange : -percentChange;
 		if (this.debug) this.debugRewards(reward);
 		return reward;
@@ -750,8 +757,7 @@ export class StockChannel extends Channel {
 	 * @returns {string} Formatted action label
 	 */
 	formatActionLabel(coords) {
-		const activityDim = `${this.symbol}_activity`;
-		const activityVal = coords[activityDim];
+		const activityVal = coords[this.activityDimName];
 		if (activityVal === POSITION_OWN) return 'OWN';
 		if (activityVal === POSITION_OUT) return 'OUT';
 		return JSON.stringify(coords);
