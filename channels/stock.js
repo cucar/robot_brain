@@ -1,7 +1,5 @@
 import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
-import { readFileSync, mkdirSync } from 'node:fs';
-import path from 'node:path';
 
 const POSITION_OWN = 1;
 const POSITION_OUT = -1;
@@ -14,19 +12,6 @@ export class StockChannel extends Channel {
 	// total cash shared across all stock channel instances
 	static initialCapital = 1000;
 	static cash = StockChannel.initialCapital;
-
-	// data configuration shared across all stock channel instances
-	static holdoutRows = 0; // Number of rows to hold out from end (set by runtime options)
-	static offsetRows = 0; // Number of rows to skip from start (set by runtime options)
-
-	/**
-	 * Static method to initialize channel class with runtime options
-	 * Called once before any channel instances are created
-	 */
-	static initialize(options = {}) {
-		if (options.holdoutRows !== undefined) StockChannel.holdoutRows = options.holdoutRows;
-		if (options.offsetRows !== undefined) StockChannel.offsetRows = options.offsetRows;
-	}
 
 	/**
 	 * Static method to reset channel-level context (shared state across all instances)
@@ -49,8 +34,9 @@ export class StockChannel extends Channel {
 		// initialize dimensions
 		this.initializeDimensions(dimensions);
 
-		// initialize training data to be read
-		this.initializeTrainingData();
+		// training data / mode (set by setTraining)
+		this.trainingData = null;
+		this.trainingRow = 0;
 
 		// initialize buckets to be used for discretizing price and volume changes
 		this.initializeBuckets();
@@ -85,63 +71,12 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * initialize training data to be read from CSV file
+	 * Set training data for this channel - switches channel to training mode
+	 * @param {Array<{price, volume}>} rows - Training data rows
 	 */
-	initializeTrainingData() {
-
-		// Store all CSV rows for holdout/offset management
-		this.allRows = [];
-
-		// CSV reading state
-		this.csvPath = null;
-		this.rl = null;
-
-		// Load CSV data
-		const baseDir = path.resolve(process.cwd(), 'data', 'stock');
-		try { mkdirSync(baseDir, { recursive: true }); } catch {}
-		this.csvPath = path.resolve(baseDir, `${this.symbol}.csv`);
-		this.loadAllRows();
-
-		// Prepare data iterator
-		this.prepareDataIterator();
-	}
-
-	/**
-	 * Load all CSV rows into memory for holdout management
-	 */
-	loadAllRows() {
-		this.allRows = [];
-		const content = readFileSync(this.csvPath, 'utf-8');
-		const lines = content.split('\n');
-
-		for (const line of lines) {
-			const trimmed = String(line).trim();
-			if (!trimmed) continue;
-			const parts = trimmed.split(',');
-			if (parts.length < 2) throw new Error(`${this.symbol}: Invalid CSV line: ${line}`);
-			const price = parseFloat(parts[0]);
-			const volume = parseFloat(parts[1]);
-			if (Number.isNaN(price) || Number.isNaN(volume)) throw new Error(`${this.symbol}: Invalid CSV values: '${line}'`);
-			this.allRows.push({ price, volume });
-		}
-
-		if (this.debug) console.log(`${this.symbol}: Loaded ${this.allRows.length} rows from CSV`);
-	}
-
-	/**
-	 * Prepare data iterator based on offset and holdout configuration
-	 */
-	prepareDataIterator() {
-
-		// Calculate start and end indices using static properties
-		const startIndex = StockChannel.offsetRows;
-		const endIndex = StockChannel.holdoutRows > 0 ? this.allRows.length - StockChannel.holdoutRows : this.allRows.length;
-
-		// Extract the slice
-		this.dataRows = this.allRows.slice(startIndex, endIndex);
-
-		this.currentRowIndex = 0;
-		if (this.debug) console.log(`${this.symbol}: Using rows ${startIndex} to ${endIndex - 1} (${this.dataRows.length} rows)`);
+	setTraining(rows) {
+		this.trainingData = rows;
+		this.trainingRow = 0;
 	}
 
 	/**
@@ -219,7 +154,7 @@ export class StockChannel extends Channel {
 		this.lastAction = null; // Last action taken by brain
 
 		// Reset data iterator to start from beginning
-		this.prepareDataIterator();
+		this.trainingRow = 0;
 	}
 
 	/**
@@ -228,14 +163,14 @@ export class StockChannel extends Channel {
 	readNextRow() {
 
 		// return false when all rows are consumed - this will stop the processing loop
-		if (this.currentRowIndex >= this.dataRows.length) return false;
+		if (this.trainingRow >= this.trainingData.length) return false;
 
 		// save the current price/volume as previous before reading next row
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
 
 		// get the new row and update price/volume
-		const row = this.dataRows[this.currentRowIndex++];
+		const row = this.trainingData[this.trainingRow++];
 		this.currentPrice = row.price;
 		this.currentVolume = row.volume;
 
@@ -298,6 +233,9 @@ export class StockChannel extends Channel {
 	 * Get frame input data for this stock channel
 	 */
 	getFrameEvents() {
+
+		// currently only the training mode is implemented
+		if (this.trainingData === null) throw new Error(`${this.symbol}: live mode not implemented yet.`);
 
 		// Read next data row - if none left, we're done
 		if (!this.readNextRow()) return [];

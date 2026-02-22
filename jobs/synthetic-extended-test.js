@@ -116,6 +116,19 @@ export default class SyntheticExtendedTest extends Job {
 	}
 
 	/**
+	 * Hook: Configure channels after brain init - generate cycled rows and call setTraining
+	 */
+	async configureChannels() {
+		const channel = this.brain.getChannel(this.config.symbol);
+		const rows = [];
+		for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
+			for (const row of this.config.sourceData)
+				rows.push({ price: row.price, volume: row.volume });
+		rows.push({ price: this.config.sourceData[0].price, volume: this.config.sourceData[0].volume });
+		channel.setTraining(rows);
+	}
+
+	/**
 	 * Hook: Execute main job logic - Run extended test with optimality analysis
 	 * Processes frames continuously and tracks whether brain makes optimal buy/sell decisions
 	 */
@@ -126,7 +139,7 @@ export default class SyntheticExtendedTest extends Job {
 
 		this.brain.resetAccuracyStats();
 
-		const expectedFrames = stockChannel.dataRows.length - 1;
+		const expectedFrames = stockChannel.trainingData.length - 1;
 		const cycleLength = this.config.sourceData.length; // 12 frames per cycle (not 11!)
 		let frameCount = 0;
 
@@ -236,13 +249,13 @@ export default class SyntheticExtendedTest extends Job {
 			const nextPrice = data[i % data.length].price;
 			const priceChange = ((nextPrice - currentPrice) / currentPrice * 100);
 			const priceBucket = stockChannel.discretizeChange(priceChange, stockChannel.priceBoundaries);
-			const priceNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_price_change_lo`, priceBucket);
+			const priceNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_price_change`, priceBucket);
 
 			const currentVolume = data[i - 1].volume;
 			const nextVolume = data[i % data.length].volume;
 			const volumeChange = ((nextVolume - currentVolume) / currentVolume * 100);
 			const volumeBucket = stockChannel.discretizeChange(volumeChange, stockChannel.volumeBoundaries);
-			const volumeNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_volume_change_lo`, volumeBucket);
+			const volumeNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_volume_change`, volumeBucket);
 
 			const optimal = nextPrice > currentPrice ? 'OWN' : 'OUT';
 

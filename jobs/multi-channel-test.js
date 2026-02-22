@@ -42,12 +42,12 @@ export default class MultiChannelTest extends Job {
 		console.log(`   Repeats: ${this.config.cycleRepeats}`);
 		console.log('');
 
-		const dataDir = path.join(__dirname, '..', 'data', 'stock');
+		const dataDir = path.join(__dirname, '..', 'data', 'stock', '1D');
 
 		for (const symbol of this.config.symbols) {
 			const csvPath = path.join(dataDir, `${symbol}.csv`);
 			if (!fs.existsSync(csvPath))
-				throw new Error(`CSV file not found: ${csvPath}. Run 'node run-setup.js stock-training' first.`);
+				throw new Error(`CSV file not found: ${csvPath}. Run 'node run-setup.js stock-test' first.`);
 
 			const content = fs.readFileSync(csvPath, 'utf-8');
 			const lines = content.trim().split('\n').slice(0, this.config.sourceRows);
@@ -60,36 +60,41 @@ export default class MultiChannelTest extends Job {
 			console.log(`   ✅ ${symbol}: Loaded ${rows.length} rows`);
 		}
 
-		// Generate test CSV files with repeated data
-		for (const symbol of this.config.symbols) {
-			const rows = this.sourceData.get(symbol);
-			const csvPath = path.join(dataDir, `${symbol}_TEST.csv`);
-			const outputRows = [];
-
-			for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
-				for (const row of rows)
-					outputRows.push(`${row.price.toFixed(2)},${row.volume}`);
-
-			// Add one final row to complete the last frame
-			outputRows.push(`${rows[0].price.toFixed(2)},${rows[0].volume}`);
-
-			fs.writeFileSync(csvPath, outputRows.join('\n'));
-			console.log(`   ✅ Generated ${symbol}_TEST.csv with ${outputRows.length} rows`);
-		}
-
 		console.log(`\n✅ Total Frames: ${this.config.cycleRepeats * (this.config.sourceRows - 1)}`);
 	}
 
 	/**
-	 * Returns the channels for the job - one channel per stock symbol with _TEST suffix
+	 * Returns the channels for the job - one channel per stock symbol
 	 * @returns {Array<Object>} Array of {name, channelClass} objects
 	 */
 	getChannels() {
-		// Use _TEST suffix for the generated test files
 		return this.config.symbols.map(symbol => ({
-			name: `${symbol}_TEST`,
+			name: symbol,
 			channelClass: StockChannel
 		}));
+	}
+
+	/**
+	 * Hook: Configure channels after brain init - generate cycled rows and call setTraining
+	 */
+	async configureChannels() {
+		if (this.sourceData.size === 0)
+			await this.loadSourceData();
+		for (const symbol of this.config.symbols)
+			this.brain.getChannel(symbol).setTraining(this.generateCycledRows(symbol));
+	}
+
+	/**
+	 * Generate cycled training rows for a symbol
+	 */
+	generateCycledRows(symbol) {
+		const sourceRows = this.sourceData.get(symbol);
+		const rows = [];
+		for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
+			for (const row of sourceRows)
+				rows.push({ price: row.price, volume: row.volume });
+		rows.push({ price: sourceRows[0].price, volume: sourceRows[0].volume });
+		return rows;
 	}
 
 	/**
@@ -112,29 +117,24 @@ export default class MultiChannelTest extends Job {
 	async executeJob() {
 		console.log('🚀 Running multi-channel continuous test...\n');
 
-		// Load source data if not already loaded (in case setup wasn't run)
-		if (this.sourceData.size === 0)
-			await this.loadSourceData();
-
 		this.brain.resetAccuracyStats();
 
 		const firstChannel = [...this.brain.getChannels()][0][1];
-		const expectedFrames = firstChannel.dataRows.length - 1;
+		const expectedFrames = firstChannel.trainingData.length - 1;
 		const cycleLength = this.config.sourceRows;
 
 		// Pre-calculate optimal strategy per cycle frame for each symbol
 		const optimalOwnership = new Map();
 		for (const symbol of this.config.symbols)
-			optimalOwnership.set(`${symbol}_TEST`, this.calculateOptimalOwnership(symbol));
+			optimalOwnership.set(symbol, this.calculateOptimalOwnership(symbol));
 
 		// Track decisions by cycle frame per channel
 		const decisionStats = new Map();
 		for (const symbol of this.config.symbols) {
-			const channelName = `${symbol}_TEST`;
 			const stats = {};
 			for (let i = 1; i <= cycleLength; i++)
 				stats[i] = { optimal: 0, suboptimal: 0, details: [] };
-			decisionStats.set(channelName, stats);
+			decisionStats.set(symbol, stats);
 		}
 
 		let frameCount = 0;
@@ -173,7 +173,7 @@ export default class MultiChannelTest extends Job {
 	 * Reads the first sourceRows from each symbol's CSV file
 	 */
 	async loadSourceData() {
-		const dataDir = path.join(__dirname, '..', 'data', 'stock');
+		const dataDir = path.join(__dirname, '..', 'data', 'stock', '1D');
 		for (const symbol of this.config.symbols) {
 			const csvPath = path.join(dataDir, `${symbol}.csv`);
 			const content = fs.readFileSync(csvPath, 'utf-8');
@@ -220,8 +220,7 @@ export default class MultiChannelTest extends Job {
 		let grandTotalOptimal = 0, grandTotalSuboptimal = 0;
 
 		for (const symbol of this.config.symbols) {
-			const channelName = `${symbol}_TEST`;
-			const stats = decisionStats.get(channelName);
+			const stats = decisionStats.get(symbol);
 			const data = this.sourceData.get(symbol);
 
 			console.log(`\n📈 ${symbol}:`);

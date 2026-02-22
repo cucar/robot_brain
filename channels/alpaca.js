@@ -21,7 +21,7 @@ export default class Alpaca {
 	 * @param timeframe - timeframe for the data request (1Min, 5Min, 15Min, 1D, etc.)
 	 * @returns [{ Timestamp, OpenPrice, ClosePrice, HighPrice, LowPrice, Volume, TradeCount, VWAP }]
 	 */
-	async getBars(symbols, start, end, timeframe) {
+	async getBars(symbols, start, end, timeframe = '1Min') {
 		const bars = [];
 		// limit 0 means return everything - pageLimit is the max number of bars per request
 		const options = { start, end, timeframe, limit: 0, pageLimit: 1000 };

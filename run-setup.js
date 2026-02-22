@@ -23,6 +23,11 @@ const __dirname = path.dirname(__filename);
 async function main() {
 	// Get job name from command line
 	const jobName = process.argv[2];
+
+	// Parse --timeframe parameter
+	let timeframe = null;
+	const timeframeIndex = process.argv.indexOf('--timeframe');
+	if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) timeframe = process.argv[timeframeIndex + 1];
 	
 	if (!jobName) {
 		console.error('❌ Error: Job name required');
@@ -59,9 +64,12 @@ async function main() {
 		const jobModule = await import(jobUrl);
 		const JobClass = jobModule.default;
 		
-		// Create job instance
+		// Create job instance and apply options
 		const job = new JobClass();
-		
+		const options = { timeframe };
+		job.options = options;
+		if (typeof job.applyOptions === 'function') job.applyOptions(options);
+
 		// Check if job has setup method
 		if (typeof job.setup !== 'function') {
 			console.log(`ℹ️  Job '${jobName}' does not have a setup() method.`);

@@ -21,6 +21,7 @@ export default class StockTestJob extends Job {
 		// Simple configuration - edit these values as needed
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
+			timeframe: '1D',                     // Timeframe for data (e.g., '1D', '1Min')
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                     // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
 			offsetRows: 0                        // Number of rows to skip from start (can be overridden with --offset)
@@ -38,10 +39,7 @@ export default class StockTestJob extends Job {
 		if (options.episodes !== null && options.episodes !== undefined) this.config.maxEpisodes = options.episodes;
 		if (options.holdout !== null && options.holdout !== undefined) this.config.holdoutRows = options.holdout;
 		if (options.offset !== null && options.offset !== undefined) this.config.offsetRows = options.offset;
-
-		// Pass stock channel options to brain via runnerOptions
-		options.holdoutRows = this.config.holdoutRows;
-		options.offsetRows = this.config.offsetRows;
+		if (options.timeframe !== null && options.timeframe !== undefined) this.config.timeframe = options.timeframe;
 	}
 
 	/**
@@ -49,12 +47,13 @@ export default class StockTestJob extends Job {
 	 * Run this with: node run-setup.js stock-test
 	 */
 	async setup() {
-		console.log('📥 Downloading historical stock data from Alpha Vantage...');
+		const timeframe = this.config.timeframe;
+		console.log(`📥 Downloading historical stock data (${timeframe})...`);
 		console.log(`   Symbols: ${this.config.symbols.join(', ')}`);
 		console.log('');
 
-		// Ensure data directory exists
-		const dataDir = path.join(__dirname, '..', 'data', 'stock');
+		// Ensure timeframe-specific data directory exists
+		const dataDir = path.join(__dirname, '..', 'data', 'stock', timeframe);
 		if (!fs.existsSync(dataDir)) {
 			fs.mkdirSync(dataDir, { recursive: true });
 			console.log(`✅ Created directory: ${dataDir}`);
@@ -75,17 +74,17 @@ export default class StockTestJob extends Job {
 		// Download JSON data for all symbols
 		const symbolData = new Map();
 		for (const symbol of this.config.symbols) {
-			const data = await this.downloadSymbolData(symbol);
+			const data = await this.downloadSymbolData(symbol, timeframe);
 			symbolData.set(symbol, data);
 		}
 
 		console.log('');
 		console.log('📊 Processing and aligning data...');
 
-		// Find all dates that exist in ALL symbols (intersection)
+		// Find all timestamps that exist in ALL symbols (intersection)
 		const commonDates = this.findCommonDates(symbolData);
 
-		// Process and save each symbol's data using only common dates
+		// Process and save each symbol's data using only common timestamps
 		for (const symbol of this.config.symbols) {
 			const data = symbolData.get(symbol);
 			await this.processAndSaveSymbolData(symbol, data, commonDates, dataDir);
@@ -97,11 +96,14 @@ export default class StockTestJob extends Job {
 
 	/**
 	 * Download historical data for a single symbol from Yahoo Finance Chart API
+	 * @param {string} symbol - Stock symbol
+	 * @param {string} timeframe - Timeframe (e.g. '1D', '1Min')
 	 */
-	async downloadSymbolData(symbol) {
-		const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=0&period2=9999999999&interval=1d`;
+	async downloadSymbolData(symbol, timeframe) {
+		const interval = this.getYahooInterval(timeframe);
+		const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=0&period2=9999999999&interval=${interval}`;
 
-		console.log(`📊 Downloading ${symbol}...`);
+		console.log(`📊 Downloading ${symbol} (${timeframe})...`);
 
 		return new Promise((resolve, reject) => {
 			https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, response => {
@@ -128,15 +130,15 @@ export default class StockTestJob extends Job {
 
 						const timeSeriesData = {};
 						for (let i = 0; i < timestamps.length; i++) {
-							const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+							const key = this.getTimestampKey(timestamps[i], timeframe);
 							const open = opens[i];
 							const volume = volumes[i];
 							if (open != null && volume != null)
-								timeSeriesData[date] = { '1. open': String(open), '5. volume': String(volume) };
+								timeSeriesData[key] = { '1. open': String(open), '5. volume': String(volume) };
 						}
 
-						const dateCount = Object.keys(timeSeriesData).length;
-						console.log(`   ✅ ${symbol}: ${dateCount} days of data`);
+						const count = Object.keys(timeSeriesData).length;
+						console.log(`   ✅ ${symbol}: ${count} bars of data`);
 						resolve(timeSeriesData);
 					} catch (error) {
 						reject(new Error(`Failed to parse data for ${symbol}: ${error.message}`));
@@ -144,6 +146,24 @@ export default class StockTestJob extends Job {
 				});
 			}).on('error', reject);
 		});
+	}
+
+	/**
+	 * Map our timeframe code to Yahoo Finance interval parameter
+	 */
+	getYahooInterval(timeframe) {
+		const map = { '1D': '1d', '1Min': '1m', '5Min': '5m', '15Min': '15m', '1H': '1h' };
+		return map[timeframe] || '1d';
+	}
+
+	/**
+	 * Format a Unix timestamp as a key based on timeframe
+	 * Daily → YYYY-MM-DD, intraday → YYYY-MM-DDTHH:MM
+	 */
+	getTimestampKey(timestamp, timeframe) {
+		const iso = new Date(timestamp * 1000).toISOString();
+		if (timeframe === '1D') return iso.split('T')[0];
+		return iso.substring(0, 16);
 	}
 
 	/**
@@ -200,11 +220,44 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
+	 * Hook: Configure channels after brain init - load CSV data and call setTraining
+	 */
+	async configureChannels() {
+		const { timeframe, holdoutRows, offsetRows } = this.config;
+		const dataDir = path.join(__dirname, '..', 'data', 'stock', timeframe);
+
+		for (const symbol of this.config.symbols) {
+			const csvPath = path.join(dataDir, `${symbol}.csv`);
+			const allRows = this.loadCsvRows(csvPath);
+
+			const startIndex = offsetRows;
+			const endIndex = holdoutRows > 0 ? allRows.length - holdoutRows : allRows.length;
+			const rows = allRows.slice(startIndex, endIndex);
+
+			this.brain.getChannel(symbol).setTraining(rows);
+		}
+	}
+
+	/**
+	 * Load and parse a CSV file into {price, volume} row objects
+	 */
+	loadCsvRows(csvPath) {
+		const content = fs.readFileSync(csvPath, 'utf-8');
+		return content.split('\n')
+			.filter(line => line.trim())
+			.map(line => {
+				const parts = line.trim().split(',');
+				return { price: parseFloat(parts[0]), volume: parseFloat(parts[1]) };
+			});
+	}
+
+	/**
 	 * Hook: Show startup information
 	 */
 	async showStartupInfo() {
 		console.log(`🚀 Starting Stock Test Job`);
 		console.log(`📊 Symbols: ${this.config.symbols.join(', ')}`);
+		console.log(`⏱️  Timeframe: ${this.config.timeframe}`);
 		console.log(`🔄 Max Episodes: ${this.config.maxEpisodes}`);
 		console.log(`📋 Holdout Rows: ${this.config.holdoutRows}`);
 		console.log(`📋 Offset Rows: ${this.config.offsetRows}`);
@@ -265,7 +318,7 @@ export default class StockTestJob extends Job {
 
 		// Calculate expected number of frames based on data rows
 		const stockChannel = [...this.brain.getChannels()][0][1];
-		const expectedFrames = stockChannel.dataRows.length - 1; // -1 because first frame reads 2 rows
+		const expectedFrames = stockChannel.trainingData.length - 1; // -1 because first frame reads 2 rows
 
 		// Process all frames for the episode duration
 		let frameCount = 0;

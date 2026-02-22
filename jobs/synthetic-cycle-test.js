@@ -99,6 +99,24 @@ export default class SyntheticCycleTest extends Job {
 	}
 
 	/**
+	 * Hook: Configure channels after brain init - generate cycle rows and call setTraining
+	 */
+	async configureChannels() {
+		const channel = this.brain.getChannel(this.config.symbol);
+		const rows = [];
+		let currentPrice = this.config.startPrice;
+		let currentVolume = this.config.startVolume;
+		for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
+			for (const priceChange of this.config.cyclePattern) {
+				rows.push({ price: currentPrice, volume: Math.round(currentVolume) });
+				currentPrice = currentPrice * (1 + priceChange);
+				currentVolume = currentVolume * (1 + priceChange);
+			}
+		rows.push({ price: currentPrice, volume: Math.round(currentVolume) });
+		channel.setTraining(rows);
+	}
+
+	/**
 	 * Hook: Execute main job logic
 	 */
 	async executeJob() {
@@ -111,7 +129,7 @@ export default class SyntheticCycleTest extends Job {
 		this.brain.resetAccuracyStats();
 
 		// expected frames count is one less than the number of rows - first row is skipped to be able to start detecting changes
-		const expectedFrames = stockChannel.dataRows.length - 2;
+		const expectedFrames = stockChannel.trainingData.length - 2;
 
 		// Track actions
 		let actions = [];
