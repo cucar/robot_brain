@@ -49,8 +49,8 @@ export class StockChannel extends Channel {
 		// initialize dimensions
 		this.initializeDimensions(dimensions);
 
-		// initialize data to be read
-		this.initializeData();
+		// initialize training data to be read
+		this.initializeTrainingData();
 
 		// initialize buckets to be used for discretizing price and volume changes
 		this.initializeBuckets();
@@ -85,9 +85,9 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * initialize data to be read from CSV file
+	 * initialize training data to be read from CSV file
 	 */
-	initializeData() {
+	initializeTrainingData() {
 
 		// Store all CSV rows for holdout/offset management
 		this.allRows = [];
@@ -145,56 +145,15 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * initialize buckets to be used for discretizing price and volume changes
+	 * initialize dynamic bucket categories
 	 */
 	initializeBuckets() {
 
-		// Fine-grained for typical stock movements (-2% to +2%), exponential for extremes, extended for volume volatility
-		// this.changeBuckets = [
-		// 	{ min: -Infinity, max: -100, value: -20 }, // -100%+
-		// 	{ min: -100, max: -90, value: -19 },       // -100% to -90%
-		// 	{ min: -90, max: -80, value: -18 },        // -90% to -80%
-		// 	{ min: -80, max: -70, value: -17 },        // -80% to -70%
-		// 	{ min: -70, max: -60, value: -16 },        // -70% to -60%
-		// 	{ min: -60, max: -50, value: -15 },        // -60% to -50%
-		// 	{ min: -50, max: -40, value: -14 },        // -50% to -40%
-		// 	{ min: -40, max: -30, value: -13 },        // -40% to -30%
-		// 	{ min: -30, max: -20, value: -12 },        // -30% to -20%
-		// 	{ min: -20, max: -10, value: -11 },        // -20% to -10%
-		// 	{ min: -10, max: -5, value: -9 },          // -10% to -5%
-		// 	{ min: -5, max: -3, value: -8 },           // -5% to -3%
-		// 	{ min: -3, max: -2, value: -7 },           // -3% to -2%
-		// 	{ min: -2, max: -1, value: -6 },           // -2% to -1%
-		// 	{ min: -1, max: -0.5, value: -5 },         // -1% to -0.5%
-		// 	{ min: -0.5, max: -0.2, value: -4 },       // -0.5% to -0.2%
-		// 	{ min: -0.2, max: -0.05, value: -3 },      // -0.2% to -0.05%
-		// 	{ min: -0.05, max: -0.01, value: -2 },     // -0.05% to -0.01%
-		// 	{ min: -0.01, max: 0.01, value: 0 },       // -0.01% to 0.01% (no change)
-		// 	{ min: 0.01, max: 0.05, value: 2 },        // 0.01% to 0.05%
-		// 	{ min: 0.05, max: 0.2, value: 3 },         // 0.05% to 0.2%
-		// 	{ min: 0.2, max: 0.5, value: 4 },          // 0.2% to 0.5%
-		// 	{ min: 0.5, max: 1, value: 5 },            // 0.5% to 1%
-		// 	{ min: 1, max: 2, value: 6 },              // 1% to 2%
-		// 	{ min: 2, max: 3, value: 7 },              // 2% to 3%
-		// 	{ min: 3, max: 5, value: 8 },              // 3% to 5%
-		// 	{ min: 5, max: 10, value: 9 },             // 5% to 10%
-		// 	{ min: 10, max: 20, value: 11 },           // 10% to 20%
-		// 	{ min: 20, max: 30, value: 12 },           // 20% to 30%
-		// 	{ min: 30, max: 40, value: 13 },           // 30% to 40%
-		// 	{ min: 40, max: 50, value: 14 },           // 40% to 50%
-		// 	{ min: 50, max: 60, value: 15 },           // 50% to 60%
-		// 	{ min: 60, max: 70, value: 16 },           // 60% to 70%
-		// 	{ min: 70, max: 80, value: 17 },           // 70% to 80%
-		// 	{ min: 80, max: 90, value: 18 },           // 80% to 90%
-		// 	{ min: 90, max: 100, value: 19 },          // 90% to 100%
-		// 	{ min: 100, max: Infinity, value: 20 }     // 100%+
-		// ];
+		// price movements are best predicted from up/down
+		this.priceBoundaries = [0];
 
-		// Simple 2-bucket system: down (-1) and up (1), with 0 counting as down - we're looking for upside
-		this.changeBuckets = [
-			{ min: -Infinity, max: 0, value: -1 },     // Down (negative change)
-			{ min: 0, max: Infinity, value: 1 }        // Up (zero or positive change)
-		];
+		// volume movements are best predicted as low, medium, high
+		this.volumeBoundaries = [-10, 10];
 
 		// Build bucket-to-percentage mapping once (used in debug output)
 		this.bucketToPercent = this.buildBucketPercentMap();
@@ -205,20 +164,36 @@ export class StockChannel extends Channel {
 	 */
 	buildBucketPercentMap() {
 		const map = new Map();
-		for (const b of this.changeBuckets) {
-			map.set(`${this.symbol}_price_change:${b.value}`, this.formatBucketRange(b.min, b.max));
-			map.set(`${this.symbol}_volume_change:${b.value}`, this.formatBucketRange(b.min, b.max));
-		}
+		const categories = [
+			{ dim: `${this.symbol}_price_change`,  boundaries: this.priceBoundaries },
+			{ dim: `${this.symbol}_volume_change`, boundaries: this.volumeBoundaries }
+		];
+		for (const { dim, boundaries } of categories)
+			for (let bucket = 1; bucket <= boundaries.length + 1; bucket++) {
+				const { lo, hi } = this.getBucketRange(bucket, boundaries);
+				map.set(`${dim}:${bucket}`, this.formatBucketRange(lo, hi));
+			}
 		return map;
 	}
 
 	/**
-	 * Format bucket range as readable string
+	 * Return the [lo, hi] boundary pair for a 1-indexed bucket in a category.
+	 * lo = -Infinity for bucket 1; hi = Infinity for the last bucket.
+	 */
+	getBucketRange(bucketValue, boundaries) {
+		const idx = bucketValue - 1;
+		const lo = idx === 0 ? -Infinity : boundaries[idx - 1];
+		const hi = idx >= boundaries.length ? Infinity : boundaries[idx];
+		return { lo, hi };
+	}
+
+	/**
+	 * Format bucket range as a readable string with 2 decimal places
 	 */
 	formatBucketRange(min, max) {
-		if (min === -Infinity) return `<${max}%`;
-		if (max === Infinity) return `>${min}%`;
-		return `${min}%~${max}%`;
+		if (min === -Infinity) return `<${max.toFixed(2)}%`;
+		if (max === Infinity) return `>${min.toFixed(2)}%`;
+		return `${min.toFixed(2)}%~${max.toFixed(2)}%`;
 	}
 
 	/**
@@ -276,19 +251,18 @@ export class StockChannel extends Channel {
 		const volumeChange = ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
-			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange) },
-			{ [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange) }
+			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange, this.priceBoundaries) },
+			{ [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange, this.volumeBoundaries) }
 		];
 	}
 
 	/**
 	 * Discretize percentage change into unified buckets
 	 */
-	discretizeChange(percentChange) {
-		for (const bucket of this.changeBuckets)
-			if (percentChange > bucket.min && percentChange <= bucket.max)
-				return bucket.value;
-		return 0; // Default to no change bucket
+	discretizeChange(value, boundaries) {
+		for (let i = 0; i < boundaries.length; i++)
+			if (value <= boundaries[i]) return i + 1;
+		return boundaries.length + 1;
 	}
 
 	/**
@@ -422,15 +396,10 @@ export class StockChannel extends Channel {
 	 * Uses the midpoint of the bucket range
 	 */
 	bucketValueToPercentage(bucketValue) {
-		for (const bucket of this.changeBuckets) {
-			if (bucket.value === bucketValue) {
-				// Use midpoint of bucket range
-				const min = bucket.min === -Infinity ? -100 : bucket.min;
-				const max = bucket.max === Infinity ? 100 : bucket.max;
-				return (min + max) / 2;
-			}
-		}
-		return 0; // Default to no change
+		const { lo, hi } = this.getBucketRange(bucketValue, this.priceBoundaries);
+		const loVal = lo === -Infinity ? hi - Math.abs(hi || 1) * 2 : lo;
+		const hiVal = hi === Infinity ? lo + Math.abs(lo || 1) * 2 : hi;
+		return (loVal + hiVal) / 2;
 	}
 
 	/**

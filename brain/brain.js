@@ -533,7 +533,7 @@ export default class Brain {
 			const neuronVotes = voter.vote(age, 1 / this.memory.contextLength);
 
 			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
-			this.memory.setVotes(voter, age, neuronVotes, contexts.get(`${age}:${voter.level}`));
+			this.memory.setVotes(voter, age, neuronVotes, contexts.get(`${age}:${voter.level}`) ?? []);
 
 			// add the votes to the returned array
 			for (const vote of neuronVotes) votes.push({ voter: voter, ...vote });
