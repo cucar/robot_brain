@@ -132,19 +132,12 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * owned shorthand property
-	 */
-	get owned() {
-		return this.shares > 0;
-	}
-
-	/**
 	 * Reset channel state for new episode (keeps learned patterns but resets trading state)
 	 */
 	resetContext() {
 
 		// Reset trading state
-		this.shares = 0;
+		this.shares = 0; // this is the actual number of shares we own - this is what will be adjusted by the actions
 		this.investment = 0; // Total amount invested in current position
 		this.totalTrades = 0; // Total number of trades in current episode
 		this.previousPrice = null;
@@ -183,7 +176,7 @@ export class StockChannel extends Channel {
 	 */
 	computeChangeInputs() {
 		const priceChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
-		const volumeChange = ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
+		const volumeChange = this.previousVolume === 0 ? 1000 : ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
 			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange, this.priceBoundaries) },
@@ -253,22 +246,17 @@ export class StockChannel extends Channel {
 	 * - Owned: positive if price went up, negative if price went down
 	 * - Not owned: positive if price went down (good timing), negative if price went up (missed opportunity)
 	 */
-	async getRewards(actions) {
+	async getRewards() {
 
 		// Need both current and previous price for calculation
 		if (this.currentPrice === null || this.previousPrice === null) return 0;
-
-		// if there were no actions, nothing to reward
-		if (actions.length === 0) return 0;
 
 		// Calculate percentage change
 		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
 
 		// For owned stocks: positive change = positive reward
 		// For not owned: negative change = positive reward (good timing on selling)
-		const actionData = actions[0]; // Single action per stock channel
-		const lastAction = actionData.coordinates[this.activityDimName];
-		const reward = (lastAction === POSITION_OWN) ? percentChange : -percentChange;
+		const reward = this.lastAction === POSITION_OWN ? percentChange : -percentChange;
 		if (this.debug) this.debugRewards(reward);
 		return reward;
 	}
@@ -281,7 +269,7 @@ export class StockChannel extends Channel {
 		const currentValue = this.shares * this.currentPrice;
 		const channelProfit = currentValue - this.investment;
 
-		if (this.owned) {
+		if (this.lastAction === POSITION_OWN) {
 			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
 			console.log(`${this.symbol}: Reward: ${reward.toFixed(2)} | Unrealized P&L: ${channelProfit >= 0 ? '+' : ''}$${channelProfit.toFixed(2)}`);
 		}
@@ -351,7 +339,7 @@ export class StockChannel extends Channel {
 		// nothing to do if there are no actions
 		if (actionsMap.size === 0) return;
 
-		// Save last actions for tracking
+		// Save last actions for rewarding in the next frame
 		this.saveLastActions(channels, actionsMap);
 
 		// Calculate portfolio allocations
@@ -732,7 +720,7 @@ export class StockChannel extends Channel {
 			shares: this.shares,
 			currentPrice: this.currentPrice,
 			trades: this.totalTrades || 0,
-			position: this.shares > 0 ? 'OWNED' : 'NOT OWNED'
+			position: this.lastAction === POSITION_OWN ? 'OWNED' : 'NOT OWNED'
 		};
 	}
 }

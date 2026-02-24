@@ -327,15 +327,20 @@ export default class Brain {
 		this.rewards = new Map();
 		let feedbackCount = 0;
 
+		// Get all actions from previous frame's inference (from in-memory inferredNeurons)
 		const frameActions = this.memory.getInferredActions();
+
+		// Get reward for each channel
 		for (const [channelName, channel] of this.thalamus.getChannels()) {
-			const actions = frameActions.get(channelName) || [];
-			const reward = await channel.getRewards(actions);
-			if (reward !== 0) { // Only process non-neutral feedback (additive: 0 = neutral)
-				if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
-				this.rewards.set(channelName, reward);
-				feedbackCount++;
-			}
+
+			// if there were no actions, nothing to reward
+			if ((frameActions.get(channelName) || []).length === 0) continue;
+
+			// get the reward for the channel
+			const reward = await channel.getRewards();
+			if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
+			this.rewards.set(channelName, reward);
+			feedbackCount++;
 		}
 
 		if (this.debug) {
@@ -369,7 +374,7 @@ export default class Brain {
 		const neurons = [];
 		for (const point of frame) neurons.push(this.thalamus.getNeuronForPoint(point.coordinates, point.channel, point.type));
 		if (neurons.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
-		if (this.debug) console.log('frame neurons', neurons);
+		// if (this.debug) console.log('frame neurons', neurons);
 		return neurons;
 	}
 
