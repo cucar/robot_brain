@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 import { Job } from './job.js';
 import { StockChannel } from '../channels/stock.js';
@@ -20,10 +19,12 @@ export default class StockTestJob extends Job {
 
 		// Simple configuration - edit these values as needed
 		this.config = {
-			symbols: ['KGC', 'GLD', 'SPY'],        // Stock symbols to train on
-			timeframe: '1D',                     // Timeframe for data (e.g., '1D', '1Min')
+			symbols: ['KGC', 'GLD', 'SPY'],      // Stock symbols to train on , 'AAPL', 'NEM', 'GDX'
+			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
+			startDate: '2026-01-22',             // Start date for data download
+			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
-			holdoutRows: 0,                     // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
+			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
 			offsetRows: 0                        // Number of rows to skip from start (can be overridden with --offset)
 		};
 
@@ -43,170 +44,141 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Setup method - Downloads historical data from Alpha Vantage and processes it
-	 * Run this with: node run-setup.js stock-test
+	 * Setup method - Processes JSON data into CSV training files
+	 * Requires: Run node stock-download.js first to download data
 	 */
 	async setup() {
 		const timeframe = this.config.timeframe;
-		console.log(`📥 Downloading historical stock data (${timeframe})...`);
+		const dataDir = path.join(__dirname, '..', 'data', 'stock', timeframe);
+
+		console.log(`📊 Processing stock data (${timeframe})...`);
 		console.log(`   Symbols: ${this.config.symbols.join(', ')}`);
 		console.log('');
 
-		// Ensure timeframe-specific data directory exists
-		const dataDir = path.join(__dirname, '..', 'data', 'stock', timeframe);
-		if (!fs.existsSync(dataDir)) {
-			fs.mkdirSync(dataDir, { recursive: true });
-			console.log(`✅ Created directory: ${dataDir}`);
-		}
-
-		// Remove old CSV files for symbols we're downloading
+		// Check if JSON files exist
+		console.log('📂 Checking for downloaded data...');
 		for (const symbol of this.config.symbols) {
-			const filePath = path.join(dataDir, `${symbol}.csv`);
-			if (fs.existsSync(filePath)) {
-				try {
-					fs.unlinkSync(filePath);
-				} catch (error) {
-					console.log(`   ⚠️  Could not delete old ${symbol}.csv: ${error.message}`);
-				}
+			const jsonPath = path.join(dataDir, `${symbol}.json`);
+			if (!fs.existsSync(jsonPath)) {
+				console.error(`❌ Error: ${symbol}.json not found in ${dataDir}`);
+				console.error(`Please run: node stock-download.js --timeframe=${timeframe}`);
+				process.exit(1);
 			}
 		}
 
-		// Download JSON data for all symbols
-		const symbolData = new Map();
+		console.log('');
+		console.log('📊 Processing data into training files...');
+
+		// Process each symbol's JSON data into CSV
 		for (const symbol of this.config.symbols) {
-			const data = await this.downloadSymbolData(symbol, timeframe);
-			symbolData.set(symbol, data);
+			const jsonPath = path.join(dataDir, `${symbol}.json`);
+			const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+
+			// Convert bars array to Map for processing
+			const barMap = new Map();
+			for (const bar of bars) {
+				const timestamp = bar.Timestamp.substring(0, 16);
+				barMap.set(timestamp, { open: bar.OpenPrice, volume: bar.Volume });
+			}
+
+			await this.processAndSaveSymbolData(symbol, barMap, dataDir);
 		}
 
 		console.log('');
-		console.log('📊 Processing and aligning data...');
-
-		// Find all timestamps that exist in ALL symbols (intersection)
-		const commonDates = this.findCommonDates(symbolData);
-
-		// Process and save each symbol's data using only common timestamps
-		for (const symbol of this.config.symbols) {
-			const data = symbolData.get(symbol);
-			await this.processAndSaveSymbolData(symbol, data, commonDates, dataDir);
-		}
-
-		console.log('');
-		console.log('✅ All data downloaded and processed successfully!');
-	}
-
-	/**
-	 * Download historical data for a single symbol from Yahoo Finance Chart API
-	 * @param {string} symbol - Stock symbol
-	 * @param {string} timeframe - Timeframe (e.g. '1D', '1Min')
-	 */
-	async downloadSymbolData(symbol, timeframe) {
-		const interval = this.getYahooInterval(timeframe);
-		const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=0&period2=9999999999&interval=${interval}`;
-
-		console.log(`📊 Downloading ${symbol} (${timeframe})...`);
-
-		return new Promise((resolve, reject) => {
-			https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, response => {
-				if (response.statusCode !== 200) {
-					reject(new Error(`Failed to download ${symbol}: HTTP ${response.statusCode}`));
-					return;
-				}
-
-				let data = '';
-				response.on('data', chunk => data += chunk);
-
-				response.on('end', () => {
-					try {
-						const json = JSON.parse(data);
-						if (!json.chart || !json.chart.result || !json.chart.result[0]) {
-							reject(new Error(`No chart data for ${symbol}`));
-							return;
-						}
-
-						const result = json.chart.result[0];
-						const timestamps = result.timestamp;
-						const opens = result.indicators.quote[0].open;
-						const volumes = result.indicators.quote[0].volume;
-
-						const timeSeriesData = {};
-						for (let i = 0; i < timestamps.length; i++) {
-							const key = this.getTimestampKey(timestamps[i], timeframe);
-							const open = opens[i];
-							const volume = volumes[i];
-							if (open != null && volume != null)
-								timeSeriesData[key] = { '1. open': String(open), '5. volume': String(volume) };
-						}
-
-						const count = Object.keys(timeSeriesData).length;
-						console.log(`   ✅ ${symbol}: ${count} bars of data`);
-						resolve(timeSeriesData);
-					} catch (error) {
-						reject(new Error(`Failed to parse data for ${symbol}: ${error.message}`));
-					}
-				});
-			}).on('error', reject);
-		});
-	}
-
-	/**
-	 * Map our timeframe code to Yahoo Finance interval parameter
-	 */
-	getYahooInterval(timeframe) {
-		const map = { '1D': '1d', '1Min': '1m', '5Min': '5m', '15Min': '15m', '1H': '1h' };
-		return map[timeframe] || '1d';
-	}
-
-	/**
-	 * Format a Unix timestamp as a key based on timeframe
-	 * Daily → YYYY-MM-DD, intraday → YYYY-MM-DDTHH:MM
-	 */
-	getTimestampKey(timestamp, timeframe) {
-		const iso = new Date(timestamp * 1000).toISOString();
-		if (timeframe === '1D') return iso.split('T')[0];
-		return iso.substring(0, 16);
-	}
-
-	/**
-	 * Find all dates that exist in ALL symbols' data (intersection)
-	 */
-	findCommonDates(symbolData) {
-		// Get all dates for each symbol as Sets
-		const symbolDateSets = [];
-		for (const [symbol, data] of symbolData) {
-			const dates = new Set(Object.keys(data));
-			symbolDateSets.push(dates);
-			console.log(`   ${symbol}: ${dates.size} dates`);
-		}
-
-		// Find intersection of all date sets
-		let commonDates = symbolDateSets[0];
-		for (let i = 1; i < symbolDateSets.length; i++)
-			commonDates = new Set([...commonDates].filter(date => symbolDateSets[i].has(date)));
-
-		// Sort chronologically and return as array
-		const sortedDates = [...commonDates].sort();
-		console.log(`   Common dates: ${sortedDates.length} (${sortedDates[0]} to ${sortedDates[sortedDates.length - 1]})`);
-		return sortedDates;
+		console.log('✅ All data processed successfully!');
 	}
 
 	/**
 	 * Process and save symbol data in the format expected by StockChannel
-	 * Format: open,volume (no header, chronological order)
+	 * Format: price,volume (no header, no timestamp, chronological order)
+	 * For minute data: Only includes regular trading hours (9:30 AM - 4:00 PM ET)
+	 * For daily data: Uses bars as-is without gap filling
 	 */
-	async processAndSaveSymbolData(symbol, data, commonDates, dataDir) {
-		// Extract open price and volume for each common date
-		const rows = commonDates.map(date => {
-			const dayData = data[date];
-			const open = dayData['1. open'];
-			const volume = dayData['5. volume'];
-			return `${open},${volume}`;
-		});
+	async processAndSaveSymbolData(symbol, barMap, dataDir) {
+
+		let filledData;
+
+		// For daily data, just use the bars as-is (sorted by timestamp)
+		if (this.config.timeframe === '1D') {
+			const timestamps = Array.from(barMap.keys()).sort();
+			filledData = timestamps.map(timestamp => ({
+				open: barMap.get(timestamp).open,
+				volume: barMap.get(timestamp).volume
+			}));
+		}
+		// For minute data, only include regular trading hours
+		else filledData = this.fillRegularHoursOnly(barMap);
+
+		// Format as CSV rows: price,volume (no timestamp)
+		const rows = filledData.map(bar => `${bar.open},${bar.volume}`);
 
 		// Write to CSV file (no header, chronological order)
 		const filePath = path.join(dataDir, `${symbol}.csv`);
 		fs.writeFileSync(filePath, rows.join('\n'));
 
-		console.log(`   ✅ ${symbol}.csv: ${rows.length} days (${commonDates[0]} to ${commonDates[commonDates.length - 1]})`);
+		console.log(`   ✅ ${symbol}.csv: ${rows.length} bars`);
+	}
+
+	/**
+	 * Generate complete grid of regular trading hours (9:30 AM - 4:00 PM ET) for every trading day
+	 * Fills missing bars with previous price and 0 volume
+	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
+	 * @returns {Array<{open: number, volume: number}>} Complete array of bars for regular hours only
+	 */
+	fillRegularHoursOnly(barMap) {
+
+		// Parse start and end dates
+		const start = new Date(this.config.startDate);
+		const end = new Date(this.config.endDate);
+
+		// Get the first bar's price to use as initial price for all stocks
+		const timestamps = Array.from(barMap.keys()).sort();
+		const firstBar = timestamps.length > 0 ? barMap.get(timestamps[0]) : null;
+		let lastPrice = firstBar ? firstBar.open : null;
+
+		const result = [];
+
+		// Loop through every minute from start to end
+		const current = new Date(start);
+		current.setUTCSeconds(0, 0);
+		while (current <= end) {
+
+			// Only output minutes within regular trading hours
+			if (this.isRegularHours(current)) {
+
+				// Check if we have a bar for this minute
+				const timestampKey = current.toISOString().substring(0, 16);
+				const bar = barMap.get(timestampKey);
+
+				// if we do have a bar, add it to the result and update last price
+				if (bar) {
+					result.push({ open: bar.open, volume: bar.volume });
+					lastPrice = bar.open;
+				}
+				// No bar - fill with last price and 0 volume
+				else if (lastPrice !== null) result.push({ open: lastPrice, volume: 0 });
+			}
+
+			// move to next minute
+			current.setUTCMinutes(current.getUTCMinutes() + 1);
+		}
+
+		return result;
+	}
+
+	/**
+	 * Check if a UTC timestamp falls within regular trading hours (9:30 AM - 4:00 PM ET)
+	 * @param {Date} utcDate - UTC date to check
+	 * @returns {boolean} True if within regular hours
+	 */
+	isRegularHours(utcDate) {
+		const etDate = new Date(utcDate.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+		const etHour = etDate.getHours();
+		const etMinutes = etDate.getMinutes();
+		const etTime = etHour * 60 + etMinutes;
+		const regularOpen = 9 * 60 + 30;   // 9:30 AM ET
+		const regularClose = 16 * 60;      // 4:00 PM ET
+		return etTime >= regularOpen && etTime < regularClose;
 	}
 
 	/**
@@ -240,6 +212,7 @@ export default class StockTestJob extends Job {
 
 	/**
 	 * Load and parse a CSV file into {price, volume} row objects
+	 * Rows are already in chronological order from processAndSaveSymbolData
 	 */
 	loadCsvRows(csvPath) {
 		const content = fs.readFileSync(csvPath, 'utf-8');

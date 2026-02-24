@@ -23,41 +23,83 @@ export default class MultiChannelTest extends Job {
 
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],
+			timeframe: '1D',                 // Timeframe for data (can be overridden with --timeframe)
 			cycleRepeats: 20,
 			sourceRows: 12 // First 12 rows from each stock's CSV
 		};
 
 		// Will be populated in setup() from actual CSV data
-		this.sourceData = new Map(); // symbol -> array of {price, volume}
+		this.sourceData = new Map(); // symbol -> array of {timestamp, price, volume}
 	}
 
 	/**
-	 * Setup method - Load source data from CSV files and generate test data with repeated cycles
-	 * Creates _TEST.csv files with the source data repeated cycleRepeats times
-	 * @throws {Error} If CSV file not found for any symbol
+	 * Apply command line options to config
+	 */
+	applyOptions(options) {
+		if (options.timeframe !== null && options.timeframe !== undefined) this.config.timeframe = options.timeframe;
+	}
+
+	/**
+	 * Check if a timestamp falls within regular trading hours (9:30 AM - 4:00 PM ET)
+	 * @param {string} timestamp - ISO timestamp string (e.g., "2026-01-22T14:30:00Z")
+	 * @returns {boolean} True if within regular hours
+	 */
+	isRegularHours(timestamp) {
+		const utcDate = new Date(timestamp);
+		const etDate = new Date(utcDate.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+		const etHour = etDate.getHours();
+		const etMinutes = etDate.getMinutes();
+		const etTime = etHour * 60 + etMinutes;
+		const regularOpen = 9 * 60 + 30;   // 9:30 AM ET
+		const regularClose = 16 * 60;      // 4:00 PM ET
+		return etTime >= regularOpen && etTime < regularClose;
+	}
+
+	/**
+	 * Setup method - Load source data from JSON files and write to CSV files
+	 * Reads from JSON files downloaded by stock-download
+	 * Filters to regular trading hours only (9:30 AM - 4:00 PM ET)
+	 * Writes CSV files in format: price,volume (no timestamps)
+	 * @throws {Error} If JSON file not found for any symbol
 	 */
 	async setup() {
-		console.log('📊 Loading first 12 rows from each stock CSV...');
+		console.log('📊 Loading first 12 rows from stock JSON files...');
 		console.log(`   Symbols: ${this.config.symbols.join(', ')}`);
+		console.log(`   Timeframe: ${this.config.timeframe}`);
 		console.log(`   Repeats: ${this.config.cycleRepeats}`);
 		console.log('');
 
-		const dataDir = path.join(__dirname, '..', 'data', 'stock', '1D');
+		const dataDir = path.join(__dirname, '..', 'data', 'stock', this.config.timeframe);
 
 		for (const symbol of this.config.symbols) {
-			const csvPath = path.join(dataDir, `${symbol}.csv`);
-			if (!fs.existsSync(csvPath))
-				throw new Error(`CSV file not found: ${csvPath}. Run 'node run-setup.js stock-test' first.`);
+			const jsonPath = path.join(dataDir, `${symbol}.json`);
+			if (!fs.existsSync(jsonPath)) {
+				console.error(`❌ JSON file not found: ${jsonPath}`);
+				console.error(`Please run: node stock-download.js --timeframe=${this.config.timeframe}`);
+				process.exit(1);
+			}
 
-			const content = fs.readFileSync(csvPath, 'utf-8');
-			const lines = content.trim().split('\n').slice(0, this.config.sourceRows);
-			const rows = lines.map(line => {
-				const [price, volume] = line.split(',');
-				return { price: parseFloat(price), volume: parseInt(volume) };
-			});
+			const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+
+			// Filter bars to regular trading hours only (9:30 AM - 4:00 PM ET)
+			const regularHoursBars = this.config.timeframe === '1D'
+				? bars
+				: bars.filter(bar => this.isRegularHours(bar.Timestamp));
+
+			// Take first sourceRows from regular hours data
+			const rows = regularHoursBars.slice(0, this.config.sourceRows).map(bar => ({
+				price: bar.OpenPrice,
+				volume: bar.Volume
+			}));
 
 			this.sourceData.set(symbol, rows);
-			console.log(`   ✅ ${symbol}: Loaded ${rows.length} rows`);
+
+			// Write to CSV file: price,volume (no timestamps)
+			const csvLines = rows.map(row => `${row.price},${row.volume}`);
+			const csvPath = path.join(dataDir, `${symbol}_TEST.csv`);
+			fs.writeFileSync(csvPath, csvLines.join('\n'));
+
+			console.log(`   ✅ ${symbol}: Loaded ${rows.length} rows, wrote to ${symbol}_TEST.csv`);
 		}
 
 		console.log(`\n✅ Total Frames: ${this.config.cycleRepeats * (this.config.sourceRows - 1)}`);
@@ -75,20 +117,40 @@ export default class MultiChannelTest extends Job {
 	}
 
 	/**
-	 * Hook: Configure channels after brain init - generate cycled rows and call setTraining
+	 * Hook: Configure channels after brain init - load CSV files and call setTraining
 	 */
 	async configureChannels() {
-		if (this.sourceData.size === 0)
-			await this.loadSourceData();
-		for (const symbol of this.config.symbols)
-			this.brain.getChannel(symbol).setTraining(this.generateCycledRows(symbol));
+		const dataDir = path.join(__dirname, '..', 'data', 'stock', this.config.timeframe);
+
+		for (const symbol of this.config.symbols) {
+			const csvPath = path.join(dataDir, `${symbol}_TEST.csv`);
+			const sourceRows = this.loadCsvRows(csvPath);
+
+			// Store source data for optimal ownership calculation
+			this.sourceData.set(symbol, sourceRows);
+
+			// Generate cycled rows and set as training data
+			this.brain.getChannel(symbol).setTraining(this.generateCycledRows(sourceRows));
+		}
 	}
 
 	/**
-	 * Generate cycled training rows for a symbol
+	 * Load and parse a CSV file into {price, volume} row objects
 	 */
-	generateCycledRows(symbol) {
-		const sourceRows = this.sourceData.get(symbol);
+	loadCsvRows(csvPath) {
+		const content = fs.readFileSync(csvPath, 'utf-8');
+		return content.split('\n')
+			.filter(line => line.trim())
+			.map(line => {
+				const parts = line.trim().split(',');
+				return { price: parseFloat(parts[0]), volume: parseFloat(parts[1]) };
+			});
+	}
+
+	/**
+	 * Generate cycled training rows from source rows
+	 */
+	generateCycledRows(sourceRows) {
 		const rows = [];
 		for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
 			for (const row of sourceRows)
@@ -166,24 +228,6 @@ export default class MultiChannelTest extends Job {
 
 		console.log(`\n✅ Completed ${frameCount} frames\n`);
 		await this.showOptimalityAnalysis(decisionStats, cycleLength);
-	}
-
-	/**
-	 * Load source data from CSV files into memory
-	 * Reads the first sourceRows from each symbol's CSV file
-	 */
-	async loadSourceData() {
-		const dataDir = path.join(__dirname, '..', 'data', 'stock', '1D');
-		for (const symbol of this.config.symbols) {
-			const csvPath = path.join(dataDir, `${symbol}.csv`);
-			const content = fs.readFileSync(csvPath, 'utf-8');
-			const lines = content.trim().split('\n').slice(0, this.config.sourceRows);
-			const rows = lines.map(line => {
-				const [price, volume] = line.split(',');
-				return { price: parseFloat(price), volume: parseInt(volume) };
-			});
-			this.sourceData.set(symbol, rows);
-		}
 	}
 
 	/**
