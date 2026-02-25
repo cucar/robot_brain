@@ -88,7 +88,7 @@ export class StockChannel extends Channel {
 		this.priceBoundaries = [0];
 
 		// volume movements are best predicted as low, medium, high
-		this.volumeBoundaries = [-10, 10];
+		this.volumeBoundaries = [0];
 
 		// Build bucket-to-percentage mapping once (used in debug output)
 		this.bucketToPercent = this.buildBucketPercentMap();
@@ -271,11 +271,11 @@ export class StockChannel extends Channel {
 
 		if (this.lastAction === POSITION_OWN) {
 			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${reward.toFixed(2)} | Unrealized P&L: ${channelProfit >= 0 ? '+' : ''}$${channelProfit.toFixed(2)}`);
+			console.log(`${this.symbol}: Reward: ${reward} | Unrealized P&L: ${channelProfit >= 0 ? '+' : ''}$${channelProfit.toFixed(2)}`);
 		}
 		else {
 			console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${reward.toFixed(2)}`);
+			console.log(`${this.symbol}: Reward: ${reward}`);
 		}
 	}
 
@@ -680,7 +680,16 @@ export class StockChannel extends Channel {
 			const val = parseFloat(valStr);
 			// Check if this dimension has a bucket mapping
 			const key = `${dimName}:${val}`;
-			const percentRange = bucketToPercent.get(key);
+			let percentRange = bucketToPercent.get(key);
+			// Fall back to matching by dimension suffix for cross-channel voters
+			// (all StockChannels share identical boundaries so this is accurate)
+			if (!percentRange) {
+				const underscoreIdx = dimName.indexOf('_');
+				if (underscoreIdx >= 0) {
+					const suffix = dimName.substring(underscoreIdx);
+					percentRange = bucketToPercent.get(`${this.symbol}${suffix}:${val}`);
+				}
+			}
 			if (percentRange) return `${dimName}=${val}(${percentRange})`;
 			return part;
 		}).join(', ');

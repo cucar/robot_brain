@@ -202,18 +202,19 @@ export default class MultiChannelTest extends Job {
 		let frameCount = 0;
 		while (frameCount < expectedFrames) {
 
-			// Capture ownership BEFORE processing frame for all channels
-			const ownedBeforeFrame = new Map();
+			// Capture the action that will be executed/rewarded in this frame
+			// (this was decided in the previous frame and is about to be rewarded)
+			const actionBeforeFrame = new Map();
 			for (const [channelName, channel] of this.brain.getChannels())
-				ownedBeforeFrame.set(channelName, channel.shares > 0);
+				actionBeforeFrame.set(channelName, channel.lastAction);
 
 			await this.brain.processFrame();
 			frameCount++;
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
 
-			// Track optimality for each channel
+			// Track optimality for each channel using the action that was rewarded this frame
 			for (const [channelName, _] of this.brain.getChannels()) {
-				const actualOwned = ownedBeforeFrame.get(channelName);
+				const actualOwned = actionBeforeFrame.get(channelName) === 1; // POSITION_OWN = 1
 				const optimalOwned = optimalOwnership.get(channelName)[cycleFrame];
 				const stats = decisionStats.get(channelName);
 

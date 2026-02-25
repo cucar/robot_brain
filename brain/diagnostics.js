@@ -183,7 +183,7 @@ export class Diagnostics {
 		for (const [label, aggregated] of aggregatedByAction) {
 			const total = totalsByAction.get(label);
 			const winnerMarker = label === winningLabel ? ' ★' : '';
-			const header = `${label} (${aggregated.length} voters, str=${total.str.toFixed(1)}, avgRwd=${total.rwd.toFixed(2)})${winnerMarker}`;
+			const header = `${label} (${aggregated.length} voters, str=${total.str}, avgRwd=${total.rwd})${winnerMarker}`;
 			console.log(this.formatAggregatedVotes(aggregated, header, true, channel));
 		}
 		console.log(`  SELECTION: ${winningLabel} (highest reward)`);
@@ -243,18 +243,18 @@ export class Diagnostics {
 	aggregateVotesBySource(votes) {
 		if (votes.length === 0) return [];
 
-		// Aggregate by voter neuron
+		// Aggregate by (voter neuron, distance) - same neuron at different ages generates
+		// separate entries so multi-distance voting is visible as distinct rows in the output
 		const bySource = new Map();
 		for (const v of votes) {
 			const coords = this.formatNeuronCoords(v.voter);
 			const level = v.voter.level;
-			const key = v.voter.id;
+			const key = `${v.voter.id}:${v.distance}`;
 			if (!bySource.has(key))
-				bySource.set(key, { voterId: key, strength: 0, weightedRewardSum: 0, coords, level, distances: [] });
+				bySource.set(key, { voterId: v.voter.id, strength: 0, weightedRewardSum: 0, coords, level, distance: v.distance });
 			const agg = bySource.get(key);
 			agg.strength += v.strength;
 			agg.weightedRewardSum += v.strength * v.reward;
-			agg.distances.push(v.distance);
 		}
 
 		// Calculate strength-weighted average reward per source
@@ -300,11 +300,10 @@ export class Diagnostics {
 		const lines = label ? [`  ${label}:`] : [];
 		for (const agg of aggVotes) {
 			const coordsFormatted = this.formatCoordinates(agg.coords, channel);
-			const distStr = agg.distances.length > 1 ? `d=[${agg.distances.join(',')}]` : `d=${agg.distances[0]}`;
 			const rewardStr = includeReward ? `, avgRwd=${agg.reward.toFixed(2)}` : '';
 			const levelStr = agg.level > 0 ? ` L${agg.level}` : '';
 			const typeStr = agg.level > 0 ? ' [P]' : '';
-			lines.push(`    ${coordsFormatted}${levelStr}${typeStr} (${distStr}) → str=${agg.strength.toFixed(1)}${rewardStr}`);
+			lines.push(`    ${coordsFormatted}${levelStr}${typeStr} (d=${agg.distance}) → str=${agg.strength.toFixed(1)}${rewardStr}`);
 		}
 		return lines.join('\n');
 	}
