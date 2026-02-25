@@ -69,7 +69,8 @@ export default class StockTestJob extends Job {
 		console.log('');
 		console.log('📊 Processing data into training files...');
 
-		// Process each symbol's JSON data into CSV
+		// Load all symbols' data first
+		const allBarMaps = new Map();
 		for (const symbol of this.config.symbols) {
 			const jsonPath = path.join(dataDir, `${symbol}.json`);
 			const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
@@ -80,8 +81,18 @@ export default class StockTestJob extends Job {
 				const timestamp = bar.Timestamp.substring(0, 16);
 				barMap.set(timestamp, { open: bar.OpenPrice, volume: bar.Volume });
 			}
+			allBarMaps.set(symbol, barMap);
+		}
 
-			await this.processAndSaveSymbolData(symbol, barMap, dataDir);
+		// For minute data, find valid dates (where at least one stock has data)
+		let validDates = null;
+		if (timeframe !== '1D')
+			validDates = this.findValidDates(allBarMaps);
+
+		// Process each symbol's data into CSV
+		for (const symbol of this.config.symbols) {
+			const barMap = allBarMaps.get(symbol);
+			await this.processAndSaveSymbolData(symbol, barMap, dataDir, validDates);
 		}
 
 		console.log('');
@@ -89,16 +100,38 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
+	 * Find all valid dates where at least one stock has data
+	 * @param {Map<string, Map<string, {open: number, volume: number}>>} allBarMaps - Map of symbol -> barMap
+	 * @returns {Set<string>} Set of valid dates in YYYY-MM-DD format
+	 */
+	findValidDates(allBarMaps) {
+		const validDates = new Set();
+
+		// Collect all dates from all stocks
+		for (const barMap of allBarMaps.values()) {
+			for (const timestamp of barMap.keys()) {
+				const date = timestamp.substring(0, 10); // Extract YYYY-MM-DD
+				validDates.add(date);
+			}
+		}
+
+		return validDates;
+	}
+
+	/**
 	 * Process and save symbol data in the format expected by StockChannel
 	 * Format: price,volume (no header, no timestamp, chronological order)
 	 * For minute data: Only includes regular trading hours (9:30 AM - 4:00 PM ET)
 	 * For daily data: Uses bars as-is without gap filling
+	 * @param {string} symbol - Stock symbol
+	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
+	 * @param {string} dataDir - Directory to save CSV files
+	 * @param {Set<string>|null} validDates - Set of valid dates in YYYY-MM-DD format (for minute data only)
 	 */
-	async processAndSaveSymbolData(symbol, barMap, dataDir) {
-
-		let filledData;
+	async processAndSaveSymbolData(symbol, barMap, dataDir, validDates = null) {
 
 		// For daily data, just use the bars as-is (sorted by timestamp)
+		let filledData;
 		if (this.config.timeframe === '1D') {
 			const timestamps = Array.from(barMap.keys()).sort();
 			filledData = timestamps.map(timestamp => ({
@@ -106,8 +139,8 @@ export default class StockTestJob extends Job {
 				volume: barMap.get(timestamp).volume
 			}));
 		}
-		// For minute data, only include regular trading hours
-		else filledData = this.fillRegularHoursOnly(barMap);
+		// For minute data, only include valid dates
+		else filledData = this.fillRegularHoursOnly(barMap, validDates);
 
 		// Format as CSV rows: price,volume (no timestamp)
 		const rows = filledData.map(bar => `${bar.open},${bar.volume}`);
@@ -120,12 +153,13 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Generate complete grid of regular trading hours (9:30 AM - 4:00 PM ET) for every trading day
+	 * Generate complete grid of regular trading hours (9:30 AM - 4:00 PM ET) for valid trading days only
 	 * Fills missing bars with previous price and 0 volume
 	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
+	 * @param {Set<string>} validDates - Set of valid dates in YYYY-MM-DD format
 	 * @returns {Array<{open: number, volume: number}>} Complete array of bars for regular hours only
 	 */
-	fillRegularHoursOnly(barMap) {
+	fillRegularHoursOnly(barMap, validDates) {
 
 		// Parse start and end dates
 		const start = new Date(this.config.startDate);
@@ -143,20 +177,27 @@ export default class StockTestJob extends Job {
 		current.setUTCSeconds(0, 0);
 		while (current <= end) {
 
-			// Only output minutes within regular trading hours
-			if (this.isRegularHours(current)) {
+			// Get the date for this timestamp
+			const dateStr = current.toISOString().substring(0, 10);
 
-				// Check if we have a bar for this minute
-				const timestampKey = current.toISOString().substring(0, 16);
-				const bar = barMap.get(timestampKey);
+			// Only process if this date has data for at least one stock
+			if (validDates.has(dateStr)) {
 
-				// if we do have a bar, add it to the result and update last price
-				if (bar) {
-					result.push({ open: bar.open, volume: bar.volume });
-					lastPrice = bar.open;
+				// Only output minutes within regular trading hours
+				if (this.isRegularHours(current)) {
+
+					// Check if we have a bar for this minute
+					const timestampKey = current.toISOString().substring(0, 16);
+					const bar = barMap.get(timestampKey);
+
+					// if we do have a bar, add it to the result and update last price
+					if (bar) {
+						result.push({ open: bar.open, volume: bar.volume });
+						lastPrice = bar.open;
+					}
+					// No bar - fill with last price and 0 volume
+					else if (lastPrice !== null) result.push({ open: lastPrice, volume: 0 });
 				}
-				// No bar - fill with last price and 0 volume
-				else if (lastPrice !== null) result.push({ open: lastPrice, volume: 0 });
 			}
 
 			// move to next minute
