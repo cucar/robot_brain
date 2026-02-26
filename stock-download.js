@@ -14,33 +14,41 @@ const __dirname = path.dirname(__filename);
 // Configuration - edit these values as needed
 const config = {
 	symbols: ['KGC', 'GLD', 'SPY', 'AAPL', 'NEM', 'GDX'],
-	startDate: '2020-01-01',
-	endDate: '2026-01-01'
+	startDate: '2025-12-22',
+	endDate: '2026-02-22'
 };
 
 /**
  * Parse command line arguments
  */
 function parseArgs() {
-	const args = process.argv.slice(2);
 	let timeframe = '1Min'; // default
-	for (const arg of args)
-		if (arg.startsWith('--timeframe=')) timeframe = arg.split('=')[1];
-	return { timeframe };
+	const timeframeIndex = process.argv.indexOf('--timeframe');
+	if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) timeframe = process.argv[timeframeIndex + 1];
+
+	let startDate = config.startDate; // default
+	const startIndex = process.argv.indexOf('--start');
+	if (startIndex !== -1 && process.argv[startIndex + 1]) startDate = process.argv[startIndex + 1];
+
+	let endDate = config.endDate; // default
+	const endIndex = process.argv.indexOf('--end');
+	if (endIndex !== -1 && process.argv[endIndex + 1]) endDate = process.argv[endIndex + 1];
+
+	return { timeframe, startDate, endDate };
 }
 
 /**
  * Download historical data for a single symbol from Alpaca
  */
-async function downloadSymbol(alpacaClient, symbol, timeframe, dataDir) {
+async function downloadSymbol(alpacaClient, symbol, timeframe, startDate, endDate, dataDir) {
 	console.log(`📊 Downloading ${symbol} (${timeframe})...`);
-	
-	const bars = await alpacaClient.getBars(symbol, config.startDate, config.endDate, timeframe);
-	
+
+	const bars = await alpacaClient.getBars(symbol, startDate, endDate, timeframe);
+
 	// Save raw bars to JSON
 	const filePath = path.join(dataDir, `${symbol}.json`);
 	fs.writeFileSync(filePath, JSON.stringify(bars, null, 2));
-	
+
 	console.log(`   ✅ ${symbol}.json: ${bars.length} bars`);
 }
 
@@ -48,12 +56,12 @@ async function downloadSymbol(alpacaClient, symbol, timeframe, dataDir) {
  * Main download function
  */
 async function main() {
-	const { timeframe } = parseArgs();
+	const { timeframe, startDate, endDate } = parseArgs();
 
 	console.log('📥 Stock Data Download');
 	console.log(`📊 Symbols: ${config.symbols.join(', ')}`);
 	console.log(`⏱️  Timeframe: ${timeframe}`);
-	console.log(`📅 Date Range: ${config.startDate} to ${config.endDate}`);
+	console.log(`📅 Date Range: ${startDate} to ${endDate}`);
 	console.log('');
 
 	// Create data directory
@@ -65,7 +73,7 @@ async function main() {
 
 	// Download each symbol
 	for (const symbol of config.symbols)
-		await downloadSymbol(alpacaClient, symbol, timeframe, dataDir);
+		await downloadSymbol(alpacaClient, symbol, timeframe, startDate, endDate, dataDir);
 
 	console.log('');
 	console.log('✅ All data downloaded successfully!');

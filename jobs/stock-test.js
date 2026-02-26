@@ -21,7 +21,7 @@ export default class StockTestJob extends Job {
 		this.config = {
 			symbols: ['KGC', 'GLD', 'SPY'],      // Stock symbols to train on , 'AAPL', 'NEM', 'GDX'
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
-			startDate: '2026-01-22',             // Start date for data download
+			startDate: '2025-12-22',             // Start date for data download
 			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
@@ -41,6 +41,8 @@ export default class StockTestJob extends Job {
 		if (options.holdout !== null && options.holdout !== undefined) this.config.holdoutRows = options.holdout;
 		if (options.offset !== null && options.offset !== undefined) this.config.offsetRows = options.offset;
 		if (options.timeframe !== null && options.timeframe !== undefined) this.config.timeframe = options.timeframe;
+		if (options.start !== null && options.start !== undefined) this.config.startDate = options.start;
+		if (options.end !== null && options.end !== undefined) this.config.endDate = options.end;
 	}
 
 	/**
@@ -170,9 +172,12 @@ export default class StockTestJob extends Job {
 		const firstBar = timestamps.length > 0 ? barMap.get(timestamps[0]) : null;
 		let lastPrice = firstBar ? firstBar.open : null;
 
+		// Determine time interval in minutes based on timeframe
+		const intervalMinutes = this.getIntervalMinutes(this.config.timeframe);
+
 		const result = [];
 
-		// Loop through every minute from start to end
+		// Loop through every interval from start to end
 		const current = new Date(start);
 		current.setUTCSeconds(0, 0);
 		while (current <= end) {
@@ -183,10 +188,10 @@ export default class StockTestJob extends Job {
 			// Only process if this date has data for at least one stock
 			if (validDates.has(dateStr)) {
 
-				// Only output minutes within regular trading hours
+				// Only output intervals within regular trading hours
 				if (this.isRegularHours(current)) {
 
-					// Check if we have a bar for this minute
+					// Check if we have a bar for this interval
 					const timestampKey = current.toISOString().substring(0, 16);
 					const bar = barMap.get(timestampKey);
 
@@ -200,11 +205,23 @@ export default class StockTestJob extends Job {
 				}
 			}
 
-			// move to next minute
-			current.setUTCMinutes(current.getUTCMinutes() + 1);
+			// move to next interval
+			current.setUTCMinutes(current.getUTCMinutes() + intervalMinutes);
 		}
 
 		return result;
+	}
+
+	/**
+	 * Get the interval in minutes for a given timeframe
+	 * @param {string} timeframe - Timeframe string (e.g., '1Min', '5Min', '15Min')
+	 * @returns {number} Interval in minutes
+	 */
+	getIntervalMinutes(timeframe) {
+		if (timeframe.endsWith('Min')) return parseInt(timeframe.replace('Min', ''));
+		if (timeframe.endsWith('H')) return parseInt(timeframe.replace('H', '')) * 60;
+		if (timeframe === '1D') return 1440;
+		return 1; // default to 1 minute
 	}
 
 	/**

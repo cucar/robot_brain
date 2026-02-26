@@ -28,7 +28,17 @@ async function main() {
 	let timeframe = null;
 	const timeframeIndex = process.argv.indexOf('--timeframe');
 	if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) timeframe = process.argv[timeframeIndex + 1];
-	
+
+	// Parse --start parameter
+	let start = null;
+	const startIndex = process.argv.indexOf('--start');
+	if (startIndex !== -1 && process.argv[startIndex + 1]) start = process.argv[startIndex + 1];
+
+	// Parse --end parameter
+	let end = null;
+	const endIndex = process.argv.indexOf('--end');
+	if (endIndex !== -1 && process.argv[endIndex + 1]) end = process.argv[endIndex + 1];
+
 	if (!jobName) {
 		console.error('❌ Error: Job name required');
 		console.log('\nUsage: node run-setup.js <job-name>');
@@ -66,7 +76,7 @@ async function main() {
 		
 		// Create job instance and apply options
 		const job = new JobClass();
-		const options = { timeframe };
+		const options = { timeframe, start, end };
 		job.options = options;
 		if (typeof job.applyOptions === 'function') job.applyOptions(options);
 

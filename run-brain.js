@@ -56,6 +56,16 @@ if (process.argv[2]) {
 	const timeframeIndex = process.argv.indexOf('--timeframe');
 	if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) timeframe = process.argv[timeframeIndex + 1];
 
+	// Parse --start parameter
+	let start = null;
+	const startIndex = process.argv.indexOf('--start');
+	if (startIndex !== -1 && process.argv[startIndex + 1]) start = process.argv[startIndex + 1];
+
+	// Parse --end parameter
+	let end = null;
+	const endIndex = process.argv.indexOf('--end');
+	if (endIndex !== -1 && process.argv[endIndex + 1]) end = process.argv[endIndex + 1];
+
 	const options = {
 		diagnostic: process.argv.includes('--diagnostic'),
 		database: process.argv.includes('--database'),
@@ -65,7 +75,9 @@ if (process.argv[2]) {
 		episodes,
 		holdout,
 		offset,
-		timeframe
+		timeframe,
+		start,
+		end
 	};
 
 	const runner = new BrainRunner();
