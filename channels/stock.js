@@ -333,8 +333,9 @@ export class StockChannel extends Channel {
 	 * Handles portfolio allocation before executing individual channel actions
 	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
 	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
+	 * @param {Map<string, Array>} eventVotesMap - Map of channel name to event vote data
 	 */
-	static async executeChannelActions(channels, actionsMap) {
+	static async executeChannelActions(channels, actionsMap, eventVotesMap) {
 
 		// nothing to do if there are no actions
 		if (actionsMap.size === 0) return;
@@ -343,7 +344,7 @@ export class StockChannel extends Channel {
 		this.saveLastActions(channels, actionsMap);
 
 		// Calculate portfolio allocations
-		const allocations = this.getAllocations(channels, actionsMap);
+		const allocations = this.getAllocations(channels, actionsMap, eventVotesMap);
 
 		// Generate action plan based on differential between ideal and current allocations
 		const actionPlan = this.getActionPlan(channels, allocations);
@@ -369,15 +370,16 @@ export class StockChannel extends Channel {
 	 * Uses softmax (exponential) weighting to handle negative rewards naturally
 	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
 	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
+	 * @param {Map<string, Array>} eventVotesMap - Map of channel name to the event vote data
 	 * @returns {Map} - Map of channel name to { action, amount } allocation
 	 */
-	static getAllocations(channels, actionsMap) {
+	static getAllocations(channels, actionsMap, eventVotesMap) {
 
 		// Calculate total portfolio value (cash + all current holdings)
 		const totalValue = this.getTotalValue(channels);
 
-		// Collect all actions with their expected rewards
-		const actions = this.getActionsExpectedRewards(channels, actionsMap);
+		// Collect all actions with their expected profits from event vote predictions
+		const actions = this.getActionsExpectedProfits(channels, actionsMap, eventVotesMap);
 
 		// Filter to only POSITION_OWN actions for allocation
 		const ownActions = actions.filter(a => a.isOwn);
@@ -405,10 +407,30 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * returns all actions with their expected rewards
+	 * Calculate expected profit for each channel based on event vote predictions (price forecasts)
+	 * Determines actions based on forecasted price direction (not brain's action decisions)
 	 */
-	static getActionsExpectedRewards(channels, actionsMap) {
+	static getActionsExpectedProfits(channels, actionsMap, eventVotesMap) {
 		const allActions = [];
+
+		/*
+		// event based trading
+		for (const [channelName, eventVotePredictions] of eventVotesMap) {
+
+			// Get forecasted price change and total strength from event vote predictions
+			const channel = channels.get(channelName);
+			const forecast = channel.calculateForecastedChangeWithStrength(eventVotePredictions);
+			if (!forecast) continue;
+
+			// Use forecast to determine action: positive forecast → buy, negative → sell
+			const reward = forecast.change;
+			const strength = forecast.strength;
+			const action = forecast.change > 0 ? POSITION_OWN : POSITION_OUT;
+			allActions.push({ channelName, reward, strength, isOwn: action === POSITION_OWN });
+		}
+	    */
+
+		// action based trading
 		for (const [channelName, actions] of actionsMap) {
 			const channel = channels.get(channelName);
 			const actionData = actions[0]; // Single action per stock channel
@@ -425,6 +447,32 @@ export class StockChannel extends Channel {
 		const expRewards = ownActions.map(a => ({ ...a, expReward: a.strength * Math.exp(a.reward) }));
 		const totalExpReward = expRewards.reduce((sum, a) => sum + a.expReward, 0);
 		return { expRewards, totalExpReward };
+	}
+
+	/**
+	 * Calculate forecasted price change and total strength from event predictions
+	 * @param {Array} eventPredictions - Array of {neuron, coordinates, strength} for event predictions
+	 * @returns {Object|null} - {change: number, strength: number} or null if no price predictions
+	 */
+	calculateForecastedChangeWithStrength(eventPredictions) {
+		const priceChangeDim = `${this.symbol}_price_change`;
+
+		// Filter to price change predictions only
+		const pricePredictions = eventPredictions.filter(p => p.coordinates[priceChangeDim] !== undefined);
+		if (pricePredictions.length === 0) return null;
+
+		// Calculate weighted predicted percentage change
+		let totalWeightedChange = 0;
+		let totalStrength = 0;
+		for (const pred of pricePredictions) {
+			const bucketValue = pred.coordinates[priceChangeDim];
+			const percentageChange = this.bucketValueToPercentage(bucketValue);
+			totalWeightedChange += percentageChange * pred.strength;
+			totalStrength += pred.strength;
+		}
+		if (totalStrength === 0) return null;
+
+		return { change: totalWeightedChange / totalStrength, strength: totalStrength };
 	}
 
 	/**

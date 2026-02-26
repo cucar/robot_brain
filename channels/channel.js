@@ -52,10 +52,10 @@ export class Channel {
 	 * Default implementation: call each channel's executeOutputs individually
 	 * Override in subclasses for coordinated execution (e.g., portfolio management)
 	 */
-	static async executeChannelActions(channels, actionsMap) {
+	static async executeChannelActions(channels, actionsMap, eventVotes) {
 		for (const [channelName, actions] of actionsMap) {
 			const channel = channels.get(channelName);
-			await channel.executeOutputs(actions);
+			await channel.executeOutputs(actions, eventVotes.get(channelName));
 		}
 	}
 

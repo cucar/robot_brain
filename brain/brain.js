@@ -514,8 +514,9 @@ export default class Brain {
 		// call diagnostics to show the debug logs for votes
 		if (this.debug) this.diagnostics.debugVotes(votes, inferences, this.thalamus.channels);
 
-		// Save inferences to memory (clears old inferences first)
+		// Save inferences and votes to memory (clears old inferences first)
 		this.memory.saveInferences(inferences);
+		this.memory.saveVotes(votes);
 	}
 
 	/**
@@ -616,7 +617,7 @@ export default class Brain {
 	 * Execute inferred actions for all channels
 	 */
 	async executeActions() {
-		await this.thalamus.executeChannelActions(this.memory.getInferredActions());
+		await this.thalamus.executeChannelActions(this.memory.getInferredActions(), this.memory.getEventVotes());
 	}
 
 	/**
