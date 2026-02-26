@@ -72,6 +72,7 @@ if (process.argv[2]) {
 		debug: process.argv.includes('--debug'),
 		noSummary: process.argv.includes('--no-summary'),
 		reset: process.argv.includes('--reset'),
+		eventTrading: process.argv.includes('--event-trading'),
 		episodes,
 		holdout,
 		offset,

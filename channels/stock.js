@@ -13,6 +13,17 @@ export class StockChannel extends Channel {
 	static initialCapital = 1000;
 	static cash = StockChannel.initialCapital;
 
+	// trading mode - set by initialize() from command line options
+	static eventTrading = false;
+
+	/**
+	 * Initialize channel type with runtime options
+	 * Called once during brain initialization
+	 */
+	static initialize(options) {
+		StockChannel.eventTrading = options.eventTrading || false;
+	}
+
 	/**
 	 * Static method to reset channel-level context (shared state across all instances)
 	 * Called once per episode reset before individual channel resetContext calls
@@ -379,7 +390,7 @@ export class StockChannel extends Channel {
 		const totalValue = this.getTotalValue(channels);
 
 		// Collect all actions with their expected profits from event vote predictions
-		const actions = this.getActionsExpectedProfits(channels, actionsMap, eventVotesMap);
+		const actions = this.getActionsExpectedRewards(channels, actionsMap, eventVotesMap);
 
 		// Filter to only POSITION_OWN actions for allocation
 		const ownActions = actions.filter(a => a.isOwn);
@@ -407,36 +418,39 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Calculate expected profit for each channel based on event vote predictions (price forecasts)
-	 * Determines actions based on forecasted price direction (not brain's action decisions)
+	 * Calculate expected rewards for each channel
+	 * - Event trading mode: uses event vote predictions (price forecasts) to determine actions
+	 * - Action trading mode: uses brain's action decisions with their rewards
 	 */
-	static getActionsExpectedProfits(channels, actionsMap, eventVotesMap) {
+	static getActionsExpectedRewards(channels, actionsMap, eventVotesMap) {
 		const allActions = [];
 
-		/*
-		// event based trading
-		for (const [channelName, eventVotePredictions] of eventVotesMap) {
+		// Event-based trading: trade based on price predictions
+		if (this.eventTrading) {
+			for (const [channelName, eventVotePredictions] of eventVotesMap) {
 
-			// Get forecasted price change and total strength from event vote predictions
-			const channel = channels.get(channelName);
-			const forecast = channel.calculateForecastedChangeWithStrength(eventVotePredictions);
-			if (!forecast) continue;
+				// Get forecasted price change and total strength from event vote predictions
+				const channel = channels.get(channelName);
+				const forecast = channel.calculateForecastedChangeWithStrength(eventVotePredictions);
+				if (!forecast) continue;
 
-			// Use forecast to determine action: positive forecast → buy, negative → sell
-			const reward = forecast.change;
-			const strength = forecast.strength;
-			const action = forecast.change > 0 ? POSITION_OWN : POSITION_OUT;
-			allActions.push({ channelName, reward, strength, isOwn: action === POSITION_OWN });
+				// Use forecast to determine action: positive forecast → buy, negative → sell
+				const reward = forecast.change;
+				const strength = forecast.strength;
+				const action = forecast.change > 0 ? POSITION_OWN : POSITION_OUT;
+				allActions.push({ channelName, reward, strength, isOwn: action === POSITION_OWN });
+			}
 		}
-	    */
-
-		// action based trading
-		for (const [channelName, actions] of actionsMap) {
-			const channel = channels.get(channelName);
-			const actionData = actions[0]; // Single action per stock channel
-			const action = actionData.coordinates[`${channel.symbol}_activity`];
-			allActions.push({ channelName, reward: actionData.reward, isOwn: action === POSITION_OWN });
+		// Action-based trading: use brain's action decisions
+		else {
+			for (const [channelName, actions] of actionsMap) {
+				const channel = channels.get(channelName);
+				const actionData = actions[0]; // Single action per stock channel
+				const action = actionData.coordinates[`${channel.symbol}_activity`];
+				allActions.push({ channelName, reward: actionData.reward, isOwn: action === POSITION_OWN });
+			}
 		}
+
 		return allActions;
 	}
 
