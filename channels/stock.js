@@ -344,9 +344,9 @@ export class StockChannel extends Channel {
 	 * Handles portfolio allocation before executing individual channel actions
 	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
 	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
-	 * @param {Map<string, Array>} eventVotesMap - Map of channel name to event vote data
+	 * @param {Map<string, Array>} eventsMap - Map of channel name to event inference data
 	 */
-	static async executeChannelActions(channels, actionsMap, eventVotesMap) {
+	static async executeChannelActions(channels, actionsMap, eventsMap) {
 
 		// nothing to do if there are no actions
 		if (actionsMap.size === 0) return;
@@ -355,7 +355,7 @@ export class StockChannel extends Channel {
 		this.saveLastActions(channels, actionsMap);
 
 		// Calculate portfolio allocations
-		const allocations = this.getAllocations(channels, actionsMap, eventVotesMap);
+		const allocations = this.getAllocations(channels, actionsMap, eventsMap);
 
 		// Generate action plan based on differential between ideal and current allocations
 		const actionPlan = this.getActionPlan(channels, allocations);
@@ -381,16 +381,16 @@ export class StockChannel extends Channel {
 	 * Uses softmax (exponential) weighting to handle negative rewards naturally
 	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
 	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
-	 * @param {Map<string, Array>} eventVotesMap - Map of channel name to the event vote data
+	 * @param {Map<string, Array>} eventsMap - Map of channel name to event inference data
 	 * @returns {Map} - Map of channel name to { action, amount } allocation
 	 */
-	static getAllocations(channels, actionsMap, eventVotesMap) {
+	static getAllocations(channels, actionsMap, eventsMap) {
 
 		// Calculate total portfolio value (cash + all current holdings)
 		const totalValue = this.getTotalValue(channels);
 
-		// Collect all actions with their expected profits from event vote predictions
-		const actions = this.getActionsExpectedRewards(channels, actionsMap, eventVotesMap);
+		// Collect all actions with their expected profits from event inference predictions
+		const actions = this.getActionsExpectedRewards(channels, actionsMap, eventsMap);
 
 		// Filter to only POSITION_OWN actions for allocation
 		const ownActions = actions.filter(a => a.isOwn);
@@ -419,26 +419,30 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Calculate expected rewards for each channel
-	 * - Event trading mode: uses event vote predictions (price forecasts) to determine actions
+	 * - Event trading mode: uses event consensus inferences (price forecasts) to determine actions
 	 * - Action trading mode: uses brain's action decisions with their rewards
 	 */
-	static getActionsExpectedRewards(channels, actionsMap, eventVotesMap) {
+	static getActionsExpectedRewards(channels, actionsMap, eventsMap) {
 		const allActions = [];
 
 		// Event-based trading: trade based on price predictions
 		if (this.eventTrading) {
-			for (const [channelName, eventVotePredictions] of eventVotesMap) {
-
-				// Get forecasted price change and total strength from event vote predictions
+			for (const [channelName, events] of eventsMap) {
 				const channel = channels.get(channelName);
-				const forecast = channel.calculateForecastedChangeWithStrength(eventVotePredictions);
-				if (!forecast) continue;
+				const priceChangeDim = `${channel.symbol}_price_change`;
 
-				// Use forecast to determine action: positive forecast → buy, negative → sell
-				const reward = forecast.change;
-				const strength = forecast.strength;
-				const action = forecast.change > 0 ? POSITION_OWN : POSITION_OUT;
-				allActions.push({ channelName, reward, strength, isOwn: action === POSITION_OWN });
+				// Find price change prediction in event inferences
+				const priceEvent = events.find(e => e.coordinates[priceChangeDim] !== undefined);
+				if (!priceEvent) continue;
+
+				// Get the predicted price change bucket value (1 = down, 2 = up)
+				const bucketValue = priceEvent.coordinates[priceChangeDim];
+
+				// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell
+				const action = bucketValue === 2 ? POSITION_OWN : POSITION_OUT;
+
+				// Use strength as reward for weighting
+				allActions.push({ channelName, reward: priceEvent.strength, strength: priceEvent.strength, isOwn: action === POSITION_OWN });
 			}
 		}
 		// Action-based trading: use brain's action decisions
@@ -464,15 +468,15 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Calculate forecasted price change and total strength from event predictions
-	 * @param {Array} eventPredictions - Array of {neuron, coordinates, strength} for event predictions
+	 * Calculate forecasted price change and total strength from event consensus inferences
+	 * @param {Array} eventInferences - Array of {coordinates, strength, reward} for event inferences
 	 * @returns {Object|null} - {change: number, strength: number} or null if no price predictions
 	 */
-	calculateForecastedChangeWithStrength(eventPredictions) {
+	calculateForecastedChangeWithStrength(eventInferences) {
 		const priceChangeDim = `${this.symbol}_price_change`;
 
 		// Filter to price change predictions only
-		const pricePredictions = eventPredictions.filter(p => p.coordinates[priceChangeDim] !== undefined);
+		const pricePredictions = eventInferences.filter(p => p.coordinates[priceChangeDim] !== undefined);
 		if (pricePredictions.length === 0) return null;
 
 		// Calculate weighted predicted percentage change

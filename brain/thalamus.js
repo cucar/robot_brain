@@ -243,9 +243,9 @@ export class Thalamus {
 	 * Execute actions for channels that have them
 	 * Groups channels by type and calls static executeChannelActions on each channel class
 	 * @param {Map<string, Array>} channelActions - Map of channel name to action data
-	 * @param {Map<string, Array>} channelEventVotes - Map of channel name to the event vote data
+	 * @param {Map<string, Array>} channelEvents - Map of channel name to event inference data
 	 */
-	async executeChannelActions(channelActions, channelEventVotes) {
+	async executeChannelActions(channelActions, channelEvents) {
 
 		// Group channels by their class constructor
 		const channelsByType = new Map(); // ChannelClass → Map(channelName → actions)
@@ -266,7 +266,7 @@ export class Thalamus {
 
 			// call channel static method to execute actions
 			// this will do the internal channel coordination if needed (like stock allocations)
-			await ChannelClass.executeChannelActions(channelsOfType, channelActionsMap, channelEventVotes);
+			await ChannelClass.executeChannelActions(channelsOfType, channelActionsMap, channelEvents);
 		}
 	}
 

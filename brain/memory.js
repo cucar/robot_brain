@@ -19,9 +19,6 @@ export class Memory {
 		// Current frame winning inferences: Array<{neuron, strength}>
 		this.inferredNeurons = [];
 
-		// Current frame votes (all predictions before consensus): Array<{neuron, strength, reward, distance}>
-		this.votes = [];
-
 		// carry over the debug flag
 		this.debug = debug;
 	}
@@ -32,7 +29,6 @@ export class Memory {
 	reset() {
 		this.activeNeurons = [];
 		this.inferredNeurons = [];
-		this.votes = [];
 	}
 
 	/**
@@ -134,29 +130,17 @@ export class Memory {
 	}
 
 	/**
-	 * Save votes from inference
-	 * @param {Array} votes - Array of vote objects {neuron, strength, reward, distance}
+	 * Get inferred events grouped by channel
+	 * @returns {Map<string, Array>} - Map of channel names to array of event data {coordinates, strength, reward}
 	 */
-	saveVotes(votes) {
-		this.votes = votes;
-	}
-
-	/**
-	 * Get all event votes grouped by channel (for event neurons only)
-	 * @returns {Map<string, Array>} - Map of channel names to array of vote data {neuron, coordinates, strength}
-	 */
-	getEventVotes() {
-		const channelVotes = new Map();
-		for (const vote of this.votes) {
-			if (vote.neuron.type !== 'event') continue;
-			if (!channelVotes.has(vote.neuron.channel)) channelVotes.set(vote.neuron.channel, []);
-			channelVotes.get(vote.neuron.channel).push({
-				neuron: vote.neuron,
-				coordinates: vote.neuron.coordinates,
-				strength: vote.strength
-			});
+	getInferredEvents() {
+		const channelEvents = new Map();
+		for (const { neuron, strength, reward } of this.inferredNeurons) {
+			if (neuron.type !== 'event') continue;
+			if (!channelEvents.has(neuron.channel)) channelEvents.set(neuron.channel, []);
+			channelEvents.get(neuron.channel).push({ coordinates: neuron.coordinates, strength, reward });
 		}
-		return channelVotes;
+		return channelEvents;
 	}
 
 	/**
