@@ -625,8 +625,8 @@ export class StockChannel extends Channel {
 
 		const cost = sharesToBuy * this.currentPrice;
 
-		// Check if we have enough cash
-		if (StockChannel.cash < cost)
+		// Check if we have enough cash - give a dollar wiggle room for rounding and stuff
+		if (StockChannel.cash < (cost - 1))
 			throw new Error(`${this.symbol}: Insufficient cash to buy ${sharesToBuy} shares at $${this.currentPrice} (need $${cost.toFixed(2)}, have $${StockChannel.cash.toFixed(2)})`);
 
 		// Deduct cash
