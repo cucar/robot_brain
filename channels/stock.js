@@ -10,11 +10,14 @@ const POSITION_OUT = -1;
 export class StockChannel extends Channel {
 
 	// total cash shared across all stock channel instances
-	static initialCapital = 1000;
+	static initialCapital = 100000;
 	static cash = StockChannel.initialCapital;
 
 	// trading mode - set by initialize() from command line options
 	static eventTrading = false;
+
+	// maximum number of positions to hold at once
+	static maxPositions = 30;
 
 	/**
 	 * Initialize channel type with runtime options
@@ -454,16 +457,25 @@ export class StockChannel extends Channel {
 	static distributeAllocations(actions, totalValue) {
 
 		// get the actions that want to own a stock
-		const ownActions = actions.filter(a => a.isOwn);
+		let ownActions = actions.filter(a => a.isOwn);
+
+		// limit to top N positions by weight
+		if (ownActions.length > this.maxPositions) {
+			ownActions.sort((a, b) => b.weight - a.weight);
+			ownActions = ownActions.slice(0, this.maxPositions);
+		}
 
 		// get the total weight for averages
 		const totalWeight = ownActions.reduce((sum, a) => sum + a.weight, 0);
 
-		// allocate the stocks to portfolio - if we want to own the stock, allocate it based on its weight, otherwise, 0
+		// create set of channel names that made the cut
+		const ownChannels = new Set(ownActions.map(a => a.channelName));
+
+		// allocate the stocks to portfolio - if we want to own the stock AND it's in top N, allocate it based on its weight, otherwise, 0
 		const allocations = new Map();
 		for (const action of actions) allocations.set(action.channelName, {
-			action: action.isOwn ? POSITION_OWN : POSITION_OUT,
-			amount: action.isOwn ? (action.weight / totalWeight) * totalValue : 0
+			action: (action.isOwn && ownChannels.has(action.channelName)) ? POSITION_OWN : POSITION_OUT,
+			amount: (action.isOwn && ownChannels.has(action.channelName)) ? (action.weight / totalWeight) * totalValue : 0
 		});
 		return allocations;
 	}
