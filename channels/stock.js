@@ -95,10 +95,10 @@ export class StockChannel extends Channel {
 	 */
 	initializeBuckets() {
 
-		// price movements are best predicted from up/down
-		this.priceBoundaries = [0];
+		// price movements are best predicted from up/down - ideal split is 0.01% - favor profit making
+		this.priceBoundaries = [0.01];
 
-		// volume movements are best predicted as low, medium, high
+		// volume movements are best predicted as up/down
 		this.volumeBoundaries = [0];
 
 		// Build bucket-to-percentage mapping once (used in debug output)
@@ -389,17 +389,11 @@ export class StockChannel extends Channel {
 		// Calculate total portfolio value (cash + all current holdings)
 		const totalValue = this.getTotalValue(channels);
 
-		// Collect all actions with their expected profits from event inference predictions
-		const actions = this.getActionsExpectedRewards(channels, actionsMap, eventsMap);
+		// Collect all actions with their weights for allocations
+		const actions = this.getActionsWeights(channels, actionsMap, eventsMap);
 
-		// Filter to only POSITION_OWN actions for allocation
-		const ownActions = actions.filter(a => a.isOwn);
-
-		// Calculate softmax weights - exp(reward[i]) / sum(exp(reward[j]))
-		const { expRewards, totalExpReward } = this.getActionsRewardWeights(ownActions);
-
-		// Allocate portfolio value proportional to softmax weights
-		const allocations = this.distributeAllocations(actions, ownActions, expRewards, totalExpReward, totalValue);
+		// Allocate portfolio value proportional to the rewards
+		const allocations = this.distributeAllocations(actions, totalValue);
 
 		// Set OUT allocation for channels not in actionsMap (no brain prediction)
 		this.setMissingChannelAllocations(channels, allocations);
@@ -418,31 +412,27 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Calculate expected rewards for each channel
+	 * Calculate action weights for each channel
 	 * - Event trading mode: uses event consensus inferences (price forecasts) to determine actions
 	 * - Action trading mode: uses brain's action decisions with their rewards
 	 */
-	static getActionsExpectedRewards(channels, actionsMap, eventsMap) {
+	static getActionsWeights(channels, actionsMap, eventsMap) {
 		const allActions = [];
 
 		// Event-based trading: trade based on price predictions
 		if (this.eventTrading) {
 			for (const [channelName, events] of eventsMap) {
 				const channel = channels.get(channelName);
-				const priceChangeDim = `${channel.symbol}_price_change`;
 
 				// Find price change prediction in event inferences
-				const priceEvent = events.find(e => e.coordinates[priceChangeDim] !== undefined);
-				if (!priceEvent) continue;
+				const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
+				if (!priceEvent) throw new Error('Cannot find price inference for event trading');
 
 				// Get the predicted price change bucket value (1 = down, 2 = up)
-				const bucketValue = priceEvent.coordinates[priceChangeDim];
-
-				// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell
+				// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell - use strength as weights
+				const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
 				const action = bucketValue === 2 ? POSITION_OWN : POSITION_OUT;
-
-				// Use strength as reward for weighting
-				allActions.push({ channelName, reward: priceEvent.strength, strength: priceEvent.strength, isOwn: action === POSITION_OWN });
+				allActions.push({ channelName, weight: priceEvent.strength, isOwn: action === POSITION_OWN });
 			}
 		}
 		// Action-based trading: use brain's action decisions
@@ -451,7 +441,7 @@ export class StockChannel extends Channel {
 				const channel = channels.get(channelName);
 				const actionData = actions[0]; // Single action per stock channel
 				const action = actionData.coordinates[`${channel.symbol}_activity`];
-				allActions.push({ channelName, reward: actionData.reward, isOwn: action === POSITION_OWN });
+				allActions.push({ channelName, weight: Math.exp(actionData.reward), isOwn: action === POSITION_OWN });
 			}
 		}
 
@@ -459,57 +449,22 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * returns actions with rewards softmax weights - exp(reward[i]) / sum(exp(reward[j]))
-	 */
-	static getActionsRewardWeights(ownActions) {
-		const expRewards = ownActions.map(a => ({ ...a, expReward: a.strength * Math.exp(a.reward) }));
-		const totalExpReward = expRewards.reduce((sum, a) => sum + a.expReward, 0);
-		return { expRewards, totalExpReward };
-	}
-
-	/**
-	 * Calculate forecasted price change and total strength from event consensus inferences
-	 * @param {Array} eventInferences - Array of {coordinates, strength, reward} for event inferences
-	 * @returns {Object|null} - {change: number, strength: number} or null if no price predictions
-	 */
-	calculateForecastedChangeWithStrength(eventInferences) {
-		const priceChangeDim = `${this.symbol}_price_change`;
-
-		// Filter to price change predictions only
-		const pricePredictions = eventInferences.filter(p => p.coordinates[priceChangeDim] !== undefined);
-		if (pricePredictions.length === 0) return null;
-
-		// Calculate weighted predicted percentage change
-		let totalWeightedChange = 0;
-		let totalStrength = 0;
-		for (const pred of pricePredictions) {
-			const bucketValue = pred.coordinates[priceChangeDim];
-			const percentageChange = this.bucketValueToPercentage(bucketValue);
-			totalWeightedChange += percentageChange * pred.strength;
-			totalStrength += pred.strength;
-		}
-		if (totalStrength === 0) return null;
-
-		return { change: totalWeightedChange / totalStrength, strength: totalStrength };
-	}
-
-	/**
 	 * Allocate portfolio value proportional to softmax weights
 	 */
-	static distributeAllocations(allActions, ownActions, expRewards, totalExpReward, totalPortfolioValue) {
+	static distributeAllocations(actions, totalValue) {
+
+		// get the actions that want to own a stock
+		const ownActions = actions.filter(a => a.isOwn);
+
+		// get the total weight for averages
+		const totalWeight = ownActions.reduce((sum, a) => sum + a.weight, 0);
+
+		// allocate the stocks to portfolio - if we want to own the stock, allocate it based on its weight, otherwise, 0
 		const allocations = new Map();
-		for (const action of allActions) {
-			// POSITION_OWN gets reward based allocation
-			if (action.isOwn) {
-				const expAction = expRewards.find(e => e.channelName === action.channelName);
-				const amount = totalExpReward > 0
-					? (expAction.expReward / totalExpReward) * totalPortfolioValue
-					: (totalPortfolioValue / ownActions.length);
-				allocations.set(action.channelName, { action: POSITION_OWN, amount });
-			}
-			// POSITION_OUT gets 0 allocation
-			else allocations.set(action.channelName, { action: POSITION_OUT, amount: 0 });
-		}
+		for (const action of actions) allocations.set(action.channelName, {
+			action: action.isOwn ? POSITION_OWN : POSITION_OUT,
+			amount: action.isOwn ? (action.weight / totalWeight) * totalValue : 0
+		});
 		return allocations;
 	}
 
