@@ -13,8 +13,12 @@ const __dirname = path.dirname(__filename);
 
 // Configuration - edit these values as needed
 const config = {
-	symbols: ['KGC', 'GLD', 'SPY', 'AAPL', 'NEM', 'GDX'],
-	startDate: '2025-12-22',
+	symbols: [
+		'KGC', 'GLD', 'SPY', 'AAPL', 'NEM', 'GDX', 'NVDA', 'AMZN', 'MSFT', 'AMD',
+		'META', 'JPM', 'BAC', 'QQQ', 'IWM', 'AEM', 'WPM', 'NG', 'GOOGL', 'XOM', 'CVX',
+		'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA'
+	],
+	startDate: '2024-02-22',
 	endDate: '2026-02-22'
 };
 

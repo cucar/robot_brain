@@ -21,11 +21,11 @@ export class Neuron {
 	// Hyperparameters
 	static maxStrength = 100;
 	static minStrength = 0;
-	static rewardSmoothing = 0.9;
-	static eventErrorMinStrength = 2;
+	static rewardSmoothing = 0.8;
+	static eventErrorMinStrength = 1;
 	static actionRegretMinStrength = 2;
 	static actionRegretMinPain = 0;
-	static levelVoteMultiplier = 3;
+	static levelVoteMultiplier = 4.25;
 	static connectionForgetRate = 1;
 	static contextForgetRate = 1;
 	static patternForgetRate = 1;

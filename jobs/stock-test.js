@@ -19,9 +19,14 @@ export default class StockTestJob extends Job {
 
 		// Simple configuration - edit these values as needed
 		this.config = {
-			symbols: ['KGC', 'GLD', 'SPY'],      // Stock symbols to train on , 'AAPL', 'NEM', 'GDX'
+			// Stock symbols to train on
+			symbols: [
+				'KGC', 'GLD', 'SPY', 'AAPL', 'NEM', 'GDX', 'NVDA', 'AMZN', 'MSFT', 'AMD',
+				'META', 'JPM', 'BAC', 'QQQ', 'IWM', 'AEM', 'WPM', 'NG', 'GOOGL', 'XOM', 'CVX',
+				'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA'
+			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
-			startDate: '2025-12-22',             // Start date for data download
+			startDate: '2024-02-22',             // Start date for data download
 			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)

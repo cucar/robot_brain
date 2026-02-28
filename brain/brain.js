@@ -16,7 +16,7 @@ export default class Brain {
 	constructor(options) {
 
 		// pattern learning parameters
-		this.maxLevels = 10; // just to prevent against infinite recursion
+		this.maxLevels = 150; // just to prevent against infinite recursion
 
 		// forget cycle parameters - very important - fights curse of dimensionality
 		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
