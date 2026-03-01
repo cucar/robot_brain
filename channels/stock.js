@@ -438,7 +438,7 @@ export class StockChannel extends Channel {
 				// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell - use strength as weights
 				const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
 				const action = bucketValue === 2 ? POSITION_OWN : POSITION_OUT;
-				allActions.push({ channelName, isOwn: action === POSITION_OWN });
+				allActions.push({ channelName, rank: priceEvent.strength, isOwn: action === POSITION_OWN });
 			}
 		}
 		// Action-based trading: use brain's action decisions
@@ -447,7 +447,7 @@ export class StockChannel extends Channel {
 				const channel = channels.get(channelName);
 				const actionData = actions[0]; // Single action per stock channel
 				const action = actionData.coordinates[`${channel.symbol}_activity`];
-				allActions.push({ channelName, isOwn: action === POSITION_OWN });
+				allActions.push({ channelName, rank: actionData.strength, isOwn: action === POSITION_OWN });
 			}
 		}
 
@@ -464,6 +464,7 @@ export class StockChannel extends Channel {
 
 		// limit to N positions
 		if (ownActions.length > this.maxPositions) {
+			ownActions.sort((a, b) => b.rank - a.rank);
 			ownActions = ownActions.filter(a => channels.get(a.channelName).currentPrice < this.maxPrice); // filter by price
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}
