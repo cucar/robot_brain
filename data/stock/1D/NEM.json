@@ -1,1445 +1,5 @@
 [
   {
-    "ClosePrice": 69.06,
-    "HighPrice": 70.2,
-    "LowPrice": 68.12,
-    "TradeCount": 1538,
-    "OpenPrice": 68.77,
-    "Timestamp": "2020-07-27T04:00:00Z",
-    "Volume": 165011,
-    "VWAP": 68.957145
-  },
-  {
-    "ClosePrice": 68.61,
-    "HighPrice": 69.22,
-    "LowPrice": 67.335,
-    "TradeCount": 1762,
-    "OpenPrice": 67.47,
-    "Timestamp": "2020-07-28T04:00:00Z",
-    "Volume": 212229,
-    "VWAP": 68.646134
-  },
-  {
-    "ClosePrice": 67.89,
-    "HighPrice": 68.68,
-    "LowPrice": 66.94,
-    "TradeCount": 931,
-    "OpenPrice": 68.68,
-    "Timestamp": "2020-07-29T04:00:00Z",
-    "Volume": 77463,
-    "VWAP": 67.635012
-  },
-  {
-    "ClosePrice": 65.64,
-    "HighPrice": 67.84,
-    "LowPrice": 64.53,
-    "TradeCount": 1213,
-    "OpenPrice": 66.11,
-    "Timestamp": "2020-07-30T04:00:00Z",
-    "Volume": 154154,
-    "VWAP": 65.875094
-  },
-  {
-    "ClosePrice": 69.195,
-    "HighPrice": 69.195,
-    "LowPrice": 65.84,
-    "TradeCount": 1521,
-    "OpenPrice": 66.66,
-    "Timestamp": "2020-07-31T04:00:00Z",
-    "Volume": 202025,
-    "VWAP": 68.387071
-  },
-  {
-    "ClosePrice": 68.15,
-    "HighPrice": 69.21,
-    "LowPrice": 67.51,
-    "TradeCount": 725,
-    "OpenPrice": 69.21,
-    "Timestamp": "2020-08-03T04:00:00Z",
-    "Volume": 66009,
-    "VWAP": 68.219167
-  },
-  {
-    "ClosePrice": 70.24,
-    "HighPrice": 70.45,
-    "LowPrice": 67.3,
-    "TradeCount": 1109,
-    "OpenPrice": 68.155,
-    "Timestamp": "2020-08-04T04:00:00Z",
-    "Volume": 86302,
-    "VWAP": 69.107326
-  },
-  {
-    "ClosePrice": 70.38,
-    "HighPrice": 72.18,
-    "LowPrice": 69.85,
-    "TradeCount": 1291,
-    "OpenPrice": 71.61,
-    "Timestamp": "2020-08-05T04:00:00Z",
-    "Volume": 109117,
-    "VWAP": 71.04404
-  },
-  {
-    "ClosePrice": 70.135,
-    "HighPrice": 71.315,
-    "LowPrice": 69.36,
-    "TradeCount": 1264,
-    "OpenPrice": 71.12,
-    "Timestamp": "2020-08-06T04:00:00Z",
-    "Volume": 116954,
-    "VWAP": 70.214076
-  },
-  {
-    "ClosePrice": 68.905,
-    "HighPrice": 69.45,
-    "LowPrice": 68.4,
-    "TradeCount": 1168,
-    "OpenPrice": 69.02,
-    "Timestamp": "2020-08-07T04:00:00Z",
-    "Volume": 114770,
-    "VWAP": 69.019345
-  },
-  {
-    "ClosePrice": 67.885,
-    "HighPrice": 70.34,
-    "LowPrice": 67.525,
-    "TradeCount": 882,
-    "OpenPrice": 69.4,
-    "Timestamp": "2020-08-10T04:00:00Z",
-    "Volume": 87536,
-    "VWAP": 68.309539
-  },
-  {
-    "ClosePrice": 62.88,
-    "HighPrice": 64.92,
-    "LowPrice": 62.66,
-    "TradeCount": 2599,
-    "OpenPrice": 64.41,
-    "Timestamp": "2020-08-11T04:00:00Z",
-    "Volume": 261221,
-    "VWAP": 63.588033
-  },
-  {
-    "ClosePrice": 63.005,
-    "HighPrice": 64.605,
-    "LowPrice": 62.695,
-    "TradeCount": 1140,
-    "OpenPrice": 64.56,
-    "Timestamp": "2020-08-12T04:00:00Z",
-    "Volume": 153793,
-    "VWAP": 63.512065
-  },
-  {
-    "ClosePrice": 64.125,
-    "HighPrice": 64.69,
-    "LowPrice": 63.35,
-    "TradeCount": 1087,
-    "OpenPrice": 63.635,
-    "Timestamp": "2020-08-13T04:00:00Z",
-    "Volume": 109823,
-    "VWAP": 63.983199
-  },
-  {
-    "ClosePrice": 63.82,
-    "HighPrice": 64.215,
-    "LowPrice": 63.375,
-    "TradeCount": 870,
-    "OpenPrice": 64.215,
-    "Timestamp": "2020-08-14T04:00:00Z",
-    "Volume": 82359,
-    "VWAP": 63.755909
-  },
-  {
-    "ClosePrice": 68.355,
-    "HighPrice": 68.355,
-    "LowPrice": 65.615,
-    "TradeCount": 1284,
-    "OpenPrice": 66.035,
-    "Timestamp": "2020-08-17T04:00:00Z",
-    "Volume": 187384,
-    "VWAP": 67.107032
-  },
-  {
-    "ClosePrice": 67.73,
-    "HighPrice": 69.755,
-    "LowPrice": 66.84,
-    "TradeCount": 798,
-    "OpenPrice": 69.74,
-    "Timestamp": "2020-08-18T04:00:00Z",
-    "Volume": 66056,
-    "VWAP": 67.835952
-  },
-  {
-    "ClosePrice": 66.01,
-    "HighPrice": 68.18,
-    "LowPrice": 65.56,
-    "TradeCount": 978,
-    "OpenPrice": 67.565,
-    "Timestamp": "2020-08-19T04:00:00Z",
-    "Volume": 77419,
-    "VWAP": 66.354561
-  },
-  {
-    "ClosePrice": 67.315,
-    "HighPrice": 67.485,
-    "LowPrice": 65.745,
-    "TradeCount": 1036,
-    "OpenPrice": 65.96,
-    "Timestamp": "2020-08-20T04:00:00Z",
-    "Volume": 69067,
-    "VWAP": 66.90409
-  },
-  {
-    "ClosePrice": 65.56,
-    "HighPrice": 66.69,
-    "LowPrice": 65.28,
-    "TradeCount": 1233,
-    "OpenPrice": 66.58,
-    "Timestamp": "2020-08-21T04:00:00Z",
-    "Volume": 91099,
-    "VWAP": 65.682805
-  },
-  {
-    "ClosePrice": 65.2,
-    "HighPrice": 66.25,
-    "LowPrice": 64.83,
-    "TradeCount": 813,
-    "OpenPrice": 66.235,
-    "Timestamp": "2020-08-24T04:00:00Z",
-    "Volume": 70745,
-    "VWAP": 65.417513
-  },
-  {
-    "ClosePrice": 64.88,
-    "HighPrice": 64.99,
-    "LowPrice": 63.275,
-    "TradeCount": 1082,
-    "OpenPrice": 64.805,
-    "Timestamp": "2020-08-25T04:00:00Z",
-    "Volume": 85512,
-    "VWAP": 64.268192
-  },
-  {
-    "ClosePrice": 65.685,
-    "HighPrice": 65.75,
-    "LowPrice": 64.045,
-    "TradeCount": 776,
-    "OpenPrice": 64.08,
-    "Timestamp": "2020-08-26T04:00:00Z",
-    "Volume": 67773,
-    "VWAP": 65.209994
-  },
-  {
-    "ClosePrice": 64.73,
-    "HighPrice": 66.64,
-    "LowPrice": 63.75,
-    "TradeCount": 999,
-    "OpenPrice": 66.63,
-    "Timestamp": "2020-08-27T04:00:00Z",
-    "Volume": 93685,
-    "VWAP": 64.750241
-  },
-  {
-    "ClosePrice": 66.71,
-    "HighPrice": 67.07,
-    "LowPrice": 65.38,
-    "TradeCount": 1141,
-    "OpenPrice": 65.71,
-    "Timestamp": "2020-08-28T04:00:00Z",
-    "Volume": 92879,
-    "VWAP": 66.654941
-  },
-  {
-    "ClosePrice": 67.29,
-    "HighPrice": 68.185,
-    "LowPrice": 66.73,
-    "TradeCount": 722,
-    "OpenPrice": 66.75,
-    "Timestamp": "2020-08-31T04:00:00Z",
-    "Volume": 154103,
-    "VWAP": 67.243446
-  },
-  {
-    "ClosePrice": 67.025,
-    "HighPrice": 68.13,
-    "LowPrice": 65.875,
-    "TradeCount": 1059,
-    "OpenPrice": 68.01,
-    "Timestamp": "2020-09-01T04:00:00Z",
-    "Volume": 122513,
-    "VWAP": 66.52282
-  },
-  {
-    "ClosePrice": 67.535,
-    "HighPrice": 67.54,
-    "LowPrice": 64.85,
-    "TradeCount": 1240,
-    "OpenPrice": 66.24,
-    "Timestamp": "2020-09-02T04:00:00Z",
-    "Volume": 101641,
-    "VWAP": 66.751496
-  },
-  {
-    "ClosePrice": 66.16,
-    "HighPrice": 67.03,
-    "LowPrice": 64.89,
-    "TradeCount": 1252,
-    "OpenPrice": 66.09,
-    "Timestamp": "2020-09-03T04:00:00Z",
-    "Volume": 95870,
-    "VWAP": 65.737763
-  },
-  {
-    "ClosePrice": 65.375,
-    "HighPrice": 65.79,
-    "LowPrice": 63.36,
-    "TradeCount": 2013,
-    "OpenPrice": 65.715,
-    "Timestamp": "2020-09-04T04:00:00Z",
-    "Volume": 183645,
-    "VWAP": 64.563493
-  },
-  {
-    "ClosePrice": 65.79,
-    "HighPrice": 66.9,
-    "LowPrice": 63.51,
-    "TradeCount": 1734,
-    "OpenPrice": 64.635,
-    "Timestamp": "2020-09-08T04:00:00Z",
-    "Volume": 151547,
-    "VWAP": 65.34727
-  },
-  {
-    "ClosePrice": 68.19,
-    "HighPrice": 68.41,
-    "LowPrice": 66.44,
-    "TradeCount": 1211,
-    "OpenPrice": 66.44,
-    "Timestamp": "2020-09-09T04:00:00Z",
-    "Volume": 85188,
-    "VWAP": 67.743846
-  },
-  {
-    "ClosePrice": 66.495,
-    "HighPrice": 68.73,
-    "LowPrice": 66.37,
-    "TradeCount": 979,
-    "OpenPrice": 68.73,
-    "Timestamp": "2020-09-10T04:00:00Z",
-    "Volume": 76876,
-    "VWAP": 67.342153
-  },
-  {
-    "ClosePrice": 66.22,
-    "HighPrice": 67.61,
-    "LowPrice": 65.82,
-    "TradeCount": 560,
-    "OpenPrice": 67.13,
-    "Timestamp": "2020-09-11T04:00:00Z",
-    "Volume": 38049,
-    "VWAP": 66.66662
-  },
-  {
-    "ClosePrice": 67.425,
-    "HighPrice": 67.575,
-    "LowPrice": 66.58,
-    "TradeCount": 1749,
-    "OpenPrice": 66.63,
-    "Timestamp": "2020-09-14T04:00:00Z",
-    "Volume": 198529,
-    "VWAP": 67.14335
-  },
-  {
-    "ClosePrice": 67.57,
-    "HighPrice": 68.54,
-    "LowPrice": 67.1,
-    "TradeCount": 1128,
-    "OpenPrice": 67.925,
-    "Timestamp": "2020-09-15T04:00:00Z",
-    "Volume": 121471,
-    "VWAP": 67.724922
-  },
-  {
-    "ClosePrice": 67.285,
-    "HighPrice": 68.37,
-    "LowPrice": 67.23,
-    "TradeCount": 1425,
-    "OpenPrice": 68.03,
-    "Timestamp": "2020-09-16T04:00:00Z",
-    "Volume": 82387,
-    "VWAP": 67.762643
-  },
-  {
-    "ClosePrice": 66.235,
-    "HighPrice": 66.565,
-    "LowPrice": 65.4,
-    "TradeCount": 873,
-    "OpenPrice": 66.1,
-    "Timestamp": "2020-09-17T04:00:00Z",
-    "Volume": 192700,
-    "VWAP": 66.266189
-  },
-  {
-    "ClosePrice": 64.62,
-    "HighPrice": 66.78,
-    "LowPrice": 64.62,
-    "TradeCount": 1319,
-    "OpenPrice": 66.37,
-    "Timestamp": "2020-09-18T04:00:00Z",
-    "Volume": 147574,
-    "VWAP": 65.275737
-  },
-  {
-    "ClosePrice": 63.635,
-    "HighPrice": 64.265,
-    "LowPrice": 62.76,
-    "TradeCount": 1195,
-    "OpenPrice": 63.03,
-    "Timestamp": "2020-09-21T04:00:00Z",
-    "Volume": 92776,
-    "VWAP": 63.573906
-  },
-  {
-    "ClosePrice": 63.46,
-    "HighPrice": 64.3,
-    "LowPrice": 62.525,
-    "TradeCount": 1252,
-    "OpenPrice": 63.81,
-    "Timestamp": "2020-09-22T04:00:00Z",
-    "Volume": 113092,
-    "VWAP": 63.285689
-  },
-  {
-    "ClosePrice": 60.21,
-    "HighPrice": 62.895,
-    "LowPrice": 59.805,
-    "TradeCount": 1700,
-    "OpenPrice": 62.7,
-    "Timestamp": "2020-09-23T04:00:00Z",
-    "Volume": 173754,
-    "VWAP": 61.099383
-  },
-  {
-    "ClosePrice": 61.44,
-    "HighPrice": 62.155,
-    "LowPrice": 59.38,
-    "TradeCount": 1385,
-    "OpenPrice": 59.475,
-    "Timestamp": "2020-09-24T04:00:00Z",
-    "Volume": 100886,
-    "VWAP": 61.257534
-  },
-  {
-    "ClosePrice": 61.435,
-    "HighPrice": 61.605,
-    "LowPrice": 60.54,
-    "TradeCount": 984,
-    "OpenPrice": 60.855,
-    "Timestamp": "2020-09-25T04:00:00Z",
-    "Volume": 64298,
-    "VWAP": 61.113766
-  },
-  {
-    "ClosePrice": 62.115,
-    "HighPrice": 62.82,
-    "LowPrice": 61.32,
-    "TradeCount": 886,
-    "OpenPrice": 61.87,
-    "Timestamp": "2020-09-28T04:00:00Z",
-    "Volume": 55136,
-    "VWAP": 61.935754
-  },
-  {
-    "ClosePrice": 62.77,
-    "HighPrice": 63.4,
-    "LowPrice": 62.48,
-    "TradeCount": 748,
-    "OpenPrice": 62.71,
-    "Timestamp": "2020-09-29T04:00:00Z",
-    "Volume": 71498,
-    "VWAP": 63.005286
-  },
-  {
-    "ClosePrice": 63.51,
-    "HighPrice": 63.895,
-    "LowPrice": 61.98,
-    "TradeCount": 1070,
-    "OpenPrice": 62.13,
-    "Timestamp": "2020-09-30T04:00:00Z",
-    "Volume": 126274,
-    "VWAP": 63.41982
-  },
-  {
-    "ClosePrice": 62.84,
-    "HighPrice": 64.07,
-    "LowPrice": 62.66,
-    "TradeCount": 2474,
-    "OpenPrice": 63.98,
-    "Timestamp": "2020-10-01T04:00:00Z",
-    "Volume": 281131,
-    "VWAP": 63.380791
-  },
-  {
-    "ClosePrice": 62.265,
-    "HighPrice": 63.37,
-    "LowPrice": 62.17,
-    "TradeCount": 1625,
-    "OpenPrice": 62.63,
-    "Timestamp": "2020-10-02T04:00:00Z",
-    "Volume": 169731,
-    "VWAP": 62.613611
-  },
-  {
-    "ClosePrice": 63.14,
-    "HighPrice": 63.93,
-    "LowPrice": 62.34,
-    "TradeCount": 1125,
-    "OpenPrice": 62.34,
-    "Timestamp": "2020-10-05T04:00:00Z",
-    "Volume": 104206,
-    "VWAP": 63.277444
-  },
-  {
-    "ClosePrice": 60.85,
-    "HighPrice": 63.7,
-    "LowPrice": 60.77,
-    "TradeCount": 2130,
-    "OpenPrice": 63.38,
-    "Timestamp": "2020-10-06T04:00:00Z",
-    "Volume": 162862,
-    "VWAP": 61.82676
-  },
-  {
-    "ClosePrice": 61.15,
-    "HighPrice": 61.75,
-    "LowPrice": 60.92,
-    "TradeCount": 1318,
-    "OpenPrice": 61.35,
-    "Timestamp": "2020-10-07T04:00:00Z",
-    "Volume": 136238,
-    "VWAP": 61.330436
-  },
-  {
-    "ClosePrice": 61.73,
-    "HighPrice": 62.14,
-    "LowPrice": 61.215,
-    "TradeCount": 1209,
-    "OpenPrice": 61.52,
-    "Timestamp": "2020-10-08T04:00:00Z",
-    "Volume": 120803,
-    "VWAP": 61.683562
-  },
-  {
-    "ClosePrice": 62.83,
-    "HighPrice": 62.91,
-    "LowPrice": 61.885,
-    "TradeCount": 1800,
-    "OpenPrice": 62.76,
-    "Timestamp": "2020-10-09T04:00:00Z",
-    "Volume": 228876,
-    "VWAP": 62.410872
-  },
-  {
-    "ClosePrice": 62.9,
-    "HighPrice": 63.45,
-    "LowPrice": 62.515,
-    "TradeCount": 1277,
-    "OpenPrice": 62.93,
-    "Timestamp": "2020-10-12T04:00:00Z",
-    "Volume": 116762,
-    "VWAP": 62.990196
-  },
-  {
-    "ClosePrice": 62.76,
-    "HighPrice": 62.835,
-    "LowPrice": 61.65,
-    "TradeCount": 1917,
-    "OpenPrice": 62.395,
-    "Timestamp": "2020-10-13T04:00:00Z",
-    "Volume": 180930,
-    "VWAP": 62.223449
-  },
-  {
-    "ClosePrice": 64.01,
-    "HighPrice": 64.32,
-    "LowPrice": 62.915,
-    "TradeCount": 1708,
-    "OpenPrice": 63.21,
-    "Timestamp": "2020-10-14T04:00:00Z",
-    "Volume": 161821,
-    "VWAP": 63.726258
-  },
-  {
-    "ClosePrice": 63.005,
-    "HighPrice": 63.62,
-    "LowPrice": 62.51,
-    "TradeCount": 1429,
-    "OpenPrice": 63.155,
-    "Timestamp": "2020-10-15T04:00:00Z",
-    "Volume": 154211,
-    "VWAP": 62.990843
-  },
-  {
-    "ClosePrice": 62.675,
-    "HighPrice": 63.34,
-    "LowPrice": 62.53,
-    "TradeCount": 1542,
-    "OpenPrice": 63.15,
-    "Timestamp": "2020-10-16T04:00:00Z",
-    "Volume": 147894,
-    "VWAP": 62.865848
-  },
-  {
-    "ClosePrice": 61.68,
-    "HighPrice": 63.29,
-    "LowPrice": 61.59,
-    "TradeCount": 1243,
-    "OpenPrice": 63.11,
-    "Timestamp": "2020-10-19T04:00:00Z",
-    "Volume": 158211,
-    "VWAP": 62.246208
-  },
-  {
-    "ClosePrice": 61.18,
-    "HighPrice": 62.1,
-    "LowPrice": 60.89,
-    "TradeCount": 1841,
-    "OpenPrice": 61.74,
-    "Timestamp": "2020-10-20T04:00:00Z",
-    "Volume": 160281,
-    "VWAP": 61.313539
-  },
-  {
-    "ClosePrice": 61.475,
-    "HighPrice": 62.37,
-    "LowPrice": 61.265,
-    "TradeCount": 1594,
-    "OpenPrice": 61.63,
-    "Timestamp": "2020-10-21T04:00:00Z",
-    "Volume": 173943,
-    "VWAP": 61.735064
-  },
-  {
-    "ClosePrice": 60.51,
-    "HighPrice": 60.82,
-    "LowPrice": 59.84,
-    "TradeCount": 1597,
-    "OpenPrice": 60.63,
-    "Timestamp": "2020-10-22T04:00:00Z",
-    "Volume": 144828,
-    "VWAP": 60.367569
-  },
-  {
-    "ClosePrice": 60.465,
-    "HighPrice": 60.98,
-    "LowPrice": 60.06,
-    "TradeCount": 1346,
-    "OpenPrice": 60.54,
-    "Timestamp": "2020-10-23T04:00:00Z",
-    "Volume": 115385,
-    "VWAP": 60.43556
-  },
-  {
-    "ClosePrice": 60.265,
-    "HighPrice": 61.03,
-    "LowPrice": 59.81,
-    "TradeCount": 1743,
-    "OpenPrice": 59.91,
-    "Timestamp": "2020-10-26T04:00:00Z",
-    "Volume": 166493,
-    "VWAP": 60.392203
-  },
-  {
-    "ClosePrice": 61.57,
-    "HighPrice": 61.79,
-    "LowPrice": 60.29,
-    "TradeCount": 2084,
-    "OpenPrice": 60.54,
-    "Timestamp": "2020-10-27T04:00:00Z",
-    "Volume": 320785,
-    "VWAP": 61.465724
-  },
-  {
-    "ClosePrice": 58.7,
-    "HighPrice": 60.5,
-    "LowPrice": 58.29,
-    "TradeCount": 4973,
-    "OpenPrice": 60.36,
-    "Timestamp": "2020-10-28T04:00:00Z",
-    "Volume": 1227149,
-    "VWAP": 59.040169
-  },
-  {
-    "ClosePrice": 60.33,
-    "HighPrice": 61.46,
-    "LowPrice": 58.52,
-    "TradeCount": 2636,
-    "OpenPrice": 58.98,
-    "Timestamp": "2020-10-29T04:00:00Z",
-    "Volume": 296968,
-    "VWAP": 60.477539
-  },
-  {
-    "ClosePrice": 62.85,
-    "HighPrice": 62.95,
-    "LowPrice": 60.855,
-    "TradeCount": 4628,
-    "OpenPrice": 61.02,
-    "Timestamp": "2020-10-30T04:00:00Z",
-    "Volume": 528450,
-    "VWAP": 62.047902
-  },
-  {
-    "ClosePrice": 64.74,
-    "HighPrice": 64.905,
-    "LowPrice": 62.64,
-    "TradeCount": 2578,
-    "OpenPrice": 63.21,
-    "Timestamp": "2020-11-02T05:00:00Z",
-    "Volume": 265810,
-    "VWAP": 63.84894
-  },
-  {
-    "ClosePrice": 66.66,
-    "HighPrice": 67.22,
-    "LowPrice": 65.125,
-    "TradeCount": 2595,
-    "OpenPrice": 65.125,
-    "Timestamp": "2020-11-03T05:00:00Z",
-    "Volume": 276034,
-    "VWAP": 66.610334
-  },
-  {
-    "ClosePrice": 65.06,
-    "HighPrice": 66.865,
-    "LowPrice": 64.95,
-    "TradeCount": 3326,
-    "OpenPrice": 66.59,
-    "Timestamp": "2020-11-04T05:00:00Z",
-    "Volume": 366976,
-    "VWAP": 65.952227
-  },
-  {
-    "ClosePrice": 67.88,
-    "HighPrice": 68.27,
-    "LowPrice": 66.72,
-    "TradeCount": 3666,
-    "OpenPrice": 66.93,
-    "Timestamp": "2020-11-05T05:00:00Z",
-    "Volume": 431519,
-    "VWAP": 67.763046
-  },
-  {
-    "ClosePrice": 68.09,
-    "HighPrice": 68.42,
-    "LowPrice": 67.5,
-    "TradeCount": 1650,
-    "OpenPrice": 68.29,
-    "Timestamp": "2020-11-06T05:00:00Z",
-    "Volume": 156794,
-    "VWAP": 68.040277
-  },
-  {
-    "ClosePrice": 66.135,
-    "HighPrice": 66.5,
-    "LowPrice": 63,
-    "TradeCount": 3854,
-    "OpenPrice": 63.95,
-    "Timestamp": "2020-11-09T05:00:00Z",
-    "Volume": 410311,
-    "VWAP": 64.809604
-  },
-  {
-    "ClosePrice": 64.865,
-    "HighPrice": 65.91,
-    "LowPrice": 64.245,
-    "TradeCount": 2842,
-    "OpenPrice": 65.53,
-    "Timestamp": "2020-11-10T05:00:00Z",
-    "Volume": 280184,
-    "VWAP": 64.899048
-  },
-  {
-    "ClosePrice": 65.65,
-    "HighPrice": 65.65,
-    "LowPrice": 63.325,
-    "TradeCount": 3147,
-    "OpenPrice": 64.27,
-    "Timestamp": "2020-11-11T05:00:00Z",
-    "Volume": 461513,
-    "VWAP": 64.17993
-  },
-  {
-    "ClosePrice": 65.03,
-    "HighPrice": 66.17,
-    "LowPrice": 64.9,
-    "TradeCount": 2159,
-    "OpenPrice": 66,
-    "Timestamp": "2020-11-12T05:00:00Z",
-    "Volume": 252614,
-    "VWAP": 65.317073
-  },
-  {
-    "ClosePrice": 65.725,
-    "HighPrice": 66.05,
-    "LowPrice": 65.37,
-    "TradeCount": 1691,
-    "OpenPrice": 66.01,
-    "Timestamp": "2020-11-13T05:00:00Z",
-    "Volume": 161545,
-    "VWAP": 65.76386
-  },
-  {
-    "ClosePrice": 65.66,
-    "HighPrice": 66.09,
-    "LowPrice": 64.945,
-    "TradeCount": 1703,
-    "OpenPrice": 65.38,
-    "Timestamp": "2020-11-16T05:00:00Z",
-    "Volume": 116244,
-    "VWAP": 65.542825
-  },
-  {
-    "ClosePrice": 64.47,
-    "HighPrice": 65.71,
-    "LowPrice": 64.47,
-    "TradeCount": 1825,
-    "OpenPrice": 65.255,
-    "Timestamp": "2020-11-17T05:00:00Z",
-    "Volume": 168935,
-    "VWAP": 64.893398
-  },
-  {
-    "ClosePrice": 61.56,
-    "HighPrice": 64.38,
-    "LowPrice": 61.495,
-    "TradeCount": 1984,
-    "OpenPrice": 64.38,
-    "Timestamp": "2020-11-18T05:00:00Z",
-    "Volume": 185349,
-    "VWAP": 62.689365
-  },
-  {
-    "ClosePrice": 61.43,
-    "HighPrice": 61.49,
-    "LowPrice": 60.43,
-    "TradeCount": 2528,
-    "OpenPrice": 60.85,
-    "Timestamp": "2020-11-19T05:00:00Z",
-    "Volume": 311261,
-    "VWAP": 61.10735
-  },
-  {
-    "ClosePrice": 61.625,
-    "HighPrice": 62.35,
-    "LowPrice": 61.13,
-    "TradeCount": 1988,
-    "OpenPrice": 62.03,
-    "Timestamp": "2020-11-20T05:00:00Z",
-    "Volume": 212176,
-    "VWAP": 61.597773
-  },
-  {
-    "ClosePrice": 58.675,
-    "HighPrice": 61.2,
-    "LowPrice": 58.59,
-    "TradeCount": 2752,
-    "OpenPrice": 60.89,
-    "Timestamp": "2020-11-23T05:00:00Z",
-    "Volume": 274433,
-    "VWAP": 59.557876
-  },
-  {
-    "ClosePrice": 56.87,
-    "HighPrice": 57.7,
-    "LowPrice": 56.555,
-    "TradeCount": 3906,
-    "OpenPrice": 57.31,
-    "Timestamp": "2020-11-24T05:00:00Z",
-    "Volume": 445478,
-    "VWAP": 57.11683
-  },
-  {
-    "ClosePrice": 57.79,
-    "HighPrice": 58.12,
-    "LowPrice": 57.345,
-    "TradeCount": 1833,
-    "OpenPrice": 57.61,
-    "Timestamp": "2020-11-25T05:00:00Z",
-    "Volume": 168489,
-    "VWAP": 57.736909
-  },
-  {
-    "ClosePrice": 58.495,
-    "HighPrice": 58.62,
-    "LowPrice": 56.8,
-    "TradeCount": 1176,
-    "OpenPrice": 57.065,
-    "Timestamp": "2020-11-27T05:00:00Z",
-    "Volume": 115445,
-    "VWAP": 57.722292
-  },
-  {
-    "ClosePrice": 58.85,
-    "HighPrice": 58.895,
-    "LowPrice": 57.48,
-    "TradeCount": 3452,
-    "OpenPrice": 57.94,
-    "Timestamp": "2020-11-30T05:00:00Z",
-    "Volume": 297061,
-    "VWAP": 58.412028
-  },
-  {
-    "ClosePrice": 60.195,
-    "HighPrice": 60.355,
-    "LowPrice": 58.46,
-    "TradeCount": 2689,
-    "OpenPrice": 59.815,
-    "Timestamp": "2020-12-01T05:00:00Z",
-    "Volume": 289830,
-    "VWAP": 59.539537
-  },
-  {
-    "ClosePrice": 59.96,
-    "HighPrice": 60.54,
-    "LowPrice": 59.6,
-    "TradeCount": 2011,
-    "OpenPrice": 60.06,
-    "Timestamp": "2020-12-02T05:00:00Z",
-    "Volume": 221146,
-    "VWAP": 60.133094
-  },
-  {
-    "ClosePrice": 59.5,
-    "HighPrice": 60.59,
-    "LowPrice": 59.21,
-    "TradeCount": 1303,
-    "OpenPrice": 60.2,
-    "Timestamp": "2020-12-03T05:00:00Z",
-    "Volume": 97380,
-    "VWAP": 59.577347
-  },
-  {
-    "ClosePrice": 59.44,
-    "HighPrice": 59.825,
-    "LowPrice": 59.025,
-    "TradeCount": 1588,
-    "OpenPrice": 59.385,
-    "Timestamp": "2020-12-04T05:00:00Z",
-    "Volume": 183116,
-    "VWAP": 59.453764
-  },
-  {
-    "ClosePrice": 61.455,
-    "HighPrice": 62.115,
-    "LowPrice": 59.59,
-    "TradeCount": 2467,
-    "OpenPrice": 59.59,
-    "Timestamp": "2020-12-07T05:00:00Z",
-    "Volume": 262577,
-    "VWAP": 61.481652
-  },
-  {
-    "ClosePrice": 61.51,
-    "HighPrice": 61.99,
-    "LowPrice": 61.02,
-    "TradeCount": 1745,
-    "OpenPrice": 61.83,
-    "Timestamp": "2020-12-08T05:00:00Z",
-    "Volume": 170266,
-    "VWAP": 61.569317
-  },
-  {
-    "ClosePrice": 60.04,
-    "HighPrice": 61.29,
-    "LowPrice": 59.66,
-    "TradeCount": 1979,
-    "OpenPrice": 61.11,
-    "Timestamp": "2020-12-09T05:00:00Z",
-    "Volume": 199421,
-    "VWAP": 60.216126
-  },
-  {
-    "ClosePrice": 59.16,
-    "HighPrice": 60.42,
-    "LowPrice": 59.1,
-    "TradeCount": 1859,
-    "OpenPrice": 59.77,
-    "Timestamp": "2020-12-10T05:00:00Z",
-    "Volume": 172597,
-    "VWAP": 59.463576
-  },
-  {
-    "ClosePrice": 58.88,
-    "HighPrice": 59.72,
-    "LowPrice": 58.58,
-    "TradeCount": 1598,
-    "OpenPrice": 58.99,
-    "Timestamp": "2020-12-11T05:00:00Z",
-    "Volume": 160563,
-    "VWAP": 59.287319
-  },
-  {
-    "ClosePrice": 57.56,
-    "HighPrice": 59.37,
-    "LowPrice": 57.54,
-    "TradeCount": 1772,
-    "OpenPrice": 58.87,
-    "Timestamp": "2020-12-14T05:00:00Z",
-    "Volume": 149426,
-    "VWAP": 58.18815
-  },
-  {
-    "ClosePrice": 59.04,
-    "HighPrice": 59.49,
-    "LowPrice": 58.27,
-    "TradeCount": 1723,
-    "OpenPrice": 58.6,
-    "Timestamp": "2020-12-15T05:00:00Z",
-    "Volume": 163130,
-    "VWAP": 58.928725
-  },
-  {
-    "ClosePrice": 60.21,
-    "HighPrice": 60.39,
-    "LowPrice": 59.03,
-    "TradeCount": 1889,
-    "OpenPrice": 59.42,
-    "Timestamp": "2020-12-16T05:00:00Z",
-    "Volume": 146329,
-    "VWAP": 59.63515
-  },
-  {
-    "ClosePrice": 61.62,
-    "HighPrice": 62.29,
-    "LowPrice": 61.08,
-    "TradeCount": 1617,
-    "OpenPrice": 61.19,
-    "Timestamp": "2020-12-17T05:00:00Z",
-    "Volume": 134169,
-    "VWAP": 61.599698
-  },
-  {
-    "ClosePrice": 60.51,
-    "HighPrice": 61.435,
-    "LowPrice": 60.51,
-    "TradeCount": 1536,
-    "OpenPrice": 61.435,
-    "Timestamp": "2020-12-18T05:00:00Z",
-    "Volume": 116244,
-    "VWAP": 60.947448
-  },
-  {
-    "ClosePrice": 60.71,
-    "HighPrice": 61.235,
-    "LowPrice": 60.03,
-    "TradeCount": 1625,
-    "OpenPrice": 60.54,
-    "Timestamp": "2020-12-21T05:00:00Z",
-    "Volume": 96471,
-    "VWAP": 60.597578
-  },
-  {
-    "ClosePrice": 59.41,
-    "HighPrice": 61,
-    "LowPrice": 59.145,
-    "TradeCount": 1645,
-    "OpenPrice": 60.755,
-    "Timestamp": "2020-12-22T05:00:00Z",
-    "Volume": 211942,
-    "VWAP": 59.5368
-  },
-  {
-    "ClosePrice": 59.77,
-    "HighPrice": 60.295,
-    "LowPrice": 59.59,
-    "TradeCount": 1014,
-    "OpenPrice": 59.59,
-    "Timestamp": "2020-12-23T05:00:00Z",
-    "Volume": 74595,
-    "VWAP": 59.969523
-  },
-  {
-    "ClosePrice": 60.48,
-    "HighPrice": 60.53,
-    "LowPrice": 59.59,
-    "TradeCount": 1740,
-    "OpenPrice": 59.615,
-    "Timestamp": "2020-12-24T05:00:00Z",
-    "Volume": 129926,
-    "VWAP": 60.293886
-  },
-  {
-    "ClosePrice": 59.81,
-    "HighPrice": 61.61,
-    "LowPrice": 59.745,
-    "TradeCount": 918,
-    "OpenPrice": 61.32,
-    "Timestamp": "2020-12-28T05:00:00Z",
-    "Volume": 80056,
-    "VWAP": 60.255115
-  },
-  {
-    "ClosePrice": 59.775,
-    "HighPrice": 60.54,
-    "LowPrice": 59.595,
-    "TradeCount": 950,
-    "OpenPrice": 60.105,
-    "Timestamp": "2020-12-29T05:00:00Z",
-    "Volume": 83408,
-    "VWAP": 60.03235
-  },
-  {
-    "ClosePrice": 60.39,
-    "HighPrice": 60.39,
-    "LowPrice": 59.58,
-    "TradeCount": 1140,
-    "OpenPrice": 59.86,
-    "Timestamp": "2020-12-30T05:00:00Z",
-    "Volume": 96518,
-    "VWAP": 60.081276
-  },
-  {
-    "ClosePrice": 59.92,
-    "HighPrice": 60.51,
-    "LowPrice": 59.43,
-    "TradeCount": 1768,
-    "OpenPrice": 60.495,
-    "Timestamp": "2020-12-31T05:00:00Z",
-    "Volume": 84099,
-    "VWAP": 59.829744
-  },
-  {
-    "ClosePrice": 63.155,
-    "HighPrice": 63.4,
-    "LowPrice": 61.79,
-    "TradeCount": 2386,
-    "OpenPrice": 61.9,
-    "Timestamp": "2021-01-04T05:00:00Z",
-    "Volume": 218406,
-    "VWAP": 62.675827
-  },
-  {
-    "ClosePrice": 63.44,
-    "HighPrice": 63.71,
-    "LowPrice": 62.35,
-    "TradeCount": 1267,
-    "OpenPrice": 63.67,
-    "Timestamp": "2021-01-05T05:00:00Z",
-    "Volume": 124525,
-    "VWAP": 63.114333
-  },
-  {
-    "ClosePrice": 65.28,
-    "HighPrice": 65.39,
-    "LowPrice": 62.69,
-    "TradeCount": 2227,
-    "OpenPrice": 62.745,
-    "Timestamp": "2021-01-06T05:00:00Z",
-    "Volume": 257214,
-    "VWAP": 64.559708
-  },
-  {
-    "ClosePrice": 65.17,
-    "HighPrice": 65.78,
-    "LowPrice": 64.27,
-    "TradeCount": 1969,
-    "OpenPrice": 65.13,
-    "Timestamp": "2021-01-07T05:00:00Z",
-    "Volume": 166635,
-    "VWAP": 65.198718
-  },
-  {
-    "ClosePrice": 62.8,
-    "HighPrice": 64.195,
-    "LowPrice": 61.76,
-    "TradeCount": 1883,
-    "OpenPrice": 64.015,
-    "Timestamp": "2021-01-08T05:00:00Z",
-    "Volume": 201793,
-    "VWAP": 62.902751
-  },
-  {
-    "ClosePrice": 61.915,
-    "HighPrice": 62.71,
-    "LowPrice": 61.45,
-    "TradeCount": 1706,
-    "OpenPrice": 61.55,
-    "Timestamp": "2021-01-11T05:00:00Z",
-    "Volume": 174465,
-    "VWAP": 62.286327
-  },
-  {
-    "ClosePrice": 62.52,
-    "HighPrice": 62.67,
-    "LowPrice": 61.48,
-    "TradeCount": 1513,
-    "OpenPrice": 62.07,
-    "Timestamp": "2021-01-12T05:00:00Z",
-    "Volume": 127258,
-    "VWAP": 62.11648
-  },
-  {
-    "ClosePrice": 62.08,
-    "HighPrice": 63.25,
-    "LowPrice": 62.07,
-    "TradeCount": 1362,
-    "OpenPrice": 62.535,
-    "Timestamp": "2021-01-13T05:00:00Z",
-    "Volume": 120262,
-    "VWAP": 62.517296
-  },
-  {
-    "ClosePrice": 63.37,
-    "HighPrice": 63.675,
-    "LowPrice": 62.16,
-    "TradeCount": 1490,
-    "OpenPrice": 62.84,
-    "Timestamp": "2021-01-14T05:00:00Z",
-    "Volume": 127948,
-    "VWAP": 63.1204
-  },
-  {
-    "ClosePrice": 61.87,
-    "HighPrice": 63.42,
-    "LowPrice": 61.79,
-    "TradeCount": 2248,
-    "OpenPrice": 62.585,
-    "Timestamp": "2021-01-15T05:00:00Z",
-    "Volume": 204855,
-    "VWAP": 62.548299
-  },
-  {
-    "ClosePrice": 61.83,
-    "HighPrice": 62.59,
-    "LowPrice": 61.45,
-    "TradeCount": 1200,
-    "OpenPrice": 62.47,
-    "Timestamp": "2021-01-19T05:00:00Z",
-    "Volume": 106692,
-    "VWAP": 61.869729
-  },
-  {
-    "ClosePrice": 63.5,
-    "HighPrice": 64.03,
-    "LowPrice": 62.02,
-    "TradeCount": 3091,
-    "OpenPrice": 62.7,
-    "Timestamp": "2021-01-20T05:00:00Z",
-    "Volume": 193378,
-    "VWAP": 63.047842
-  },
-  {
-    "ClosePrice": 62.33,
-    "HighPrice": 63.51,
-    "LowPrice": 62.12,
-    "TradeCount": 1721,
-    "OpenPrice": 63.51,
-    "Timestamp": "2021-01-21T05:00:00Z",
-    "Volume": 176919,
-    "VWAP": 62.634547
-  },
-  {
-    "ClosePrice": 61.8,
-    "HighPrice": 62.31,
-    "LowPrice": 60.42,
-    "TradeCount": 1254,
-    "OpenPrice": 61.15,
-    "Timestamp": "2021-01-22T05:00:00Z",
-    "Volume": 106889,
-    "VWAP": 61.477039
-  },
-  {
-    "ClosePrice": 61.66,
-    "HighPrice": 62.36,
-    "LowPrice": 60.66,
-    "TradeCount": 1480,
-    "OpenPrice": 62.01,
-    "Timestamp": "2021-01-25T05:00:00Z",
-    "Volume": 146880,
-    "VWAP": 61.35691
-  },
-  {
-    "ClosePrice": 61.47,
-    "HighPrice": 62.41,
-    "LowPrice": 61.44,
-    "TradeCount": 3333,
-    "OpenPrice": 61.58,
-    "Timestamp": "2021-01-26T05:00:00Z",
-    "Volume": 161690,
-    "VWAP": 61.769547
-  },
-  {
-    "ClosePrice": 58.91,
-    "HighPrice": 60.83,
-    "LowPrice": 58.64,
-    "TradeCount": 2918,
-    "OpenPrice": 60.83,
-    "Timestamp": "2021-01-27T05:00:00Z",
-    "Volume": 334650,
-    "VWAP": 59.429902
-  },
-  {
-    "ClosePrice": 59.74,
-    "HighPrice": 60.9,
-    "LowPrice": 59.45,
-    "TradeCount": 1965,
-    "OpenPrice": 59.975,
-    "Timestamp": "2021-01-28T05:00:00Z",
-    "Volume": 176050,
-    "VWAP": 60.134901
-  },
-  {
-    "ClosePrice": 59.62,
-    "HighPrice": 61.46,
-    "LowPrice": 59.43,
-    "TradeCount": 1903,
-    "OpenPrice": 61.16,
-    "Timestamp": "2021-01-29T05:00:00Z",
-    "Volume": 185680,
-    "VWAP": 60.215998
-  },
-  {
-    "ClosePrice": 59.87,
-    "HighPrice": 61.195,
-    "LowPrice": 58.91,
-    "TradeCount": 3139,
-    "OpenPrice": 61.08,
-    "Timestamp": "2021-02-01T05:00:00Z",
-    "Volume": 328866,
-    "VWAP": 59.690871
-  },
-  {
-    "ClosePrice": 59.62,
-    "HighPrice": 60.63,
-    "LowPrice": 58.83,
-    "TradeCount": 3782,
-    "OpenPrice": 59.12,
-    "Timestamp": "2021-02-02T05:00:00Z",
-    "Volume": 219089,
-    "VWAP": 59.900126
-  },
-  {
-    "ClosePrice": 58.88,
-    "HighPrice": 60.06,
-    "LowPrice": 58.88,
-    "TradeCount": 1546,
-    "OpenPrice": 59.64,
-    "Timestamp": "2021-02-03T05:00:00Z",
-    "Volume": 262338,
-    "VWAP": 59.025975
-  },
-  {
-    "ClosePrice": 57.66,
-    "HighPrice": 57.96,
-    "LowPrice": 56.61,
-    "TradeCount": 2528,
-    "OpenPrice": 57.365,
-    "Timestamp": "2021-02-04T05:00:00Z",
-    "Volume": 254539,
-    "VWAP": 57.415636
-  },
-  {
-    "ClosePrice": 59.3,
-    "HighPrice": 59.45,
-    "LowPrice": 57.47,
-    "TradeCount": 2170,
-    "OpenPrice": 57.9,
-    "Timestamp": "2021-02-05T05:00:00Z",
-    "Volume": 234017,
-    "VWAP": 58.863519
-  },
-  {
-    "ClosePrice": 60.38,
-    "HighPrice": 60.92,
-    "LowPrice": 59.73,
-    "TradeCount": 1692,
-    "OpenPrice": 60.07,
-    "Timestamp": "2021-02-08T05:00:00Z",
-    "Volume": 177868,
-    "VWAP": 60.406972
-  },
-  {
-    "ClosePrice": 60.01,
-    "HighPrice": 60.75,
-    "LowPrice": 59.77,
-    "TradeCount": 1502,
-    "OpenPrice": 60.62,
-    "Timestamp": "2021-02-09T05:00:00Z",
-    "Volume": 128525,
-    "VWAP": 60.155318
-  },
-  {
-    "ClosePrice": 59.7,
-    "HighPrice": 60.79,
-    "LowPrice": 59.565,
-    "TradeCount": 1560,
-    "OpenPrice": 60.64,
-    "Timestamp": "2021-02-10T05:00:00Z",
-    "Volume": 147619,
-    "VWAP": 59.828085
-  },
-  {
-    "ClosePrice": 58.36,
-    "HighPrice": 59.975,
-    "LowPrice": 58.325,
-    "TradeCount": 2116,
-    "OpenPrice": 59.68,
-    "Timestamp": "2021-02-11T05:00:00Z",
-    "Volume": 179012,
-    "VWAP": 58.829405
-  },
-  {
-    "ClosePrice": 58.94,
-    "HighPrice": 59.22,
-    "LowPrice": 57.585,
-    "TradeCount": 1381,
-    "OpenPrice": 57.99,
-    "Timestamp": "2021-02-12T05:00:00Z",
-    "Volume": 132211,
-    "VWAP": 58.554179
-  },
-  {
-    "ClosePrice": 57.81,
-    "HighPrice": 58.53,
-    "LowPrice": 57.46,
-    "TradeCount": 2317,
-    "OpenPrice": 58.46,
-    "Timestamp": "2021-02-16T05:00:00Z",
-    "Volume": 232820,
-    "VWAP": 58.089501
-  },
-  {
-    "ClosePrice": 57,
-    "HighPrice": 57.72,
-    "LowPrice": 56.385,
-    "TradeCount": 2860,
-    "OpenPrice": 57.055,
-    "Timestamp": "2021-02-17T05:00:00Z",
-    "Volume": 281328,
-    "VWAP": 56.870828
-  },
-  {
-    "ClosePrice": 57.38,
-    "HighPrice": 58.09,
-    "LowPrice": 56.08,
-    "TradeCount": 2334,
-    "OpenPrice": 57.015,
-    "Timestamp": "2021-02-18T05:00:00Z",
-    "Volume": 238696,
-    "VWAP": 57.155075
-  },
-  {
-    "ClosePrice": 56.65,
-    "HighPrice": 57.79,
-    "LowPrice": 56.025,
-    "TradeCount": 2593,
-    "OpenPrice": 57.79,
-    "Timestamp": "2021-02-19T05:00:00Z",
-    "Volume": 238959,
-    "VWAP": 56.687187
-  },
-  {
     "ClosePrice": 57.52,
     "HighPrice": 57.7,
     "LowPrice": 56.59,
@@ -13628,5 +12188,345 @@
     "Timestamp": "2025-12-31T05:00:00Z",
     "Volume": 154318,
     "VWAP": 100.377131
+  },
+  {
+    "ClosePrice": 101.23,
+    "HighPrice": 101.625,
+    "LowPrice": 98.28,
+    "TradeCount": 6415,
+    "OpenPrice": 101.335,
+    "Timestamp": "2026-01-02T05:00:00Z",
+    "Volume": 299021,
+    "VWAP": 100.068713
+  },
+  {
+    "ClosePrice": 103.565,
+    "HighPrice": 105.86,
+    "LowPrice": 102.695,
+    "TradeCount": 5134,
+    "OpenPrice": 102.905,
+    "Timestamp": "2026-01-05T05:00:00Z",
+    "Volume": 343216,
+    "VWAP": 104.065906
+  },
+  {
+    "ClosePrice": 109.285,
+    "HighPrice": 109.29,
+    "LowPrice": 104.83,
+    "TradeCount": 8108,
+    "OpenPrice": 105.08,
+    "Timestamp": "2026-01-06T05:00:00Z",
+    "Volume": 606535,
+    "VWAP": 108.264948
+  },
+  {
+    "ClosePrice": 108.04,
+    "HighPrice": 109.015,
+    "LowPrice": 104.59,
+    "TradeCount": 8405,
+    "OpenPrice": 105.745,
+    "Timestamp": "2026-01-07T05:00:00Z",
+    "Volume": 756002,
+    "VWAP": 107.85448
+  },
+  {
+    "ClosePrice": 106.9,
+    "HighPrice": 106.94,
+    "LowPrice": 104.41,
+    "TradeCount": 4445,
+    "OpenPrice": 105.825,
+    "Timestamp": "2026-01-08T05:00:00Z",
+    "Volume": 229311,
+    "VWAP": 105.844674
+  },
+  {
+    "ClosePrice": 108.97,
+    "HighPrice": 109.08,
+    "LowPrice": 106.28,
+    "TradeCount": 5932,
+    "OpenPrice": 107.355,
+    "Timestamp": "2026-01-09T05:00:00Z",
+    "Volume": 349328,
+    "VWAP": 108.035728
+  },
+  {
+    "ClosePrice": 112.93,
+    "HighPrice": 113.7,
+    "LowPrice": 111.98,
+    "TradeCount": 5539,
+    "OpenPrice": 112.41,
+    "Timestamp": "2026-01-12T05:00:00Z",
+    "Volume": 376939,
+    "VWAP": 113.008645
+  },
+  {
+    "ClosePrice": 114.66,
+    "HighPrice": 115.01,
+    "LowPrice": 112.965,
+    "TradeCount": 6452,
+    "OpenPrice": 113.13,
+    "Timestamp": "2026-01-13T05:00:00Z",
+    "Volume": 325404,
+    "VWAP": 114.21429
+  },
+  {
+    "ClosePrice": 114.15,
+    "HighPrice": 115.57,
+    "LowPrice": 112.225,
+    "TradeCount": 6888,
+    "OpenPrice": 115.55,
+    "Timestamp": "2026-01-14T05:00:00Z",
+    "Volume": 371216,
+    "VWAP": 114.043001
+  },
+  {
+    "ClosePrice": 114.23,
+    "HighPrice": 114.91,
+    "LowPrice": 112.36,
+    "TradeCount": 6330,
+    "OpenPrice": 113.45,
+    "Timestamp": "2026-01-15T05:00:00Z",
+    "Volume": 308699,
+    "VWAP": 113.88128
+  },
+  {
+    "ClosePrice": 114.09,
+    "HighPrice": 114.64,
+    "LowPrice": 111.325,
+    "TradeCount": 4449,
+    "OpenPrice": 113.48,
+    "Timestamp": "2026-01-16T05:00:00Z",
+    "Volume": 249611,
+    "VWAP": 113.457817
+  },
+  {
+    "ClosePrice": 118.9,
+    "HighPrice": 119.34,
+    "LowPrice": 116.77,
+    "TradeCount": 6683,
+    "OpenPrice": 117.895,
+    "Timestamp": "2026-01-20T05:00:00Z",
+    "Volume": 343613,
+    "VWAP": 118.181178
+  },
+  {
+    "ClosePrice": 118.92,
+    "HighPrice": 121.31,
+    "LowPrice": 118.23,
+    "TradeCount": 7576,
+    "OpenPrice": 121.21,
+    "Timestamp": "2026-01-21T05:00:00Z",
+    "Volume": 378737,
+    "VWAP": 119.648215
+  },
+  {
+    "ClosePrice": 121.71,
+    "HighPrice": 123,
+    "LowPrice": 118.32,
+    "TradeCount": 7870,
+    "OpenPrice": 118.32,
+    "Timestamp": "2026-01-22T05:00:00Z",
+    "Volume": 352315,
+    "VWAP": 121.437309
+  },
+  {
+    "ClosePrice": 124.35,
+    "HighPrice": 124.63,
+    "LowPrice": 121.98,
+    "TradeCount": 5984,
+    "OpenPrice": 122.815,
+    "Timestamp": "2026-01-23T05:00:00Z",
+    "Volume": 290699,
+    "VWAP": 123.628694
+  },
+  {
+    "ClosePrice": 125.92,
+    "HighPrice": 129.195,
+    "LowPrice": 125.7,
+    "TradeCount": 9873,
+    "OpenPrice": 127.49,
+    "Timestamp": "2026-01-26T05:00:00Z",
+    "Volume": 550262,
+    "VWAP": 127.178196
+  },
+  {
+    "ClosePrice": 127.09,
+    "HighPrice": 127.09,
+    "LowPrice": 121.58,
+    "TradeCount": 7538,
+    "OpenPrice": 124.68,
+    "Timestamp": "2026-01-27T05:00:00Z",
+    "Volume": 410662,
+    "VWAP": 125.162918
+  },
+  {
+    "ClosePrice": 131.89,
+    "HighPrice": 132.39,
+    "LowPrice": 128.16,
+    "TradeCount": 6755,
+    "OpenPrice": 129.095,
+    "Timestamp": "2026-01-28T05:00:00Z",
+    "Volume": 363265,
+    "VWAP": 130.50364
+  },
+  {
+    "ClosePrice": 126.96,
+    "HighPrice": 134.74,
+    "LowPrice": 123.675,
+    "TradeCount": 7634,
+    "OpenPrice": 133.61,
+    "Timestamp": "2026-01-29T05:00:00Z",
+    "Volume": 447664,
+    "VWAP": 127.469151
+  },
+  {
+    "ClosePrice": 112.35,
+    "HighPrice": 120.6,
+    "LowPrice": 111.37,
+    "TradeCount": 9481,
+    "OpenPrice": 117.94,
+    "Timestamp": "2026-01-30T05:00:00Z",
+    "Volume": 689275,
+    "VWAP": 115.316026
+  },
+  {
+    "ClosePrice": 112.89,
+    "HighPrice": 116.15,
+    "LowPrice": 110.47,
+    "TradeCount": 9913,
+    "OpenPrice": 112.31,
+    "Timestamp": "2026-02-02T05:00:00Z",
+    "Volume": 531279,
+    "VWAP": 112.69209
+  },
+  {
+    "ClosePrice": 117.13,
+    "HighPrice": 118.855,
+    "LowPrice": 114.79,
+    "TradeCount": 6746,
+    "OpenPrice": 118.79,
+    "Timestamp": "2026-02-03T05:00:00Z",
+    "Volume": 369100,
+    "VWAP": 116.944702
+  },
+  {
+    "ClosePrice": 116.86,
+    "HighPrice": 120.66,
+    "LowPrice": 113.54,
+    "TradeCount": 6540,
+    "OpenPrice": 120.46,
+    "Timestamp": "2026-02-04T05:00:00Z",
+    "Volume": 363779,
+    "VWAP": 115.959785
+  },
+  {
+    "ClosePrice": 108.54,
+    "HighPrice": 115.28,
+    "LowPrice": 108.045,
+    "TradeCount": 7573,
+    "OpenPrice": 113.595,
+    "Timestamp": "2026-02-05T05:00:00Z",
+    "Volume": 415077,
+    "VWAP": 110.346219
+  },
+  {
+    "ClosePrice": 115.37,
+    "HighPrice": 115.46,
+    "LowPrice": 110.965,
+    "TradeCount": 5984,
+    "OpenPrice": 110.965,
+    "Timestamp": "2026-02-06T05:00:00Z",
+    "Volume": 282495,
+    "VWAP": 114.485447
+  },
+  {
+    "ClosePrice": 120.75,
+    "HighPrice": 121.105,
+    "LowPrice": 116.52,
+    "TradeCount": 3802,
+    "OpenPrice": 116.56,
+    "Timestamp": "2026-02-09T05:00:00Z",
+    "Volume": 170813,
+    "VWAP": 119.584357
+  },
+  {
+    "ClosePrice": 121.475,
+    "HighPrice": 121.715,
+    "LowPrice": 119.71,
+    "TradeCount": 8970,
+    "OpenPrice": 119.875,
+    "Timestamp": "2026-02-10T05:00:00Z",
+    "Volume": 336880,
+    "VWAP": 120.886539
+  },
+  {
+    "ClosePrice": 124.7,
+    "HighPrice": 125.11,
+    "LowPrice": 121.46,
+    "TradeCount": 4266,
+    "OpenPrice": 125.11,
+    "Timestamp": "2026-02-11T05:00:00Z",
+    "Volume": 224069,
+    "VWAP": 123.180851
+  },
+  {
+    "ClosePrice": 118.08,
+    "HighPrice": 125.47,
+    "LowPrice": 118.05,
+    "TradeCount": 5973,
+    "OpenPrice": 122.785,
+    "Timestamp": "2026-02-12T05:00:00Z",
+    "Volume": 311613,
+    "VWAP": 120.96767
+  },
+  {
+    "ClosePrice": 125.83,
+    "HighPrice": 126.29,
+    "LowPrice": 119.09,
+    "TradeCount": 5102,
+    "OpenPrice": 119.84,
+    "Timestamp": "2026-02-13T05:00:00Z",
+    "Volume": 208917,
+    "VWAP": 124.078143
+  },
+  {
+    "ClosePrice": 122.27,
+    "HighPrice": 123.54,
+    "LowPrice": 118.14,
+    "TradeCount": 6065,
+    "OpenPrice": 122.28,
+    "Timestamp": "2026-02-17T05:00:00Z",
+    "Volume": 290952,
+    "VWAP": 121.420307
+  },
+  {
+    "ClosePrice": 124.71,
+    "HighPrice": 127.335,
+    "LowPrice": 123.45,
+    "TradeCount": 5141,
+    "OpenPrice": 125.24,
+    "Timestamp": "2026-02-18T05:00:00Z",
+    "Volume": 220534,
+    "VWAP": 125.469678
+  },
+  {
+    "ClosePrice": 125.36,
+    "HighPrice": 126.15,
+    "LowPrice": 122.235,
+    "TradeCount": 5105,
+    "OpenPrice": 122.75,
+    "Timestamp": "2026-02-19T05:00:00Z",
+    "Volume": 263890,
+    "VWAP": 124.911066
+  },
+  {
+    "ClosePrice": 122.17,
+    "HighPrice": 125.31,
+    "LowPrice": 118.83,
+    "TradeCount": 5869,
+    "OpenPrice": 122.35,
+    "Timestamp": "2026-02-20T05:00:00Z",
+    "Volume": 333003,
+    "VWAP": 122.123445
   }
 ]
