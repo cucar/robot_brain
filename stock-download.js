@@ -18,7 +18,7 @@ const config = {
 		'META', 'JPM', 'BAC', 'QQQ', 'IWM', 'AEM', 'WPM', 'NG', 'GOOGL', 'XOM', 'CVX',
 		'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA'
 	],
-	startDate: '2024-02-22',
+	startDate: '2021-02-22',
 	endDate: '2026-02-22'
 };
 

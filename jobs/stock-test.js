@@ -26,7 +26,7 @@ export default class StockTestJob extends Job {
 				'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA'
 			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
-			startDate: '2024-02-22',             // Start date for data download
+			startDate: '2021-02-22',             // Start date for data download
 			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
@@ -137,11 +137,15 @@ export default class StockTestJob extends Job {
 	 */
 	async processAndSaveSymbolData(symbol, barMap, dataDir, validDates = null) {
 
-		// For daily data, just use the bars as-is (sorted by timestamp)
+		// For daily data, filter by startDate and endDate
 		let filledData;
 		if (this.config.timeframe === '1D') {
 			const timestamps = Array.from(barMap.keys()).sort();
-			filledData = timestamps.map(timestamp => ({
+			const filteredTimestamps = timestamps.filter(timestamp => {
+				const date = timestamp.substring(0, 10); // Extract YYYY-MM-DD
+				return date >= this.config.startDate && date <= this.config.endDate;
+			});
+			filledData = filteredTimestamps.map(timestamp => ({
 				open: barMap.get(timestamp).open,
 				volume: barMap.get(timestamp).volume
 			}));

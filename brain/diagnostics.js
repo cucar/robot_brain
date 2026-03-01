@@ -457,15 +457,18 @@ export class Diagnostics {
 			}
 		}
 
-		// Format output performance display
+		// Format output performance display (filter out zeros, always show labels)
 		let outputDisplay = 'N/A';
-		if (outputMetrics.length > 0)
-			outputDisplay = outputMetrics.map(m => {
-				const formatted = m.format === 'currency'
-					? `${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
-					: m.value.toFixed(2);
-				return outputMetrics.length > 1 ? `${m.label}:${formatted}` : formatted;
-			}).join(', ');
+		if (outputMetrics.length > 0) {
+			const nonZeroMetrics = outputMetrics.filter(m => m.value !== 0);
+			if (nonZeroMetrics.length > 0)
+				outputDisplay = nonZeroMetrics.map(m => {
+					const formatted = m.format === 'currency'
+						? `${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
+						: m.value.toFixed(2);
+					return `${m.label}:${formatted}`;
+				}).join(', ');
+		}
 
 		// Get portfolio metrics if any stock channels exist
 		let portfolioDisplay = '';

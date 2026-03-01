@@ -10,14 +10,17 @@ const POSITION_OUT = -1;
 export class StockChannel extends Channel {
 
 	// total cash shared across all stock channel instances
-	static initialCapital = 100000;
+	static initialCapital = 15000;
 	static cash = StockChannel.initialCapital;
 
 	// trading mode - set by initialize() from command line options
 	static eventTrading = false;
 
 	// maximum number of positions to hold at once
-	static maxPositions = 30;
+	static maxPositions = 1;
+
+	// maximum price limit for stocks
+	static maxPrice = 50;
 
 	/**
 	 * Initialize channel type with runtime options
@@ -99,7 +102,7 @@ export class StockChannel extends Channel {
 	initializeBuckets() {
 
 		// price movements are best predicted from up/down - ideal split is 0.01% - favor profit making
-		this.priceBoundaries = [0.01];
+		this.priceBoundaries = [0];
 
 		// volume movements are best predicted as up/down
 		this.volumeBoundaries = [0];
@@ -396,7 +399,7 @@ export class StockChannel extends Channel {
 		const actions = this.getActionsWeights(channels, actionsMap, eventsMap);
 
 		// Allocate portfolio value proportional to the rewards
-		const allocations = this.distributeAllocations(actions, totalValue);
+		const allocations = this.distributeAllocations(channels, actions, totalValue);
 
 		// Set OUT allocation for channels not in actionsMap (no brain prediction)
 		this.setMissingChannelAllocations(channels, allocations);
@@ -435,7 +438,7 @@ export class StockChannel extends Channel {
 				// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell - use strength as weights
 				const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
 				const action = bucketValue === 2 ? POSITION_OWN : POSITION_OUT;
-				allActions.push({ channelName, weight: priceEvent.strength, isOwn: action === POSITION_OWN });
+				allActions.push({ channelName, isOwn: action === POSITION_OWN });
 			}
 		}
 		// Action-based trading: use brain's action decisions
@@ -444,7 +447,7 @@ export class StockChannel extends Channel {
 				const channel = channels.get(channelName);
 				const actionData = actions[0]; // Single action per stock channel
 				const action = actionData.coordinates[`${channel.symbol}_activity`];
-				allActions.push({ channelName, weight: Math.exp(actionData.reward), isOwn: action === POSITION_OWN });
+				allActions.push({ channelName, isOwn: action === POSITION_OWN });
 			}
 		}
 
@@ -454,19 +457,16 @@ export class StockChannel extends Channel {
 	/**
 	 * Allocate portfolio value proportional to softmax weights
 	 */
-	static distributeAllocations(actions, totalValue) {
+	static distributeAllocations(channels, actions, totalValue) {
 
 		// get the actions that want to own a stock
 		let ownActions = actions.filter(a => a.isOwn);
 
-		// limit to top N positions by weight
+		// limit to N positions
 		if (ownActions.length > this.maxPositions) {
-			ownActions.sort((a, b) => b.weight - a.weight);
+			ownActions = ownActions.filter(a => channels.get(a.channelName).currentPrice < this.maxPrice); // filter by price
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}
-
-		// get the total weight for averages
-		const totalWeight = ownActions.reduce((sum, a) => sum + a.weight, 0);
 
 		// create set of channel names that made the cut
 		const ownChannels = new Set(ownActions.map(a => a.channelName));
@@ -475,7 +475,7 @@ export class StockChannel extends Channel {
 		const allocations = new Map();
 		for (const action of actions) allocations.set(action.channelName, {
 			action: (action.isOwn && ownChannels.has(action.channelName)) ? POSITION_OWN : POSITION_OUT,
-			amount: (action.isOwn && ownChannels.has(action.channelName)) ? (action.weight / totalWeight) * totalValue : 0
+			amount: (action.isOwn && ownChannels.has(action.channelName)) ? (1 / ownActions.length) * totalValue : 0
 		});
 		return allocations;
 	}
