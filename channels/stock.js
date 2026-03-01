@@ -20,7 +20,7 @@ export class StockChannel extends Channel {
 	static maxPositions = 1;
 
 	// maximum price limit for stocks
-	static maxPrice = 50;
+	static maxPrice = 5000;
 
 	/**
 	 * Initialize channel type with runtime options
@@ -432,7 +432,7 @@ export class StockChannel extends Channel {
 
 				// Find price change prediction in event inferences
 				const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
-				if (!priceEvent) throw new Error('Cannot find price inference for event trading');
+				if (!priceEvent) continue;
 
 				// Get the predicted price change bucket value (1 = down, 2 = up)
 				// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell - use strength as weights

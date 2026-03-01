@@ -16,7 +16,9 @@ const config = {
 	symbols: [
 		'KGC', 'GLD', 'SPY', 'AAPL', 'NEM', 'GDX', 'NVDA', 'AMZN', 'MSFT', 'AMD',
 		'META', 'JPM', 'BAC', 'QQQ', 'IWM', 'AEM', 'WPM', 'NG', 'GOOGL', 'XOM', 'CVX',
-		'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA'
+		'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA', 'INTC', 'CRM', 'ORCL',
+		'IBM', 'CSCO', 'TGT', 'HD', 'MCD', 'NKE', 'SBUX', 'ABBV', 'MRK', 'BMY', 'LLY', 'GILD',
+		'SLB', 'OXY', 'FCX', 'MOS', 'CLF'
 	],
 	startDate: '2021-02-22',
 	endDate: '2026-02-22'
