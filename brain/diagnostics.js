@@ -12,6 +12,7 @@ export class Diagnostics {
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 };
+		this.previousProfit = 0;
 
 		// Flags
 		this.debug = debug;
@@ -448,37 +449,27 @@ export class Diagnostics {
 			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
 		}
 
-		// Collect output performance metrics from channels
-		const outputMetrics = [];
+		// Get holdings display - show which stocks are being held
+		let holdingsDisplay = 'None';
+		const holdings = [];
 		for (const [_, channel] of channels) {
-			if (typeof channel.getOutputPerformanceMetrics === 'function') {
-				const metrics = channel.getOutputPerformanceMetrics();
-				if (metrics) outputMetrics.push(metrics);
-			}
+			const info = channel.getHoldingsInfo();
+			if (info.shares > 0) holdings.push(info);
 		}
-
-		// Format output performance display (filter out zeros, always show labels)
-		let outputDisplay = 'N/A';
-		if (outputMetrics.length > 0) {
-			const nonZeroMetrics = outputMetrics.filter(m => m.value !== 0);
-			if (nonZeroMetrics.length > 0)
-				outputDisplay = nonZeroMetrics.map(m => {
-					const formatted = m.format === 'currency'
-						? `${m.value >= 0 ? '+' : ''}${m.value.toFixed(2)}`
-						: m.value.toFixed(2);
-					return `${m.label}:${formatted}`;
-				}).join(', ');
-		}
+		if (holdings.length > 0) holdingsDisplay = holdings.map(h => `${h.symbol}:${h.shares}sh`).join(', ');
 
 		// Get portfolio metrics if any stock channels exist
 		let portfolioDisplay = '';
 		if (channels.length > 0 && channels[0][1].constructor.getPortfolioMetrics) {
 			const portfolioMetrics = channels[0][1].constructor.getPortfolioMetrics(channels);
-			const totalValue = portfolioMetrics.cash + portfolioMetrics.totalInvestments;
-			portfolioDisplay = ` | Portfolio: Cash:${portfolioMetrics.cash.toFixed(0)} Inv:${portfolioMetrics.totalInvestments.toFixed(0)} Val:${totalValue.toFixed(0)} P&L:${portfolioMetrics.totalProfit >= 0 ? '+' : ''}${portfolioMetrics.totalProfit.toFixed(2)}`;
+			const profitDelta = portfolioMetrics.totalProfit - this.previousProfit;
+			this.previousProfit = portfolioMetrics.totalProfit;
+			const totalPL = portfolioMetrics.totalProfit >= 0 ? '+' : '';
+			const deltaPL = profitDelta >= 0 ? '+' : '';
+			portfolioDisplay = ` | Cash:${portfolioMetrics.cash.toFixed(0)} | Holdings: ${holdingsDisplay} | P&L:${totalPL}${portfolioMetrics.totalProfit.toFixed(2)} (${deltaPL}${profitDelta.toFixed(2)})`;
 		}
 
 		if (this.frameSummary)
-			console.log(`Frame ${frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | P&L: ${outputDisplay}${portfolioDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+			console.log(`Frame ${frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay}${portfolioDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 }
