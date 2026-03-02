@@ -25,10 +25,14 @@ export default class StockTestJob extends Job {
 				'META', 'JPM', 'BAC', 'QQQ', 'IWM', 'AEM', 'WPM', 'NG', 'GOOGL', 'XOM', 'CVX',
 				'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA', 'INTC', 'CRM', 'ORCL',
 				'IBM', 'CSCO', 'TGT', 'HD', 'MCD', 'NKE', 'SBUX', 'ABBV', 'MRK', 'BMY', 'LLY', 'GILD',
-				'SLB', 'OXY', 'FCX', 'MOS', 'CLF'
+				'SLB', 'OXY', 'FCX', 'MOS', 'CLF', 'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB',
+				'SNAP', 'PINS', 'ROKU', 'GS', 'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK',
+				'BA', 'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS', 'CMCSA', 'PEP',
+				'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', 'COIN', 'LCID', 'PLTR', 'SOFI',
+				'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
-			startDate: '2021-02-22',             // Start date for data download
+			startDate: '2025-02-22',             // Start date for data download
 			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
