@@ -456,7 +456,7 @@ export class Diagnostics {
 			const info = channel.getHoldingsInfo();
 			if (info.shares > 0) holdings.push(info);
 		}
-		if (holdings.length > 0) holdingsDisplay = holdings.map(h => `${h.symbol}:${h.shares}sh`).join(', ');
+		if (holdings.length > 0) holdingsDisplay = holdings.map(h => `${h.symbol}:${h.shares}@$${h.price.toFixed(2)}`).join(', ');
 
 		// Get portfolio metrics if any stock channels exist
 		let portfolioDisplay = '';

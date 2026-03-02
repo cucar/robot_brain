@@ -733,7 +733,8 @@ export class StockChannel extends Channel {
 	getHoldingsInfo() {
 		return {
 			symbol: this.symbol,
-			shares: this.shares
+			shares: this.shares,
+			price: this.currentPrice
 		};
 	}
 
