@@ -13,8 +13,8 @@ export class StockChannel extends Channel {
 	static initialCapital = 15000;
 	static cash = StockChannel.initialCapital;
 
-	// trading mode - set by initialize() from command line options
-	static eventTrading = false;
+	// default is trading based on event inferences - more reliable, but action trading mode can generate more profit sometimes
+	static actionTrading = false;
 
 	// maximum number of positions to hold at once
 	static maxPositions = 1;
@@ -27,7 +27,7 @@ export class StockChannel extends Channel {
 	 * Called once during brain initialization
 	 */
 	static initialize(options) {
-		StockChannel.eventTrading = options.eventTrading || false;
+		StockChannel.actionTrading = options.actionTrading || false;
 	}
 
 	/**
@@ -425,30 +425,35 @@ export class StockChannel extends Channel {
 	static getActionsWeights(channels, actionsMap, eventsMap) {
 		const allActions = [];
 
-		// Event-based trading: trade based on price predictions
-		if (this.eventTrading) {
-			for (const [channelName, events] of eventsMap) {
-				const channel = channels.get(channelName);
-
-				// Find price change prediction in event inferences
-				const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
-				if (!priceEvent) continue;
-
-				// Get the predicted price change bucket value (1 = down, 2 = up)
-				// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell - use strength as weights
-				const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
-				const action = bucketValue === 2 ? POSITION_OWN : POSITION_OUT;
-				allActions.push({ channelName, rank: priceEvent.strength, isOwn: action === POSITION_OWN });
-			}
-		}
 		// Action-based trading: use brain's action decisions
-		else {
+		if (this.actionTrading) {
 			for (const [channelName, actions] of actionsMap) {
 				const channel = channels.get(channelName);
 				const actionData = actions[0]; // Single action per stock channel
 				const action = actionData.coordinates[`${channel.symbol}_activity`];
+				// alternative: use rewards as weights - rank: Math.exp(actionData.reward)
 				allActions.push({ channelName, rank: actionData.strength, isOwn: action === POSITION_OWN });
 			}
+			return allActions;
+		}
+
+		// Event-based trading: trade based on price predictions
+		for (const [channelName, events] of eventsMap) {
+			const channel = channels.get(channelName);
+
+			// Find price change prediction in event inferences - if there are none, nothing to trade - hold
+			const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
+			if (!priceEvent) continue;
+
+			// rank higher strength predictions higher, safer
+			// alternative: rank by price - favor cheaper stocks for higher gains - rank: -channels.get(channelName).currentPrice
+			const rank = priceEvent.strength / channels.get(channelName).currentPrice;
+
+			// Get the predicted price change bucket value (1 = down, 2 = up)
+			// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell - use strength as weights
+			const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
+			const action = bucketValue === 2 ? POSITION_OWN : POSITION_OUT;
+			allActions.push({ channelName, rank, isOwn: action === POSITION_OWN });
 		}
 
 		return allActions;
@@ -647,26 +652,18 @@ export class StockChannel extends Channel {
 	 * @returns {Object} - Portfolio metrics including total profit and per-channel unrealized profit
 	 */
 	static getPortfolioMetrics(channels) {
-		let totalInvestments = 0;
-		const channelProfits = new Map();
+		let totalCurrentValue = 0;
 
-		for (const [channelName, channel] of channels) {
-			const currentValue = channel.shares * channel.currentPrice;
-			totalInvestments += channel.investment || 0;
+		for (const [_, channel] of channels)
+			totalCurrentValue += channel.shares * channel.currentPrice;
 
-			// Channel unrealized profit: current value - amount invested
-			const channelProfit = currentValue - (channel.investment || 0);
-			channelProfits.set(channelName, channelProfit);
-		}
-
-		// Total profit: (current cash + current investments) - original capital
-		const totalProfit = (this.cash + totalInvestments) - this.initialCapital;
+		// Total profit: (current cash + current market value) - original capital
+		const totalProfit = (this.cash + totalCurrentValue) - this.initialCapital;
 
 		return {
 			cash: this.cash,
-			totalInvestments,
-			totalProfit,
-			channelProfits
+			totalInvestments: totalCurrentValue,
+			totalProfit
 		};
 	}
 
@@ -730,19 +727,13 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get current unrealized profit/loss for this channel (profit = current value - amount invested)
-	 * @returns {Object} - { value: number, label: string, format: string }
+	 * Get holdings information for display
+	 * @returns {Object} - { symbol: string, shares: number }
 	 */
-	getOutputPerformanceMetrics() {
-
-		// Channel unrealized profit: current value - investment
-		const currentValue = this.shares * this.currentPrice;
-		const channelProfit = currentValue - this.investment;
-
+	getHoldingsInfo() {
 		return {
-			value: channelProfit,
-			label: this.symbol,
-			format: 'currency'
+			symbol: this.symbol,
+			shares: this.shares
 		};
 	}
 
