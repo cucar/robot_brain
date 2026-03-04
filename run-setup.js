@@ -39,6 +39,9 @@ async function main() {
 	const endIndex = process.argv.indexOf('--end');
 	if (endIndex !== -1 && process.argv[endIndex + 1]) end = process.argv[endIndex + 1];
 
+	// Parse --extended-hours flag (boolean, no value needed)
+	const extendedHours = process.argv.includes('--extended-hours');
+
 	if (!jobName) {
 		console.error('❌ Error: Job name required');
 		console.log('\nUsage: node run-setup.js <job-name>');
@@ -76,7 +79,7 @@ async function main() {
 		
 		// Create job instance and apply options
 		const job = new JobClass();
-		const options = { timeframe, start, end };
+		const options = { timeframe, start, end, extendedHours };
 		job.options = options;
 		if (typeof job.applyOptions === 'function') job.applyOptions(options);
 

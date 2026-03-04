@@ -32,11 +32,12 @@ export default class StockTestJob extends Job {
 				'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
-			startDate: '2025-02-22',             // Start date for data download
+			startDate: '2021-02-22',             // Start date for data download
 			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
-			offsetRows: 0                        // Number of rows to skip from start (can be overridden with --offset)
+			offsetRows: 0,                       // Number of rows to skip from start (can be overridden with --offset)
+			extendedHours: false                 // Include extended hours data (pre-market/after-hours) - use --extended-hours
 		};
 
 		// Training metrics
@@ -54,6 +55,7 @@ export default class StockTestJob extends Job {
 		if (options.timeframe !== null && options.timeframe !== undefined) this.config.timeframe = options.timeframe;
 		if (options.start !== null && options.start !== undefined) this.config.startDate = options.start;
 		if (options.end !== null && options.end !== undefined) this.config.endDate = options.end;
+		if (options.extendedHours) this.config.extendedHours = true;
 	}
 
 	/**
@@ -97,15 +99,15 @@ export default class StockTestJob extends Job {
 			allBarMaps.set(symbol, barMap);
 		}
 
-		// For minute data, find valid dates (where at least one stock has data)
-		let validDates = null;
+		// For minute data, find valid intervals (where ALL stocks have non-zero volume)
+		let validIntervals = null;
 		if (timeframe !== '1D')
-			validDates = this.findValidDates(allBarMaps);
+			validIntervals = this.findValidIntervals(allBarMaps);
 
 		// Process each symbol's data into CSV
 		for (const symbol of this.config.symbols) {
 			const barMap = allBarMaps.get(symbol);
-			await this.processAndSaveSymbolData(symbol, barMap, dataDir, validDates);
+			await this.processAndSaveSymbolData(symbol, barMap, dataDir, validIntervals);
 		}
 
 		console.log('');
@@ -113,130 +115,42 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Find all valid dates where at least one stock has data
+	 * Find all valid intervals where ALL stocks have non-zero volume data
+	 * By default only includes regular trading hours (9:30 AM - 4:00 PM ET)
+	 * With extendedHours option, includes pre-market and after-hours data
 	 * @param {Map<string, Map<string, {open: number, volume: number}>>} allBarMaps - Map of symbol -> barMap
-	 * @returns {Set<string>} Set of valid dates in YYYY-MM-DD format
+	 * @returns {Set<string>} Set of valid interval timestamps (YYYY-MM-DDTHH:MM format)
 	 */
-	findValidDates(allBarMaps) {
-		const validDates = new Set();
+	findValidIntervals(allBarMaps) {
 
-		// Collect all dates from all stocks
-		for (const barMap of allBarMaps.values()) {
-			for (const timestamp of barMap.keys()) {
-				const date = timestamp.substring(0, 10); // Extract YYYY-MM-DD
-				validDates.add(date);
-			}
-		}
+		const useExtendedHours = this.config.extendedHours;
 
-		return validDates;
-	}
+		// Collect all unique intervals from all stocks (filtered by hours setting)
+		const allIntervals = new Set();
+		for (const barMap of allBarMaps.values())
+			for (const timestamp of barMap.keys())
+				if (useExtendedHours || this.isRegularHours(new Date(timestamp + ':00Z')))
+					allIntervals.add(timestamp);
 
-	/**
-	 * Process and save symbol data in the format expected by StockChannel
-	 * Format: price,volume (no header, no timestamp, chronological order)
-	 * For minute data: Only includes regular trading hours (9:30 AM - 4:00 PM ET)
-	 * For daily data: Uses bars as-is without gap filling
-	 * @param {string} symbol - Stock symbol
-	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
-	 * @param {string} dataDir - Directory to save CSV files
-	 * @param {Set<string>|null} validDates - Set of valid dates in YYYY-MM-DD format (for minute data only)
-	 */
-	async processAndSaveSymbolData(symbol, barMap, dataDir, validDates = null) {
-
-		// For daily data, filter by startDate and endDate
-		let filledData;
-		if (this.config.timeframe === '1D') {
-			const timestamps = Array.from(barMap.keys()).sort();
-			const filteredTimestamps = timestamps.filter(timestamp => {
-				const date = timestamp.substring(0, 10); // Extract YYYY-MM-DD
-				return date >= this.config.startDate && date <= this.config.endDate;
-			});
-			filledData = filteredTimestamps.map(timestamp => ({
-				open: barMap.get(timestamp).open,
-				volume: barMap.get(timestamp).volume
-			}));
-		}
-		// For minute data, only include valid dates
-		else filledData = this.fillRegularHoursOnly(barMap, validDates);
-
-		// Format as CSV rows: price,volume (no timestamp)
-		const rows = filledData.map(bar => `${bar.open},${bar.volume}`);
-
-		// Write to CSV file (no header, chronological order)
-		const filePath = path.join(dataDir, `${symbol}.csv`);
-		fs.writeFileSync(filePath, rows.join('\n'));
-
-		console.log(`   ✅ ${symbol}.csv: ${rows.length} bars`);
-	}
-
-	/**
-	 * Generate complete grid of regular trading hours (9:30 AM - 4:00 PM ET) for valid trading days only
-	 * Fills missing bars with previous price and 0 volume
-	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
-	 * @param {Set<string>} validDates - Set of valid dates in YYYY-MM-DD format
-	 * @returns {Array<{open: number, volume: number}>} Complete array of bars for regular hours only
-	 */
-	fillRegularHoursOnly(barMap, validDates) {
-
-		// Parse start and end dates
-		const start = new Date(this.config.startDate);
-		const end = new Date(this.config.endDate);
-
-		// Get the first bar's price to use as initial price for all stocks
-		const timestamps = Array.from(barMap.keys()).sort();
-		const firstBar = timestamps.length > 0 ? barMap.get(timestamps[0]) : null;
-		let lastPrice = firstBar ? firstBar.open : null;
-
-		// Determine time interval in minutes based on timeframe
-		const intervalMinutes = this.getIntervalMinutes(this.config.timeframe);
-
-		const result = [];
-
-		// Loop through every interval from start to end
-		const current = new Date(start);
-		current.setUTCSeconds(0, 0);
-		while (current <= end) {
-
-			// Get the date for this timestamp
-			const dateStr = current.toISOString().substring(0, 10);
-
-			// Only process if this date has data for at least one stock
-			if (validDates.has(dateStr)) {
-
-				// Only output intervals within regular trading hours
-				if (this.isRegularHours(current)) {
-
-					// Check if we have a bar for this interval
-					const timestampKey = current.toISOString().substring(0, 16);
-					const bar = barMap.get(timestampKey);
-
-					// if we do have a bar, add it to the result and update last price
-					if (bar) {
-						result.push({ open: bar.open, volume: bar.volume });
-						lastPrice = bar.open;
-					}
-					// No bar - fill with last price and 0 volume
-					else if (lastPrice !== null) result.push({ open: lastPrice, volume: 0 });
+		// Filter to only intervals where ALL stocks have valid data (non-zero price and volume)
+		const validIntervals = new Set();
+		for (const interval of allIntervals) {
+			let allStocksHaveData = true;
+			for (const barMap of allBarMaps.values()) {
+				const bar = barMap.get(interval);
+				// Must have bar with non-zero price AND non-zero volume
+				if (!bar || bar.open === 0 || bar.volume === 0) {
+					allStocksHaveData = false;
+					break;
 				}
 			}
-
-			// move to next interval
-			current.setUTCMinutes(current.getUTCMinutes() + intervalMinutes);
+			if (allStocksHaveData)
+				validIntervals.add(interval);
 		}
 
-		return result;
-	}
-
-	/**
-	 * Get the interval in minutes for a given timeframe
-	 * @param {string} timeframe - Timeframe string (e.g., '1Min', '5Min', '15Min')
-	 * @returns {number} Interval in minutes
-	 */
-	getIntervalMinutes(timeframe) {
-		if (timeframe.endsWith('Min')) return parseInt(timeframe.replace('Min', ''));
-		if (timeframe.endsWith('H')) return parseInt(timeframe.replace('H', '')) * 60;
-		if (timeframe === '1D') return 1440;
-		return 1; // default to 1 minute
+		const hoursLabel = useExtendedHours ? 'extended hours' : 'regular hours';
+		console.log(`   Found ${validIntervals.size} valid intervals (out of ${allIntervals.size} ${hoursLabel}) where all stocks have data`);
+		return validIntervals;
 	}
 
 	/**
@@ -252,6 +166,66 @@ export default class StockTestJob extends Job {
 		const regularOpen = 9 * 60 + 30;   // 9:30 AM ET
 		const regularClose = 16 * 60;      // 4:00 PM ET
 		return etTime >= regularOpen && etTime < regularClose;
+	}
+
+	/**
+	 * Process and save symbol data in the format expected by StockChannel
+	 * Format: price,volume (no header, no timestamp, chronological order)
+	 * For minute data: Only includes intervals where ALL stocks have data
+	 * For daily data: Uses bars as-is without gap filling
+	 * @param {string} symbol - Stock symbol
+	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
+	 * @param {string} dataDir - Directory to save CSV files
+	 * @param {Set<string>|null} validIntervals - Set of valid interval timestamps (for minute data only)
+	 */
+	async processAndSaveSymbolData(symbol, barMap, dataDir, validIntervals = null) {
+
+		// For daily data, filter by startDate and endDate
+		let filledData;
+		if (this.config.timeframe === '1D') {
+			const timestamps = Array.from(barMap.keys()).sort();
+			const filteredTimestamps = timestamps.filter(timestamp => {
+				const date = timestamp.substring(0, 10); // Extract YYYY-MM-DD
+				return date >= this.config.startDate && date <= this.config.endDate;
+			});
+			filledData = filteredTimestamps.map(timestamp => ({
+				open: barMap.get(timestamp).open,
+				volume: barMap.get(timestamp).volume
+			}));
+		}
+		// For minute data, only include valid intervals (where all stocks have data)
+		else filledData = this.extractValidIntervals(barMap, validIntervals);
+
+		// Format as CSV rows: price,volume (no timestamp)
+		const rows = filledData.map(bar => `${bar.open},${bar.volume}`);
+
+		// Write to CSV file (no header, chronological order)
+		const filePath = path.join(dataDir, `${symbol}.csv`);
+		fs.writeFileSync(filePath, rows.join('\n'));
+
+		console.log(`   ✅ ${symbol}.csv: ${rows.length} bars`);
+	}
+
+	/**
+	 * Extract bars only for intervals where ALL stocks have data
+	 * No gap filling - only real data is included
+	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
+	 * @param {Set<string>} validIntervals - Set of valid interval timestamps (YYYY-MM-DDTHH:MM format)
+	 * @returns {Array<{open: number, volume: number}>} Array of bars for valid intervals only
+	 */
+	extractValidIntervals(barMap, validIntervals) {
+
+		// Sort valid intervals chronologically
+		const sortedIntervals = Array.from(validIntervals).sort();
+
+		// Extract bars for each valid interval (should always exist since we pre-validated)
+		const result = [];
+		for (const interval of sortedIntervals) {
+			const bar = barMap.get(interval);
+			if (bar) result.push({ open: bar.open, volume: bar.volume });
+		}
+
+		return result;
 	}
 
 	/**

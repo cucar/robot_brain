@@ -24,7 +24,7 @@ const config = {
 		'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', 'COIN', 'LCID', 'PLTR', 'SOFI',
 		'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 	],
-	startDate: '2025-02-22',
+	startDate: '2021-02-22',
 	endDate: '2026-02-22'
 };
 
