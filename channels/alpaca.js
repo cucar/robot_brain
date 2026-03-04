@@ -24,7 +24,7 @@ export default class Alpaca {
 	async getBars(symbols, start, end, timeframe = '1Min') {
 		const bars = [];
 		// limit 0 means return everything - pageLimit is the max number of bars per request
-		const options = { start, end, timeframe, limit: 0, pageLimit: 1000, feed: 'iex' };
+		const options = { start, end, timeframe, limit: 0, pageLimit: 1000, feed: 'iex', adjustment: 'all' };
 		for await (const bar of this.alpaca.getBarsV2(symbols, options))
 			bars.push(bar);
 		return bars;
