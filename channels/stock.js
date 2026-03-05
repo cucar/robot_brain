@@ -479,15 +479,12 @@ export class StockChannel extends Channel {
 			// console.log(`${channelName}: priceEvent:`, priceEvent);
 			if (!priceEvent) continue;
 
-			// rank higher strength predictions higher, safer
-			// alternative: rank by price - favor cheaper stocks for higher gains - rank: -channels.get(channelName).currentPrice
-			const rank = priceEvent.strength / channels.get(channelName).currentPrice;
-
+			// Rank by reward (likelihood = strength / total strength for dimension)
+			// This is the safety score: how likely this prediction is compared to alternatives
 			// Get the predicted price change bucket value (1 = down, 2 = up)
-			// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell - use strength as weights
+			// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell
 			const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
-			const action = bucketValue === 2 ? POSITION_OWN : POSITION_OUT;
-			allActions.push({ channelName, rank, isOwn: action === POSITION_OWN });
+			allActions.push({ channelName, rank: priceEvent.reward, isOwn: bucketValue === 2 });
 		}
 
 		return allActions;

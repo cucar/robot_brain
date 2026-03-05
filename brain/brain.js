@@ -550,28 +550,41 @@ export default class Brain {
 	/**
 	 * Aggregate votes and determine winners per dimension.
 	 * Events win by strength, actions win by reward.
+	 * For events, reward = strength / totalDimensionStrength (likelihood vs alternatives = safety score)
 	 * @param {Array} votes - Array of vote objects from collectVotes
 	 * @returns {Array} Array of winning inference objects {neuron_id, neuron, strength, reward}
 	 */
 	determineConsensus(votes) {
 
-		// Aggregate candidate neurons
-		const candidates = new Map(); // neuronId -> {neuron, strength, weightedReward}
+		// Aggregate candidate neurons and dimension totals in one pass
+		const candidates = new Map(); // neuronId -> {neuron, strength, weightedTotal}
+		const dimTotalStrength = new Map(); // dimension -> totalStrength (for events only)
 		for (const v of votes) {
-			if (!candidates.has(v.neuron.id)) candidates.set(v.neuron.id, { neuron: v.neuron, strength: 0, weightedReward: 0 });
+
+			// add the neuron to the candidates if not seen before
+			if (!candidates.has(v.neuron.id)) candidates.set(v.neuron.id, { neuron: v.neuron, strength: 0, weightedTotal: 0 });
+
+			// update candidate total strength - this is needed for events and actions both
 			const candidate = candidates.get(v.neuron.id);
 			candidate.strength += v.strength;
-			candidate.weightedReward += v.strength * v.reward;
+
+			// for actions, calculate the weighted total - for events, calculate total strengths for each dimension
+			if (v.neuron.type === 'action') candidate.weightedTotal += v.strength * v.reward;
+			else this.addDimStrength(dimTotalStrength, v.neuron.coordinates, v.strength);
 		}
 
 		// Determine winners per dimension (events by strength, actions by reward)
 		const dimBest = new Map(); // dimension -> {neuronId, score}
 		for (const [neuronId, candidate] of candidates) {
-			candidate.reward = candidate.strength > 0 ? (candidate.weightedReward / candidate.strength) : 0;
-			const score = candidate.neuron.type === 'action' ? candidate.reward : candidate.strength;
+
+			// for actions, calculate the reward as weighted total / strength - for events, calculate the likelihood of the event
+			if (candidate.neuron.type === 'action') candidate.reward = candidate.strength > 0 ? candidate.weightedTotal / candidate.strength : 0;
+			else candidate.reward = this.calcLikelihood(candidate.strength, candidate.neuron.coordinates, dimTotalStrength);
+
+			// set the best neuron for each dimension based on rewards
 			for (const dim of Object.keys(candidate.neuron.coordinates))
-				if (!dimBest.has(dim) || score > dimBest.get(dim).score)
-					dimBest.set(dim, { neuronId, score });
+				if (!dimBest.has(dim) || candidate.reward > dimBest.get(dim).score)
+					dimBest.set(dim, { neuronId, score: candidate.reward });
 		}
 
 		// Return winners with neuron object reference and reward
@@ -588,6 +601,27 @@ export default class Brain {
 			});
 		}
 		return winners;
+	}
+
+	/**
+	 * Add strength to dimension totals map
+	 */
+	addDimStrength(dimTotalStrength, coordinates, strength) {
+		for (const dim of Object.keys(coordinates))
+			dimTotalStrength.set(dim, (dimTotalStrength.get(dim) || 0) + strength);
+	}
+
+	/**
+	 * Calculate likelihood (strength / total) averaged across dimensions
+	 */
+	calcLikelihood(strength, coordinates, dimTotalStrength) {
+		let totalLikelihood = 0;
+		let dimCount = 0;
+		for (const dim of Object.keys(coordinates)) {
+			const total = dimTotalStrength.get(dim) || 0;
+			if (total > 0) { totalLikelihood += strength / total; dimCount++; }
+		}
+		return dimCount > 0 ? totalLikelihood / dimCount : 0;
 	}
 
 	/**
