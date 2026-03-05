@@ -501,7 +501,7 @@ export class StockChannel extends Channel {
 		// limit to N positions
 		if (ownActions.length > this.maxPositions) {
 			ownActions.sort((a, b) => b.rank - a.rank);
-			ownActions = ownActions.filter(a => channels.get(a.channelName).currentPrice < this.maxPrice); // filter by price
+			ownActions = ownActions.filter(a => channels.get(a.channelName).getCurrentPrice() < this.maxPrice); // filter by price
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}
 
@@ -519,10 +519,11 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Set OUT allocation for channels not in actionsMap (no brain prediction)
+	 * Channels with shares but no data still need OUT allocation so they can be sold using lastKnownPrice
 	 */
 	static setMissingChannelAllocations(channels, allocations) {
 		for (const [channelName, channel] of channels)
-			if (!allocations.has(channelName) && channel.hasData)
+			if (!allocations.has(channelName) && (channel.hasData || channel.shares > 0))
 				allocations.set(channelName, { action: POSITION_OUT, amount: 0 });
 	}
 
@@ -565,14 +566,14 @@ export class StockChannel extends Channel {
 	 */
 	static planSellAll(channel, sells, state) {
 		sells.push({ channel, shares: channel.shares });
-		state.remainingCash += channel.shares * channel.currentPrice;
+		state.remainingCash += channel.shares * channel.getCurrentPrice();
 	}
 
 	/**
 	 * track the cheapest stock we want to own so that we can fill leftover cash
 	 */
 	static trackCheapestOwnChannel(channel, state) {
-		if (!state.cheapestOwnChannel || channel.currentPrice < state.cheapestOwnChannel.currentPrice)
+		if (!state.cheapestOwnChannel || channel.getCurrentPrice() < state.cheapestOwnChannel.getCurrentPrice())
 			state.cheapestOwnChannel = channel;
 	}
 
@@ -580,15 +581,15 @@ export class StockChannel extends Channel {
 	 * brain wants to own the stock - calculate differential between target and current
 	 */
 	static planPositionAdjustment(channel, allocation, sells, buys, state) {
-		const targetShares = Math.floor(allocation.amount / channel.currentPrice);
+		const targetShares = Math.floor(allocation.amount / channel.getCurrentPrice());
 		const sharesDiff = targetShares - channel.shares;
 		if (sharesDiff < 0) {
 			sells.push({ channel, shares: -sharesDiff });
-			state.remainingCash += (-sharesDiff) * channel.currentPrice;
+			state.remainingCash += (-sharesDiff) * channel.getCurrentPrice();
 		}
 		else if (sharesDiff > 0) {
 			buys.push({ channel, shares: sharesDiff });
-			state.remainingCash -= sharesDiff * channel.currentPrice;
+			state.remainingCash -= sharesDiff * channel.getCurrentPrice();
 		}
 	}
 
@@ -601,7 +602,7 @@ export class StockChannel extends Channel {
 		if (!state.cheapestOwnChannel || state.remainingCash <= 0) return;
 
 		// get the number of additional shares we can buy with the remaining cash - if none, nothing we can do
-		const additionalShares = Math.floor(state.remainingCash / state.cheapestOwnChannel.currentPrice);
+		const additionalShares = Math.floor(state.remainingCash / state.cheapestOwnChannel.getCurrentPrice());
 		if (additionalShares <= 0) return;
 
 		// Find existing buy for this channel and increment it, or add new buy
@@ -631,11 +632,11 @@ export class StockChannel extends Channel {
 	 */
 	async executeBuy(sharesToBuy) {
 
-		const cost = sharesToBuy * this.currentPrice;
+		const cost = sharesToBuy * this.getCurrentPrice();
 
 		// Check if we have enough cash - give a dollar wiggle room for rounding and stuff
 		if (StockChannel.cash < (cost - 1))
-			throw new Error(`${this.symbol}: Insufficient cash to buy ${sharesToBuy} shares at $${this.currentPrice} (need $${cost.toFixed(2)}, have $${StockChannel.cash.toFixed(2)})`);
+			throw new Error(`${this.symbol}: Insufficient cash to buy ${sharesToBuy} shares at $${this.getCurrentPrice()} (need $${cost.toFixed(2)}, have $${StockChannel.cash.toFixed(2)})`);
 
 		// Deduct cash
 		StockChannel.cash -= cost;
@@ -648,7 +649,7 @@ export class StockChannel extends Channel {
 		this.totalTrades++;
 
 		if (this.debug)
-			console.log(`${this.symbol}: BOUGHT ${sharesToBuy} shares @ $${this.currentPrice.toFixed(2)} = $${cost.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
+			console.log(`${this.symbol}: BOUGHT ${sharesToBuy} shares @ $${this.getCurrentPrice().toFixed(2)} = $${cost.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
 	}
 
 	/**
@@ -660,7 +661,7 @@ export class StockChannel extends Channel {
 		if (sharesToSell > this.shares)
 			throw new Error(`${this.symbol}: Cannot sell ${sharesToSell} shares, only have ${this.shares}`);
 
-		const proceeds = sharesToSell * this.currentPrice;
+		const proceeds = sharesToSell * this.getCurrentPrice();
 		const costBasis = (this.investment / this.shares) * sharesToSell;
 
 		// Add cash
@@ -674,7 +675,7 @@ export class StockChannel extends Channel {
 		this.totalTrades++;
 
 		if (this.debug)
-			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.currentPrice.toFixed(2)} = $${proceeds.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
+			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.getCurrentPrice().toFixed(2)} = $${proceeds.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
 	}
 
 	/**
@@ -686,7 +687,7 @@ export class StockChannel extends Channel {
 		let totalCurrentValue = 0;
 
 		for (const [_, channel] of channels)
-			totalCurrentValue += channel.shares * channel.currentPrice;
+			totalCurrentValue += channel.shares * channel.getCurrentPrice();
 
 		// Total profit: (current cash + current market value) - original capital
 		const totalProfit = (this.cash + totalCurrentValue) - this.initialCapital;
@@ -774,7 +775,7 @@ export class StockChannel extends Channel {
 	 * @returns {Object} - Stock channel metrics
 	 */
 	getMetrics() {
-		const currentValue = this.shares * this.currentPrice;
+		const currentValue = this.shares * this.getCurrentPrice();
 		const unrealizedProfit = currentValue - this.investment;
 
 		return {
@@ -784,7 +785,7 @@ export class StockChannel extends Channel {
 			currentValue: currentValue,
 			unrealizedProfit: unrealizedProfit,
 			shares: this.shares,
-			currentPrice: this.currentPrice,
+			currentPrice: this.getCurrentPrice(),
 			trades: this.totalTrades || 0,
 			position: this.lastAction === POSITION_OWN ? 'OWNED' : 'NOT OWNED'
 		};
