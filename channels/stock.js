@@ -157,6 +157,7 @@ export class StockChannel extends Channel {
 		this.shares = 0; // this is the actual number of shares we own - this is what will be adjusted by the actions
 		this.investment = 0; // Total amount invested in current position
 		this.totalTrades = 0; // Total number of trades in current episode
+		this.lastKnownPrice = null; // Last valid price for portfolio valuation when offline
 		this.previousPrice = null;
 		this.previousVolume = null;
 		this.currentPrice = null;
@@ -188,6 +189,9 @@ export class StockChannel extends Channel {
 		const row = this.trainingData[this.trainingRow++];
 		this.currentPrice = row.price === -1 ? null : row.price;
 		this.currentVolume = row.volume === -1 ? null : row.volume;
+
+		// Track last known price for portfolio valuation when offline
+		if (this.currentPrice !== null) this.lastKnownPrice = this.currentPrice;
 
 		// return true to indicate that we have more data
 		return true;
@@ -431,8 +435,19 @@ export class StockChannel extends Channel {
 	static getTotalValue(channels) {
 		let totalPortfolioValue = this.cash;
 		for (const [, channel] of channels)
-			totalPortfolioValue += channel.shares * channel.currentPrice;
+			totalPortfolioValue += channel.shares * channel.getCurrentPrice();
 		return totalPortfolioValue;
+	}
+
+	/**
+	 * returns the effective price of the stock
+	 * currentPrice: whatever row we read from the training data or got live via API call
+	 * it's usually populated, but when the stock is not traded in that period, it would be null
+	 * lastKnownPrice: covers those periods where the stock is not traded
+	 * this covers all except the initial frame maybe - return 0 in that case
+	 */
+	getCurrentPrice() {
+		return this.currentPrice || this.lastKnownPrice || 0;
 	}
 
 	/**
@@ -461,6 +476,7 @@ export class StockChannel extends Channel {
 
 			// Find price change prediction in event inferences - if there are none, nothing to trade - hold
 			const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
+			// console.log(`${channelName}: priceEvent:`, priceEvent);
 			if (!priceEvent) continue;
 
 			// rank higher strength predictions higher, safer
@@ -752,7 +768,7 @@ export class StockChannel extends Channel {
 		return {
 			symbol: this.symbol,
 			shares: this.shares,
-			price: this.currentPrice
+			price: this.getCurrentPrice()
 		};
 	}
 

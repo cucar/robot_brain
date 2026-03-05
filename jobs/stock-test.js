@@ -204,7 +204,7 @@ export default class StockTestJob extends Job {
 		const result = [];
 		for (const interval of sortedIntervals) {
 			const bar = barMap.get(interval);
-			if (bar) result.push({ open: bar.open || -1, volume: bar.volume || -1 });
+			result.push({ open: bar?.open || -1, volume: bar?.volume || -1 });
 		}
 
 		return result;
