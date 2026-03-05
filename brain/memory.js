@@ -130,20 +130,6 @@ export class Memory {
 	}
 
 	/**
-	 * Get inferred events grouped by channel
-	 * @returns {Map<string, Array>} - Map of channel names to array of event data {coordinates, strength, reward}
-	 */
-	getInferredEvents() {
-		const channelEvents = new Map();
-		for (const { neuron, strength, reward } of this.inferredNeurons) {
-			if (neuron.type !== 'event') continue;
-			if (!channelEvents.has(neuron.channel)) channelEvents.set(neuron.channel, []);
-			channelEvents.get(neuron.channel).push({ coordinates: neuron.coordinates, strength, reward });
-		}
-		return channelEvents;
-	}
-
-	/**
 	 * Clear all inferred neurons
 	 */
 	clearInferences() {

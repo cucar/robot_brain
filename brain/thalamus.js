@@ -242,32 +242,35 @@ export class Thalamus {
 	/**
 	 * Execute actions for channels that have them
 	 * Groups channels by type and calls static executeChannelActions on each channel class
-	 * @param {Map<string, Array>} channelActions - Map of channel name to action data
-	 * @param {Map<string, Array>} channelEvents - Map of channel name to event inference data
+	 * @param {Array} inferredNeurons - Array of { neuron, strength, reward } from memory
 	 */
-	async executeChannelActions(channelActions, channelEvents) {
+	async executeChannelActions(inferredNeurons) {
 
-		// Group channels by their class constructor
-		const channelsByType = new Map(); // ChannelClass → Map(channelName → actions)
-		for (const [channelName, actions] of channelActions) {
+		// prepare the channels map that contains their event and action inferences
+		const channelInferences = new Map(); // channelName → { actions, events }
+		for (const channelName of this.channels.keys())
+			channelInferences.set(channelName, { actions: [], events: [] });
+
+		// Add inferred neurons to their channels
+		for (const { neuron, strength, reward } of inferredNeurons) {
+			const inferences = channelInferences.get(neuron.channel);
+			const inference = { coordinates: neuron.coordinates, strength, reward };
+			if (neuron.type === 'action') inferences.actions.push(inference);
+			else if (neuron.type === 'event') inferences.events.push(inference);
+		}
+
+		// group by channel classes for action execution
+		const channelTypes = new Map();
+		for (const [channelName, inferences] of channelInferences) {
 			const channel = this.channels.get(channelName);
 			const ChannelClass = channel.constructor;
-			if (!channelsByType.has(ChannelClass)) channelsByType.set(ChannelClass, new Map());
-			channelsByType.get(ChannelClass).set(channelName, actions);
+			if (!channelTypes.has(ChannelClass)) channelTypes.set(ChannelClass, new Map());
+			channelTypes.get(ChannelClass).set(channelName, { channel, ...inferences });
 		}
 
-		// Call static executeChannelActions on each channel class
-		for (const [ChannelClass, channelActionsMap] of channelsByType) {
-
-			// Get actual channel objects for this type
-			const channelsOfType = new Map();
-			for (const channelName of channelActionsMap.keys())
-				channelsOfType.set(channelName, this.channels.get(channelName));
-
-			// call channel static method to execute actions
-			// this will do the internal channel coordination if needed (like stock allocations)
-			await ChannelClass.executeChannelActions(channelsOfType, channelActionsMap, channelEvents);
-		}
+		// Dispatch to each channel class
+		for (const [ChannelClass, classChannelData] of channelTypes)
+			await ChannelClass.executeChannelActions(classChannelData);
 	}
 
 	/**

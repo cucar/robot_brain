@@ -26,11 +26,11 @@ export default class StockTestJob extends Job {
 				'CVX', 'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA',
 				'INTC', 'CRM', 'ORCL', 'IBM', 'CSCO', 'TGT', 'HD', 'MCD', 'NKE', 'SBUX',
 				'ABBV', 'MRK', 'BMY', 'LLY', 'GILD', 'SLB', 'OXY', 'FCX', 'MOS', 'CLF',
-				// 'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
-				// 'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
-				// 'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
-				// 'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', 'COIN',
-				// 'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
+				'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
+				'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
+				'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
+				'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', /* 'COIN', */
+				'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
 			startDate: '2021-02-22',             // Start date for data download
@@ -178,7 +178,7 @@ export default class StockTestJob extends Job {
 			}));
 		}
 		// For minute data, only include valid intervals (where all stocks have data)
-		else filledData = this.extractValidIntervals(barMap, validIntervals);
+		else filledData = this.extractValidIntervals(symbol, barMap, validIntervals);
 
 		// Format as CSV rows: price,volume (no timestamp)
 		const rows = filledData.map(bar => `${bar.open},${bar.volume}`);
@@ -191,21 +191,32 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Extract bars for all valid intervals, using -1,-1 placeholder for missing data
+	 * Extract bars for all valid intervals, using last known price with 0 volume for missing data
+	 * This ensures the brain sees a "0% price change" event (categorized as down) for missing bars
+	 * @param {string} symbol - Stock symbol
 	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
 	 * @param {Set<string>} validIntervals - Set of valid interval timestamps (YYYY-MM-DDTHH:MM format)
-	 * @returns {Array<{open: number, volume: number}>} Array of bars for valid intervals (-1,-1 for missing)
+	 * @returns {Array<{open: number, volume: number}>} Array of bars for valid intervals
 	 */
-	extractValidIntervals(barMap, validIntervals) {
+	extractValidIntervals(symbol, barMap, validIntervals) {
 
 		// Sort valid intervals chronologically
 		const sortedIntervals = Array.from(validIntervals).sort();
 
-		// Extract bars for each valid interval (should always exist since we pre-validated)
+		// Extract bars for each valid interval
+		// For missing data: use last known price with 0 volume (fires "flat" event)
 		const result = [];
+		let lastKnownPrice = null;
 		for (const interval of sortedIntervals) {
 			const bar = barMap.get(interval);
-			result.push({ open: bar?.open || -1, volume: bar?.volume || -1 });
+			if (bar) {
+				lastKnownPrice = bar.open;
+				result.push({ open: bar.open, volume: bar.volume });
+			}
+			else {
+				if (!lastKnownPrice) throw new Error(`No last known price: ${symbol}`);
+				result.push({ open: lastKnownPrice, volume: 0 });
+			}
 		}
 
 		return result;

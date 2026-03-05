@@ -51,12 +51,11 @@ export class Channel {
 	 * Static method called by Thalamus to execute actions for all channels of this type
 	 * Default implementation: call each channel's executeOutputs individually
 	 * Override in subclasses for coordinated execution (e.g., portfolio management)
+	 * @param {Map<string, { channel, actions, events }>} channelInferences - Map of channel name to channel data
 	 */
-	static async executeChannelActions(channels, actionsMap, eventsMap) {
-		for (const [channelName, actions] of actionsMap) {
-			const channel = channels.get(channelName);
-			await channel.executeOutputs(actions, eventsMap.get(channelName));
-		}
+	static async executeChannelActions(channelInferences) {
+		for (const [, { channel, actions, events }] of channelInferences)
+			await channel.executeOutputs(actions, events);
 	}
 
 	/**

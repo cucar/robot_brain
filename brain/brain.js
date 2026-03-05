@@ -19,7 +19,7 @@ export default class Brain {
 		this.maxLevels = 150; // just to prevent against infinite recursion
 
 		// forget cycle parameters - very important - fights curse of dimensionality
-		this.forgetCycles = 10; // number of frames between forget cycles (increased to let connections stabilize)
+		this.forgetCycles = 100; // number of frames between forget cycles (increased to let connections stabilize)
 		this.frameNumber = 0;
 
 		// Debugging info and flags
@@ -650,7 +650,7 @@ export default class Brain {
 	 * Execute inferred actions for all channels
 	 */
 	async executeActions() {
-		await this.thalamus.executeChannelActions(this.memory.getInferredActions(), this.memory.getInferredEvents());
+		await this.thalamus.executeChannelActions(this.memory.getInferences());
 	}
 
 	/**

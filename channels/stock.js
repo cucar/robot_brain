@@ -185,12 +185,12 @@ export class StockChannel extends Channel {
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
 
-		// get the new row and update price/volume (-1 means no data)
+		// get the new row and update price/volume
 		const row = this.trainingData[this.trainingRow++];
-		this.currentPrice = row.price === -1 ? null : row.price;
-		this.currentVolume = row.volume === -1 ? null : row.volume;
+		this.currentPrice = row.price;
+		this.currentVolume = row.volume;
 
-		// Track last known price for portfolio valuation when offline
+		// Track last known price for portfolio valuation
 		if (this.currentPrice !== null) this.lastKnownPrice = this.currentPrice;
 
 		// return true to indicate that we have more data
@@ -363,68 +363,63 @@ export class StockChannel extends Channel {
 	/**
 	 * Static method for coordinated execution across all stock channels
 	 * Handles portfolio allocation before executing individual channel actions
-	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
-	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
-	 * @param {Map<string, Array>} eventsMap - Map of channel name to event inference data
+	 * @param {Map<string, { channel, actions, events }>} channelInferences - Map of channel name to channel data
 	 */
-	static async executeChannelActions(channels, actionsMap, eventsMap) {
+	static async executeChannelActions(channelInferences) {
 
-		// Filter out channels without data (no price to trade at)
-		for (const channelName of new Set([...actionsMap.keys(), ...eventsMap.keys()]))
-			if (!channels.get(channelName).hasData) {
-				actionsMap.delete(channelName);
-				eventsMap.delete(channelName);
-			}
-
-		// nothing to do if there are no actions
-		if (actionsMap.size === 0) return;
+		// if there are no actions, nothing to do
+		if (!this.hasActions(channelInferences)) return;
 
 		// Save last actions for rewarding in the next frame
-		this.saveLastActions(channels, actionsMap);
+		this.saveLastActions(channelInferences);
 
 		// Calculate portfolio allocations
-		const allocations = this.getAllocations(channels, actionsMap, eventsMap);
+		const allocations = this.getAllocations(channelInferences);
 
 		// Generate action plan based on differential between ideal and current allocations
-		const actionPlan = this.getActionPlan(channels, allocations);
+		const actionPlan = this.getActionPlan(channelInferences, allocations);
 
 		// Execute the action plan
 		await this.executeActionPlan(actionPlan);
 	}
 
 	/**
+	 * Check if any channel has actions
+	 */
+	static hasActions(channelInferences) {
+		for (const [, { actions }] of channelInferences) if (actions.length > 0) return true;
+		return false;
+	}
+
+	/**
 	 * Save last action for each channel for tracking purposes
 	 */
-	static saveLastActions(channels, actionsMap) {
-		for (const [channelName, actions] of actionsMap) {
+	static saveLastActions(channelInferences) {
+		for (const [, { channel, actions }] of channelInferences) {
 			if (actions.length === 0) continue;
-			const channel = channels.get(channelName);
-			const actionData = actions[0];
-			channel.lastAction = actionData.coordinates[`${channel.symbol}_activity`];
+			channel.lastAction = actions[0].coordinates[`${channel.symbol}_activity`];
 		}
 	}
 
 	/**
 	 * Calculate portfolio allocations for stock actions based on total portfolio value
 	 * Uses softmax (exponential) weighting to handle negative rewards naturally
-	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
-	 * @param {Map<string, Array>} actionsMap - Map of channel name to action data
-	 * @param {Map<string, Array>} eventsMap - Map of channel name to event inference data
+	 * @param {Map<string, { channel, actions, events }>} channelInferences - Map of channel name to channel data
 	 * @returns {Map} - Map of channel name to { action, amount } allocation
 	 */
-	static getAllocations(channels, actionsMap, eventsMap) {
+	static getAllocations(channelInferences) {
 
 		// Calculate total portfolio value (cash + all current holdings)
-		const totalValue = this.getTotalValue(channels);
+		const totalValue = this.getTotalValue(channelInferences);
 
 		// Collect all actions with their weights for allocations
-		const actions = this.getActionsWeights(channels, actionsMap, eventsMap);
+		const actions = this.getActionsWeights(channelInferences);
 
 		// Allocate portfolio value proportional to the rewards
-		const allocations = this.distributeAllocations(channels, actions, totalValue);
+		const allocations = this.distributeAllocations(channelInferences, actions, totalValue);
 
-		// Set OUT allocation for channels not in actionsMap (no brain prediction)
-		this.setMissingChannelAllocations(channels, allocations);
+		// Set OUT allocation for channels without predictions
+		this.setMissingChannelAllocations(channelInferences, allocations);
 
 		return allocations;
 	}
@@ -432,9 +427,9 @@ export class StockChannel extends Channel {
 	/**
 	 * returns total portfolio value (cash + all current holdings)
 	 */
-	static getTotalValue(channels) {
+	static getTotalValue(channelInferences) {
 		let totalPortfolioValue = this.cash;
-		for (const [, channel] of channels)
+		for (const [, { channel }] of channelInferences)
 			totalPortfolioValue += channel.shares * channel.getCurrentPrice();
 		return totalPortfolioValue;
 	}
@@ -455,13 +450,13 @@ export class StockChannel extends Channel {
 	 * - Event trading mode: uses event consensus inferences (price forecasts) to determine actions
 	 * - Action trading mode: uses brain's action decisions with their rewards
 	 */
-	static getActionsWeights(channels, actionsMap, eventsMap) {
+	static getActionsWeights(channelInferences) {
 		const allActions = [];
 
 		// Action-based trading: use brain's action decisions
 		if (this.actionTrading) {
-			for (const [channelName, actions] of actionsMap) {
-				const channel = channels.get(channelName);
+			for (const [channelName, { channel, actions }] of channelInferences) {
+				if (actions.length === 0) continue;
 				const actionData = actions[0]; // Single action per stock channel
 				const action = actionData.coordinates[`${channel.symbol}_activity`];
 				// alternative: use rewards as weights - rank: Math.exp(actionData.reward)
@@ -471,8 +466,7 @@ export class StockChannel extends Channel {
 		}
 
 		// Event-based trading: trade based on price predictions
-		for (const [channelName, events] of eventsMap) {
-			const channel = channels.get(channelName);
+		for (const [channelName, { channel, events }] of channelInferences) {
 
 			// Find price change prediction in event inferences - if there are none, nothing to trade - hold
 			const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
@@ -493,7 +487,7 @@ export class StockChannel extends Channel {
 	/**
 	 * Allocate portfolio value proportional to softmax weights
 	 */
-	static distributeAllocations(channels, actions, totalValue) {
+	static distributeAllocations(channelInferences, actions, totalValue) {
 
 		// get the actions that want to own a stock
 		let ownActions = actions.filter(a => a.isOwn);
@@ -501,7 +495,7 @@ export class StockChannel extends Channel {
 		// limit to N positions
 		if (ownActions.length > this.maxPositions) {
 			ownActions.sort((a, b) => b.rank - a.rank);
-			ownActions = ownActions.filter(a => channels.get(a.channelName).getCurrentPrice() < this.maxPrice); // filter by price
+			ownActions = ownActions.filter(a => channelInferences.get(a.channelName).channel.getCurrentPrice() < this.maxPrice);
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}
 
@@ -518,28 +512,28 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Set OUT allocation for channels not in actionsMap (no brain prediction)
+	 * Set OUT allocation for channels without predictions
 	 * Channels with shares but no data still need OUT allocation so they can be sold using lastKnownPrice
 	 */
-	static setMissingChannelAllocations(channels, allocations) {
-		for (const [channelName, channel] of channels)
+	static setMissingChannelAllocations(channelInferences, allocations) {
+		for (const [channelName, { channel }] of channelInferences)
 			if (!allocations.has(channelName) && (channel.hasData || channel.shares > 0))
 				allocations.set(channelName, { action: POSITION_OUT, amount: 0 });
 	}
 
 	/**
 	 * Generate action plan based on differential between ideal allocations and current holdings
-	 * @param {Map<string, StockChannel>} channels - Map of channel name to channel instance
+	 * @param {Map<string, { channel, actions, events }>} channelInferences - Map of channel name to channel data
 	 * @param {Map} allocations - Map of channel name to { action, amount } allocation
 	 * @returns {Object} - Action plan with { sells: [...], buys: [...] }
 	 */
-	static getActionPlan(channels, allocations) {
+	static getActionPlan(channelInferences, allocations) {
 		const sells = [];
 		const buys = [];
 		const state = { remainingCash: this.cash, cheapestOwnChannel: null };
 
 		for (const [channelName, allocation] of allocations) {
-			const channel = channels.get(channelName);
+			const { channel } = channelInferences.get(channelName);
 
 			// brain wants out - sell all shares if we have any
 			if (allocation.action === POSITION_OUT) {
