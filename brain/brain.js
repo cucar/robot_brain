@@ -303,7 +303,7 @@ export default class Brain {
 		for (const [channelName, channel] of this.thalamus.getChannels()) {
 
 			// Get the frame event inputs from the channel
-			const channelEvents = await channel.getFrameEvents();
+			const channelEvents = await channel.getFrameEvents(this.frameNumber);
 			for (const event of channelEvents)
 				this.frame.push({ coordinates: event, channel: channelName, type: 'event' });
 
