@@ -115,7 +115,7 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Find all valid intervals where ALL stocks have non-zero volume data
+	 * Find all intervals where at least one stock has data
 	 * By default only includes regular trading hours (9:30 AM - 4:00 PM ET)
 	 * With extendedHours option, includes pre-market and after-hours data
 	 * @param {Map<string, Map<string, {open: number, volume: number}>>} allBarMaps - Map of symbol -> barMap
@@ -123,34 +123,17 @@ export default class StockTestJob extends Job {
 	 */
 	findValidIntervals(allBarMaps) {
 
-		const useExtendedHours = this.config.extendedHours;
-
 		// Collect all unique intervals from all stocks (filtered by hours setting)
-		const allIntervals = new Set();
+		// Alpaca only returns bars with actual trading data (non-zero values)
+		const intervals = new Set();
 		for (const barMap of allBarMaps.values())
 			for (const timestamp of barMap.keys())
-				if (useExtendedHours || this.isRegularHours(new Date(timestamp + ':00Z')))
-					allIntervals.add(timestamp);
+				if (this.config.extendedHours || this.isRegularHours(new Date(timestamp + ':00Z')))
+					intervals.add(timestamp);
 
-		// Filter to only intervals where ALL stocks have valid data (non-zero price and volume)
-		const validIntervals = new Set();
-		for (const interval of allIntervals) {
-			let allStocksHaveData = true;
-			for (const barMap of allBarMaps.values()) {
-				const bar = barMap.get(interval);
-				// Must have bar with non-zero price AND non-zero volume
-				if (!bar || bar.open === 0 || bar.volume === 0) {
-					allStocksHaveData = false;
-					break;
-				}
-			}
-			if (allStocksHaveData)
-				validIntervals.add(interval);
-		}
-
-		const hoursLabel = useExtendedHours ? 'extended hours' : 'regular hours';
-		console.log(`   Found ${validIntervals.size} valid intervals (out of ${allIntervals.size} ${hoursLabel}) where all stocks have data`);
-		return validIntervals;
+		const hoursLabel = this.config.extendedHours ? 'extended hours' : 'regular hours';
+		console.log(`   Found ${intervals.size} valid intervals (${hoursLabel}) where at least one stock has data`);
+		return intervals;
 	}
 
 	/**
@@ -207,11 +190,10 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Extract bars only for intervals where ALL stocks have data
-	 * No gap filling - only real data is included
+	 * Extract bars for all valid intervals, using -1,-1 placeholder for missing data
 	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
 	 * @param {Set<string>} validIntervals - Set of valid interval timestamps (YYYY-MM-DDTHH:MM format)
-	 * @returns {Array<{open: number, volume: number}>} Array of bars for valid intervals only
+	 * @returns {Array<{open: number, volume: number}>} Array of bars for valid intervals (-1,-1 for missing)
 	 */
 	extractValidIntervals(barMap, validIntervals) {
 
@@ -222,7 +204,7 @@ export default class StockTestJob extends Job {
 		const result = [];
 		for (const interval of sortedIntervals) {
 			const bar = barMap.get(interval);
-			if (bar) result.push({ open: bar.open, volume: bar.volume });
+			if (bar) result.push({ open: bar.open || -1, volume: bar.volume || -1 });
 		}
 
 		return result;

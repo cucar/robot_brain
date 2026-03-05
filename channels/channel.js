@@ -101,8 +101,9 @@ export class Channel {
 	/**
 	 * Get frame events data - override in subclasses
 	 * Returns array of input neuron objects: [{ [input-dim]: value }]
+	 * @param {number} frameNumber - Current frame number (1-indexed)
 	 */
-	async getFrameEvents() {
+	async getFrameEvents(frameNumber) {
 		throw new Error('Channel must implement getFrameEvents() method');
 	}
 

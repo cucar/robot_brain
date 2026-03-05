@@ -168,6 +168,11 @@ export class StockChannel extends Channel {
 	}
 
 	/**
+	 * Whether current frame has valid data (not a placeholder)
+	 */
+	get hasData() { return this.previousPrice === null || this.currentPrice !== null; }
+
+	/**
 	 * Reads the next data row from the prepared dataset - returns true if we should continue to process
 	 */
 	readNextRow() {
@@ -179,10 +184,10 @@ export class StockChannel extends Channel {
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
 
-		// get the new row and update price/volume
+		// get the new row and update price/volume (-1 means no data)
 		const row = this.trainingData[this.trainingRow++];
-		this.currentPrice = row.price;
-		this.currentVolume = row.volume;
+		this.currentPrice = row.price === -1 ? null : row.price;
+		this.currentVolume = row.volume === -1 ? null : row.volume;
 
 		// return true to indicate that we have more data
 		return true;
@@ -242,7 +247,7 @@ export class StockChannel extends Channel {
 	/**
 	 * Get frame input data for this stock channel
 	 */
-	getFrameEvents() {
+	getFrameEvents(frameNumber) {
 
 		// currently only the training mode is implemented
 		if (this.trainingData === null) throw new Error(`${this.symbol}: live mode not implemented yet.`);
@@ -251,7 +256,10 @@ export class StockChannel extends Channel {
 		if (!this.readNextRow()) return [];
 
 		// if this is the first frame, read another row so that we can start sending change stats
-		if (this.previousPrice === null || this.previousVolume === null) this.readNextRow();
+		if (frameNumber === 1) this.readNextRow();
+
+		// if the channel does not have any data in this frame, nothing to report
+		if (!this.hasData) return [];
 
 		// Compute and return discretized changes
 		return this.computeChangeInputs();
@@ -264,6 +272,9 @@ export class StockChannel extends Channel {
 	 * - Not owned: positive if price went down (good timing), negative if price went up (missed opportunity)
 	 */
 	async getRewards() {
+
+		// No data for this frame - no reward
+		if (!this.hasData) return 0;
 
 		// Need both current and previous price for calculation
 		if (this.currentPrice === null || this.previousPrice === null) return 0;
@@ -353,6 +364,13 @@ export class StockChannel extends Channel {
 	 * @param {Map<string, Array>} eventsMap - Map of channel name to event inference data
 	 */
 	static async executeChannelActions(channels, actionsMap, eventsMap) {
+
+		// Filter out channels without data (no price to trade at)
+		for (const channelName of new Set([...actionsMap.keys(), ...eventsMap.keys()]))
+			if (!channels.get(channelName).hasData) {
+				actionsMap.delete(channelName);
+				eventsMap.delete(channelName);
+			}
 
 		// nothing to do if there are no actions
 		if (actionsMap.size === 0) return;
@@ -490,8 +508,8 @@ export class StockChannel extends Channel {
 	 * Set OUT allocation for channels not in actionsMap (no brain prediction)
 	 */
 	static setMissingChannelAllocations(channels, allocations) {
-		for (const [channelName] of channels)
-			if (!allocations.has(channelName))
+		for (const [channelName, channel] of channels)
+			if (!allocations.has(channelName) && channel.hasData)
 				allocations.set(channelName, { action: POSITION_OUT, amount: 0 });
 	}
 
