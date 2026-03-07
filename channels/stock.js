@@ -478,7 +478,7 @@ export class StockChannel extends Channel {
 			// Get the predicted price change bucket value (1 = down, 2 = up)
 			// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell
 			const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
-			allActions.push({ channelName, rank: priceEvent.reward, isOwn: bucketValue === 2 });
+			allActions.push({ channelName, rank: priceEvent.strength / channel.getCurrentPrice(), isOwn: bucketValue === 2 });
 		}
 
 		return allActions;
