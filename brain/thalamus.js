@@ -182,10 +182,10 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get portfolio metrics by detecting distinct channel classes and calling their static methods
-	 * @returns {Object|null} - Portfolio metrics or null if not applicable
+	 * Get aggregate metrics by detecting distinct channel classes and calling their static methods
+	 * @returns {Object|null} - Aggregate metrics keyed by channel class name, or null if none
 	 */
-	getPortfolioMetrics() {
+	getAggregateMetrics() {
 		if (this.channels.size === 0) return null;
 
 		// Group channels by their class constructor
@@ -196,16 +196,17 @@ export class Thalamus {
 			channelsByClass.get(ChannelClass).set(channelName, channel);
 		}
 
-		// Call static getPortfolioMetrics on each channel class that has it
-		const portfolioMetrics = {};
+		// Call static getAggregateMetrics on each channel class
+		const aggregateMetrics = {};
 		for (const [ChannelClass, channelsOfType] of channelsByClass) {
-			if (ChannelClass.getPortfolioMetrics) {
+			const metrics = ChannelClass.getAggregateMetrics(channelsOfType);
+			if (metrics) {
 				const className = ChannelClass.name;
-				portfolioMetrics[className] = ChannelClass.getPortfolioMetrics(channelsOfType);
+				aggregateMetrics[className] = metrics;
 			}
 		}
 
-		return Object.keys(portfolioMetrics).length > 0 ? portfolioMetrics : null;
+		return Object.keys(aggregateMetrics).length > 0 ? aggregateMetrics : null;
 	}
 
 	/**
@@ -291,9 +292,12 @@ export class Thalamus {
 			channelActions.set(channelName, actionNeurons);
 			if (this.debug) console.log(`Created ${actionNeurons.size} action neurons for ${channelName}`);
 
-			// set the default action for the channel
-			const defaultAction = this.getNeuronForPoint(channel.getDefaultAction(), channelName, 'action');
-			this.channelDefaultActions.set(channelName, defaultAction);
+			// set the default action for the channel (if one exists)
+			const defaultActionCoords = channel.getDefaultAction();
+			if (defaultActionCoords !== null) {
+				const defaultAction = this.getNeuronForPoint(defaultActionCoords, channelName, 'action');
+				this.channelDefaultActions.set(channelName, defaultAction);
+			}
 		}
 
 		// set channel actions for exploration

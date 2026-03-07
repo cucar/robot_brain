@@ -2,92 +2,121 @@ import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 
 /**
- * Text Channel - Handles character input and character output (like typing/speaking)
- * Input: characters being read/heard
- * Output: characters to type/speak
- * Feedback: language comprehension/generation rewards
+ * Text Channel - Handles character input for text sequence learning
+ * Input: characters being read (ASCII codes)
+ * Output: none for now (event inference only)
+ * Goal: Test if brain can memorize and predict character sequences
  */
 export class TextChannel extends Channel {
 
-	constructor(name, pattern = 'cats', dimensions = null) {
-		super(name);
+	/**
+	 * Constructor for text channel - dimensions are given when loading from database
+	 */
+	constructor(name, debug, id = null, dimensions = null) {
+		super(name, debug, id);
 
-		// Pattern to learn (can be set from job)
-		this.pattern = pattern;
+		// Initialize dimensions
+		this.initializeDimensions(dimensions);
 
-		this.currentLetterIndex = 0;
-		this.patternIterations = 0;
-		this.maxIterations = 10;
+		// Training data / mode (set by setTraining)
+		this.trainingData = null;
+		this.trainingIndex = 0;
 
-		// Create or use provided dimension objects for this channel
-		if (dimensions) {
+		// Initialize context
+		this.resetContext();
+	}
+
+	/**
+	 * Initialize dimensions - dimensions are given when loading from database
+	 */
+	initializeDimensions(dimensions) {
+		if (dimensions && dimensions.length > 0) {
 			// Loading from database - use provided dimensions
-			this.charInputDim = dimensions.find(d => d.name === 'char_input');
-
-			// Validate all required dimensions exist
-			if (!this.charInputDim)
-				throw new Error(`TextChannel ${name}: Missing required dimensions in database`);
-		} else {
+			this.charDim = dimensions.find(d => d.name === `${this.name}_char`);
+			if (!this.charDim)
+				throw new Error(`TextChannel ${this.name}: Missing required dimensions in database`);
+		}
+		else {
 			// New channel - create dimensions with auto-increment IDs
-			this.charInputDim = new Dimension('char_input');
+			this.charDim = new Dimension(`${this.name}_char`);
 		}
 	}
 
 	/**
-	 * we only have one character input at a time
+	 * Set training data for this channel - switches channel to training mode
+	 * @param {string} text - Text string to train on
+	 * @param {number} iterations - Number of times to repeat the text
 	 */
-	getEventDimensions() {
-		return [ this.charInputDim ];
+	setTraining(text, iterations = 1) {
+		// Repeat the text for the specified number of iterations
+		this.trainingData = text.repeat(iterations);
+		this.trainingIndex = 0;
 	}
 
 	/**
-	 * text channel does not need any outputs - for now we are simply mimicking the inputs
-	 * in the future, we may want to generate text based on conscious thoughts - we would add it then
-	 * @returns {*[]}
+	 * Reset channel state for new episode (keeps learned patterns but resets reading state)
+	 */
+	resetContext() {
+		this.trainingIndex = 0;
+	}
+
+	/**
+	 * Returns the input dimensions for the channel
+	 */
+	getEventDimensions() {
+		return [this.charDim];
+	}
+
+	/**
+	 * Returns the output dimensions for the channel - none for now
 	 */
 	getActionDimensions() {
 		return [];
 	}
 
 	/**
-	 * Get character input data
+	 * Get frame event data for this text channel
+	 * @param {number} frameNumber - Current frame number (1-indexed)
 	 */
-	async getFrameEvents() {
+	getFrameEvents(frameNumber) {
+		if (this.trainingData === null)
+			throw new Error(`${this.name}: Training data not set. Call setTraining() first.`);
 
-		// Stop if we have reached the maximum number of iterations
-		if (this.patternIterations >= this.maxIterations) return [];
+		// Return empty if all characters consumed
+		if (this.trainingIndex >= this.trainingData.length)
+			return [];
 
-		// Reset to next iteration if current pattern is finished
-		if (this.currentLetterIndex >= this.pattern.length) {
-			this.currentLetterIndex = 0;
-			this.patternIterations++;
-			if (this.patternIterations >= this.maxIterations) return [];
-		}
+		// Read current character and use ASCII code for dimension value
+		const char = this.trainingData[this.trainingIndex++];
+		const charCode = char.charCodeAt(0);
+		if (this.debug)
+			console.log(`${this.name}: Frame ${frameNumber} - char '${char}' (${charCode})`);
 
-		// Use ASCII code for dimension value of the base neuron
-		const charValue = this.pattern[this.currentLetterIndex].charCodeAt(0);
-
-		// advance to next letter
-		this.currentLetterIndex++;
-
-		// Return character input neuron
-		return [ { char_input: charValue } ];
+		return [{ [`${this.name}_char`]: charCode }];
 	}
 
 	/**
-	 * Get feedback based on character prediction accuracy
+	 * Get feedback - neutral for text channel (no actions)
 	 */
 	async getRewards() {
-		return 1.0; // Neutral - no feedback for now since this is simply mimicking the input
+		return 0; // Neutral - no actions to reward
 	}
 
 	/**
-	 * Execute character output based on brain predictions
-	 * Returns final frame points (inputs only, since text channel has no outputs)
+	 * Execute outputs - text channel has no outputs for now
 	 */
-	async executeOutputs(inputs, outputs) {
-		// Text channel has no outputs - just return inputs as-is
-		return inputs;
+	async executeOutputs() {
+		// No outputs to execute
+	}
+
+	/**
+	 * Get short state display for frame summary
+	 * Shows current progress through the text
+	 * @returns {string|null} - Progress display or null if no training data
+	 */
+	getStateDisplay() {
+		if (!this.trainingData) return null;
+		return `${this.name}:${this.trainingIndex}/${this.trainingData.length}`;
 	}
 
 	/**
@@ -95,13 +124,12 @@ export class TextChannel extends Channel {
 	 * @returns {Object} - Text channel metrics
 	 */
 	getMetrics() {
+		const totalChars = this.trainingData ? this.trainingData.length : 0;
 		return {
 			...super.getMetrics(),
-			pattern: this.pattern,
-			currentLetterIndex: this.currentLetterIndex,
-			patternIterations: this.patternIterations,
-			maxIterations: this.maxIterations,
-			progress: `${this.patternIterations}/${this.maxIterations} iterations`
+			totalChars,
+			currentIndex: this.trainingIndex,
+			progress: totalChars > 0 ? `${this.trainingIndex}/${totalChars}` : 'N/A'
 		};
 	}
 }

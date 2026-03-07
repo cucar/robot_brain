@@ -19,7 +19,7 @@ export default class Brain {
 		this.maxLevels = 150; // just to prevent against infinite recursion
 
 		// forget cycle parameters - very important - fights curse of dimensionality
-		this.forgetCycles = 10; // number of frames between forget cycles (increased to let connections stabilize)
+		this.forgetCycles = 2000; // number of frames between forget cycles (increased to let connections stabilize)
 		this.frameNumber = 0;
 
 		// Debugging info and flags
@@ -207,14 +207,14 @@ export default class Brain {
 
 	/**
 	 * Get episode summary with all diagnostic information
-	 * @returns {Object} - Episode summary with accuracy, channel metrics, and portfolio metrics
+	 * @returns {Object} - Episode summary with accuracy, channel metrics, and aggregate metrics
 	 */
 	getEpisodeSummary() {
 		return {
 			frameNumber: this.frameNumber,
 			accuracy: this.diagnostics.accuracyStats,
 			channelMetrics: this.thalamus.getChannelMetrics(),
-			portfolioMetrics: this.thalamus.getPortfolioMetrics()
+			aggregateMetrics: this.thalamus.getAggregateMetrics()
 		};
 	}
 
@@ -640,8 +640,11 @@ export default class Brain {
 		for (const [channelName] of this.thalamus.getChannels()) {
 			if (channelsWithActions.has(channelName)) continue;
 
-			// No action inferred for this channel - use the default action for deterministic exploration
+			// Skip channels that have no actions defined
 			const explorationAction = this.thalamus.getChannelDefaultAction(channelName);
+			if (!explorationAction) continue;
+
+			// No action inferred for this channel - use the default action for deterministic exploration
 			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0, reward: 0 });
 		}
 	}

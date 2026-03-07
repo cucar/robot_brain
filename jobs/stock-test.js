@@ -401,12 +401,12 @@ export default class StockTestJob extends Job {
 	 * Collect profit/loss results from all channels
 	 */
 	collectEpisodeResults(episodeMetrics) {
-		// Get portfolio-level metrics from brain (via thalamus)
-		const allPortfolioMetrics = this.brain.getEpisodeSummary().portfolioMetrics;
-		const portfolioMetrics = allPortfolioMetrics ? allPortfolioMetrics.StockChannel : null;
+		// Get aggregate metrics from brain (via thalamus)
+		const allAggregateMetrics = this.brain.getEpisodeSummary().aggregateMetrics;
+		const stockMetrics = allAggregateMetrics ? allAggregateMetrics.StockChannel : null;
 
-		if (!portfolioMetrics) {
-			console.error('Warning: getPortfolioMetrics returned null');
+		if (!stockMetrics) {
+			console.error('Warning: getAggregateMetrics returned null for StockChannel');
 			episodeMetrics.netProfit = 0;
 			episodeMetrics.totalROI = 1;
 			episodeMetrics.totalROIPercent = 0;
@@ -414,10 +414,10 @@ export default class StockTestJob extends Job {
 		}
 
 		// Store portfolio profit
-		episodeMetrics.netProfit = portfolioMetrics.totalProfit;
+		episodeMetrics.netProfit = stockMetrics.totalProfit;
 
 		// Calculate ROI metrics
-		const finalValue = StockChannel.initialCapital + portfolioMetrics.totalProfit;
+		const finalValue = StockChannel.initialCapital + stockMetrics.totalProfit;
 		const totalROI = finalValue / StockChannel.initialCapital;
 		episodeMetrics.totalROI = totalROI;
 		episodeMetrics.totalROIPercent = (totalROI - 1) * 100;

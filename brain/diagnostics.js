@@ -12,7 +12,6 @@ export class Diagnostics {
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 };
-		this.previousProfit = 0;
 
 		// Flags
 		this.debug = debug;
@@ -449,27 +448,22 @@ export class Diagnostics {
 			mapeDisplay = `${avgMAPE}% (${this.continuousPredictionMetrics.count})`;
 		}
 
-		// Get holdings display - show which stocks are being held
-		let holdingsDisplay = 'None';
-		const holdings = [];
+		// Get state display from all channels
+		const stateDisplays = [];
 		for (const [_, channel] of channels) {
-			const info = channel.getHoldingsInfo();
-			if (info.shares > 0) holdings.push(info);
+			const display = channel.getStateDisplay();
+			if (display) stateDisplays.push(display);
 		}
-		if (holdings.length > 0) holdingsDisplay = holdings.map(h => `${h.symbol}:${h.shares}@$${h.price?.toFixed(2) ?? '?'}`).join(', ');
+		const stateDisplay = stateDisplays.length > 0 ? stateDisplays.join(', ') : 'None';
 
-		// Get portfolio metrics if any stock channels exist
-		let portfolioDisplay = '';
-		if (channels.length > 0 && channels[0][1].constructor.getPortfolioMetrics) {
-			const portfolioMetrics = channels[0][1].constructor.getPortfolioMetrics(channels);
-			const profitDelta = portfolioMetrics.totalProfit - this.previousProfit;
-			this.previousProfit = portfolioMetrics.totalProfit;
-			const totalPL = portfolioMetrics.totalProfit >= 0 ? '+' : '';
-			const deltaPL = profitDelta >= 0 ? '+' : '';
-			portfolioDisplay = ` | Cash:${portfolioMetrics.cash.toFixed(0)} | Holdings: ${holdingsDisplay} | P&L:${totalPL}${portfolioMetrics.totalProfit.toFixed(2)} (${deltaPL}${profitDelta.toFixed(2)})`;
+		// Get aggregate display from channel type if provided
+		let aggregateDisplay = '';
+		if (channels.length > 0) {
+			const display = channels[0][1].constructor.getAggregateDisplay(channels);
+			if (display) aggregateDisplay = ` | ${display}`;
 		}
 
 		if (this.frameSummary)
-			console.log(`Frame ${frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay}${portfolioDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+			console.log(`Frame ${frameNumber} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | State: ${stateDisplay}${aggregateDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
 	}
 }

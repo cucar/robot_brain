@@ -673,11 +673,11 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get portfolio-level metrics across all stock channels
-	 * @param {Array} channels - array of channel name to channel instance
-	 * @returns {Object} - Portfolio metrics including total profit and per-channel unrealized profit
+	 * Get aggregate metrics across all stock channels (portfolio metrics)
+	 * @param {Array} channels - array of [channelName, channel] pairs
+	 * @returns {Object} - Portfolio metrics including cash, investments, and total profit
 	 */
-	static getPortfolioMetrics(channels) {
+	static getAggregateMetrics(channels) {
 		let totalCurrentValue = 0;
 
 		for (const [_, channel] of channels)
@@ -691,6 +691,17 @@ export class StockChannel extends Channel {
 			totalInvestments: totalCurrentValue,
 			totalProfit
 		};
+	}
+
+	/**
+	 * Get aggregate display string for frame summary (portfolio P&L)
+	 * @param {Array} channels - array of [channelName, channel] pairs
+	 * @returns {string} - Formatted portfolio display
+	 */
+	static getAggregateDisplay(channels) {
+		const metrics = this.getAggregateMetrics(channels);
+		const totalPL = metrics.totalProfit >= 0 ? '+' : '';
+		return `Cash:${metrics.cash.toFixed(0)} | P&L:${totalPL}${metrics.totalProfit.toFixed(2)}`;
 	}
 
 	/**
@@ -753,15 +764,13 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get holdings information for display
-	 * @returns {Object} - { symbol: string, shares: number }
+	 * Get short state display for frame summary
+	 * Shows current holdings for this stock
+	 * @returns {string|null} - Holdings display or null if no shares
 	 */
-	getHoldingsInfo() {
-		return {
-			symbol: this.symbol,
-			shares: this.shares,
-			price: this.getCurrentPrice()
-		};
+	getStateDisplay() {
+		if (this.shares === 0) return null;
+		return `${this.symbol}:${this.shares}@$${this.getCurrentPrice()?.toFixed(2) ?? '?'}`;
 	}
 
 	/**
