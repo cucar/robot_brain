@@ -7,7 +7,7 @@ export class Memory {
 	constructor(debug) {
 
 		// memory hyperparameters
-		this.contextLength = 10; // number of frames a base neuron stays active
+		this.contextLength = 20; // number of frames a base neuron stays active
 
 		// Active context indexed by age: Array<Map<Neuron, {activatedPattern, votes, context}>>
 		// activeNeurons[0] = age 0 (newest), activeNeurons[n] = age n (older)
@@ -89,6 +89,17 @@ export class Memory {
 		const neuronsAtAge = this.activeNeurons[age];
 		const state = neuronsAtAge.get(parent);
 		state.activatedPattern = pattern;
+	}
+
+	/**
+	 * Clear per-frame saved votes and contexts before recollecting them.
+	 */
+	clearVotes() {
+		for (const neuronsAtAge of this.activeNeurons)
+			for (const state of neuronsAtAge.values()) {
+				state.votes = null;
+				state.context = null;
+			}
 	}
 
 	/**
@@ -222,7 +233,7 @@ export class Memory {
 	getVotersWithContext() {
 		const result = [];
 		for (let age = 1; age < this.activeNeurons.length; age++)
-			for (const [neuron, state] of this.activeNeurons[age])
+			for (const [neuron, state] of (this.activeNeurons[age] ?? new Map()))
 				if (state.votes && state.votes.length > 0)
 					result.push({ neuron, age, votes: state.votes, context: state.context });
 		return result;

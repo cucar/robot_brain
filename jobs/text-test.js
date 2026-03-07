@@ -13,19 +13,8 @@ export default class TextTestJob extends Job {
 
 		// Simple configuration - edit these values as needed
 		this.config = {
-			pattern: `Russia has provided Iran with information that can help Tehran strike US military, AP sources say
-SEUNG MIN KIM and AAMER MADHANI
-Updated Fri, March 6, 2026 at 11:13 AM PST
-4 min read
-Add Yahoo as a preferred source to see more of our stories on Google.
-Add Yahoo on Google
-
-
-5.9k
-
-Is Russia helping Iran in war against the U.S. and Israel?Scroll back up to restore default view.
-WASHINGTON (AP) — Russia has provided Iran with information that could`,              // Pattern to learn
-			maxEpisodes: 8,              // Number of training episodes
+			pattern: 'test123 Russia has provided Iran with information that can help WASHINGTON Russia has provided Iran with information that could',              // Pattern to learn
+			maxEpisodes: 5,              // Number of training episodes
 			iterationsPerEpisode: 1      // How many times to repeat pattern per episode
 		};
 

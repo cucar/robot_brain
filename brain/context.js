@@ -7,7 +7,7 @@ export class Context {
 	// Hyperparameters (shared with Neuron)
 	static maxStrength = 100;
 	static minStrength = 0;
-	static mergeThreshold = 0.5;
+	static mergeThreshold = 0.9;
 	static negativeReinforcement = 0.1;
 
 	constructor() {
