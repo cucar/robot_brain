@@ -11,7 +11,7 @@ select * from pattern_past where context_neuron_id = 106110;
 select * from neurons order by level desc;
 select * from base_neurons;
 select * from connections;
-select parent_neuron_id, pattern_neuron_id, strength from patterns order by parent_neuron_id, pattern_neuron_id;
+select parent_neuron_id, pattern_neuron_id from patterns order by parent_neuron_id, pattern_neuron_id;
 select * from patterns where pattern_neuron_id = 159;
 select * from pattern_past where context_neuron_id = 159;
 select * from pattern_past where context_neuron_id = 1632;

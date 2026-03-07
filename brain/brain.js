@@ -19,7 +19,7 @@ export default class Brain {
 		this.maxLevels = 150; // just to prevent against infinite recursion
 
 		// forget cycle parameters - very important - fights curse of dimensionality
-		this.forgetCycles = 2000; // number of frames between forget cycles (increased to let connections stabilize)
+		this.forgetCycles = 500; // number of frames between forget cycles (increased to let connections stabilize)
 		this.frameNumber = 0;
 
 		// Debugging info and flags
@@ -213,6 +213,7 @@ export default class Brain {
 		return {
 			frameNumber: this.frameNumber,
 			accuracy: this.diagnostics.accuracyStats,
+			mispredictions: this.diagnostics.mispredictions,
 			channelMetrics: this.thalamus.getChannelMetrics(),
 			aggregateMetrics: this.thalamus.getAggregateMetrics()
 		};

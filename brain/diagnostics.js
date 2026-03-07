@@ -12,6 +12,7 @@ export class Diagnostics {
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 };
+		this.mispredictions = []; // Array of { predicted: coordinates, actual: coordinates, channel }
 
 		// Flags
 		this.debug = debug;
@@ -39,6 +40,7 @@ export class Diagnostics {
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 };
+		this.mispredictions = [];
 	}
 
 	/**
@@ -345,12 +347,13 @@ export class Diagnostics {
 			// Track event prediction accuracy
 			if (neuron.type === 'event') {
 				eventTotal++;
-				if (neuronsAtAge0.has(neuron)) eventCorrect++;
+				const isCorrect = neuronsAtAge0.has(neuron);
+				if (isCorrect) eventCorrect++;
 
 				// Group for continuous error calculation
 				if (!predictionsByChannel.has(neuron.channel))
 					predictionsByChannel.set(neuron.channel, []);
-				predictionsByChannel.get(neuron.channel).push({ neuron, strength });
+				predictionsByChannel.get(neuron.channel).push({ neuron, strength, isCorrect });
 			}
 			// Track action reward from the action's channel
 			else if (neuron.type === 'action') {
@@ -366,6 +369,24 @@ export class Diagnostics {
 			if (!actualsByChannel.has(neuron.channel))
 				actualsByChannel.set(neuron.channel, []);
 			actualsByChannel.get(neuron.channel).push(neuron);
+		}
+
+		// Track mispredictions for each channel
+		for (const [channelName] of channels) {
+			const predictions = predictionsByChannel.get(channelName) || [];
+			const actuals = actualsByChannel.get(channelName) || [];
+
+			// Find wrong predictions
+			for (const { neuron, isCorrect } of predictions) {
+				if (!isCorrect && actuals.length > 0) {
+					// Record the misprediction with predicted and actual coordinates
+					this.mispredictions.push({
+						channel: channelName,
+						predicted: neuron.coordinates,
+						actual: actuals[0].coordinates // Take first actual neuron's coordinates
+					});
+				}
+			}
 		}
 
 		// Calculate continuous prediction errors for each channel

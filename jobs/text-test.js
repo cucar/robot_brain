@@ -13,9 +13,20 @@ export default class TextTestJob extends Job {
 
 		// Simple configuration - edit these values as needed
 		this.config = {
-			pattern: 'i don\'t like green eggs and ham. i do not like them, sam-i-am.',              // Pattern to learn
-			maxEpisodes: 10,              // Number of training episodes
-			iterationsPerEpisode: 10      // How many times to repeat pattern per episode
+			pattern: `Russia has provided Iran with information that can help Tehran strike US military, AP sources say
+SEUNG MIN KIM and AAMER MADHANI
+Updated Fri, March 6, 2026 at 11:13 AM PST
+4 min read
+Add Yahoo as a preferred source to see more of our stories on Google.
+Add Yahoo on Google
+
+
+5.9k
+
+Is Russia helping Iran in war against the U.S. and Israel?Scroll back up to restore default view.
+WASHINGTON (AP) — Russia has provided Iran with information that could`,              // Pattern to learn
+			maxEpisodes: 8,              // Number of training episodes
+			iterationsPerEpisode: 1      // How many times to repeat pattern per episode
 		};
 
 		// Training metrics
@@ -151,6 +162,47 @@ export default class TextTestJob extends Job {
 			? `${episodeMetrics.baseAccuracy.toFixed(2)}%`
 			: 'N/A';
 		console.log(`✅ Accuracy: ${accStr} (${frameCount} frames, ${duration}ms)`);
+
+		// Show mispredictions if any
+		this.showMispredictions(summary.mispredictions);
+	}
+
+	/**
+	 * Convert ASCII code to displayable character
+	 */
+	charFromCode(code) {
+		if (code === 32) return '␣'; // Space
+		if (code === 10) return '↵'; // Newline
+		if (code === 9) return '→';  // Tab
+		if (code < 32) return `\\x${code.toString(16).padStart(2, '0')}`; // Control chars
+		return String.fromCharCode(code);
+	}
+
+	/**
+	 * Show mispredictions for the episode
+	 */
+	showMispredictions(mispredictions) {
+		if (!mispredictions || mispredictions.length === 0) return;
+
+		// Group and dedupe mispredictions by predicted→actual pair
+		const grouped = new Map();
+		for (const m of mispredictions) {
+			const predChar = Object.values(m.predicted)[0];
+			const actualChar = Object.values(m.actual)[0];
+			const key = `${predChar}→${actualChar}`;
+			grouped.set(key, (grouped.get(key) || 0) + 1);
+		}
+
+		// Format as readable string
+		const items = [];
+		for (const [key, count] of grouped) {
+			const [pred, actual] = key.split('→').map(Number);
+			const predStr = this.charFromCode(pred);
+			const actualStr = this.charFromCode(actual);
+			items.push(`'${predStr}'→'${actualStr}'${count > 1 ? `(×${count})` : ''}`);
+		}
+
+		console.log(`   ❌ Mispredictions: ${items.join(', ')}`);
 	}
 
 	/**
