@@ -26,11 +26,11 @@ export default class StockTestJob extends Job {
 				'CVX', 'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA',
 				'INTC', 'CRM', 'ORCL', 'IBM', 'CSCO', 'TGT', 'HD', 'MCD', 'NKE', 'SBUX',
 				'ABBV', 'MRK', 'BMY', 'LLY', 'GILD', 'SLB', 'OXY', 'FCX', 'MOS', 'CLF',
-				'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
-				'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
-				'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
-				'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', /* 'COIN', */
-				'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
+				// 'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
+				// 'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
+				// 'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
+				// 'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', /* 'COIN', */
+				// 'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
 			startDate: '2021-02-22',             // Start date for data download
