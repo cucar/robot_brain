@@ -70,6 +70,7 @@ if (process.argv[2]) {
 		diagnostic: process.argv.includes('--diagnostic'),
 		database: process.argv.includes('--database'),
 		debug: process.argv.includes('--debug'),
+		wait: process.argv.includes('--wait'),
 		noSummary: process.argv.includes('--no-summary'),
 		reset: process.argv.includes('--reset'),
 		actionTrading: process.argv.includes('--action-trading'),

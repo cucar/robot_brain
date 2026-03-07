@@ -19,7 +19,7 @@ export default class Brain {
 		this.maxLevels = 150; // just to prevent against infinite recursion
 
 		// forget cycle parameters - very important - fights curse of dimensionality
-		this.forgetCycles = 500; // number of frames between forget cycles (increased to let connections stabilize)
+		this.forgetCycles = 1000; // number of frames between forget cycles (increased to let connections stabilize)
 		this.frameNumber = 0;
 
 		// Debugging info and flags
@@ -27,7 +27,7 @@ export default class Brain {
 		this.database = options.database; // skip database backup/restore for tests
 		this.diagnostic = options.diagnostic; // diagnostic mode - shows detailed inference/conflict resolution info
 		this.frameSummary = !options.noSummary; // show frame summary or not
-		this.waitForUserInput = options.debug;
+		this.waitForUserInput = options.wait;
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
@@ -525,6 +525,9 @@ export default class Brain {
 	 */
 	collectVotes() {
 		const votes = [];
+
+		// clear the previous votes before setting new ones
+		this.memory.clearVotes();
 
 		// Build all contexts once for all ages/levels
 		const contexts = this.memory.getContexts();
