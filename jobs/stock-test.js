@@ -26,11 +26,11 @@ export default class StockTestJob extends Job {
 				'CVX', 'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA',
 				'INTC', 'CRM', 'ORCL', 'IBM', 'CSCO', 'TGT', 'HD', 'MCD', 'NKE', 'SBUX',
 				'ABBV', 'MRK', 'BMY', 'LLY', 'GILD', 'SLB', 'OXY', 'FCX', 'MOS', 'CLF',
-				// 'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
-				// 'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
-				// 'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
-				// 'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', /* 'COIN', */
-				// 'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
+				'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
+				'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
+				'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
+				'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', 'COIN',
+				'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
 			startDate: '2021-02-22',             // Start date for data download
@@ -203,23 +203,39 @@ export default class StockTestJob extends Job {
 		// Sort valid intervals chronologically
 		const sortedIntervals = Array.from(validIntervals).sort();
 
+		// Find the first available price (for filling gaps at the beginning)
+		const firstKnownPrice = this.findFirstKnownPrice(symbol, barMap, sortedIntervals);
+
 		// Extract bars for each valid interval
-		// For missing data: use last known price with 0 volume (fires "flat" event)
+		// For missing data at beginning: use first known price (fill from future)
+		// For missing data in middle/end: use last known price (fill from past)
 		const result = [];
-		let lastKnownPrice = null;
+		let lastKnownPrice = firstKnownPrice;
 		for (const interval of sortedIntervals) {
 			const bar = barMap.get(interval);
 			if (bar) {
 				lastKnownPrice = bar.open;
 				result.push({ open: bar.open, volume: bar.volume });
 			}
-			else {
-				if (!lastKnownPrice) throw new Error(`No last known price: ${symbol}`);
-				result.push({ open: lastKnownPrice, volume: 0 });
-			}
+			else result.push({ open: lastKnownPrice, volume: 0 });
 		}
 
 		return result;
+	}
+
+	/**
+	 * Find the first available price for a symbol in the valid intervals
+	 * @param {string} symbol - Stock symbol (for error messages)
+	 * @param {Map<string, {open: number, volume: number}>} barMap - Map of timestamp -> bar data
+	 * @param {string[]} sortedIntervals - Chronologically sorted interval timestamps
+	 * @returns {number} First available price
+	 */
+	findFirstKnownPrice(symbol, barMap, sortedIntervals) {
+		for (const interval of sortedIntervals) {
+			const bar = barMap.get(interval);
+			if (bar) return bar.open;
+		}
+		throw new Error(`No data at all for: ${symbol}`);
 	}
 
 	/**
