@@ -171,7 +171,7 @@ export class StockChannel extends Channel {
 	/**
 	 * Whether current frame has valid data (not a placeholder)
 	 */
-	get hasData() { return this.previousPrice === null || this.currentPrice !== null; }
+	get hasData() { return this.previousPrice !== null && this.currentPrice !== null && this.currentVolume > 0; }
 
 	/**
 	 * Reads the next data row from the prepared dataset - returns true if we should continue to process
@@ -516,8 +516,8 @@ export class StockChannel extends Channel {
 	 * Channels with shares but no data still need OUT allocation so they can be sold using lastKnownPrice
 	 */
 	static setMissingChannelAllocations(channelInferences, allocations) {
-		for (const [channelName, { channel }] of channelInferences)
-			if (!allocations.has(channelName) && (channel.hasData || channel.shares > 0))
+		for (const [channelName] of channelInferences)
+			if (!allocations.has(channelName))
 				allocations.set(channelName, { action: POSITION_OUT, amount: 0 });
 	}
 

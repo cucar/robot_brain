@@ -33,7 +33,7 @@ export default class StockTestJob extends Job {
 				'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 			],
 			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
-			startDate: '2021-02-22',             // Start date for data download
+			startDate: '2026-01-22',             // Start date for data download
 			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
