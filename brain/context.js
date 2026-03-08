@@ -7,7 +7,7 @@ export class Context {
 	// Hyperparameters (shared with Neuron)
 	static maxStrength = 100;
 	static minStrength = 0;
-	static mergeThreshold = 0.9;
+	static mergeThreshold = 0.5;
 	static negativeReinforcement = 0.1;
 
 	constructor() {
@@ -75,6 +75,25 @@ export class Context {
 	}
 
 	/**
+	 * Materialize lazy decay for all entries using the owner's activation frame.
+	 */
+	materialize(patternLastActivationFrame, currentFrame, rate) {
+		const decay = (currentFrame - patternLastActivationFrame) * rate;
+		if (decay <= 0) return [];
+
+		const toDelete = [];
+		for (const [neuron, distanceMap] of this.entries)
+			for (const [distance, strength] of distanceMap) {
+				const effectiveStrength = Math.max(Context.minStrength, strength - decay);
+				if (effectiveStrength <= 0) toDelete.push({ neuron, distance });
+				else distanceMap.set(distance, effectiveStrength);
+			}
+
+		// return the entries that can be deleted
+		return toDelete;
+	}
+
+	/**
 	 * Remove an entry.
 	 */
 	remove(neuron, distance) {
@@ -94,27 +113,44 @@ export class Context {
 	}
 
 	/**
-	 * Match this known context against an observed context.
-	 * Returns match result with score, or null if below threshold.
-	 * @param {Context} observed - The observed context to match against
-	 * @returns {Object|null} { score, common, missing, novel } or null
+	 * Get entries with effective strengths after lazy decay applied. Filters out entries that have decayed to zero.
 	 */
-	match(observed) {
-		if (this.size === 0) return null;
-
-		const common = [];
-		const missing = [];
-
-		// Check each entry in this known context and add to common or missing
+	getEffectiveEntries(patternLastActivationFrame, currentFrame, decayRate) {
+		const decay = (currentFrame - patternLastActivationFrame) * decayRate;
+		const result = [];
 		for (const [neuron, distanceMap] of this.entries)
 			for (const [distance, strength] of distanceMap) {
-				const entry = { neuron, distance, strength };
-				if (observed.hasKey(neuron, distance)) common.push(entry);
-				else missing.push(entry);
+				const effectiveStrength = Math.max(Context.minStrength, strength - decay);
+				if (effectiveStrength > 0) result.push({ neuron, distance, strength: effectiveStrength });
 			}
+		return result;
+	}
+
+	/**
+	 * Match this known context against an observed context.
+	 * Returns match result with score, or null if below threshold.
+	 * Uses effective strengths (with lazy decay applied) for scoring.
+	 * @param {Context} observed - The observed context to match against
+	 * @param {number} patternLastActivationFrame - When the owning pattern was last activated
+	 * @param {number} currentFrame - Current frame number for lazy decay
+	 * @param {number} decayRate - decay rate to use for lazy decay
+	 * @returns {Object|null} { score, common, missing, novel } or null
+	 */
+	match(observed, patternLastActivationFrame, currentFrame, decayRate) {
+
+		// Get entries with decay applied, filtering out zero-strength
+		const effectiveEntries = this.getEffectiveEntries(patternLastActivationFrame, currentFrame, decayRate);
+		if (effectiveEntries.length === 0) return null;
+
+		// Categorize into common (present in observed) and missing (not present)
+		const common = [];
+		const missing = [];
+		for (const entry of effectiveEntries)
+			if (observed.hasKey(entry.neuron, entry.distance)) common.push(entry);
+			else missing.push(entry);
 
 		// Check match threshold - if it's below the threshold, not matched at all
-		if ((common.length / this.size) < Context.mergeThreshold) return null;
+		if ((common.length / effectiveEntries.length) < Context.mergeThreshold) return null;
 
 		// Find novel (in observed but not in this known context)
 		const novel = [];
@@ -123,11 +159,18 @@ export class Context {
 				if (!this.hasKey(neuron, distance))
 					novel.push({ neuron, distance, strength });
 
-		// Calculate score as sum of strengths of common entries
+		// Calculate score as sum of effective strengths of common entries
 		// Round to 14 decimal places to avoid floating-point precision issues
 		const score = Math.round(common.reduce((sum, e) => sum + e.strength, 0) * 1e14) / 1e14;
 
 		// return the matched context with pattern and score
 		return { score, common, missing, novel };
+	}
+
+	/**
+	 * Get effective size (number of entries with positive effective strength)
+	 */
+	getEffectiveSize(patternLastActivationFrame, currentFrame, decayRate) {
+		return this.getEffectiveEntries(patternLastActivationFrame, currentFrame, decayRate).length;
 	}
 }

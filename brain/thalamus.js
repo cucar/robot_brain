@@ -351,8 +351,17 @@ export class Thalamus {
 	}
 
 	/**
-	 * forget neuron children and connections and then delete if it can be deleted
-	 * @returns {Array<Neuron>} - Array of neurons that can be deleted
+	 * Cleanup zombie neurons - delete items with zero effective strength.
+	 * With lazy decay, this is a cleanup operation only.
+	 * @param {number} currentFrame - Current frame number
+	 * @returns {Array<Neuron>} - Array of zombie neurons that can be deleted
+	 */
+	cleanupZombieNeurons(currentFrame) {
+		return this.getNeurons().filter(neuron => neuron.cleanupZombies(currentFrame));
+	}
+
+	/**
+	 * @deprecated - Use cleanupZombieNeurons instead.
 	 */
 	forgetNeurons() {
 		return this.getNeurons().filter(neuron => neuron.forget());
@@ -362,15 +371,16 @@ export class Thalamus {
 	 * Delete a pattern neuron and clean up all references to it.
 	 * Returns patterns that became deletable as a result of cleanup.
 	 * @param {Neuron} pattern - Pattern to delete
+	 * @param {number} currentFrame - Current frame number for lazy decay checks
 	 * @returns {Array<Neuron>} - Patterns that became deletable after cleanup
 	 */
-	deletePattern(pattern) {
+	deletePattern(pattern, currentFrame) {
 
 		// ignore double delete requests
 		if (!this.neurons.has(pattern.id)) return [];
 
 		// Clean up this pattern from other patterns' contexts
-		const newlyDeletable = this.cleanupContextReferences(pattern);
+		const newlyDeletable = this.cleanupContextReferences(pattern, currentFrame);
 
 		// Remove pattern from its parent's routing table (if parent still exists)
 		if (pattern.parent && this.neurons.has(pattern.parent.id)) pattern.parent.removeChild(pattern);
@@ -384,6 +394,7 @@ export class Thalamus {
 		delete pattern.contextRefs;
 		delete pattern.children;
 		delete pattern.connections;
+		pattern = null;
 
 		return newlyDeletable;
 	}
@@ -393,9 +404,10 @@ export class Thalamus {
 	 * pattern.contextRefs tells us which patterns have this pattern in their context.
 	 * We need to remove this pattern from those patterns' contexts.
 	 * @param {Neuron} neuron - Neuron/pattern being deleted
+	 * @param {number} currentFrame - Current frame number for lazy decay checks
 	 * @returns {Array<Neuron>} - Patterns that became deletable after cleanup
 	 */
-	cleanupContextReferences(neuron) {
+	cleanupContextReferences(neuron, currentFrame) {
 		const newlyDeletable = [];
 
 		// clean up forward references (neurons this pattern referenced)
@@ -411,7 +423,7 @@ export class Thalamus {
 				referencingPattern.removeContext(neuron, distance);
 
 			// Check if the referencing pattern became deletable
-			if (referencingPattern.canDelete())
+			if (referencingPattern.canDelete(currentFrame))
 				newlyDeletable.push(referencingPattern);
 		}
 

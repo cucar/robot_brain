@@ -18,8 +18,8 @@ export default class Brain {
 		// pattern learning parameters
 		this.maxLevels = 150; // just to prevent against infinite recursion
 
-		// forget cycle parameters - very important - fights curse of dimensionality
-		this.forgetCycles = 1000; // number of frames between forget cycles (increased to let connections stabilize)
+		// cleanup parameters - decay rates are in Neuron/Context as static properties
+		this.cleanupCycles = 10; // how often to run zombie neuron cleanup
 		this.frameNumber = 0;
 
 		// Debugging info and flags
@@ -269,7 +269,7 @@ export default class Brain {
 
 		// forget connections and patterns in all neurons to avoid curse of dimensionality
 		// this should normally not be part of the frame processing and instead should be a separate thread
-		this.runForgetCycle();
+		this.cleanupDeadPatterns();
 
 		// show frame processing summary
 		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getChannels());
@@ -385,7 +385,7 @@ export default class Brain {
 	 */
 	activateNeurons(neurons) {
 		for (const neuron of neurons)
-			this.memory.activateNeuron(neuron);
+			this.memory.activateNeuron(neuron, this.frameNumber);
 	}
 
 	/**
@@ -424,8 +424,8 @@ export default class Brain {
 			context.addNeuron(neuron, age, 1);
 
 		// Match patterns (parallelizable) - collect results with parent reference
-		const matchedParents = recognizers.map(parent => ({ parent, pattern: parent.matchPattern(context) }));
-		const matchedPatterns = matchedParents.filter(p => p.pattern);
+		const matchedParents = recognizers.map(parent => ({ parent, match: parent.matchPattern(context, this.frameNumber) }));
+		const matchedPatterns = matchedParents.filter(p => p.match);
 
 		// If no patterns matched, stop here
 		if (matchedPatterns.length === 0) {
@@ -433,13 +433,19 @@ export default class Brain {
 			return false;
 		}
 
-		// activate the matched pattern neurons
-		for (const { parent, pattern } of matchedPatterns)
-			this.memory.activatePattern(pattern, parent, 0);
+		// activate the matched pattern neurons and refine their context
+		for (const { parent, match } of matchedPatterns) {
+
+			// activate the pattern neuron now that it's matched/recognized
+			this.memory.activatePattern(match.pattern, parent, 0, this.frameNumber);
+
+			// refine the pattern context based on observations
+			match.pattern.refineContext(match.common, match.novel, match.missing);
+		}
 
 		if (this.debug)
 			console.log(`Matched ${matchedPatterns.length} patterns at level ${level}:`,
-				matchedPatterns.map(m => `parent=${m.parent.id}, pattern=${m.pattern.id}`).join('; '));
+				matchedPatterns.map(m => `parent=${m.parent.id}, pattern=${m.match.pattern.id}`).join('; '));
 
 		// return true to indicate patterns found
 		return true;
@@ -457,7 +463,7 @@ export default class Brain {
 		// Each context neuron learns connections at its own distance
 		const channelActions = this.thalamus.getAllChannelActions();
 		for (const { neuron, age } of this.memory.getContextNeurons())
-			neuron.learnConnections(age, newActiveNeurons, this.rewards, channelActions);
+			neuron.learnConnections(age, newActiveNeurons, this.rewards, channelActions, this.frameNumber);
 	}
 
 	/**
@@ -484,7 +490,7 @@ export default class Brain {
 			this.thalamus.addNeuron(newPattern);
 
 			// activate the pattern neuron at the parent's age
-			this.memory.activatePattern(newPattern, neuron, age);
+			this.memory.activatePattern(newPattern, neuron, age, this.frameNumber);
 
 			patternCount++;
 		}
@@ -539,7 +545,7 @@ export default class Brain {
 			if (state.activatedPattern !== null) continue;
 
 			// get the votes of the neuron
-			const neuronVotes = voter.vote(age, 1 / this.memory.contextLength);
+			const neuronVotes = voter.vote(age, 1 / this.memory.contextLength, this.frameNumber);
 
 			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
 			this.memory.setVotes(voter, age, neuronVotes, contexts.get(`${age}:${voter.level}`) ?? []);
@@ -661,50 +667,62 @@ export default class Brain {
 	}
 
 	/**
-	 * Runs the forget cycle, reducing strengths and deleting unused connections/patterns/neurons.
-	 * Critical for avoiding curse of dimensionality.
+	 * Runs the cleanup cycle for zombie cleanup only.
+	 * With lazy decay, this only deletes items that have decayed to zero effective strength.
+	 * Critical for avoiding memory bloat from dead neurons.
 	 */
-	runForgetCycle() {
+	cleanupDeadPatterns() {
 
 		// Run periodically for cleanup
-		if (this.frameNumber % this.forgetCycles !== 0) return;
+		if (this.frameNumber % this.cleanupCycles !== 0) return;
 
 		const cycleStart = Date.now();
-		if (this.debug) console.log('=== FORGET CYCLE STARTING ===');
+		if (this.debug) console.log('=== CLEANUP STARTING ===');
 
 		// run forget on all neurons and collect patterns to be deleted after forgetting
-		const deadPatterns = this.excludeActiveNeurons(this.thalamus.forgetNeurons());
+		const deadPatterns = this.excludeActiveNeurons(this.thalamus.cleanupZombieNeurons(this.frameNumber));
 
 		// delete dead patterns (with recursive cleanup of context references)
-		const deletedPatterns = this.deletePatterns(deadPatterns);
+		const deletedPatterns = this.deletePatterns(deadPatterns, this.frameNumber);
 
 		// clean up deleted patterns from active memory contexts
 		for (const pattern of deletedPatterns) this.memory.cleanupDeletedNeuron(pattern);
 
-		if (this.debug) console.log(`=== FORGET CYCLE COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
+		if (this.debug) console.log(`=== CLEANUP COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}
 
 	/**
 	 * Delete dead pattern neurons (no content, no references, not active)
 	 * Recursively deletes patterns that become deletable after cleanup
 	 * @param {Array<Neuron>} patterns - Initial list of patterns to delete
+	 * @param {number} currentFrame - Current frame number for lazy decay checks
 	 * @returns {Array<Neuron>} - All deleted patterns (for memory cleanup)
 	 */
-	deletePatterns(patterns) {
+	deletePatterns(patterns, currentFrame) {
 		const toDelete = [...patterns];
+		const queuedIds = new Set(patterns.map(pattern => pattern.id));
+		const deletedPatterns = [];
+		const deletedIds = new Set();
 
 		while (toDelete.length > 0) {
 			const pattern = toDelete.shift();
+			if (deletedIds.has(pattern.id)) continue;
 
 			// Clean up context references and get newly deletable patterns
-			const newlyDeletable = this.excludeActiveNeurons(this.thalamus.deletePattern(pattern));
+			const newlyDeletable = this.excludeActiveNeurons(this.thalamus.deletePattern(pattern, currentFrame));
+			deletedPatterns.push(pattern);
+			deletedIds.add(pattern.id);
 
 			// Add newly deletable patterns to the queue
-			toDelete.push(...newlyDeletable);
+			for (const newlyDeletablePattern of newlyDeletable) {
+				if (deletedIds.has(newlyDeletablePattern.id) || queuedIds.has(newlyDeletablePattern.id)) continue;
+				toDelete.push(newlyDeletablePattern);
+				queuedIds.add(newlyDeletablePattern.id);
+			}
 		}
 
-		if (this.debug) console.log(`  Patterns deleted: ${patterns.length}`);
-		return patterns;
+		if (this.debug) console.log(`  Patterns deleted: ${deletedPatterns.length}`);
+		return deletedPatterns;
 	}
 
 	/**

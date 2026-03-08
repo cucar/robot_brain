@@ -56,17 +56,17 @@ export class Memory {
 	/**
 	 * Activate a neuron at age 0
 	 */
-	activateNeuron(neuron) {
-		this.activateNeuronAtAge(neuron, 0);
+	activateNeuron(neuron, currentFrame) {
+		this.activateNeuronAtAge(neuron, 0, currentFrame);
 	}
 
 	/**
 	 * Activate a neuron at a specific age
 	 */
-	activateNeuronAtAge(neuron, age) {
+	activateNeuronAtAge(neuron, age, currentFrame) {
 		if (!this.activeNeurons[age]) this.activeNeurons[age] = new Map();
 		this.activeNeurons[age].set(neuron, { activatedPattern: null, votes: null, context: null });
-		neuron.strengthenActivation();
+		neuron.strengthenActivation(currentFrame);
 	}
 
 	/**
@@ -83,9 +83,10 @@ export class Memory {
 	 * @param {Neuron} pattern - The pattern neuron to activate
 	 * @param {Neuron} parent - The parent neuron that triggered the pattern
 	 * @param {number} age - The age at which to activate
+	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
-	activatePattern(pattern, parent, age) {
-		this.activateNeuronAtAge(pattern, age);
+	activatePattern(pattern, parent, age, currentFrame) {
+		this.activateNeuronAtAge(pattern, age, currentFrame);
 		const neuronsAtAge = this.activeNeurons[age];
 		const state = neuronsAtAge.get(parent);
 		state.activatedPattern = pattern;

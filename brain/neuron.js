@@ -4,7 +4,7 @@ import { Context } from './context.js';
  * Neuron - Unified class for all neurons (sensory and pattern)
  *
  * All neurons have:
- * - connections: Map<distance, Map<toNeuron, {strength, reward}>> - predictions
+ * - connections: Map<distance, Map<toNeuron, {strength, reward, lastFrame}>> - predictions with lazy decay
  * - children: Set<Neuron> - child pattern neurons (routing table)
  *
  * Level 0 (sensory) neurons additionally have: channel, type, coordinates
@@ -12,6 +12,10 @@ import { Context } from './context.js';
  *
  * Note: Active state (which neurons are active at which ages) and votes are managed
  * by the Brain, not stored on neurons. This allows efficient age-indexed queries.
+ *
+ * Lazy Decay: Continuous decay based on frames elapsed since last activation.
+ * We store lastActivationFrame and compute effective strength on-demand:
+ * effectiveStrength = strength - (currentFrame - lastFrame) * rate
  */
 export class Neuron {
 
@@ -26,12 +30,31 @@ export class Neuron {
 	static actionRegretMinStrength = 2;
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 4.25;
-	static connectionForgetRate = 1;
-	static contextForgetRate = 1;
-	static patternForgetRate = 1;
+	static connectionForgetRate = 0.01;
+	static contextForgetRate = 0.01;
+	static patternForgetRate = 0.01;
 
 	// static debug flag for the neuron
 	static debug = false;
+
+	/**
+	 * Calculate continuous lazy decay amount based on frames elapsed
+	 * @param {number} lastFrame - Frame when item was last updated
+	 * @param {number} currentFrame - Current frame number
+	 * @param {number} rate - Decay rate per frame
+	 * @returns {number} Amount to subtract from strength
+	 */
+	static calculateDecay(lastFrame, currentFrame, rate) {
+		return (currentFrame - lastFrame) * rate;
+	}
+
+	/**
+	 * Get effective strength after lazy decay
+	 */
+	static getEffectiveStrength(strength, lastFrame, currentFrame, rate) {
+		const decay = Neuron.calculateDecay(lastFrame, currentFrame, rate);
+		return Math.max(Neuron.minStrength, strength - decay);
+	}
 
 	/**
 	 * Create a sensory neuron (level 0) - id optional for loading from database
@@ -74,6 +97,7 @@ export class Neuron {
 		this.context = new Context();  // the context that activated this pattern - not used by sensory neurons
 		this.contextRefs = new Map(); // context references: Map<Neuron, Set<distance>>
 		this.activationStrength = 0; // incremented with activation, forgotten over time
+		this.lastActivationFrame = 0; // frame when activation was last strengthened (for lazy decay)
 
 		// Update nextId if we're loading a neuron with a specific ID
 		if (id !== null && id >= Neuron.nextId) Neuron.nextId = id + 1;
@@ -105,12 +129,15 @@ export class Neuron {
 
 	/**
 	 * updates the connection at distance to target neuron - increments strength and updates reward
+	 * Materializes lazy decay before incrementing strength using lastActivationFrame
 	 */
-	updateConnection(distance, toNeuron, reward) {
+	updateConnection(distance, toNeuron, reward, currentFrame) {
 		if (!this.connections.has(distance)) throw new Error('Unknown connection'); // should not happen
-		const connection = this.connections.get(distance).get(toNeuron);
-		connection.strength = Math.min(Neuron.maxStrength, connection.strength + 1);
-		connection.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * connection.reward;
+		const conn = this.connections.get(distance).get(toNeuron);
+		// Materialize lazy decay before strengthening using the neuron's true last activation frame
+		const effectiveStrength = Neuron.getEffectiveStrength(conn.strength, this.lastActivationFrame, currentFrame, Neuron.connectionForgetRate);
+		conn.strength = Math.min(Neuron.maxStrength, effectiveStrength + 1);
+		conn.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * conn.reward;
 	}
 
 	/**
@@ -127,9 +154,10 @@ export class Neuron {
 	 * returns votes from this neuron at a specific age.
 	 * @param {number} age - The age at which this neuron is active
 	 * @param {number} timeDecay - Context window length for time decay
+	 * @param {number} currentFrame - Current frame number for lazy decay
 	 * @returns {Array} Array of vote objects {toNeuron, strength, reward, distance}
 	 */
-	vote(age, timeDecay) {
+	vote(age, timeDecay, currentFrame) {
 
 		// use connections of distance one more than the age to get the inferences for the next frame
 		const distance = age + 1;
@@ -142,32 +170,85 @@ export class Neuron {
 		const distanceMap = this.connections.get(distance);
 		if (!distanceMap) return [];
 
+		// calculate neuron decay since last activation
+		const decay = Neuron.calculateDecay(this.lastActivationFrame, currentFrame, Neuron.connectionForgetRate);
+
 		// create votes for all connections at the distance and return them
 		const result = [];
-		for (const [neuron, conn] of distanceMap)
-			result.push({ neuron, strength: levelWeight * timeWeight * conn.strength, reward: conn.reward, distance });
+		for (const [neuron, conn] of distanceMap) {
+			const effectiveStrength = Math.max(Neuron.minStrength, conn.strength - decay);
+			if (effectiveStrength > 0)
+				result.push({ neuron, strength: levelWeight * timeWeight * effectiveStrength, reward: conn.reward, distance });
+		}
 		return result;
 	}
 
 	/**
 	 * sets the activation strength of the neuron - used when loading from database
 	 */
-	setActivationStrength(strength) {
+	setActivationStrength(strength, lastFrame = 0) {
 		this.activationStrength = strength;
+		this.lastActivationFrame = lastFrame;
 	}
 
 	/**
-	 * increments activation strength
+	 * Get effective activation strength with lazy decay
 	 */
-	strengthenActivation() {
+	getEffectiveActivationStrength(currentFrame) {
+		return Neuron.getEffectiveStrength(this.activationStrength, this.lastActivationFrame, currentFrame, Neuron.patternForgetRate);
+	}
+
+	/**
+	 * Materialize lazy decay for all owned connections.
+	 */
+	materializeConnections(currentFrame) {
+
+		// Calculate decay based on when this neuron was last activated
+		const decay = Neuron.calculateDecay(this.lastActivationFrame, currentFrame, Neuron.connectionForgetRate);
+		if (decay <= 0) return;
+
+		// update decayed strengths and collect dead connections
+		const toDelete = [];
+		for (const [distance, distanceMap] of this.connections)
+			for (const [toNeuron, conn] of distanceMap) {
+				const effectiveStrength = Math.max(Neuron.minStrength, conn.strength - decay);
+				if (effectiveStrength <= 0) toDelete.push({ distance, toNeuron });
+				else conn.strength = effectiveStrength;
+			}
+
+		// delete dead connections
+		for (const { distance, toNeuron } of toDelete) this.deleteConnection(distance, toNeuron);
+	}
+
+	/**
+	 * Materialize lazy decay for all owner-scoped values.
+	 */
+	materializeStrengths(currentFrame) {
+
+		// decay own activation strength
+		this.activationStrength = this.getEffectiveActivationStrength(currentFrame);
+
+		// decay connection strengths and delete as needed
+		this.materializeConnections(currentFrame);
+
+		// decay context strengths and delete as needed
+		const toDelete = this.context.materialize(this.lastActivationFrame, currentFrame, Neuron.contextForgetRate);
+		for (const entry of toDelete) this.removePatternContext(entry.neuron, entry.distance);
+	}
+
+	/**
+	 * increments activation strength - materializes all owner-scoped lazy decay first
+	 */
+	strengthenActivation(currentFrame) {
+
+		// update all strengths based on decay rate first
+		this.materializeStrengths(currentFrame);
+
+		// increment activation strength
 		this.activationStrength = Math.min(Neuron.maxStrength, this.activationStrength + 1);
-	}
 
-	/**
-	 * reduces activation strength
-	 */
-	weakenActivation() {
-		this.activationStrength = Math.max(Neuron.minStrength, this.activationStrength - Neuron.patternForgetRate);
+		// remember when this happened for lazy decay
+		this.lastActivationFrame = currentFrame;
 	}
 
 	/**
@@ -195,7 +276,7 @@ export class Neuron {
 	/**
 	 * adds a new entry to a pattern context
 	 */
-	addPatternContext(neuron, distance, strength) {
+	addPatternContext(neuron, distance, strength = 1) {
 		this.addContext(neuron, distance, strength);
 		neuron.addContextRef(this, distance);
 	}
@@ -211,7 +292,7 @@ export class Neuron {
 	/**
 	 * adds an entry from the pattern context
 	 */
-	addContext(neuron, distance, strength) {
+	addContext(neuron, distance, strength = 1) {
 		this.context.addNeuron(neuron, distance, strength);
 	}
 
@@ -242,26 +323,31 @@ export class Neuron {
 	/**
 	 * Find the best matching pattern for this parent neuron given the observed context.
 	 * @param {Context} observed - The observed context from brain
-	 * @returns Neuron The matched pattern, or null if no match
+	 * @param {number} currentFrame - Current frame number for lazy decay
+	 * @returns {Object|null} The matched pattern and match details, or null if no match
 	 */
-	matchPattern(observed) {
+	matchPattern(observed, currentFrame) {
 
 		// try to match the observed context to known patterns
 		// sort children by id for deterministic ordering
 		const sortedChildren = Array.from(this.children).sort((a, b) => a.id - b.id);
 		let best = null; // { pattern, score, common, missing, novel }
 		for (const pattern of sortedChildren) {
-			if (pattern.activationStrength === 0) continue;
-			const match = pattern.context.match(observed);
+
+			// if the pattern has been forgotten, ignore that - cleanup cycle will take care of it
+			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
+
+			// get the match results for the pattern for the given context
+			// send pattern's lastActivationFrame for dynamic decay calculation (pattern not yet activated this frame)
+			const match = pattern.context.match(observed, pattern.lastActivationFrame, currentFrame, Neuron.contextForgetRate);
+
+			// if there is a match, and it's the best so far, store it
 			if (match && (!best || match.score > best.score)) best = { ...match, pattern };
 		}
 		if (!best) return null; // if there are no matches, return null
 
-		// call the pattern to refine its context based on the observed context
-		best.pattern.refineContext(best.common, best.novel, best.missing);
-
-		// return the matched pattern with parent reference (brain will set activated pattern)
-		return best.pattern;
+		// return the matched pattern and details so brain can activate first, then refine
+		return best;
 	}
 
 	/**
@@ -291,8 +377,9 @@ export class Neuron {
 	 * @param {Set<Neuron>} newActiveNeurons - Newly active action neurons at age=0
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
+	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
-	learnConnections(age, newActiveNeurons, rewards, channelActions) {
+	learnConnections(age, newActiveNeurons, rewards, channelActions, currentFrame) {
 
 		// action neurons cannot learn connections - they do not infer
 		if (this.level === 0 && this.type === 'action') return;
@@ -304,7 +391,7 @@ export class Neuron {
 			const reward = neuron.type === 'action' ? (rewards.get(neuron.channel) || 0) : 0;
 
 			// if the event/action was already known, strengthen the connection and update the reward
-			if (this.hasConnection(age, neuron)) this.updateConnection(age, neuron, reward);
+			if (this.hasConnection(age, neuron)) this.updateConnection(age, neuron, reward, currentFrame);
 			// if the event/action was not known, add it to the connections with the current reward (learning from observation)
 			else this.createConnection(age, neuron, 1, reward);
 
@@ -471,37 +558,39 @@ export class Neuron {
 	}
 
 	/**
-	 * forget cycle - decay activation, connections and patterns - returns if it can be deleted after the forgetting
+	 * Zombie cleanup - delete items that have decayed to zero effective strength.
+	 * With lazy decay, this is a cleanup operation only - decay is computed on-demand.
+	 * @param {number} currentFrame - Current frame number
+	 * @returns {boolean} True if this neuron can be deleted (is a zombie)
 	 */
-	forget() {
+	cleanupZombies(currentFrame) {
 
-		// weaken activation strength
-		this.weakenActivation();
+		// cleanup dead context entries (effective strength <= 0)
+		this.cleanupDeadContexts(currentFrame);
 
-		// forget the contexts which activate this pattern
-		this.forgetContexts();
-
-		// forget connections
-		this.forgetConnections();
+		// cleanup dead connections (effective strength <= 0)
+		this.cleanupDeadConnections(currentFrame);
 
 		// return if the neuron can be deleted or not
-		return this.canDelete();
+		return this.canDelete(currentFrame);
 	}
 
 	/**
-	 * Forget context entries (routing tables) - decay strengths and delete weak entries.
+	 * Cleanup context entries with zero effective strength.
+	 * Uses this neuron's lastActivationFrame as decay base.
 	 */
-	forgetContexts() {
+	cleanupDeadContexts(currentFrame) {
 		let contextsDeleted = 0;
 
-		// decay the context strengths
-		const toDelete = [];
-		for (const entry of this.context.getEntries()) {
-			const canDelete = this.context.weakenNeuron(entry.neuron, entry.distance, Neuron.contextForgetRate);
-			if (canDelete) toDelete.push(entry);
-		}
+		// Calculate decay based on when this pattern was last activated
+		const decay = (currentFrame - this.lastActivationFrame) * Neuron.contextForgetRate;
 
-		// delete the weak context entries
+		// find context entries with zero effective strength
+		const toDelete = [];
+		for (const entry of this.context.getEntries())
+			if (entry.strength - decay <= 0) toDelete.push(entry);
+
+		// delete the dead context entries
 		for (const entry of toDelete) {
 			this.removePatternContext(entry.neuron, entry.distance);
 			contextsDeleted++;
@@ -511,40 +600,44 @@ export class Neuron {
 	}
 
 	/**
-	 * Forget connections - decay strengths and delete weak connections.
+	 * Cleanup connections with zero effective strength.
+	 * Uses this neuron's lastActivationFrame as decay base.
 	 */
-	forgetConnections() {
+	cleanupDeadConnections(currentFrame) {
 
-		// decay the connection strengths and collect the connections to be deleted
+		// Calculate decay based on when this neuron was last activated
+		const decay = (currentFrame - this.lastActivationFrame) * Neuron.connectionForgetRate;
+
+		// find connections with zero effective strength
 		const toDelete = [];
 		for (const [distance, distanceMap] of this.connections)
-			for (const [toNeuron, conn] of distanceMap) {
-				conn.strength = Math.max(Neuron.minStrength, conn.strength - Neuron.connectionForgetRate);
-				if (conn.strength <= Neuron.minStrength) toDelete.push({ toNeuron, distance });
-			}
+			for (const [toNeuron, conn] of distanceMap)
+				if (conn.strength - decay <= 0) toDelete.push({ toNeuron, distance });
 
-		// delete the weak connections
+		// delete the dead connections
 		for (const { toNeuron, distance } of toDelete) this.deleteConnection(distance, toNeuron);
 
 		if (Neuron.debug) console.log(`  Connections: ${toDelete.length} deleted`);
 	}
 
 	/**
-	 * Check if neuron can be deleted
+	 * Check if neuron can be deleted (is a zombie)
+	 * @param {number} currentFrame - Current frame number
 	 */
-	canDelete() {
+	canDelete(currentFrame) {
 
 		// sensory neurons cannot be deleted
 		if (this.level === 0) return false;
 
 		// if the pattern has not been activated in some time, die!
-		if (this.activationStrength === 0) return true;
+		if (this.getEffectiveActivationStrength(currentFrame) <= 0) return true;
 
 		// if a pattern does not have any contexts (cannot be recognized), it cannot be activated - it needs to be deleted
-		if (this.context.size === 0) return true;
+		// use effective size to account for lazy decay (pass this pattern's lastActivationFrame)
+		if (this.context.getEffectiveSize(this.lastActivationFrame, currentFrame, Neuron.contextForgetRate) === 0) return true;
 
-		// if as a result of the forget or cleanup operation, we don't have any connections or children
-		// we don't serve a purpose - it's detrimental - need to be deleted
+		// if as a result of cleanup, we don't have any connections or children, we don't serve a purpose
+		// Note: connections.size is physical count, effective connections may be fewer
 		return this.connections.size === 0 && this.children.size === 0;
 	}
 }
