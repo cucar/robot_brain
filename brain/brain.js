@@ -19,7 +19,7 @@ export default class Brain {
 		this.maxLevels = 150; // just to prevent against infinite recursion
 
 		// cleanup parameters - decay rates are in Neuron/Context as static properties
-		this.cleanupCycles = 10; // how often to run zombie neuron cleanup
+		this.cleanupCycles = 100; // how often to run zombie neuron cleanup
 		this.frameNumber = 0;
 
 		// Debugging info and flags
