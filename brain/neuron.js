@@ -31,7 +31,7 @@ export class Neuron {
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 4.25;
 	static connectionForgetRate = 0.01;
-	static contextForgetRate = 0.01;
+	static contextForgetRate = 0.009;
 	static patternForgetRate = 0.01;
 
 	// static debug flag for the neuron
@@ -568,9 +568,6 @@ export class Neuron {
 		// cleanup dead context entries (effective strength <= 0)
 		this.cleanupDeadContexts(currentFrame);
 
-		// cleanup dead connections (effective strength <= 0)
-		this.cleanupDeadConnections(currentFrame);
-
 		// return if the neuron can be deleted or not
 		return this.canDelete(currentFrame);
 	}
@@ -597,27 +594,6 @@ export class Neuron {
 		}
 
 		if (Neuron.debug) console.log(`  Contexts: ${contextsDeleted} deleted`);
-	}
-
-	/**
-	 * Cleanup connections with zero effective strength.
-	 * Uses this neuron's lastActivationFrame as decay base.
-	 */
-	cleanupDeadConnections(currentFrame) {
-
-		// Calculate decay based on when this neuron was last activated
-		const decay = (currentFrame - this.lastActivationFrame) * Neuron.connectionForgetRate;
-
-		// find connections with zero effective strength
-		const toDelete = [];
-		for (const [distance, distanceMap] of this.connections)
-			for (const [toNeuron, conn] of distanceMap)
-				if (conn.strength - decay <= 0) toDelete.push({ toNeuron, distance });
-
-		// delete the dead connections
-		for (const { toNeuron, distance } of toDelete) this.deleteConnection(distance, toNeuron);
-
-		if (Neuron.debug) console.log(`  Connections: ${toDelete.length} deleted`);
 	}
 
 	/**
