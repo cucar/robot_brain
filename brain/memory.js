@@ -7,7 +7,7 @@ export class Memory {
 	constructor(debug) {
 
 		// memory hyperparameters
-		this.contextLength = 5; // number of frames a base neuron stays active
+		this.contextLength = 20; // number of frames a base neuron stays active
 
 		// Active context indexed by age: Array<Map<Neuron, {activatedPattern, votes, context}>>
 		// activeNeurons[0] = age 0 (newest), activeNeurons[n] = age n (older)

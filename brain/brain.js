@@ -272,7 +272,7 @@ export default class Brain {
 		this.cleanupDeadPatterns();
 
 		// show frame processing summary
-		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getChannels());
+		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getChannels(), this.thalamus.getNeurons().length);
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
@@ -589,7 +589,7 @@ export default class Brain {
 
 			// for actions, calculate the reward as weighted total / strength - for events, calculate the likelihood of the event
 			if (candidate.neuron.type === 'action') candidate.reward = candidate.strength > 0 ? candidate.weightedTotal / candidate.strength : 0;
-			else candidate.reward = this.calcLikelihood(candidate.strength, candidate.neuron.coordinates, dimTotalStrength);
+			else candidate.reward = this.getEventProbability(candidate.strength, candidate.neuron.coordinates, dimTotalStrength);
 
 			// set the best neuron for each dimension based on rewards
 			for (const dim of Object.keys(candidate.neuron.coordinates))
@@ -624,14 +624,21 @@ export default class Brain {
 	/**
 	 * Calculate likelihood (strength / total) averaged across dimensions
 	 */
-	calcLikelihood(strength, coordinates, dimTotalStrength) {
+	getEventProbability(strength, coordinates, dimTotalStrength) {
+
+		// if there are no dimensions, return 0 - this should not happen
+		// if there is only one option, the reward would be 1, which would distort values - don't use it - not reliable
+		const dimensions = Object.keys(coordinates);
+		const dimCount = dimensions.length;
+		if (dimCount <= 1) return 0;
+
+		// calculate the total likelihood of the event and return it
 		let totalLikelihood = 0;
-		let dimCount = 0;
-		for (const dim of Object.keys(coordinates)) {
+		for (const dim of dimensions) {
 			const total = dimTotalStrength.get(dim) || 0;
-			if (total > 0) { totalLikelihood += strength / total; dimCount++; }
+			if (total > 0) totalLikelihood += strength / total;
 		}
-		return dimCount > 0 ? totalLikelihood / dimCount : 0;
+		return totalLikelihood / dimCount;
 	}
 
 	/**

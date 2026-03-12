@@ -630,14 +630,6 @@ export class Neuron {
 		if (this.level === 0) return false;
 
 		// if the pattern has not been activated in some time, die!
-		if (this.getEffectiveActivationStrength(currentFrame) <= 0) return true;
-
-		// if a pattern does not have any contexts (cannot be recognized), it cannot be activated - it needs to be deleted
-		// use effective size to account for lazy decay (pass this pattern's lastActivationFrame)
-		if (this.context.getEffectiveSize(this.lastActivationFrame, currentFrame, Neuron.contextForgetRate) === 0) return true;
-
-		// if as a result of cleanup, we don't have any connections or children, we don't serve a purpose
-		// Note: connections.size is physical count, effective connections may be fewer
-		return this.connections.size === 0 && this.children.size === 0;
+		return this.getEffectiveActivationStrength(currentFrame) <= 0;
 	}
 }

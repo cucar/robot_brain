@@ -171,7 +171,9 @@ export class StockChannel extends Channel {
 	/**
 	 * Whether current frame has valid data (not a placeholder)
 	 */
-	get hasData() { return this.previousPrice !== null && this.currentPrice !== null && this.currentVolume > 0; }
+	get hasData() {
+		return this.previousPrice !== null && this.currentPrice !== null && this.currentPrice > 0 && this.currentVolume > 0;
+	}
 
 	/**
 	 * Reads the next data row from the prepared dataset - returns true if we should continue to process
@@ -277,11 +279,8 @@ export class StockChannel extends Channel {
 	 */
 	async getRewards() {
 
-		// No data for this frame - no reward
+		// No data for this frame means no reward
 		if (!this.hasData) return 0;
-
-		// Need both current and previous price for calculation
-		if (this.currentPrice === null || this.previousPrice === null) return 0;
 
 		// Calculate percentage change
 		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
@@ -459,26 +458,30 @@ export class StockChannel extends Channel {
 				if (actions.length === 0) continue;
 				const actionData = actions[0]; // Single action per stock channel
 				const action = actionData.coordinates[`${channel.symbol}_activity`];
-				// alternative: use rewards as weights - rank: Math.exp(actionData.reward)
-				allActions.push({ channelName, rank: actionData.strength, isOwn: action === POSITION_OWN });
+				allActions.push({ channelName, rank: Math.exp(actionData.reward), isOwn: action === POSITION_OWN });
 			}
 			return allActions;
 		}
 
 		// Event-based trading: trade based on price predictions
-		for (const [channelName, { channel, events }] of channelInferences) {
+		for (const [channelName, { channel, events, actions }] of channelInferences) {
 
-			// Find price change prediction in event inferences - if there are none, nothing to trade - hold
+			// get the action for the channel
+			if (actions.length === 0) continue;
+			const actionData = actions[0]; // Single action per stock channel
+			const action = actionData.coordinates[`${channel.symbol}_activity`];
+			const actionOwn = action === POSITION_OWN;
+
+			// get price change prediction in event inferences from bucket value (1 = down, 2 = up)
 			const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
-			// console.log(`${channelName}: priceEvent:`, priceEvent);
-			if (!priceEvent) continue;
+			if (!priceEvent) continue; // if there are none, nothing to trade - hold
+			const eventOwn = priceEvent.coordinates[`${channel.symbol}_price_change`] > 1; // bucket 2 (up) → buy, bucket 1 (down) → sell
 
-			// Rank by reward (likelihood = strength / total strength for dimension)
-			// This is the safety score: how likely this prediction is compared to alternatives
-			// Get the predicted price change bucket value (1 = down, 2 = up)
-			// Determine action: bucket 2 (up) → buy, bucket 1 (down) → sell
-			const bucketValue = priceEvent.coordinates[`${channel.symbol}_price_change`];
-			allActions.push({ channelName, rank: priceEvent.strength / channel.getCurrentPrice(), isOwn: bucketValue === 2 });
+			// require event inference to predict stock going UP and action to own the stock
+			// rank stocks by expected reward AND event inference confidence (reward)
+			const isOwn = eventOwn && actionOwn;
+			const rank = priceEvent.reward * Math.exp(actionData.reward);
+			allActions.push({ channelName, rank, isOwn });
 		}
 
 		return allActions;
