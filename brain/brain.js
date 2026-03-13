@@ -687,7 +687,7 @@ export default class Brain {
 		if (this.debug) console.log('=== CLEANUP STARTING ===');
 
 		// run forget on all neurons and collect patterns to be deleted after forgetting
-		const deadPatterns = this.excludeActiveNeurons(this.thalamus.getDeadPatterns(this.frameNumber));
+		const deadPatterns = this.thalamus.getDeadPatterns(this.frameNumber);
 
 		// delete dead patterns (with recursive cleanup of context references)
 		const deletedPatterns = this.deletePatterns(deadPatterns, this.frameNumber);
@@ -716,7 +716,7 @@ export default class Brain {
 			if (deletedIds.has(pattern.id)) continue;
 
 			// Clean up context references and get newly deletable patterns
-			const newlyDeletable = this.excludeActiveNeurons(this.thalamus.deletePattern(pattern, currentFrame));
+			const newlyDeletable = this.thalamus.deletePattern(pattern, currentFrame);
 			deletedPatterns.push(pattern);
 			deletedIds.add(pattern.id);
 
@@ -730,12 +730,5 @@ export default class Brain {
 
 		if (this.debug) console.log(`  Patterns deleted: ${deletedPatterns.length}`);
 		return deletedPatterns;
-	}
-
-	/**
-	 * excludes active neurons from delete list
-	 */
-	excludeActiveNeurons(neurons) {
-		return neurons.filter(neuron => !this.memory.isNeuronActive(neuron));
 	}
 }
