@@ -57,25 +57,17 @@ export class Memory {
 	 * Activate a neuron at age 0
 	 */
 	activateNeuron(neuron, currentFrame) {
-		this.activateNeuronAtAge(neuron, 0, currentFrame);
+		return this.activateNeuronAtAge(neuron, 0, currentFrame);
 	}
 
 	/**
 	 * Activate a neuron at a specific age
+	 * @returns {number|null} death frame for pattern neurons, null for sensory
 	 */
 	activateNeuronAtAge(neuron, age, currentFrame) {
 		if (!this.activeNeurons[age]) this.activeNeurons[age] = new Map();
 		this.activeNeurons[age].set(neuron, { activatedPattern: null, votes: null, context: null });
-		neuron.strengthenActivation(currentFrame);
-	}
-
-	/**
-	 * Check if a neuron is active at any age
-	 */
-	isNeuronActive(neuron) {
-		for (const neuronsAtAge of this.activeNeurons)
-			if (neuronsAtAge.has(neuron)) return true;
-		return false;
+		return neuron.strengthenActivation(currentFrame);
 	}
 
 	/**
@@ -86,10 +78,11 @@ export class Memory {
 	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
 	activatePattern(pattern, parent, age, currentFrame) {
-		this.activateNeuronAtAge(pattern, age, currentFrame);
+		const deathFrame = this.activateNeuronAtAge(pattern, age, currentFrame);
 		const neuronsAtAge = this.activeNeurons[age];
 		const state = neuronsAtAge.get(parent);
 		state.activatedPattern = pattern;
+		return deathFrame;
 	}
 
 	/**

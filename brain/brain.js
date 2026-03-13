@@ -18,8 +18,7 @@ export default class Brain {
 		// pattern learning parameters
 		this.maxLevels = 150; // just to prevent against infinite recursion
 
-		// cleanup parameters - decay rates are in Neuron/Context as static properties
-		this.cleanupCycles = 100; // how often to run zombie neuron cleanup
+		// frame number is used for death ledger and diagnostics
 		this.frameNumber = 0;
 
 		// Debugging info and flags
@@ -437,7 +436,8 @@ export default class Brain {
 		for (const { parent, match } of matchedPatterns) {
 
 			// activate the pattern neuron now that it's matched/recognized
-			this.memory.activatePattern(match.pattern, parent, 0, this.frameNumber);
+			const deathFrame = this.memory.activatePattern(match.pattern, parent, 0, this.frameNumber);
+			this.thalamus.registerDeath(match.pattern, deathFrame);
 
 			// refine the pattern context based on observations
 			match.pattern.refineContext(match.common, match.novel, match.missing);
@@ -490,7 +490,8 @@ export default class Brain {
 			this.thalamus.addNeuron(newPattern);
 
 			// activate the pattern neuron at the parent's age
-			this.memory.activatePattern(newPattern, neuron, age, this.frameNumber);
+			const deathFrame = this.memory.activatePattern(newPattern, neuron, age, this.frameNumber);
+			this.thalamus.registerDeath(newPattern, deathFrame);
 
 			patternCount++;
 		}
@@ -679,15 +680,12 @@ export default class Brain {
 	 * Critical for avoiding memory bloat from dead neurons.
 	 */
 	cleanupDeadPatterns() {
-
-		// Run periodically for cleanup
-		if (this.frameNumber % this.cleanupCycles !== 0) return;
-
 		const cycleStart = Date.now();
 		if (this.debug) console.log('=== CLEANUP STARTING ===');
 
-		// run forget on all neurons and collect patterns to be deleted after forgetting
-		const deadPatterns = this.thalamus.getDeadPatterns(this.frameNumber);
+		// reap neurons scheduled to die at or before this frame
+		const deadPatterns = this.thalamus.reapDeadNeurons(this.frameNumber);
+		if (deadPatterns.length === 0) return;
 
 		// delete dead patterns (with recursive cleanup of context references)
 		const deletedPatterns = this.deletePatterns(deadPatterns, this.frameNumber);

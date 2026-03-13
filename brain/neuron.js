@@ -249,6 +249,10 @@ export class Neuron {
 
 		// remember when this happened for lazy decay
 		this.lastActivationFrame = currentFrame;
+
+		// return death frame for pattern neurons (sensory neurons never die)
+		if (this.level === 0) return null;
+		return currentFrame + Math.ceil(this.activationStrength / Neuron.patternForgetRate);
 	}
 
 	/**

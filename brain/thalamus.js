@@ -16,6 +16,10 @@ export class Thalamus {
 		this.neurons = new Map(); // neuronId -> Neuron
 		this.neuronsByValue = new Map(); // valueKey -> SensoryNeuron
 
+		// Death ledger - scheduled neuron deaths
+		this.deathLedger = new Map(); // frameNumber -> Set<Neuron>
+		this.neuronDeathFrame = new Map(); // neuron -> frameNumber (reverse lookup)
+
 		// Channel registry
 		this.channelClasses = new Map(); // channelName -> Channel class (not instantiated)
 		this.channels = new Map(); // channelName -> Channel instance
@@ -92,6 +96,8 @@ export class Thalamus {
 	reset() {
 		this.neurons.clear();
 		this.neuronsByValue.clear();
+		this.deathLedger.clear();
+		this.neuronDeathFrame.clear();
 		Neuron.nextId = 1;
 	}
 
@@ -351,10 +357,48 @@ export class Thalamus {
 	}
 
 	/**
-	 * returns dead pattern neurons
+	 * Register a neuron's scheduled death frame
 	 */
-	getDeadPatterns(currentFrame) {
-		return this.getNeurons().filter(neuron => neuron.canDelete(currentFrame));
+	registerDeath(neuron, deathFrame) {
+		// unregister old death frame if exists
+		this.unregisterDeath(neuron);
+
+		// register new death frame
+		if (!this.deathLedger.has(deathFrame)) this.deathLedger.set(deathFrame, new Set());
+		this.deathLedger.get(deathFrame).add(neuron);
+		this.neuronDeathFrame.set(neuron, deathFrame);
+	}
+
+	/**
+	 * Unregister a neuron from the death ledger
+	 */
+	unregisterDeath(neuron) {
+		const oldFrame = this.neuronDeathFrame.get(neuron);
+		if (oldFrame === undefined) return;
+
+		const set = this.deathLedger.get(oldFrame);
+		if (set) {
+			set.delete(neuron);
+			if (set.size === 0) this.deathLedger.delete(oldFrame);
+		}
+		this.neuronDeathFrame.delete(neuron);
+	}
+
+	/**
+	 * Reap neurons scheduled to die at or before the given frame
+	 * Returns array of dead neurons and removes them from the ledger
+	 */
+	reapDeadNeurons(currentFrame) {
+		const dead = [];
+		for (const [frame, neurons] of this.deathLedger) {
+			if (frame > currentFrame) continue;
+			for (const neuron of neurons) {
+				dead.push(neuron);
+				this.neuronDeathFrame.delete(neuron);
+			}
+			this.deathLedger.delete(frame);
+		}
+		return dead;
 	}
 
 	/**
@@ -374,6 +418,9 @@ export class Thalamus {
 
 		// Remove pattern from its parent's routing table (if parent still exists)
 		if (pattern.parent && this.neurons.has(pattern.parent.id)) pattern.parent.removeChild(pattern);
+
+		// Remove from death ledger
+		this.unregisterDeath(pattern);
 
 		// Delete this pattern neuron from the index
 		this.neurons.delete(pattern.id);
