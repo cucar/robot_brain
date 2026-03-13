@@ -687,7 +687,7 @@ export default class Brain {
 		if (this.debug) console.log('=== CLEANUP STARTING ===');
 
 		// run forget on all neurons and collect patterns to be deleted after forgetting
-		const deadPatterns = this.excludeActiveNeurons(this.thalamus.cleanupZombieNeurons(this.frameNumber));
+		const deadPatterns = this.excludeActiveNeurons(this.thalamus.getDeadPatterns(this.frameNumber));
 
 		// delete dead patterns (with recursive cleanup of context references)
 		const deletedPatterns = this.deletePatterns(deadPatterns, this.frameNumber);

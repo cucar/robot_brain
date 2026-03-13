@@ -351,20 +351,10 @@ export class Thalamus {
 	}
 
 	/**
-	 * Cleanup zombie neurons - delete items with zero effective strength.
-	 * With lazy decay, this is a cleanup operation only.
-	 * @param {number} currentFrame - Current frame number
-	 * @returns {Array<Neuron>} - Array of zombie neurons that can be deleted
+	 * returns dead pattern neurons
 	 */
-	cleanupZombieNeurons(currentFrame) {
-		return this.getNeurons().filter(neuron => neuron.cleanupZombies(currentFrame));
-	}
-
-	/**
-	 * @deprecated - Use cleanupZombieNeurons instead.
-	 */
-	forgetNeurons() {
-		return this.getNeurons().filter(neuron => neuron.forget());
+	getDeadPatterns(currentFrame) {
+		return this.getNeurons().filter(neuron => neuron.canDelete(currentFrame));
 	}
 
 	/**

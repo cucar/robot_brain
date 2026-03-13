@@ -152,11 +152,14 @@ export class Context {
 		// Check match threshold - if it's below the threshold, not matched at all
 		if ((common.length / effectiveEntries.length) < Context.mergeThreshold) return null;
 
-		// Find novel (in observed but not in this known context)
+		// Build set of effective keys for novel detection (ignore dead entries)
+		const effectiveKeys = new Set(effectiveEntries.map(e => `${e.neuron.id}:${e.distance}`));
+
+		// Find novel (in observed but not in this known context's effective entries)
 		const novel = [];
 		for (const [neuron, distanceMap] of observed.entries)
 			for (const [distance, strength] of distanceMap)
-				if (!this.hasKey(neuron, distance))
+				if (!effectiveKeys.has(`${neuron.id}:${distance}`))
 					novel.push({ neuron, distance, strength });
 
 		// Calculate score as sum of effective strengths of common entries
@@ -165,12 +168,5 @@ export class Context {
 
 		// return the matched context with pattern and score
 		return { score, common, missing, novel };
-	}
-
-	/**
-	 * Get effective size (number of entries with positive effective strength)
-	 */
-	getEffectiveSize(patternLastActivationFrame, currentFrame, decayRate) {
-		return this.getEffectiveEntries(patternLastActivationFrame, currentFrame, decayRate).length;
 	}
 }

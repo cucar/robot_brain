@@ -558,45 +558,6 @@ export class Neuron {
 	}
 
 	/**
-	 * Zombie cleanup - delete items that have decayed to zero effective strength.
-	 * With lazy decay, this is a cleanup operation only - decay is computed on-demand.
-	 * @param {number} currentFrame - Current frame number
-	 * @returns {boolean} True if this neuron can be deleted (is a zombie)
-	 */
-	cleanupZombies(currentFrame) {
-
-		// cleanup dead context entries (effective strength <= 0)
-		this.cleanupDeadContexts(currentFrame);
-
-		// return if the neuron can be deleted or not
-		return this.canDelete(currentFrame);
-	}
-
-	/**
-	 * Cleanup context entries with zero effective strength.
-	 * Uses this neuron's lastActivationFrame as decay base.
-	 */
-	cleanupDeadContexts(currentFrame) {
-		let contextsDeleted = 0;
-
-		// Calculate decay based on when this pattern was last activated
-		const decay = (currentFrame - this.lastActivationFrame) * Neuron.contextForgetRate;
-
-		// find context entries with zero effective strength
-		const toDelete = [];
-		for (const entry of this.context.getEntries())
-			if (entry.strength - decay <= 0) toDelete.push(entry);
-
-		// delete the dead context entries
-		for (const entry of toDelete) {
-			this.removePatternContext(entry.neuron, entry.distance);
-			contextsDeleted++;
-		}
-
-		if (Neuron.debug) console.log(`  Contexts: ${contextsDeleted} deleted`);
-	}
-
-	/**
 	 * Check if neuron can be deleted (is a zombie)
 	 * @param {number} currentFrame - Current frame number
 	 */
