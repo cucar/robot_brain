@@ -333,10 +333,8 @@ export class Neuron {
 	matchPattern(observed, currentFrame) {
 
 		// try to match the observed context to known patterns
-		// sort children by id for deterministic ordering
-		const sortedChildren = Array.from(this.children).sort((a, b) => a.id - b.id);
 		let best = null; // { pattern, score, common, missing, novel }
-		for (const pattern of sortedChildren) {
+		for (const pattern of this.children) {
 
 			// if the pattern has been forgotten, ignore that - cleanup cycle will take care of it
 			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
