@@ -402,6 +402,37 @@ export class Thalamus {
 	}
 
 	/**
+	 * Delete dead pattern neurons with recursive cascade.
+	 * When a pattern is deleted, other patterns that referenced it may become deletable too.
+	 * @param {Array<Neuron>} patterns - Initial list of patterns to delete
+	 * @param {number} currentFrame - Current frame number for lazy decay checks
+	 * @returns {Array<Neuron>} - All deleted patterns
+	 */
+	deletePatterns(patterns, currentFrame) {
+		const toDelete = [...patterns];
+		const queuedIds = new Set(patterns.map(pattern => pattern.id));
+		const deletedPatterns = [];
+		const deletedIds = new Set();
+
+		while (toDelete.length > 0) {
+			const pattern = toDelete.shift();
+			if (deletedIds.has(pattern.id)) continue;
+
+			const newlyDeletable = this.deletePattern(pattern, currentFrame);
+			deletedPatterns.push(pattern);
+			deletedIds.add(pattern.id);
+
+			for (const newlyDeletablePattern of newlyDeletable) {
+				if (deletedIds.has(newlyDeletablePattern.id) || queuedIds.has(newlyDeletablePattern.id)) continue;
+				toDelete.push(newlyDeletablePattern);
+				queuedIds.add(newlyDeletablePattern.id);
+			}
+		}
+
+		return deletedPatterns;
+	}
+
+	/**
 	 * Delete a pattern neuron and clean up all references to it.
 	 * Returns patterns that became deletable as a result of cleanup.
 	 * @param {Neuron} pattern - Pattern to delete

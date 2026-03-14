@@ -688,45 +688,11 @@ export default class Brain {
 		if (deadPatterns.length === 0) return;
 
 		// delete dead patterns (with recursive cleanup of context references)
-		const deletedPatterns = this.deletePatterns(deadPatterns, this.frameNumber);
+		const deletedPatterns = this.thalamus.deletePatterns(deadPatterns, this.frameNumber);
 
-		// clean up deleted patterns from active memory contexts
-		for (const pattern of deletedPatterns) this.memory.cleanupDeletedNeuron(pattern);
+		// verify no deleted patterns are active - that would be a bug
+		this.memory.assertNotActive(deletedPatterns);
 
 		if (this.debug) console.log(`=== CLEANUP COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
-	}
-
-	/**
-	 * Delete dead pattern neurons (no content, no references, not active)
-	 * Recursively deletes patterns that become deletable after cleanup
-	 * @param {Array<Neuron>} patterns - Initial list of patterns to delete
-	 * @param {number} currentFrame - Current frame number for lazy decay checks
-	 * @returns {Array<Neuron>} - All deleted patterns (for memory cleanup)
-	 */
-	deletePatterns(patterns, currentFrame) {
-		const toDelete = [...patterns];
-		const queuedIds = new Set(patterns.map(pattern => pattern.id));
-		const deletedPatterns = [];
-		const deletedIds = new Set();
-
-		while (toDelete.length > 0) {
-			const pattern = toDelete.shift();
-			if (deletedIds.has(pattern.id)) continue;
-
-			// Clean up context references and get newly deletable patterns
-			const newlyDeletable = this.thalamus.deletePattern(pattern, currentFrame);
-			deletedPatterns.push(pattern);
-			deletedIds.add(pattern.id);
-
-			// Add newly deletable patterns to the queue
-			for (const newlyDeletablePattern of newlyDeletable) {
-				if (deletedIds.has(newlyDeletablePattern.id) || queuedIds.has(newlyDeletablePattern.id)) continue;
-				toDelete.push(newlyDeletablePattern);
-				queuedIds.add(newlyDeletablePattern.id);
-			}
-		}
-
-		if (this.debug) console.log(`  Patterns deleted: ${deletedPatterns.length}`);
-		return deletedPatterns;
 	}
 }

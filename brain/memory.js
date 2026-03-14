@@ -244,14 +244,13 @@ export class Memory {
 	}
 
 	/**
-	 * Clean up a deleted neuron from all active contexts.
-	 * This prevents learnNewPattern from creating patterns with zombie references.
-	 * @param {Neuron} deletedNeuron - The neuron being deleted
+	 * Verify that none of the deleted patterns are currently active.
+	 * @param {Array<Neuron>} deletedPatterns - Patterns that were deleted
 	 */
-	cleanupDeletedNeuron(deletedNeuron) {
-		for (const neuronsAtAge of this.activeNeurons)
-			for (const state of neuronsAtAge.values())
-				if (state.context)
-					state.context = state.context.filter(entry => entry.neuron !== deletedNeuron);
+	assertNotActive(deletedPatterns) {
+		for (const pattern of deletedPatterns)
+			for (const neuronsAtAge of this.activeNeurons)
+				if (neuronsAtAge.has(pattern))
+					throw new Error(`BUG: deleting active neuron ${pattern.id} (level ${pattern.level})`);
 	}
 }
