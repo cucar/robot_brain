@@ -30,9 +30,10 @@ export class Neuron {
 	static actionRegretMinStrength = 3;
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 4.25;
-	static connectionForgetRate = 0.009;
-	static contextForgetRate = 0.009;
-	static patternForgetRate = 0.011;
+	// use 0.001 or lower for text for all forget rates
+	static connectionForgetRate = 0.009; // use 0.009 for stocks
+	static contextForgetRate = 0.009; // use 0.009 for stocks
+	static patternForgetRate = 0.011; // use 0.011 for stocks
 
 	// static debug flag for the neuron
 	static debug = false;
@@ -369,7 +370,7 @@ export class Neuron {
 
 		// Weaken missing and delete if necessary
 		for (const entry of missing) {
-			const canDelete = this.context.weakenNeuron(entry.neuron, entry.distance, Context.negativeReinforcement);
+			const canDelete = this.context.weakenNeuron(entry.neuron, entry.distance);
 			if (canDelete) this.removePatternContext(entry.neuron, entry.distance);
 		}
 	}

@@ -7,7 +7,7 @@ export class Context {
 	// Hyperparameters (shared with Neuron)
 	static maxStrength = 100;
 	static minStrength = 0;
-	static mergeThreshold = 0.5;
+	static mergeThreshold = 0.5; // use 0.5 for stocks, 0.8 for text
 	static negativeReinforcement = 0.1;
 
 	constructor() {
@@ -63,13 +63,13 @@ export class Context {
 	}
 
 	/**
-	 * reduces the strength of an entry - returns if it can be deleted
+	 * reduces the strength of an entry when not observed - returns if it can be deleted
 	 */
-	weakenNeuron(neuron, distance, rate) {
+	weakenNeuron(neuron, distance) {
 		const distanceMap = this.entries.get(neuron);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for weakening');
 		const strength = distanceMap.get(distance);
-		const newStrength = Math.max(Context.minStrength, strength - rate);
+		const newStrength = Math.max(Context.minStrength, strength - Context.negativeReinforcement);
 		distanceMap.set(distance, newStrength);
 		return newStrength <= Context.minStrength; // return if the entry can be deleted or not
 	}
@@ -110,20 +110,6 @@ export class Context {
 	hasKey(neuron, distance) {
 		const distanceMap = this.entries.get(neuron);
 		return distanceMap ? distanceMap.has(distance) : false;
-	}
-
-	/**
-	 * Get entries with effective strengths after lazy decay applied. Filters out entries that have decayed to zero.
-	 */
-	getEffectiveEntries(patternLastActivationFrame, currentFrame, decayRate) {
-		const decay = (currentFrame - patternLastActivationFrame) * decayRate;
-		const result = [];
-		for (const [neuron, distanceMap] of this.entries)
-			for (const [distance, strength] of distanceMap) {
-				const effectiveStrength = Math.max(Context.minStrength, strength - decay);
-				if (effectiveStrength > 0) result.push({ neuron, distance, strength: effectiveStrength });
-			}
-		return result;
 	}
 
 	/**
