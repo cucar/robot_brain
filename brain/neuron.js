@@ -340,11 +340,14 @@ export class Neuron {
 			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
 
 			// get the match results for the pattern for the given context
-			// send pattern's lastActivationFrame for dynamic decay calculation (pattern not yet activated this frame)
-			const match = pattern.context.match(observed, pattern.lastActivationFrame, currentFrame, Neuron.contextForgetRate);
+			const decay = Neuron.calculateDecay(pattern.lastActivationFrame, currentFrame, Neuron.contextForgetRate);
+			const match = pattern.context.match(observed, decay);
 
 			// if there is a match, and it's the best so far, store it
-			if (match && (!best || match.score > best.score)) best = { ...match, pattern };
+			if (match && (!best || match.score > best.score)) {
+				match.pattern = pattern;
+				best = match;
+			}
 		}
 		if (!best) return null; // if there are no matches, return null
 

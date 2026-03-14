@@ -131,42 +131,59 @@ export class Context {
 	 * Returns match result with score, or null if below threshold.
 	 * Uses effective strengths (with lazy decay applied) for scoring.
 	 * @param {Context} observed - The observed context to match against
-	 * @param {number} patternLastActivationFrame - When the owning pattern was last activated
-	 * @param {number} currentFrame - Current frame number for lazy decay
-	 * @param {number} decayRate - decay rate to use for lazy decay
+	 * @param {number} decay - strength decay since last activation
 	 * @returns {Object|null} { score, common, missing, novel } or null
 	 */
-	match(observed, patternLastActivationFrame, currentFrame, decayRate) {
+	match(observed, decay) {
 
-		// Get entries with decay applied, filtering out zero-strength
-		const effectiveEntries = this.getEffectiveEntries(patternLastActivationFrame, currentFrame, decayRate);
-		if (effectiveEntries.length === 0) return null;
-
-		// Categorize into common (present in observed) and missing (not present)
+		// Single pass: categorize into common/missing while computing score and counts
 		const common = [];
 		const missing = [];
-		for (const entry of effectiveEntries)
-			if (observed.hasKey(entry.neuron, entry.distance)) common.push(entry);
-			else missing.push(entry);
+		let totalCount = 0;
+		let score = 0;
 
-		// Check match threshold - if it's below the threshold, not matched at all
-		if ((common.length / effectiveEntries.length) < Context.mergeThreshold) return null;
+		// process all neurons in the known context
+		for (const [neuron, distanceMap] of this.entries) {
 
-		// Build set of effective keys for novel detection (ignore dead entries)
-		const effectiveKeys = new Set(effectiveEntries.map(e => `${e.neuron.id}:${e.distance}`));
+			// get the observed distances for the neuron in the observed context
+			const observedDistances = observed.entries.get(neuron);
 
-		// Find novel (in observed but not in this known context's effective entries)
+			// process all distances for the neuron in the known context
+			for (const [distance, strength] of distanceMap) {
+
+				// calculate the effective strength of the entry - if it is zero or less, it will be deleted
+				const effectiveStrength = Math.max(Context.minStrength, strength - decay);
+				if (effectiveStrength <= 0) continue;
+				totalCount++;
+
+				// if the observed context has the neuron at the same distance, it is a common entry
+				if (observedDistances && observedDistances.has(distance)) {
+					common.push({ neuron, distance, strength: effectiveStrength });
+					score += effectiveStrength;
+				}
+				// otherwise, it is a missing entry
+				else missing.push({ neuron, distance, strength: effectiveStrength });
+			}
+		}
+
+		// if there are no known context entries, there cannot be a match
+		if (totalCount === 0) return null;
+
+		// check match threshold to decide if there is a match or not
+		if (common.length / totalCount < Context.mergeThreshold) return null;
+
+		// match found - find the novel entries (in observed but not in this known context) using lookups
 		const novel = [];
-		for (const [neuron, distanceMap] of observed.entries)
+		for (const [neuron, distanceMap] of observed.entries) {
+			const knownDistances = this.entries.get(neuron);
 			for (const [distance, strength] of distanceMap)
-				if (!effectiveKeys.has(`${neuron.id}:${distance}`))
+				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance) - decay) <= 0)
 					novel.push({ neuron, distance, strength });
+		}
 
-		// Calculate score as sum of effective strengths of common entries
 		// Round to 14 decimal places to avoid floating-point precision issues
-		const score = Math.round(common.reduce((sum, e) => sum + e.strength, 0) * 1e14) / 1e14;
+		score = Math.round(score * 1e14) / 1e14;
 
-		// return the matched context with pattern and score
 		return { score, common, missing, novel };
 	}
 }
