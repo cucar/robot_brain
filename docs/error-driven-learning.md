@@ -21,7 +21,7 @@ Patterns are created by `brain.learnNewPatterns()` which calls `neuron.learnNewP
 
 When a neuron confidently predicted an event that didn't happen:
 - Neuron voted in previous frame (has saved votes and context)
-- Vote strength >= `eventErrorMinStrength` (default: 2.0)
+- Vote strength >= `eventErrorMinStrength` (default: 1)
 - Vote type is 'event'
 - The predicted neuron did NOT appear in current frame
 - Create a pattern with the predictor as parent
@@ -45,7 +45,7 @@ for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
 
 When an action resulted in negative reward:
 - Neuron voted for an action in previous frame
-- Vote strength >= `actionRegretMinStrength` (default: 2.0)
+- Vote strength >= `actionRegretMinStrength` (default: 3)
 - Vote type is 'action'
 - The action's reward < `actionRegretMinPain` (default: 0)
 - Create a pattern to try alternative actions
@@ -66,6 +66,23 @@ for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
     }
   }
 }
+```
+
+```mermaid
+flowchart TD
+    V["Neuron voted in previous frame"]
+    V --> ET{"Event vote?"}
+    V --> AT{"Action vote?"}
+    ET --> ES{"strength ≥ 1?"}
+    ES --> EP{"Predicted neuron<br/>appeared?"}
+    EP -- "No" --> CREATE1["Create error pattern<br/>parent = predictor<br/>prediction = actual outcome"]
+    EP -- "Yes" --> SKIP1["No pattern needed"]
+    ES -- "No" --> SKIP2["Too weak to matter"]
+    AT --> AS{"strength ≥ 3?"}
+    AS --> AR{"reward < 0?"}
+    AR -- "Yes" --> CREATE2["Create regret pattern<br/>parent = predictor<br/>prediction = better action"]
+    AR -- "No" --> SKIP3["No regret"]
+    AS -- "No" --> SKIP4["Too weak to matter"]
 ```
 
 ---
@@ -207,7 +224,7 @@ for (peak of peaks) {
   bestPattern = null
   bestScore = 0
 
-  for (pattern of peak.patterns) {
+  for (pattern of peak.children) {
     match = pattern.context.match(context)
     if (match && match.score > bestScore) {
       bestPattern = pattern
@@ -258,8 +275,8 @@ When a pattern is active, it votes via its connections:
 ```javascript
 // Pattern neuron at age 0 votes for distance = 0 + 1 = 1
 distance = age + 1
-levelWeight = 1 + level * levelVoteMultiplier  // e.g., 1 + 1*3 = 4
-timeWeight = 1 - age / contextLength           // e.g., 1 - 0/5 = 1.0
+levelWeight = 1 + level * levelVoteMultiplier  // e.g., 1 + 1*4.25 = 5.25
+timeWeight = 1 - age / contextLength           // e.g., 1 - 0/20 = 1.0
 
 distanceMap = connections.get(distance)
 if (!distanceMap) return []
@@ -289,6 +306,24 @@ for ({voter, age, state} of memory.getVotingNeurons()) {
 ```
 
 This override is the key mechanism: patterns exist to correct connection predictions. When a pattern matches, the parent neuron doesn't vote via its connections - the pattern votes instead.
+
+```mermaid
+graph TD
+    subgraph Recognition["Pattern Recognition"]
+        PARENT["Parent neuron B<br/>appears at age 0"]
+        CHECK["Check B.children<br/>against current context"]
+        MATCH{"Context match<br/>≥ threshold?"}
+        ACTIVATE["Activate pattern<br/>suppress B's votes"]
+        NOACT["No pattern active<br/>B votes via connections"]
+    end
+    subgraph Voting["Vote Collection"]
+        PVOTE["Pattern votes<br/>(5.25× weight)"]
+        CVOTE["Connection votes<br/>(1× weight)"]
+    end
+    PARENT --> CHECK --> MATCH
+    MATCH -- "Yes" --> ACTIVATE --> PVOTE
+    MATCH -- "No" --> NOACT --> CVOTE
+```
 
 ---
 
@@ -396,7 +431,7 @@ for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
 Over many cycles, patterns converge to accurate predictions for their specific contexts through:
 1. **Strengthening** correct predictions (connection updates)
 2. **Creating higher-level patterns** for persistent errors (pattern learning)
-3. **Forgetting** weak predictions (forget cycles)
+3. **Forgetting** weak predictions (lazy decay)
 
 ---
 
@@ -486,19 +521,19 @@ If contextLength frames isn't enough context, patterns can form hierarchies:
 - Created when base neurons make prediction errors
 - Context: base neurons at various distances
 - Predictions: base neurons at distance 1
-- Vote with 4x weight (1 + 1*3)
+- Vote with 5.25x weight (1 + 1*4.25)
 
 **Level 2 (Second-order patterns)**:
 - Created when level 1 patterns make prediction errors
 - Context: level 1 patterns at various distances
 - Predictions: base neurons at distance 1
-- Vote with 7x weight (1 + 2*3)
+- Vote with 9.5x weight (1 + 2*4.25)
 
 **Level N**:
 - Created when level N-1 patterns make prediction errors
 - Context: level N-1 patterns at various distances
 - Predictions: base neurons at distance 1
-- Vote with (1 + N*3)x weight
+- Vote with (1 + N*4.25)x weight
 
 ### Hierarchical Recognition
 
@@ -530,12 +565,30 @@ while (true) {
 ### Temporal Extension
 
 Each level extends the effective temporal context:
-- **Level 0**: contextLength frames (e.g., 5 frames)
-- **Level 1**: contextLength * contextLength frames (e.g., 25 frames)
-- **Level 2**: contextLength^3 frames (e.g., 125 frames)
+- **Level 0**: contextLength frames (e.g., 20 frames)
+- **Level 1**: contextLength * contextLength frames (e.g., 400 frames)
+- **Level 2**: contextLength^3 frames (e.g., 8000 frames)
 - **Level N**: contextLength^(N+1) frames
 
 This exponential growth allows the system to capture long-term dependencies without increasing contextLength.
+
+```mermaid
+graph BT
+    subgraph L0["Level 0 — Base (20 frames context)"]
+        direction LR
+        A["A"] --- B["B"] --- C["C"] --- D["D"]
+    end
+    subgraph L1["Level 1 — 400 frames context, 5.25× vote weight"]
+        direction LR
+        P1["Pattern₁"] --- P2["Pattern₂"]
+    end
+    subgraph L2["Level 2 — 8000 frames context, 9.5× vote weight"]
+        P3["Pattern₃"]
+    end
+    B -. "error" .-> P1
+    C -. "error" .-> P2
+    P1 -. "error" .-> P3
+```
 
 ### Example: Multi-Level Learning
 
@@ -589,6 +642,6 @@ Pattern errors at level N create patterns at level N+1, enabling hierarchical ab
 2. **Activation**: Context match triggers `memory.activatePattern()`
 3. **Voting**: Pattern votes via `neuron.vote()` with level weighting
 4. **Learning**: Connections strengthen/weaken via `neuron.learnConnections()`
-5. **Forgetting**: Weak patterns deleted via `neuron.forget()` and `thalamus.deletePattern()`
+5. **Forgetting**: Weak patterns decay via lazy decay and are cleaned up when effective strength reaches zero
 
 The algorithm memorizes any sequence with learnable temporal structure, while correctly refusing to memorize true randomness.

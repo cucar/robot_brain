@@ -1,15 +1,25 @@
 {
-  "name": "machine_intelligence",
+  "name": "robot_brain",
   "version": "1.0.0",
-  "description": "Hierarchical Unsupervised Predictive Learning Algorithm",
+  "description": "A hierarchical temporal neural network that learns patterns from raw sequential data without training epochs, backpropagation, or labeled data.",
   "type": "module",
-  "main": "main.js",
+  "main": "run-brain.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "artificial-intelligence",
+    "neural-network",
+    "temporal-learning",
+    "hierarchical-patterns",
+    "online-learning",
+    "prediction",
+    "neuroscience",
+    "brain",
+    "unsupervised-learning"
+  ],
+  "author": "Cagdas Ucar",
+  "license": "Apache-2.0",
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.1.3",
     "dotenv": "^17.3.1",

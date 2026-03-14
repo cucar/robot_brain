@@ -59,11 +59,12 @@ Temporal sliding window for short-term memory:
 
 #### Neuron (`brain/neuron.js`)
 Unified class for all neurons (sensory and pattern):
-- **Connections**: Map<distance, Map<toNeuron, {strength, reward}>>
-- **Patterns**: Set of pattern neurons (for peak neurons)
+- **Connections**: Map<distance, Map<toNeuron, {strength, reward, lastFrame}>> — with lazy decay
+- **Children**: Set of child pattern neurons (routing table for context-specific predictions)
 - **Context**: Context object (for pattern neurons)
 - **Voting**: Generates votes weighted by level and time
 - **Learning**: Creates connections and patterns from observations
+- **Lazy Decay**: Strengths decay continuously based on frames elapsed since last activation
 
 #### Context (`brain/context.js`)
 Pattern context representation and matching:
@@ -71,6 +72,22 @@ Pattern context representation and matching:
 - **Keys**: Set for fast O(1) lookup during matching
 - **Matching**: Threshold-based pattern recognition
 - **Merging**: Strengthens common, adds novel, weakens missing
+
+### Class Relationships
+
+```mermaid
+graph LR
+    Brain --> Thalamus
+    Brain --> Memory
+    Brain --> Diagnostics
+    Brain --> Database
+    Thalamus --> Neuron
+    Thalamus --> Channel
+    Neuron --> Context
+    Channel --> Dimension
+    Neuron -- "children" --> Neuron
+    Neuron -- "connections" --> Neuron
+```
 
 ---
 
@@ -164,14 +181,36 @@ Each vote is weighted by two factors:
 
 1. **Level weight**: `1 + level * levelVoteMultiplier`
    - Higher-level patterns have more influence (they represent more context)
-   - Default multiplier: 3x per level
-   - Example: level 0 = 1x, level 1 = 4x, level 2 = 7x
+   - Default multiplier: 4.25x per level
+   - Example: level 0 = 1x, level 1 = 5.25x, level 2 = 9.5x
 
 2. **Time decay**: `1 - age / contextLength`
    - Recent predictions weighted more than distant ones
-   - Age 0 gets full weight (1.0), age 4 gets 20% weight (0.2) with contextLength=5
+   - Age 0 gets full weight (1.0), age 19 gets 5% weight (0.05) with contextLength=20
 
 **Effective strength** = `levelWeight * timeWeight * rawStrength`
+
+```mermaid
+graph LR
+    subgraph Active["Active Neurons"]
+        N1["Neuron A<br/>level 0, age 0"]
+        N2["Neuron B<br/>level 0, age 3"]
+        P1["Pattern₁<br/>level 1, age 0"]
+    end
+    subgraph Votes["Weighted Votes"]
+        V1["A → price_up<br/>1.0 × 1.0 × str"]
+        V2["B → price_down<br/>1.0 × 0.85 × str"]
+        V3["P₁ → price_up<br/>5.25 × 1.0 × str"]
+    end
+    subgraph Winner["Consensus"]
+        W["price_up wins<br/>(higher total)"]
+    end
+    N1 --> V1
+    N2 --> V2
+    P1 --> V3
+    V1 --> W
+    V3 --> W
+```
 
 ### Pattern Override Rule
 
@@ -230,14 +269,15 @@ class Neuron {
   coordinates: object           // {dimension: value}
 
   // Pattern neurons (level > 0)
-  peak: Neuron                  // Peak neuron reference
+  parent: Neuron                // Parent neuron (the predictor that made the error)
 
   // All neurons
-  connections: Map<distance, Map<Neuron, {strength, reward}>>
-  patterns: Set<Neuron>         // Pattern neurons (for peaks)
+  connections: Map<distance, Map<Neuron, {strength, reward, lastFrame}>>
+  children: Set<Neuron>         // Child pattern neurons (routing table)
   context: Context              // Pattern context (for patterns)
   contextRefs: Map<Neuron, Set<distance>>  // Reverse references
   activationStrength: number    // Incremented on activation
+  lastActivationFrame: number   // Frame when last activated (for lazy decay)
 }
 ```
 
@@ -268,12 +308,26 @@ Used for backup/restore between episodes, not during frame processing:
 - **`base_neurons`** - Sensory neuron metadata (channel, type)
 - **`coordinates`** - Sensory neuron coordinate values
 - **`connections`** - Base neuron connections (distance, strength, reward)
-- **`pattern_peaks`** - Pattern-to-peak mappings with strength
+- **`patterns`** - Pattern-to-parent mappings with strength
 - **`pattern_past`** - Pattern contexts (context neurons with ages and strengths)
 
 ---
 
 ## Frame Processing Flow
+
+```mermaid
+flowchart TD
+    A["1. getFrame()<br/>Collect events from channels"] --> B["2. ageNeurons()<br/>Shift sliding window"]
+    B --> C["3. activateNeurons()<br/>Find/create neurons for observations"]
+    C --> D["4. recognizePatterns()<br/>Match patterns at each level"]
+    D --> E["5. learnConnections()<br/>Strengthen co-occurrence links"]
+    E --> F["6. learnNewPatterns()<br/>Create patterns from prediction errors"]
+    F --> G["7. collectVotes()<br/>All neurons vote on predictions"]
+    G --> H["8. determineConsensus()<br/>Select winners by strength/reward"]
+    H --> I["9. executeActions()<br/>Send actions to channels, get rewards"]
+    I --> J["10. cleanupDeadPatterns()<br/>Remove decayed patterns"]
+    J --> A
+```
 
 The brain processes each frame through a coordinated sequence:
 
@@ -443,41 +497,18 @@ channelActions = memory.getInferredActions()
 thalamus.executeChannelActions(channelActions)
 ```
 
-### 10. runForgetCycle() (periodic)
-**Purpose**: Prevent curse of dimensionality
+### 10. cleanupDeadPatterns()
+**Purpose**: Remove patterns whose effective strength has decayed to zero
+
+The system uses **lazy decay** instead of periodic forget cycles. Strengths are computed on-demand:
 
 ```javascript
-if (frameNumber % forgetCycles !== 0) return
-
-// Forget connections and patterns
-deadPatterns = thalamus.forgetNeurons()
-
-// Delete dead patterns recursively
-deletePatterns(deadPatterns)
+effectiveStrength = strength - (currentFrame - lastActivationFrame) * decayRate
 ```
 
-**Neuron.forget()**:
-```javascript
-// Decay connections
-for (distanceMap of connections.values()) {
-  for (connection of distanceMap.values()) {
-    connection.strength -= connectionForgetRate
-    if (connection.strength <= 0) delete connection
-  }
-}
+When a connection or pattern context entry's effective strength drops to zero or below, it is deleted. Patterns with no remaining content or references are recursively cleaned up.
 
-// Decay pattern context
-for (entry of context.entries) {
-  entry.strength -= contextForgetRate
-  if (entry.strength <= 0) remove entry
-}
-
-// Decay pattern predictions
-// (stored in pattern neurons, not shown here)
-
-// Return true if pattern can be deleted (no content, no references)
-return canDelete()
-```
+This eliminates the need for batch decay passes and provides smooth, continuous forgetting.
 
 ---
 
@@ -577,21 +608,20 @@ Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 
 | Parameter | Default | Location | Description |
 |-----------|---------|----------|-------------|
-| contextLength | 5 | Memory | Frames a neuron stays active |
+| contextLength | 20 | Memory | Frames a neuron stays active |
 | maxStrength | 100 | Neuron/Context | Maximum connection/pattern strength |
 | minStrength | 0 | Neuron/Context | Minimum strength before deletion |
-| levelVoteMultiplier | 3 | Neuron | Weight increase per pattern level |
-| rewardSmoothing | 1 | Neuron | Exponential smoothing for rewards (1 = full replacement) |
-| eventErrorMinStrength | 2 | Neuron | Min strength to create error pattern |
-| actionRegretMinStrength | 2 | Neuron | Min strength to create regret pattern |
+| levelVoteMultiplier | 4.25 | Neuron | Weight increase per pattern level |
+| rewardSmoothing | 0.8 | Neuron | Exponential smoothing for rewards |
+| eventErrorMinStrength | 1 | Neuron | Min strength to create error pattern |
+| actionRegretMinStrength | 3 | Neuron | Min strength to create regret pattern |
 | actionRegretMinPain | 0 | Neuron | Min negative reward to trigger regret |
-| mergeThreshold | 0.5 | Context | Min match ratio for pattern recognition |
+| mergeThreshold | 0.5 | Context | Min match ratio for pattern recognition (0.8 for text) |
 | negativeReinforcement | 0.1 | Context | Weakening rate for missing context |
-| connectionForgetRate | 1 | Neuron | Connection strength decay per forget cycle |
-| contextForgetRate | 1 | Neuron | Pattern context strength decay per forget cycle |
-| patternForgetRate | 1 | Neuron | Pattern prediction strength decay per forget cycle |
-| forgetCycles | 100 | Brain | Frames between forget cycles |
-| maxLevels | 10 | Brain | Maximum pattern hierarchy depth |
+| connectionForgetRate | 0.009 | Neuron | Connection strength decay rate per frame (lazy decay) |
+| contextForgetRate | 0.009 | Neuron | Pattern context strength decay rate per frame |
+| patternForgetRate | 0.011 | Neuron | Pattern prediction strength decay rate per frame |
+| maxLevels | 150 | Brain | Maximum pattern hierarchy depth (safety limit) |
 
 ---
 
@@ -612,8 +642,9 @@ This architecture implements a theory of how minds work:
 - **In-memory processing**: All learning in JavaScript objects (no DB queries during frames)
 - **Unified neuron class**: Sensory and pattern neurons share common functionality
 - **Thalamus relay**: Centralizes neuron registry and channel coordination
-- **Temporal sliding window**: Memory manages active neurons by age
+- **Temporal sliding window**: Memory manages active neurons by age (contextLength=20)
 - **Context matching**: Fast threshold-based pattern recognition
+- **Lazy decay**: Continuous strength decay computed on-demand (no periodic forget cycles)
 - **Optional persistence**: MySQL backup/restore between episodes
 
 The code is just the implementation. The architecture is a model of intelligence.
