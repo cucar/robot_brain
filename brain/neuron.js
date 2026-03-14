@@ -27,12 +27,12 @@ export class Neuron {
 	static minStrength = 0;
 	static rewardSmoothing = 0.8;
 	static eventErrorMinStrength = 1;
-	static actionRegretMinStrength = 2;
+	static actionRegretMinStrength = 3;
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 4.25;
-	static connectionForgetRate = 0.01;
+	static connectionForgetRate = 0.009;
 	static contextForgetRate = 0.009;
-	static patternForgetRate = 0.01;
+	static patternForgetRate = 0.011;
 
 	// static debug flag for the neuron
 	static debug = false;
