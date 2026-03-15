@@ -83,11 +83,15 @@ export class Thalamus {
 	setNeurons(neurons) {
 		this.neurons = neurons;
 
-		// Rebuild neuronsByValue map for base neurons
+		// Rebuild neuronsByValue map and death ledger
 		this.neuronsByValue.clear();
+		this.deathLedger.clear();
+		this.neuronDeathFrame.clear();
 		for (const neuron of neurons.values())
 			if (neuron.level === 0)
 				this.neuronsByValue.set(neuron.valueKey, neuron);
+			else
+				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / Neuron.patternForgetRate));
 	}
 
 	/**
@@ -100,6 +104,22 @@ export class Thalamus {
 		this.neuronDeathFrame.clear();
 		Neuron.nextId = 1;
 	}
+
+	/**
+	 * Materialize all lazy decay into actual values and reset timestamps.
+	 * Re-registers death frames so pattern cleanup continues working.
+	 */
+	materializeAndResetNeurons(currentFrame) {
+		this.deathLedger.clear();
+		this.neuronDeathFrame.clear();
+		for (const neuron of this.neurons.values()) {
+			neuron.materializeStrengths(currentFrame);
+			neuron.lastActivationFrame = 0;
+			if (neuron.level > 0)
+				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / Neuron.patternForgetRate));
+		}
+	}
+
 
 	/**
 	 * Register a channel class (not instantiated yet)
