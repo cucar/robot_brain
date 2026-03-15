@@ -444,6 +444,69 @@ export class Neuron {
 		// No errors to learn from
 		if (errorCorrections.size === 0) return null;
 
+		// If an existing child already handles the same corrections in a similar context, merge into it
+		const existing = this.findDuplicateChild(age, errorCorrections);
+		if (existing && this.mergeContextIntoChild(existing, age, context, errorCorrections))
+			return null;
+
+		// Create new pattern neuron at next level up
+		return this.createErrorPattern(age, context, errorCorrections);
+	}
+
+	/**
+	 * Find an existing child pattern that predicts the same corrections at the same distance.
+	 */
+	findDuplicateChild(age, errorCorrections) {
+		for (const child of this.children) {
+			const childConnections = child.connections.get(age);
+			if (!childConnections || childConnections.size !== errorCorrections.size) continue;
+			let allMatch = true;
+			for (const neuron of errorCorrections)
+				if (!childConnections.has(neuron)) { allMatch = false; break; }
+			if (allMatch) return child;
+		}
+		return null;
+	}
+
+	/**
+	 * Merge current context into an existing child pattern instead of creating a duplicate.
+	 * Only merges if contexts are sufficiently similar — otherwise returns false so a new pattern is created.
+	 * Common context entries strengthen, novel entries are added, missing entries weaken.
+	 */
+	mergeContextIntoChild(child, age, context, errorCorrections) {
+		const common = [];
+		const novel = [];
+
+		// Categorize current context entries relative to the child's known context
+		for (const { neuron, distance } of context) {
+			if (neuron.level !== this.level) continue;
+			if (child.context.hasKey(neuron, distance)) common.push({ neuron, distance });
+			else novel.push({ neuron, distance });
+		}
+
+		// Only merge if contexts overlap enough — otherwise these are genuinely different situations
+		const totalKnown = child.context.size;
+		if (totalKnown > 0 && common.length / totalKnown < Context.mergeThreshold) return false;
+
+		// Find entries in child's context missing from current context
+		const missing = [];
+		for (const { neuron, distance } of child.context.getEntries())
+			if (!context.some(c => c.neuron === neuron && c.distance === distance && c.neuron.level === this.level))
+				missing.push({ neuron, distance });
+
+		child.refineContext(common, novel, missing);
+
+		// Strengthen the existing correction connections
+		for (const neuron of errorCorrections)
+			child.updateConnection(age, neuron, 0, child.lastActivationFrame);
+		return true;
+	}
+
+	/**
+	 * Create a new error pattern with the given corrections and context.
+	 */
+	createErrorPattern(age, context, errorCorrections) {
+
 		// Create pattern neuron at next level up
 		const pattern = Neuron.createPattern(this.level + 1, this);
 		for (const correctionNeuron of errorCorrections)

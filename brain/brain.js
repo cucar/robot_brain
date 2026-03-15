@@ -78,10 +78,9 @@ export default class Brain {
 	}
 
 	/**
-	 * Reset brain memory state for a clean episode start
-	 * note that the frameNumber is NOT reset — it must be monotonically increasing across the brain's lifetime.
-	 * Resetting it would cause lazy decay to go backwards (negative decay = strength boost)
-	 * since neurons retain lastActivationFrame from the previous episode.
+	 * Reset brain memory state for a clean episode start.
+	 * frameNumber is NOT reset — it must increase monotonically across the brain's lifetime
+	 * so that lazy decay calculations remain correct (neurons retain lastActivationFrame).
 	 */
 	resetContext() {
 		console.log('Resetting brain context...');
