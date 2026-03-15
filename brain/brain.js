@@ -79,12 +79,12 @@ export default class Brain {
 
 	/**
 	 * Reset brain memory state for a clean episode start
+	 * note that the frameNumber is NOT reset — it must be monotonically increasing across the brain's lifetime.
+	 * Resetting it would cause lazy decay to go backwards (negative decay = strength boost)
+	 * since neurons retain lastActivationFrame from the previous episode.
 	 */
 	resetContext() {
 		console.log('Resetting brain context...');
-
-		// Reset frame counter for proper context window handling
-		this.frameNumber = 0;
 
 		// Reset accuracy stats
 		this.resetAccuracyStats();
@@ -106,6 +106,9 @@ export default class Brain {
 	 */
 	async resetBrain() {
 		console.log('Hard resetting brain (all learned data)...');
+
+		// reset frame counter (safe here since all neurons are also cleared)
+		this.frameNumber = 0;
 
 		// reset active memory
 		this.resetContext();
