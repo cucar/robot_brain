@@ -13,22 +13,11 @@ export class StockChannel extends Channel {
 	static initialCapital = 15000;
 	static cash = StockChannel.initialCapital;
 
-	// default is trading based on event inferences - more reliable, but action trading mode can generate more profit sometimes
-	static actionTrading = false;
-
 	// maximum number of positions to hold at once
 	static maxPositions = 1;
 
 	// maximum price limit for stocks
 	static maxPrice = 5000;
-
-	/**
-	 * Initialize channel type with runtime options
-	 * Called once during brain initialization
-	 */
-	static initialize(options) {
-		StockChannel.actionTrading = options.actionTrading || false;
-	}
 
 	/**
 	 * Static method to reset channel-level context (shared state across all instances)
@@ -411,8 +400,8 @@ export class StockChannel extends Channel {
 		// Calculate total portfolio value (cash + all current holdings)
 		const totalValue = this.getTotalValue(channelInferences);
 
-		// Collect all actions with their weights for allocations
-		const actions = this.getActionsWeights(channelInferences);
+		// determine actions to be taken from the channel inferences
+		const actions = this.determineActions(channelInferences);
 
 		// Allocate portfolio value proportional to the rewards
 		const allocations = this.distributeAllocations(channelInferences, actions, totalValue);
@@ -445,34 +434,19 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Calculate action weights for each channel
-	 * - Event trading mode: uses event consensus inferences (price forecasts) to determine actions
-	 * - Action trading mode: uses brain's action decisions with their rewards
+	 * determines actions to be taken from the channel inferences
 	 */
-	static getActionsWeights(channelInferences) {
+	static determineActions(channelInferences) {
 		const allActions = [];
-
-		// Action-based trading: use brain's action decisions
-		if (this.actionTrading) {
-			for (const [channelName, { channel, actions }] of channelInferences) {
-				if (actions.length === 0) continue;
-				const actionData = actions[0]; // Single action per stock channel
-				const action = actionData.coordinates[`${channel.symbol}_activity`];
-				allActions.push({ channelName, rank: Math.exp(actionData.reward), isOwn: action === POSITION_OWN });
-			}
-			return allActions;
-		}
-
-		// Event-based trading: trade based on price predictions
 		for (const [channelName, { channel, events, actions }] of channelInferences) {
 
-			// get the action for the channel
+			// get the brain desired action for the channel
 			if (actions.length === 0) continue;
 			const actionData = actions[0]; // Single action per stock channel
 			const action = actionData.coordinates[`${channel.symbol}_activity`];
 			const actionOwn = action === POSITION_OWN;
 
-			// get price change prediction in event inferences from bucket value (1 = down, 2 = up)
+			// get brain price change prediction in event inferences from bucket value (1 = down, 2 = up)
 			const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
 			if (!priceEvent) continue; // if there are none, nothing to trade - hold
 			const eventOwn = priceEvent.coordinates[`${channel.symbol}_price_change`] > 1; // bucket 2 (up) → buy, bucket 1 (down) → sell
@@ -483,7 +457,6 @@ export class StockChannel extends Channel {
 			const rank = priceEvent.reward * Math.exp(actionData.reward);
 			allActions.push({ channelName, rank, isOwn });
 		}
-
 		return allActions;
 	}
 
