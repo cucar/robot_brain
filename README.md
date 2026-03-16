@@ -101,7 +101,67 @@ To download new data or different timeframes, you need a free [Alpaca](https://a
    node run-brain.js stock-test --timeframe 3H
    ```
 
-## Demo 2: Text Sequence Learning
+## Demo 2: Stock Sequence Memorization
+
+The brain memorizes a repeating stock price sequence across 5 episodes, reaching 95%+ prediction accuracy. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
+
+**Before running**, adjust the hyperparameters for stock memorization:
+
+In `jobs/stock-test.js`, use only 3 stocks:
+```javascript
+symbols: ['KGC', 'GLD', 'SPY'],
+```
+
+In `brain/memory.js`, change `contextLength` to `3`:
+```javascript
+this.contextLength = 3;
+```
+
+In `brain/neuron.js`, change the forget rates to `0.0001`:
+```javascript
+static connectionForgetRate = 0.0001;
+static contextForgetRate = 0.0001;
+static patternForgetRate = 0.0001;
+```
+
+Then run:
+```bash
+node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
+```
+
+**Expected output:**
+```
+🎯 Final Training Results (5 episodes):
+============================================================
+📈 Overall Performance:
+   Starting Capital: $15000.00
+   Total Net Profit: $2386888285524.23
+   Average per Episode: $477377657104.85
+   Average ROI: +3182517714.03%
+   Average Per-Frame ROI: +0.476526%
+   Total Trades: 12195
+   Average Trades per Episode: 2439.0
+
+💰 Net Profit & ROI by Episode:
+   Episode 1: $3518.06 | ROI: +23.45%, +0.008411%/frame (2063 trades)
+   Episode 2: $67967449.57 | ROI: +453116.33%, +0.336651%/frame (2484 trades)
+   Episode 3: $37952932525.14 | ROI: +253019550.17%, +0.590311%/frame (2532 trades)
+   Episode 4: $643220132782.73 | ROI: +4288134218.55%, +0.704021%/frame (2548 trades)
+   Episode 5: $1705647249248.74 | ROI: +11370981661.66%, +0.743234%/frame (2568 trades)
+
+📊 Base Level Accuracy by Episode:
+   Episode 1: 50.50%
+   Episode 2: 69.35%
+   Episode 3: 84.32%
+   Episode 4: 91.91%
+   Episode 5: 95.38%
+```
+
+The brain goes from 50% accuracy (random) to 95%+ in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
+
+> **Remember to change the hyperparameters back** to their stock defaults (`contextLength = 20`, forget rates = `0.009`/`0.009`/`0.011`, all 10 stocks uncommented) if you want to run the default stock test afterward.
+
+## Demo 3: Text Sequence Learning
 
 The brain learns to predict character sequences. Feed it a string, and it memorizes the pattern — reaching 100% prediction accuracy within a few episodes.
 
@@ -138,7 +198,7 @@ The brain goes from ~24% accuracy (random) to 100% in 5 episodes — it has full
 
 > **Remember to change the hyperparameters back** to their stock defaults (`mergeThreshold = 0.5`, forget rates = `0.009`/`0.009`/`0.011`) if you want to run stock tests afterward.
 
-## Demo 3: Multi-Channel Learning
+## Demo 4: Synthetic Cycle Memorization
 
 The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a separate channel. A repeating 12-day price cycle is presented 20 times — the brain discovers cross-stock patterns and converges on optimal buy/sell timing.
 
