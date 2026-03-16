@@ -549,7 +549,7 @@ export default class Brain {
 			if (state.activatedPattern !== null) continue;
 
 			// get the votes of the neuron
-			const neuronVotes = voter.vote(age, 1 / this.memory.contextLength, this.frameNumber);
+			const neuronVotes = voter.vote(age, this.frameNumber);
 
 			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
 			this.memory.setVotes(voter, age, neuronVotes, contexts.get(`${age}:${voter.level}`) ?? []);

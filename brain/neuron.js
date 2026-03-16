@@ -154,18 +154,16 @@ export class Neuron {
 	/**
 	 * returns votes from this neuron at a specific age.
 	 * @param {number} age - The age at which this neuron is active
-	 * @param {number} timeDecay - Context window length for time decay
 	 * @param {number} currentFrame - Current frame number for lazy decay
 	 * @returns {Array} Array of vote objects {toNeuron, strength, reward, distance}
 	 */
-	vote(age, timeDecay, currentFrame) {
+	vote(age, currentFrame) {
 
 		// use connections of distance one more than the age to get the inferences for the next frame
 		const distance = age + 1;
 
 		// level and age adjustments to the vote strength
 		const levelWeight = 1 + this.level * Neuron.levelVoteMultiplier;
-		const timeWeight = 1 - age * timeDecay;
 
 		// get connections at the distance - if there are none, no votes
 		const distanceMap = this.connections.get(distance);
@@ -179,7 +177,7 @@ export class Neuron {
 		for (const [neuron, conn] of distanceMap) {
 			const effectiveStrength = Math.max(Neuron.minStrength, conn.strength - decay);
 			if (effectiveStrength > 0)
-				result.push({ neuron, strength: levelWeight * timeWeight * effectiveStrength, reward: conn.reward, distance });
+				result.push({ neuron, strength: levelWeight * effectiveStrength, reward: conn.reward, distance });
 		}
 		return result;
 	}
