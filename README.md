@@ -64,18 +64,18 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $152419.94
-   Average per Episode: $152419.94
-   Average ROI: +1016.13%
-   Average Per-Frame ROI: +0.096352%
-   Total Trades: 2947
-   Average Trades per Episode: 2947.0
+   Total Net Profit: $146741.60
+   Average per Episode: $146741.60
+   Average ROI: +978.28%
+   Average Per-Frame ROI: +0.094973%
+   Total Trades: 3060
+   Average Trades per Episode: 3060.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $152419.94 | ROI: +1016.13%, +0.096352%/frame (2947 trades)
+   Episode 1: $146741.60 | ROI: +978.28%, +0.094973%/frame (3060 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.88%
+   Episode 1: 56.13%
 ```
 
 The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.

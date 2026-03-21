@@ -25,9 +25,9 @@ export class Neuron {
 	// Hyperparameters
 	static maxStrength = 100;
 	static minStrength = 0;
-	static rewardSmoothing = 0.8;
+	static rewardSmoothing = 0.9;
 	static eventErrorMinStrength = 1;
-	static actionRegretMinStrength = 3;
+	static actionRegretMinStrength = 4;
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 4.25;
 	// use 0.001 or lower for text for all forget rates
@@ -384,9 +384,6 @@ export class Neuron {
 	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
 	learnConnections(age, newActiveNeurons, rewards, channelActions, currentFrame) {
-
-		// action neurons cannot learn connections - they do not infer
-		if (this.level === 0 && this.type === 'action') return;
 
 		// learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
 		for (const neuron of newActiveNeurons) {

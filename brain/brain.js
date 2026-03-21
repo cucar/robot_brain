@@ -45,7 +45,7 @@ export default class Brain {
 		this.thalamus = new Thalamus(options);
 
 		// Memory - manages temporal sliding window and inferred neurons
-		this.memory = new Memory(this.debug);
+		this.memory = new Memory(options);
 	}
 
 	/**
@@ -188,6 +188,9 @@ export default class Brain {
 
 		// Pre-create action neurons for all channels so that we can explore
 		this.thalamus.initializeActionNeurons();
+
+		// Build per-channel action sequence set and pass to memory
+		this.memory.setNoActionSequenceChannels(this.thalamus.getNoActionSequenceChannels());
 	}
 
 	/**
@@ -465,8 +468,14 @@ export default class Brain {
 
 		// Each context neuron learns connections at its own distance
 		const channelActions = this.thalamus.getAllChannelActions();
-		for (const { neuron, age } of this.memory.getContextNeurons())
+		for (const { neuron, age } of this.memory.getContextNeurons()) {
+
+			// do not allow action neurons to learn connections unless action sequences are enabled for their channel
+			if (this.memory.skipActionNeuron(neuron)) continue;
+
+			// learn connections from the context neuron to the newly active neurons
 			neuron.learnConnections(age, newActiveNeurons, this.rewards, channelActions, this.frameNumber);
+		}
 	}
 
 	/**
@@ -570,7 +579,23 @@ export default class Brain {
 	 */
 	determineConsensus(votes) {
 
-		// Aggregate candidate neurons and dimension totals in one pass
+		// Aggregate votes into candidates and dimension totals
+		const { candidates, dimTotalStrength } = this.aggregateVotes(votes);
+
+		// Determine the best neuron per dimension
+		const dimBest = this.determineDimensionWinners(candidates, dimTotalStrength);
+
+		// Build winner objects from dimension winners
+		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
+		if (this.debug) console.log(`Determined consensus: ${candidates.size} candidates, ${winnerIds.size} winners`);
+		return this.buildWinners(winnerIds, candidates);
+	}
+
+	/**
+	 * Aggregate votes into candidate neurons and dimension strength totals.
+	 * @returns {{ candidates: Map, dimTotalStrength: Map }}
+	 */
+	aggregateVotes(votes) {
 		const candidates = new Map(); // neuronId -> {neuron, strength, weightedTotal}
 		const dimTotalStrength = new Map(); // dimension -> totalStrength (for events only)
 		for (const v of votes) {
@@ -586,33 +611,61 @@ export default class Brain {
 			if (v.neuron.type === 'action') candidate.weightedTotal += v.strength * v.reward;
 			else this.addDimStrength(dimTotalStrength, v.neuron.coordinates, v.strength);
 		}
+		return { candidates, dimTotalStrength };
+	}
 
-		// Determine winners per dimension (events by strength, actions by reward)
-		const dimBest = new Map(); // dimension -> {neuronId, score}
+	/**
+	 * Determine the best neuron per dimension (events by probability, actions by reward).
+	 * @returns {Map} dimension -> {neuronId, neuron, score, strength}
+	 */
+	determineDimensionWinners(candidates, dimTotalStrength) {
+		const dimBest = new Map();
 		for (const [neuronId, candidate] of candidates) {
 
 			// for actions, calculate the reward as weighted total / strength - for events, calculate the likelihood of the event
 			if (candidate.neuron.type === 'action') candidate.reward = candidate.strength > 0 ? candidate.weightedTotal / candidate.strength : 0;
-			else candidate.reward = this.getEventProbability(candidate.strength, candidate.neuron.coordinates, dimTotalStrength);
+			else candidate.probability = this.getEventProbability(candidate.strength, candidate.neuron.coordinates, dimTotalStrength);
 
-			// set the best neuron for each dimension based on rewards
-			for (const dim of Object.keys(candidate.neuron.coordinates))
-				if (!dimBest.has(dim) || candidate.reward > dimBest.get(dim).score)
-					dimBest.set(dim, { neuronId, score: candidate.reward });
+			// set the best neuron for each dimension based on rewards or probabilities, break ties by strength
+			for (const dim of Object.keys(candidate.neuron.coordinates)) {
+				const best = dimBest.get(dim);
+				const score = candidate.neuron.type === 'action' ? candidate.reward : candidate.probability;
+				if (this.isBetterCandidate(score, candidate.strength, neuronId, best))
+					dimBest.set(dim, { neuronId, neuron: candidate.neuron, score, strength: candidate.strength });
+			}
 		}
+		return dimBest;
+	}
 
-		// Return winners with neuron object reference and reward
-		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
-		if (this.debug) console.log(`Determined consensus: ${candidates.size} candidates, ${winnerIds.size} winners`);
+	/**
+	 * Check if a candidate beats the current best for a dimension.
+	 * Compares by score first, then strength, then neuron ID as tiebreaker.
+	 */
+	isBetterCandidate(score, strength, neuronId, best) {
+		if (!best) return true;
+		if (score !== best.score) return score > best.score;
+		if (strength !== best.strength) return strength > best.strength;
+		return neuronId < best.neuronId;
+	}
+
+	/**
+	 * Build winner inference objects from winning neuron IDs.
+	 * @returns {Array} Array of winner objects
+	 */
+	buildWinners(winnerIds, candidates) {
 		const winners = [];
 		for (const neuronId of winnerIds) {
 			const candidate = candidates.get(neuronId);
-			winners.push({
+			const winner = {
 				neuron_id: neuronId,
 				neuron: candidate.neuron,
-				strength: candidate.strength,
-				reward: candidate.reward
-			});
+				coordinates: candidate.neuron.coordinates,
+				channel: candidate.neuron.channel,
+				strength: candidate.strength
+			};
+			if (candidate.neuron.type === 'action') winner.reward = candidate.reward;
+			else winner.probability = candidate.probability;
+			winners.push(winner);
 		}
 		return winners;
 	}
@@ -630,11 +683,10 @@ export default class Brain {
 	 */
 	getEventProbability(strength, coordinates, dimTotalStrength) {
 
-		// if there are no dimensions, return 0 - this should not happen
-		// if there is only one option, the reward would be 1, which would distort values - don't use it - not reliable
+		// if there are no dimensions, error out - this should not happen
 		const dimensions = Object.keys(coordinates);
 		const dimCount = dimensions.length;
-		if (dimCount <= 1) return 0;
+		if (dimCount === 0) throw new Error('Neuron with no dimensions.');
 
 		// calculate the total likelihood of the event and return it
 		let totalLikelihood = 0;
@@ -666,7 +718,13 @@ export default class Brain {
 			if (!explorationAction) continue;
 
 			// No action inferred for this channel - use the default action for deterministic exploration
-			inferences.push({ neuron_id: explorationAction.id, neuron: explorationAction, strength: 0, reward: 0 });
+			inferences.push({
+				neuron_id: explorationAction.id,
+				neuron: explorationAction,
+				coordinates: explorationAction.coordinates,
+				strength: 0,
+				reward: 0
+			});
 		}
 	}
 

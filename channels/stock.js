@@ -33,6 +33,9 @@ export class StockChannel extends Channel {
 	constructor(name, debug, id = null, dimensions = null) {
 		super(name, debug, id);
 
+		// Stock actions (buy/sell) don't affect event inputs (price/volume are independent of our trades)
+		this.actionSequences = false;
+
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
 		this.activityDimName = `${this.symbol}_activity`;
@@ -438,7 +441,7 @@ export class StockChannel extends Channel {
 	 */
 	static determineActions(channelInferences) {
 		const allActions = [];
-		for (const [channelName, { channel, events, actions }] of channelInferences) {
+		for (const [channelName, { channel, actions }] of channelInferences) {
 
 			// get the brain desired action for the channel
 			if (actions.length === 0) continue;
@@ -446,16 +449,8 @@ export class StockChannel extends Channel {
 			const action = actionData.coordinates[`${channel.symbol}_activity`];
 			const actionOwn = action === POSITION_OWN;
 
-			// get brain price change prediction in event inferences from bucket value (1 = down, 2 = up)
-			const priceEvent = events.find(e => e.coordinates[`${channel.symbol}_price_change`] !== undefined);
-			if (!priceEvent) continue; // if there are none, nothing to trade - hold
-			const eventOwn = priceEvent.coordinates[`${channel.symbol}_price_change`] > 1; // bucket 2 (up) → buy, bucket 1 (down) → sell
-
-			// require event inference to predict stock going UP and action to own the stock
-			// rank stocks by expected reward AND event inference confidence (reward)
-			const isOwn = eventOwn && actionOwn;
-			const rank = priceEvent.reward * Math.exp(actionData.reward);
-			allActions.push({ channelName, rank, isOwn });
+			// rank stocks by expected reward AND event probability
+			allActions.push({ channelName, rank: Math.exp(actionData.reward), isOwn: actionOwn });
 		}
 		return allActions;
 	}
@@ -468,9 +463,9 @@ export class StockChannel extends Channel {
 		// get the actions that want to own a stock
 		let ownActions = actions.filter(a => a.isOwn);
 
-		// limit to N positions
+		// limit to N positions - break tie by channel name alphabetical order just to be deterministic
 		if (ownActions.length > this.maxPositions) {
-			ownActions.sort((a, b) => b.rank - a.rank);
+			ownActions.sort((a, b) => b.rank - a.rank || a.channelName.localeCompare(b.channelName));
 			ownActions = ownActions.filter(a => channelInferences.get(a.channelName).channel.getCurrentPrice() < this.maxPrice);
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}

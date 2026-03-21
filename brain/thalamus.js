@@ -197,6 +197,17 @@ export class Thalamus {
 	}
 
 	/**
+	 * Get set of channel names that have action sequence learning disabled
+	 * @returns {Set<string>} - Set of channel names where actions don't participate in learning context
+	 */
+	getNoActionSequenceChannels() {
+		const result = new Set();
+		for (const [channelName, channel] of this.channels)
+			if (!channel.actionSequences) result.add(channelName);
+		return result;
+	}
+
+	/**
 	 * Get channel metrics for all channels
 	 * @returns {Array<Object>} - Array of channel metrics
 	 */
@@ -269,7 +280,7 @@ export class Thalamus {
 	/**
 	 * Execute actions for channels that have them
 	 * Groups channels by type and calls static executeChannelActions on each channel class
-	 * @param {Array} inferredNeurons - Array of { neuron, strength, reward } from memory
+	 * @param {Array} inferredNeurons - Array of { neuron, strength, reward, probability } from memory
 	 */
 	async executeChannelActions(inferredNeurons) {
 
@@ -279,11 +290,10 @@ export class Thalamus {
 			channelInferences.set(channelName, { actions: [], events: [] });
 
 		// Add inferred neurons to their channels
-		for (const { neuron, strength, reward } of inferredNeurons) {
-			const inferences = channelInferences.get(neuron.channel);
-			const inference = { coordinates: neuron.coordinates, strength, reward };
-			if (neuron.type === 'action') inferences.actions.push(inference);
-			else if (neuron.type === 'event') inferences.events.push(inference);
+		for (const inference of inferredNeurons) {
+			const inferences = channelInferences.get(inference.neuron.channel);
+			if (inference.neuron.type === 'action') inferences.actions.push(inference);
+			else if (inference.neuron.type === 'event') inferences.events.push(inference);
 		}
 
 		// group by channel classes for action execution

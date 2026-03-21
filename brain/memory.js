@@ -4,7 +4,7 @@
  */
 export class Memory {
 
-	constructor(debug) {
+	constructor(options) {
 
 		// memory hyperparameters
 		this.contextLength = 20; // number of frames a base neuron stays active
@@ -20,7 +20,25 @@ export class Memory {
 		this.inferredNeurons = [];
 
 		// carry over the debug flag
-		this.debug = debug;
+		this.debug = options.debug;
+
+		// Set of channel names that have action sequence learning disabled (populated by brain after init)
+		this.noActionSequenceChannels = new Set();
+	}
+
+	/**
+	 * Set the channels that have action sequence learning disabled
+	 * @param {Set<string>} channels - Set of channel names
+	 */
+	setNoActionSequenceChannels(channels) {
+		this.noActionSequenceChannels = channels;
+	}
+
+	/**
+	 * Check if a neuron should be skipped from learning context (action neuron in a channel without action sequences)
+	 */
+	skipActionNeuron(neuron) {
+		return neuron.level === 0 && neuron.type === 'action' && this.noActionSequenceChannels.has(neuron.channel);
 	}
 
 	/**
@@ -107,13 +125,6 @@ export class Memory {
 	}
 
 	/**
-	 * Add an inferred neuron
-	 */
-	addInference(neuron, strength, reward) {
-		this.inferredNeurons.push({ neuron, strength, reward });
-	}
-
-	/**
 	 * Get all inferred neurons
 	 */
 	getInferences() {
@@ -162,8 +173,8 @@ export class Memory {
 		for (let ctxAge = 1; ctxAge < this.activeNeurons.length; ctxAge++)
 			for (const neuron of (this.activeNeurons[ctxAge] ?? new Map()).keys()) {
 
-				// actions cannot be in contexts
-				if (neuron.level === 0 && neuron.type === 'action') continue;
+				// do not allow actions in contexts unless action sequences are enabled for their channel
+				if (this.skipActionNeuron(neuron)) continue;
 
 				// Add this neuron to context for all ages before it
 				for (let age = 0; age < ctxAge; age++) {
@@ -181,7 +192,11 @@ export class Memory {
 	getRecognizerNeurons(level) {
 		const newNeurons = [];
 		for (const neuron of this.activeNeurons[0].keys()) {
-			if (neuron.level === 0 && neuron.type === 'action') continue; // actions cannot be peaks
+
+			// do not allow actions to form patterns unless action sequences are enabled for their channel
+			if (this.skipActionNeuron(neuron)) continue;
+
+			// filter by level and add to list
 			if (neuron.level !== level) continue;
 			newNeurons.push(neuron);
 		}
@@ -196,9 +211,14 @@ export class Memory {
 		const result = [];
 		// Iterate through all active neurons except the oldest (which don't have distance+1 connections)
 		for (let age = 0; age < this.activeNeurons.length - 1; age++)
-			for (const [voter, state] of this.activeNeurons[age])
-				if (voter.level > 0 || voter.type !== 'action') // action neurons cannot vote - their inferences are too erratic
-					result.push({ voter, age, state });
+			for (const [voter, state] of this.activeNeurons[age]) {
+
+				// do not allow action neurons to vote unless action sequences are enabled for their channel
+				if (this.skipActionNeuron(voter)) continue;
+
+				// add the neuron to the list
+				result.push({ voter, age, state });
+			}
 		return result;
 	}
 
@@ -212,7 +232,11 @@ export class Memory {
 		const result = [];
 		for (let age = 1; age < this.activeNeurons.length; age++)
 			for (const neuron of this.activeNeurons[age].keys()) {
-				if (neuron.level === 0 && neuron.type === 'action') continue; // actions cannot be in contexts
+
+				// do not allow actions in contexts unless action sequences are enabled for their channel
+				if (this.skipActionNeuron(neuron)) continue;
+
+				// filter by level if requested and add to list
 				if (filterByLevel && neuron.level !== level) continue;
 				result.push({ neuron, age });
 			}
@@ -239,7 +263,7 @@ export class Memory {
 	 */
 	saveInferences(inferences) {
 		this.clearInferences();
-		for (const inf of inferences) this.addInference(inf.neuron, inf.strength, inf.reward);
+		for (const inference of inferences) this.inferredNeurons.push(inference);
 		if (this.debug) console.log(`Saved ${this.inferredNeurons.length} inferences`);
 	}
 

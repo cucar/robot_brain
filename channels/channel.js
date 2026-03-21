@@ -23,6 +23,7 @@ export class Channel {
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
 		this.debug = debug; // controls verbosity of channel output
+		this.actionSequences = true; // whether action neurons participate in learning context (override false for channels where actions don't affect events)
 
 		// Update nextId if we're loading a channel with a specific ID
 		if (id !== null && id >= Channel.nextId) Channel.nextId = id + 1;
