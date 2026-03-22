@@ -3,6 +3,7 @@ import { Context } from './context.js';
 import { Database } from './database.js';
 import { Diagnostics } from './diagnostics.js';
 import { Dump } from './dump.js';
+import { Neuron } from './neuron.js';
 import { Thalamus } from './thalamus.js';
 
 /**
@@ -244,8 +245,6 @@ export default class Brain {
 		// display diagnostic frame start if enabled
 		this.diagnostics.startFrame(this.frameNumber, this.rewards, this.frame);
 
-		// ---------------------------- FIRST LOOP ----------------------------------
-
 		// age the active neurons in memory context - sliding the temporal window
 		// also deactivates aged-out neurons (now that context was saved with votes in previous frame)
 		this.memory.age();
@@ -253,7 +252,7 @@ export default class Brain {
 		// activate sensory neurons in age=0, level=0 - inputs from the world
 		this.activateSensors();
 
-		// ---------------------------- SECOND LOOP ----------------------------------
+		// ---------------------------- PARALLEL PROCESSING START ----------------------------------
 
 		// discover and activate patterns using connections in age=0 - start recursion from base level
 		this.recognizePatterns();
@@ -267,7 +266,7 @@ export default class Brain {
 		// do inferences with age>0 neurons - what's going to happen next? and what's our best response?
 		this.inferNeurons();
 
-		// ---------------------------- END PROCESSING ----------------------------------
+		// ---------------------------- PARALLEL PROCESSING END ----------------------------------
 
 		// execute the inferred actions in all channels
 		await this.executeActions();
@@ -484,30 +483,67 @@ export default class Brain {
 	 */
 	learnNewPatterns() {
 
-		// Get newly active sensory neurons (age=0, level=0 - events and actions)
-		const newActiveNeurons = this.memory.getNewSensoryNeurons();
+		// Get active sensory neurons (level=0 - events and actions)
+		const sensoryNeurons = this.memory.getSensoryNeurons();
 
-		// For each neuron that voted with its context
+		// ask each neuron if it needs a new error correction pattern
+		const requests = this.findErrorCorrectionRequests(sensoryNeurons);
+
+		// create pattern neurons and populate their connections from the future
+		this.createErrorPatterns(requests, sensoryNeurons);
+
+		if (this.debug && requests.length > 0) console.log(`Created ${requests.length} error patterns`);
+	}
+
+	/**
+	 * Ask each neuron if it needs a new error correction pattern.
+	 * Only sends newly active neurons (age=0) - that's all the neuron needs for error detection.
+	 */
+	findErrorCorrectionRequests(sensoryNeurons) {
+
+		// get newly active sensory neurons (age=0, level=0 - events and actions)
+		const newActiveNeurons = new Set(sensoryNeurons[0] || []);
+
+		// call each neuron to ask if it needs a new error correction pattern (parallelizable)
 		const channelActions = this.thalamus.getAllChannelActions();
-		let patternCount = 0;
-		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext()) {
+		const requests = [];
+		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext())
+			if (neuron.needsErrorCorrection(votes, newActiveNeurons, this.rewards, channelActions))
+				requests.push({ neuron, age, context });
+		return requests;
+	}
 
-			// Try to learn a pattern at this age
-			const newPattern = neuron.learnNewPattern(age, context, votes, newActiveNeurons, this.rewards, channelActions);
+	/**
+	 * Create pattern neurons and populate their connections from the future.
+	 */
+	createErrorPatterns(requests, sensoryNeurons) {
+		for (const { neuron, age, context } of requests) {
 
-			// if no pattern was learned, move on to the next neuron
-			if (!newPattern) continue;
+			// create the new pattern with its future connections
+			const pattern = Neuron.createPattern(neuron.level + 1, neuron);
+			for (let a = 0; a < age && a < sensoryNeurons.length; a++)
+				for (const n of sensoryNeurons[a])
+					pattern.createConnection(age - a, n, 1, 0);
 
 			// index the new neuron with its id
-			this.thalamus.addNeuron(newPattern);
+			this.thalamus.addNeuron(pattern);
 
-			// activate the pattern neuron at the parent's age
-			const deathFrame = this.memory.activatePattern(newPattern, neuron, age, this.frameNumber);
-			this.thalamus.registerDeath(newPattern, deathFrame);
+			// activate the pattern neuron at the parent's age and register the pattern for death
+			// must happen before adding context — activation calls materializeStrengths which
+			// would decay freshly added context entries from lastActivationFrame=0 to currentFrame
+			const deathFrame = this.memory.activatePattern(pattern, neuron, age, this.frameNumber);
+			this.thalamus.registerDeath(pattern, deathFrame);
 
-			patternCount++;
+			// Set context on patterns and add them to parent routing tables.
+			// TODO: When context is moved to the parent, the brain will not need to set the context
+			//  on the child. Instead, it will send the context to the parent along with the new pattern neuron id.
+			for (const { neuron: ctxNeuron, distance } of context)
+				if (ctxNeuron.level === neuron.level)
+					pattern.addPatternContext(ctxNeuron, distance, 1);
+
+			// add the pattern to parent routing table
+			neuron.addChild(pattern);
 		}
-		if (this.debug && patternCount > 0) console.log(`Created ${patternCount} error patterns`);
 	}
 
 	/**

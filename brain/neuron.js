@@ -29,7 +29,7 @@ export class Neuron {
 	static eventErrorMinStrength = 1;
 	static actionRegretMinStrength = 4;
 	static actionRegretMinPain = 0;
-	static levelVoteMultiplier = 4.25;
+	static levelVoteMultiplier = 2;
 	// use 0.001 or lower for text for all forget rates
 	static connectionForgetRate = 0.009; // use 0.009 for stocks
 	static contextForgetRate = 0.009; // use 0.009 for stocks
@@ -421,109 +421,10 @@ export class Neuron {
 	}
 
 	/**
-	 * Learn new pattern from prediction errors and action regret at a specific age.
-	 * Only called for ages where no pattern was activated.
-	 * @param {number} age - The age at which this neuron made a bad inference
-	 * @param {Array<{neuron: Neuron, distance: number}>} context - Active context neurons with distances
-	 * @param {Array<{toNeuron, strength, reward}>} inferences - Inferences made by this neuron at this age
-	 * @param {Set<Neuron>} actualNeurons - What actually happened at age=0
-	 * @param {Map<string, number>} rewards - Map of channel name to reward value
-	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
-	 * @returns {Neuron|null} Newly created pattern, or null if no pattern needed
+	 * Check if there are any prediction errors or action regret that need correction.
+	 * @returns {boolean} Whether any errors were found
 	 */
-	learnNewPattern(age, context, inferences, actualNeurons, rewards, channelActions) {
-
-		// Find corrections for prediction errors and action regret
-		const errorCorrections = this.findErrorCorrections(inferences, actualNeurons, rewards, channelActions);
-
-		// No errors to learn from
-		if (errorCorrections.size === 0) return null;
-
-		// If an existing child already handles the same corrections in a similar context, merge into it
-		const existing = this.findDuplicateChild(age, errorCorrections);
-		if (existing && this.mergeContextIntoChild(existing, age, context, errorCorrections))
-			return null;
-
-		// Create new pattern neuron at next level up
-		return this.createErrorPattern(age, context, errorCorrections);
-	}
-
-	/**
-	 * Find an existing child pattern that predicts the same corrections at the same distance.
-	 */
-	findDuplicateChild(age, errorCorrections) {
-		for (const child of this.children) {
-			const childConnections = child.connections.get(age);
-			if (!childConnections || childConnections.size !== errorCorrections.size) continue;
-			let allMatch = true;
-			for (const neuron of errorCorrections)
-				if (!childConnections.has(neuron)) { allMatch = false; break; }
-			if (allMatch) return child;
-		}
-		return null;
-	}
-
-	/**
-	 * Merge current context into an existing child pattern instead of creating a duplicate.
-	 * Only merges if contexts are sufficiently similar — otherwise returns false so a new pattern is created.
-	 * Common context entries strengthen, novel entries are added, missing entries weaken.
-	 */
-	mergeContextIntoChild(child, age, context, errorCorrections) {
-		const common = [];
-		const novel = [];
-
-		// Categorize current context entries relative to the child's known context
-		for (const { neuron, distance } of context) {
-			if (neuron.level !== this.level) continue;
-			if (child.context.hasKey(neuron, distance)) common.push({ neuron, distance });
-			else novel.push({ neuron, distance });
-		}
-
-		// Only merge if contexts overlap enough — otherwise these are genuinely different situations
-		const totalKnown = child.context.size;
-		if (totalKnown > 0 && common.length / totalKnown < Context.mergeThreshold) return false;
-
-		// Find entries in child's context missing from current context
-		const missing = [];
-		for (const { neuron, distance } of child.context.getEntries())
-			if (!context.some(c => c.neuron === neuron && c.distance === distance && c.neuron.level === this.level))
-				missing.push({ neuron, distance });
-
-		child.refineContext(common, novel, missing);
-
-		// Strengthen the existing correction connections
-		for (const neuron of errorCorrections)
-			child.updateConnection(age, neuron, 0, child.lastActivationFrame);
-		return true;
-	}
-
-	/**
-	 * Create a new error pattern with the given corrections and context.
-	 */
-	createErrorPattern(age, context, errorCorrections) {
-
-		// Create pattern neuron at next level up
-		const pattern = Neuron.createPattern(this.level + 1, this);
-		for (const correctionNeuron of errorCorrections)
-			pattern.createConnection(age, correctionNeuron, 1, 0);
-
-		// add the new pattern to the routing table
-		this.addChild(pattern);
-
-		// Add the context to the new pattern (only same-level neurons)
-		for (const { neuron, distance } of context)
-			if (neuron.level === this.level)
-				pattern.addPatternContext(neuron, distance, 1);
-
-		// Return pattern - brain will handle activation
-		return pattern;
-	}
-
-	/**
-	 * Find corrections for prediction errors and action regret.
-	 */
-	findErrorCorrections(inferences, actualNeurons, rewards, channelActions) {
-		const errorCorrections = new Set();
+	needsErrorCorrection(inferences, actualNeurons, rewards, channelActions) {
 
 		// Categorize what actually happened into events and actions
 		const { events: actualEvents, actions: executedActions } = this.categorizeActualNeurons(actualNeurons);
@@ -534,17 +435,17 @@ export class Neuron {
 		// Pre-compute dimension signatures for fast lookup (performance optimization)
 		const eventsByDimensions = this.groupEventsByDimensions(actualEvents);
 
-		// Process each inference to find error corrections
+		// Process each inference to find if any errors exist
 		for (const inference of inferences) {
 
-			// Handle event prediction errors
-			this.findEventErrorCorrections(inference, actualNeurons, eventsByDimensions, errorCorrections);
+			// Check for event prediction errors
+			if (this.hasEventErrors(inference, actualNeurons, eventsByDimensions)) return true;
 
-			// Handle action regret
-			this.findActionRegretCorrections(inference, executedActions, painfulChannels, channelActions, errorCorrections);
+			// Check for action regret
+			if (this.hasActionRegret(inference, executedActions, painfulChannels, channelActions)) return true;
 		}
 
-		return errorCorrections;
+		return false;
 	}
 
 	/**
@@ -587,38 +488,34 @@ export class Neuron {
 	 * Find corrections for event prediction errors.
 	 * When a confident prediction didn't happen, find what actually happened with the same dimensions.
 	 */
-	findEventErrorCorrections(prediction, actualNeurons, eventsByDimensions, errorCorrections) {
+	hasEventErrors(prediction, actualNeurons, eventsByDimensions) {
 
 		// Only process event predictions that were confident but didn't happen
-		if (prediction.neuron.type !== 'event') return;
-		if (prediction.strength < Neuron.eventErrorMinStrength) return;
-		if (actualNeurons.has(prediction.neuron)) return;
+		if (prediction.neuron.type !== 'event') return false;
+		if (prediction.strength < Neuron.eventErrorMinStrength) return false;
+		if (actualNeurons.has(prediction.neuron)) return false;
 
-		// Find actual events with the same dimensions as the failed prediction
+		// Check if there are actual events with the same dimensions as the failed prediction
 		const failedDimensions = Object.keys(prediction.neuron.coordinates).sort().join(',');
-		const matchingEvents = eventsByDimensions.get(failedDimensions);
-		if (matchingEvents)
-			for (const actualEvent of matchingEvents)
-				errorCorrections.add(actualEvent);
+		return eventsByDimensions.has(failedDimensions);
 	}
 
 	/**
-	 * When a confident action was executed and resulted in pain, suggest an alternative.
+	 * Check if a confident action was executed and resulted in pain.
 	 */
-	findActionRegretCorrections(prediction, executedActions, painfulChannels, channelActions, errorCorrections) {
+	hasActionRegret(prediction, executedActions, painfulChannels, channelActions) {
 
 		// Only process action predictions that were confident, executed, and painful
-		if (prediction.neuron.type !== 'action') return;
-		if (prediction.strength < Neuron.actionRegretMinStrength) return;
-		if (!executedActions.has(prediction.neuron)) return;
-		if (!painfulChannels.has(prediction.neuron.channel)) return;
+		if (prediction.neuron.type !== 'action') return false;
+		if (prediction.strength < Neuron.actionRegretMinStrength) return false;
+		if (!executedActions.has(prediction.neuron)) return false;
+		if (!painfulChannels.has(prediction.neuron.channel)) return false;
 
-		// Find an alternative action for this channel
+		// Check if an alternative action exists for this channel
 		const channelAlternatives = channelActions.get(prediction.neuron.channel);
-		if (!channelAlternatives) return;
+		if (!channelAlternatives) return false;
 
-		const alternativeAction = [...channelAlternatives].find(n => n !== prediction.neuron);
-		if (alternativeAction) errorCorrections.add(alternativeAction);
+		return [...channelAlternatives].some(n => n !== prediction.neuron);
 	}
 
 	/**

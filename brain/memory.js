@@ -164,6 +164,21 @@ export class Memory {
 	}
 
 	/**
+	 * Get all active sensory neurons indexed by age.
+	 * @returns {Array<Array<Neuron>>} Array where index is age, value is array of sensory neurons at that age
+	 */
+	getSensoryNeurons() {
+		const result = [];
+		for (let age = 0; age < this.activeNeurons.length; age++) {
+			const neurons = [];
+			for (const neuron of this.activeNeurons[age].keys())
+				if (neuron.level === 0) neurons.push(neuron);
+			result.push(neurons);
+		}
+		return result;
+	}
+
+	/**
 	 * Build all contexts for all ages and levels in a single pass.
 	 * Returns a map indexed by 'age:level' for O(1) lookup.
 	 * @returns {Map<string, Array<{neuron, distance}>>} - Map of 'age:level' to context array
