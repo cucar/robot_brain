@@ -1,5 +1,4 @@
 import { Memory } from './memory.js';
-import { Context } from './context.js';
 import { Database } from './database.js';
 import { Diagnostics } from './diagnostics.js';
 import { Dump } from './dump.js';
@@ -415,21 +414,24 @@ export default class Brain {
 	recognizeLevel(level) {
 		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
-		// get newly activated recognizing neurons at this level
-		const recognizers = this.memory.getRecognizerNeurons(level);
+		// get active recognizer neurons at this level with their per-age contexts
+		const recognizers = this.memory.getRecognizersWithContext(level);
 		if (recognizers.length === 0) {
-			if (this.debug) console.log(`No newly activated neurons at level ${level}`);
+			if (this.debug) console.log(`No active neurons at level ${level}`);
 			return false;
 		}
 
-		// build context from context neurons at this level
-		const context = new Context();
-		for (const { neuron, age } of this.memory.getContextNeurons(level))
-			context.addNeuron(neuron, age, 1);
-
-		// Match patterns (parallelizable) - collect results with parent reference
-		const matchedParents = recognizers.map(parent => ({ parent, match: parent.matchPattern(context, this.frameNumber) }));
-		const matchedPatterns = matchedParents.filter(p => p.match);
+		// Match patterns (parallelizable) - each recognizer uses its own age-appropriate context
+		// A pattern can only be recognized once (by the first recognizer that matches it)
+		const matchedPatterns = [];
+		const recognizedPatterns = new Set();
+		for (const { neuron: parent, age, context } of recognizers) {
+			const match = parent.matchPattern(context, this.frameNumber);
+			if (match && !recognizedPatterns.has(match.pattern)) {
+				recognizedPatterns.add(match.pattern);
+				matchedPatterns.push({ parent, age, match });
+			}
+		}
 
 		// If no patterns matched, stop here
 		if (matchedPatterns.length === 0) {
@@ -438,10 +440,10 @@ export default class Brain {
 		}
 
 		// activate the matched pattern neurons and refine their context
-		for (const { parent, match } of matchedPatterns) {
+		for (const { parent, age, match } of matchedPatterns) {
 
-			// activate the pattern neuron now that it's matched/recognized
-			const deathFrame = this.memory.activatePattern(match.pattern, parent, 0, this.frameNumber);
+			// activate the pattern neuron at the recognizer's age - not at age=0
+			const deathFrame = this.memory.activatePattern(match.pattern, parent, age, this.frameNumber);
 			this.thalamus.registerDeath(match.pattern, deathFrame);
 
 			// refine the pattern context based on observations
@@ -450,7 +452,7 @@ export default class Brain {
 
 		if (this.debug)
 			console.log(`Matched ${matchedPatterns.length} patterns at level ${level}:`,
-				matchedPatterns.map(m => `parent=${m.parent.id}, pattern=${m.match.pattern.id}`).join('; '));
+				matchedPatterns.map(m => `parent=${m.parent.id}, age=${m.age}, pattern=${m.match.pattern.id}`).join('; '));
 
 		// return true to indicate patterns found
 		return true;

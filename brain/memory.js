@@ -1,3 +1,5 @@
+import { Context } from './context.js';
+
 /**
  * Memory - manages the temporal sliding window of active and inferred neurons.
  * Encapsulates all access to the brain's short-term memory structures.
@@ -202,20 +204,39 @@ export class Memory {
 	}
 
 	/**
-	 * returns newly activated non-action neurons at age=0 (recognizers), filtered by level
+	 * Returns recognizer neurons with their per-age contexts for pattern matching.
+	 * Each recognizer at age N gets context from neurons at ages > N at the same level.
+	 * Contexts are shared across recognizers at the same age for efficiency.
+	 * @returns {Array<{neuron, age, context: Context}>}
 	 */
-	getRecognizerNeurons(level) {
-		const newNeurons = [];
-		for (const neuron of this.activeNeurons[0].keys()) {
+	getRecognizersWithContext(level) {
 
-			// do not allow actions to form patterns unless action sequences are enabled for their channel
-			if (this.skipActionNeuron(neuron)) continue;
+		// build context per age at this level (same fan-out pattern as getContexts)
+		const contextByAge = new Map();
+		for (let ctxAge = 1; ctxAge < this.activeNeurons.length; ctxAge++)
+			for (const neuron of this.activeNeurons[ctxAge].keys()) {
+				if (this.skipActionNeuron(neuron)) continue;
+				if (neuron.level !== level) continue;
+				for (let age = 0; age < ctxAge; age++) {
+					if (!contextByAge.has(age)) contextByAge.set(age, new Context());
+					contextByAge.get(age).addNeuron(neuron, ctxAge - age, 1);
+				}
+			}
 
-			// filter by level and add to list
-			if (neuron.level !== level) continue;
-			newNeurons.push(neuron);
+		// collect recognizers and pair with pre-built contexts
+		// skip if no context exists or if neuron already activated a pattern (recognition or error correction)
+		const result = [];
+		for (let age = 0; age < this.activeNeurons.length; age++) {
+			const context = contextByAge.get(age);
+			if (!context) continue;
+			for (const [neuron, state] of this.activeNeurons[age]) {
+				if (state.activatedPattern !== null) continue;
+				if (this.skipActionNeuron(neuron)) continue;
+				if (neuron.level !== level) continue;
+				result.push({ neuron, age, context });
+			}
 		}
-		return newNeurons;
+		return result;
 	}
 
 	/**

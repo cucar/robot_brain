@@ -64,21 +64,21 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $256394.06
-   Average per Episode: $256394.06
-   Average ROI: +1709.29%
-   Average Per-Frame ROI: +0.115657%
-   Total Trades: 2866
-   Average Trades per Episode: 2866.0
+   Total Net Profit: $234318.20
+   Average per Episode: $234318.20
+   Average ROI: +1562.12%
+   Average Per-Frame ROI: +0.112266%
+   Total Trades: 2905
+   Average Trades per Episode: 2905.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $256394.06 | ROI: +1709.29%, +0.115657%/frame (2866 trades)
+   Episode 1: $234318.20 | ROI: +1562.12%, +0.112266%/frame (2905 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 56.04%
+   Episode 1: 55.97%
 ```
 
-The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
+The brain achieves ~56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
 
 ### Downloading Fresh Stock Data
 
@@ -135,29 +135,29 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $2386888285524.23
-   Average per Episode: $477377657104.85
-   Average ROI: +3182517714.03%
-   Average Per-Frame ROI: +0.476526%
-   Total Trades: 12195
-   Average Trades per Episode: 2439.0
+   Total Net Profit: $16193327510960.11
+   Average per Episode: $3238665502192.02
+   Average ROI: +21591103347.95%
+   Average Per-Frame ROI: +0.503740%
+   Total Trades: 14379
+   Average Trades per Episode: 2875.8
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $3518.06 | ROI: +23.45%, +0.008411%/frame (2063 trades)
-   Episode 2: $67967449.57 | ROI: +453116.33%, +0.336651%/frame (2484 trades)
-   Episode 3: $37952932525.14 | ROI: +253019550.17%, +0.590311%/frame (2532 trades)
-   Episode 4: $643220132782.73 | ROI: +4288134218.55%, +0.704021%/frame (2548 trades)
-   Episode 5: $1705647249248.74 | ROI: +11370981661.66%, +0.743234%/frame (2568 trades)
+   Episode 1: $14550.91 | ROI: +97.01%, +0.027072%/frame (2976 trades)
+   Episode 2: $15220816.19 | ROI: +101472.11%, +0.276764%/frame (2981 trades)
+   Episode 3: $63621445665.48 | ROI: +424142971.10%, +0.611057%/frame (2856 trades)
+   Episode 4: $4706854220408.77 | ROI: +31379028136.06%, +0.784065%/frame (2729 trades)
+   Episode 5: $11422836609518.74 | ROI: +76152244063.46%, +0.819742%/frame (2837 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.50%
-   Episode 2: 69.35%
-   Episode 3: 84.32%
-   Episode 4: 91.91%
-   Episode 5: 95.38%
+   Episode 1: 56.90%
+   Episode 2: 84.12%
+   Episode 3: 96.61%
+   Episode 4: 98.96%
+   Episode 5: 99.71%
 ```
 
-The brain goes from 50% accuracy (random) to 95%+ in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
+The brain goes from 50% accuracy (random) to 99%+ in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
 > **Remember to change the hyperparameters back** to their stock defaults (`contextLength = 20`, forget rates = `0.009`/`0.009`/`0.011`, all 10 stocks uncommented) if you want to run the default stock test afterward.
 
@@ -167,9 +167,9 @@ The brain learns to predict character sequences. Feed it a string, and it memori
 
 **Before running**, adjust the hyperparameters for text learning (the defaults are tuned for stock data):
 
-In `brain/context.js`, change `mergeThreshold` to `0.8`:
+In `brain/context.js`, change `mergeThreshold` to `0.9`:
 ```javascript
-static mergeThreshold = 0.8;
+static mergeThreshold = 0.9;
 ```
 
 In `brain/neuron.js`, change the forget rates to `0.001`:
@@ -187,14 +187,14 @@ node run-brain.js text-test
 **Expected output:**
 ```
 Accuracy by Episode:
-   Episode 1: 23.58% (127 frames)
-   Episode 2: 89.60% (127 frames)
-   Episode 3: 98.40% (127 frames)
+   Episode 1: 39.84% (127 frames)
+   Episode 2: 93.60% (127 frames)
+   Episode 3: 94.40% (127 frames)
    Episode 4: 98.40% (127 frames)
    Episode 5: 100.00% (127 frames)
 ```
 
-The brain goes from ~24% accuracy (random) to 100% in 5 episodes — it has fully memorized the character sequence and can predict every next character correctly.
+The brain goes from low accuracy to 100% in 5 episodes — it has fully memorized the character sequence and can predict every next character correctly.
 
 > **Remember to change the hyperparameters back** to their stock defaults (`mergeThreshold = 0.5`, forget rates = `0.009`/`0.009`/`0.011`) if you want to run stock tests afterward.
 

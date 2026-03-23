@@ -29,11 +29,11 @@ export class Neuron {
 	static eventErrorMinStrength = 1;
 	static actionRegretMinStrength = 4;
 	static actionRegretMinPain = 0;
-	static levelVoteMultiplier = 2;
+	static levelVoteMultiplier = 0;
 	// use 0.001 or lower for text for all forget rates
 	static connectionForgetRate = 0.009; // use 0.009 for stocks
 	static contextForgetRate = 0.009; // use 0.009 for stocks
-	static patternForgetRate = 0.011; // use 0.011 for stocks
+	static patternForgetRate = 0.013; // use 0.011 for stocks
 
 	// static debug flag for the neuron
 	static debug = false;
