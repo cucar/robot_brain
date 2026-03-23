@@ -64,15 +64,15 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $234318.20
-   Average per Episode: $234318.20
-   Average ROI: +1562.12%
-   Average Per-Frame ROI: +0.112266%
-   Total Trades: 2905
-   Average Trades per Episode: 2905.0
+   Total Net Profit: $234325.08
+   Average per Episode: $234325.08
+   Average ROI: +1562.17%
+   Average Per-Frame ROI: +0.112267%
+   Total Trades: 2904
+   Average Trades per Episode: 2904.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $234318.20 | ROI: +1562.12%, +0.112266%/frame (2905 trades)
+   Episode 1: $234325.08 | ROI: +1562.17%, +0.112267%/frame (2904 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 55.97%
@@ -135,17 +135,17 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $16193327510960.11
-   Average per Episode: $3238665502192.02
-   Average ROI: +21591103347.95%
-   Average Per-Frame ROI: +0.503740%
-   Total Trades: 14379
-   Average Trades per Episode: 2875.8
+   Total Net Profit: $16193383290435.41
+   Average per Episode: $3238676658087.08
+   Average ROI: +21591177720.58%
+   Average Per-Frame ROI: +0.503682%
+   Total Trades: 14394
+   Average Trades per Episode: 2878.8
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $14550.91 | ROI: +97.01%, +0.027072%/frame (2976 trades)
-   Episode 2: $15220816.19 | ROI: +101472.11%, +0.276764%/frame (2981 trades)
-   Episode 3: $63621445665.48 | ROI: +424142971.10%, +0.611057%/frame (2856 trades)
+   Episode 1: $15115.12 | ROI: +100.77%, +0.027827%/frame (2974 trades)
+   Episode 2: $14814151.25 | ROI: +98761.01%, +0.275681%/frame (2987 trades)
+   Episode 3: $63677631241.53 | ROI: +424517541.61%, +0.611093%/frame (2867 trades)
    Episode 4: $4706854220408.77 | ROI: +31379028136.06%, +0.784065%/frame (2729 trades)
    Episode 5: $11422836609518.74 | ROI: +76152244063.46%, +0.819742%/frame (2837 trades)
 

@@ -458,15 +458,22 @@ export class StockChannel extends Channel {
 	/**
 	 * Allocate portfolio value proportional to softmax weights
 	 */
-	static distributeAllocations(channelInferences, actions, totalValue) {
+	static distributeAllocations(channels, actions, totalValue) {
 
 		// get the actions that want to own a stock
 		let ownActions = actions.filter(a => a.isOwn);
 
-		// limit to N positions - break tie by channel name alphabetical order just to be deterministic
+		// limit to N positions
 		if (ownActions.length > this.maxPositions) {
-			ownActions.sort((a, b) => b.rank - a.rank || a.channelName.localeCompare(b.channelName));
-			ownActions = ownActions.filter(a => channelInferences.get(a.channelName).channel.getCurrentPrice() < this.maxPrice);
+			ownActions.sort((a, b) =>
+				// sort by reward - prefer higher rewards
+				b.rank - a.rank ||
+				// if reward is the same, we're not sure - prefer more expensive, safer stocks
+				channels.get(b.channelName).channel.getCurrentPrice() - channels.get(a.channelName).channel.getCurrentPrice() ||
+				// if reward and price are the same, sort alphabetically to be deterministic
+				a.channelName.localeCompare(b.channelName)
+			);
+			ownActions = ownActions.filter(a => channels.get(a.channelName).channel.getCurrentPrice() < this.maxPrice);
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}
 
