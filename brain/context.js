@@ -7,7 +7,7 @@ export class Context {
 	// Hyperparameters (shared with Neuron)
 	static maxStrength = 100;
 	static minStrength = 0;
-	static mergeThreshold = 0.5; // use 0.5 for stocks, 0.8 for text
+	static mergeThreshold = 1; // use 0.5 for stocks, 0.8 for text
 	static negativeReinforcement = 0.1;
 
 	constructor() {
@@ -118,58 +118,126 @@ export class Context {
 	 * Uses effective strengths (with lazy decay applied) for scoring.
 	 * @param {Context} observed - The observed context to match against
 	 * @param {number} decay - strength decay since last activation
+	 * @param {number} contextLength - the context window length for distance similarity scaling
 	 * @returns {Object|null} { score, common, missing, novel } or null
 	 */
-	match(observed, decay) {
+	match(observed, decay, contextLength) {
 
-		// Single pass: categorize into common/missing while computing score and counts
+		// match known context entries against observed
+		const { commonStrength, knownStrength, common, missing } = this.matchKnown(observed, decay, contextLength);
+
+		// if there are no common entries, there is no match
+		if (knownStrength === 0) throw new Error('zero total strength');
+
+		// get novel context entries that are not in the known context
+		const { novelStrength, novel } = this.matchNovel(observed, decay);
+
+		// calculate the normalized match score - round to 14 decimal places to avoid floating-point precision issues
+		const score = Math.round(commonStrength / (knownStrength + novelStrength) * 1e14) / 1e14;
+
+		// if the match score is less than the threshold, it's no a match - otherwise return match details
+		return score < Context.mergeThreshold ? null : { score, common, missing, novel };
+	}
+
+	/**
+	 * Score known context entries against observed context.
+	 * Score is neuron-level (common vs missing). Return arrays are (neuron, distance)-level.
+	 */
+	matchKnown(observed, decay, contextLength) {
+		let knownStrength = 0;
+		let commonStrength = 0;
 		const common = [];
 		const missing = [];
-		let totalCount = 0;
-		let score = 0;
 
-		// process all neurons in the known context
+		// loop over neurons in the known context
 		for (const [neuron, distanceMap] of this.entries) {
 
-			// get the observed distances for the neuron in the observed context
+			// apply the decay to get the effective distance map and total strength of the neuron in the known context
+			const { effectiveDistanceMap, strength } = this.getEffectiveDistanceMap(distanceMap, decay);
+
+			// if the neuron has no effective strength, it has been forgotten - ignore it
+			if (strength === 0) continue;
+
+			// add the neuron's known strength to the total strength - does not matter if missing or common
+			knownStrength += strength;
+
+			// get the distances for the neuron in the observed context
 			const observedDistances = observed.entries.get(neuron);
 
-			// process all distances for the neuron in the known context
-			for (const [distance, strength] of distanceMap) {
+			// add the neuron common/missing distances to the returned entries to merge if it's a match
+			this.populateCommonMissing(neuron, effectiveDistanceMap, observedDistances, common, missing);
 
-				// calculate the effective strength of the entry - if it is zero or less, it will be deleted
-				const effectiveStrength = Math.max(Context.minStrength, strength - decay);
-				if (effectiveStrength <= 0) continue;
-				totalCount++;
+			// if the neuron is in the observed context, add the common strength
+			if (observedDistances) commonStrength += this.getCommonStrength(effectiveDistanceMap, observedDistances, contextLength);
+		}
 
-				// if the observed context has the neuron at the same distance, it is a common entry
-				if (observedDistances && observedDistances.has(distance)) {
-					common.push({ neuron, distance, strength: effectiveStrength });
-					score += effectiveStrength;
-				}
-				// otherwise, it is a missing entry
-				else missing.push({ neuron, distance, strength: effectiveStrength });
+		return { commonStrength, knownStrength, common, missing };
+	}
+
+	/**
+	 * returns effective context distance map after applying decay
+	 */
+	getEffectiveDistanceMap(distanceMap, decay) {
+		let strength = 0;
+		const effectiveDistanceMap = new Map();
+		for (const [distance, rawStrength] of distanceMap) {
+			const effectiveStrength = Math.max(Context.minStrength, rawStrength - decay);
+			if (effectiveStrength > 0) effectiveDistanceMap.set(distance, effectiveStrength);
+			strength += effectiveStrength;
+		}
+		return { effectiveDistanceMap, strength };
+	}
+
+	/**
+	 * populate common/missing entries for a known neuron
+	 */
+	populateCommonMissing(neuron, distanceMap, observedDistances, common, missing) {
+		for (const [distance, strength] of distanceMap) {
+			if (observedDistances?.has(distance)) common.push({ neuron, distance, strength });
+			else missing.push({ neuron, distance, strength });
+		}
+	}
+
+	/**
+	 * returns the common strength for a known neuron in the observed context
+	 * considers all pairs of known/observed distances, weighted by known strength
+	 */
+	getCommonStrength(knownDistanceMap, observedDistances, contextLength) {
+		let weightedDeltaSum = 0;
+		let totalWeight = 0;
+		for (const [kDist, strength] of knownDistanceMap)
+			for (const oDist of observedDistances.keys()) {
+				weightedDeltaSum += strength * Math.abs(kDist - oDist);
+				totalWeight += strength;
 			}
-		}
+		const avgDelta = weightedDeltaSum / totalWeight;
+		let neuronStrength = 0;
+		for (const s of knownDistanceMap.values()) neuronStrength += s;
+		return neuronStrength * (1 - avgDelta / contextLength);
+	}
 
-		// if there are no known context entries, there cannot be a match
-		if (totalCount === 0) return null;
-
-		// check match threshold to decide if there is a match or not
-		if (common.length / totalCount < Context.mergeThreshold) return null;
-
-		// match found - find the novel entries (in observed but not in this known context) using lookups
+	/**
+	 * Find novel entries in observed context and compute novel penalty.
+	 */
+	matchNovel(observed, decay) {
+		let novelStrength = 0;
 		const novel = [];
-		for (const [neuron, distanceMap] of observed.entries) {
-			const knownDistances = this.entries.get(neuron);
-			for (const [distance, strength] of distanceMap)
-				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance) - decay) <= 0)
-					novel.push({ neuron, distance, strength });
+
+		for (const { neuron, distance, strength } of observed.getEntries()) {
+			if (this.neuronExists(neuron, distance, decay)) continue;
+			novel.push({ neuron, distance, strength });
+			novelStrength += strength;
 		}
 
-		// Round to 14 decimal places to avoid floating-point precision issues
-		score = Math.round(score * 1e14) / 1e14;
+		return { novelStrength, novel };
+	}
 
-		return { score, common, missing, novel };
+	/**
+	 * Check if a (neuron, distance) entry exists and has positive effective strength.
+	 */
+	neuronExists(neuron, distance, decay) {
+		const distanceMap = this.entries.get(neuron);
+		if (!distanceMap || !distanceMap.has(distance)) return false;
+		return Math.max(Context.minStrength, distanceMap.get(distance) - decay) > 0;
 	}
 }

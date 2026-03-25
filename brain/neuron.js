@@ -26,14 +26,13 @@ export class Neuron {
 	static maxStrength = 100;
 	static minStrength = 0;
 	static rewardSmoothing = 0.9;
-	static eventErrorMinStrength = 1;
-	static actionRegretMinStrength = 4;
+	static errorCorrectionThreshold = 0.6; // ratio of failed/total inference strength to trigger pattern creation
 	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 0;
 	// use 0.001 or lower for text for all forget rates
-	static connectionForgetRate = 0.009; // use 0.009 for stocks
-	static contextForgetRate = 0.009; // use 0.009 for stocks
-	static patternForgetRate = 0.013; // use 0.011 for stocks
+	static connectionForgetRate = 0.001; // use 0.009 for stocks
+	static contextForgetRate = 0.001; // use 0.009 for stocks
+	static patternForgetRate = 0.001; // use 0.011 for stocks
 
 	// static debug flag for the neuron
 	static debug = false;
@@ -327,20 +326,29 @@ export class Neuron {
 	 * Find the best matching pattern for this parent neuron given the observed context.
 	 * @param {Context} observed - The observed context from brain
 	 * @param {number} currentFrame - Current frame number for lazy decay
+	 * @param {number} contextLength - the context window length for distance similarity scaling
 	 * @returns {Object|null} The matched pattern and match details, or null if no match
 	 */
-	matchPattern(observed, currentFrame) {
+	matchPattern(observed, currentFrame, contextLength) {
 
-		// try to match the observed context to known patterns
+		// collect candidate patterns from observed context using contextRefs as inverted index
+		// narrow them down to only those that share at least one neuron with the observed context
+		const candidates = new Set();
+		for (const [neuron] of observed.entries)
+			if (neuron.contextRefs)
+				for (const [pattern] of neuron.contextRefs)
+					if (this.children.has(pattern)) candidates.add(pattern);
+
+		// try to match the observed context to candidate patterns only
 		let best = null; // { pattern, score, common, missing, novel }
-		for (const pattern of this.children) {
+		for (const pattern of candidates) {
 
 			// if the pattern has been forgotten, ignore that - cleanup cycle will take care of it
 			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
 
 			// get the match results for the pattern for the given context
 			const decay = Neuron.calculateDecay(pattern.lastActivationFrame, currentFrame, Neuron.contextForgetRate);
-			const match = pattern.context.match(observed, decay);
+			const match = pattern.context.match(observed, decay, contextLength);
 
 			// if there is a match, and it's the best so far, store it
 			if (match && (!best || match.score > best.score)) {
@@ -422,6 +430,7 @@ export class Neuron {
 
 	/**
 	 * Check if there are any prediction errors or action regret that need correction.
+	 * Uses ratio of failed inference strengths to total inference strengths.
 	 * @returns {boolean} Whether any errors were found
 	 */
 	needsErrorCorrection(inferences, actualNeurons, rewards, channelActions) {
@@ -435,17 +444,30 @@ export class Neuron {
 		// Pre-compute dimension signatures for fast lookup (performance optimization)
 		const eventsByDimensions = this.groupEventsByDimensions(actualEvents);
 
-		// Process each inference to find if any errors exist
+		// Accumulate failed and total inference strengths
+		let failedStrength = 0;
+		let totalStrength = 0;
+
 		for (const inference of inferences) {
 
 			// Check for event prediction errors
-			if (this.hasEventErrors(inference, actualNeurons, eventsByDimensions)) return true;
+			if (inference.neuron.type === 'event') {
+				totalStrength += inference.strength;
+				if (this.hasEventErrors(inference, actualNeurons, eventsByDimensions))
+					failedStrength += inference.strength;
+			}
 
 			// Check for action regret
-			if (this.hasActionRegret(inference, executedActions, painfulChannels, channelActions)) return true;
+			if (inference.neuron.type === 'action') {
+				totalStrength += inference.strength;
+				if (this.hasActionRegret(inference, executedActions, painfulChannels, channelActions))
+					failedStrength += inference.strength;
+			}
 		}
 
-		return false;
+		// Error correction needed when failure ratio exceeds threshold
+		console.log(failedStrength, totalStrength, failedStrength / totalStrength);
+		return (failedStrength / totalStrength) >= Neuron.errorCorrectionThreshold;
 	}
 
 	/**
@@ -490,9 +512,7 @@ export class Neuron {
 	 */
 	hasEventErrors(prediction, actualNeurons, eventsByDimensions) {
 
-		// Only process event predictions that were confident but didn't happen
-		if (prediction.neuron.type !== 'event') return false;
-		if (prediction.strength < Neuron.eventErrorMinStrength) return false;
+		// Only process event predictions that didn't happen
 		if (actualNeurons.has(prediction.neuron)) return false;
 
 		// Check if there are actual events with the same dimensions as the failed prediction
@@ -501,13 +521,11 @@ export class Neuron {
 	}
 
 	/**
-	 * Check if a confident action was executed and resulted in pain.
+	 * Check if an action was executed and resulted in pain.
 	 */
 	hasActionRegret(prediction, executedActions, painfulChannels, channelActions) {
 
-		// Only process action predictions that were confident, executed, and painful
-		if (prediction.neuron.type !== 'action') return false;
-		if (prediction.strength < Neuron.actionRegretMinStrength) return false;
+		// Only process action predictions that were executed and painful
 		if (!executedActions.has(prediction.neuron)) return false;
 		if (!painfulChannels.has(prediction.neuron.channel)) return false;
 

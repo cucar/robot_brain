@@ -226,9 +226,9 @@ for (peak of peaks) {
 
   for (pattern of peak.children) {
     match = pattern.context.match(context)
-    if (match && match.score > bestScore) {
+    if (match && match.totalScore > bestScore) {
       bestPattern = pattern
-      bestScore = match.score
+      bestScore = match.totalScore
     }
   }
 
@@ -258,8 +258,8 @@ matchRatio = common.length / pattern.context.entries.length
 // matchRatio = 2/3 = 67% >= mergeThreshold (50%)
 
 if (matchRatio >= mergeThreshold) {
-  score = sum(common.map(e => e.strength))
-  return {score, common, missing, novel}
+  totalScore = sum(common.map(e => e.strength))
+  return {totalScore, common, missing, novel}
 }
 
 return null  // No match
@@ -377,7 +377,7 @@ Patterns refine over time through connection learning and pattern matching:
 Pattern contexts evolve through the matching process:
 
 **During matching** (`context.match()`):
-- Common neurons: contribute to match score
+- Common neurons: contribute to match totalScore
 - Missing neurons: reduce match ratio
 - Novel neurons: identified but not added automatically
 
@@ -492,9 +492,9 @@ bestScore = 0
 
 for (pattern of B.children) {
   match = pattern.context.match(observedContext)
-  if (match && match.score > bestScore) {
+  if (match && match.totalScore > bestScore) {
     bestPattern = pattern
-    bestScore = match.score
+    bestScore = match.totalScore
   }
 }
 

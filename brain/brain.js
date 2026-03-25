@@ -275,7 +275,7 @@ export default class Brain {
 		this.cleanupDeadPatterns();
 
 		// show frame processing summary
-		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getChannels(), this.thalamus.getNeurons().length);
+		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getChannels(), this.thalamus.getNeurons());
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
@@ -426,7 +426,7 @@ export default class Brain {
 		const matchedPatterns = [];
 		const recognizedPatterns = new Set();
 		for (const { neuron: parent, age, context } of recognizers) {
-			const match = parent.matchPattern(context, this.frameNumber);
+			const match = parent.matchPattern(context, this.frameNumber, this.memory.contextLength);
 			if (match && !recognizedPatterns.has(match.pattern)) {
 				recognizedPatterns.add(match.pattern);
 				matchedPatterns.push({ parent, age, match });

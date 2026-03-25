@@ -267,7 +267,10 @@ export class Memory {
 		const filterByLevel = level !== undefined;
 		const result = [];
 		for (let age = 1; age < this.activeNeurons.length; age++)
-			for (const neuron of this.activeNeurons[age].keys()) {
+			for (const [neuron, state] of this.activeNeurons[age]) {
+
+				// skip neurons that activated a child pattern - the context differs from what the parent expects
+				if (state.activatedPattern !== null) continue;
 
 				// do not allow actions in contexts unless action sequences are enabled for their channel
 				if (this.skipActionNeuron(neuron)) continue;

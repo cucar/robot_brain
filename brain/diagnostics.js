@@ -449,9 +449,9 @@ export class Diagnostics {
 	 * @param {number} frameNumber - Current frame number
 	 * @param {number} frameElapsed - Time elapsed for frame processing (ms)
 	 * @param {Array<Channel>} channels - array of [channelName, channel]
-	 * @param {number} neuronCount - number of neurons in thalamus
+	 * @param {Array<Neuron>} neurons - neurons in thalamus
 	 */
-	endFrame(frameNumber, frameElapsed, channels, neuronCount) {
+	endFrame(frameNumber, frameElapsed, channels, neurons) {
 
 		// Get base level (level 0) accuracy
 		let baseAccuracy = 'N/A';
@@ -485,7 +485,10 @@ export class Diagnostics {
 			if (display) aggregateDisplay = ` | ${display}`;
 		}
 
-		if (this.frameSummary)
-			console.log(`Frame ${frameNumber} | Neurons: ${neuronCount} | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | State: ${stateDisplay}${aggregateDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+		if (this.frameSummary) {
+			let maxLevel = 0;
+			for (const neuron of neurons) if (neuron.level > maxLevel) maxLevel = neuron.level;
+			console.log(`Frame ${frameNumber} | Neurons: ${neurons.length} (L${maxLevel}) | Accuracy: ${baseAccuracy} | Reward: ${avgReward} | MAPE: ${mapeDisplay} | State: ${stateDisplay}${aggregateDisplay} | Time: ${frameElapsed.toFixed(2)}ms`);
+		}
 	}
 }
