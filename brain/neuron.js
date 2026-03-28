@@ -26,9 +26,6 @@ export class Neuron {
 	static maxStrength = 100;
 	static minStrength = 0;
 	static rewardSmoothing = 0.9;
-	static eventErrorMinStrength = 1;
-	static actionRegretMinStrength = 4;
-	static actionRegretMinPain = 0;
 	static levelVoteMultiplier = 0;
 	// use 0.001 or lower for text for all forget rates
 	static connectionForgetRate = 0.009; // use 0.009 for stocks
@@ -398,7 +395,7 @@ export class Neuron {
 
 			// if the neuron is an action and the reward is below a threshold, add an alternative action for the channel
 			const conn = this.connections.get(age).get(neuron);
-			if (conn.reward < Neuron.actionRegretMinPain) {
+			if (conn.reward < 0) {
 				const altNeuron = this.findAlternativeAction(age, neuron.channel, neuron, channelActions);
 				if (altNeuron) this.createConnection(age, altNeuron, 1, 0);
 			}
@@ -418,104 +415,6 @@ export class Neuron {
 			if (altNeuron !== currentAction && !this.hasConnection(age, altNeuron))
 				return altNeuron;
 		return null;
-	}
-
-	/**
-	 * Check if there are any prediction errors or action regret that need correction.
-	 * @returns {boolean} Whether any errors were found
-	 */
-	needsErrorCorrection(inferences, actualNeurons, rewards, channelActions) {
-
-		// Categorize what actually happened into events and actions
-		const { events: actualEvents, actions: executedActions } = this.categorizeActualNeurons(actualNeurons);
-
-		// Identify channels with painful outcomes
-		const painfulChannels = this.identifyPainfulChannels(rewards);
-
-		// Pre-compute dimension signatures for fast lookup (performance optimization)
-		const eventsByDimensions = this.groupEventsByDimensions(actualEvents);
-
-		// Process each inference to find if any errors exist
-		for (const inference of inferences) {
-
-			// Check for event prediction errors
-			if (this.hasEventErrors(inference, actualNeurons, eventsByDimensions)) return true;
-
-			// Check for action regret
-			if (this.hasActionRegret(inference, executedActions, painfulChannels, channelActions)) return true;
-		}
-
-		return false;
-	}
-
-	/**
-	 * Categorize actual neurons into events and actions.
-	 */
-	categorizeActualNeurons(actualNeurons) {
-		const events = new Set();
-		const actions = new Set();
-		for (const neuron of actualNeurons) {
-			if (neuron.type === 'event') events.add(neuron);
-			if (neuron.type === 'action') actions.add(neuron);
-		}
-		return { events, actions };
-	}
-
-	/**
-	 * Identify channels that had painful outcomes.
-	 */
-	identifyPainfulChannels(rewards) {
-		const painfulChannels = new Set();
-		for (const [channelName, reward] of rewards)
-			if (reward < Neuron.actionRegretMinPain) painfulChannels.add(channelName);
-		return painfulChannels;
-	}
-
-	/**
-	 * Group event neurons by their dimension signatures for fast lookup.
-	 */
-	groupEventsByDimensions(events) {
-		const eventsByDimensions = new Map();
-		for (const neuron of events) {
-			const dimensionKey = Object.keys(neuron.coordinates).sort().join(',');
-			if (!eventsByDimensions.has(dimensionKey)) eventsByDimensions.set(dimensionKey, []);
-			eventsByDimensions.get(dimensionKey).push(neuron);
-		}
-		return eventsByDimensions;
-	}
-
-	/**
-	 * Find corrections for event prediction errors.
-	 * When a confident prediction didn't happen, find what actually happened with the same dimensions.
-	 */
-	hasEventErrors(prediction, actualNeurons, eventsByDimensions) {
-
-		// Only process event predictions that were confident but didn't happen
-		if (prediction.neuron.type !== 'event') return false;
-		if (prediction.strength < Neuron.eventErrorMinStrength) return false;
-		if (actualNeurons.has(prediction.neuron)) return false;
-
-		// Check if there are actual events with the same dimensions as the failed prediction
-		const failedDimensions = Object.keys(prediction.neuron.coordinates).sort().join(',');
-		return eventsByDimensions.has(failedDimensions);
-	}
-
-	/**
-	 * Check if a confident action was executed and resulted in pain.
-	 */
-	hasActionRegret(prediction, executedActions, painfulChannels, channelActions) {
-
-		// Only process action predictions that were confident, executed, and painful
-		if (prediction.neuron.type !== 'action') return false;
-		if (prediction.strength < Neuron.actionRegretMinStrength) return false;
-		if (!executedActions.has(prediction.neuron)) return false;
-		if (!painfulChannels.has(prediction.neuron.channel)) return false;
-
-		// Check if an alternative action exists for this channel
-		const channelAlternatives = channelActions.get(prediction.neuron.channel);
-		if (!channelAlternatives) return false;
-
-		return [...channelAlternatives].some(n => n !== prediction.neuron);
 	}
 
 	/**

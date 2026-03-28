@@ -17,6 +17,8 @@ export default class Brain {
 
 		// pattern learning parameters
 		this.maxLevels = 150; // just to prevent against infinite recursion
+		this.eventErrorMinStrength = 1;
+		this.actionRegretMinStrength = 4;
 
 		// frame number is used for death ledger and diagnostics
 		this.frameNumber = 0;
@@ -494,31 +496,93 @@ export default class Brain {
 		// Get active sensory neurons (level=0 - events and actions)
 		const sensoryNeurons = this.memory.getSensoryNeurons();
 
-		// ask each neuron if it needs a new error correction pattern
-		const requests = this.findErrorCorrectionRequests(sensoryNeurons);
+		// check for each neuron if it needs a new error correction pattern
+		const corrections = this.getErrorCorrections(sensoryNeurons);
 
 		// create pattern neurons and populate their connections from the future
-		this.createErrorPatterns(requests, sensoryNeurons);
+		this.createErrorPatterns(corrections, sensoryNeurons);
 
-		if (this.debug && requests.length > 0) console.log(`Created ${requests.length} error patterns`);
+		if (this.debug && corrections.length > 0) console.log(`Created ${corrections.length} error patterns`);
 	}
 
 	/**
-	 * Ask each neuron if it needs a new error correction pattern.
-	 * Only sends newly active neurons (age=0) - that's all the neuron needs for error detection.
+	 * returns the error corrections we need for all voters
 	 */
-	findErrorCorrectionRequests(sensoryNeurons) {
+	getErrorCorrections(sensoryNeurons) {
 
 		// get newly active sensory neurons (age=0, level=0 - events and actions)
-		const newActiveNeurons = new Set(sensoryNeurons[0] || []);
+		const { events, actions } = this.categorizeActualNeurons(new Set(sensoryNeurons[0] || []));
 
-		// call each neuron to ask if it needs a new error correction pattern (parallelizable)
-		const channelActions = this.thalamus.getAllChannelActions();
-		const requests = [];
+		// Identify channels with painful outcomes
+		const painfulChannels = this.identifyPainfulChannels();
+
+		// check for each neuron if it needs a new error correction pattern
+		const corrections = [];
 		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext())
-			if (neuron.needsErrorCorrection(votes, newActiveNeurons, this.rewards, channelActions))
-				requests.push({ neuron, age, context });
-		return requests;
+			if (this.needsErrorCorrection(votes, events, actions, painfulChannels))
+				corrections.push({ neuron, age, context });
+		return corrections;
+	}
+
+	/**
+	 * Categorize actual neurons into events and actions.
+	 */
+	categorizeActualNeurons(actualNeurons) {
+		const events = new Set();
+		const actions = new Set();
+		for (const neuron of actualNeurons) {
+			if (neuron.type === 'event') events.add(neuron);
+			if (neuron.type === 'action') actions.add(neuron);
+		}
+		return { events, actions };
+	}
+
+	/**
+	 * Identify channels that had painful outcomes.
+	 */
+	identifyPainfulChannels() {
+		const painfulChannels = new Set();
+		for (const [channelName, reward] of this.rewards)
+			if (reward < 0) painfulChannels.add(channelName);
+		return painfulChannels;
+	}
+
+	/**
+	 * Check if there are any prediction errors or action regret that need correction.
+	 * @returns {boolean} Whether any errors were found
+	 */
+	needsErrorCorrection(inferences, actualEvents, executedActions, painfulChannels) {
+
+		// Process each inference to find if any errors exist
+		for (const inference of inferences) {
+
+			// Check for event prediction errors
+			if (this.hasEventErrors(inference, actualEvents)) return true;
+
+			// Check for action regret
+			if (this.hasActionRegret(inference, executedActions, painfulChannels)) return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Find corrections for event inference errors.
+	 * When a confident inference didn't happen, find what actually happened with the same dimensions.
+	 */
+	hasEventErrors(inference, actualNeurons) {
+		if (inference.neuron.type !== 'event') return false;
+		if (inference.strength < this.eventErrorMinStrength) return false;
+		return !actualNeurons.has(inference.neuron);
+	}
+
+	/**
+	 * Check if a confident action was executed and resulted in pain.
+	 */
+	hasActionRegret(prediction, executedActions, painfulChannels) {
+		if (prediction.neuron.type !== 'action') return false;
+		if (prediction.strength < this.actionRegretMinStrength) return false;
+		return painfulChannels.has(prediction.neuron.channel);
 	}
 
 	/**
