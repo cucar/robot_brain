@@ -275,7 +275,13 @@ export default class Brain {
 		this.cleanupDeadPatterns();
 
 		// show frame processing summary
-		this.diagnostics.endFrame(this.frameNumber, performance.now() - frameStart, this.thalamus.getChannels(), this.thalamus.getNeurons().length);
+		this.diagnostics.endFrame(
+			this.frameNumber,
+			performance.now() - frameStart,
+			this.thalamus.getChannels(),
+			this.thalamus.getNeuronCount(),
+			this.thalamus.getMaxLevel()
+		);
 
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');

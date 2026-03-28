@@ -31,6 +31,9 @@ export class Thalamus {
 		// Dimension mappings
 		this.dimensionNameToId = {}; // dimensionName -> dimensionId
 		this.dimensionIdToName = {}; // dimensionId -> dimensionName
+
+		// Level counts - tracks number of neurons at each level for efficient max level diagnostics lookup
+		this.levelCounts = []; // index = level, value = count of neurons at that level
 	}
 
 	/**
@@ -47,6 +50,7 @@ export class Thalamus {
 		neuron = Neuron.createSensory(channel, type, coordinates);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronsByValue.set(neuron.valueKey, neuron);
+		this.incrementLevelCount(neuron.level); // for diagnostics
 		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${neuron.valueKey}`);
 		return neuron;
 	}
@@ -74,6 +78,7 @@ export class Thalamus {
 	addNeuron(neuron) {
 		this.neurons.set(neuron.id, neuron);
 		if (neuron.level === 0) this.neuronsByValue.set(neuron.valueKey, neuron);
+		this.incrementLevelCount(neuron.level); // for diagnostics
 	}
 
 	/**
@@ -83,15 +88,18 @@ export class Thalamus {
 	setNeurons(neurons) {
 		this.neurons = neurons;
 
-		// Rebuild neuronsByValue map and death ledger
+		// Rebuild neuronsByValue map, death ledger, and level counts
 		this.neuronsByValue.clear();
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
-		for (const neuron of neurons.values())
+		this.levelCounts = []; // for diagnostics
+		for (const neuron of neurons.values()) {
+			this.incrementLevelCount(neuron.level); // for diagnostics
 			if (neuron.level === 0)
 				this.neuronsByValue.set(neuron.valueKey, neuron);
 			else
 				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / Neuron.patternForgetRate));
+		}
 	}
 
 	/**
@@ -102,6 +110,7 @@ export class Thalamus {
 		this.neuronsByValue.clear();
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
+		this.levelCounts = []; // for diagnostics
 		Neuron.nextId = 1;
 	}
 
@@ -486,6 +495,9 @@ export class Thalamus {
 		// Delete this pattern neuron from the index
 		this.neurons.delete(pattern.id);
 
+		// decrement level count for diagnostics
+		this.decrementLevelCount(pattern.level);
+
 		// memory cleanup
 		pattern.parent = null;
 		delete pattern.context;
@@ -526,5 +538,38 @@ export class Thalamus {
 		}
 
 		return newlyDeletable;
+	}
+
+	/**
+	 * Increment the neuron count at a given level for diagnostics
+	 */
+	incrementLevelCount(level) {
+		while (this.levelCounts.length <= level) this.levelCounts.push(0);
+		this.levelCounts[level]++;
+	}
+
+	/**
+	 * Decrement the neuron count at a given level for diagnostics
+	 */
+	decrementLevelCount(level) {
+		if (level < this.levelCounts.length) this.levelCounts[level]--;
+	}
+
+	/**
+	 * Get total number of neurons for diagnostics
+	 * @returns {number}
+	 */
+	getNeuronCount() {
+		return this.neurons.size;
+	}
+
+	/**
+	 * Get the maximum level of any neuron currently in the registry for diagnostics
+	 * @returns {number}
+	 */
+	getMaxLevel() {
+		for (let i = this.levelCounts.length - 1; i >= 0; i--)
+			if (this.levelCounts[i] > 0) return i;
+		return 0;
 	}
 }
