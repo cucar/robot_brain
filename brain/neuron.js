@@ -25,12 +25,11 @@ export class Neuron {
 	// Hyperparameters
 	static maxStrength = 100;
 	static minStrength = 0;
-	static rewardSmoothing = 0.9;
+	static rewardSmoothing = 0.1;
 	static levelVoteMultiplier = 0;
-	// use 0.001 or lower for text for all forget rates
-	static connectionForgetRate = 0.009; // use 0.009 for stocks
-	static contextForgetRate = 0.009; // use 0.009 for stocks
-	static patternForgetRate = 0.013; // use 0.011 for stocks
+	static connectionForgetRate = 0.01;
+	static contextForgetRate = 0.01;
+	static patternForgetRate = 0.01;
 
 	// static debug flag for the neuron
 	static debug = false;

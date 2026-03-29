@@ -17,8 +17,7 @@ export default class Brain {
 
 		// pattern learning parameters
 		this.maxLevels = 150; // just to prevent against infinite recursion
-		this.eventErrorMinStrength = 1;
-		this.actionRegretMinStrength = 4;
+		this.errorCorrectionThreshold = 0.55; // if the error is below this threshold, no need to create a new correction pattern
 
 		// frame number is used for death ledger and diagnostics
 		this.frameNumber = 0;
@@ -32,7 +31,7 @@ export default class Brain {
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
-		this.rewards = new Map(); // channel rewards for current frame
+		this.rewards = []; // channel rewards indexed by age (array of Maps)
 
 		// Database - used for persistent storage - backup and restore
 		this.db = this.database ? new Database(options) : null;
@@ -94,8 +93,9 @@ export default class Brain {
 		// Reset accuracy stats
 		this.resetAccuracyStats();
 
-		// Clear memory
+		// Clear memory and rewards history
 		this.memory.reset();
+		this.rewards = [];
 
 		// Reset channel class static state (once per class)
 		const channelClasses = new Set();
@@ -244,7 +244,7 @@ export default class Brain {
 		await this.getRewards();
 
 		// display diagnostic frame start if enabled
-		this.diagnostics.startFrame(this.frameNumber, this.rewards, this.frame);
+		this.diagnostics.startFrame(this.frameNumber, this.rewards[0], this.frame);
 
 		// age the active neurons in memory context - sliding the temporal window
 		// also deactivates aged-out neurons (now that context was saved with votes in previous frame)
@@ -336,7 +336,7 @@ export default class Brain {
 	 */
 	async getRewards() {
 		if (this.debug) console.log('Getting rewards feedback from all channels...');
-		this.rewards = new Map();
+		const rewards = new Map();
 		let feedbackCount = 0;
 
 		// Get all actions from previous frame's inference (from in-memory inferredNeurons)
@@ -351,16 +351,20 @@ export default class Brain {
 			// get the reward for the channel
 			const reward = await channel.getRewards();
 			if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
-			this.rewards.set(channelName, reward);
+			rewards.set(channelName, reward);
 			feedbackCount++;
 		}
+
+		// Age rewards: push current rewards to front, trim to context window
+		this.rewards.unshift(rewards);
+		if (this.rewards.length > this.memory.contextLength) this.rewards.pop();
 
 		if (this.debug) {
 			if (feedbackCount > 0) console.log(`Received rewards from ${feedbackCount} channels`);
 			else console.log('No rewards from any channels');
 		}
 		if (this.debug && feedbackCount > 0)
-			console.log(`Channel rewards:`, Array.from(this.rewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
+			console.log(`Channel rewards:`, Array.from(rewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
 	}
 
 	/**
@@ -375,7 +379,7 @@ export default class Brain {
 		this.activateNeurons(neurons);
 
 		// Track inference performance (event accuracy, action rewards, and continuous prediction errors)
-		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards, this.thalamus.getChannels());
+		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards[0], this.thalamus.getChannels());
 	}
 
 	/**
@@ -483,7 +487,7 @@ export default class Brain {
 			if (this.memory.skipActionNeuron(neuron)) continue;
 
 			// learn connections from the context neuron to the newly active neurons
-			neuron.learnConnections(age, newActiveNeurons, this.rewards, channelActions, this.frameNumber);
+			neuron.learnConnections(age, newActiveNeurons, this.rewards[0], channelActions, this.frameNumber);
 		}
 	}
 
@@ -510,92 +514,67 @@ export default class Brain {
 	 */
 	getErrorCorrections(sensoryNeurons) {
 
-		// get newly active sensory neurons (age=0, level=0 - events and actions)
-		const { events, actions } = this.categorizeActualNeurons(new Set(sensoryNeurons[0] || []));
-
-		// Identify channels with painful outcomes
-		const painfulChannels = this.identifyPainfulChannels();
+		// get newly active events (age=0, level=0)
+		const events = this.getActualEvents(sensoryNeurons);
 
 		// check for each neuron if it needs a new error correction pattern
 		const corrections = [];
 		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext())
-			if (this.needsErrorCorrection(votes, events, actions, painfulChannels))
+			if (this.needsErrorCorrection(votes, events))
 				corrections.push({ neuron, age, context });
 		return corrections;
 	}
 
 	/**
-	 * Categorize actual neurons into events and actions.
+	 * returns the actual events from the given neurons (new frame)
 	 */
-	categorizeActualNeurons(actualNeurons) {
+	getActualEvents(sensoryNeurons) {
 		const events = new Set();
-		const actions = new Set();
-		for (const neuron of actualNeurons) {
-			if (neuron.type === 'event') events.add(neuron);
-			if (neuron.type === 'action') actions.add(neuron);
-		}
-		return { events, actions };
+		for (const neuron of sensoryNeurons[0])if (neuron.type === 'event') events.add(neuron);
+		return events;
 	}
 
 	/**
-	 * Identify channels that had painful outcomes.
+	 * returns if a neuron needs error correction
+	 * based on its inferences in the previous frame and the actual events in the current frame
+	 * @returns {boolean} Whether error correction is needed
 	 */
-	identifyPainfulChannels() {
-		const painfulChannels = new Set();
-		for (const [channelName, reward] of this.rewards)
-			if (reward < 0) painfulChannels.add(channelName);
-		return painfulChannels;
-	}
-
-	/**
-	 * Check if there are any prediction errors or action regret that need correction.
-	 * @returns {boolean} Whether any errors were found
-	 */
-	needsErrorCorrection(inferences, actualEvents, executedActions, painfulChannels) {
-
-		// Process each inference to find if any errors exist
-		for (const inference of inferences) {
-
-			// Check for event prediction errors
-			if (this.hasEventErrors(inference, actualEvents)) return true;
-
-			// Check for action regret
-			if (this.hasActionRegret(inference, executedActions, painfulChannels)) return true;
-		}
-
-		return false;
-	}
-
-	/**
-	 * Find corrections for event inference errors.
-	 * When a confident inference didn't happen, find what actually happened with the same dimensions.
-	 */
-	hasEventErrors(inference, actualNeurons) {
-		if (inference.neuron.type !== 'event') return false;
-		if (inference.strength < this.eventErrorMinStrength) return false;
-		return !actualNeurons.has(inference.neuron);
-	}
-
-	/**
-	 * Check if a confident action was executed and resulted in pain.
-	 */
-	hasActionRegret(prediction, executedActions, painfulChannels) {
-		if (prediction.neuron.type !== 'action') return false;
-		if (prediction.strength < this.actionRegretMinStrength) return false;
-		return painfulChannels.has(prediction.neuron.channel);
+	needsErrorCorrection(votes, actualEvents) {
+		let failedEvents = 0;
+		let totalEvents = 0;
+		for (const vote of votes)
+			if (vote.neuron.type === 'event') {
+				totalEvents++;
+				if (!actualEvents.has(vote.neuron)) failedEvents++;
+			}
+		const eventError = failedEvents / totalEvents;
+		// if (eventError > this.errorCorrectionThreshold) console.log('correctError', eventError, totalEvents);
+		return eventError > this.errorCorrectionThreshold;
 	}
 
 	/**
 	 * Create pattern neurons and populate their connections from the future.
 	 */
-	createErrorPatterns(requests, sensoryNeurons) {
-		for (const { neuron, age, context } of requests) {
+	createErrorPatterns(corrections, sensoryNeurons) {
+		for (const { neuron, age, context } of corrections) {
 
-			// create the new pattern with its future connections
+			// create the new pattern neuron
 			const pattern = Neuron.createPattern(neuron.level + 1, neuron);
+
+			// create the future connections of the pattern from currently observed neurons
 			for (let a = 0; a < age && a < sensoryNeurons.length; a++)
-				for (const n of sensoryNeurons[a])
-					pattern.createConnection(age - a, n, 1, 0);
+				for (const n of sensoryNeurons[a]) {
+
+					// save the event/action - include observed reward for actions - for events it's zero
+					const reward = this.rewards[a].get(n.channel) || 0;
+					pattern.createConnection(age - a, n, 1, reward);
+
+					// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
+					if (reward < 0) {
+						const alt = pattern.findAlternativeAction(age - a, n.channel, n, this.thalamus.getAllChannelActions());
+						if (alt) pattern.createConnection(age - a, alt, 1, 0);
+					}
+				}
 
 			// index the new neuron with its id
 			this.thalamus.addNeuron(pattern);

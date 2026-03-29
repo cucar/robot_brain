@@ -14,7 +14,7 @@ export class StockChannel extends Channel {
 	static cash = StockChannel.initialCapital;
 
 	// maximum number of positions to hold at once
-	static maxPositions = 1;
+	static maxPositions = 10;
 
 	// maximum price limit for stocks
 	static maxPrice = 5000;
