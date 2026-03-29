@@ -164,7 +164,7 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 
 The brain goes from 50% accuracy (random) to 99%+ in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
-> **Remember to change the hyperparameters back** to their stock defaults (`contextLength = 20`, forget rates = `0.009`/`0.009`/`0.011`, all 10 stocks uncommented) if you want to run the default stock test afterward.
+> **Remember to change the hyperparameters back** to their stock defaults if you want to run the default stock test afterward.
 
 ## Demo 3: Text Sequence Learning
 
@@ -175,6 +175,11 @@ The brain learns to predict character sequences. Feed it a string, and it memori
 In `brain/brain.js`, change the error correction to `0.3`:
 ```javascript
 this.errorCorrectionThreshold = 0.3;
+```
+
+In `brain/memory.js`, change `contextLength` to `20`:
+```javascript
+this.contextLength = 20;
 ```
 
 In `brain/context.js`, change `mergeThreshold` to `0.9`:
@@ -206,7 +211,7 @@ Accuracy by Episode:
 
 The brain goes from low accuracy to 100% in 5 episodes — it has fully memorized the character sequence and can predict every next character correctly.
 
-> **Remember to change the hyperparameters back** to their stock defaults (`mergeThreshold = 0.5`, forget rates = `0.009`/`0.009`/`0.011`) if you want to run stock tests afterward.
+> **Remember to change the hyperparameters back** to their stock defaults if you want to run stock tests afterward.
 
 ## Demo 4: Synthetic Cycle Memorization
 
