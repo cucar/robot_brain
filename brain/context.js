@@ -7,7 +7,7 @@ export class Context {
 	// Hyperparameters (shared with Neuron)
 	static maxStrength = 100;
 	static minStrength = 0;
-	static mergeThreshold = 0.5; // use 0.5 for stocks, 0.8 for text
+	static mergeThreshold = 0.5;
 	static negativeReinforcement = 0.1;
 
 	constructor() {
@@ -148,7 +148,10 @@ export class Context {
 					score += effectiveStrength;
 				}
 				// otherwise, it is a missing entry
-				else missing.push({ neuron, distance, strength: effectiveStrength });
+				else {
+					missing.push({neuron, distance, strength: effectiveStrength});
+					score -= effectiveStrength;
+				}
 			}
 		}
 
@@ -163,8 +166,10 @@ export class Context {
 		for (const [neuron, distanceMap] of observed.entries) {
 			const knownDistances = this.entries.get(neuron);
 			for (const [distance, strength] of distanceMap)
-				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance) - decay) <= 0)
+				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance) - decay) <= 0) {
 					novel.push({ neuron, distance, strength });
+					score -= strength;
+				}
 		}
 
 		// Round to 14 decimal places to avoid floating-point precision issues

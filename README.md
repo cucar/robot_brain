@@ -64,21 +64,21 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $38693.62
-   Average per Episode: $38693.62
-   Average ROI: +257.96%
-   Average Per-Frame ROI: +0.050921%
-   Total Trades: 12482
-   Average Trades per Episode: 12482.0
+   Total Net Profit: $26030.96
+   Average per Episode: $26030.96
+   Average ROI: +173.54%
+   Average Per-Frame ROI: +0.040179%
+   Total Trades: 22231
+   Average Trades per Episode: 22231.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $38693.62 | ROI: +257.96%, +0.050921%/frame (12482 trades)
+   Episode 1: $26030.96 | ROI: +173.54%, +0.040179%/frame (22231 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 55.80%
+   Episode 1: 58.02%
 ```
 
-The brain achieves ~56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
+The brain achieves 58% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
 
 ### Downloading Fresh Stock Data
 
@@ -129,6 +129,11 @@ In `brain/brain.js`, change the error correction to `0.3`:
 this.errorCorrectionThreshold = 0.3;
 ```
 
+In `brain/context.js`, change `mergeThreshold` to `0.9`:
+```javascript
+static mergeThreshold = 0.9;
+```
+
 Then run:
 ```bash
 node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
@@ -140,26 +145,26 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $24524624463.60
-   Average per Episode: $4904924892.72
-   Average ROI: +32699499.28%
-   Average Per-Frame ROI: +0.398400%
-   Total Trades: 30782
-   Average Trades per Episode: 6156.4
+   Total Net Profit: $55558614788.75
+   Average per Episode: $11111722957.75
+   Average ROI: +74078153.05%
+   Average Per-Frame ROI: +0.445989%
+   Total Trades: 30258
+   Average Trades per Episode: 6051.6
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $18918.74 | ROI: +126.12%, +0.032577%/frame (5909 trades)
-   Episode 2: $215661780.31 | ROI: +1437745.20%, +0.382906%/frame (6429 trades)
-   Episode 3: $4406325735.12 | ROI: +29375504.90%, +0.503880%/frame (6064 trades)
-   Episode 4: $8840977456.99 | ROI: +58939849.71%, +0.531823%/frame (6140 trades)
-   Episode 5: $11061640572.45 | ROI: +73744270.48%, +0.540816%/frame (6240 trades)
+   Episode 1: $26082.41 | ROI: +173.88%, +0.040229%/frame (5304 trades)
+   Episode 2: $6728114062.67 | ROI: +44854093.75%, +0.520863%/frame (6249 trades)
+   Episode 3: $16291639008.21 | ROI: +108610926.72%, +0.556357%/frame (6231 trades)
+   Episode 4: $17103693696.34 | ROI: +114024624.64%, +0.558309%/frame (6236 trades)
+   Episode 5: $15435141939.12 | ROI: +102900946.26%, +0.554189%/frame (6238 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 57.10%
-   Episode 2: 83.14%
-   Episode 3: 96.74%
-   Episode 4: 99.19%
-   Episode 5: 99.71%
+   Episode 1: 55.93%
+   Episode 2: 97.77%
+   Episode 3: 99.99%
+   Episode 4: 99.99%
+   Episode 5: 99.99%
 ```
 
 The brain goes from 50% accuracy (random) to 99%+ in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
@@ -228,7 +233,7 @@ node run-brain.js multi-channel-test
 
 **Expected output:**
 ```
-🎯 Overall Optimal Rate: 95%+
+🎯 Overall Optimal Rate: 96%
 ```
 
 The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 93%+ optimal trade decisions across all three channels. This demonstrates how multiple input streams converge to improve inference — one of the architecture's core strengths.
