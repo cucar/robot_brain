@@ -113,6 +113,32 @@ export class Context {
 	}
 
 	/**
+	 * Score a known context entry against the observed context.
+	 * Returns full strength for exact match, partial credit for distance mismatch, negative for missing.
+	 */
+	getMatchScore(strength, distance, observedDistances) {
+		if (observedDistances?.has(distance)) return strength;
+		if (!observedDistances) return -strength;
+		let minDelta = Infinity;
+		for (const observedDistance of observedDistances.keys()) {
+			const delta = Math.abs(observedDistance - distance);
+			if (delta < minDelta) minDelta = delta;
+		}
+		return strength / (1 + minDelta);
+	}
+
+	/**
+	 * Score a novel observed entry. Returns 0 if the neuron has a partial match
+	 * in the known context (already accounted for), otherwise returns negative strength.
+	 */
+	hasPartialMatch(distance, knownDistances, decay) {
+		if (knownDistances)
+			for (const [d, s] of knownDistances)
+				if (d !== distance && Math.max(Context.minStrength, s - decay) > 0) return true;
+		return false;
+	}
+
+	/**
 	 * Match this known context against an observed context.
 	 * Returns match result with score, or null if below threshold.
 	 * Uses effective strengths (with lazy decay applied) for scoring.
@@ -142,16 +168,12 @@ export class Context {
 				if (effectiveStrength <= 0) continue;
 				totalCount++;
 
-				// if the observed context has the neuron at the same distance, it is a common entry
-				if (observedDistances && observedDistances.has(distance)) {
-					common.push({ neuron, distance, strength: effectiveStrength });
-					score += effectiveStrength;
-				}
-				// otherwise, it is a missing entry
-				else {
-					missing.push({neuron, distance, strength: effectiveStrength});
-					score -= effectiveStrength;
-				}
+				// if the observed context has the neuron at the same distance, it is a common entry - otherwise missing
+				if (observedDistances?.has(distance)) common.push({ neuron, distance, strength: effectiveStrength });
+				else missing.push({ neuron, distance, strength: effectiveStrength });
+
+				// add the match score for the entry
+				score += this.getMatchScore(effectiveStrength, distance, observedDistances);
 			}
 		}
 
@@ -166,10 +188,11 @@ export class Context {
 		for (const [neuron, distanceMap] of observed.entries) {
 			const knownDistances = this.entries.get(neuron);
 			for (const [distance, strength] of distanceMap)
-				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance) - decay) <= 0) {
-					novel.push({ neuron, distance, strength });
-					score -= strength;
-				}
+				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance) - decay) <= 0)
+					if (!this.hasPartialMatch(distance, knownDistances, decay)) {
+						novel.push({ neuron, distance, strength });
+						score -= strength;
+					}
 		}
 
 		// Round to 14 decimal places to avoid floating-point precision issues

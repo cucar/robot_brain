@@ -64,21 +64,21 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $26030.96
-   Average per Episode: $26030.96
-   Average ROI: +173.54%
-   Average Per-Frame ROI: +0.040179%
-   Total Trades: 22231
-   Average Trades per Episode: 22231.0
+   Total Net Profit: $96359.10
+   Average per Episode: $96359.10
+   Average ROI: +642.39%
+   Average Per-Frame ROI: +0.080060%
+   Total Trades: 1472
+   Average Trades per Episode: 1472.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $26030.96 | ROI: +173.54%, +0.040179%/frame (22231 trades)
+   Episode 1: $96359.10 | ROI: +642.39%, +0.080060%/frame (1472 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 58.02%
+   Episode 1: 55.62%
 ```
 
-The brain achieves 58% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
+The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
 
 ### Downloading Fresh Stock Data
 
@@ -145,29 +145,29 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $55558614788.75
-   Average per Episode: $11111722957.75
-   Average ROI: +74078153.05%
-   Average Per-Frame ROI: +0.445989%
-   Total Trades: 30258
-   Average Trades per Episode: 6051.6
+   Total Net Profit: $48201936157449.70
+   Average per Episode: $9640387231489.94
+   Average ROI: +64269248209.93%
+   Average Per-Frame ROI: +0.652512%
+   Total Trades: 11899
+   Average Trades per Episode: 2379.8
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $26082.41 | ROI: +173.88%, +0.040229%/frame (5304 trades)
-   Episode 2: $6728114062.67 | ROI: +44854093.75%, +0.520863%/frame (6249 trades)
-   Episode 3: $16291639008.21 | ROI: +108610926.72%, +0.556357%/frame (6231 trades)
-   Episode 4: $17103693696.34 | ROI: +114024624.64%, +0.558309%/frame (6236 trades)
-   Episode 5: $15435141939.12 | ROI: +102900946.26%, +0.554189%/frame (6238 trades)
+   Episode 1: $52086.32 | ROI: +347.24%, +0.059815%/frame (1007 trades)
+   Episode 2: $726362927896.04 | ROI: +4842419519.31%, +0.708909%/frame (2636 trades)
+   Episode 3: $10597348249977.08 | ROI: +70648988333.18%, +0.816723%/frame (2740 trades)
+   Episode 4: $15668587441206.53 | ROI: +104457249608.04%, +0.832463%/frame (2758 trades)
+   Episode 5: $21209637486283.73 | ROI: +141397583241.89%, +0.844652%/frame (2758 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 55.93%
-   Episode 2: 97.77%
-   Episode 3: 99.99%
-   Episode 4: 99.99%
-   Episode 5: 99.99%
+   Episode 1: 54.10%
+   Episode 2: 99.98%
+   Episode 3: 100.00%
+   Episode 4: 100.00%
+   Episode 5: 100.00%
 ```
 
-The brain goes from 50% accuracy (random) to 99%+ in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
+The brain goes from 50% accuracy (random) to 100% in 3 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
 > **Remember to change the hyperparameters back** to their stock defaults if you want to run the default stock test afterward.
 
@@ -227,13 +227,18 @@ In `brain/brain.js`, change the error correction to `0.3`:
 this.errorCorrectionThreshold = 0.3;
 ```
 
+In `brain/context.js`, change `mergeThreshold` to `0.9`:
+```javascript
+static mergeThreshold = 0.9;
+```
+
 ```bash
 node run-brain.js multi-channel-test
 ```
 
 **Expected output:**
 ```
-🎯 Overall Optimal Rate: 96%
+🎯 Overall Optimal Rate: 96.9%
 ```
 
 The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 93%+ optimal trade decisions across all three channels. This demonstrates how multiple input streams converge to improve inference — one of the architecture's core strengths.
