@@ -26,7 +26,6 @@ export class Neuron {
 	static maxStrength = 100;
 	static minStrength = 0;
 	static rewardSmoothing = 0.1;
-	static levelVoteMultiplier = 0;
 	static connectionForgetRate = 0.01;
 	static contextForgetRate = 0.01;
 	static patternForgetRate = 0.01;
@@ -158,9 +157,6 @@ export class Neuron {
 		// use connections of distance one more than the age to get the inferences for the next frame
 		const distance = age + 1;
 
-		// level and age adjustments to the vote strength
-		const levelWeight = 1 + this.level * Neuron.levelVoteMultiplier;
-
 		// get connections at the distance - if there are none, no votes
 		const distanceMap = this.connections.get(distance);
 		if (!distanceMap) return [];
@@ -173,7 +169,7 @@ export class Neuron {
 		for (const [neuron, conn] of distanceMap) {
 			const effectiveStrength = Math.max(Neuron.minStrength, conn.strength - decay);
 			if (effectiveStrength > 0)
-				result.push({ neuron, strength: levelWeight * effectiveStrength, reward: conn.reward, distance });
+				result.push({ neuron, strength: effectiveStrength, reward: conn.reward, distance });
 		}
 		return result;
 	}
