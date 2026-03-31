@@ -189,6 +189,8 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 3. `parent` (replace with Thalamus `childId → parentId` map)
 4. `level` (refactor `vote()`, `strengthenActivation()`, `canBeDeleted()` to take level as parameter)
 
+**Note**: all neuron metadata is **immutable after creation** — it never changes once a neuron is created. This property is critical for distribution in later phases (see Phase 5 and Phase 8).
+
 **Verify**: all tests pass after each sub-step, results identical
 
 ---
@@ -379,7 +381,13 @@ Add threading within the Rust core. Introduce the column/mini-column abstraction
 - Barrier synchronization at frame boundaries
 - Vote aggregation across mini columns
 
-### 5.3 Neuron partitioning strategy
+### 5.3 Neuron metadata storage for multi-threaded
+- Each CorticalColumn holds the metadata lookup tables (channel, type, coordinates, level, parentId) for its owned neurons
+- Mini columns within the same CorticalColumn read from the parent column's tables via shared memory — no copies needed
+- All neuron metadata is immutable after creation, so no synchronization is required for reads
+- Lookup interface remains the same as single-threaded (`get_channel(neuron_id)`, `get_type(neuron_id)`, etc.)
+
+### 5.4 Neuron partitioning strategy
 - Sensory neurons partitioned by channel/dimension hash
 - Pattern neurons live on same mini column as parent
 - Dynamic rebalancing deferred to Phase 8 (MPI)
@@ -425,12 +433,19 @@ Distribute across multiple machines for large-scale workloads.
 - MPI messages: vote broadcasts, neuron migration, consensus sync
 - Use `rsmpi` crate for Rust MPI bindings
 
-### 8.2 Global consensus protocol
+### 8.2 Neuron metadata storage for MPI
+- Each MPI rank's CorticalColumn holds full metadata for its own neurons
+- Read-only cache of metadata for foreign neurons it has connections to
+- Cache populated on creation — when a new neuron is created, the creating rank broadcasts its metadata once via MPI
+- No ongoing synchronization needed since all metadata is immutable after creation
+- Lookup interface unchanged (`get_channel(neuron_id)`, etc.) — only backing storage is distributed
+
+### 8.3 Global consensus protocol
 - Each column produces local vote aggregation
 - MPI AllReduce or custom gather for global consensus
 - Actions executed by rank 0 (or designated I/O rank)
 
-### 8.3 Neuron partitioning and migration
+### 8.4 Neuron partitioning and migration
 - Sensory neurons assigned to columns by channel/dimension hash
 - Pattern neurons live on same column as parent
 - Migration protocol for rebalancing load across columns
