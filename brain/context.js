@@ -131,10 +131,10 @@ export class Context {
 	 * Score a novel observed entry. Returns 0 if the neuron has a partial match
 	 * in the known context (already accounted for), otherwise returns negative strength.
 	 */
-	hasPartialMatch(distance, knownDistances, decay) {
+	hasPartialMatch(distance, knownDistances) {
 		if (knownDistances)
-			for (const [d, s] of knownDistances)
-				if (d !== distance && Math.max(Context.minStrength, s - decay) > 0) return true;
+			for (const [d, strength] of knownDistances)
+				if (d !== distance && strength > 0) return true;
 		return false;
 	}
 
@@ -143,10 +143,9 @@ export class Context {
 	 * Returns match result with score, or null if below threshold.
 	 * Uses effective strengths (with lazy decay applied) for scoring.
 	 * @param {Context} observed - The observed context to match against
-	 * @param {number} decay - strength decay since last activation
 	 * @returns {Object|null} { score, common, missing, novel } or null
 	 */
-	match(observed, decay) {
+	match(observed) {
 
 		// Single pass: categorize into common/missing while computing score and counts
 		const common = [];
@@ -164,7 +163,7 @@ export class Context {
 			for (const [distance, strength] of distanceMap) {
 
 				// calculate the effective strength of the entry - if it is zero or less, it will be deleted
-				const effectiveStrength = Math.max(Context.minStrength, strength - decay);
+				const effectiveStrength = Math.max(Context.minStrength, strength);
 				if (effectiveStrength <= 0) continue;
 				totalCount++;
 
@@ -188,8 +187,8 @@ export class Context {
 		for (const [neuron, distanceMap] of observed.entries) {
 			const knownDistances = this.entries.get(neuron);
 			for (const [distance, strength] of distanceMap)
-				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance) - decay) <= 0)
-					if (!this.hasPartialMatch(distance, knownDistances, decay)) {
+				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance)) <= 0)
+					if (!this.hasPartialMatch(distance, knownDistances)) {
 						novel.push({ neuron, distance, strength });
 						score -= strength;
 					}

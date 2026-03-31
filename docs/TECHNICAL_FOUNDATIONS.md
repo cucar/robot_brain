@@ -77,7 +77,6 @@ Hierarchy emerges from failure, not by design. When a level-1 pattern makes a pr
 - **Level 0**: Base sensory/action neurons with connections
 - **Level 1**: Patterns created from base neuron prediction errors
 - **Level N**: Patterns created from level N-1 prediction errors
-- **Vote weighting**: higher-level patterns have more influence: `1 + level × levelVoteMultiplier`
 - **Temporal extension**: each level effectively extends the context window exponentially
 
 ```mermaid

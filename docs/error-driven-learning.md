@@ -275,8 +275,6 @@ When a pattern is active, it votes via its connections:
 ```javascript
 // Pattern neuron at age 0 votes for distance = 0 + 1 = 1
 distance = age + 1
-levelWeight = 1 + level * levelVoteMultiplier  // e.g., 1 + 1*4.25 = 5.25
-timeWeight = 1 - age / contextLength           // e.g., 1 - 0/20 = 1.0
 
 distanceMap = connections.get(distance)
 if (!distanceMap) return []
@@ -285,7 +283,7 @@ votes = []
 for ([neuron, conn] of distanceMap) {
   votes.push({
     neuron: neuron,
-    strength: levelWeight * timeWeight * conn.strength,
+    strength: conn.strength,
     reward: conn.reward,
     distance: distance
   })

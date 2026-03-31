@@ -63,9 +63,7 @@ All hyperparameters are currently scattered as static class fields and construct
 | Neuron | `maxStrength` | 100 | Strength cap for connections/activation |
 | Neuron | `minStrength` | 0 | Strength floor |
 | Neuron | `rewardSmoothing` | 0.1 | Reward exponential moving average factor |
-| Neuron | `levelVoteMultiplier` | 0 | Extra weight for higher-level votes |
 | Neuron | `connectionForgetRate` | 0.01 | Connection lazy decay rate per frame |
-| Neuron | `contextForgetRate` | 0.01 | Context lazy decay rate per frame |
 | Neuron | `patternForgetRate` | 0.01 | Pattern activation decay rate per frame |
 | Context | `maxStrength` | 100 | Context entry strength cap |
 | Context | `minStrength` | 0 | Context entry strength floor |
@@ -75,19 +73,26 @@ All hyperparameters are currently scattered as static class fields and construct
 
 ### Implementation
 
-#### Step 0.1 — Accept hyperparameters in Brain constructor options
+#### Step 0.1 — Test removing min/max strength caps
+- Run 10 batches of 10-stock jobs with current min/max strength settings vs uncapped
+- Compare accuracy, neuron counts, connection counts, pattern counts
+- If no meaningful impact, remove `maxStrength` and `minStrength` from both Neuron and Context — fewer hyperparameters to carry forward into Rust
+- If there is impact, keep them but document why they matter
+
+#### Step 0.2 — Accept hyperparameters in Brain constructor options
 - Brain constructor takes an optional `hyperparameters` object (or flat keys) in `options`
 - Defaults match current hardcoded values — zero behavior change
 - Brain distributes values to Neuron, Context, Memory on construction
 
-#### Step 0.2 — Remove static fields, pass through constructor chain
+#### Step 0.3 — Remove static fields, pass through constructor chain
 - Neuron, Context, Memory receive their hyperparameters via constructor or init method
 - Remove static class fields — they become instance-scoped (or module-scoped set once by Brain)
 - This eliminates hidden global state and makes the dependency explicit
 
-#### Step 0.3 — Wire command line options
+#### Step 0.4 — Wire command line options and update README
 - Add `--max-levels`, `--context-length`, `--forget-rate`, etc. to the job runner CLI
 - Job passes them through to Brain constructor options
+- Update README demo sections to show how to run with custom hyperparameters
 - **Verify**: default values produce identical results, all tests pass
 
 ---
@@ -159,6 +164,30 @@ Each step is a self-contained refactor. Run ALL tests after each step. Results m
 5. `Memory.activeNeurons` — ~15 methods read this assuming Neuron objects, all need updating
 
 **This step alone is ~3–4 days** given the surface area.
+
+**Verify**: all tests pass after each sub-step, results identical
+
+#### Step 1.0b — Move neuron metadata to Thalamus
+
+Neurons currently store metadata they never use internally (`channel`, `type`, `coordinates`, `parent`). This metadata is only read by Brain, Memory, and Thalamus for routing/filtering/consensus decisions. Moving it to Thalamus makes neurons pure data processors — they only store learned associations and do pattern matching/voting based on numeric IDs and strengths.
+
+**Fields to move off Neuron → Thalamus lookup tables**:
+
+| Field | Neuron uses internally? | Who reads it? | Thalamus storage |
+|---|---|---|---|
+| `channel` | never | Brain (consensus, rewards), Memory (action grouping) | `neuronId → channel` |
+| `type` | never | Brain (event vs action filtering), Memory (same) | `neuronId → type` |
+| `coordinates` | only for `valueKey` (already a Thalamus lookup) | Brain (consensus dimensions, winner building) | `neuronId → coordinates` (already in `neuronsByValue`) |
+| `parent` | never | Brain (error correction only) | `childId → parentId` |
+| `level` | vote weighting, death frame, deletion guard | Brain/Memory (level loop, context keys, filtering) | `neuronId → level` + `level → Set<neuronId>` |
+
+**For `level`**: the 3 internal uses (vote weighting, death frame calculation, deletion guard) all become parameters passed in by the caller. Thalamus already needs level→neuron mapping for the level loop.
+
+**Implementation**: move one field at a time, update all callers to go through Thalamus lookups, verify after each:
+1. `channel` and `type` (always accessed together — move as a pair)
+2. `coordinates` (drop `valueKey` getter from Neuron)
+3. `parent` (replace with Thalamus `childId → parentId` map)
+4. `level` (refactor `vote()`, `strengthenActivation()`, `canBeDeleted()` to take level as parameter)
 
 **Verify**: all tests pass after each sub-step, results identical
 

@@ -27,7 +27,6 @@ export class Neuron {
 	static minStrength = 0;
 	static rewardSmoothing = 0.1;
 	static connectionForgetRate = 0.01;
-	static contextForgetRate = 0.01;
 	static patternForgetRate = 0.01;
 
 	// static debug flag for the neuron
@@ -221,10 +220,6 @@ export class Neuron {
 
 		// decay connection strengths and delete as needed
 		this.materializeConnections(currentFrame);
-
-		// decay context strengths and delete as needed
-		const toDelete = this.context.materialize(this.lastActivationFrame, currentFrame, Neuron.contextForgetRate);
-		for (const entry of toDelete) this.removePatternContext(entry.neuron, entry.distance);
 	}
 
 	/**
@@ -331,8 +326,7 @@ export class Neuron {
 			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
 
 			// get the match results for the pattern for the given context
-			const decay = Neuron.calculateDecay(pattern.lastActivationFrame, currentFrame, Neuron.contextForgetRate);
-			const match = pattern.context.match(observed, decay);
+			const match = pattern.context.match(observed);
 
 			// if there is a match, and it's the best so far, store it
 			if (match && (!best || match.score > best.score)) {

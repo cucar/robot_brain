@@ -175,43 +175,6 @@ All active neurons (at all levels) cast votes for what they predict will happen 
 - Weight each connection by level and time
 - Return array of {neuron, strength, reward, distance}
 
-### Vote Weighting
-
-Each vote is weighted by two factors:
-
-1. **Level weight**: `1 + level * levelVoteMultiplier`
-   - Higher-level patterns have more influence (they represent more context)
-   - Default multiplier: 4.25x per level
-   - Example: level 0 = 1x, level 1 = 5.25x, level 2 = 9.5x
-
-2. **Time decay**: `1 - age / contextLength`
-   - Recent predictions weighted more than distant ones
-   - Age 0 gets full weight (1.0), age 19 gets 5% weight (0.05) with contextLength=20
-
-**Effective strength** = `levelWeight * timeWeight * rawStrength`
-
-```mermaid
-graph LR
-    subgraph Active["Active Neurons"]
-        N1["Neuron A<br/>level 0, age 0"]
-        N2["Neuron B<br/>level 0, age 3"]
-        P1["Pattern₁<br/>level 1, age 0"]
-    end
-    subgraph Votes["Weighted Votes"]
-        V1["A → price_up<br/>1.0 × 1.0 × str"]
-        V2["B → price_down<br/>1.0 × 0.85 × str"]
-        V3["P₁ → price_up<br/>5.25 × 1.0 × str"]
-    end
-    subgraph Winner["Consensus"]
-        W["price_up wins<br/>(higher total)"]
-    end
-    N1 --> V1
-    N2 --> V2
-    P1 --> V3
-    V1 --> W
-    V3 --> W
-```
-
 ### Pattern Override Rule
 
 When a pattern activates on a parent neuron, the parent's connection votes are suppressed.
@@ -611,7 +574,6 @@ Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 | contextLength | 20 | Memory | Frames a neuron stays active |
 | maxStrength | 100 | Neuron/Context | Maximum connection/pattern strength |
 | minStrength | 0 | Neuron/Context | Minimum strength before deletion |
-| levelVoteMultiplier | 4.25 | Neuron | Weight increase per pattern level |
 | rewardSmoothing | 0.8 | Neuron | Exponential smoothing for rewards |
 | eventErrorMinStrength | 1 | Neuron | Min strength to create error pattern |
 | actionRegretMinStrength | 3 | Neuron | Min strength to create regret pattern |
@@ -619,7 +581,6 @@ Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 | mergeThreshold | 0.5 | Context | Min match ratio for pattern recognition (0.8 for text) |
 | negativeReinforcement | 0.1 | Context | Weakening rate for missing context |
 | connectionForgetRate | 0.009 | Neuron | Connection strength decay rate per frame (lazy decay) |
-| contextForgetRate | 0.009 | Neuron | Pattern context strength decay rate per frame |
 | patternForgetRate | 0.011 | Neuron | Pattern prediction strength decay rate per frame |
 | maxLevels | 150 | Brain | Maximum pattern hierarchy depth (safety limit) |
 

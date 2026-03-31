@@ -64,18 +64,18 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $96359.10
-   Average per Episode: $96359.10
-   Average ROI: +642.39%
-   Average Per-Frame ROI: +0.080060%
-   Total Trades: 1472
-   Average Trades per Episode: 1472.0
+   Total Net Profit: $221157.70
+   Average per Episode: $221157.70
+   Average ROI: +1474.38%
+   Average Per-Frame ROI: +0.110098%
+   Total Trades: 1268
+   Average Trades per Episode: 1268.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $96359.10 | ROI: +642.39%, +0.080060%/frame (1472 trades)
+   Episode 1: $221157.70 | ROI: +1474.38%, +0.110098%/frame (1268 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 55.62%
+   Episode 1: 55.83%
 ```
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -120,18 +120,12 @@ this.contextLength = 3;
 In `brain/neuron.js`, change the forget rates to `0.0001`:
 ```javascript
 static connectionForgetRate = 0.0001;
-static contextForgetRate = 0.0001;
 static patternForgetRate = 0.0001;
 ```
 
 In `brain/brain.js`, change the error correction to `0.3`:
 ```javascript
 this.errorCorrectionThreshold = 0.3;
-```
-
-In `brain/context.js`, change `mergeThreshold` to `0.9`:
-```javascript
-static mergeThreshold = 0.9;
 ```
 
 Then run:
@@ -145,29 +139,29 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $48201936157449.70
-   Average per Episode: $9640387231489.94
-   Average ROI: +64269248209.93%
-   Average Per-Frame ROI: +0.652512%
-   Total Trades: 11899
-   Average Trades per Episode: 2379.8
+   Total Net Profit: $87186640674.97
+   Average per Episode: $17437328134.99
+   Average ROI: +116248854.23%
+   Average Per-Frame ROI: +0.358034%
+   Total Trades: 13966
+   Average Trades per Episode: 2793.2
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $52086.32 | ROI: +347.24%, +0.059815%/frame (1007 trades)
-   Episode 2: $726362927896.04 | ROI: +4842419519.31%, +0.708909%/frame (2636 trades)
-   Episode 3: $10597348249977.08 | ROI: +70648988333.18%, +0.816723%/frame (2740 trades)
-   Episode 4: $15668587441206.53 | ROI: +104457249608.04%, +0.832463%/frame (2758 trades)
-   Episode 5: $21209637486283.73 | ROI: +141397583241.89%, +0.844652%/frame (2758 trades)
+   Episode 1: $71165.68 | ROI: +474.44%, +0.069814%/frame (2760 trades)
+   Episode 2: $1918224.66 | ROI: +12788.16%, +0.194156%/frame (2805 trades)
+   Episode 3: $272943733.84 | ROI: +1819624.89%, +0.392346%/frame (2834 trades)
+   Episode 4: $5517101092.31 | ROI: +36780673.95%, +0.512900%/frame (2775 trades)
+   Episode 5: $81394606458.48 | ROI: +542630709.72%, +0.620953%/frame (2792 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 54.10%
-   Episode 2: 99.98%
-   Episode 3: 100.00%
-   Episode 4: 100.00%
-   Episode 5: 100.00%
+   Episode 1: 57.01%
+   Episode 2: 70.66%
+   Episode 3: 86.28%
+   Episode 4: 93.80%
+   Episode 5: 96.21%
 ```
 
-The brain goes from 50% accuracy (random) to 100% in 3 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
+The brain goes from 50% accuracy (random) to 96% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
 > **Remember to change the hyperparameters back** to their stock defaults if you want to run the default stock test afterward.
 
@@ -195,7 +189,6 @@ static mergeThreshold = 0.9;
 In `brain/neuron.js`, change the forget rates to `0.001`:
 ```javascript
 static connectionForgetRate = 0.001;
-static contextForgetRate = 0.001;
 static patternForgetRate = 0.001;
 ```
 
@@ -342,7 +335,6 @@ All hyperparameters are configured as static properties on their respective clas
 |-----------|---------|-------|-------------|
 | `contextLength` | 20 | Memory | Frames a neuron stays active in the sliding window |
 | `maxStrength` | 100 | Neuron/Context | Maximum connection/pattern strength |
-| `levelVoteMultiplier` | 4.25 | Neuron | Vote weight increase per pattern level |
 | `rewardSmoothing` | 0.8 | Neuron | Exponential smoothing factor for reward updates |
 | `eventErrorMinStrength` | 1 | Neuron | Min prediction strength to trigger error pattern creation |
 | `actionRegretMinStrength` | 3 | Neuron | Min action strength to trigger regret pattern creation |
@@ -350,7 +342,6 @@ All hyperparameters are configured as static properties on their respective clas
 | `mergeThreshold` | 0.5 | Context | Min context match ratio for pattern recognition (0.8 for text) |
 | `negativeReinforcement` | 0.1 | Context | Weakening rate for missing context entries |
 | `connectionForgetRate` | 0.009 | Neuron | Connection strength decay rate per frame (0.001 for text) |
-| `contextForgetRate` | 0.009 | Neuron | Pattern context decay rate per frame (0.001 for text) |
 | `patternForgetRate` | 0.011 | Neuron | Pattern prediction decay rate per frame (0.001 for text) |
 
 ## Command Line Options
