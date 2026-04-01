@@ -63,7 +63,7 @@ All hyperparameters are currently scattered as static class fields and construct
 | Neuron | `maxStrength` | 100 | Strength cap for connections/activation |
 | Neuron | `minStrength` | 0 | Strength floor |
 | Neuron | `rewardSmoothing` | 0.1 | Reward exponential moving average factor |
-| Neuron | `connectionForgetRate` | 0.01 | Connection lazy decay rate per frame |
+| Neuron | `connectionForgetRate` | 0.01 | Connection lazy decay rate per frame (Step 0.1: test replacing with negative reinforcement) |
 | Neuron | `patternForgetRate` | 0.01 | Pattern activation decay rate per frame |
 | Context | `maxStrength` | 100 | Context entry strength cap |
 | Context | `minStrength` | 0 | Context entry strength floor |
@@ -73,26 +73,36 @@ All hyperparameters are currently scattered as static class fields and construct
 
 ### Implementation
 
-#### Step 0.1 — Test removing min/max strength caps
+#### Step 0.1 — Test replacing connection forgetting with negative reinforcement
+- Context forgetting was already removed — negative reinforcement alone handles it, with equal or better accuracy
+- Test the same approach for connections: instead of decaying all connections by `connectionForgetRate` each frame, negatively reinforce connections whose predictions didn't occur
+- Run 10 batches of 10-stock jobs: (a) current forgetting, (b) negative reinforcement only, (c) neither
+- Compare accuracy (primary metric) and ROI
+- If negative reinforcement works: remove `connectionForgetRate` hyperparameter entirely — one less knob, cleaner algorithm
+- This aligns with the pattern: the system already uses negative reinforcement for context (past). Using it for connections (future) makes the learning model consistent
+- If it does not work, try to consolidate the forget rate of connections and patterns?
+
+#### Step 0.2 — Test removing min/max strength caps
 - Run 10 batches of 10-stock jobs with current min/max strength settings vs uncapped
 - Compare accuracy, neuron counts, connection counts, pattern counts
 - If no meaningful impact, remove `maxStrength` and `minStrength` from both Neuron and Context — fewer hyperparameters to carry forward into Rust
 - If there is impact, keep them but document why they matter
 
-#### Step 0.2 — Accept hyperparameters in Brain constructor options
+#### Step 0.3 — Accept hyperparameters in Brain constructor options
 - Brain constructor takes an optional `hyperparameters` object (or flat keys) in `options`
 - Defaults match current hardcoded values — zero behavior change
 - Brain distributes values to Neuron, Context, Memory on construction
 
-#### Step 0.3 — Remove static fields, pass through constructor chain
+#### Step 0.4 — Remove static fields, pass through constructor chain
 - Neuron, Context, Memory receive their hyperparameters via constructor or init method
 - Remove static class fields — they become instance-scoped (or module-scoped set once by Brain)
 - This eliminates hidden global state and makes the dependency explicit
 
-#### Step 0.4 — Wire command line options and update README
+#### Step 0.5 — Wire command line options and update README
 - Add `--max-levels`, `--context-length`, `--forget-rate`, etc. to the job runner CLI
+- Add stock channels (tickers) as a command line argument instead of hardcoded lists
 - Job passes them through to Brain constructor options
-- Update README demo sections to show how to run with custom hyperparameters
+- Update README demo sections to show how to run with custom hyperparameters and stock selections
 - **Verify**: default values produce identical results, all tests pass
 
 ---
@@ -114,7 +124,21 @@ The 4 operations currently iterate active neurons differently:
 
 **Target**: all 4 operations merge into the level-by-level loop that recognition already uses. At each level, for each neuron, do: recognize → learn connections → learn patterns → cast votes.
 
-**What stays global (never per-neuron)**: consensus determination, action execution, ensuring channel actions, sensor activation, cleanup.
+**What stays global (never per-neuron)**: consensus determination, action execution, death ledger, sensor activation.
+
+### Target Frame Outline
+
+After unification, each frame follows this sequence:
+
+1. Get frame with rewards
+2. Age neurons
+3. Activate new sensory neurons
+4. Process level by level (update connections, recognize patterns, learn error patterns, cast votes)
+5. Determine consensus
+6. Execute death ledger
+7. Execute actions
+
+Steps 1–3 and 5–7 stay in Brain. Step 4 moves to Thalamus (Step 1.6).
 
 ### Dependencies Between Operations (Within a Single Frame)
 
@@ -189,9 +213,18 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 3. `parent` (replace with Thalamus `childId → parentId` map)
 4. `level` (refactor `vote()`, `strengthenActivation()`, `canBeDeleted()` to take level as parameter)
 
-**Note**: all neuron metadata is **immutable after creation** — it never changes once a neuron is created. This property is critical for distribution in later phases (see Phase 5 and Phase 8).
+**Note**: all neuron metadata is **immutable after creation** — it never changes once a neuron is created. This property is critical for distribution in later phases (see Phase 5 and [MPI Distribution](future-work.md#mpi-distribution-when-multi-server-budget-available)).
 
 **Verify**: all tests pass after each sub-step, results identical
+
+#### Step 1.0c — Unify sensory and pattern neuron constructors
+
+With metadata moved to Thalamus (Step 1.0b), the Neuron constructor simplifies to just `(id, level, parentId)`. Sensory neurons are `(id, 0, null)` — no structural difference from pattern neurons anymore.
+
+- Remove `Neuron.createSensory()` and `Neuron.createPattern()` static factories
+- Single constructor: `new Neuron(id, level, parentId)` — sensory neurons just have `level=0, parentId=null`
+- If meaningful behavioral differences remain between sensory and pattern neurons after this, consider splitting back to separate `SensoryNeuron` and `PatternNeuron` classes — may be cleaner now that metadata is external
+- **Verify**: all tests pass, results identical
 
 ---
 
@@ -218,7 +251,41 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 
 **Verify**: pattern recognition results identical, all tests pass
 
-#### Step 1.2 — Move `updateConnections` into the level loop
+#### Step 1.1b — Add inverted index for pattern recognition
+
+With contexts now stored in the parent's routing table (Step 1.1), the parent has all its pattern contexts in one place — the natural location for an inverted index.
+
+**Current matching**: parent iterates all children, scores each pattern's context against observed context → `O(Pₗ × C)` per neuron, where Pₗ = number of patterns (children) and C = context size.
+
+**Optimized matching**: build an inverted index on the parent that maps context neuron IDs to the patterns that reference them. To match:
+1. Use observed context entries to look up which patterns reference them (candidate retrieval)
+2. Score only the candidate patterns against full context, instead of scoring all children
+
+This is sublinear when the index prunes most patterns out of consideration. Higher levels (more patterns, fewer active neurons) benefit most.
+
+**Implementation**:
+- Build the inverted index alongside the routing table (maintained on pattern creation/deletion)
+- Fall back to linear scan when candidate set isn't significantly smaller than pattern count
+
+**Why now (before Rust)**: get the algorithm correct and testable in JS where debugging is easy. Translating known-correct optimized code to Rust is far safer than trying to develop/test both the optimization and the Rust migration simultaneously.
+
+**Verify**: pattern recognition results identical (same patterns matched, same scores), all tests pass. Benchmark selectivity per level on stock workloads.
+
+---
+
+#### Step 1.2 — Test inference before learning ordering
+
+Currently the assumed per-neuron ordering is: recognize → learn connections → learn patterns → vote. But voting (inference) only depends on recognition (suppression flag), not on learning. Test reversing the order: recognize → vote → learn connections → learn patterns.
+
+- Run 10 batches of 10-stock jobs with both orderings, compare accuracy and ROI
+- If results are equivalent or better: keep voting right after recognition, group the two learning operations together
+- This matters for parallelization — if voting is independent of learning, action execution can proceed without waiting for learning to finish (non-blocking actions)
+- If results are worse: keep the original ordering, document why learning must precede voting
+- **Verify**: compare accuracy across orderings on stock workloads
+
+---
+
+#### Step 1.3 — Move `updateConnections` into the level loop
 
 - Currently `updateConnections()` iterates `memory.getContextNeurons()` (all age>0, all levels)
 - Restructure: within `recognizeLevel(level)`, after pattern matching, also call `learnConnections` on neurons at this level
@@ -226,7 +293,7 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 - Remove `updateConnections()` from Brain once fully merged
 - **Verify**: connection learning results identical, all tests pass
 
-#### Step 1.3 — Move `learnNewPatterns` into the level loop
+#### Step 1.4 — Move `learnNewPatterns` into the level loop
 
 - Currently `learnNewPatterns()` iterates `memory.getVotersWithContext()` (age>0, have votes from previous frame)
 - Brain determines which neurons need error correction (by checking previous-frame votes against actual events)
@@ -237,7 +304,7 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 - `getActualEvents()` and `sensoryNeurons` are computed once before the loop (unchanged)
 - **Verify**: pattern creation identical, all tests pass
 
-#### Step 1.4 — Move `collectVotes` into the level loop
+#### Step 1.5 — Move `collectVotes` into the level loop
 
 - Currently `collectVotes()` iterates `memory.getVotingNeurons()` (all ages 0..N-1, all levels)
 - Restructure: within the level loop, after connections and pattern learning, collect votes from neurons at this level
@@ -245,7 +312,7 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 - Suppression: neurons skip voting if they had a pattern activated — either from recognition (Step 1.2 ordering) or from error correction (Step 1.3)
 - **Verify**: votes identical, inference results identical, all tests pass
 
-#### Step 1.5 — Rename the unified loop
+#### Step 1.6 — Rename the unified loop
 
 - `recognizeLevel()` is now doing all 4 operations — rename to `processLevel()`
 - `recognizePatterns()` (the outer level loop) becomes `processLevels()`
@@ -254,7 +321,7 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 - Consensus determination and action execution remain in Brain, called after `processLevels()` returns votes
 - **Verify**: all tests pass, behavior identical
 
-#### Step 1.6 — Push the unified loop into Thalamus
+#### Step 1.7 — Push the unified loop into Thalamus
 
 - Brain currently owns `processLevels()` — move it to Thalamus
 - Brain calls `thalamus.processFrame(...)` which returns votes + new patterns
@@ -387,10 +454,19 @@ Add threading within the Rust core. Introduce the column/mini-column abstraction
 - All neuron metadata is immutable after creation, so no synchronization is required for reads
 - Lookup interface remains the same as single-threaded (`get_channel(neuron_id)`, `get_type(neuron_id)`, etc.)
 
-### 5.4 Neuron partitioning strategy
+### 5.4 Neuron-to-thread ownership map
+- Maintain a 2-way map: `neuronId ↔ threadId/miniColumnId`
+- When a neuron is created, Brain decides which thread/mini column owns it
+- This map is used for routing: when a neuron references a foreign ID, the system knows which thread to query
+
+### 5.5 Neuron distribution on load, collection on save
+- When loading from a dump, neurons are distributed to the thread/mini column pool based on partitioning strategy
+- When saving, Brain collects neuron state from each thread/mini column and serializes centrally
+
+### 5.6 Neuron partitioning strategy
 - Sensory neurons partitioned by channel/dimension hash
 - Pattern neurons live on same mini column as parent
-- Dynamic rebalancing deferred to Phase 8 (MPI)
+- Dynamic rebalancing deferred to MPI phase (see [future-work.md](future-work.md))
 
 ---
 
@@ -403,52 +479,10 @@ With multi-threaded Rust core in place, focus on scaling the stock trading workl
 - Benchmark: throughput vs single-threaded JS baseline
 
 ### 6.2 Performance tuning
-- Profile hot paths (pattern matching, vote aggregation, connection updates)
+- Inverted index for pattern recognition already implemented in JS (Step 1.1b) and ported to Rust (Phase 4) — validate selectivity metrics at scale
+- Profile hot paths (vote aggregation, connection updates, index maintenance)
 - Optimize memory layout for cache locality (arena allocation, struct-of-arrays where beneficial)
 - Tune thread count and neuron partitioning for stock workloads
-
----
-
-## Phase 7 — Python Bindings + PyPI (optional, ~1 week)
-
-Expose the Rust core to Python for broader adoption.
-
-### 7.1 Python bindings via PyO3/maturin
-- Wrap `brain-core` Rust library with PyO3
-- Pythonic API matching the Node.js wrapper patterns
-- Build and publish to PyPI via maturin
-
-### 7.2 Python channel interface
-- Python equivalent of Channel base class
-- Example: stock channel in Python
-
----
-
-## Phase 8 — MPI Distribution (optional, future)
-
-Distribute across multiple machines for large-scale workloads.
-
-### 8.1 Add MPI layer for inter-column communication
-- Each MPI rank runs one `CorticalColumn`
-- MPI messages: vote broadcasts, neuron migration, consensus sync
-- Use `rsmpi` crate for Rust MPI bindings
-
-### 8.2 Neuron metadata storage for MPI
-- Each MPI rank's CorticalColumn holds full metadata for its own neurons
-- Read-only cache of metadata for foreign neurons it has connections to
-- Cache populated on creation — when a new neuron is created, the creating rank broadcasts its metadata once via MPI
-- No ongoing synchronization needed since all metadata is immutable after creation
-- Lookup interface unchanged (`get_channel(neuron_id)`, etc.) — only backing storage is distributed
-
-### 8.3 Global consensus protocol
-- Each column produces local vote aggregation
-- MPI AllReduce or custom gather for global consensus
-- Actions executed by rank 0 (or designated I/O rank)
-
-### 8.4 Neuron partitioning and migration
-- Sensory neurons assigned to columns by channel/dimension hash
-- Pattern neurons live on same column as parent
-- Migration protocol for rebalancing load across columns
 
 ---
 
@@ -501,11 +535,10 @@ Database                      →     Stays in JS (persistence boundary)
 | 4 | Single-threaded Rust core + Node.js/npm | ~3 weeks |
 | 5 | Multi-threaded Rust core + column classes | ~1 week |
 | 6 | Scale stock processing | ~1 week |
-| 7 | Python bindings + PyPI | optional |
-| 8 | MPI distribution | optional |
 
-**Total core work (Phases 0–6):** ~8 weeks
-**Optional (Phases 7–8):** as needed
+**Total: ~8 weeks**
+
+See [future-work.md](future-work.md) for Python bindings, MPI distribution, text/vision/audio channels, robotics, and other longer-term plans.
 
 ---
 
@@ -518,6 +551,4 @@ Database                      →     Stays in JS (persistence boundary)
 - **Phase 4**: Single-threaded Rust core handles frame processing. Rust unit tests pass. Dump cross-compatibility verified (JS↔Rust). JS tests pass through N-API. Published to npm. Results identical to JS implementation.
 - **Phase 5**: Multi-threaded Rust core with column classes. Measurable speedup over single-threaded. Thread count configurable. Neurons partitioned across mini columns.
 - **Phase 6**: Stock processing scales with parallelism. Benchmarked against JS baseline.
-- **Phase 7** (optional): Python bindings published to PyPI. Python channels work end-to-end.
-- **Phase 8** (optional): Multiple MPI ranks process frames in parallel. Linear scaling for neuron-heavy workloads.
 
