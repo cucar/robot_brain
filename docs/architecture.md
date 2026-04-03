@@ -569,20 +569,20 @@ class StockChannel extends Channel {
 
 Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 
-| Parameter | Default | Location | Description |
-|-----------|---------|----------|-------------|
-| contextLength | 20 | Memory | Frames a neuron stays active |
-| maxStrength | 100 | Neuron/Context | Maximum connection/pattern strength |
-| minStrength | 0 | Neuron/Context | Minimum strength before deletion |
-| rewardSmoothing | 0.8 | Neuron | Exponential smoothing for rewards |
-| eventErrorMinStrength | 1 | Neuron | Min strength to create error pattern |
-| actionRegretMinStrength | 3 | Neuron | Min strength to create regret pattern |
-| actionRegretMinPain | 0 | Neuron | Min negative reward to trigger regret |
-| mergeThreshold | 0.5 | Context | Min match ratio for pattern recognition (0.8 for text) |
-| negativeReinforcement | 0.1 | Context | Weakening rate for missing context |
-| connectionForgetRate | 0.009 | Neuron | Connection strength decay rate per frame (lazy decay) |
-| patternForgetRate | 0.011 | Neuron | Pattern prediction strength decay rate per frame |
-| maxLevels | 150 | Brain | Maximum pattern hierarchy depth (safety limit) |
+| Parameter               | Default | Location | Description                                            |
+|-------------------------|---------|----------|--------------------------------------------------------|
+| contextLength           | 20      | Memory | Frames a neuron stays active                           |
+| maxStrength             | 100     | Neuron/Context | Maximum connection/pattern strength                    |
+| minStrength             | 0       | Neuron/Context | Minimum strength before deletion                       |
+| rewardSmoothing         | 0.8     | Neuron | Exponential smoothing for rewards                      |
+| eventErrorMinStrength   | 1       | Neuron | Min strength to create error pattern                   |
+| actionRegretMinStrength | 3       | Neuron | Min strength to create regret pattern                  |
+| actionRegretMinPain     | 0       | Neuron | Min negative reward to trigger regret                  |
+| mergeThreshold          | 0.5     | Context | Min match ratio for pattern recognition (0.8 for text) |
+| negativeReinforcement   | 1       | Neuron | Weakening rate for missing neuron                      |
+| positiveReinforcement   | 1       | Neuron | Strengthening rate for observed neuron                 |
+| patternForgetRate       | 0.011   | Neuron | Pattern prediction strength decay rate per frame       |
+| maxLevels               | 150     | Brain | Maximum pattern hierarchy depth (safety limit)         |
 
 ---
 

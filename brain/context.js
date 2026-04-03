@@ -1,3 +1,5 @@
+import { Neuron } from './neuron.js';
+
 /**
  * Context - represents a set of neurons at distances with strengths.
  * Used both for observed context (from brain) and known contexts (in neuron routing tables).
@@ -5,10 +7,7 @@
 export class Context {
 
 	// Hyperparameters (shared with Neuron)
-	static maxStrength = 100;
-	static minStrength = 0;
 	static mergeThreshold = 0.5;
-	static negativeReinforcement = 0.1;
 
 	constructor() {
 		this.entries = new Map(); // Map<neuron, Map<distance, strength>>
@@ -59,7 +58,7 @@ export class Context {
 		const distanceMap = this.entries.get(neuron);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for strengthening');
 		const strength = distanceMap.get(distance);
-		distanceMap.set(distance, Math.min(Context.maxStrength, strength + 1));
+		distanceMap.set(distance, Math.min(Neuron.maxStrength, strength + Neuron.positiveReinforcement));
 	}
 
 	/**
@@ -69,28 +68,9 @@ export class Context {
 		const distanceMap = this.entries.get(neuron);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for weakening');
 		const strength = distanceMap.get(distance);
-		const newStrength = Math.max(Context.minStrength, strength - Context.negativeReinforcement);
+		const newStrength = Math.max(Neuron.minStrength, strength - Neuron.negativeReinforcement);
 		distanceMap.set(distance, newStrength);
-		return newStrength <= Context.minStrength; // return if the entry can be deleted or not
-	}
-
-	/**
-	 * Materialize lazy decay for all entries using the owner's activation frame.
-	 */
-	materialize(patternLastActivationFrame, currentFrame, rate) {
-		const decay = (currentFrame - patternLastActivationFrame) * rate;
-		if (decay <= 0) return [];
-
-		const toDelete = [];
-		for (const [neuron, distanceMap] of this.entries)
-			for (const [distance, strength] of distanceMap) {
-				const effectiveStrength = Math.max(Context.minStrength, strength - decay);
-				if (effectiveStrength <= 0) toDelete.push({ neuron, distance });
-				else distanceMap.set(distance, effectiveStrength);
-			}
-
-		// return the entries that can be deleted
-		return toDelete;
+		return newStrength <= Neuron.minStrength; // return if the entry can be deleted or not
 	}
 
 	/**
@@ -163,7 +143,7 @@ export class Context {
 			for (const [distance, strength] of distanceMap) {
 
 				// calculate the effective strength of the entry - if it is zero or less, it will be deleted
-				const effectiveStrength = Math.max(Context.minStrength, strength);
+				const effectiveStrength = Math.max(Neuron.minStrength, strength);
 				if (effectiveStrength <= 0) continue;
 				totalCount++;
 
@@ -187,7 +167,7 @@ export class Context {
 		for (const [neuron, distanceMap] of observed.entries) {
 			const knownDistances = this.entries.get(neuron);
 			for (const [distance, strength] of distanceMap)
-				if (!knownDistances || !knownDistances.has(distance) || Math.max(Context.minStrength, knownDistances.get(distance)) <= 0)
+				if (!knownDistances || !knownDistances.has(distance) || Math.max(Neuron.minStrength, knownDistances.get(distance)) <= 0)
 					if (!this.hasPartialMatch(distance, knownDistances)) {
 						novel.push({ neuron, distance, strength });
 						score -= strength;

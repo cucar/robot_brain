@@ -122,7 +122,7 @@ export class Thalamus {
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		for (const neuron of this.neurons.values()) {
-			neuron.materializeStrengths(currentFrame);
+			neuron.materializeStrength(currentFrame);
 			neuron.lastActivationFrame = 0;
 			if (neuron.level > 0)
 				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / Neuron.patternForgetRate));

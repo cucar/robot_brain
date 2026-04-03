@@ -4,7 +4,7 @@ import { Context } from './context.js';
  * Neuron - Unified class for all neurons (sensory and pattern)
  *
  * All neurons have:
- * - connections: Map<distance, Map<toNeuron, {strength, reward, lastFrame}>> - predictions with lazy decay
+ * - connections: Map<distance, Map<toNeuron, {strength, reward}>> - predictions
  * - children: Set<Neuron> - child pattern neurons (routing table)
  *
  * Level 0 (sensory) neurons additionally have: channel, type, coordinates
@@ -25,8 +25,9 @@ export class Neuron {
 	// Hyperparameters
 	static maxStrength = 100;
 	static minStrength = 0;
-	static rewardSmoothing = 0.1;
-	static connectionForgetRate = 0.01;
+	static positiveReinforcement = 1;
+	static negativeReinforcement = 1;
+	static rewardSmoothing = 0.5;
 	static patternForgetRate = 0.01;
 
 	// static debug flag for the neuron
@@ -124,15 +125,25 @@ export class Neuron {
 
 	/**
 	 * updates the connection at distance to target neuron - increments strength and updates reward
-	 * Materializes lazy decay before incrementing strength using lastActivationFrame
 	 */
-	updateConnection(distance, toNeuron, reward, currentFrame) {
+	strengthenConnection(distance, toNeuron, reward) {
 		if (!this.connections.has(distance)) throw new Error('Unknown connection'); // should not happen
 		const conn = this.connections.get(distance).get(toNeuron);
-		// Materialize lazy decay before strengthening using the neuron's true last activation frame
-		const effectiveStrength = Neuron.getEffectiveStrength(conn.strength, this.lastActivationFrame, currentFrame, Neuron.connectionForgetRate);
-		conn.strength = Math.min(Neuron.maxStrength, effectiveStrength + 1);
+		conn.strength = Math.min(Neuron.maxStrength, conn.strength + Neuron.positiveReinforcement);
 		conn.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * conn.reward;
+	}
+
+	/**
+	 * Weaken a connection via negative reinforcement (prediction didn't occur).
+	 * Deletes the connection if strength drops to zero or below.
+	 */
+	weakenConnection(distance, toNeuron) {
+		const distanceMap = this.connections.get(distance);
+		if (!distanceMap) return;
+		const conn = distanceMap.get(toNeuron);
+		if (!conn) return;
+		conn.strength = Math.max(Neuron.minStrength, conn.strength - Neuron.negativeReinforcement);
+		if (conn.strength <= Neuron.minStrength) this.deleteConnection(distance, toNeuron);
 	}
 
 	/**
@@ -148,10 +159,9 @@ export class Neuron {
 	/**
 	 * returns votes from this neuron at a specific age.
 	 * @param {number} age - The age at which this neuron is active
-	 * @param {number} currentFrame - Current frame number for lazy decay
 	 * @returns {Array} Array of vote objects {toNeuron, strength, reward, distance}
 	 */
-	vote(age, currentFrame) {
+	vote(age) {
 
 		// use connections of distance one more than the age to get the inferences for the next frame
 		const distance = age + 1;
@@ -160,16 +170,11 @@ export class Neuron {
 		const distanceMap = this.connections.get(distance);
 		if (!distanceMap) return [];
 
-		// calculate neuron decay since last activation
-		const decay = Neuron.calculateDecay(this.lastActivationFrame, currentFrame, Neuron.connectionForgetRate);
-
 		// create votes for all connections at the distance and return them
 		const result = [];
-		for (const [neuron, conn] of distanceMap) {
-			const effectiveStrength = Math.max(Neuron.minStrength, conn.strength - decay);
-			if (effectiveStrength > 0)
-				result.push({ neuron, strength: effectiveStrength, reward: conn.reward, distance });
-		}
+		for (const [neuron, conn] of distanceMap)
+			if (conn.strength > 0)
+				result.push({ neuron, strength: conn.strength, reward: conn.reward, distance });
 		return result;
 	}
 
@@ -189,37 +194,10 @@ export class Neuron {
 	}
 
 	/**
-	 * Materialize lazy decay for all owned connections.
+	 * Materialize lazy decay
 	 */
-	materializeConnections(currentFrame) {
-
-		// Calculate decay based on when this neuron was last activated
-		const decay = Neuron.calculateDecay(this.lastActivationFrame, currentFrame, Neuron.connectionForgetRate);
-		if (decay <= 0) return;
-
-		// update decayed strengths and collect dead connections
-		const toDelete = [];
-		for (const [distance, distanceMap] of this.connections)
-			for (const [toNeuron, conn] of distanceMap) {
-				const effectiveStrength = Math.max(Neuron.minStrength, conn.strength - decay);
-				if (effectiveStrength <= 0) toDelete.push({ distance, toNeuron });
-				else conn.strength = effectiveStrength;
-			}
-
-		// delete dead connections
-		for (const { distance, toNeuron } of toDelete) this.deleteConnection(distance, toNeuron);
-	}
-
-	/**
-	 * Materialize lazy decay for all owner-scoped values.
-	 */
-	materializeStrengths(currentFrame) {
-
-		// decay own activation strength
+	materializeStrength(currentFrame) {
 		this.activationStrength = this.getEffectiveActivationStrength(currentFrame);
-
-		// decay connection strengths and delete as needed
-		this.materializeConnections(currentFrame);
 	}
 
 	/**
@@ -228,7 +206,7 @@ export class Neuron {
 	strengthenActivation(currentFrame) {
 
 		// update all strengths based on decay rate first
-		this.materializeStrengths(currentFrame);
+		this.materializeStrength(currentFrame);
 
 		// increment activation strength
 		this.activationStrength = Math.min(Neuron.maxStrength, this.activationStrength + 1);
@@ -367,9 +345,8 @@ export class Neuron {
 	 * @param {Set<Neuron>} newActiveNeurons - Newly active action neurons at age=0
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<Neuron>>} channelActions - Map of channel name to all action neurons
-	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
-	learnConnections(age, newActiveNeurons, rewards, channelActions, currentFrame) {
+	learnConnections(age, newActiveNeurons, rewards, channelActions) {
 
 		// learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
 		for (const neuron of newActiveNeurons) {
@@ -378,7 +355,7 @@ export class Neuron {
 			const reward = neuron.type === 'action' ? (rewards.get(neuron.channel) || 0) : 0;
 
 			// if the event/action was already known, strengthen the connection and update the reward
-			if (this.hasConnection(age, neuron)) this.updateConnection(age, neuron, reward, currentFrame);
+			if (this.hasConnection(age, neuron)) this.strengthenConnection(age, neuron, reward);
 			// if the event/action was not known, add it to the connections with the current reward (learning from observation)
 			else this.createConnection(age, neuron, 1, reward);
 
@@ -389,6 +366,21 @@ export class Neuron {
 				if (altNeuron) this.createConnection(age, altNeuron, 1, 0);
 			}
 		}
+
+		// negatively reinforce connections at this distance whose predictions didn't occur
+		for (const neuron of this.getNeuronsNotFound(age, newActiveNeurons))
+			this.weakenConnection(age, neuron);
+	}
+
+	/**
+	 * returns neurons at a distance whose inferences did not occur
+	 */
+	getNeuronsNotFound(distance, activeNeurons) {
+		const distanceMap = this.connections.get(distance);
+		if (!distanceMap) return [];
+		const notFound = [];
+		for (const [toNeuron] of distanceMap) if (!activeNeurons.has(toNeuron)) notFound.push(toNeuron);
+		return notFound;
 	}
 
 	/**

@@ -17,7 +17,7 @@ export default class Brain {
 
 		// pattern learning parameters
 		this.maxLevels = 150; // just to prevent against infinite recursion
-		this.errorCorrectionThreshold = 0.55; // if the error is below this threshold, no need to create a new correction pattern
+		this.errorCorrectionThreshold = 0.65; // if the error is below this threshold, no need to create a new correction pattern
 
 		// frame number is used for death ledger and diagnostics
 		this.frameNumber = 0;
@@ -487,7 +487,7 @@ export default class Brain {
 			if (this.memory.skipActionNeuron(neuron)) continue;
 
 			// learn connections from the context neuron to the newly active neurons
-			neuron.learnConnections(age, newActiveNeurons, this.rewards[0], channelActions, this.frameNumber);
+			neuron.learnConnections(age, newActiveNeurons, this.rewards[0], channelActions);
 		}
 	}
 
@@ -580,7 +580,7 @@ export default class Brain {
 			this.thalamus.addNeuron(pattern);
 
 			// activate the pattern neuron at the parent's age and register the pattern for death
-			// must happen before adding context — activation calls materializeStrengths which
+			// must happen before adding context — activation calls materializeStrength which
 			// would decay freshly added context entries from lastActivationFrame=0 to currentFrame
 			const deathFrame = this.memory.activatePattern(pattern, neuron, age, this.frameNumber);
 			this.thalamus.registerDeath(pattern, deathFrame);
@@ -645,7 +645,7 @@ export default class Brain {
 			if (state.activatedPattern !== null) continue;
 
 			// get the votes of the neuron
-			const neuronVotes = voter.vote(age, this.frameNumber);
+			const neuronVotes = voter.vote(age);
 
 			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
 			this.memory.setVotes(voter, age, neuronVotes, contexts.get(`${age}:${voter.level}`) ?? []);

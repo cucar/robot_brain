@@ -56,51 +56,41 @@ All hyperparameters are currently scattered as static class fields and construct
 
 ### Current hyperparameter locations
 
-| Class | Parameter | Default | Purpose |
-|---|---|---|---|
-| Brain | `maxLevels` | 150 | Recursion limit for pattern hierarchy |
-| Brain | `errorCorrectionThreshold` | 0.55 | Prediction error threshold for creating patterns |
-| Neuron | `maxStrength` | 100 | Strength cap for connections/activation |
-| Neuron | `minStrength` | 0 | Strength floor |
-| Neuron | `rewardSmoothing` | 0.1 | Reward exponential moving average factor |
-| Neuron | `connectionForgetRate` | 0.01 | Connection lazy decay rate per frame (Step 0.1: test replacing with negative reinforcement) |
-| Neuron | `patternForgetRate` | 0.01 | Pattern activation decay rate per frame |
-| Context | `maxStrength` | 100 | Context entry strength cap |
-| Context | `minStrength` | 0 | Context entry strength floor |
-| Context | `mergeThreshold` | 0.5 | Threshold for pattern context matching |
-| Context | `negativeReinforcement` | 0.1 | Weakening rate for missing context entries |
-| Memory | `contextLength` | 10 | Sliding window size (frames) |
+| Class      | Parameter                  | Default | Purpose                                          |
+|------------|----------------------------|---------|--------------------------------------------------|
+| Brain      | `maxLevels`                | 150     | Recursion limit for pattern hierarchy            |
+| Brain      | `errorCorrectionThreshold` | 0.65    | Prediction error threshold for creating patterns |
+| Neuron     | `maxStrength`              | 100     | Strength cap for connections/activation          |
+| Neuron     | `minStrength`              | 0       | Strength floor                                   |
+| Neuron     | `rewardSmoothing`          | 0.5     | Reward exponential moving average factor         |
+| Neuron     | `positiveReinforcement`    | 1       | Strengthening rate for observed neurons          |
+| Neuron     | `negativeReinforcement`    | 1       | Weakening rate for missing neurons               |
+| Neuron     | `patternForgetRate`        | 0.01    | Pattern activation decay rate per frame          |
+| Context    | `mergeThreshold`           | 0.5     | Threshold for pattern context matching           |
+| Memory     | `contextLength`            | 10      | Sliding window size (frames)                     |
 
 ### Implementation
 
-#### Step 0.1 — Test replacing connection forgetting with negative reinforcement
-- Context forgetting was already removed — negative reinforcement alone handles it, with equal or better accuracy
-- Test the same approach for connections: instead of decaying all connections by `connectionForgetRate` each frame, negatively reinforce connections whose predictions didn't occur
-- Run 10 batches of 10-stock jobs: (a) current forgetting, (b) negative reinforcement only, (c) neither
-- Compare accuracy (primary metric) and ROI
-- If negative reinforcement works: remove `connectionForgetRate` hyperparameter entirely — one less knob, cleaner algorithm
-- This aligns with the pattern: the system already uses negative reinforcement for context (past). Using it for connections (future) makes the learning model consistent
-- If it does not work, try to consolidate the forget rate of connections and patterns?
-
-#### Step 0.2 — Test removing min/max strength caps
+#### Step 0.1 — Test removing min/max strength caps
 - Run 10 batches of 10-stock jobs with current min/max strength settings vs uncapped
 - Compare accuracy, neuron counts, connection counts, pattern counts
-- If no meaningful impact, remove `maxStrength` and `minStrength` from both Neuron and Context — fewer hyperparameters to carry forward into Rust
+- If no meaningful impact, remove `maxStrength` and `minStrength` from Neuron — fewer hyperparameters to carry forward into Rust
 - If there is impact, keep them but document why they matter
 
-#### Step 0.3 — Accept hyperparameters in Brain constructor options
+#### Step 0.2 — Accept hyperparameters in Brain constructor options
 - Brain constructor takes an optional `hyperparameters` object (or flat keys) in `options`
 - Defaults match current hardcoded values — zero behavior change
 - Brain distributes values to Neuron, Context, Memory on construction
 
-#### Step 0.4 — Remove static fields, pass through constructor chain
+#### Step 0.3 — Remove static fields, pass through constructor chain
 - Neuron, Context, Memory receive their hyperparameters via constructor or init method
 - Remove static class fields — they become instance-scoped (or module-scoped set once by Brain)
 - This eliminates hidden global state and makes the dependency explicit
 
-#### Step 0.5 — Wire command line options and update README
+#### Step 0.4 — Wire command line options and update README
 - Add `--max-levels`, `--context-length`, `--forget-rate`, etc. to the job runner CLI
 - Add stock channels (tickers) as a command line argument instead of hardcoded lists
+- Add stock channel parameters as command line arguments: max-positions, max-price, initial-capital
 - Job passes them through to Brain constructor options
 - Update README demo sections to show how to run with custom hyperparameters and stock selections
 - **Verify**: default values produce identical results, all tests pass
