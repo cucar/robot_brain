@@ -1,5 +1,3 @@
-import { Neuron } from './neuron.js';
-
 /**
  * Context - represents a set of neurons at distances with strengths.
  * Used both for observed context (from brain) and known contexts (in neuron routing tables).
@@ -58,7 +56,7 @@ export class Context {
 		const distanceMap = this.entries.get(neuron);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for strengthening');
 		const strength = distanceMap.get(distance);
-		distanceMap.set(distance, Math.min(Neuron.maxStrength, strength + Neuron.positiveReinforcement));
+		distanceMap.set(distance, strength + 1);
 	}
 
 	/**
@@ -68,9 +66,9 @@ export class Context {
 		const distanceMap = this.entries.get(neuron);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for weakening');
 		const strength = distanceMap.get(distance);
-		const newStrength = Math.max(Neuron.minStrength, strength - Neuron.negativeReinforcement);
+		const newStrength = Math.max(0, strength - 1);
 		distanceMap.set(distance, newStrength);
-		return newStrength <= Neuron.minStrength; // return if the entry can be deleted or not
+		return newStrength <= 0; // return if the entry can be deleted or not
 	}
 
 	/**
@@ -142,17 +140,16 @@ export class Context {
 			// process all distances for the neuron in the known context
 			for (const [distance, strength] of distanceMap) {
 
-				// calculate the effective strength of the entry - if it is zero or less, it will be deleted
-				const effectiveStrength = Math.max(Neuron.minStrength, strength);
-				if (effectiveStrength <= 0) continue;
+				// if the entry strength is zero or less, it will be deleted
+				if (strength <= 0) continue;
 				totalCount++;
 
 				// if the observed context has the neuron at the same distance, it is a common entry - otherwise missing
-				if (observedDistances?.has(distance)) common.push({ neuron, distance, strength: effectiveStrength });
-				else missing.push({ neuron, distance, strength: effectiveStrength });
+				if (observedDistances?.has(distance)) common.push({ neuron, distance, strength });
+				else missing.push({ neuron, distance, strength });
 
 				// add the match score for the entry
-				score += this.getMatchScore(effectiveStrength, distance, observedDistances);
+				score += this.getMatchScore(strength, distance, observedDistances);
 			}
 		}
 
@@ -167,7 +164,7 @@ export class Context {
 		for (const [neuron, distanceMap] of observed.entries) {
 			const knownDistances = this.entries.get(neuron);
 			for (const [distance, strength] of distanceMap)
-				if (!knownDistances || !knownDistances.has(distance) || Math.max(Neuron.minStrength, knownDistances.get(distance)) <= 0)
+				if (!knownDistances || !knownDistances.has(distance) || knownDistances.get(distance) <= 0)
 					if (!this.hasPartialMatch(distance, knownDistances)) {
 						novel.push({ neuron, distance, strength });
 						score -= strength;

@@ -101,7 +101,7 @@ Event neurons observe what happens in the world. They learn by **association** -
 
 When a neuron is active at age > 0 and a new neuron appears at age 0:
 - Create or strengthen connection at distance = age
-- Increment strength (clamped to maxStrength)
+- Increment strength
 - Connections predict: "when I appear, this other neuron appears N frames later"
 
 #### Pattern Learning for Events
@@ -369,7 +369,6 @@ while (true) {
   }
 
   level++
-  if (level >= maxLevels) break
 }
 ```
 
@@ -572,16 +571,11 @@ Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 | Parameter               | Default | Location | Description                                            |
 |-------------------------|---------|----------|--------------------------------------------------------|
 | contextLength           | 20      | Memory | Frames a neuron stays active                           |
-| maxStrength             | 100     | Neuron/Context | Maximum connection/pattern strength                    |
-| minStrength             | 0       | Neuron/Context | Minimum strength before deletion                       |
 | eventErrorMinStrength   | 1       | Neuron | Min strength to create error pattern                   |
 | actionRegretMinStrength | 3       | Neuron | Min strength to create regret pattern                  |
 | actionRegretMinPain     | 0       | Neuron | Min negative reward to trigger regret                  |
 | mergeThreshold          | 0.5     | Context | Min match ratio for pattern recognition (0.8 for text) |
-| negativeReinforcement   | 1       | Neuron | Weakening rate for missing neuron                      |
-| positiveReinforcement   | 1       | Neuron | Strengthening rate for observed neuron                 |
 | patternForgetRate       | 0.011   | Neuron | Pattern prediction strength decay rate per frame       |
-| maxLevels               | 150     | Brain | Maximum pattern hierarchy depth (safety limit)         |
 
 ---
 

@@ -23,10 +23,6 @@ export class Neuron {
 	static nextId = 1;
 
 	// Hyperparameters
-	static maxStrength = 1000000;
-	static minStrength = 0;
-	static positiveReinforcement = 1;
-	static negativeReinforcement = 1;
 	static patternForgetRate = 0.01;
 
 	// static debug flag for the neuron
@@ -48,7 +44,7 @@ export class Neuron {
 	 */
 	static getEffectiveStrength(strength, lastFrame, currentFrame, rate) {
 		const decay = Neuron.calculateDecay(lastFrame, currentFrame, rate);
-		return Math.max(Neuron.minStrength, strength - decay);
+		return Math.max(0, strength - decay);
 	}
 
 	/**
@@ -130,7 +126,7 @@ export class Neuron {
 
 		// increment the strength of the connection
 		const conn = this.connections.get(distance).get(toNeuron);
-		conn.strength = Math.min(Neuron.maxStrength, conn.strength + Neuron.positiveReinforcement);
+		conn.strength++;
 
 		// update reward with dynamic exponential smoothing - calculates exact expected value based on means
 		const alpha = 1 / conn.strength;
@@ -146,8 +142,8 @@ export class Neuron {
 		if (!distanceMap) return;
 		const conn = distanceMap.get(toNeuron);
 		if (!conn) return;
-		conn.strength = Math.max(Neuron.minStrength, conn.strength - Neuron.negativeReinforcement);
-		if (conn.strength <= Neuron.minStrength) this.deleteConnection(distance, toNeuron);
+		conn.strength--;
+		if (conn.strength <= 0) this.deleteConnection(distance, toNeuron);
 	}
 
 	/**
@@ -213,7 +209,7 @@ export class Neuron {
 		this.materializeStrength(currentFrame);
 
 		// increment activation strength
-		this.activationStrength = Math.min(Neuron.maxStrength, this.activationStrength + 1);
+		this.activationStrength++;
 
 		// remember when this happened for lazy decay
 		this.lastActivationFrame = currentFrame;

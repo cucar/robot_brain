@@ -64,18 +64,18 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $73774.34
-   Average per Episode: $73774.34
-   Average ROI: +491.83%
-   Average Per-Frame ROI: +0.071005%
-   Total Trades: 2741
-   Average Trades per Episode: 2741.0
+   Total Net Profit: $107401.29
+   Average per Episode: $107401.29
+   Average ROI: +716.01%
+   Average Per-Frame ROI: +0.083838%
+   Total Trades: 2508
+   Average Trades per Episode: 2508.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $73774.34 | ROI: +491.83%, +0.071005%/frame (2741 trades)
+   Episode 1: $107401.29 | ROI: +716.01%, +0.083838%/frame (2508 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 56.77%
+   Episode 1: 56.81%
 ```
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -119,7 +119,6 @@ this.contextLength = 3;
 
 In `brain/neuron.js`, change these parameters:
 ```javascript
-static negativeReinforcement = 0.1;
 static patternForgetRate = 0.0001;
 ```
 
@@ -139,26 +138,26 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $126843131168.58
-   Average per Episode: $25368626233.72
-   Average ROI: +169124174.89%
-   Average Per-Frame ROI: +0.353651%
-   Total Trades: 14161
-   Average Trades per Episode: 2832.2
+   Total Net Profit: $2121028909597.97
+   Average per Episode: $424205781919.59
+   Average ROI: +2828038546.13%
+   Average Per-Frame ROI: +0.491773%
+   Total Trades: 14167
+   Average Trades per Episode: 2833.4
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $75409.82 | ROI: +502.73%, +0.071734%/frame (2740 trades)
-   Episode 2: $891163.33 | ROI: +5941.09%, +0.163853%/frame (2836 trades)
-   Episode 3: $138994572.13 | ROI: +926630.48%, +0.365306%/frame (2884 trades)
-   Episode 4: $8773292635.28 | ROI: +58488617.57%, +0.531514%/frame (2842 trades)
-   Episode 5: $117929877388.02 | ROI: +786199182.59%, +0.635847%/frame (2859 trades)
+   Episode 1: $6498.38 | ROI: +43.32%, +0.014369%/frame (2824 trades)
+   Episode 2: $260055925.54 | ROI: +1733706.17%, +0.390407%/frame (2858 trades)
+   Episode 3: $67697038480.94 | ROI: +451313589.87%, +0.613551%/frame (2836 trades)
+   Episode 4: $672437972564.51 | ROI: +4482919817.10%, +0.705807%/frame (2797 trades)
+   Episode 5: $1380633836128.60 | ROI: +9204225574.19%, +0.734732%/frame (2852 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 57.25%
-   Episode 2: 71.24%
-   Episode 3: 87.28%
-   Episode 4: 94.30%
-   Episode 5: 96.76%
+   Episode 1: 58.63%
+   Episode 2: 72.19%
+   Episode 3: 88.77%
+   Episode 4: 93.67%
+   Episode 5: 95.56%
 ```
 
 The brain goes from 50% accuracy (random) to 96% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
@@ -333,7 +332,6 @@ All hyperparameters are configured as static properties on their respective clas
 | Parameter | Default | Class | Description |
 |-----------|---------|-------|-------------|
 | `contextLength` | 20 | Memory | Frames a neuron stays active in the sliding window |
-| `maxStrength` | 100 | Neuron/Context | Maximum connection/pattern strength |
 | `rewardSmoothing` | 0.8 | Neuron | Exponential smoothing factor for reward updates |
 | `eventErrorMinStrength` | 1 | Neuron | Min prediction strength to trigger error pattern creation |
 | `actionRegretMinStrength` | 3 | Neuron | Min action strength to trigger regret pattern creation |

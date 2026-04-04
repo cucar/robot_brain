@@ -37,7 +37,7 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 | Class | Role | Key State |
 |-------|------|-----------|
-| **Brain** | Orchestrator — frame loop, learning, inference | frameNumber, maxLevels, error threshold |
+| **Brain** | Orchestrator — frame loop, learning, inference | frameNumber, error threshold |
 | **Thalamus** | Neuron registry, channel mgmt, dimension maps | neurons Map, neuronsByValue, deathLedger, channels |
 | **Memory** | Temporal sliding window of active neurons | activeNeurons[], inferredNeurons[], contextLength |
 | **Neuron** | Connections, children, voting, learning, decay | connections, children, context, coordinates |
@@ -56,35 +56,24 @@ All hyperparameters are currently scattered as static class fields and construct
 
 | Class      | Parameter                  | Default | Purpose                                          |
 |------------|----------------------------|---------|--------------------------------------------------|
-| Brain      | `maxLevels`                | 150     | Recursion limit for pattern hierarchy            |
 | Brain      | `errorCorrectionThreshold` | 0.65    | Prediction error threshold for creating patterns |
-| Neuron     | `maxStrength`              | 100     | Strength cap for connections/activation          |
-| Neuron     | `minStrength`              | 0       | Strength floor                                   |
-| Neuron     | `positiveReinforcement`    | 1       | Strengthening rate for observed neurons          |
-| Neuron     | `negativeReinforcement`    | 1       | Weakening rate for missing neurons               |
 | Neuron     | `patternForgetRate`        | 0.01    | Pattern activation decay rate per frame          |
 | Context    | `mergeThreshold`           | 0.5     | Threshold for pattern context matching           |
 | Memory     | `contextLength`            | 10      | Sliding window size (frames)                     |
 
 ### Implementation
 
-#### Step 0.1 — Test removing min/max strength caps
-- Run 10 batches of 10-stock jobs with current min/max strength settings vs uncapped
-- Compare accuracy, neuron counts, connection counts, pattern counts
-- If no meaningful impact, remove `maxStrength` and `minStrength` from Neuron — fewer hyperparameters to carry forward into Rust
-- If there is impact, keep them but document why they matter
-
-#### Step 0.2 — Accept hyperparameters in Brain constructor options
+#### Step 0.1 — Accept hyperparameters in Brain constructor options
 - Brain constructor takes an optional `hyperparameters` object (or flat keys) in `options`
 - Defaults match current hardcoded values — zero behavior change
 - Brain distributes values to Neuron, Context, Memory on construction
 
-#### Step 0.3 — Remove static fields, pass through constructor chain
+#### Step 0.2 — Remove static fields, pass through constructor chain
 - Neuron, Context, Memory receive their hyperparameters via constructor or init method
 - Remove static class fields — they become instance-scoped (or module-scoped set once by Brain)
 - This eliminates hidden global state and makes the dependency explicit
 
-#### Step 0.4 — Wire command line options and update README
+#### Step 0.3 — Wire command line options and update README
 - Add `--max-levels`, `--context-length`, `--forget-rate`, etc. to the job runner CLI
 - Add stock channels (tickers) as a command line argument instead of hardcoded lists
 - Add stock channel parameters as command line arguments: max-positions, max-price, initial-capital

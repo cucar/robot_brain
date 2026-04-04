@@ -16,7 +16,6 @@ export default class Brain {
 	constructor(options) {
 
 		// pattern learning parameters
-		this.maxLevels = 150; // just to prevent against infinite recursion
 		this.errorCorrectionThreshold = 0.65; // if the error is below this threshold, no need to create a new correction pattern
 
 		// frame number is used for death ledger and diagnostics
@@ -411,12 +410,7 @@ export default class Brain {
 		while (true) {
 			const patternsFound = this.recognizeLevel(level);
 			if (!patternsFound) break;
-
 			level++;
-			if (level >= this.maxLevels) {
-				console.error('Max level exceeded.');
-				break;
-			}
 		}
 	}
 

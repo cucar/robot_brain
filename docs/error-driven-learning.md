@@ -556,7 +556,6 @@ while (true) {
   if (!patternsFound) break
 
   level++
-  if (level >= maxLevels) break
 }
 ```
 
