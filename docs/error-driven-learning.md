@@ -19,54 +19,32 @@ Patterns are created by `brain.learnNewPatterns()` which calls `neuron.learnNewP
 
 ### 1. Event Prediction Errors
 
-When a neuron confidently predicted an event that didn't happen:
-- Neuron voted in previous frame (has saved votes and context)
-- Vote strength >= `eventErrorMinStrength` (default: 1)
-- Vote type is 'event'
-- The predicted neuron did NOT appear in current frame
+When a neuron's event predictions have a high error rate:
+- Neuron voted for events in previous frame (has saved votes and context)
+- The ratio of failed event predictions to total event predictions > `errorCorrectionThreshold` (default: 0.65)
 - Create a pattern with the predictor as parent
 
 **Implementation**:
 ```javascript
-for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
-  for (vote of votes) {
-    if (vote.neuron.type === 'event' &&
-        vote.strength >= eventErrorMinStrength &&
-        !newActiveNeurons.has(vote.neuron)) {
-      // Strong prediction failed - create error pattern
-      pattern = neuron.createPattern(context, newActiveNeurons)
-      return pattern
-    }
+let failedEvents = 0;
+let totalEvents = 0;
+for (const vote of votes) {
+  if (vote.neuron.type === 'event') {
+    totalEvents++;
+    if (!actualEvents.has(vote.neuron)) failedEvents++;
   }
+}
+const eventError = failedEvents / totalEvents;
+if (eventError > this.errorCorrectionThreshold) {
+  // Error rate too high - create error pattern
+  pattern = neuron.createPattern(context, actualEvents)
+  return pattern
 }
 ```
 
 ### 2. Action Regret
 
-When an action resulted in negative reward:
-- Neuron voted for an action in previous frame
-- Vote strength >= `actionRegretMinStrength` (default: 3)
-- Vote type is 'action'
-- The action's reward < `actionRegretMinPain` (default: 0)
-- Create a pattern to try alternative actions
-
-**Implementation**:
-```javascript
-for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
-  for (vote of votes) {
-    if (vote.neuron.type === 'action' &&
-        vote.strength >= actionRegretMinStrength) {
-      reward = rewards.get(vote.neuron.channel)
-      if (reward < actionRegretMinPain) {
-        // Painful action - create regret pattern
-        alternativeActions = getAlternativeActions(vote.neuron, channelActions)
-        pattern = neuron.createPattern(context, alternativeActions)
-        return pattern
-      }
-    }
-  }
-}
-```
+Action regret is handled simultaneously during pattern creation. When an error pattern is created, it saves the observed actions and their rewards. If an action had a negative reward, the pattern also creates a connection to an alternative action with a neutral reward, to try it next time.
 
 ```mermaid
 flowchart TD
@@ -414,15 +392,20 @@ for (newNeuron of newActiveNeurons) {
 // Neuron E appears instead
 // learnNewPatterns() may create a new pattern
 
-for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
-  // neuron is the pattern that voted
-  for (vote of votes) {
-    if (vote.strength >= eventErrorMinStrength &&
-        !newActiveNeurons.has(vote.neuron)) {
-      // Create new pattern at level+1
-      newPattern = neuron.createPattern(context, newActiveNeurons)
-    }
+let failedEvents = 0;
+let totalEvents = 0;
+for (const vote of votes) {
+  if (vote.neuron.type === 'event') {
+    totalEvents++;
+    if (!newActiveNeurons.has(vote.neuron)) failedEvents++;
   }
+}
+const eventError = failedEvents / totalEvents;
+
+// neuron is the pattern that voted
+if (eventError > errorCorrectionThreshold) {
+  // Create new pattern at level+1
+  newPattern = neuron.createPattern(context, newActiveNeurons)
 }
 ```
 

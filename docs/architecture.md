@@ -151,8 +151,8 @@ When action connection/pattern results in **positive reward**:
 - Action becomes more likely in similar contexts
 
 When action connection/pattern results in **negative reward** (regret):
-- If strength >= actionRegretMinStrength, create regret pattern
-- Pattern learns alternative actions for this context
+- Regret actions are saved as alternatives when an error pattern is created
+- Pattern learns alternative actions for this context with neutral reward
 - Over time, reward-weighted selection favors best action
 
 ---
@@ -413,25 +413,22 @@ for ({neuron, age, votes, context} of memory.getVotersWithContext()) {
 **Neuron.learnNewPattern()**:
 ```javascript
 // Check for prediction errors (events)
+let failedEvents = 0;
+let totalEvents = 0;
 for (vote of votes) {
-  if (vote.neuron.type === 'event' && vote.strength >= eventErrorMinStrength) {
-    if (!newActiveNeurons.has(vote.neuron)) {
-      // Strong prediction failed - create error pattern
-      return createPattern(context, newActiveNeurons)
-    }
+  if (vote.neuron.type === 'event') {
+    totalEvents++;
+    if (!newActiveNeurons.has(vote.neuron)) failedEvents++;
   }
 }
+const eventError = failedEvents / totalEvents;
 
-// Check for action regret
-for (vote of votes) {
-  if (vote.neuron.type === 'action' && vote.strength >= actionRegretMinStrength) {
-    reward = rewards.get(vote.neuron.channel)
-    if (reward < actionRegretMinPain) {
-      // Painful action - create regret pattern
-      return createPattern(context, alternativeActions)
-    }
-  }
+if (eventError > errorCorrectionThreshold) {
+  // Error rate too high - create error pattern
+  return createPattern(context, newActiveNeurons)
 }
+// Action regret is handled implicitly by saving alternatives with 0 reward
+// during the createPattern call
 ```
 
 ### 8. inferNeurons()
@@ -570,12 +567,10 @@ Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 
 | Parameter               | Default | Location | Description                                            |
 |-------------------------|---------|----------|--------------------------------------------------------|
+| errorCorrectionThreshold| 0.65    | Brain  | Prediction error threshold for creating patterns         |
 | contextLength           | 20      | Memory | Frames a neuron stays active                           |
-| eventErrorMinStrength   | 1       | Neuron | Min strength to create error pattern                   |
-| actionRegretMinStrength | 3       | Neuron | Min strength to create regret pattern                  |
-| actionRegretMinPain     | 0       | Neuron | Min negative reward to trigger regret                  |
 | mergeThreshold          | 0.5     | Context | Min match ratio for pattern recognition (0.8 for text) |
-| patternForgetRate       | 0.011   | Neuron | Pattern prediction strength decay rate per frame       |
+| patternForgetRate       | 0.01    | Neuron | Pattern prediction strength decay rate per frame       |
 
 ---
 

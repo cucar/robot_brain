@@ -331,11 +331,8 @@ All hyperparameters are configured as static properties on their respective clas
 
 | Parameter | Default | Class | Description |
 |-----------|---------|-------|-------------|
+| `errorCorrectionThreshold` | 0.65 | Brain | Prediction error threshold for creating patterns |
 | `contextLength` | 20 | Memory | Frames a neuron stays active in the sliding window |
-| `rewardSmoothing` | 0.8 | Neuron | Exponential smoothing factor for reward updates |
-| `eventErrorMinStrength` | 1 | Neuron | Min prediction strength to trigger error pattern creation |
-| `actionRegretMinStrength` | 3 | Neuron | Min action strength to trigger regret pattern creation |
-| `actionRegretMinPain` | 0 | Neuron | Min negative reward to trigger action regret |
 | `mergeThreshold` | 0.5 | Context | Min context match ratio for pattern recognition (0.8 for text) |
 | `patternForgetRate` | 0.01 | Neuron | Pattern prediction decay rate per frame (0.001 for text) |
 
