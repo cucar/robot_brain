@@ -175,13 +175,12 @@ The architecture draws from several neuroscience concepts:
 
 | Concept | Biological Basis | Implementation |
 |---------|-----------------|----------------|
-| Cortical columns | 6-layer hierarchical processing | Multi-level pattern hierarchy |
+| Regions | 6-layer hierarchical processing | Multi-level pattern hierarchy |
 | Hebbian learning | "Neurons that fire together wire together" | Connection strengthening through co-occurrence |
 | Error-driven plasticity | Prediction error signals in cortex | Patterns created from prediction failures |
 | Sparse coding | Only ~1-5% of neurons active at any time | Only relevant neurons participate per frame |
 | Thalamic relay | Thalamus routes sensory information | Thalamus class manages neuron registry and channel coordination |
 | Temporal context | Working memory maintains recent history | Sliding window of active neurons indexed by age |
-| Habituation | Repeated stimuli produce diminished response | Connection strength decay over time |
 
 ## Comparison with Conventional Approaches
 

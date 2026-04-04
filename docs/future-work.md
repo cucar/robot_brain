@@ -20,12 +20,12 @@ Expose the Rust core to Python for broader adoption.
 Distribute across multiple machines for large-scale workloads.
 
 ### Add MPI layer for inter-column communication
-- Each MPI rank runs one `CorticalColumn`
+- Each MPI rank runs one `Region`
 - MPI messages: vote broadcasts, neuron migration, consensus sync
 - Use `rsmpi` crate for Rust MPI bindings
 
 ### Neuron metadata storage for MPI
-- Each MPI rank's CorticalColumn holds full metadata for its own neurons
+- Each MPI rank's Region holds full metadata for its own neurons
 - Read-only cache of metadata for foreign neurons it has connections to
 - Cache populated on creation — when a new neuron is created, the creating rank broadcasts its metadata once via MPI
 - No ongoing synchronization needed since all metadata is immutable after creation
