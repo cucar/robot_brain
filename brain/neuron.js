@@ -23,11 +23,10 @@ export class Neuron {
 	static nextId = 1;
 
 	// Hyperparameters
-	static maxStrength = 100;
+	static maxStrength = 1000000;
 	static minStrength = 0;
 	static positiveReinforcement = 1;
 	static negativeReinforcement = 1;
-	static rewardSmoothing = 0.5;
 	static patternForgetRate = 0.01;
 
 	// static debug flag for the neuron
@@ -128,9 +127,14 @@ export class Neuron {
 	 */
 	strengthenConnection(distance, toNeuron, reward) {
 		if (!this.connections.has(distance)) throw new Error('Unknown connection'); // should not happen
+
+		// increment the strength of the connection
 		const conn = this.connections.get(distance).get(toNeuron);
 		conn.strength = Math.min(Neuron.maxStrength, conn.strength + Neuron.positiveReinforcement);
-		conn.reward = Neuron.rewardSmoothing * reward + (1 - Neuron.rewardSmoothing) * conn.reward;
+
+		// update reward with dynamic exponential smoothing - calculates exact expected value based on means
+		const alpha = 1 / conn.strength;
+		conn.reward = alpha * reward + (1 - alpha) * conn.reward;
 	}
 
 	/**

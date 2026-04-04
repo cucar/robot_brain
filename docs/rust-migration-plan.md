@@ -60,7 +60,6 @@ All hyperparameters are currently scattered as static class fields and construct
 | Brain      | `errorCorrectionThreshold` | 0.65    | Prediction error threshold for creating patterns |
 | Neuron     | `maxStrength`              | 100     | Strength cap for connections/activation          |
 | Neuron     | `minStrength`              | 0       | Strength floor                                   |
-| Neuron     | `rewardSmoothing`          | 0.5     | Reward exponential moving average factor         |
 | Neuron     | `positiveReinforcement`    | 1       | Strengthening rate for observed neurons          |
 | Neuron     | `negativeReinforcement`    | 1       | Weakening rate for missing neurons               |
 | Neuron     | `patternForgetRate`        | 0.01    | Pattern activation decay rate per frame          |

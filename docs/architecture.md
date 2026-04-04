@@ -574,7 +574,6 @@ Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 | contextLength           | 20      | Memory | Frames a neuron stays active                           |
 | maxStrength             | 100     | Neuron/Context | Maximum connection/pattern strength                    |
 | minStrength             | 0       | Neuron/Context | Minimum strength before deletion                       |
-| rewardSmoothing         | 0.8     | Neuron | Exponential smoothing for rewards                      |
 | eventErrorMinStrength   | 1       | Neuron | Min strength to create error pattern                   |
 | actionRegretMinStrength | 3       | Neuron | Min strength to create regret pattern                  |
 | actionRegretMinPain     | 0       | Neuron | Min negative reward to trigger regret                  |
