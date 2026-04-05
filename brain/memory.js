@@ -6,10 +6,10 @@ import { Context } from './context.js';
  */
 export class Memory {
 
-	constructor(options) {
+	constructor(debug, contextLength) {
 
-		// memory hyperparameters
-		this.contextLength = 10; // number of frames a base neuron stays active
+		// number of frames a base neuron stays active
+		this.contextLength = contextLength;
 
 		// Active context indexed by age: Array<Map<Neuron, {activatedPattern, votes, context}>>
 		// activeNeurons[0] = age 0 (newest), activeNeurons[n] = age n (older)
@@ -22,7 +22,7 @@ export class Memory {
 		this.inferredNeurons = [];
 
 		// carry over the debug flag
-		this.debug = options.debug;
+		this.debug = debug;
 
 		// Set of channel names that have action sequence learning disabled (populated by brain after init)
 		this.noActionSequenceChannels = new Set();

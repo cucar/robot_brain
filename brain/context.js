@@ -4,9 +4,6 @@
  */
 export class Context {
 
-	// Hyperparameters (shared with Neuron)
-	static mergeThreshold = 0.5;
-
 	constructor() {
 		this.entries = new Map(); // Map<neuron, Map<distance, strength>>
 	}
@@ -121,9 +118,10 @@ export class Context {
 	 * Returns match result with score, or null if below threshold.
 	 * Uses effective strengths (with lazy decay applied) for scoring.
 	 * @param {Context} observed - The observed context to match against
+	 * @param {Context} mergeThreshold - minimum required percentage for merge (0-1)
 	 * @returns {Object|null} { score, common, missing, novel } or null
 	 */
-	match(observed) {
+	match(observed, mergeThreshold) {
 
 		// Single pass: categorize into common/missing while computing score and counts
 		const common = [];
@@ -157,7 +155,7 @@ export class Context {
 		if (totalCount === 0) return null;
 
 		// check match threshold to decide if there is a match or not
-		if (common.length / totalCount < Context.mergeThreshold) return null;
+		if (common.length / totalCount < mergeThreshold) return null;
 
 		// match found - find the novel entries (in observed but not in this known context) using lookups
 		const novel = [];

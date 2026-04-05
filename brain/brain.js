@@ -15,37 +15,36 @@ export default class Brain {
 	 */
 	constructor(options) {
 
-		// pattern learning parameters
-		this.errorCorrectionThreshold = 0.65; // if the error is below this threshold, no need to create a new correction pattern
-
-		// frame number is used for death ledger and diagnostics
-		this.frameNumber = 0;
+		// set hyperparameters
+		this.contextLength = options?.contextLength ?? 10; // number of frames a base neuron stays active
+		this.errorCorrectionThreshold = options?.errorCorrectionThreshold ?? 0.65; // if the error is below this threshold, no need to create a new correction pattern
+		this.mergeThreshold = options?.mergeThreshold ?? 0.5; // percentage of matched entries needed for context merge
+		this.patternForgetRate = options?.patternForgetRate ?? 0.01; // how many frames will a pattern be remembered (inverse)
 
 		// Debugging info and flags
-		this.debug = options.debug;
-		this.database = options.database; // skip database backup/restore for tests
-		this.diagnostic = options.diagnostic; // diagnostic mode - shows detailed inference/conflict resolution info
-		this.frameSummary = !options.noSummary; // show frame summary or not
-		this.waitForUserInput = options.wait;
+		this.debug = options?.debug;
+		this.database = options?.database; // skip database backup/restore for tests
+		this.waitForUserInput = options?.wait;
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
 		this.rewards = []; // channel rewards indexed by age (array of Maps)
+		this.frameNumber = 0; // frame number is used for death ledger and diagnostics
 
 		// Database - used for persistent storage - backup and restore
-		this.db = this.database ? new Database(options) : null;
+		this.db = this.database ? new Database(this.debug, this.patternForgetRate, this.mergeThreshold) : null;
 
 		// Diagnostics - used for debug methods and performance tracking
-		this.diagnostics = new Diagnostics(this.diagnostic, this.frameSummary);
+		this.diagnostics = new Diagnostics(options?.diagnostic, !options?.noSummary);
 
 		// Dump - used for creating brain state dumps for debugging
 		this.dump = new Dump();
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
-		this.thalamus = new Thalamus(options);
+		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold);
 
 		// Memory - manages temporal sliding window and inferred neurons
-		this.memory = new Memory(options);
+		this.memory = new Memory(this.debug, this.contextLength);
 	}
 
 	/**
@@ -553,7 +552,7 @@ export default class Brain {
 		for (const { neuron, age, context } of corrections) {
 
 			// create the new pattern neuron
-			const pattern = Neuron.createPattern(neuron.level + 1, neuron);
+			const pattern = Neuron.createPattern(neuron.level + 1, neuron, this.patternForgetRate, this.mergeThreshold);
 
 			// create the future connections of the pattern from currently observed neurons
 			for (let a = 0; a < age && a < sensoryNeurons.length; a++)

@@ -8,10 +8,11 @@ import { Channel } from '../channels/channel.js';
  * Handles persistence of neurons, connections, and patterns to MySQL
  */
 export class Database {
-	constructor(options) {
+	constructor(debug, patternForgetRate, mergeThreshold) {
 		this.conn = null;
-		this.debug = options.debug;
-		this.options = options;
+		this.debug = debug;
+		this.patternForgetRate = patternForgetRate;
+		this.mergeThreshold = mergeThreshold;
 	}
 
 	/**
@@ -44,9 +45,6 @@ export class Database {
 			const channelClass = channelClasses.get(row.name);
 			if (!channelClass)
 				throw new Error(`Channel class not found: ${row.name}. Code not compatible.`);
-
-			// initialize channel class with runtime options
-			channelClass.initialize(this.options);
 
 			// Instantiate channel with DB id and dimensions
 			const channel = new channelClass(row.name, this.debug, row.id, dbDimensions);
@@ -103,7 +101,7 @@ export class Database {
 		for (const row of rows) {
 
 			// create the neuron with its activation strength
-			const neuron = new Neuron(row.level, row.id);
+			const neuron = new Neuron(row.level, this.patternForgetRate, this.mergeThreshold, row.id);
 			neuron.setActivationStrength(Number(row.strength));
 			neurons.set(row.id, neuron);
 

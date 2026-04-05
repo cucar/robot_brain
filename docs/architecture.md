@@ -498,7 +498,6 @@ class Channel {
 ```javascript
 class Channel {
   // Initialization
-  static initialize(options)           // Channel-level setup
   static resetChannelContext()         // Reset shared state
 
   // Coordinated execution

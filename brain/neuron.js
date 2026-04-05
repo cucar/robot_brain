@@ -22,36 +22,11 @@ export class Neuron {
 	// Static counter for assigning unique IDs to neurons
 	static nextId = 1;
 
-	// Hyperparameters
-	static patternForgetRate = 0.01;
-
-	// static debug flag for the neuron
-	static debug = false;
-
-	/**
-	 * Calculate continuous lazy decay amount based on frames elapsed
-	 * @param {number} lastFrame - Frame when item was last updated
-	 * @param {number} currentFrame - Current frame number
-	 * @param {number} rate - Decay rate per frame
-	 * @returns {number} Amount to subtract from strength
-	 */
-	static calculateDecay(lastFrame, currentFrame, rate) {
-		return (currentFrame - lastFrame) * rate;
-	}
-
-	/**
-	 * Get effective strength after lazy decay
-	 */
-	static getEffectiveStrength(strength, lastFrame, currentFrame, rate) {
-		const decay = Neuron.calculateDecay(lastFrame, currentFrame, rate);
-		return Math.max(0, strength - decay);
-	}
-
 	/**
 	 * Create a sensory neuron (level 0) - id optional for loading from database
 	 */
-	static createSensory(channel, type, coordinates, id = null) {
-		const neuron = new Neuron(0, id);
+	static createSensory(channel, type, coordinates, patternForgetRate, mergeThreshold) {
+		const neuron = new Neuron(0, patternForgetRate, mergeThreshold);
 		neuron.channel = channel;
 		neuron.type = type;
 		neuron.coordinates = coordinates;
@@ -61,8 +36,8 @@ export class Neuron {
 	/**
 	 * Create a pattern neuron (level > 0) - id optional for loading from database
 	 */
-	static createPattern(level, parent, id = null) {
-		const neuron = new Neuron(level, id);
+	static createPattern(level, parent, patternForgetRate, mergeThreshold) {
+		const neuron = new Neuron(level, patternForgetRate, mergeThreshold);
 		neuron.parent = parent;
 		return neuron;
 	}
@@ -80,18 +55,29 @@ export class Neuron {
 	/**
 	 * constructor - id optional for loading from database
 	 */
-	constructor(level = 0, id = null) {
-		this.id = id !== null ? id : Neuron.nextId++;
+	constructor(level, patternForgetRate, mergeThreshold, id = null) {
+
+		// initialize neuron parameters
 		this.level = level;
-		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
-		this.children = new Set(); // child pattern neurons (routing table)
-		this.context = new Context();  // the context that activated this pattern - not used by sensory neurons
-		this.contextRefs = new Map(); // context references: Map<Neuron, Set<distance>>
+		this.patternForgetRate = patternForgetRate;
+		this.mergeThreshold = mergeThreshold;
+
+		// the context that activated this pattern - not used by sensory neurons
+		// TODO: this will be moved to the parent routing tables instead of the child
+		this.context = new Context();
+
+		// initialize neuron id if given - update nextId if we're loading a neuron with a specific ID
+		this.id = id || Neuron.nextId++;
+		if (id && id >= Neuron.nextId) Neuron.nextId = id + 1;
+
+		// initialize activation strength with delayed calculations based on frames
 		this.activationStrength = 0; // incremented with activation, forgotten over time
 		this.lastActivationFrame = 0; // frame when activation was last strengthened (for lazy decay)
 
-		// Update nextId if we're loading a neuron with a specific ID
-		if (id !== null && id >= Neuron.nextId) Neuron.nextId = id + 1;
+		// initialize synapses
+		this.connections = new Map(); // inferences: Map<distance, Map<toNeuron, {strength, reward}>>
+		this.children = new Set(); // child pattern neurons (routing table)
+		this.contextRefs = new Map(); // context references: Map<Neuron, Set<distance>>
 	}
 
 	/**
@@ -190,7 +176,7 @@ export class Neuron {
 	 * Get effective activation strength with lazy decay
 	 */
 	getEffectiveActivationStrength(currentFrame) {
-		return Neuron.getEffectiveStrength(this.activationStrength, this.lastActivationFrame, currentFrame, Neuron.patternForgetRate);
+		return Math.max(0, this.activationStrength - (currentFrame - this.lastActivationFrame) * this.patternForgetRate);
 	}
 
 	/**
@@ -216,7 +202,7 @@ export class Neuron {
 
 		// return death frame for pattern neurons (sensory neurons never die)
 		if (this.level === 0) return null;
-		return currentFrame + Math.ceil(this.activationStrength / Neuron.patternForgetRate);
+		return currentFrame + Math.ceil(this.activationStrength / this.patternForgetRate);
 	}
 
 	/**
@@ -304,7 +290,7 @@ export class Neuron {
 			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
 
 			// get the match results for the pattern for the given context
-			const match = pattern.context.match(observed);
+			const match = pattern.context.match(observed, this.mergeThreshold);
 
 			// if there is a match, and it's the best so far, store it
 			if (match && (!best || match.score > best.score)) {

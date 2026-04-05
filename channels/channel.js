@@ -30,15 +30,6 @@ export class Channel {
 	}
 
 	/**
-	 * Initialize channel type - override in subclasses as needed
-	 * Called once during brain initialization
-	 */
-	static initialize() {
-		// Default implementation does nothing
-		// Child classes can override for channel-specific initialization
-	}
-
-	/**
 	 * Static method to reset channel-level context (shared state across all instances)
 	 * Called once per episode reset before individual channel resetContext calls
 	 * Override in subclasses if they have static/shared state to reset

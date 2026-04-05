@@ -63,23 +63,13 @@ All hyperparameters are currently scattered as static class fields and construct
 
 ### Implementation
 
-#### Step 0.1 — Accept hyperparameters in Brain constructor options
-- Brain constructor takes an optional `hyperparameters` object (or flat keys) in `options`
-- Defaults match current hardcoded values — zero behavior change
-- Brain distributes values to Neuron, Context, Memory on construction
-
-#### Step 0.2 — Remove static fields, pass through constructor chain
-- Neuron, Context, Memory receive their hyperparameters via constructor or init method
-- Remove static class fields — they become instance-scoped (or module-scoped set once by Brain)
-- This eliminates hidden global state and makes the dependency explicit
-
-#### Step 0.3 — Wire command line options and update README
-- Add `--max-levels`, `--context-length`, `--forget-rate`, etc. to the job runner CLI
-- Add stock channels (tickers) as a command line argument instead of hardcoded lists
-- Add stock channel parameters as command line arguments: max-positions, max-price, initial-capital
+#### Step 0.1 — Wire command line options and update README
+- Add `--context-length`, `--forget-rate`, `--error-threshold`, and `merge-threshold` to the job runner CLI
+- Add stock channels (tickers) as a command line argument instead of hardcoded lists (comma separated, no spaces)
+- Add stock channel parameters as command line arguments: `max-positions`, `max-price`, `initial-capital`
 - Job passes them through to Brain constructor options
 - Update README demo sections to show how to run with custom hyperparameters and stock selections
-- **Verify**: default values produce identical results, all tests pass
+- Verify that tests produce the same results
 
 ---
 
