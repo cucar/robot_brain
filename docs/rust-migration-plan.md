@@ -48,32 +48,6 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 ---
 
-## Phase 0 — Centralize Hyperparameters in Brain Constructor
-
-All hyperparameters are currently scattered as static class fields and constructor hardcodes across Neuron, Context, Memory, and Brain. Move them all into the Brain constructor options so they can be set from the command line. This clarifies the Brain interface — which is what Rust will eventually mirror as its public API.
-
-### Current hyperparameter locations
-
-| Class      | Parameter                  | Default | Purpose                                          |
-|------------|----------------------------|---------|--------------------------------------------------|
-| Brain      | `errorCorrectionThreshold` | 0.65    | Prediction error threshold for creating patterns |
-| Neuron     | `patternForgetRate`        | 0.01    | Pattern activation decay rate per frame          |
-| Context    | `mergeThreshold`           | 0.5     | Threshold for pattern context matching           |
-| Memory     | `contextLength`            | 10      | Sliding window size (frames)                     |
-
-### Implementation
-
-#### Wire command line options and update README
-- Add `--context-length`, `--forget-rate`, `--error-threshold`, and `merge-threshold` to the job runner CLI
-- Add stock channels (tickers) as a command line argument instead of hardcoded lists (comma separated, no spaces)
-- Add stock channel parameters as command line arguments: `max-positions`, `max-price`, `initial-capital`
-- Job passes them through to Brain constructor options
-- Update README demo sections to show how to run with custom hyperparameters and stock selections
-- Verify that tests produce the same results
-- Add another demo for low accuracy 10 repeated episodes learning best actions to perform in each situation: node run-brain.js stock-test --timeframe 3H --no-summary --episodes 20
-
----
-
 ## Phase 1 — Unify Per-Neuron Processing (~1.5 weeks)
 
 Collapse the 4 separate passes over neurons (recognize, learn connections, learn patterns, infer) into a single per-neuron `processFrame()` call — the prerequisite for parallelization. This must be done incrementally, one operation at a time, verifying results after each step.
