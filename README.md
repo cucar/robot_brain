@@ -48,7 +48,24 @@ cd robot_brain
 npm install
 ```
 
-## Demo 1: Stock Trading
+## Demo 1: Synthetic Cycle Memorization
+
+The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a separate channel. A repeating 12-day price cycle is presented 20 times — the brain discovers cross-stock patterns and converges on optimal buy/sell timing.
+
+Run the multi-channel test with customized hyperparameters:
+
+```bash
+node run-brain.js multi-channel-test --error-threshold 0.3 --merge-threshold 0.9
+```
+
+**Expected output:**
+```
+🎯 Overall Optimal Rate: 97.1%
+```
+
+The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 96%+ optimal trade decisions across all three channels. This demonstrates how multiple input streams converge to improve inference — one of the architecture's core strengths.
+
+## Demo 2: Stock Trading
 
 The brain learns to trade stocks from historical price and volume data. Each stock is a separate channel — the brain discovers cross-stock patterns and makes buy/sell/hold decisions optimized by reward feedback.
 
@@ -80,56 +97,70 @@ Final Training Results (1 episodes):
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
 
-### Downloading Fresh Stock Data
+## Demo 3: Action Learning in Low Accuracy
 
-To download new data or different timeframes, you need a free [Alpaca](https://alpaca.markets) account:
+The brain learns the best actions to perform in each situation over repeated episodes, even when base prediction accuracy is low.
 
-1. Sign up at [alpaca.markets](https://alpaca.markets) (free paper trading account)
-2. Get your API key and secret from the dashboard
-3. Copy `.env.example` to `.env` and fill in your credentials:
-   ```
-   ALPACA_KEY_ID=your_key_here
-   ALPACA_SECRET_KEY=your_secret_here
-   ```
-4. Download data:
-   ```bash
-   node stock-download.js --timeframe=3H
-   ```
-5. Process and run:
-   ```bash
-   node run-setup.js stock-test --timeframe 3H
-   node run-brain.js stock-test --timeframe 3H
-   ```
+Run the test:
+```bash
+node run-brain.js stock-test --timeframe 3H --no-summary --episodes 20
+```
 
-## Demo 2: Stock Sequence Memorization
+**Expected output:**
+```
+💰 Net Profit & ROI by Episode:
+Episode 1: $107401.29 | ROI: +716.01%, +0.083838%/frame (2508 trades)
+Episode 2: $50513.88 | ROI: +336.76%, +0.058868%/frame (2052 trades)
+Episode 3: $74285.76 | ROI: +495.24%, +0.071235%/frame (1772 trades)
+Episode 4: $125251.11 | ROI: +835.01%, +0.089277%/frame (1982 trades)
+Episode 5: $73772.97 | ROI: +491.82%, +0.071005%/frame (2151 trades)
+Episode 6: $146496.99 | ROI: +976.65%, +0.094913%/frame (2057 trades)
+Episode 7: $90108.51 | ROI: +600.72%, +0.077752%/frame (2529 trades)
+Episode 8: $166326.18 | ROI: +1108.84%, +0.099540%/frame (2178 trades)
+Episode 9: $67012.18 | ROI: +446.75%, +0.067840%/frame (2291 trades)
+Episode 10: $134242.76 | ROI: +894.95%, +0.091760%/frame (1934 trades)
+Episode 11: $145834.55 | ROI: +972.23%, +0.094748%/frame (2079 trades)
+Episode 12: $278734.23 | ROI: +1858.23%, +0.118818%/frame (2008 trades)
+Episode 13: $129134.28 | ROI: +860.90%, +0.090368%/frame (1914 trades)
+Episode 14: $98759.76 | ROI: +658.40%, +0.080913%/frame (1888 trades)
+Episode 15: $136488.92 | ROI: +909.93%, +0.092356%/frame (1691 trades)
+Episode 16: $166297.29 | ROI: +1108.65%, +0.099534%/frame (2047 trades)
+Episode 17: $155024.76 | ROI: +1033.50%, +0.096969%/frame (1624 trades)
+Episode 18: $200176.61 | ROI: +1334.51%, +0.106380%/frame (1838 trades)
+Episode 19: $154778.76 | ROI: +1031.86%, +0.096911%/frame (1789 trades)
+Episode 20: $174850.74 | ROI: +1165.67%, +0.101376%/frame (1810 trades)
+
+📊 Base Level Accuracy by Episode:
+Episode 1: 56.81%
+Episode 2: 56.62%
+Episode 3: 56.65%
+Episode 4: 56.69%
+Episode 5: 56.64%
+Episode 6: 56.59%
+Episode 7: 56.57%
+Episode 8: 56.57%
+Episode 9: 56.46%
+Episode 10: 56.42%
+Episode 11: 56.40%
+Episode 12: 56.39%
+Episode 13: 56.32%
+Episode 14: 56.25%
+Episode 15: 56.21%
+Episode 16: 56.18%
+Episode 17: 56.14%
+Episode 18: 56.07%
+Episode 19: 56.03%
+Episode 20: 56.00%
+```
+
+## Demo 4: Stock Sequence Memorization
 
 The brain memorizes a repeating stock price sequence across 5 episodes, reaching 95%+ prediction accuracy. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
 
-**Before running**, adjust the hyperparameters for stock memorization:
+Run the stock test with customized hyperparameters for sequence memorization:
 
-In `jobs/stock-test.js`, use only 3 stocks:
-```javascript
-symbols: ['KGC', 'GLD', 'SPY'],
-```
-
-In `brain/memory.js`, change `contextLength` to `3`:
-```javascript
-this.contextLength = 3;
-```
-
-In `brain/neuron.js`, change these parameters:
-```javascript
-static patternForgetRate = 0.0001;
-```
-
-In `brain/brain.js`, change the error correction to `0.3`:
-```javascript
-this.errorCorrectionThreshold = 0.3;
-```
-
-Then run:
 ```bash
-node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
+node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.0001 --error-threshold 0.3
 ```
 
 **Expected output:**
@@ -162,37 +193,14 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary
 
 The brain goes from 50% accuracy (random) to 96% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
-> **Remember to change the hyperparameters back** to their stock defaults if you want to run the default stock test afterward.
-
-## Demo 3: Text Sequence Learning
+## Demo 5: Text Sequence Learning
 
 The brain learns to predict character sequences. Feed it a string, and it memorizes the pattern — reaching 100% prediction accuracy within a few episodes.
 
-**Before running**, adjust the hyperparameters for text learning (the defaults are tuned for stock data):
+Run the text test with customized hyperparameters for text learning (the defaults are tuned for stock data):
 
-In `brain/brain.js`, change the error correction to `0.3`:
-```javascript
-this.errorCorrectionThreshold = 0.3;
-```
-
-In `brain/memory.js`, change `contextLength` to `20`:
-```javascript
-this.contextLength = 20;
-```
-
-In `brain/context.js`, change `mergeThreshold` to `0.9`:
-```javascript
-static mergeThreshold = 0.9;
-```
-
-In `brain/neuron.js`, change `patternForgetRate` to `0.001`:
-```javascript
-static patternForgetRate = 0.001;
-```
-
-Then run:
 ```bash
-node run-brain.js text-test
+node run-brain.js text-test --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001
 ```
 
 **Expected output:**
@@ -207,32 +215,26 @@ node run-brain.js text-test
 
 The brain goes from low accuracy to 100% in 5 episodes — it has fully memorized the character sequence and can predict every next character correctly.
 
-> **Remember to change the hyperparameters back** to their stock defaults if you want to run stock tests afterward.
+### Downloading Fresh Stock Data
 
-## Demo 4: Synthetic Cycle Memorization
+To download new data or different timeframes, you need a free [Alpaca](https://alpaca.markets) account:
 
-The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a separate channel. A repeating 12-day price cycle is presented 20 times — the brain discovers cross-stock patterns and converges on optimal buy/sell timing.
-
-In `brain/brain.js`, change the error correction to `0.3`:
-```javascript
-this.errorCorrectionThreshold = 0.3;
-```
-
-In `brain/context.js`, change `mergeThreshold` to `0.9`:
-```javascript
-static mergeThreshold = 0.9;
-```
-
-```bash
-node run-brain.js multi-channel-test
-```
-
-**Expected output:**
-```
-🎯 Overall Optimal Rate: 97.1%
-```
-
-The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 96%+ optimal trade decisions across all three channels. This demonstrates how multiple input streams converge to improve inference — one of the architecture's core strengths.
+1. Sign up at [alpaca.markets](https://alpaca.markets) (free paper trading account)
+2. Get your API key and secret from the dashboard
+3. Copy `.env.example` to `.env` and fill in your credentials:
+   ```
+   ALPACA_KEY_ID=your_key_here
+   ALPACA_SECRET_KEY=your_secret_here
+   ```
+4. Download data:
+   ```bash
+   node stock-download.js --timeframe=3H
+   ```
+5. Process and run:
+   ```bash
+   node run-setup.js stock-test --timeframe 3H
+   node run-brain.js stock-test --timeframe 3H
+   ```
 
 ## Architecture
 
@@ -327,14 +329,14 @@ Jobs define learning scenarios — which channels to use, how to configure them,
 
 ## Hyperparameters
 
-All hyperparameters are configured as static properties on their respective classes:
+All hyperparameters are configured via the Brain constructor options and can be passed as command-line arguments:
 
-| Parameter | Default | Class | Description |
-|-----------|---------|-------|-------------|
-| `errorCorrectionThreshold` | 0.65 | Brain | Prediction error threshold for creating patterns |
-| `contextLength` | 20 | Memory | Frames a neuron stays active in the sliding window |
-| `mergeThreshold` | 0.5 | Context | Min context match ratio for pattern recognition (0.8 for text) |
-| `patternForgetRate` | 0.01 | Neuron | Pattern prediction decay rate per frame (0.001 for text) |
+| Parameter | Default | Command Line Option | Description |
+|-----------|---------|---------------------|-------------|
+| `errorCorrectionThreshold` | 0.65 | `--error-threshold` | Prediction error threshold for creating patterns |
+| `contextLength` | 10 | `--context-length` | Frames a neuron stays active in the sliding window |
+| `mergeThreshold` | 0.5 | `--merge-threshold` | Min context match ratio for pattern recognition |
+| `patternForgetRate` | 0.01 | `--forget-rate` | Pattern prediction decay rate per frame |
 
 ## Command Line Options
 
@@ -348,6 +350,14 @@ node run-brain.js <job-name> [options]
 | `--episodes <n>` | Number of training episodes |
 | `--holdout <n>` | Hold out last N rows from training |
 | `--offset <n>` | Skip first N rows |
+| `--symbols <list>` | Comma-separated list of stock tickers (e.g. `KGC,GLD,SPY`) |
+| `--max-positions <n>`| Maximum number of stock positions to hold at once |
+| `--max-price <n>` | Maximum price limit for stocks |
+| `--initial-capital <n>`| Starting capital for the portfolio |
+| `--context-length <n>`| Sliding window size (frames) |
+| `--forget-rate <n>` | Pattern activation decay rate per frame |
+| `--error-threshold <n>`| Prediction error threshold |
+| `--merge-threshold <n>`| Threshold for pattern context matching |
 | `--debug` | Show detailed frame-by-frame processing |
 | `--diagnostic` | Show inference and conflict resolution details |
 | `--database` | Enable MySQL backup/restore |

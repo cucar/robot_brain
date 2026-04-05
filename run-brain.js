@@ -36,35 +36,25 @@ class BrainRunner {
 if (process.argv[2]) {
 	const jobName = process.argv[2];
 
-	// Parse --episodes parameter
-	let episodes = null;
-	const episodesIndex = process.argv.indexOf('--episodes');
-	if (episodesIndex !== -1 && process.argv[episodesIndex + 1]) episodes = parseInt(process.argv[episodesIndex + 1]);
+	// Parse --context-length
+	let contextLength = null;
+	const contextLengthIndex = process.argv.indexOf('--context-length');
+	if (contextLengthIndex !== -1 && process.argv[contextLengthIndex + 1]) contextLength = parseInt(process.argv[contextLengthIndex + 1]);
 
-	// Parse --holdout parameter
-	let holdout = null;
-	const holdoutIndex = process.argv.indexOf('--holdout');
-	if (holdoutIndex !== -1 && process.argv[holdoutIndex + 1]) holdout = parseInt(process.argv[holdoutIndex + 1]);
+	// Parse --forget-rate
+	let patternForgetRate = null;
+	const forgetRateIndex = process.argv.indexOf('--forget-rate');
+	if (forgetRateIndex !== -1 && process.argv[forgetRateIndex + 1]) patternForgetRate = parseFloat(process.argv[forgetRateIndex + 1]);
 
-	// Parse --offset parameter
-	let offset = null;
-	const offsetIndex = process.argv.indexOf('--offset');
-	if (offsetIndex !== -1 && process.argv[offsetIndex + 1]) offset = parseInt(process.argv[offsetIndex + 1]);
+	// Parse --error-threshold
+	let errorCorrectionThreshold = null;
+	const errorThresholdIndex = process.argv.indexOf('--error-threshold');
+	if (errorThresholdIndex !== -1 && process.argv[errorThresholdIndex + 1]) errorCorrectionThreshold = parseFloat(process.argv[errorThresholdIndex + 1]);
 
-	// Parse --timeframe parameter
-	let timeframe = null;
-	const timeframeIndex = process.argv.indexOf('--timeframe');
-	if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) timeframe = process.argv[timeframeIndex + 1];
-
-	// Parse --start parameter
-	let start = null;
-	const startIndex = process.argv.indexOf('--start');
-	if (startIndex !== -1 && process.argv[startIndex + 1]) start = process.argv[startIndex + 1];
-
-	// Parse --end parameter
-	let end = null;
-	const endIndex = process.argv.indexOf('--end');
-	if (endIndex !== -1 && process.argv[endIndex + 1]) end = process.argv[endIndex + 1];
+	// Parse --merge-threshold
+	let mergeThreshold = null;
+	const mergeThresholdIndex = process.argv.indexOf('--merge-threshold');
+	if (mergeThresholdIndex !== -1 && process.argv[mergeThresholdIndex + 1]) mergeThreshold = parseFloat(process.argv[mergeThresholdIndex + 1]);
 
 	const options = {
 		diagnostic: process.argv.includes('--diagnostic'),
@@ -73,12 +63,10 @@ if (process.argv[2]) {
 		wait: process.argv.includes('--wait'),
 		noSummary: process.argv.includes('--no-summary'),
 		reset: process.argv.includes('--reset'),
-		episodes,
-		holdout,
-		offset,
-		timeframe,
-		start,
-		end
+		contextLength,
+		patternForgetRate,
+		errorCorrectionThreshold,
+		mergeThreshold
 	};
 
 	const runner = new BrainRunner();

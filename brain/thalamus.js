@@ -99,7 +99,7 @@ export class Thalamus {
 			if (neuron.level === 0)
 				this.neuronsByValue.set(neuron.valueKey, neuron);
 			else
-				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / Neuron.patternForgetRate));
+				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / neuron.patternForgetRate));
 		}
 	}
 
@@ -126,7 +126,7 @@ export class Thalamus {
 			neuron.materializeStrength(currentFrame);
 			neuron.lastActivationFrame = 0;
 			if (neuron.level > 0)
-				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / Neuron.patternForgetRate));
+				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / neuron.patternForgetRate));
 		}
 	}
 

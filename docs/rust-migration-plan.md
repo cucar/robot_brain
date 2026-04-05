@@ -48,7 +48,7 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 ---
 
-## Phase 0 — Centralize Hyperparameters in Brain Constructor (~2 days)
+## Phase 0 — Centralize Hyperparameters in Brain Constructor
 
 All hyperparameters are currently scattered as static class fields and constructor hardcodes across Neuron, Context, Memory, and Brain. Move them all into the Brain constructor options so they can be set from the command line. This clarifies the Brain interface — which is what Rust will eventually mirror as its public API.
 
@@ -63,13 +63,14 @@ All hyperparameters are currently scattered as static class fields and construct
 
 ### Implementation
 
-#### Step 0.1 — Wire command line options and update README
+#### Wire command line options and update README
 - Add `--context-length`, `--forget-rate`, `--error-threshold`, and `merge-threshold` to the job runner CLI
 - Add stock channels (tickers) as a command line argument instead of hardcoded lists (comma separated, no spaces)
 - Add stock channel parameters as command line arguments: `max-positions`, `max-price`, `initial-capital`
 - Job passes them through to Brain constructor options
 - Update README demo sections to show how to run with custom hyperparameters and stock selections
 - Verify that tests produce the same results
+- Add another demo for low accuracy 10 repeated episodes learning best actions to perform in each situation: node run-brain.js stock-test --timeframe 3H --no-summary --episodes 20
 
 ---
 

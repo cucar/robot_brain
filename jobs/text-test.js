@@ -26,13 +26,15 @@ export default class TextTestJob extends Job {
 	/**
 	 * Apply command line options to config
 	 */
-	applyOptions(options) {
-		if (options.episodes !== null && options.episodes !== undefined)
-			this.config.maxEpisodes = options.episodes;
-		if (options.pattern !== null && options.pattern !== undefined)
-			this.config.pattern = options.pattern;
-		if (options.iterations !== null && options.iterations !== undefined)
-			this.config.iterationsPerEpisode = options.iterations;
+	applyOptions() {
+		const episodesIndex = process.argv.indexOf('--episodes');
+		if (episodesIndex !== -1 && process.argv[episodesIndex + 1]) this.config.maxEpisodes = parseInt(process.argv[episodesIndex + 1]);
+
+		const patternIndex = process.argv.indexOf('--pattern');
+		if (patternIndex !== -1 && process.argv[patternIndex + 1]) this.config.pattern = process.argv[patternIndex + 1];
+
+		const iterationsIndex = process.argv.indexOf('--iterations');
+		if (iterationsIndex !== -1 && process.argv[iterationsIndex + 1]) this.config.iterationsPerEpisode = parseInt(process.argv[iterationsIndex + 1]);
 	}
 
 	/**

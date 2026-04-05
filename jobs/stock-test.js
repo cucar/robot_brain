@@ -49,14 +49,41 @@ export default class StockTestJob extends Job {
 	/**
 	 * Apply command line options to config
 	 */
-	applyOptions(options) {
-		if (options.episodes !== null && options.episodes !== undefined) this.config.maxEpisodes = options.episodes;
-		if (options.holdout !== null && options.holdout !== undefined) this.config.holdoutRows = options.holdout;
-		if (options.offset !== null && options.offset !== undefined) this.config.offsetRows = options.offset;
-		if (options.timeframe !== null && options.timeframe !== undefined) this.config.timeframe = options.timeframe;
-		if (options.start !== null && options.start !== undefined) this.config.startDate = options.start;
-		if (options.end !== null && options.end !== undefined) this.config.endDate = options.end;
-		if (options.extendedHours) this.config.extendedHours = true;
+	applyOptions() {
+		const episodesIndex = process.argv.indexOf('--episodes');
+		if (episodesIndex !== -1 && process.argv[episodesIndex + 1]) this.config.maxEpisodes = parseInt(process.argv[episodesIndex + 1]);
+
+		const holdoutIndex = process.argv.indexOf('--holdout');
+		if (holdoutIndex !== -1 && process.argv[holdoutIndex + 1]) this.config.holdoutRows = parseInt(process.argv[holdoutIndex + 1]);
+
+		const offsetIndex = process.argv.indexOf('--offset');
+		if (offsetIndex !== -1 && process.argv[offsetIndex + 1]) this.config.offsetRows = parseInt(process.argv[offsetIndex + 1]);
+
+		const timeframeIndex = process.argv.indexOf('--timeframe');
+		if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) this.config.timeframe = process.argv[timeframeIndex + 1];
+
+		const startIndex = process.argv.indexOf('--start');
+		if (startIndex !== -1 && process.argv[startIndex + 1]) this.config.startDate = process.argv[startIndex + 1];
+
+		const endIndex = process.argv.indexOf('--end');
+		if (endIndex !== -1 && process.argv[endIndex + 1]) this.config.endDate = process.argv[endIndex + 1];
+
+		if (process.argv.includes('--extended-hours')) this.config.extendedHours = true;
+
+		const symbolsIndex = process.argv.indexOf('--symbols');
+		if (symbolsIndex !== -1 && process.argv[symbolsIndex + 1]) this.config.symbols = process.argv[symbolsIndex + 1].split(',');
+
+		const maxPositionsIndex = process.argv.indexOf('--max-positions');
+		if (maxPositionsIndex !== -1 && process.argv[maxPositionsIndex + 1]) StockChannel.maxPositions = parseInt(process.argv[maxPositionsIndex + 1]);
+
+		const maxPriceIndex = process.argv.indexOf('--max-price');
+		if (maxPriceIndex !== -1 && process.argv[maxPriceIndex + 1]) StockChannel.maxPrice = parseFloat(process.argv[maxPriceIndex + 1]);
+
+		const initialCapitalIndex = process.argv.indexOf('--initial-capital');
+		if (initialCapitalIndex !== -1 && process.argv[initialCapitalIndex + 1]) {
+			StockChannel.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
+			StockChannel.cash = StockChannel.initialCapital;
+		}
 	}
 
 	/**

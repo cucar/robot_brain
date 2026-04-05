@@ -35,8 +35,9 @@ export default class MultiChannelTest extends Job {
 	/**
 	 * Apply command line options to config
 	 */
-	applyOptions(options) {
-		if (options.timeframe !== null && options.timeframe !== undefined) this.config.timeframe = options.timeframe;
+	applyOptions() {
+		const timeframeIndex = process.argv.indexOf('--timeframe');
+		if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) this.config.timeframe = process.argv[timeframeIndex + 1];
 	}
 
 	/**
