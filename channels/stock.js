@@ -312,15 +312,15 @@ export class StockChannel extends Channel {
 	calculatePredictionError(predictions, actuals) {
 		const priceChangeDim = `${this.symbol}_price_change`;
 
-		// Filter to price change predictions only
-		const pricePredictions = predictions.filter(p => p.neuron.coordinates[priceChangeDim] !== undefined);
+		// Filter to price change predictions only (predictions have {coordinates, strength, isCorrect})
+		const pricePredictions = predictions.filter(p => p.coordinates[priceChangeDim] !== undefined);
 		if (pricePredictions.length === 0) return null;
 
 		// Calculate weighted predicted percentage change
 		let totalWeightedChange = 0;
 		let totalStrength = 0;
 		for (const pred of pricePredictions) {
-			const bucketValue = pred.neuron.coordinates[priceChangeDim];
+			const bucketValue = pred.coordinates[priceChangeDim];
 			const percentageChange = this.bucketValueToPercentage(bucketValue);
 			totalWeightedChange += percentageChange * pred.strength;
 			totalStrength += pred.strength;
@@ -328,10 +328,10 @@ export class StockChannel extends Channel {
 		if (totalStrength === 0) return null;
 		const predictedChange = totalWeightedChange / totalStrength;
 
-		// Find actual price change from actuals
-		const actualNeuron = actuals.find(n => n.coordinates[priceChangeDim] !== undefined);
-		if (!actualNeuron) return null;
-		const actualChange = this.bucketValueToPercentage(actualNeuron.coordinates[priceChangeDim]);
+		// Find actual price change from actuals (actuals are coordinate objects)
+		const actualCoords = actuals.find(coords => coords[priceChangeDim] !== undefined);
+		if (!actualCoords) return null;
+		const actualChange = this.bucketValueToPercentage(actualCoords[priceChangeDim]);
 
 		// Return absolute error in percentage points
 		const error = Math.abs(predictedChange - actualChange);

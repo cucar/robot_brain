@@ -162,19 +162,18 @@ export class Database {
 			FROM connections
 		`);
 
-		// update all connections
+		// update all connections (using neuron IDs as keys)
 		for (const row of rows) {
 
 			// get the neuron that has the connection
 			const fromNeuron = neurons.get(row.from_neuron_id);
 			if (!fromNeuron) throw new Error('Connection source neuron not found');
 
-			// get the neuron that is the target of the connection
-			const toNeuron = neurons.get(row.to_neuron_id);
-			if (!toNeuron) throw new Error('Connection target neuron not found');
+			// verify the target neuron exists
+			if (!neurons.has(row.to_neuron_id)) throw new Error('Connection target neuron not found');
 
-			// add the connection
-			fromNeuron.createConnection(row.distance, toNeuron, Number(row.strength), Number(row.reward));
+			// add the connection using neuron ID as key
+			fromNeuron.createConnection(row.distance, row.to_neuron_id, Number(row.strength), Number(row.reward));
 		}
 
 		console.log(`  Loaded ${rows.length} connections from table`);
@@ -189,15 +188,16 @@ export class Database {
 		// get the patterns
 		const [rows] = await this.conn.query('SELECT pattern_neuron_id, parent_neuron_id FROM patterns');
 
-		// create the pattern to parent mappings in neurons
+		// create the pattern to parent mappings in neurons (using IDs)
 		for (const row of rows) {
 
-			// map the pattern to its parent
+			// map the pattern to its parent by ID
 			const pattern = neurons.get(row.pattern_neuron_id);
-			pattern.parent = neurons.get(row.parent_neuron_id);
+			pattern.parentId = row.parent_neuron_id;
 
-			// add the pattern to the parent's children array without any context for now - will be loaded later
-			pattern.parent.addChild(pattern);
+			// add the pattern to the parent's children set by ID
+			const parent = neurons.get(row.parent_neuron_id);
+			parent.addChild(row.pattern_neuron_id);
 		}
 	}
 
@@ -303,8 +303,8 @@ export class Database {
 		const connRows = [];
 		for (const neuron of neurons)
 			for (const [distance, targets] of neuron.connections)
-				for (const [toNeuron, conn] of targets)
-					connRows.push([neuron.id, toNeuron.id, distance, conn.strength, conn.reward || 0]);
+				for (const [toNeuronId, conn] of targets)
+					connRows.push([neuron.id, toNeuronId, distance, conn.strength, conn.reward || 0]);
 		if (connRows.length === 0) return;
 		await this.conn.query('INSERT INTO connections (from_neuron_id, to_neuron_id, distance, strength, reward) VALUES ?', [connRows]);
 		console.log(`  Saved ${connRows.length} connections`);
@@ -318,7 +318,7 @@ export class Database {
 		const patternRows = [];
 		for (const pattern of neurons)
 			if (pattern.level > 0)
-				patternRows.push([pattern.id, pattern.parent.id]);
+				patternRows.push([pattern.id, pattern.parentId]);
 		if (patternRows.length === 0) return;
 		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id) VALUES ?', [patternRows]);
 		console.log(`  Saved ${patternRows.length} patterns`);
@@ -331,8 +331,8 @@ export class Database {
 		await this.conn.query('TRUNCATE pattern_past');
 		const pastRows = [];
 		for (const neuron of neurons)
-			for (const { neuron: ctxNeuron, distance, strength } of neuron.getPatternContext())
-				pastRows.push([neuron.id, ctxNeuron.id, distance, strength]);
+			for (const { neuronId, distance, strength } of neuron.getPatternContext())
+				pastRows.push([neuron.id, neuronId, distance, strength]);
 		if (pastRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
 		console.log(`  Saved ${pastRows.length} pattern context entries (to pattern_past)`);

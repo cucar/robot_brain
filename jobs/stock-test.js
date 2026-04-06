@@ -32,7 +32,7 @@ export default class StockTestJob extends Job {
 				// 'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', 'COIN',
 				// 'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', /* 'AMC', */ 'TWLO', 'ZM', 'SNOW'
 			],
-			timeframe: '1Min',                   // Timeframe for data (e.g., '1D', '1Min')
+			timeframe: '3H',                     // Timeframe for data (e.g., '1D', '1Min')
 			startDate: '2026-01-22',             // Start date for data download
 			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)

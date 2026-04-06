@@ -104,35 +104,7 @@ Key insight: within a single neuron, the ordering is natural:
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.0 — Convert all neuron references from pointers to IDs
-
-**Why first**: Every data structure in the system uses object pointers (`Map<Neuron, ...>`, `Set<Neuron>`, direct neuron references). In a distributed system, neurons on different threads/machines can only reference each other by numeric ID. This is the most fundamental change and everything else depends on it.
-
-**Pointer-based fields to convert**:
-
-| Location | Field | Current | Target |
-|---|---|---|---|
-| Neuron | `connections` | `Map<dist, Map<Neuron, ...>>` | `Map<dist, Map<neuronId, ...>>` |
-| Neuron | `children` | `Set<Neuron>` | `Set<neuronId>` |
-| Neuron | `parent` | `Neuron` | `neuronId` |
-| Neuron | `contextRefs` | `Map<Neuron, Set<dist>>` | `Map<neuronId, Set<dist>>` |
-| Context | `entries` | `Map<Neuron, Map<dist, str>>` | `Map<neuronId, Map<dist, str>>` |
-| Memory | `activeNeurons` | `Array<Map<Neuron, state>>` | `Array<Map<neuronId, state>>` |
-
-**All callers that dereference neurons from these maps must go through Thalamus (or a passed-in lookup) to resolve ID → Neuron when they need the actual object** (e.g., to read `neuron.coordinates`, `neuron.type`, `neuron.channel`). Most internal processing (connections, context matching, voting) only needs the ID and stored numeric data — no object dereference required.
-
-**Implementation**: convert one field at a time, fix all callers, verify tests after each sub-step:
-1. `connections` — largest surface area, most callers
-2. `children` and `parent`
-3. `contextRefs`
-4. `Context.entries`
-5. `Memory.activeNeurons` — ~15 methods read this assuming Neuron objects, all need updating
-
-**This step alone is ~3–4 days** given the surface area.
-
-**Verify**: all tests pass after each sub-step, results identical
-
-#### Step 1.0b — Move neuron metadata to Thalamus
+#### Step 1.0 — Move neuron metadata to Thalamus
 
 Neurons currently store metadata they never use internally (`channel`, `type`, `coordinates`, `parent`). This metadata is only read by Brain, Memory, and Thalamus for routing/filtering/consensus decisions. Moving it to Thalamus makes neurons pure data processors — they only store learned associations and do pattern matching/voting based on numeric IDs and strengths.
 
@@ -158,7 +130,7 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 
 **Verify**: all tests pass after each sub-step, results identical
 
-#### Step 1.0c — Unify sensory and pattern neuron constructors
+#### Step 1.0b — Unify sensory and pattern neuron constructors
 
 With metadata moved to Thalamus (Step 1.0b), the Neuron constructor simplifies to just `(id, level, parentId)`. Sensory neurons are `(id, 0, null)` — no structural difference from pattern neurons anymore.
 

@@ -105,10 +105,10 @@ export class Dump {
 	collectConnectionsData(neuron) {
 		const connections = [];
 		for (const [distance, distanceMap] of neuron.connections) {
-			for (const [toNeuron, conn] of distanceMap) {
+			for (const [toNeuronId, conn] of distanceMap) {
 				connections.push({
 					distance,
-					toNeuronId: toNeuron.id,
+					toNeuronId,
 					strength: conn.strength,
 					reward: conn.reward || 0
 				});
@@ -126,7 +126,7 @@ export class Dump {
 	 */
 	collectPatternsData(neuron) {
 		const patterns = [];
-		for (const pattern of neuron.children) patterns.push(pattern.id);
+		for (const patternId of neuron.children) patterns.push(patternId);
 		patterns.sort((a, b) => a - b);
 		return patterns;
 	}
@@ -136,9 +136,9 @@ export class Dump {
 	 */
 	collectContextRefsData(neuron) {
 		const contextRefs = [];
-		for (const [contextNeuron, distances] of neuron.contextRefs) {
+		for (const [neuronId, distances] of neuron.contextRefs) {
 			contextRefs.push({
-				neuronId: contextNeuron.id,
+				neuronId,
 				distances: Array.from(distances).sort((a, b) => a - b)
 			});
 		}
@@ -151,9 +151,9 @@ export class Dump {
 	 */
 	collectPatternContextData(neuron) {
 		const patternContext = [];
-		for (const { neuron: ctxNeuron, distance, strength } of neuron.getPatternContext()) {
+		for (const { neuronId, distance, strength } of neuron.getPatternContext()) {
 			patternContext.push({
-				neuronId: ctxNeuron.id,
+				neuronId,
 				distance,
 				strength
 			});

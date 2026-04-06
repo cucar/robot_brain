@@ -17,7 +17,7 @@ export default class Brain {
 
 		// set hyperparameters
 		this.contextLength = options?.contextLength ?? 10; // number of frames a base neuron stays active
-		this.errorCorrectionThreshold = options?.errorCorrectionThreshold ?? 0.65; // if the error is below this threshold, no need to create a new correction pattern
+		this.errorCorrectionThreshold = options?.errorCorrectionThreshold ?? 0.5; // if the error is below this threshold, no need to create a new correction pattern
 		this.mergeThreshold = options?.mergeThreshold ?? 0.5; // percentage of matched entries needed for context merge
 		this.patternForgetRate = options?.patternForgetRate ?? 0.01; // how many frames will a pattern be remembered (inverse)
 
@@ -188,9 +188,6 @@ export default class Brain {
 
 		// Pre-create action neurons for all channels so that we can explore
 		this.thalamus.initializeActionNeurons();
-
-		// Build per-channel action sequence set and pass to memory
-		this.memory.setNoActionSequenceChannels(this.thalamus.getNoActionSequenceChannels());
 	}
 
 	/**
@@ -307,7 +304,7 @@ export default class Brain {
 		if (this.debug) console.log(`OBSERVING FRAME ${this.frameNumber}`);
 
 		// Get all frame actions from previous frame's inference (from in-memory inferredNeurons)
-		const frameActions = this.memory.getInferredActions();
+		const frameActions = this.getInferredActions();
 
 		// Process each channel: get inputs from channel, get outputs from previous inference
 		for (const [channelName, channel] of this.thalamus.getChannels()) {
@@ -329,6 +326,20 @@ export default class Brain {
 	}
 
 	/**
+	 * Get inferred actions grouped by channel from memory's inferred neurons.
+	 * @returns {Map<string, Array>} - Map of channel names to array of action data {coordinates, strength, reward}
+	 */
+	getInferredActions() {
+		const channelOutputs = new Map();
+		for (const { neuron, strength, reward } of this.memory.getInferences()) {
+			if (neuron.type !== 'action') continue;
+			if (!channelOutputs.has(neuron.channel)) channelOutputs.set(neuron.channel, []);
+			channelOutputs.get(neuron.channel).push({ coordinates: neuron.coordinates, strength, reward });
+		}
+		return channelOutputs;
+	}
+
+	/**
 	 * Get channel-specific feedback as a Map of channel_name -> reward
 	 * Each channel provides its own reward signal based on its objectives
 	 */
@@ -338,7 +349,7 @@ export default class Brain {
 		let feedbackCount = 0;
 
 		// Get all actions from previous frame's inference (from in-memory inferredNeurons)
-		const frameActions = this.memory.getInferredActions();
+		const frameActions = this.getInferredActions();
 
 		// Get reward for each channel
 		for (const [channelName, channel] of this.thalamus.getChannels()) {
@@ -355,7 +366,7 @@ export default class Brain {
 
 		// Age rewards: push current rewards to front, trim to context window
 		this.rewards.unshift(rewards);
-		if (this.rewards.length > this.memory.contextLength) this.rewards.pop();
+		if (this.rewards.length > this.contextLength) this.rewards.pop();
 
 		if (this.debug) {
 			if (feedbackCount > 0) console.log(`Received rewards from ${feedbackCount} channels`);
@@ -377,7 +388,25 @@ export default class Brain {
 		this.activateNeurons(neurons);
 
 		// Track inference performance (event accuracy, action rewards, and continuous prediction errors)
-		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), this.memory.getNeuronsAtAge(0), this.rewards[0], this.thalamus.getChannels());
+		const activeNeuronIds = new Set(this.memory.getNeuronsAtAge(0).keys());
+		const actualEvents = this.getInferredEvents(activeNeuronIds);
+		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), activeNeuronIds, actualEvents, this.rewards[0], this.thalamus.getChannels());
+	}
+
+	/**
+	 * Get actual event coordinates grouped by channel from currently active neurons.
+	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
+	 * @returns {Map<string, Array>} - Map of channel name to array of coordinate objects
+	 */
+	getInferredEvents(activeNeuronIds) {
+		const result = new Map();
+		for (const neuronId of activeNeuronIds) {
+			const neuron = this.thalamus.neurons.get(neuronId);
+			if (!neuron || neuron.type !== 'event') continue;
+			if (!result.has(neuron.channel)) result.set(neuron.channel, []);
+			result.get(neuron.channel).push(neuron.coordinates);
+		}
+		return result;
 	}
 
 	/**
@@ -419,40 +448,17 @@ export default class Brain {
 	recognizeLevel(level) {
 		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
-		// get active recognizer neurons at this level with their per-age contexts
-		const recognizers = this.memory.getRecognizersWithContext(level);
-		if (recognizers.length === 0) {
-			if (this.debug) console.log(`No active neurons at level ${level}`);
-			return false;
-		}
-
-		// Match patterns (parallelizable) - each recognizer uses its own age-appropriate context
-		// A pattern can only be recognized once (by the first recognizer that matches it)
-		const matchedPatterns = [];
-		const recognizedPatterns = new Set();
-		for (const { neuron: parent, age, context } of recognizers) {
-			const match = parent.matchPattern(context, this.frameNumber);
-			if (match && !recognizedPatterns.has(match.pattern)) {
-				recognizedPatterns.add(match.pattern);
-				matchedPatterns.push({ parent, age, match });
-			}
-		}
-
-		// If no patterns matched, stop here
+		// Pass memory snapshot to thalamus — it owns all neuron access
+		const matchedPatterns = this.thalamus.recognizeLevel(level, this.memory.activeNeurons, this.frameNumber);
 		if (matchedPatterns.length === 0) {
 			if (this.debug) console.log(`No pattern matches found at level ${level}`);
 			return false;
 		}
 
-		// activate the matched pattern neurons and refine their context
+		// Activate matched patterns in memory and register death
 		for (const { parent, age, match } of matchedPatterns) {
-
-			// activate the pattern neuron at the recognizer's age - not at age=0
 			const deathFrame = this.memory.activatePattern(match.pattern, parent, age, this.frameNumber);
 			this.thalamus.registerDeath(match.pattern, deathFrame);
-
-			// refine the pattern context based on observations
-			match.pattern.refineContext(match.common, match.novel, match.missing);
 		}
 
 		if (this.debug)
@@ -468,20 +474,27 @@ export default class Brain {
 	 * Context neurons (age > 0) learn about newly active neurons (age = 0).
 	 */
 	updateConnections() {
+		const neurons = this.thalamus.neurons;
 
-		// Get newly active sensory neurons (age=0, level=0 - events and actions)
-		const newActiveNeurons = this.memory.getNewSensoryNeurons();
-
-		// Each context neuron learns connections at its own distance
-		const channelActions = this.thalamus.getAllChannelActions();
-		for (const { neuron, age } of this.memory.getContextNeurons()) {
-
-			// do not allow action neurons to learn connections unless action sequences are enabled for their channel
-			if (this.memory.skipActionNeuron(neuron)) continue;
-
-			// learn connections from the context neuron to the newly active neurons
-			neuron.learnConnections(age, newActiveNeurons, this.rewards[0], channelActions);
+		// Get newly active sensory neurons (age=0, level=0) with metadata for connection learning
+		const newActiveNeurons = [];
+		const newActiveNeuronIds = new Set();
+		for (const neuronId of this.memory.getNeuronsAtAge(0).keys()) {
+			const neuron = neurons.get(neuronId);
+			if (neuron && neuron.level === 0) {
+				newActiveNeurons.push(neuron);
+				newActiveNeuronIds.add(neuronId);
+			}
 		}
+
+		// Each context neuron (age > 0) learns connections at its own distance
+		const channelActionIds = this.thalamus.getAllChannelActionIds();
+		for (let age = 1; age < this.memory.depth; age++)
+			for (const neuronId of this.memory.getNeuronsAtAge(age).keys()) {
+				const neuron = neurons.get(neuronId);
+				if (!neuron || this.thalamus.skipActionNeuron(neuron)) continue;
+				neuron.learnConnections(age, newActiveNeurons, newActiveNeuronIds, this.rewards[0], channelActionIds);
+			}
 	}
 
 	/**
@@ -489,9 +502,18 @@ export default class Brain {
 	 * Iterates over neurons that voted to find prediction errors.
 	 */
 	learnNewPatterns() {
+		const neurons = this.thalamus.neurons;
 
-		// Get active sensory neurons (level=0 - events and actions)
-		const sensoryNeurons = this.memory.getSensoryNeurons();
+		// Get active sensory neurons (level=0) indexed by age
+		const sensoryNeurons = [];
+		for (let age = 0; age < this.memory.depth; age++) {
+			const ageNeurons = [];
+			for (const neuronId of this.memory.getNeuronsAtAge(age).keys()) {
+				const neuron = neurons.get(neuronId);
+				if (neuron && neuron.level === 0) ageNeurons.push(neuron);
+			}
+			sensoryNeurons.push(ageNeurons);
+		}
 
 		// check for each neuron if it needs a new error correction pattern
 		const corrections = this.getErrorCorrections(sensoryNeurons);
@@ -506,24 +528,30 @@ export default class Brain {
 	 * returns the error corrections we need for all voters
 	 */
 	getErrorCorrections(sensoryNeurons) {
+		const neurons = this.thalamus.neurons;
 
 		// get newly active events (age=0, level=0)
 		const events = this.getActualEvents(sensoryNeurons);
 
 		// check for each neuron if it needs a new error correction pattern
 		const corrections = [];
-		for (const { neuron, age, votes, context } of this.memory.getVotersWithContext())
-			if (this.needsErrorCorrection(votes, events))
-				corrections.push({ neuron, age, context });
+		for (let age = 1; age < this.memory.depth; age++)
+			for (const [neuronId, state] of this.memory.getNeuronsAtAge(age)) {
+				if (!state.votes || state.votes.length === 0) continue;
+				const neuron = neurons.get(neuronId);
+				if (!neuron) continue;
+				if (this.needsErrorCorrection(state.votes, events))
+					corrections.push({ neuron, age, context: state.context });
+			}
 		return corrections;
 	}
 
 	/**
-	 * returns the actual events from the given neurons (new frame)
+	 * returns the actual event neuron IDs from the given neurons (new frame)
 	 */
 	getActualEvents(sensoryNeurons) {
 		const events = new Set();
-		for (const neuron of sensoryNeurons[0])if (neuron.type === 'event') events.add(neuron);
+		for (const neuron of sensoryNeurons[0]) if (neuron.type === 'event') events.add(neuron.id);
 		return events;
 	}
 
@@ -535,11 +563,13 @@ export default class Brain {
 	needsErrorCorrection(votes, actualEvents) {
 		let failedEvents = 0;
 		let totalEvents = 0;
-		for (const vote of votes)
-			if (vote.neuron.type === 'event') {
+		for (const vote of votes) {
+			const votedNeuron = this.thalamus.neurons.get(vote.neuronId);
+			if (votedNeuron && votedNeuron.type === 'event') {
 				totalEvents++;
-				if (!actualEvents.has(vote.neuron)) failedEvents++;
+				if (!actualEvents.has(vote.neuronId)) failedEvents++;
 			}
+		}
 		const eventError = failedEvents / totalEvents;
 		// if (eventError > this.errorCorrectionThreshold) console.log('correctError', eventError, totalEvents);
 		return eventError > this.errorCorrectionThreshold;
@@ -549,10 +579,11 @@ export default class Brain {
 	 * Create pattern neurons and populate their connections from the future.
 	 */
 	createErrorPatterns(corrections, sensoryNeurons) {
+		const channelActionIds = this.thalamus.getAllChannelActionIds();
 		for (const { neuron, age, context } of corrections) {
 
 			// create the new pattern neuron
-			const pattern = Neuron.createPattern(neuron.level + 1, neuron, this.patternForgetRate, this.mergeThreshold);
+			const pattern = Neuron.createPattern(neuron.level + 1, neuron.id, this.patternForgetRate, this.mergeThreshold);
 
 			// create the future connections of the pattern from currently observed neurons
 			for (let a = 0; a < age && a < sensoryNeurons.length; a++)
@@ -560,11 +591,11 @@ export default class Brain {
 
 					// save the event/action - include observed reward for actions - for events it's zero
 					const reward = this.rewards[a].get(n.channel) || 0;
-					pattern.createConnection(age - a, n, 1, reward);
+					pattern.createConnection(age - a, n.id, 1, reward);
 
 					// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
 					if (reward < 0) {
-						const alt = pattern.findAlternativeAction(age - a, n.channel, n, this.thalamus.getAllChannelActions());
+						const alt = pattern.findAlternativeAction(age - a, n.channel, n.id, channelActionIds);
 						if (alt) pattern.createConnection(age - a, alt, 1, 0);
 					}
 				}
@@ -585,8 +616,8 @@ export default class Brain {
 				if (ctxNeuron.level === neuron.level)
 					pattern.addPatternContext(ctxNeuron, distance, 1);
 
-			// add the pattern to parent routing table
-			neuron.addChild(pattern);
+			// add the pattern to parent routing table (by ID)
+			neuron.addChild(pattern.id);
 		}
 	}
 
@@ -611,8 +642,22 @@ export default class Brain {
 		// Ensure every channel has an action - explore if none inferred
 		this.ensureChannelActions(inferences);
 
-		// call diagnostics to show the debug logs for votes
-		if (this.debug) this.diagnostics.debugVotes(votes, inferences, this.thalamus.channels);
+		// call diagnostics to show the debug logs for votes - pre-resolve all neuron data
+		if (this.debug) {
+			const resolvedVotes = votes.map(v => ({
+				targetId: v.neuron.id,
+				targetType: v.neuron.type,
+				targetChannel: v.neuron.channel,
+				targetCoords: v.neuron.coordinates,
+				voterId: v.voter.id,
+				voterLevel: v.voter.level,
+				voterLabel: this.formatNeuronLabel(v.voter),
+				strength: v.strength,
+				reward: v.reward,
+				distance: v.distance
+			}));
+			this.diagnostics.debugVotes(resolvedVotes, inferences, this.thalamus.channels);
+		}
 
 		// Save inferences to memory (clears old inferences first)
 		this.memory.saveInferences(inferences);
@@ -624,28 +669,45 @@ export default class Brain {
 	 */
 	collectVotes() {
 		const votes = [];
+		const neurons = this.thalamus.neurons;
 
 		// clear the previous votes before setting new ones
 		this.memory.clearVotes();
 
 		// Build all contexts once for all ages/levels
-		const contexts = this.memory.getContexts();
+		const contexts = new Map();
+		for (let ctxAge = 1; ctxAge < this.memory.depth; ctxAge++)
+			for (const neuronId of this.memory.getNeuronsAtAge(ctxAge).keys()) {
+				const neuron = neurons.get(neuronId);
+				if (!neuron || this.thalamus.skipActionNeuron(neuron)) continue;
+				for (let age = 0; age < ctxAge; age++) {
+					const key = `${age}:${neuron.level}`;
+					if (!contexts.has(key)) contexts.set(key, []);
+					contexts.get(key).push({ neuron, distance: ctxAge - age });
+				}
+			}
 
-		// Collect votes from neurons that can vote
-		for (const { voter, age, state } of this.memory.getVotingNeurons()) {
+		// Collect votes from neurons that can vote (all ages except the oldest)
+		for (let age = 0; age < this.memory.depth - 1; age++)
+			for (const [neuronId, state] of this.memory.getNeuronsAtAge(age)) {
+				const voter = neurons.get(neuronId);
+				if (!voter || this.thalamus.skipActionNeuron(voter)) continue;
 
-			// if a pattern was activated by the neuron, its inference is suppressed - skip
-			if (state.activatedPattern !== null) continue;
+				// if a pattern was activated by the neuron, its inference is suppressed - skip
+				if (state.activatedPattern !== null) continue;
 
-			// get the votes of the neuron
-			const neuronVotes = voter.vote(age);
+				// get the votes of the neuron
+				const neuronVotes = voter.vote(age);
 
-			// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
-			this.memory.setVotes(voter, age, neuronVotes, contexts.get(`${age}:${voter.level}`) ?? []);
+				// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
+				this.memory.setVotes(neuronId, age, neuronVotes, contexts.get(`${age}:${voter.level}`) ?? []);
 
-			// add the votes to the returned array
-			for (const vote of neuronVotes) votes.push({ voter: voter, ...vote });
-		}
+				// add the votes to the returned array - resolve neuronId to neuron object for consensus
+				for (const vote of neuronVotes) {
+					const neuron = neurons.get(vote.neuronId);
+					if (neuron) votes.push({ voter, neuron, ...vote });
+				}
+			}
 
 		return votes;
 	}
@@ -806,6 +868,27 @@ export default class Brain {
 				reward: 0
 			});
 		}
+	}
+
+	/**
+	 * Format a neuron's coordinates as a display label.
+	 * For pattern neurons, resolves up the parent chain to find root sensory coordinates.
+	 * @param {Neuron} neuron
+	 * @returns {string}
+	 */
+	formatNeuronLabel(neuron) {
+		// Pattern neurons: resolve parent chain to root sensory neuron
+		if (neuron.level > 0 && neuron.parentId != null) {
+			const parent = this.thalamus.neurons.get(neuron.parentId);
+			if (parent) return this.formatNeuronLabel(parent);
+			return `n${neuron.id}(parent:${neuron.parentId})`;
+		}
+		// Sensory neurons: format coordinates
+		if (!neuron.coordinates) return `n${neuron.id}`;
+		return Object.entries(neuron.coordinates)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([k, v]) => `${k}=${v}`)
+			.join(', ');
 	}
 
 	/**

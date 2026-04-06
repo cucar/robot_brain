@@ -1,3 +1,4 @@
+import { Context } from './context.js';
 import { Neuron } from './neuron.js';
 
 /**
@@ -204,14 +205,94 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get set of channel names that have action sequence learning disabled
-	 * @returns {Set<string>} - Set of channel names where actions don't participate in learning context
+	 * Recognize patterns at a given level using active neuron state from memory.
+	 * Brain passes the raw memory snapshot; Thalamus owns all neuron access.
+	 * @param {number} level - The level to process
+	 * @param {Array<Map<number, {activatedPattern, votes, context}>>} activeNeuronsByAge - Memory snapshot
+	 * @param {number} frameNumber - Current frame number for lazy decay
+	 * @returns {Array<{parent, age, match}>} - Matched patterns to activate
 	 */
-	getNoActionSequenceChannels() {
-		const result = new Set();
-		for (const [channelName, channel] of this.channels)
-			if (!channel.actionSequences) result.add(channelName);
-		return result;
+	recognizeLevel(level, activeNeuronsByAge, frameNumber) {
+
+		// get the contexts (neuron id and distance pairs) organized by age to be used for recognition
+		const contextByAge = this.getContextByAge(level, activeNeuronsByAge);
+
+		// get the active neurons that will do the recognition
+		const recognizers = this.getRecognizers(level, contextByAge, activeNeuronsByAge);
+		if (recognizers.length === 0) return [];
+
+		// ask recognizers to match the contexts to known patterns
+		const matchedPatterns = this.matchPatterns(recognizers, frameNumber);
+
+		// Refine context on matched patterns
+		// TODO: this will be done automatically by the parent when matching the pattern when we move contexts to parents
+		for (const { match } of matchedPatterns)
+			match.pattern.refineContext(match.common, match.novel, match.missing, this.neurons);
+
+		return matchedPatterns;
+	}
+
+	/**
+	 * Build context maps keyed by age for a given level.
+	 * @returns {Map<number, Context>}
+	 */
+	getContextByAge(level, activeNeuronsByAge) {
+		const contextByAge = new Map();
+		for (let ctxAge = 1; ctxAge < activeNeuronsByAge.length; ctxAge++)
+			for (const neuronId of (activeNeuronsByAge[ctxAge] ?? new Map()).keys()) {
+				const neuron = this.neurons.get(neuronId);
+				if (this.skipActionNeuron(neuron) || neuron.level !== level) continue;
+				for (let age = 0; age < ctxAge; age++) {
+					if (!contextByAge.has(age)) contextByAge.set(age, new Context());
+					contextByAge.get(age).addNeuron(neuronId, ctxAge - age, 1);
+				}
+			}
+		return contextByAge;
+	}
+
+	/**
+	 * Check if a neuron should be skipped (action neuron in a channel without action sequences)
+	 */
+	skipActionNeuron(neuron) {
+		if (neuron.level !== 0 || neuron.type !== 'action') return false;
+		const channel = this.channels.get(neuron.channel);
+		return channel && !channel.actionSequences;
+	}
+
+	/**
+	 * Collect recognizer neurons at a given level, paired with their pre-built contexts.
+	 * @returns {Array<{neuron, age, context: Context}>}
+	 */
+	getRecognizers(level, contextByAge, activeNeuronsByAge) {
+		const recognizers = [];
+		for (let age = 0; age < activeNeuronsByAge.length; age++) {
+			const context = contextByAge.get(age);
+			if (!context) continue;
+			for (const [neuronId, state] of (activeNeuronsByAge[age] ?? new Map())) {
+				const neuron = this.neurons.get(neuronId);
+				if (!neuron || state.activatedPattern !== null) continue;
+				if (this.skipActionNeuron(neuron) || neuron.level !== level) continue;
+				recognizers.push({ neuron, age, context });
+			}
+		}
+		return recognizers;
+	}
+
+	/**
+	 * Match recognizers against their patterns. Each pattern can only be recognized once.
+	 * @returns {Array<{parent, age, match}>}
+	 */
+	matchPatterns(recognizers, frameNumber) {
+		const matchedPatterns = [];
+		const recognizedPatterns = new Set();
+		for (const { neuron: parent, age, context } of recognizers) {
+			const match = parent.matchPattern(context, frameNumber, this.neurons);
+			if (match && !recognizedPatterns.has(match.pattern)) {
+				recognizedPatterns.add(match.pattern);
+				matchedPatterns.push({ parent, age, match });
+			}
+		}
+		return matchedPatterns;
 	}
 
 	/**
@@ -282,6 +363,20 @@ export class Thalamus {
 	 */
 	getAllChannelActions() {
 		return this.channelActions;
+	}
+
+	/**
+	 * Get all channel action neuron IDs as a Map
+	 * @returns {Map<string, Set<number>>} - Map of channel name to action neuron IDs
+	 */
+	getAllChannelActionIds() {
+		const result = new Map();
+		for (const [channelName, actionNeurons] of this.channelActions) {
+			const ids = new Set();
+			for (const neuron of actionNeurons) ids.add(neuron.id);
+			result.set(channelName, ids);
+		}
+		return result;
 	}
 
 	/**
@@ -485,7 +580,10 @@ export class Thalamus {
 		const newlyDeletable = this.cleanupContextReferences(pattern, currentFrame);
 
 		// Remove pattern from its parent's routing table (if parent still exists)
-		if (pattern.parent && this.neurons.has(pattern.parent.id)) pattern.parent.removeChild(pattern);
+		if (pattern.parentId) {
+			const parentNeuron = this.neurons.get(pattern.parentId);
+			if (parentNeuron) parentNeuron.removeChild(pattern.id);
+		}
 
 		// Remove from death ledger
 		this.unregisterDeath(pattern);
@@ -497,7 +595,7 @@ export class Thalamus {
 		this.decrementLevelCount(pattern.level);
 
 		// memory cleanup
-		pattern.parent = null;
+		pattern.parentId = null;
 		delete pattern.context;
 		delete pattern.contextRefs;
 		delete pattern.children;
@@ -520,15 +618,19 @@ export class Thalamus {
 
 		// clean up forward references (neurons this pattern referenced)
 		// most of the time, this should be empty if the neuron is getting deleted, but it's possible for some left over
-		for (const entry of neuron.context.getEntries())
-			entry.neuron.removeContextRef(neuron, entry.distance);
+		for (const entry of neuron.context.getEntries()) {
+			const ctxNeuron = this.neurons.get(entry.neuronId);
+			if (ctxNeuron) ctxNeuron.removeContextRef(neuron.id, entry.distance);
+		}
 
 		// for each pattern that has this neuron in their context, clean them up
-		for (const [referencingPattern, distances] of neuron.contextRefs) {
+		for (const [referencingPatternId, distances] of neuron.contextRefs) {
+			const referencingPattern = this.neurons.get(referencingPatternId);
+			if (!referencingPattern) continue;
 
-			// Remove this neuron from that pattern's context
+			// Remove this neuron from that pattern's context (by neuron ID)
 			for (const distance of distances)
-				referencingPattern.removeContext(neuron, distance);
+				referencingPattern.removeContext(neuron.id, distance);
 
 			// Check if the referencing pattern became deletable
 			if (referencingPattern.canDelete(currentFrame))

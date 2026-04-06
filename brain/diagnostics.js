@@ -44,7 +44,8 @@ export class Diagnostics {
 	}
 
 	/**
-	 * Show debug information for the inference votes
+	 * Show debug information for the inference votes.
+	 * Receives pre-resolved vote data — no neuron objects, only display-ready fields.
 	 */
 	debugVotes(votes, winners, channels) {
 
@@ -57,9 +58,8 @@ export class Diagnostics {
 		// Group votes by channel
 		const votesByChannel = new Map();
 		for (const vote of votes) {
-			const channelName = vote.neuron.channel;
-			if (!votesByChannel.has(channelName)) votesByChannel.set(channelName, []);
-			votesByChannel.get(channelName).push(vote);
+			if (!votesByChannel.has(vote.targetChannel)) votesByChannel.set(vote.targetChannel, []);
+			votesByChannel.get(vote.targetChannel).push(vote);
 		}
 
 		// Debug votes for each channel
@@ -81,7 +81,7 @@ export class Diagnostics {
 	 * @param {Object} channel - Channel instance for formatting
 	 */
 	debugEventVotes(allVotes, winnerIds, channel) {
-		const eventVotes = allVotes.filter(v => v.neuron.type === 'event');
+		const eventVotes = allVotes.filter(v => v.targetType === 'event');
 		if (eventVotes.length === 0) return;
 
 		// Group votes by event neuron and build metadata
@@ -120,18 +120,18 @@ export class Diagnostics {
 	groupVotesByNeuron(votes) {
 		const votesByNeuron = new Map();
 		for (const v of votes) {
-			if (!votesByNeuron.has(v.neuron.id)) {
-				const coords = v.neuron.coordinates;
-				const coordsStr = Object.entries(coords).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join(', ');
-				votesByNeuron.set(v.neuron.id, {
-					neuronId: v.neuron.id,
+			if (!votesByNeuron.has(v.targetId)) {
+				const coords = v.targetCoords;
+				const coordsStr = Object.entries(coords).sort(([a], [b]) => a.localeCompare(b)).map(([k, val]) => `${k}=${val}`).join(', ');
+				votesByNeuron.set(v.targetId, {
+					neuronId: v.targetId,
 					coordsStr,
 					dimensions: coords,
 					votes: [],
 					totalStrength: 0
 				});
 			}
-			const data = votesByNeuron.get(v.neuron.id);
+			const data = votesByNeuron.get(v.targetId);
 			data.votes.push(v);
 			data.totalStrength += v.strength;
 		}
@@ -163,7 +163,7 @@ export class Diagnostics {
 	 * @param {Object} channel - Channel instance for formatting
 	 */
 	debugActionVotes(allVotes, winnerIds, channel) {
-		const actionVotes = allVotes.filter(v => v.neuron.type === 'action');
+		const actionVotes = allVotes.filter(v => v.targetType === 'action');
 		if (actionVotes.length === 0) return;
 
 		// Group by action label and aggregate
@@ -201,8 +201,7 @@ export class Diagnostics {
 	groupActionsByLabel(actionVotes, channel) {
 		const actionGroups = new Map();
 		for (const v of actionVotes) {
-			const coords = v.neuron.coordinates;
-			const label = channel.formatActionLabel ? channel.formatActionLabel(coords) : JSON.stringify(coords);
+			const label = channel.formatActionLabel ? channel.formatActionLabel(v.targetCoords) : JSON.stringify(v.targetCoords);
 			if (!actionGroups.has(label))
 				actionGroups.set(label, []);
 			actionGroups.get(label).push(v);
@@ -233,7 +232,7 @@ export class Diagnostics {
 	findWinningActionLabel(actionGroups, winnerIds) {
 		for (const [label, votes] of actionGroups)
 			for (const vote of votes)
-				if (winnerIds.has(vote.neuron.id)) return label;
+				if (winnerIds.has(vote.targetId)) return label;
 		throw new Error('Cannot find winning action label');
 	}
 
@@ -249,11 +248,9 @@ export class Diagnostics {
 		// separate entries so multi-distance voting is visible as distinct rows in the output
 		const bySource = new Map();
 		for (const v of votes) {
-			const coords = this.formatNeuronCoords(v.voter);
-			const level = v.voter.level;
-			const key = `${v.voter.id}:${v.distance}`;
+			const key = `${v.voterId}:${v.distance}`;
 			if (!bySource.has(key))
-				bySource.set(key, { voterId: v.voter.id, strength: 0, weightedRewardSum: 0, coords, level, distance: v.distance });
+				bySource.set(key, { voterId: v.voterId, strength: 0, weightedRewardSum: 0, coords: v.voterLabel, level: v.voterLevel, distance: v.distance });
 			const agg = bySource.get(key);
 			agg.strength += v.strength;
 			agg.weightedRewardSum += v.strength * v.reward;
@@ -264,25 +261,6 @@ export class Diagnostics {
 			agg.reward = agg.strength > 0 ? agg.weightedRewardSum / agg.strength : 0;
 
 		return [...bySource.values()];
-	}
-
-	/**
-	 * Format neuron coordinates for display (brain.js version)
-	 * @param {Object} neuron - Neuron object
-	 * @returns {string} Formatted coordinates string
-	 */
-	formatNeuronCoords(neuron) {
-
-		// Pattern neurons (level > 0) have a parent neuron instead of direct coordinates
-		if (neuron.level > 0 && neuron.parent)
-			return this.formatNeuronCoords(neuron.parent);
-
-		// Sensory neurons (level 0) have coordinates
-		if (!neuron.coordinates) return `n${neuron.id}`;
-		return Object.entries(neuron.coordinates)
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([k, v]) => `${k}=${v}`)
-			.join(', ');
 	}
 
 	/**
@@ -327,12 +305,13 @@ export class Diagnostics {
 	/**
 	 * Track inference performance for both events and actions.
 	 * Also calculates continuous prediction errors via channel callbacks.
-	 * @param {Array} inferences - Array of inferred neurons {neuron, strength}
-	 * @param {Map} neuronsAtAge0 - Map of neurons active at age 0 (reality)
-	 * @param {Map} rewards - Map of channel name to reward value
+	 * @param {Array<{neuron, strength}>} inferences - Inferred neurons with strength
+	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
+	 * @param {Map<string, Array>} actualEventCoordsByChannel - Map of channel → array of coordinate objects
+	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {IterableIterator<[string, object]>} channels - Iterator of [channelName, channel] pairs
 	 */
-	trackInferencePerformance(inferences, neuronsAtAge0, rewards, channels) {
+	trackInferencePerformance(inferences, activeNeuronIds, actualEventCoordsByChannel, rewards, channels) {
 		let eventCorrect = 0;
 		let eventTotal = 0;
 		let actionReward = 0;
@@ -340,20 +319,19 @@ export class Diagnostics {
 
 		// Group event predictions by channel for continuous error calculation
 		const predictionsByChannel = new Map();
-		const actualsByChannel = new Map();
 
 		for (const { neuron, strength } of inferences) {
 
 			// Track event prediction accuracy
 			if (neuron.type === 'event') {
 				eventTotal++;
-				const isCorrect = neuronsAtAge0.has(neuron);
+				const isCorrect = activeNeuronIds.has(neuron.id);
 				if (isCorrect) eventCorrect++;
 
 				// Group for continuous error calculation
 				if (!predictionsByChannel.has(neuron.channel))
 					predictionsByChannel.set(neuron.channel, []);
-				predictionsByChannel.get(neuron.channel).push({ neuron, strength, isCorrect });
+				predictionsByChannel.get(neuron.channel).push({ coordinates: neuron.coordinates, strength, isCorrect });
 			}
 			// Track action reward from the action's channel
 			else if (neuron.type === 'action') {
@@ -363,27 +341,19 @@ export class Diagnostics {
 			}
 		}
 
-		// Group actual event neurons by channel
-		for (const [neuron] of neuronsAtAge0) {
-			if (neuron.type !== 'event') continue;
-			if (!actualsByChannel.has(neuron.channel))
-				actualsByChannel.set(neuron.channel, []);
-			actualsByChannel.get(neuron.channel).push(neuron);
-		}
-
 		// Track mispredictions for each channel
 		for (const [channelName] of channels) {
 			const predictions = predictionsByChannel.get(channelName) || [];
-			const actuals = actualsByChannel.get(channelName) || [];
+			const actuals = actualEventCoordsByChannel.get(channelName) || [];
 
 			// Find wrong predictions
-			for (const { neuron, isCorrect } of predictions) {
+			for (const { coordinates, isCorrect } of predictions) {
 				if (!isCorrect && actuals.length > 0) {
 					// Record the misprediction with predicted and actual coordinates
 					this.mispredictions.push({
 						channel: channelName,
-						predicted: neuron.coordinates,
-						actual: actuals[0].coordinates // Take first actual neuron's coordinates
+						predicted: coordinates,
+						actual: actuals[0]
 					});
 				}
 			}
@@ -392,7 +362,7 @@ export class Diagnostics {
 		// Calculate continuous prediction errors for each channel
 		for (const [channelName, channel] of channels) {
 			const predictions = predictionsByChannel.get(channelName) || [];
-			const actuals = actualsByChannel.get(channelName) || [];
+			const actuals = actualEventCoordsByChannel.get(channelName) || [];
 			if (predictions.length === 0) continue;
 
 			const error = channel.calculatePredictionError(predictions, actuals);

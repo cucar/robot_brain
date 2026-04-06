@@ -70,9 +70,10 @@ The brain learns when to own vs. not own each stock based on upcoming price move
 The brain learns to trade stocks from historical price and volume data. Each stock is a separate channel — the brain discovers cross-stock patterns and makes buy/sell/hold decisions optimized by reward feedback.
 
 **The included 3-hour timeframe data is ready to use** — no API key needed for this demo.
+**Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
-node run-brain.js stock-test --timeframe 3H
+node run-brain.js stock-test --error-threshold 0.65
 ```
 
 **Expected output:**
@@ -103,54 +104,24 @@ The brain learns the best actions to perform in each situation over repeated epi
 
 Run the test:
 ```bash
-node run-brain.js stock-test --timeframe 3H --no-summary --episodes 20
+node run-brain.js stock-test --no-summary --episodes 5
 ```
 
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-Episode 1: $107401.29 | ROI: +716.01%, +0.083838%/frame (2508 trades)
-Episode 2: $50513.88 | ROI: +336.76%, +0.058868%/frame (2052 trades)
-Episode 3: $74285.76 | ROI: +495.24%, +0.071235%/frame (1772 trades)
-Episode 4: $125251.11 | ROI: +835.01%, +0.089277%/frame (1982 trades)
-Episode 5: $73772.97 | ROI: +491.82%, +0.071005%/frame (2151 trades)
-Episode 6: $146496.99 | ROI: +976.65%, +0.094913%/frame (2057 trades)
-Episode 7: $90108.51 | ROI: +600.72%, +0.077752%/frame (2529 trades)
-Episode 8: $166326.18 | ROI: +1108.84%, +0.099540%/frame (2178 trades)
-Episode 9: $67012.18 | ROI: +446.75%, +0.067840%/frame (2291 trades)
-Episode 10: $134242.76 | ROI: +894.95%, +0.091760%/frame (1934 trades)
-Episode 11: $145834.55 | ROI: +972.23%, +0.094748%/frame (2079 trades)
-Episode 12: $278734.23 | ROI: +1858.23%, +0.118818%/frame (2008 trades)
-Episode 13: $129134.28 | ROI: +860.90%, +0.090368%/frame (1914 trades)
-Episode 14: $98759.76 | ROI: +658.40%, +0.080913%/frame (1888 trades)
-Episode 15: $136488.92 | ROI: +909.93%, +0.092356%/frame (1691 trades)
-Episode 16: $166297.29 | ROI: +1108.65%, +0.099534%/frame (2047 trades)
-Episode 17: $155024.76 | ROI: +1033.50%, +0.096969%/frame (1624 trades)
-Episode 18: $200176.61 | ROI: +1334.51%, +0.106380%/frame (1838 trades)
-Episode 19: $154778.76 | ROI: +1031.86%, +0.096911%/frame (1789 trades)
-Episode 20: $174850.74 | ROI: +1165.67%, +0.101376%/frame (1810 trades)
+   Episode 1: $31319.85 | ROI: +208.80%, +0.045021%/frame (3383 trades)
+   Episode 2: $99025.61 | ROI: +660.17%, +0.081006%/frame (2804 trades)
+   Episode 3: $372621.54 | ROI: +2484.14%, +0.129904%/frame (2517 trades)
+   Episode 4: $490530.29 | ROI: +3270.20%, +0.140520%/frame (2556 trades)
+   Episode 5: $1541438.82 | ROI: +10276.26%, +0.185485%/frame (3074 trades)
 
 📊 Base Level Accuracy by Episode:
-Episode 1: 56.81%
-Episode 2: 56.62%
-Episode 3: 56.65%
-Episode 4: 56.69%
-Episode 5: 56.64%
-Episode 6: 56.59%
-Episode 7: 56.57%
-Episode 8: 56.57%
-Episode 9: 56.46%
-Episode 10: 56.42%
-Episode 11: 56.40%
-Episode 12: 56.39%
-Episode 13: 56.32%
-Episode 14: 56.25%
-Episode 15: 56.21%
-Episode 16: 56.18%
-Episode 17: 56.14%
-Episode 18: 56.07%
-Episode 19: 56.03%
-Episode 20: 56.00%
+   Episode 1: 57.05%
+   Episode 2: 57.78%
+   Episode 3: 58.32%
+   Episode 4: 58.62%
+   Episode 5: 58.75%
 ```
 
 ## Demo 4: Stock Sequence Memorization
@@ -333,7 +304,7 @@ All hyperparameters are configured via the Brain constructor options and can be 
 
 | Parameter | Default | Command Line Option | Description |
 |-----------|---------|---------------------|-------------|
-| `errorCorrectionThreshold` | 0.65 | `--error-threshold` | Prediction error threshold for creating patterns |
+| `errorCorrectionThreshold` | 0.5 | `--error-threshold` | Prediction error threshold for creating patterns |
 | `contextLength` | 10 | `--context-length` | Frames a neuron stays active in the sliding window |
 | `mergeThreshold` | 0.5 | `--merge-threshold` | Min context match ratio for pattern recognition |
 | `patternForgetRate` | 0.01 | `--forget-rate` | Pattern prediction decay rate per frame |

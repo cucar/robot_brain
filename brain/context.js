@@ -5,7 +5,7 @@
 export class Context {
 
 	constructor() {
-		this.entries = new Map(); // Map<neuron, Map<distance, strength>>
+		this.entries = new Map(); // Map<neuronId, Map<distance, strength>>
 	}
 
 	get size() {
@@ -16,41 +16,41 @@ export class Context {
 
 	/**
 	 * returns entries for the context as an array
-	 * @returns Array<{neuron, distance, strength}>
+	 * @returns Array<{neuronId, distance, strength}>
 	 */
 	getEntries() {
 		const result = [];
-		for (const [neuron, distanceMap] of this.entries)
+		for (const [neuronId, distanceMap] of this.entries)
 			for (const [distance, strength] of distanceMap)
-				result.push({ neuron, distance, strength });
+				result.push({ neuronId, distance, strength });
 		return result;
 	}
 
 	/**
 	 * Add or update an entry.
 	 */
-	addNeuron(neuron, distance, strength = 1) {
-		if (!this.entries.has(neuron)) this.entries.set(neuron, new Map());
-		const distanceMap = this.entries.get(neuron);
+	addNeuron(neuronId, distance, strength = 1) {
+		if (!this.entries.has(neuronId)) this.entries.set(neuronId, new Map());
+		const distanceMap = this.entries.get(neuronId);
 		if (distanceMap.has(distance)) throw new Error('Context entry already exists');
 		distanceMap.set(distance, strength);
 	}
 
 	/**
-	 * Find an entry by neuron and distance.
+	 * Find an entry by neuron ID and distance.
 	 */
-	find(neuron, distance) {
-		const distanceMap = this.entries.get(neuron);
+	find(neuronId, distance) {
+		const distanceMap = this.entries.get(neuronId);
 		if (!distanceMap) return null;
 		const strength = distanceMap.get(distance);
-		return strength !== undefined ? { neuron, distance, strength } : null;
+		return strength !== undefined ? { neuronId, distance, strength } : null;
 	}
 
 	/**
 	 * increases the strength of an entry.
 	 */
-	strengthenNeuron(neuron, distance) {
-		const distanceMap = this.entries.get(neuron);
+	strengthenNeuron(neuronId, distance) {
+		const distanceMap = this.entries.get(neuronId);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for strengthening');
 		const strength = distanceMap.get(distance);
 		distanceMap.set(distance, strength + 1);
@@ -59,8 +59,8 @@ export class Context {
 	/**
 	 * reduces the strength of an entry when not observed - returns if it can be deleted
 	 */
-	weakenNeuron(neuron, distance) {
-		const distanceMap = this.entries.get(neuron);
+	weakenNeuron(neuronId, distance) {
+		const distanceMap = this.entries.get(neuronId);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for weakening');
 		const strength = distanceMap.get(distance);
 		const newStrength = Math.max(0, strength - 1);
@@ -71,19 +71,19 @@ export class Context {
 	/**
 	 * Remove an entry.
 	 */
-	remove(neuron, distance) {
-		const distanceMap = this.entries.get(neuron);
+	remove(neuronId, distance) {
+		const distanceMap = this.entries.get(neuronId);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for deletion');
 		distanceMap.delete(distance);
-		if (distanceMap.size === 0) this.entries.delete(neuron);
+		if (distanceMap.size === 0) this.entries.delete(neuronId);
 		return true;
 	}
 
 	/**
 	 * Check if a key exists in this context.
 	 */
-	hasKey(neuron, distance) {
-		const distanceMap = this.entries.get(neuron);
+	hasKey(neuronId, distance) {
+		const distanceMap = this.entries.get(neuronId);
 		return distanceMap ? distanceMap.has(distance) : false;
 	}
 
@@ -129,11 +129,11 @@ export class Context {
 		let totalCount = 0;
 		let score = 0;
 
-		// process all neurons in the known context
-		for (const [neuron, distanceMap] of this.entries) {
+		// process all neurons in the known context (keyed by neuron ID)
+		for (const [neuronId, distanceMap] of this.entries) {
 
 			// get the observed distances for the neuron in the observed context
-			const observedDistances = observed.entries.get(neuron);
+			const observedDistances = observed.entries.get(neuronId);
 
 			// process all distances for the neuron in the known context
 			for (const [distance, strength] of distanceMap) {
@@ -143,8 +143,8 @@ export class Context {
 				totalCount++;
 
 				// if the observed context has the neuron at the same distance, it is a common entry - otherwise missing
-				if (observedDistances?.has(distance)) common.push({ neuron, distance, strength });
-				else missing.push({ neuron, distance, strength });
+				if (observedDistances?.has(distance)) common.push({ neuronId, distance, strength });
+				else missing.push({ neuronId, distance, strength });
 
 				// add the match score for the entry
 				score += this.getMatchScore(strength, distance, observedDistances);
@@ -159,12 +159,12 @@ export class Context {
 
 		// match found - find the novel entries (in observed but not in this known context) using lookups
 		const novel = [];
-		for (const [neuron, distanceMap] of observed.entries) {
-			const knownDistances = this.entries.get(neuron);
+		for (const [neuronId, distanceMap] of observed.entries) {
+			const knownDistances = this.entries.get(neuronId);
 			for (const [distance, strength] of distanceMap)
 				if (!knownDistances || !knownDistances.has(distance) || knownDistances.get(distance) <= 0)
 					if (!this.hasPartialMatch(distance, knownDistances)) {
-						novel.push({ neuron, distance, strength });
+						novel.push({ neuronId, distance, strength });
 						score -= strength;
 					}
 		}
