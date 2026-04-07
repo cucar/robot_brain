@@ -140,24 +140,14 @@ export default class Brain {
 	 */
 	async backup() {
 		if (!this.database) return;
-		const neurons = this.thalamus.getNeurons();
-		const channelNameToId = this.thalamus.getChannelNameToIdMap();
-		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
-		const channels = this.thalamus.getChannels();
-		await this.db.backupChannels(channels);
-		await this.db.backupDimensions(channels);
-		await this.db.backupNeurons(neurons, channelNameToId, dimensionNameToId);
+		await this.db.saveSnapshot(this.thalamus.getSnapshot());
 	}
 
 	/**
 	 * Create a dump file with current brain state for debugging and comparison
 	 */
 	createDump() {
-		const neurons = this.thalamus.getNeurons();
-		const channelNameToId = this.thalamus.getChannelNameToIdMap();
-		const dimensionNameToId = this.thalamus.getDimensionNameToIdMap();
-		const channels = this.thalamus.getChannels();
-		return this.dump.createDumpFile(neurons, channels, channelNameToId, dimensionNameToId);
+		return this.dump.saveSnapshot(this.thalamus.getSnapshot());
 	}
 
 	/**
@@ -165,26 +155,17 @@ export default class Brain {
 	 */
 	async init() {
 
-		// Load channels from DB (if enabled)
+		// Load full snapshot from DB (channels, dimensions, neurons)
 		if (this.database) {
-			const channelClasses = this.thalamus.getChannelClasses();
-			const channels = await this.db.loadChannels(channelClasses);
-			this.thalamus.setChannels(channels);
+			const snapshot = await this.db.loadSnapshot(this.thalamus.getChannelClasses());
+			this.thalamus.restoreSnapshot(snapshot);
 		}
 
 		// Instantiate channels that did not come from the database
 		this.thalamus.instantiateChannels();
 
-		// Load dimension mappings BEFORE loading neurons (neurons need dimension name lookups)
+		// Load dimension mappings for any new channels
 		this.thalamus.loadDimensionMaps();
-
-		// Load neurons from database (if enabled)
-		if (this.database) {
-			const channelIdToName = this.thalamus.getChannelIdToNameMap();
-			const dimensionIdToName = this.thalamus.getDimensionIdToNameMap();
-			const neurons = await this.db.loadNeurons(channelIdToName, dimensionIdToName);
-			this.thalamus.setNeurons(neurons);
-		}
 
 		// Pre-create action neurons for all channels so that we can explore
 		this.thalamus.initializeActionNeurons();
@@ -304,7 +285,7 @@ export default class Brain {
 		if (this.debug) console.log(`OBSERVING FRAME ${this.frameNumber}`);
 
 		// Get all frame actions from previous frame's inference (from in-memory inferredNeurons)
-		const frameActions = this.getInferredActions();
+		const frameActions = this.thalamus.getInferredActions(this.memory.getInferredNeurons());
 
 		// Process each channel: get inputs from channel, get outputs from previous inference
 		for (const [channelName, channel] of this.thalamus.getChannels()) {
@@ -326,20 +307,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Get inferred actions grouped by channel from memory's inferred neurons.
-	 * @returns {Map<string, Array>} - Map of channel names to array of action data {coordinates, strength, reward}
-	 */
-	getInferredActions() {
-		const channelOutputs = new Map();
-		for (const { neuron, strength, reward } of this.memory.getInferences()) {
-			if (neuron.type !== 'action') continue;
-			if (!channelOutputs.has(neuron.channel)) channelOutputs.set(neuron.channel, []);
-			channelOutputs.get(neuron.channel).push({ coordinates: neuron.coordinates, strength, reward });
-		}
-		return channelOutputs;
-	}
-
-	/**
 	 * Get channel-specific feedback as a Map of channel_name -> reward
 	 * Each channel provides its own reward signal based on its objectives
 	 */
@@ -349,7 +316,7 @@ export default class Brain {
 		let feedbackCount = 0;
 
 		// Get all actions from previous frame's inference (from in-memory inferredNeurons)
-		const frameActions = this.getInferredActions();
+		const frameActions = this.thalamus.getInferredActions(this.memory.getInferredNeurons());
 
 		// Get reward for each channel
 		for (const [channelName, channel] of this.thalamus.getChannels()) {
@@ -389,24 +356,9 @@ export default class Brain {
 
 		// Track inference performance (event accuracy, action rewards, and continuous prediction errors)
 		const activeNeuronIds = new Set(this.memory.getNeuronsAtAge(0).keys());
-		const actualEvents = this.getInferredEvents(activeNeuronIds);
-		this.diagnostics.trackInferencePerformance(this.memory.getInferences(), activeNeuronIds, actualEvents, this.rewards[0], this.thalamus.getChannels());
-	}
-
-	/**
-	 * Get actual event coordinates grouped by channel from currently active neurons.
-	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
-	 * @returns {Map<string, Array>} - Map of channel name to array of coordinate objects
-	 */
-	getInferredEvents(activeNeuronIds) {
-		const result = new Map();
-		for (const neuronId of activeNeuronIds) {
-			const neuron = this.thalamus.neurons.get(neuronId);
-			if (!neuron || neuron.type !== 'event') continue;
-			if (!result.has(neuron.channel)) result.set(neuron.channel, []);
-			result.get(neuron.channel).push(neuron.coordinates);
-		}
-		return result;
+		const actualEvents = this.thalamus.getActiveEvents(activeNeuronIds);
+		const inferences = this.thalamus.getInferences(this.memory.getInferredNeurons());
+		this.diagnostics.trackInferencePerformance(inferences, activeNeuronIds, actualEvents, this.rewards[0], this.thalamus.getChannels());
 	}
 
 	/**
@@ -482,7 +434,7 @@ export default class Brain {
 		for (const neuronId of this.memory.getNeuronsAtAge(0).keys()) {
 			const neuron = neurons.get(neuronId);
 			if (neuron && neuron.level === 0) {
-				newActiveNeurons.push(neuron);
+				newActiveNeurons.push({ id: neuron.id, type: neuron.type, channel: this.thalamus.getNeuronChannel(neuron.id) });
 				newActiveNeuronIds.add(neuronId);
 			}
 		}
@@ -510,7 +462,7 @@ export default class Brain {
 			const ageNeurons = [];
 			for (const neuronId of this.memory.getNeuronsAtAge(age).keys()) {
 				const neuron = neurons.get(neuronId);
-				if (neuron && neuron.level === 0) ageNeurons.push(neuron);
+				if (neuron && neuron.level === 0) ageNeurons.push({ id: neuron.id, type: neuron.type, channel: this.thalamus.getNeuronChannel(neuron.id) });
 			}
 			sensoryNeurons.push(ageNeurons);
 		}
@@ -590,12 +542,13 @@ export default class Brain {
 				for (const n of sensoryNeurons[a]) {
 
 					// save the event/action - include observed reward for actions - for events it's zero
-					const reward = this.rewards[a].get(n.channel) || 0;
+					const nChannel = this.thalamus.getNeuronChannel(n.id);
+					const reward = this.rewards[a].get(nChannel) || 0;
 					pattern.createConnection(age - a, n.id, 1, reward);
 
 					// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
 					if (reward < 0) {
-						const alt = pattern.findAlternativeAction(age - a, n.channel, n.id, channelActionIds);
+						const alt = pattern.findAlternativeAction(age - a, nChannel, n.id, channelActionIds);
 						if (alt) pattern.createConnection(age - a, alt, 1, 0);
 					}
 				}
@@ -647,7 +600,7 @@ export default class Brain {
 			const resolvedVotes = votes.map(v => ({
 				targetId: v.neuron.id,
 				targetType: v.neuron.type,
-				targetChannel: v.neuron.channel,
+				targetChannel: this.thalamus.getNeuronChannel(v.neuron.id),
 				targetCoords: v.neuron.coordinates,
 				voterId: v.voter.id,
 				voterLevel: v.voter.level,
@@ -660,7 +613,7 @@ export default class Brain {
 		}
 
 		// Save inferences to memory (clears old inferences first)
-		this.memory.saveInferences(inferences);
+		this.memory.saveInferredNeurons(inferences);
 	}
 
 	/**
@@ -802,7 +755,7 @@ export default class Brain {
 				neuron_id: neuronId,
 				neuron: candidate.neuron,
 				coordinates: candidate.neuron.coordinates,
-				channel: candidate.neuron.channel,
+				channel: this.thalamus.getNeuronChannel(neuronId),
 				strength: candidate.strength
 			};
 			if (candidate.neuron.type === 'action') winner.reward = candidate.reward;
@@ -849,7 +802,7 @@ export default class Brain {
 		// Find which channels already have an action inferred
 		const channelsWithActions = new Set();
 		for (const inf of inferences)
-			if (inf.neuron.type === 'action') channelsWithActions.add(inf.neuron.channel);
+			if (inf.neuron.type === 'action') channelsWithActions.add(this.thalamus.getNeuronChannel(inf.neuron.id));
 
 		// Add exploration action for channels without one
 		for (const [channelName] of this.thalamus.getChannels()) {
@@ -895,7 +848,7 @@ export default class Brain {
 	 * Execute inferred actions for all channels
 	 */
 	async executeActions() {
-		await this.thalamus.executeChannelActions(this.memory.getInferences());
+		await this.thalamus.executeChannelActions(this.memory.getInferredNeurons());
 	}
 
 	/**

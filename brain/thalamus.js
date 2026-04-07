@@ -18,6 +18,9 @@ export class Thalamus {
 		this.neurons = new Map(); // neuronId -> Neuron
 		this.neuronsByValue = new Map(); // valueKey -> SensoryNeuron
 
+		// Neuron metadata lookup tables (immutable after creation)
+		this.neuronChannel = new Map(); // neuronId -> channelName (sensory neurons only)
+
 		// Death ledger - scheduled neuron deaths
 		this.deathLedger = new Map(); // frameNumber -> Set<Neuron>
 		this.neuronDeathFrame = new Map(); // neuron -> frameNumber (reverse lookup)
@@ -49,9 +52,10 @@ export class Thalamus {
 		if (neuron) return neuron;
 
 		// Create new neuron if not found
-		neuron = Neuron.createSensory(channel, type, coordinates, this.patternForgetRate, this.mergeThreshold);
+		neuron = Neuron.createSensory(type, coordinates, this.patternForgetRate, this.mergeThreshold);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronsByValue.set(neuron.valueKey, neuron);
+		this.neuronChannel.set(neuron.id, channel);
 		this.incrementLevelCount(neuron.level); // for diagnostics
 		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${neuron.valueKey}`);
 		return neuron;
@@ -84,19 +88,29 @@ export class Thalamus {
 	}
 
 	/**
-	 * Set neurons from a Map (used when loading from database)
-	 * @param {Map<number, Neuron>} neurons - Map of neuron ID to neuron object
+	 * Restore brain state from a snapshot (same format as getSnapshot).
+	 * Channels and dimensions are restored if present in the snapshot.
+	 * @param {{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels?: Map, channelNameToId?: Object, dimensionNameToId?: Object}} snapshot
 	 */
-	setNeurons(neurons) {
-		this.neurons = neurons;
+	restoreSnapshot(snapshot) {
+		// Restore channels and derive dimension mappings from them
+		if (snapshot.channels) {
+			this.setChannels(snapshot.channels);
+			this.loadDimensionMaps();
+		}
 
-		// Rebuild neuronsByValue map, death ledger, and level counts
+		// Restore neurons
+		this.neurons.clear();
 		this.neuronsByValue.clear();
+		this.neuronChannel.clear();
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
-		this.levelCounts = []; // for diagnostics
-		for (const neuron of neurons.values()) {
-			this.incrementLevelCount(neuron.level); // for diagnostics
+		this.levelCounts = [];
+
+		for (const { neuron, channel } of snapshot.neurons) {
+			this.neurons.set(neuron.id, neuron);
+			if (channel) this.neuronChannel.set(neuron.id, channel);
+			this.incrementLevelCount(neuron.level);
 			if (neuron.level === 0)
 				this.neuronsByValue.set(neuron.valueKey, neuron);
 			else
@@ -110,10 +124,85 @@ export class Thalamus {
 	reset() {
 		this.neurons.clear();
 		this.neuronsByValue.clear();
+		this.neuronChannel.clear();
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		this.levelCounts = []; // for diagnostics
 		Neuron.nextId = 1;
+	}
+
+	/**
+	 * Get the channel name for a neuron
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {string} Channel name
+	 */
+	getNeuronChannel(neuronId) {
+		return this.neuronChannel.get(neuronId);
+	}
+
+	/**
+	 * Get inferred actions grouped by channel from the given inferences.
+	 * @param {Array<{neuron, strength, reward}>} inferences - Inferred neurons from memory
+	 * @returns {Map<string, Array>} - Map of channel name to array of {coordinates, strength, reward}
+	 */
+	getInferredActions(inferences) {
+		const channelOutputs = new Map();
+		for (const { neuron, strength, reward } of inferences) {
+			if (neuron.type !== 'action') continue;
+			const channel = this.neuronChannel.get(neuron.id);
+			if (!channelOutputs.has(channel)) channelOutputs.set(channel, []);
+			channelOutputs.get(channel).push({ coordinates: neuron.coordinates, strength, reward });
+		}
+		return channelOutputs;
+	}
+
+	/**
+	 * Get actual event coordinates grouped by channel from active neuron IDs.
+	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
+	 * @returns {Map<string, Array>} - Map of channel name to array of coordinate objects
+	 */
+	getActiveEvents(activeNeuronIds) {
+		const result = new Map();
+		for (const neuronId of activeNeuronIds) {
+			const neuron = this.neurons.get(neuronId);
+			if (!neuron || neuron.type !== 'event') continue;
+			const channel = this.neuronChannel.get(neuron.id);
+			if (!result.has(channel)) result.set(channel, []);
+			result.get(channel).push(neuron.coordinates);
+		}
+		return result;
+	}
+
+	/**
+	 * Get inferences with channel metadata attached.
+	 * @param {Array<{neuron, strength}>} inferredNeurons - Inferred neurons from memory
+	 * @returns {Array<{neuron, strength, channel}>} - Inferences with channel
+	 */
+	getInferences(inferredNeurons) {
+		const inferences = [];
+		for (const { neuron, strength } of inferredNeurons)
+			inferences.push({ neuron, strength, channel: this.neuronChannel.get(neuron.id) });
+		return inferences;
+	}
+
+	/**
+	 * Get a self-contained snapshot of all brain state for external consumers (backup, dump).
+	 * Each neuron entry carries its resolved metadata — consumers never need separate lookups.
+	 * @returns {{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels: Array, channelNameToId: Object, dimensionNameToId: Object}}
+	 */
+	getSnapshot() {
+		const neurons = [];
+		for (const neuron of this.neurons.values()) {
+			const entry = { neuron };
+			if (neuron.level === 0) entry.channel = this.neuronChannel.get(neuron.id);
+			neurons.push(entry);
+		}
+		return {
+			neurons,
+			channels: this.getChannels(),
+			channelNameToId: this.channelNameToId,
+			dimensionNameToId: this.dimensionNameToId,
+		};
 	}
 
 	/**
@@ -255,7 +344,7 @@ export class Thalamus {
 	 */
 	skipActionNeuron(neuron) {
 		if (neuron.level !== 0 || neuron.type !== 'action') return false;
-		const channel = this.channels.get(neuron.channel);
+		const channel = this.channels.get(this.neuronChannel.get(neuron.id));
 		return channel && !channel.actionSequences;
 	}
 
@@ -393,7 +482,7 @@ export class Thalamus {
 
 		// Add inferred neurons to their channels
 		for (const inference of inferredNeurons) {
-			const inferences = channelInferences.get(inference.neuron.channel);
+			const inferences = channelInferences.get(this.neuronChannel.get(inference.neuron.id));
 			if (inference.neuron.type === 'action') inferences.actions.push(inference);
 			else if (inference.neuron.type === 'event') inferences.events.push(inference);
 		}
@@ -460,22 +549,30 @@ export class Thalamus {
 	 * Load dimension name/id mappings from instantiated channels
 	 */
 	loadDimensionMaps() {
-		const dimensionNameToId = {};
-		const dimensionIdToName = {};
+		const { nameToId, idToName } = Thalamus.buildDimensionMaps(this.getChannels());
+		this.setDimensionMappings(nameToId, idToName);
+		if (this.debug) console.log('Dimensions loaded:', nameToId);
+	}
 
-		for (const [, channel] of this.getChannels()) {
+	/**
+	 * Build dimension name↔id maps from channel instances.
+	 * @param {Iterable<[string, Channel]>} channels - Channel entries
+	 * @returns {{nameToId: Object, idToName: Object}}
+	 */
+	static buildDimensionMaps(channels) {
+		const nameToId = {};
+		const idToName = {};
+		for (const [, channel] of channels) {
 			for (const dim of channel.getEventDimensions()) {
-				dimensionNameToId[dim.name] = dim.id;
-				dimensionIdToName[dim.id] = dim.name;
+				nameToId[dim.name] = dim.id;
+				idToName[dim.id] = dim.name;
 			}
 			for (const dim of channel.getActionDimensions()) {
-				dimensionNameToId[dim.name] = dim.id;
-				dimensionIdToName[dim.id] = dim.name;
+				nameToId[dim.name] = dim.id;
+				idToName[dim.id] = dim.name;
 			}
 		}
-
-		this.setDimensionMappings(dimensionNameToId, dimensionIdToName);
-		if (this.debug) console.log('Dimensions loaded:', dimensionNameToId);
+		return { nameToId, idToName };
 	}
 
 	/**

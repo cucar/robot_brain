@@ -1,5 +1,6 @@
 import getMySQLConnection from '../db/db.js';
 import { Neuron } from './neuron.js';
+import { Thalamus } from './thalamus.js';
 import { Dimension } from '../channels/dimension.js';
 import { Channel } from '../channels/channel.js';
 
@@ -25,7 +26,7 @@ export class Database {
 	/**
 	 * Load channels and dimensions from database and return instantiated channel objects.
 	 * @param {Map} channelClasses - Map of channel name to channel class
-	 * @returns {Promise<Map>} Map of channel name to channel instance
+	 * @returns {Promise<{channels: Map, channelNameToId: Object, channelIdToName: Object}>}
 	 */
 	async loadChannels(channelClasses) {
 
@@ -36,8 +37,10 @@ export class Database {
 		// Create dimension objects
 		const dbDimensions = dimensionRows.map(row => new Dimension(row.name, row.id));
 
-		// Create channel instances
+		// Create channel instances and build ID maps
 		const channels = new Map();
+		const channelNameToId = {};
+		const channelIdToName = {};
 		let maxChannelId = 0;
 		for (const row of channelRows) {
 
@@ -49,6 +52,8 @@ export class Database {
 			// Instantiate channel with DB id and dimensions
 			const channel = new channelClass(row.name, this.debug, row.id, dbDimensions);
 			channels.set(row.name, channel);
+			channelNameToId[row.name] = row.id;
+			channelIdToName[row.id] = row.name;
 
 			// Track max channel id
 			if (row.id > maxChannelId) maxChannelId = row.id;
@@ -58,33 +63,40 @@ export class Database {
 		if (maxChannelId >= Channel.nextId) Channel.nextId = maxChannelId + 1;
 
 		console.log(`Channels loaded: ${channels.size} total, next ID: ${Channel.nextId}`);
-		return channels;
+		return { channels, channelNameToId, channelIdToName };
 	}
 
 	/**
-	 * Load neurons from MySQL and return neurons map.
-	 * @returns {Promise<Map<number, Neuron>>} Map of neuron ID to neuron object
+	 * Load a complete brain snapshot from MySQL (channels, dimensions, and neurons).
+	 * Returns the same format as thalamus.getSnapshot().
+	 * @param {Map} channelClasses - Map of channel name to channel class
+	 * @returns {Promise<{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels: Map, channelNameToId: Object, dimensionNameToId: Object}>}
 	 */
-	async loadNeurons(channelIdToName, dimensionIdToName) {
+	async loadSnapshot(channelClasses) {
 
+		const { channels, channelNameToId, channelIdToName } = await this.loadChannels(channelClasses);
+
+		// Build dimension ID maps from channel instances
+		const { nameToId: dimensionNameToId, idToName: dimensionIdToName } = Thalamus.buildDimensionMaps(channels);
+
+		// Load neurons (dimension maps must be built first — coordinate loading needs dimension ID→name lookups)
 		console.log('Loading neurons from MySQL...');
+		const neuronMap = await this.loadNeuronsTable();
 
-		// create the neurons first with their ids - they need to exist before we can build them
-		const neurons = await this.loadNeuronsTable();
+		const neuronChannels = await this.loadBaseNeurons(neuronMap, channelIdToName);
+		await this.loadCoordinates(neuronMap, dimensionIdToName);
+		await this.loadConnections(neuronMap);
+		await this.loadPatterns(neuronMap);
+		await this.loadPatternContexts(neuronMap);
 
-		// update base neurons and their coordinates
-		await this.loadBaseNeurons(neurons, channelIdToName);
-		await this.loadCoordinates(neurons, dimensionIdToName);
-
-		// update connections used for inferences
-		await this.loadConnections(neurons);
-
-		// update patterns used for pattern matching
-		await this.loadPatterns(neurons);
-		await this.loadPatternContexts(neurons);
-
-		// return the neurons to be loaded to thalamus
-		return neurons;
+		// Build snapshot
+		const neurons = [];
+		for (const neuron of neuronMap.values()) {
+			const entry = { neuron };
+			if (neuron.level === 0) entry.channel = neuronChannels.get(neuron.id);
+			neurons.push(entry);
+		}
+		return { neurons, channels, channelNameToId, dimensionNameToId };
 	}
 
 	/**
@@ -124,13 +136,16 @@ export class Database {
 		// get the base neuron data from the database
 		const [rows] = await this.conn.query('SELECT neuron_id, channel_id, type FROM base_neurons');
 
-		// update all base neurons
+		// update all base neurons and collect channel metadata for caller
+		const neuronChannels = new Map(); // neuronId → channelName
 		for (const row of rows) {
 			const neuron = neurons.get(row.neuron_id);
-			neuron.channel = channelIdToName[row.channel_id];
+			const channelName = channelIdToName[row.channel_id];
 			neuron.type = row.type;
+			neuronChannels.set(row.neuron_id, channelName);
 		}
 		console.log(`  Loaded ${rows.length} base neurons from table`);
+		return neuronChannels;
 	}
 
 	/**
@@ -223,6 +238,16 @@ export class Database {
 	}
 
 	/**
+	 * Save a complete brain snapshot to MySQL.
+	 * @param {Object} snapshot - Brain state snapshot from thalamus.getSnapshot()
+	 */
+	async saveSnapshot(snapshot) {
+		await this.backupChannels(snapshot.channels);
+		await this.backupDimensions(snapshot.channels);
+		await this.backupNeurons(snapshot);
+	}
+
+	/**
 	 * Backup channels to MySQL.
 	 */
 	async backupChannels(channels) {
@@ -250,17 +275,18 @@ export class Database {
 
 	/**
 	 * Backup neurons state to MySQL.
+	 * @param {Object} snapshot - Brain state snapshot from thalamus.getSnapshot()
 	 */
-	async backupNeurons(neurons, channelNameToId, dimensionNameToId) {
+	async backupNeurons(snapshot) {
 		console.log('Backing up brain to MySQL...');
 
-		if (neurons.length === 0) return;
+		if (snapshot.neurons.length === 0) return;
 
-		await this.backupNeuronsTable(neurons);
-		await this.backupBaseNeurons(neurons, channelNameToId, dimensionNameToId);
-		await this.backupConnections(neurons);
-		await this.backupPatterns(neurons);
-		await this.backupPatternContext(neurons);
+		await this.backupNeuronsTable(snapshot.neurons);
+		await this.backupBaseNeurons(snapshot);
+		await this.backupConnections(snapshot.neurons);
+		await this.backupPatterns(snapshot.neurons);
+		await this.backupPatternContext(snapshot.neurons);
 
 		console.log('Brain backed up to MySQL.');
 	}
@@ -271,7 +297,7 @@ export class Database {
 	async backupNeuronsTable(neurons) {
 		await this.conn.query('TRUNCATE neurons');
 		const rows = [];
-		for (const neuron of neurons) rows.push([neuron.id, neuron.level, neuron.activationStrength]);
+		for (const { neuron } of neurons) rows.push([neuron.id, neuron.level, neuron.activationStrength]);
 		await this.conn.query('INSERT INTO neurons (id, level, strength) VALUES ?', [rows]);
 		console.log(`  Saved ${rows.length} neurons`);
 	}
@@ -279,16 +305,16 @@ export class Database {
 	/**
 	 * Backup base_neurons and coordinates
 	 */
-	async backupBaseNeurons(neurons, channelNameToId, dimensionNameToId) {
+	async backupBaseNeurons(snapshot) {
 		await this.conn.query('TRUNCATE base_neurons');
 		await this.conn.query('TRUNCATE coordinates');
 		const baseRows = [];
 		const valueRows = [];
-		for (const neuron of neurons) {
+		for (const { neuron, channel } of snapshot.neurons) {
 			if (neuron.level !== 0) continue;
-			baseRows.push([neuron.id, channelNameToId[neuron.channel], neuron.type]);
+			baseRows.push([neuron.id, snapshot.channelNameToId[channel], neuron.type]);
 			for (const [dimName, val] of Object.entries(neuron.coordinates))
-				valueRows.push([neuron.id, dimensionNameToId[dimName], val]);
+				valueRows.push([neuron.id, snapshot.dimensionNameToId[dimName], val]);
 		}
 		await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [baseRows]);
 		await this.conn.query('INSERT INTO coordinates (neuron_id, dimension_id, val) VALUES ?', [valueRows]);
@@ -301,7 +327,7 @@ export class Database {
 	async backupConnections(neurons) {
 		await this.conn.query('TRUNCATE connections');
 		const connRows = [];
-		for (const neuron of neurons)
+		for (const { neuron } of neurons)
 			for (const [distance, targets] of neuron.connections)
 				for (const [toNeuronId, conn] of targets)
 					connRows.push([neuron.id, toNeuronId, distance, conn.strength, conn.reward || 0]);
@@ -316,9 +342,9 @@ export class Database {
 	async backupPatterns(neurons) {
 		await this.conn.query('TRUNCATE patterns');
 		const patternRows = [];
-		for (const pattern of neurons)
-			if (pattern.level > 0)
-				patternRows.push([pattern.id, pattern.parentId]);
+		for (const { neuron } of neurons)
+			if (neuron.level > 0)
+				patternRows.push([neuron.id, neuron.parentId]);
 		if (patternRows.length === 0) return;
 		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id) VALUES ?', [patternRows]);
 		console.log(`  Saved ${patternRows.length} patterns`);
@@ -330,7 +356,7 @@ export class Database {
 	async backupPatternContext(neurons) {
 		await this.conn.query('TRUNCATE pattern_past');
 		const pastRows = [];
-		for (const neuron of neurons)
+		for (const { neuron } of neurons)
 			for (const { neuronId, distance, strength } of neuron.getPatternContext())
 				pastRows.push([neuron.id, neuronId, distance, strength]);
 		if (pastRows.length === 0) return;

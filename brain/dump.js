@@ -7,22 +7,19 @@ import path from 'node:path';
 export class Dump {
 
 	/**
-	 * Create a dump file with brain state data from Thalamus
-	 * @param {Array} neurons - All neurons from Thalamus
-	 * @param {Array} channels - All channels from Thalamus
-	 * @param {Object} channelNameToId - Channel name to ID mapping
-	 * @param {Object} dimensionNameToId - Dimension name to ID mapping
+	 * Save a brain snapshot to a JSON dump file.
+	 * @param {Object} snapshot - Brain state snapshot from thalamus.getSnapshot()
 	 */
-	createDumpFile(neurons, channels, channelNameToId, dimensionNameToId) {
+	saveSnapshot(snapshot) {
 		const dumpDir = path.join(process.cwd(), 'data', 'brain-dumps');
 		if (!fs.existsSync(dumpDir)) fs.mkdirSync(dumpDir, { recursive: true });
 
 		const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 		const filename = `brain-dump-${timestamp}`;
 
-		const channelsData = this.collectChannelsData(channels, channelNameToId);
-		const dimensionsData = this.collectDimensionsData(dimensionNameToId);
-		const neuronsData = this.collectNeuronsData(neurons);
+		const channelsData = this.collectChannelsData(snapshot.channels, snapshot.channelNameToId);
+		const dimensionsData = this.collectDimensionsData(snapshot.dimensionNameToId);
+		const neuronsData = this.collectNeuronsData(snapshot.neurons);
 
 		const dump = {
 			timestamp: new Date().toISOString(),
@@ -30,7 +27,7 @@ export class Dump {
 			dimensions: dimensionsData,
 			neurons: neuronsData,
 			neuronCount: neuronsData.length,
-			nextNeuronId: neurons.length > 0 ? Math.max(...Array.from(neurons, n => n.id)) + 1 : 1
+			nextNeuronId: snapshot.neurons.length > 0 ? Math.max(...snapshot.neurons.map(e => e.neuron.id)) + 1 : 1
 		};
 
 		const filepath = path.join(dumpDir, `${filename}.json`);
@@ -73,14 +70,14 @@ export class Dump {
 	 */
 	collectNeuronsData(neurons) {
 		const neuronsData = [];
-		for (const neuron of neurons) {
+		for (const { neuron, channel } of neurons) {
 			const neuronData = {
 				id: neuron.id,
 				level: neuron.level
 			};
 
 			if (neuron.level === 0) {
-				neuronData.channel = neuron.channel;
+				neuronData.channel = channel;
 				neuronData.type = neuron.type;
 				neuronData.coordinates = neuron.coordinates;
 			}

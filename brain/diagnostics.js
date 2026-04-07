@@ -305,7 +305,7 @@ export class Diagnostics {
 	/**
 	 * Track inference performance for both events and actions.
 	 * Also calculates continuous prediction errors via channel callbacks.
-	 * @param {Array<{neuron, strength}>} inferences - Inferred neurons with strength
+	 * @param {Array<{neuron, strength, channel}>} inferences - Inferred neurons with strength and resolved channel
 	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
 	 * @param {Map<string, Array>} actualEventCoordsByChannel - Map of channel → array of coordinate objects
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
@@ -320,7 +320,7 @@ export class Diagnostics {
 		// Group event predictions by channel for continuous error calculation
 		const predictionsByChannel = new Map();
 
-		for (const { neuron, strength } of inferences) {
+		for (const { neuron, strength, channel } of inferences) {
 
 			// Track event prediction accuracy
 			if (neuron.type === 'event') {
@@ -329,13 +329,13 @@ export class Diagnostics {
 				if (isCorrect) eventCorrect++;
 
 				// Group for continuous error calculation
-				if (!predictionsByChannel.has(neuron.channel))
-					predictionsByChannel.set(neuron.channel, []);
-				predictionsByChannel.get(neuron.channel).push({ coordinates: neuron.coordinates, strength, isCorrect });
+				if (!predictionsByChannel.has(channel))
+					predictionsByChannel.set(channel, []);
+				predictionsByChannel.get(channel).push({ coordinates: neuron.coordinates, strength, isCorrect });
 			}
 			// Track action reward from the action's channel
 			else if (neuron.type === 'action') {
-				const reward = rewards.get(neuron.channel) || 0;
+				const reward = rewards.get(channel) || 0;
 				actionReward += reward;
 				actionCount++;
 			}

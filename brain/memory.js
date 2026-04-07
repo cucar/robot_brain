@@ -116,14 +116,14 @@ export class Memory {
 	/**
 	 * Get all inferred neurons
 	 */
-	getInferences() {
+	getInferredNeurons() {
 		return this.inferredNeurons;
 	}
 
 	/**
 	 * Clear all inferred neurons
 	 */
-	clearInferences() {
+	clearInferredNeurons() {
 		this.inferredNeurons = [];
 	}
 
@@ -131,8 +131,8 @@ export class Memory {
 	 * Save winning inferences to in-memory structures.
 	 * @param {Array} inferences - Array of winning inference objects
 	 */
-	saveInferences(inferences) {
-		this.clearInferences();
+	saveInferredNeurons(inferences) {
+		this.clearInferredNeurons();
 		for (const inference of inferences) this.inferredNeurons.push(inference);
 		if (this.debug) console.log(`Saved ${this.inferredNeurons.length} inferences`);
 	}

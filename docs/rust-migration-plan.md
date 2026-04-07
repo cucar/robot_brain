@@ -11,23 +11,23 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        MPI Cluster                                  │
 │                                                                     │
-│  ┌─────────────────────┐    ┌─────────────────────┐                │
-│  │ Region 0            │    │ Region 1            │   ...          │
-│  │ (MPI Rank 0)        │    │ (MPI Rank 1)        │                │
-│  │                     │    │                     │                │
-│  │  ┌──────┐ ┌──────┐  │    │  ┌──────┐ ┌──────┐  │                │
-│  │  │Column│ │Column│  │    │  │Column│ │Column│  │                │
-│  │  │  0   │ │  1   │  │    │  │  0   │ │  1   │  │                │
-│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                │
-│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                │
-│  │  └──────┘ └──────┘  │    │  └──────┘ └──────┘  │                │
-│  │  ┌──────┐ ┌──────┐  │    │  ┌──────┐ ┌──────┐  │                │
-│  │  │Column│ │Column│  │    │  │Column│ │Column│  │                │
-│  │  │  2   │ │  3   │  │    │  │  2   │ │  3   │  │                │
-│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                │
-│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                │
-│  │  └──────┘ └──────┘  │    │  └──────┘ └──────┘  │                │
-│  └─────────────────────┘    └─────────────────────┘                │
+│  ┌─────────────────────┐    ┌─────────────────────┐                 │
+│  │ Region 0            │    │ Region 1            │   ...           │
+│  │ (MPI Rank 0)        │    │ (MPI Rank 1)        │                 │
+│  │                     │    │                     │                 │
+│  │  ┌──────┐ ┌──────┐  │    │  ┌──────┐ ┌──────┐  │                 │
+│  │  │Column│ │Column│  │    │  │Column│ │Column│  │                 │
+│  │  │  0   │ │  1   │  │    │  │  0   │ │  1   │  │                 │
+│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                 │
+│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                 │
+│  │  └──────┘ └──────┘  │    │  └──────┘ └──────┘  │                 │
+│  │  ┌──────┐ ┌──────┐  │    │  ┌──────┐ ┌──────┐  │                 │
+│  │  │Column│ │Column│  │    │  │Column│ │Column│  │                 │
+│  │  │  2   │ │  3   │  │    │  │  2   │ │  3   │  │                 │
+│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                 │
+│  │  │ N N  │ │ N N  │  │    │  │ N N  │ │ N N  │  │                 │
+│  │  └──────┘ └──────┘  │    │  └──────┘ └──────┘  │                 │
+│  └─────────────────────┘    └─────────────────────┘                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -104,7 +104,7 @@ Key insight: within a single neuron, the ordering is natural:
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.0 — Move neuron metadata to Thalamus
+#### Step 1.0a — Move neuron metadata to Thalamus
 
 Neurons currently store metadata they never use internally (`channel`, `type`, `coordinates`, `parent`). This metadata is only read by Brain, Memory, and Thalamus for routing/filtering/consensus decisions. Moving it to Thalamus makes neurons pure data processors — they only store learned associations and do pattern matching/voting based on numeric IDs and strengths.
 
@@ -112,7 +112,6 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 
 | Field | Neuron uses internally? | Who reads it? | Thalamus storage |
 |---|---|---|---|
-| `channel` | never | Brain (consensus, rewards), Memory (action grouping) | `neuronId → channel` |
 | `type` | never | Brain (event vs action filtering), Memory (same) | `neuronId → type` |
 | `coordinates` | only for `valueKey` (already a Thalamus lookup) | Brain (consensus dimensions, winner building) | `neuronId → coordinates` (already in `neuronsByValue`) |
 | `parent` | never | Brain (error correction only) | `childId → parentId` |
@@ -441,7 +440,6 @@ Database                      →     Stays in JS (persistence boundary)
 
 | Phase | Scope | Estimate |
 |-------|-------|----------|
-| 0 | Centralize hyperparameters in Brain constructor | ~2 days |
 | 1 | Unify per-neuron processing (JS refactor) | ~1.5 weeks |
 | 2 | Column class design (deferred to Rust — Phase 5) | — |
 | 3 | Clean up persistence (dumps/database) | ~1 week |
@@ -457,11 +455,9 @@ See [future-work.md](future-work.md) for Python bindings, MPI distribution, text
 
 ## Success Criteria
 
-- **Phase 0**: All hyperparameters configurable via Brain constructor and CLI. Default values produce identical results. No static class fields for hyperparameters.
 - **Phase 1**: All existing tests pass identically. Brain behavior unchanged. Every neuron's frame work goes through a single `processFrame()` call. Brain delegates to Thalamus, not to individual neuron loops. All neuron references are ID-based. Contexts live in parent routing tables.
 - **Phase 2**: Column class design documented. Implementation deferred to Phase 5 in Rust.
 - **Phase 3**: Dumps are the primary backup/restore mechanism. Database is analysis-only. Serialization format is portable and versioned, ready for Rust core to own.
 - **Phase 4**: Single-threaded Rust core handles frame processing. Rust unit tests pass. Dump cross-compatibility verified (JS↔Rust). JS tests pass through N-API. Published to npm. Results identical to JS implementation.
 - **Phase 5**: Multi-threaded Rust core with region/column classes. Measurable speedup over single-threaded. Thread count configurable. Neurons partitioned across columns.
 - **Phase 6**: Stock processing scales with parallelism. Benchmarked against JS baseline.
-

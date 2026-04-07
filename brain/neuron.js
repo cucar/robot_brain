@@ -7,7 +7,8 @@ import { Context } from './context.js';
  * - connections: Map<distance, Map<toNeuronId, {strength, reward}>> - predictions
  * - children: Set<neuronId> - child pattern neuron IDs (routing table)
  *
- * Level 0 (sensory) neurons additionally have: channel, type, coordinates
+ * Level 0 (sensory) neurons additionally have: type, coordinates
+ * Channel is stored externally in Thalamus lookup tables (neuronId → channelName).
  * Level > 0 (pattern) neurons additionally have: parent
  *
  * Note: Active state (which neurons are active at which ages) and votes are managed
@@ -23,11 +24,11 @@ export class Neuron {
 	static nextId = 1;
 
 	/**
-	 * Create a sensory neuron (level 0) - id optional for loading from database
+	 * Create a sensory neuron (level 0)
+	 * Channel is stored externally in Thalamus lookup tables.
 	 */
-	static createSensory(channel, type, coordinates, patternForgetRate, mergeThreshold) {
+	static createSensory(type, coordinates, patternForgetRate, mergeThreshold) {
 		const neuron = new Neuron(0, patternForgetRate, mergeThreshold);
-		neuron.channel = channel;
 		neuron.type = type;
 		neuron.coordinates = coordinates;
 		return neuron;
