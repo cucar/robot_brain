@@ -116,6 +116,9 @@ export default class Brain {
 		// reset all neurons
 		this.thalamus.reset();
 
+		// reset neuron id counter
+		Neuron.nextId = 1;
+
 		// Clear MySQL tables if using a database
 		if (this.database) await this.db.reset();
 	}

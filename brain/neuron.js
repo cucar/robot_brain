@@ -37,8 +37,6 @@ export class Neuron {
 		return new Neuron(level, patternForgetRate, mergeThreshold);
 	}
 
-
-
 	/**
 	 * constructor - id optional for loading from database
 	 */

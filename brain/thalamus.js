@@ -143,7 +143,6 @@ export class Thalamus {
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		this.levelCounts = []; // for diagnostics
-		Neuron.nextId = 1;
 	}
 
 	/**
