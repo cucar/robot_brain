@@ -7,8 +7,8 @@ import { Context } from './context.js';
  * - connections: Map<distance, Map<toNeuronId, {strength, reward}>> - predictions
  * - children: Set<neuronId> - child pattern neuron IDs (routing table)
  *
- * Sensory neuron metadata (coordinates, channel, type) is stored externally in Thalamus lookup tables.
- * Level > 0 (pattern) neurons additionally have: parent
+ * Sensory neuron metadata (coordinates, channel, type) and pattern neuron metadata (parent)
+ * are stored externally in Thalamus lookup tables.
  *
  * Note: Active state (which neurons are active at which ages) and votes are managed
  * by the Brain, not stored on neurons. This allows efficient age-indexed queries.
@@ -33,10 +33,8 @@ export class Neuron {
 	/**
 	 * Create a pattern neuron (level > 0) - id optional for loading from database
 	 */
-	static createPattern(level, parentId, patternForgetRate, mergeThreshold) {
-		const neuron = new Neuron(level, patternForgetRate, mergeThreshold);
-		neuron.parentId = parentId;
-		return neuron;
+	static createPattern(level, patternForgetRate, mergeThreshold) {
+		return new Neuron(level, patternForgetRate, mergeThreshold);
 	}
 
 

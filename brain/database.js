@@ -86,7 +86,7 @@ export class Database {
 		const { neuronChannels, neuronTypes } = await this.loadBaseNeurons(channelIdToName);
 		const neuronCoordinates = await this.loadCoordinates(dimensionIdToName);
 		await this.loadConnections(neuronMap);
-		await this.loadPatterns(neuronMap);
+		const neuronParentMap = await this.loadPatterns(neuronMap);
 		await this.loadPatternContexts(neuronMap);
 
 		// Build snapshot
@@ -98,6 +98,8 @@ export class Database {
 				entry.type = neuronTypes.get(neuron.id);
 				entry.coordinates = neuronCoordinates.get(neuron.id);
 			}
+			const parentId = neuronParentMap.get(neuron.id);
+			if (parentId != null) entry.parentId = parentId;
 			neurons.push(entry);
 		}
 		return { neurons, channels, channelNameToId, dimensionNameToId };
@@ -203,23 +205,25 @@ export class Database {
 
 	/**
 	 * Load patterns table
+	 * @returns {Map<number, number>} neuronId -> parentNeuronId
 	 */
 	async loadPatterns(neurons) {
 
 		// get the patterns
 		const [rows] = await this.conn.query('SELECT pattern_neuron_id, parent_neuron_id FROM patterns');
 
-		// create the pattern to parent mappings in neurons (using IDs)
+		// create the pattern to parent mappings (stored in Thalamus via snapshot)
+		const neuronParentMap = new Map();
 		for (const row of rows) {
 
 			// map the pattern to its parent by ID
-			const pattern = neurons.get(row.pattern_neuron_id);
-			pattern.parentId = row.parent_neuron_id;
+			neuronParentMap.set(row.pattern_neuron_id, row.parent_neuron_id);
 
 			// add the pattern to the parent's children set by ID
 			const parent = neurons.get(row.parent_neuron_id);
 			parent.addChild(row.pattern_neuron_id);
 		}
+		return neuronParentMap;
 	}
 
 	/**
@@ -348,9 +352,9 @@ export class Database {
 	async backupPatterns(neurons) {
 		await this.conn.query('TRUNCATE patterns');
 		const patternRows = [];
-		for (const { neuron } of neurons)
+		for (const { neuron, parentId } of neurons)
 			if (neuron.level > 0)
-				patternRows.push([neuron.id, neuron.parentId]);
+				patternRows.push([neuron.id, parentId]);
 		if (patternRows.length === 0) return;
 		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id) VALUES ?', [patternRows]);
 		console.log(`  Saved ${patternRows.length} patterns`);

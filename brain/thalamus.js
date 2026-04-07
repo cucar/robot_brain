@@ -20,6 +20,7 @@ export class Thalamus {
 		this.neuronValues = new Map(); // neuronId -> coordinates (neuron -> coordinates reverse lookup)
 		this.neuronChannel = new Map(); // neuronId -> channelName (sensory neurons only)
 		this.neuronType = new Map(); // neuronId -> 'event'|'action' (sensory neurons only)
+		this.neuronParents = new Map(); // neuronId -> parentNeuronId (pattern neurons only)
 
 		// Death ledger - scheduled neuron deaths
 		this.deathLedger = new Map(); // frameNumber -> Set<Neuron>
@@ -87,13 +88,15 @@ export class Thalamus {
 	 * Add a neuron to the registry
 	 * @param {Neuron} neuron - Neuron to add
 	 * @param {object} [coordinates] - Coordinates for sensory neurons (level 0)
+	 * @param {number} [parentId] - Parent neuron ID for pattern neurons (level > 0)
 	 */
-	addNeuron(neuron, coordinates) {
+	addNeuron(neuron, coordinates, parentId) {
 		this.neurons.set(neuron.id, neuron);
 		if (neuron.level === 0 && coordinates) {
 			this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
 			this.neuronValues.set(neuron.id, coordinates);
 		}
+		if (parentId) this.neuronParents.set(neuron.id, parentId);
 		this.incrementLevelCount(neuron.level); // for diagnostics
 	}
 
@@ -112,10 +115,11 @@ export class Thalamus {
 		// Restore neurons
 		this.reset();
 
-		for (const { neuron, channel, type, coordinates } of snapshot.neurons) {
+		for (const { neuron, channel, type, coordinates, parentId } of snapshot.neurons) {
 			this.neurons.set(neuron.id, neuron);
 			if (channel) this.neuronChannel.set(neuron.id, channel);
 			if (type) this.neuronType.set(neuron.id, type);
+			if (parentId) this.neuronParents.set(neuron.id, parentId);
 			this.incrementLevelCount(neuron.level);
 			if (neuron.level === 0 && coordinates) {
 				this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
@@ -135,6 +139,7 @@ export class Thalamus {
 		this.neuronValues.clear();
 		this.neuronChannel.clear();
 		this.neuronType.clear();
+		this.neuronParents.clear();
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		this.levelCounts = []; // for diagnostics
@@ -157,6 +162,15 @@ export class Thalamus {
 	 */
 	getNeuronType(neuronId) {
 		return this.neuronType.get(neuronId);
+	}
+
+	/**
+	 * Get the parent neuron ID for a pattern neuron
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {number|undefined} Parent neuron ID
+	 */
+	getNeuronParent(neuronId) {
+		return this.neuronParents.get(neuronId);
 	}
 
 	/**
@@ -227,6 +241,8 @@ export class Thalamus {
 				entry.type = this.getNeuronType(neuron.id);
 				entry.coordinates = this.getNeuronCoordinates(neuron.id);
 			}
+			const parentId = this.neuronParents.get(neuron.id);
+			if (parentId) entry.parentId = parentId;
 			neurons.push(entry);
 		}
 		return {
@@ -710,8 +726,9 @@ export class Thalamus {
 		const newlyDeletable = this.cleanupContextReferences(pattern, currentFrame);
 
 		// Remove pattern from its parent's routing table (if parent still exists)
-		if (pattern.parentId) {
-			const parentNeuron = this.neurons.get(pattern.parentId);
+		const parentId = this.neuronParents.get(pattern.id);
+		if (parentId) {
+			const parentNeuron = this.neurons.get(parentId);
 			if (parentNeuron) parentNeuron.removeChild(pattern.id);
 		}
 
@@ -725,7 +742,7 @@ export class Thalamus {
 		this.decrementLevelCount(pattern.level);
 
 		// memory cleanup
-		pattern.parentId = null;
+		this.neuronParents.delete(pattern.id);
 		delete pattern.context;
 		delete pattern.contextRefs;
 		delete pattern.children;

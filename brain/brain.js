@@ -535,7 +535,7 @@ export default class Brain {
 		for (const { neuron, age, context } of corrections) {
 
 			// create the new pattern neuron
-			const pattern = Neuron.createPattern(neuron.level + 1, neuron.id, this.patternForgetRate, this.mergeThreshold);
+			const pattern = Neuron.createPattern(neuron.level + 1, this.patternForgetRate, this.mergeThreshold);
 
 			// create the future connections of the pattern from currently observed neurons
 			for (let a = 0; a < age && a < sensoryNeurons.length; a++)
@@ -553,8 +553,8 @@ export default class Brain {
 					}
 				}
 
-			// index the new neuron with its id
-			this.thalamus.addNeuron(pattern);
+			// index the new neuron with its id and parent
+			this.thalamus.addNeuron(pattern, undefined, neuron.id);
 
 			// activate the pattern neuron at the parent's age and register the pattern for death
 			// must happen before adding context — activation calls materializeStrength which
@@ -832,10 +832,11 @@ export default class Brain {
 	 */
 	formatNeuronLabel(neuron) {
 		// Pattern neurons: resolve parent chain to root sensory neuron
-		if (neuron.level > 0 && neuron.parentId != null) {
-			const parent = this.thalamus.neurons.get(neuron.parentId);
+		const parentId = this.thalamus.getNeuronParent(neuron.id);
+		if (neuron.level > 0 && parentId != null) {
+			const parent = this.thalamus.neurons.get(parentId);
 			if (parent) return this.formatNeuronLabel(parent);
-			return `n${neuron.id}(parent:${neuron.parentId})`;
+			return `n${neuron.id}(parent:${parentId})`;
 		}
 		// Sensory neurons: format coordinates
 		const coordinates = this.thalamus.getNeuronCoordinates(neuron.id);

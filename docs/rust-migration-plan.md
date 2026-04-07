@@ -112,16 +112,12 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 
 | Field | Neuron uses internally? | Who reads it? | Thalamus storage |
 |---|---|---|---|
-| `coordinates` | only for `valueKey` (already a Thalamus lookup) | Brain (consensus dimensions, winner building) | `neuronId → coordinates` (already in `neuronsByValue`) |
-| `parent` | never | Brain (error correction only) | `childId → parentId` |
 | `level` | vote weighting, death frame, deletion guard | Brain/Memory (level loop, context keys, filtering) | `neuronId → level` + `level → Set<neuronId>` |
 
 **For `level`**: the 3 internal uses (vote weighting, death frame calculation, deletion guard) all become parameters passed in by the caller. Thalamus already needs level→neuron mapping for the level loop.
 
 **Implementation**: move one field at a time, update all callers to go through Thalamus lookups, verify after each:
-1. `coordinates` (drop `valueKey` getter from Neuron)
-3. `parent` (replace with Thalamus `childId → parentId` map)
-4. `level` (refactor `vote()`, `strengthenActivation()`, `canBeDeleted()` to take level as parameter)
+1. `level` (refactor `vote()`, `strengthenActivation()`, `canBeDeleted()` to take level as parameter)
 
 **Note**: all neuron metadata is **immutable after creation** — it never changes once a neuron is created. This property is critical for distribution in later phases (see Phase 5 and [MPI Distribution](future-work.md#mpi-distribution-when-multi-server-budget-available)).
 
