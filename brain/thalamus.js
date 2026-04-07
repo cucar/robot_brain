@@ -163,7 +163,7 @@ export class Thalamus {
 		const channelOutputs = new Map();
 		for (const { neuron, strength, reward } of inferences) {
 			if (this.getNeuronType(neuron.id) !== 'action') continue;
-			const channel = this.neuronChannel.get(neuron.id);
+			const channel = this.getNeuronChannel(neuron.id);
 			if (!channelOutputs.has(channel)) channelOutputs.set(channel, []);
 			channelOutputs.get(channel).push({ coordinates: neuron.coordinates, strength, reward });
 		}
@@ -180,7 +180,7 @@ export class Thalamus {
 		for (const neuronId of activeNeuronIds) {
 			const neuron = this.neurons.get(neuronId);
 			if (!neuron || this.getNeuronType(neuronId) !== 'event') continue;
-			const channel = this.neuronChannel.get(neuron.id);
+			const channel = this.getNeuronChannel(neuron.id);
 			if (!result.has(channel)) result.set(channel, []);
 			result.get(channel).push(neuron.coordinates);
 		}
@@ -195,7 +195,7 @@ export class Thalamus {
 	getInferences(inferredNeurons) {
 		const inferences = [];
 		for (const { neuron, strength } of inferredNeurons)
-			inferences.push({ neuron, strength, channel: this.neuronChannel.get(neuron.id), type: this.getNeuronType(neuron.id) });
+			inferences.push({ neuron, strength, channel: this.getNeuronChannel(neuron.id), type: this.getNeuronType(neuron.id) });
 		return inferences;
 	}
 
@@ -209,8 +209,8 @@ export class Thalamus {
 		for (const neuron of this.neurons.values()) {
 			const entry = { neuron };
 			if (neuron.level === 0) {
-				entry.channel = this.neuronChannel.get(neuron.id);
-				entry.type = this.neuronType.get(neuron.id);
+				entry.channel = this.getNeuronChannel(neuron.id);
+				entry.type = this.getNeuronType(neuron.id);
 			}
 			neurons.push(entry);
 		}
@@ -360,8 +360,8 @@ export class Thalamus {
 	 * Check if a neuron should be skipped (action neuron in a channel without action sequences)
 	 */
 	skipActionNeuron(neuron) {
-		if (neuron.level !== 0 || this.neuronType.get(neuron.id) !== 'action') return false;
-		const channel = this.channels.get(this.neuronChannel.get(neuron.id));
+		if (neuron.level !== 0 || this.getNeuronType(neuron.id) !== 'action') return false;
+		const channel = this.channels.get(this.getNeuronChannel(neuron.id));
 		return channel && !channel.actionSequences;
 	}
 
@@ -499,8 +499,8 @@ export class Thalamus {
 
 		// Add inferred neurons to their channels
 		for (const inference of inferredNeurons) {
-			const inferences = channelInferences.get(this.neuronChannel.get(inference.neuron.id));
-			const type = this.neuronType.get(inference.neuron.id);
+			const inferences = channelInferences.get(this.getNeuronChannel(inference.neuron.id));
+			const type = this.getNeuronType(inference.neuron.id);
 			if (type === 'action') inferences.actions.push(inference);
 			else if (type === 'event') inferences.events.push(inference);
 		}
