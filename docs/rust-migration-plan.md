@@ -232,6 +232,7 @@ The following describes the *design* for reference — implementation happens in
 
 ### 2.4 Refactor Thalamus for column-aware neuron ownership
 - Neurons get assigned to a specific column (owner)
+- Neuron channel, type, coordinates belong to base level only - may be ok to merge as baseNeurons?
 - Thalamus tracks which region/column owns each neuron
 - Neuron lookup still global (Thalamus), but mutations route through owner
 
@@ -239,6 +240,10 @@ The following describes the *design* for reference — implementation happens in
 - Each column has its own active neuron window
 - Global Memory becomes an aggregator over per-column memories
 - Inferred neurons remain global (consensus output)
+
+### 2.6 Cleanup
+- Change offset rows to work from the end and add demo for training first and then testing accuracy with hold out data
+- Change brain interface to take inputs of the frame as arguments - maybe even actions?
 
 ---
 
@@ -253,6 +258,12 @@ Clarify the two distinct persistence concerns before moving to Rust, so the libr
 **Responsibility split**:
 - **Rust core (library)**: owns `serialize() → bytes` and `deserialize(bytes) → brain state`. The library knows its internal data structures — only it can produce a correct serialization. No file I/O, no database, no external dependencies.
 - **App/wrapper (JS or future bindings)**: decides *where* and *when* to persist. Calls `core.serialize()`, writes to file. Reads file, calls `core.deserialize(bytes)`. Also owns database population for analysis tools (iterates neurons via core query APIs, writes to indexed tables).
+
+### 3.0 Dump/backup connection
+- Dumps become binary serialization of full brain state (neurons, connections, contexts, routing tables)
+- Core Brain (rust) should only do file based backup/restore 
+- we need separate node.js tools for importing and exporting backups to database for debugging and analysis applications
+- Reference: https://claude.ai/share/e319c25b-5323-4313-adf2-d1720e068b16
 
 ### 3.1 Convert dumps to the primary backup/restore mechanism
 - Dumps become binary serialization of full brain state (neurons, connections, contexts, routing tables)
