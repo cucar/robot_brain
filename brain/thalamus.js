@@ -21,6 +21,7 @@ export class Thalamus {
 		this.neuronChannel = new Map(); // neuronId -> channelName (sensory neurons only)
 		this.neuronType = new Map(); // neuronId -> 'event'|'action' (sensory neurons only)
 		this.neuronParents = new Map(); // neuronId -> parentNeuronId (pattern neurons only)
+		this.neuronLevels = new Map(); // neuronId -> level (0 = sensory, 1+ = pattern)
 
 		// Death ledger - scheduled neuron deaths
 		this.deathLedger = new Map(); // frameNumber -> Set<Neuron>
@@ -63,14 +64,15 @@ export class Thalamus {
 		if (neuron) return neuron;
 
 		// Create new neuron if not found
-		neuron = Neuron.createSensory(this.patternForgetRate, this.mergeThreshold);
+		neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
 		const valueKey = this.makeValueKey(coordinates);
 		this.neurons.set(neuron.id, neuron);
+		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(valueKey, neuron);
 		this.neuronValues.set(neuron.id, coordinates);
 		this.neuronChannel.set(neuron.id, channel);
 		this.neuronType.set(neuron.id, type);
-		this.incrementLevelCount(neuron.level); // for diagnostics
+		this.incrementLevelCount(0); // for diagnostics
 		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${valueKey}`);
 		return neuron;
 	}
@@ -87,17 +89,19 @@ export class Thalamus {
 	/**
 	 * Add a neuron to the registry
 	 * @param {Neuron} neuron - Neuron to add
+	 * @param {number} level - Neuron level (0 = sensory, 1+ = pattern)
 	 * @param {object} [coordinates] - Coordinates for sensory neurons (level 0)
 	 * @param {number} [parentId] - Parent neuron ID for pattern neurons (level > 0)
 	 */
-	addNeuron(neuron, coordinates, parentId) {
+	addNeuron(neuron, level, coordinates, parentId) {
 		this.neurons.set(neuron.id, neuron);
-		if (neuron.level === 0 && coordinates) {
+		this.neuronLevels.set(neuron.id, level);
+		if (level === 0 && coordinates) {
 			this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
 			this.neuronValues.set(neuron.id, coordinates);
 		}
 		if (parentId) this.neuronParents.set(neuron.id, parentId);
-		this.incrementLevelCount(neuron.level); // for diagnostics
+		this.incrementLevelCount(level); // for diagnostics
 	}
 
 	/**
@@ -115,17 +119,18 @@ export class Thalamus {
 		// Restore neurons
 		this.reset();
 
-		for (const { neuron, channel, type, coordinates, parentId } of snapshot.neurons) {
+		for (const { neuron, level, channel, type, coordinates, parentId } of snapshot.neurons) {
 			this.neurons.set(neuron.id, neuron);
+			this.neuronLevels.set(neuron.id, level);
 			if (channel) this.neuronChannel.set(neuron.id, channel);
 			if (type) this.neuronType.set(neuron.id, type);
 			if (parentId) this.neuronParents.set(neuron.id, parentId);
-			this.incrementLevelCount(neuron.level);
-			if (neuron.level === 0 && coordinates) {
+			this.incrementLevelCount(level);
+			if (level === 0 && coordinates) {
 				this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
 				this.neuronValues.set(neuron.id, coordinates);
 			}
-			else if (neuron.level > 0)
+			else if (level > 0)
 				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / neuron.patternForgetRate));
 		}
 	}
@@ -135,6 +140,7 @@ export class Thalamus {
 	 */
 	reset() {
 		this.neurons.clear();
+		this.neuronLevels.clear();
 		this.neuronsByValue.clear();
 		this.neuronValues.clear();
 		this.neuronChannel.clear();
@@ -170,6 +176,15 @@ export class Thalamus {
 	 */
 	getNeuronParent(neuronId) {
 		return this.neuronParents.get(neuronId);
+	}
+
+	/**
+	 * Get the level for a neuron (0 = sensory, 1+ = pattern)
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {number} Neuron level
+	 */
+	getNeuronLevel(neuronId) {
+		return this.neuronLevels.get(neuronId);
 	}
 
 	/**
@@ -234,8 +249,9 @@ export class Thalamus {
 	getSnapshot() {
 		const neurons = [];
 		for (const neuron of this.neurons.values()) {
-			const entry = { neuron };
-			if (neuron.level === 0) {
+			const level = this.neuronLevels.get(neuron.id);
+			const entry = { neuron, level };
+			if (level === 0) {
 				entry.channel = this.getNeuronChannel(neuron.id);
 				entry.type = this.getNeuronType(neuron.id);
 				entry.coordinates = this.getNeuronCoordinates(neuron.id);
@@ -262,7 +278,7 @@ export class Thalamus {
 		for (const neuron of this.neurons.values()) {
 			neuron.materializeStrength(currentFrame);
 			neuron.lastActivationFrame = 0;
-			if (neuron.level > 0)
+			if (this.neuronLevels.get(neuron.id) > 0)
 				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / neuron.patternForgetRate));
 		}
 	}
@@ -377,7 +393,7 @@ export class Thalamus {
 		for (let ctxAge = 1; ctxAge < activeNeuronsByAge.length; ctxAge++)
 			for (const neuronId of (activeNeuronsByAge[ctxAge] ?? new Map()).keys()) {
 				const neuron = this.neurons.get(neuronId);
-				if (this.skipActionNeuron(neuron) || neuron.level !== level) continue;
+				if (this.skipActionNeuron(neuron) || this.neuronLevels.get(neuronId) !== level) continue;
 				for (let age = 0; age < ctxAge; age++) {
 					if (!contextByAge.has(age)) contextByAge.set(age, new Context());
 					contextByAge.get(age).addNeuron(neuronId, ctxAge - age, 1);
@@ -390,7 +406,7 @@ export class Thalamus {
 	 * Check if a neuron should be skipped (action neuron in a channel without action sequences)
 	 */
 	skipActionNeuron(neuron) {
-		if (neuron.level !== 0 || this.getNeuronType(neuron.id) !== 'action') return false;
+		if (this.neuronLevels.get(neuron.id) !== 0 || this.getNeuronType(neuron.id) !== 'action') return false;
 		const channel = this.channels.get(this.getNeuronChannel(neuron.id));
 		return channel && !channel.actionSequences;
 	}
@@ -407,7 +423,7 @@ export class Thalamus {
 			for (const [neuronId, state] of (activeNeuronsByAge[age] ?? new Map())) {
 				const neuron = this.neurons.get(neuronId);
 				if (!neuron || state.activatedPattern !== null) continue;
-				if (this.skipActionNeuron(neuron) || neuron.level !== level) continue;
+				if (this.skipActionNeuron(neuron) || this.neuronLevels.get(neuronId) !== level) continue;
 				recognizers.push({ neuron, age, context });
 			}
 		}
@@ -735,10 +751,12 @@ export class Thalamus {
 		this.unregisterDeath(pattern);
 
 		// Delete this pattern neuron from the index
+		const level = this.neuronLevels.get(pattern.id);
 		this.neurons.delete(pattern.id);
+		this.neuronLevels.delete(pattern.id);
 
 		// decrement level count for diagnostics
-		this.decrementLevelCount(pattern.level);
+		this.decrementLevelCount(level);
 
 		// memory cleanup
 		this.neuronParents.delete(pattern.id);
@@ -779,7 +797,7 @@ export class Thalamus {
 				referencingPattern.removeContext(neuron.id, distance);
 
 			// Check if the referencing pattern became deletable
-			if (referencingPattern.canDelete(currentFrame))
+			if (referencingPattern.canDelete(currentFrame, this.neuronLevels.get(referencingPatternId)))
 				newlyDeletable.push(referencingPattern);
 		}
 

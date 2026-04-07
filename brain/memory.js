@@ -63,30 +63,38 @@ export class Memory {
 
 	/**
 	 * Activate a neuron at age 0
+	 * @param {Neuron} neuron - Neuron to activate
+	 * @param {number} level - Neuron level (from Thalamus)
+	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
-	activateNeuron(neuron, currentFrame) {
-		return this.activateNeuronAtAge(neuron, 0, currentFrame);
+	activateNeuron(neuron, level, currentFrame) {
+		return this.activateNeuronAtAge(neuron, level, 0, currentFrame);
 	}
 
 	/**
 	 * Activate a neuron at a specific age (keyed by neuron ID)
+	 * @param {Neuron} neuron - Neuron to activate
+	 * @param {number} level - Neuron level (from Thalamus)
+	 * @param {number} age - Age slot
+	 * @param {number} currentFrame - Current frame number for lazy decay
 	 * @returns {number|null} death frame for pattern neurons, null for sensory
 	 */
-	activateNeuronAtAge(neuron, age, currentFrame) {
+	activateNeuronAtAge(neuron, level, age, currentFrame) {
 		if (!this.activeNeurons[age]) this.activeNeurons[age] = new Map();
 		this.activeNeurons[age].set(neuron.id, { activatedPattern: null, votes: null, context: null });
-		return neuron.strengthenActivation(currentFrame);
+		return neuron.strengthenActivation(currentFrame, level);
 	}
 
 	/**
 	 * Activate a pattern neuron and link it to its parent
 	 * @param {Neuron} pattern - The pattern neuron to activate
+	 * @param {number} patternLevel - Pattern neuron level (from Thalamus)
 	 * @param {Neuron} parent - The parent neuron that triggered the pattern
 	 * @param {number} age - The age at which to activate
 	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
-	activatePattern(pattern, parent, age, currentFrame) {
-		const deathFrame = this.activateNeuronAtAge(pattern, age, currentFrame);
+	activatePattern(pattern, patternLevel, parent, age, currentFrame) {
+		const deathFrame = this.activateNeuronAtAge(pattern, patternLevel, age, currentFrame);
 		const neuronsAtAge = this.activeNeurons[age];
 		const state = neuronsAtAge.get(parent.id);
 		state.activatedPattern = pattern;
@@ -145,6 +153,6 @@ export class Memory {
 		for (const pattern of deletedPatterns)
 			for (const neuronsAtAge of this.activeNeurons)
 				if (neuronsAtAge.has(pattern.id))
-					throw new Error(`BUG: deleting active neuron ${pattern.id} (level ${pattern.level})`);
+					throw new Error(`BUG: deleting active neuron ${pattern.id}`);
 	}
 }

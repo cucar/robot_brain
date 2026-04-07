@@ -7,8 +7,9 @@ import { Context } from './context.js';
  * - connections: Map<distance, Map<toNeuronId, {strength, reward}>> - predictions
  * - children: Set<neuronId> - child pattern neuron IDs (routing table)
  *
- * Sensory neuron metadata (coordinates, channel, type) and pattern neuron metadata (parent)
- * are stored externally in Thalamus lookup tables.
+ * All neuron metadata (level, coordinates, channel, type, parent) is stored externally
+ * in Thalamus lookup tables. Neurons are pure data processors — they only store learned
+ * associations and do pattern matching/voting based on numeric IDs and strengths.
  *
  * Note: Active state (which neurons are active at which ages) and votes are managed
  * by the Brain, not stored on neurons. This allows efficient age-indexed queries.
@@ -23,27 +24,11 @@ export class Neuron {
 	static nextId = 1;
 
 	/**
-	 * Create a sensory neuron (level 0)
-	 * Channel, type, and coordinates are stored externally in Thalamus lookup tables.
-	 */
-	static createSensory(patternForgetRate, mergeThreshold) {
-		return new Neuron(0, patternForgetRate, mergeThreshold);
-	}
-
-	/**
-	 * Create a pattern neuron (level > 0) - id optional for loading from database
-	 */
-	static createPattern(level, patternForgetRate, mergeThreshold) {
-		return new Neuron(level, patternForgetRate, mergeThreshold);
-	}
-
-	/**
 	 * constructor - id optional for loading from database
 	 */
-	constructor(level, patternForgetRate, mergeThreshold, id = null) {
+	constructor(patternForgetRate, mergeThreshold, id = null) {
 
 		// initialize neuron parameters
-		this.level = level;
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
 
@@ -172,8 +157,11 @@ export class Neuron {
 
 	/**
 	 * increments activation strength - materializes all owner-scoped lazy decay first
+	 * @param {number} currentFrame - Current frame number for lazy decay
+	 * @param {number} level - Neuron level (passed in from Thalamus)
+	 * @returns {number|null} Death frame for pattern neurons, null for sensory neurons
 	 */
-	strengthenActivation(currentFrame) {
+	strengthenActivation(currentFrame, level) {
 
 		// update all strengths based on decay rate first
 		this.materializeStrength(currentFrame);
@@ -185,7 +173,7 @@ export class Neuron {
 		this.lastActivationFrame = currentFrame;
 
 		// return death frame for pattern neurons (sensory neurons never die)
-		if (this.level === 0) return null;
+		if (level === 0) return null;
 		return currentFrame + Math.ceil(this.activationStrength / this.patternForgetRate);
 	}
 
@@ -390,11 +378,12 @@ export class Neuron {
 	/**
 	 * Check if neuron can be deleted (is a zombie)
 	 * @param {number} currentFrame - Current frame number
+	 * @param {number} level - Neuron level (passed in from Thalamus)
 	 */
-	canDelete(currentFrame) {
+	canDelete(currentFrame, level) {
 
 		// sensory neurons cannot be deleted
-		if (this.level === 0) return false;
+		if (level === 0) return false;
 
 		// if the pattern has not been activated in some time, die!
 		return this.getEffectiveActivationStrength(currentFrame) <= 0;

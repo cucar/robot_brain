@@ -104,37 +104,7 @@ Key insight: within a single neuron, the ordering is natural:
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.0a — Move neuron metadata to Thalamus
-
-Neurons currently store metadata they never use internally (`channel`, `type`, `coordinates`, `parent`). This metadata is only read by Brain, Memory, and Thalamus for routing/filtering/consensus decisions. Moving it to Thalamus makes neurons pure data processors — they only store learned associations and do pattern matching/voting based on numeric IDs and strengths.
-
-**Fields to move off Neuron → Thalamus lookup tables**:
-
-| Field | Neuron uses internally? | Who reads it? | Thalamus storage |
-|---|---|---|---|
-| `level` | vote weighting, death frame, deletion guard | Brain/Memory (level loop, context keys, filtering) | `neuronId → level` + `level → Set<neuronId>` |
-
-**For `level`**: the 3 internal uses (vote weighting, death frame calculation, deletion guard) all become parameters passed in by the caller. Thalamus already needs level→neuron mapping for the level loop.
-
-**Implementation**: move one field at a time, update all callers to go through Thalamus lookups, verify after each:
-1. `level` (refactor `vote()`, `strengthenActivation()`, `canBeDeleted()` to take level as parameter)
-
-**Note**: all neuron metadata is **immutable after creation** — it never changes once a neuron is created. This property is critical for distribution in later phases (see Phase 5 and [MPI Distribution](future-work.md#mpi-distribution-when-multi-server-budget-available)).
-
-**Verify**: all tests pass after each sub-step, results identical
-
-#### Step 1.0b — Unify sensory and pattern neuron constructors
-
-With metadata moved to Thalamus (Step 1.0a), the Neuron constructor simplifies to just `(id, level, parentId)`. Sensory neurons are `(id, 0, null)` — no structural difference from pattern neurons anymore.
-
-- Remove `Neuron.createSensory()` and `Neuron.createPattern()` static factories
-- Single constructor: `new Neuron(id, level, parentId)` — sensory neurons just have `level=0, parentId=null`
-- If meaningful behavioral differences remain between sensory and pattern neurons after this, consider splitting back to separate `SensoryNeuron` and `PatternNeuron` classes — may be cleaner now that metadata is external
-- **Verify**: all tests pass, results identical
-
----
-
-#### Step 1.1 — Move pattern contexts from children to parent routing table
+#### Step 1.1a — Move pattern contexts from children to parent routing table
 
 **Why first**: Currently `matchPattern()` on the parent reaches into each child's `pattern.context` to match. In a distributed system, children may live on different machines. The parent must own the routing table with all context data so matching is local.
 
