@@ -434,7 +434,7 @@ export default class Brain {
 		for (const neuronId of this.memory.getNeuronsAtAge(0).keys()) {
 			const neuron = neurons.get(neuronId);
 			if (neuron && neuron.level === 0) {
-				newActiveNeurons.push({ id: neuron.id, type: neuron.type, channel: this.thalamus.getNeuronChannel(neuron.id) });
+				newActiveNeurons.push({ id: neuron.id, type: this.thalamus.getNeuronType(neuron.id), channel: this.thalamus.getNeuronChannel(neuron.id) });
 				newActiveNeuronIds.add(neuronId);
 			}
 		}
@@ -462,7 +462,7 @@ export default class Brain {
 			const ageNeurons = [];
 			for (const neuronId of this.memory.getNeuronsAtAge(age).keys()) {
 				const neuron = neurons.get(neuronId);
-				if (neuron && neuron.level === 0) ageNeurons.push({ id: neuron.id, type: neuron.type, channel: this.thalamus.getNeuronChannel(neuron.id) });
+				if (neuron && neuron.level === 0) ageNeurons.push({ id: neuron.id, type: this.thalamus.getNeuronType(neuron.id), channel: this.thalamus.getNeuronChannel(neuron.id) });
 			}
 			sensoryNeurons.push(ageNeurons);
 		}
@@ -517,7 +517,7 @@ export default class Brain {
 		let totalEvents = 0;
 		for (const vote of votes) {
 			const votedNeuron = this.thalamus.neurons.get(vote.neuronId);
-			if (votedNeuron && votedNeuron.type === 'event') {
+			if (votedNeuron && this.thalamus.getNeuronType(vote.neuronId) === 'event') {
 				totalEvents++;
 				if (!actualEvents.has(vote.neuronId)) failedEvents++;
 			}
@@ -599,7 +599,7 @@ export default class Brain {
 		if (this.debug) {
 			const resolvedVotes = votes.map(v => ({
 				targetId: v.neuron.id,
-				targetType: v.neuron.type,
+				targetType: this.thalamus.getNeuronType(v.neuron.id),
 				targetChannel: this.thalamus.getNeuronChannel(v.neuron.id),
 				targetCoords: v.neuron.coordinates,
 				voterId: v.voter.id,
@@ -703,7 +703,7 @@ export default class Brain {
 			candidate.strength += v.strength;
 
 			// for actions, calculate the weighted total - for events, calculate total strengths for each dimension
-			if (v.neuron.type === 'action') candidate.weightedTotal += v.strength * v.reward;
+			if (this.thalamus.getNeuronType(v.neuron.id) === 'action') candidate.weightedTotal += v.strength * v.reward;
 			else this.addDimStrength(dimTotalStrength, v.neuron.coordinates, v.strength);
 		}
 		return { candidates, dimTotalStrength };
@@ -718,13 +718,14 @@ export default class Brain {
 		for (const [neuronId, candidate] of candidates) {
 
 			// for actions, calculate the reward as weighted total / strength - for events, calculate the likelihood of the event
-			if (candidate.neuron.type === 'action') candidate.reward = candidate.strength > 0 ? candidate.weightedTotal / candidate.strength : 0;
+			const candidateType = this.thalamus.getNeuronType(neuronId);
+			if (candidateType === 'action') candidate.reward = candidate.strength > 0 ? candidate.weightedTotal / candidate.strength : 0;
 			else candidate.probability = this.getEventProbability(candidate.strength, candidate.neuron.coordinates, dimTotalStrength);
 
 			// set the best neuron for each dimension based on rewards or probabilities, break ties by strength
 			for (const dim of Object.keys(candidate.neuron.coordinates)) {
 				const best = dimBest.get(dim);
-				const score = candidate.neuron.type === 'action' ? candidate.reward : candidate.probability;
+				const score = candidateType === 'action' ? candidate.reward : candidate.probability;
 				if (this.isBetterCandidate(score, candidate.strength, neuronId, best))
 					dimBest.set(dim, { neuronId, neuron: candidate.neuron, score, strength: candidate.strength });
 			}
@@ -758,7 +759,7 @@ export default class Brain {
 				channel: this.thalamus.getNeuronChannel(neuronId),
 				strength: candidate.strength
 			};
-			if (candidate.neuron.type === 'action') winner.reward = candidate.reward;
+			if (this.thalamus.getNeuronType(neuronId) === 'action') winner.reward = candidate.reward;
 			else winner.probability = candidate.probability;
 			winners.push(winner);
 		}
@@ -802,7 +803,7 @@ export default class Brain {
 		// Find which channels already have an action inferred
 		const channelsWithActions = new Set();
 		for (const inf of inferences)
-			if (inf.neuron.type === 'action') channelsWithActions.add(this.thalamus.getNeuronChannel(inf.neuron.id));
+			if (this.thalamus.getNeuronType(inf.neuron.id) === 'action') channelsWithActions.add(this.thalamus.getNeuronChannel(inf.neuron.id));
 
 		// Add exploration action for channels without one
 		for (const [channelName] of this.thalamus.getChannels()) {

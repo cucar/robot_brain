@@ -20,6 +20,7 @@ export class Thalamus {
 
 		// Neuron metadata lookup tables (immutable after creation)
 		this.neuronChannel = new Map(); // neuronId -> channelName (sensory neurons only)
+		this.neuronType = new Map(); // neuronId -> 'event'|'action' (sensory neurons only)
 
 		// Death ledger - scheduled neuron deaths
 		this.deathLedger = new Map(); // frameNumber -> Set<Neuron>
@@ -52,10 +53,11 @@ export class Thalamus {
 		if (neuron) return neuron;
 
 		// Create new neuron if not found
-		neuron = Neuron.createSensory(type, coordinates, this.patternForgetRate, this.mergeThreshold);
+		neuron = Neuron.createSensory(coordinates, this.patternForgetRate, this.mergeThreshold);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronsByValue.set(neuron.valueKey, neuron);
 		this.neuronChannel.set(neuron.id, channel);
+		this.neuronType.set(neuron.id, type);
 		this.incrementLevelCount(neuron.level); // for diagnostics
 		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${neuron.valueKey}`);
 		return neuron;
@@ -103,13 +105,15 @@ export class Thalamus {
 		this.neurons.clear();
 		this.neuronsByValue.clear();
 		this.neuronChannel.clear();
+		this.neuronType.clear();
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		this.levelCounts = [];
 
-		for (const { neuron, channel } of snapshot.neurons) {
+		for (const { neuron, channel, type } of snapshot.neurons) {
 			this.neurons.set(neuron.id, neuron);
 			if (channel) this.neuronChannel.set(neuron.id, channel);
+			if (type) this.neuronType.set(neuron.id, type);
 			this.incrementLevelCount(neuron.level);
 			if (neuron.level === 0)
 				this.neuronsByValue.set(neuron.valueKey, neuron);
@@ -125,6 +129,7 @@ export class Thalamus {
 		this.neurons.clear();
 		this.neuronsByValue.clear();
 		this.neuronChannel.clear();
+		this.neuronType.clear();
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		this.levelCounts = []; // for diagnostics
@@ -141,6 +146,15 @@ export class Thalamus {
 	}
 
 	/**
+	 * Get the type for a neuron ('event' or 'action')
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {string} Neuron type
+	 */
+	getNeuronType(neuronId) {
+		return this.neuronType.get(neuronId);
+	}
+
+	/**
 	 * Get inferred actions grouped by channel from the given inferences.
 	 * @param {Array<{neuron, strength, reward}>} inferences - Inferred neurons from memory
 	 * @returns {Map<string, Array>} - Map of channel name to array of {coordinates, strength, reward}
@@ -148,7 +162,7 @@ export class Thalamus {
 	getInferredActions(inferences) {
 		const channelOutputs = new Map();
 		for (const { neuron, strength, reward } of inferences) {
-			if (neuron.type !== 'action') continue;
+			if (this.getNeuronType(neuron.id) !== 'action') continue;
 			const channel = this.neuronChannel.get(neuron.id);
 			if (!channelOutputs.has(channel)) channelOutputs.set(channel, []);
 			channelOutputs.get(channel).push({ coordinates: neuron.coordinates, strength, reward });
@@ -165,7 +179,7 @@ export class Thalamus {
 		const result = new Map();
 		for (const neuronId of activeNeuronIds) {
 			const neuron = this.neurons.get(neuronId);
-			if (!neuron || neuron.type !== 'event') continue;
+			if (!neuron || this.getNeuronType(neuronId) !== 'event') continue;
 			const channel = this.neuronChannel.get(neuron.id);
 			if (!result.has(channel)) result.set(channel, []);
 			result.get(channel).push(neuron.coordinates);
@@ -181,7 +195,7 @@ export class Thalamus {
 	getInferences(inferredNeurons) {
 		const inferences = [];
 		for (const { neuron, strength } of inferredNeurons)
-			inferences.push({ neuron, strength, channel: this.neuronChannel.get(neuron.id) });
+			inferences.push({ neuron, strength, channel: this.neuronChannel.get(neuron.id), type: this.getNeuronType(neuron.id) });
 		return inferences;
 	}
 
@@ -194,7 +208,10 @@ export class Thalamus {
 		const neurons = [];
 		for (const neuron of this.neurons.values()) {
 			const entry = { neuron };
-			if (neuron.level === 0) entry.channel = this.neuronChannel.get(neuron.id);
+			if (neuron.level === 0) {
+				entry.channel = this.neuronChannel.get(neuron.id);
+				entry.type = this.neuronType.get(neuron.id);
+			}
 			neurons.push(entry);
 		}
 		return {
@@ -343,7 +360,7 @@ export class Thalamus {
 	 * Check if a neuron should be skipped (action neuron in a channel without action sequences)
 	 */
 	skipActionNeuron(neuron) {
-		if (neuron.level !== 0 || neuron.type !== 'action') return false;
+		if (neuron.level !== 0 || this.neuronType.get(neuron.id) !== 'action') return false;
 		const channel = this.channels.get(this.neuronChannel.get(neuron.id));
 		return channel && !channel.actionSequences;
 	}
@@ -483,8 +500,9 @@ export class Thalamus {
 		// Add inferred neurons to their channels
 		for (const inference of inferredNeurons) {
 			const inferences = channelInferences.get(this.neuronChannel.get(inference.neuron.id));
-			if (inference.neuron.type === 'action') inferences.actions.push(inference);
-			else if (inference.neuron.type === 'event') inferences.events.push(inference);
+			const type = this.neuronType.get(inference.neuron.id);
+			if (type === 'action') inferences.actions.push(inference);
+			else if (type === 'event') inferences.events.push(inference);
 		}
 
 		// group by channel classes for action execution

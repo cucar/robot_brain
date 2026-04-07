@@ -70,7 +70,7 @@ export class Dump {
 	 */
 	collectNeuronsData(neurons) {
 		const neuronsData = [];
-		for (const { neuron, channel } of neurons) {
+		for (const { neuron, channel, type } of neurons) {
 			const neuronData = {
 				id: neuron.id,
 				level: neuron.level
@@ -78,7 +78,7 @@ export class Dump {
 
 			if (neuron.level === 0) {
 				neuronData.channel = channel;
-				neuronData.type = neuron.type;
+				neuronData.type = type;
 				neuronData.coordinates = neuron.coordinates;
 			}
 

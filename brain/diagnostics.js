@@ -320,10 +320,10 @@ export class Diagnostics {
 		// Group event predictions by channel for continuous error calculation
 		const predictionsByChannel = new Map();
 
-		for (const { neuron, strength, channel } of inferences) {
+		for (const { neuron, strength, channel, type } of inferences) {
 
 			// Track event prediction accuracy
-			if (neuron.type === 'event') {
+			if (type === 'event') {
 				eventTotal++;
 				const isCorrect = activeNeuronIds.has(neuron.id);
 				if (isCorrect) eventCorrect++;
@@ -334,7 +334,7 @@ export class Diagnostics {
 				predictionsByChannel.get(channel).push({ coordinates: neuron.coordinates, strength, isCorrect });
 			}
 			// Track action reward from the action's channel
-			else if (neuron.type === 'action') {
+			else if (type === 'action') {
 				const reward = rewards.get(channel) || 0;
 				actionReward += reward;
 				actionCount++;

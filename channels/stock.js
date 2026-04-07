@@ -449,7 +449,7 @@ export class StockChannel extends Channel {
 			const action = actionData.coordinates[`${channel.symbol}_activity`];
 			const actionOwn = action === POSITION_OWN;
 
-			// rank stocks by expected reward AND event probability
+			// rank stocks by expected reward
 			allActions.push({ channelName, rank: Math.exp(actionData.reward), isOwn: actionOwn });
 		}
 		return allActions;

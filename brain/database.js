@@ -83,7 +83,7 @@ export class Database {
 		console.log('Loading neurons from MySQL...');
 		const neuronMap = await this.loadNeuronsTable();
 
-		const neuronChannels = await this.loadBaseNeurons(neuronMap, channelIdToName);
+		const { neuronChannels, neuronTypes } = await this.loadBaseNeurons(channelIdToName);
 		await this.loadCoordinates(neuronMap, dimensionIdToName);
 		await this.loadConnections(neuronMap);
 		await this.loadPatterns(neuronMap);
@@ -93,7 +93,10 @@ export class Database {
 		const neurons = [];
 		for (const neuron of neuronMap.values()) {
 			const entry = { neuron };
-			if (neuron.level === 0) entry.channel = neuronChannels.get(neuron.id);
+			if (neuron.level === 0) {
+				entry.channel = neuronChannels.get(neuron.id);
+				entry.type = neuronTypes.get(neuron.id);
+			}
 			neurons.push(entry);
 		}
 		return { neurons, channels, channelNameToId, dimensionNameToId };
@@ -131,21 +134,21 @@ export class Database {
 	/**
 	 * Load base_neurons table
 	 */
-	async loadBaseNeurons(neurons, channelIdToName) {
+	async loadBaseNeurons(channelIdToName) {
 
 		// get the base neuron data from the database
 		const [rows] = await this.conn.query('SELECT neuron_id, channel_id, type FROM base_neurons');
 
-		// update all base neurons and collect channel metadata for caller
+		// update all base neurons and collect channel/type metadata for caller
 		const neuronChannels = new Map(); // neuronId → channelName
+		const neuronTypes = new Map(); // neuronId → type
 		for (const row of rows) {
-			const neuron = neurons.get(row.neuron_id);
 			const channelName = channelIdToName[row.channel_id];
-			neuron.type = row.type;
 			neuronChannels.set(row.neuron_id, channelName);
+			neuronTypes.set(row.neuron_id, row.type);
 		}
 		console.log(`  Loaded ${rows.length} base neurons from table`);
-		return neuronChannels;
+		return { neuronChannels, neuronTypes };
 	}
 
 	/**
@@ -310,9 +313,9 @@ export class Database {
 		await this.conn.query('TRUNCATE coordinates');
 		const baseRows = [];
 		const valueRows = [];
-		for (const { neuron, channel } of snapshot.neurons) {
+		for (const { neuron, channel, type } of snapshot.neurons) {
 			if (neuron.level !== 0) continue;
-			baseRows.push([neuron.id, snapshot.channelNameToId[channel], neuron.type]);
+			baseRows.push([neuron.id, snapshot.channelNameToId[channel], type]);
 			for (const [dimName, val] of Object.entries(neuron.coordinates))
 				valueRows.push([neuron.id, snapshot.dimensionNameToId[dimName], val]);
 		}

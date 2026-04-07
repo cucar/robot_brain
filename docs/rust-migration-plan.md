@@ -112,7 +112,6 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 
 | Field | Neuron uses internally? | Who reads it? | Thalamus storage |
 |---|---|---|---|
-| `type` | never | Brain (event vs action filtering), Memory (same) | `neuronId → type` |
 | `coordinates` | only for `valueKey` (already a Thalamus lookup) | Brain (consensus dimensions, winner building) | `neuronId → coordinates` (already in `neuronsByValue`) |
 | `parent` | never | Brain (error correction only) | `childId → parentId` |
 | `level` | vote weighting, death frame, deletion guard | Brain/Memory (level loop, context keys, filtering) | `neuronId → level` + `level → Set<neuronId>` |
@@ -120,8 +119,7 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 **For `level`**: the 3 internal uses (vote weighting, death frame calculation, deletion guard) all become parameters passed in by the caller. Thalamus already needs level→neuron mapping for the level loop.
 
 **Implementation**: move one field at a time, update all callers to go through Thalamus lookups, verify after each:
-1. `channel` and `type` (always accessed together — move as a pair)
-2. `coordinates` (drop `valueKey` getter from Neuron)
+1. `coordinates` (drop `valueKey` getter from Neuron)
 3. `parent` (replace with Thalamus `childId → parentId` map)
 4. `level` (refactor `vote()`, `strengthenActivation()`, `canBeDeleted()` to take level as parameter)
 
@@ -131,7 +129,7 @@ Neurons currently store metadata they never use internally (`channel`, `type`, `
 
 #### Step 1.0b — Unify sensory and pattern neuron constructors
 
-With metadata moved to Thalamus (Step 1.0b), the Neuron constructor simplifies to just `(id, level, parentId)`. Sensory neurons are `(id, 0, null)` — no structural difference from pattern neurons anymore.
+With metadata moved to Thalamus (Step 1.0a), the Neuron constructor simplifies to just `(id, level, parentId)`. Sensory neurons are `(id, 0, null)` — no structural difference from pattern neurons anymore.
 
 - Remove `Neuron.createSensory()` and `Neuron.createPattern()` static factories
 - Single constructor: `new Neuron(id, level, parentId)` — sensory neurons just have `level=0, parentId=null`
