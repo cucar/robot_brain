@@ -7,8 +7,7 @@ import { Context } from './context.js';
  * - connections: Map<distance, Map<toNeuronId, {strength, reward}>> - predictions
  * - children: Set<neuronId> - child pattern neuron IDs (routing table)
  *
- * Level 0 (sensory) neurons additionally have: coordinates
- * Channel and type are stored externally in Thalamus lookup tables (neuronId → channelName, neuronId → type).
+ * Sensory neuron metadata (coordinates, channel, type) is stored externally in Thalamus lookup tables.
  * Level > 0 (pattern) neurons additionally have: parent
  *
  * Note: Active state (which neurons are active at which ages) and votes are managed
@@ -25,12 +24,10 @@ export class Neuron {
 
 	/**
 	 * Create a sensory neuron (level 0)
-	 * Channel and type are stored externally in Thalamus lookup tables.
+	 * Channel, type, and coordinates are stored externally in Thalamus lookup tables.
 	 */
-	static createSensory(coordinates, patternForgetRate, mergeThreshold) {
-		const neuron = new Neuron(0, patternForgetRate, mergeThreshold);
-		neuron.coordinates = coordinates;
-		return neuron;
+	static createSensory(patternForgetRate, mergeThreshold) {
+		return new Neuron(0, patternForgetRate, mergeThreshold);
 	}
 
 	/**
@@ -42,15 +39,7 @@ export class Neuron {
 		return neuron;
 	}
 
-	/**
-	 * Create value key for neuron lookup
-	 */
-	static makeValueKey(coordinates) {
-		const sorted = Object.keys(coordinates).sort();
-		const obj = {};
-		for (const k of sorted) obj[k] = coordinates[k];
-		return JSON.stringify(obj);
-	}
+
 
 	/**
 	 * constructor - id optional for loading from database
@@ -78,13 +67,6 @@ export class Neuron {
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuronId, {strength, reward}>>
 		this.children = new Set(); // child pattern neuron IDs (routing table)
 		this.contextRefs = new Map(); // context references: Map<neuronId, Set<distance>>
-	}
-
-	/**
-	 * Get value key for this neuron (sensory only)
-	 */
-	get valueKey() {
-		return Neuron.makeValueKey(this.coordinates);
 	}
 
 	/**

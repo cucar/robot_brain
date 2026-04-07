@@ -16,9 +16,8 @@ export class Thalamus {
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
-		this.neuronsByValue = new Map(); // valueKey -> SensoryNeuron
-
-		// Neuron metadata lookup tables (immutable after creation)
+		this.neuronsByValue = new Map(); // valueKey -> SensoryNeuron (coordinates -> neuron lookup)
+		this.neuronValues = new Map(); // neuronId -> coordinates (neuron -> coordinates reverse lookup)
 		this.neuronChannel = new Map(); // neuronId -> channelName (sensory neurons only)
 		this.neuronType = new Map(); // neuronId -> 'event'|'action' (sensory neurons only)
 
@@ -43,6 +42,16 @@ export class Thalamus {
 	}
 
 	/**
+	 * Create value key for neuron coordinate lookup
+	 */
+	makeValueKey(coordinates) {
+		const sorted = Object.keys(coordinates).sort();
+		const obj = {};
+		for (const k of sorted) obj[k] = coordinates[k];
+		return JSON.stringify(obj);
+	}
+
+	/**
 	 * Get or create a sensory neuron ID from a frame point
 	 * @returns {Neuron} - Neuron
 	 */
@@ -53,13 +62,15 @@ export class Thalamus {
 		if (neuron) return neuron;
 
 		// Create new neuron if not found
-		neuron = Neuron.createSensory(coordinates, this.patternForgetRate, this.mergeThreshold);
+		neuron = Neuron.createSensory(this.patternForgetRate, this.mergeThreshold);
+		const valueKey = this.makeValueKey(coordinates);
 		this.neurons.set(neuron.id, neuron);
-		this.neuronsByValue.set(neuron.valueKey, neuron);
+		this.neuronsByValue.set(valueKey, neuron);
+		this.neuronValues.set(neuron.id, coordinates);
 		this.neuronChannel.set(neuron.id, channel);
 		this.neuronType.set(neuron.id, type);
 		this.incrementLevelCount(neuron.level); // for diagnostics
-		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${neuron.valueKey}`);
+		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${valueKey}`);
 		return neuron;
 	}
 
@@ -69,23 +80,20 @@ export class Thalamus {
 	 * @returns {Neuron|null} - Neuron or null if not found
 	 */
 	getNeuronByCoordinates(coordinates) {
-		return this.neuronsByValue.get(Neuron.makeValueKey(coordinates));
-	}
-
-	/**
-	 * returns all neurons as an array
-	 */
-	getNeurons() {
-		return Array.from(this.neurons.values());
+		return this.neuronsByValue.get(this.makeValueKey(coordinates));
 	}
 
 	/**
 	 * Add a neuron to the registry
 	 * @param {Neuron} neuron - Neuron to add
+	 * @param {object} [coordinates] - Coordinates for sensory neurons (level 0)
 	 */
-	addNeuron(neuron) {
+	addNeuron(neuron, coordinates) {
 		this.neurons.set(neuron.id, neuron);
-		if (neuron.level === 0) this.neuronsByValue.set(neuron.valueKey, neuron);
+		if (neuron.level === 0 && coordinates) {
+			this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
+			this.neuronValues.set(neuron.id, coordinates);
+		}
 		this.incrementLevelCount(neuron.level); // for diagnostics
 	}
 
@@ -102,22 +110,18 @@ export class Thalamus {
 		}
 
 		// Restore neurons
-		this.neurons.clear();
-		this.neuronsByValue.clear();
-		this.neuronChannel.clear();
-		this.neuronType.clear();
-		this.deathLedger.clear();
-		this.neuronDeathFrame.clear();
-		this.levelCounts = [];
+		this.reset();
 
-		for (const { neuron, channel, type } of snapshot.neurons) {
+		for (const { neuron, channel, type, coordinates } of snapshot.neurons) {
 			this.neurons.set(neuron.id, neuron);
 			if (channel) this.neuronChannel.set(neuron.id, channel);
 			if (type) this.neuronType.set(neuron.id, type);
 			this.incrementLevelCount(neuron.level);
-			if (neuron.level === 0)
-				this.neuronsByValue.set(neuron.valueKey, neuron);
-			else
+			if (neuron.level === 0 && coordinates) {
+				this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
+				this.neuronValues.set(neuron.id, coordinates);
+			}
+			else if (neuron.level > 0)
 				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / neuron.patternForgetRate));
 		}
 	}
@@ -128,6 +132,7 @@ export class Thalamus {
 	reset() {
 		this.neurons.clear();
 		this.neuronsByValue.clear();
+		this.neuronValues.clear();
 		this.neuronChannel.clear();
 		this.neuronType.clear();
 		this.deathLedger.clear();
@@ -155,6 +160,15 @@ export class Thalamus {
 	}
 
 	/**
+	 * Get the coordinates for a sensory neuron
+	 * @param {number} neuronId - Neuron ID
+	 * @returns {object|undefined} Coordinate object with dimension-value pairs
+	 */
+	getNeuronCoordinates(neuronId) {
+		return this.neuronValues.get(neuronId);
+	}
+
+	/**
 	 * Get inferred actions grouped by channel from the given inferences.
 	 * @param {Array<{neuron, strength, reward}>} inferences - Inferred neurons from memory
 	 * @returns {Map<string, Array>} - Map of channel name to array of {coordinates, strength, reward}
@@ -165,7 +179,7 @@ export class Thalamus {
 			if (this.getNeuronType(neuron.id) !== 'action') continue;
 			const channel = this.getNeuronChannel(neuron.id);
 			if (!channelOutputs.has(channel)) channelOutputs.set(channel, []);
-			channelOutputs.get(channel).push({ coordinates: neuron.coordinates, strength, reward });
+			channelOutputs.get(channel).push({ coordinates: this.getNeuronCoordinates(neuron.id), strength, reward });
 		}
 		return channelOutputs;
 	}
@@ -182,7 +196,7 @@ export class Thalamus {
 			if (!neuron || this.getNeuronType(neuronId) !== 'event') continue;
 			const channel = this.getNeuronChannel(neuron.id);
 			if (!result.has(channel)) result.set(channel, []);
-			result.get(channel).push(neuron.coordinates);
+			result.get(channel).push(this.getNeuronCoordinates(neuronId));
 		}
 		return result;
 	}
@@ -195,7 +209,7 @@ export class Thalamus {
 	getInferences(inferredNeurons) {
 		const inferences = [];
 		for (const { neuron, strength } of inferredNeurons)
-			inferences.push({ neuron, strength, channel: this.getNeuronChannel(neuron.id), type: this.getNeuronType(neuron.id) });
+			inferences.push({ neuron, strength, channel: this.getNeuronChannel(neuron.id), type: this.getNeuronType(neuron.id), coordinates: this.getNeuronCoordinates(neuron.id) });
 		return inferences;
 	}
 
@@ -211,6 +225,7 @@ export class Thalamus {
 			if (neuron.level === 0) {
 				entry.channel = this.getNeuronChannel(neuron.id);
 				entry.type = this.getNeuronType(neuron.id);
+				entry.coordinates = this.getNeuronCoordinates(neuron.id);
 			}
 			neurons.push(entry);
 		}

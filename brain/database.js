@@ -84,7 +84,7 @@ export class Database {
 		const neuronMap = await this.loadNeuronsTable();
 
 		const { neuronChannels, neuronTypes } = await this.loadBaseNeurons(channelIdToName);
-		await this.loadCoordinates(neuronMap, dimensionIdToName);
+		const neuronCoordinates = await this.loadCoordinates(dimensionIdToName);
 		await this.loadConnections(neuronMap);
 		await this.loadPatterns(neuronMap);
 		await this.loadPatternContexts(neuronMap);
@@ -96,6 +96,7 @@ export class Database {
 			if (neuron.level === 0) {
 				entry.channel = neuronChannels.get(neuron.id);
 				entry.type = neuronTypes.get(neuron.id);
+				entry.coordinates = neuronCoordinates.get(neuron.id);
 			}
 			neurons.push(entry);
 		}
@@ -153,20 +154,22 @@ export class Database {
 
 	/**
 	 * Load coordinates table
+	 * @returns {Map<number, object>} neuronId → coordinates
 	 */
-	async loadCoordinates(neurons, dimensionIdToName) {
+	async loadCoordinates(dimensionIdToName) {
 
 		// get the base neuron coordinates from the database
 		const [rows] = await this.conn.query('SELECT neuron_id, dimension_id, val FROM coordinates');
 
-		// update all base neuron coordinates
+		// build neuronId → coordinates map
+		const neuronCoordinates = new Map(); // neuronId → coordinates
 		for (const row of rows) {
-			const neuron = neurons.get(row.neuron_id);
-			if (!neuron.coordinates) neuron.coordinates = {};
-			neuron.coordinates[dimensionIdToName[row.dimension_id]] = row.val;
+			if (!neuronCoordinates.has(row.neuron_id)) neuronCoordinates.set(row.neuron_id, {});
+			neuronCoordinates.get(row.neuron_id)[dimensionIdToName[row.dimension_id]] = row.val;
 		}
 
 		console.log(`  Loaded ${rows.length} coordinates from table`);
+		return neuronCoordinates;
 	}
 
 	/**
@@ -313,10 +316,10 @@ export class Database {
 		await this.conn.query('TRUNCATE coordinates');
 		const baseRows = [];
 		const valueRows = [];
-		for (const { neuron, channel, type } of snapshot.neurons) {
+		for (const { neuron, channel, type, coordinates } of snapshot.neurons) {
 			if (neuron.level !== 0) continue;
 			baseRows.push([neuron.id, snapshot.channelNameToId[channel], type]);
-			for (const [dimName, val] of Object.entries(neuron.coordinates))
+			for (const [dimName, val] of Object.entries(coordinates))
 				valueRows.push([neuron.id, snapshot.dimensionNameToId[dimName], val]);
 		}
 		await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type) VALUES ?', [baseRows]);

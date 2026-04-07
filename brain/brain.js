@@ -601,7 +601,7 @@ export default class Brain {
 				targetId: v.neuron.id,
 				targetType: this.thalamus.getNeuronType(v.neuron.id),
 				targetChannel: this.thalamus.getNeuronChannel(v.neuron.id),
-				targetCoords: v.neuron.coordinates,
+				targetCoords: this.thalamus.getNeuronCoordinates(v.neuron.id),
 				voterId: v.voter.id,
 				voterLevel: v.voter.level,
 				voterLabel: this.formatNeuronLabel(v.voter),
@@ -704,7 +704,7 @@ export default class Brain {
 
 			// for actions, calculate the weighted total - for events, calculate total strengths for each dimension
 			if (this.thalamus.getNeuronType(v.neuron.id) === 'action') candidate.weightedTotal += v.strength * v.reward;
-			else this.addDimStrength(dimTotalStrength, v.neuron.coordinates, v.strength);
+			else this.addDimStrength(dimTotalStrength, this.thalamus.getNeuronCoordinates(v.neuron.id), v.strength);
 		}
 		return { candidates, dimTotalStrength };
 	}
@@ -720,10 +720,10 @@ export default class Brain {
 			// for actions, calculate the reward as weighted total / strength - for events, calculate the likelihood of the event
 			const candidateType = this.thalamus.getNeuronType(neuronId);
 			if (candidateType === 'action') candidate.reward = candidate.strength > 0 ? candidate.weightedTotal / candidate.strength : 0;
-			else candidate.probability = this.getEventProbability(candidate.strength, candidate.neuron.coordinates, dimTotalStrength);
+			else candidate.probability = this.getEventProbability(candidate.strength, this.thalamus.getNeuronCoordinates(neuronId), dimTotalStrength);
 
 			// set the best neuron for each dimension based on rewards or probabilities, break ties by strength
-			for (const dim of Object.keys(candidate.neuron.coordinates)) {
+			for (const dim of Object.keys(this.thalamus.getNeuronCoordinates(neuronId))) {
 				const best = dimBest.get(dim);
 				const score = candidateType === 'action' ? candidate.reward : candidate.probability;
 				if (this.isBetterCandidate(score, candidate.strength, neuronId, best))
@@ -755,7 +755,7 @@ export default class Brain {
 			const winner = {
 				neuron_id: neuronId,
 				neuron: candidate.neuron,
-				coordinates: candidate.neuron.coordinates,
+				coordinates: this.thalamus.getNeuronCoordinates(neuronId),
 				channel: this.thalamus.getNeuronChannel(neuronId),
 				strength: candidate.strength
 			};
@@ -817,7 +817,7 @@ export default class Brain {
 			inferences.push({
 				neuron_id: explorationAction.id,
 				neuron: explorationAction,
-				coordinates: explorationAction.coordinates,
+				coordinates: this.thalamus.getNeuronCoordinates(explorationAction.id),
 				strength: 0,
 				reward: 0
 			});
@@ -838,8 +838,9 @@ export default class Brain {
 			return `n${neuron.id}(parent:${neuron.parentId})`;
 		}
 		// Sensory neurons: format coordinates
-		if (!neuron.coordinates) return `n${neuron.id}`;
-		return Object.entries(neuron.coordinates)
+		const coordinates = this.thalamus.getNeuronCoordinates(neuron.id);
+		if (!coordinates) return `n${neuron.id}`;
+		return Object.entries(coordinates)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([k, v]) => `${k}=${v}`)
 			.join(', ');
