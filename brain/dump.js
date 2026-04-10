@@ -82,12 +82,17 @@ export class Dump {
 				neuronData.coordinates = coordinates;
 			}
 
-			if (level > 0 && neuron.peak) neuronData.peak = neuron.peak.id;
+			if (level > 0) {
+				const parentId = this.thalamus.neuronParents.get(neuron.id);
+				if (parentId) neuronData.parentId = parentId;
+
+				const parentNeuron = this.thalamus.neurons.get(parentId);
+				if (parentNeuron) neuronData.patternContext = this.collectPatternContextData(parentNeuron, neuron.id);
+			}
 
 			neuronData.connections = this.collectConnectionsData(neuron);
 			neuronData.children = this.collectPatternsData(neuron);
 			neuronData.contextRefs = this.collectContextRefsData(neuron);
-			neuronData.patternContext = this.collectPatternContextData(neuron);
 			neuronData.activationStrength = neuron.activationStrength;
 
 			neuronsData.push(neuronData);
@@ -123,7 +128,7 @@ export class Dump {
 	 */
 	collectPatternsData(neuron) {
 		const patterns = [];
-		for (const patternId of neuron.children) patterns.push(patternId);
+		for (const patternId of neuron.routingTable.keys()) patterns.push(patternId);
 		patterns.sort((a, b) => a - b);
 		return patterns;
 	}
@@ -146,9 +151,9 @@ export class Dump {
 	/**
 	 * Collect and format pattern context data for a pattern neuron
 	 */
-	collectPatternContextData(neuron) {
+	collectPatternContextData(parentNeuron, patternId) {
 		const patternContext = [];
-		for (const { neuronId, distance, strength } of neuron.getPatternContext()) {
+		for (const { neuronId, distance, strength } of parentNeuron.getPatternContext(patternId)) {
 			patternContext.push({
 				neuronId,
 				distance,

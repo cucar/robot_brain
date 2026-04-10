@@ -104,30 +104,7 @@ Key insight: within a single neuron, the ordering is natural:
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.1a — Move pattern contexts from children to parent routing table
-
-**Why first**: Currently `matchPattern()` on the parent reaches into each child's `pattern.context` to match. In a distributed system, children may live on different machines. The parent must own the routing table with all context data so matching is local.
-
-**Current flow**:
-- Child pattern neuron owns `this.context` (a Context object)
-- Parent's `matchPattern(observed)` iterates `this.children`, calls `pattern.context.match(observed, decay)` on each
-- `refineContext()` is called on the child: `pattern.refineContext(common, novel, missing)`
-- `addPatternContext()` is called on the child, which also sets `contextRefs` on the context neurons
-
-**Target flow**:
-- Parent neuron owns a routing table: `Map<patternNeuron, Context>` (or similar structure inside existing children set)
-- `matchPattern()` reads from the parent's own routing table — no reaching into children
-- `refineContext()` updates the parent's routing table entry for that child
-- `addPatternContext()` adds entries to the parent's routing table
-- Children no longer own context — they remain lightweight (just connections + children of their own)
-- `contextRefs` still needed for cleanup (when a context neuron dies, find all routing tables that reference it)
-- **Subtle change**: `contextRefs` currently points back to the *child pattern* that references a context neuron. When context moves to the parent's routing table, `contextRefs` must point to the *parent* instead. This changes the cleanup path in `Thalamus.deletePatterns` — must be updated carefully.
-
-**Implementation**: small incremental sub-steps within this milestone — move context storage first, then matching, then refinement, then contextRefs cleanup path, verifying after each.
-
-**Verify**: pattern recognition results identical, all tests pass
-
-#### Step 1.1b — Add inverted index for pattern recognition
+#### Step 1.1 — Add inverted index for pattern recognition
 
 With contexts now stored in the parent's routing table (Step 1.1), the parent has all its pattern contexts in one place — the natural location for an inverted index.
 

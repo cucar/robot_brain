@@ -213,6 +213,9 @@ export default class Brain {
 	async processFrame() {
 		const frameStart = performance.now();
 
+		// forget connections and patterns in all neurons to avoid curse of dimensionality
+		this.cleanupDeadPatterns();
+
 		// ---------------------------- FRAME I/O ----------------------------------
 
 		// get the current frame from all channels - includes events and previously executed actions
@@ -250,10 +253,6 @@ export default class Brain {
 
 		// execute the inferred actions in all channels
 		await this.executeActions();
-
-		// forget connections and patterns in all neurons to avoid curse of dimensionality
-		// this should normally not be part of the frame processing and instead should be a separate thread
-		this.cleanupDeadPatterns();
 
 		// show frame processing summary
 		this.diagnostics.endFrame(
@@ -443,7 +442,7 @@ export default class Brain {
 		}
 
 		// Each context neuron (age > 0) learns connections at its own distance
-		const channelActionIds = this.thalamus.getAllChannelActionIds();
+		const channelActionIds = this.thalamus.getChannelActionIds();
 		for (let age = 1; age < this.memory.depth; age++)
 			for (const neuronId of this.memory.getNeuronsAtAge(age).keys()) {
 				const neuron = neurons.get(neuronId);
@@ -534,7 +533,7 @@ export default class Brain {
 	 * Create pattern neurons and populate their connections from the future.
 	 */
 	createErrorPatterns(corrections, sensoryNeurons) {
-		const channelActionIds = this.thalamus.getAllChannelActionIds();
+		const channelActionIds = this.thalamus.getChannelActionIds();
 		for (const { neuron, age, context } of corrections) {
 
 			// create the new pattern neuron
@@ -567,15 +566,12 @@ export default class Brain {
 			const deathFrame = this.memory.activatePattern(pattern, patternLevel, neuron, age, this.frameNumber);
 			this.thalamus.registerDeath(pattern, deathFrame);
 
-			// Set context on patterns and add them to parent routing tables.
-			// TODO: When context is moved to the parent, the brain will not need to set the context
-			//  on the child. Instead, it will send the context to the parent along with the new pattern neuron id.
-			for (const { neuron: ctxNeuron, distance } of context)
-				if (this.thalamus.getNeuronLevel(ctxNeuron.id) === neuronLevel)
-					pattern.addPatternContext(ctxNeuron, distance, 1);
+			// add the patterns to parent routing tables with their contexts in the parent's level
+			const levelContext = context.filter(c => this.thalamus.getNeuronLevel(c.neuron.id) === neuronLevel);
+			neuron.addPattern(pattern.id, levelContext.map(c => ({ neuronId: c.neuron.id, distance: c.distance })));
 
-			// add the pattern to parent routing table (by ID)
-			neuron.addChild(pattern.id);
+			// update the context references of the neurons that were used in new contexts
+			for (const c of levelContext) c.neuron.addContextRef(neuron.id, c.distance);
 		}
 	}
 

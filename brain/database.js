@@ -222,7 +222,7 @@ export class Database {
 			// map the pattern to its parent by ID
 			neuronParentMap.set(row.pattern_neuron_id, row.parent_neuron_id);
 
-			// add the pattern to the parent's children set by ID
+			// add the pattern to the parent's routing table by ID
 			const parent = neurons.get(row.parent_neuron_id);
 			parent.addChild(row.pattern_neuron_id);
 		}
@@ -236,16 +236,27 @@ export class Database {
 
 		// get the pattern contexts
 		const [rows] = await this.conn.query(`
-			SELECT pattern_neuron_id, context_neuron_id, context_age, strength 
-			FROM pattern_past
+			SELECT p.parent_neuron_id, pp.pattern_neuron_id, pp.context_neuron_id, pp.context_age, pp.strength
+			FROM pattern_past pp
+			JOIN patterns p ON p.pattern_neuron_id = pp.pattern_neuron_id
 		`);
 
 		// load the pattern contexts in the parent
 		for (const row of rows) {
-			const pattern = neurons.get(row.pattern_neuron_id);
+
+			// get the context neuron
 			const contextNeuron = neurons.get(row.context_neuron_id);
 			if (!contextNeuron) throw new Error(`contextNeuron null: ${row.context_neuron_id}`);
-			pattern.addPatternContext(contextNeuron, row.context_age, Number(row.strength));
+
+			// get the parent neuron that will store the pattern route and context
+			const parent = neurons.get(row.parent_neuron_id);
+			if (!parent) throw new Error(`parent null: ${row.parent_neuron_id}`);
+
+			// add the pattern to the parent routing table with the given distance
+			parent.addContext(row.pattern_neuron_id, contextNeuron.id, row.context_age, Number(row.strength));
+
+			// update the context references of the neuron used in pattern context
+			contextNeuron.addContextRef(row.parent_neuron_id, row.context_age);
 		}
 		console.log(`  Loaded ${rows.length} pattern_past entries from table`);
 	}
@@ -370,8 +381,8 @@ export class Database {
 		await this.conn.query('TRUNCATE pattern_past');
 		const pastRows = [];
 		for (const { neuron } of neurons)
-			for (const { neuronId, distance, strength } of neuron.getPatternContext())
-				pastRows.push([neuron.id, neuronId, distance, strength]);
+			for (const { patternId, neuronId, distance, strength } of neuron.getRoutingTable())
+				pastRows.push([patternId, neuronId, distance, strength]);
 		if (pastRows.length === 0) return;
 		await this.conn.query('INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength) VALUES ?', [pastRows]);
 		console.log(`  Saved ${pastRows.length} pattern context entries (to pattern_past)`);

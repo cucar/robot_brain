@@ -82,18 +82,18 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $107401.29
-   Average per Episode: $107401.29
-   Average ROI: +716.01%
-   Average Per-Frame ROI: +0.083838%
-   Total Trades: 2508
-   Average Trades per Episode: 2508.0
+   Total Net Profit: $167750.74
+   Average per Episode: $167750.74
+   Average ROI: +1118.34%
+   Average Per-Frame ROI: +0.099853%
+   Total Trades: 2447
+   Average Trades per Episode: 2447.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $107401.29 | ROI: +716.01%, +0.083838%/frame (2508 trades)
+   Episode 1: $167750.74 | ROI: +1118.34%, +0.099853%/frame (2447 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 56.81%
+   Episode 1: 56.93%
 ```
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -110,18 +110,18 @@ node run-brain.js stock-test --no-summary --episodes 5
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $31319.85 | ROI: +208.80%, +0.045021%/frame (3383 trades)
-   Episode 2: $99025.61 | ROI: +660.17%, +0.081006%/frame (2804 trades)
-   Episode 3: $372621.54 | ROI: +2484.14%, +0.129904%/frame (2517 trades)
-   Episode 4: $490530.29 | ROI: +3270.20%, +0.140520%/frame (2556 trades)
-   Episode 5: $1541438.82 | ROI: +10276.26%, +0.185485%/frame (3074 trades)
+   Episode 1: $31329.91 | ROI: +208.87%, +0.045030%/frame (2901 trades)
+   Episode 2: $163147.26 | ROI: +1087.65%, +0.098834%/frame (2703 trades)
+   Episode 3: $874064.01 | ROI: +5827.09%, +0.163092%/frame (2928 trades)
+   Episode 4: $2007695.70 | ROI: +13384.64%, +0.195966%/frame (3438 trades)
+   Episode 5: $522305.81 | ROI: +3482.04%, +0.142957%/frame (3667 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 57.05%
+   Episode 1: 57.04%
    Episode 2: 57.78%
-   Episode 3: 58.32%
-   Episode 4: 58.62%
-   Episode 5: 58.75%
+   Episode 3: 58.38%
+   Episode 4: 58.61%
+   Episode 5: 58.69%
 ```
 
 ## Demo 4: Stock Sequence Memorization

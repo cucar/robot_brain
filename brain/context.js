@@ -57,15 +57,22 @@ export class Context {
 	}
 
 	/**
-	 * reduces the strength of an entry when not observed - returns if it can be deleted
+	 * Reduces the strength of an entry when not observed.
+	 * Auto-deletes the entry when strength reaches zero.
+	 * @returns {boolean} true if the entry was deleted, false if it was only weakened
 	 */
 	weakenNeuron(neuronId, distance) {
 		const distanceMap = this.entries.get(neuronId);
 		if (!distanceMap || !distanceMap.has(distance)) throw new Error('Context entry not found for weakening');
 		const strength = distanceMap.get(distance);
-		const newStrength = Math.max(0, strength - 1);
+		const newStrength = strength - 1;
+		if (newStrength <= 0) {
+			distanceMap.delete(distance);
+			if (distanceMap.size === 0) this.entries.delete(neuronId);
+			return true;
+		}
 		distanceMap.set(distance, newStrength);
-		return newStrength <= 0; // return if the entry can be deleted or not
+		return false;
 	}
 
 	/**

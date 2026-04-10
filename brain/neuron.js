@@ -5,7 +5,7 @@ import { Context } from './context.js';
  *
  * All neurons have:
  * - connections: Map<distance, Map<toNeuronId, {strength, reward}>> - predictions
- * - children: Set<neuronId> - child pattern neuron IDs (routing table)
+ * - routingTable: Map<patternId, Context> - child pattern contexts
  *
  * All neuron metadata (level, coordinates, channel, type, parent) is stored externally
  * in Thalamus lookup tables. Neurons are pure data processors — they only store learned
@@ -32,10 +32,6 @@ export class Neuron {
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
 
-		// the context that activated this pattern - not used by sensory neurons
-		// TODO: this will be moved to the parent routing tables instead of the child
-		this.context = new Context();
-
 		// initialize neuron id if given - update nextId if we're loading a neuron with a specific ID
 		this.id = id || Neuron.nextId++;
 		if (id && id >= Neuron.nextId) Neuron.nextId = id + 1;
@@ -46,8 +42,9 @@ export class Neuron {
 
 		// initialize synapses
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuronId, {strength, reward}>>
-		this.children = new Set(); // child pattern neuron IDs (routing table)
-		this.contextRefs = new Map(); // context references: Map<neuronId, Set<distance>>
+		this.routingTable = new Map(); // routing table: Map<patternId, Context>
+		this.contextIndex = new Map(); // inverted index: Map<neuronId, Map<distance, Set<patternId>>>
+		this.contextRefs = new Map(); // context references: Map<parentId, Set<distance>>
 	}
 
 	/**
@@ -178,11 +175,21 @@ export class Neuron {
 	}
 
 	/**
-	 * add a child pattern to the routing table without context (used for load - it will be added later)
+	 * Add a child pattern to the routing table and populate its context
+	 * @param {number} patternId - numeric neuron ID of the child pattern
+	 * @param {Array<{neuron: Neuron, distance: number}>} context - The context to add
+	 */
+	addPattern(patternId, context) {
+		this.addChild(patternId);
+		for (const { neuronId, distance } of context) this.addContext(patternId, neuronId, distance);
+	}
+
+	/**
+	 * add a child pattern to the routing table
 	 * @param {number} patternId - numeric neuron ID of the child pattern
 	 */
 	addChild(patternId) {
-		this.children.add(patternId);
+		if (!this.routingTable.has(patternId)) this.routingTable.set(patternId, new Context());
 	}
 
 	/**
@@ -191,44 +198,126 @@ export class Neuron {
 	 * @param {number} patternId - numeric neuron ID of the child pattern
 	 */
 	removeChild(patternId) {
-		this.children.delete(patternId);
+
+		// clean up both context and context index for all context entries of this pattern
+		const context = this.routingTable.get(patternId);
+		if (!context) throw new Error(`removeChild: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+		for (const entry of context.getEntries())
+			this.removeContext(patternId, entry.neuronId, entry.distance);
+
+		// remove the pattern from the routing table
+		this.routingTable.delete(patternId);
 	}
 
 	/**
 	 * returns pattern context entries
 	 */
-	getPatternContext() {
-		return this.context.getEntries();
+	getPatternContext(patternId) {
+		const ctx = this.routingTable.get(patternId);
+		if (!ctx) throw new Error(`getPatternContext: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+		return ctx.getEntries();
 	}
 
 	/**
-	 * adds a new entry to a pattern context
+	 * returns all pattern context entries for all patterns in the routing table
 	 */
-	addPatternContext(neuron, distance, strength = 1) {
-		this.addContext(neuron.id, distance, strength);
-		neuron.addContextRef(this.id, distance);
-	}
-
-	/**
-	 * removes an entry from the pattern context
-	 */
-	removePatternContext(neuron, distance) {
-		this.removeContext(neuron.id, distance);
-		neuron.removeContextRef(this.id, distance);
+	getRoutingTable() {
+		const result = [];
+		for (const [patternId, context] of this.routingTable)
+			for (const entry of context.getEntries())
+				result.push({ patternId, ...entry });
+		return result;
 	}
 
 	/**
 	 * adds an entry to the pattern context by neuron ID
 	 */
-	addContext(neuronId, distance, strength = 1) {
-		this.context.addNeuron(neuronId, distance, strength);
+	addContext(patternId, neuronId, distance, strength = 1) {
+
+		// add the neuron to the pattern context at the given distance
+		const context = this.routingTable.get(patternId);
+		if (!context) throw new Error(`addContext: pattern not found in routing table: ${patternId}`);
+		context.addNeuron(neuronId, distance, strength);
+
+		// add the neuron to the context index so that we can search efficiently
+		this.addContextIndex(neuronId, distance, patternId);
 	}
 
 	/**
-	 * removes an entry from the pattern context by neuron ID
+	 * adds a neuron to the context index
 	 */
-	removeContext(neuronId, distance) {
-		this.context.remove(neuronId, distance);
+	addContextIndex(neuronId, distance, patternId) {
+		if (!this.contextIndex.has(neuronId)) this.contextIndex.set(neuronId, new Map());
+		const distMap = this.contextIndex.get(neuronId);
+		if (!distMap.has(distance)) distMap.set(distance, new Set());
+		distMap.get(distance).add(patternId);
+	}
+
+	/**
+	 * Removes an entry from a child pattern's context.
+	 * Returns whether the neuron is no longer referenced by any child pattern in this parent
+	 * (i.e., the caller should remove the contextRef on the target neuron).
+	 * @param {number} patternId - child pattern ID
+	 * @param {number} neuronId - context neuron ID to remove
+	 * @param {number} distance - distance of the context entry
+	 * @returns {boolean} true if no sibling pattern still references this neuron at this distance
+	 */
+	removeContext(patternId, neuronId, distance) {
+
+		// remove the neuron from the pattern context at the given distance
+		const context = this.routingTable.get(patternId);
+		if (!context) throw new Error(`removeContext: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+		context.remove(neuronId, distance);
+
+		// remove the neuron from the context index
+		return this.removeContextIndex(neuronId, distance, patternId);
+	}
+
+	/**
+	 * Remove a pattern from the context inverted index for a given neuron/distance.
+	 * @returns {boolean} true if no pattern references this neuron at this distance anymore (orphaned)
+	 */
+	removeContextIndex(neuronId, distance, patternId) {
+		const distMap = this.contextIndex.get(neuronId);
+		if (!distMap) throw new Error(`removeContextIndex: neuron ${neuronId} not found in contextIndex of neuron ${this.id}`);
+		const patterns = distMap.get(distance);
+		if (!patterns) throw new Error(`removeContextIndex: distance ${distance} not found for neuron ${neuronId} in contextIndex of neuron ${this.id}`);
+		patterns.delete(patternId);
+		if (patterns.size === 0) {
+			distMap.delete(distance);
+			if (distMap.size === 0) this.contextIndex.delete(neuronId);
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Remove all references to a dying neuron from this parent's children's contexts.
+	 * Uses the contextIndex to find affected patterns in O(1) per entry.
+	 * @param {number} neuronId - ID of the dying context neuron
+	 * @param {Set<number>} distances - distances at which the dying neuron was referenced
+	 * @returns {Set<number>} pattern IDs whose context was modified (caller checks if deletable)
+	 */
+	removeContextNeuron(neuronId, distances) {
+		const affectedPatterns = new Set();
+		const distMap = this.contextIndex.get(neuronId);
+		if (!distMap) throw new Error(`removeContextNeuron: neuron ${neuronId} not found in contextIndex of neuron ${this.id}`);
+
+		for (const distance of distances) {
+			const patterns = distMap.get(distance);
+			if (!patterns) throw new Error(`removeContextNeuron: distance ${distance} for neuron ${neuronId} not found in contextIndex of neuron ${this.id}`);
+			// remove from each pattern's context and collect affected pattern IDs
+			for (const patternId of patterns) {
+				const ctx = this.routingTable.get(patternId);
+				if (!ctx) throw new Error(`removeContextNeuron: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+				ctx.remove(neuronId, distance);
+				affectedPatterns.add(patternId);
+			}
+			// clean up the index entries for this distance
+			distMap.delete(distance);
+		}
+		if (distMap.size === 0) this.contextIndex.delete(neuronId);
+		return affectedPatterns;
 	}
 
 	/**
@@ -244,22 +333,26 @@ export class Neuron {
 	 * Called when this neuron is removed from another neuron's context
 	 */
 	removeContextRef(referencingNeuronId, distance) {
-		this.contextRefs.get(referencingNeuronId).delete(distance);
-		if (this.contextRefs.get(referencingNeuronId).size === 0) this.contextRefs.delete(referencingNeuronId);
+		const distances = this.contextRefs.get(referencingNeuronId);
+		if (!distances) throw new Error(`Context ref not found: ${referencingNeuronId}`);
+		distances.delete(distance);
+		if (distances.size === 0) this.contextRefs.delete(referencingNeuronId);
 	}
 
 	/**
 	 * Find the best matching pattern for this parent neuron given the observed context.
+	 * Refines the matched pattern's context automatically.
+	 * Returns match result with novel and removedRefs for the caller to deliver cross-neuron updates.
 	 * @param {Context} observed - The observed context from brain
 	 * @param {number} currentFrame - Current frame number for lazy decay
-	 * @param {Map<number, Neuron>} neurons - Neuron lookup map (id → Neuron)
-	 * @returns {Object|null} The matched pattern and match details, or null if no match
+	 * @param {Map<number, Neuron>} neurons - Neuron lookup map (id → Neuron) — for active pattern check only
+	 * @returns {Object|null} { pattern, score, common, missing, novel, removedRefs } or null
 	 */
 	matchPattern(observed, currentFrame, neurons) {
 
 		// try to match the observed context to known patterns
 		let best = null; // { pattern, score, common, missing, novel }
-		for (const patternId of this.children) {
+		for (const [patternId, context] of this.routingTable) {
 			const pattern = neurons.get(patternId);
 			if (!pattern) continue;
 
@@ -267,7 +360,7 @@ export class Neuron {
 			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
 
 			// get the match results for the pattern for the given context
-			const match = pattern.context.match(observed, this.mergeThreshold);
+			const match = context.match(observed, this.mergeThreshold);
 
 			// if there is a match, and it's the best so far, store it
 			if (match && (!best || match.score > best.score)) {
@@ -277,38 +370,42 @@ export class Neuron {
 		}
 		if (!best) return null; // if there are no matches, return null
 
-		// return the matched pattern and details so brain can activate first, then refine
+		// refine the context — returns removed refs for the caller to deliver
+		best.removedRefs = this.refineContext(best.pattern.id, best.common, best.novel, best.missing);
+
 		return best;
 	}
 
 	/**
 	 * Refine the context of a pattern neuron based on the observed context.
-	 * Strengthens common context neurons, adds novel ones, and weakens/ deletes missing ones.
+	 * Strengthens common, adds novel, weakens/deletes missing.
+	 * Returns list of context refs that should be removed (caller delivers to target neurons).
+	 * @param {number} patternId - ID of the pattern to refine
 	 * @param {Array<{neuronId, distance, strength}>} common - Entries present in both known and observed
 	 * @param {Array<{neuronId, distance, strength}>} novel - Entries in observed but not known
 	 * @param {Array<{neuronId, distance, strength}>} missing - Entries in known but not observed
-	 * @param {Map<number, Neuron>} neurons - Neuron lookup map for resolving IDs to objects
+	 * @returns {Array<{neuronId, distance}>} context refs that should be removed on target neurons
 	 */
-	refineContext(common, novel, missing, neurons) {
+	refineContext(patternId, common, novel, missing) {
 
-		// strengthen common context neurons (only need ID)
-		for (const entry of common) this.context.strengthenNeuron(entry.neuronId, entry.distance);
+		// get the routing table entry for the pattern
+		const context = this.routingTable.get(patternId);
+		if (!context) throw new Error('pattern not found in routing table.'); // should not happen
 
-		// add novel context neurons (need Neuron object for contextRef)
-		for (const entry of novel) {
-			const neuron = neurons.get(entry.neuronId);
-			if (neuron) this.addPatternContext(neuron, entry.distance, 1);
-		}
+		// strengthen common context neurons
+		for (const entry of common) context.strengthenNeuron(entry.neuronId, entry.distance);
 
-		// Weaken missing and delete if necessary (need Neuron object for contextRef removal)
+		// add novel context neurons
+		for (const entry of novel) this.addContext(patternId, entry.neuronId, entry.distance, 1);
+
+		// weaken missing — weakenNeuron auto-deletes at zero strength
+		const removedRefs = [];
 		for (const entry of missing) {
-			const canDelete = this.context.weakenNeuron(entry.neuronId, entry.distance);
-			if (canDelete) {
-				const neuron = neurons.get(entry.neuronId);
-				if (neuron) this.removePatternContext(neuron, entry.distance);
-				else this.removeContext(entry.neuronId, entry.distance); // neuron already deleted, just remove context entry
-			}
+			const wasDeleted = context.weakenNeuron(entry.neuronId, entry.distance);
+			if (wasDeleted && this.removeContextIndex(entry.neuronId, entry.distance, patternId))
+				removedRefs.push({ neuronId: entry.neuronId, distance: entry.distance });
 		}
+		return removedRefs;
 	}
 
 	/**
