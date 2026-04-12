@@ -1,5 +1,79 @@
 # Future Work
 
+## MNIST Digit Recognition Benchmark (post-Rust Phase 6)
+
+### Why this matters
+
+MNIST is the most widely recognized benchmark in machine learning. Demonstrating competitive digit recognition with an architecture that has no backpropagation, no gradient descent, no convolution, and no explicit spatial encoding would validate Robot Brain as a fundamentally different computational paradigm — not just a curiosity on financial data.
+
+The key claim: **one architecture, zero modifications, multiple domains** (stocks, text, vision). No other system makes this claim with the same underlying mechanism.
+
+### Approach — sequential pixel reading with action-based classification
+
+Unlike conventional image classification, Robot Brain cannot process static images. Each MNIST image (28×28 grayscale) is presented as a **784-frame episode**, reading pixels sequentially in raster scan order (left-to-right, top-to-bottom). Each frame contains a single grayscale value (0–255).
+
+Classification is modeled as an **action selection problem**:
+
+* The brain has 10 possible actions (digits 0–9)
+* At each frame (after passing the context length threshold), the brain outputs a digit prediction as its action
+* During training, the correct digit action receives positive reward; incorrect actions receive negative reward
+* Over many episodes, the brain learns which pixel-value sequences correlate with which digit actions
+* The brain discovers spatial structure implicitly — e.g., dark pixels at positions spaced 28 apart represent a vertical line — without any geometric encoding
+
+This is analogous to the stock channel (sequential price events → directional actions with reward) and the text channel (sequential character events → character actions with reward). Same mechanism, different domain.
+
+### Spatial feature discovery
+
+The system has no knowledge that pixels are arranged in a 28×28 grid. All spatial relationships must be discovered through temporal prediction:
+
+* **Horizontal adjacency**: consecutive pixels in the sequence (distance 1)
+* **Vertical adjacency**: pixels 28 frames apart (distance 28) — requires sufficient context length
+* **Diagonal features**: pixels at distance 27 or 29
+* **Larger structures**: hierarchical pattern neurons combine lower-level detections across longer timescales
+
+Context length directly determines what spatial features the system can discover. A context length of 100+ is recommended to capture cross-row relationships.
+
+#### Parallelization variant — row-at-a-time (28 channels)
+
+For practical compute reasons, a parallelized variant reads one full row per frame across 28 simultaneous channels (one per column position). This reduces episode length from 784 to 28 frames while preserving the need to discover vertical relationships across frames. This maps naturally to the multi-channel architecture already validated with 30 stock channels.
+
+#### Training protocol
+
+1. Generate episodes from the 60,000 MNIST training images — each image becomes one 784-frame episode (or 28-frame episode in the 28-channel variant)
+2. Run multiple training passes (episodes repeated 10–100 times) with low forget rate to build stable representations
+3. Classification accuracy measured as: percentage of episodes where the brain's final-frame action matches the correct digit
+
+#### Evaluation protocol
+
+* **Training accuracy**: measured on the 60,000 training images across episodes (expect improvement similar to text memorization — 41% → 100% over 3–5 episodes with tight parameters)
+* **Test accuracy (generalization)**: present the 10,000 held-out MNIST test images as new episodes the brain has never seen. This is the number that matters for benchmark comparison. The brain continues learning during test (no freeze mode), so accuracy is measured on **first exposure** to each test image, with randomized presentation order.
+
+#### Compute requirements
+
+* **Single-channel (784 frames/episode)**: 50,000 images × 100 episodes × 784 frames = ~3.9B frames. At 0.007ms/frame (Rust target) ≈ 8 hours. Requires Rust + Rayon threading.
+* **28-channel (28 frames/episode)**: 50,000 images × 100 episodes × 28 frames = ~140M frames. Significantly more tractable — potentially under 1 hour in Rust.
+* **For comparison**: conventional CNNs train on MNIST in 2–5 minutes on GPU. The compute gap is expected and irrelevant to the architectural claim.
+
+#### Recommended hyperparameters (starting point)
+
+Based on stock and text experiments:
+
+* Context length: 100 (single-channel) or 10 (28-channel variant)
+* Forget rate: 0.001–0.01 (low, to retain learned digit patterns across episodes)
+* Error threshold: 0.3 (same as text memorization experiments)
+* Merge threshold: 0.9
+
+#### Dependencies
+
+* Requires Rust core (Phase 4+) for practical training times
+* Multi-threaded Rust (Phase 5) needed for the single-channel variant
+* No architectural changes to the brain algorithm — same code as stock/text channels
+* MNIST dataset download and episode generation tooling (trivial)
+
+#### What this is NOT
+
+This is not an attempt to beat CNNs on their home turf. It is a demonstration that a single prediction-only architecture, designed for temporal sequences, can learn visual recognition without any vision-specific components. The benchmark exists to make the architectural claim legible to the ML community using a universally understood task.
+
 ## Python Bindings + PyPI (~1 week when prioritized)
 
 Expose the Rust core to Python for broader adoption.
