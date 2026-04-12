@@ -104,16 +104,11 @@ Key insight: within a single neuron, the ordering is natural:
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.1 — Test inference before learning ordering
+#### Step 1.1 — Test new order of operations
 
-Currently the assumed per-neuron ordering is: recognize → learn connections → learn patterns → vote. But voting (inference) only depends on recognition (suppression flag), not on learning. Test reversing the order: recognize → vote → learn connections → learn patterns.
-
-- Run 10 batches of 10-stock jobs with both orderings, compare accuracy and ROI
-- If results are equivalent or better: keep voting right after recognition, group the two learning operations together
-- This matters for parallelization — if voting is independent of learning, action execution can proceed without waiting for learning to finish (non-blocking actions)
-- If results are worse: keep the original ordering, document why learning must precede voting
-- Also, test this order: update connections, recognize and refine contexts, error correction, vote
-- **Verify**: compare accuracy across orderings on stock workloads
+Currently the assumed per-neuron ordering is: recognize → learn connections → learn patterns → vote. 
+But voting (inference) only depends on recognition (suppression flag), not on learning. 
+Test this order: update connections, recognize (update contexts), learn patterns, vote
 
 ---
 
