@@ -870,7 +870,7 @@ export default class Brain {
 		const cycleStart = Date.now();
 		if (this.debug) console.log('=== CLEANUP STARTING ===');
 
-		// reap neurons scheduled to die at or before this frame
+		// reap neurons scheduled to die at this frame
 		const deadPatterns = this.thalamus.reapDeadNeurons(this.frameNumber);
 		if (deadPatterns.length === 0) return;
 

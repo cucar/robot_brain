@@ -712,19 +712,23 @@ export class Thalamus {
 	}
 
 	/**
-	 * Reap neurons scheduled to die at or before the given frame
-	 * Returns array of dead neurons and removes them from the ledger
+	 * Reap neurons scheduled to die at the given frame.
+	 * Assumes cleanup runs for every frame in order with no skips.
+	 * Returns array of dead neurons and removes them from the ledger.
 	 */
 	reapDeadNeurons(currentFrame) {
+
+		// get the neurons to be deleted in this frame
+		const neurons = this.deathLedger.get(currentFrame);
+		if (!neurons) return []; // nothing to do if no neurons dying
+
+		// reap the dead neurons and return them
 		const dead = [];
-		for (const [frame, neurons] of this.deathLedger) {
-			if (frame > currentFrame) continue;
-			for (const neuron of neurons) {
-				dead.push(neuron);
-				this.neuronDeathFrame.delete(neuron);
-			}
-			this.deathLedger.delete(frame);
+		for (const neuron of neurons) {
+			dead.push(neuron);
+			this.neuronDeathFrame.delete(neuron);
 		}
+		this.deathLedger.delete(currentFrame);
 		return dead;
 	}
 
