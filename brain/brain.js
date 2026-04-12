@@ -411,13 +411,14 @@ export default class Brain {
 
 		// Activate matched patterns in memory and register death
 		for (const { parent, age, match } of matchedPatterns) {
-			const deathFrame = this.memory.activatePattern(match.pattern, this.thalamus.getNeuronLevel(match.pattern.id), parent, age, this.frameNumber);
-			this.thalamus.registerDeath(match.pattern, deathFrame);
+			const pattern = this.thalamus.neurons.get(match.patternId);
+			const deathFrame = this.memory.activatePattern(pattern, this.thalamus.getNeuronLevel(match.patternId), parent, age, this.frameNumber);
+			this.thalamus.registerDeath(pattern, deathFrame);
 		}
 
 		if (this.debug)
 			console.log(`Matched ${matchedPatterns.length} patterns at level ${level}:`,
-				matchedPatterns.map(m => `parent=${m.parent.id}, age=${m.age}, pattern=${m.match.pattern.id}`).join('; '));
+				matchedPatterns.map(m => `parent=${m.parent.id}, age=${m.age}, pattern=${m.match.patternId}`).join('; '));
 
 		// return true to indicate patterns found
 		return true;
@@ -491,11 +492,16 @@ export default class Brain {
 		const corrections = [];
 		for (let age = 1; age < this.memory.depth; age++)
 			for (const [neuronId, state] of this.memory.getNeuronsAtAge(age)) {
+
+				// if there are no votes from previous frame, no need for error correction
 				if (!state.votes || state.votes.length === 0) continue;
-				const neuron = neurons.get(neuronId);
-				if (!neuron) continue;
-				if (this.needsErrorCorrection(state.votes, events))
+
+				// if the neuron needs error correction, add it to the list
+				if (this.needsErrorCorrection(state.votes, events)) {
+					const neuron = neurons.get(neuronId);
+					if (!neuron) throw new Error(`neuron not found for error correction: ${neuronId}`);
 					corrections.push({ neuron, age, context: state.context });
+				}
 			}
 		return corrections;
 	}
@@ -648,7 +654,7 @@ export default class Brain {
 				if (!voter || this.thalamus.skipActionNeuron(voter)) continue;
 
 				// if a pattern was activated by the neuron, its inference is suppressed - skip
-				if (state.activatedPattern !== null) continue;
+				if (state.activatedPatternId !== null) continue;
 
 				// get the votes of the neuron
 				const neuronVotes = voter.vote(age);

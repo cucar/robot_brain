@@ -10,9 +10,9 @@ export class Memory {
 		// number of frames a base neuron stays active
 		this.contextLength = contextLength;
 
-		// Active context indexed by age: Array<Map<neuronId, {activatedPattern, votes, context}>>
+		// Active context indexed by age: Array<Map<neuronId, {activatedPatternId, votes, context}>>
 		// activeNeurons[0] = age 0 (newest), activeNeurons[n] = age n (older)
-		// activatedPattern: pattern neuron activated by this neuron, or null
+		// activatedPatternId: ID of pattern neuron activated by this neuron, or null
 		// votes: array of votes cast by this neuron, or null if hasn't voted yet
 		// context: array of context neurons at voting time, or null if hasn't voted yet
 		this.activeNeurons = [];
@@ -55,7 +55,7 @@ export class Memory {
 
 	/**
 	 * Get neuron IDs and states at a specific age
-	 * @returns {Map<number, {activatedPattern, votes, context}>}
+	 * @returns {Map<number, {activatedPatternId, votes, context}>}
 	 */
 	getNeuronsAtAge(age) {
 		return this.activeNeurons[age] ?? new Map();
@@ -81,7 +81,7 @@ export class Memory {
 	 */
 	activateNeuronAtAge(neuron, level, age, currentFrame) {
 		if (!this.activeNeurons[age]) this.activeNeurons[age] = new Map();
-		this.activeNeurons[age].set(neuron.id, { activatedPattern: null, votes: null, context: null });
+		this.activeNeurons[age].set(neuron.id, { activatedPatternId: null, votes: null, context: null });
 		return neuron.strengthenActivation(currentFrame, level);
 	}
 
@@ -97,7 +97,7 @@ export class Memory {
 		const deathFrame = this.activateNeuronAtAge(pattern, patternLevel, age, currentFrame);
 		const neuronsAtAge = this.activeNeurons[age];
 		const state = neuronsAtAge.get(parent.id);
-		state.activatedPattern = pattern;
+		state.activatedPatternId = pattern.id;
 		return deathFrame;
 	}
 

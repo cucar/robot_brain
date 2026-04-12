@@ -125,10 +125,11 @@ export class Context {
 	 * Returns match result with score, or null if below threshold.
 	 * Uses effective strengths (with lazy decay applied) for scoring.
 	 * @param {Context} observed - The observed context to match against
-	 * @param {Context} mergeThreshold - minimum required percentage for merge (0-1)
+	 * @param {number} offset - The parent's active age (shifts pattern distances to absolute)
+	 * @param {number} mergeThreshold - minimum required percentage for merge (0-1)
 	 * @returns {Object|null} { score, common, missing, novel } or null
 	 */
-	match(observed, mergeThreshold) {
+	match(observed, offset, mergeThreshold) {
 
 		// Single pass: categorize into common/missing while computing score and counts
 		const common = [];
@@ -149,12 +150,15 @@ export class Context {
 				if (strength <= 0) continue;
 				totalCount++;
 
-				// if the observed context has the neuron at the same distance, it is a common entry - otherwise missing
-				if (observedDistances?.has(distance)) common.push({ neuronId, distance, strength });
+				// convert pattern-relative distance to absolute distance for comparison
+				const absoluteDistance = distance + offset;
+
+				// if the observed context has the neuron at the absolute distance, it is a common entry - otherwise missing
+				if (observedDistances?.has(absoluteDistance)) common.push({ neuronId, distance, strength });
 				else missing.push({ neuronId, distance, strength });
 
-				// add the match score for the entry
-				score += this.getMatchScore(strength, distance, observedDistances);
+				// add the match score for the entry (using absolute distance against observed)
+				score += this.getMatchScore(strength, absoluteDistance, observedDistances);
 			}
 		}
 
@@ -168,12 +172,20 @@ export class Context {
 		const novel = [];
 		for (const [neuronId, distanceMap] of observed.entries) {
 			const knownDistances = this.entries.get(neuronId);
-			for (const [distance, strength] of distanceMap)
-				if (!knownDistances || !knownDistances.has(distance) || knownDistances.get(distance) <= 0)
-					if (!this.hasPartialMatch(distance, knownDistances)) {
-						novel.push({ neuronId, distance, strength });
+			for (const [absoluteDistance, strength] of distanceMap) {
+
+				// convert absolute distance back to pattern-relative
+				const patternDistance = absoluteDistance - offset;
+
+				// context neurons must be older than the parent (distance >= 1 in pattern-relative terms)
+				if (patternDistance < 1) continue;
+
+				if (!knownDistances || !knownDistances.has(patternDistance) || knownDistances.get(patternDistance) <= 0)
+					if (!this.hasPartialMatch(patternDistance, knownDistances)) {
+						novel.push({ neuronId, distance: patternDistance, strength });
 						score -= strength;
 					}
+			}
 		}
 
 		// Round to 14 decimal places to avoid floating-point precision issues

@@ -340,18 +340,61 @@ export class Neuron {
 	}
 
 	/**
-	 * Find the best matching pattern for this parent neuron given the observed context.
-	 * Refines the matched pattern's context automatically.
-	 * Returns match result with novel and removedRefs for the caller to deliver cross-neuron updates.
-	 * @param {Context} observed - The observed context from brain
+	 * Find matching patterns for this parent neuron given the observed context.
+	 * The neuron is called once per frame with all active ages. For each age that matches,
+	 * the matched pattern's context is refined immediately. Cross-neuron contextRef additions
+	 * and removals are returned for delivery in a separate post-match phase.
+	 * If the same child pattern matches at multiple ages for this parent, all refined matches
+	 * are returned in order so side effects remain identical, but only the first match is
+	 * flagged as an activation candidate.
+	 * @param {Context} observed - The level context (distances are absolute ages)
+	 * @param {Array<number>} activeAges - Ages at which this neuron is active (sorted ascending)
 	 * @param {number} currentFrame - Current frame number for lazy decay
-	 * @param {Map<number, Neuron>} neurons - Neuron lookup map (id → Neuron) — for active pattern check only
-	 * @returns {Object|null} { pattern, score, common, missing, novel, removedRefs } or null
+	 * @param {Map<number, Neuron>} neurons - Neuron lookup map (id → Neuron) for active pattern checks
+	 * @returns {{
+	 *   matches: Array<{ patternId, age, score, common, missing, novel, removedRefs, activate }>,
+	 *   contextRefUpdates: Array<{ type: 'add'|'remove', neuronId, distance }>
+	 * }}
 	 */
-	matchPattern(observed, currentFrame, neurons) {
+	matchPatterns(observed, activeAges, currentFrame, neurons) {
+		const matches = [];
+		const contextRefUpdates = [];
+		const activatedPatternIds = new Set();
+		for (const age of activeAges) {
 
-		// try to match the observed context to known patterns
-		let best = null; // { pattern, score, common, missing, novel }
+			// active ages are processed in ascending order (most recent first). The first age that
+			// produces a match at that age is refined and preserved. More recent ages tend to have
+			// the richest available context, so they are processed first.
+			const best = this.findBestPatternMatchAtAge(observed, age, currentFrame, neurons);
+			if (!best) continue; // try older age if there is a match
+
+			// refine the context — returns cross-neuron contextRef side effects for later delivery
+			best.removedRefs = this.refineContext(best.patternId, best.common, best.novel, best.missing);
+			for (const entry of best.novel)
+				contextRefUpdates.push({ type: 'add', neuronId: entry.neuronId, distance: entry.distance });
+			for (const ref of best.removedRefs)
+				contextRefUpdates.push({ type: 'remove', neuronId: ref.neuronId, distance: ref.distance });
+
+			// activate the matched pattern if it was not elected to be activated already
+			best.activate = !activatedPatternIds.has(best.patternId);
+			activatedPatternIds.add(best.patternId);
+
+			// include the best match for the age in the results
+			matches.push(best);
+		}
+		return { matches, contextRefUpdates };
+	}
+
+	/**
+	 * Find the best matching pattern for a specific active age.
+	 * @param {Context} observed - The level context (distances are absolute ages)
+	 * @param {number} age - The specific active age being evaluated
+	 * @param {number} currentFrame - Current frame number for lazy decay
+	 * @param {Map<number, Neuron>} neurons - Neuron lookup map for active pattern checks
+	 * @returns {{ patternId, age, score, common, missing, novel }|null}
+	 */
+	findBestPatternMatchAtAge(observed, age, currentFrame, neurons) {
+		let best = null; // { patternId, age, score, common, missing, novel }
 		for (const [patternId, context] of this.routingTable) {
 			const pattern = neurons.get(patternId);
 			if (!pattern) continue;
@@ -360,19 +403,15 @@ export class Neuron {
 			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
 
 			// get the match results for the pattern for the given context
-			const match = context.match(observed, this.mergeThreshold);
+			const match = context.match(observed, age, this.mergeThreshold);
 
 			// if there is a match, and it's the best so far, store it
 			if (match && (!best || match.score > best.score)) {
-				match.pattern = pattern;
+				match.patternId = patternId;
+				match.age = age;
 				best = match;
 			}
 		}
-		if (!best) return null; // if there are no matches, return null
-
-		// refine the context — returns removed refs for the caller to deliver
-		best.removedRefs = this.refineContext(best.pattern.id, best.common, best.novel, best.missing);
-
 		return best;
 	}
 
