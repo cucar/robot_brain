@@ -110,18 +110,18 @@ node run-brain.js stock-test --no-summary --episodes 5
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $31329.91 | ROI: +208.87%, +0.045030%/frame (2901 trades)
-   Episode 2: $163147.26 | ROI: +1087.65%, +0.098834%/frame (2703 trades)
-   Episode 3: $874064.01 | ROI: +5827.09%, +0.163092%/frame (2928 trades)
-   Episode 4: $2007695.70 | ROI: +13384.64%, +0.195966%/frame (3438 trades)
-   Episode 5: $522305.81 | ROI: +3482.04%, +0.142957%/frame (3667 trades)
+   Episode 1: $33516.41 | ROI: +223.44%, +0.046871%/frame (2904 trades)
+   Episode 2: $212532.28 | ROI: +1416.88%, +0.108612%/frame (2576 trades)
+   Episode 3: $527506.07 | ROI: +3516.71%, +0.143342%/frame (3373 trades)
+   Episode 4: $276208.68 | ROI: +1841.39%, +0.118473%/frame (3680 trades)
+   Episode 5: $1359988.44 | ROI: +9066.59%, +0.180528%/frame (3755 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 57.04%
-   Episode 2: 57.78%
-   Episode 3: 58.38%
-   Episode 4: 58.61%
-   Episode 5: 58.69%
+   Episode 2: 57.79%
+   Episode 3: 58.35%
+   Episode 4: 58.52%
+   Episode 5: 58.70%
 ```
 
 ## Demo 4: Stock Sequence Memorization

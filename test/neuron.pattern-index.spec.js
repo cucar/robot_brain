@@ -42,6 +42,38 @@ describe('Neuron pattern index', () => {
 		assert.deepStrictEqual(actual, expected);
 	});
 
+	it('preserves routing-table tie-breaking when the index yields a different candidate order', () => {
+		const parent = new Neuron(0.01, 0.5, 105);
+		parent.addPattern(601, [{ neuronId: 11, distance: 1 }]);
+		parent.addPattern(602, [{ neuronId: 22, distance: 1 }]);
+
+		const observed = makeContext([[22, 1], [11, 1]]);
+		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 0)], [602, 601]);
+
+		const actual = parent.findBestPatternMatchAtAge(observed, 0);
+		const expected = findBestLinearMatch(parent, observed, 0);
+		assert.deepStrictEqual(actual, expected);
+		assert.equal(actual.patternId, 601);
+	});
+
+	it('ignores zero-strength patterns even if they are still present in the index candidates', () => {
+		const parent = new Neuron(1, 0.5, 106);
+		const expiredPattern = new Neuron(1, 0.5, 701);
+		const alivePattern = new Neuron(1, 0.5, 702);
+		const neurons = new Map([[701, expiredPattern], [702, alivePattern]]);
+
+		parent.addPattern(701, [{ neuronId: 11, distance: 1 }]);
+		parent.addPattern(702, [{ neuronId: 22, distance: 1 }]);
+		expiredPattern.setActivationStrength(1, 0);
+		alivePattern.setActivationStrength(2, 1);
+
+		const observed = makeContext([[11, 1], [22, 1]]);
+		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 1 - 1)], [701, 702]);
+
+		const actual = parent.findBestPatternMatchAtAge(observed, 0, 1, neurons);
+		assert.equal(actual.patternId, 702);
+	});
+
 	it('returns null when the index produces no candidates', () => {
 		const parent = new Neuron(0.01, 0.5, 102);
 		parent.addPattern(311, [{ neuronId: 40, distance: 1 }, { neuronId: 41, distance: 2 }]);

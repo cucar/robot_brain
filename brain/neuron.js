@@ -407,7 +407,17 @@ export class Neuron {
 			// context.match() handles the full scoring and threshold check;
 			// the index only decides which child patterns are worth evaluating.
 			const match = context.match(observed, age, this.mergeThreshold);
-			if (!match || (best && match.score <= best.score)) continue;
+			if (!match) continue; // nothing to do if there is no match
+
+			// if there is already a best match, check if this match is better
+			if (best) {
+
+				// if the previous best is better than this match, skip
+				if (match.score < best.score) continue;
+
+				// to preserve determinism when multiple patterns achieve the exact same score, explicitly tie-break using patternId
+				if (match.score === best.score && patternId > best.patternId) continue; // prefer smaller id (older)
+			}
 
 			// store the best match
 			match.patternId = patternId;
