@@ -213,9 +213,6 @@ export default class Brain {
 	async processFrame() {
 		const frameStart = performance.now();
 
-		// forget connections and patterns in all neurons to avoid curse of dimensionality
-		this.cleanupDeadPatterns();
-
 		// ---------------------------- FRAME I/O ----------------------------------
 
 		// get the current frame from all channels - includes events and previously executed actions
@@ -234,6 +231,9 @@ export default class Brain {
 
 		// activate sensory neurons in age=0, level=0 - inputs from the world
 		this.activateSensors();
+
+		// forget connections and patterns in all neurons to avoid curse of dimensionality
+		this.cleanupDeadPatterns();
 
 		// ---------------------------- PARALLEL PROCESSING START ----------------------------------
 
@@ -403,7 +403,7 @@ export default class Brain {
 		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 		// Pass memory snapshot to thalamus — it owns all neuron access
-		const matchedPatterns = this.thalamus.recognizeLevel(level, this.memory.activeNeurons, this.frameNumber);
+		const matchedPatterns = this.thalamus.recognizeLevel(level, this.memory.activeNeurons);
 		if (matchedPatterns.length === 0) {
 			if (this.debug) console.log(`No pattern matches found at level ${level}`);
 			return false;

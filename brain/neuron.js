@@ -349,14 +349,12 @@ export class Neuron {
 	 * flagged as an activation candidate.
 	 * @param {Context} observed - The level context (distances are absolute ages)
 	 * @param {Array<number>} activeAges - Ages at which this neuron is active (sorted ascending)
-	 * @param {number} currentFrame - Current frame number for lazy decay
-	 * @param {Map<number, Neuron>} neurons - Neuron lookup map (id → Neuron) for active pattern checks
 	 * @returns {{
 	 *   matches: Array<{ patternId, age, score, common, missing, novel, removedRefs, activate }>,
 	 *   contextRefUpdates: Array<{ type: 'add'|'remove', neuronId, distance }>
 	 * }}
 	 */
-	matchPatterns(observed, activeAges, currentFrame, neurons) {
+	matchPatterns(observed, activeAges) {
 		const matches = [];
 		const contextRefUpdates = [];
 		const activatedPatternIds = new Set();
@@ -365,7 +363,7 @@ export class Neuron {
 			// active ages are processed in ascending order (most recent first). The first age that
 			// produces a match at that age is refined and preserved. More recent ages tend to have
 			// the richest available context, so they are processed first.
-			const best = this.findBestPatternMatchAtAge(observed, age, currentFrame, neurons);
+			const best = this.findBestPatternMatchAtAge(observed, age);
 			if (!best) continue; // try older age if there is a match
 
 			// refine the context — returns cross-neuron contextRef side effects for later delivery
@@ -389,18 +387,11 @@ export class Neuron {
 	 * Find the best matching pattern for a specific active age.
 	 * @param {Context} observed - The level context (distances are absolute ages)
 	 * @param {number} age - The specific active age being evaluated
-	 * @param {number} currentFrame - Current frame number for lazy decay
-	 * @param {Map<number, Neuron>} neurons - Neuron lookup map for active pattern checks
 	 * @returns {{ patternId, age, score, common, missing, novel }|null}
 	 */
-	findBestPatternMatchAtAge(observed, age, currentFrame, neurons) {
+	findBestPatternMatchAtAge(observed, age) {
 		let best = null; // { patternId, age, score, common, missing, novel }
 		for (const [patternId, context] of this.routingTable) {
-			const pattern = neurons.get(patternId);
-			if (!pattern) continue;
-
-			// if the pattern has been forgotten, ignore that - cleanup cycle will take care of it
-			if (pattern.getEffectiveActivationStrength(currentFrame) === 0) continue;
 
 			// get the match results for the pattern for the given context
 			const match = context.match(observed, age, this.mergeThreshold);

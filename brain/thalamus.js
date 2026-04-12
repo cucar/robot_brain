@@ -361,10 +361,9 @@ export class Thalamus {
 	 * Brain passes the raw memory snapshot; Thalamus owns all neuron access.
 	 * @param {number} level - The level to process
 	 * @param {Array<Map<number, {activatedPatternId, votes, context}>>} activeNeuronsByAge - Memory snapshot
-	 * @param {number} frameNumber - Current frame number for lazy decay checks during matching
 	 * @returns {Array<{parent, age, match}>} - Matched patterns to activate
 	 */
-	recognizeLevel(level, activeNeuronsByAge, frameNumber) {
+	recognizeLevel(level, activeNeuronsByAge) {
 
 		// build one context for the entire level (distances are absolute ages)
 		const levelContext = this.buildLevelContext(level, activeNeuronsByAge);
@@ -375,7 +374,7 @@ export class Thalamus {
 		if (recognizers.size === 0) return [];
 
 		// ask each recognizer neuron once to match patterns across all its active ages
-		const { matches, contextRefUpdates } = this.matchPatterns(recognizers, levelContext, frameNumber);
+		const { matches, contextRefUpdates } = this.matchPatterns(recognizers, levelContext);
 
 		// now, deliver the context reference updates as a result of the matches
 		this.deliverContextRefUpdates(contextRefUpdates);
@@ -440,10 +439,10 @@ export class Thalamus {
 	 *   contextRefUpdates: Array<{parentId, type, neuronId, distance}>
 	 * }}
 	 */
-	matchPatterns(recognizers, context, frameNumber) {
+	matchPatterns(recognizers, context) {
 		const recognitionResults = [];
 		for (const { neuron: parent, activeAges } of recognizers.values()) {
-			const result = parent.matchPatterns(context, activeAges, frameNumber, this.neurons);
+			const result = parent.matchPatterns(context, activeAges);
 			if (result.matches.length === 0) continue;
 			recognitionResults.push({ parent, ...result });
 		}
