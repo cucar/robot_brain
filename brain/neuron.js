@@ -391,19 +391,75 @@ export class Neuron {
 	 */
 	findBestPatternMatchAtAge(observed, age) {
 		let best = null; // { patternId, age, score, common, missing, novel }
-		for (const [patternId, context] of this.routingTable) {
 
-			// get the match results for the pattern for the given context
+		// Use the inverted index to narrow the search to child patterns that share at least one
+		// exact neuron/distance entry with the observed context at this active age.
+		const candidateIds = this.getPatternCandidatesAtAge(observed, age);
+		if (candidateIds.size === 0) return null;
+
+		// go through the candidate patterns and find the best match
+		for (const patternId of candidateIds) {
+
+			// get the context of the pattern
+			const context = this.routingTable.get(patternId);
+			if (!context) throw new Error(`Cannot find context for pattern: ${patternId}`);
+
+			// context.match() handles the full scoring and threshold check;
+			// the index only decides which child patterns are worth evaluating.
 			const match = context.match(observed, age, this.mergeThreshold);
+			if (!match || (best && match.score <= best.score)) continue;
 
-			// if there is a match, and it's the best so far, store it
-			if (match && (!best || match.score > best.score)) {
-				match.patternId = patternId;
-				match.age = age;
-				best = match;
-			}
+			// store the best match
+			match.patternId = patternId;
+			match.age = age;
+			best = match;
 		}
 		return best;
+	}
+
+	/**
+	 * Find candidate child patterns for a specific active age using the inverted index.
+	 * Candidate patterns must share at least one exact neuron/distance context entry with the
+	 * observed context after converting absolute observed ages into pattern-relative distances.
+	 *
+	 * The observed context is keyed by absolute age within the current frame snapshot, while each
+	 * stored pattern context is keyed by distance relative to the parent's own activation age.
+	 * For a parent active at `age`, an observed entry at absolute distance `d` maps to a pattern
+	 * entry at relative distance `d - age`.
+	 *
+	 * Missing index entries are expected here: they just mean the observed neuron/distance pair is
+	 * not referenced by any child pattern and therefore contributes no candidates.
+	 * @param {Context} observed
+	 * @param {number} age
+	 * @returns {Set<number>}
+	 */
+	getPatternCandidatesAtAge(observed, age) {
+		const candidates = new Set();
+		for (const [neuronId, distanceMap] of observed.entries) {
+
+			// First narrow by exact context neuron ID. If this neuron does not appear in the index,
+			// no child pattern references it anywhere in this parent's routing table.
+			const indexedDistances = this.contextIndex.get(neuronId);
+			if (!indexedDistances) continue;
+
+			for (const absoluteDistance of distanceMap.keys()) {
+
+				// Convert the observed absolute age into the pattern-relative distance used by the
+				// routing table and inverted index. Distances < 1 are not valid pattern context entries
+				// because context neurons must be older than the parent neuron itself.
+				const patternDistance = absoluteDistance - age;
+				if (patternDistance < 1) continue;
+
+				// Then narrow by exact relative distance. Missing entries here are also expected and
+				// simply mean no child pattern references this neuron at this particular distance.
+				const patternIds = indexedDistances.get(patternDistance);
+				if (!patternIds) continue;
+
+				// A candidate only needs one exact neuron/distance overlap to be worth a full score.
+				for (const patternId of patternIds) candidates.add(patternId);
+			}
+		}
+		return candidates;
 	}
 
 	/**

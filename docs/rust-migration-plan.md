@@ -104,29 +104,7 @@ Key insight: within a single neuron, the ordering is natural:
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.1 — Add inverted index for pattern recognition
-
-With contexts now stored in the parent's routing table (Step 1.1), the parent has all its pattern contexts in one place — the natural location for an inverted index.
-
-**Current matching**: parent iterates all children, scores each pattern's context against observed context → `O(Pₗ × C)` per neuron, where Pₗ = number of patterns (children) and C = context size.
-
-**Optimized matching**: build an inverted index on the parent that maps context neuron IDs to the patterns that reference them. To match:
-1. Use observed context entries to look up which patterns reference them (candidate retrieval)
-2. Score only the candidate patterns against full context, instead of scoring all children
-
-This is sublinear when the index prunes most patterns out of consideration. Higher levels (more patterns, fewer active neurons) benefit most.
-
-**Implementation**:
-- Build the inverted index alongside the routing table (maintained on pattern creation/deletion)
-- Fall back to linear scan when candidate set isn't significantly smaller than pattern count
-
-**Why now (before Rust)**: get the algorithm correct and testable in JS where debugging is easy. Translating known-correct optimized code to Rust is far safer than trying to develop/test both the optimization and the Rust migration simultaneously.
-
-**Verify**: pattern recognition results identical (same patterns matched, same scores), all tests pass. Benchmark selectivity per level on stock workloads.
-
----
-
-#### Step 1.2 — Test inference before learning ordering
+#### Step 1.1 — Test inference before learning ordering
 
 Currently the assumed per-neuron ordering is: recognize → learn connections → learn patterns → vote. But voting (inference) only depends on recognition (suppression flag), not on learning. Test reversing the order: recognize → vote → learn connections → learn patterns.
 
@@ -134,11 +112,12 @@ Currently the assumed per-neuron ordering is: recognize → learn connections �
 - If results are equivalent or better: keep voting right after recognition, group the two learning operations together
 - This matters for parallelization — if voting is independent of learning, action execution can proceed without waiting for learning to finish (non-blocking actions)
 - If results are worse: keep the original ordering, document why learning must precede voting
+- Also, test this order: update connections, recognize and refine contexts, error correction, vote
 - **Verify**: compare accuracy across orderings on stock workloads
 
 ---
 
-#### Step 1.3 — Move `updateConnections` into the level loop
+#### Step 1.2 — Move `updateConnections` into the level loop
 
 - Currently `updateConnections()` iterates `memory.getContextNeurons()` (all age>0, all levels)
 - Restructure: within `recognizeLevel(level)`, after pattern matching, also call `learnConnections` on neurons at this level
@@ -146,7 +125,7 @@ Currently the assumed per-neuron ordering is: recognize → learn connections �
 - Remove `updateConnections()` from Brain once fully merged
 - **Verify**: connection learning results identical, all tests pass
 
-#### Step 1.4 — Move `learnNewPatterns` into the level loop
+#### Step 1.3 — Move `learnNewPatterns` into the level loop
 
 - Currently `learnNewPatterns()` iterates `memory.getVotersWithContext()` (age>0, have votes from previous frame)
 - Brain determines which neurons need error correction (by checking previous-frame votes against actual events)
@@ -157,7 +136,7 @@ Currently the assumed per-neuron ordering is: recognize → learn connections �
 - `getActualEvents()` and `sensoryNeurons` are computed once before the loop (unchanged)
 - **Verify**: pattern creation identical, all tests pass
 
-#### Step 1.5 — Move `collectVotes` into the level loop
+#### Step 1.4 — Move `collectVotes` into the level loop
 
 - Currently `collectVotes()` iterates `memory.getVotingNeurons()` (all ages 0..N-1, all levels)
 - Restructure: within the level loop, after connections and pattern learning, collect votes from neurons at this level
@@ -165,7 +144,7 @@ Currently the assumed per-neuron ordering is: recognize → learn connections �
 - Suppression: neurons skip voting if they had a pattern activated — either from recognition (Step 1.2 ordering) or from error correction (Step 1.3)
 - **Verify**: votes identical, inference results identical, all tests pass
 
-#### Step 1.6 — Rename the unified loop
+#### Step 1.5 — Rename the unified loop
 
 - `recognizeLevel()` is now doing all 4 operations — rename to `processLevel()`
 - `recognizePatterns()` (the outer level loop) becomes `processLevels()`
@@ -174,7 +153,7 @@ Currently the assumed per-neuron ordering is: recognize → learn connections �
 - Consensus determination and action execution remain in Brain, called after `processLevels()` returns votes
 - **Verify**: all tests pass, behavior identical
 
-#### Step 1.7 — Push the unified loop into Thalamus
+#### Step 1.6 — Push the unified loop into Thalamus
 
 - Brain currently owns `processLevels()` — move it to Thalamus
 - Brain calls `thalamus.processFrame(...)` which returns votes + new patterns
