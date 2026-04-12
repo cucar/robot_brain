@@ -11,12 +11,15 @@ export class Job {
 		this.brain = null; // Brain instance will be created in run() based on options
 		this.isShuttingDown = false;
 		this.database = false; // Default: skip database backup/restore for jobs (tests)
+		this.jobStartTime = null;
+		this.hasShownExecutionTime = false;
 	}
 
 	/**
 	 * Main run method - template method pattern with hooks for customization
 	 */
 	async run() {
+		this.jobStartTime = Date.now();
 
 		// Set up signal handlers for graceful shutdown
 		this.setupSignalHandlers();
@@ -58,10 +61,12 @@ export class Job {
 
 			// Backup brain state to MySQL before exiting
 			await this.shutdown();
+			this.showExecutionTime();
 		}
 		catch (error) {
 			console.error('Job execution failed:', error);
 			await this.shutdown(); // try to back up on error
+			this.showExecutionTime();
 			throw error;
 		}
 	}
@@ -84,7 +89,29 @@ export class Job {
 	async handleInterrupt(signal) {
 		console.log(`\nReceived ${signal}, shutting down gracefully...`);
 		await this.shutdown();
+		this.showExecutionTime();
 		process.exit(0);
+	}
+
+	formatDuration(durationMs) {
+		if (durationMs < 1000) return `${durationMs}ms`;
+
+		const totalSeconds = Math.floor(durationMs / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+
+		if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+		if (minutes > 0) return `${minutes}m ${seconds}s`;
+		return `${(durationMs / 1000).toFixed(2)}s`;
+	}
+
+	showExecutionTime() {
+		if (this.hasShownExecutionTime || this.jobStartTime === null) return;
+
+		this.hasShownExecutionTime = true;
+		const totalExecutionTime = Date.now() - this.jobStartTime;
+		console.log(`\n⏱️  Total Execution Time: ${this.formatDuration(totalExecutionTime)}`);
 	}
 
 	/**
