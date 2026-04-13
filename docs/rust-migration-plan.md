@@ -104,23 +104,17 @@ Key insight: within a single neuron, the ordering is natural:
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.1 — Test new order of operations
-
-Currently the assumed per-neuron ordering is: recognize → learn connections → learn patterns → vote. 
-But voting (inference) only depends on recognition (suppression flag), not on learning. 
-Test this order: update connections, recognize (update contexts), learn patterns, vote
-
----
-
-#### Step 1.2 — Move `updateConnections` into the level loop
+#### Step 1.1 — Move `updateConnections` into the level loop
 
 - Currently `updateConnections()` iterates `memory.getContextNeurons()` (all age>0, all levels)
 - Restructure: within `recognizeLevel(level)`, after pattern matching, also call `learnConnections` on neurons at this level
 - The set of neurons iterated is the same — just reorganized by level
 - Remove `updateConnections()` from Brain once fully merged
+- In the initial refactoring, for each neuron, keep connection updates after pattern recognition. 
+- Once that's verified to work, try to see if the connection updates can happen before pattern recognition for each neuron 
 - **Verify**: connection learning results identical, all tests pass
 
-#### Step 1.3 — Move `learnNewPatterns` into the level loop
+#### Step 1.2 — Move `learnNewPatterns` into the level loop
 
 - Currently `learnNewPatterns()` iterates `memory.getVotersWithContext()` (age>0, have votes from previous frame)
 - Brain determines which neurons need error correction (by checking previous-frame votes against actual events)
@@ -131,7 +125,7 @@ Test this order: update connections, recognize (update contexts), learn patterns
 - `getActualEvents()` and `sensoryNeurons` are computed once before the loop (unchanged)
 - **Verify**: pattern creation identical, all tests pass
 
-#### Step 1.4 — Move `collectVotes` into the level loop
+#### Step 1.3 — Move `collectVotes` into the level loop
 
 - Currently `collectVotes()` iterates `memory.getVotingNeurons()` (all ages 0..N-1, all levels)
 - Restructure: within the level loop, after connections and pattern learning, collect votes from neurons at this level
@@ -139,7 +133,7 @@ Test this order: update connections, recognize (update contexts), learn patterns
 - Suppression: neurons skip voting if they had a pattern activated — either from recognition (Step 1.2 ordering) or from error correction (Step 1.3)
 - **Verify**: votes identical, inference results identical, all tests pass
 
-#### Step 1.5 — Rename the unified loop
+#### Step 1.4 — Rename the unified loop
 
 - `recognizeLevel()` is now doing all 4 operations — rename to `processLevel()`
 - `recognizePatterns()` (the outer level loop) becomes `processLevels()`
@@ -148,7 +142,7 @@ Test this order: update connections, recognize (update contexts), learn patterns
 - Consensus determination and action execution remain in Brain, called after `processLevels()` returns votes
 - **Verify**: all tests pass, behavior identical
 
-#### Step 1.6 — Push the unified loop into Thalamus
+#### Step 1.5 — Push the unified loop into Thalamus
 
 - Brain currently owns `processLevels()` — move it to Thalamus
 - Brain calls `thalamus.processFrame(...)` which returns votes + new patterns
