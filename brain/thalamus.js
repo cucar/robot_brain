@@ -16,7 +16,7 @@ export class Thalamus {
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
-		this.neuronsByValue = new Map(); // valueKey -> SensoryNeuron (coordinates -> neuron lookup)
+		this.neuronsByValue = new Map(); // valueKey -> neuronId (coordinates -> neuronId lookup)
 		this.neuronValues = new Map(); // neuronId -> coordinates (neuron -> coordinates reverse lookup)
 		this.neuronChannel = new Map(); // neuronId -> channelName (sensory neurons only)
 		this.neuronType = new Map(); // neuronId -> 'event'|'action' (sensory neurons only)
@@ -24,8 +24,8 @@ export class Thalamus {
 		this.neuronLevels = new Map(); // neuronId -> level (0 = sensory, 1+ = pattern)
 
 		// Death ledger - scheduled neuron deaths
-		this.deathLedger = new Map(); // frameNumber -> Set<Neuron>
-		this.neuronDeathFrame = new Map(); // neuron -> frameNumber (reverse lookup)
+		this.deathLedger = new Map(); // frameNumber -> Set<number>
+		this.neuronDeathFrame = new Map(); // neuronId -> frameNumber (reverse lookup)
 
 		// Channel registry
 		this.channelClasses = new Map(); // channelName -> Channel class (not instantiated)
@@ -55,53 +55,91 @@ export class Thalamus {
 
 	/**
 	 * Get or create a sensory neuron ID from a frame point
-	 * @returns {Neuron} - Neuron
+	 * @returns {number} - Neuron ID
 	 */
-	getNeuronForPoint(coordinates, channel, type) {
+	getNeuronIdForPoint(coordinates, channel, type) {
 
 		// Try to find existing neuron - if found, return it
-		let neuron = this.getNeuronByCoordinates(coordinates);
-		if (neuron) return neuron;
+		let neuronId = this.getNeuronIdByCoordinates(coordinates);
+		if (neuronId) return neuronId;
 
 		// Create new neuron if not found
-		neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
-		const valueKey = this.makeValueKey(coordinates);
-		this.neurons.set(neuron.id, neuron);
-		this.neuronLevels.set(neuron.id, 0);
-		this.neuronsByValue.set(valueKey, neuron);
-		this.neuronValues.set(neuron.id, coordinates);
+		const neuron = this.addSensoryNeuron(coordinates);
 		this.neuronChannel.set(neuron.id, channel);
 		this.neuronType.set(neuron.id, type);
-		this.incrementLevelCount(0); // for diagnostics
-		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${valueKey}`);
-		return neuron;
+		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${this.makeValueKey(coordinates)}`);
+		return neuron.id;
 	}
 
 	/**
 	 * returns neuron ID by coordinates (for diagnostics)
 	 * @param {object} coordinates - Coordinate object with dimension-value pairs
-	 * @returns {Neuron|null} - Neuron or null if not found
+	 * @returns {number|null} - Neuron ID or null if not found
 	 */
-	getNeuronByCoordinates(coordinates) {
-		return this.neuronsByValue.get(this.makeValueKey(coordinates));
+	getNeuronIdByCoordinates(coordinates) {
+		return this.neuronsByValue.get(this.makeValueKey(coordinates)) || null;
 	}
 
 	/**
-	 * Add a neuron to the registry
-	 * @param {Neuron} neuron - Neuron to add
-	 * @param {number} level - Neuron level (0 = sensory, 1+ = pattern)
-	 * @param {object} [coordinates] - Coordinates for sensory neurons (level 0)
-	 * @param {number} [parentId] - Parent neuron ID for pattern neurons (level > 0)
+	 * Create and add a new sensory neuron to the registry
+	 * @param {object} coordinates - Coordinates for sensory neurons (level 0)
+	 * @returns {Neuron} The newly created neuron
 	 */
-	addNeuron(neuron, level, coordinates, parentId) {
+	addSensoryNeuron(coordinates) {
+		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
+		this.neurons.set(neuron.id, neuron);
+		this.neuronLevels.set(neuron.id, 0);
+		this.neuronsByValue.set(this.makeValueKey(coordinates), neuron.id);
+		this.neuronValues.set(neuron.id, coordinates);
+		this.incrementLevelCount(0); // for diagnostics
+		return neuron;
+	}
+
+	/**
+	 * Create and add a new pattern neuron to the registry
+	 * @param {number} level - Neuron level (1+ = pattern)
+	 * @param {number} parentId - Parent neuron ID
+	 * @param {number} age - Distance in time between the observation and the error
+	 * @param {Array<Array<object>>} sensoryNeurons - Recent sensory neurons by age
+	 * @param {Array<Map<string, number>>} rewards - Rewards by age
+	 * @param {Array<{neuronId: number, distance: number}>} levelContext - Parent level context
+	 * @param {number} currentFrame - Current frame number
+	 * @returns {Neuron} The newly created neuron
+	 */
+	addPatternNeuron(level, parentId, age, sensoryNeurons, rewards, levelContext, currentFrame) {
+
+		// create the neuron
+		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
+
+		const channelActionIds = this.getChannelActionIds();
+		// create the future connections of the pattern from currently observed neurons
+		for (let a = 0; a < age && a < sensoryNeurons.length; a++)
+			for (const n of sensoryNeurons[a]) {
+
+				// save the event/action - include observed reward for actions - for events it's zero
+				const nChannel = this.getNeuronChannel(n.id);
+				const reward = rewards[a].get(nChannel) || 0;
+				neuron.createConnection(age - a, n.id, 1, reward);
+
+				// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
+				if (reward < 0) {
+					const alt = neuron.findAlternativeAction(age - a, nChannel, n.id, channelActionIds);
+					if (alt) neuron.createConnection(age - a, alt, 1, 0);
+				}
+			}
+
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, level);
-		if (level === 0 && coordinates) {
-			this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
-			this.neuronValues.set(neuron.id, coordinates);
-		}
-		if (parentId) this.neuronParents.set(neuron.id, parentId);
+		this.neuronParents.set(neuron.id, parentId);
 		this.incrementLevelCount(level); // for diagnostics
+
+		const parent = this.neurons.get(parentId);
+		if (parent) {
+			const deathFrame = parent.addPattern(neuron.id, levelContext, currentFrame);
+			this.registerDeath(neuron.id, deathFrame);
+		}
+
+		return neuron;
 	}
 
 	/**
@@ -127,11 +165,16 @@ export class Thalamus {
 			if (parentId) this.neuronParents.set(neuron.id, parentId);
 			this.incrementLevelCount(level);
 			if (level === 0 && coordinates) {
-				this.neuronsByValue.set(this.makeValueKey(coordinates), neuron);
+				this.neuronsByValue.set(this.makeValueKey(coordinates), neuron.id);
 				this.neuronValues.set(neuron.id, coordinates);
 			}
-			else if (level > 0)
-				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / neuron.patternForgetRate));
+			else if (level > 0 && parentId) {
+				const parent = this.neurons.get(parentId);
+				if (parent) {
+					const ctx = parent.routingTable.get(neuron.id);
+					if (ctx) this.registerDeath(neuron.id, Math.ceil(ctx.activationStrength / neuron.patternForgetRate));
+				}
+			}
 		}
 	}
 
@@ -276,10 +319,12 @@ export class Thalamus {
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		for (const neuron of this.neurons.values()) {
-			neuron.materializeStrength(currentFrame);
-			neuron.lastActivationFrame = 0;
-			if (this.neuronLevels.get(neuron.id) > 0)
-				this.registerDeath(neuron, Math.ceil(neuron.activationStrength / neuron.patternForgetRate));
+			for (const [patternId, ctx] of neuron.routingTable) {
+				neuron.materializeChildStrength(patternId, currentFrame);
+				ctx.lastActivationFrame = 0;
+				const pattern = this.neurons.get(patternId);
+				if (pattern) this.registerDeath(pattern.id, Math.ceil(ctx.activationStrength / neuron.patternForgetRate));
+			}
 		}
 	}
 
@@ -361,9 +406,10 @@ export class Thalamus {
 	 * Brain passes the raw memory snapshot; Thalamus owns all neuron access.
 	 * @param {number} level - The level to process
 	 * @param {Array<Map<number, {activatedPatternId, votes, context}>>} activeNeuronsByAge - Memory snapshot
-	 * @returns {Array<{parent, age, match}>} - Matched patterns to activate
+	 * @param {number} currentFrame - Current frame number
+	 * @returns {Array<{parentId, patternId, age, deathFrame}>} - Matched patterns to activate
 	 */
-	recognizeLevel(level, activeNeuronsByAge) {
+	recognizeLevel(level, activeNeuronsByAge, currentFrame) {
 
 		// build one context for the entire level (distances are absolute ages)
 		const levelContext = this.buildLevelContext(level, activeNeuronsByAge);
@@ -374,10 +420,13 @@ export class Thalamus {
 		if (recognizers.size === 0) return [];
 
 		// ask each recognizer neuron once to match patterns across all its active ages
-		const { matches, contextRefUpdates } = this.matchPatterns(recognizers, levelContext);
+		const { matches, contextRefUpdates } = this.matchPatterns(recognizers, levelContext, currentFrame);
 
 		// now, deliver the context reference updates as a result of the matches
 		this.deliverContextRefUpdates(contextRefUpdates);
+
+		// register death for activated patterns
+		for (const match of matches) this.registerDeath(match.patternId, match.deathFrame);
 
 		// return the patterns to be activated
 		return matches;
@@ -392,8 +441,7 @@ export class Thalamus {
 		const context = new Context();
 		for (let ctxAge = 1; ctxAge < activeNeuronsByAge.length; ctxAge++)
 			for (const neuronId of (activeNeuronsByAge[ctxAge] ?? new Map()).keys()) {
-				const neuron = this.neurons.get(neuronId);
-				if (this.skipActionNeuron(neuron) || this.neuronLevels.get(neuronId) !== level) continue;
+				if (this.skipActionNeuron(neuronId) || this.neuronLevels.get(neuronId) !== level) continue;
 				context.addNeuron(neuronId, ctxAge);  // distance = absolute age
 			}
 		return context;
@@ -402,9 +450,9 @@ export class Thalamus {
 	/**
 	 * Check if a neuron should be skipped (action neuron in a channel without action sequences)
 	 */
-	skipActionNeuron(neuron) {
-		if (this.neuronLevels.get(neuron.id) !== 0 || this.getNeuronType(neuron.id) !== 'action') return false;
-		const channel = this.channels.get(this.getNeuronChannel(neuron.id));
+	skipActionNeuron(neuronId) {
+		if (this.neuronLevels.get(neuronId) !== 0 || this.getNeuronType(neuronId) !== 'action') return false;
+		const channel = this.channels.get(this.getNeuronChannel(neuronId));
 		return channel && !channel.actionSequences;
 	}
 
@@ -421,7 +469,7 @@ export class Thalamus {
 				const neuron = this.neurons.get(neuronId);
 				if (!neuron) throw new Error(`Neuron not found in recognition: ${neuronId}`);
 				if (state.activatedPatternId !== null) continue;
-				if (this.skipActionNeuron(neuron) || this.neuronLevels.get(neuronId) !== level) continue;
+				if (this.skipActionNeuron(neuronId) || this.neuronLevels.get(neuronId) !== level) continue;
 				if (!recognizers.has(neuronId)) recognizers.set(neuronId, { neuron, activeAges: [] });
 				recognizers.get(neuronId).activeAges.push(age);
 			}
@@ -434,17 +482,20 @@ export class Thalamus {
 	 * Each recognizer neuron is called once with all active ages. Matching/refinement happens
 	 * first for all recognizers, then all deferred contextRef updates are flattened into one
 	 * ordered global post-match update list, and activation candidates are collected separately.
+	 * @param {Map<number, {neuron, activeAges}>} recognizers
+	 * @param {Context} context
+	 * @param {number} currentFrame
 	 * @returns {{
-	 *   matches: Array<{parent, age, match}>,
+	 *   matches: Array<{parentId, patternId, age, deathFrame}>,
 	 *   contextRefUpdates: Array<{parentId, type, neuronId, distance}>
 	 * }}
 	 */
-	matchPatterns(recognizers, context) {
+	matchPatterns(recognizers, context, currentFrame) {
 		const recognitionResults = [];
 		for (const { neuron: parent, activeAges } of recognizers.values()) {
-			const result = parent.matchPatterns(context, activeAges);
+			const result = parent.matchPatterns(context, activeAges, currentFrame);
 			if (result.matches.length === 0) continue;
-			recognitionResults.push({ parent, ...result });
+			recognitionResults.push({ parentId: parent.id, ...result });
 		}
 		return {
 			matches: this.collectActivationMatches(recognitionResults),
@@ -455,14 +506,14 @@ export class Thalamus {
 	/**
 	 * Flatten deferred contextRef updates from all recognizers into one ordered global list.
 	 * Order is preserved exactly as produced during matching/refinement.
-	 * @param {Array<{parent, contextRefUpdates}>} recognitionResults
+	 * @param {Array<{parentId, contextRefUpdates}>} recognitionResults
 	 * @returns {Array<{parentId, type, neuronId, distance}>}
 	 */
 	collectContextRefUpdates(recognitionResults) {
 		const contextRefUpdates = [];
-		for (const { parent, contextRefUpdates: parentUpdates } of recognitionResults)
+		for (const { parentId, contextRefUpdates: parentUpdates } of recognitionResults)
 			for (const update of parentUpdates)
-				contextRefUpdates.push({ parentId: parent.id, ...update });
+				contextRefUpdates.push({ parentId, ...update });
 		return contextRefUpdates;
 	}
 
@@ -478,14 +529,14 @@ export class Thalamus {
 
 	/**
 	 * Collect only the matches that should activate downstream.
-	 * @param {Array<{parent, matches}>} recognitionResults
-	 * @returns {Array<{parent, age, match}>}
+	 * @param {Array<{parentId, matches}>} recognitionResults
+	 * @returns {Array<{parentId, patternId, age, deathFrame}>}
 	 */
 	collectActivationMatches(recognitionResults) {
 		const matchedPatterns = [];
-		for (const { parent, matches } of recognitionResults)
+		for (const { parentId, matches } of recognitionResults)
 			for (const match of matches)
-				if (match.activate) matchedPatterns.push({ parent, age: match.age, match });
+				if (match.activate) matchedPatterns.push({ parentId, patternId: match.patternId, age: match.age, deathFrame: match.deathFrame });
 		return matchedPatterns;
 	}
 
@@ -526,20 +577,6 @@ export class Thalamus {
 		}
 
 		return Object.keys(aggregateMetrics).length > 0 ? aggregateMetrics : null;
-	}
-
-	/**
-	 * returns channel name map to id
-	 */
-	getChannelNameToIdMap() {
-		return this.channelNameToId;
-	}
-
-	/**
-	 * returns channel id map to name
-	 */
-	getChannelIdToNameMap() {
-		return this.channelIdToName;
 	}
 
 	/**
@@ -611,7 +648,7 @@ export class Thalamus {
 			// get or create the action neurons for the channel
 			const actionNeurons = new Set();
 			for (const coordinates of channel.getActions())
-				actionNeurons.add(this.getNeuronForPoint(coordinates, channelName, 'action'));
+				actionNeurons.add(this.neurons.get(this.getNeuronIdForPoint(coordinates, channelName, 'action')));
 
 			// add channel's action neurons to the channelActions map
 			channelActions.set(channelName, actionNeurons);
@@ -620,27 +657,13 @@ export class Thalamus {
 			// set the default action for the channel (if one exists)
 			const defaultActionCoords = channel.getDefaultAction();
 			if (defaultActionCoords !== null) {
-				const defaultAction = this.getNeuronForPoint(defaultActionCoords, channelName, 'action');
+				const defaultAction = this.neurons.get(this.getNeuronIdForPoint(defaultActionCoords, channelName, 'action'));
 				this.channelDefaultActions.set(channelName, defaultAction);
 			}
 		}
 
 		// set channel actions for exploration
 		this.channelActions = channelActions;
-	}
-
-	/**
-	 * returns dimension name map to id
-	 */
-	getDimensionNameToIdMap() {
-		return this.dimensionNameToId;
-	}
-
-	/**
-	 * returns dimension id map to name
-	 */
-	getDimensionIdToNameMap() {
-		return this.dimensionIdToName;
 	}
 
 	/**
@@ -686,29 +709,29 @@ export class Thalamus {
 	/**
 	 * Register a neuron's scheduled death frame
 	 */
-	registerDeath(neuron, deathFrame) {
+	registerDeath(neuronId, deathFrame) {
 		// unregister old death frame if exists
-		this.unregisterDeath(neuron);
+		this.unregisterDeath(neuronId);
 
 		// register new death frame
 		if (!this.deathLedger.has(deathFrame)) this.deathLedger.set(deathFrame, new Set());
-		this.deathLedger.get(deathFrame).add(neuron);
-		this.neuronDeathFrame.set(neuron, deathFrame);
+		this.deathLedger.get(deathFrame).add(neuronId);
+		this.neuronDeathFrame.set(neuronId, deathFrame);
 	}
 
 	/**
 	 * Unregister a neuron from the death ledger
 	 */
-	unregisterDeath(neuron) {
-		const oldFrame = this.neuronDeathFrame.get(neuron);
+	unregisterDeath(neuronId) {
+		const oldFrame = this.neuronDeathFrame.get(neuronId);
 		if (oldFrame === undefined) return;
 
 		const set = this.deathLedger.get(oldFrame);
 		if (set) {
-			set.delete(neuron);
+			set.delete(neuronId);
 			if (set.size === 0) this.deathLedger.delete(oldFrame);
 		}
-		this.neuronDeathFrame.delete(neuron);
+		this.neuronDeathFrame.delete(neuronId);
 	}
 
 	/**
@@ -719,14 +742,15 @@ export class Thalamus {
 	reapDeadNeurons(currentFrame) {
 
 		// get the neurons to be deleted in this frame
-		const neurons = this.deathLedger.get(currentFrame);
-		if (!neurons) return []; // nothing to do if no neurons dying
+		const neuronIds = this.deathLedger.get(currentFrame);
+		if (!neuronIds) return []; // nothing to do if no neurons dying
 
 		// reap the dead neurons and return them
 		const dead = [];
-		for (const neuron of neurons) {
-			dead.push(neuron);
-			this.neuronDeathFrame.delete(neuron);
+		for (const neuronId of neuronIds) {
+			const neuron = this.neurons.get(neuronId);
+			if (neuron) dead.push(neuron);
+			this.neuronDeathFrame.delete(neuronId);
 		}
 		this.deathLedger.delete(currentFrame);
 		return dead;
@@ -792,7 +816,7 @@ export class Thalamus {
 		this.deregisterFromParent(pattern);
 
 		// Remove from death ledger
-		this.unregisterDeath(pattern);
+		this.unregisterDeath(pattern.id);
 
 		// Delete this pattern neuron from the index and decrement level count
 		this.removeFromIndexes(pattern);
@@ -845,7 +869,9 @@ export class Thalamus {
 			const affectedPatterns = referencingParent.removeContextNeuron(pattern.id, distances);
 			for (const patternId of affectedPatterns) {
 				const childPattern = this.neurons.get(patternId);
-				if (childPattern && childPattern.canDelete(currentFrame, this.neuronLevels.get(patternId)))
+				const parentId = this.neuronParents.get(patternId);
+				const parent = this.neurons.get(parentId);
+				if (childPattern && parent && parent.canDeleteChild(patternId, currentFrame, this.neuronLevels.get(patternId)))
 					newlyDeletable.push(childPattern);
 			}
 		}
@@ -859,8 +885,8 @@ export class Thalamus {
 	 * @param {Neuron} pattern - Pattern being deleted
 	 */
 	cleanupOrphanedChildren(pattern) {
-		for (const [childPatternId, context] of pattern.routingTable)
-			for (const entry of context.getEntries()) {
+		for (const [childPatternId, tableEntry] of pattern.routingTable)
+			for (const entry of tableEntry.context.getEntries()) {
 				const isOrphaned = pattern.removeContextIndex(entry.neuronId, entry.distance, childPatternId);
 				if (isOrphaned) {
 					const ctxNeuron = this.neurons.get(entry.neuronId);

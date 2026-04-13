@@ -76,6 +76,8 @@ export class Dump {
 				level
 			};
 
+			let strength = 0;
+
 			if (level === 0) {
 				neuronData.channel = channel;
 				neuronData.type = type;
@@ -87,13 +89,17 @@ export class Dump {
 				if (parentId) neuronData.parentId = parentId;
 
 				const parentNeuron = this.thalamus.neurons.get(parentId);
-				if (parentNeuron) neuronData.patternContext = this.collectPatternContextData(parentNeuron, neuron.id);
+				if (parentNeuron) {
+					neuronData.patternContext = this.collectPatternContextData(parentNeuron, neuron.id);
+					const ctx = parentNeuron.routingTable.get(neuron.id);
+					if (ctx) strength = ctx.activationStrength || 0;
+				}
 			}
 
 			neuronData.connections = this.collectConnectionsData(neuron);
 			neuronData.children = this.collectPatternsData(neuron);
 			neuronData.contextRefs = this.collectContextRefsData(neuron);
-			neuronData.activationStrength = neuron.activationStrength;
+			neuronData.activationStrength = strength;
 
 			neuronsData.push(neuronData);
 		}

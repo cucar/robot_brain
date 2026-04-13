@@ -3,24 +3,6 @@ CREATE DATABASE IF NOT EXISTS machine_intelligence;
 USE machine_intelligence;
 
 -- 1 = up, 2 = down, 3 = buy, 4 = sell (not created yet)
-select c.neuron_id, d.name, c.val from coordinates c join dimensions d on d.id = c.dimension_id;
-select * from dimensions;
-select * from channels;
-select * from neurons where id = 100848;
-select * from pattern_past where context_neuron_id = 106110;
-select * from neurons order by level desc;
-select * from base_neurons;
-select * from connections;
-select parent_neuron_id, pattern_neuron_id from patterns order by parent_neuron_id, pattern_neuron_id;
-select * from patterns where pattern_neuron_id = 159;
-select * from pattern_past where context_neuron_id = 159;
-select * from pattern_past where context_neuron_id = 1632;
-select * from patterns where pattern_neuron_id = 1632;
-
-select * from pattern_past order by pattern_neuron_id, context_age;
-select * from pattern_past where context_neuron_id not in (select id from neurons);
-select * from pattern_peaks where pattern_neuron_id = 8;
-select * from pattern_past where pattern_neuron_id in (8, 9) order by pattern_neuron_id, context_age;
 
 -- channels table for efficient storage (neurons reference by id instead of varchar)
 -- IDs come from static class counters in Channel class (not auto-increment)
@@ -44,7 +26,6 @@ CREATE TABLE IF NOT EXISTS dimensions (
 CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     level TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    strength DECIMAL(30,20) NOT NULL DEFAULT 1.0,
     INDEX idx_level (level)
 );
 
@@ -87,8 +68,10 @@ CREATE TABLE IF NOT EXISTS connections (
 CREATE TABLE IF NOT EXISTS patterns (
     pattern_neuron_id BIGINT UNSIGNED NOT NULL,
     parent_neuron_id BIGINT UNSIGNED NOT NULL,
+    strength DECIMAL(30,20) NOT NULL DEFAULT 1.0,
     PRIMARY KEY (pattern_neuron_id),
-    INDEX idx_parent (parent_neuron_id)
+    INDEX idx_parent (parent_neuron_id),
+    INDEX idx_strength (strength)
 );
 
 -- pattern_past: pattern contexts for recognition/matching (cross-channel)

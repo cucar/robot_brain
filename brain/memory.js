@@ -63,42 +63,33 @@ export class Memory {
 
 	/**
 	 * Activate a neuron at age 0
-	 * @param {Neuron} neuron - Neuron to activate
-	 * @param {number} level - Neuron level (from Thalamus)
-	 * @param {number} currentFrame - Current frame number for lazy decay
+	 * @param {number} neuronId - Neuron ID to activate
 	 */
-	activateNeuron(neuron, level, currentFrame) {
-		return this.activateNeuronAtAge(neuron, level, 0, currentFrame);
+	activateNeuron(neuronId) {
+		this.activateNeuronAtAge(neuronId, 0);
 	}
 
 	/**
 	 * Activate a neuron at a specific age (keyed by neuron ID)
-	 * @param {Neuron} neuron - Neuron to activate
-	 * @param {number} level - Neuron level (from Thalamus)
+	 * @param {number} neuronId - Neuron ID to activate
 	 * @param {number} age - Age slot
-	 * @param {number} currentFrame - Current frame number for lazy decay
-	 * @returns {number|null} death frame for pattern neurons, null for sensory
 	 */
-	activateNeuronAtAge(neuron, level, age, currentFrame) {
+	activateNeuronAtAge(neuronId, age) {
 		if (!this.activeNeurons[age]) this.activeNeurons[age] = new Map();
-		this.activeNeurons[age].set(neuron.id, { activatedPatternId: null, votes: null, context: null });
-		return neuron.strengthenActivation(currentFrame, level);
+		this.activeNeurons[age].set(neuronId, { activatedPatternId: null, votes: null, context: null });
 	}
 
 	/**
 	 * Activate a pattern neuron and link it to its parent
-	 * @param {Neuron} pattern - The pattern neuron to activate
-	 * @param {number} patternLevel - Pattern neuron level (from Thalamus)
-	 * @param {Neuron} parent - The parent neuron that triggered the pattern
+	 * @param {number} patternId - The pattern neuron ID to activate
+	 * @param {number} parentId - The parent neuron ID that triggered the pattern
 	 * @param {number} age - The age at which to activate
-	 * @param {number} currentFrame - Current frame number for lazy decay
 	 */
-	activatePattern(pattern, patternLevel, parent, age, currentFrame) {
-		const deathFrame = this.activateNeuronAtAge(pattern, patternLevel, age, currentFrame);
+	activatePattern(patternId, parentId, age) {
+		this.activateNeuronAtAge(patternId, age);
 		const neuronsAtAge = this.activeNeurons[age];
-		const state = neuronsAtAge.get(parent.id);
-		state.activatedPatternId = pattern.id;
-		return deathFrame;
+		const state = neuronsAtAge.get(parentId);
+		state.activatedPatternId = patternId;
 	}
 
 	/**

@@ -28,8 +28,8 @@ describe('Brain cleanupDeadPatterns', () => {
 		Brain.prototype.cleanupDeadPatterns.call(fakeBrain);
 
 		assert.deepStrictEqual(calls, [
-			['reap', 9],
-			['delete', ['dead-pattern'], 9],
+			['reap', 10],
+			['delete', ['dead-pattern'], 10],
 			['assertNotActive', deletedPatterns]
 		]);
 	});

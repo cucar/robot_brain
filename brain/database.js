@@ -112,7 +112,7 @@ export class Database {
 	async loadNeuronsTable() {
 
 		// get the neurons from the database
-		const [rows] = await this.conn.query('SELECT id, level, strength FROM neurons');
+		const [rows] = await this.conn.query('SELECT id, level FROM neurons');
 
 		// create all neurons
 		let maxId = 0;
@@ -122,7 +122,6 @@ export class Database {
 
 			// create the neuron with its activation strength
 			const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, row.id);
-			neuron.setActivationStrength(Number(row.strength));
 			neurons.set(row.id, neuron);
 			levels.set(row.id, row.level);
 
@@ -213,7 +212,7 @@ export class Database {
 	async loadPatterns(neurons) {
 
 		// get the patterns
-		const [rows] = await this.conn.query('SELECT pattern_neuron_id, parent_neuron_id FROM patterns');
+		const [rows] = await this.conn.query('SELECT pattern_neuron_id, parent_neuron_id, strength FROM patterns');
 
 		// create the pattern to parent mappings (stored in Thalamus via snapshot)
 		const neuronParentMap = new Map();
@@ -224,7 +223,7 @@ export class Database {
 
 			// add the pattern to the parent's routing table by ID
 			const parent = neurons.get(row.parent_neuron_id);
-			parent.addChild(row.pattern_neuron_id);
+			parent.addChild(row.pattern_neuron_id, Number(row.strength));
 		}
 		return neuronParentMap;
 	}
@@ -320,9 +319,13 @@ export class Database {
 	 */
 	async backupNeuronsTable(neurons) {
 		await this.conn.query('TRUNCATE neurons');
+
 		const rows = [];
-		for (const { neuron, level } of neurons) rows.push([neuron.id, level, neuron.activationStrength]);
-		await this.conn.query('INSERT INTO neurons (id, level, strength) VALUES ?', [rows]);
+		for (const { neuron, level } of neurons) {
+			rows.push([neuron.id, level]);
+		}
+
+		await this.conn.query('INSERT INTO neurons (id, level) VALUES ?', [rows]);
 		console.log(`  Saved ${rows.length} neurons`);
 	}
 
@@ -365,12 +368,25 @@ export class Database {
 	 */
 	async backupPatterns(neurons) {
 		await this.conn.query('TRUNCATE patterns');
+
+		const neuronMap = new Map();
+		for (const entry of neurons) neuronMap.set(entry.neuron.id, entry.neuron);
+
 		const patternRows = [];
-		for (const { neuron, level, parentId } of neurons)
-			if (level > 0)
-				patternRows.push([neuron.id, parentId]);
+		for (const { neuron, level, parentId } of neurons) {
+			if (level > 0) {
+				let strength = 0;
+				const parent = neuronMap.get(parentId);
+				if (parent) {
+					const ctx = parent.routingTable.get(neuron.id);
+					if (ctx) strength = ctx.activationStrength;
+				}
+				patternRows.push([neuron.id, parentId, strength]);
+			}
+		}
+
 		if (patternRows.length === 0) return;
-		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id) VALUES ?', [patternRows]);
+		await this.conn.query('INSERT INTO patterns (pattern_neuron_id, parent_neuron_id, strength) VALUES ?', [patternRows]);
 		console.log(`  Saved ${patternRows.length} patterns`);
 	}
 

@@ -36,10 +36,6 @@ export class Neuron {
 		this.id = id || Neuron.nextId++;
 		if (id && id >= Neuron.nextId) Neuron.nextId = id + 1;
 
-		// initialize activation strength with delayed calculations based on frames
-		this.activationStrength = 0; // incremented with activation, forgotten over time
-		this.lastActivationFrame = 0; // frame when activation was last strengthened (for lazy decay)
-
 		// initialize synapses
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuronId, {strength, reward}>>
 		this.routingTable = new Map(); // routing table: Map<patternId, Context>
@@ -131,65 +127,82 @@ export class Neuron {
 	}
 
 	/**
-	 * sets the activation strength of the neuron - used when loading from database
+	 * sets the activation strength of a child pattern - used when loading from database
 	 */
-	setActivationStrength(strength, lastFrame = 0) {
-		this.activationStrength = strength;
-		this.lastActivationFrame = lastFrame;
+	setChildActivationStrength(patternId, strength, lastFrame = 0) {
+		const entry = this.routingTable.get(patternId);
+		if (entry) {
+			entry.activationStrength = strength;
+			entry.lastActivationFrame = lastFrame;
+		}
 	}
 
 	/**
-	 * Get effective activation strength with lazy decay
+	 * Get effective activation strength for a child pattern with lazy decay
 	 */
-	getEffectiveActivationStrength(currentFrame) {
-		return Math.max(0, this.activationStrength - (currentFrame - this.lastActivationFrame) * this.patternForgetRate);
+	getChildEffectiveActivationStrength(patternId, currentFrame) {
+		const entry = this.routingTable.get(patternId);
+		if (!entry) return 0;
+		return Math.max(0, entry.activationStrength - (currentFrame - entry.lastActivationFrame) * this.patternForgetRate);
 	}
 
 	/**
-	 * Materialize lazy decay
+	 * Materialize lazy decay for a child pattern
 	 */
-	materializeStrength(currentFrame) {
-		this.activationStrength = this.getEffectiveActivationStrength(currentFrame);
+	materializeChildStrength(patternId, currentFrame) {
+		const entry = this.routingTable.get(patternId);
+		if (entry) entry.activationStrength = this.getChildEffectiveActivationStrength(patternId, currentFrame);
 	}
 
 	/**
-	 * increments activation strength - materializes all owner-scoped lazy decay first
+	 * increments activation strength for a child pattern - materializes all owner-scoped lazy decay first
+	 * @param {number} patternId - ID of the child pattern
 	 * @param {number} currentFrame - Current frame number for lazy decay
-	 * @param {number} level - Neuron level (passed in from Thalamus)
 	 * @returns {number|null} Death frame for pattern neurons, null for sensory neurons
 	 */
-	strengthenActivation(currentFrame, level) {
+	strengthenChildActivation(patternId, currentFrame) {
+		const entry = this.routingTable.get(patternId);
+		if (!entry) return null;
 
 		// update all strengths based on decay rate first
-		this.materializeStrength(currentFrame);
+		this.materializeChildStrength(patternId, currentFrame);
 
 		// increment activation strength
-		this.activationStrength++;
+		entry.activationStrength++;
 
 		// remember when this happened for lazy decay
-		this.lastActivationFrame = currentFrame;
+		entry.lastActivationFrame = currentFrame;
 
-		// return death frame for pattern neurons (sensory neurons never die)
-		if (level === 0) return null;
-		return currentFrame + Math.ceil(this.activationStrength / this.patternForgetRate);
+		// return death frame for pattern neurons
+		return currentFrame + Math.ceil(entry.activationStrength / this.patternForgetRate);
 	}
 
 	/**
 	 * Add a child pattern to the routing table and populate its context
 	 * @param {number} patternId - numeric neuron ID of the child pattern
 	 * @param {Array<{neuron: Neuron, distance: number}>} context - The context to add
+	 * @param {number} currentFrame - Current frame number for lazy decay and strengthening
+	 * @returns {number|null} Death frame for pattern neurons, null for sensory neurons
 	 */
-	addPattern(patternId, context) {
+	addPattern(patternId, context, currentFrame) {
 		this.addChild(patternId);
 		for (const { neuronId, distance } of context) this.addContext(patternId, neuronId, distance);
+		return this.strengthenChildActivation(patternId, currentFrame);
 	}
 
 	/**
 	 * add a child pattern to the routing table
 	 * @param {number} patternId - numeric neuron ID of the child pattern
+	 * @param {number} initialStrength - initial activation strength, useful when loading from database
 	 */
-	addChild(patternId) {
-		if (!this.routingTable.has(patternId)) this.routingTable.set(patternId, new Context());
+	addChild(patternId, initialStrength = 0) {
+		if (!this.routingTable.has(patternId)) {
+			this.routingTable.set(patternId, {
+				context: new Context(),
+				activationStrength: initialStrength,
+				lastActivationFrame: 0
+			});
+		}
 	}
 
 	/**
@@ -200,10 +213,10 @@ export class Neuron {
 	removeChild(patternId) {
 
 		// clean up both context and context index for all context entries of this pattern
-		const context = this.routingTable.get(patternId);
-		if (!context) throw new Error(`removeChild: pattern ${patternId} not found in routing table of neuron ${this.id}`);
-		for (const entry of context.getEntries())
-			this.removeContext(patternId, entry.neuronId, entry.distance);
+		const entry = this.routingTable.get(patternId);
+		if (!entry) throw new Error(`removeChild: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+		for (const ctxEntry of entry.context.getEntries())
+			this.removeContext(patternId, ctxEntry.neuronId, ctxEntry.distance);
 
 		// remove the pattern from the routing table
 		this.routingTable.delete(patternId);
@@ -213,9 +226,9 @@ export class Neuron {
 	 * returns pattern context entries
 	 */
 	getPatternContext(patternId) {
-		const ctx = this.routingTable.get(patternId);
-		if (!ctx) throw new Error(`getPatternContext: pattern ${patternId} not found in routing table of neuron ${this.id}`);
-		return ctx.getEntries();
+		const entry = this.routingTable.get(patternId);
+		if (!entry) throw new Error(`getPatternContext: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+		return entry.context.getEntries();
 	}
 
 	/**
@@ -223,9 +236,9 @@ export class Neuron {
 	 */
 	getRoutingTable() {
 		const result = [];
-		for (const [patternId, context] of this.routingTable)
-			for (const entry of context.getEntries())
-				result.push({ patternId, ...entry });
+		for (const [patternId, entry] of this.routingTable)
+			for (const ctxEntry of entry.context.getEntries())
+				result.push({ patternId, ...ctxEntry });
 		return result;
 	}
 
@@ -235,9 +248,9 @@ export class Neuron {
 	addContext(patternId, neuronId, distance, strength = 1) {
 
 		// add the neuron to the pattern context at the given distance
-		const context = this.routingTable.get(patternId);
-		if (!context) throw new Error(`addContext: pattern not found in routing table: ${patternId}`);
-		context.addNeuron(neuronId, distance, strength);
+		const entry = this.routingTable.get(patternId);
+		if (!entry) throw new Error(`addContext: pattern not found in routing table: ${patternId}`);
+		entry.context.addNeuron(neuronId, distance, strength);
 
 		// add the neuron to the context index so that we can search efficiently
 		this.addContextIndex(neuronId, distance, patternId);
@@ -265,9 +278,9 @@ export class Neuron {
 	removeContext(patternId, neuronId, distance) {
 
 		// remove the neuron from the pattern context at the given distance
-		const context = this.routingTable.get(patternId);
-		if (!context) throw new Error(`removeContext: pattern ${patternId} not found in routing table of neuron ${this.id}`);
-		context.remove(neuronId, distance);
+		const entry = this.routingTable.get(patternId);
+		if (!entry) throw new Error(`removeContext: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+		entry.context.remove(neuronId, distance);
 
 		// remove the neuron from the context index
 		return this.removeContextIndex(neuronId, distance, patternId);
@@ -308,9 +321,9 @@ export class Neuron {
 			if (!patterns) throw new Error(`removeContextNeuron: distance ${distance} for neuron ${neuronId} not found in contextIndex of neuron ${this.id}`);
 			// remove from each pattern's context and collect affected pattern IDs
 			for (const patternId of patterns) {
-				const ctx = this.routingTable.get(patternId);
-				if (!ctx) throw new Error(`removeContextNeuron: pattern ${patternId} not found in routing table of neuron ${this.id}`);
-				ctx.remove(neuronId, distance);
+				const entry = this.routingTable.get(patternId);
+				if (!entry) throw new Error(`removeContextNeuron: pattern ${patternId} not found in routing table of neuron ${this.id}`);
+				entry.context.remove(neuronId, distance);
 				affectedPatterns.add(patternId);
 			}
 			// clean up the index entries for this distance
@@ -349,12 +362,13 @@ export class Neuron {
 	 * flagged as an activation candidate.
 	 * @param {Context} observed - The level context (distances are absolute ages)
 	 * @param {Array<number>} activeAges - Ages at which this neuron is active (sorted ascending)
+	 * @param {number} currentFrame - Current frame number for lazy decay
 	 * @returns {{
-	 *   matches: Array<{ patternId, age, score, common, missing, novel, removedRefs, activate }>,
+	 *   matches: Array<{ patternId, age, score, common, missing, novel, removedRefs, activate, deathFrame }>,
 	 *   contextRefUpdates: Array<{ type: 'add'|'remove', neuronId, distance }>
 	 * }}
 	 */
-	matchPatterns(observed, activeAges) {
+	matchPatterns(observed, activeAges, currentFrame) {
 		const matches = [];
 		const contextRefUpdates = [];
 		const activatedPatternIds = new Set();
@@ -363,7 +377,7 @@ export class Neuron {
 			// active ages are processed in ascending order (most recent first). The first age that
 			// produces a match at that age is refined and preserved. More recent ages tend to have
 			// the richest available context, so they are processed first.
-			const best = this.findBestPatternMatchAtAge(observed, age);
+			const best = this.findBestPatternMatchAtAge(observed, age, currentFrame);
 			if (!best) continue; // try older age if there is a match
 
 			// refine the context — returns cross-neuron contextRef side effects for later delivery
@@ -377,6 +391,9 @@ export class Neuron {
 			best.activate = !activatedPatternIds.has(best.patternId);
 			activatedPatternIds.add(best.patternId);
 
+			// strengthen child activation automatically here
+			if (best.activate) best.deathFrame = this.strengthenChildActivation(best.patternId, currentFrame);
+
 			// include the best match for the age in the results
 			matches.push(best);
 		}
@@ -387,9 +404,10 @@ export class Neuron {
 	 * Find the best matching pattern for a specific active age.
 	 * @param {Context} observed - The level context (distances are absolute ages)
 	 * @param {number} age - The specific active age being evaluated
+	 * @param {number} currentFrame - The current frame number to check activation strength
 	 * @returns {{ patternId, age, score, common, missing, novel }|null}
 	 */
-	findBestPatternMatchAtAge(observed, age) {
+	findBestPatternMatchAtAge(observed, age, currentFrame) {
 		let best = null; // { patternId, age, score, common, missing, novel }
 
 		// Use the inverted index to narrow the search to child patterns that share at least one
@@ -400,13 +418,16 @@ export class Neuron {
 		// go through the candidate patterns and find the best match
 		for (const patternId of candidateIds) {
 
+			// check if pattern is still alive (skip functionally dead patterns)
+			if (this.getChildEffectiveActivationStrength(patternId, currentFrame) <= 0) continue;
+
 			// get the context of the pattern
-			const context = this.routingTable.get(patternId);
-			if (!context) throw new Error(`Cannot find context for pattern: ${patternId}`);
+			const entry = this.routingTable.get(patternId);
+			if (!entry) throw new Error(`Cannot find context for pattern: ${patternId}`);
 
 			// context.match() handles the full scoring and threshold check;
 			// the index only decides which child patterns are worth evaluating.
-			const match = context.match(observed, age, this.mergeThreshold);
+			const match = entry.context.match(observed, age, this.mergeThreshold);
 			if (!match) continue; // nothing to do if there is no match
 
 			// if there is already a best match, check if this match is better
@@ -485,21 +506,21 @@ export class Neuron {
 	refineContext(patternId, common, novel, missing) {
 
 		// get the routing table entry for the pattern
-		const context = this.routingTable.get(patternId);
-		if (!context) throw new Error('pattern not found in routing table.'); // should not happen
+		const entry = this.routingTable.get(patternId);
+		if (!entry) throw new Error('pattern not found in routing table.'); // should not happen
 
 		// strengthen common context neurons
-		for (const entry of common) context.strengthenNeuron(entry.neuronId, entry.distance);
+		for (const item of common) entry.context.strengthenNeuron(item.neuronId, item.distance);
 
 		// add novel context neurons
-		for (const entry of novel) this.addContext(patternId, entry.neuronId, entry.distance, 1);
+		for (const item of novel) this.addContext(patternId, item.neuronId, item.distance, 1);
 
 		// weaken missing — weakenNeuron auto-deletes at zero strength
 		const removedRefs = [];
-		for (const entry of missing) {
-			const wasDeleted = context.weakenNeuron(entry.neuronId, entry.distance);
-			if (wasDeleted && this.removeContextIndex(entry.neuronId, entry.distance, patternId))
-				removedRefs.push({ neuronId: entry.neuronId, distance: entry.distance });
+		for (const item of missing) {
+			const wasDeleted = entry.context.weakenNeuron(item.neuronId, item.distance);
+			if (wasDeleted && this.removeContextIndex(item.neuronId, item.distance, patternId))
+				removedRefs.push({ neuronId: item.neuronId, distance: item.distance });
 		}
 		return removedRefs;
 	}
@@ -569,16 +590,12 @@ export class Neuron {
 	}
 
 	/**
-	 * Check if neuron can be deleted (is a zombie)
+	 * Check if a child pattern can be deleted (is a zombie)
+	 * @param {number} patternId - ID of the child pattern
 	 * @param {number} currentFrame - Current frame number
-	 * @param {number} level - Neuron level (passed in from Thalamus)
 	 */
-	canDelete(currentFrame, level) {
-
-		// sensory neurons cannot be deleted
-		if (level === 0) return false;
-
+	canDeleteChild(patternId, currentFrame) {
 		// if the pattern has not been activated in some time, die!
-		return this.getEffectiveActivationStrength(currentFrame) <= 0;
+		return this.getChildEffectiveActivationStrength(patternId, currentFrame) <= 0;
 	}
 }

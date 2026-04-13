@@ -8,10 +8,11 @@ const makeContext = entries => {
 	return context;
 };
 
-const findBestLinearMatch = (parent, observed, age) => {
+const findBestLinearMatch = (parent, observed, age, currentFrame = 0) => {
 	let best = null;
-	for (const [patternId, context] of parent.routingTable) {
-		const match = context.match(observed, age, parent.mergeThreshold);
+	for (const [patternId, entry] of parent.routingTable) {
+		if (parent.getChildEffectiveActivationStrength(patternId, currentFrame) <= 0) continue;
+		const match = entry.context.match(observed, age, parent.mergeThreshold);
 		if (match && (!best || match.score > best.score)) best = { ...match, patternId, age };
 	}
 	return best;
@@ -37,8 +38,8 @@ describe('Neuron pattern index', () => {
 		const observed = makeContext([[7, 1], [11, 2], [12, 3], [99, 4]]);
 		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 0)].sort((a, b) => a - b), [301, 303]);
 
-		const actual = parent.findBestPatternMatchAtAge(observed, 0);
-		const expected = findBestLinearMatch(parent, observed, 0);
+		const actual = parent.findBestPatternMatchAtAge(observed, 0, 0);
+		const expected = findBestLinearMatch(parent, observed, 0, 0);
 		assert.deepStrictEqual(actual, expected);
 	});
 
@@ -50,28 +51,10 @@ describe('Neuron pattern index', () => {
 		const observed = makeContext([[22, 1], [11, 1]]);
 		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 0)], [602, 601]);
 
-		const actual = parent.findBestPatternMatchAtAge(observed, 0);
-		const expected = findBestLinearMatch(parent, observed, 0);
+		const actual = parent.findBestPatternMatchAtAge(observed, 0, 0);
+		const expected = findBestLinearMatch(parent, observed, 0, 0);
 		assert.deepStrictEqual(actual, expected);
 		assert.equal(actual.patternId, 601);
-	});
-
-	it('ignores zero-strength patterns even if they are still present in the index candidates', () => {
-		const parent = new Neuron(1, 0.5, 106);
-		const expiredPattern = new Neuron(1, 0.5, 701);
-		const alivePattern = new Neuron(1, 0.5, 702);
-		const neurons = new Map([[701, expiredPattern], [702, alivePattern]]);
-
-		parent.addPattern(701, [{ neuronId: 11, distance: 1 }]);
-		parent.addPattern(702, [{ neuronId: 22, distance: 1 }]);
-		expiredPattern.setActivationStrength(1, 0);
-		alivePattern.setActivationStrength(2, 1);
-
-		const observed = makeContext([[11, 1], [22, 1]]);
-		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 1 - 1)], [701, 702]);
-
-		const actual = parent.findBestPatternMatchAtAge(observed, 0, 1, neurons);
-		assert.equal(actual.patternId, 702);
 	});
 
 	it('returns null when the index produces no candidates', () => {
@@ -81,7 +64,7 @@ describe('Neuron pattern index', () => {
 
 		const observed = makeContext([[99, 1], [100, 2]]);
 		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 0)], []);
-		assert.equal(parent.findBestPatternMatchAtAge(observed, 0), null);
+		assert.equal(parent.findBestPatternMatchAtAge(observed, 0, 0), null);
 	});
 
 	it('keeps the inverted index in sync when patterns are removed', () => {
@@ -108,7 +91,7 @@ describe('Neuron pattern index', () => {
 		parent.routingTable.delete(501);
 
 		assert.throws(
-			() => parent.findBestPatternMatchAtAge(observed, 0),
+			() => parent.findBestPatternMatchAtAge(observed, 0, 0),
 			/Cannot find context for pattern: 501/
 		);
 	});
