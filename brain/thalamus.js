@@ -30,7 +30,7 @@ export class Thalamus {
 		// Channel registry
 		this.channelClasses = new Map(); // channelName -> Channel class (not instantiated)
 		this.channels = new Map(); // channelName -> Channel instance
-		this.channelActions = new Map(); // channelName -> Set<Neuron>
+		this.channelActions = new Map(); // channelName -> Set<number> (neuron ids)
 		this.channelDefaultActions = new Map(); // channelName -> Neuron
 		this.channelNameToId = {}; // channelName -> channelId
 		this.channelIdToName = {}; // channelId -> channelName
@@ -560,7 +560,7 @@ export class Thalamus {
 		const result = new Map();
 		for (const [channelName, actionNeurons] of this.channelActions) {
 			const ids = new Set();
-			for (const neuron of actionNeurons) ids.add(neuron.id);
+			for (const id of actionNeurons) ids.add(id);
 			result.set(channelName, ids);
 		}
 		return result;
@@ -612,7 +612,7 @@ export class Thalamus {
 			// get or create the action neurons for the channel
 			const actionNeurons = new Set();
 			for (const coordinates of channel.getActions())
-				actionNeurons.add(this.neurons.get(this.getNeuronIdForPoint(coordinates, channelName, 'action')));
+				actionNeurons.add(this.getNeuronIdForPoint(coordinates, channelName, 'action'));
 
 			// add channel's action neurons to the channelActions map
 			channelActions.set(channelName, actionNeurons);
