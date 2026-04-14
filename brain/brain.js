@@ -561,7 +561,7 @@ export default class Brain {
 				targetCoords: this.thalamus.getNeuronCoordinates(v.neuron.id),
 				voterId: v.voter.id,
 				voterLevel: this.thalamus.getNeuronLevel(v.voter.id),
-				voterLabel: this.formatNeuronLabel(v.voter),
+				voterLabel: this.formatNeuronLabel(v.voter.id),
 				strength: v.strength,
 				reward: v.reward,
 				distance: v.distance
@@ -785,20 +785,18 @@ export default class Brain {
 	/**
 	 * Format a neuron's coordinates as a display label.
 	 * For pattern neurons, resolves up the parent chain to find root sensory coordinates.
-	 * @param {Neuron} neuron
+	 * @param {number} neuronId
 	 * @returns {string}
 	 */
-	formatNeuronLabel(neuron) {
+	formatNeuronLabel(neuronId) {
+
 		// Pattern neurons: resolve parent chain to root sensory neuron
-		const parentId = this.thalamus.getNeuronParent(neuron.id);
-		if (this.thalamus.getNeuronLevel(neuron.id) > 0 && parentId != null) {
-			const parent = this.thalamus.neurons.get(parentId);
-			if (parent) return this.formatNeuronLabel(parent);
-			return `n${neuron.id}(parent:${parentId})`;
-		}
+		const parentId = this.thalamus.getNeuronParent(neuronId);
+		if (this.thalamus.getNeuronLevel(neuronId) > 0 && parentId != null) return this.formatNeuronLabel(parentId);
+
 		// Sensory neurons: format coordinates
-		const coordinates = this.thalamus.getNeuronCoordinates(neuron.id);
-		if (!coordinates) return `n${neuron.id}`;
+		const coordinates = this.thalamus.getNeuronCoordinates(neuronId);
+		if (!coordinates) return `n${neuronId}`;
 		return Object.entries(coordinates)
 			.sort(([a], [b]) => a.localeCompare(b))
 			.map(([k, v]) => `${k}=${v}`)

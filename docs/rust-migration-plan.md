@@ -390,34 +390,6 @@ ageSlots: Array<Set<{neuronId, level}>>
 * Remove standalone `collectVotes()` from Brain once fully merged
 * **Verify**: votes identical, inference results identical, all tests pass
 
-#### Step 1.3 — Introduce `neuron.processFrame()` method
-
-* Implement the `processFrame(input): output` method on Neuron as described above
-* This method calls the existing internal methods in order: `addPattern` → `matchPatterns` → `updateConnections` → `vote`
-* The level loop now calls `neuron.processFrame(input)` instead of individual methods
-* Post-processing handles all cross-neuron side effects from the output
-* Remove direct calls to individual neuron methods from the level loop
-* **Verify**: all tests pass, behavior identical
-
-#### Step 1.4 — Unify the level loop and push into Thalamus
-
-* Brain's `processFrame()` now has a single level loop calling `neuron.processFrame()` per neuron
-* Rename the loop method to `processLevels()`
-* Move `processLevels()` into Thalamus — Brain calls `thalamus.processLevels(...)` which returns aggregated votes
-* Brain retains: I/O, sensor activation, error correction decisions, consensus, action execution, cleanup
-* Thalamus retains: neuron iteration, level context building, post-processing side effect delivery
-* This is the final structural separation: **Brain = coordinator, Thalamus = neuron processor**
-* **Verify**: all tests pass, behavior identical
-
-#### Step 1.5 — Snapshot level context before iterating
-
-* Ensure `buildLevelContext(level)` is called once before iterating neurons at that level
-* The context is a read-only snapshot — it does NOT change as neurons at this level are processed
-* If a neuron's pattern recognition activates a pattern at this same level, it does NOT appear in the level context for sibling neurons in the same iteration
-* This makes intra-level processing order-independent — **required for future parallel execution**
-* Verify current behavior: check if intra-level ordering produces different results with reversed iteration order. If results differ, this is a behavioral change that needs explicit testing.
-* **Verify**: all tests pass. If intra-level ordering was producing different results, document the behavioral change and verify accuracy is not degraded.
-
 ### Phase 1 Success Criteria
 
 * All existing tests pass identically
