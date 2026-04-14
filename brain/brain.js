@@ -215,6 +215,9 @@ export default class Brain {
 		// display diagnostic frame start if enabled
 		this.diagnostics.startFrame(this.frameNumber, this.rewards[0], this.frame);
 
+		// forget connections and patterns in all neurons to avoid curse of dimensionality
+		this.cleanupDeadPatterns();
+
 		// age the active neurons in memory context - sliding the temporal window
 		// also deactivates aged-out neurons (now that context was saved with votes in previous frame)
 		this.memory.age();
@@ -222,16 +225,10 @@ export default class Brain {
 		// activate sensory neurons in age=0, level=0 - inputs from the world
 		this.activateSensors();
 
-		// forget connections and patterns in all neurons to avoid curse of dimensionality
-		this.cleanupDeadPatterns();
-
 		// ---------------------------- PARALLEL PROCESSING START ----------------------------------
 
-		// discover and activate patterns using connections in age=0 - start recursion from base level
-		this.recognizePatterns();
-
-		// update the age>0 neurons connections based on observations in age=0
-		this.updateConnections();
+		// process neurons level-by-level in parallel
+		this.processLevels();
 
 		// learn new patterns in age>0 neurons from failed predictions and action regret
 		this.learnNewPatterns();
@@ -376,65 +373,57 @@ export default class Brain {
 	/**
 	 * Detects patterns at all levels starting from base - goes as high as possible until no patterns found.
 	 */
-	recognizePatterns() {
-		let level = 0;
-		while (true) {
-			const patternsFound = this.recognizeLevel(level);
-			if (!patternsFound) break;
-			level++;
-		}
-	}
-
-	/**
-	 * Processes a level to detect patterns and activate them. Returns true if patterns were found, false otherwise.
-	 */
-	recognizeLevel(level) {
-		if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
-
-		// Pass memory snapshot to thalamus — it owns all neuron access
-		const matchedPatterns = this.thalamus.recognizeLevel(level, this.memory.activeNeurons, this.frameNumber);
-		if (matchedPatterns.length === 0) {
-			if (this.debug) console.log(`No pattern matches found at level ${level}`);
-			return false;
-		}
-
-		// Activate matched patterns in memory
-		for (const { parentId, patternId, age } of matchedPatterns)
-			this.memory.activatePattern(patternId, parentId, age);
-
-		if (this.debug)
-			console.log(`Matched ${matchedPatterns.length} patterns at level ${level}:`,
-				matchedPatterns.map(m => `parent=${m.parentId}, age=${m.age}, pattern=${m.patternId}`).join('; '));
-
-		// return true to indicate patterns found
-		return true;
-	}
-
-	/**
-	 * updates neuron connections based on observations.
-	 * Context neurons (age > 0) learn about newly active neurons (age = 0).
-	 */
-	updateConnections() {
+	processLevels() {
 
 		// Get newly active sensory neurons (age=0, level=0) with metadata for connection learning
-		const newActiveNeurons = [];
-		const newActiveNeuronIds = new Set();
-		for (const neuronId of this.memory.getNeuronsAtAge(0).keys()) {
-			const neuron = this.thalamus.neurons.get(neuronId);
-			if (neuron && this.thalamus.getNeuronLevel(neuronId) === 0) {
-				newActiveNeurons.push({ id: neuron.id, type: this.thalamus.getNeuronType(neuron.id), channel: this.thalamus.getNeuronChannel(neuron.id) });
-				newActiveNeuronIds.add(neuronId);
-			}
-		}
-
-		// Each context neuron (age > 0) learns connections at its own distance
 		const channelActionIds = this.thalamus.getChannelActionIds();
-		for (let age = 1; age < this.memory.depth; age++)
-			for (const neuronId of this.memory.getNeuronsAtAge(age).keys()) {
-				if (this.thalamus.skipActionNeuron(neuronId)) continue;
-				const neuron = this.thalamus.neurons.get(neuronId);
-				neuron.learnConnections(age, newActiveNeurons, newActiveNeuronIds, this.rewards[0], channelActionIds);
-			}
+		const newActiveNeurons = [];
+		for (const neuronId of this.memory.getNeuronsAtAge(0).keys())
+			if (this.thalamus.getNeuronLevel(neuronId) === 0)
+				newActiveNeurons.push({
+					id: neuronId,
+					type: this.thalamus.getNeuronType(neuronId),
+					channel: this.thalamus.getNeuronChannel(neuronId)
+				});
+
+		// get the max active level in memory
+		let maxActiveLevel = 0;
+		for (let age = 0; age < this.memory.depth; age++)
+			for (const neuronId of this.memory.getNeuronsAtAge(age).keys())
+				maxActiveLevel = Math.max(maxActiveLevel, this.thalamus.getNeuronLevel(neuronId));
+
+		// process neurons level-by-level - each level in parallel
+		let level = 0;
+		while (true) {
+			if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
+
+			// Build the current level view explicitly from age-indexed memory. This mirrors the
+			// level-first structure planned in the Rust migration without changing Memory yet.
+			const levelNeurons = new Map();
+			for (let age = 0; age < this.memory.depth; age++)
+				for (const [neuronId, state] of this.memory.getNeuronsAtAge(age)) {
+					if (this.thalamus.skipActionNeuron(neuronId) || this.thalamus.getNeuronLevel(neuronId) !== level) continue;
+					if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
+					const entry = levelNeurons.get(neuronId);
+					entry.activeAges.push(age);
+					if (state.activatedPatternId === null && age !== this.memory.depth - 1) entry.recognizerAges.push(age);
+				}
+
+			// process level: recognize patterns and learn connections
+			const matches = this.thalamus.processLevel(levelNeurons, newActiveNeurons, this.rewards[0], channelActionIds, this.frameNumber);
+
+			// Activate matched patterns in memory — they land one level above
+			for (const { parentId, patternId, age } of matches) this.memory.activatePattern(patternId, parentId, age);
+
+			// if we recognized some patterns, increment the max active level as needed
+			if (matches.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
+
+			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
+			if (level >= maxActiveLevel) break;
+
+			// otherwise, increment the level and process the next level
+			level++;
+		}
 	}
 
 	/**

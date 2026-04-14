@@ -402,48 +402,52 @@ export class Thalamus {
 	}
 
 	/**
-	 * Recognize patterns at a given level using active neuron state from memory.
-	 * Brain passes the raw memory snapshot; Thalamus owns all neuron access.
-	 * @param {number} level - The level to process
-	 * @param {Array<Map<number, {activatedPatternId, votes, context}>>} activeNeuronsByAge - Memory snapshot
-	 * @param {number} currentFrame - Current frame number
-	 * @returns {Array<{parentId, patternId, age, deathFrame}>} - Matched patterns to activate
+	 * Process one pre-built level view: match patterns, deliver updates, and return activations.
+	 * Brain builds the level-neuron map from memory and passes it in.
+	 * @param {Map<number, {activeAges: number[], recognizerAges: number[]}>} levelNeurons
+	 * @param {Array<{id, type, channel}>} newActiveNeurons - Newly active sensory neurons for connection learning
+	 * @param {Map} rewards - Rewards at current frame (age 0)
+	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron IDs for skipping
+	 * @param {number} frameNumber - Current frame number
+	 * @returns {Array<{parentId, patternId, age, deathFrame}>} Matched patterns (empty if none or recognition inactive)
 	 */
-	recognizeLevel(level, activeNeuronsByAge, currentFrame) {
+	processLevel(levelNeurons, newActiveNeurons, rewards, channelActionIds, frameNumber) {
 
-		// build one context for the entire level (distances are absolute ages)
-		const levelContext = this.buildLevelContext(level, activeNeuronsByAge);
-		if (levelContext.size === 0) return [];
+		// Build the level context once; matching runs only if recognition is still active and there's context.
+		const levelContext = this.buildLevelContext(levelNeurons);
 
-		// collect unique recognizer neurons with their active ages and alive pattern IDs
-		const recognizers = this.getRecognizers(level, activeNeuronsByAge);
-		if (recognizers.size === 0) return [];
+		// Per-neuron: learn connections and match patterns.
+		const recognitionResults = [];
+		for (const [neuronId, { activeAges, recognizerAges }] of levelNeurons) {
+			const neuron = this.neurons.get(neuronId);
+			const result = neuron.processFrame(activeAges, recognizerAges, levelContext, newActiveNeurons, rewards, channelActionIds, frameNumber);
+			if (result.matches.length > 0) recognitionResults.push({ parentId: neuronId, ...result });
+		}
 
-		// ask each recognizer neuron once to match patterns across all its active ages
-		const { matches, contextRefUpdates } = this.matchPatterns(recognizers, levelContext, currentFrame);
+		// Recognition post-processing: deliver contextRef updates and activate matches in bulk.
+		if (recognitionResults.length > 0) {
+			const contextRefUpdates = this.collectContextRefUpdates(recognitionResults);
+			this.deliverContextRefUpdates(contextRefUpdates);
+			const matches = this.collectActivationMatches(recognitionResults);
+			for (const match of matches) this.registerDeath(match.patternId, match.deathFrame);
+			return matches;
+		}
 
-		// now, deliver the context reference updates as a result of the matches
-		this.deliverContextRefUpdates(contextRefUpdates);
-
-		// register death for activated patterns
-		for (const match of matches) this.registerDeath(match.patternId, match.deathFrame);
-
-		// return the patterns to be activated
-		return matches;
+		return [];
 	}
 
 	/**
-	 * Build one universal context for a level. Distances are absolute ages (age of the context neuron).
-	 * Each neuron is called once with all active ages; matchWithOffset handles the distance shifting.
+	 * Build one universal context for a level from the already-filtered levelNeurons map.
+	 * Distances are absolute ages (age of the context neuron). Age 0 is excluded — it is
+	 * the recognizer itself, not context.
+	 * @param {Map<number, {activeAges: number[]}>} levelNeurons
 	 * @returns {Context}
 	 */
-	buildLevelContext(level, activeNeuronsByAge) {
+	buildLevelContext(levelNeurons) {
 		const context = new Context();
-		for (let ctxAge = 1; ctxAge < activeNeuronsByAge.length; ctxAge++)
-			for (const neuronId of (activeNeuronsByAge[ctxAge] ?? new Map()).keys()) {
-				if (this.skipActionNeuron(neuronId) || this.neuronLevels.get(neuronId) !== level) continue;
-				context.addNeuron(neuronId, ctxAge);  // distance = absolute age
-			}
+		for (const [neuronId, { activeAges }] of levelNeurons)
+			for (const age of activeAges)
+				if (age > 0) context.addNeuron(neuronId, age);  // distance = absolute age
 		return context;
 	}
 
@@ -454,53 +458,6 @@ export class Thalamus {
 		if (this.neuronLevels.get(neuronId) !== 0 || this.getNeuronType(neuronId) !== 'action') return false;
 		const channel = this.channels.get(this.getNeuronChannel(neuronId));
 		return channel && !channel.actionSequences;
-	}
-
-	/**
-	 * Collect unique recognizer neurons at a given level with their active ages.
-	 * Each neuron appears once with all ages it's active at.
-	 * Dead patterns are already removed from routing tables by cleanupDeadPatterns() each frame.
-	 * @returns {Map<number, {neuron, activeAges}>}
-	 */
-	getRecognizers(level, activeNeuronsByAge) {
-		const recognizers = new Map();
-		for (let age = 0; age < activeNeuronsByAge.length; age++) {
-			for (const [neuronId, state] of (activeNeuronsByAge[age] ?? new Map())) {
-				const neuron = this.neurons.get(neuronId);
-				if (!neuron) throw new Error(`Neuron not found in recognition: ${neuronId}`);
-				if (state.activatedPatternId !== null) continue;
-				if (this.skipActionNeuron(neuronId) || this.neuronLevels.get(neuronId) !== level) continue;
-				if (!recognizers.has(neuronId)) recognizers.set(neuronId, { neuron, activeAges: [] });
-				recognizers.get(neuronId).activeAges.push(age);
-			}
-		}
-		return recognizers;
-	}
-
-	/**
-	 * Match recognizer neurons against their patterns using the unified level context.
-	 * Each recognizer neuron is called once with all active ages. Matching/refinement happens
-	 * first for all recognizers, then all deferred contextRef updates are flattened into one
-	 * ordered global post-match update list, and activation candidates are collected separately.
-	 * @param {Map<number, {neuron, activeAges}>} recognizers
-	 * @param {Context} context
-	 * @param {number} currentFrame
-	 * @returns {{
-	 *   matches: Array<{parentId, patternId, age, deathFrame}>,
-	 *   contextRefUpdates: Array<{parentId, type, neuronId, distance}>
-	 * }}
-	 */
-	matchPatterns(recognizers, context, currentFrame) {
-		const recognitionResults = [];
-		for (const { neuron: parent, activeAges } of recognizers.values()) {
-			const result = parent.matchPatterns(context, activeAges, currentFrame);
-			if (result.matches.length === 0) continue;
-			recognitionResults.push({ parentId: parent.id, ...result });
-		}
-		return {
-			matches: this.collectActivationMatches(recognitionResults),
-			contextRefUpdates: this.collectContextRefUpdates(recognitionResults)
-		};
 	}
 
 	/**
@@ -537,6 +494,13 @@ export class Thalamus {
 		for (const { parentId, matches } of recognitionResults)
 			for (const match of matches)
 				if (match.activate) matchedPatterns.push({ parentId, patternId: match.patternId, age: match.age, deathFrame: match.deathFrame });
+		if (this.debug) {
+			if (matchedPatterns.length > 0)
+				console.log(`Matched ${matchedPatterns.length} patterns:`,
+					matchedPatterns.map(m => `parent=${m.parentId}, age=${m.age}, pattern=${m.patternId}`).join('; '));
+			else
+				console.log('No pattern matches found');
+		}
 		return matchedPatterns;
 	}
 

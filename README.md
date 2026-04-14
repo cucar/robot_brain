@@ -82,15 +82,15 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $167750.74
-   Average per Episode: $167750.74
-   Average ROI: +1118.34%
-   Average Per-Frame ROI: +0.099853%
-   Total Trades: 2447
-   Average Trades per Episode: 2447.0
+   Total Net Profit: $129521.67
+   Average per Episode: $129521.67
+   Average ROI: +863.48%
+   Average Per-Frame ROI: +0.090475%
+   Total Trades: 2524
+   Average Trades per Episode: 2524.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $167750.74 | ROI: +1118.34%, +0.099853%/frame (2447 trades)
+   Episode 1: $129521.67 | ROI: +863.48%, +0.090475%/frame (2524 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 56.93%

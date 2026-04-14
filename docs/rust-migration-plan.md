@@ -63,92 +63,372 @@ The 4 operations currently iterate active neurons differently:
 | **learnNewPatterns** | neurons that voted (age > 0) | flat (all levels) | previous frame votes, actual events |
 | **collectVotes** | all neurons age 0..contextLength-2 | flat (all levels) | per-age/level context |
 
-**Target**: all 4 operations merge into the level-by-level loop that recognition already uses. At each level, for each neuron, do: recognize → learn connections → learn patterns → cast votes.
+**Target**: all 4 operations merge into a level-by-level loop. At each level, for each neuron, a single `neuron.processFrame(input)` call handles: error correction install → recognize → learn connections → cast votes. Error correction decisions are made by Brain *before* the loop; neurons just receive the result.
 
-**What stays global (never per-neuron)**: consensus determination, action execution, death ledger, sensor activation.
-
-### Target Frame Outline
-
-After unification, each frame follows this sequence:
-
-1. Get frame with rewards
-2. Age neurons
-3. Activate new sensory neurons
-4. Process level by level (update connections, recognize patterns, learn error patterns, cast votes)
-5. Determine consensus
-6. Execute death ledger
-7. Execute actions
-
-Steps 1–3 and 5–7 stay in Brain. Step 4 moves to Thalamus (Step 1.6).
+**What stays global (never per-neuron)**: error correction decisions (Brain compares previous-frame consensus against actual events), consensus determination, action execution, ensuring channel actions, sensor activation, cleanup.
 
 ### Dependencies Between Operations (Within a Single Frame)
 
 ```
-recognizePatterns ──► sets activatedPattern flag on parent neurons
-                 ──► activates pattern neurons in memory (become available at same age)
-                      │
-updateConnections     │ (independent — uses age=0 sensory neurons, available before loop)
-                      │
-learnNewPatterns      │ (independent — uses PREVIOUS frame's votes, already stored in memory)
-                      │
-collectVotes ◄────────┘ (depends on activatedPattern flag — suppresses parent if pattern matched)
+Brain.determineErrorCorrections() ──► pre-loop: compares previous votes vs actuals
+                                      creates pattern neurons via Thalamus
+                                      produces Map<parentNeuronId, {patternId, context}>
+                                      │
+                                      ▼
+processLevels (level-by-level loop):
+  for each neuron at this level:
+    neuron.processFrame(input):
+      1. installErrorCorrection ──► adds pattern to routing table (if Brain assigned one)
+                                    suppresses recognition and voting
+      2. recognizePatterns ────────► activates child patterns in routing table
+                                    suppresses voting if pattern matched
+      3. updateConnections ────────► independent — uses age=0 sensory neurons
+      4. collectVotes ─────────────► skipped if suppressed by step 1 or 2
+                                      │
+                                      ▼
+  post-processing (sequential):
+    deliver contextRef updates to target neurons
+    activate recognized patterns in level+1 of active neurons map
+    register death frames for activated patterns
+    store votes for next frame's error correction
 ```
 
-Key insight: within a single neuron, the ordering is natural:
-1. Try to recognize a pattern (sets activatedPattern on self)
-2. Learn connections (independent)
-3. Learn from errors (uses previous frame's votes on self)
-4. Cast votes (skipped if activatedPattern was set in step 1)
+### Active Neurons Data Structure Change
 
-### Incremental Steps
+Current: `Array<Map<neuronId, state>>` indexed by age (age-first).
+
+Target: dual-indexed structure to support both level-first iteration and age-based sliding window:
+
+```
+// Primary structure for the processing loop — level-first
+activeLevels: Map<level, Map<neuronId, {
+    ages: number[],                  // sorted ascending — all ages this neuron is active at
+    activatedPatternId: number|null, // set during processFrame
+    votes: Vote[]|null,              // saved for next frame's error correction
+    votingContext: Context|null,     // saved for next frame's error correction
+}>>
+
+// Secondary structure for aging/eviction — age-first bookkeeping
+ageSlots: Array<Set<{neuronId, level}>>
+// ageSlots[0] = newest, ageSlots[N] = oldest
+// On age(): unshift new empty set, pop oldest, update activeLevels accordingly
+```
+
+When `age()` is called: shift all age slots, evict aged-out neurons from `activeLevels` (decrement or remove their ages entry). When `activateNeuron(id, level)` is called: add to `ageSlots[0]` and upsert into `activeLevels[level]`.
+
+### neuron.processFrame() — Input/Output Contract
+
+The neuron receives a work packet with everything it needs and returns results. It never reaches outside itself — no Thalamus access, no Memory access, no cross-neuron mutations.
+
+**Input (assembled by caller):**
+
+```
+NeuronFrameInput {
+    ages: number[],                    // all ages this neuron is active at (sorted ascending)
+    levelContext: Context,             // observed context at this neuron's level (read-only snapshot)
+    sensoryNeurons: Array<Array>,      // age-indexed sensory neurons for connection learning
+    rewards: Array<Map>,               // age-indexed rewards per channel
+    channelActionIds: Map,             // for alternative action lookup in connection learning
+    currentFrame: number,
+    contextLength: number,
+
+    // Error correction — decided by Brain before the loop, not by this neuron
+    // null if Brain didn't assign an error correction to this neuron
+    errorCorrection: {
+        patternId: number,             // already created by Thalamus
+        context: Array<{neuronId, distance}>,  // what to store in routing table
+    } | null,
+}
+```
+
+**Output (processed by caller in sequential post-processing):**
+
+```
+NeuronFrameOutput {
+    // From error correction install — contextRef adds for the new pattern's context neurons
+    errorCorrectionDeathFrame: number|null,
+    errorCorrectionContextRefs: Array<{neuronId, distance}>,
+
+    // From recognition
+    matches: Array<{patternId, age, deathFrame, activate}>,
+    contextRefUpdates: Array<{type: 'add'|'remove', neuronId, distance}>,
+
+    // Votes (null if suppressed by error correction or recognition)
+    votes: Vote[]|null,
+    votingContext: Context|null,       // snapshot saved for next frame's error correction
+
+    suppressed: boolean,
+}
+```
+
+**neuron.processFrame() implementation:**
+
+```
+processFrame(input: NeuronFrameInput): NeuronFrameOutput {
+    let suppressed = false;
+    let errorCorrectionDeathFrame = null;
+    let errorCorrectionContextRefs = [];
+
+    // 1. INSTALL ERROR CORRECTION (Brain already decided and created the pattern)
+    if (input.errorCorrection) {
+        const { patternId, context } = input.errorCorrection;
+        errorCorrectionDeathFrame = this.addPattern(patternId, context, input.currentFrame);
+        // Collect contextRef additions — caller delivers to target neurons
+        errorCorrectionContextRefs = context.map(c => ({ neuronId: c.neuronId, distance: c.distance }));
+        suppressed = true;  // don't recognize, don't vote
+    }
+
+    // 2. RECOGNIZE PATTERNS (skip if error-corrected)
+    let matches = [], contextRefUpdates = [];
+    if (!suppressed) {
+        const recognitionAges = input.ages.filter(a => a > 0);
+        if (recognitionAges.length > 0) {
+            const result = this.matchPatterns(input.levelContext, recognitionAges, input.currentFrame);
+            matches = result.matches;
+            contextRefUpdates = result.contextRefUpdates;
+            if (matches.some(m => m.activate)) suppressed = true;
+        }
+    }
+
+    // 3. UPDATE CONNECTIONS (always runs — independent of recognition/error correction)
+    for (const age of input.ages) {
+        if (age > 0)
+            this.updateConnections(age, input.sensoryNeurons, input.rewards, input.channelActionIds);
+    }
+
+    // 4. COLLECT VOTES (skip if suppressed)
+    let votes = null, votingContext = null;
+    if (!suppressed) {
+        votes = [];
+        for (const age of input.ages)
+            if (age < input.contextLength - 1)
+                votes.push(...this.vote(age));
+        votingContext = input.levelContext;  // snapshot for next frame
+    }
+
+    return {
+        errorCorrectionDeathFrame, errorCorrectionContextRefs,
+        matches, contextRefUpdates,
+        votes, votingContext, suppressed,
+    };
+}
+```
+
+### processLevels() — The Unified Caller Loop
+
+```
+processLevels(sensoryNeurons, rewards, channelActionIds, currentFrame, contextLength):
+
+    // ── Pre-loop: Brain decides error corrections ──
+    // Brain compares previous-frame consensus votes (stored per-neuron in activeLevels)
+    // against actual events (age-0 sensory neurons). For each neuron that voted wrong:
+    //   1. Brain calls thalamus.addPatternNeuron(level+1, parentId, age, ...)
+    //   2. Thalamus creates neuron, sets up connections, returns patternId
+    //   3. Brain stores result in errorCorrections map
+    //   4. Brain delivers addContextRef to context neurons (immediate, before loop)
+    //   5. Brain activates the new pattern neuron in activeLevels at level+1
+    //   6. Brain registers deathFrame
+    //
+    // Wait — steps 4-6 overlap with what processFrame returns. Two options:
+    //   A) Brain does the full setup before the loop (addPattern happens in Thalamus,
+    //      not in neuron.processFrame). Neuron just gets told "you're suppressed."
+    //   B) Brain creates the pattern neuron but neuron.processFrame installs it
+    //      (addPattern) and returns the side effects for the caller to deliver.
+    //
+    // Option B is cleaner: the neuron's routing table is its own state. Having Brain
+    // mutate it from outside breaks encapsulation. So Brain pre-creates the pattern
+    // neuron (with connections) via Thalamus, then passes {patternId, context} to the
+    // neuron. The neuron calls addPattern (updating its own routing table + contextIndex)
+    // and returns the cross-neuron side effects (contextRefs, deathFrame) for delivery.
+
+    errorCorrections = brain.determineErrorCorrections(previousVotes, actualEvents)
+    // Returns: Map<parentNeuronId, {patternId, context: Array<{neuronId, distance}>}>
+
+    allVotes = []
+
+    for level = 0 to maxActiveLevel:
+        neuronsAtLevel = activeLevels.get(level)
+        if !neuronsAtLevel or neuronsAtLevel.size == 0: continue
+
+        // Build level context ONCE before iterating neurons at this level.
+        // This is a snapshot — it does NOT change as neurons at this level are processed.
+        // Consequence: if neuron A's pattern recognition activates a pattern at this same
+        // level, neuron B (processed later) does NOT see it in the levelContext.
+        // This is intentional: it makes intra-level processing order-independent,
+        // which is required for parallel execution (Rayon in Rust).
+        levelContext = buildLevelContext(level)
+
+        // ── Parallel phase (future: Rayon par_iter in Rust) ──
+        results = []
+        for (neuronId, state) in neuronsAtLevel:
+            neuron = thalamus.getNeuron(neuronId)
+            input = {
+                ages: state.ages,
+                levelContext,                          // shared read-only snapshot
+                sensoryNeurons, rewards, channelActionIds, currentFrame, contextLength,
+                errorCorrection: errorCorrections.get(neuronId) ?? null,
+            }
+            output = neuron.processFrame(input)
+            results.push({neuronId, state, output})
+
+        // ── Sequential post-processing (cross-neuron side effects) ──
+        newActivationsAtNextLevel = false
+
+        for {neuronId, state, output} in results:
+
+            // Error correction: deliver contextRefs and register death
+            if output.errorCorrectionDeathFrame != null:
+                for ref in output.errorCorrectionContextRefs:
+                    thalamus.getNeuron(ref.neuronId).addContextRef(neuronId, ref.distance)
+                thalamus.registerDeath(errorCorrections.get(neuronId).patternId,
+                                       output.errorCorrectionDeathFrame)
+                // Pattern neuron already activated in activeLevels by Brain pre-loop
+                newActivationsAtNextLevel = true
+
+            // Recognition: activate matched patterns at level+1
+            for match in output.matches:
+                if match.activate:
+                    activateInLevelMap(match.patternId, level + 1, match.age)
+                    thalamus.registerDeath(match.patternId, match.deathFrame)
+                    newActivationsAtNextLevel = true
+
+            // Deliver contextRef updates from recognition refinement
+            for update in output.contextRefUpdates:
+                targetNeuron = thalamus.getNeuron(update.neuronId)
+                if update.type == 'add':
+                    targetNeuron.addContextRef(neuronId, update.distance)
+                else:
+                    targetNeuron.removeContextRef(neuronId, update.distance)
+
+            // Store votes for consensus and for next frame's error correction
+            if output.votes:
+                allVotes.push(...output.votes)
+            state.votes = output.votes
+            state.votingContext = output.votingContext
+
+        // Early exit: if no new pattern activations at level+1 AND no neurons
+        // exist above this level in activeLevels, stop the level loop.
+        // Connection updates and voting for already-active higher-level neurons
+        // have already been processed (they were in activeLevels from prior frames).
+        if !newActivationsAtNextLevel and level >= maxActiveLevel:
+            break
+
+    return allVotes
+```
+
+### Incremental Implementation Steps
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.1 — Move `updateConnections` into the level loop
+#### Step 1.1 — Restructure Memory for level-first indexing
 
-- Currently `updateConnections()` iterates `memory.getContextNeurons()` (all age>0, all levels)
-- Restructure: within `recognizeLevel(level)`, after pattern matching, also call `learnConnections` on neurons at this level
-- The set of neurons iterated is the same — just reorganized by level
-- Remove `updateConnections()` from Brain once fully merged
-- In the initial refactoring, for each neuron, keep connection updates after pattern recognition. 
-- Once that's verified to work, try to see if the connection updates can happen before pattern recognition for each neuron 
-- **Verify**: connection learning results identical, all tests pass
+**Why**: The unified loop iterates level-by-level, but Memory currently indexes by age. We need level-first access with per-neuron age arrays.
 
-#### Step 1.2 — Move `learnNewPatterns` into the level loop
+**Current Memory structure**:
+```
+activeNeurons: Array<Map<neuronId, {activatedPatternId, votes, context}>>
+// indexed by age: activeNeurons[0] = age 0, activeNeurons[N] = age N
+```
 
-- Currently `learnNewPatterns()` iterates `memory.getVotersWithContext()` (age>0, have votes from previous frame)
-- Brain determines which neurons need error correction (by checking previous-frame votes against actual events)
-- Brain allocates new pattern neurons via Thalamus (in bulk, per level — future: parallel allocation across machines)
-- Then in the level loop, neurons that need correction are called with the new pattern ID and context
-- The neuron stores the context in the parent's routing table (from Step 1.1)
-- When a neuron gets a new error correction pattern activated, it should no longer vote (same as recognition suppression)
-- `getActualEvents()` and `sensoryNeurons` are computed once before the loop (unchanged)
-- **Verify**: pattern creation identical, all tests pass
+**Target Memory structure**:
+```
+// Primary: level-first for the processing loop
+activeLevels: Map<level, Map<neuronId, {
+    ages: number[],                  // sorted ascending
+    activatedPatternId: number|null,
+    votes: Vote[]|null,
+    votingContext: Context|null,
+}>>
 
-#### Step 1.3 — Move `collectVotes` into the level loop
+// Secondary: age-first for sliding window mechanics (age/evict)
+ageSlots: Array<Set<{neuronId, level}>>
+```
 
-- Currently `collectVotes()` iterates `memory.getVotingNeurons()` (all ages 0..N-1, all levels)
-- Restructure: within the level loop, after connections and pattern learning, collect votes from neurons at this level
-- Votes accumulate into an array passed to `determineConsensus()` unchanged
-- Suppression: neurons skip voting if they had a pattern activated — either from recognition (Step 1.2 ordering) or from error correction (Step 1.3)
-- **Verify**: votes identical, inference results identical, all tests pass
+**Implementation**:
+1. Add `activeLevels` alongside existing `activeNeurons` — populate both during activation, verify they stay in sync
+2. Convert all loop consumers (recognizePatterns, updateConnections, collectVotes, learnNewPatterns) to read from `activeLevels` instead of `activeNeurons`
+3. Convert `age()` to maintain both structures — shift ageSlots, update ages arrays in activeLevels, remove neurons whose last age is evicted
+4. Remove old `activeNeurons` once no code reads it
+5. Rename `votes`/`context` fields to `votes`/`votingContext` for clarity
 
-#### Step 1.4 — Rename the unified loop
+**Key behavioral decision**: `activatePattern()` currently inserts the pattern neuron at the same age as the parent. With level-first indexing, it inserts into `activeLevels[level+1]` with the parent's age. This makes the pattern immediately available when the loop reaches level+1.
 
-- `recognizeLevel()` is now doing all 4 operations — rename to `processLevel()`
-- `recognizePatterns()` (the outer level loop) becomes `processLevels()`
-- Brain's `processFrame()` calls `processLevels()` instead of 4 separate methods
-- Remove the now-dead `updateConnections()`, `learnNewPatterns()`, `inferNeurons()`, `collectVotes()` from Brain
-- Consensus determination and action execution remain in Brain, called after `processLevels()` returns votes
-- **Verify**: all tests pass, behavior identical
+**Verify**: all iteration patterns produce identical neuron sets, all tests pass
 
-#### Step 1.5 — Push the unified loop into Thalamus
+#### Step 1.2 — Move error correction decisions before the level loop
 
-- Brain currently owns `processLevels()` — move it to Thalamus
-- Brain calls `thalamus.processFrame(...)` which returns votes + new patterns
-- Brain still handles: I/O, sensor activation, consensus, action execution, cleanup
-- This is the final structural separation: Thalamus owns neuron iteration, Brain owns coordination
-- **Verify**: all tests pass, behavior identical
+**Why**: Error correction is a Brain-level decision (compare consensus votes against actual events). Moving it before the loop makes neurons passive recipients — they just install the pattern they're told to install.
+
+**Current flow**:
+* `learnNewPatterns()` iterates neurons with previous-frame votes
+* For each, Brain checks if the neuron's predictions were wrong
+* If wrong, Brain creates a new pattern via Thalamus and calls neuron methods to set it up
+
+**Target flow**:
+* Before the level loop, Brain calls `determineErrorCorrections()`:
+    - Iterates `activeLevels` looking for neurons with stored `votes` from previous frame
+    - For each, compares votes against actual events (age-0 sensory neurons)
+    - If error exceeds threshold: calls `thalamus.addPatternNeuron(level+1, parentId, age, sensoryNeurons, rewards, levelContext, currentFrame)`
+    - Thalamus creates the pattern neuron with connections but does NOT install it in the parent's routing table — that happens inside `neuron.processFrame()`
+    - Brain stores `{patternId, context}` in `errorCorrections` map keyed by `parentNeuronId`
+    - Brain activates the new pattern neuron in `activeLevels[level+1]`
+* During the level loop, `errorCorrections.get(neuronId)` is passed as input to `neuron.processFrame()`
+* The neuron calls `this.addPattern(patternId, context, currentFrame)` — updating its own routing table
+* The neuron returns `errorCorrectionContextRefs` and `errorCorrectionDeathFrame` for the caller to deliver
+
+**Important**: `thalamus.addPatternNeuron()` must be split — currently it both creates the neuron AND installs it in the parent's routing table (`parent.addPattern(...)`). After this step, Thalamus creates the neuron and its connections, but the routing table installation is deferred to `neuron.processFrame()`.
+
+**Verify**: pattern creation identical, error correction timing identical, all tests pass
+
+#### Step 1.4 — Move `collectVotes` into the level loop
+
+* Currently `collectVotes()` iterates all active neurons at ages 0..N-1 across all levels
+* Restructure: within the level loop, the neuron's `processFrame()` calls `this.vote(age)` for each eligible age
+* Votes are returned in `NeuronFrameOutput` and accumulated by the caller
+* Suppression: `processFrame()` skips voting if `errorCorrection` was installed or if recognition activated a pattern
+* Previous-frame votes and context are stored in `activeLevels` state for next frame's error correction
+* Remove standalone `collectVotes()` from Brain once fully merged
+* **Verify**: votes identical, inference results identical, all tests pass
+
+#### Step 1.3 — Introduce `neuron.processFrame()` method
+
+* Implement the `processFrame(input): output` method on Neuron as described above
+* This method calls the existing internal methods in order: `addPattern` → `matchPatterns` → `updateConnections` → `vote`
+* The level loop now calls `neuron.processFrame(input)` instead of individual methods
+* Post-processing handles all cross-neuron side effects from the output
+* Remove direct calls to individual neuron methods from the level loop
+* **Verify**: all tests pass, behavior identical
+
+#### Step 1.4 — Unify the level loop and push into Thalamus
+
+* Brain's `processFrame()` now has a single level loop calling `neuron.processFrame()` per neuron
+* Rename the loop method to `processLevels()`
+* Move `processLevels()` into Thalamus — Brain calls `thalamus.processLevels(...)` which returns aggregated votes
+* Brain retains: I/O, sensor activation, error correction decisions, consensus, action execution, cleanup
+* Thalamus retains: neuron iteration, level context building, post-processing side effect delivery
+* This is the final structural separation: **Brain = coordinator, Thalamus = neuron processor**
+* **Verify**: all tests pass, behavior identical
+
+#### Step 1.5 — Snapshot level context before iterating
+
+* Ensure `buildLevelContext(level)` is called once before iterating neurons at that level
+* The context is a read-only snapshot — it does NOT change as neurons at this level are processed
+* If a neuron's pattern recognition activates a pattern at this same level, it does NOT appear in the level context for sibling neurons in the same iteration
+* This makes intra-level processing order-independent — **required for future parallel execution**
+* Verify current behavior: check if intra-level ordering produces different results with reversed iteration order. If results differ, this is a behavioral change that needs explicit testing.
+* **Verify**: all tests pass. If intra-level ordering was producing different results, document the behavioral change and verify accuracy is not degraded.
+
+### Phase 1 Success Criteria
+
+* All existing tests pass identically
+* Every neuron's per-frame work goes through a single `processFrame(input): output` call
+* `processFrame()` has no side effects outside the neuron itself — all cross-neuron effects are returned as output
+* Error correction decisions are made by Brain before the level loop — neurons just install pre-created patterns
+* Memory is indexed level-first with per-neuron age arrays
+* Brain delegates level iteration to Thalamus via `thalamus.processLevels(...)`
+* Level context is a snapshot taken before iterating neurons at each level (order-independent)
+* All neuron references are ID-based (from Step 1.0)
+* Contexts live in parent routing tables with inverted contextIndex (from Step 1.1)
 
 ---
 
