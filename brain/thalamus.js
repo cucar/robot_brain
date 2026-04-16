@@ -196,8 +196,6 @@ export class Thalamus {
 
 	/**
 	 * Get the channel name for a neuron
-	 * @param {number} neuronId - Neuron ID
-	 * @returns {string} Channel name
 	 */
 	getNeuronChannel(neuronId) {
 		return this.neuronChannel.get(neuronId);
@@ -205,8 +203,6 @@ export class Thalamus {
 
 	/**
 	 * Get the type for a neuron ('event' or 'action')
-	 * @param {number} neuronId - Neuron ID
-	 * @returns {string} Neuron type
 	 */
 	getNeuronType(neuronId) {
 		return this.neuronType.get(neuronId);
@@ -214,8 +210,6 @@ export class Thalamus {
 
 	/**
 	 * Get the parent neuron ID for a pattern neuron
-	 * @param {number} neuronId - Neuron ID
-	 * @returns {number|undefined} Parent neuron ID
 	 */
 	getNeuronParent(neuronId) {
 		return this.neuronParents.get(neuronId);
@@ -263,9 +257,8 @@ export class Thalamus {
 	getActiveEvents(activeNeuronIds) {
 		const result = new Map();
 		for (const neuronId of activeNeuronIds) {
-			const neuron = this.neurons.get(neuronId);
-			if (!neuron || this.getNeuronType(neuronId) !== 'event') continue;
-			const channel = this.getNeuronChannel(neuron.id);
+			if (this.getNeuronType(neuronId) !== 'event') continue;
+			const channel = this.getNeuronChannel(neuronId);
 			if (!result.has(channel)) result.set(channel, []);
 			result.get(channel).push(this.getNeuronCoordinates(neuronId));
 		}
@@ -404,21 +397,38 @@ export class Thalamus {
 	/**
 	 * Process one pre-built level view: match patterns, deliver updates, and return activations.
 	 * Brain builds the level-neuron map from memory and passes it in.
-	 * @param {Map<number, {activeAges: number[], recognizerAges: number[]}>} levelNeurons
+	 * @param {Map<neuronId, Map<age, {activatedPatternId, votes, context}>>} levelNeurons
 	 * @param {Array<{id, type, channel}>} newActiveNeurons - Newly active sensory neurons for connection learning
 	 * @param {Map} rewards - Rewards at current frame (age 0)
 	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron IDs for skipping
 	 * @param {number} frameNumber - Current frame number
+	 * @param {number} maxAge - maximum age in memory
 	 * @returns {Array<{parentId, patternId, age, deathFrame}>} Matched patterns (empty if none or recognition inactive)
 	 */
-	processLevel(levelNeurons, newActiveNeurons, rewards, channelActionIds, frameNumber) {
+	processLevel(levelNeurons, newActiveNeurons, rewards, channelActionIds, frameNumber, maxAge) {
 
 		// Build the level context once; matching runs only if recognition is still active and there's context.
-		const levelContext = this.buildLevelContext(levelNeurons);
+		const levelContext = new Context();
+		for (const [neuronId, ageMap] of levelNeurons)
+			for (const [age] of ageMap)
+				if (age > 0 && !this.skipActionNeuron(neuronId)) levelContext.addNeuron(neuronId, age);  // distance = absolute age
+
+		// Build the current level view directly from level-indexed memory
+		// (ageMap is maintained in ascending order by Memory — required by matchPatterns)
+		const learningNeurons = new Map();
+		for (const [neuronId, ageMap] of levelNeurons) {
+			if (this.skipActionNeuron(neuronId)) continue;
+			const entry = { activeAges: [], recognizerAges: [] };
+			for (const [age, state] of ageMap) {
+				entry.activeAges.push(age);
+				if (state.activatedPatternId === null && age !== maxAge - 1) entry.recognizerAges.push(age);
+			}
+			learningNeurons.set(neuronId, entry);
+		}
 
 		// Per-neuron: learn connections and match patterns.
 		const recognitionResults = [];
-		for (const [neuronId, { activeAges, recognizerAges }] of levelNeurons) {
+		for (const [neuronId, { activeAges, recognizerAges }] of learningNeurons) {
 			const neuron = this.neurons.get(neuronId);
 			const result = neuron.processFrame(activeAges, recognizerAges, levelContext, newActiveNeurons, rewards, channelActionIds, frameNumber);
 			if (result.matches.length > 0) recognitionResults.push({ parentId: neuronId, ...result });
@@ -434,21 +444,6 @@ export class Thalamus {
 		}
 
 		return [];
-	}
-
-	/**
-	 * Build one universal context for a level from the already-filtered levelNeurons map.
-	 * Distances are absolute ages (age of the context neuron). Age 0 is excluded — it is
-	 * the recognizer itself, not context.
-	 * @param {Map<number, {activeAges: number[]}>} levelNeurons
-	 * @returns {Context}
-	 */
-	buildLevelContext(levelNeurons) {
-		const context = new Context();
-		for (const [neuronId, { activeAges }] of levelNeurons)
-			for (const age of activeAges)
-				if (age > 0) context.addNeuron(neuronId, age);  // distance = absolute age
-		return context;
 	}
 
 	/**

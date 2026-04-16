@@ -110,18 +110,18 @@ node run-brain.js stock-test --no-summary --episodes 5
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $33516.41 | ROI: +223.44%, +0.046871%/frame (2904 trades)
-   Episode 2: $212532.28 | ROI: +1416.88%, +0.108612%/frame (2576 trades)
-   Episode 3: $527506.07 | ROI: +3516.71%, +0.143342%/frame (3373 trades)
-   Episode 4: $276208.68 | ROI: +1841.39%, +0.118473%/frame (3680 trades)
-   Episode 5: $1359988.44 | ROI: +9066.59%, +0.180528%/frame (3755 trades)
+   Episode 1: $94769.07 | ROI: +631.79%, +0.079486%/frame (3172 trades)
+   Episode 2: $244895.00 | ROI: +1632.63%, +0.113926%/frame (2611 trades)
+   Episode 3: $856053.62 | ROI: +5707.02%, +0.162273%/frame (2967 trades)
+   Episode 4: $390559.68 | ROI: +2603.73%, +0.131712%/frame (2912 trades)
+   Episode 5: $720249.33 | ROI: +4801.66%, +0.155496%/frame (2981 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 57.04%
    Episode 2: 57.79%
-   Episode 3: 58.35%
-   Episode 4: 58.52%
-   Episode 5: 58.70%
+   Episode 3: 58.36%
+   Episode 4: 58.54%
+   Episode 5: 58.69%
 ```
 
 ## Demo 4: Stock Sequence Memorization
@@ -140,19 +140,19 @@ node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary --symbols 
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $2121028909597.97
-   Average per Episode: $424205781919.59
-   Average ROI: +2828038546.13%
-   Average Per-Frame ROI: +0.491773%
-   Total Trades: 14167
-   Average Trades per Episode: 2833.4
+   Total Net Profit: $2078639644919.19
+   Average per Episode: $415727928983.84
+   Average ROI: +2771519526.56%
+   Average Per-Frame ROI: +0.497123%
+   Total Trades: 14075
+   Average Trades per Episode: 2815.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $6498.38 | ROI: +43.32%, +0.014369%/frame (2824 trades)
-   Episode 2: $260055925.54 | ROI: +1733706.17%, +0.390407%/frame (2858 trades)
-   Episode 3: $67697038480.94 | ROI: +451313589.87%, +0.613551%/frame (2836 trades)
-   Episode 4: $672437972564.51 | ROI: +4482919817.10%, +0.705807%/frame (2797 trades)
-   Episode 5: $1380633836128.60 | ROI: +9204225574.19%, +0.734732%/frame (2852 trades)
+   Episode 1: $14841.25 | ROI: +98.94%, +0.027463%/frame (2844 trades)
+   Episode 2: $294254517.30 | ROI: +1961696.78%, +0.395358%/frame (2787 trades)
+   Episode 3: $82106608634.65 | ROI: +547377390.90%, +0.621303%/frame (2852 trades)
+   Episode 4: $784705351866.82 | ROI: +5231369012.45%, +0.712015%/frame (2750 trades)
+   Episode 5: $1211533415059.18 | ROI: +8076889433.73%, +0.729478%/frame (2842 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 58.63%

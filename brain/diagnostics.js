@@ -309,7 +309,7 @@ export class Diagnostics {
 	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
 	 * @param {Map<string, Array>} actualEventCoordsByChannel - Map of channel → array of coordinate objects
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
-	 * @param {IterableIterator<[string, object]>} channels - Iterator of [channelName, channel] pairs
+	 * @param {Array<[string, object]>} channels - Iterator of [channelName, channel] pairs
 	 */
 	trackInferencePerformance(inferences, activeNeuronIds, actualEventCoordsByChannel, rewards, channels) {
 		let eventCorrect = 0;
