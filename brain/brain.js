@@ -341,7 +341,7 @@ export default class Brain {
 		this.activateNeurons(neuronIds);
 
 		// Track inference performance (event accuracy, action rewards, and continuous prediction errors)
-		const activeNeuronIds = new Set(this.memory.getNeuronsAtAge(0).keys());
+		const activeNeuronIds = new Set(this.memory.getNeuronIdsAtAge(0));
 		const actualEvents = this.thalamus.getActiveEvents(activeNeuronIds);
 		const inferences = this.thalamus.getInferences(this.memory.getInferredNeurons());
 		this.diagnostics.trackInferencePerformance(inferences, activeNeuronIds, actualEvents, this.rewards[0], this.thalamus.getChannels());
@@ -364,7 +364,7 @@ export default class Brain {
 	 * @param {Array<number>} neuronIds - Array of neuron IDs to activate
 	 */
 	activateNeurons(neuronIds) {
-		for (const neuronId of neuronIds) this.memory.activateNeuron(neuronId);
+		for (const neuronId of neuronIds) this.memory.activateNeuron(neuronId, this.thalamus.getNeuronLevel(neuronId));
 	}
 
 	/**
@@ -381,7 +381,8 @@ export default class Brain {
 		let maxActiveLevel = 0;
 		for (let age = 0; age < this.memory.depth; age++) {
 			const ageNeurons = [];
-			for (const [neuronId, state] of this.memory.getNeuronsAtAge(age)) {
+			for (const neuronId of this.memory.getNeuronIdsAtAge(age)) {
+				const state = this.memory.getState(neuronId, age);
 
 				// get the neuron properties
 				const level = this.thalamus.getNeuronLevel(neuronId);
@@ -415,12 +416,13 @@ export default class Brain {
 		while (true) {
 			if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
-			// Build the current level view explicitly from age-indexed memory. This mirrors the
-			// level-first structure planned in the Rust migration without changing Memory yet.
+			// Build the level view from memory's level index (age-ascending, activation-order within age).
 			const levelNeurons = new Map();
-			for (let age = 0; age < this.memory.depth; age++)
-				for (const [neuronId, state] of this.memory.getNeuronsAtAge(age)) {
-					if (this.thalamus.skipActionNeuron(neuronId) || this.thalamus.getNeuronLevel(neuronId) !== level) continue;
+			const levelAges = this.memory.getLevelAges(level);
+			for (let age = 0; age < levelAges.length; age++)
+				for (const neuronId of levelAges[age]) {
+					if (this.thalamus.skipActionNeuron(neuronId)) continue;
+					const state = this.memory.getState(neuronId, age);
 					if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
 					const entry = levelNeurons.get(neuronId);
 					entry.activeAges.push(age);
@@ -431,7 +433,7 @@ export default class Brain {
 			const matches = this.thalamus.processLevel(levelNeurons, newActiveNeurons, this.rewards[0], channelActionIds, this.frameNumber);
 
 			// Activate matched patterns in memory — they land one level above
-			for (const { parentId, patternId, age } of matches) this.memory.activatePattern(patternId, parentId, age);
+			for (const { parentId, patternId, age } of matches) this.memory.activatePattern(patternId, level + 1, parentId, age);
 
 			// if we recognized some patterns, increment the max active level as needed
 			if (matches.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
@@ -458,7 +460,7 @@ export default class Brain {
 			const pattern = this.thalamus.addPatternNeuron(neuronLevel + 1, neuronId, age, sensoryNeurons, this.rewards, mappedContext, this.frameNumber);
 
 			// activate the pattern neuron at the parent's age
-			this.memory.activatePattern(pattern.id, neuronId, age);
+			this.memory.activatePattern(pattern.id, neuronLevel + 1, neuronId, age);
 
 			// update the context references of the neurons that were used in new contexts
 			for (const c of levelContext) c.neuron.addContextRef(neuronId, c.distance);
@@ -546,7 +548,7 @@ export default class Brain {
 		// Build all contexts once for all ages/levels
 		const contexts = new Map();
 		for (let ctxAge = 1; ctxAge < this.memory.depth; ctxAge++)
-			for (const neuronId of this.memory.getNeuronsAtAge(ctxAge).keys()) {
+			for (const neuronId of this.memory.getNeuronIdsAtAge(ctxAge)) {
 				const neuron = neurons.get(neuronId);
 				if (this.thalamus.skipActionNeuron(neuronId)) continue;
 				for (let age = 0; age < ctxAge; age++) {
@@ -558,7 +560,8 @@ export default class Brain {
 
 		// Collect votes from neurons that can vote (all ages except the oldest)
 		for (let age = 0; age < this.memory.depth - 1; age++)
-			for (const [neuronId, state] of this.memory.getNeuronsAtAge(age)) {
+			for (const neuronId of this.memory.getNeuronIdsAtAge(age)) {
+				const state = this.memory.getState(neuronId, age);
 				const voter = neurons.get(neuronId);
 
 				if (this.thalamus.skipActionNeuron(neuronId)) continue;
