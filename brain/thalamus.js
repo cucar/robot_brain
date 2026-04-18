@@ -396,7 +396,7 @@ export class Thalamus {
 
 	/**
 	 * Process one level end-to-end: aggregate the level view, match patterns, create
-	 * error-correction pattern neurons, and return all activations at level+1.
+	 * error-correction pattern neurons, collect votes, and return activations + votes.
 	 * @param {number} level - Current level being processed
 	 * @param {Map<number, Map<number, object>>} levelNeurons - Active neurons at this level: neuronId -> age -> state (ages ascending)
 	 * @param {number} memoryDepth - Current sliding-window depth (age count)
@@ -406,7 +406,7 @@ export class Thalamus {
 	 * @param {number} frameNumber - Current frame number
 	 * @param {Set<number>} newErrorPatternIds - Accumulator of error pattern ids created this frame (mutated)
 	 * @param {number} errorCorrectionThreshold - Event-error ratio above which a correction is created
-	 * @returns {Array<{parentId, patternId, age, deathFrame}>} Activations to apply at level+1
+	 * @returns {{activations: Array<{parentId, patternId, age, deathFrame}>, votes: Array}}
 	 */
 	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
 
@@ -422,11 +422,83 @@ export class Thalamus {
 		// pass 3: applyFrameResults - batch contextRef updates by target, register deaths, collect activations
 		const activations = this.applyFrameResults(results);
 
+		// pass 4: collectLevelVotes - per-neuron voting for this level, suppression derived from results
+		const votes = this.collectLevelVotes(levelNeurons, memoryDepth, results);
+
 		if (this.debug && activations.length > 0)
 			console.log(`Level ${level}: ${activations.length} activations`,
 				activations.map(a => `parent=${a.parentId}, age=${a.age}, pattern=${a.patternId}`).join('; '));
 
-		return activations;
+		return { activations, votes };
+	}
+
+	/**
+	 * Collect votes from neurons at this level. Builds the per-age voting context from
+	 * this level's own active neurons, then iterates each neuron's active ages to vote.
+	 * Suppression sources: state.activatedPatternId (carryover from prior frames) and
+	 * this-frame matches/error-corrections from `results`.
+	 * Mutates state.votes/state.context directly via the references in levelNeurons.
+	 * @param {Map<number, Map<number, object>>} levelNeurons
+	 * @param {number} memoryDepth
+	 * @param {Array<{parentId, matches, correctionActivations, contextRefUpdates}>} results
+	 * @returns {Array} Array of vote objects {voter, neuron, neuronId, strength, reward, distance}
+	 */
+	collectLevelVotes(levelNeurons, memoryDepth, results) {
+		const votes = [];
+
+		// clear stale votes/context for this level's neurons so suppressed ages don't carry stale data
+		for (const ageStates of levelNeurons.values())
+			for (const state of ageStates.values()) {
+				state.votes = null;
+				state.context = null;
+			}
+
+		// build per-neuron set of ages suppressed this frame (matches with activate=true and error corrections)
+		const suppressedThisFrame = new Map();
+		for (const { parentId, matches, correctionActivations } of results) {
+			let ages = suppressedThisFrame.get(parentId);
+			if (!ages) { ages = new Set(); suppressedThisFrame.set(parentId, ages); }
+			for (const m of matches) if (m.activate) ages.add(m.age);
+			for (const c of correctionActivations) ages.add(c.age);
+		}
+
+		// build per-age voting context from this level's neurons (action neurons excluded)
+		const contextByAge = new Map();
+		for (const [neuronId, ageStates] of levelNeurons) {
+			if (this.skipActionNeuron(neuronId)) continue;
+			const neuron = this.neurons.get(neuronId);
+			for (const ctxAge of ageStates.keys()) {
+				if (ctxAge === 0) continue;
+				for (let age = 0; age < ctxAge; age++) {
+					if (!contextByAge.has(age)) contextByAge.set(age, []);
+					contextByAge.get(age).push({ neuron, distance: ctxAge - age });
+				}
+			}
+		}
+
+		// collect votes from this level's neurons (oldest-age and suppressed entries skipped)
+		for (const [neuronId, ageStates] of levelNeurons) {
+			if (this.skipActionNeuron(neuronId)) continue;
+			const voter = this.neurons.get(neuronId);
+			const suppressedAges = suppressedThisFrame.get(neuronId);
+			for (const [age, state] of ageStates) {
+				if (age >= memoryDepth - 1) continue;
+				if (state.activatedPatternId !== null) continue;
+				if (suppressedAges && suppressedAges.has(age)) continue;
+
+				// get the votes of the neuron and store them on the shared state for next frame's error correction
+				const neuronVotes = voter.vote(age);
+				state.votes = neuronVotes;
+				state.context = contextByAge.get(age) ?? [];
+
+				// add the votes to the returned array - resolve neuronId to neuron object for consensus
+				for (const vote of neuronVotes) {
+					const neuron = this.neurons.get(vote.neuronId);
+					if (neuron) votes.push({ voter, neuron, ...vote });
+				}
+			}
+		}
+		return votes;
 	}
 
 	/**

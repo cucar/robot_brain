@@ -180,15 +180,6 @@ export class Memory {
 	}
 
 	/**
-	 * Set votes and context for a neuron at a specific age
-	 */
-	setVotes(neuronId, age, votes, context) {
-		const state = this.neuronStates.get(neuronId).get(age);
-		state.votes = votes;
-		state.context = context;
-	}
-
-	/**
 	 * Get all inferred neurons
 	 */
 	getInferredNeurons() {

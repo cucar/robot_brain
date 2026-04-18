@@ -369,8 +369,8 @@ export default class Brain {
 
 	/**
 	 * Detects patterns at all levels starting from base - goes as high as possible until no patterns found.
-	 * Collects votes from each level's neurons inline (after that level's activations are applied,
-	 * so suppression flags from this-frame recognitions and error corrections are already set).
+	 * Each level's processFrame pass produces both activations and votes; votes are accumulated
+	 * across levels for consensus.
 	 * @returns {Array} Accumulated votes across all processed levels
 	 */
 	processLevels() {
@@ -394,8 +394,8 @@ export default class Brain {
 		while (true) {
 			if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
-			// process level: aggregate view, recognize patterns, create error corrections
-			const activations = this.thalamus.processLevel(
+			// process level: aggregate view, recognize patterns, create error corrections, collect votes
+			const { activations, votes: levelVotes } = this.thalamus.processLevel(
 				level, this.memory.getLevelNeurons(level), this.memory.depth,
 				sensoryNeurons, this.rewards, channelActionIds, this.frameNumber,
 				newErrorPatternIds, this.errorCorrectionThreshold
@@ -407,8 +407,8 @@ export default class Brain {
 			// if we produced any activations, increment the max active level as needed
 			if (activations.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
 
-			// collect votes for this level now that suppression flags from its activations are set
-			votes.push(...this.collectLevelVotes(level));
+			// accumulate this level's votes for consensus
+			votes.push(...levelVotes);
 
 			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
 			if (level >= maxActiveLevel) break;
@@ -458,63 +458,6 @@ export default class Brain {
 
 		// Save inferences to memory (clears old inferences first)
 		this.memory.saveInferredNeurons(inferences);
-	}
-
-	/**
-	 * Collect votes from neurons at a single level. Clears stale votes/context for this
-	 * level's active states, builds the per-age voting context from this level's own
-	 * neurons, then iterates each neuron's active ages.
-	 * @param {number} level
-	 * @returns {Array} Array of vote objects for consensus
-	 */
-	collectLevelVotes(level) {
-		const votes = [];
-		const neurons = this.thalamus.neurons;
-		const levelNeurons = this.memory.getLevelNeurons(level);
-
-		// clear stale votes/context for this level's neurons so suppressed ages don't carry stale data
-		for (const ageStates of levelNeurons.values())
-			for (const state of ageStates.values()) {
-				state.votes = null;
-				state.context = null;
-			}
-
-		// build per-age voting context from this level's neurons (action neurons excluded)
-		const contextByAge = new Map();
-		for (const [neuronId, ageStates] of levelNeurons) {
-			if (this.thalamus.skipActionNeuron(neuronId)) continue;
-			const neuron = neurons.get(neuronId);
-			for (const ctxAge of ageStates.keys()) {
-				if (ctxAge === 0) continue;
-				for (let age = 0; age < ctxAge; age++) {
-					if (!contextByAge.has(age)) contextByAge.set(age, []);
-					contextByAge.get(age).push({ neuron, distance: ctxAge - age });
-				}
-			}
-		}
-
-		// collect votes from this level's neurons (oldest-age and suppressed entries skipped)
-		for (const [neuronId, ageStates] of levelNeurons) {
-			if (this.thalamus.skipActionNeuron(neuronId)) continue;
-			const voter = neurons.get(neuronId);
-			for (const [age, state] of ageStates) {
-				if (age >= this.memory.depth - 1) continue;
-				if (state.activatedPatternId !== null) continue;
-
-				// get the votes of the neuron
-				const neuronVotes = voter.vote(age);
-
-				// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
-				this.memory.setVotes(neuronId, age, neuronVotes, contextByAge.get(age) ?? []);
-
-				// add the votes to the returned array - resolve neuronId to neuron object for consensus
-				for (const vote of neuronVotes) {
-					const neuron = neurons.get(vote.neuronId);
-					if (neuron) votes.push({ voter, neuron, ...vote });
-				}
-			}
-		}
-		return votes;
 	}
 
 	/**
