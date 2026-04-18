@@ -379,18 +379,28 @@ export default class Brain {
 		// Get the maximum active level from memory index - this may increase as we process levels
 		let maxActiveLevel = this.memory.getMaxActiveLevel();
 
+		// track newly-created error pattern ids so they are excluded from the level
+		// pass at their own level (prevents double connection-learning and context leak)
+		const newErrorPatternIds = new Set();
+
 		// process neurons level-by-level - each level in parallel
 		let level = 0;
-		const corrections = [];
 		while (true) {
 			if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 			// Build the level view from memory's level index (age-ascending, activation-order within age).
 			const levelNeurons = new Map();
+			const corrections = [];
 			const levelAges = this.memory.getLevelAges(level);
 			for (let age = 0; age < levelAges.length; age++)
 				for (const neuronId of levelAges[age]) {
+
 					if (this.thalamus.skipActionNeuron(neuronId)) continue;
+
+					// skip error patterns created during this frame - preserves prior behavior
+					// where corrections ran after the level loop (no re-learning, no context leak)
+					if (newErrorPatternIds.has(neuronId)) continue;
+
 					const state = this.memory.getState(neuronId, age);
 
 					// check for each neuron if it needs a new error correction pattern
@@ -413,35 +423,33 @@ export default class Brain {
 			// if we recognized some patterns, increment the max active level as needed
 			if (matches.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
 
+			// learn new patterns for failed predictions at this level - create pattern
+			// neurons and populate their connections from the future
+			for (const { neuronId, age, context } of corrections) {
+
+				// neuron level is the current loop level - all corrections collected here are at `level`
+				const levelContext = context.filter(c => this.thalamus.getNeuronLevel(c.neuron.id) === level);
+				const mappedContext = levelContext.map(c => ({ neuronId: c.neuron.id, distance: c.distance }));
+
+				// ask thalamus to create and wire the new pattern neuron
+				const pattern = this.thalamus.addPatternNeuron(level + 1, neuronId, age, sensoryNeurons, this.rewards, mappedContext, this.frameNumber);
+
+				// activate the pattern neuron at the parent's age
+				this.memory.activatePattern(pattern.id, level + 1, neuronId, age);
+
+				// update the context references of the neurons that were used in new contexts
+				for (const c of levelContext) c.neuron.addContextRef(neuronId, c.distance);
+
+				// exclude this new pattern when we build the level view for level+1
+				newErrorPatternIds.add(pattern.id);
+			}
+
 			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
 			if (level >= maxActiveLevel) break;
 
 			// otherwise, increment the level and process the next level
 			level++;
 		}
-
-		// learn new patterns in age>0 neurons from failed predictions
-		// create pattern neurons and populate their connections from the future
-		for (const { neuronId, age, context } of corrections) {
-
-			// get the level of the neuron - when we merge this with the recognition, we won't need to fetch it explicitly
-			const neuronLevel = this.thalamus.getNeuronLevel(neuronId);
-
-			// get the level context
-			const levelContext = context.filter(c => this.thalamus.getNeuronLevel(c.neuron.id) === neuronLevel);
-			const mappedContext = levelContext.map(c => ({ neuronId: c.neuron.id, distance: c.distance }));
-
-			// ask thalamus to create and wire the new pattern neuron
-			const pattern = this.thalamus.addPatternNeuron(neuronLevel + 1, neuronId, age, sensoryNeurons, this.rewards, mappedContext, this.frameNumber);
-
-			// activate the pattern neuron at the parent's age
-			this.memory.activatePattern(pattern.id, neuronLevel + 1, neuronId, age);
-
-			// update the context references of the neurons that were used in new contexts
-			for (const c of levelContext) c.neuron.addContextRef(neuronId, c.distance);
-		}
-
-		if (this.debug && corrections.length > 0) console.log(`Created ${corrections.length} error patterns`);
 	}
 
 	/**
