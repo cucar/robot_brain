@@ -20,7 +20,7 @@ const findBestLinearMatch = (parent, observed, age, currentFrame = 0) => {
 
 describe('Neuron pattern index', () => {
 	it('finds age-adjusted candidate patterns from the inverted index', () => {
-		const parent = new Neuron(0.01, 0.5, 100);
+		const parent = new Neuron(0.01, 0.5, new Map(), 100);
 		parent.addPattern(201, [{ neuronId: 11, distance: 1 }, { neuronId: 12, distance: 2 }]);
 		parent.addPattern(202, [{ neuronId: 11, distance: 2 }, { neuronId: 13, distance: 3 }]);
 
@@ -30,7 +30,7 @@ describe('Neuron pattern index', () => {
 	});
 
 	it('matches the same best pattern as a full linear scan when pruning candidates', () => {
-		const parent = new Neuron(0.01, 0.5, 101);
+		const parent = new Neuron(0.01, 0.5, new Map(), 101);
 		parent.addPattern(301, [{ neuronId: 7, distance: 1 }, { neuronId: 8, distance: 2 }]);
 		parent.addPattern(302, [{ neuronId: 50, distance: 1 }, { neuronId: 51, distance: 2 }]);
 		parent.addPattern(303, [{ neuronId: 7, distance: 1 }, { neuronId: 11, distance: 2 }, { neuronId: 12, distance: 3 }]);
@@ -44,7 +44,7 @@ describe('Neuron pattern index', () => {
 	});
 
 	it('preserves routing-table tie-breaking when the index yields a different candidate order', () => {
-		const parent = new Neuron(0.01, 0.5, 105);
+		const parent = new Neuron(0.01, 0.5, new Map(), 105);
 		parent.addPattern(601, [{ neuronId: 11, distance: 1 }]);
 		parent.addPattern(602, [{ neuronId: 22, distance: 1 }]);
 
@@ -58,7 +58,7 @@ describe('Neuron pattern index', () => {
 	});
 
 	it('returns null when the index produces no candidates', () => {
-		const parent = new Neuron(0.01, 0.5, 102);
+		const parent = new Neuron(0.01, 0.5, new Map(), 102);
 		parent.addPattern(311, [{ neuronId: 40, distance: 1 }, { neuronId: 41, distance: 2 }]);
 		parent.addPattern(312, [{ neuronId: 42, distance: 1 }, { neuronId: 43, distance: 2 }]);
 
@@ -68,7 +68,7 @@ describe('Neuron pattern index', () => {
 	});
 
 	it('keeps the inverted index in sync when patterns are removed', () => {
-		const parent = new Neuron(0.01, 0.5, 103);
+		const parent = new Neuron(0.01, 0.5, new Map(), 103);
 		parent.addPattern(401, [{ neuronId: 21, distance: 1 }]);
 		parent.addPattern(402, [{ neuronId: 21, distance: 1 }, { neuronId: 22, distance: 2 }]);
 
@@ -84,7 +84,7 @@ describe('Neuron pattern index', () => {
 	});
 
 	it('throws when the index points to a pattern missing from the routing table', () => {
-		const parent = new Neuron(0.01, 0.5, 104);
+		const parent = new Neuron(0.01, 0.5, new Map(), 104);
 		parent.addPattern(501, [{ neuronId: 31, distance: 1 }]);
 
 		const observed = makeContext([[31, 1]]);

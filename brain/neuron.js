@@ -25,12 +25,15 @@ export class Neuron {
 
 	/**
 	 * constructor - id optional for loading from database
+	 * channelActionIds are used for alternative-action lookup during learning. Static after initializeActionNeurons.
+	 * shared across all neurons so the map is broadcast once at creation time (no per-frame traffic).
 	 */
-	constructor(patternForgetRate, mergeThreshold, id = null) {
+	constructor(patternForgetRate, mergeThreshold, channelActionIds, id = null) {
 
 		// initialize neuron parameters
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
+		this.channelActionIds = channelActionIds;
 
 		// initialize neuron id if given - update nextId if we're loading a neuron with a specific ID
 		this.id = id || Neuron.nextId++;
@@ -70,16 +73,15 @@ export class Neuron {
 	 * @param {number} toNeuronId - Target neuron id
 	 * @param {string} channel - Target neuron's channel (used only for alt-action lookup)
 	 * @param {number} reward - Observed reward (0 for events, signed for actions)
-	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron ids by channel
 	 */
-	upsertConnection(distance, toNeuronId, channel, reward, channelActionIds) {
+	upsertConnection(distance, toNeuronId, channel, reward) {
 		if (this.hasConnection(distance, toNeuronId)) this.strengthenConnection(distance, toNeuronId, reward);
 		else this.createConnection(distance, toNeuronId, 1, reward);
 
 		// for actions with negative (smoothed) rewards, save an alternative with neutral reward - we'll try it next time
 		const conn = this.connections.get(distance).get(toNeuronId);
 		if (conn.reward < 0) {
-			const alt = this.findAlternativeAction(distance, channel, toNeuronId, channelActionIds);
+			const alt = this.findAlternativeAction(distance, channel, toNeuronId);
 			if (alt) this.createConnection(distance, alt, 1, 0);
 		}
 	}
@@ -92,9 +94,8 @@ export class Neuron {
 	 * entry is a single observation, so connections are always created (strength=1) - never
 	 * strengthened - even if a later entry targets a slot that a prior alt-action filled.
 	 * @param {Array<{distance: number, toNeuronId: number, channel: string, reward: number}>} connections
-	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron ids by channel
 	 */
-	initializeConnections(connections, channelActionIds) {
+	initializeConnections(connections) {
 		for (const { distance, toNeuronId, channel, reward } of connections) {
 
 			// save the event/action - include observed reward for actions - for events it's zero
@@ -102,7 +103,7 @@ export class Neuron {
 
 			// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
 			if (reward < 0) {
-				const alt = this.findAlternativeAction(distance, channel, toNeuronId, channelActionIds);
+				const alt = this.findAlternativeAction(distance, channel, toNeuronId);
 				if (alt) this.createConnection(distance, alt, 1, 0);
 			}
 		}
@@ -421,17 +422,16 @@ export class Neuron {
 	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
 	 * @param {Map<number, Array<{neuronId: number, distance: number}>>} contextByAge - Per-age voting context for storage
 	 * @param {Array<{id: number, channel: string, reward: number}>} actives - Age=0 sensory neurons with pre-resolved rewards
-	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 * @param {number} currentFrame - Current frame number
 	 * @param {Array<{patternId: number, age: number, contextEntries: Array<{neuronId, distance}>}>} corrections
 	 *        Pre-created error-correction pattern neurons to install as children at the given ages.
 	 * @returns {{ matches, correctionActivations, contextRefUpdates, votes }}
 	 *          votes: Array<{age, votes, context}> - one entry per non-suppressed voting age
 	 */
-	processFrame(learnerAges, recognizerAges, votingAges, levelContext, contextByAge, actives, channelActionIds, currentFrame, corrections = []) {
+	processFrame(learnerAges, recognizerAges, votingAges, levelContext, contextByAge, actives, currentFrame, corrections = []) {
 
 		// learn connections across all active ages (age=0 skipped internally)
-		this.learnConnections(learnerAges, actives, channelActionIds);
+		this.learnConnections(learnerAges, actives);
 
 		// match patterns if we have context and eligible ages
 		const { matches, contextRefUpdates: matchRefs } = this.recognizePatterns(recognizerAges, levelContext, currentFrame);
@@ -682,9 +682,8 @@ export class Neuron {
 	 * thalamus-side (0 for events, observed value for actions).
 	 * @param {Array<number>} ages - Ages at which this neuron is active and should be learning
 	 * @param {Array<{id: number, channel: string, reward: number}>} neurons - Currently observed neurons (age=0) with pre-resolved rewards
-	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 */
-	learnConnections(ages, neurons, channelActionIds) {
+	learnConnections(ages, neurons) {
 		for (const age of ages) {
 
 			// skip age 0 - connection learning only applies to context neurons (age > 0)
@@ -693,7 +692,7 @@ export class Neuron {
 			// learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
 			const neuronIds = new Set();
 			for (const { id, channel, reward } of neurons) {
-				this.upsertConnection(age, id, channel, reward, channelActionIds);
+				this.upsertConnection(age, id, channel, reward);
 				neuronIds.add(id);
 			}
 
@@ -721,11 +720,10 @@ export class Neuron {
 	 * @param {number} age - The age at which to check for existing connections
 	 * @param {string} channel - The channel name
 	 * @param {number} currentActionId - The action neuron ID to find an alternative to
-	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 * @returns {number|null} An alternative action neuron ID, or null if none available
 	 */
-	findAlternativeAction(age, channel, currentActionId, channelActionIds) {
-		for (const altNeuronId of channelActionIds.get(channel))
+	findAlternativeAction(age, channel, currentActionId) {
+		for (const altNeuronId of this.channelActionIds.get(channel))
 			if (altNeuronId !== currentActionId && !this.hasConnection(age, altNeuronId))
 				return altNeuronId;
 		return null;

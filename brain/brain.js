@@ -160,7 +160,7 @@ export default class Brain {
 
 		// Load full snapshot from DB (channels, dimensions, neurons)
 		if (this.database) {
-			const snapshot = await this.db.loadSnapshot(this.thalamus.getChannelClasses());
+			const snapshot = await this.db.loadSnapshot(this.thalamus.getChannelClasses(), this.thalamus.channelActions);
 			this.thalamus.restoreSnapshot(snapshot);
 		}
 
@@ -368,7 +368,6 @@ export default class Brain {
 	 * @returns {Array} Accumulated votes across all processed levels
 	 */
 	processLevels() {
-		const channelActionIds = this.thalamus.getChannelActionIds();
 
 		// get the active sensory neurons at level 0
 		const sensoryNeurons = this.memory.getLevelAges(0);
@@ -391,7 +390,7 @@ export default class Brain {
 			// process level: aggregate view, recognize patterns, create error corrections, collect votes
 			const { activations, votes: levelVotes } = this.thalamus.processLevel(
 				level, this.memory.getLevelNeurons(level), this.memory.depth,
-				sensoryNeurons, this.rewards, channelActionIds, this.frameNumber,
+				sensoryNeurons, this.rewards, this.frameNumber,
 				newErrorPatternIds, this.errorCorrectionThreshold
 			);
 

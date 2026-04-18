@@ -86,7 +86,7 @@ export class Thalamus {
 	 * @returns {Neuron} The newly created neuron
 	 */
 	addSensoryNeuron(coordinates) {
-		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
+		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, this.channelActions);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(this.makeValueKey(coordinates), neuron.id);
@@ -106,10 +106,9 @@ export class Thalamus {
 	 * @param {number} age - Distance in time between the observation and the error
 	 * @param {Array<Set<number>>} sensoryNeurons - Recent sensory neuron ids by age
 	 * @param {Array<Map<string, number>>} rewards - Rewards by age
-	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron ids by channel
 	 * @returns {number} The newly created pattern neuron
 	 */
-	createPatternNeuron(level, parentId, age, sensoryNeurons, rewards, channelActionIds) {
+	createPatternNeuron(level, parentId, age, sensoryNeurons, rewards) {
 
 		// build the future connection spec of the pattern from currently observed neurons
 		// (thalamus-side lookups - channel, reward - are resolved here so the neuron can be
@@ -123,8 +122,8 @@ export class Thalamus {
 			}
 
 		// create and initialize the neuron in a single call
-		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
-		neuron.initializeConnections(connections, channelActionIds);
+		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, this.channelActions);
+		neuron.initializeConnections(connections);
 
 		// register in the thalamus
 		this.neurons.set(neuron.id, neuron);
@@ -400,22 +399,21 @@ export class Thalamus {
 	 * @param {number} memoryDepth - Current sliding-window depth (age count)
 	 * @param {Array<Set<number>>} sensoryNeurons - Active sensory neuron ids by age (level 0)
 	 * @param {Array<Map>} rewards - Rewards by age (rewards[0] = current frame)
-	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron IDs by channel
 	 * @param {number} frameNumber - Current frame number
 	 * @param {Set<number>} newErrorPatternIds - Accumulator of error pattern ids created this frame (mutated)
 	 * @param {number} errorCorrectionThreshold - Event-error ratio above which a correction is created
 	 * @returns {{activations: Array<{parentId, patternId, age, deathFrame}>, votes: Array}}
 	 */
-	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
+	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
 
 		// pass 1: aggregate per-neuron work, build level context and per-age voting context, pre-create corrections
 		const { tasks, levelContext, contextByAge } = this.buildLevelTasks(
 			level, levelNeurons, memoryDepth, sensoryNeurons, rewards,
-			channelActionIds, newErrorPatternIds, errorCorrectionThreshold
+			newErrorPatternIds, errorCorrectionThreshold
 		);
 
 		// pass 2: dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
-		const results = this.dispatchFrame(tasks, levelContext, contextByAge, sensoryNeurons[0], rewards[0], channelActionIds, frameNumber);
+		const results = this.dispatchFrame(tasks, levelContext, contextByAge, sensoryNeurons[0], rewards[0], frameNumber);
 
 		// pass 3: applyFrameResults - batch contextRef updates by target, register deaths, collect activations + votes
 		const { activations, votes } = this.applyFrameResults(results, levelNeurons);
@@ -435,7 +433,7 @@ export class Thalamus {
 	 * patterns created earlier this frame receive voting-only tasks.
 	 * @returns {{tasks: Array, levelContext: Context, contextByAge: Map<number, Array<{neuronId, distance}>>}}
 	 */
-	buildLevelTasks(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, newErrorPatternIds, errorCorrectionThreshold) {
+	buildLevelTasks(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, newErrorPatternIds, errorCorrectionThreshold) {
 		const tasks = [];
 		const levelContext = new Context();
 		const contextByAge = new Map();
@@ -458,7 +456,7 @@ export class Thalamus {
 			const isNewErrorPattern = newErrorPatternIds.has(neuronId);
 
 			// loop through the ages and determine the task needed for the neuron
-			const task = this.getNeuronTask(neuronId, level, levelContext, ageStates, memoryDepth, sensoryNeurons, rewards, channelActionIds, errorCorrectionThreshold, isNewErrorPattern);
+			const task = this.getNeuronTask(neuronId, level, levelContext, ageStates, memoryDepth, sensoryNeurons, rewards, errorCorrectionThreshold, isNewErrorPattern);
 
 			// also return the created pattern neuron id so that we can suppress it in higher level
 			for (const correction of task.corrections) newErrorPatternIds.add(correction.patternId);
@@ -475,7 +473,7 @@ export class Thalamus {
 	 * error correction at its own level - only voting (empty connections ⇒ empty votes) runs,
 	 * which preserves state.context for next frame's error-correction check.
 	 */
-	getNeuronTask(neuronId, level, levelContext, ageStates, memoryDepth, sensoryNeurons, rewards, channelActionIds, errorCorrectionThreshold, isNewErrorPattern) {
+	getNeuronTask(neuronId, level, levelContext, ageStates, memoryDepth, sensoryNeurons, rewards, errorCorrectionThreshold, isNewErrorPattern) {
 		const learnerAges = [];
 		const recognizerAges = [];
 		const votingAges = [];
@@ -500,7 +498,7 @@ export class Thalamus {
 			// create an error correction pattern for this (neuron, age) if previous votes mismatched reality
 			if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0], errorCorrectionThreshold))
 				corrections.push({
-					patternId: this.createPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards, channelActionIds),
+					patternId: this.createPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards),
 					age,
 					contextEntries: state.context.map(c => ({ neuronId: c.neuronId, distance: c.distance }))
 				});
@@ -512,7 +510,7 @@ export class Thalamus {
 	 * Pass 2: dispatch exactly one neuron.processFrame call per active neuron.
 	 * Returns raw results tagged with parentId for post-processing.
 	 */
-	dispatchFrame(tasks, levelContext, contextByAge, age0, currentRewards, channelActionIds, frameNumber) {
+	dispatchFrame(tasks, levelContext, contextByAge, age0, currentRewards, frameNumber) {
 
 		// decorate age=0 sensory neurons with channel + pre-resolved reward (MPI-ready: neuron doesn't need type)
 		const newActiveNeurons = [];
@@ -527,7 +525,7 @@ export class Thalamus {
 		for (const { neuronId, learnerAges, recognizerAges, votingAges, corrections } of tasks) {
 			const result = this.neurons.get(neuronId).processFrame(
 				learnerAges, recognizerAges, votingAges, levelContext, contextByAge,
-				newActiveNeurons, channelActionIds, frameNumber, corrections
+				newActiveNeurons, frameNumber, corrections
 			);
 			results.push({ parentId: neuronId, ...result });
 		}
@@ -678,20 +676,6 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get channel action neuron IDs as a Map
-	 * @returns {Map<string, Set<number>>} - Map of channel name to action neuron IDs
-	 */
-	getChannelActionIds() {
-		const result = new Map();
-		for (const [channelName, actionNeurons] of this.channelActions) {
-			const ids = new Set();
-			for (const id of actionNeurons) ids.add(id);
-			result.set(channelName, ids);
-		}
-		return result;
-	}
-
-	/**
 	 * Execute actions for channels that have them
 	 * Groups channels by type and calls static executeChannelActions on each channel class
 	 * @param {Array} inferredNeurons - Array of { neuronId, strength, reward, probability } from memory
@@ -730,8 +714,10 @@ export class Thalamus {
 	 */
 	initializeActionNeurons() {
 
-		// get points for the channel's action neurons and add them to the channel's action set for exploration
-		const channelActions = new Map();
+		// populate this.channelActions in place — neurons hold a live reference to this map,
+		// so we must not reassign it. Action neurons are created once at startup; the map is
+		// static thereafter and can be broadcast once in the future MPI setup.
+		this.channelActions.clear();
 		for (const [channelName, channel] of this.getChannels()) {
 
 			// get or create the action neurons for the channel
@@ -740,7 +726,7 @@ export class Thalamus {
 				actionNeurons.add(this.getNeuronIdForPoint(coordinates, channelName, 'action'));
 
 			// add channel's action neurons to the channelActions map
-			channelActions.set(channelName, actionNeurons);
+			this.channelActions.set(channelName, actionNeurons);
 			if (this.debug) console.log(`Created ${actionNeurons.size} action neurons for ${channelName}`);
 
 			// set the default action for the channel (if one exists)
@@ -748,9 +734,6 @@ export class Thalamus {
 			if (defaultActionCoords !== null)
 				this.channelDefaultActions.set(channelName, this.getNeuronIdForPoint(defaultActionCoords, channelName, 'action'));
 		}
-
-		// set channel actions for exploration
-		this.channelActions = channelActions;
 	}
 
 	/**

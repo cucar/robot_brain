@@ -70,9 +70,11 @@ export class Database {
 	 * Load a complete brain snapshot from MySQL (channels, dimensions, and neurons).
 	 * Returns the same format as thalamus.getSnapshot().
 	 * @param {Map} channelClasses - Map of channel name to channel class
+	 * @param {Map<string, Set<number>>} channelActionIds - Live reference to thalamus's channelActions Map,
+	 *   passed into every restored neuron so alternative-action lookup works without per-frame argument threading.
 	 * @returns {Promise<{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels: Map, channelNameToId: Object, dimensionNameToId: Object}>}
 	 */
-	async loadSnapshot(channelClasses) {
+	async loadSnapshot(channelClasses, channelActionIds) {
 
 		const { channels, channelNameToId, channelIdToName } = await this.loadChannels(channelClasses);
 
@@ -81,7 +83,7 @@ export class Database {
 
 		// Load neurons (dimension maps must be built first — coordinate loading needs dimension ID→name lookups)
 		console.log('Loading neurons from MySQL...');
-		const { neurons: neuronMap, levels: neuronLevelMap } = await this.loadNeuronsTable();
+		const { neurons: neuronMap, levels: neuronLevelMap } = await this.loadNeuronsTable(channelActionIds);
 
 		const { neuronChannels, neuronTypes } = await this.loadBaseNeurons(channelIdToName);
 		const neuronCoordinates = await this.loadCoordinates(dimensionIdToName);
@@ -109,7 +111,7 @@ export class Database {
 	/**
 	 * Load neurons table
 	 */
-	async loadNeuronsTable() {
+	async loadNeuronsTable(channelActionIds) {
 
 		// get the neurons from the database
 		const [rows] = await this.conn.query('SELECT id, level FROM neurons');
@@ -121,7 +123,7 @@ export class Database {
 		for (const row of rows) {
 
 			// create the neuron with its activation strength
-			const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, row.id);
+			const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, channelActionIds, row.id);
 			neurons.set(row.id, neuron);
 			levels.set(row.id, row.level);
 
