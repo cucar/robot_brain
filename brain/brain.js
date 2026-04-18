@@ -203,8 +203,6 @@ export default class Brain {
 	async processFrame() {
 		const frameStart = performance.now();
 
-		// ---------------------------- FRAME I/O ----------------------------------
-
 		// get the current frame from all channels - includes events and previously executed actions
 		await this.getFrame();
 		if (!this.frame || this.frame.length === 0) return false;
@@ -225,15 +223,11 @@ export default class Brain {
 		// activate sensory neurons in age=0, level=0 - inputs from the world
 		this.activateSensors();
 
-		// ---------------------------- PARALLEL PROCESSING START ----------------------------------
-
 		// process neurons level-by-level in parallel - collects votes inline per level
 		const votes = this.processLevels();
 
 		// do inferences with age>0 neurons - what's going to happen next? and what's our best response?
 		this.inferNeurons(votes);
-
-		// ---------------------------- PARALLEL PROCESSING END ----------------------------------
 
 		// execute the inferred actions in all channels
 		await this.executeActions();

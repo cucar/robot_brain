@@ -226,7 +226,7 @@ export class Neuron {
 	/**
 	 * Add a child pattern to the routing table and populate its context
 	 * @param {number} patternId - numeric neuron ID of the child pattern
-	 * @param {Array<{neuron: Neuron, distance: number}>} context - The context to add
+	 * @param {Array<{neuronId: number, distance: number}>} context - The context to add
 	 * @param {number} currentFrame - Current frame number for lazy decay and strengthening
 	 * @returns {number|null} Death frame for pattern neurons, null for sensory neurons
 	 */
@@ -410,71 +410,69 @@ export class Neuron {
 	}
 
 	/**
-	 * Process a frame for this neuron: learn connections, match patterns, and install
-	 * pre-created error-correction patterns. One call per active neuron per frame.
+	 * Process a frame for this neuron: learn connections, match patterns, install
+	 * pre-created error-correction patterns, and cast votes. One call per active neuron per frame.
 	 * Matching is skipped when levelContext is null/empty or recognizerAges is empty.
+	 * Votes are cast for each age in votingAges unless suppressed by a this-frame match
+	 * (with activate=true) or error-correction activation at the same age.
 	 * @param {Array<number>} learnerAges - Ages at which this neuron is active (for connection learning)
 	 * @param {Array<number>} recognizerAges - Ages eligible for pattern matching (subset of activeAges)
+	 * @param {Array<number>} votingAges - Ages eligible for voting (pre-filtered by caller for carryover suppression)
 	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
+	 * @param {Map<number, Array<{neuron: Neuron, distance: number}>>} contextByAge - Per-age voting context for storage
 	 * @param {Array<{id: number, channel: string, reward: number}>} actives - Age=0 sensory neurons with pre-resolved rewards
 	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 * @param {number} currentFrame - Current frame number
-	 * @param {Array<{patternNeuron: Neuron, age: number, contextEntries: Array<{neuronId, distance}>}>} corrections
+	 * @param {Array<{patternId: number, age: number, contextEntries: Array<{neuronId, distance}>}>} corrections
 	 *        Pre-created error-correction pattern neurons to install as children at the given ages.
-	 * @returns {{ matches, correctionActivations, contextRefUpdates }}
+	 * @returns {{ matches, correctionActivations, contextRefUpdates, votes }}
+	 *          votes: Array<{age, votes, context}> - one entry per non-suppressed voting age
 	 */
-	processFrame(learnerAges, recognizerAges, levelContext, actives, channelActionIds, currentFrame, corrections = []) {
+	processFrame(learnerAges, recognizerAges, votingAges, levelContext, contextByAge, actives, channelActionIds, currentFrame, corrections = []) {
 
 		// learn connections across all active ages (age=0 skipped internally)
 		this.learnConnections(learnerAges, actives, channelActionIds);
 
 		// match patterns if we have context and eligible ages
-		let matches = [];
-		let contextRefUpdates = [];
-		if (levelContext && levelContext.size > 0 && recognizerAges.length > 0) {
-			const res = this.matchPatterns(levelContext, recognizerAges, currentFrame);
-			matches = res.matches;
-			contextRefUpdates = res.contextRefUpdates;
-		}
+		const { matches, contextRefUpdates: matchRefs } = this.recognizePatterns(recognizerAges, levelContext, currentFrame);
 
 		// install pre-created error-correction patterns as children and emit their contextRef adds
-		const correctionActivations = [];
-		for (const { patternId, age, contextEntries } of corrections) {
-			const deathFrame = this.addPattern(patternId, contextEntries, currentFrame);
-			correctionActivations.push({ patternId, age, deathFrame });
-			for (const { neuronId, distance } of contextEntries)
-				contextRefUpdates.push({ type: 'add', neuronId, distance });
-		}
+		const { correctionActivations, contextRefUpdates: correctionRefs } = this.correctErrors(corrections, currentFrame);
 
-		return { matches, correctionActivations, contextRefUpdates };
+		// cast votes for each eligible age, suppressing any ages that activated a pattern
+		const votes = this.generateVotes(votingAges, contextByAge, matches, correctionActivations);
+
+		// return frame processing results
+		return { matches, correctionActivations, contextRefUpdates: [...matchRefs, ...correctionRefs], votes };
 	}
 
 	/**
-	 * Find matching patterns for this parent neuron given the observed context.
-	 * The neuron is called once per frame with all active ages. For each age that matches,
-	 * the matched pattern's context is refined immediately. Cross-neuron contextRef additions
-	 * and removals are returned for delivery in a separate post-match phase.
-	 * If the same child pattern matches at multiple ages for this parent, all refined matches
-	 * are returned in order so side effects remain identical, but only the first match is
-	 * flagged as an activation candidate.
-	 * @param {Context} observed - The level context (distances are absolute ages)
-	 * @param {Array<number>} activeAges - Ages at which this neuron is active (sorted ascending)
+	 * Find matching patterns for this parent neuron given the observed level context.
+	 * For each age that matches, the matched pattern's context is refined immediately.
+	 * Cross-neuron contextRef additions and removals are returned for delivery in a separate
+	 * post-match phase. If the same child pattern matches at multiple ages for this parent,
+	 * all refined matches are returned in order so side effects remain identical, but only
+	 * the first match is flagged as an activation candidate. Matching is skipped entirely
+	 * when levelContext is null/empty or recognizerAges is empty.
+	 * @param {Array<number>} recognizerAges - Ages eligible for pattern matching (sorted ascending)
+	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
 	 * @param {number} currentFrame - Current frame number for lazy decay
 	 * @returns {{
 	 *   matches: Array<{ patternId, age, score, common, missing, novel, removedRefs, activate, deathFrame }>,
 	 *   contextRefUpdates: Array<{ type: 'add'|'remove', neuronId, distance }>
 	 * }}
 	 */
-	matchPatterns(observed, activeAges, currentFrame) {
+	recognizePatterns(recognizerAges, levelContext, currentFrame) {
 		const matches = [];
 		const contextRefUpdates = [];
+		if (!levelContext || levelContext.size === 0 || recognizerAges.length === 0) return { matches, contextRefUpdates };
 		const activatedPatternIds = new Set();
-		for (const age of activeAges) {
+		for (const age of recognizerAges) {
 
 			// active ages are processed in ascending order (most recent first). The first age that
 			// produces a match at that age is refined and preserved. More recent ages tend to have
 			// the richest available context, so they are processed first.
-			const best = this.findBestPatternMatchAtAge(observed, age, currentFrame);
+			const best = this.findBestPatternMatchAtAge(levelContext, age, currentFrame);
 			if (!best) continue; // try older age if there is a match
 
 			// refine the context — returns cross-neuron contextRef side effects for later delivery
@@ -495,6 +493,61 @@ export class Neuron {
 			matches.push(best);
 		}
 		return { matches, contextRefUpdates };
+	}
+
+	/**
+	 * Install pre-created error-correction pattern neurons as children at the given ages.
+	 * Each install adds a child pattern entry to the routing table and emits contextRef adds
+	 * for every context entry so target neurons can track this parent.
+	 * @param {Array<{patternId: number, age, contextEntries: Array<{neuronId: number, distance: number }>}>} corrections
+	 * @param {number} currentFrame - Current frame number for lazy decay / death scheduling
+	 * @returns {{
+	 *   correctionActivations: Array<{patternId, age, deathFrame}>,
+	 *   contextRefUpdates: Array<{type: 'add', neuronId, distance}>
+	 * }}
+	 */
+	correctErrors(corrections, currentFrame) {
+		const correctionActivations = [];
+		const contextRefUpdates = [];
+		for (const { patternId, age, contextEntries } of corrections) {
+
+			// add the pattern to the routing table
+			const deathFrame = this.addPattern(patternId, contextEntries, currentFrame);
+
+			// add the pattern to the activations to be returned with its death frame
+			correctionActivations.push({ patternId, age, deathFrame });
+
+			// also update the context reference updates to be returned for the new patterns
+			for (const { neuronId, distance } of contextEntries)
+				contextRefUpdates.push({ type: 'add', neuronId, distance });
+		}
+		return { correctionActivations, contextRefUpdates };
+	}
+
+	/**
+	 * Cast votes for each eligible age, suppressing any age that activated a pattern this
+	 * frame via either a recognition match (activate=true) or an error-correction install.
+	 * @param {Array<number>} votingAges - Ages eligible for voting (pre-filtered by caller)
+	 * @param {Map<number, Array<{neuron: Neuron, distance: number}>>} contextByAge - Per-age voting context for storage
+	 * @param {Array<{patternId, age, activate}>} matches - This frame's recognition matches
+	 * @param {Array<{patternId, age}>} correctionActivations - This frame's error-correction installs
+	 * @returns {Array<{age, votes, context}>} One entry per non-suppressed voting age
+	 */
+	generateVotes(votingAges, contextByAge, matches, correctionActivations) {
+		if (votingAges.length === 0) return [];
+
+		// determine the suppressed ages based on recognized patterns and error creations
+		const suppressedAges = new Set();
+		for (const m of matches) if (m.activate) suppressedAges.add(m.age);
+		for (const c of correctionActivations) suppressedAges.add(c.age);
+
+		// generate votes for the non-suppressed voting ages
+		const votes = [];
+		for (const age of votingAges) {
+			if (suppressedAges.has(age)) continue;
+			votes.push({ age, votes: this.vote(age), context: contextByAge.get(age) ?? [] });
+		}
+		return votes;
 	}
 
 	/**
