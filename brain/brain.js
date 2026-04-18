@@ -375,22 +375,16 @@ export default class Brain {
 
 		// loop over the active neurons in memory and index them for processing
 		const events = new Set();
-		const corrections = [];
 		const newActiveNeurons = [];
 		const sensoryNeurons = [];
-		let maxActiveLevel = 0;
 		for (let age = 0; age < this.memory.depth; age++) {
 			const ageNeurons = [];
 			for (const neuronId of this.memory.getNeuronIdsAtAge(age)) {
-				const state = this.memory.getState(neuronId, age);
 
 				// get the neuron properties
 				const level = this.thalamus.getNeuronLevel(neuronId);
 				const type = this.thalamus.getNeuronType(neuronId);
 				const channel = this.thalamus.getNeuronChannel(neuronId);
-
-				// set the max active level in memory if needed
-				maxActiveLevel = Math.max(maxActiveLevel, level);
 
 				// Get newly active sensory neurons (age=0, level=0) with metadata for connection learning
 				if (level === 0 && age === 0) newActiveNeurons.push({ id: neuronId, type, channel });
@@ -400,19 +394,17 @@ export default class Brain {
 
 				// get active sensory neurons (level=0) in the age
 				if (level === 0) ageNeurons.push({ id: neuronId, type, channel });
-
-				// check for each neuron if it needs a new error correction pattern
-				// if the neuron needs error correction, add it to the list
-				// age=0 neurons cannot need correction because they are just voting now
-				if (age > 0 && this.needsErrorCorrection(state.votes, events))
-					corrections.push({ neuronId, age, context: state.context });
 			}
 			// Get active sensory neurons (level=0) indexed by age
 			sensoryNeurons.push(ageNeurons);
 		}
 
+		// Get the maximum active level from memory index - this may increase as we process levels
+		let maxActiveLevel = this.memory.getMaxActiveLevel();
+
 		// process neurons level-by-level - each level in parallel
 		let level = 0;
+		const corrections = [];
 		while (true) {
 			if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
@@ -423,10 +415,16 @@ export default class Brain {
 				for (const neuronId of levelAges[age]) {
 					if (this.thalamus.skipActionNeuron(neuronId)) continue;
 					const state = this.memory.getState(neuronId, age);
+
+					// check for each neuron if it needs a new error correction pattern
+					// if the neuron needs error correction, add it to the list
+					if (this.needsErrorCorrection(age, state.votes, events))
+						corrections.push({ neuronId, age, context: state.context });
+
 					if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
 					const entry = levelNeurons.get(neuronId);
 					entry.activeAges.push(age);
-					if (state.activatedPatternId === null && age !== this.memory.depth - 1) entry.recognizerAges.push(age);
+					if (!state.activatedPatternId && age !== this.memory.depth - 1) entry.recognizerAges.push(age);
 				}
 
 			// process level: recognize patterns and learn connections
@@ -474,7 +472,10 @@ export default class Brain {
 	 * based on its inferences in the previous frame and the actual events in the current frame
 	 * @returns {boolean} Whether error correction is needed
 	 */
-	needsErrorCorrection(votes, actualEvents) {
+	needsErrorCorrection(age, votes, actualEvents) {
+
+		// age=0 neurons cannot need correction because they are just voting now
+		if (age === 0) return false;
 
 		// if there are no votes from previous frame, no need for error correction
 		if (!votes || votes.length === 0) return false;

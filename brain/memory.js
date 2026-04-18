@@ -208,4 +208,12 @@ export class Memory {
 			if (this.neuronStates.has(pattern.id))
 				throw new Error(`BUG: deleting active neuron ${pattern.id}`);
 	}
+
+	/**
+	 * Get the maximum active level from the level index
+	 * @returns {number} The highest level that has any active neurons
+	 */
+	getMaxActiveLevel() {
+		return this.levelIndex.size;
+	}
 }
