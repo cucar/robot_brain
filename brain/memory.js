@@ -109,6 +109,20 @@ export class Memory {
 	}
 
 	/**
+	 * Returns active neurons at a given level as a flat list of {neuronId, age, state}
+	 * entries in age-ascending order (activation order within age).
+	 */
+	getLevelNeurons(level) {
+		const entries = [];
+		const levelAges = this.levelIndex.get(level);
+		if (!levelAges) return entries;
+		for (let age = 0; age < levelAges.length; age++)
+			for (const neuronId of levelAges[age])
+				entries.push({ neuronId, age, state: this.neuronStates.get(neuronId).get(age) });
+		return entries;
+	}
+
+	/**
 	 * Get the state for a neuron at a specific age.
 	 */
 	getState(neuronId, age) {

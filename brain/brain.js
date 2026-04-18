@@ -391,37 +391,27 @@ export default class Brain {
 			// Build the level view from memory's level index (age-ascending, activation-order within age).
 			const levelNeurons = new Map();
 			const corrections = [];
-			const levelAges = this.memory.getLevelAges(level);
-			for (let age = 0; age < levelAges.length; age++)
-				for (const neuronId of levelAges[age]) {
+			for (const { neuronId, age, state } of this.memory.getLevelNeurons(level)) {
 
-					if (this.thalamus.skipActionNeuron(neuronId)) continue;
+				if (this.thalamus.skipActionNeuron(neuronId)) continue;
 
-					// skip error patterns created during this frame - preserves prior behavior
-					// where corrections ran after the level loop (no re-learning, no context leak)
-					if (newErrorPatternIds.has(neuronId)) continue;
+				// skip error patterns created during this frame - preserves prior behavior
+				// where corrections ran after the level loop (no re-learning, no context leak)
+				if (newErrorPatternIds.has(neuronId)) continue;
 
-					const state = this.memory.getState(neuronId, age);
+				// check for each neuron if it needs a new error correction pattern
+				// if the neuron needs error correction, add it to the list
+				if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0]))
+					corrections.push({ neuronId, age, context: state.context });
 
-					// check for each neuron if it needs a new error correction pattern
-					// if the neuron needs error correction, add it to the list
-					if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0]))
-						corrections.push({ neuronId, age, context: state.context });
-
-					if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
-					const entry = levelNeurons.get(neuronId);
-					entry.activeAges.push(age);
-					if (!state.activatedPatternId && age !== this.memory.depth - 1) entry.recognizerAges.push(age);
-				}
+				if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
+				const entry = levelNeurons.get(neuronId);
+				entry.activeAges.push(age);
+				if (!state.activatedPatternId && age !== this.memory.depth - 1) entry.recognizerAges.push(age);
+			}
 
 			// process level: recognize patterns and learn connections
 			const matches = this.thalamus.processLevel(levelNeurons, sensoryNeurons[0], this.rewards[0], channelActionIds, this.frameNumber);
-
-			// Activate matched patterns in memory — they land one level above
-			for (const { parentId, patternId, age } of matches) this.memory.activatePattern(patternId, level + 1, parentId, age);
-
-			// if we recognized some patterns, increment the max active level as needed
-			if (matches.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
 
 			// learn new patterns for failed predictions at this level - create pattern
 			// neurons and populate their connections from the future
@@ -434,15 +424,21 @@ export default class Brain {
 				// ask thalamus to create and wire the new pattern neuron
 				const pattern = this.thalamus.addPatternNeuron(level + 1, neuronId, age, sensoryNeurons, this.rewards, mappedContext, this.frameNumber);
 
-				// activate the pattern neuron at the parent's age
-				this.memory.activatePattern(pattern.id, level + 1, neuronId, age);
-
 				// update the context references of the neurons that were used in new contexts
 				for (const c of levelContext) c.neuron.addContextRef(neuronId, c.distance);
+
+				// activate the pattern neuron at the parent's age
+				this.memory.activatePattern(pattern.id, level + 1, neuronId, age);
 
 				// exclude this new pattern when we build the level view for level+1
 				newErrorPatternIds.add(pattern.id);
 			}
+
+			// Activate matched patterns in memory — they land one level above
+			for (const { parentId, patternId, age } of matches) this.memory.activatePattern(patternId, level + 1, parentId, age);
+
+			// if we recognized some patterns, increment the max active level as needed
+			if (matches.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
 
 			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
 			if (level >= maxActiveLevel) break;
