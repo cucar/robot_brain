@@ -10,10 +10,10 @@ describe('Thalamus reapDeadNeurons', () => {
 		thalamus.registerDeath(dueNow.id, 10);
 		thalamus.registerDeath(dueLater.id, 11);
 
-		assert.deepStrictEqual(thalamus.reapDeadNeurons(10), [dueNow]);
+		assert.deepStrictEqual(thalamus.reapDeadNeurons(10), [dueNow.id]);
 		assert.equal(thalamus.neuronDeathFrame.has(dueNow.id), false);
 		assert.equal(thalamus.neuronDeathFrame.get(dueLater.id), 11);
 		assert.deepStrictEqual(thalamus.reapDeadNeurons(10), []);
-		assert.deepStrictEqual(thalamus.reapDeadNeurons(11), [dueLater]);
+		assert.deepStrictEqual(thalamus.reapDeadNeurons(11), [dueLater.id]);
 	});
 });

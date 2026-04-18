@@ -203,12 +203,13 @@ export class Memory {
 	}
 
 	/**
-	 * Verify that none of the deleted patterns are currently active.
+	 * Verify that none of the deleted pattern ids are currently active.
+	 * @param {Array<number>} deletedPatternIds
 	 */
-	assertNotActive(deletedPatterns) {
-		for (const pattern of deletedPatterns)
-			if (this.neuronStates.has(pattern.id))
-				throw new Error(`BUG: deleting active neuron ${pattern.id}`);
+	assertNotActive(deletedPatternIds) {
+		for (const patternId of deletedPatternIds)
+			if (this.neuronStates.has(patternId))
+				throw new Error(`BUG: deleting active neuron ${patternId}`);
 	}
 
 	/**

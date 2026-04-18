@@ -4,23 +4,23 @@ import Brain from '../brain/brain.js';
 describe('Brain cleanupDeadPatterns', () => {
 	it('reaps the previous frame bucket after getFrame increments frameNumber', () => {
 		const calls = [];
-		const deletedPatterns = [{ id: 9001 }];
+		const deletedPatternIds = [9001];
 		const fakeBrain = {
 			frameNumber: 10,
 			debug: false,
 			thalamus: {
 				reapDeadNeurons(frame) {
 					calls.push(['reap', frame]);
-					return ['dead-pattern'];
+					return [8001];
 				},
-				deletePatterns(patterns, frame) {
-					calls.push(['delete', patterns, frame]);
-					return deletedPatterns;
+				deletePatterns(patternIds, frame) {
+					calls.push(['delete', patternIds, frame]);
+					return deletedPatternIds;
 				}
 			},
 			memory: {
-				assertNotActive(patterns) {
-					calls.push(['assertNotActive', patterns]);
+				assertNotActive(patternIds) {
+					calls.push(['assertNotActive', patternIds]);
 				}
 			}
 		};
@@ -29,8 +29,8 @@ describe('Brain cleanupDeadPatterns', () => {
 
 		assert.deepStrictEqual(calls, [
 			['reap', 10],
-			['delete', ['dead-pattern'], 10],
-			['assertNotActive', deletedPatterns]
+			['delete', [8001], 10],
+			['assertNotActive', deletedPatternIds]
 		]);
 	});
 });

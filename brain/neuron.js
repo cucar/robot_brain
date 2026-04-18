@@ -419,7 +419,7 @@ export class Neuron {
 	 * @param {Array<number>} recognizerAges - Ages eligible for pattern matching (subset of activeAges)
 	 * @param {Array<number>} votingAges - Ages eligible for voting (pre-filtered by caller for carryover suppression)
 	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
-	 * @param {Map<number, Array<{neuron: Neuron, distance: number}>>} contextByAge - Per-age voting context for storage
+	 * @param {Map<number, Array<{neuronId: number, distance: number}>>} contextByAge - Per-age voting context for storage
 	 * @param {Array<{id: number, channel: string, reward: number}>} actives - Age=0 sensory neurons with pre-resolved rewards
 	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 * @param {number} currentFrame - Current frame number
@@ -528,7 +528,7 @@ export class Neuron {
 	 * Cast votes for each eligible age, suppressing any age that activated a pattern this
 	 * frame via either a recognition match (activate=true) or an error-correction install.
 	 * @param {Array<number>} votingAges - Ages eligible for voting (pre-filtered by caller)
-	 * @param {Map<number, Array<{neuron: Neuron, distance: number}>>} contextByAge - Per-age voting context for storage
+	 * @param {Map<number, Array<{neuronId: number, distance: number}>>} contextByAge - Per-age voting context for storage
 	 * @param {Array<{patternId, age, activate}>} matches - This frame's recognition matches
 	 * @param {Array<{patternId, age}>} correctionActivations - This frame's error-correction installs
 	 * @returns {Array<{age, votes, context}>} One entry per non-suppressed voting age

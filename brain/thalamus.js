@@ -234,16 +234,16 @@ export class Thalamus {
 
 	/**
 	 * Get inferred actions grouped by channel from the given inferences.
-	 * @param {Array<{neuron, strength, reward}>} inferences - Inferred neurons from memory
+	 * @param {Array<{neuronId, strength, reward}>} inferences - Inferred neurons from memory
 	 * @returns {Map<string, Array>} - Map of channel name to array of {coordinates, strength, reward}
 	 */
 	getInferredActions(inferences) {
 		const channelOutputs = new Map();
-		for (const { neuron, strength, reward } of inferences) {
-			if (this.getNeuronType(neuron.id) !== 'action') continue;
-			const channel = this.getNeuronChannel(neuron.id);
+		for (const { neuronId, strength, reward } of inferences) {
+			if (this.getNeuronType(neuronId) !== 'action') continue;
+			const channel = this.getNeuronChannel(neuronId);
 			if (!channelOutputs.has(channel)) channelOutputs.set(channel, []);
-			channelOutputs.get(channel).push({ coordinates: this.getNeuronCoordinates(neuron.id), strength, reward });
+			channelOutputs.get(channel).push({ coordinates: this.getNeuronCoordinates(neuronId), strength, reward });
 		}
 		return channelOutputs;
 	}
@@ -256,9 +256,8 @@ export class Thalamus {
 	getActiveEvents(activeNeuronIds) {
 		const result = new Map();
 		for (const neuronId of activeNeuronIds) {
-			const neuron = this.neurons.get(neuronId);
-			if (!neuron || this.getNeuronType(neuronId) !== 'event') continue;
-			const channel = this.getNeuronChannel(neuron.id);
+			if (this.getNeuronType(neuronId) !== 'event') continue;
+			const channel = this.getNeuronChannel(neuronId);
 			if (!result.has(channel)) result.set(channel, []);
 			result.get(channel).push(this.getNeuronCoordinates(neuronId));
 		}
@@ -267,13 +266,13 @@ export class Thalamus {
 
 	/**
 	 * Get inferences with channel metadata attached.
-	 * @param {Array<{neuron, strength}>} inferredNeurons - Inferred neurons from memory
-	 * @returns {Array<{neuron, strength, channel}>} - Inferences with channel
+	 * @param {Array<{neuronId, strength}>} inferredNeurons - Inferred neurons from memory
+	 * @returns {Array<{neuronId, strength, channel, type, coordinates}>} - Inferences with channel
 	 */
 	getInferences(inferredNeurons) {
 		const inferences = [];
-		for (const { neuron, strength } of inferredNeurons)
-			inferences.push({ neuron, strength, channel: this.getNeuronChannel(neuron.id), type: this.getNeuronType(neuron.id), coordinates: this.getNeuronCoordinates(neuron.id) });
+		for (const { neuronId, strength } of inferredNeurons)
+			inferences.push({ neuronId, strength, channel: this.getNeuronChannel(neuronId), type: this.getNeuronType(neuronId), coordinates: this.getNeuronCoordinates(neuronId) });
 		return inferences;
 	}
 
@@ -315,8 +314,7 @@ export class Thalamus {
 			for (const [patternId, ctx] of neuron.routingTable) {
 				neuron.materializeChildStrength(patternId, currentFrame);
 				ctx.lastActivationFrame = 0;
-				const pattern = this.neurons.get(patternId);
-				if (pattern) this.registerDeath(pattern.id, Math.ceil(ctx.activationStrength / neuron.patternForgetRate));
+				this.registerDeath(patternId, Math.ceil(ctx.activationStrength / neuron.patternForgetRate));
 			}
 		}
 	}
@@ -435,7 +433,7 @@ export class Thalamus {
 	 * error-correction pattern neurons for any (neuron, age) whose previous votes mismatched
 	 * reality. New correction pattern ids are added to newErrorPatternIds (mutated); error
 	 * patterns created earlier this frame receive voting-only tasks.
-	 * @returns {{tasks: Array, levelContext: Context, contextByAge: Map<number, Array<{neuron, distance}>>}}
+	 * @returns {{tasks: Array, levelContext: Context, contextByAge: Map<number, Array<{neuronId, distance}>>}}
 	 */
 	buildLevelTasks(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, newErrorPatternIds, errorCorrectionThreshold) {
 		const tasks = [];
@@ -448,12 +446,11 @@ export class Thalamus {
 
 			// contribute to the per-age voting context regardless of newErrorPatternIds
 			// (newly-created patterns at age 0 don't contribute - ctxAge=0 is skipped)
-			const neuron = this.neurons.get(neuronId);
 			for (const ctxAge of ageStates.keys()) {
 				if (ctxAge === 0) continue;
 				for (let age = 0; age < ctxAge; age++) {
 					if (!contextByAge.has(age)) contextByAge.set(age, []);
-					contextByAge.get(age).push({ neuron, distance: ctxAge - age });
+					contextByAge.get(age).push({ neuronId, distance: ctxAge - age });
 				}
 			}
 
@@ -505,7 +502,7 @@ export class Thalamus {
 				corrections.push({
 					patternId: this.createPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards, channelActionIds),
 					age,
-					contextEntries: state.context.map(c => ({ neuronId: c.neuron.id, distance: c.distance }))
+					contextEntries: state.context.map(c => ({ neuronId: c.neuronId, distance: c.distance }))
 				});
 		}
 		return { neuronId, learnerAges, recognizerAges, votingAges, corrections };
@@ -579,18 +576,14 @@ export class Thalamus {
 				activations.push({ parentId, patternId, age, deathFrame });
 			}
 
-			// flush per-age votes: write state.votes/state.context for storage, resolve neurons for consensus
+			// flush per-age votes: write state.votes/state.context for storage, collect id-only votes for consensus
 			if (perAgeVotes && perAgeVotes.length > 0) {
-				const voter = this.neurons.get(parentId);
 				const ageStates = levelNeurons.get(parentId);
 				for (const { age, votes: ageVotes, context } of perAgeVotes) {
 					const state = ageStates.get(age);
 					state.votes = ageVotes;
 					state.context = context;
-					for (const vote of ageVotes) {
-						const neuron = this.neurons.get(vote.neuronId);
-						if (neuron) votes.push({ voter, neuron, ...vote });
-					}
+					for (const vote of ageVotes) votes.push({ voterId: parentId, ...vote });
 				}
 			}
 		}
@@ -676,9 +669,9 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get action neurons for a channel
+	 * Get default action neuron id for a channel
 	 * @param {string} channelName - Channel name
-	 * @returns {Neuron} - Set of action neurons or undefined
+	 * @returns {number|undefined} - Default action neuron id or undefined
 	 */
 	getChannelDefaultAction(channelName) {
 		return this.channelDefaultActions.get(channelName);
@@ -701,7 +694,7 @@ export class Thalamus {
 	/**
 	 * Execute actions for channels that have them
 	 * Groups channels by type and calls static executeChannelActions on each channel class
-	 * @param {Array} inferredNeurons - Array of { neuron, strength, reward, probability } from memory
+	 * @param {Array} inferredNeurons - Array of { neuronId, strength, reward, probability } from memory
 	 */
 	async executeChannelActions(inferredNeurons) {
 
@@ -712,8 +705,8 @@ export class Thalamus {
 
 		// Add inferred neurons to their channels
 		for (const inference of inferredNeurons) {
-			const inferences = channelInferences.get(this.getNeuronChannel(inference.neuron.id));
-			const type = this.getNeuronType(inference.neuron.id);
+			const inferences = channelInferences.get(this.getNeuronChannel(inference.neuronId));
+			const type = this.getNeuronType(inference.neuronId);
 			if (type === 'action') inferences.actions.push(inference);
 			else if (type === 'event') inferences.events.push(inference);
 		}
@@ -752,10 +745,8 @@ export class Thalamus {
 
 			// set the default action for the channel (if one exists)
 			const defaultActionCoords = channel.getDefaultAction();
-			if (defaultActionCoords !== null) {
-				const defaultAction = this.neurons.get(this.getNeuronIdForPoint(defaultActionCoords, channelName, 'action'));
-				this.channelDefaultActions.set(channelName, defaultAction);
-			}
+			if (defaultActionCoords !== null)
+				this.channelDefaultActions.set(channelName, this.getNeuronIdForPoint(defaultActionCoords, channelName, 'action'));
 		}
 
 		// set channel actions for exploration
@@ -833,7 +824,8 @@ export class Thalamus {
 	/**
 	 * Reap neurons scheduled to die at the given frame.
 	 * Assumes cleanup runs for every frame in order with no skips.
-	 * Returns array of dead neurons and removes them from the ledger.
+	 * Returns array of dead neuron ids and removes them from the ledger.
+	 * @returns {Array<number>}
 	 */
 	reapDeadNeurons(currentFrame) {
 
@@ -841,11 +833,10 @@ export class Thalamus {
 		const neuronIds = this.deathLedger.get(currentFrame);
 		if (!neuronIds) return []; // nothing to do if no neurons dying
 
-		// reap the dead neurons and return them
+		// reap the dead neuron ids and return them
 		const dead = [];
 		for (const neuronId of neuronIds) {
-			const neuron = this.neurons.get(neuronId);
-			if (neuron) dead.push(neuron);
+			if (this.neurons.has(neuronId)) dead.push(neuronId);
 			this.neuronDeathFrame.delete(neuronId);
 		}
 		this.deathLedger.delete(currentFrame);
@@ -855,48 +846,49 @@ export class Thalamus {
 	/**
 	 * Delete dead pattern neurons with recursive cascade.
 	 * When a pattern is deleted, other patterns that referenced it may become deletable too.
-	 * @param {Array<Neuron>} patterns - Initial list of patterns to delete
+	 * @param {Array<number>} patternIds - Initial list of pattern ids to delete
 	 * @param {number} currentFrame - Current frame number for lazy decay checks
-	 * @returns {Array<Neuron>} - All deleted patterns
+	 * @returns {Array<number>} - All deleted pattern ids
 	 */
-	deletePatterns(patterns, currentFrame) {
-		const toDelete = [...patterns];
-		const queuedIds = new Set(patterns.map(pattern => pattern.id));
-		const deletedPatterns = [];
-		const deletedIds = new Set();
+	deletePatterns(patternIds, currentFrame) {
+		const toDelete = [...patternIds];
+		const queuedIds = new Set(patternIds);
+		const deletedIds = [];
+		const deletedIdSet = new Set();
 
 		while (toDelete.length > 0) {
-			const pattern = toDelete.shift();
-			if (deletedIds.has(pattern.id)) continue;
+			const patternId = toDelete.shift();
+			if (deletedIdSet.has(patternId)) continue;
 
-			const newlyDeletable = this.deletePattern(pattern, currentFrame);
-			deletedPatterns.push(pattern);
-			deletedIds.add(pattern.id);
+			const newlyDeletable = this.deletePattern(patternId, currentFrame);
+			deletedIds.push(patternId);
+			deletedIdSet.add(patternId);
 
-			for (const newlyDeletablePattern of newlyDeletable) {
-				if (deletedIds.has(newlyDeletablePattern.id) || queuedIds.has(newlyDeletablePattern.id)) continue;
-				toDelete.push(newlyDeletablePattern);
-				queuedIds.add(newlyDeletablePattern.id);
+			for (const newlyDeletableId of newlyDeletable) {
+				if (deletedIdSet.has(newlyDeletableId) || queuedIds.has(newlyDeletableId)) continue;
+				toDelete.push(newlyDeletableId);
+				queuedIds.add(newlyDeletableId);
 			}
 		}
 
-		return deletedPatterns;
+		return deletedIds;
 	}
 
 	/**
 	 * Delete a pattern neuron and clean up all references to it.
-	 * Returns patterns that became deletable as a result of cleanup.
-	 * @param {Neuron} pattern - Pattern to delete
+	 * Returns pattern ids that became deletable as a result of cleanup.
+	 * @param {number} patternId - Id of the pattern to delete
 	 * @param {number} currentFrame - Current frame number for lazy decay checks
-	 * @returns {Array<Neuron>} - Patterns that became deletable after cleanup
+	 * @returns {Array<number>} - Pattern ids that became deletable after cleanup
 	 */
-	deletePattern(pattern, currentFrame) {
+	deletePattern(patternId, currentFrame) {
 
-		// ignore double delete requests
-		if (!this.neurons.has(pattern.id)) return [];
+		// ignore double delete requests - also the single cleanup-path lookup for this neuron
+		const pattern = this.neurons.get(patternId);
+		if (!pattern) return [];
 
 		// Clean up forward references: remove this pattern from its parent's context entries
-		const newlyDeletable = this.cleanupPatternFromParentContext(pattern);
+		const newlyDeletable = this.cleanupPatternFromParentContext(patternId);
 
 		// Clean up reverse references: remove this pattern from other parents' child contexts
 		const moreNewlyDeletable = this.cleanupPatternFromChildContexts(pattern, currentFrame);
@@ -912,7 +904,7 @@ export class Thalamus {
 		this.deregisterFromParent(pattern);
 
 		// Remove from death ledger
-		this.unregisterDeath(pattern.id);
+		this.unregisterDeath(patternId);
 
 		// Delete this pattern neuron from the index and decrement level count
 		this.removeFromIndexes(pattern);
@@ -925,22 +917,22 @@ export class Thalamus {
 
 	/**
 	 * Remove this pattern from its parent's context entries
-	 * @param {Neuron} pattern - Pattern being deleted
-	 * @returns {Array<Neuron>} - Patterns that became deletable after cleanup
+	 * @param {number} patternId - Pattern being deleted
+	 * @returns {Array<number>} - Pattern ids that became deletable after cleanup
 	 */
-	cleanupPatternFromParentContext(pattern) {
+	cleanupPatternFromParentContext(patternId) {
 		const newlyDeletable = [];
-		const parentId = this.neuronParents.get(pattern.id);
-		if (!parentId) throw new Error(`Cannot find parent of pattern for cleanup: ${pattern.id}`);
+		const parentId = this.neuronParents.get(patternId);
+		if (!parentId) throw new Error(`Cannot find parent of pattern for cleanup: ${patternId}`);
 		const parentNeuron = this.neurons.get(parentId);
 
 		// If parent was already deleted during cascade, its deletePattern already cleaned up
 		// all remaining children's contextRefs — nothing left for us to do.
 		if (parentNeuron)
-			for (const entry of parentNeuron.getPatternContext(pattern.id)) {
+			for (const entry of parentNeuron.getPatternContext(patternId)) {
 				const ctxNeuron = this.neurons.get(entry.neuronId);
 				if (!ctxNeuron) continue;
-				const isOrphaned = parentNeuron.removeContext(pattern.id, entry.neuronId, entry.distance);
+				const isOrphaned = parentNeuron.removeContext(patternId, entry.neuronId, entry.distance);
 				if (isOrphaned) ctxNeuron.removeContextRef(parentNeuron.id, entry.distance);
 			}
 
@@ -951,7 +943,7 @@ export class Thalamus {
 	 * Remove this pattern from other parents' children's contexts
 	 * @param {Neuron} pattern - Pattern being deleted
 	 * @param {number} currentFrame - Current frame number for lazy decay checks
-	 * @returns {Array<Neuron>} - Patterns that became deletable after cleanup
+	 * @returns {Array<number>} - Pattern ids that became deletable after cleanup
 	 */
 	cleanupPatternFromChildContexts(pattern, currentFrame) {
 		const newlyDeletable = [];
@@ -964,11 +956,10 @@ export class Thalamus {
 			// Remove this pattern from the parent's context and get affected child patterns
 			const affectedPatterns = referencingParent.removeContextNeuron(pattern.id, distances);
 			for (const patternId of affectedPatterns) {
-				const childPattern = this.neurons.get(patternId);
-				const parentId = this.neuronParents.get(patternId);
-				const parent = this.neurons.get(parentId);
-				if (childPattern && parent && parent.canDeleteChild(patternId, currentFrame, this.neuronLevels.get(patternId)))
-					newlyDeletable.push(childPattern);
+				if (!this.neurons.has(patternId)) continue;
+				const parent = this.neurons.get(this.neuronParents.get(patternId));
+				if (parent && parent.canDeleteChild(patternId, currentFrame, this.neuronLevels.get(patternId)))
+					newlyDeletable.push(patternId);
 			}
 		}
 

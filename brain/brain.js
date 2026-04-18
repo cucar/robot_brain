@@ -436,13 +436,13 @@ export default class Brain {
 		// call diagnostics to show the debug logs for votes - pre-resolve all neuron data
 		if (this.debug) {
 			const resolvedVotes = votes.map(v => ({
-				targetId: v.neuron.id,
-				targetType: this.thalamus.getNeuronType(v.neuron.id),
-				targetChannel: this.thalamus.getNeuronChannel(v.neuron.id),
-				targetCoords: this.thalamus.getNeuronCoordinates(v.neuron.id),
-				voterId: v.voter.id,
-				voterLevel: this.thalamus.getNeuronLevel(v.voter.id),
-				voterLabel: this.formatNeuronLabel(v.voter.id),
+				targetId: v.neuronId,
+				targetType: this.thalamus.getNeuronType(v.neuronId),
+				targetChannel: this.thalamus.getNeuronChannel(v.neuronId),
+				targetCoords: this.thalamus.getNeuronCoordinates(v.neuronId),
+				voterId: v.voterId,
+				voterLevel: this.thalamus.getNeuronLevel(v.voterId),
+				voterLabel: this.formatNeuronLabel(v.voterId),
 				strength: v.strength,
 				reward: v.reward,
 				distance: v.distance
@@ -459,7 +459,7 @@ export default class Brain {
 	 * Events win by strength, actions win by reward.
 	 * For events, reward = strength / totalDimensionStrength (likelihood vs alternatives = safety score)
 	 * @param {Array} votes - Array of vote objects accumulated by processLevels
-	 * @returns {Array} Array of winning inference objects {neuron_id, neuron, strength, reward}
+	 * @returns {Array} Array of winning inference objects {neuronId, strength, reward}
 	 */
 	determineConsensus(votes) {
 
@@ -480,27 +480,27 @@ export default class Brain {
 	 * @returns {{ candidates: Map, dimTotalStrength: Map }}
 	 */
 	aggregateVotes(votes) {
-		const candidates = new Map(); // neuronId -> {neuron, strength, weightedTotal}
+		const candidates = new Map(); // neuronId -> {strength, weightedTotal}
 		const dimTotalStrength = new Map(); // dimension -> totalStrength (for events only)
 		for (const v of votes) {
 
 			// add the neuron to the candidates if not seen before
-			if (!candidates.has(v.neuron.id)) candidates.set(v.neuron.id, { neuron: v.neuron, strength: 0, weightedTotal: 0 });
+			if (!candidates.has(v.neuronId)) candidates.set(v.neuronId, { strength: 0, weightedTotal: 0 });
 
 			// update candidate total strength - this is needed for events and actions both
-			const candidate = candidates.get(v.neuron.id);
+			const candidate = candidates.get(v.neuronId);
 			candidate.strength += v.strength;
 
 			// for actions, calculate the weighted total - for events, calculate total strengths for each dimension
-			if (this.thalamus.getNeuronType(v.neuron.id) === 'action') candidate.weightedTotal += v.strength * v.reward;
-			else this.addDimStrength(dimTotalStrength, this.thalamus.getNeuronCoordinates(v.neuron.id), v.strength);
+			if (this.thalamus.getNeuronType(v.neuronId) === 'action') candidate.weightedTotal += v.strength * v.reward;
+			else this.addDimStrength(dimTotalStrength, this.thalamus.getNeuronCoordinates(v.neuronId), v.strength);
 		}
 		return { candidates, dimTotalStrength };
 	}
 
 	/**
 	 * Determine the best neuron per dimension (events by probability, actions by reward).
-	 * @returns {Map} dimension -> {neuronId, neuron, score, strength}
+	 * @returns {Map} dimension -> {neuronId, score, strength}
 	 */
 	determineDimensionWinners(candidates, dimTotalStrength) {
 		const dimBest = new Map();
@@ -516,7 +516,7 @@ export default class Brain {
 				const best = dimBest.get(dim);
 				const score = candidateType === 'action' ? candidate.reward : candidate.probability;
 				if (this.isBetterCandidate(score, candidate.strength, neuronId, best))
-					dimBest.set(dim, { neuronId, neuron: candidate.neuron, score, strength: candidate.strength });
+					dimBest.set(dim, { neuronId, score, strength: candidate.strength });
 			}
 		}
 		return dimBest;
@@ -542,8 +542,7 @@ export default class Brain {
 		for (const neuronId of winnerIds) {
 			const candidate = candidates.get(neuronId);
 			const winner = {
-				neuron_id: neuronId,
-				neuron: candidate.neuron,
+				neuronId,
 				coordinates: this.thalamus.getNeuronCoordinates(neuronId),
 				channel: this.thalamus.getNeuronChannel(neuronId),
 				strength: candidate.strength
@@ -592,21 +591,21 @@ export default class Brain {
 		// Find which channels already have an action inferred
 		const channelsWithActions = new Set();
 		for (const inf of inferences)
-			if (this.thalamus.getNeuronType(inf.neuron.id) === 'action') channelsWithActions.add(this.thalamus.getNeuronChannel(inf.neuron.id));
+			if (this.thalamus.getNeuronType(inf.neuronId) === 'action') channelsWithActions.add(this.thalamus.getNeuronChannel(inf.neuronId));
 
 		// Add exploration action for channels without one
 		for (const [channelName] of this.thalamus.getChannels()) {
 			if (channelsWithActions.has(channelName)) continue;
 
 			// Skip channels that have no actions defined
-			const explorationAction = this.thalamus.getChannelDefaultAction(channelName);
-			if (!explorationAction) continue;
+			const explorationActionId = this.thalamus.getChannelDefaultAction(channelName);
+			if (!explorationActionId) continue;
 
 			// No action inferred for this channel - use the default action for deterministic exploration
 			inferences.push({
-				neuron_id: explorationAction.id,
-				neuron: explorationAction,
-				coordinates: this.thalamus.getNeuronCoordinates(explorationAction.id),
+				neuronId: explorationActionId,
+				coordinates: this.thalamus.getNeuronCoordinates(explorationActionId),
+				channel: channelName,
 				strength: 0,
 				reward: 0
 			});
@@ -651,14 +650,14 @@ export default class Brain {
 		if (this.debug) console.log('=== CLEANUP STARTING ===');
 
 		// reap neurons scheduled to die at this frame
-		const deadPatterns = this.thalamus.reapDeadNeurons(this.frameNumber);
-		if (deadPatterns.length === 0) return;
+		const deadPatternIds = this.thalamus.reapDeadNeurons(this.frameNumber);
+		if (deadPatternIds.length === 0) return;
 
 		// delete dead patterns (with recursive cleanup of context references)
-		const deletedPatterns = this.thalamus.deletePatterns(deadPatterns, this.frameNumber);
+		const deletedPatternIds = this.thalamus.deletePatterns(deadPatternIds, this.frameNumber);
 
 		// verify no deleted patterns are active - that would be a bug
-		this.memory.assertNotActive(deletedPatterns);
+		this.memory.assertNotActive(deletedPatternIds);
 
 		if (this.debug) console.log(`=== CLEANUP COMPLETED in ${Date.now() - cycleStart}ms ===\n`);
 	}

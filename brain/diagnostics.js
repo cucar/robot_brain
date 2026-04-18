@@ -53,7 +53,7 @@ export class Diagnostics {
 		console.log(`Collected ${votes.length} votes`);
 
 		// Build winner set for quick lookup
-		const winnerIds = new Set(winners.map(w => w.neuron_id));
+		const winnerIds = new Set(winners.map(w => w.neuronId));
 
 		// Group votes by channel
 		const votesByChannel = new Map();
@@ -305,7 +305,7 @@ export class Diagnostics {
 	/**
 	 * Track inference performance for both events and actions.
 	 * Also calculates continuous prediction errors via channel callbacks.
-	 * @param {Array<{neuron, strength, channel}>} inferences - Inferred neurons with strength and resolved channel
+	 * @param {Array<{neuronId, strength, channel}>} inferences - Inferred neurons with strength and resolved channel
 	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
 	 * @param {Map<string, Array>} actualEventCoordsByChannel - Map of channel → array of coordinate objects
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
@@ -320,12 +320,12 @@ export class Diagnostics {
 		// Group event predictions by channel for continuous error calculation
 		const predictionsByChannel = new Map();
 
-		for (const { neuron, strength, channel, type, coordinates } of inferences) {
+		for (const { neuronId, strength, channel, type, coordinates } of inferences) {
 
 			// Track event prediction accuracy
 			if (type === 'event') {
 				eventTotal++;
-				const isCorrect = activeNeuronIds.has(neuron.id);
+				const isCorrect = activeNeuronIds.has(neuronId);
 				if (isCorrect) eventCorrect++;
 
 				// Group for continuous error calculation
