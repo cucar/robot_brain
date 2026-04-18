@@ -402,23 +402,50 @@ export class Thalamus {
 	}
 
 	/**
-	 * Process one pre-built level view: match patterns, deliver updates, and return activations.
-	 * Brain builds the level-neuron map from memory and passes it in.
-	 * @param {Map<number, {activeAges: number[], recognizerAges: number[]}>} levelNeurons
-	 * @param {Array<number>} newActiveNeuronIds - Newly active sensory neuron ids for connection learning
-	 * @param {Map} rewards - Rewards at current frame (age 0)
+	 * Process one level end-to-end: aggregate the level view, match patterns, create
+	 * error-correction pattern neurons, and return all activations at level+1.
+	 * @param {number} level - Current level being processed
+	 * @param {Array<{neuronId, age, state}>} levelEntries - Active neurons at this level from memory
+	 * @param {number} memoryDepth - Current sliding-window depth (age count)
+	 * @param {Array<Set<number>>} sensoryNeurons - Active sensory neuron ids by age (level 0)
+	 * @param {Array<Map>} rewards - Rewards by age (rewards[0] = current frame)
 	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron IDs for skipping
 	 * @param {number} frameNumber - Current frame number
-	 * @returns {Array<{parentId, patternId, age, deathFrame}>} Matched patterns (empty if none or recognition inactive)
+	 * @param {Set<number>} newErrorPatternIds - Accumulator of error pattern ids created this frame (mutated)
+	 * @param {number} errorCorrectionThreshold - Event-error ratio above which a correction is created
+	 * @returns {Array<{parentId, patternId, age, deathFrame?}>} Activations to apply at level+1
 	 */
-	processLevel(levelNeurons, newActiveNeuronIds, rewards, channelActionIds, frameNumber) {
+	processLevel(level, levelEntries, memoryDepth, sensoryNeurons, rewards, channelActionIds, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
+
+		// Aggregate the level view (age-ascending, activation-order within age).
+		const levelNeurons = new Map();
+		const corrections = [];
+		const age0 = sensoryNeurons[0];
+		for (const { neuronId, age, state } of levelEntries) {
+
+			if (this.skipActionNeuron(neuronId)) continue;
+
+			// skip error patterns created during this frame - preserves prior behavior
+			// where corrections ran after the level loop (no re-learning, no context leak)
+			if (newErrorPatternIds.has(neuronId)) continue;
+
+			// check for each neuron if it needs a new error correction pattern
+			// if the neuron needs error correction, add it to the list
+			if (this.needsErrorCorrection(age, state.votes, age0, errorCorrectionThreshold))
+				corrections.push({ neuronId, age, context: state.context });
+
+			if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
+			const entry = levelNeurons.get(neuronId);
+			entry.activeAges.push(age);
+			if (!state.activatedPatternId && age !== memoryDepth - 1) entry.recognizerAges.push(age);
+		}
 
 		// Build the level context once; matching runs only if recognition is still active and there's context.
 		const levelContext = this.buildLevelContext(levelNeurons);
 
 		// add the type and channel to the active sensory neurons for processing
 		const newActiveNeurons = [];
-		for (const neuronId of newActiveNeuronIds) {
+		for (const neuronId of age0) {
 			const type = this.getNeuronType(neuronId);
 			const channel = this.getNeuronChannel(neuronId);
 			newActiveNeurons.push({ id: neuronId, type, channel });
@@ -428,20 +455,67 @@ export class Thalamus {
 		const recognitionResults = [];
 		for (const [neuronId, { activeAges, recognizerAges }] of levelNeurons) {
 			const neuron = this.neurons.get(neuronId);
-			const result = neuron.processFrame(activeAges, recognizerAges, levelContext, newActiveNeurons, rewards, channelActionIds, frameNumber);
+			const result = neuron.processFrame(activeAges, recognizerAges, levelContext, newActiveNeurons, rewards[0], channelActionIds, frameNumber);
 			if (result.matches.length > 0) recognitionResults.push({ parentId: neuronId, ...result });
 		}
 
-		// Recognition post-processing: deliver contextRef updates and activate matches in bulk.
+		// Recognition post-processing: deliver contextRef updates and collect match activations.
+		const activations = [];
 		if (recognitionResults.length > 0) {
 			const contextRefUpdates = this.collectContextRefUpdates(recognitionResults);
 			this.deliverContextRefUpdates(contextRefUpdates);
 			const matches = this.collectActivationMatches(recognitionResults);
 			for (const match of matches) this.registerDeath(match.patternId, match.deathFrame);
-			return matches;
+			for (const match of matches) activations.push(match);
 		}
 
-		return [];
+		// learn new patterns for failed predictions at this level - create pattern
+		// neurons and populate their connections from the future
+		for (const { neuronId, age, context } of corrections) {
+
+			// neuron level is the current loop level - all corrections collected here are at `level`
+			const levelCtx = context.filter(c => this.getNeuronLevel(c.neuron.id) === level);
+			const mappedContext = levelCtx.map(c => ({ neuronId: c.neuron.id, distance: c.distance }));
+
+			// create and wire the new pattern neuron
+			const pattern = this.addPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards, mappedContext, frameNumber);
+
+			// update the context references of the neurons that were used in new contexts
+			for (const c of levelCtx) c.neuron.addContextRef(neuronId, c.distance);
+
+			// exclude this new pattern when we build the level view for level+1
+			newErrorPatternIds.add(pattern.id);
+
+			// return as an activation so the caller activates it alongside matches
+			activations.push({ parentId: neuronId, patternId: pattern.id, age });
+		}
+
+		return activations;
+	}
+
+	/**
+	 * returns if a neuron needs error correction
+	 * based on its inferences in the previous frame and the actual events in the current frame
+	 * @returns {boolean} Whether error correction is needed
+	 */
+	needsErrorCorrection(age, votes, actualNeuronIds, errorCorrectionThreshold) {
+
+		// age=0 neurons cannot need correction because they are just voting now
+		if (age === 0) return false;
+
+		// if there are no votes from previous frame, no need for error correction
+		if (!votes || votes.length === 0) return false;
+
+		// compare the inferred events to reality to determine if we need error correction
+		let failedEvents = 0;
+		let totalEvents = 0;
+		for (const vote of votes)
+			if (this.getNeuronType(vote.neuronId) === 'event') {
+				totalEvents++;
+				if (!actualNeuronIds.has(vote.neuronId)) failedEvents++;
+			}
+		const eventError = failedEvents / totalEvents;
+		return eventError > errorCorrectionThreshold;
 	}
 
 	/**
