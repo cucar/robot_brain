@@ -100,7 +100,7 @@ export class Thalamus {
 	 * @param {number} level - Neuron level (1+ = pattern)
 	 * @param {number} parentId - Parent neuron ID
 	 * @param {number} age - Distance in time between the observation and the error
-	 * @param {Array<Array<object>>} sensoryNeurons - Recent sensory neurons by age
+	 * @param {Array<Array<number>>} sensoryNeurons - Recent sensory neuron ids by age
 	 * @param {Array<Map<string, number>>} rewards - Rewards by age
 	 * @param {Array<{neuronId: number, distance: number}>} levelContext - Parent level context
 	 * @param {number} currentFrame - Current frame number
@@ -114,16 +114,16 @@ export class Thalamus {
 		const channelActionIds = this.getChannelActionIds();
 		// create the future connections of the pattern from currently observed neurons
 		for (let a = 0; a < age && a < sensoryNeurons.length; a++)
-			for (const n of sensoryNeurons[a]) {
+			for (const sensoryNeuronId of sensoryNeurons[a]) {
 
 				// save the event/action - include observed reward for actions - for events it's zero
-				const nChannel = this.getNeuronChannel(n.id);
+				const nChannel = this.getNeuronChannel(sensoryNeuronId);
 				const reward = rewards[a].get(nChannel) || 0;
-				neuron.createConnection(age - a, n.id, 1, reward);
+				neuron.createConnection(age - a, sensoryNeuronId, 1, reward);
 
 				// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
 				if (reward < 0) {
-					const alt = neuron.findAlternativeAction(age - a, nChannel, n.id, channelActionIds);
+					const alt = neuron.findAlternativeAction(age - a, nChannel, sensoryNeuronId, channelActionIds);
 					if (alt) neuron.createConnection(age - a, alt, 1, 0);
 				}
 			}
@@ -405,16 +405,24 @@ export class Thalamus {
 	 * Process one pre-built level view: match patterns, deliver updates, and return activations.
 	 * Brain builds the level-neuron map from memory and passes it in.
 	 * @param {Map<number, {activeAges: number[], recognizerAges: number[]}>} levelNeurons
-	 * @param {Array<{id, type, channel}>} newActiveNeurons - Newly active sensory neurons for connection learning
+	 * @param {Array<number>} newActiveNeuronIds - Newly active sensory neuron ids for connection learning
 	 * @param {Map} rewards - Rewards at current frame (age 0)
 	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron IDs for skipping
 	 * @param {number} frameNumber - Current frame number
 	 * @returns {Array<{parentId, patternId, age, deathFrame}>} Matched patterns (empty if none or recognition inactive)
 	 */
-	processLevel(levelNeurons, newActiveNeurons, rewards, channelActionIds, frameNumber) {
+	processLevel(levelNeurons, newActiveNeuronIds, rewards, channelActionIds, frameNumber) {
 
 		// Build the level context once; matching runs only if recognition is still active and there's context.
 		const levelContext = this.buildLevelContext(levelNeurons);
+
+		// add the type and channel to the active sensory neurons for processing
+		const newActiveNeurons = [];
+		for (const neuronId of newActiveNeuronIds) {
+			const type = this.getNeuronType(neuronId);
+			const channel = this.getNeuronChannel(neuronId);
+			newActiveNeurons.push({ id: neuronId, type, channel });
+		}
 
 		// Per-neuron: learn connections and match patterns.
 		const recognitionResults = [];

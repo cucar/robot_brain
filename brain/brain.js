@@ -373,31 +373,8 @@ export default class Brain {
 	processLevels() {
 		const channelActionIds = this.thalamus.getChannelActionIds();
 
-		// loop over the active neurons in memory and index them for processing
-		const events = new Set();
-		const newActiveNeurons = [];
-		const sensoryNeurons = [];
-		for (let age = 0; age < this.memory.depth; age++) {
-			const ageNeurons = [];
-			for (const neuronId of this.memory.getNeuronIdsAtAge(age)) {
-
-				// get the neuron properties
-				const level = this.thalamus.getNeuronLevel(neuronId);
-				const type = this.thalamus.getNeuronType(neuronId);
-				const channel = this.thalamus.getNeuronChannel(neuronId);
-
-				// Get newly active sensory neurons (age=0, level=0) with metadata for connection learning
-				if (level === 0 && age === 0) newActiveNeurons.push({ id: neuronId, type, channel });
-
-				// get newly active events (age=0, level=0)
-				if (level === 0 && age === 0 && type === 'event') events.add(neuronId);
-
-				// get active sensory neurons (level=0) in the age
-				if (level === 0) ageNeurons.push({ id: neuronId, type, channel });
-			}
-			// Get active sensory neurons (level=0) indexed by age
-			sensoryNeurons.push(ageNeurons);
-		}
+		// get the active sensory neurons at level 0
+		const sensoryNeurons = this.memory.getLevelAges(0);
 
 		// Get the maximum active level from memory index - this may increase as we process levels
 		let maxActiveLevel = this.memory.getMaxActiveLevel();
@@ -418,7 +395,7 @@ export default class Brain {
 
 					// check for each neuron if it needs a new error correction pattern
 					// if the neuron needs error correction, add it to the list
-					if (this.needsErrorCorrection(age, state.votes, events))
+					if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0]))
 						corrections.push({ neuronId, age, context: state.context });
 
 					if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
@@ -428,7 +405,7 @@ export default class Brain {
 				}
 
 			// process level: recognize patterns and learn connections
-			const matches = this.thalamus.processLevel(levelNeurons, newActiveNeurons, this.rewards[0], channelActionIds, this.frameNumber);
+			const matches = this.thalamus.processLevel(levelNeurons, sensoryNeurons[0], this.rewards[0], channelActionIds, this.frameNumber);
 
 			// Activate matched patterns in memory — they land one level above
 			for (const { parentId, patternId, age } of matches) this.memory.activatePattern(patternId, level + 1, parentId, age);
@@ -472,7 +449,7 @@ export default class Brain {
 	 * based on its inferences in the previous frame and the actual events in the current frame
 	 * @returns {boolean} Whether error correction is needed
 	 */
-	needsErrorCorrection(age, votes, actualEvents) {
+	needsErrorCorrection(age, votes, actualNeuronIds) {
 
 		// age=0 neurons cannot need correction because they are just voting now
 		if (age === 0) return false;
@@ -486,7 +463,7 @@ export default class Brain {
 		for (const vote of votes)
 			if (this.thalamus.getNeuronType(vote.neuronId) === 'event') {
 				totalEvents++;
-				if (!actualEvents.has(vote.neuronId)) failedEvents++;
+				if (!actualNeuronIds.has(vote.neuronId)) failedEvents++;
 			}
 		const eventError = failedEvents / totalEvents;
 		// if (eventError > this.errorCorrectionThreshold) console.log('correctError', eventError, totalEvents);
