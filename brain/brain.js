@@ -227,11 +227,11 @@ export default class Brain {
 
 		// ---------------------------- PARALLEL PROCESSING START ----------------------------------
 
-		// process neurons level-by-level in parallel
-		this.processLevels();
+		// process neurons level-by-level in parallel - collects votes inline per level
+		const votes = this.processLevels();
 
 		// do inferences with age>0 neurons - what's going to happen next? and what's our best response?
-		this.inferNeurons();
+		this.inferNeurons(votes);
 
 		// ---------------------------- PARALLEL PROCESSING END ----------------------------------
 
@@ -369,6 +369,9 @@ export default class Brain {
 
 	/**
 	 * Detects patterns at all levels starting from base - goes as high as possible until no patterns found.
+	 * Collects votes from each level's neurons inline (after that level's activations are applied,
+	 * so suppression flags from this-frame recognitions and error corrections are already set).
+	 * @returns {Array} Accumulated votes across all processed levels
 	 */
 	processLevels() {
 		const channelActionIds = this.thalamus.getChannelActionIds();
@@ -382,6 +385,9 @@ export default class Brain {
 		// track newly-created error pattern ids so they are excluded from the level
 		// pass at their own level (prevents double connection-learning and context leak)
 		const newErrorPatternIds = new Set();
+
+		// accumulate votes across levels for consensus
+		const votes = [];
 
 		// process neurons level-by-level - each level in parallel
 		let level = 0;
@@ -401,22 +407,25 @@ export default class Brain {
 			// if we produced any activations, increment the max active level as needed
 			if (activations.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
 
+			// collect votes for this level now that suppression flags from its activations are set
+			votes.push(...this.collectLevelVotes(level));
+
 			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
 			if (level >= maxActiveLevel) break;
 
 			// otherwise, increment the level and process the next level
 			level++;
 		}
+
+		return votes;
 	}
 
 	/**
 	 * Infer predictions and outputs using voting architecture.
 	 * All levels vote for both actions and events.
+	 * @param {Array} votes - Accumulated votes from processLevels
 	 */
-	inferNeurons() {
-
-		// Collect votes from active neurons (suppression handled during collection)
-		const votes = this.collectVotes();
+	inferNeurons(votes) {
 
 		// If no inference votes, wait for more data
 		if (votes.length === 0) {
@@ -452,45 +461,51 @@ export default class Brain {
 	}
 
 	/**
-	 * Collect votes from active neurons. Stores votes and context in activeNeurons for pattern learning.
+	 * Collect votes from neurons at a single level. Clears stale votes/context for this
+	 * level's active states, builds the per-age voting context from this level's own
+	 * neurons, then iterates each neuron's active ages.
+	 * @param {number} level
 	 * @returns {Array} Array of vote objects for consensus
 	 */
-	collectVotes() {
+	collectLevelVotes(level) {
 		const votes = [];
 		const neurons = this.thalamus.neurons;
+		const levelNeurons = this.memory.getLevelNeurons(level);
 
-		// clear the previous votes before setting new ones
-		this.memory.clearVotes();
-
-		// Build all contexts once for all ages/levels
-		const contexts = new Map();
-		for (let ctxAge = 1; ctxAge < this.memory.depth; ctxAge++)
-			for (const neuronId of this.memory.getNeuronIdsAtAge(ctxAge)) {
-				const neuron = neurons.get(neuronId);
-				if (this.thalamus.skipActionNeuron(neuronId)) continue;
-				for (let age = 0; age < ctxAge; age++) {
-					const key = `${age}:${this.thalamus.getNeuronLevel(neuronId)}`;
-					if (!contexts.has(key)) contexts.set(key, []);
-					contexts.get(key).push({ neuron, distance: ctxAge - age });
-				}
+		// clear stale votes/context for this level's neurons so suppressed ages don't carry stale data
+		for (const ageStates of levelNeurons.values())
+			for (const state of ageStates.values()) {
+				state.votes = null;
+				state.context = null;
 			}
 
-		// Collect votes from neurons that can vote (all ages except the oldest)
-		for (let age = 0; age < this.memory.depth - 1; age++)
-			for (const neuronId of this.memory.getNeuronIdsAtAge(age)) {
-				const state = this.memory.getState(neuronId, age);
-				const voter = neurons.get(neuronId);
+		// build per-age voting context from this level's neurons (action neurons excluded)
+		const contextByAge = new Map();
+		for (const [neuronId, ageStates] of levelNeurons) {
+			if (this.thalamus.skipActionNeuron(neuronId)) continue;
+			const neuron = neurons.get(neuronId);
+			for (const ctxAge of ageStates.keys()) {
+				if (ctxAge === 0) continue;
+				for (let age = 0; age < ctxAge; age++) {
+					if (!contextByAge.has(age)) contextByAge.set(age, []);
+					contextByAge.get(age).push({ neuron, distance: ctxAge - age });
+				}
+			}
+		}
 
-				if (this.thalamus.skipActionNeuron(neuronId)) continue;
-
-				// if a pattern was activated by the neuron, its inference is suppressed - skip
+		// collect votes from this level's neurons (oldest-age and suppressed entries skipped)
+		for (const [neuronId, ageStates] of levelNeurons) {
+			if (this.thalamus.skipActionNeuron(neuronId)) continue;
+			const voter = neurons.get(neuronId);
+			for (const [age, state] of ageStates) {
+				if (age >= this.memory.depth - 1) continue;
 				if (state.activatedPatternId !== null) continue;
 
 				// get the votes of the neuron
 				const neuronVotes = voter.vote(age);
 
 				// store votes and context in memory for learning if the inference ends up being bad (wrong/painful)
-				this.memory.setVotes(neuronId, age, neuronVotes, contexts.get(`${age}:${this.thalamus.getNeuronLevel(neuronId)}`) ?? []);
+				this.memory.setVotes(neuronId, age, neuronVotes, contextByAge.get(age) ?? []);
 
 				// add the votes to the returned array - resolve neuronId to neuron object for consensus
 				for (const vote of neuronVotes) {
@@ -498,7 +513,7 @@ export default class Brain {
 					if (neuron) votes.push({ voter, neuron, ...vote });
 				}
 			}
-
+		}
 		return votes;
 	}
 
@@ -506,7 +521,7 @@ export default class Brain {
 	 * Aggregate votes and determine winners per dimension.
 	 * Events win by strength, actions win by reward.
 	 * For events, reward = strength / totalDimensionStrength (likelihood vs alternatives = safety score)
-	 * @param {Array} votes - Array of vote objects from collectVotes
+	 * @param {Array} votes - Array of vote objects accumulated by processLevels
 	 * @returns {Array} Array of winning inference objects {neuron_id, neuron, strength, reward}
 	 */
 	determineConsensus(votes) {

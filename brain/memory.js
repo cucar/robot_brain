@@ -180,17 +180,6 @@ export class Memory {
 	}
 
 	/**
-	 * Clear per-frame saved votes and contexts before recollecting them.
-	 */
-	clearVotes() {
-		for (const inner of this.neuronStates.values())
-			for (const state of inner.values()) {
-				state.votes = null;
-				state.context = null;
-			}
-	}
-
-	/**
 	 * Set votes and context for a neuron at a specific age
 	 */
 	setVotes(neuronId, age, votes, context) {
