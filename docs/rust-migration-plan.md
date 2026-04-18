@@ -320,67 +320,7 @@ processLevels(sensoryNeurons, rewards, channelActionIds, currentFrame, contextLe
 
 Each step is a self-contained refactor. Run ALL tests after each step. Results must be identical.
 
-#### Step 1.1 — Restructure Memory for level-first indexing
-
-**Why**: The unified loop iterates level-by-level, but Memory currently indexes by age. We need level-first access with per-neuron age arrays.
-
-**Current Memory structure**:
-```
-activeNeurons: Array<Map<neuronId, {activatedPatternId, votes, context}>>
-// indexed by age: activeNeurons[0] = age 0, activeNeurons[N] = age N
-```
-
-**Target Memory structure**:
-```
-// Primary: level-first for the processing loop
-activeLevels: Map<level, Map<neuronId, {
-    ages: number[],                  // sorted ascending
-    activatedPatternId: number|null,
-    votes: Vote[]|null,
-    votingContext: Context|null,
-}>>
-
-// Secondary: age-first for sliding window mechanics (age/evict)
-ageSlots: Array<Set<{neuronId, level}>>
-```
-
-**Implementation**:
-1. Add `activeLevels` alongside existing `activeNeurons` — populate both during activation, verify they stay in sync
-2. Convert all loop consumers (recognizePatterns, updateConnections, collectVotes, learnNewPatterns) to read from `activeLevels` instead of `activeNeurons`
-3. Convert `age()` to maintain both structures — shift ageSlots, update ages arrays in activeLevels, remove neurons whose last age is evicted
-4. Remove old `activeNeurons` once no code reads it
-5. Rename `votes`/`context` fields to `votes`/`votingContext` for clarity
-
-**Key behavioral decision**: `activatePattern()` currently inserts the pattern neuron at the same age as the parent. With level-first indexing, it inserts into `activeLevels[level+1]` with the parent's age. This makes the pattern immediately available when the loop reaches level+1.
-
-**Verify**: all iteration patterns produce identical neuron sets, all tests pass
-
-#### Step 1.2 — Move error correction decisions before the level loop
-
-**Why**: Error correction is a Brain-level decision (compare consensus votes against actual events). Moving it before the loop makes neurons passive recipients — they just install the pattern they're told to install.
-
-**Current flow**:
-* `learnNewPatterns()` iterates neurons with previous-frame votes
-* For each, Brain checks if the neuron's predictions were wrong
-* If wrong, Brain creates a new pattern via Thalamus and calls neuron methods to set it up
-
-**Target flow**:
-* Before the level loop, Brain calls `determineErrorCorrections()`:
-    - Iterates `activeLevels` looking for neurons with stored `votes` from previous frame
-    - For each, compares votes against actual events (age-0 sensory neurons)
-    - If error exceeds threshold: calls `thalamus.addPatternNeuron(level+1, parentId, age, sensoryNeurons, rewards, levelContext, currentFrame)`
-    - Thalamus creates the pattern neuron with connections but does NOT install it in the parent's routing table — that happens inside `neuron.processFrame()`
-    - Brain stores `{patternId, context}` in `errorCorrections` map keyed by `parentNeuronId`
-    - Brain activates the new pattern neuron in `activeLevels[level+1]`
-* During the level loop, `errorCorrections.get(neuronId)` is passed as input to `neuron.processFrame()`
-* The neuron calls `this.addPattern(patternId, context, currentFrame)` — updating its own routing table
-* The neuron returns `errorCorrectionContextRefs` and `errorCorrectionDeathFrame` for the caller to deliver
-
-**Important**: `thalamus.addPatternNeuron()` must be split — currently it both creates the neuron AND installs it in the parent's routing table (`parent.addPattern(...)`). After this step, Thalamus creates the neuron and its connections, but the routing table installation is deferred to `neuron.processFrame()`.
-
-**Verify**: pattern creation identical, error correction timing identical, all tests pass
-
-#### Step 1.4 — Move `collectVotes` into the level loop
+#### Step 1.1 — Move `collectVotes` into the level loop
 
 * Currently `collectVotes()` iterates all active neurons at ages 0..N-1 across all levels
 * Restructure: within the level loop, the neuron's `processFrame()` calls `this.vote(age)` for each eligible age

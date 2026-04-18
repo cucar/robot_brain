@@ -63,6 +63,52 @@ export class Neuron {
 	}
 
 	/**
+	 * Upsert a connection at distance to the target neuron: create if missing, else
+	 * strengthen (smoothing the reward). If the resulting reward is negative, wire an
+	 * alternative action with neutral reward so it can be tried next time.
+	 * @param {number} distance - Connection distance (1+)
+	 * @param {number} toNeuronId - Target neuron id
+	 * @param {string} channel - Target neuron's channel (used only for alt-action lookup)
+	 * @param {number} reward - Observed reward (0 for events, signed for actions)
+	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron ids by channel
+	 */
+	upsertConnection(distance, toNeuronId, channel, reward, channelActionIds) {
+		if (this.hasConnection(distance, toNeuronId)) this.strengthenConnection(distance, toNeuronId, reward);
+		else this.createConnection(distance, toNeuronId, 1, reward);
+
+		// for actions with negative (smoothed) rewards, save an alternative with neutral reward - we'll try it next time
+		const conn = this.connections.get(distance).get(toNeuronId);
+		if (conn.reward < 0) {
+			const alt = this.findAlternativeAction(distance, channel, toNeuronId, channelActionIds);
+			if (alt) this.createConnection(distance, alt, 1, 0);
+		}
+	}
+
+	/**
+	 * Bulk-initialize this neuron's connections from a pre-built spec. Single entry point
+	 * for wiring a freshly-created pattern neuron: all thalamus-side lookups (channel, reward)
+	 * are already resolved in the spec; alternative-action substitution for negative rewards
+	 * is resolved locally against this neuron's own (mutating) connection state. Each spec
+	 * entry is a single observation, so connections are always created (strength=1) - never
+	 * strengthened - even if a later entry targets a slot that a prior alt-action filled.
+	 * @param {Array<{distance: number, toNeuronId: number, channel: string, reward: number}>} connections
+	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron ids by channel
+	 */
+	initializeConnections(connections, channelActionIds) {
+		for (const { distance, toNeuronId, channel, reward } of connections) {
+
+			// save the event/action - include observed reward for actions - for events it's zero
+			this.createConnection(distance, toNeuronId, 1, reward);
+
+			// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
+			if (reward < 0) {
+				const alt = this.findAlternativeAction(distance, channel, toNeuronId, channelActionIds);
+				if (alt) this.createConnection(distance, alt, 1, 0);
+			}
+		}
+	}
+
+	/**
 	 * updates the connection at distance to target neuron - increments strength and updates reward
 	 */
 	strengthenConnection(distance, toNeuronId, reward) {
@@ -370,18 +416,17 @@ export class Neuron {
 	 * @param {Array<number>} learnerAges - Ages at which this neuron is active (for connection learning)
 	 * @param {Array<number>} recognizerAges - Ages eligible for pattern matching (subset of activeAges)
 	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
-	 * @param {Array<{id, type, channel}>} newActiveNeurons - Age=0 sensory neurons
-	 * @param {Map<string, number>} rewards - Map of channel name to reward value
+	 * @param {Array<{id: number, channel: string, reward: number}>} actives - Age=0 sensory neurons with pre-resolved rewards
 	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 * @param {number} currentFrame - Current frame number
 	 * @param {Array<{patternNeuron: Neuron, age: number, contextEntries: Array<{neuronId, distance}>}>} corrections
 	 *        Pre-created error-correction pattern neurons to install as children at the given ages.
 	 * @returns {{ matches, correctionActivations, contextRefUpdates }}
 	 */
-	processFrame(learnerAges, recognizerAges, levelContext, newActiveNeurons, rewards, channelActionIds, currentFrame, corrections = []) {
+	processFrame(learnerAges, recognizerAges, levelContext, actives, channelActionIds, currentFrame, corrections = []) {
 
 		// learn connections across all active ages (age=0 skipped internally)
-		this.learnConnections(learnerAges, newActiveNeurons, rewards, channelActionIds);
+		this.learnConnections(learnerAges, actives, channelActionIds);
 
 		// match patterns if we have context and eligible ages
 		let matches = [];
@@ -578,44 +623,29 @@ export class Neuron {
 	}
 
 	/**
-	 * Update connections at a specific age based on observations.
-	 * Events: strengthen correct, weaken incorrect, add novel.
-	 * Actions: update with rewards, add alternatives for painful actions.
-	 * @param {Array<number>} ages - The ages at which this neuron is active and should be learning
-	 * @param {Array<{id: number, type: string, channel: string}>} newActiveNeurons - Newly active neurons at age=0 with metadata
-	 * @param {Map<string, number>} rewards - Map of channel name to reward value
+	 * Update connections at the given ages based on the currently observed actives.
+	 * For each age > 0: upsert a connection per active (create-or-strengthen + alt-action),
+	 * then weaken predictions at that distance that did not occur. Rewards are pre-resolved
+	 * thalamus-side (0 for events, observed value for actions).
+	 * @param {Array<number>} ages - Ages at which this neuron is active and should be learning
+	 * @param {Array<{id: number, channel: string, reward: number}>} neurons - Currently observed neurons (age=0) with pre-resolved rewards
 	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 */
-	learnConnections(ages, newActiveNeurons, rewards, channelActionIds) {
+	learnConnections(ages, neurons, channelActionIds) {
 		for (const age of ages) {
 
 			// skip age 0 - connection learning only applies to context neurons (age > 0)
 			if (age === 0) continue;
 
 			// learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
-			const newActiveNeuronIds = new Set();
-			for (const neuron of newActiveNeurons) {
-
-				// get the reward for the neuron if it is an action
-				const reward = neuron.type === 'action' ? (rewards.get(neuron.channel) || 0) : 0;
-
-				// if the event/action was already known, strengthen the connection and update the reward
-				if (this.hasConnection(age, neuron.id)) this.strengthenConnection(age, neuron.id, reward);
-				// if the event/action was not known, add it to the connections with the current reward (learning from observation)
-				else this.createConnection(age, neuron.id, 1, reward);
-
-				// if the neuron is an action and the reward is below a threshold, add an alternative action for the channel
-				const conn = this.connections.get(age).get(neuron.id);
-				if (conn.reward < 0) {
-					const altNeuronId = this.findAlternativeAction(age, neuron.channel, neuron.id, channelActionIds);
-					if (altNeuronId) this.createConnection(age, altNeuronId, 1, 0);
-				}
-
-				newActiveNeuronIds.add(neuron.id);
+			const neuronIds = new Set();
+			for (const { id, channel, reward } of neurons) {
+				this.upsertConnection(age, id, channel, reward, channelActionIds);
+				neuronIds.add(id);
 			}
 
 			// negatively reinforce connections at this distance whose predictions didn't occur
-			for (const neuronId of this.getNeuronsNotFound(age, newActiveNeuronIds))
+			for (const neuronId of this.getNeuronsNotFound(age, neuronIds))
 				this.weakenConnection(age, neuronId);
 		}
 	}

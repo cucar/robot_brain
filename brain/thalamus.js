@@ -111,24 +111,20 @@ export class Thalamus {
 	 */
 	createPatternNeuron(level, parentId, age, sensoryNeurons, rewards, channelActionIds) {
 
-		// create the neuron
-		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
-
-		// create the future connections of the pattern from currently observed neurons
+		// build the future connection spec of the pattern from currently observed neurons
+		// (thalamus-side lookups - channel, reward - are resolved here so the neuron can be
+		// initialized with a single self-contained call; MPI-ready boundary)
+		const connections = [];
 		for (let a = 0; a < age && a < sensoryNeurons.length; a++)
 			for (const sensoryNeuronId of sensoryNeurons[a]) {
-
-				// save the event/action - include observed reward for actions - for events it's zero
-				const nChannel = this.getNeuronChannel(sensoryNeuronId);
-				const reward = rewards[a].get(nChannel) || 0;
-				neuron.createConnection(age - a, sensoryNeuronId, 1, reward);
-
-				// for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
-				if (reward < 0) {
-					const alt = neuron.findAlternativeAction(age - a, nChannel, sensoryNeuronId, channelActionIds);
-					if (alt) neuron.createConnection(age - a, alt, 1, 0);
-				}
+				const channel = this.getNeuronChannel(sensoryNeuronId);
+				const reward = rewards[a].get(channel) || 0;
+				connections.push({ distance: age - a, toNeuronId: sensoryNeuronId, channel, reward });
 			}
+
+		// create and initialize the neuron in a single call
+		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
+		neuron.initializeConnections(connections, channelActionIds);
 
 		// register in the thalamus
 		this.neurons.set(neuron.id, neuron);
@@ -416,7 +412,9 @@ export class Thalamus {
 
 		// pass 1: aggregate per-neuron work, build level context, pre-create corrections
 		const { tasks, levelContext } = this.buildLevelTasks(
-			level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, newErrorPatternIds, errorCorrectionThreshold);
+			level, levelNeurons, memoryDepth, sensoryNeurons, rewards,
+			channelActionIds, newErrorPatternIds, errorCorrectionThreshold
+		);
 
 		// pass 2: dispatchFrame - one neuron.processFrame call per active neuron
 		const results = this.dispatchFrame(tasks, levelContext, sensoryNeurons[0], rewards[0], channelActionIds, frameNumber);
@@ -497,17 +495,20 @@ export class Thalamus {
 	 */
 	dispatchFrame(tasks, levelContext, age0, currentRewards, channelActionIds, frameNumber) {
 
-		// decorate age=0 sensory neurons with type/channel for connection learning
+		// decorate age=0 sensory neurons with channel + pre-resolved reward (MPI-ready: neuron doesn't need type)
 		const newActiveNeurons = [];
-		for (const neuronId of age0)
-			newActiveNeurons.push({ id: neuronId, type: this.getNeuronType(neuronId), channel: this.getNeuronChannel(neuronId) });
+		for (const neuronId of age0) {
+			const channel = this.getNeuronChannel(neuronId);
+			const reward = this.getNeuronType(neuronId) === 'action' ? (currentRewards.get(channel) || 0) : 0;
+			newActiveNeurons.push({ id: neuronId, channel, reward });
+		}
 
 		// call each neuron to deliver the tasks to process the frame
 		const results = [];
 		for (const { neuronId, learnerAges, recognizerAges, corrections } of tasks) {
 			const result = this.neurons.get(neuronId).processFrame(
 				learnerAges, recognizerAges, levelContext, newActiveNeurons,
-				currentRewards, channelActionIds, frameNumber, corrections
+				channelActionIds, frameNumber, corrections
 			);
 			results.push({ parentId: neuronId, ...result });
 		}
