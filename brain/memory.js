@@ -1,15 +1,5 @@
 /**
  * Memory - manages the temporal sliding window of active and inferred neurons.
- * A dumb data store: stores neuron IDs and states, returns raw data.
- * All neuron-property-aware filtering is done by the caller (Brain).
- *
- * Internal layout:
- *   ageIndex:     Array<Set<neuronId>>                    — neurons at each age slot (order = activation order)
- *   levelIndex:   Map<level, Array<Set<neuronId>>>        — per-level, per-age neuron sets (age arrays kept in sync with ageIndex length)
- *   neuronStates: Map<neuronId, Map<age, state>>          — per-neuron state, keyed by current age
- *
- * Aging shifts state keys by +1 and prepends empty sets. This is aggressive but keeps
- * the mental model simple; if it becomes a hotspot we can switch to a birth-frame scheme.
  */
 export class Memory {
 
@@ -22,13 +12,15 @@ export class Memory {
 		// number of frames a base neuron stays active
 		this.contextLength = contextLength;
 
-		// Active indexed context
-		// activatedPatternId: ID of pattern neuron activated by this neuron, or null
-		// votes: array of votes cast by this neuron, or null if hasn't voted yet
-		// context: array of context neurons at voting time, or null if hasn't voted yet
-		this.ageIndex = [];
-		this.levelIndex = new Map();
+		// active neuron states by age - Map<neuronId, Map<age, state>> - state properties:
+		// context: array of context neurons at voting time
+		// votes: array of votes cast by this neuron
+		// activatedPatternId: ID of pattern neuron activated by this neuron (recognized)
 		this.neuronStates = new Map();
+
+		// indexes to be able to retrieve neurons by age and level faster
+		this.ageIndex = []; // Array<Set<neuronId>> - neurons at each age slot (order = activation order)
+		this.levelIndex = new Map(); // Map<level, Array<Set<neuronId>>> - per-level, per-age neuron sets
 
 		// Current frame winning inferences: Array<{neuron, strength}>
 		this.inferredNeurons = [];
@@ -53,28 +45,45 @@ export class Memory {
 	age() {
 		if (this.debug) console.log('Aging neurons...');
 
+		// age index update for active neurons: add age=0 set and shift everything else
 		this.ageIndex.unshift(new Set());
+
+		// do the same for the level index - ages in each level
 		for (const arr of this.levelIndex.values()) arr.unshift(new Set());
 
-		// Shift every neuron's state age keys by +1 (preserves insertion order within inner map)
-		for (const [id, inner] of this.neuronStates) {
-			const shifted = new Map();
-			for (const [a, s] of inner) shifted.set(a + 1, s);
-			this.neuronStates.set(id, shifted);
+		// ages also exist in neuron states - shift every neuron's state age keys by +1 (preserves insertion order)
+		for (const [neuronId, oldAges] of this.neuronStates) {
+			const newAges = new Map();
+			for (const [age, state] of oldAges) newAges.set(age + 1, state);
+			this.neuronStates.set(neuronId, newAges);
 		}
 
-		// Deactivate neurons that have aged out of the context window
-		if (this.ageIndex.length > this.contextLength) {
-			const evictedAge = this.ageIndex.length - 1;
-			const evicted = this.ageIndex.pop();
-			for (const arr of this.levelIndex.values()) arr.pop();
-			for (const id of evicted) {
-				const inner = this.neuronStates.get(id);
-				inner.delete(evictedAge);
-				if (inner.size === 0) this.neuronStates.delete(id);
-			}
-			if (this.debug && evicted.size > 0) console.log(`Deactivated ${evicted.size} aged-out neurons`);
+		// deactivate neurons that have aged out of the context window
+		if (this.ageIndex.length > this.contextLength) this.deactivateOldNeurons();
+	}
+
+	/**
+	 * deactivates aged-out neurons
+	 */
+	deactivateOldNeurons() {
+
+		// we will deactivate the oldest age in the context
+		const evictedAge = this.ageIndex.length - 1;
+
+		// get rid of the oldest neurons in the age index, while retrieving their ids
+		const evictedNeuronIds = this.ageIndex.pop();
+
+		// get rid of the oldest neurons in the level index, for each age within them
+		for (const levelAges of this.levelIndex.values()) levelAges.pop();
+
+		// get rid of the oldest neuron ages in the neuron states themselves
+		for (const id of evictedNeuronIds) {
+			const ages = this.neuronStates.get(id);
+			ages.delete(evictedAge);
+			if (ages.size === 0) this.neuronStates.delete(id); // deactivate neuron if all ages are inactive
 		}
+
+		if (this.debug && evictedNeuronIds.size > 0) console.log(`Deactivated ${evictedNeuronIds.size} aged-out neurons`);
 	}
 
 	/**
@@ -118,23 +127,26 @@ export class Memory {
 	 */
 	activateNeuronAtAge(neuronId, age, level) {
 
+		// add the neuron to the age index
 		while (this.ageIndex.length <= age) this.ageIndex.push(new Set());
 		this.ageIndex[age].add(neuronId);
 
-		let levelArr = this.levelIndex.get(level);
-		if (!levelArr) {
-			levelArr = [];
-			this.levelIndex.set(level, levelArr);
+		// add the neuron to the level index
+		let levelAges = this.levelIndex.get(level);
+		if (!levelAges) {
+			levelAges = [];
+			this.levelIndex.set(level, levelAges);
 		}
-		while (levelArr.length < this.ageIndex.length) levelArr.push(new Set());
-		levelArr[age].add(neuronId);
+		while (levelAges.length < this.ageIndex.length) levelAges.push(new Set());
+		levelAges[age].add(neuronId);
 
-		let inner = this.neuronStates.get(neuronId);
-		if (!inner) {
-			inner = new Map();
-			this.neuronStates.set(neuronId, inner);
+		// add the active neuron to the neuron states with a new state
+		let ages = this.neuronStates.get(neuronId);
+		if (!ages) {
+			ages = new Map();
+			this.neuronStates.set(neuronId, ages);
 		}
-		inner.set(age, { activatedPatternId: null, votes: null, context: null });
+		ages.set(age, { activatedPatternId: null, votes: null, context: null });
 	}
 
 	/**
