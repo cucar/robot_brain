@@ -353,28 +353,55 @@ export class Neuron {
 	}
 
 	/**
-	 * Process a frame for this neuron: learn connections and match patterns.
+	 * Apply a batch of context-reference updates targeting this neuron.
+	 * One call per target neuron per frame (callers aggregate by target).
+	 * @param {Array<{type: 'add'|'remove', parentId: number, distance: number}>} updates
+	 */
+	applyContextRefUpdates(updates) {
+		for (const { type, parentId, distance } of updates)
+			if (type === 'add') this.addContextRef(parentId, distance);
+			else this.removeContextRef(parentId, distance);
+	}
+
+	/**
+	 * Process a frame for this neuron: learn connections, match patterns, and install
+	 * pre-created error-correction patterns. One call per active neuron per frame.
 	 * Matching is skipped when levelContext is null/empty or recognizerAges is empty.
-	 * @param {Array<number>} activeAges - Ages at which this neuron is active (for connection learning)
+	 * @param {Array<number>} learnerAges - Ages at which this neuron is active (for connection learning)
 	 * @param {Array<number>} recognizerAges - Ages eligible for pattern matching (subset of activeAges)
 	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
 	 * @param {Array<{id, type, channel}>} newActiveNeurons - Age=0 sensory neurons
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 * @param {number} currentFrame - Current frame number
-	 * @returns {{ matches, contextRefUpdates }} - Empty arrays if matching was skipped
+	 * @param {Array<{patternNeuron: Neuron, age: number, contextEntries: Array<{neuronId, distance}>}>} corrections
+	 *        Pre-created error-correction pattern neurons to install as children at the given ages.
+	 * @returns {{ matches, correctionActivations, contextRefUpdates }}
 	 */
-	processFrame(activeAges, recognizerAges, levelContext, newActiveNeurons, rewards, channelActionIds, currentFrame) {
+	processFrame(learnerAges, recognizerAges, levelContext, newActiveNeurons, rewards, channelActionIds, currentFrame, corrections = []) {
 
 		// learn connections across all active ages (age=0 skipped internally)
-		this.learnConnections(activeAges, newActiveNeurons, rewards, channelActionIds);
+		this.learnConnections(learnerAges, newActiveNeurons, rewards, channelActionIds);
 
 		// match patterns if we have context and eligible ages
-		if (!levelContext || levelContext.size === 0 || recognizerAges.length === 0)
-			return { matches: [], contextRefUpdates: [] };
+		let matches = [];
+		let contextRefUpdates = [];
+		if (levelContext && levelContext.size > 0 && recognizerAges.length > 0) {
+			const res = this.matchPatterns(levelContext, recognizerAges, currentFrame);
+			matches = res.matches;
+			contextRefUpdates = res.contextRefUpdates;
+		}
 
-		// match patterns if recognition is still active, we have context, and this neuron has eligible ages
-		return this.matchPatterns(levelContext, recognizerAges, currentFrame);
+		// install pre-created error-correction patterns as children and emit their contextRef adds
+		const correctionActivations = [];
+		for (const { patternId, age, contextEntries } of corrections) {
+			const deathFrame = this.addPattern(patternId, contextEntries, currentFrame);
+			correctionActivations.push({ patternId, age, deathFrame });
+			for (const { neuronId, distance } of contextEntries)
+				contextRefUpdates.push({ type: 'add', neuronId, distance });
+		}
+
+		return { matches, correctionActivations, contextRefUpdates };
 	}
 
 	/**
@@ -554,13 +581,13 @@ export class Neuron {
 	 * Update connections at a specific age based on observations.
 	 * Events: strengthen correct, weaken incorrect, add novel.
 	 * Actions: update with rewards, add alternatives for painful actions.
-	 * @param {Array<number>} activeAges - The ages at which this neuron is active
+	 * @param {Array<number>} ages - The ages at which this neuron is active and should be learning
 	 * @param {Array<{id: number, type: string, channel: string}>} newActiveNeurons - Newly active neurons at age=0 with metadata
 	 * @param {Map<string, number>} rewards - Map of channel name to reward value
 	 * @param {Map<string, Set<number>>} channelActionIds - Map of channel name to all action neuron IDs
 	 */
-	learnConnections(activeAges, newActiveNeurons, rewards, channelActionIds) {
-		for (const age of activeAges) {
+	learnConnections(ages, newActiveNeurons, rewards, channelActionIds) {
+		for (const age of ages) {
 
 			// skip age 0 - connection learning only applies to context neurons (age > 0)
 			if (age === 0) continue;

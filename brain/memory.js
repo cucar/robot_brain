@@ -109,17 +109,25 @@ export class Memory {
 	}
 
 	/**
-	 * Returns active neurons at a given level as a flat list of {neuronId, age, state}
-	 * entries in age-ascending order (activation order within age).
+	 * Returns the active neurons at a given level with their age-states.
+	 * Shape: Map<neuronId, Map<age, state>>. The inner map is populated in
+	 * age-ascending order (Map preserves insertion order), so iterating it
+	 * yields ages ascending.
 	 */
 	getLevelNeurons(level) {
-		const entries = [];
+		const neurons = new Map();
 		const levelAges = this.levelIndex.get(level);
-		if (!levelAges) return entries;
+		if (!levelAges) return neurons;
 		for (let age = 0; age < levelAges.length; age++)
-			for (const neuronId of levelAges[age])
-				entries.push({ neuronId, age, state: this.neuronStates.get(neuronId).get(age) });
-		return entries;
+			for (const neuronId of levelAges[age]) {
+				let ageStates = neurons.get(neuronId);
+				if (!ageStates) {
+					ageStates = new Map();
+					neurons.set(neuronId, ageStates);
+				}
+				ageStates.set(age, this.neuronStates.get(neuronId).get(age));
+			}
+		return neurons;
 	}
 
 	/**

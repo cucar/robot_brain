@@ -96,22 +96,24 @@ export class Thalamus {
 	}
 
 	/**
-	 * Create and add a new pattern neuron to the registry
+	 * Create a new pattern neuron and register it in the thalamus. Pure factory:
+	 * wires the pattern's own connections to sensory history but does NOT touch the
+	 * parent's routing table (that happens inside parent.processFrame via addPattern)
+	 * and does NOT deliver contextRef updates or register death (death frame is known
+	 * only after parent.addPattern runs).
 	 * @param {number} level - Neuron level (1+ = pattern)
 	 * @param {number} parentId - Parent neuron ID
 	 * @param {number} age - Distance in time between the observation and the error
-	 * @param {Array<Array<number>>} sensoryNeurons - Recent sensory neuron ids by age
+	 * @param {Array<Set<number>>} sensoryNeurons - Recent sensory neuron ids by age
 	 * @param {Array<Map<string, number>>} rewards - Rewards by age
-	 * @param {Array<{neuronId: number, distance: number}>} levelContext - Parent level context
-	 * @param {number} currentFrame - Current frame number
-	 * @returns {Neuron} The newly created neuron
+	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron ids by channel
+	 * @returns {number} The newly created pattern neuron
 	 */
-	addPatternNeuron(level, parentId, age, sensoryNeurons, rewards, levelContext, currentFrame) {
+	createPatternNeuron(level, parentId, age, sensoryNeurons, rewards, channelActionIds) {
 
 		// create the neuron
 		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold);
 
-		const channelActionIds = this.getChannelActionIds();
 		// create the future connections of the pattern from currently observed neurons
 		for (let a = 0; a < age && a < sensoryNeurons.length; a++)
 			for (const sensoryNeuronId of sensoryNeurons[a]) {
@@ -128,18 +130,13 @@ export class Thalamus {
 				}
 			}
 
+		// register in the thalamus
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, level);
 		this.neuronParents.set(neuron.id, parentId);
 		this.incrementLevelCount(level); // for diagnostics
 
-		const parent = this.neurons.get(parentId);
-		if (parent) {
-			const deathFrame = parent.addPattern(neuron.id, levelContext, currentFrame);
-			this.registerDeath(neuron.id, deathFrame);
-		}
-
-		return neuron;
+		return neuron.id;
 	}
 
 	/**
@@ -405,90 +402,153 @@ export class Thalamus {
 	 * Process one level end-to-end: aggregate the level view, match patterns, create
 	 * error-correction pattern neurons, and return all activations at level+1.
 	 * @param {number} level - Current level being processed
-	 * @param {Array<{neuronId, age, state}>} levelEntries - Active neurons at this level from memory
+	 * @param {Map<number, Map<number, object>>} levelNeurons - Active neurons at this level: neuronId -> age -> state (ages ascending)
 	 * @param {number} memoryDepth - Current sliding-window depth (age count)
 	 * @param {Array<Set<number>>} sensoryNeurons - Active sensory neuron ids by age (level 0)
 	 * @param {Array<Map>} rewards - Rewards by age (rewards[0] = current frame)
-	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron IDs for skipping
+	 * @param {Map<string, Set<number>>} channelActionIds - Action neuron IDs by channel
 	 * @param {number} frameNumber - Current frame number
 	 * @param {Set<number>} newErrorPatternIds - Accumulator of error pattern ids created this frame (mutated)
 	 * @param {number} errorCorrectionThreshold - Event-error ratio above which a correction is created
-	 * @returns {Array<{parentId, patternId, age, deathFrame?}>} Activations to apply at level+1
+	 * @returns {Array<{parentId, patternId, age, deathFrame}>} Activations to apply at level+1
 	 */
-	processLevel(level, levelEntries, memoryDepth, sensoryNeurons, rewards, channelActionIds, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
+	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
 
-		// Aggregate the level view (age-ascending, activation-order within age).
-		const levelNeurons = new Map();
-		const corrections = [];
-		const age0 = sensoryNeurons[0];
-		for (const { neuronId, age, state } of levelEntries) {
+		// pass 1: aggregate per-neuron work, build level context, pre-create corrections
+		const { tasks, levelContext } = this.buildLevelTasks(
+			level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, newErrorPatternIds, errorCorrectionThreshold);
 
+		// pass 2: dispatchFrame - one neuron.processFrame call per active neuron
+		const results = this.dispatchFrame(tasks, levelContext, sensoryNeurons[0], rewards[0], channelActionIds, frameNumber);
+
+		// pass 3: applyFrameResults - batch contextRef updates by target, register deaths, collect activations
+		const activations = this.applyFrameResults(results);
+
+		if (this.debug && activations.length > 0)
+			console.log(`Level ${level}: ${activations.length} activations`,
+				activations.map(a => `parent=${a.parentId}, age=${a.age}, pattern=${a.patternId}`).join('; '));
+
+		return activations;
+	}
+
+	/**
+	 * walk the active neurons at this level, aggregate per-neuron dispatch data,
+	 * inline-build the shared level context, and pre-create error-correction pattern neurons
+	 * for any (neuron, age) whose previous votes mismatched reality. New correction pattern
+	 * ids are added to newErrorPatternIds (mutated).
+	 * @returns {{tasks: Array<{neuron, activeAges, recognizerAges, corrections}>, levelContext: Context}}
+	 */
+	buildLevelTasks(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, channelActionIds, newErrorPatternIds, errorCorrectionThreshold) {
+		const tasks = [];
+		const levelContext = new Context();
+		for (const [neuronId, ageStates] of levelNeurons) {
+
+			// skip action neurons for learning or contexts if the channel learns without them
 			if (this.skipActionNeuron(neuronId)) continue;
 
-			// skip error patterns created during this frame - preserves prior behavior
-			// where corrections ran after the level loop (no re-learning, no context leak)
+			// skip error patterns created earlier this frame (their own level pass is suppressed)
 			if (newErrorPatternIds.has(neuronId)) continue;
 
-			// check for each neuron if it needs a new error correction pattern
-			// if the neuron needs error correction, add it to the list
-			if (this.needsErrorCorrection(age, state.votes, age0, errorCorrectionThreshold))
-				corrections.push({ neuronId, age, context: state.context });
+			// loop through the ages and determine the task needed for the neuron
+			const task = this.getNeuronTask(neuronId, level, levelContext, ageStates, memoryDepth, sensoryNeurons, rewards, channelActionIds, errorCorrectionThreshold);
 
-			if (!levelNeurons.has(neuronId)) levelNeurons.set(neuronId, { activeAges: [], recognizerAges: [] });
-			const entry = levelNeurons.get(neuronId);
-			entry.activeAges.push(age);
-			if (!state.activatedPatternId && age !== memoryDepth - 1) entry.recognizerAges.push(age);
+			// also return the created pattern neuron id so that we can suppress it in higher level
+			for (const correction of task.corrections) newErrorPatternIds.add(correction.patternId);
+
+			// add the task to the returned tasks
+			tasks.push(task);
 		}
+		return { tasks, levelContext };
+	}
 
-		// Build the level context once; matching runs only if recognition is still active and there's context.
-		const levelContext = this.buildLevelContext(levelNeurons);
+	/**
+	 * returns a task to be executed by a neuron
+	 */
+	getNeuronTask(neuronId, level, levelContext, ageStates, memoryDepth, sensoryNeurons, rewards, channelActionIds, errorCorrectionThreshold) {
+		const learnerAges = [];
+		const recognizerAges = [];
+		const corrections = [];
+		for (const [age, state] of ageStates) {
 
-		// add the type and channel to the active sensory neurons for processing
+			// every active entry (age > 0) contributes to the shared level context
+			if (age > 0) levelContext.addNeuron(neuronId, age);
+
+			// add active ages for the connections to be learned - age=0 cannot learn - just got activated
+			if (age > 0) learnerAges.push(age);
+
+			// add ages to be used for pattern recognition - if there was
+			if (!state.activatedPatternId && age !== memoryDepth - 1) recognizerAges.push(age);
+
+			// create an error correction pattern for this (neuron, age) if previous votes mismatched reality
+			if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0], errorCorrectionThreshold)) {
+
+				// create the error correction pattern neuron
+				const contextEntries = state.context.map(c => ({ neuronId: c.neuron.id, distance: c.distance }));
+				const patternId = this.createPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards, channelActionIds);
+				corrections.push({ patternId, age, contextEntries });
+			}
+		}
+		return { neuronId, learnerAges, recognizerAges, corrections };
+	}
+
+	/**
+	 * Pass 2: dispatch exactly one neuron.processFrame call per active neuron.
+	 * Returns raw results tagged with parentId for post-processing.
+	 */
+	dispatchFrame(tasks, levelContext, age0, currentRewards, channelActionIds, frameNumber) {
+
+		// decorate age=0 sensory neurons with type/channel for connection learning
 		const newActiveNeurons = [];
-		for (const neuronId of age0) {
-			const type = this.getNeuronType(neuronId);
-			const channel = this.getNeuronChannel(neuronId);
-			newActiveNeurons.push({ id: neuronId, type, channel });
-		}
+		for (const neuronId of age0)
+			newActiveNeurons.push({ id: neuronId, type: this.getNeuronType(neuronId), channel: this.getNeuronChannel(neuronId) });
 
-		// Per-neuron: learn connections and match patterns.
-		const recognitionResults = [];
-		for (const [neuronId, { activeAges, recognizerAges }] of levelNeurons) {
-			const neuron = this.neurons.get(neuronId);
-			const result = neuron.processFrame(activeAges, recognizerAges, levelContext, newActiveNeurons, rewards[0], channelActionIds, frameNumber);
-			if (result.matches.length > 0) recognitionResults.push({ parentId: neuronId, ...result });
+		// call each neuron to deliver the tasks to process the frame
+		const results = [];
+		for (const { neuronId, learnerAges, recognizerAges, corrections } of tasks) {
+			const result = this.neurons.get(neuronId).processFrame(
+				learnerAges, recognizerAges, levelContext, newActiveNeurons,
+				currentRewards, channelActionIds, frameNumber, corrections
+			);
+			results.push({ parentId: neuronId, ...result });
 		}
+		return results;
+	}
 
-		// Recognition post-processing: deliver contextRef updates and collect match activations.
+	/**
+	 * Pass 3: deliver contextRef updates (one call per target neuron), register deaths
+	 * for both recognition matches and error-correction patterns, and collect the unified
+	 * activation list to feed into level+1.
+	 * @returns {Array<{parentId, patternId, age, deathFrame}>}
+	 */
+	applyFrameResults(results) {
+		const perTarget = new Map(); // targetNeuronId -> [{type, parentId, distance}]
 		const activations = [];
-		if (recognitionResults.length > 0) {
-			const contextRefUpdates = this.collectContextRefUpdates(recognitionResults);
-			this.deliverContextRefUpdates(contextRefUpdates);
-			const matches = this.collectActivationMatches(recognitionResults);
-			for (const match of matches) this.registerDeath(match.patternId, match.deathFrame);
-			for (const match of matches) activations.push(match);
+		for (const { parentId, matches, correctionActivations, contextRefUpdates } of results) {
+
+			// batch contextRef updates by target neuron (delivered in the loop below)
+			for (const { type, neuronId, distance } of contextRefUpdates) {
+				let list = perTarget.get(neuronId);
+				if (!list) { list = []; perTarget.set(neuronId, list); }
+				list.push({ type, parentId, distance });
+			}
+
+			// register deaths + collect activations for recognition matches
+			for (const match of matches)
+				if (match.activate) {
+					this.registerDeath(match.patternId, match.deathFrame);
+					activations.push({ parentId, patternId: match.patternId, age: match.age, deathFrame: match.deathFrame });
+				}
+
+			// register deaths + collect activations for error-correction patterns
+			for (const { patternId, age, deathFrame } of correctionActivations) {
+				this.registerDeath(patternId, deathFrame);
+				activations.push({ parentId, patternId, age, deathFrame });
+			}
 		}
 
-		// learn new patterns for failed predictions at this level - create pattern
-		// neurons and populate their connections from the future
-		for (const { neuronId, age, context } of corrections) {
-
-			// neuron level is the current loop level - all corrections collected here are at `level`
-			const levelCtx = context.filter(c => this.getNeuronLevel(c.neuron.id) === level);
-			const mappedContext = levelCtx.map(c => ({ neuronId: c.neuron.id, distance: c.distance }));
-
-			// create and wire the new pattern neuron
-			const pattern = this.addPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards, mappedContext, frameNumber);
-
-			// update the context references of the neurons that were used in new contexts
-			for (const c of levelCtx) c.neuron.addContextRef(neuronId, c.distance);
-
-			// exclude this new pattern when we build the level view for level+1
-			newErrorPatternIds.add(pattern.id);
-
-			// return as an activation so the caller activates it alongside matches
-			activations.push({ parentId: neuronId, patternId: pattern.id, age });
-		}
+		// deliver contextRef updates: one call per target neuron
+		for (const [targetId, updates] of perTarget)
+			this.neurons.get(targetId).applyContextRefUpdates(updates);
 
 		return activations;
 	}
@@ -519,71 +579,12 @@ export class Thalamus {
 	}
 
 	/**
-	 * Build one universal context for a level from the already-filtered levelNeurons map.
-	 * Distances are absolute ages (age of the context neuron). Age 0 is excluded — it is
-	 * the recognizer itself, not context.
-	 * @param {Map<number, {activeAges: number[]}>} levelNeurons
-	 * @returns {Context}
-	 */
-	buildLevelContext(levelNeurons) {
-		const context = new Context();
-		for (const [neuronId, { activeAges }] of levelNeurons)
-			for (const age of activeAges)
-				if (age > 0) context.addNeuron(neuronId, age);  // distance = absolute age
-		return context;
-	}
-
-	/**
 	 * Check if a neuron should be skipped (action neuron in a channel without action sequences)
 	 */
 	skipActionNeuron(neuronId) {
 		if (this.neuronLevels.get(neuronId) !== 0 || this.getNeuronType(neuronId) !== 'action') return false;
 		const channel = this.channels.get(this.getNeuronChannel(neuronId));
 		return channel && !channel.actionSequences;
-	}
-
-	/**
-	 * Flatten deferred contextRef updates from all recognizers into one ordered global list.
-	 * Order is preserved exactly as produced during matching/refinement.
-	 * @param {Array<{parentId, contextRefUpdates}>} recognitionResults
-	 * @returns {Array<{parentId, type, neuronId, distance}>}
-	 */
-	collectContextRefUpdates(recognitionResults) {
-		const contextRefUpdates = [];
-		for (const { parentId, contextRefUpdates: parentUpdates } of recognitionResults)
-			for (const update of parentUpdates)
-				contextRefUpdates.push({ parentId, ...update });
-		return contextRefUpdates;
-	}
-
-	/**
-	 * Deliver the ordered global post-match contextRef update list.
-	 * @param {Array<{parentId, type, neuronId, distance}>} contextRefUpdates
-	 */
-	deliverContextRefUpdates(contextRefUpdates) {
-		for (const update of contextRefUpdates)
-			if (update.type === 'add') this.neurons.get(update.neuronId)?.addContextRef(update.parentId, update.distance);
-			else this.neurons.get(update.neuronId)?.removeContextRef(update.parentId, update.distance);
-	}
-
-	/**
-	 * Collect only the matches that should activate downstream.
-	 * @param {Array<{parentId, matches}>} recognitionResults
-	 * @returns {Array<{parentId, patternId, age, deathFrame}>}
-	 */
-	collectActivationMatches(recognitionResults) {
-		const matchedPatterns = [];
-		for (const { parentId, matches } of recognitionResults)
-			for (const match of matches)
-				if (match.activate) matchedPatterns.push({ parentId, patternId: match.patternId, age: match.age, deathFrame: match.deathFrame });
-		if (this.debug) {
-			if (matchedPatterns.length > 0)
-				console.log(`Matched ${matchedPatterns.length} patterns:`,
-					matchedPatterns.map(m => `parent=${m.parentId}, age=${m.age}, pattern=${m.patternId}`).join('; '));
-			else
-				console.log('No pattern matches found');
-		}
-		return matchedPatterns;
 	}
 
 	/**
