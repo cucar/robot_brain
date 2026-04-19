@@ -92,7 +92,7 @@ export class TextChannel extends Channel {
 		if (this.debug)
 			console.log(`${this.name}: Frame ${frameNumber} - char '${char}' (${charCode})`);
 
-		return [{ [`${this.name}_char`]: charCode }];
+		return [{ dimension: `${this.name}_char`, value: charCode }];
 	}
 
 	/**

@@ -43,12 +43,12 @@ graph TD
 
 ### 1. Spatio-Temporal Neural Representation
 
-Neurons represent points in multi-dimensional coordinate space. Base neurons (level 0) have explicit coordinates in named dimensions — a vision neuron might encode `(x=12, y=5, r=200, g=50, b=30)`, while a financial neuron encodes `(price_change=up, volume_change=high)`.
+Each base neuron occupies a single point on a single named dimension. Base neurons (level 0) carry exactly one `(dimension, value)` pair — a vision neuron encodes `{dimension: pixel_12_5, value: 200}` (one neuron per pixel position, brightness as value); a financial neuron encodes `{dimension: price_change, value: up}`. Multi-dimensional observations emit multiple base neurons in the same frame.
 
-- **Coordinate-based encoding** — base neurons are identified by their position in dimension space
+- **Single-dim coordinate encoding** — every base neuron is identified by exactly one `(dimension, value)` pair
 - **Type-aware neurons** — `event` neurons observe the world; `action` neurons represent decisions
-- **Pattern neurons** (level > 0) have no coordinates — they represent learned contexts
-- **O(1) neuron lookup** via hash map using coordinate JSON strings as keys
+- **Pattern neurons** (level > 0) have no coordinate — they represent learned contexts
+- **O(1) neuron lookup** via hash map keyed by `dimension:value`
 
 ### 2. Temporal Connections with Distance Encoding
 

@@ -12,7 +12,7 @@ export class Diagnostics {
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 };
-		this.mispredictions = []; // Array of { predicted: coordinates, actual: coordinates, channel }
+		this.mispredictions = []; // Array of { predicted: coordinate, actual: coordinate, channel }
 
 		// Flags
 		this.debug = debug;
@@ -121,12 +121,11 @@ export class Diagnostics {
 		const votesByNeuron = new Map();
 		for (const v of votes) {
 			if (!votesByNeuron.has(v.targetId)) {
-				const coords = v.targetCoords;
-				const coordsStr = Object.entries(coords).sort(([a], [b]) => a.localeCompare(b)).map(([k, val]) => `${k}=${val}`).join(', ');
+				const coord = v.targetCoordinate;
 				votesByNeuron.set(v.targetId, {
 					neuronId: v.targetId,
-					coordsStr,
-					dimensions: coords,
+					coordsStr: `${coord.dimension}=${coord.value}`,
+					dimension: coord.dimension,
 					votes: [],
 					totalStrength: 0
 				});
@@ -145,12 +144,9 @@ export class Diagnostics {
 	 */
 	groupByDimension(votesByNeuron) {
 		const byDimension = new Map();
-		for (const [_, data] of votesByNeuron) {
-			for (const [dimName, _] of Object.entries(data.dimensions)) {
-				if (!byDimension.has(dimName))
-					byDimension.set(dimName, []);
-				byDimension.get(dimName).push(data);
-			}
+		for (const data of votesByNeuron.values()) {
+			if (!byDimension.has(data.dimension)) byDimension.set(data.dimension, []);
+			byDimension.get(data.dimension).push(data);
 		}
 		return byDimension;
 	}
@@ -201,7 +197,7 @@ export class Diagnostics {
 	groupActionsByLabel(actionVotes, channel) {
 		const actionGroups = new Map();
 		for (const v of actionVotes) {
-			const label = channel.formatActionLabel ? channel.formatActionLabel(v.targetCoords) : JSON.stringify(v.targetCoords);
+			const label = channel.formatActionLabel ? channel.formatActionLabel(v.targetCoordinate) : JSON.stringify(v.targetCoordinate);
 			if (!actionGroups.has(label))
 				actionGroups.set(label, []);
 			actionGroups.get(label).push(v);
@@ -320,7 +316,7 @@ export class Diagnostics {
 		// Group event predictions by channel for continuous error calculation
 		const predictionsByChannel = new Map();
 
-		for (const { neuronId, strength, channel, type, coordinates } of inferences) {
+		for (const { neuronId, strength, channel, type, coordinate } of inferences) {
 
 			// Track event prediction accuracy
 			if (type === 'event') {
@@ -331,7 +327,7 @@ export class Diagnostics {
 				// Group for continuous error calculation
 				if (!predictionsByChannel.has(channel))
 					predictionsByChannel.set(channel, []);
-				predictionsByChannel.get(channel).push({ coordinates, strength, isCorrect });
+				predictionsByChannel.get(channel).push({ coordinate, strength, isCorrect });
 			}
 			// Track action reward from the action's channel
 			else if (type === 'action') {
@@ -347,12 +343,12 @@ export class Diagnostics {
 			const actuals = actualEventCoordsByChannel.get(channelName) || [];
 
 			// Find wrong predictions
-			for (const { coordinates, isCorrect } of predictions) {
+			for (const { coordinate, isCorrect } of predictions) {
 				if (!isCorrect && actuals.length > 0) {
 					// Record the misprediction with predicted and actual coordinates
 					this.mispredictions.push({
 						channel: channelName,
-						predicted: coordinates,
+						predicted: coordinate,
 						actual: actuals[0]
 					});
 				}
@@ -408,8 +404,7 @@ export class Diagnostics {
 		// Build observation string from frame
 		const observations = [];
 		for (const point of frame)
-			for (const [dim, val] of Object.entries(point.coordinates))
-				observations.push(`${dim}=${val}`);
+			observations.push(`${point.coordinate.dimension}=${point.coordinate.value}`);
 
 		console.log(`\nF${frameNumber} | Obs: ${observations.join(', ')}`);
 	}

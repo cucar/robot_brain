@@ -178,8 +178,8 @@ export default class TextTestJob extends Job {
 		// Group and dedupe mispredictions by predicted→actual pair
 		const grouped = new Map();
 		for (const m of mispredictions) {
-			const predChar = Object.values(m.predicted)[0];
-			const actualChar = Object.values(m.actual)[0];
+			const predChar = m.predicted.value;
+			const actualChar = m.actual.value;
 			const key = `${predChar}→${actualChar}`;
 			grouped.set(key, (grouped.get(key) || 0) + 1);
 		}

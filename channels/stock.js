@@ -199,8 +199,8 @@ export class StockChannel extends Channel {
 		const volumeChange = this.previousVolume === 0 ? 1000 : ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
 		return [
-			{ [`${this.symbol}_price_change`]: this.discretizeChange(priceChange, this.priceBoundaries) },
-			{ [`${this.symbol}_volume_change`]: this.discretizeChange(volumeChange, this.volumeBoundaries) }
+			{ dimension: `${this.symbol}_price_change`, value: this.discretizeChange(priceChange, this.priceBoundaries) },
+			{ dimension: `${this.symbol}_volume_change`, value: this.discretizeChange(volumeChange, this.volumeBoundaries) }
 		];
 	}
 
@@ -232,14 +232,17 @@ export class StockChannel extends Channel {
 	 * These are pre-created during brain init so exploration can find them.
 	 */
 	getActions() {
-		return [ { [this.activityDimName]: POSITION_OUT }, { [this.activityDimName]: POSITION_OWN } ];
+		return [
+			{ dimension: this.activityDimName, value: POSITION_OUT },
+			{ dimension: this.activityDimName, value: POSITION_OWN }
+		];
 	}
 
 	/**
 	 * returns the coordinates of the channel default action - for stock channels, this is "do nothing"
 	 */
 	getDefaultAction() {
-		return { [this.activityDimName]: POSITION_OUT };
+		return { dimension: this.activityDimName, value: POSITION_OUT };
 	}
 
 	/**
@@ -312,26 +315,25 @@ export class StockChannel extends Channel {
 	calculatePredictionError(predictions, actuals) {
 		const priceChangeDim = `${this.symbol}_price_change`;
 
-		// Filter to price change predictions only (predictions have {coordinates, strength, isCorrect})
-		const pricePredictions = predictions.filter(p => p.coordinates[priceChangeDim] !== undefined);
+		// Filter to price change predictions only (predictions have {coordinate, strength, isCorrect})
+		const pricePredictions = predictions.filter(p => p.coordinate.dimension === priceChangeDim);
 		if (pricePredictions.length === 0) return null;
 
 		// Calculate weighted predicted percentage change
 		let totalWeightedChange = 0;
 		let totalStrength = 0;
 		for (const pred of pricePredictions) {
-			const bucketValue = pred.coordinates[priceChangeDim];
-			const percentageChange = this.bucketValueToPercentage(bucketValue);
+			const percentageChange = this.bucketValueToPercentage(pred.coordinate.value);
 			totalWeightedChange += percentageChange * pred.strength;
 			totalStrength += pred.strength;
 		}
 		if (totalStrength === 0) return null;
 		const predictedChange = totalWeightedChange / totalStrength;
 
-		// Find actual price change from actuals (actuals are coordinate objects)
-		const actualCoords = actuals.find(coords => coords[priceChangeDim] !== undefined);
-		if (!actualCoords) return null;
-		const actualChange = this.bucketValueToPercentage(actualCoords[priceChangeDim]);
+		// Find actual price change from actuals (actuals are coordinate objects: {dimension, value})
+		const actualCoord = actuals.find(c => c.dimension === priceChangeDim);
+		if (!actualCoord) return null;
+		const actualChange = this.bucketValueToPercentage(actualCoord.value);
 
 		// Return absolute error in percentage points
 		const error = Math.abs(predictedChange - actualChange);
@@ -388,7 +390,7 @@ export class StockChannel extends Channel {
 	static saveLastActions(channelInferences) {
 		for (const [, { channel, actions }] of channelInferences) {
 			if (actions.length === 0) continue;
-			channel.lastAction = actions[0].coordinates[`${channel.symbol}_activity`];
+			channel.lastAction = actions[0].coordinate.value;
 		}
 	}
 
@@ -441,12 +443,12 @@ export class StockChannel extends Channel {
 	 */
 	static determineActions(channelInferences) {
 		const allActions = [];
-		for (const [channelName, { channel, actions }] of channelInferences) {
+		for (const [channelName, { actions }] of channelInferences) {
 
 			// get the brain desired action for the channel
 			if (actions.length === 0) continue;
 			const actionData = actions[0]; // Single action per stock channel
-			const action = actionData.coordinates[`${channel.symbol}_activity`];
+			const action = actionData.coordinate.value;
 			const actionOwn = action === POSITION_OWN;
 
 			// rank stocks by expected reward
@@ -693,15 +695,14 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Format action label for debug output
-	 * Converts raw coordinates to human-readable action names (e.g., "OWN", "OUT")
-	 * @param {Object} coords - Coordinates object { dimension: value }
+	 * Converts raw coordinate to human-readable action names (e.g., "OWN", "OUT")
+	 * @param {{dimension: string, value: number}} coordinate
 	 * @returns {string} Formatted action label
 	 */
-	formatActionLabel(coords) {
-		const activityVal = coords[this.activityDimName];
-		if (activityVal === POSITION_OWN) return 'OWN';
-		if (activityVal === POSITION_OUT) return 'OUT';
-		return JSON.stringify(coords);
+	formatActionLabel(coordinate) {
+		if (coordinate.value === POSITION_OWN) return 'OWN';
+		if (coordinate.value === POSITION_OUT) return 'OUT';
+		return JSON.stringify(coordinate);
 	}
 
 	/**

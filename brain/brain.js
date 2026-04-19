@@ -273,12 +273,12 @@ export default class Brain {
 			// Get the frame event inputs from the channel
 			const channelEvents = await channel.getFrameEvents(this.frameNumber);
 			for (const event of channelEvents)
-				this.frame.push({ coordinates: event, channel: channelName, type: 'event' });
+				this.frame.push({ coordinate: event, channel: channelName, type: 'event' });
 
 			// Get actions from previous inference (guaranteed to exist after first frame)
 			const channelActions = frameActions.get(channelName) || [];
 			for (const action of channelActions)
-				this.frame.push({ coordinates: action.coordinates, channel: channelName, type: 'action' });
+				this.frame.push({ coordinate: action.coordinate, channel: channelName, type: 'action' });
 		}
 
 		if (this.debug) console.log(`Processing frame: ${this.frame.length} neurons`);
@@ -347,7 +347,7 @@ export default class Brain {
 	 */
 	getFrameNeurons(frame) {
 		const neuronIds = [];
-		for (const point of frame) neuronIds.push(this.thalamus.getNeuronIdForPoint(point.coordinates, point.channel, point.type));
+		for (const point of frame) neuronIds.push(this.thalamus.getNeuronIdForPoint(point.coordinate, point.channel, point.type));
 		if (neuronIds.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
 		// if (this.debug) console.log('frame neurons', neuronIds);
 		return neuronIds;
@@ -437,7 +437,7 @@ export default class Brain {
 				targetId: v.neuronId,
 				targetType: this.thalamus.getNeuronType(v.neuronId),
 				targetChannel: this.thalamus.getNeuronChannel(v.neuronId),
-				targetCoords: this.thalamus.getNeuronCoordinates(v.neuronId),
+				targetCoordinate: this.thalamus.getNeuronCoordinate(v.neuronId),
 				voterId: v.voterId,
 				voterLevel: this.thalamus.getNeuronLevel(v.voterId),
 				voterLabel: this.formatNeuronLabel(v.voterId),
@@ -489,9 +489,9 @@ export default class Brain {
 			const candidate = candidates.get(v.neuronId);
 			candidate.strength += v.strength;
 
-			// for actions, calculate the weighted total - for events, calculate total strengths for each dimension
+			// for actions, calculate the weighted total - for events, accumulate strength on the event's dimension
 			if (this.thalamus.getNeuronType(v.neuronId) === 'action') candidate.weightedTotal += v.strength * v.reward;
-			else this.addDimStrength(dimTotalStrength, this.thalamus.getNeuronCoordinates(v.neuronId), v.strength);
+			else this.addDimStrength(dimTotalStrength, this.thalamus.getNeuronCoordinate(v.neuronId), v.strength);
 		}
 		return { candidates, dimTotalStrength };
 	}
@@ -503,19 +503,18 @@ export default class Brain {
 	determineDimensionWinners(candidates, dimTotalStrength) {
 		const dimBest = new Map();
 		for (const [neuronId, candidate] of candidates) {
+			const coordinate = this.thalamus.getNeuronCoordinate(neuronId);
 
 			// for actions, calculate the reward as weighted total / strength - for events, calculate the likelihood of the event
 			const candidateType = this.thalamus.getNeuronType(neuronId);
 			if (candidateType === 'action') candidate.reward = candidate.strength > 0 ? candidate.weightedTotal / candidate.strength : 0;
-			else candidate.probability = this.getEventProbability(candidate.strength, this.thalamus.getNeuronCoordinates(neuronId), dimTotalStrength);
+			else candidate.probability = this.getEventProbability(candidate.strength, coordinate, dimTotalStrength);
 
-			// set the best neuron for each dimension based on rewards or probabilities, break ties by strength
-			for (const dim of Object.keys(this.thalamus.getNeuronCoordinates(neuronId))) {
-				const best = dimBest.get(dim);
-				const score = candidateType === 'action' ? candidate.reward : candidate.probability;
-				if (this.isBetterCandidate(score, candidate.strength, neuronId, best))
-					dimBest.set(dim, { neuronId, score, strength: candidate.strength });
-			}
+			// set the best neuron for this dimension based on reward or probability, break ties by strength
+			const best = dimBest.get(coordinate.dimension);
+			const score = candidateType === 'action' ? candidate.reward : candidate.probability;
+			if (this.isBetterCandidate(score, candidate.strength, neuronId, best))
+				dimBest.set(coordinate.dimension, { neuronId, score, strength: candidate.strength });
 		}
 		return dimBest;
 	}
@@ -541,7 +540,7 @@ export default class Brain {
 			const candidate = candidates.get(neuronId);
 			const winner = {
 				neuronId,
-				coordinates: this.thalamus.getNeuronCoordinates(neuronId),
+				coordinate: this.thalamus.getNeuronCoordinate(neuronId),
 				channel: this.thalamus.getNeuronChannel(neuronId),
 				strength: candidate.strength
 			};
@@ -553,30 +552,18 @@ export default class Brain {
 	}
 
 	/**
-	 * Add strength to dimension totals map
+	 * Add strength to the dimension total for the given coordinate
 	 */
-	addDimStrength(dimTotalStrength, coordinates, strength) {
-		for (const dim of Object.keys(coordinates))
-			dimTotalStrength.set(dim, (dimTotalStrength.get(dim) || 0) + strength);
+	addDimStrength(dimTotalStrength, coordinate, strength) {
+		dimTotalStrength.set(coordinate.dimension, (dimTotalStrength.get(coordinate.dimension) || 0) + strength);
 	}
 
 	/**
-	 * Calculate likelihood (strength / total) averaged across dimensions
+	 * Calculate event likelihood (this neuron's strength / total strength on its dimension)
 	 */
-	getEventProbability(strength, coordinates, dimTotalStrength) {
-
-		// if there are no dimensions, error out - this should not happen
-		const dimensions = Object.keys(coordinates);
-		const dimCount = dimensions.length;
-		if (dimCount === 0) throw new Error('Neuron with no dimensions.');
-
-		// calculate the total likelihood of the event and return it
-		let totalLikelihood = 0;
-		for (const dim of dimensions) {
-			const total = dimTotalStrength.get(dim) || 0;
-			if (total > 0) totalLikelihood += strength / total;
-		}
-		return totalLikelihood / dimCount;
+	getEventProbability(strength, coordinate, dimTotalStrength) {
+		const total = dimTotalStrength.get(coordinate.dimension) || 0;
+		return total > 0 ? strength / total : 0;
 	}
 
 	/**
@@ -602,7 +589,7 @@ export default class Brain {
 			// No action inferred for this channel - use the default action for deterministic exploration
 			inferences.push({
 				neuronId: explorationActionId,
-				coordinates: this.thalamus.getNeuronCoordinates(explorationActionId),
+				coordinate: this.thalamus.getNeuronCoordinate(explorationActionId),
 				channel: channelName,
 				strength: 0,
 				reward: 0
@@ -622,13 +609,9 @@ export default class Brain {
 		const parentId = this.thalamus.getNeuronParent(neuronId);
 		if (this.thalamus.getNeuronLevel(neuronId) > 0 && parentId != null) return this.formatNeuronLabel(parentId);
 
-		// Sensory neurons: format coordinates
-		const coordinates = this.thalamus.getNeuronCoordinates(neuronId);
-		if (!coordinates) return `n${neuronId}`;
-		return Object.entries(coordinates)
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([k, v]) => `${k}=${v}`)
-			.join(', ');
+		// Sensory neurons: format coordinate
+		const coordinate = this.thalamus.getNeuronCoordinate(neuronId);
+		return `${coordinate.dimension}=${coordinate.value}`;
 	}
 
 	/**

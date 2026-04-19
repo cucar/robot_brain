@@ -12,6 +12,8 @@ The key claim: **one architecture, zero modifications, multiple domains** (stock
 
 Unlike conventional image classification, Robot Brain cannot process static images. Each MNIST image (28×28 grayscale) is presented as a **784-frame episode**, reading pixels sequentially in raster scan order (left-to-right, top-to-bottom). Each frame contains a single grayscale value (0–255).
 
+> **Single-dim model note**: under the current single-dimension-per-base-neuron rule, each pixel position is its own dimension (e.g. `pixel_12_5`), and a frame emits exactly one base neuron `{dimension: pixel_x_y, value: brightness}`. Multi-dim packing of position + color into one neuron is no longer supported.
+
 Classification is modeled as an **action selection problem**:
 
 * The brain has 10 possible actions (digits 0–9)
@@ -203,9 +205,9 @@ Distribute across multiple machines for large-scale workloads.
 
 ### Core approach
 - Reference: https://claude.ai/share/5ac65464-6293-4cad-9683-07f0bd135644
-- Each pixel neuron has dimensions: x, y, color (grayscale 0–256 to start)
-- Coordinates relative to screen — each combination is a different neuron
-- 100×100 camera with 256 color values = ~2.5M possible neurons
+- Under the single-dimension-per-base-neuron rule, each (x, y) screen position becomes its own dimension (e.g. `pixel_12_5`), and the base neuron carries `{dimension: pixel_x_y, value: brightness}`
+- Color (grayscale 0–256 to start) is the value; for RGB, each channel becomes its own dimension family (`pixel_x_y_r`, `_g`, `_b`)
+- 100×100 grayscale camera = 10,000 dimensions × 256 values = ~2.5M possible base neurons
 - No explicit relationships between inputs — the brain forms them via temporal prediction models
 
 ### Biological reference
@@ -225,9 +227,9 @@ Distribute across multiple machines for large-scale workloads.
 - How to build depth perception from 2 eyes
 
 ### Spatial processing (spatio-temporal pooling)
-- Channel sends pixels with 5 dimensions: x, y, r, g, b
-- Brain activates neurons corresponding to differences between these dimensions
-- For each dimension, transform coordinates to relative values within the frame
+- Channel emits one base neuron per pixel as `{dimension: pixel_x_y, value: brightness}` (or per-color-channel variant for RGB)
+- Brain activates neurons corresponding to differences between these per-pixel dimensions
+- Position is encoded structurally in the dimension name; brightness is the value — no multi-dim packing
 - This is done BEFORE temporal recognition — spatial level processing within same frame and age
 - Two-level processing: spatial levels and temporal levels
 - For spatial pooling, add x and y distances to connections table alongside temporal distance
@@ -237,8 +239,8 @@ Distribute across multiple machines for large-scale workloads.
 ### Value encoding (applies to all channels)
 - Channels should NOT do encoding like slope categorization or discretization
 - Brain should automatically convert:
-  1. Take all active neurons in frame, group by dimensions
-  2. Calculate differences of coordinate values between new and older neurons
+  1. Take all active neurons in frame, group by dimension
+  2. Calculate differences of values between new and older neurons within the same dimension
   3. Activate neurons corresponding to those differences
 - For stocks: neurons for differences in price and volume
 - For vision: neurons for pixel differences across frames

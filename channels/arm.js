@@ -1,6 +1,9 @@
 import { Channel } from './channel.js';
 import { Dimension } from './dimension.js';
 
+// TODO: scratch channel — not updated for single-dim coordinate refactor.
+// getActions/getDefaultAction/getFrameEvents must emit {dimension, value}, not {[dimName]: value}.
+
 /**
  * Arm Channel - Handles touch/proprioception input and motor output
  * Input: touch, proprioception (joint positions, muscle tension)

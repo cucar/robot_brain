@@ -275,16 +275,18 @@ graph BT
 
 ### Channels
 
-Channels are adapters between the brain and external data. Each channel defines its input dimensions (events) and output dimensions (actions):
+Channels are adapters between the brain and external data. Each channel defines its input dimensions (events) and output dimensions (actions). Each base neuron carries exactly one `(dimension, value)` pair — multi-dim observations emit multiple base neurons per frame.
 
 | Channel | Inputs (Events) | Outputs (Actions) | Reward Signal |
 |---------|-----------------|-------------------|---------------|
-| `StockChannel` | Price change, volume change, position | Buy, sell, hold | Profit/loss |
-| `TextChannel` | Character code | Next character | Prediction accuracy |
-| `VisionChannel` | x, y, r, g, b | Saccade direction | Target acquisition |
-| `AudioChannel` | Frequency bands | — | — |
-| `ArmChannel` | Joint positions, touch | Muscle contractions | Goal reaching |
-| `TongueChannel` | Taste dimensions | Tongue movements | — |
+| `StockChannel` | One neuron per dim: price change, volume change | One neuron: position (own/out) | Profit/loss |
+| `TextChannel` | One neuron: character code | — | — |
+| `VisionChannel` ⚠️ | One neuron per pixel position (`pixel_x_y` dim, brightness as value) | Saccade direction | Target acquisition |
+| `AudioChannel` ⚠️ | Frequency bands | — | — |
+| `ArmChannel` ⚠️ | Joint positions, touch | Muscle contractions | Goal reaching |
+| `TongueChannel` ⚠️ | Taste dimensions | Tongue movements | — |
+
+⚠️ = scratch channel; not yet updated for the single-dim `{dimension, value}` coordinate shape.
 
 ### Jobs
 

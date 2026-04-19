@@ -40,7 +40,7 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 | **Brain** | Orchestrator — frame loop, learning, inference | frameNumber, error threshold |
 | **Thalamus** | Neuron registry, channel mgmt, dimension maps | neurons Map, neuronsByValue, deathLedger, channels |
 | **Memory** | Temporal sliding window of active neurons | activeNeurons[], inferredNeurons[], contextLength |
-| **Neuron** | Connections, children, voting, learning, decay | connections, children, context, coordinates |
+| **Neuron** | Connections, children, voting, learning, decay | connections, children, context (coordinate held in Thalamus.baseNeurons for level-0 only) |
 | **Context** | Pattern context matching & merging | entries Map<neuron, Map<distance, strength>> |
 | **Channel** | I/O interface (stock, text, vision, etc.) | dimensions, actions, rewards |
 | **Database** | MySQL persistence | connection, backup/restore |
@@ -73,7 +73,7 @@ The following describes the *design* for reference — implementation happens in
 
 ### 2.4 Refactor Thalamus for column-aware neuron ownership
 - Neurons get assigned to a specific column (owner)
-- Neuron channel, type, coordinates belong to base level only - may be ok to merge as baseNeurons?
+- ~~Neuron channel, type, coordinates belong to base level only - may be ok to merge as baseNeurons?~~ **Done**: Thalamus now holds a single `baseNeurons` Map (`neuronId → {channel, type, coordinate}`) for level-0 only; interneurons have no coordinate. DB `coordinates` table dropped, columns merged into `base_neurons`.
 - Thalamus tracks which region/column owns each neuron
 - Neuron lookup still global (Thalamus), but mutations route through owner
 
@@ -177,7 +177,7 @@ Add threading within the Rust core. Introduce the region/column abstractions dir
 - Vote aggregation across columns
 
 ### 5.3 Neuron metadata storage for multi-threaded
-- Each Region holds the metadata lookup tables (channel, type, coordinates, level, parentId) for its owned neurons
+- Each Region holds the metadata lookup tables (channel, type, dimension, value, level, parentId) for its owned neurons (dimension/value are level-0 only)
 - Columns within the same Region read from the parent region's tables via shared memory — no copies needed
 - All neuron metadata is immutable after creation, so no synchronization is required for reads
 - Lookup interface remains the same as single-threaded (`get_channel(neuron_id)`, `get_type(neuron_id)`, etc.)

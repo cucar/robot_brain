@@ -193,10 +193,10 @@ When a pattern activates on a parent neuron, the parent's connection votes are s
 
 1. **Aggregate votes**: Sum effective strengths per target neuron
 2. **Calculate rewards**: Weighted average of vote rewards (for actions)
-3. **Select winners per dimension**:
-   - Events: highest total strength wins
+3. **Select winners per dimension** (each base neuron has exactly one dimension):
+   - Events: highest total strength wins; probability = strength / total dimension strength
    - Actions: highest weighted reward wins
-4. **Return winners**: Neurons that won in any dimension
+4. **Return winners**: One winner per dimension
 
 **Example**:
 ```
@@ -226,10 +226,10 @@ class Neuron {
   id: number                    // Unique ID
   level: number                 // 0 = sensory, 1+ = pattern
 
-  // Sensory neurons (level 0)
+  // Sensory neurons (level 0) — single dimension per base neuron
   channel: string               // Channel name
   type: 'event' | 'action'      // Neuron type
-  coordinates: object           // {dimension: value}
+  coordinate: object            // {dimension, value}
 
   // Pattern neurons (level > 0)
   parent: Neuron                // Parent neuron (the predictor that made the error)
@@ -268,8 +268,7 @@ Used for backup/restore between episodes, not during frame processing:
 - **`channels`** - Channel registry with IDs
 - **`dimensions`** - Dimension names with IDs
 - **`neurons`** - All neurons with level
-- **`base_neurons`** - Sensory neuron metadata (channel, type)
-- **`coordinates`** - Sensory neuron coordinate values
+- **`base_neurons`** - Sensory neuron metadata, one row per neuron (`neuron_id` PK, `channel_id`, `type`, `dimension_id`, `val`)
 - **`connections`** - Base neuron connections (distance, strength, reward)
 - **`patterns`** - Pattern-to-parent mappings with strength
 - **`pattern_past`** - Pattern contexts (context neurons with ages and strengths)
@@ -529,26 +528,27 @@ class StockChannel extends Channel {
   }
 
   getActions() {
+    // One base neuron per (dimension, value) — single dim per neuron
     return [
-      {action: 'buy'},
-      {action: 'sell'},
-      {action: 'hold'}
+      {dimension: 'action', value: 'buy'},
+      {dimension: 'action', value: 'sell'},
+      {dimension: 'action', value: 'hold'}
     ]
   }
 
   async getFrameEvents() {
-    // Return current price/volume changes and position
-    return [{
-      price_change: this.discretize(priceChange),
-      volume_change: this.discretize(volumeChange),
-      position: this.position
-    }]
+    // Emit one base neuron per dimension (single dim per neuron)
+    return [
+      {dimension: 'price_change',  value: this.discretize(priceChange)},
+      {dimension: 'volume_change', value: this.discretize(volumeChange)},
+      {dimension: 'position',      value: this.position}
+    ]
   }
 
   async executeOutputs(actions) {
     // Execute trade decision
-    if (actions[0].coordinates.action === 'buy') this.position = 1
-    else if (actions[0].coordinates.action === 'sell') this.position = -1
+    if (actions[0].coordinate.value === 'buy') this.position = 1
+    else if (actions[0].coordinate.value === 'sell') this.position = -1
   }
 
   async getRewards(actions) {
