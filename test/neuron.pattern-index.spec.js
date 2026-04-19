@@ -38,7 +38,7 @@ describe('Neuron pattern index', () => {
 		const observed = makeContext([[7, 1], [11, 2], [12, 3], [99, 4]]);
 		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 0)].sort((a, b) => a - b), [301, 303]);
 
-		const actual = parent.findBestPatternMatchAtAge(observed, 0, 0);
+		const actual = parent.findBestPatternMatchAtAge(observed, 0, null, 0);
 		const expected = findBestLinearMatch(parent, observed, 0, 0);
 		assert.deepStrictEqual(actual, expected);
 	});
@@ -51,7 +51,7 @@ describe('Neuron pattern index', () => {
 		const observed = makeContext([[22, 1], [11, 1]]);
 		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 0)], [602, 601]);
 
-		const actual = parent.findBestPatternMatchAtAge(observed, 0, 0);
+		const actual = parent.findBestPatternMatchAtAge(observed, 0, null, 0);
 		const expected = findBestLinearMatch(parent, observed, 0, 0);
 		assert.deepStrictEqual(actual, expected);
 		assert.equal(actual.patternId, 601);
@@ -64,7 +64,7 @@ describe('Neuron pattern index', () => {
 
 		const observed = makeContext([[99, 1], [100, 2]]);
 		assert.deepStrictEqual([...parent.getPatternCandidatesAtAge(observed, 0)], []);
-		assert.equal(parent.findBestPatternMatchAtAge(observed, 0, 0), null);
+		assert.equal(parent.findBestPatternMatchAtAge(observed, 0, null, 0), null);
 	});
 
 	it('keeps the inverted index in sync when patterns are removed', () => {
@@ -91,7 +91,7 @@ describe('Neuron pattern index', () => {
 		parent.routingTable.delete(501);
 
 		assert.throws(
-			() => parent.findBestPatternMatchAtAge(observed, 0, 0),
+			() => parent.findBestPatternMatchAtAge(observed, 0, null, 0),
 			/Cannot find context for pattern: 501/
 		);
 	});

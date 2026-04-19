@@ -418,10 +418,15 @@ export class Neuron {
 	 * error-correction activation at the same age.
 	 * @param {Map<number, {activatedPatternId?: number}>} ageStates - This neuron's per-age state
 	 * @param {number} memoryDepth - Sliding window depth (used to gate voting and recognizer ages)
-	 * @param {boolean} isNewErrorPattern - True if this neuron was just created this frame
-	 *        (skips learning, recognition, and context contribution; voting still runs)
-	 * @param {Context|null} levelContext - Level context for matching (excludes new-this-frame error patterns)
-	 * @param {Context|null} votingContext - Level context for voting (includes new-this-frame error patterns)
+	 * @param {Context|null} levelContext - Shared level context (all age>0 entries this frame,
+	 *        including neurons created as error-corrections earlier this frame)
+	 * @param {Set<number>} newErrorPatternIds - Ids of neurons created as error-corrections earlier
+	 *        this frame. Used locally to (a) detect whether *this* neuron is one of them — in
+	 *        which case learning, recognition, and correction are skipped this frame so only
+	 *        voting runs — and (b) mask those ids out at match time so they don't look like
+	 *        unexplained novel entries and unfairly penalize pattern scores. They remain in the
+	 *        shared levelContext so their ids propagate into downstream state.context for
+	 *        next-frame corrections.
 	 * @param {Array<{id: number, channel: string, reward: number}>} actives - Age=0 sensory neurons with pre-resolved rewards
 	 * @param {number} currentFrame - Current frame number
 	 * @param {Array<{patternId: number, age: number, contextEntries: Array<{neuronId, distance}>}>} corrections
@@ -429,19 +434,22 @@ export class Neuron {
 	 * @returns {{ matches, correctionActivations, contextRefUpdates, votes }}
 	 *          votes: Array<{age, votes, context}> - one entry per non-suppressed voting age
 	 */
-	processFrame(ageStates, memoryDepth, isNewErrorPattern, levelContext, votingContext, actives, currentFrame, corrections = []) {
+	processFrame(ageStates, memoryDepth, levelContext, newErrorPatternIds, actives, currentFrame, corrections = []) {
+
+		// derive locally — ships with the neuron instead of being re-sent each frame
+		const isNewErrorPattern = newErrorPatternIds.has(this.id);
 
 		// learn connections across all active ages (age=0 skipped internally)
 		this.learnConnections(ageStates, isNewErrorPattern, actives);
 
 		// match patterns if we have context and eligible ages
-		const { matches, contextRefUpdates: matchRefs } = this.recognizePatterns(ageStates, memoryDepth, isNewErrorPattern, levelContext, currentFrame);
+		const { matches, contextRefUpdates: matchRefs } = this.recognizePatterns(ageStates, memoryDepth, isNewErrorPattern, levelContext, newErrorPatternIds, currentFrame);
 
 		// install pre-created error-correction patterns as children and emit their contextRef adds
 		const { correctionActivations, contextRefUpdates: correctionRefs } = this.correctErrors(corrections, currentFrame);
 
 		// cast votes for each eligible age, suppressing any ages that activated a pattern
-		const votes = this.generateVotes(ageStates, memoryDepth, votingContext, matches, correctionActivations);
+		const votes = this.generateVotes(ageStates, memoryDepth, levelContext, matches, correctionActivations);
 
 		// return frame processing results
 		return { matches, correctionActivations, contextRefUpdates: [...matchRefs, ...correctionRefs], votes };
@@ -461,13 +469,15 @@ export class Neuron {
 	 * @param {number} memoryDepth - Sliding window depth
 	 * @param {boolean} isNewErrorPattern - True if this neuron was just created this frame
 	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
+	 * @param {Set<number>} newErrorPatternIds - Ids to mask out of the observed context during
+	 *        match scoring (brand-new neurons created earlier this frame)
 	 * @param {number} currentFrame - Current frame number for lazy decay
 	 * @returns {{
 	 *   matches: Array<{ patternId, age, score, common, missing, novel, removedRefs, activate, deathFrame }>,
 	 *   contextRefUpdates: Array<{ type: 'add'|'remove', neuronId, distance }>
 	 * }}
 	 */
-	recognizePatterns(ageStates, memoryDepth, isNewErrorPattern, levelContext, currentFrame) {
+	recognizePatterns(ageStates, memoryDepth, isNewErrorPattern, levelContext, newErrorPatternIds, currentFrame) {
 		const matches = [];
 		const contextRefUpdates = [];
 		if (isNewErrorPattern || !levelContext || levelContext.size === 0) return { matches, contextRefUpdates };
@@ -478,7 +488,7 @@ export class Neuron {
 			// active ages are processed in ascending order (most recent first). The first age that
 			// produces a match at that age is refined and preserved. More recent ages tend to have
 			// the richest available context, so they are processed first.
-			const best = this.findBestPatternMatchAtAge(levelContext, age, currentFrame);
+			const best = this.findBestPatternMatchAtAge(levelContext, age, newErrorPatternIds, currentFrame);
 			if (!best) continue; // try older age if there is a match
 
 			// refine the context — returns cross-neuron contextRef side effects for later delivery
@@ -535,16 +545,16 @@ export class Neuron {
 	 * frame via either a recognition match (activate=true) or an error-correction install.
 	 * Eligible ages: non-activated and younger than the oldest sliding-window slot. Runs for
 	 * new error patterns too so their state.context gets populated for next-frame corrections.
-	 * The per-age context is derived from votingContext on the fly — contextByAge is a pure
-	 * reshape of votingContext (no extra info), so it is not sent over the wire.
+	 * The per-age context is reshaped from levelContext locally — contextByAge is a pure reshape
+	 * (no extra info), so it's derived here instead of being shipped over the wire.
 	 * @param {Map<number, {activatedPatternId?: number}>} ageStates
 	 * @param {number} memoryDepth - Sliding window depth
-	 * @param {Context|null} votingContext - Level voting context (source for per-age context derivation)
+	 * @param {Context|null} levelContext - Shared level context (source for per-age context derivation)
 	 * @param {Array<{patternId, age, activate}>} matches - This frame's recognition matches
 	 * @param {Array<{patternId, age}>} correctionActivations - This frame's error-correction installs
 	 * @returns {Array<{age, votes, context}>} One entry per non-suppressed voting age
 	 */
-	generateVotes(ageStates, memoryDepth, votingContext, matches, correctionActivations) {
+	generateVotes(ageStates, memoryDepth, levelContext, matches, correctionActivations) {
 
 		// determine the suppressed ages based on recognized patterns and error creations
 		const suppressedAges = new Set();
@@ -556,7 +566,7 @@ export class Neuron {
 		for (const [age, state] of ageStates) {
 			if (state.activatedPatternId || age >= memoryDepth - 1) continue;
 			if (suppressedAges.has(age)) continue;
-			votes.push({ age, votes: this.vote(age), context: this.deriveContextAtAge(votingContext, age) });
+			votes.push({ age, votes: this.vote(age), context: this.deriveContextAtAge(levelContext, age) });
 		}
 		return votes;
 	}
@@ -583,10 +593,12 @@ export class Neuron {
 	 * Find the best matching pattern for a specific active age.
 	 * @param {Context} observed - The level context (distances are absolute ages)
 	 * @param {number} age - The specific active age being evaluated
+	 * @param {Set<number>} excludeIds - Neuron ids to mask out of the observed context (e.g.
+	 *        brand-new error-correction patterns created earlier this frame)
 	 * @param {number} currentFrame - The current frame number to check activation strength
 	 * @returns {{ patternId, age, score, common, missing, novel }|null}
 	 */
-	findBestPatternMatchAtAge(observed, age, currentFrame) {
+	findBestPatternMatchAtAge(observed, age, excludeIds, currentFrame) {
 		let best = null; // { patternId, age, score, common, missing, novel }
 
 		// Use the inverted index to narrow the search to child patterns that share at least one
@@ -606,7 +618,8 @@ export class Neuron {
 
 			// context.match() handles the full scoring and threshold check;
 			// the index only decides which child patterns are worth evaluating.
-			const match = entry.context.match(observed, age, this.mergeThreshold);
+			// excludeIds masks out brand-new neurons so they don't count as "novel" misses.
+			const match = entry.context.match(observed, age, this.mergeThreshold, excludeIds);
 			if (!match) continue; // nothing to do if there is no match
 
 			// if there is already a best match, check if this match is better

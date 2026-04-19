@@ -406,21 +406,17 @@ export class Thalamus {
 	 */
 	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
 
-		// pass 1: aggregate per-neuron work, build level contexts, pre-create corrections.
-		// Per-age task derivation (learner/recognizer/voting ages) has moved into the neuron.
-		// Two contexts are built here because matching and voting have different visibility
-		// rules for neurons created as error-corrections earlier this frame:
-		//   - levelContext (for matching) excludes them — matching must not penalize patterns
-		//     for "missing" a neuron that didn't exist until this frame.
-		//   - votingContext (for per-age voting context) includes them — their ids need to
-		//     appear in downstream state.context so next frame's error-correction can use them.
-		const { tasks, levelContext, votingContext } = this.buildLevelTasks(
+		// pass 1: aggregate per-neuron work, build the shared level context, pre-create corrections.
+		// Per-age task derivation and per-age context reshape both happen inside the neuron —
+		// the only cross-neuron data shipped is the shared levelContext and the small
+		// newErrorPatternIds set (used by the neuron to mask brand-new ids out of matching).
+		const { tasks, levelContext } = this.buildLevelTasks(
 			level, levelNeurons, sensoryNeurons, rewards,
 			newErrorPatternIds, errorCorrectionThreshold
 		);
 
 		// pass 2: dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
-		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, votingContext, sensoryNeurons[0], rewards[0], frameNumber);
+		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, sensoryNeurons[0], rewards[0], frameNumber);
 
 		// pass 3: applyFrameResults - batch contextRef updates by target, register deaths, collect activations + votes
 		const { activations, votes } = this.applyFrameResults(results, levelNeurons);
@@ -442,58 +438,50 @@ export class Thalamus {
 	 * Per-age task derivation (learner/recognizer/voting ages) now happens inside
 	 * neuron.processFrame from its own ageStates — this pass only does cross-neuron work
 	 * (levelContext merge, id allocation for corrections) that must stay on the driver.
-	 * @returns {{tasks: Array<{neuronId, ageStates, isNewErrorPattern, corrections}>, levelContext: Context, votingContext: Context}}
+	 * @returns {{tasks: Array<{neuronId, ageStates, corrections}>, levelContext: Context}}
 	 */
 	buildLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds, errorCorrectionThreshold) {
 		const tasks = [];
 		const levelContext = new Context();
-		const votingContext = new Context();
 		for (const [neuronId, ageStates] of levelNeurons) {
 
 			// skip action neurons for learning or contexts if the channel learns without them
 			if (this.skipActionNeuron(neuronId)) continue;
 
-			// error patterns created earlier this frame get voting-only tasks (no learn/match/correct)
-			const isNewErrorPattern = newErrorPatternIds.has(neuronId);
-
-			// contribute to the shared level contexts and detect error-correction needs
+			// contribute to the shared level context and detect error-correction needs
 			const corrections = this.collectLevelContributions(
-				neuronId, level, levelContext, votingContext, ageStates, sensoryNeurons, rewards,
-				errorCorrectionThreshold, isNewErrorPattern
+				neuronId, level, levelContext, ageStates, sensoryNeurons, rewards,
+				errorCorrectionThreshold, newErrorPatternIds.has(neuronId)
 			);
 
 			// also return the created pattern neuron id so that we can suppress it in higher level
 			for (const correction of corrections) newErrorPatternIds.add(correction.patternId);
 
-			// emit the task - ages are derived inside the neuron, so we only ship state + flags
-			tasks.push({ neuronId, ageStates, isNewErrorPattern, corrections });
+			// emit the task - the neuron derives its own isNewErrorPattern from newErrorPatternIds
+			tasks.push({ neuronId, ageStates, corrections });
 		}
-		return { tasks, levelContext, votingContext };
+		return { tasks, levelContext };
 	}
 
 	/**
-	 * For a single active neuron: add its age>0 entries to the per-level contexts and create
+	 * For a single active neuron: add its age>0 entries to the shared levelContext and create
 	 * error-correction pattern neurons for ages whose previous votes mismatched reality.
-	 * Every age>0 entry contributes to votingContext (voting context must include new error
-	 * patterns so their ids propagate into downstream state.context); only non-new neurons
-	 * contribute to levelContext (matching must not see brand-new ids as "novel" entries).
+	 * Every age>0 entry contributes to levelContext, including new error patterns — their ids
+	 * must propagate into downstream state.context for next-frame corrections. The neuron
+	 * itself filters out newErrorPatternIds at match time so brand-new ids don't look like
+	 * unexplained novel entries and unfairly penalize pattern scores.
 	 * Correction id allocation stays central — the driver owns the neuron-id counter.
 	 * @returns {Array<{patternId, age, contextEntries}>} corrections created for this neuron
 	 */
-	collectLevelContributions(neuronId, level, levelContext, votingContext, ageStates, sensoryNeurons, rewards, errorCorrectionThreshold, isNewErrorPattern) {
+	collectLevelContributions(neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, errorCorrectionThreshold, isNewErrorPattern) {
 		const corrections = [];
 		for (const [age, state] of ageStates) {
 
-			// voting context sees every age > 0 entry, including new error patterns — their
-			// ids must propagate into downstream state.context for next-frame corrections
-			if (age > 0) votingContext.addNeuron(neuronId, age);
-
-			// new error patterns skip match-context contribution and further correction this frame
-			if (isNewErrorPattern) continue;
-
-			// match context excludes new error patterns — they'd look like unexplained novel
-			// entries and unfairly penalize pattern scores
+			// every age > 0 entry contributes to the shared level context
 			if (age > 0) levelContext.addNeuron(neuronId, age);
+
+			// new error patterns skip further correction this frame
+			if (isNewErrorPattern) continue;
 
 			// create an error correction pattern for this (neuron, age) if previous votes mismatched reality
 			if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0], errorCorrectionThreshold))
@@ -510,7 +498,7 @@ export class Thalamus {
 	 * Pass 2: dispatch exactly one neuron.processFrame call per active neuron.
 	 * Returns raw results tagged with parentId for post-processing.
 	 */
-	dispatchFrame(tasks, memoryDepth, levelContext, votingContext, age0, currentRewards, frameNumber) {
+	dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, age0, currentRewards, frameNumber) {
 
 		// decorate age=0 sensory neurons with channel + pre-resolved reward (MPI-ready: neuron doesn't need type)
 		const newActiveNeurons = [];
@@ -522,9 +510,9 @@ export class Thalamus {
 
 		// call each neuron to deliver the tasks to process the frame
 		const results = [];
-		for (const { neuronId, ageStates, isNewErrorPattern, corrections } of tasks) {
+		for (const { neuronId, ageStates, corrections } of tasks) {
 			const result = this.neurons.get(neuronId).processFrame(
-				ageStates, memoryDepth, isNewErrorPattern, levelContext, votingContext,
+				ageStates, memoryDepth, levelContext, newErrorPatternIds,
 				newActiveNeurons, frameNumber, corrections
 			);
 			results.push({ parentId: neuronId, ...result });

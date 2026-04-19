@@ -127,9 +127,11 @@ export class Context {
 	 * @param {Context} observed - The observed context to match against
 	 * @param {number} offset - The parent's active age (shifts pattern distances to absolute)
 	 * @param {number} mergeThreshold - minimum required percentage for merge (0-1)
+	 * @param {Set<number>|null} excludeIds - Optional set of observed neuron ids to mask out of
+	 *        scoring (e.g. brand-new neurons that shouldn't count as unexplained novel entries)
 	 * @returns {Object|null} { score, common, missing, novel } or null
 	 */
-	match(observed, offset, mergeThreshold) {
+	match(observed, offset, mergeThreshold, excludeIds = null) {
 
 		// Single pass: categorize into common/missing while computing score and counts
 		const common = [];
@@ -171,6 +173,10 @@ export class Context {
 		// match found - find the novel entries (in observed but not in this known context) using lookups
 		const novel = [];
 		for (const [neuronId, distanceMap] of observed.entries) {
+
+			// skip ids the caller asked to mask out (e.g. brand-new neurons created this frame)
+			if (excludeIds?.has(neuronId)) continue;
+
 			const knownDistances = this.entries.get(neuronId);
 			for (const [absoluteDistance, strength] of distanceMap) {
 
