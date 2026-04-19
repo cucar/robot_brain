@@ -21,7 +21,7 @@ Patterns are created by `brain.learnNewPatterns()` which calls `neuron.learnNewP
 
 When a neuron's event predictions have a high error rate:
 - Neuron voted for events in previous frame (has saved votes and context)
-- The ratio of failed event predictions to total event predictions > `errorCorrectionThreshold` (default: 0.65)
+- The ratio of failed event predictions to total event predictions > `errorCorrectionThreshold` (default: 0.5)
 - Create a pattern with the predictor as parent
 
 **Implementation**:

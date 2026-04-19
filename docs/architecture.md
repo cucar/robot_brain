@@ -566,10 +566,10 @@ Configured in `Neuron`, `Context`, `Memory`, and `Brain` classes:
 
 | Parameter               | Default | Location | Description                                            |
 |-------------------------|---------|----------|--------------------------------------------------------|
-| errorCorrectionThreshold| 0.65    | Brain  | Prediction error threshold for creating patterns         |
-| contextLength           | 20      | Memory | Frames a neuron stays active                           |
-| mergeThreshold          | 0.5     | Context | Min match ratio for pattern recognition (0.8 for text) |
-| patternForgetRate       | 0.01    | Neuron | Pattern prediction strength decay rate per frame       |
+| errorCorrectionThreshold| 0.5     | Brain    | Prediction error threshold for creating patterns         |
+| contextLength           | 10      | Memory   | Frames a neuron stays active                           |
+| mergeThreshold          | 0.5     | Context  | Min match ratio for pattern recognition (0.8 for text) |
+| patternForgetRate       | 0.01    | Neuron   | Pattern prediction strength decay rate per frame       |
 
 ---
 
