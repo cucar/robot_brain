@@ -31,21 +31,14 @@ CREATE TABLE IF NOT EXISTS neurons (
 
 -- base neuron attributes (level=0 neurons)
 -- DROP TABLE IF EXISTS base_neurons;
-CREATE TABLE IF NOT EXISTS base_neurons (
+CREATE TABLE base_neurons (
     neuron_id BIGINT PRIMARY KEY,
     channel_id SMALLINT UNSIGNED NOT NULL,
-    type ENUM('event', 'action') NOT NULL,
-    INDEX idx_channel_type (channel_id, type)
-);
-
--- Base neuron coordinates (only level=0 neurons)
--- DROP TABLE IF EXISTS coordinates;
-CREATE TABLE IF NOT EXISTS coordinates (
-    neuron_id BIGINT UNSIGNED,
-    dimension_id SMALLINT UNSIGNED,
-    val FLOAT,
-    PRIMARY KEY (neuron_id, dimension_id),
-    INDEX (dimension_id, val)
+    type ENUM('event','action') NOT NULL,
+    dimension_id SMALLINT UNSIGNED NOT NULL,
+    val FLOAT NOT NULL,
+    INDEX idx_channel_type (channel_id, type),
+    INDEX idx_dim_val (dimension_id, val)
 );
 
 -- connections between base-level neurons (level=0 to level=0)
