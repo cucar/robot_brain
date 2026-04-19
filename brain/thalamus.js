@@ -9,10 +9,11 @@ import { Neuron } from './neuron.js';
  * Named after the biological thalamus which routes sensory signals and translates reference frames.
  */
 export class Thalamus {
-	constructor(debug, patternForgetRate, mergeThreshold) {
+	constructor(debug, patternForgetRate, mergeThreshold, errorCorrectionThreshold) {
 		this.debug = debug;
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
+		this.errorCorrectionThreshold = errorCorrectionThreshold;
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
@@ -401,19 +402,15 @@ export class Thalamus {
 	 * @param {Array<Map>} rewards - Rewards by age (rewards[0] = current frame)
 	 * @param {number} frameNumber - Current frame number
 	 * @param {Set<number>} newErrorPatternIds - Accumulator of error pattern ids created this frame (mutated)
-	 * @param {number} errorCorrectionThreshold - Event-error ratio above which a correction is created
 	 * @returns {{activations: Array<{parentId, patternId, age, deathFrame}>, votes: Array}}
 	 */
-	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, frameNumber, newErrorPatternIds, errorCorrectionThreshold) {
+	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, frameNumber, newErrorPatternIds) {
 
 		// pass 1: aggregate per-neuron work, build the shared level context, pre-create corrections.
 		// Per-age task derivation and per-age context reshape both happen inside the neuron —
 		// the only cross-neuron data shipped is the shared levelContext and the small
 		// newErrorPatternIds set (used by the neuron to mask brand-new ids out of matching).
-		const { tasks, levelContext } = this.buildLevelTasks(
-			level, levelNeurons, sensoryNeurons, rewards,
-			newErrorPatternIds, errorCorrectionThreshold
-		);
+		const { tasks, levelContext } = this.getLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds);
 
 		// pass 2: dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
 		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, sensoryNeurons[0], rewards[0], frameNumber);
@@ -440,7 +437,7 @@ export class Thalamus {
 	 * (levelContext merge, id allocation for corrections) that must stay on the driver.
 	 * @returns {{tasks: Array<{neuronId, ageStates, corrections}>, levelContext: Context}}
 	 */
-	buildLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds, errorCorrectionThreshold) {
+	getLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds) {
 		const tasks = [];
 		const levelContext = new Context();
 		for (const [neuronId, ageStates] of levelNeurons) {
@@ -448,10 +445,9 @@ export class Thalamus {
 			// skip action neurons for learning or contexts if the channel learns without them
 			if (this.skipActionNeuron(neuronId)) continue;
 
-			// contribute to the shared level context and detect error-correction needs
-			const corrections = this.collectLevelContributions(
-				neuronId, level, levelContext, ageStates, sensoryNeurons, rewards,
-				errorCorrectionThreshold, newErrorPatternIds.has(neuronId)
+			// get level error corrections
+			const corrections = this.getLevelCorrections(
+				neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, newErrorPatternIds.has(neuronId)
 			);
 
 			// also return the created pattern neuron id so that we can suppress it in higher level
@@ -473,7 +469,7 @@ export class Thalamus {
 	 * Correction id allocation stays central — the driver owns the neuron-id counter.
 	 * @returns {Array<{patternId, age, contextEntries}>} corrections created for this neuron
 	 */
-	collectLevelContributions(neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, errorCorrectionThreshold, isNewErrorPattern) {
+	getLevelCorrections(neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, isNewErrorPattern) {
 		const corrections = [];
 		for (const [age, state] of ageStates) {
 
@@ -484,7 +480,7 @@ export class Thalamus {
 			if (isNewErrorPattern) continue;
 
 			// create an error correction pattern for this (neuron, age) if previous votes mismatched reality
-			if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0], errorCorrectionThreshold))
+			if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0]))
 				corrections.push({
 					patternId: this.createPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards),
 					age,
@@ -586,7 +582,7 @@ export class Thalamus {
 	 * based on its inferences in the previous frame and the actual events in the current frame
 	 * @returns {boolean} Whether error correction is needed
 	 */
-	needsErrorCorrection(age, votes, actualNeuronIds, errorCorrectionThreshold) {
+	needsErrorCorrection(age, votes, actualNeuronIds) {
 
 		// age=0 neurons cannot need correction because they are just voting now
 		if (age === 0) return false;
@@ -603,7 +599,7 @@ export class Thalamus {
 				if (!actualNeuronIds.has(vote.neuronId)) failedEvents++;
 			}
 		const eventError = failedEvents / totalEvents;
-		return eventError > errorCorrectionThreshold;
+		return eventError > this.errorCorrectionThreshold;
 	}
 
 	/**

@@ -41,7 +41,7 @@ export default class Brain {
 		this.dump = new Dump();
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
-		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold);
+		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.errorCorrectionThreshold);
 
 		// Memory - manages temporal sliding window and inferred neurons
 		this.memory = new Memory(this.debug, this.contextLength);
@@ -390,8 +390,7 @@ export default class Brain {
 			// process level: aggregate view, recognize patterns, create error corrections, collect votes
 			const { activations, votes: levelVotes } = this.thalamus.processLevel(
 				level, this.memory.getLevelNeurons(level), this.memory.depth,
-				sensoryNeurons, this.rewards, this.frameNumber,
-				newErrorPatternIds, this.errorCorrectionThreshold
+				sensoryNeurons, this.rewards, this.frameNumber, newErrorPatternIds
 			);
 
 			// activate matched patterns and newly-created error patterns at level+1
