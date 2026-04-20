@@ -386,11 +386,8 @@ export class Diagnostics {
 
 	/**
 	 * Display diagnostic frame header with frame number and observations
-	 * @param {number} frameNumber - Current frame number
-	 * @param {Map} rewards - Map of channel name to reward value
-	 * @param {Array} frame - Frame data points
 	 */
-	startFrame(frameNumber, rewards, frame) {
+	startFrame(frameNumber, rewards, frame, dimensionIdToName) {
 		if (!this.debug) return;
 
 		// Display reward information
@@ -401,10 +398,14 @@ export class Diagnostics {
 			console.log(`  Rewards: ${rewardParts.join(', ')}`);
 		}
 
-		// Build observation string from frame
+		// Build observation string from frame. Coordinates are id-form ({dimId, bucketId});
+		// dimensionIdToName is used only for display labels.
 		const observations = [];
-		for (const point of frame)
-			observations.push(`${point.coordinate.dimension}=${point.coordinate.value}`);
+		for (const point of frame) {
+			const { dimId, bucketId } = point.coordinate;
+			const label = dimensionIdToName?.[dimId] ?? `dim${dimId}`;
+			observations.push(`${label}=${bucketId}`);
+		}
 
 		console.log(`\nF${frameNumber} | Obs: ${observations.join(', ')}`);
 	}

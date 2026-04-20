@@ -131,7 +131,7 @@ The brain memorizes a repeating stock price sequence across 5 episodes, reaching
 Run the stock test with customized hyperparameters for sequence memorization:
 
 ```bash
-node run-brain.js stock-test --timeframe 3H --episodes 5 --no-summary --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.0001 --error-threshold 0.3
+node run-brain.js stock-test --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.0001 --error-threshold 0.3
 ```
 
 **Expected output:**

@@ -1,5 +1,6 @@
 import { Context } from './context.js';
 import { Neuron } from './neuron.js';
+import { Quantizer } from './quantizer.js';
 
 /**
  * Thalamus - Brain's relay station for reference frame transfers
@@ -38,19 +39,45 @@ export class Thalamus {
 		this.dimensionNameToId = {}; // dimensionName -> dimensionId
 		this.dimensionIdToName = {}; // dimensionId -> dimensionName
 
+		// channel/dimension registry - populated by registerChannelSpec() — not yet read by the frame pipeline.
+		// Once populated, these become the source of truth for channel/dimension metadata, replacing the name-keyed maps above.
+		this.channelSpecs = new Map(); // channelId -> ChannelSpec
+		this.dimensionSpecs = new Map(); // dimensionId -> DimSpec (flattened across all channels)
+		this.quantizer = new Quantizer();
+
 		// Level counts - tracks number of neurons at each level for efficient max level diagnostics lookup
 		this.levelCounts = []; // index = level, value = count of neurons at that level
 	}
 
 	/**
-	 * Create value key for neuron coordinate lookup
+	 * Create value key for neuron coordinate lookup.
+	 * Coordinates are id-form: {dimId, bucketId}. The key is purely numeric content
+	 * encoded as a string for Map hashing — handles negative bucketIds naturally.
 	 */
 	makeValueKey(coordinate) {
-		return `${coordinate.dimension}:${coordinate.value}`;
+		return `${coordinate.dimId}:${coordinate.bucketId}`;
 	}
 
 	/**
-	 * Get or create a sensory neuron ID from a frame point.
+	 * Translate an id-form coordinate to name-form for channel-facing code.
+	 * @param {{dimId: number, bucketId: number}} coordinate
+	 * @returns {{dimension: string, value: number}}
+	 */
+	coordinateIdToName(coordinate) {
+		return { dimension: this.dimensionIdToName[coordinate.dimId], value: coordinate.bucketId };
+	}
+
+	/**
+	 * Translate a name-form coordinate to id-form for internal brain use.
+	 * @param {{dimension: string, value: number}} coordinate
+	 * @returns {{dimId: number, bucketId: number}}
+	 */
+	coordinateNameToId(coordinate) {
+		return { dimId: this.dimensionNameToId[coordinate.dimension], bucketId: coordinate.value };
+	}
+
+	/**
+	 * Get or create a sensory neuron ID from a frame point. coordinate form: {dimId, bucketId }
 	 * @returns {number} - Neuron ID
 	 */
 	getNeuronIdForPoint(coordinate, channel, type) {
@@ -67,7 +94,7 @@ export class Thalamus {
 
 	/**
 	 * returns neuron ID by coordinate
-	 * @param {object} coordinate - {dimension, value}
+	 * @param {{dimId: number, bucketId: number}} coordinate - id-form coordinate
 	 * @returns {number|null} - Neuron ID or null if not found
 	 */
 	getNeuronIdByCoordinate(coordinate) {
@@ -76,7 +103,7 @@ export class Thalamus {
 
 	/**
 	 * Create and add a new sensory neuron to the registry
-	 * @param {object} coordinate - {dimension, value}
+	 * @param {{dimId: number, bucketId: number}} coordinate - id-form coordinate
 	 * @param {string} channel - Channel name
 	 * @param {string} type - Neuron type ('event' or 'action')
 	 * @returns {Neuron} The newly created neuron
@@ -218,7 +245,7 @@ export class Thalamus {
 	 * Get the coordinate for a base (sensory/action) neuron.
 	 * Throws if called for an interneuron — interneurons have no coordinate.
 	 * @param {number} neuronId - Neuron ID
-	 * @returns {{dimension: string, value: number}} Single dimension-value pair
+	 * @returns {{dimId: number, bucketId: number}} Id-form coordinate
 	 */
 	getNeuronCoordinate(neuronId) {
 		const baseNeuron = this.baseNeurons.get(neuronId);
@@ -250,10 +277,10 @@ export class Thalamus {
 	getActiveEvents(activeNeuronIds) {
 		const result = new Map();
 		for (const neuronId of activeNeuronIds) {
-			if (this.getNeuronType(neuronId) !== 'event') continue;
-			const channel = this.getNeuronChannel(neuronId);
-			if (!result.has(channel)) result.set(channel, []);
-			result.get(channel).push(this.getNeuronCoordinate(neuronId));
+			const baseNeuron = this.baseNeurons.get(neuronId);
+			if (baseNeuron.type !== 'event') continue;
+			if (!result.has(baseNeuron.channel)) result.set(baseNeuron.channel, []);
+			result.get(baseNeuron.channel).push(baseNeuron.coordinate);
 		}
 		return result;
 	}
@@ -318,6 +345,73 @@ export class Thalamus {
 	registerChannel(name, channelClass) {
 		this.channelClasses.set(name, channelClass);
 		if (this.debug) console.log(`Registered channel class: ${name} (${channelClass.name})`);
+	}
+
+	/**
+	 * Register a channel spec with the brain.
+	 * This is the new registration path — channels live outside the brain and pass in a
+	 * lightweight spec describing their shape. The brain stores the spec, registers each
+	 * dimension with the quantizer, and uses it as the source of truth for channel/dimension
+	 * metadata. Not yet wired into the frame pipeline; co-exists with registerChannel()
+	 * during migration.
+	 *
+	 * @param {object} spec
+	 * @param {number} spec.id - Channel ID (numeric, caller-assigned)
+	 * @param {Array<object>} spec.dimensions - Per-dimension specs
+	 * @param {number} spec.dimensions[].id - Dimension ID (numeric, caller-assigned)
+	 * @param {string} spec.dimensions[].kind - 'input' | 'action'
+	 * @param {number} spec.dimensions[].resolution - Number of buckets (>= 2)
+	 * @param {string} [spec.dimensions[].mode='passthrough'] - Quantizer mode
+	 * @param {number[]} [spec.dimensions[].boundaries] - Static mode boundaries (length = resolution - 1)
+	 * @param {number[]} [spec.dimensions[].actionBuckets] - For action dims: explicit bucket IDs to pre-create neurons for
+	 * @param {number} [spec.dimensions[].warmupSamples] - Dynamic mode warmup window
+	 * @param {boolean} [spec.emitsReward=false] - Channel produces a reward signal each frame
+	 * @param {boolean} [spec.learnActionSequences=false] - Channel's action neurons participate in pattern learning
+	 */
+	registerChannelSpec(spec) {
+		if (this.channelSpecs.has(spec.id))
+			throw new Error(`Thalamus: channel ${spec.id} already registered`);
+
+		// store channel-level spec (clone dimensions array to protect against caller mutation)
+		const storedSpec = {
+			id: spec.id,
+			dimensions: spec.dimensions.map(d => ({ ...d })),
+			emitsReward: spec.emitsReward ?? false,
+			learnActionSequences: spec.learnActionSequences ?? false
+		};
+		this.channelSpecs.set(spec.id, storedSpec);
+
+		// register each dimension: store spec and hand it to the quantizer
+		for (const dim of storedSpec.dimensions) {
+			if (this.dimensionSpecs.has(dim.id))
+				throw new Error(`Thalamus: dimension ${dim.id} already registered (channel ${spec.id})`);
+			if (dim.kind !== 'input' && dim.kind !== 'action')
+				throw new Error(`Thalamus: dimension ${dim.id} has invalid kind '${dim.kind}' (expected 'input' or 'action')`);
+
+			this.dimensionSpecs.set(dim.id, dim);
+			this.quantizer.registerDimension(dim.id, {
+				resolution: dim.resolution,
+				mode: dim.mode,
+				boundaries: dim.boundaries,
+				warmupSamples: dim.warmupSamples
+			});
+		}
+
+		if (this.debug) console.log(`Registered channel spec ${spec.id} (${storedSpec.dimensions.length} dimensions)`);
+	}
+
+	/**
+	 * Get stored channel spec by ID.
+	 */
+	getChannelSpec(channelId) {
+		return this.channelSpecs.get(channelId);
+	}
+
+	/**
+	 * Get stored dimension spec by ID.
+	 */
+	getDimensionSpec(dimensionId) {
+		return this.dimensionSpecs.get(dimensionId);
 	}
 
 	/**
@@ -661,12 +755,17 @@ export class Thalamus {
 		for (const channelName of this.channels.keys())
 			channelInferences.set(channelName, { actions: [], events: [] });
 
-		// Add inferred neurons to their channels
+		// Add inferred neurons to their channels.
+		// Translate id-form coordinate to name-form here — channels still speak name-form
+		// at their I/O boundary until Phase 5 migrates them to id-form.
 		for (const inference of inferredNeurons) {
 			const inferences = channelInferences.get(this.getNeuronChannel(inference.neuronId));
 			const type = this.getNeuronType(inference.neuronId);
-			if (type === 'action') inferences.actions.push(inference);
-			else if (type === 'event') inferences.events.push(inference);
+			const channelFacing = inference.coordinate
+				? { ...inference, coordinate: this.coordinateIdToName(inference.coordinate) }
+				: inference;
+			if (type === 'action') inferences.actions.push(channelFacing);
+			else if (type === 'event') inferences.events.push(channelFacing);
 		}
 
 		// group by channel classes for action execution
@@ -694,10 +793,12 @@ export class Thalamus {
 		this.channelActions.clear();
 		for (const [channelName, channel] of this.getChannels()) {
 
-			// get or create the action neurons for the channel
+			// get or create the action neurons for the channel.
+			// Channels still return name-form coordinates from getActions()/getDefaultAction();
+			// translate to id-form at this boundary before lookup/creation.
 			const actionNeurons = new Set();
 			for (const coordinate of channel.getActions())
-				actionNeurons.add(this.getNeuronIdForPoint(coordinate, channelName, 'action'));
+				actionNeurons.add(this.getNeuronIdForPoint(this.coordinateNameToId(coordinate), channelName, 'action'));
 
 			// add channel's action neurons to the channelActions map
 			this.channelActions.set(channelName, actionNeurons);
@@ -706,7 +807,7 @@ export class Thalamus {
 			// set the default action for the channel (if one exists)
 			const defaultActionCoord = channel.getDefaultAction();
 			if (defaultActionCoord !== null)
-				this.channelDefaultActions.set(channelName, this.getNeuronIdForPoint(defaultActionCoord, channelName, 'action'));
+				this.channelDefaultActions.set(channelName, this.getNeuronIdForPoint(this.coordinateNameToId(defaultActionCoord), channelName, 'action'));
 		}
 	}
 

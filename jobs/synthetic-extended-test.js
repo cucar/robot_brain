@@ -219,7 +219,8 @@ export default class SyntheticExtendedTest extends Job {
 	 * @returns {number|null} Neuron ID or null if not found
 	 */
 	async getNeuronIdForDimensionValue(dimensionName, value) {
-		return this.brain.thalamus.getNeuronIdByCoordinate({ dimension: dimensionName, value }).id;
+		const dimId = this.brain.thalamus.dimensionNameToId[dimensionName];
+		return this.brain.thalamus.getNeuronIdByCoordinate({ dimId, bucketId: value })?.id;
 	}
 
 	/**

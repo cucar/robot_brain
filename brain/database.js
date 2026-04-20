@@ -79,13 +79,13 @@ export class Database {
 		const { channels, channelNameToId, channelIdToName } = await this.loadChannels(channelClasses);
 
 		// Build dimension ID maps from channel instances
-		const { nameToId: dimensionNameToId, idToName: dimensionIdToName } = Thalamus.buildDimensionMaps(channels);
+		const { nameToId: dimensionNameToId } = Thalamus.buildDimensionMaps(channels);
 
 		// Load neurons (dimension maps must be built first — coordinate loading needs dimension ID→name lookups)
 		console.log('Loading neurons from MySQL...');
 		const { neurons: neuronMap, levels: neuronLevelMap } = await this.loadNeuronsTable(channelActionIds);
 
-		const baseNeurons = await this.loadBaseNeurons(channelIdToName, dimensionIdToName);
+		const baseNeurons = await this.loadBaseNeurons(channelIdToName);
 		await this.loadConnections(neuronMap);
 		const neuronParentMap = await this.loadPatterns(neuronMap);
 		await this.loadPatternContexts(neuronMap);
@@ -134,21 +134,22 @@ export class Database {
 	}
 
 	/**
-	 * Load base_neurons table (channel, type, and single coordinate per neuron)
-	 * @returns {Map<number, { channel: string, type: string, coordinate: {dimension: string, value: number} }>}
+	 * Load base_neurons table (channel, type, and single coordinate per neuron).
+	 * Coordinates are id-form on disk and in memory
+	 * @returns {Map<number, { channel: string, type: string, coordinate: {dimId: number, bucketId: number} }>}
 	 */
-	async loadBaseNeurons(channelIdToName, dimensionIdToName) {
+	async loadBaseNeurons(channelIdToName) {
 
 		// get the base neuron data from the database
 		const [rows] = await this.conn.query('SELECT neuron_id, channel_id, type, dimension_id, val FROM base_neurons');
 
-		// build neuronId → base neuron metadata map
+		// build neuronId → base neuron metadata map (coordinate kept in id-form)
 		const baseNeurons = new Map();
 		for (const row of rows)
 			baseNeurons.set(row.neuron_id, {
 				channel: channelIdToName[row.channel_id],
 				type: row.type,
-				coordinate: { dimension: dimensionIdToName[row.dimension_id], value: row.val }
+				coordinate: { dimId: row.dimension_id, bucketId: row.val }
 			});
 		console.log(`  Loaded ${rows.length} base neurons from table`);
 		return baseNeurons;
@@ -316,7 +317,8 @@ export class Database {
 		for (const { neuron, level, baseNeuron } of snapshot.neurons) {
 			if (level !== 0) continue;
 			const { channel, type, coordinate } = baseNeuron;
-			baseRows.push([neuron.id, snapshot.channelNameToId[channel], type, snapshot.dimensionNameToId[coordinate.dimension], coordinate.value]);
+			// coordinate is id-form: {dimId, bucketId} — no name lookup needed
+			baseRows.push([neuron.id, snapshot.channelNameToId[channel], type, coordinate.dimId, coordinate.bucketId]);
 		}
 		await this.conn.query('INSERT INTO base_neurons (neuron_id, channel_id, type, dimension_id, val) VALUES ?', [baseRows]);
 		console.log(`  Saved ${baseRows.length} base neurons`);
