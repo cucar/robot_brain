@@ -299,6 +299,32 @@ export class Diagnostics {
 	}
 
 	/**
+	 * Accumulate MAPE (Mean Absolute Percentage Error) from scalar-space inferences.
+	 * Compares the continuous (score-weighted) event predictions against the actual
+	 * input scalars for the same (channelId, dimId). Actions are ignored here — no
+	 * ground truth to compare against until the reward arrives next frame.
+	 *
+	 * @param {Map<number, Array<{dimId, kind, continuous}>>} inferencesByChannel - from inferNeurons
+	 * @param {Map<number, Map<number, number>>} inputs - channelId → (dimId → actual scalar)
+	 * @param {Quantizer} quantizer - to skip dims owned by channels that haven't migrated;
+	 *   those are still accounted via channel.calculatePredictionError in trackInferencePerformance
+	 */
+	trackContinuousError(inferencesByChannel, inputs, quantizer) {
+		for (const [channelId, dimInferences] of inferencesByChannel) {
+			const actuals = inputs.get(channelId);
+			if (!actuals) continue;
+			for (const { dimId, kind, continuous } of dimInferences) {
+				if (kind !== 'event') continue;
+				if (!quantizer.has(dimId)) continue; // channel still owns bucketization - skip to avoid double-counting
+				const actual = actuals.get(dimId);
+				if (actual === undefined || actual === 0) continue; // skip undefined and avoid divide-by-zero
+				this.continuousPredictionMetrics.totalError += Math.abs((actual - continuous) / actual) * 100;
+				this.continuousPredictionMetrics.count++;
+			}
+		}
+	}
+
+	/**
 	 * Track inference performance for both events and actions.
 	 * Also calculates continuous prediction errors via channel callbacks.
 	 * @param {Array<{neuronId, strength, channel}>} inferences - Inferred neurons with strength and resolved channel

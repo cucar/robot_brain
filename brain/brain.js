@@ -196,19 +196,23 @@ export default class Brain {
 	}
 
 	/**
-	 * processes one frame of input values - [{ [dim1-name]: <value>, [dim2-name]: <value>, ... }]
-	 * and channel-specific rewards (Map of channel_name -> reward)
-	 * @returns Promise<boolean> - true if frame was processed, false if no more data available
+	 * Id-native frame entry point. Accepts raw scalars per dimension and returns
+	 * inferred predictions (events and actions) in the same scalar space. The brain
+	 * is a pure compute function here — no channel I/O, no action dispatch.
+	 * @param {Map<number, Map<number, number>>} inputs - channelId → (dimId → raw scalar)
+	 * @param {Map<number, number>} rewards - channelId → reward for previous frame's actions
+	 * @returns {Map<number, Array<{dimId, kind, winner: {value, strength, score}, continuous: number}>>}
+	 *   channelId → per-dimension inferences. winner.value is the dequantized scalar of
+	 *   the winning bucket; continuous is the score-weighted average of all competing
+	 *   candidates on that dimension. Empty map if no inputs.
 	 */
-	async processFrame() {
+	processInputs(inputs, rewards) {
 		const frameStart = performance.now();
+		this.frameNumber++;
 
-		// get the current frame from all channels - includes events and previously executed actions
-		await this.getFrame();
-		if (!this.frame || this.frame.length === 0) return false;
-
-		// get rewards from all channels based on executed actions
-		await this.getRewards();
+		// build the current frame from quantized inputs and previously inferred actions
+		this.buildFrame(inputs);
+		if (this.frame.length === 0) return new Map();
 
 		// display diagnostic frame start if enabled
 		this.diagnostics.startFrame(this.frameNumber, this.rewards[0], this.frame, this.thalamus.dimensionIdToName);
@@ -216,9 +220,8 @@ export default class Brain {
 		// forget connections and patterns in all neurons to avoid curse of dimensionality
 		this.cleanupDeadPatterns();
 
-		// age the active neurons in memory context - sliding the temporal window
-		// also deactivates aged-out neurons (now that context was saved with votes in previous frame)
-		this.memory.age();
+		// slide the temporal window: age active neurons and push the new rewards frame
+		this.ageContext(rewards);
 
 		// activate sensory neurons in age=0, level=0 - inputs from the world
 		this.activateSensors();
@@ -226,11 +229,12 @@ export default class Brain {
 		// process neurons level-by-level in parallel - collects votes inline per level
 		const votes = this.processLevels();
 
-		// do inferences with age>0 neurons - what's going to happen next? and what's our best response?
-		this.inferNeurons(votes);
+		// do inferences with age>0 neurons - returns scalar-space predictions for the caller
+		const inferences = this.inferNeurons(votes);
 
-		// execute the inferred actions in all channels
-		await this.executeActions();
+		// accumulate MAPE by comparing continuous event predictions to the actual input scalars
+		// (skips dims not registered with the quantizer - those are tracked via channel callbacks)
+		this.diagnostics.trackContinuousError(inferences, inputs, this.thalamus.quantizer);
 
 		// show frame processing summary
 		this.diagnostics.endFrame(
@@ -241,88 +245,118 @@ export default class Brain {
 			this.thalamus.getMaxLevel()
 		);
 
+		return inferences;
+	}
+
+	/**
+	 * Build this.frame[] from id-keyed inputs: quantize scalars to bucket IDs and push
+	 * event coordinates, then append previously-inferred action coordinates from memory
+	 * so they participate in this frame's pattern matching.
+	 * @param {Map<number, Map<number, number>>} inputs - channelId → (dimId → raw scalar)
+	 */
+	buildFrame(inputs) {
+		this.frame = [];
+		const frameActions = this.thalamus.getInferredActions(this.memory.getInferredNeurons());
+
+		// iterate every registered channel - a channel may contribute events, carry-forward
+		// actions from the previous frame's inference, or both
+		for (const [channelName] of this.thalamus.getChannels()) {
+			const channelId = this.thalamus.channelNameToId[channelName];
+			const dimMap = inputs.get(channelId);
+
+			// quantize each dimension's scalar to a bucketId and push as event coordinate
+			if (dimMap) for (const [dimId, scalar] of dimMap) {
+				this.thalamus.quantizer.observe(dimId, scalar);
+				const bucketId = this.thalamus.quantizer.quantize(dimId, scalar);
+				this.frame.push({ coordinate: { dimId, bucketId }, channel: channelName, type: 'event' });
+			}
+
+			// include previously-inferred actions for this channel as sensory inputs
+			for (const action of frameActions.get(channelName) || [])
+				this.frame.push({ coordinate: action.coordinate, channel: channelName, type: 'action' });
+		}
+	}
+
+	/**
+	 * Slide the temporal window by one frame: push the new channel rewards onto the
+	 * rewards history and age all active neurons in memory context (which also
+	 * deactivates any neurons that aged out of the window).
+	 * @param {Map<number, number>} rewards - channelId → reward for previous frame's actions
+	 */
+	ageContext(rewards) {
+		// push this frame's rewards onto the history, keyed by channel name for now
+		const rewardsByName = new Map();
+		for (const [channelId, reward] of rewards)
+			rewardsByName.set(this.thalamus.channelIdToName[channelId], reward);
+		this.rewards.unshift(rewardsByName);
+		if (this.rewards.length > this.contextLength) this.rewards.pop();
+
+		// advance the age of every active neuron and drop any that fell off the window
+		this.memory.age();
+	}
+
+	/**
+	 * Legacy entry point - thin shim around processInputs for channels that still own
+	 * their I/O and bucketization. Pulls raw events and rewards from every registered
+	 * channel, runs the pure compute step, then dispatches the inferred actions back
+	 * to the channels. Used while channels migrate to the id-native processInputs path.
+	 * @returns Promise<boolean> - true if a frame was processed, false if no data left
+	 */
+	async processFrame() {
+
+		// collect per-channel, per-dim scalars and per-channel rewards from all channels
+		const { inputs, rewards } = await this.collectChannelFrame();
+		if (inputs.size === 0 && this.memory.getInferredNeurons().length === 0) return false;
+
+		// run the pure compute step - quantization, aging, pattern matching, inference, diagnostics
+		const inferences = this.processInputs(inputs, rewards);
+		if (inferences.size === 0) return false;
+
+		// dispatch inferred actions back to the channels (reads the inferences memory saved above)
+		await this.executeActions();
+
 		// when debugging, wait for user to press Enter before continuing to next frame
 		await this.waitForUser('Press Enter to continue to next frame');
 
-		// give a chance to the event loop to run other tasks
+		// give the event loop a chance to run other tasks between frames
 		await new Promise(resolve => setImmediate(resolve));
-
-		// return true to indicate that we have processed the frame successfully
 		return true;
 	}
 
 	/**
-	 * Returns the current frame combined from all registered channels
-	 * Each frame point includes: coordinates, channel, type
-	 * Populates this.frame with events from channels and actions from previous inference
+	 * Pull the upcoming frame's event scalars and reward signals from every channel
+	 * and shape them into the id-keyed maps processInputs expects. The channel still
+	 * emits name-form coordinates with discrete bucket values; we translate the dim
+	 * name to its numeric ID and pass the bucket value through as the scalar (the
+	 * Quantizer treats unregistered dims as passthrough).
+	 * @returns {Promise<{inputs: Map<number, Map<number, number>>, rewards: Map<number, number>}>}
 	 */
-	async getFrame() {
-		this.frame = [];
-
-		// Increment frame counter to be able to track inactivity
-		this.frameNumber++;
-		if (this.debug) console.log('******************************************************************');
-		if (this.debug) console.log(`OBSERVING FRAME ${this.frameNumber}`);
-
-		// Get all frame actions from previous frame's inference (from in-memory inferredNeurons)
-		const frameActions = this.thalamus.getInferredActions(this.memory.getInferredNeurons());
-
-		// Process each channel: get inputs from channel, get outputs from previous inference
-		for (const [channelName, channel] of this.thalamus.getChannels()) {
-
-			// Get the frame event inputs from the channel (name-form coords from channel) and
-			// translate to id-form for brain-internal use. frameActions already carries id-form
-			// coords (they come from getInferredActions → getNeuronCoordinate).
-			const channelEvents = await channel.getFrameEvents(this.frameNumber);
-			for (const event of channelEvents)
-				this.frame.push({ coordinate: this.thalamus.coordinateNameToId(event), channel: channelName, type: 'event' });
-
-			// Get actions from previous inference (guaranteed to exist after first frame)
-			const channelActions = frameActions.get(channelName) || [];
-			for (const action of channelActions)
-				this.frame.push({ coordinate: action.coordinate, channel: channelName, type: 'action' });
-		}
-
-		if (this.debug) console.log(`Processing frame: ${this.frame.length} neurons`);
-		if (this.debug) console.log(`frame points: ${JSON.stringify(this.frame)}`);
-		if (this.debug) console.log('******************************************************************');
-	}
-
-	/**
-	 * Get channel-specific feedback as a Map of channel_name -> reward
-	 * Each channel provides its own reward signal based on its objectives
-	 */
-	async getRewards() {
-		if (this.debug) console.log('Getting rewards feedback from all channels...');
+	async collectChannelFrame() {
+		const inputs = new Map();
 		const rewards = new Map();
-		let feedbackCount = 0;
-
-		// Get all actions from previous frame's inference (from in-memory inferredNeurons)
 		const frameActions = this.thalamus.getInferredActions(this.memory.getInferredNeurons());
 
-		// Get reward for each channel
+		// channel.getFrameEvents takes the frame number the events belong to - processInputs
+		// will increment this.frameNumber, so we anticipate it here to keep channels in sync
+		const nextFrameNumber = this.frameNumber + 1;
+
 		for (const [channelName, channel] of this.thalamus.getChannels()) {
+			const channelId = this.thalamus.channelNameToId[channelName];
 
-			// if there were no actions, nothing to reward
-			if ((frameActions.get(channelName) || []).length === 0) continue;
+			// collect this channel's event scalars keyed by dimId (channel emits name-form)
+			const dimMap = new Map();
+			const channelEvents = await channel.getFrameEvents(nextFrameNumber);
+			for (const event of channelEvents) {
+				const { dimId, bucketId } = this.thalamus.coordinateNameToId(event);
+				dimMap.set(dimId, bucketId);
+			}
+			if (dimMap.size > 0) inputs.set(channelId, dimMap);
 
-			// get the reward for the channel
-			const reward = await channel.getRewards();
-			if (this.debug) console.log(`${channelName}: reward ${reward.toFixed(3)}`);
-			rewards.set(channelName, reward);
-			feedbackCount++;
+			// request reward only when we actually executed actions for this channel last frame
+			if ((frameActions.get(channelName) || []).length > 0)
+				rewards.set(channelId, await channel.getRewards());
 		}
-
-		// Age rewards: push current rewards to front, trim to context window
-		this.rewards.unshift(rewards);
-		if (this.rewards.length > this.contextLength) this.rewards.pop();
-
-		if (this.debug) {
-			if (feedbackCount > 0) console.log(`Received rewards from ${feedbackCount} channels`);
-			else console.log('No rewards from any channels');
-		}
-		if (this.debug && feedbackCount > 0)
-			console.log(`Channel rewards:`, Array.from(rewards.entries()).map(([ch, r]) => `${ch}: ${r.toFixed(3)}`).join(', '));
+		return { inputs, rewards };
 	}
 
 	/**
@@ -423,17 +457,21 @@ export default class Brain {
 	 * Infer predictions and outputs using voting architecture.
 	 * All levels vote for both actions and events.
 	 * @param {Array} votes - Accumulated votes from processLevels
+	 * @returns {Map<number, Array<{dimId, kind, winner: {value, strength, score}, continuous: number}>>}
+	 *   channelId → per-dimension inferences in scalar space. winner.value and continuous
+	 *   are dequantized via the Quantizer. continuous is the score-weighted average of
+	 *   all competing candidates on that dimension. Empty map if there were no votes.
 	 */
 	inferNeurons(votes) {
 
 		// If no inference votes, wait for more data
 		if (votes.length === 0) {
 			if (this.debug) console.log('No inferences found. Waiting for more data in future frames.');
-			return;
+			return new Map();
 		}
 
-		// Aggregate votes and determine winners
-		const inferences = this.determineConsensus(votes);
+		// Aggregate votes and determine winners - returns winners plus full candidate map for continuous predictions
+		const { inferences, candidates, dimBest } = this.determineConsensus(votes);
 
 		// Ensure every channel has an action - explore if none inferred
 		this.ensureChannelActions(inferences);
@@ -457,6 +495,59 @@ export default class Brain {
 
 		// Save inferences to memory (clears old inferences first)
 		this.memory.saveInferredNeurons(inferences);
+
+		// Build the scalar-space output: per-channel, per-dimension winner and continuous prediction
+		return this.buildInferencesByChannel(candidates, dimBest);
+	}
+
+	/**
+	 * Build the per-channel, per-dimension inference output in scalar space.
+	 * For each dimension that received votes, produces a single entry containing the
+	 * winning bucket's dequantized value plus a score-weighted continuous prediction
+	 * across all candidates on that dimension. Bucket IDs never appear in the output.
+	 *
+	 * @param {Map<number, object>} candidates - neuronId → { strength, reward?, probability? }
+	 * @param {Map<number, {neuronId, score, strength}>} dimBest - dimId → winning candidate
+	 * @returns {Map<number, Array<{dimId, kind, winner: {value, strength, score}, continuous: number}>>}
+	 */
+	buildInferencesByChannel(candidates, dimBest) {
+
+		// Group every candidate by (channelId, dimId) and accumulate weighted sums for the continuous prediction
+		const dims = new Map(); // key `${channelId}:${dimId}` → { channelId, dimId, kind, weightedSum, totalScore }
+		for (const [neuronId, candidate] of candidates) {
+			const coordinate = this.thalamus.getNeuronCoordinate(neuronId);
+			const kind = this.thalamus.getNeuronType(neuronId);
+			const channelId = this.thalamus.channelNameToId[this.thalamus.getNeuronChannel(neuronId)];
+			const score = kind === 'action' ? candidate.reward : candidate.probability;
+			const value = this.thalamus.quantizer.dequantize(coordinate.dimId, coordinate.bucketId);
+
+			const key = `${channelId}:${coordinate.dimId}`;
+			let entry = dims.get(key);
+			if (!entry) {
+				entry = { channelId, dimId: coordinate.dimId, kind, weightedSum: 0, totalScore: 0 };
+				dims.set(key, entry);
+			}
+			entry.weightedSum += score * value;
+			entry.totalScore += score;
+		}
+
+		// Finalize each dimension entry: resolve winner via dimBest and compute the continuous prediction
+		const out = new Map();
+		for (const { channelId, dimId, kind, weightedSum, totalScore } of dims.values()) {
+			const best = dimBest.get(dimId);
+			const winnerCoord = this.thalamus.getNeuronCoordinate(best.neuronId);
+			const winnerValue = this.thalamus.quantizer.dequantize(winnerCoord.dimId, winnerCoord.bucketId);
+			const continuous = totalScore > 0 ? weightedSum / totalScore : winnerValue;
+
+			if (!out.has(channelId)) out.set(channelId, []);
+			out.get(channelId).push({
+				dimId,
+				kind,
+				winner: { value: winnerValue, strength: best.strength, score: best.score },
+				continuous
+			});
+		}
+		return out;
 	}
 
 	/**
@@ -464,7 +555,10 @@ export default class Brain {
 	 * Events win by strength, actions win by reward.
 	 * For events, reward = strength / totalDimensionStrength (likelihood vs alternatives = safety score)
 	 * @param {Array} votes - Array of vote objects accumulated by processLevels
-	 * @returns {Array} Array of winning inference objects {neuronId, strength, reward}
+	 * @returns {{ inferences: Array, candidates: Map, dimBest: Map }}
+	 *   inferences: winner objects for memory/diagnostics.
+	 *   candidates: neuronId → aggregated vote data (strength, reward/probability).
+	 *   dimBest: dimId → winning candidate ({neuronId, score, strength}).
 	 */
 	determineConsensus(votes) {
 
@@ -477,7 +571,8 @@ export default class Brain {
 		// Build winner objects from dimension winners
 		const winnerIds = new Set([...dimBest.values()].map(w => w.neuronId));
 		if (this.debug) console.log(`Determined consensus: ${candidates.size} candidates, ${winnerIds.size} winners`);
-		return this.buildWinners(winnerIds, candidates);
+		const inferences = this.buildWinners(winnerIds, candidates);
+		return { inferences, candidates, dimBest };
 	}
 
 	/**

@@ -755,9 +755,8 @@ export class Thalamus {
 		for (const channelName of this.channels.keys())
 			channelInferences.set(channelName, { actions: [], events: [] });
 
-		// Add inferred neurons to their channels.
-		// Translate id-form coordinate to name-form here — channels still speak name-form
-		// at their I/O boundary until Phase 5 migrates them to id-form.
+		// Add inferred neurons to their channels. Translate id-form coordinate to
+		// name-form here — channels still speak name-form at their I/O boundary.
 		for (const inference of inferredNeurons) {
 			const inferences = channelInferences.get(this.getNeuronChannel(inference.neuronId));
 			const type = this.getNeuronType(inference.neuronId);

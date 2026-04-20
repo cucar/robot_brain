@@ -92,7 +92,9 @@ export class Quantizer {
 	 */
 	observe(dimId, scalar) {
 		const state = this.dimensions.get(dimId);
-		if (!state) throw new Error(`Quantizer: dimension ${dimId} not registered`);
+
+		// unregistered dims are owned by channels that bucketize on their own; ignore
+		if (!state) return;
 		if (state.mode !== 'dynamic') return;
 
 		state.samples.push(scalar);
@@ -112,7 +114,13 @@ export class Quantizer {
 	 */
 	quantize(dimId, scalar) {
 		const state = this.dimensions.get(dimId);
-		if (!state) throw new Error(`Quantizer: dimension ${dimId} not registered`);
+
+		// unregistered dim: channel already emits a discrete bucket ID, pass it through
+		if (!state) {
+			if (!Number.isInteger(scalar))
+				throw new Error(`Quantizer: unregistered dim ${dimId} requires integer bucket ID, got ${scalar}`);
+			return scalar;
+		}
 
 		// input should already be an integer bucket ID - sign and magnitude don't matter,
 		// only that the encoder uses integer IDs consistently across frames
@@ -128,6 +136,78 @@ export class Quantizer {
 			return Math.ceil(state.resolution / 2);
 
 		return this.bucketize(scalar, state.boundaries);
+	}
+
+	/**
+	 * Map a bucket ID back to a representative scalar in the dimension's input space.
+	 * Accepts a fractional bucket ID so callers can pass the weighted average of a
+	 * vote distribution and get a continuous scalar prediction back.
+	 *
+	 * passthrough: the bucket ID IS the scalar, returned unchanged.
+	 * static / dynamic: interpolates across bucket midpoints. Interior midpoints are
+	 * the average of adjacent boundaries; the two outer buckets are open-ended, so we
+	 * reflect the nearest interior width to get a finite representative value.
+	 *
+	 * @param {number} dimId
+	 * @param {number} bucketId - 1-indexed; may be fractional (e.g. 2.7 for weighted avg)
+	 * @returns {number} representative scalar
+	 */
+	dequantize(dimId, bucketId) {
+		const state = this.dimensions.get(dimId);
+
+		// unregistered dims come from channels that still own their own bucketization;
+		// treat the bucket ID as the scalar (same as passthrough mode)
+		if (!state) return bucketId;
+
+		if (state.mode === 'passthrough') return bucketId;
+
+		// dynamic mode before warmup: we returned the middle bucket from quantize(),
+		// so dequantize the same way - no boundaries means no meaningful scalar yet
+		if (!state.boundaries) return 0;
+
+		return this.interpolateBucketMidpoint(bucketId, state.boundaries);
+	}
+
+	/**
+	 * Linear interpolation over a piecewise-linear map from bucket index to scalar.
+	 * The map is anchored at the integer bucket midpoints; fractional bucket IDs
+	 * interpolate between the two surrounding midpoints.
+	 */
+	interpolateBucketMidpoint(bucketId, boundaries) {
+		const midpoints = this.bucketMidpoints(boundaries);
+		const n = midpoints.length;
+		if (bucketId <= 1) return midpoints[0];
+		if (bucketId >= n) return midpoints[n - 1];
+		const lo = Math.floor(bucketId);
+		const frac = bucketId - lo;
+		return midpoints[lo - 1] * (1 - frac) + midpoints[lo] * frac;
+	}
+
+	/**
+	 * Build one representative scalar per bucket. Interior buckets use the mean of
+	 * their two boundaries; the two outer open-ended buckets mirror the adjacent
+	 * interior width so they contribute a finite anchor to interpolation.
+	 */
+	bucketMidpoints(boundaries) {
+		const resolution = boundaries.length + 1;
+		const mids = new Array(resolution);
+
+		// interior buckets: midpoint between the two boundaries that enclose them
+		for (let i = 1; i < resolution - 1; i++)
+			mids[i] = (boundaries[i - 1] + boundaries[i]) / 2;
+
+		// outer buckets: reflect the adjacent interior half-width to stay finite.
+		// for resolution=2 there is no interior bucket, so we just offset by 1 unit.
+		if (resolution === 2) {
+			mids[0] = boundaries[0] - 0.5;
+			mids[1] = boundaries[0] + 0.5;
+		}
+		else {
+			mids[0] = 2 * boundaries[0] - mids[1];
+			mids[resolution - 1] = 2 * boundaries[resolution - 2] - mids[resolution - 2];
+		}
+
+		return mids;
 	}
 
 	/**
