@@ -1,30 +1,33 @@
 import { Channel } from './channel.js';
-import { Dimension } from './dimension.js';
+import { StockEncoder } from '../apps/stocks/encoder.js';
+import { StockTrader } from '../apps/stocks/trader.js';
 
 const POSITION_OWN = 1;
 const POSITION_OUT = -1;
 
 /**
- * Stock Channel Implementation - this channel is used for buying/selling stocks based on their values
+ * Stock Channel Implementation - thin adapter that delegates encoding to StockEncoder
+ * and position/reward/execution to StockTrader. Preserves the channel surface the brain
+ * currently relies on; will be retired once jobs talk to encoder/trader directly.
  */
 export class StockChannel extends Channel {
 
-	// total cash shared across all stock channel instances
-	static initialCapital = 15000;
-	static cash = StockChannel.initialCapital;
-
-	// maximum number of positions to hold at once
-	static maxPositions = 1;
-
-	// maximum price limit for stocks
-	static maxPrice = 5000;
+	// --- portfolio-wide shared state (proxied to StockTrader for single-source-of-truth) ---
+	static get initialCapital() { return StockTrader.initialCapital; }
+	static set initialCapital(v) { StockTrader.initialCapital = v; }
+	static get cash()           { return StockTrader.cash; }
+	static set cash(v)          { StockTrader.cash = v; }
+	static get maxPositions()   { return StockTrader.maxPositions; }
+	static set maxPositions(v)  { StockTrader.maxPositions = v; }
+	static get maxPrice()       { return StockTrader.maxPrice; }
+	static set maxPrice(v)      { StockTrader.maxPrice = v; }
 
 	/**
 	 * Static method to reset channel-level context (shared state across all instances)
 	 * Called once per episode reset before individual channel resetContext calls
 	 */
 	static resetChannelContext() {
-		StockChannel.cash = StockChannel.initialCapital;
+		StockTrader.resetPortfolio();
 	}
 
 	/**
@@ -38,46 +41,45 @@ export class StockChannel extends Channel {
 
 		// Extract symbol from name (e.g., "AAPL" from name)
 		this.symbol = name;
-		this.activityDimName = `${this.symbol}_activity`;
 
-		// initialize dimensions
-		this.initializeDimensions(dimensions);
+		// Delegates: encoder handles inputs/dims/buckets, trader handles positions/reward/execution
+		this.encoder = new StockEncoder(name, dimensions);
+		this.trader = new StockTrader(name, debug);
+
+		// Expose dimensions for the Channel framework
+		this.activityDimName = this.encoder.activityDimName;
+		this.priceChangeDim  = this.encoder.priceChangeDim;
+		this.volumeChangeDim = this.encoder.volumeChangeDim;
+		this.activityDim     = this.encoder.activityDim;
 
 		// training data / mode (set by setTraining)
 		this.trainingData = null;
 		this.trainingRow = 0;
 
-		// initialize buckets to be used for discretizing price and volume changes
-		this.initializeBuckets();
-
 		// initialize context
 		this.resetContext(false);
 	}
 
-	/**
-	 * initialize dimensions - dimensions are given when loading from database
-	 */
-	initializeDimensions(dimensions) {
-
-		// Create or use provided dimension objects for this channel
-		if (dimensions && dimensions.length > 0) {
-
-			// Loading from database - use provided dimensions
-			this.priceChangeDim = dimensions.find(d => d.name === `${this.symbol}_price_change`);
-			this.volumeChangeDim = dimensions.find(d => d.name === `${this.symbol}_volume_change`);
-			this.activityDim = dimensions.find(d => d.name === this.activityDimName);
-
-			// Validate all required dimensions exist
-			if (!this.priceChangeDim || !this.volumeChangeDim || !this.activityDim)
-				throw new Error(`StockChannel ${name}: Missing required dimensions in database`);
-		}
-		// New channel - create dimensions with auto-increment IDs
-		else {
-			this.priceChangeDim = new Dimension(`${this.symbol}_price_change`);
-			this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
-			this.activityDim = new Dimension(this.activityDimName);
-		}
-	}
+	// --- per-instance state forwarding to trader (keeps the existing external surface working) ---
+	get shares()          { return this.trader.shares; }
+	set shares(v)         { this.trader.shares = v; }
+	get investment()      { return this.trader.investment; }
+	set investment(v)     { this.trader.investment = v; }
+	get totalTrades()     { return this.trader.totalTrades; }
+	set totalTrades(v)    { this.trader.totalTrades = v; }
+	get lastKnownPrice()  { return this.trader.lastKnownPrice; }
+	set lastKnownPrice(v) { this.trader.lastKnownPrice = v; }
+	get previousPrice()   { return this.trader.previousPrice; }
+	set previousPrice(v)  { this.trader.previousPrice = v; }
+	get previousVolume()  { return this.trader.previousVolume; }
+	set previousVolume(v) { this.trader.previousVolume = v; }
+	get currentPrice()    { return this.trader.currentPrice; }
+	set currentPrice(v)   { this.trader.currentPrice = v; }
+	get currentVolume()   { return this.trader.currentVolume; }
+	set currentVolume(v)  { this.trader.currentVolume = v; }
+	get lastAction()      { return this.trader.lastAction; }
+	set lastAction(v)     { this.trader.lastAction = v; }
+	get hasData()         { return this.trader.hasData; }
 
 	/**
 	 * Set training data for this channel - switches channel to training mode
@@ -89,82 +91,11 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * initialize dynamic bucket categories
-	 */
-	initializeBuckets() {
-
-		// price movements are best predicted from up/down - ideal split is 0.01% - favor profit making
-		this.priceBoundaries = [0];
-
-		// volume movements are best predicted as up/down
-		this.volumeBoundaries = [0];
-
-		// Build bucket-to-percentage mapping once (used in debug output)
-		this.bucketToPercent = this.buildBucketPercentMap();
-	}
-
-	/**
-	 * Build a map from bucket values to percentage ranges for price/volume dimensions
-	 */
-	buildBucketPercentMap() {
-		const map = new Map();
-		const categories = [
-			{ dim: `${this.symbol}_price_change`,  boundaries: this.priceBoundaries },
-			{ dim: `${this.symbol}_volume_change`, boundaries: this.volumeBoundaries }
-		];
-		for (const { dim, boundaries } of categories)
-			for (let bucket = 1; bucket <= boundaries.length + 1; bucket++) {
-				const { lo, hi } = this.getBucketRange(bucket, boundaries);
-				map.set(`${dim}:${bucket}`, this.formatBucketRange(lo, hi));
-			}
-		return map;
-	}
-
-	/**
-	 * Return the [lo, hi] boundary pair for a 1-indexed bucket in a category.
-	 * lo = -Infinity for bucket 1; hi = Infinity for the last bucket.
-	 */
-	getBucketRange(bucketValue, boundaries) {
-		const idx = bucketValue - 1;
-		const lo = idx === 0 ? -Infinity : boundaries[idx - 1];
-		const hi = idx >= boundaries.length ? Infinity : boundaries[idx];
-		return { lo, hi };
-	}
-
-	/**
-	 * Format bucket range as a readable string with 2 decimal places
-	 */
-	formatBucketRange(min, max) {
-		if (min === -Infinity) return `<${max.toFixed(2)}%`;
-		if (max === Infinity) return `>${min.toFixed(2)}%`;
-		return `${min.toFixed(2)}%~${max.toFixed(2)}%`;
-	}
-
-	/**
 	 * Reset channel state for new episode (keeps learned patterns but resets trading state)
 	 */
 	resetContext() {
-
-		// Reset trading state
-		this.shares = 0; // this is the actual number of shares we own - this is what will be adjusted by the actions
-		this.investment = 0; // Total amount invested in current position
-		this.totalTrades = 0; // Total number of trades in current episode
-		this.lastKnownPrice = null; // Last valid price for portfolio valuation when offline
-		this.previousPrice = null;
-		this.previousVolume = null;
-		this.currentPrice = null;
-		this.currentVolume = null;
-		this.lastAction = null; // Last action taken by brain
-
-		// Reset data iterator to start from beginning
+		this.trader.resetContext();
 		this.trainingRow = 0;
-	}
-
-	/**
-	 * Whether current frame has valid data (not a placeholder)
-	 */
-	get hasData() {
-		return this.previousPrice !== null && this.currentPrice !== null && this.currentPrice > 0 && this.currentVolume > 0;
 	}
 
 	/**
@@ -175,42 +106,25 @@ export class StockChannel extends Channel {
 		// return false when all rows are consumed - this will stop the processing loop
 		if (this.trainingRow >= this.trainingData.length) return false;
 
-		// save the current price/volume as previous before reading next row
-		this.previousPrice = this.currentPrice;
-		this.previousVolume = this.currentVolume;
-
-		// get the new row and update price/volume
+		// feed the next tick to the trader (advances previous → current)
 		const row = this.trainingData[this.trainingRow++];
-		this.currentPrice = row.price;
-		this.currentVolume = row.volume;
+		this.trader.setTick(row.price, row.volume);
 
-		// Track last known price for portfolio valuation
-		if (this.currentPrice !== null) this.lastKnownPrice = this.currentPrice;
-
-		// return true to indicate that we have more data
 		return true;
 	}
 
 	/**
-	 * Compute discretized change inputs from previous → current and update state.
+	 * Compute discretized change inputs from previous → current via the encoder.
 	 */
 	computeChangeInputs() {
-		const priceChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
-		const volumeChange = this.previousVolume === 0 ? 1000 : ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
+		const { priceChange, volumeChange, inputs } = this.encoder.encode({
+			previousPrice: this.previousPrice,
+			currentPrice: this.currentPrice,
+			previousVolume: this.previousVolume,
+			currentVolume: this.currentVolume
+		});
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
-		return [
-			{ dimension: `${this.symbol}_price_change`, value: this.discretizeChange(priceChange, this.priceBoundaries) },
-			{ dimension: `${this.symbol}_volume_change`, value: this.discretizeChange(volumeChange, this.volumeBoundaries) }
-		];
-	}
-
-	/**
-	 * Discretize percentage change into unified buckets
-	 */
-	discretizeChange(value, boundaries) {
-		for (let i = 0; i < boundaries.length; i++)
-			if (value <= boundaries[i]) return i + 1;
-		return boundaries.length + 1;
+		return inputs;
 	}
 
 	/**
@@ -267,55 +181,20 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get feedback based on price movement
-	 * Returns additive reward (0 = neutral, positive = good, negative = bad):
-	 * - Owned: positive if price went up, negative if price went down
-	 * - Not owned: positive if price went down (good timing), negative if price went up (missed opportunity)
+	 * Get feedback based on price movement (delegates to trader).
 	 */
 	async getRewards() {
-
-		// No data for this frame means no reward
-		if (!this.hasData) return 0;
-
-		// Calculate percentage change
-		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
-
-		// For owned stocks: positive change = positive reward
-		// For not owned: negative change = positive reward (good timing on selling)
-		const reward = this.lastAction === POSITION_OWN ? percentChange : -percentChange;
-		if (this.debug) this.debugRewards(reward);
-		return reward;
-	}
-
-	/**
-	 * Debug output for reward calculation
-	 */
-	debugRewards(reward) {
-		const recentChange = this.currentPrice - this.previousPrice;
-		const currentValue = this.shares * this.currentPrice;
-		const channelProfit = currentValue - this.investment;
-
-		if (this.lastAction === POSITION_OWN) {
-			console.log(`${this.symbol}: OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${reward} | Unrealized P&L: ${channelProfit >= 0 ? '+' : ''}$${channelProfit.toFixed(2)}`);
-		}
-		else {
-			console.log(`${this.symbol}: NOT OWNED - Price ${this.previousPrice.toFixed(2)} → ${this.currentPrice.toFixed(2)} (${recentChange >= 0 ? '+' : ''}${recentChange.toFixed(2)})`);
-			console.log(`${this.symbol}: Reward: ${reward}`);
-		}
+		return this.trader.getReward();
 	}
 
 	/**
 	 * Calculate continuous prediction error for price predictions.
 	 * Compares weighted predicted percentage change to actual percentage change.
-	 * @param {Array} predictions - Array of {neuron, strength} for predicted event neurons
-	 * @param {Array} actuals - Array of neurons that actually occurred
-	 * @returns {number|null} - Absolute error in percentage points, or null if no price predictions
 	 */
 	calculatePredictionError(predictions, actuals) {
 		const priceChangeDim = `${this.symbol}_price_change`;
 
-		// Filter to price change predictions only (predictions have {coordinate, strength, isCorrect})
+		// Filter to price change predictions only
 		const pricePredictions = predictions.filter(p => p.coordinate.dimension === priceChangeDim);
 		if (pricePredictions.length === 0) return null;
 
@@ -323,19 +202,18 @@ export class StockChannel extends Channel {
 		let totalWeightedChange = 0;
 		let totalStrength = 0;
 		for (const pred of pricePredictions) {
-			const percentageChange = this.bucketValueToPercentage(pred.coordinate.value);
+			const percentageChange = this.encoder.bucketValueToPercentage(pred.coordinate.value);
 			totalWeightedChange += percentageChange * pred.strength;
 			totalStrength += pred.strength;
 		}
 		if (totalStrength === 0) return null;
 		const predictedChange = totalWeightedChange / totalStrength;
 
-		// Find actual price change from actuals (actuals are coordinate objects: {dimension, value})
+		// Find actual price change from actuals
 		const actualCoord = actuals.find(c => c.dimension === priceChangeDim);
 		if (!actualCoord) return null;
-		const actualChange = this.bucketValueToPercentage(actualCoord.value);
+		const actualChange = this.encoder.bucketValueToPercentage(actualCoord.value);
 
-		// Return absolute error in percentage points
 		const error = Math.abs(predictedChange - actualChange);
 		if (this.debug)
 			console.log(`${this.symbol}: Predicted ${predictedChange.toFixed(2)}%, Actual ${actualChange.toFixed(2)}%, Error ${error.toFixed(2)}pp`);
@@ -343,14 +221,10 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Convert discretized bucket value back to approximate percentage change
-	 * Uses the midpoint of the bucket range
+	 * Effective price of the stock (delegates to trader).
 	 */
-	bucketValueToPercentage(bucketValue) {
-		const { lo, hi } = this.getBucketRange(bucketValue, this.priceBoundaries);
-		const loVal = lo === -Infinity ? hi - Math.abs(hi || 1) * 2 : lo;
-		const hiVal = hi === Infinity ? lo + Math.abs(lo || 1) * 2 : hi;
-		return (loVal + hiVal) / 2;
+	getCurrentPrice() {
+		return this.trader.getCurrentPrice();
 	}
 
 	/**
@@ -390,30 +264,19 @@ export class StockChannel extends Channel {
 	static saveLastActions(channelInferences) {
 		for (const [, { channel, actions }] of channelInferences) {
 			if (actions.length === 0) continue;
-			channel.lastAction = actions[0].coordinate.value;
+			channel.trader.apply(actions[0].coordinate.value);
 		}
 	}
 
 	/**
 	 * Calculate portfolio allocations for stock actions based on total portfolio value
 	 * Uses softmax (exponential) weighting to handle negative rewards naturally
-	 * @param {Map<string, { channel, actions, events }>} channelInferences - Map of channel name to channel data
-	 * @returns {Map} - Map of channel name to { action, amount } allocation
 	 */
 	static getAllocations(channelInferences) {
-
-		// Calculate total portfolio value (cash + all current holdings)
 		const totalValue = this.getTotalValue(channelInferences);
-
-		// determine actions to be taken from the channel inferences
 		const actions = this.determineActions(channelInferences);
-
-		// Allocate portfolio value proportional to the rewards
 		const allocations = this.distributeAllocations(channelInferences, actions, totalValue);
-
-		// Set OUT allocation for channels without predictions
 		this.setMissingChannelAllocations(channelInferences, allocations);
-
 		return allocations;
 	}
 
@@ -425,17 +288,6 @@ export class StockChannel extends Channel {
 		for (const [, { channel }] of channelInferences)
 			totalPortfolioValue += channel.shares * channel.getCurrentPrice();
 		return totalPortfolioValue;
-	}
-
-	/**
-	 * returns the effective price of the stock
-	 * currentPrice: whatever row we read from the training data or got live via API call
-	 * it's usually populated, but when the stock is not traded in that period, it would be null
-	 * lastKnownPrice: covers those periods where the stock is not traded
-	 * this covers all except the initial frame maybe - return 0 in that case
-	 */
-	getCurrentPrice() {
-		return this.currentPrice || this.lastKnownPrice || 0;
 	}
 
 	/**
@@ -503,9 +355,6 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Generate action plan based on differential between ideal allocations and current holdings
-	 * @param {Map<string, { channel, actions, events }>} channelInferences - Map of channel name to channel data
-	 * @param {Map} allocations - Map of channel name to { action, amount } allocation
-	 * @returns {Object} - Action plan with { sells: [...], buys: [...] }
 	 */
 	static getActionPlan(channelInferences, allocations) {
 		const sells = [];
@@ -531,7 +380,6 @@ export class StockChannel extends Channel {
 		// use leftover cash to buy additional shares of the cheapest stock we want to own
 		this.fillLeftoverCash(buys, state);
 
-		// return the planned actions
 		return { sells, buys };
 	}
 
@@ -572,14 +420,11 @@ export class StockChannel extends Channel {
 	 */
 	static fillLeftoverCash(buys, state) {
 
-		// if there is no cash to fill or no stock to buy, we can't fill left over cash
 		if (!state.cheapestOwnChannel || state.remainingCash <= 0) return;
 
-		// get the number of additional shares we can buy with the remaining cash - if none, nothing we can do
 		const additionalShares = Math.floor(state.remainingCash / state.cheapestOwnChannel.getCurrentPrice());
 		if (additionalShares <= 0) return;
 
-		// Find existing buy for this channel and increment it, or add new buy
 		const existingBuy = buys.find(b => b.channel === state.cheapestOwnChannel);
 		if (existingBuy) existingBuy.shares += additionalShares;
 		else buys.push({ channel: state.cheapestOwnChannel, shares: additionalShares });
@@ -587,83 +432,36 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Execute action plan by performing sells first, then buys
-	 * @param {Object} actionPlan - Action plan with { sells: [...], buys: [...] }
 	 */
 	static async executeActionPlan(actionPlan) {
-
-		// FIRST PASS: Execute sells to free up cash
 		for (const sell of actionPlan.sells)
 			await sell.channel.executeSell(sell.shares);
-
-		// SECOND PASS: Execute buys using freed cash
 		for (const buy of actionPlan.buys)
 			await buy.channel.executeBuy(buy.shares);
 	}
 
 	/**
-	 * Execute a buy action
-	 * @param {number} sharesToBuy - Number of shares to buy
+	 * Execute a buy action (delegates to trader).
 	 */
 	async executeBuy(sharesToBuy) {
-
-		const cost = sharesToBuy * this.getCurrentPrice();
-
-		// Check if we have enough cash - give a dollar wiggle room for rounding and stuff
-		if (StockChannel.cash < (cost - 1))
-			throw new Error(`${this.symbol}: Insufficient cash to buy ${sharesToBuy} shares at $${this.getCurrentPrice()} (need $${cost.toFixed(2)}, have $${StockChannel.cash.toFixed(2)})`);
-
-		// Deduct cash
-		StockChannel.cash -= cost;
-
-		// Add shares and track investment
-		this.shares += sharesToBuy;
-		this.investment += cost;
-
-		// Track trade count
-		this.totalTrades++;
-
-		if (this.debug)
-			console.log(`${this.symbol}: BOUGHT ${sharesToBuy} shares @ $${this.getCurrentPrice().toFixed(2)} = $${cost.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
+		return this.trader.executeBuy(sharesToBuy);
 	}
 
 	/**
-	 * Execute a sell action
-	 * @param {number} sharesToSell - Number of shares to sell
+	 * Execute a sell action (delegates to trader).
 	 */
 	async executeSell(sharesToSell) {
-
-		if (sharesToSell > this.shares)
-			throw new Error(`${this.symbol}: Cannot sell ${sharesToSell} shares, only have ${this.shares}`);
-
-		const proceeds = sharesToSell * this.getCurrentPrice();
-		const costBasis = (this.investment / this.shares) * sharesToSell;
-
-		// Add cash
-		StockChannel.cash += proceeds;
-
-		// Reduce shares and investment
-		this.shares -= sharesToSell;
-		this.investment -= costBasis;
-
-		// Track trade count
-		this.totalTrades++;
-
-		if (this.debug)
-			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.getCurrentPrice().toFixed(2)} = $${proceeds.toFixed(2)} | Cash: $${StockChannel.cash.toFixed(2)}`);
+		return this.trader.executeSell(sharesToSell);
 	}
 
 	/**
 	 * Get aggregate metrics across all stock channels (portfolio metrics)
-	 * @param {Array} channels - array of [channelName, channel] pairs
-	 * @returns {Object} - Portfolio metrics including cash, investments, and total profit
 	 */
 	static getAggregateMetrics(channels) {
 		let totalCurrentValue = 0;
-
 		for (const [_, channel] of channels)
 			totalCurrentValue += channel.shares * channel.getCurrentPrice();
 
-		// Total profit: (current cash + current market value) - original capital
 		const totalProfit = (this.cash + totalCurrentValue) - this.initialCapital;
 
 		return {
@@ -675,8 +473,6 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Get aggregate display string for frame summary (portfolio P&L)
-	 * @param {Array} channels - array of [channelName, channel] pairs
-	 * @returns {string} - Formatted portfolio display
 	 */
 	static getAggregateDisplay(channels) {
 		const metrics = this.getAggregateMetrics(channels);
@@ -695,9 +491,6 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Format action label for debug output
-	 * Converts raw coordinate to human-readable action names (e.g., "OWN", "OUT")
-	 * @param {{dimension: string, value: number}} coordinate
-	 * @returns {string} Formatted action label
 	 */
 	formatActionLabel(coordinate) {
 		if (coordinate.value === POSITION_OWN) return 'OWN';
@@ -707,12 +500,9 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Format coordinates string with percentage ranges where applicable
-	 * Used by diagnostics for displaying event/action votes
-	 * @param {string} coordsStr - Coordinates string (e.g., "dim1=val1, dim2=val2")
-	 * @returns {string} Formatted coordinates with percentage ranges
 	 */
 	formatCoordinates(coordsStr) {
-		return this.formatCoordsWithPercent(coordsStr, this.bucketToPercent);
+		return this.formatCoordsWithPercent(coordsStr, this.encoder.bucketToPercent);
 	}
 
 	/**
@@ -721,11 +511,9 @@ export class StockChannel extends Channel {
 	formatCoordsWithPercent(coordsStr, bucketToPercent) {
 		if (!coordsStr) return '(no coords)';
 		if (!bucketToPercent) return coordsStr;
-		// Parse "TEST_price_change=5, TEST_volume_change=0" format
 		return coordsStr.split(', ').map(part => {
 			const [dimName, valStr] = part.split('=');
 			const val = parseFloat(valStr);
-			// Check if this dimension has a bucket mapping
 			const key = `${dimName}:${val}`;
 			let percentRange = bucketToPercent.get(key);
 			// Fall back to matching by dimension suffix for cross-channel voters
@@ -744,8 +532,6 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Get short state display for frame summary
-	 * Shows current holdings for this stock
-	 * @returns {string|null} - Holdings display or null if no shares
 	 */
 	getStateDisplay() {
 		if (this.shares === 0) return null;
@@ -754,7 +540,6 @@ export class StockChannel extends Channel {
 
 	/**
 	 * Get channel metrics for diagnostic reporting
-	 * @returns {Object} - Stock channel metrics
 	 */
 	getMetrics() {
 		const currentValue = this.shares * this.getCurrentPrice();
