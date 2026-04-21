@@ -349,21 +349,23 @@ export class Thalamus {
 
 	/**
 	 * Register a channel spec with the brain.
-	 * This is the new registration path — channels live outside the brain and pass in a
+	 * This is the id-native registration path — channels live outside the brain and pass in a
 	 * lightweight spec describing their shape. The brain stores the spec, registers each
-	 * dimension with the quantizer, and uses it as the source of truth for channel/dimension
-	 * metadata. Not yet wired into the frame pipeline; co-exists with registerChannel()
-	 * during migration.
+	 * dimension with the quantizer, populates name↔id maps, and pre-creates action neurons
+	 * for action dims with explicit bucket IDs. Coexists with registerChannel() during migration.
 	 *
 	 * @param {object} spec
 	 * @param {number} spec.id - Channel ID (numeric, caller-assigned)
+	 * @param {string} spec.name - Channel name (used as the channel key in the frame pipeline)
 	 * @param {Array<object>} spec.dimensions - Per-dimension specs
 	 * @param {number} spec.dimensions[].id - Dimension ID (numeric, caller-assigned)
+	 * @param {string} spec.dimensions[].name - Dimension name (used in name↔id maps)
 	 * @param {string} spec.dimensions[].kind - 'input' | 'action'
 	 * @param {number} spec.dimensions[].resolution - Number of buckets (>= 2)
 	 * @param {string} [spec.dimensions[].mode='passthrough'] - Quantizer mode
 	 * @param {number[]} [spec.dimensions[].boundaries] - Static mode boundaries (length = resolution - 1)
 	 * @param {number[]} [spec.dimensions[].actionBuckets] - For action dims: explicit bucket IDs to pre-create neurons for
+	 * @param {number} [spec.dimensions[].defaultBucket] - For action dims: bucket ID of the channel's default action
 	 * @param {number} [spec.dimensions[].warmupSamples] - Dynamic mode warmup window
 	 * @param {boolean} [spec.emitsReward=false] - Channel produces a reward signal each frame
 	 * @param {boolean} [spec.learnActionSequences=false] - Channel's action neurons participate in pattern learning
@@ -371,24 +373,33 @@ export class Thalamus {
 	registerChannelSpec(spec) {
 		if (this.channelSpecs.has(spec.id))
 			throw new Error(`Thalamus: channel ${spec.id} already registered`);
+		if (!spec.name) throw new Error(`Thalamus: channel spec ${spec.id} is missing required name`);
 
 		// store channel-level spec (clone dimensions array to protect against caller mutation)
 		const storedSpec = {
 			id: spec.id,
+			name: spec.name,
 			dimensions: spec.dimensions.map(d => ({ ...d })),
 			emitsReward: spec.emitsReward ?? false,
 			learnActionSequences: spec.learnActionSequences ?? false
 		};
 		this.channelSpecs.set(spec.id, storedSpec);
 
-		// register each dimension: store spec and hand it to the quantizer
+		// populate name↔id maps so the frame pipeline can resolve this channel by name
+		this.channelNameToId[spec.name] = spec.id;
+		this.channelIdToName[spec.id] = spec.name;
+
+		// register each dimension: store spec, register with quantizer, populate dim name↔id maps
 		for (const dim of storedSpec.dimensions) {
 			if (this.dimensionSpecs.has(dim.id))
 				throw new Error(`Thalamus: dimension ${dim.id} already registered (channel ${spec.id})`);
+			if (!dim.name) throw new Error(`Thalamus: dimension ${dim.id} is missing required name (channel ${spec.id})`);
 			if (dim.kind !== 'input' && dim.kind !== 'action')
 				throw new Error(`Thalamus: dimension ${dim.id} has invalid kind '${dim.kind}' (expected 'input' or 'action')`);
 
 			this.dimensionSpecs.set(dim.id, dim);
+			this.dimensionNameToId[dim.name] = dim.id;
+			this.dimensionIdToName[dim.id] = dim.name;
 			this.quantizer.registerDimension(dim.id, {
 				resolution: dim.resolution,
 				mode: dim.mode,
@@ -397,7 +408,29 @@ export class Thalamus {
 			});
 		}
 
-		if (this.debug) console.log(`Registered channel spec ${spec.id} (${storedSpec.dimensions.length} dimensions)`);
+		// pre-create action neurons for action dims with explicit bucket IDs so exploration can find them
+		const actionNeurons = this.channelActions.get(spec.name) || new Set();
+		for (const dim of storedSpec.dimensions) {
+			if (dim.kind !== 'action' || !Array.isArray(dim.actionBuckets)) continue;
+			for (const bucketId of dim.actionBuckets)
+				actionNeurons.add(this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, spec.name, 'action'));
+			if (dim.defaultBucket !== undefined)
+				this.channelDefaultActions.set(spec.name, this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultBucket }, spec.name, 'action'));
+		}
+		if (actionNeurons.size > 0) this.channelActions.set(spec.name, actionNeurons);
+
+		if (this.debug) console.log(`Registered channel spec ${spec.id} "${spec.name}" (${storedSpec.dimensions.length} dimensions)`);
+	}
+
+	/**
+	 * Iterate channel names registered through either path (instance or spec).
+	 * Used by the frame pipeline to drive buildFrame over every channel the brain knows about.
+	 * @returns {string[]}
+	 */
+	getAllChannelNames() {
+		const names = new Set(this.channels.keys());
+		for (const spec of this.channelSpecs.values()) names.add(spec.name);
+		return [...names];
 	}
 
 	/**
@@ -691,8 +724,12 @@ export class Thalamus {
 	 */
 	skipActionNeuron(neuronId) {
 		if (this.neuronLevels.get(neuronId) !== 0 || this.getNeuronType(neuronId) !== 'action') return false;
-		const channel = this.channels.get(this.getNeuronChannel(neuronId));
-		return channel && !channel.actionSequences;
+		const channelName = this.getNeuronChannel(neuronId);
+		const channel = this.channels.get(channelName);
+		if (channel) return !channel.actionSequences;
+		const channelId = this.channelNameToId[channelName];
+		const spec = channelId !== undefined ? this.channelSpecs.get(channelId) : null;
+		return spec ? !spec.learnActionSequences : false;
 	}
 
 	/**
@@ -789,7 +826,9 @@ export class Thalamus {
 		// populate this.channelActions in place — neurons hold a live reference to this map,
 		// so we must not reassign it. Action neurons are created once at startup; the map is
 		// static thereafter and can be broadcast once in the future MPI setup.
-		this.channelActions.clear();
+		// Preserve entries already populated by registerChannelSpec() (spec-only channels);
+		// only reset entries for instance-based channels that this loop is about to rebuild.
+		for (const [channelName] of this.getChannels()) this.channelActions.delete(channelName);
 		for (const [channelName, channel] of this.getChannels()) {
 
 			// get or create the action neurons for the channel.

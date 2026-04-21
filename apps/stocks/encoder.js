@@ -1,16 +1,37 @@
 import { Dimension } from '../../channels/dimension.js';
+import { Channel } from '../../channels/channel.js';
+
+const POSITION_OWN = 1;
+const POSITION_OUT = -1;
 
 /**
- * Per-symbol stock encoder. Owns the dimensions, bucket boundaries, and change
- * discretization used to translate raw ticks into brain inputs.
+ * Per-symbol stock encoder. Owns the channel and dimension IDs, the bucket boundaries,
+ * and the raw-frame → scalar translation the brain's quantizer bucketizes.
  */
 export class StockEncoder {
 
 	constructor(symbol, dimensions = null) {
 		this.symbol = symbol;
+
+		// Claim a brain-side channel ID up front (the trader will borrow the same ID later,
+		// so rewards, inputs, and inferences all key off a single number per symbol).
+		this.channelId = Channel.nextId++;
+
+		// Activity dim name is used both internally and by the trader for action coordinates.
 		this.activityDimName = `${symbol}_activity`;
+
+		// Dimensions are either reused from the database (restore path) or newly created.
 		this.initializeDimensions(dimensions);
+
+		// Bucket boundaries and the display map that turns bucket IDs into percent ranges.
 		this.initializeBuckets();
+
+		// Per-episode frame iteration state: the row slice being streamed, the cursor,
+		// and the previous frame's reading (so each encode() call sees a full pair).
+		this.rows = null;
+		this.rowIndex = 0;
+		this.previousPrice = null;
+		this.previousVolume = null;
 	}
 
 	initializeDimensions(dimensions) {
@@ -68,21 +89,81 @@ export class StockEncoder {
 	}
 
 	/**
-	 * Compute discretized change inputs from previous → current tick data.
-	 * @returns {{priceChange:number, volumeChange:number, inputs:Array<{dimension:string,value:number}>}}
+	 * Feed the encoder the chronological training rows for an episode and reset the
+	 * frame iteration state. Called once per episode (after slicing for holdout/offset).
+	 * @param {Array<{price:number, volume:number}>} rows
 	 */
-	encode({ previousPrice, currentPrice, previousVolume, currentVolume }) {
-		const priceChange = ((currentPrice - previousPrice) / previousPrice) * 100;
-		const volumeChange = previousVolume === 0 ? 1000 : ((currentVolume - previousVolume) / previousVolume) * 100;
-		const inputs = [
-			{ dimension: `${this.symbol}_price_change`,  value: this.discretizeChange(priceChange,  this.priceBoundaries) },
-			{ dimension: `${this.symbol}_volume_change`, value: this.discretizeChange(volumeChange, this.volumeBoundaries) }
-		];
-		return { priceChange, volumeChange, inputs };
+	setData(rows) {
+		this.rows = rows;
+		this.rowIndex = 0;
+		this.previousPrice = null;
+		this.previousVolume = null;
 	}
 
 	/**
-	 * Convert discretized bucket value back to approximate percentage change (midpoint of range).
+	 * Pull the next frame's reading from the data source. Returns null when the stream
+	 * is exhausted. The returned object carries both current and previous readings so
+	 * encode() can be stateless — this lets the job consume the first frame as a warmup
+	 * frame without entangling the encoder and the trader's step order.
+	 * @returns {null | {price:number, volume:number, previousPrice:number|null, previousVolume:number|null}}
+	 */
+	nextFrame() {
+		if (this.rows === null || this.rowIndex >= this.rows.length) return null;
+
+		// Snapshot current (previous, current) pair before advancing the cursor.
+		const row = this.rows[this.rowIndex++];
+		const frame = {
+			price: row.price,
+			volume: row.volume,
+			previousPrice: this.previousPrice,
+			previousVolume: this.previousVolume
+		};
+
+		// Advance: the row we just emitted becomes the "previous" for the next call.
+		this.previousPrice = row.price;
+		this.previousVolume = row.volume;
+		return frame;
+	}
+
+	/**
+	 * Rewind frame iteration without dropping the loaded rows. Called once per episode
+	 * so the brain re-sees the same sequence while preserving learned patterns.
+	 */
+	resetFrames() {
+		this.rowIndex = 0;
+		this.previousPrice = null;
+		this.previousVolume = null;
+	}
+
+	/**
+	 * Translate a frame into raw per-dimension scalars the brain's quantizer will
+	 * bucketize. Returns null in two cases:
+	 *   (1) first frame of a run — there is no previous reading yet, so no change
+	 *       can be computed.
+	 *   (2) the current frame has no trading data (price or volume is zero) — the
+	 *       setup path backfills missing bars with zero volume; we skip those.
+	 * @returns {Map<number, number>|null} dimId → raw scalar percentage change
+	 */
+	encode(frame) {
+		if (frame.previousPrice === null || frame.previousVolume === null) return null;
+		if (!frame.price || !frame.volume) return null;
+
+		// Percent change since last frame; volume jumps from a zero-volume bar are
+		// capped at 1000% to avoid infinities when the previous frame had no trades.
+		const priceChange = ((frame.price - frame.previousPrice) / frame.previousPrice) * 100;
+		const volumeChange = frame.previousVolume === 0 ? 1000 : ((frame.volume - frame.previousVolume) / frame.previousVolume) * 100;
+
+		// Map of dimId → raw scalar; the brain's quantizer bucketizes these per-dim
+		// according to the registered static boundaries.
+		const dimMap = new Map();
+		dimMap.set(this.priceChangeDim.id, priceChange);
+		dimMap.set(this.volumeChangeDim.id, volumeChange);
+		return dimMap;
+	}
+
+	/**
+	 * Convert a (possibly fractional) bucket value back to an approximate percentage change.
+	 * Midpoint of the bucket range, with open-ended outer buckets reflected.
 	 */
 	bucketValueToPercentage(bucketValue) {
 		const { lo, hi } = this.getBucketRange(bucketValue, this.priceBoundaries);
@@ -92,14 +173,43 @@ export class StockEncoder {
 	}
 
 	/**
-	 * Describe the channel shape the brain should register for this symbol.
+	 * Describe this encoder's channel for brain.registerChannelSpec(). Shape-only —
+	 * no behavior. The brain stores it, registers dims with the quantizer, and pre-creates
+	 * action neurons for the activity dim.
 	 */
 	getChannelSpec() {
 		return {
-			symbol: this.symbol,
-			activityDimName: this.activityDimName,
-			eventDims:  [ this.priceChangeDim, this.volumeChangeDim ],
-			actionDims: [ this.activityDim ]
+			id: this.channelId,
+			name: this.symbol,
+			emitsReward: true,
+			learnActionSequences: false,
+			dimensions: [
+				{
+					id: this.priceChangeDim.id,
+					name: this.priceChangeDim.name,
+					kind: 'input',
+					resolution: this.priceBoundaries.length + 1,
+					mode: 'static',
+					boundaries: [...this.priceBoundaries]
+				},
+				{
+					id: this.volumeChangeDim.id,
+					name: this.volumeChangeDim.name,
+					kind: 'input',
+					resolution: this.volumeBoundaries.length + 1,
+					mode: 'static',
+					boundaries: [...this.volumeBoundaries]
+				},
+				{
+					id: this.activityDim.id,
+					name: this.activityDim.name,
+					kind: 'action',
+					resolution: 2,
+					mode: 'passthrough',
+					actionBuckets: [ POSITION_OUT, POSITION_OWN ],
+					defaultBucket: POSITION_OUT
+				}
+			]
 		};
 	}
 }

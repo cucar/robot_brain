@@ -106,25 +106,29 @@ export class StockChannel extends Channel {
 		// return false when all rows are consumed - this will stop the processing loop
 		if (this.trainingRow >= this.trainingData.length) return false;
 
-		// feed the next tick to the trader (advances previous → current)
+		// feed the next frame to the trader (advances previous → current)
 		const row = this.trainingData[this.trainingRow++];
-		this.trader.setTick(row.price, row.volume);
+		this.trader.setFrame(row.price, row.volume);
 
 		return true;
 	}
 
 	/**
-	 * Compute discretized change inputs from previous → current via the encoder.
+	 * Legacy-path adapter: compute price/volume percent changes, bucketize through the
+	 * encoder's static boundaries, and return name-keyed inputs in the shape the old
+	 * buildFrame() path expects. The new spec-based path bypasses this — it hands raw
+	 * scalars to brain.processInputs(), which bucketizes via the quantizer.
 	 */
 	computeChangeInputs() {
-		const { priceChange, volumeChange, inputs } = this.encoder.encode({
-			previousPrice: this.previousPrice,
-			currentPrice: this.currentPrice,
-			previousVolume: this.previousVolume,
-			currentVolume: this.currentVolume
-		});
+		const priceChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
+		const volumeChange = this.previousVolume === 0 ? 1000 : ((this.currentVolume - this.previousVolume) / this.previousVolume) * 100;
+		const priceBucket = this.encoder.discretizeChange(priceChange, this.encoder.priceBoundaries);
+		const volumeBucket = this.encoder.discretizeChange(volumeChange, this.encoder.volumeBoundaries);
 		if (this.debug) console.log(`${this.symbol}: Price: ${this.currentPrice} (${priceChange.toFixed(2)}%), Volume: ${this.currentVolume} (${volumeChange.toFixed(2)}%)`);
-		return inputs;
+		return [
+			{ dimension: this.encoder.priceChangeDim.name, value: priceBucket },
+			{ dimension: this.encoder.volumeChangeDim.name, value: volumeBucket }
+		];
 	}
 
 	/**
@@ -259,12 +263,14 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Save last action for each channel for tracking purposes
+	 * Save last action for each channel for tracking purposes. Uses setAction() rather
+	 * than apply() because this legacy path already extracted the action-kind winner into
+	 * the actions array — we hand the bucket value and its expected reward directly.
 	 */
 	static saveLastActions(channelInferences) {
 		for (const [, { channel, actions }] of channelInferences) {
 			if (actions.length === 0) continue;
-			channel.trader.apply(actions[0].coordinate.value);
+			channel.trader.setAction(actions[0].coordinate.value, actions[0].reward ?? 0);
 		}
 	}
 

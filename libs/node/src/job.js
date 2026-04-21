@@ -39,7 +39,7 @@ export class Job {
 
 			// get channels defined by child class and register them with brain
 			// console.log('Registering channels with brain...');
-			for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
+			await this.registerBrainChannels();
 
 			// initialize database connection in the brain
 			await this.brain.initDB();
@@ -182,5 +182,14 @@ export class Job {
 	 */
 	getChannels() {
 		throw new Error('Job must implement getChannels() method');
+	}
+
+	/**
+	 * Hook: Register channels with the brain. Default path registers each getChannels()
+	 * entry as a Channel class. Jobs that own their encoders/traders directly can override
+	 * this to call brain.registerChannelSpec() per channel instead.
+	 */
+	async registerBrainChannels() {
+		for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
 	}
 }

@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Job, runJob } from '#brain-node';
-import { StockChannel } from '../../../channels/stock.js';
+import { StockEncoder } from '../encoder.js';
+import { StockTrader } from '../trader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +42,9 @@ export default class StockTestJob extends Job {
 			extendedHours: false                 // Include extended hours data (pre-market/after-hours) - use --extended-hours
 		};
 
+		this.encoders = [];
+		this.traders = [];
+
 		// Training metrics
 		this.episodeResults = [];
 		this.currentEpisode = 0;
@@ -74,21 +78,30 @@ export default class StockTestJob extends Job {
 		if (symbolsIndex !== -1 && process.argv[symbolsIndex + 1]) this.config.symbols = process.argv[symbolsIndex + 1].split(',');
 
 		const maxPositionsIndex = process.argv.indexOf('--max-positions');
-		if (maxPositionsIndex !== -1 && process.argv[maxPositionsIndex + 1]) StockChannel.maxPositions = parseInt(process.argv[maxPositionsIndex + 1]);
+		if (maxPositionsIndex !== -1 && process.argv[maxPositionsIndex + 1]) StockTrader.maxPositions = parseInt(process.argv[maxPositionsIndex + 1]);
 
 		const maxPriceIndex = process.argv.indexOf('--max-price');
-		if (maxPriceIndex !== -1 && process.argv[maxPriceIndex + 1]) StockChannel.maxPrice = parseFloat(process.argv[maxPriceIndex + 1]);
+		if (maxPriceIndex !== -1 && process.argv[maxPriceIndex + 1]) StockTrader.maxPrice = parseFloat(process.argv[maxPriceIndex + 1]);
 
 		const initialCapitalIndex = process.argv.indexOf('--initial-capital');
 		if (initialCapitalIndex !== -1 && process.argv[initialCapitalIndex + 1]) {
-			StockChannel.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
-			StockChannel.cash = StockChannel.initialCapital;
+			StockTrader.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
+			StockTrader.cash = StockTrader.initialCapital;
 		}
 	}
 
 	/**
-	 * Setup method - Processes JSON data into CSV training files
-	 * Requires: Run node stock-download.js first to download data
+	 * No Channel classes registered with the brain — this job owns encoders/traders directly
+	 * and overrides registerBrainChannels() below to use the spec-based path. The Job base
+	 * class still calls getChannels(), so return an empty list to opt out of the legacy path.
+	 */
+	getChannels() {
+		return [];
+	}
+
+	/**
+	 * Setup method - Processes JSON data into CSV training files.
+	 * Called by run-setup.js; requires stock-download.js to have already fetched raw JSON.
 	 */
 	async setup() {
 		const timeframe = this.config.timeframe;
@@ -104,7 +117,7 @@ export default class StockTestJob extends Job {
 			const jsonPath = path.join(dataDir, `${symbol}.json`);
 			if (!fs.existsSync(jsonPath)) {
 				console.error(`❌ Error: ${symbol}.json not found in ${dataDir}`);
-				console.error(`Please run: node stock-download.js --timeframe=${timeframe}`);
+				console.error(`Please run: node apps/stocks/jobs/download.js --timeframe=${timeframe}`);
 				process.exit(1);
 			}
 		}
@@ -266,37 +279,49 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Returns the channels for the job - one channel per stock symbol
+	 * Create an encoder + trader per symbol and register the encoder's spec with the brain.
+	 * The trader borrows the encoder's channelId so rewards, inputs, and inferences all key
+	 * off a single number per symbol — otherwise we'd need a second id→symbol lookup.
+	 * Called before brain.init(), which then creates the dimensions/neurons from each spec.
 	 */
-	getChannels() {
-		return this.config.symbols.map(symbol => ({
-			name: symbol,
-			channelClass: StockChannel
-		}));
+	async registerBrainChannels() {
+		for (const symbol of this.config.symbols) {
+			const encoder = new StockEncoder(symbol);
+			const trader = new StockTrader(symbol);
+			trader.channelId = encoder.channelId;
+			this.encoders.push(encoder);
+			this.traders.push(trader);
+			this.brain.registerChannelSpec(encoder.getChannelSpec());
+		}
 	}
 
 	/**
-	 * Hook: Configure channels after brain init - load CSV data and call setTraining
+	 * Hook: after brain init, load each symbol's CSV, slice off the holdout (from the tail)
+	 * and offset (from the head), and hand the resulting chronological rows to the encoder.
+	 * Runs once per job, before any episodes — rows are reused across episodes via resetFrames().
 	 */
 	async configureChannels() {
 		const { timeframe, holdoutRows, offsetRows } = this.config;
 		const dataDir = path.join(__dirname, '..', 'data', timeframe);
 
-		for (const symbol of this.config.symbols) {
-			const csvPath = path.join(dataDir, `${symbol}.csv`);
+		for (const encoder of this.encoders) {
+			const csvPath = path.join(dataDir, `${encoder.symbol}.csv`);
 			const allRows = this.loadCsvRows(csvPath);
 
+			// Offset trims from the start (skip warmup bars), holdout trims from the end
+			// (reserved for out-of-sample prediction testing in a separate job invocation).
 			const startIndex = offsetRows;
 			const endIndex = holdoutRows > 0 ? allRows.length - holdoutRows : allRows.length;
 			const rows = allRows.slice(startIndex, endIndex);
 
-			this.brain.getChannel(symbol).setTraining(rows);
+			encoder.setData(rows);
 		}
 	}
 
 	/**
-	 * Load and parse a CSV file into {price, volume} row objects
-	 * Rows are already in chronological order from processAndSaveSymbolData
+	 * Load and parse a CSV file into {price, volume} row objects. Rows are already in
+	 * chronological order from processAndSaveSymbolData, so no sort is needed. Empty lines
+	 * are filtered so a trailing newline doesn't produce a NaN row.
 	 */
 	loadCsvRows(csvPath) {
 		const content = fs.readFileSync(csvPath, 'utf-8');
@@ -347,7 +372,11 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Run a single training episode through all historical data
+	 * Run one episode: reset portfolio cash, rewind each encoder to frame 0, and wipe each
+	 * trader's per-episode context (position, last action, etc.). Then stream frames through
+	 * the brain, apply inferences back to the traders, and let the portfolio coordinate
+	 * execution per frame. Learned brain state (dimensions, neuron weights) is preserved —
+	 * only episode context is reset, so successive episodes build on prior learning.
 	 */
 	async runEpisode() {
 		const startTime = Date.now();
@@ -355,6 +384,9 @@ export default class StockTestJob extends Job {
 
 		// Reset context but keep learned patterns
 		this.brain.resetContext();
+		StockTrader.resetPortfolio();
+		for (const encoder of this.encoders) encoder.resetFrames();
+		for (const trader of this.traders) trader.resetContext();
 
 		// to test hard resets between episodes:
 		// this.brain.thalamus.reset();
@@ -373,16 +405,26 @@ export default class StockTestJob extends Job {
 			overallAccuracy: null
 		};
 
-		// Calculate expected number of frames based on data rows
-		const stockChannel = [...this.brain.getChannels()][0][1];
-		const expectedFrames = stockChannel.trainingData.length - 1; // -1 because first frame reads 2 rows
+		// Warmup: consume the first frame per encoder so the first real processed frame
+		// has a full (previous, current) pair. Mirrors the legacy frame-1 double-read in
+		// StockChannel — without this, the first encoded frame would have previousPrice=null
+		// and be skipped, and the trader would start one frame behind the encoder.
+		for (let i = 0; i < this.encoders.length; i++) {
+			const frame = this.encoders[i].nextFrame();
+			if (frame) this.traders[i].setFrame(frame.price, frame.volume);
+		}
+
+		// Every encoder has the same row count by construction (aligned intervals). One
+		// frame was consumed by the warmup above, so the main loop processes one fewer.
+		const expectedFrames = this.encoders[0].rows.length - 1;
 
 		// Process all frames for the episode duration
 		let frameCount = 0;
 		while (frameCount < expectedFrames) {
 
 			// Process frame
-			await this.brain.processFrame();
+			const hasMore = await this.runFrame();
+			if (!hasMore) break;
 			frameCount++;
 
 			// Show progress every 100 frames
@@ -425,51 +467,95 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Collect profit/loss results from all channels
+	 * Process one frame: pull the next frame per encoder, hand the encoded scalars and
+	 * any per-trader rewards to the brain, apply the returned inferences back to each
+	 * trader, and let the portfolio coordinate the resulting buys/sells.
+	 * @returns {Promise<boolean>} false when all encoders are exhausted
+	 */
+	async runFrame() {
+		const inputs = new Map();
+		const rewards = new Map();
+
+		// Pull one frame per encoder. Even frames that don't produce an encoded input
+		// (e.g. zero-volume bar, first frame) still update the trader's price/volume so
+		// valuation and reward math see the most recent reading.
+		let anyFrames = false;
+		for (let i = 0; i < this.encoders.length; i++) {
+			const encoder = this.encoders[i];
+			const trader = this.traders[i];
+			const frame = encoder.nextFrame();
+			if (!frame) continue;
+			anyFrames = true;
+			trader.setFrame(frame.price, frame.volume);
+			const dimMap = encoder.encode(frame);
+			if (dimMap) inputs.set(encoder.channelId, dimMap);
+		}
+		if (!anyFrames) return false;
+
+		// Only report reward for traders that actually acted last frame. This matches the
+		// legacy path, which called channel.getRewards() only when the channel had inferred
+		// actions in the previous frame — reporting a reward for a trader that never acted
+		// would credit/punish neurons that weren't responsible.
+		for (const trader of this.traders)
+			if (trader.lastAction !== null) rewards.set(trader.channelId, trader.getReward());
+
+		// Brain returns inferences keyed by channelId. Each trader grabs its own (or an
+		// empty array if the channel didn't fire) and records its last action for next frame.
+		const inferences = this.brain.processInputs(inputs, rewards);
+
+		for (const trader of this.traders)
+			trader.apply(inferences.get(trader.channelId) ?? []);
+
+		// Coordinated portfolio execution: ranks OWN actions, sizes positions, and runs
+		// sells-then-buys so cash is freed before it's spent.
+		await StockTrader.executePortfolio(this.traders);
+
+		// Yield to the event loop so SIGINT handlers can fire between frames — without this,
+		// a tight synchronous loop ignores Ctrl+C until the episode finishes.
+		await new Promise(resolve => setImmediate(resolve));
+		return true;
+	}
+
+	/**
+	 * Populate episodeMetrics from the traders themselves — no Channel class aggregation.
+	 * Computes portfolio-level ROI (total and compounded per-frame) plus per-symbol stats
+	 * for the results display.
 	 */
 	collectEpisodeResults(episodeMetrics) {
-		// Get aggregate metrics from brain (via thalamus)
-		const allAggregateMetrics = this.brain.getEpisodeSummary().aggregateMetrics;
-		const stockMetrics = allAggregateMetrics ? allAggregateMetrics.StockChannel : null;
 
-		if (!stockMetrics) {
-			console.error('Warning: getAggregateMetrics returned null for StockChannel');
-			episodeMetrics.netProfit = 0;
-			episodeMetrics.totalROI = 1;
-			episodeMetrics.totalROIPercent = 0;
-			return;
-		}
+		// Portfolio profit = (cash + market value of all positions) - initial capital.
+		episodeMetrics.netProfit = StockTrader.getPortfolioProfit(this.traders);
 
-		// Store portfolio profit
-		episodeMetrics.netProfit = stockMetrics.totalProfit;
-
-		// Calculate ROI metrics
-		const finalValue = StockChannel.initialCapital + stockMetrics.totalProfit;
-		const totalROI = finalValue / StockChannel.initialCapital;
+		// Total ROI as a ratio (1.0 == breakeven) and as a percentage delta.
+		const finalValue = StockTrader.initialCapital + episodeMetrics.netProfit;
+		const totalROI = finalValue / StockTrader.initialCapital;
 		episodeMetrics.totalROI = totalROI;
 		episodeMetrics.totalROIPercent = (totalROI - 1) * 100;
 
-		// Calculate per-frame ROI (assuming compounding returns)
+		// Geometric per-frame return — the constant rate that, compounded over `frames`
+		// frames, reproduces the episode's total ROI. Makes episodes of different lengths
+		// comparable.
 		if (episodeMetrics.frames > 0) {
 			const perFrameROI = Math.pow(totalROI, 1 / episodeMetrics.frames) - 1;
 			episodeMetrics.perFrameROI = perFrameROI;
 			episodeMetrics.perFrameROIPercent = perFrameROI * 100;
 		}
 
-		// Collect per-channel results from channel metrics
-		for (const [channelName, channel] of this.brain.getChannels()) {
-			const metrics = channel.getMetrics();
+		// Per-symbol breakdown for the results table. Unrealized profit uses current market
+		// price vs. cost basis — realized P&L is already baked into StockTrader.cash.
+		for (const trader of this.traders) {
+			const currentValue = trader.shares * trader.getCurrentPrice();
 
 			const channelResult = {
-				symbol: channelName,
-				investment: metrics.investment,
-				currentValue: metrics.currentValue,
-				unrealizedProfit: metrics.unrealizedProfit,
-				trades: metrics.trades
+				symbol: trader.symbol,
+				investment: trader.investment,
+				currentValue,
+				unrealizedProfit: currentValue - trader.investment,
+				trades: trader.totalTrades
 			};
 
-			episodeMetrics.channelResults.set(channelName, channelResult);
-			episodeMetrics.totalTrades += channelResult.trades;
+			episodeMetrics.channelResults.set(trader.symbol, channelResult);
+			episodeMetrics.totalTrades += trader.totalTrades;
 		}
 	}
 
@@ -512,7 +598,7 @@ export default class StockTestJob extends Job {
 		const avgPerFrameROI = this.episodeResults.reduce((sum, ep) => sum + (ep.perFrameROIPercent || 0), 0) / this.episodeResults.length;
 
 		console.log(`📈 Overall Performance:`);
-		console.log(`   Starting Capital: $${StockChannel.initialCapital.toFixed(2)}`);
+		console.log(`   Starting Capital: $${StockTrader.initialCapital.toFixed(2)}`);
 		console.log(`   Total Net Profit: $${totalNetProfit.toFixed(2)}`);
 		console.log(`   Average per Episode: $${avgNetProfit.toFixed(2)}`);
 		console.log(`   Average ROI: ${avgTotalROI >= 0 ? '+' : ''}${avgTotalROI.toFixed(2)}%`);

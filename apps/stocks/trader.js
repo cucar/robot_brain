@@ -2,9 +2,10 @@ const POSITION_OWN = 1;
 const POSITION_OUT = -1;
 
 /**
- * Per-symbol trader. Owns position tracking, tick state, reward calculation, and buy/sell
- * execution. Shares portfolio-wide cash via class statics so a multi-symbol portfolio adds
- * up to a single bankroll. Configured for simulation today; Alpaca-backed later.
+ * Per-symbol trader. Owns position tracking, frame state (current/previous price and volume),
+ * reward calculation, and buy/sell execution. Shares portfolio-wide cash via class statics
+ * so a multi-symbol portfolio adds up to a single bankroll. Configured for simulation today;
+ * Alpaca-backed later.
  */
 export class StockTrader {
 
@@ -24,6 +25,7 @@ export class StockTrader {
 	constructor(symbol, debug = false) {
 		this.symbol = symbol;
 		this.debug = debug;
+		this.channelId = null; // job wires this to match the encoder's channelId
 		this.resetContext();
 	}
 
@@ -37,12 +39,15 @@ export class StockTrader {
 		this.currentPrice = null;
 		this.currentVolume = null;
 		this.lastAction = null;
+		this.lastActionReward = 0;
 	}
 
 	/**
-	 * Advance one tick: current becomes previous, then new values are applied.
+	 * Advance one frame: current becomes previous, then new values are applied. Called
+	 * once per frame by the job so reward calculation has a full (prev, curr) pair and
+	 * valuation can fall back to lastKnownPrice when a bar is missing.
 	 */
-	setTick(price, volume) {
+	setFrame(price, volume) {
 		this.previousPrice = this.currentPrice;
 		this.previousVolume = this.currentVolume;
 		this.currentPrice = price;
@@ -62,10 +67,27 @@ export class StockTrader {
 	}
 
 	/**
-	 * Record the brain-chosen action for this symbol so the next-frame reward can use it.
+	 * Apply the brain's inferences for this trader's channel. Extracts the action-kind
+	 * winner and records it as the last action so next-frame reward can use it.
+	 * Also captures the winning action's strength as its expected-reward proxy for
+	 * portfolio ranking (mirrors the previous `actionData.reward` field).
+	 * @param {Array<{dimId, kind, winner, continuous}>|undefined} inferences
 	 */
-	apply(actionValue) {
-		this.lastAction = actionValue;
+	apply(inferences) {
+		if (!inferences || inferences.length === 0) return;
+		const actionInf = inferences.find(inf => inf.kind === 'action');
+		if (!actionInf) return;
+		this.lastAction = actionInf.winner.value;
+		this.lastActionReward = actionInf.winner.score ?? actionInf.winner.strength ?? 0;
+	}
+
+	/**
+	 * Legacy-path setter: record the action bucket value directly (no inference array).
+	 * Used by StockChannel.saveLastActions while the channel-class path is still alive.
+	 */
+	setAction(value, reward = 0) {
+		this.lastAction = value;
+		this.lastActionReward = reward;
 	}
 
 	/**
@@ -125,5 +147,168 @@ export class StockTrader {
 
 		if (this.debug)
 			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.getCurrentPrice().toFixed(2)} = $${proceeds.toFixed(2)} | Cash: $${StockTrader.cash.toFixed(2)}`);
+	}
+
+	/**
+	 * Aggregate portfolio profit across a set of traders:
+	 *   (cash + market value) - initial capital
+	 */
+	static getPortfolioProfit(traders) {
+		let totalCurrentValue = 0;
+		for (const trader of traders) totalCurrentValue += trader.shares * trader.getCurrentPrice();
+		return (StockTrader.cash + totalCurrentValue) - StockTrader.initialCapital;
+	}
+
+	/**
+	 * Coordinated execution across a group of traders. Given each trader's inferences,
+	 * allocates the portfolio, plans the differential, and executes sells-then-buys.
+	 * Traders with no inferences get a default OUT allocation so lingering positions are sold.
+	 * @param {StockTrader[]} traders
+	 */
+	static async executePortfolio(traders) {
+
+		// Only traders whose brain produced an action participate in allocation. Traders
+		// that didn't produce one still get a default OUT allocation below so any lingering
+		// position is sold — we don't want stale holdings from a skipped frame.
+		const acting = traders.filter(t => t.lastAction !== null);
+		if (acting.length === 0) return;
+
+		// Compute desired (action, dollar amount) per trader, then diff against current
+		// holdings to produce a concrete sell/buy plan.
+		const totalValue = this.getTotalValue(traders);
+		const ranked = this.rankActions(acting);
+		const allocations = this.distributeAllocations(traders, ranked, totalValue);
+		this.setMissingAllocations(traders, allocations);
+
+		// Sells run before buys so cash is freed before we try to spend it.
+		const plan = this.getActionPlan(traders, allocations);
+		await this.executeActionPlan(plan);
+	}
+
+	/**
+	 * Total portfolio value: unallocated cash plus current market value of every trader's
+	 * position. Used as the denominator for per-symbol allocation sizing.
+	 */
+	static getTotalValue(traders) {
+		let total = this.cash;
+		for (const trader of traders) total += trader.shares * trader.getCurrentPrice();
+		return total;
+	}
+
+	/**
+	 * Shape each trader into a ranking tuple. `rank = exp(lastActionReward)` gives an
+	 * always-positive score suitable for sorting, and `isOwn` flags the ones that want
+	 * to hold a position this frame.
+	 */
+	static rankActions(traders) {
+		return traders.map(trader => ({
+			trader,
+			rank: Math.exp(trader.lastActionReward),
+			isOwn: trader.lastAction === POSITION_OWN
+		}));
+	}
+
+	/**
+	 * Pick the winning OWN traders (respecting maxPositions and maxPrice), then split
+	 * portfolio value equally across them. Traders not in the winning set get a zero-
+	 * dollar OUT allocation. Returned Map is keyed by trader for O(1) lookup in the planner.
+	 */
+	static distributeAllocations(traders, ranked, totalValue) {
+		let ownActions = ranked.filter(a => a.isOwn);
+
+		// More OWN actions than we can hold: rank first by expected reward, then prefer
+		// cheaper shares (more granularity when sizing), then alphabetic for determinism.
+		// Filter out any symbol priced above maxPrice — too lumpy to allocate cleanly.
+		if (ownActions.length > this.maxPositions) {
+			ownActions.sort((a, b) =>
+				b.rank - a.rank ||
+				b.trader.getCurrentPrice() - a.trader.getCurrentPrice() ||
+				a.trader.symbol.localeCompare(b.trader.symbol)
+			);
+			ownActions = ownActions.filter(a => a.trader.getCurrentPrice() < this.maxPrice);
+			ownActions = ownActions.slice(0, this.maxPositions);
+		}
+
+		const ownSet = new Set(ownActions.map(a => a.trader));
+		const allocations = new Map();
+		for (const a of ranked) allocations.set(a.trader, {
+			action: (a.isOwn && ownSet.has(a.trader)) ? POSITION_OWN : POSITION_OUT,
+			amount: (a.isOwn && ownSet.has(a.trader)) ? (1 / ownActions.length) * totalValue : 0
+		});
+		return allocations;
+	}
+
+	/**
+	 * Traders that didn't record an action (null lastAction) still need an allocation so
+	 * the planner sees them and sells off any stale shares. Default them to OUT / $0.
+	 */
+	static setMissingAllocations(traders, allocations) {
+		for (const trader of traders)
+			if (!allocations.has(trader))
+				allocations.set(trader, { action: POSITION_OUT, amount: 0 });
+	}
+
+	/**
+	 * Turn (trader, allocation) pairs into a concrete {sells, buys} list by diffing target
+	 * share count against current holdings. Tracks projected cash so we can sweep any
+	 * leftover into the cheapest owned symbol (otherwise flooring to whole shares would
+	 * leave dollars sitting idle).
+	 */
+	static getActionPlan(traders, allocations) {
+		const sells = [];
+		const buys = [];
+		const state = { remainingCash: this.cash, cheapestOwnTrader: null };
+
+		for (const trader of traders) {
+			const allocation = allocations.get(trader);
+
+			// OUT allocation: liquidate any existing position and credit projected cash.
+			if (allocation.action === POSITION_OUT) {
+				if (trader.shares > 0) {
+					sells.push({ trader, shares: trader.shares });
+					state.remainingCash += trader.shares * trader.getCurrentPrice();
+				}
+				continue;
+			}
+
+			// Remember the cheapest OWN trader so we can dump leftover cash into it below.
+			if (!state.cheapestOwnTrader || trader.getCurrentPrice() < state.cheapestOwnTrader.getCurrentPrice())
+				state.cheapestOwnTrader = trader;
+
+			// Whole-share target from dollar allocation; sign of diff picks buy vs sell.
+			const targetShares = Math.floor(allocation.amount / trader.getCurrentPrice());
+			const sharesDiff = targetShares - trader.shares;
+			if (sharesDiff < 0) {
+				sells.push({ trader, shares: -sharesDiff });
+				state.remainingCash += (-sharesDiff) * trader.getCurrentPrice();
+			}
+			else if (sharesDiff > 0) {
+				buys.push({ trader, shares: sharesDiff });
+				state.remainingCash -= sharesDiff * trader.getCurrentPrice();
+			}
+		}
+
+		// Flooring leaves sub-share dollars on the table; sweep them into the cheapest
+		// owned symbol so we stay as fully invested as the allocation intended.
+		if (state.cheapestOwnTrader && state.remainingCash > 0) {
+			const additional = Math.floor(state.remainingCash / state.cheapestOwnTrader.getCurrentPrice());
+			if (additional > 0) {
+				const existing = buys.find(b => b.trader === state.cheapestOwnTrader);
+				if (existing) existing.shares += additional;
+				else buys.push({ trader: state.cheapestOwnTrader, shares: additional });
+			}
+		}
+
+		return { sells, buys };
+	}
+
+	/**
+	 * Execute the plan: sells first (frees cash), then buys (needs cash). Sequential
+	 * awaits — simulation today, but the same ordering is required for a live broker
+	 * so we don't overdraw.
+	 */
+	static async executeActionPlan(plan) {
+		for (const sell of plan.sells) await sell.trader.executeSell(sell.shares);
+		for (const buy of plan.buys) await buy.trader.executeBuy(buy.shares);
 	}
 }

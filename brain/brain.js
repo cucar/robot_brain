@@ -56,10 +56,20 @@ export default class Brain {
 	}
 
 	/**
-	 * Register a channel with the brain
+	 * Register a channel with the brain (legacy class-based path).
 	 */
 	registerChannel(name, channelClass) {
 		this.thalamus.registerChannel(name, channelClass);
+	}
+
+	/**
+	 * Register a channel spec with the brain (new id-native path).
+	 * The caller owns the encoder/trader and passes in a lightweight spec describing the
+	 * channel's dimensions. See Thalamus.registerChannelSpec for the spec shape.
+	 * Coexists with registerChannel() during migration.
+	 */
+	registerChannelSpec(spec) {
+		this.thalamus.registerChannelSpec(spec);
 	}
 
 	/**
@@ -258,9 +268,9 @@ export default class Brain {
 		this.frame = [];
 		const frameActions = this.thalamus.getInferredActions(this.memory.getInferredNeurons());
 
-		// iterate every registered channel - a channel may contribute events, carry-forward
-		// actions from the previous frame's inference, or both
-		for (const [channelName] of this.thalamus.getChannels()) {
+		// iterate every registered channel (instance or spec) - a channel may contribute events,
+		// carry-forward actions from the previous frame's inference, or both
+		for (const channelName of this.thalamus.getAllChannelNames()) {
 			const channelId = this.thalamus.channelNameToId[channelName];
 			const dimMap = inputs.get(channelId);
 
@@ -473,8 +483,9 @@ export default class Brain {
 		// Aggregate votes and determine winners - returns winners plus full candidate map for continuous predictions
 		const { inferences, candidates, dimBest } = this.determineConsensus(votes);
 
-		// Ensure every channel has an action - explore if none inferred
-		this.ensureChannelActions(inferences);
+		// Ensure every channel has an action - explore if none inferred.
+		// Also seeds candidates + dimBest so the scalar-space output includes the fallback action.
+		this.ensureChannelActions(inferences, candidates, dimBest);
 
 		// call diagnostics to show the debug logs for votes - pre-resolve all neuron data
 		if (this.debug) {
@@ -671,17 +682,16 @@ export default class Brain {
 	/**
 	 * Ensure every channel has an action in the inferences array.
 	 * If a channel has no inferred action, add an exploration action.
-	 * @param {Array} inferences - Array of winning inference objects to modify
 	 */
-	ensureChannelActions(inferences) {
+	ensureChannelActions(inferences, candidates, dimBest) {
 
 		// Find which channels already have an action inferred
 		const channelsWithActions = new Set();
 		for (const inf of inferences)
 			if (this.thalamus.getNeuronType(inf.neuronId) === 'action') channelsWithActions.add(this.thalamus.getNeuronChannel(inf.neuronId));
 
-		// Add exploration action for channels without one
-		for (const [channelName] of this.thalamus.getChannels()) {
+		// Add exploration action for channels without one (iterates instance- and spec-registered channels)
+		for (const channelName of this.thalamus.getAllChannelNames()) {
 			if (channelsWithActions.has(channelName)) continue;
 
 			// Skip channels that have no actions defined
@@ -689,13 +699,21 @@ export default class Brain {
 			if (!explorationActionId) continue;
 
 			// No action inferred for this channel - use the default action for deterministic exploration
+			const coordinate = this.thalamus.getNeuronCoordinate(explorationActionId);
 			inferences.push({
 				neuronId: explorationActionId,
-				coordinate: this.thalamus.getNeuronCoordinate(explorationActionId),
+				coordinate,
 				channel: channelName,
 				strength: 0,
 				reward: 0
 			});
+
+			// also seed candidates + dimBest so buildInferencesByChannel surfaces this action
+			// to processInputs callers (legacy path reads actions from memory; spec path reads the return map)
+			if (candidates && !candidates.has(explorationActionId))
+				candidates.set(explorationActionId, { strength: 0, reward: 0, weightedTotal: 0 });
+			if (dimBest && !dimBest.has(coordinate.dimId))
+				dimBest.set(coordinate.dimId, { neuronId: explorationActionId, score: 0, strength: 0 });
 		}
 	}
 
