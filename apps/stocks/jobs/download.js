@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -5,6 +6,9 @@ import Alpaca from '../../../channels/alpaca.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load .env from the stocks app folder so the script works no matter which cwd it's run from.
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 /**
  * Stock Download Script - Downloads historical stock data from Alpaca and saves as JSON
@@ -15,15 +19,15 @@ const __dirname = path.dirname(__filename);
 const config = {
 	symbols: [
 		'KGC', 'GLD', 'SPY', 'AAPL', 'NEM', 'GDX', 'NVDA', 'AMZN', 'MSFT', 'AMD',
-		'META', 'JPM', 'BAC', 'QQQ', 'IWM', 'AEM', 'WPM', 'NG', 'GOOGL', 'XOM',
-		'CVX', 'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA',
-		'INTC', 'CRM', 'ORCL', 'IBM', 'CSCO', 'TGT', 'HD', 'MCD', 'NKE', 'SBUX',
-		'ABBV', 'MRK', 'BMY', 'LLY', 'GILD', 'SLB', 'OXY', 'FCX', 'MOS', 'CLF',
-		'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
-		'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
-		'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
-		'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', 'COIN',
-		'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
+		// 'META', 'JPM', 'BAC', 'QQQ', 'IWM', 'AEM', 'WPM', 'NG', 'GOOGL', 'XOM',
+		// 'CVX', 'JNJ', 'UNH', 'PFE', 'WMT', 'COST', 'KO', 'CAT', 'XLF', 'DIA',
+		// 'INTC', 'CRM', 'ORCL', 'IBM', 'CSCO', 'TGT', 'HD', 'MCD', 'NKE', 'SBUX',
+		// 'ABBV', 'MRK', 'BMY', 'LLY', 'GILD', 'SLB', 'OXY', 'FCX', 'MOS', 'CLF',
+		// 'ADBE', 'NFLX', 'PYPL', 'SHOP', 'UBER', 'ABNB', 'SNAP', 'PINS', 'ROKU', 'GS',
+		// 'MS', 'C', 'WFC', 'AXP', 'V', 'MA', 'COF', 'SCHW', 'BLK', 'BA',
+		// 'LMT', 'GE', 'UPS', 'FDX', 'DE', 'HON', 'RTX', 'UNP', 'DAL', 'DIS',
+		// 'CMCSA', 'PEP', 'PM', 'MO', 'CL', 'PG', 'EL', 'LULU', 'F', 'COIN',
+		// 'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', 'AMC', 'TWLO', 'ZM', 'SNOW'
 	],
 	startDate: '2026-01-22',
 	endDate: '2026-02-22'

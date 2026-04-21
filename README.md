@@ -192,18 +192,21 @@ To download new data or different timeframes, you need a free [Alpaca](https://a
 
 1. Sign up at [alpaca.markets](https://alpaca.markets) (free paper trading account)
 2. Get your API key and secret from the dashboard
-3. Copy `.env.example` to `.env` and fill in your credentials:
+3. Copy `apps/stocks/.env.example` to `apps/stocks/.env` and fill in your credentials:
    ```
    ALPACA_KEY_ID=your_key_here
    ALPACA_SECRET_KEY=your_secret_here
    ```
 4. Download data:
    ```bash
-   node apps/stocks/jobs/download.js --timeframe=3H
+   node apps/stocks/jobs/download.js --timeframe 3H
    ```
-5. Process and run:
+5. Process downloaded data into training files:
    ```bash
-   node run-setup.js apps/stocks/jobs/test.js --timeframe 3H
+   node apps/stocks/jobs/setup.js --timeframe 3H
+   ```
+6. Run the training job:
+   ```bash
    node apps/stocks/jobs/test.js --timeframe 3H
    ```
 

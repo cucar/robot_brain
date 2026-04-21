@@ -1,7 +1,6 @@
 /**
  * Base Job Class - Common functionality for all episodes
  */
-import 'dotenv/config'; // Load environment variables from .env file
 import process from 'node:process';
 import Brain from '../../../brain/brain.js';
 

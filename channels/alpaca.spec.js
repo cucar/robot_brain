@@ -1,5 +1,10 @@
-import 'dotenv/config'; // Load environment variables from .env file
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
 import Alpaca from './alpaca.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '..', 'apps', 'stocks', '.env') });
 
 it('should connect to alpaca and get bars', async () => {
 	const alpaca = new Alpaca();
