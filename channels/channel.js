@@ -13,20 +13,18 @@
  */
 export class Channel {
 
-	static nextId = 1; // Start at 1 to match typical DB conventions
-
 	/**
+	 * Channel IDs are allocated by the Thalamus during registration, not here. An id may
+	 * still be passed in when a channel is restored from the database; otherwise it stays
+	 * null until instantiateChannels() or registerChannelSpec() assigns one.
 	 * dimensions are given as a 4th argument when loading from database - children may use them
 	 */
 	constructor(name, debug, id = null) {
-		this.id = id !== null ? id : Channel.nextId++;
+		this.id = id;
 		this.name = name; // just for descriptions in debugging
 		this.frameNumber = 0; // frame counter for channel-specific operations
 		this.debug = debug; // controls verbosity of channel output
 		this.actionSequences = true; // whether action neurons participate in learning context (override false for channels where actions don't affect events)
-
-		// Update nextId if we're loading a channel with a specific ID
-		if (id !== null && id >= Channel.nextId) Channel.nextId = id + 1;
 	}
 
 	/**

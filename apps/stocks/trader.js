@@ -25,8 +25,16 @@ export class StockTrader {
 	constructor(symbol, debug = false) {
 		this.symbol = symbol;
 		this.debug = debug;
-		this.channelId = null; // job wires this to match the encoder's channelId
+		this.channelId = null; // assigned by bindChannelId() — same ID the encoder gets
 		this.resetContext();
+	}
+
+	/**
+	 * Called after the brain allocates the channel ID for this symbol. Trader borrows the
+	 * encoder's ID so rewards, inputs, and inferences all key off a single number per symbol.
+	 */
+	bindChannelId(channelId) {
+		this.channelId = channelId;
 	}
 
 	resetContext() {

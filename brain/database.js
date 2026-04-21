@@ -2,7 +2,6 @@ import getMySQLConnection from '../db/db.js';
 import { Neuron } from './neuron.js';
 import { Thalamus } from './thalamus.js';
 import { Dimension } from '../channels/dimension.js';
-import { Channel } from '../channels/channel.js';
 
 /**
  * Database backup and restore operations for Brain
@@ -59,10 +58,9 @@ export class Database {
 			if (row.id > maxChannelId) maxChannelId = row.id;
 		}
 
-		// Update Channel.nextId for new channels to be created after this
-		if (maxChannelId >= Channel.nextId) Channel.nextId = maxChannelId + 1;
-
-		console.log(`Channels loaded: ${channels.size} total, next ID: ${Channel.nextId}`);
+		// ID counters are owned by the Thalamus; it advances them past the restored max
+		// via advanceIdCountersPastMax() after setChannels() runs in restoreSnapshot.
+		console.log(`Channels loaded: ${channels.size} total, max ID: ${maxChannelId}`);
 		return { channels, channelNameToId, channelIdToName };
 	}
 

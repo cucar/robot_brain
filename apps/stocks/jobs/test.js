@@ -288,10 +288,16 @@ export default class StockTestJob extends Job {
 		for (const symbol of this.config.symbols) {
 			const encoder = new StockEncoder(symbol);
 			const trader = new StockTrader(symbol);
-			trader.channelId = encoder.channelId;
+
+			// Brain allocates the channel ID (and the dim IDs, in place on the encoder's
+			// Dimension instances). Wire the returned channelId into both encoder and trader
+			// so they share a single per-symbol key for inputs/rewards/inferences.
+			const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
+			encoder.bindChannelId(channelId);
+			trader.bindChannelId(channelId);
+
 			this.encoders.push(encoder);
 			this.traders.push(trader);
-			this.brain.registerChannelSpec(encoder.getChannelSpec());
 		}
 	}
 

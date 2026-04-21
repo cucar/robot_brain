@@ -65,11 +65,12 @@ export default class Brain {
 	/**
 	 * Register a channel spec with the brain (new id-native path).
 	 * The caller owns the encoder/trader and passes in a lightweight spec describing the
-	 * channel's dimensions. See Thalamus.registerChannelSpec for the spec shape.
-	 * Coexists with registerChannel() during migration.
+	 * channel's dimensions. See Thalamus.registerChannelSpec for the spec shape. Returns
+	 * the allocated channel ID; dim IDs are written in place onto the Dimension instances
+	 * the caller supplied. Coexists with registerChannel() during migration.
 	 */
 	registerChannelSpec(spec) {
-		this.thalamus.registerChannelSpec(spec);
+		return this.thalamus.registerChannelSpec(spec);
 	}
 
 	/**

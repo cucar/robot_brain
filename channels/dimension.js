@@ -1,18 +1,13 @@
 /**
- * Dimension represents a coordinate axis for neurons.
- * Each dimension has a unique ID (from static counter) and a name (for debugging).
- * Channels create and own their Dimension objects.
+ * Dimension represents a coordinate axis for neurons. Each dimension has a unique ID
+ * (allocated by the Thalamus during registration) and a name (for debugging).
+ * Channels create Dimension instances with a name; the Thalamus fills in `id` when the
+ * channel (or spec) is registered.
  */
 export class Dimension {
 
-	static nextId = 1; // Start at 1 to match typical DB conventions
-
 	constructor(name, id = null) {
-		this.id = id !== null ? id : Dimension.nextId++;
-		this.name = name; // for debugging
-
-		// Update nextId if we're loading a dimension with a specific ID
-		if (id !== null && id >= Dimension.nextId) Dimension.nextId = id + 1;
+		this.id = id;       // null until Thalamus allocates one (or DB passes one in on restore)
+		this.name = name;   // for debugging and name↔id lookups
 	}
 }
-

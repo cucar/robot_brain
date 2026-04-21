@@ -1,21 +1,23 @@
 import { Dimension } from '../../channels/dimension.js';
-import { Channel } from '../../channels/channel.js';
 
 const POSITION_OWN = 1;
 const POSITION_OUT = -1;
 
 /**
- * Per-symbol stock encoder. Owns the channel and dimension IDs, the bucket boundaries,
- * and the raw-frame → scalar translation the brain's quantizer bucketizes.
+ * Per-symbol stock encoder. Owns the channel and dimension names, the bucket boundaries,
+ * and the raw-frame → scalar translation the brain's quantizer bucketizes. Channel and
+ * dimension IDs are allocated by the Thalamus when the encoder's spec is registered —
+ * the encoder reads them back via `bindChannelId()` and the Dimension instances it holds.
  */
 export class StockEncoder {
 
 	constructor(symbol, dimensions = null) {
 		this.symbol = symbol;
 
-		// Claim a brain-side channel ID up front (the trader will borrow the same ID later,
-		// so rewards, inputs, and inferences all key off a single number per symbol).
-		this.channelId = Channel.nextId++;
+		// channelId is null until the brain registers the spec and hands back an ID via
+		// bindChannelId(); the trader then borrows the same ID so rewards, inputs, and
+		// inferences all key off a single number per symbol.
+		this.channelId = null;
 
 		// Activity dim name is used both internally and by the trader for action coordinates.
 		this.activityDimName = `${symbol}_activity`;
@@ -174,35 +176,33 @@ export class StockEncoder {
 
 	/**
 	 * Describe this encoder's channel for brain.registerChannelSpec(). Shape-only —
-	 * no behavior. The brain stores it, registers dims with the quantizer, and pre-creates
-	 * action neurons for the activity dim.
+	 * no behavior. Each dim spec carries the Dimension instance; the Thalamus allocates
+	 * an ID and writes it onto the instance in place. The brain stores the spec, registers
+	 * dims with the quantizer, and pre-creates action neurons for the activity dim. The
+	 * caller passes the returned channelId to bindChannelId().
 	 */
 	getChannelSpec() {
 		return {
-			id: this.channelId,
 			name: this.symbol,
 			emitsReward: true,
 			learnActionSequences: false,
 			dimensions: [
 				{
-					id: this.priceChangeDim.id,
-					name: this.priceChangeDim.name,
+					dim: this.priceChangeDim,
 					kind: 'input',
 					resolution: this.priceBoundaries.length + 1,
 					mode: 'static',
 					boundaries: [...this.priceBoundaries]
 				},
 				{
-					id: this.volumeChangeDim.id,
-					name: this.volumeChangeDim.name,
+					dim: this.volumeChangeDim,
 					kind: 'input',
 					resolution: this.volumeBoundaries.length + 1,
 					mode: 'static',
 					boundaries: [...this.volumeBoundaries]
 				},
 				{
-					id: this.activityDim.id,
-					name: this.activityDim.name,
+					dim: this.activityDim,
 					kind: 'action',
 					resolution: 2,
 					mode: 'passthrough',
@@ -211,5 +211,14 @@ export class StockEncoder {
 				}
 			]
 		};
+	}
+
+	/**
+	 * Called after brain.registerChannelSpec() returns the allocated channel ID. Dimension
+	 * IDs are written onto the Dimension instances in place by the Thalamus, so the encoder
+	 * just needs to record its channelId here.
+	 */
+	bindChannelId(channelId) {
+		this.channelId = channelId;
 	}
 }

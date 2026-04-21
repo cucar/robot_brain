@@ -45,6 +45,13 @@ export class Thalamus {
 		this.dimensionSpecs = new Map(); // dimensionId -> DimSpec (flattened across all channels)
 		this.quantizer = new Quantizer();
 
+		// ID allocators - single source of truth for channel and dimension IDs.
+		// Both the legacy instance path (instantiateChannels + loadDimensionMaps) and the
+		// new spec path (registerChannelSpec) pull from these counters, so IDs are unique
+		// across paths. Advanced past max when restoring from DB via advanceIdCountersPastMax().
+		this.nextChannelId = 1;
+		this.nextDimensionId = 1;
+
 		// Level counts - tracks number of neurons at each level for efficient max level diagnostics lookup
 		this.levelCounts = []; // index = level, value = count of neurons at that level
 	}
@@ -163,9 +170,12 @@ export class Thalamus {
 	 * @param {{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels?: Map, channelNameToId?: Object, dimensionNameToId?: Object}} snapshot
 	 */
 	restoreSnapshot(snapshot) {
-		// Restore channels and derive dimension mappings from them
+		// Restore channels and derive dimension mappings from them. Channels and dims
+		// arrive with their IDs already populated by the DB loader; advance the Thalamus
+		// counters past the max so any subsequently-created channels/dims don't collide.
 		if (snapshot.channels) {
 			this.setChannels(snapshot.channels);
+			this.advanceIdCountersPastMax(snapshot.channels);
 			this.loadDimensionMaps();
 		}
 
@@ -348,18 +358,20 @@ export class Thalamus {
 	}
 
 	/**
-	 * Register a channel spec with the brain.
-	 * This is the id-native registration path — channels live outside the brain and pass in a
-	 * lightweight spec describing their shape. The brain stores the spec, registers each
-	 * dimension with the quantizer, populates name↔id maps, and pre-creates action neurons
-	 * for action dims with explicit bucket IDs. Coexists with registerChannel() during migration.
+	 * Register a channel spec with the brain. The Thalamus allocates a channel ID and
+	 * (if the caller supplied Dimension instances without IDs) dimension IDs, populates the
+	 * name↔id maps, registers each dimension with the quantizer, and pre-creates action
+	 * neurons for action dims with explicit bucket IDs. Returns the allocated IDs so the
+	 * caller can wire them into whatever owns the spec (encoder, trader, legacy channel).
+	 *
+	 * Each dim spec carries a Dimension instance (spec.dimensions[].dim). The instance's
+	 * `.id` field is populated in place with the allocated ID — the caller keeps its
+	 * existing reference and reads `.id` directly afterward.
 	 *
 	 * @param {object} spec
-	 * @param {number} spec.id - Channel ID (numeric, caller-assigned)
 	 * @param {string} spec.name - Channel name (used as the channel key in the frame pipeline)
 	 * @param {Array<object>} spec.dimensions - Per-dimension specs
-	 * @param {number} spec.dimensions[].id - Dimension ID (numeric, caller-assigned)
-	 * @param {string} spec.dimensions[].name - Dimension name (used in name↔id maps)
+	 * @param {Dimension} spec.dimensions[].dim - Dimension instance (id will be allocated in place if null)
 	 * @param {string} spec.dimensions[].kind - 'input' | 'action'
 	 * @param {number} spec.dimensions[].resolution - Number of buckets (>= 2)
 	 * @param {string} [spec.dimensions[].mode='passthrough'] - Quantizer mode
@@ -369,34 +381,56 @@ export class Thalamus {
 	 * @param {number} [spec.dimensions[].warmupSamples] - Dynamic mode warmup window
 	 * @param {boolean} [spec.emitsReward=false] - Channel produces a reward signal each frame
 	 * @param {boolean} [spec.learnActionSequences=false] - Channel's action neurons participate in pattern learning
+	 * @returns {number} - The allocated channel ID
 	 */
 	registerChannelSpec(spec) {
-		if (this.channelSpecs.has(spec.id))
-			throw new Error(`Thalamus: channel ${spec.id} already registered`);
-		if (!spec.name) throw new Error(`Thalamus: channel spec ${spec.id} is missing required name`);
+		if (!spec.name) throw new Error('Thalamus: channel spec is missing required name');
+		if (this.channelNameToId[spec.name] !== undefined)
+			throw new Error(`Thalamus: channel "${spec.name}" already registered`);
 
-		// store channel-level spec (clone dimensions array to protect against caller mutation)
+		// Allocate the channel ID. Single counter for both spec- and instance-registered
+		// channels, so IDs never collide across paths.
+		const channelId = this.nextChannelId++;
+
+		// Allocate dimension IDs in place on the passed-in Dimension instances. Encoder/channel
+		// code already reads `dim.id` off these references, so no second lookup is needed.
+		for (const d of spec.dimensions) {
+			if (!d.dim) throw new Error(`Thalamus: dim spec on channel "${spec.name}" is missing Dimension instance`);
+			if (!d.dim.name) throw new Error(`Thalamus: dim on channel "${spec.name}" is missing a name`);
+			if (d.kind !== 'input' && d.kind !== 'action')
+				throw new Error(`Thalamus: dim "${d.dim.name}" has invalid kind '${d.kind}' (expected 'input' or 'action')`);
+			if (d.dim.id === null) d.dim.id = this.nextDimensionId++;
+		}
+
+		// Build the stored spec with IDs baked in (decoupled from the mutable Dimension
+		// instances — storedSpec is the Thalamus's source of truth from here on).
 		const storedSpec = {
-			id: spec.id,
+			id: channelId,
 			name: spec.name,
-			dimensions: spec.dimensions.map(d => ({ ...d })),
+			dimensions: spec.dimensions.map(d => ({
+				id: d.dim.id,
+				name: d.dim.name,
+				kind: d.kind,
+				resolution: d.resolution,
+				mode: d.mode,
+				boundaries: d.boundaries,
+				actionBuckets: d.actionBuckets,
+				defaultBucket: d.defaultBucket,
+				warmupSamples: d.warmupSamples
+			})),
 			emitsReward: spec.emitsReward ?? false,
 			learnActionSequences: spec.learnActionSequences ?? false
 		};
-		this.channelSpecs.set(spec.id, storedSpec);
+		this.channelSpecs.set(channelId, storedSpec);
 
-		// populate name↔id maps so the frame pipeline can resolve this channel by name
-		this.channelNameToId[spec.name] = spec.id;
-		this.channelIdToName[spec.id] = spec.name;
+		// Populate name↔id maps so the frame pipeline can resolve this channel by name.
+		this.channelNameToId[spec.name] = channelId;
+		this.channelIdToName[channelId] = spec.name;
 
-		// register each dimension: store spec, register with quantizer, populate dim name↔id maps
+		// Register each dimension: store spec, register with quantizer, populate dim name↔id maps.
 		for (const dim of storedSpec.dimensions) {
 			if (this.dimensionSpecs.has(dim.id))
-				throw new Error(`Thalamus: dimension ${dim.id} already registered (channel ${spec.id})`);
-			if (!dim.name) throw new Error(`Thalamus: dimension ${dim.id} is missing required name (channel ${spec.id})`);
-			if (dim.kind !== 'input' && dim.kind !== 'action')
-				throw new Error(`Thalamus: dimension ${dim.id} has invalid kind '${dim.kind}' (expected 'input' or 'action')`);
-
+				throw new Error(`Thalamus: dimension ${dim.id} already registered (channel "${spec.name}")`);
 			this.dimensionSpecs.set(dim.id, dim);
 			this.dimensionNameToId[dim.name] = dim.id;
 			this.dimensionIdToName[dim.id] = dim.name;
@@ -408,7 +442,7 @@ export class Thalamus {
 			});
 		}
 
-		// pre-create action neurons for action dims with explicit bucket IDs so exploration can find them
+		// Pre-create action neurons for action dims with explicit bucket IDs so exploration can find them.
 		const actionNeurons = this.channelActions.get(spec.name) || new Set();
 		for (const dim of storedSpec.dimensions) {
 			if (dim.kind !== 'action' || !Array.isArray(dim.actionBuckets)) continue;
@@ -419,7 +453,8 @@ export class Thalamus {
 		}
 		if (actionNeurons.size > 0) this.channelActions.set(spec.name, actionNeurons);
 
-		if (this.debug) console.log(`Registered channel spec ${spec.id} "${spec.name}" (${storedSpec.dimensions.length} dimensions)`);
+		if (this.debug) console.log(`Registered channel spec ${channelId} "${spec.name}" (${storedSpec.dimensions.length} dimensions)`);
+		return channelId;
 	}
 
 	/**
@@ -482,14 +517,30 @@ export class Thalamus {
 	 * Instantiate new channels (those registered but not yet in thalamus).
 	 * Called after loadChannels (if DB) or standalone (if no DB).
 	 */
+	/**
+	 * Advance the channel/dimension ID counters past the max IDs present in the given
+	 * channels (typically after a DB restore). Ensures newly allocated IDs don't collide
+	 * with ones already in use. Safe to call multiple times; counters only ever move forward.
+	 */
+	advanceIdCountersPastMax(channels) {
+		for (const [, channel] of channels) {
+			if (channel.id !== null && channel.id >= this.nextChannelId) this.nextChannelId = channel.id + 1;
+			for (const dim of [...channel.getEventDimensions(), ...channel.getActionDimensions()])
+				if (dim.id !== null && dim.id >= this.nextDimensionId) this.nextDimensionId = dim.id + 1;
+		}
+	}
+
 	instantiateChannels() {
 		for (const [channelName, channelClass] of this.channelClasses) {
 
 			// protection to not instantiate channels that already exist - should not happen - just in case
 			if (this.channels.has(channelName)) continue;
 
-			// create new channel instance and add it to the thalamus
+			// Create new channel instance. The channel constructor leaves id=null; Thalamus
+			// allocates it here so channel and dimension IDs come from a single counter
+			// rather than leaking into channel code via a static.
 			const channel = new channelClass(channelName, this.debug);
+			if (channel.id === null) channel.id = this.nextChannelId++;
 			this.addChannel(channelName, channel);
 			if (this.debug) console.log(`Created new channel: ${channelName} (id: ${channel.id})`);
 		}
@@ -850,33 +901,28 @@ export class Thalamus {
 	}
 
 	/**
-	 * Load dimension name/id mappings from instantiated channels
+	 * Allocate dimension IDs for any legacy-path channel that doesn't have them yet and
+	 * populate the name↔id maps. Called after instantiateChannels. Dimensions restored from
+	 * the DB arrive with IDs already set; Thalamus preserves those and advances its counter
+	 * past them via advanceIdCountersPastMax().
 	 */
 	loadDimensionMaps() {
-		const { nameToId, idToName } = Thalamus.buildDimensionMaps(this.getChannels());
-		this.setDimensionMappings(nameToId, idToName);
-		if (this.debug) console.log('Dimensions loaded:', nameToId);
+		for (const [, channel] of this.getChannels()) {
+			for (const dim of channel.getEventDimensions()) this.assignAndMapDimension(dim);
+			for (const dim of channel.getActionDimensions()) this.assignAndMapDimension(dim);
+		}
+		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
 	}
 
 	/**
-	 * Build dimension name↔id maps from channel instances.
-	 * @param {Iterable<[string, Channel]>} channels - Channel entries
-	 * @returns {{nameToId: Object, idToName: Object}}
+	 * Allocate an ID for a Dimension if it doesn't have one yet, then record the name↔id
+	 * mapping. Idempotent — safe to call twice for the same Dimension (second call is a no-op
+	 * since the id is already set and the maps already hold the entry).
 	 */
-	static buildDimensionMaps(channels) {
-		const nameToId = {};
-		const idToName = {};
-		for (const [, channel] of channels) {
-			for (const dim of channel.getEventDimensions()) {
-				nameToId[dim.name] = dim.id;
-				idToName[dim.id] = dim.name;
-			}
-			for (const dim of channel.getActionDimensions()) {
-				nameToId[dim.name] = dim.id;
-				idToName[dim.id] = dim.name;
-			}
-		}
-		return { nameToId, idToName };
+	assignAndMapDimension(dim) {
+		if (dim.id === null) dim.id = this.nextDimensionId++;
+		this.dimensionNameToId[dim.name] = dim.id;
+		this.dimensionIdToName[dim.id] = dim.name;
 	}
 
 	/**
