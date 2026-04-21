@@ -67,4 +67,4 @@ export default class MultiSensoryJob1 extends Job {
 	}
 }
 
-await runJob(MultiSensoryJob1);
+await runJob(import.meta, MultiSensoryJob1);

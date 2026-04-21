@@ -70,7 +70,7 @@ export default class MultiChannelTest extends Job {
 		console.log(`   Repeats: ${this.config.cycleRepeats}`);
 		console.log('');
 
-		const dataDir = path.join(__dirname, '..', 'data', 'stock', this.config.timeframe);
+		const dataDir = path.join(__dirname, '..', 'apps', 'stocks', 'data', this.config.timeframe);
 
 		for (const symbol of this.config.symbols) {
 			const jsonPath = path.join(dataDir, `${symbol}.json`);
@@ -121,7 +121,7 @@ export default class MultiChannelTest extends Job {
 	 * Hook: Configure channels after brain init - load CSV files and call setTraining
 	 */
 	async configureChannels() {
-		const dataDir = path.join(__dirname, '..', 'data', 'stock', this.config.timeframe);
+		const dataDir = path.join(__dirname, '..', 'apps', 'stocks', 'data', this.config.timeframe);
 
 		for (const symbol of this.config.symbols) {
 			const csvPath = path.join(dataDir, `${symbol}_TEST.csv`);
@@ -314,4 +314,4 @@ export default class MultiChannelTest extends Job {
 	}
 }
 
-await runJob(MultiChannelTest);
+await runJob(import.meta, MultiChannelTest);

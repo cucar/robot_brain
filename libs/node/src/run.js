@@ -5,6 +5,7 @@
  */
 
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Parse the well-known brain CLI flags out of argv into a plain options object.
@@ -33,14 +34,13 @@ export function parseBrainArgs(argv = process.argv) {
 }
 
 /**
- * Run a Job class directly. Meant to be called at the bottom of a job file so
- * `node path/to/job.js` just works. Options come from argv by default but can
- * be passed explicitly for programmatic use.
+ * Unconditionally run a Job class to completion and exit the process. Used by
+ * external runners that dynamic-import a job module and drive it themselves.
  *
  * @param {Function} JobClass - Job subclass constructor
  * @param {object} [options] - if omitted, parsed from process.argv
  */
-export async function runJob(JobClass, options) {
+export async function executeJob(JobClass, options) {
 	try {
 		const job = new JobClass();
 		job.options = options ?? parseBrainArgs();
@@ -51,4 +51,21 @@ export async function runJob(JobClass, options) {
 		console.error(`Job failed: ${JobClass.name}`, error);
 		process.exit(1);
 	}
+}
+
+/**
+ * Run a Job class when its file is the program entry point. Meant to be called
+ * at the bottom of a job file as `await runJob(import.meta, MyJob)`. If the
+ * file was dynamic-imported by another module (e.g. run-setup.js), this is a
+ * no-op so the caller can use the exported class without triggering a full run.
+ *
+ * @param {ImportMeta} meta - pass `import.meta` from the job file
+ * @param {Function} JobClass - Job subclass constructor
+ * @param {object} [options] - if omitted, parsed from process.argv
+ */
+export async function runJob(meta, JobClass, options) {
+
+	// only run when this file is the entry point - dynamic imports should not auto-execute
+	if (!meta || meta.url !== pathToFileURL(process.argv[1]).href) return;
+	await executeJob(JobClass, options);
 }

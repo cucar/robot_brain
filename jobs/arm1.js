@@ -35,4 +35,4 @@ export default class ArmJob1 extends Job {
 	}
 }
 
-await runJob(ArmJob1);
+await runJob(import.meta, ArmJob1);

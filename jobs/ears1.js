@@ -35,4 +35,4 @@ export default class EarsJob1 extends Job {
 	}
 }
 
-await runJob(EarsJob1);
+await runJob(import.meta, EarsJob1);

@@ -35,4 +35,4 @@ export default class VisionJob1 extends Job {
 	}
 }
 
-await runJob(VisionJob1);
+await runJob(import.meta, VisionJob1);

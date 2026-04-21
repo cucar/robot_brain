@@ -10,4 +10,4 @@
 export { default as Brain } from '../../brain/brain.js';
 export { Quantizer } from '../../brain/quantizer.js';
 export { Job } from './src/job.js';
-export { runJob, parseBrainArgs } from './src/run.js';
+export { runJob, executeJob, parseBrainArgs } from './src/run.js';

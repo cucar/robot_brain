@@ -55,7 +55,7 @@ The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a sep
 Run the multi-channel test with customized hyperparameters:
 
 ```bash
-node run-brain.js multi-channel-test --error-threshold 0.3 --merge-threshold 0.9
+node jobs/multi-channel-test.js --error-threshold 0.3 --merge-threshold 0.9
 ```
 
 **Expected output:**
@@ -73,7 +73,7 @@ The brain learns to trade stocks from historical price and volume data. Each sto
 **Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
-node run-brain.js stock-test --error-threshold 0.65
+node apps/stocks/jobs/test.js --error-threshold 0.65
 ```
 
 **Expected output:**
@@ -104,7 +104,7 @@ The brain learns the best actions to perform in each situation over repeated epi
 
 Run the test:
 ```bash
-node run-brain.js stock-test --no-summary --episodes 5
+node apps/stocks/jobs/test.js --no-summary --episodes 5
 ```
 
 **Expected output:**
@@ -131,7 +131,7 @@ The brain memorizes a repeating stock price sequence across 5 episodes, reaching
 Run the stock test with customized hyperparameters for sequence memorization:
 
 ```bash
-node run-brain.js stock-test --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.0001 --error-threshold 0.3
+node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.0001 --error-threshold 0.3
 ```
 
 **Expected output:**
@@ -171,7 +171,7 @@ The brain learns to predict character sequences. Feed it a string, and it memori
 Run the text test with customized hyperparameters for text learning (the defaults are tuned for stock data):
 
 ```bash
-node run-brain.js text-test --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001
+node jobs/text-test.js --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001
 ```
 
 **Expected output:**
@@ -199,12 +199,12 @@ To download new data or different timeframes, you need a free [Alpaca](https://a
    ```
 4. Download data:
    ```bash
-   node stock-download.js --timeframe=3H
+   node apps/stocks/jobs/download.js --timeframe=3H
    ```
 5. Process and run:
    ```bash
-   node run-setup.js stock-test --timeframe 3H
-   node run-brain.js stock-test --timeframe 3H
+   node run-setup.js apps/stocks/jobs/test.js --timeframe 3H
+   node apps/stocks/jobs/test.js --timeframe 3H
    ```
 
 ## Architecture
@@ -294,11 +294,11 @@ Jobs define learning scenarios — which channels to use, how to configure them,
 
 | Job | Description |
 |-----|-------------|
-| `stock-test` | Multi-stock trading with historical data |
-| `text-test` | Character sequence memorization |
-| `vision1` | Visual pattern learning with saccadic eye movements |
-| `arm1` | Motor control with proprioceptive feedback |
-| `multisensory1` | Multi-channel integration |
+| `apps/stocks/jobs/test.js` | Multi-stock trading with historical data |
+| `jobs/text-test.js` | Character sequence memorization |
+| `jobs/vision1.js` | Visual pattern learning with saccadic eye movements |
+| `jobs/arm1.js` | Motor control with proprioceptive feedback |
+| `jobs/multisensory1.js` | Multi-channel integration |
 
 ## Hyperparameters
 
@@ -314,7 +314,7 @@ All hyperparameters are configured via the Brain constructor options and can be 
 ## Command Line Options
 
 ```bash
-node run-brain.js <job-name> [options]
+node <path-to-job.js> [options]
 ```
 
 | Option | Description |
@@ -341,8 +341,8 @@ node run-brain.js <job-name> [options]
 ## Creating Custom Jobs
 
 ```javascript
-import { Job } from './jobs/job.js';
-import { TextChannel } from './channels/text.js';
+import { Job, runJob } from '#brain-node';
+import { TextChannel } from '../channels/text.js';
 
 export default class MyJob extends Job {
 
@@ -363,9 +363,11 @@ export default class MyJob extends Job {
         console.log(this.brain.getEpisodeSummary());
     }
 }
+
+await runJob(import.meta, MyJob);
 ```
 
-Save as `jobs/my-job.js` and run with `node run-brain.js my-job`.
+Save as `jobs/my-job.js` and run with `node jobs/my-job.js`.
 
 ## Documentation
 
@@ -382,7 +384,7 @@ The brain runs entirely in-memory. MySQL is optional — used only for saving/re
 mysql -u root -p < db/db.sql
 
 # Run with database backup enabled
-node run-brain.js stock-test --timeframe 3H --database
+node apps/stocks/jobs/test.js --timeframe 3H --database
 ```
 
 ## License

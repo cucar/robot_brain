@@ -35,4 +35,4 @@ export default class TongueJob1 extends Job {
 	}
 }
 
-await runJob(TongueJob1);
+await runJob(import.meta, TongueJob1);

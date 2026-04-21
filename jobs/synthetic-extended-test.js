@@ -74,7 +74,7 @@ export default class SyntheticExtendedTest extends Job {
 		console.log(`   Total Frames: ${this.config.cycleRepeats * (this.config.sourceData.length - 1)}`);
 		console.log('');
 
-		const dataDir = path.join(__dirname, '..', 'data', 'stock');
+		const dataDir = path.join(__dirname, '..', 'apps', 'stocks', 'data');
 		if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 		const csvPath = path.join(dataDir, `${this.config.symbol}.csv`);
@@ -298,4 +298,4 @@ export default class SyntheticExtendedTest extends Job {
 	}
 }
 
-await runJob(SyntheticExtendedTest);
+await runJob(import.meta, SyntheticExtendedTest);

@@ -35,7 +35,7 @@ export default class SyntheticCycleTest extends Job {
 		console.log('');
 
 		// Ensure data directory exists
-		const dataDir = path.join(__dirname, '..', 'data', 'stock');
+		const dataDir = path.join(__dirname, '..', 'apps', 'stocks', 'data');
 		if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 		// Generate CSV data (format: open,volume - no header)
@@ -203,4 +203,4 @@ export default class SyntheticCycleTest extends Job {
 	}
 }
 
-await runJob(SyntheticCycleTest);
+await runJob(import.meta, SyntheticCycleTest);

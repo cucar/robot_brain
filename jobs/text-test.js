@@ -277,5 +277,5 @@ export default class TextTestJob extends Job {
 	}
 }
 
-await runJob(TextTestJob);
+await runJob(import.meta, TextTestJob);
 
