@@ -1,0 +1,54 @@
+/**
+ * Job runner entry point. A job file imports `runJob` from the lib, defines its
+ * Job subclass, and ends with `await runJob(MyJob)` so running the file directly
+ * (node path/to/job.js --flags) parses argv and executes the job.
+ */
+
+import process from 'node:process';
+
+/**
+ * Parse the well-known brain CLI flags out of argv into a plain options object.
+ * Unknown args are ignored; the job subclass can read `process.argv` itself if
+ * it needs job-specific flags.
+ */
+export function parseBrainArgs(argv = process.argv) {
+	const has = flag => argv.includes(flag);
+	const num = (flag, parser) => {
+		const i = argv.indexOf(flag);
+		return i !== -1 && argv[i + 1] !== undefined ? parser(argv[i + 1]) : null;
+	};
+
+	return {
+		diagnostic: has('--diagnostic'),
+		database: has('--database'),
+		debug: has('--debug'),
+		wait: has('--wait'),
+		noSummary: has('--no-summary'),
+		reset: has('--reset'),
+		contextLength: num('--context-length', parseInt),
+		patternForgetRate: num('--forget-rate', parseFloat),
+		errorCorrectionThreshold: num('--error-threshold', parseFloat),
+		mergeThreshold: num('--merge-threshold', parseFloat)
+	};
+}
+
+/**
+ * Run a Job class directly. Meant to be called at the bottom of a job file so
+ * `node path/to/job.js` just works. Options come from argv by default but can
+ * be passed explicitly for programmatic use.
+ *
+ * @param {Function} JobClass - Job subclass constructor
+ * @param {object} [options] - if omitted, parsed from process.argv
+ */
+export async function runJob(JobClass, options) {
+	try {
+		const job = new JobClass();
+		job.options = options ?? parseBrainArgs();
+		await job.run();
+		process.exit(0);
+	}
+	catch (error) {
+		console.error(`Job failed: ${JobClass.name}`, error);
+		process.exit(1);
+	}
+}

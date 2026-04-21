@@ -1,4 +1,4 @@
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { EarsChannel } from '../channels/audio.js';
 
 export default class EarsJob1 extends Job {
@@ -34,3 +34,5 @@ export default class EarsJob1 extends Job {
 		console.log(`Completed ${frameCount} frames of audio localization learning`);
 	}
 }
+
+await runJob(EarsJob1);

@@ -1,4 +1,4 @@
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { ArmChannel } from '../channels/arm.js';
 
 export default class ArmJob1 extends Job {
@@ -34,3 +34,5 @@ export default class ArmJob1 extends Job {
 		console.log(`Completed ${frameCount} frames of motor control learning`);
 	}
 }
+
+await runJob(ArmJob1);

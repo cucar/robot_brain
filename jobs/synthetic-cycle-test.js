@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { StockChannel } from '../channels/stock.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -202,3 +202,5 @@ export default class SyntheticCycleTest extends Job {
 		else for (const action of actions) console.log(`   Frame ${action.frame} (Cycle ${action.cycleFrame}): ${action.action} at ${action.priceChange}`);
 	}
 }
+
+await runJob(SyntheticCycleTest);

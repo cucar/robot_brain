@@ -1,4 +1,4 @@
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { EyesChannel } from '../channels/vision.js'; // Will be renamed from vision.js to eyes.js
 
 export default class VisionJob1 extends Job {
@@ -34,3 +34,5 @@ export default class VisionJob1 extends Job {
 		console.log(`Completed ${frameCount} frames of visual attention learning`);
 	}
 }
+
+await runJob(VisionJob1);

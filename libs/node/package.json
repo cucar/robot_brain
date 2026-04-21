@@ -1,0 +1,9 @@
+{
+  "name": "@mi/brain-node",
+  "version": "0.0.0",
+  "description": "Node wrapper for the machine-intelligence brain core. Re-exports the brain's public surface while the core is still JavaScript; will later wrap the Rust core via NAPI.",
+  "type": "module",
+  "main": "index.js",
+  "private": true,
+  "license": "Apache-2.0"
+}

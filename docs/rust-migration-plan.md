@@ -84,7 +84,6 @@ The following describes the *design* for reference — implementation happens in
 
 ### 2.6 Cleanup
 - Change offset rows to work from the end and add demo for training first and then testing accuracy with hold out data
-- Change brain interface to take inputs of the frame as arguments - maybe even actions?
 
 ---
 

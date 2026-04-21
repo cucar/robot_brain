@@ -1,4 +1,4 @@
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { EyesChannel } from '../channels/vision.js';
 import { EarsChannel } from '../channels/audio.js';
 import { ArmChannel } from '../channels/arm.js';
@@ -66,3 +66,5 @@ export default class MultiSensoryJob1 extends Job {
 		console.log('- Language processing (text prediction)');
 	}
 }
+
+await runJob(MultiSensoryJob1);

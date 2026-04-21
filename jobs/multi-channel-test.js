@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { StockChannel } from '../channels/stock.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -313,3 +313,5 @@ export default class MultiChannelTest extends Job {
 		console.log('='.repeat(80));
 	}
 }
+
+await runJob(MultiChannelTest);

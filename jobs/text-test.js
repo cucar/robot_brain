@@ -1,4 +1,4 @@
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { TextChannel } from '../channels/text.js';
 
 /**
@@ -276,4 +276,6 @@ export default class TextTestJob extends Job {
 		console.log('='.repeat(60));
 	}
 }
+
+await runJob(TextTestJob);
 

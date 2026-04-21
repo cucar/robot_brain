@@ -1,4 +1,4 @@
-import { Job } from './job.js';
+import { Job, runJob } from '#brain-node';
 import { TongueChannel } from '../channels/tongue.js';
 
 export default class TongueJob1 extends Job {
@@ -34,3 +34,5 @@ export default class TongueJob1 extends Job {
 		console.log(`Completed ${frameCount} frames of taste learning`);
 	}
 }
+
+await runJob(TongueJob1);
