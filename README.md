@@ -60,12 +60,27 @@ node apps/stocks/jobs/multi-channel-test.js --error-threshold 0.3 --merge-thresh
 
 **Expected output:**
 ```
-🎯 Overall Optimal Rate: 97.1%
+🎯 Overall Optimal Rate: 96.5%
 ```
 
 The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 96%+ optimal trade decisions across all three channels. This demonstrates how multiple input streams converge to improve inference — one of the architecture's core strengths.
 
-## Demo 2: Stock Trading
+## Demo 2: Single-Channel Synthetic Cycle
+
+A single-stock variant of the cycle test: one channel, a repeating 12-frame price/volume pattern, 20 repeats. Same idea as Demo 1 but isolated to a single channel so you can see the brain converge on optimal actions without multi-channel reinforcement doing any of the work.
+
+```bash
+node apps/stocks/jobs/synthetic-extended-test.js --error-threshold 0.3 --merge-threshold 0.9
+```
+
+**Expected output:**
+```
+Overall Optimal Rate: 233/240 = 97.1%
+```
+
+With the right thresholds the brain converges to 97%+ optimal action decisions on a single-channel cyclical pattern — confirming that hierarchy and action inference work without cross-channel consensus.
+
+## Demo 3: Stock Trading
 
 The brain learns to trade stocks from historical price and volume data. Each stock is a separate channel — the brain discovers cross-stock patterns and makes buy/sell/hold decisions optimized by reward feedback.
 
@@ -82,15 +97,15 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $129521.67
-   Average per Episode: $129521.67
-   Average ROI: +863.48%
-   Average Per-Frame ROI: +0.090475%
-   Total Trades: 2524
-   Average Trades per Episode: 2524.0
+   Total Net Profit: $78247.02
+   Average per Episode: $78247.02
+   Average ROI: +521.65%
+   Average Per-Frame ROI: +0.072969%
+   Total Trades: 1723
+   Average Trades per Episode: 1723.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $129521.67 | ROI: +863.48%, +0.090475%/frame (2524 trades)
+   Episode 1: $78247.02 | ROI: +521.65%, +0.072969%/frame (1723 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 56.93%
@@ -98,7 +113,7 @@ Final Training Results (1 episodes):
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
 
-## Demo 3: Action Learning in Low Accuracy
+## Demo 4: Action Learning in Low Accuracy
 
 The brain learns the best actions to perform in each situation over repeated episodes, even when base prediction accuracy is low.
 
@@ -110,21 +125,21 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $33516.41 | ROI: +223.44%, +0.046871%/frame (2904 trades)
-   Episode 2: $212532.28 | ROI: +1416.88%, +0.108612%/frame (2576 trades)
-   Episode 3: $527506.07 | ROI: +3516.71%, +0.143342%/frame (3373 trades)
-   Episode 4: $276208.68 | ROI: +1841.39%, +0.118473%/frame (3680 trades)
-   Episode 5: $1359988.44 | ROI: +9066.59%, +0.180528%/frame (3755 trades)
+   Episode 1: $40429.13 | ROI: +269.53%, +0.052191%/frame (2275 trades)
+   Episode 2: $303486.84 | ROI: +2023.25%, +0.122052%/frame (1347 trades)
+   Episode 3: $2488788.84 | ROI: +16591.93%, +0.204501%/frame (2358 trades)
+   Episode 4: $15091093.55 | ROI: +100607.29%, +0.276421%/frame (3342 trades)
+   Episode 5: $41930865.41 | ROI: +279539.10%, +0.317312%/frame (3312 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 57.04%
    Episode 2: 57.79%
-   Episode 3: 58.35%
-   Episode 4: 58.52%
-   Episode 5: 58.70%
+   Episode 3: 58.36%
+   Episode 4: 58.54%
+   Episode 5: 58.69%
 ```
 
-## Demo 4: Stock Sequence Memorization
+## Demo 5: Stock Sequence Memorization
 
 The brain memorizes a repeating stock price sequence across 5 episodes, reaching 95%+ prediction accuracy. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
 
@@ -140,19 +155,19 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $2121028909597.97
-   Average per Episode: $424205781919.59
-   Average ROI: +2828038546.13%
-   Average Per-Frame ROI: +0.491773%
-   Total Trades: 14167
-   Average Trades per Episode: 2833.4
+   Total Net Profit: $5384763364966.22
+   Average per Episode: $1076952672993.24
+   Average ROI: +7179684486.62%
+   Average Per-Frame ROI: +0.495480%
+   Total Trades: 14470
+   Average Trades per Episode: 2894.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $6498.38 | ROI: +43.32%, +0.014369%/frame (2824 trades)
-   Episode 2: $260055925.54 | ROI: +1733706.17%, +0.390407%/frame (2858 trades)
-   Episode 3: $67697038480.94 | ROI: +451313589.87%, +0.613551%/frame (2836 trades)
-   Episode 4: $672437972564.51 | ROI: +4482919817.10%, +0.705807%/frame (2797 trades)
-   Episode 5: $1380633836128.60 | ROI: +9204225574.19%, +0.734732%/frame (2852 trades)
+   Episode 1: $19578.05 | ROI: +130.52%, +0.033346%/frame (3172 trades)
+   Episode 2: $31795850.67 | ROI: +211972.34%, +0.306237%/frame (3037 trades)
+   Episode 3: $92251373990.90 | ROI: +615009159.94%, +0.625982%/frame (2747 trades)
+   Episode 4: $1406600435356.14 | ROI: +9377336235.71%, +0.735482%/frame (2763 trades)
+   Episode 5: $3885879740190.46 | ROI: +25905864934.60%, +0.776354%/frame (2751 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 58.63%
@@ -164,7 +179,7 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --
 
 The brain goes from 50% accuracy (random) to 96% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
-## Demo 5: Text Sequence Learning
+## Demo 6: Text Sequence Learning
 
 The brain learns to predict character sequences. Feed it a string, and it memorizes the pattern — reaching 100% prediction accuracy within a few episodes.
 

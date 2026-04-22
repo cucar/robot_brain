@@ -742,8 +742,12 @@ export class Neuron {
 			}
 
 			// negatively reinforce connections at this distance whose predictions didn't occur
+			// events only. Action connections are never weakened: the brain executes exactly one
+			// action per channel per frame, so any non-chosen action wasn't a "wrong prediction",
+			// it just wasn't tried. Weakening it would collapse the brain onto whichever action
+			// it happened to try first and destroy the alt-action exploration mechanism.
 			for (const neuronId of this.getNeuronsNotFound(age, neuronIds))
-				this.weakenConnection(age, neuronId);
+				if (!this.isActionNeuron(neuronId)) this.weakenConnection(age, neuronId);
 		}
 	}
 
@@ -758,6 +762,19 @@ export class Neuron {
 		const notFound = [];
 		for (const [toNeuronId] of distanceMap) if (!activeNeuronIds.has(toNeuronId)) notFound.push(toNeuronId);
 		return notFound;
+	}
+
+	/**
+	 * Check if a neuron id is an action neuron in any channel. Uses channelActionIds,
+	 * the same source-of-truth used for alt-action lookup, so action detection stays
+	 * aligned with the rest of the learning path.
+	 * @param {number} neuronId
+	 * @returns {boolean}
+	 */
+	isActionNeuron(neuronId) {
+		for (const actionIds of this.channelActionIds.values())
+			if (actionIds.has(neuronId)) return true;
+		return false;
 	}
 
 	/**
