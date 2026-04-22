@@ -1,5 +1,5 @@
 import { Job, runJob } from '#brain-node';
-import { TongueChannel } from '../channels/tongue.js';
+import { TongueChannel } from '../channel.js';
 
 export default class TongueJob1 extends Job {
 

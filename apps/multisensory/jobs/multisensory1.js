@@ -1,8 +1,8 @@
 import { Job, runJob } from '#brain-node';
-import { EyesChannel } from '../channels/vision.js';
-import { EarsChannel } from '../channels/audio.js';
-import { ArmChannel } from '../channels/arm.js';
-import { TextChannel } from '../channels/text.js';
+import { EyesChannel } from '../../eyes/channel.js';
+import { EarsChannel } from '../../ears/channel.js';
+import { ArmChannel } from '../../arm/channel.js';
+import { TextChannel } from '../../text/channel.js';
 
 export default class MultiSensoryJob1 extends Job {
 

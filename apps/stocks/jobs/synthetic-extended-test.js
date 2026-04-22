@@ -1,32 +1,25 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Job, runJob } from '#brain-node';
-import { StockChannel } from '../channels/stock.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { StockEncoder } from '../encoder.js';
+import { StockTrader } from '../trader.js';
 
 /**
- * Synthetic Extended Test - Replicates stock-training data pattern but runs continuously
- * Uses the actual first 12 rows from KGC.csv (the training data) repeated 25 times
- * This tests if episode boundaries (resetContext) are causing learning issues
- * 25 repeats × 11 frames = 275 frames (similar to 25 episodes worth)
+ * Synthetic Extended Test - Replicates the stock-training data pattern but runs continuously.
+ * Uses the actual first 12 rows from KGC.csv (the training data) repeated N times to test
+ * if episode boundaries (resetContext) were causing learning issues.
+ *
+ * Spec-based path: single StockEncoder + StockTrader, no Channel subclass. Source rows
+ * live in code (no CSV is written) so the test is fully self-contained and reproducible.
  */
 export default class SyntheticExtendedTest extends Job {
 
-	/**
-	 * Constructor - Initialize synthetic extended test configuration
-	 * Sets up source data with actual KGC training rows and cycle repeats
-	 */
 	constructor() {
 		super();
 
 		this.config = {
 			symbol: 'TEST',
-			// Actual first 12 rows from KGC.csv (training data when holdoutRows=5240)
-			// Frame 1 reads row 0→1, Frame 2 reads row 1→2, etc., Frame 12 reads row 11→0
-			// Comments show frames in EXECUTION order (Frame 12 executes last but reads row 0)
+			// Actual first 12 rows from KGC.csv (training data when holdoutRows=5240).
+			// Frame 1 reads row 0→1, Frame 2 reads row 1→2, etc., Frame 12 reads row 11→0.
+			// Comments show frames in EXECUTION order (Frame 12 executes last but reads row 0).
 			// Format: Frame N: price (neuron), vol (neuron), optimal action
 			sourceData: [
 
@@ -59,45 +52,43 @@ export default class SyntheticExtendedTest extends Job {
 				{ price: 7.22, volume: 2742800 },  // Frame 10: price=-1(n5), vol=-1 (n3), OUT (n4)
 				{ price: 7.51, volume: 1510600 }   // Frame 11: price=1 (n1), vol=-1 (n3), OWN (n6)
 			],
-			cycleRepeats: 20 // 5 repeats × 12 frames = 60 frames (reduced for debugging)
+			cycleRepeats: 20 // 20 repeats × 12 frames = 240 frames
 		};
+
+		// Single-symbol arrays — kept as arrays to mirror the multi-symbol shape.
+		this.encoders = [];
+		this.traders = [];
+	}
+
+	getChannels() {
+		return [];
+	}
+
+	async registerBrainChannels() {
+		const encoder = new StockEncoder(this.config.symbol);
+		const trader = new StockTrader(this.config.symbol);
+		const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
+		encoder.bindChannelId(channelId);
+		trader.bindChannelId(channelId);
+		this.encoders.push(encoder);
+		this.traders.push(trader);
 	}
 
 	/**
-	 * Setup method - Generate extended test data by repeating source data pattern
-	 * Creates a CSV file with the source data repeated cycleRepeats times
+	 * Build the cycled rows in memory. One trailing row (= first row of next cycle) is
+	 * appended so the last frame still has a "next" reading to compute change against —
+	 * mirrors the legacy behavior where the CSV had N+1 rows for N frames.
 	 */
-	async setup() {
-		console.log('📊 Generating extended data from KGC training rows...');
-		console.log(`   Source rows: ${this.config.sourceData.length}`);
-		console.log(`   Repeats: ${this.config.cycleRepeats}`);
-		console.log(`   Total Frames: ${this.config.cycleRepeats * (this.config.sourceData.length - 1)}`);
-		console.log('');
-
-		const dataDir = path.join(__dirname, '..', 'apps', 'stocks', 'data');
-		if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
-		const csvPath = path.join(dataDir, `${this.config.symbol}.csv`);
+	async configureChannels() {
 		const rows = [];
-
-		// Repeat the source data pattern
 		for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
 			for (const row of this.config.sourceData)
-				rows.push(`${row.price.toFixed(2)},${row.volume}`);
+				rows.push({ price: row.price, volume: row.volume });
+		rows.push({ price: this.config.sourceData[0].price, volume: this.config.sourceData[0].volume });
 
-		// Add one final row to complete the last frame
-		const lastRow = this.config.sourceData[0];
-		rows.push(`${lastRow.price.toFixed(2)},${lastRow.volume}`);
-
-		fs.writeFileSync(csvPath, rows.join('\n'));
-		console.log(`✅ Generated ${rows.length} rows of data`);
-		console.log(`   Saved to: ${csvPath}`);
+		for (const encoder of this.encoders) encoder.setData(rows);
 	}
 
-	/**
-	 * Hook: Show startup information
-	 * Displays test configuration including symbol, cycles, and total frames
-	 */
 	async showStartupInfo() {
 		const cycleLength = this.config.sourceData.length - 1; // 11 frames per cycle
 		console.log(`🧪 Synthetic Extended Test (KGC training data pattern)`);
@@ -108,91 +99,102 @@ export default class SyntheticExtendedTest extends Job {
 	}
 
 	/**
-	 * Returns the channels for the job - single stock channel for synthetic test
-	 * @returns {Array<Object>} Array with single {name, channelClass} object
-	 */
-	getChannels() {
-		return [{ name: this.config.symbol, channelClass: StockChannel }];
-	}
-
-	/**
-	 * Hook: Configure channels after brain init - generate cycled rows and call setTraining
-	 */
-	async configureChannels() {
-		const channel = this.brain.getChannel(this.config.symbol);
-		const rows = [];
-		for (let cycle = 0; cycle < this.config.cycleRepeats; cycle++)
-			for (const row of this.config.sourceData)
-				rows.push({ price: row.price, volume: row.volume });
-		rows.push({ price: this.config.sourceData[0].price, volume: this.config.sourceData[0].volume });
-		channel.setTraining(rows);
-	}
-
-	/**
-	 * Hook: Execute main job logic - Run extended test with optimality analysis
-	 * Processes frames continuously and tracks whether brain makes optimal buy/sell decisions
+	 * Single continuous episode (no resetContext between cycles). Tracks per-cycle-frame
+	 * optimality so the results table can show whether the brain learned to OWN before
+	 * up-moves and stay OUT before down-moves.
 	 */
 	async executeJob() {
 		console.log('🚀 Running extended continuous episode...\n');
 
-		const stockChannel = this.brain.getChannel(this.config.symbol);
-
+		StockTrader.resetPortfolio();
+		for (const trader of this.traders) trader.resetContext();
 		this.brain.resetAccuracyStats();
 
-		const expectedFrames = stockChannel.trainingData.length - 1;
-		const cycleLength = this.config.sourceData.length; // 12 frames per cycle (not 11!)
-		let frameCount = 0;
+		// Warmup: see synthetic-cycle-test for rationale.
+		for (let i = 0; i < this.encoders.length; i++) {
+			const frame = this.encoders[i].nextFrame();
+			if (frame) this.traders[i].setFrame(frame.price, frame.volume);
+		}
 
-		// Pre-calculate optimal strategy per cycle frame
-		// Optimal: own before positive frames, out before negative frames
+		const expectedFrames = this.encoders[0].rows.length - 1;
+		const cycleLength = this.config.sourceData.length; // 12 frames per cycle (not 11!)
+
+		// Pre-calculate optimal strategy per cycle frame: own if price will rise, else out.
 		const optimalOwnership = this.calculateOptimalOwnership();
 		console.log('Optimal ownership by cycle frame:', optimalOwnership);
 		console.log('');
 
-		// Track decisions by cycle frame
 		const decisionStats = {};
 		for (let i = 1; i <= cycleLength; i++)
 			decisionStats[i] = { optimal: 0, suboptimal: 0, details: [] };
 
-		// Print header
 		console.log('Frame | CycleFrame | Price Change | Volume Change | Optimal | Actual | Match | P&L');
 		console.log('------|------------|--------------|---------------|---------|--------|-------|----');
 
+		let frameCount = 0;
 		while (frameCount < expectedFrames) {
 
-			// Capture ownership BEFORE processing frame (this is what we owned during the price change)
-			const ownedBeforeFrame = stockChannel.owned;
+			// Capture ownership BEFORE running the frame (this is what we owned during the
+			// price change being evaluated). After runFrame the trader's lastAction reflects
+			// the NEW decision for the upcoming frame, not the one we want to score here.
+			const ownedBeforeFrame = this.traders[0].lastAction === 1; // POSITION_OWN = 1
 
-			// Process frame (includes getFrame, executeActions, getRewards, and all brain processing)
-			await this.brain.processFrame();
-
+			const hasMore = await this.runFrame();
+			if (!hasMore) break;
 			frameCount++;
+
 			const cycleFrame = ((frameCount - 1) % cycleLength) + 1;
-
-			// Get actual position (what we owned DURING this frame's price change)
-			const actualOwned = ownedBeforeFrame;
 			const optimalOwned = optimalOwnership[cycleFrame];
-			const isOptimal = actualOwned === optimalOwned;
+			const isOptimal = ownedBeforeFrame === optimalOwned;
 
-			// Track stats
-			if (isOptimal)
-				decisionStats[cycleFrame].optimal++;
+			if (isOptimal) decisionStats[cycleFrame].optimal++;
 			else {
 				decisionStats[cycleFrame].suboptimal++;
-				decisionStats[cycleFrame].details.push({ frame: frameCount, actual: actualOwned, optimal: optimalOwned });
+				decisionStats[cycleFrame].details.push({ frame: frameCount, actual: ownedBeforeFrame, optimal: optimalOwned });
 			}
+
+			if (this.isShuttingDown) return;
 		}
 
 		console.log(`\n✅ Completed ${frameCount} frames\n`);
-
-		// Show analysis
-		await this.showOptimalityAnalysis(decisionStats, cycleLength, stockChannel);
+		await this.showOptimalityAnalysis(decisionStats, cycleLength);
 	}
 
 	/**
-	 * Calculate optimal buy/sell decisions for each cycle frame based on price movements
-	 * Optimal = own if price will go UP during this frame, out if price will go DOWN
-	 * @returns {Object} Map of cycle frame number to boolean (true = own, false = out)
+	 * One frame: same shape as the main stocks/jobs/test.js loop.
+	 */
+	async runFrame() {
+		const inputs = new Map();
+		const rewards = new Map();
+
+		let anyFrames = false;
+		for (let i = 0; i < this.encoders.length; i++) {
+			const encoder = this.encoders[i];
+			const trader = this.traders[i];
+			const frame = encoder.nextFrame();
+			if (!frame) continue;
+			anyFrames = true;
+			trader.setFrame(frame.price, frame.volume);
+			const dimMap = encoder.encode(frame);
+			if (dimMap) inputs.set(encoder.channelId, dimMap);
+		}
+		if (!anyFrames) return false;
+
+		for (const trader of this.traders)
+			if (trader.lastAction !== null) rewards.set(trader.channelId, trader.getReward());
+
+		const inferences = this.brain.processInputs(inputs, rewards);
+
+		for (const trader of this.traders)
+			trader.apply(inferences.get(trader.channelId) ?? []);
+
+		await StockTrader.executePortfolio(this.traders);
+		await new Promise(resolve => setImmediate(resolve));
+		return true;
+	}
+
+	/**
+	 * Optimal at frame N = own iff price will rise into frame N+1 (cyclic).
 	 */
 	calculateOptimalOwnership() {
 		const ownership = {};
@@ -202,40 +204,28 @@ export default class SyntheticExtendedTest extends Job {
 			const cycleFrame = i + 1;
 			const currentPrice = data[i].price;
 			const nextPrice = data[(i + 1) % data.length].price;
-			const priceChange = (nextPrice - currentPrice) / currentPrice;
-
-			// Own if price goes up
-			ownership[cycleFrame] = priceChange > 0;
+			ownership[cycleFrame] = (nextPrice - currentPrice) / currentPrice > 0;
 		}
 
 		return ownership;
 	}
 
 	/**
-	 * Get neuron ID for a specific dimension and value
-	 * Used for displaying which neurons represent specific price/volume/activity changes
-	 * @param {string} dimensionName - Name of the dimension (e.g., "TEST_price_change")
-	 * @param {number} value - Value of the dimension
-	 * @returns {number|null} Neuron ID or null if not found
+	 * Look up a neuron by (dim name, bucket value). Used to display which neurons represent
+	 * which price/volume/activity buckets in the optimality table.
 	 */
 	async getNeuronIdForDimensionValue(dimensionName, value) {
 		const dimId = this.brain.thalamus.dimensionNameToId[dimensionName];
 		return this.brain.thalamus.getNeuronIdByCoordinate({ dimId, bucketId: value })?.id;
 	}
 
-	/**
-	 * Display detailed optimality analysis showing how often brain made correct buy/sell decisions
-	 * Compares actual decisions against optimal decisions for each cycle frame
-	 * @param {Object} decisionStats - Decision statistics by cycle frame
-	 * @param {number} cycleLength - Number of frames in each cycle
-	 * @param {StockChannel} stockChannel - Stock channel instance for discretization
-	 */
-	async showOptimalityAnalysis(decisionStats, cycleLength, stockChannel) {
+	async showOptimalityAnalysis(decisionStats, cycleLength) {
 		console.log('='.repeat(70));
 		console.log('📊 Optimality Analysis by Cycle Frame');
 		console.log('='.repeat(70));
 
 		const data = this.config.sourceData;
+		const encoder = this.encoders[0];
 		let totalOptimal = 0, totalSuboptimal = 0;
 
 		console.log('CycleFrame | PriceChange  | PriceNeuron | VolumeChange  | VolumeNeuron | Optimal | OptimalRate | Suboptimal Frames');
@@ -249,13 +239,13 @@ export default class SyntheticExtendedTest extends Job {
 			const currentPrice = data[i - 1].price;
 			const nextPrice = data[i % data.length].price;
 			const priceChange = ((nextPrice - currentPrice) / currentPrice * 100);
-			const priceBucket = stockChannel.discretizeChange(priceChange, stockChannel.priceBoundaries);
+			const priceBucket = encoder.discretizeChange(priceChange, encoder.priceBoundaries);
 			const priceNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_price_change`, priceBucket);
 
 			const currentVolume = data[i - 1].volume;
 			const nextVolume = data[i % data.length].volume;
 			const volumeChange = ((nextVolume - currentVolume) / currentVolume * 100);
-			const volumeBucket = stockChannel.discretizeChange(volumeChange, stockChannel.volumeBoundaries);
+			const volumeBucket = encoder.discretizeChange(volumeChange, encoder.volumeBoundaries);
 			const volumeNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_volume_change`, volumeBucket);
 
 			const optimal = nextPrice > currentPrice ? 'OWN' : 'OUT';
@@ -275,21 +265,11 @@ export default class SyntheticExtendedTest extends Job {
 		console.log('');
 		console.log(`Overall Optimal Rate: ${totalOptimal}/${totalOptimal + totalSuboptimal} = ${overallRate}%`);
 
-		// Calculate theoretical optimal profit based on percentage returns
-		let capitalMultiplier = 1.0;
-		for (let i = 0; i < data.length; i++) {
-			const currentPrice = data[i].price;
-			const nextPrice = data[(i + 1) % data.length].price;
-			const priceChange = (nextPrice - currentPrice) / currentPrice;
-			if (priceChange > 0) capitalMultiplier *= (1 + priceChange);
-		}
-
-		// Get portfolio metrics for actual P&L
-		const allPortfolioMetrics = this.brain.getEpisodeSummary().portfolioMetrics;
+		// Actual portfolio P&L (cash + market value − initial capital).
+		const netProfit = StockTrader.getPortfolioProfit(this.traders);
 		console.log(`\n💰 Profit Analysis:`);
-		console.log(`   Actual P&L: $${allPortfolioMetrics.StockChannel.totalProfit.toFixed(2)}`);
+		console.log(`   Actual P&L: $${netProfit.toFixed(2)}`);
 
-		// Show action neuron IDs
 		console.log(`\n🎯 Action Neuron IDs:`);
 		const ownNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_activity`, 1);
 		const outNeuronId = await this.getNeuronIdForDimensionValue(`${this.config.symbol}_activity`, -1);

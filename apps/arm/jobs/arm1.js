@@ -1,5 +1,5 @@
 import { Job, runJob } from '#brain-node';
-import { ArmChannel } from '../channels/arm.js';
+import { ArmChannel } from '../channel.js';
 
 export default class ArmJob1 extends Job {
 

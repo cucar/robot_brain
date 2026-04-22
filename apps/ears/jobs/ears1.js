@@ -1,5 +1,5 @@
 import { Job, runJob } from '#brain-node';
-import { EarsChannel } from '../channels/audio.js';
+import { EarsChannel } from '../channel.js';
 
 export default class EarsJob1 extends Job {
 

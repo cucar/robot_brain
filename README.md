@@ -55,7 +55,7 @@ The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a sep
 Run the multi-channel test with customized hyperparameters:
 
 ```bash
-node jobs/multi-channel-test.js --error-threshold 0.3 --merge-threshold 0.9
+node apps/stocks/jobs/multi-channel-test.js --error-threshold 0.3 --merge-threshold 0.9
 ```
 
 **Expected output:**
@@ -171,7 +171,7 @@ The brain learns to predict character sequences. Feed it a string, and it memori
 Run the text test with customized hyperparameters for text learning (the defaults are tuned for stock data):
 
 ```bash
-node jobs/text-test.js --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001
+node apps/text/jobs/test.js --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001
 ```
 
 **Expected output:**
@@ -298,10 +298,10 @@ Jobs define learning scenarios — which channels to use, how to configure them,
 | Job | Description |
 |-----|-------------|
 | `apps/stocks/jobs/test.js` | Multi-stock trading with historical data |
-| `jobs/text-test.js` | Character sequence memorization |
-| `jobs/vision1.js` | Visual pattern learning with saccadic eye movements |
-| `jobs/arm1.js` | Motor control with proprioceptive feedback |
-| `jobs/multisensory1.js` | Multi-channel integration |
+| `apps/text/jobs/test.js` | Character sequence memorization |
+| `apps/eyes/jobs/vision1.js` | Visual pattern learning with saccadic eye movements |
+| `apps/arm/jobs/arm1.js` | Motor control with proprioceptive feedback |
+| `apps/multisensory/jobs/multisensory1.js` | Multi-channel integration |
 
 ## Hyperparameters
 
@@ -345,21 +345,42 @@ node <path-to-job.js> [options]
 
 ```javascript
 import { Job, runJob } from '#brain-node';
-import { TextChannel } from '../channels/text.js';
+import { TextEncoder } from '../encoder.js';
 
 export default class MyJob extends Job {
 
-    getChannels() {
-        return [{ name: 'text', channelClass: TextChannel }];
+    constructor() {
+        super();
+        this.encoders = [];
+    }
+
+    getChannels() { return []; } // opt out of legacy Channel-class path
+
+    async registerBrainChannels() {
+        const encoder = new TextEncoder('text');
+        const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
+        encoder.bindChannelId(channelId);
+        this.encoders.push(encoder);
     }
 
     async configureChannels() {
-        this.brain.getChannel('text').setTraining('hello world', 3);
+        for (const encoder of this.encoders) encoder.setData('hello world');
     }
 
     async executeJob() {
         this.brain.resetContext();
-        while (await this.brain.processFrame()) {}
+        while (true) {
+            const inputs = new Map();
+            let any = false;
+            for (const encoder of this.encoders) {
+                const frame = encoder.nextFrame();
+                if (!frame) continue;
+                any = true;
+                inputs.set(encoder.channelId, encoder.encode(frame));
+            }
+            if (!any) break;
+            this.brain.processInputs(inputs, new Map());
+        }
     }
 
     async showResults() {
@@ -370,7 +391,7 @@ export default class MyJob extends Job {
 await runJob(import.meta, MyJob);
 ```
 
-Save as `jobs/my-job.js` and run with `node jobs/my-job.js`.
+Save as `apps/text/jobs/my-job.js` and run with `node apps/text/jobs/my-job.js`.
 
 ## Documentation
 

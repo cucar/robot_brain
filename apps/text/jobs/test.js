@@ -1,31 +1,31 @@
 import { Job, runJob } from '#brain-node';
-import { TextChannel } from '../channels/text.js';
+import { TextEncoder } from '../encoder.js';
 
 /**
- * Text Test Job - Trains the brain on repeating text patterns
- * Tests pattern learning and event prediction accuracy
- * Goal: Validate if brain can memorize and predict character sequences
+ * Text Test Job - Trains the brain on a repeating character pattern and reports per-episode
+ * prediction accuracy. Uses the spec-based registration path (registerChannelSpec + an
+ * Encoder it owns directly) — no Channel subclass.
  */
 export default class TextTestJob extends Job {
 
 	constructor() {
 		super();
 
-		// Simple configuration - edit these values as needed
+		// Simple configuration - edit these values as needed.
 		this.config = {
-			pattern: 'test123 Russia has provided Iran with information that can help WASHINGTON Russia has provided Iran with information that could',              // Pattern to learn
-			maxEpisodes: 5,              // Number of training episodes
-			iterationsPerEpisode: 1      // How many times to repeat pattern per episode
+			pattern: 'test123 Russia has provided Iran with information that can help WASHINGTON Russia has provided Iran with information that could',
+			maxEpisodes: 5,
+			iterationsPerEpisode: 1
 		};
 
-		// Training metrics
+		// Single encoder for now — kept as an array to mirror stocks' multi-encoder shape,
+		// so adding additional text streams later doesn't require restructuring.
+		this.encoders = [];
+
 		this.episodeResults = [];
 		this.currentEpisode = 0;
 	}
 
-	/**
-	 * Apply command line options to config
-	 */
 	applyOptions() {
 		const episodesIndex = process.argv.indexOf('--episodes');
 		if (episodesIndex !== -1 && process.argv[episodesIndex + 1]) this.config.maxEpisodes = parseInt(process.argv[episodesIndex + 1]);
@@ -38,18 +38,34 @@ export default class TextTestJob extends Job {
 	}
 
 	/**
-	 * Returns the channels for the job
+	 * Opt out of the legacy Channel-class registration path; this job owns its encoder
+	 * directly and registers via getChannelSpec() in registerBrainChannels() below.
 	 */
 	getChannels() {
-		return [{
-			name: 'text',
-			channelClass: TextChannel
-		}];
+		return [];
 	}
 
 	/**
-	 * Hook: Show startup information
+	 * Create the encoder and hand its spec to the brain. The brain allocates the channel
+	 * ID (and dim IDs in place on the encoder's Dimension instance); we wire that ID back
+	 * onto the encoder so encode() outputs key off the same number the job uses as a Map key.
 	 */
+	async registerBrainChannels() {
+		const encoder = new TextEncoder('text');
+		const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
+		encoder.bindChannelId(channelId);
+		this.encoders.push(encoder);
+	}
+
+	/**
+	 * Load the training string into the encoder once per job. resetFrames() is called per
+	 * episode so the same sequence is re-streamed.
+	 */
+	async configureChannels() {
+		const text = this.config.pattern.repeat(this.config.iterationsPerEpisode);
+		for (const encoder of this.encoders) encoder.setData(text);
+	}
+
 	async showStartupInfo() {
 		console.log(`🚀 Starting Text Test Job`);
 		console.log(`📝 Pattern: "${this.config.pattern}"`);
@@ -58,124 +74,112 @@ export default class TextTestJob extends Job {
 		console.log('');
 	}
 
-	/**
-	 * Hook: Configure text channel after brain initialization
-	 */
-	async configureChannels() {
-		const textChannel = this.brain.getChannel('text');
-		textChannel.setTraining(this.config.pattern, this.config.iterationsPerEpisode);
-	}
-
-	/**
-	 * Hook: Execute main job logic - multi-episode training
-	 */
 	async executeJob() {
 		for (this.currentEpisode = 1; this.currentEpisode <= this.config.maxEpisodes; this.currentEpisode++) {
-
-			// Run episode
 			await this.runEpisode();
-
-			// If interrupt is received, stop processing
 			if (this.isShuttingDown) return;
-
-			// Show progress every 10 episodes or on last episode
 			if (this.currentEpisode % 10 === 0 || this.currentEpisode === this.config.maxEpisodes)
 				this.showProgress();
 		}
 	}
 
-	/**
-	 * Hook: Show results
-	 */
 	async showResults() {
 		this.showFinalResults();
 	}
 
 	/**
-	 * Run a single training episode through the pattern
+	 * One episode: rewind encoders, reset brain context (keeps learned patterns), then
+	 * stream every character through the brain. No rewards (text channel doesn't emit any).
 	 */
 	async runEpisode() {
 		const startTime = Date.now();
 		console.log(`📝 Episode ${this.currentEpisode}/${this.config.maxEpisodes}...`);
 
-		// Reset context but keep learned patterns
 		this.brain.resetContext();
+		for (const encoder of this.encoders) encoder.resetFrames();
 
-		// Reset channel training data for new episode
-		const textChannel = this.brain.getChannel('text');
-		textChannel.setTraining(this.config.pattern, this.config.iterationsPerEpisode);
-
-		// Initialize episode metrics
 		const episodeMetrics = {
 			episode: this.currentEpisode,
 			pattern: this.config.pattern,
 			baseAccuracy: null
 		};
 
-		// Calculate expected number of frames
 		const expectedFrames = this.config.pattern.length * this.config.iterationsPerEpisode;
 
-		// Process all frames for the episode duration
 		let frameCount = 0;
 		while (frameCount < expectedFrames) {
-			await this.brain.processFrame();
+			const hasMore = await this.runFrame();
+			if (!hasMore) break;
 			frameCount++;
 
-			// Show progress every 100 frames
 			if (frameCount % 100 === 0)
 				process.stdout.write(`\r📝 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${expectedFrames}...`);
 
-			// If interrupt is received, stop processing
 			if (this.isShuttingDown) return;
 		}
 
-		// Clear progress line (only if stdout is a TTY)
+		// Clear progress line (TTY only).
 		if (!process.stdout.isTTY) process.stdout.write('\n');
 		else {
 			process.stdout.write('\r');
 			process.stdout.clearLine?.(0);
 		}
 
-		// Set frame count and duration
 		const duration = Date.now() - startTime;
 		episodeMetrics.duration = duration;
 		episodeMetrics.frames = frameCount;
 
-		// Capture base level accuracy stats
 		const summary = this.brain.getEpisodeSummary();
 		if (summary.accuracy.total > 0)
 			episodeMetrics.baseAccuracy = (summary.accuracy.correct / summary.accuracy.total * 100);
 
 		this.episodeResults.push(episodeMetrics);
 
-		// Show episode summary
 		const accStr = episodeMetrics.baseAccuracy !== null
 			? `${episodeMetrics.baseAccuracy.toFixed(2)}%`
 			: 'N/A';
 		console.log(`✅ Accuracy: ${accStr} (${frameCount} frames, ${duration}ms)`);
 
-		// Show mispredictions if any
 		this.showMispredictions(summary.mispredictions);
 	}
 
 	/**
-	 * Convert ASCII code to displayable character
+	 * Pull one frame per encoder, build the inputs Map keyed by channelId, send it
+	 * through the brain. Empty rewards Map — text doesn't reward.
+	 * @returns {Promise<boolean>} false when all encoders are exhausted
 	 */
+	async runFrame() {
+		const inputs = new Map();
+		const rewards = new Map();
+
+		let anyFrames = false;
+		for (const encoder of this.encoders) {
+			const frame = encoder.nextFrame();
+			if (!frame) continue;
+			anyFrames = true;
+			const dimMap = encoder.encode(frame);
+			if (dimMap) inputs.set(encoder.channelId, dimMap);
+		}
+		if (!anyFrames) return false;
+
+		this.brain.processInputs(inputs, rewards);
+
+		// Yield to the event loop so SIGINT can fire between frames.
+		await new Promise(resolve => setImmediate(resolve));
+		return true;
+	}
+
 	charFromCode(code) {
-		if (code === 32) return '␣'; // Space
-		if (code === 10) return '↵'; // Newline
-		if (code === 9) return '→';  // Tab
-		if (code < 32) return `\\x${code.toString(16).padStart(2, '0')}`; // Control chars
+		if (code === 32) return '␣';
+		if (code === 10) return '↵';
+		if (code === 9) return '→';
+		if (code < 32) return `\\x${code.toString(16).padStart(2, '0')}`;
 		return String.fromCharCode(code);
 	}
 
-	/**
-	 * Show mispredictions for the episode
-	 */
 	showMispredictions(mispredictions) {
 		if (!mispredictions || mispredictions.length === 0) return;
 
-		// Group and dedupe mispredictions by predicted→actual pair
 		const grouped = new Map();
 		for (const m of mispredictions) {
 			const predChar = m.predicted.value;
@@ -184,7 +188,6 @@ export default class TextTestJob extends Job {
 			grouped.set(key, (grouped.get(key) || 0) + 1);
 		}
 
-		// Format as readable string
 		const items = [];
 		for (const [key, count] of grouped) {
 			const [pred, actual] = key.split('→').map(Number);
@@ -196,9 +199,6 @@ export default class TextTestJob extends Job {
 		console.log(`   ❌ Mispredictions: ${items.join(', ')}`);
 	}
 
-	/**
-	 * Show training progress
-	 */
 	showProgress() {
 		console.log(`\n📊 Training Progress (Episode ${this.currentEpisode}/${this.config.maxEpisodes}):`);
 
@@ -221,9 +221,6 @@ export default class TextTestJob extends Job {
 		console.log('');
 	}
 
-	/**
-	 * Show final training results
-	 */
 	showFinalResults() {
 		console.log(`\n🎯 Final Training Results (${this.config.maxEpisodes} episodes):`);
 		console.log('='.repeat(60));
@@ -235,7 +232,6 @@ export default class TextTestJob extends Job {
 			return;
 		}
 
-		// Calculate average accuracy
 		const avgAccuracy = validResults.reduce((sum, ep) => sum + ep.baseAccuracy, 0) / validResults.length;
 
 		console.log(`📈 Overall Performance:`);
@@ -243,14 +239,13 @@ export default class TextTestJob extends Job {
 		console.log(`   Iterations per Episode: ${this.config.iterationsPerEpisode}`);
 		console.log(`   Average Accuracy: ${avgAccuracy.toFixed(2)}%`);
 
-		// Show accuracy per episode
 		console.log(`\n📊 Accuracy by Episode:`);
 		for (const ep of this.episodeResults) {
 			const accStr = ep.baseAccuracy !== null ? `${ep.baseAccuracy.toFixed(2)}%` : 'N/A';
 			console.log(`   Episode ${ep.episode}: ${accStr} (${ep.frames} frames)`);
 		}
 
-		// Show improvement trend
+		// First-half / second-half comparison flags whether learning is improving.
 		if (validResults.length >= 4) {
 			const firstHalf = validResults.slice(0, Math.floor(validResults.length / 2));
 			const secondHalf = validResults.slice(Math.floor(validResults.length / 2));
@@ -265,7 +260,6 @@ export default class TextTestJob extends Job {
 			console.log(`   Improvement: ${improvement >= 0 ? '+' : ''}${improvement.toFixed(2)}pp ${improvement >= 0 ? '📈' : '📉'}`);
 		}
 
-		// Show best episodes
 		console.log('\n🏆 Best Episodes (by Accuracy):');
 		const sortedByAccuracy = [...validResults].sort((a, b) => b.baseAccuracy - a.baseAccuracy);
 		for (let i = 0; i < Math.min(5, sortedByAccuracy.length); i++) {
@@ -278,4 +272,3 @@ export default class TextTestJob extends Job {
 }
 
 await runJob(import.meta, TextTestJob);
-

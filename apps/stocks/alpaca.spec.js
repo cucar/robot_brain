@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import Alpaca from './alpaca.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.join(__dirname, '..', 'apps', 'stocks', '.env') });
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 it('should connect to alpaca and get bars', async () => {
 	const alpaca = new Alpaca();
