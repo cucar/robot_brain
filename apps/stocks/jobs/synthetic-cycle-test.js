@@ -142,6 +142,8 @@ export default class SyntheticCycleTest extends Job {
 		const inputs = new Map();
 		const rewards = new Map();
 
+		// Pull next frame per encoder. Trader still gets price/volume even when the encoder
+		// produces no input, so reward/valuation math always sees the latest reading.
 		let anyFrames = false;
 		for (let i = 0; i < this.encoders.length; i++) {
 			const encoder = this.encoders[i];
@@ -155,18 +157,49 @@ export default class SyntheticCycleTest extends Job {
 		}
 		if (!anyFrames) return false;
 
-		// Only report reward for traders that actually acted last frame.
+		// Only report reward for traders that actually acted last frame — otherwise we'd
+		// credit/punish neurons that didn't drive the current state.
 		for (const trader of this.traders)
 			if (trader.lastAction !== null) rewards.set(trader.channelId, trader.getReward());
 
-		const inferences = this.brain.processInputs(inputs, rewards);
-
+		// Brain returns inferences keyed by channelId plus per-frame diagnostic data;
+		// `frame` flows straight to the renderer.
+		const { inferences, frame } = this.brain.processInputs(inputs, rewards);
 		for (const trader of this.traders)
 			trader.apply(inferences.get(trader.channelId) ?? []);
 
+		// Coordinated portfolio execution: ranks OWN actions, sizes positions, runs
+		// sells-then-buys so cash is freed before it's spent.
 		await StockTrader.executePortfolio(this.traders);
+
+		// Host-side rendering happens here (after portfolio execution so the tail
+		// reflects the positions the traders just took).
+		this.renderFrame(frame);
+
+		// Step-debug pause between frames (no-op unless --wait is set).
+		await this.waitForUser('Press Enter to continue to next frame');
+
+		// Yield to the event loop so SIGINT can fire between frames.
 		await new Promise(resolve => setImmediate(resolve));
 		return true;
+	}
+
+	/**
+	 * Append per-symbol holdings + portfolio Cash/P&L to the base summary line.
+	 * The brain doesn't know about traders, so the tail lives here.
+	 */
+	getFrameSummaryTail() {
+		return StockTrader.getSummaryTail(this.traders);
+	}
+
+	/**
+	 * Vote-dump formatters: encoders keyed by channel name (== symbol). Each
+	 * StockEncoder provides formatActionLabel + formatCoordinates.
+	 */
+	getChannelFormatters() {
+		const map = new Map();
+		for (const encoder of this.encoders) map.set(encoder.symbol, encoder);
+		return map;
 	}
 
 	showTestResults(actions) {

@@ -48,7 +48,22 @@ cd robot_brain
 npm install
 ```
 
-## Demo 1: Synthetic Cycle Memorization
+## Demo 1: Single-Channel Synthetic Cycle
+
+A single-stock variant of the cycle test: one channel, a repeating 12-frame price/volume pattern, 20 repeats. Same idea as Demo 1 but isolated to a single channel so you can see the brain converge on optimal actions without multi-channel reinforcement doing any of the work.
+
+```bash
+node apps/stocks/jobs/synthetic-extended-test.js --error-threshold 0.3 --merge-threshold 0.9
+```
+
+**Expected output:**
+```
+Overall Optimal Rate: 233/240 = 97.1%
+```
+
+With the right thresholds the brain converges to 97%+ optimal action decisions on a single-channel cyclical pattern — confirming that hierarchy and action inference work without cross-channel consensus.
+
+## Demo 2: Multi-Channel Synthetic Cycle
 
 The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a separate channel. A repeating 12-day price cycle is presented 20 times — the brain discovers cross-stock patterns and converges on optimal buy/sell timing.
 
@@ -64,21 +79,6 @@ node apps/stocks/jobs/multi-channel-test.js --error-threshold 0.3 --merge-thresh
 ```
 
 The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 96%+ optimal trade decisions across all three channels. This demonstrates how multiple input streams converge to improve inference — one of the architecture's core strengths.
-
-## Demo 2: Single-Channel Synthetic Cycle
-
-A single-stock variant of the cycle test: one channel, a repeating 12-frame price/volume pattern, 20 repeats. Same idea as Demo 1 but isolated to a single channel so you can see the brain converge on optimal actions without multi-channel reinforcement doing any of the work.
-
-```bash
-node apps/stocks/jobs/synthetic-extended-test.js --error-threshold 0.3 --merge-threshold 0.9
-```
-
-**Expected output:**
-```
-Overall Optimal Rate: 233/240 = 97.1%
-```
-
-With the right thresholds the brain converges to 97%+ optimal action decisions on a single-channel cyclical pattern — confirming that hierarchy and action inference work without cross-channel consensus.
 
 ## Demo 3: Stock Trading
 

@@ -478,15 +478,6 @@ export class StockChannel extends Channel {
 	}
 
 	/**
-	 * Get aggregate display string for frame summary (portfolio P&L)
-	 */
-	static getAggregateDisplay(channels) {
-		const metrics = this.getAggregateMetrics(channels);
-		const totalPL = metrics.totalProfit >= 0 ? '+' : '';
-		return `Cash:${metrics.cash.toFixed(0)} | P&L:${totalPL}${metrics.totalProfit.toFixed(2)}`;
-	}
-
-	/**
 	 * returns the label for an activity value
 	 */
 	getActionName(activityValue) {
@@ -534,14 +525,6 @@ export class StockChannel extends Channel {
 			if (percentRange) return `${dimName}=${val}(${percentRange})`;
 			return part;
 		}).join(', ');
-	}
-
-	/**
-	 * Get short state display for frame summary
-	 */
-	getStateDisplay() {
-		if (this.shares === 0) return null;
-		return `${this.symbol}:${this.shares}@$${this.getCurrentPrice()?.toFixed(2) ?? '?'}`;
 	}
 
 	/**

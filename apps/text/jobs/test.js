@@ -148,10 +148,23 @@ export default class TextTestJob extends Job {
 	 * through the brain. Empty rewards Map — text doesn't reward.
 	 * @returns {Promise<boolean>} false when all encoders are exhausted
 	 */
+	/**
+	 * Vote-dump formatters: text encoders keyed by channel name. Text has no
+	 * actions (event-only channel), so only `name` is needed — coords fall back
+	 * to the raw string. The renderer's defaults handle the missing methods.
+	 */
+	getChannelFormatters() {
+		const map = new Map();
+		for (const encoder of this.encoders) map.set(encoder.name, encoder);
+		return map;
+	}
+
 	async runFrame() {
 		const inputs = new Map();
 		const rewards = new Map();
 
+		// Pull one character per encoder and key the encoded scalar map by channelId, the
+		// same shape the brain uses for stocks. Empty frame → encoders are exhausted.
 		let anyFrames = false;
 		for (const encoder of this.encoders) {
 			const frame = encoder.nextFrame();
@@ -162,7 +175,16 @@ export default class TextTestJob extends Job {
 		}
 		if (!anyFrames) return false;
 
-		this.brain.processInputs(inputs, rewards);
+		// Text doesn't reward (no environment feedback), so rewards stays empty. We only
+		// need `frame` from the return — no actions to dispatch since there's no trader.
+		const { frame } = this.brain.processInputs(inputs, rewards);
+
+		// Host-side rendering: emits the per-frame summary line / vote debug / start-of-frame
+		// info per the flags the host owns. Text channel has no app-layer tail to append.
+		this.renderFrame(frame);
+
+		// Step-debug pause between frames (no-op unless --wait is set).
+		await this.waitForUser('Press Enter to continue to next frame');
 
 		// Yield to the event loop so SIGINT can fire between frames.
 		await new Promise(resolve => setImmediate(resolve));

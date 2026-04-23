@@ -2,7 +2,10 @@
  * Base Job Class - Common functionality for all episodes
  */
 import process from 'node:process';
+import { createInterface } from 'node:readline';
+import { stdin, stdout } from 'node:process';
 import Brain from '../../../brain/brain.js';
+import { formatFrameSummary, formatStartFrame, formatVoteDebug } from './renderer.js';
 
 export class Job {
 
@@ -12,6 +15,31 @@ export class Job {
 		this.database = false; // Default: skip database backup/restore for jobs (tests)
 		this.jobStartTime = null;
 		this.hasShownExecutionTime = false;
+
+		// Render flags — read from options in run(). These used to live on the brain but
+		// they're presentation concerns, so they belong on the host where the console.log
+		// actually happens. `frameSummary` defaults to on (matches legacy behavior);
+		// `diagnostic` and `debug` are opt-in.
+		this.frameSummary = true;
+		this.diagnostic = false;
+		this.debug = false;
+
+		// Interactive step-debug: when --wait is set, runFrame should pause for the
+		// user to hit Enter between frames. Lazy-initialized readline interface lives
+		// here on the host (not the brain core) since it's terminal I/O.
+		this.wait = false;
+		this.rl = null;
+	}
+
+	/**
+	 * Wait for the user to press Enter before continuing (used between frames when
+	 * --wait is set). No-op when --wait is off so jobs can call it unconditionally.
+	 * Lives on the Job because it's interactive host I/O, not part of the brain core.
+	 */
+	waitForUser(message = 'Press Enter to continue') {
+		if (!this.wait) return Promise.resolve();
+		if (!this.rl) this.rl = createInterface({ input: stdin, output: stdout });
+		return new Promise(resolve => this.rl.question(`\n${message}...`, resolve));
 	}
 
 	/**
@@ -27,6 +55,12 @@ export class Job {
 			// Apply command line options to job config (if job has applyOptions method)
 			if (this.applyOptions && this.options) this.applyOptions(this.options);
 
+			// Pull render flags off options (set by parseBrainArgs in run.js).
+			this.frameSummary = !(this.options?.noSummary);
+			this.diagnostic = !!this.options?.diagnostic;
+			this.debug = !!this.options?.debug;
+			this.wait = !!this.options?.wait;
+
 			// Create brain instance
 			this.brain = new Brain(this.options);
 
@@ -37,7 +71,6 @@ export class Job {
 			await this.showStartupInfo();
 
 			// get channels defined by child class and register them with brain
-			// console.log('Registering channels with brain...');
 			await this.registerBrainChannels();
 
 			// initialize database connection in the brain
@@ -83,9 +116,15 @@ export class Job {
 	}
 
 	/**
-	 * event handler for interrupt signals
+	 * Interrupt handler. First press starts a graceful shutdown; if the caller hits
+	 * Ctrl+C again before it completes, force-exit immediately so we don't hang on
+	 * a slow backup or a synchronous brain step.
 	 */
 	async handleInterrupt(signal) {
+		if (this.isShuttingDown) {
+			console.log(`\nSecond ${signal} received, forcing exit.`);
+			process.exit(130);
+		}
 		console.log(`\nReceived ${signal}, shutting down gracefully...`);
 		await this.shutdown();
 		this.showExecutionTime();
@@ -119,73 +158,114 @@ export class Job {
 	async shutdown() {
 		if (this.isShuttingDown) return;
 		this.isShuttingDown = true;
+		// Close readline if --wait opened one; otherwise the process hangs on the
+		// open stdin handle even after backup completes.
+		if (this.rl) { this.rl.close(); this.rl = null; }
 		if (this.brain && this.database) await this.brain.backup();
 	}
 
-	/**
-	 * Hook: Show startup information (override in subclasses)
-	 */
-	async showStartupInfo() {
-		// Default: no custom startup info
-	}
+	/* ---------- Hooks ---------- */
 
-	/**
-	 * Hook: Configure channels after brain initialization (override in subclasses)
-	 */
-	async configureChannels() {
-		// Default: no custom channel configuration
-	}
+	async showStartupInfo() {}
 
-	/**
-	 * Hook: Handle brain reset strategy (override in subclasses)
-	 */
+	async configureChannels() {}
+
 	async handleBrainReset() {
-		// Check command-line flags for reset strategy
 		if (this.options?.reset) {
 			console.log('Hard reset requested. Clearing all tables...');
 			await this.brain.resetBrain();
 		}
 	}
 
-	/**
-	 * Hook: Execute main job logic (override in subclasses)
-	 */
 	async executeJob() {
-		// Default: single episode processing
 		console.log('Running episode...');
 		await this.processFrames();
 	}
 
-	/**
-	 * Hook: Show results (override in subclasses)
-	 */
-	async showResults() {
-		// Default: no custom results display
-	}
+	async showResults() {}
 
 	/**
-	 * Process frames in a loop until all channels are exhausted
-	 * Channels execute their own outputs and provide feedback based on state changes
+	 * Legacy channel-class processing loop. Delegates per-frame I/O to the brain
+	 * (which pulls events and rewards from the registered Channel instances), then
+	 * fires the render hooks before moving on. Spec-based jobs implement their own
+	 * runFrame and call renderFrame() themselves.
 	 */
 	async processFrames() {
-		let continueProcessing = true;
-		while (continueProcessing && !this.isShuttingDown)
-			continueProcessing = await this.brain.processFrame();
+		while (!this.isShuttingDown) {
+			const { processed, frame } = await this.brain.processFrame();
+			if (!processed) break;
+			this.renderFrame(frame);
+			// Step-debug pause between frames (no-op unless --wait is set).
+			await this.waitForUser('Press Enter to continue to next frame');
+		}
 		if (this.isShuttingDown) console.log('Processing interrupted by shutdown signal.');
 		else console.log('Completed processing. no more channel data.');
 	}
 
 	/**
-	 * Override this to define which channels the job uses
-	 * Returns array of: { name, channelClass }
+	 * Per-frame host-side rendering entry point. Jobs call this after the brain
+	 * processes a frame — or spec-based jobs call it at the end of their runFrame.
+	 * Prints the start-of-frame diagnostic dump (if --diagnostic), the vote debug
+	 * dump (if --debug), and the one-line summary (unless --no-summary). Any of
+	 * the three is a no-op when its flag is off.
+	 *
+	 * @param {{ elapsed: number, voteDebug: object|null }} frame - per-frame byproducts
+	 *   returned alongside inferences from brain.processInputs / brain.processFrame
+	 */
+	renderFrame(frame) {
+		if (this.diagnostic) {
+			const info = this.brain.getStartFrameInfo();
+			const out = formatStartFrame(info);
+			if (out) console.log(out);
+		}
+
+		if (this.debug) {
+			const out = formatVoteDebug(frame?.voteDebug, this.getChannelFormatters());
+			if (out) console.log(out);
+		}
+
+		if (this.frameSummary) {
+			const summary = this.brain.getFrameSummary();
+			const tail = this.getFrameSummaryTail();
+			console.log(formatFrameSummary(summary, frame?.elapsed ?? 0, tail));
+		}
+	}
+
+	/**
+	 * Hook: app-layer state to append to the per-frame summary line. Default is
+	 * empty (brain stats only). Stocks jobs override this to return the holdings
+	 * list and portfolio P&L; text jobs override for per-symbol state; etc.
+	 * @returns {string}
+	 */
+	getFrameSummaryTail() {
+		return '';
+	}
+
+	/**
+	 * Hook: return Map<channelName, formatter> the --debug vote-dump renderer uses
+	 * to humanize action coordinates and bucket numbers. Each formatter exposes
+	 * `name` and (optionally) `formatActionLabel(coord)` / `formatCoordinates(str)`.
+	 *
+	 * Default uses the legacy Channel instances registered with the brain so the
+	 * Channel-class jobs work without overriding. Spec-based jobs override to
+	 * return a Map of their encoders/traders keyed by channel name.
+	 * @returns {Map<string, object>}
+	 */
+	getChannelFormatters() {
+		return this.brain?.thalamus?.channels ?? new Map();
+	}
+
+	/**
+	 * Override this to define which channels the job uses (legacy Channel-class
+	 * path). Returns array of: { name, channelClass }
 	 */
 	getChannels() {
 		throw new Error('Job must implement getChannels() method');
 	}
 
 	/**
-	 * Hook: Register channels with the brain. Default path registers each getChannels()
-	 * entry as a Channel class. Jobs that own their encoders/traders directly can override
+	 * Register channels with the brain. Default registers each getChannels() entry
+	 * as a Channel class. Jobs that own their encoders/traders directly override
 	 * this to call brain.registerChannelSpec() per channel instead.
 	 */
 	async registerBrainChannels() {

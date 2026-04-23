@@ -175,6 +175,51 @@ export class StockEncoder {
 	}
 
 	/**
+	 * Channel name as far as the brain/thalamus is concerned. Used by the host-side
+	 * vote-debug renderer to label per-channel sections; matches the spec name.
+	 */
+	get name() { return this.symbol; }
+
+	/**
+	 * Renderer hook: humanize an action coordinate into OWN/OUT for the vote-debug
+	 * dump. Coordinate.value is the action bucket (POSITION_OWN/POSITION_OUT). Falls
+	 * back to a JSON dump for unrecognized values so unknown actions still surface.
+	 */
+	formatActionLabel(coordinate) {
+		if (coordinate.value === POSITION_OWN) return 'OWN';
+		if (coordinate.value === POSITION_OUT) return 'OUT';
+		return JSON.stringify(coordinate);
+	}
+
+	/**
+	 * Renderer hook: turn a "dim=bucket, dim=bucket" coords string into one with
+	 * the percent ranges appended (e.g. "AAPL_price_change=3(+0.50%~+1.00%)") so
+	 * the vote dump shows what bucket numbers actually mean. Cross-channel voters
+	 * are matched by dimension suffix since all StockEncoders share boundaries.
+	 */
+	formatCoordinates(coordsStr) {
+		if (!coordsStr) return '(no coords)';
+		if (!this.bucketToPercent) return coordsStr;
+		return coordsStr.split(', ').map(part => {
+			const [dimName, valStr] = part.split('=');
+			const val = parseFloat(valStr);
+			const key = `${dimName}:${val}`;
+			let percentRange = this.bucketToPercent.get(key);
+			// Fall back to matching by dimension suffix for cross-channel voters
+			// (all StockEncoders share identical boundaries so this is accurate).
+			if (!percentRange) {
+				const underscoreIdx = dimName.indexOf('_');
+				if (underscoreIdx >= 0) {
+					const suffix = dimName.substring(underscoreIdx);
+					percentRange = this.bucketToPercent.get(`${this.symbol}${suffix}:${val}`);
+				}
+			}
+			if (percentRange) return `${dimName}=${val}(${percentRange})`;
+			return part;
+		}).join(', ');
+	}
+
+	/**
 	 * Describe this encoder's channel for brain.registerChannelSpec(). Shape-only —
 	 * no behavior. Each dim spec carries the Dimension instance; the Thalamus allocates
 	 * an ID and writes it onto the instance in place. The brain stores the spec, registers

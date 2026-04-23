@@ -24,7 +24,6 @@ export default class Brain {
 		// Debugging info and flags
 		this.debug = options?.debug;
 		this.database = options?.database; // skip database backup/restore for tests
-		this.waitForUserInput = options?.wait;
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
@@ -34,8 +33,8 @@ export default class Brain {
 		// Database - used for persistent storage - backup and restore
 		this.db = this.database ? new Database(this.debug, this.patternForgetRate, this.mergeThreshold) : null;
 
-		// Diagnostics - used for debug methods and performance tracking
-		this.diagnostics = new Diagnostics(options?.diagnostic, !options?.noSummary);
+		// Diagnostics - pure stats tracker. No flags — presentation flags live on the host.
+		this.diagnostics = new Diagnostics();
 
 		// Dump - used for creating brain state dumps for debugging
 		this.dump = new Dump();
@@ -45,14 +44,6 @@ export default class Brain {
 
 		// Memory - manages temporal sliding window and inferred neurons
 		this.memory = new Memory(this.debug, this.contextLength);
-	}
-
-	/**
-	 * waits for user input to continue - used for debugging
-	 */
-	waitForUser(message) {
-		if (!this.waitForUserInput) return Promise.resolve();
-		return this.diagnostics.waitForUser(message);
 	}
 
 	/**
@@ -208,14 +199,21 @@ export default class Brain {
 
 	/**
 	 * Id-native frame entry point. Accepts raw scalars per dimension and returns
-	 * inferred predictions (events and actions) in the same scalar space. The brain
-	 * is a pure compute function here — no channel I/O, no action dispatch.
+	 * inferred predictions plus per-frame diagnostic byproducts. The brain is a
+	 * pure compute function here — no channel I/O, no action dispatch, no printing.
+	 *
+	 * The return shape bundles everything the host needs from this single call:
+	 *   - `inferences`: channelId → per-dimension predictions (winner + continuous)
+	 *   - `frame`: per-frame diagnostic data (elapsed, voteDebug). voteDebug is only
+	 *     populated when this.debug is set; null otherwise (the resolution is
+	 *     expensive, so it's skipped when nobody will read it). Keeping these in
+	 *     the return value rather than as Brain instance fields means the host
+	 *     never reaches into the core for "last frame" state — the data flows out
+	 *     once, with the call that produced it.
+	 *
 	 * @param {Map<number, Map<number, number>>} inputs - channelId → (dimId → raw scalar)
 	 * @param {Map<number, number>} rewards - channelId → reward for previous frame's actions
-	 * @returns {Map<number, Array<{dimId, kind, winner: {value, strength, score}, continuous: number}>>}
-	 *   channelId → per-dimension inferences. winner.value is the dequantized scalar of
-	 *   the winning bucket; continuous is the score-weighted average of all competing
-	 *   candidates on that dimension. Empty map if no inputs.
+	 * @returns {{ inferences: Map, frame: { elapsed: number, voteDebug: object|null } }}
 	 */
 	processInputs(inputs, rewards) {
 		const frameStart = performance.now();
@@ -223,10 +221,8 @@ export default class Brain {
 
 		// build the current frame from quantized inputs and previously inferred actions
 		this.buildFrame(inputs);
-		if (this.frame.length === 0) return new Map();
-
-		// display diagnostic frame start if enabled
-		this.diagnostics.startFrame(this.frameNumber, this.rewards[0], this.frame, this.thalamus.dimensionIdToName);
+		if (this.frame.length === 0)
+			return { inferences: new Map(), frame: { elapsed: performance.now() - frameStart, voteDebug: null } };
 
 		// forget connections and patterns in all neurons to avoid curse of dimensionality
 		this.cleanupDeadPatterns();
@@ -240,23 +236,50 @@ export default class Brain {
 		// process neurons level-by-level in parallel - collects votes inline per level
 		const votes = this.processLevels();
 
-		// do inferences with age>0 neurons - returns scalar-space predictions for the caller
-		const inferences = this.inferNeurons(votes);
+		// do inferences with age>0 neurons. Returns the scalar-space inferences plus an
+		// optional voteDebug dump (populated only when this.debug is set, null otherwise).
+		const { inferences, voteDebug } = this.inferNeurons(votes);
 
 		// accumulate MAPE by comparing continuous event predictions to the actual input scalars
 		// (skips dims not registered with the quantizer - those are tracked via channel callbacks)
 		this.diagnostics.trackContinuousError(inferences, inputs, this.thalamus.quantizer);
 
-		// show frame processing summary
-		this.diagnostics.endFrame(
-			this.frameNumber,
-			performance.now() - frameStart,
-			this.thalamus.getChannels(),
-			this.thalamus.getNeuronCount(),
-			this.thalamus.getMaxLevel()
-		);
+		// Bundle the per-frame byproducts (timing + optional debug data) with the inferences
+		// so the host gets everything from one call. No "last frame" state is kept on Brain.
+		return { inferences, frame: { elapsed: performance.now() - frameStart, voteDebug } };
+	}
 
-		return inferences;
+	/**
+	 * Compose the cumulative/episode-level summary the host renderer uses for the
+	 * "Frame N | Neurons: ..." line. Numbers only; the renderer formats units and
+	 * decides how to show null (== "no data yet"). Per-frame byproducts (elapsed,
+	 * voteDebug) come back from processInputs directly — they are NOT in here.
+	 * Apps can tack on app-layer state (e.g. the stocks portfolio P&L) by passing
+	 * a tail string to formatFrameSummary().
+	 */
+	getFrameSummary() {
+		return {
+			frameNumber: this.frameNumber,
+			neuronCount: this.thalamus.getNeuronCount(),
+			maxLevel: this.thalamus.getMaxLevel(),
+			...this.diagnostics.getStats()
+		};
+	}
+
+	/**
+	 * Snapshot of the start-of-frame state the --diagnostic renderer dumps: incoming
+	 * rewards for the previous frame's actions, raw observations being sensed, and
+	 * the dimId→name map so the host can humanize dim ids. Returns null when the
+	 * frame was empty (nothing to show).
+	 */
+	getStartFrameInfo() {
+		if (this.frame.length === 0) return null;
+		return {
+			frameNumber: this.frameNumber,
+			rewards: this.rewards[0],
+			frame: this.frame,
+			dimensionIdToName: this.thalamus.dimensionIdToName
+		};
 	}
 
 	/**
@@ -317,21 +340,21 @@ export default class Brain {
 
 		// collect per-channel, per-dim scalars and per-channel rewards from all channels
 		const { inputs, rewards } = await this.collectChannelFrame();
-		if (inputs.size === 0 && this.memory.getInferredNeurons().length === 0) return false;
+		if (inputs.size === 0 && this.memory.getInferredNeurons().length === 0) return { processed: false, frame: null };
 
 		// run the pure compute step - quantization, aging, pattern matching, inference, diagnostics
-		const inferences = this.processInputs(inputs, rewards);
-		if (inferences.size === 0) return false;
+		const { inferences, frame } = this.processInputs(inputs, rewards);
+		if (inferences.size === 0) return { processed: false, frame };
 
 		// dispatch inferred actions back to the channels (reads the inferences memory saved above)
 		await this.executeActions();
 
-		// when debugging, wait for user to press Enter before continuing to next frame
-		await this.waitForUser('Press Enter to continue to next frame');
-
 		// give the event loop a chance to run other tasks between frames
 		await new Promise(resolve => setImmediate(resolve));
-		return true;
+
+		// Return the per-frame diagnostic byproducts so the host renderer can pick them up
+		// without reaching into Brain for "last frame" state.
+		return { processed: true, frame };
 	}
 
 	/**
@@ -468,17 +491,19 @@ export default class Brain {
 	 * Infer predictions and outputs using voting architecture.
 	 * All levels vote for both actions and events.
 	 * @param {Array} votes - Accumulated votes from processLevels
-	 * @returns {Map<number, Array<{dimId, kind, winner: {value, strength, score}, continuous: number}>>}
-	 *   channelId → per-dimension inferences in scalar space. winner.value and continuous
-	 *   are dequantized via the Quantizer. continuous is the score-weighted average of
-	 *   all competing candidates on that dimension. Empty map if there were no votes.
+	 * @returns {{ inferences: Map, voteDebug: object|null }}
+	 *   inferences: channelId → per-dimension inferences in scalar space. winner.value and
+	 *     continuous are dequantized via the Quantizer. continuous is the score-weighted
+	 *     average of all competing candidates on that dimension. Empty map if no votes.
+	 *   voteDebug: fully-resolved vote snapshot for the host-side debug renderer, or null
+	 *     when debug is off (the resolution is expensive; we only do it when asked).
 	 */
 	inferNeurons(votes) {
 
 		// If no inference votes, wait for more data
 		if (votes.length === 0) {
 			if (this.debug) console.log('No inferences found. Waiting for more data in future frames.');
-			return new Map();
+			return { inferences: new Map(), voteDebug: null };
 		}
 
 		// Aggregate votes and determine winners - returns winners plus full candidate map for continuous predictions
@@ -488,7 +513,9 @@ export default class Brain {
 		// Also seeds candidates + dimBest so the scalar-space output includes the fallback action.
 		this.ensureChannelActions(inferences, candidates, dimBest);
 
-		// call diagnostics to show the debug logs for votes - pre-resolve all neuron data
+		// Build the resolved vote dump only when the host will actually render it. The
+		// metadata lookups (neuron type/channel/coordinate name) are non-trivial.
+		let voteDebug = null;
 		if (this.debug) {
 			const resolvedVotes = votes.map(v => ({
 				targetId: v.neuronId,
@@ -502,14 +529,16 @@ export default class Brain {
 				reward: v.reward,
 				distance: v.distance
 			}));
-			this.diagnostics.debugVotes(resolvedVotes, inferences, this.thalamus.channels);
+			// Pure data only — no Channel instance refs. The host owns label formatters
+			// (encoders/traders/legacy Channel objects) and looks them up by channel name.
+			voteDebug = { votes: resolvedVotes, winners: inferences };
 		}
 
 		// Save inferences to memory (clears old inferences first)
 		this.memory.saveInferredNeurons(inferences);
 
 		// Build the scalar-space output: per-channel, per-dimension winner and continuous prediction
-		return this.buildInferencesByChannel(candidates, dimBest);
+		return { inferences: this.buildInferencesByChannel(candidates, dimBest), voteDebug };
 	}
 
 	/**

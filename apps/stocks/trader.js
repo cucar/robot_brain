@@ -158,6 +158,38 @@ export class StockTrader {
 	}
 
 	/**
+	 * Per-frame state blurb for the summary line's tail. Only emits when the trader
+	 * holds a position — matches the legacy channel behavior of hiding idle symbols
+	 * so the line stays compact in multi-symbol runs.
+	 */
+	getStateDisplay() {
+		if (this.shares === 0) return null;
+		return `${this.symbol}:${this.shares}@$${this.getCurrentPrice()?.toFixed(2) ?? '?'}`;
+	}
+
+	/**
+	 * Build the tail suffix the Job appends to each per-frame summary: per-symbol
+	 * holdings (via getStateDisplay) plus portfolio Cash/P&L. Returns an empty
+	 * string when no trader holds anything and cash is at initial capital, so
+	 * early frames before any trade don't clutter the log.
+	 */
+	static getSummaryTail(traders) {
+		const stateParts = [];
+		for (const trader of traders) {
+			const display = trader.getStateDisplay();
+			if (display) stateParts.push(display);
+		}
+		const state = stateParts.length > 0 ? stateParts.join(', ') : 'None';
+
+		let totalCurrentValue = 0;
+		for (const trader of traders) totalCurrentValue += trader.shares * trader.getCurrentPrice();
+		const totalProfit = (StockTrader.cash + totalCurrentValue) - StockTrader.initialCapital;
+		const sign = totalProfit >= 0 ? '+' : '';
+
+		return `State: ${state} | Cash:${StockTrader.cash.toFixed(0)} | P&L:${sign}${totalProfit.toFixed(2)}`;
+	}
+
+	/**
 	 * Aggregate portfolio profit across a set of traders:
 	 *   (cash + market value) - initial capital
 	 */

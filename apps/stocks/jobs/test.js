@@ -326,9 +326,10 @@ export default class StockTestJob extends Job {
 		for (const trader of this.traders)
 			if (trader.lastAction !== null) rewards.set(trader.channelId, trader.getReward());
 
-		// Brain returns inferences keyed by channelId. Each trader grabs its own (or an
-		// empty array if the channel didn't fire) and records its last action for next frame.
-		const inferences = this.brain.processInputs(inputs, rewards);
+		// Brain returns inferences keyed by channelId plus per-frame diagnostic data
+		// (timing, optional vote debug). Destructure so we can pass `frame` straight
+		// to the renderer — no separate getter call into the brain.
+		const { inferences, frame } = this.brain.processInputs(inputs, rewards);
 
 		for (const trader of this.traders)
 			trader.apply(inferences.get(trader.channelId) ?? []);
@@ -337,10 +338,36 @@ export default class StockTestJob extends Job {
 		// sells-then-buys so cash is freed before it's spent.
 		await StockTrader.executePortfolio(this.traders);
 
+		// Host-side rendering happens here (after portfolio execution so the tail
+		// reflects the positions the trader just took).
+		this.renderFrame(frame);
+
+		// Step-debug pause between frames (no-op unless --wait is set).
+		await this.waitForUser('Press Enter to continue to next frame');
+
 		// Yield to the event loop so SIGINT handlers can fire between frames — without this,
 		// a tight synchronous loop ignores Ctrl+C until the episode finishes.
 		await new Promise(resolve => setImmediate(resolve));
 		return true;
+	}
+
+	/**
+	 * Append per-symbol holdings + portfolio Cash/P&L to the base summary line.
+	 * The brain doesn't know about traders, so the tail lives here.
+	 */
+	getFrameSummaryTail() {
+		return StockTrader.getSummaryTail(this.traders);
+	}
+
+	/**
+	 * Vote-dump formatters for the spec-based path: each StockEncoder owns its own
+	 * action labels and bucket-to-percent map, so we hand the encoders to the
+	 * renderer keyed by channel name (== symbol).
+	 */
+	getChannelFormatters() {
+		const map = new Map();
+		for (const encoder of this.encoders) map.set(encoder.symbol, encoder);
+		return map;
 	}
 
 	/**

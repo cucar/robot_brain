@@ -59,16 +59,6 @@ export class Channel {
 	}
 
 	/**
-	 * Static method to get aggregate display string for frame summary
-	 * Override in subclasses to provide channel-type-specific display
-	 * @param {Array} channels - Array of [channelName, channel] pairs
-	 * @returns {string|null} - Formatted display string or null if nothing to show
-	 */
-	static getAggregateDisplay(channels) {
-		return null;
-	}
-
-	/**
 	 * Execute outputs based on brain predictions - override in subclasses
 	 * Invalid actions should be filtered during conflict resolution, so only valid actions should be received
 	 */
@@ -155,16 +145,6 @@ export class Channel {
 		return {
 			name: this.name
 		};
-	}
-
-	/**
-	 * Get short state display for frame summary
-	 * Returns a brief string showing current channel state
-	 * Override in subclasses for channel-specific state display
-	 * @returns {string|null} - Short state string or null if nothing to display
-	 */
-	getStateDisplay() {
-		return null;
 	}
 
 }
