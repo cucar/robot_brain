@@ -43,7 +43,11 @@ export class Quantizer {
 		if (!Number.isInteger(resolution) || resolution < 2)
 			throw new Error(`Quantizer: resolution must be integer >= 2, got ${resolution} for dim ${dimId}`);
 
-		const state = { mode, resolution, boundaries: null };
+		// bucketStats is lazy-initialized on first observed sample (see observe()). It
+		// holds per-bucket {count, sum} so dequantize can return the empirical mean of
+		// each bucket instead of its geometric midpoint — meaningful continuous output
+		// even at low resolution, since the output lives in the actual input scale.
+		const state = { mode, resolution, boundaries: null, bucketStats: null };
 
 		if (mode === 'static') {
 			if (!Array.isArray(spec.boundaries) || spec.boundaries.length !== resolution - 1)
@@ -87,23 +91,46 @@ export class Quantizer {
 	}
 
 	/**
-	 * Feed a raw scalar to the quantizer - updates internal state for 'dynamic' mode.
-	 * No-op for 'passthrough' and 'static'.
+	 * Feed a raw scalar to the quantizer. Two jobs:
+	 *   (1) for 'dynamic' mode, buffer samples and compute split points after warmup
+	 *   (2) for any mode with known boundaries (static always, dynamic post-warmup),
+	 *       accumulate a running {count, sum} per bucket so dequantize can return the
+	 *       empirical mean of observations in that bucket instead of a geometric
+	 *       midpoint. This lifts the dequantize output off the ±0.5 ceiling at res=2
+	 *       and into the actual input scale (e.g. a "positive volume" bucket returns
+	 *       ~+40% once it's seen typical positive-volume moves).
+	 * No-op for 'passthrough' and for dims the caller hasn't registered.
 	 */
 	observe(dimId, scalar) {
 		const state = this.dimensions.get(dimId);
 
 		// unregistered dims are owned by channels that bucketize on their own; ignore
 		if (!state) return;
-		if (state.mode !== 'dynamic') return;
+		if (state.mode === 'passthrough') return;
 
-		state.samples.push(scalar);
+		// dynamic: buffer and learn boundaries at warmup
+		if (state.mode === 'dynamic') {
+			state.samples.push(scalar);
 
-		// compute initial boundaries once we have enough warmup samples
-		if (state.boundaries === null && state.samples.length >= state.warmupSamples)
-			state.boundaries = this.computeQuantileBoundaries(state.samples, state.resolution);
+			// compute initial boundaries once we have enough warmup samples
+			if (state.boundaries === null && state.samples.length >= state.warmupSamples)
+				state.boundaries = this.computeQuantileBoundaries(state.samples, state.resolution);
 
-		// TODO: incremental boundary refinement post-warmup (e.g. sliding window or t-digest)
+			// TODO: incremental boundary refinement post-warmup (e.g. sliding window or t-digest)
+		}
+
+		// accumulate per-bucket empirical mean. Requires boundaries, so dynamic mode
+		// starts contributing only after warmup — pre-warmup samples are not attributed
+		// to any bucket since the bucketing itself isn't defined yet.
+		if (!state.boundaries) return;
+		if (!state.bucketStats) {
+			state.bucketStats = new Array(state.resolution);
+			for (let i = 0; i < state.resolution; i++) state.bucketStats[i] = { count: 0, sum: 0 };
+		}
+		const bucketId = this.bucketize(scalar, state.boundaries);
+		const stats = state.bucketStats[bucketId - 1];
+		stats.count++;
+		stats.sum += scalar;
 	}
 
 	/**
@@ -144,13 +171,14 @@ export class Quantizer {
 	 * vote distribution and get a continuous scalar prediction back.
 	 *
 	 * passthrough: the bucket ID IS the scalar, returned unchanged.
-	 * static / dynamic: interpolates across bucket midpoints. Interior midpoints are
-	 * the average of adjacent boundaries; the two outer buckets are open-ended, so we
-	 * reflect the nearest interior width to get a finite representative value.
+	 * static / dynamic: looks up the empirical mean of observed samples per bucket
+	 * (populated by observe()). Returns null when the bucket has never been observed
+	 * — honest about the absence of data rather than fabricating a geometric midpoint.
+	 * Callers must handle null (skip from weighted sums, skip from MAPE, etc.).
 	 *
 	 * @param {number} dimId
 	 * @param {number} bucketId - 1-indexed; may be fractional (e.g. 2.7 for weighted avg)
-	 * @returns {number} representative scalar
+	 * @returns {number|null} representative scalar, or null if unobserved
 	 */
 	dequantize(dimId, bucketId) {
 		const state = this.dimensions.get(dimId);
@@ -161,53 +189,47 @@ export class Quantizer {
 
 		if (state.mode === 'passthrough') return bucketId;
 
-		// dynamic mode before warmup: we returned the middle bucket from quantize(),
-		// so dequantize the same way - no boundaries means no meaningful scalar yet
-		if (!state.boundaries) return 0;
+		// dynamic mode before warmup, or static/dynamic with no samples yet: no data
+		// to produce a scalar from. Null propagates through callers as "no prediction".
+		if (!state.boundaries) return null;
 
-		return this.interpolateBucketMidpoint(bucketId, state.boundaries);
+		return this.interpolateRepresentative(bucketId, this.bucketRepresentatives(state));
 	}
 
 	/**
-	 * Linear interpolation over a piecewise-linear map from bucket index to scalar.
-	 * The map is anchored at the integer bucket midpoints; fractional bucket IDs
-	 * interpolate between the two surrounding midpoints.
+	 * Per-bucket representative scalars: the empirical mean of samples observed in
+	 * each bucket (populated by observe()), or null for buckets we've never seen.
+	 * Null is load-bearing — callers use it to know when to skip a contribution
+	 * rather than consuming a fabricated midpoint that biases predictions.
 	 */
-	interpolateBucketMidpoint(bucketId, boundaries) {
-		const midpoints = this.bucketMidpoints(boundaries);
-		const n = midpoints.length;
-		if (bucketId <= 1) return midpoints[0];
-		if (bucketId >= n) return midpoints[n - 1];
+	bucketRepresentatives(state) {
+		if (!state.bucketStats) return new Array(state.resolution).fill(null);
+		const out = new Array(state.resolution);
+		for (let i = 0; i < state.resolution; i++) {
+			const s = state.bucketStats[i];
+			out[i] = s.count > 0 ? s.sum / s.count : null;
+		}
+		return out;
+	}
+
+	/**
+	 * Linear interpolation over bucket representatives. Unseen buckets carry null;
+	 * if one flanking rep is null the other is used as-is, and if both are null the
+	 * result is null. Clamps at the ends so out-of-range bucketIds saturate instead
+	 * of extrapolating.
+	 */
+	interpolateRepresentative(bucketId, reps) {
+		const n = reps.length;
+		if (bucketId <= 1) return reps[0];
+		if (bucketId >= n) return reps[n - 1];
 		const lo = Math.floor(bucketId);
 		const frac = bucketId - lo;
-		return midpoints[lo - 1] * (1 - frac) + midpoints[lo] * frac;
-	}
-
-	/**
-	 * Build one representative scalar per bucket. Interior buckets use the mean of
-	 * their two boundaries; the two outer open-ended buckets mirror the adjacent
-	 * interior width so they contribute a finite anchor to interpolation.
-	 */
-	bucketMidpoints(boundaries) {
-		const resolution = boundaries.length + 1;
-		const mids = new Array(resolution);
-
-		// interior buckets: midpoint between the two boundaries that enclose them
-		for (let i = 1; i < resolution - 1; i++)
-			mids[i] = (boundaries[i - 1] + boundaries[i]) / 2;
-
-		// outer buckets: reflect the adjacent interior half-width to stay finite.
-		// for resolution=2 there is no interior bucket, so we just offset by 1 unit.
-		if (resolution === 2) {
-			mids[0] = boundaries[0] - 0.5;
-			mids[1] = boundaries[0] + 0.5;
-		}
-		else {
-			mids[0] = 2 * boundaries[0] - mids[1];
-			mids[resolution - 1] = 2 * boundaries[resolution - 2] - mids[resolution - 2];
-		}
-
-		return mids;
+		const a = reps[lo - 1];
+		const b = reps[lo];
+		if (a === null && b === null) return null;
+		if (a === null) return b;
+		if (b === null) return a;
+		return a * (1 - frac) + b * frac;
 	}
 
 	/**
@@ -236,8 +258,10 @@ export class Quantizer {
 
 	/**
 	 * Serialize quantizer state for persistence.
-	 * Only static boundaries and dynamic-mode learned boundaries are persisted;
-	 * sample buffers are treated as transient.
+	 * Persists boundaries (static + dynamic learned) and per-bucket empirical-mean
+	 * accumulators — the latter is learned state that takes many frames to collect
+	 * and would otherwise have to be rebuilt from scratch on every restart.
+	 * Sample buffers (dynamic mode pre-warmup reservoir) are treated as transient.
 	 */
 	serialize() {
 		const out = {};
@@ -245,14 +269,16 @@ export class Quantizer {
 			out[dimId] = {
 				mode: state.mode,
 				resolution: state.resolution,
-				boundaries: state.boundaries ? [...state.boundaries] : null
+				boundaries: state.boundaries ? [...state.boundaries] : null,
+				bucketStats: state.bucketStats ? state.bucketStats.map(s => ({ count: s.count, sum: s.sum })) : null
 			};
 		return out;
 	}
 
 	/**
 	 * Restore previously serialized state. Dimensions must be registered first
-	 * with the same mode/resolution; this only reinstates boundaries.
+	 * with the same mode/resolution; this only reinstates boundaries and the
+	 * per-bucket accumulators used for empirical-mean dequantization.
 	 */
 	restore(snapshot) {
 		for (const [dimIdStr, saved] of Object.entries(snapshot)) {
@@ -260,6 +286,7 @@ export class Quantizer {
 			const state = this.dimensions.get(dimId);
 			if (!state) continue; // unknown dimension - ignore
 			if (saved.boundaries) state.boundaries = [...saved.boundaries];
+			if (saved.bucketStats) state.bucketStats = saved.bucketStats.map(s => ({ count: s.count, sum: s.sum }));
 		}
 	}
 }

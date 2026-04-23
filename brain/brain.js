@@ -553,14 +553,14 @@ export default class Brain {
 	 */
 	buildInferencesByChannel(candidates, dimBest) {
 
-		// Group every candidate by (channelId, dimId) and accumulate weighted sums for the continuous prediction
+		// Group every candidate by (channelId, dimId) and accumulate weighted sums for the continuous prediction.
+		// Candidates whose bucket has no observed samples yet contribute to the dim entry's existence (so the
+		// winner below can still produce output) but not to the weighted sum — we can't mix in a scalar we don't have.
 		const dims = new Map(); // key `${channelId}:${dimId}` → { channelId, dimId, kind, weightedSum, totalScore }
 		for (const [neuronId, candidate] of candidates) {
 			const coordinate = this.thalamus.getNeuronCoordinate(neuronId);
 			const kind = this.thalamus.getNeuronType(neuronId);
 			const channelId = this.thalamus.channelNameToId[this.thalamus.getNeuronChannel(neuronId)];
-			const score = kind === 'action' ? candidate.reward : candidate.probability;
-			const value = this.thalamus.quantizer.dequantize(coordinate.dimId, coordinate.bucketId);
 
 			const key = `${channelId}:${coordinate.dimId}`;
 			let entry = dims.get(key);
@@ -568,11 +568,20 @@ export default class Brain {
 				entry = { channelId, dimId: coordinate.dimId, kind, weightedSum: 0, totalScore: 0 };
 				dims.set(key, entry);
 			}
+
+			// Skip candidates with no dequantized value (never-observed bucket) — the dim entry
+			// is already registered above so the winner's pass below still emits an inference.
+			const value = this.thalamus.quantizer.dequantize(coordinate.dimId, coordinate.bucketId);
+			if (value === null) continue;
+
+			const score = kind === 'action' ? candidate.reward : candidate.probability;
 			entry.weightedSum += score * value;
 			entry.totalScore += score;
 		}
 
-		// Finalize each dimension entry: resolve winner via dimBest and compute the continuous prediction
+		// Finalize each dimension entry: resolve winner via dimBest and compute the continuous prediction.
+		// If no candidate contributed a dequantized value and the winner itself has none either, continuous
+		// comes out null — downstream consumers (MAPE tracker, etc.) skip null rather than coerce it to zero.
 		const out = new Map();
 		for (const { channelId, dimId, kind, weightedSum, totalScore } of dims.values()) {
 			const best = dimBest.get(dimId);

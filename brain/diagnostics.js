@@ -50,6 +50,7 @@ export class Diagnostics {
 			for (const { dimId, kind, continuous } of dimInferences) {
 				if (kind !== 'event') continue;
 				if (!quantizer.has(dimId)) continue; // channel still owns bucketization - skip to avoid double-counting
+				if (continuous === null) continue; // brain had no observed-bucket data to produce a scalar prediction
 				const actual = actuals.get(dimId);
 				if (actual === undefined || actual === 0) continue; // skip undefined and avoid divide-by-zero
 				this.continuousPredictionMetrics.totalError += Math.abs((actual - continuous) / actual) * 100;
