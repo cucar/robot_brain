@@ -29,21 +29,14 @@ export default class SyntheticCycleTest extends Job {
 	}
 
 	/**
-	 * Opt out of the legacy Channel-class path; this job owns its encoder/trader directly.
-	 */
-	getChannels() {
-		return [];
-	}
-
-	/**
 	 * Create encoder + trader and register the encoder spec with the brain. The trader
 	 * borrows the same channelId so rewards/inputs/inferences key off a single number.
 	 */
 	async registerBrainChannels() {
 		const encoder = new StockEncoder(this.config.symbol);
 		const trader = new StockTrader(this.config.symbol);
-		const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
-		encoder.bindChannelId(channelId);
+		const { channelId, dimensionIds } = this.brain.registerChannelSpec(encoder.getChannelSpec());
+		encoder.bindIds({ channelId, dimensionIds });
 		trader.bindChannelId(channelId);
 		this.encoders.push(encoder);
 		this.traders.push(trader);
@@ -164,7 +157,7 @@ export default class SyntheticCycleTest extends Job {
 
 		// Brain returns inferences keyed by channelId plus per-frame diagnostic data;
 		// `frame` flows straight to the renderer.
-		const { inferences, frame } = this.brain.processInputs(inputs, rewards);
+		const { inferences, frame } = this.brain.processFrame(inputs, rewards);
 		for (const trader of this.traders)
 			trader.apply(inferences.get(trader.channelId) ?? []);
 

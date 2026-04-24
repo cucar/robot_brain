@@ -91,15 +91,6 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * No Channel classes registered with the brain — this job owns encoders/traders directly
-	 * and overrides registerBrainChannels() below to use the spec-based path. The Job base
-	 * class still calls getChannels(), so return an empty list to opt out of the legacy path.
-	 */
-	getChannels() {
-		return [];
-	}
-
-	/**
 	 * Create an encoder + trader per symbol and register the encoder's spec with the brain.
 	 * The trader borrows the encoder's channelId so rewards, inputs, and inferences all key
 	 * off a single number per symbol — otherwise we'd need a second id→symbol lookup.
@@ -110,11 +101,11 @@ export default class StockTestJob extends Job {
 			const encoder = new StockEncoder(symbol);
 			const trader = new StockTrader(symbol);
 
-			// Brain allocates the channel ID (and the dim IDs, in place on the encoder's
-			// Dimension instances). Wire the returned channelId into both encoder and trader
-			// so they share a single per-symbol key for inputs/rewards/inferences.
-			const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
-			encoder.bindChannelId(channelId);
+			// Brain allocates the channel ID and per-dim IDs. Wire the channelId into
+			// both encoder and trader so they share a single per-symbol key for
+			// inputs/rewards/inferences; the encoder additionally stashes the dim IDs.
+			const { channelId, dimensionIds } = this.brain.registerChannelSpec(encoder.getChannelSpec());
+			encoder.bindIds({ channelId, dimensionIds });
 			trader.bindChannelId(channelId);
 
 			this.encoders.push(encoder);
@@ -215,13 +206,6 @@ export default class StockTestJob extends Job {
 		for (const encoder of this.encoders) encoder.resetFrames();
 		for (const trader of this.traders) trader.resetContext();
 
-		// to test hard resets between episodes:
-		// this.brain.thalamus.reset();
-		// this.brain.thalamus.initializeActionNeurons();
-
-		// Dump brain data at the beginning of each episode for debugging
-		// this.brain.createDump();
-
 		// Initialize episode metrics
 		const episodeMetrics = {
 			episode: this.currentEpisode,
@@ -283,9 +267,6 @@ export default class StockTestJob extends Job {
 			episodeMetrics.baseAccuracy = (summary.accuracy.correct / summary.accuracy.total * 100);
 		this.episodeResults.push(episodeMetrics);
 
-		// Dump brain data at the beginning of each episode for debugging
-		// this.brain.createDump();
-
 		// Format ROI output
 		const roiStr = episodeMetrics.totalROIPercent >= 0 ? `+${episodeMetrics.totalROIPercent.toFixed(2)}%` : `${episodeMetrics.totalROIPercent.toFixed(2)}%`;
 		const perFrameROIStr = episodeMetrics.perFrameROI !== undefined ? `, ${(episodeMetrics.perFrameROIPercent >= 0 ? '+' : '')}${episodeMetrics.perFrameROIPercent.toFixed(6)}%/frame` : '';
@@ -329,8 +310,7 @@ export default class StockTestJob extends Job {
 		// Brain returns inferences keyed by channelId plus per-frame diagnostic data
 		// (timing, optional vote debug). Destructure so we can pass `frame` straight
 		// to the renderer — no separate getter call into the brain.
-		const { inferences, frame } = this.brain.processInputs(inputs, rewards);
-
+		const { inferences, frame } = this.brain.processFrame(inputs, rewards);
 		for (const trader of this.traders)
 			trader.apply(inferences.get(trader.channelId) ?? []);
 

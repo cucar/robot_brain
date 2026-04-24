@@ -447,13 +447,9 @@ ensureChannelActions(inferences)
 memory.saveInferences(inferences)
 ```
 
-### 9. executeActions()
-**Purpose**: Execute inferred actions
+### 9. Action dispatch (host side)
 
-```javascript
-channelActions = memory.getInferredActions()
-thalamus.executeChannelActions(channelActions)
-```
+Inferred actions come back from `brain.processFrame(inputs, rewards)` as part of the per-channel inference map. The host (app-layer trader / encoder / whatever owns the channel) pulls the action and executes it — the brain itself does not dispatch.
 
 ### 10. cleanupDeadPatterns()
 **Purpose**: Remove patterns whose effective strength has decayed to zero
@@ -472,88 +468,60 @@ This eliminates the need for batch decay passes and provides smooth, continuous 
 
 ## Channel Interface
 
-Channels are adapters between the brain and external devices (eyes, ears, trading systems, etc.).
+Channels live entirely on the host side — the brain knows nothing about I/O, sensors, or traders. Each app owns an encoder (and optionally a trader) that:
+  1. Describes its channel to the brain via a **channel spec** (`brain.registerChannelSpec(spec)`), which lists the channel's dimensions, their bucket resolutions, quantizer modes (`passthrough` / `static` / `dynamic`), and whether each dim is an input (event) or output (action). The brain allocates a channel ID and per-dimension IDs and returns them as `{ channelId, dimensionIds }` so the encoder can key its frame outputs off the allocated dim IDs.
+  2. Feeds raw per-dimension scalars to `brain.processFrame(inputs, rewards)` each frame. The brain quantizes, learns, and returns per-channel inferences; the host dispatches actions back to whatever the app drives.
 
-### Required Methods
+### Channel Spec Shape
 
 ```javascript
-class Channel {
-  // Define coordinate space
-  getEventDimensions()    // Returns: Array<Dimension>
-  getActionDimensions()   // Returns: Array<Dimension>
-
-  // Pre-create action neurons
-  getActions()            // Returns: Array<coordinates>
-
-  // Frame processing
-  getFrameEvents()        // Returns: Array<coordinates>
-  executeOutputs(actions) // Execute brain's decisions
-  getRewards(actions)     // Returns: number (0 = neutral, + = good, - = bad)
+{
+  name: 'AAPL',             // channel name (string)
+  emitsReward: true,        // does the channel produce a reward signal each frame
+  learnActionSequences: false,  // should action neurons participate in pattern learning
+  dimensions: [
+    { name: 'AAPL_price_change',  kind: 'input',  resolution: 2,
+      mode: 'static', boundaries: [0] },
+    { name: 'AAPL_volume_change', kind: 'input',  resolution: 2,
+      mode: 'static', boundaries: [0] },
+    { name: 'AAPL_activity',      kind: 'action', resolution: 2,
+      mode: 'passthrough',
+      actionBuckets: [-1, 1], defaultBucket: -1 }
+  ]
 }
 ```
 
-### Optional Methods
+### Example: Stock Encoder
 
 ```javascript
-class Channel {
-  // Initialization
-  static resetChannelContext()         // Reset shared state
-
-  // Coordinated execution
-  static executeChannelActions(channels, actionsMap)  // Multi-channel coordination
-  static getPortfolioMetrics(channels)                // Aggregate metrics
-
-  // Instance methods
-  resetContext()                       // Reset instance state
-  calculatePredictionError()           // Continuous error (e.g., MAPE)
-  getOutputPerformanceMetrics()        // Channel performance (e.g., P&L)
-  getMetrics()                         // Diagnostic metrics
-}
-```
-
-### Example: Stock Channel
-
-```javascript
-class StockChannel extends Channel {
-  getEventDimensions() {
-    return [
-      new Dimension('price_change', this.id, 'event'),
-      new Dimension('volume_change', this.id, 'event'),
-      new Dimension('position', this.id, 'event')
-    ]
+class StockEncoder {
+  constructor(symbol) {
+    this.symbol = symbol;
+    this.priceChangeDimName  = `${symbol}_price_change`;
+    this.volumeChangeDimName = `${symbol}_volume_change`;
+    this.activityDimName     = `${symbol}_activity`;
+    this.channelId = null;
+    this.priceChangeDimId = null;
+    this.volumeChangeDimId = null;
+    this.activityDimId = null;
   }
 
-  getActionDimensions() {
-    return [new Dimension('action', this.id, 'action')]
+  // Raw scalars per dimension — the brain's quantizer bucketizes these.
+  encode(frame) {
+    const priceChange  = (frame.price - frame.previousPrice) / frame.previousPrice * 100;
+    const volumeChange = (frame.volume - frame.previousVolume) / frame.previousVolume * 100;
+    const dimMap = new Map();
+    dimMap.set(this.priceChangeDimId, priceChange);
+    dimMap.set(this.volumeChangeDimId, volumeChange);
+    return dimMap;
   }
 
-  getActions() {
-    // One base neuron per (dimension, value) — single dim per neuron
-    return [
-      {dimension: 'action', value: 'buy'},
-      {dimension: 'action', value: 'sell'},
-      {dimension: 'action', value: 'hold'}
-    ]
-  }
-
-  async getFrameEvents() {
-    // Emit one base neuron per dimension (single dim per neuron)
-    return [
-      {dimension: 'price_change',  value: this.discretize(priceChange)},
-      {dimension: 'volume_change', value: this.discretize(volumeChange)},
-      {dimension: 'position',      value: this.position}
-    ]
-  }
-
-  async executeOutputs(actions) {
-    // Execute trade decision
-    if (actions[0].coordinate.value === 'buy') this.position = 1
-    else if (actions[0].coordinate.value === 'sell') this.position = -1
-  }
-
-  async getRewards(actions) {
-    // Return profit/loss from trade
-    return this.position * this.priceChange
+  getChannelSpec() { /* … see shape above … */ }
+  bindIds({ channelId, dimensionIds }) {
+    this.channelId = channelId;
+    this.priceChangeDimId  = dimensionIds[this.priceChangeDimName];
+    this.volumeChangeDimId = dimensionIds[this.volumeChangeDimName];
+    this.activityDimId     = dimensionIds[this.activityDimName];
   }
 }
 ```

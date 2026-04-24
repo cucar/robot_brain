@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS channels (
 );
 
 -- dimensions table defines coordinate space (just names, no type/channel)
--- IDs come from static class counters in Dimension class (not auto-increment)
+-- IDs are allocated by the Thalamus (nextDimensionId counter) when registering channel specs (not auto-increment)
 -- DROP TABLE IF EXISTS dimensions;
 CREATE TABLE IF NOT EXISTS dimensions (
     id SMALLINT UNSIGNED PRIMARY KEY,

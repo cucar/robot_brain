@@ -178,39 +178,19 @@ export class Job {
 	}
 
 	async executeJob() {
-		console.log('Running episode...');
-		await this.processFrames();
+		throw new Error('Job must implement executeJob() method');
 	}
 
 	async showResults() {}
 
 	/**
-	 * Legacy channel-class processing loop. Delegates per-frame I/O to the brain
-	 * (which pulls events and rewards from the registered Channel instances), then
-	 * fires the render hooks before moving on. Spec-based jobs implement their own
-	 * runFrame and call renderFrame() themselves.
-	 */
-	async processFrames() {
-		while (!this.isShuttingDown) {
-			const { processed, frame } = await this.brain.processFrame();
-			if (!processed) break;
-			this.renderFrame(frame);
-			// Step-debug pause between frames (no-op unless --wait is set).
-			await this.waitForUser('Press Enter to continue to next frame');
-		}
-		if (this.isShuttingDown) console.log('Processing interrupted by shutdown signal.');
-		else console.log('Completed processing. no more channel data.');
-	}
-
-	/**
 	 * Per-frame host-side rendering entry point. Jobs call this after the brain
-	 * processes a frame — or spec-based jobs call it at the end of their runFrame.
-	 * Prints the start-of-frame diagnostic dump (if --diagnostic), the vote debug
-	 * dump (if --debug), and the one-line summary (unless --no-summary). Any of
-	 * the three is a no-op when its flag is off.
+	 * processes a frame. Prints the start-of-frame diagnostic dump (if --diagnostic),
+	 * the vote debug dump (if --debug), and the one-line summary (unless --no-summary).
+	 * Any of the three is a no-op when its flag is off.
 	 *
 	 * @param {{ elapsed: number, voteDebug: object|null }} frame - per-frame byproducts
-	 *   returned alongside inferences from brain.processInputs / brain.processFrame
+	 *   returned alongside inferences from brain.processFrame
 	 */
 	renderFrame(frame) {
 		if (this.diagnostic) {
@@ -246,29 +226,17 @@ export class Job {
 	 * to humanize action coordinates and bucket numbers. Each formatter exposes
 	 * `name` and (optionally) `formatActionLabel(coord)` / `formatCoordinates(str)`.
 	 *
-	 * Default uses the legacy Channel instances registered with the brain so the
-	 * Channel-class jobs work without overriding. Spec-based jobs override to
-	 * return a Map of their encoders/traders keyed by channel name.
+	 * Default returns an empty map; jobs override to return a Map of their
+	 * encoders/traders keyed by channel name.
 	 * @returns {Map<string, object>}
 	 */
 	getChannelFormatters() {
-		return this.brain?.thalamus?.channels ?? new Map();
+		return new Map();
 	}
 
 	/**
-	 * Override this to define which channels the job uses (legacy Channel-class
-	 * path). Returns array of: { name, channelClass }
+	 * Register channels with the brain. Jobs override this to call
+	 * brain.registerChannelSpec() for each channel they own.
 	 */
-	getChannels() {
-		throw new Error('Job must implement getChannels() method');
-	}
-
-	/**
-	 * Register channels with the brain. Default registers each getChannels() entry
-	 * as a Channel class. Jobs that own their encoders/traders directly override
-	 * this to call brain.registerChannelSpec() per channel instead.
-	 */
-	async registerBrainChannels() {
-		for (const channel of this.getChannels()) this.brain.registerChannel(channel.name, channel.channelClass);
-	}
+	async registerBrainChannels() {}
 }

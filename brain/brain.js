@@ -47,28 +47,13 @@ export default class Brain {
 	}
 
 	/**
-	 * Register a channel with the brain (legacy class-based path).
-	 */
-	registerChannel(name, channelClass) {
-		this.thalamus.registerChannel(name, channelClass);
-	}
-
-	/**
-	 * Register a channel spec with the brain (new id-native path).
-	 * The caller owns the encoder/trader and passes in a lightweight spec describing the
-	 * channel's dimensions. See Thalamus.registerChannelSpec for the spec shape. Returns
-	 * the allocated channel ID; dim IDs are written in place onto the Dimension instances
-	 * the caller supplied. Coexists with registerChannel() during migration.
+	 * Register a channel spec with the brain. The caller owns the encoder/trader and
+	 * passes in a lightweight spec describing the channel's dimensions. See
+	 * Thalamus.registerChannelSpec for the spec shape. Returns `{ channelId, dimensionIds }`
+	 * where `dimensionIds` is a map from dim name → allocated ID.
 	 */
 	registerChannelSpec(spec) {
 		return this.thalamus.registerChannelSpec(spec);
-	}
-
-	/**
-	 * Get channel by name
-	 */
-	getChannel(channelName) {
-		return this.thalamus.getChannel(channelName);
 	}
 
 	/**
@@ -96,14 +81,6 @@ export default class Brain {
 		// Clear memory and rewards history
 		this.memory.reset();
 		this.rewards = [];
-
-		// Reset channel class static state (once per class)
-		const channelClasses = new Set();
-		for (const [, channel] of this.thalamus.getChannels()) channelClasses.add(channel.constructor);
-		for (const ChannelClass of channelClasses) ChannelClass.resetChannelContext();
-
-		// Reset all channel instance states
-		for (const [, channel] of this.thalamus.getChannels()) channel.resetContext();
 	}
 
 	/**
@@ -160,40 +137,24 @@ export default class Brain {
 	 */
 	async init() {
 
-		// Load full snapshot from DB (channels, dimensions, neurons)
+		// Load full snapshot from DB (channels, dimensions, neurons). Channel specs must
+		// already be registered on the Thalamus before init() — the DB snapshot only
+		// reconciles id↔name maps and restores neurons.
 		if (this.database) {
-			const snapshot = await this.db.loadSnapshot(this.thalamus.getChannelClasses(), this.thalamus.channelActions);
+			const snapshot = await this.db.loadSnapshot(this.thalamus.channelActions);
 			this.thalamus.restoreSnapshot(snapshot);
 		}
-
-		// Instantiate channels that did not come from the database
-		this.thalamus.instantiateChannels();
-
-		// Load dimension mappings for any new channels
-		this.thalamus.loadDimensionMaps();
-
-		// Pre-create action neurons for all channels so that we can explore
-		this.thalamus.initializeActionNeurons();
-	}
-
-	/**
-	 * Get all channels (public interface)
-	 */
-	getChannels() {
-		return this.thalamus.getChannels();
 	}
 
 	/**
 	 * Get episode summary with all diagnostic information
-	 * @returns {Object} - Episode summary with accuracy, channel metrics, and aggregate metrics
+	 * @returns {Object} - Episode summary with accuracy and mispredictions
 	 */
 	getEpisodeSummary() {
 		return {
 			frameNumber: this.frameNumber,
 			accuracy: this.diagnostics.accuracyStats,
-			mispredictions: this.diagnostics.mispredictions,
-			channelMetrics: this.thalamus.getChannelMetrics(),
-			aggregateMetrics: this.thalamus.getAggregateMetrics()
+			mispredictions: this.diagnostics.mispredictions
 		};
 	}
 
@@ -215,7 +176,7 @@ export default class Brain {
 	 * @param {Map<number, number>} rewards - channelId → reward for previous frame's actions
 	 * @returns {{ inferences: Map, frame: { elapsed: number, voteDebug: object|null } }}
 	 */
-	processInputs(inputs, rewards) {
+	processFrame(inputs, rewards) {
 		const frameStart = performance.now();
 		this.frameNumber++;
 
@@ -253,7 +214,7 @@ export default class Brain {
 	 * Compose the cumulative/episode-level summary the host renderer uses for the
 	 * "Frame N | Neurons: ..." line. Numbers only; the renderer formats units and
 	 * decides how to show null (== "no data yet"). Per-frame byproducts (elapsed,
-	 * voteDebug) come back from processInputs directly — they are NOT in here.
+	 * voteDebug) come back from processFrame directly — they are NOT in here.
 	 * Apps can tack on app-layer state (e.g. the stocks portfolio P&L) by passing
 	 * a tail string to formatFrameSummary().
 	 */
@@ -330,71 +291,7 @@ export default class Brain {
 	}
 
 	/**
-	 * Legacy entry point - thin shim around processInputs for channels that still own
-	 * their I/O and bucketization. Pulls raw events and rewards from every registered
-	 * channel, runs the pure compute step, then dispatches the inferred actions back
-	 * to the channels. Used while channels migrate to the id-native processInputs path.
-	 * @returns Promise<boolean> - true if a frame was processed, false if no data left
-	 */
-	async processFrame() {
-
-		// collect per-channel, per-dim scalars and per-channel rewards from all channels
-		const { inputs, rewards } = await this.collectChannelFrame();
-		if (inputs.size === 0 && this.memory.getInferredNeurons().length === 0) return { processed: false, frame: null };
-
-		// run the pure compute step - quantization, aging, pattern matching, inference, diagnostics
-		const { inferences, frame } = this.processInputs(inputs, rewards);
-		if (inferences.size === 0) return { processed: false, frame };
-
-		// dispatch inferred actions back to the channels (reads the inferences memory saved above)
-		await this.executeActions();
-
-		// give the event loop a chance to run other tasks between frames
-		await new Promise(resolve => setImmediate(resolve));
-
-		// Return the per-frame diagnostic byproducts so the host renderer can pick them up
-		// without reaching into Brain for "last frame" state.
-		return { processed: true, frame };
-	}
-
-	/**
-	 * Pull the upcoming frame's event scalars and reward signals from every channel
-	 * and shape them into the id-keyed maps processInputs expects. The channel still
-	 * emits name-form coordinates with discrete bucket values; we translate the dim
-	 * name to its numeric ID and pass the bucket value through as the scalar (the
-	 * Quantizer treats unregistered dims as passthrough).
-	 * @returns {Promise<{inputs: Map<number, Map<number, number>>, rewards: Map<number, number>}>}
-	 */
-	async collectChannelFrame() {
-		const inputs = new Map();
-		const rewards = new Map();
-		const frameActions = this.thalamus.getInferredActions(this.memory.getInferredNeurons());
-
-		// channel.getFrameEvents takes the frame number the events belong to - processInputs
-		// will increment this.frameNumber, so we anticipate it here to keep channels in sync
-		const nextFrameNumber = this.frameNumber + 1;
-
-		for (const [channelName, channel] of this.thalamus.getChannels()) {
-			const channelId = this.thalamus.channelNameToId[channelName];
-
-			// collect this channel's event scalars keyed by dimId (channel emits name-form)
-			const dimMap = new Map();
-			const channelEvents = await channel.getFrameEvents(nextFrameNumber);
-			for (const event of channelEvents) {
-				const { dimId, bucketId } = this.thalamus.coordinateNameToId(event);
-				dimMap.set(dimId, bucketId);
-			}
-			if (dimMap.size > 0) inputs.set(channelId, dimMap);
-
-			// request reward only when we actually executed actions for this channel last frame
-			if ((frameActions.get(channelName) || []).length > 0)
-				rewards.set(channelId, await channel.getRewards());
-		}
-		return { inputs, rewards };
-	}
-
-	/**
-	 * activates base level neurons from frame coordinates
+	 * activates base level neurons from frame coordinates and tracks inference performance.
 	 */
 	activateSensors() {
 
@@ -404,16 +301,12 @@ export default class Brain {
 		// activate the neurons in the in-memory context
 		this.activateNeurons(neuronIds);
 
-		// Track inference performance (event accuracy, action rewards, and continuous prediction errors).
-		// Diagnostics hands coordinates to channel.calculatePredictionError which expects name-form,
-		// so we translate id-form → name-form at this boundary.
+		// Track event accuracy, action rewards, and misprediction log. Continuous prediction
+		// error is tracked separately via diagnostics.trackContinuousError in processFrame().
 		const activeNeuronIds = new Set(this.memory.getNeuronIdsAtAge(0));
-		const actualEvents = new Map();
-		for (const [channelName, coords] of this.thalamus.getActiveEvents(activeNeuronIds))
-			actualEvents.set(channelName, coords.map(c => this.thalamus.coordinateIdToName(c)));
-		const inferences = this.thalamus.getInferences(this.memory.getInferredNeurons())
-			.map(inf => ({ ...inf, coordinate: this.thalamus.coordinateIdToName(inf.coordinate) }));
-		this.diagnostics.trackInferencePerformance(inferences, activeNeuronIds, actualEvents, this.rewards[0], this.thalamus.getChannels());
+		const actualEvents = this.thalamus.getActiveEvents(activeNeuronIds);
+		const inferences = this.thalamus.getInferences(this.memory.getInferredNeurons());
+		this.diagnostics.trackInferencePerformance(inferences, activeNeuronIds, actualEvents, this.rewards[0]);
 	}
 
 	/**
@@ -748,7 +641,7 @@ export default class Brain {
 			});
 
 			// also seed candidates + dimBest so buildInferencesByChannel surfaces this action
-			// to processInputs callers (legacy path reads actions from memory; spec path reads the return map)
+			// in the per-channel inference return map processFrame emits
 			if (candidates && !candidates.has(explorationActionId))
 				candidates.set(explorationActionId, { strength: 0, reward: 0, weightedTotal: 0 });
 			if (dimBest && !dimBest.has(coordinate.dimId))
@@ -772,13 +665,6 @@ export default class Brain {
 		const coordinate = this.thalamus.getNeuronCoordinate(neuronId);
 		const name = this.thalamus.dimensionIdToName[coordinate.dimId] ?? `dim${coordinate.dimId}`;
 		return `${name}=${coordinate.bucketId}`;
-	}
-
-	/**
-	 * Execute inferred actions for all channels
-	 */
-	async executeActions() {
-		await this.thalamus.executeChannelActions(this.memory.getInferredNeurons());
 	}
 
 	/**

@@ -293,30 +293,24 @@ graph BT
 
 ### Channels
 
-Channels are adapters between the brain and external data. Each channel defines its input dimensions (events) and output dimensions (actions). Each base neuron carries exactly one `(dimension, value)` pair — multi-dim observations emit multiple base neurons per frame.
+Each app owns an encoder (and optionally a trader) that describes its channels to the brain via a spec (`registerChannelSpec`). The spec lists the channel's dimensions, their bucket resolutions, and whether each dim is an input (event) or output (action). Base neurons carry exactly one `(dimId, bucketId)` pair — multi-dim observations emit multiple base neurons per frame.
 
-| Channel | Inputs (Events) | Outputs (Actions) | Reward Signal |
-|---------|-----------------|-------------------|---------------|
-| `StockChannel` | One neuron per dim: price change, volume change | One neuron: position (own/out) | Profit/loss |
-| `TextChannel` | One neuron: character code | — | — |
-| `VisionChannel` ⚠️ | One neuron per pixel position (`pixel_x_y` dim, brightness as value) | Saccade direction | Target acquisition |
-| `AudioChannel` ⚠️ | Frequency bands | — | — |
-| `ArmChannel` ⚠️ | Joint positions, touch | Muscle contractions | Goal reaching |
-| `TongueChannel` ⚠️ | Taste dimensions | Tongue movements | — |
-
-⚠️ = scratch channel; not yet updated for the single-dim `{dimension, value}` coordinate shape.
+| App | Inputs (Events) | Outputs (Actions) | Reward Signal |
+|-----|-----------------|-------------------|---------------|
+| `apps/stocks` | One neuron per dim: price change, volume change | One neuron: position (own/out) | Profit/loss |
+| `apps/text`   | One neuron: character code | — | — |
 
 ### Jobs
 
-Jobs define learning scenarios — which channels to use, how to configure them, and how to run episodes:
+Jobs define learning scenarios — which encoders to register, how to configure them, and how to run episodes:
 
 | Job | Description |
 |-----|-------------|
 | `apps/stocks/jobs/test.js` | Multi-stock trading with historical data |
+| `apps/stocks/jobs/multi-channel-test.js` | Multi-symbol trading across shared brain |
+| `apps/stocks/jobs/synthetic-cycle-test.js` | Cycle-learning synthetic stress test |
+| `apps/stocks/jobs/synthetic-extended-test.js` | Extended cycle synthetic with optimality analysis |
 | `apps/text/jobs/test.js` | Character sequence memorization |
-| `apps/eyes/jobs/vision1.js` | Visual pattern learning with saccadic eye movements |
-| `apps/arm/jobs/arm1.js` | Motor control with proprioceptive feedback |
-| `apps/multisensory/jobs/multisensory1.js` | Multi-channel integration |
 
 ## Hyperparameters
 
@@ -369,12 +363,10 @@ export default class MyJob extends Job {
         this.encoders = [];
     }
 
-    getChannels() { return []; } // opt out of legacy Channel-class path
-
     async registerBrainChannels() {
         const encoder = new TextEncoder('text');
-        const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
-        encoder.bindChannelId(channelId);
+        const ids = this.brain.registerChannelSpec(encoder.getChannelSpec());
+        encoder.bindIds(ids);
         this.encoders.push(encoder);
     }
 

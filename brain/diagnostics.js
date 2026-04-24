@@ -60,72 +60,38 @@ export class Diagnostics {
 	}
 
 	/**
-	 * Legacy-path inference tracker: event accuracy, action rewards, per-channel
-	 * continuous prediction errors (via channel callbacks), and misprediction log.
-	 * Used by the Channel-class flow; spec-based flow routes through
-	 * trackContinuousError + reward bookkeeping only.
+	 * Track event accuracy, action rewards, and misprediction log. Continuous prediction
+	 * error is tracked separately in trackContinuousError.
+	 *
+	 * Mispredictions pair a predicted id-form coordinate with an actual one drawn from
+	 * the same channel; the host-side renderer resolves ids to names when printing.
 	 *
 	 * @param {Array<{neuronId, strength, channel, type, coordinate}>} inferences
 	 * @param {Set<number>} activeNeuronIds
-	 * @param {Map<string, Array>} actualEventCoordsByChannel
+	 * @param {Map<string, Array<{dimId:number, bucketId:number}>>} actualEventCoordsByChannel
 	 * @param {Map<string, number>} rewards
-	 * @param {IterableIterator<[string, object]>} channels
 	 */
-	trackInferencePerformance(inferences, activeNeuronIds, actualEventCoordsByChannel, rewards, channels) {
+	trackInferencePerformance(inferences, activeNeuronIds, actualEventCoordsByChannel, rewards) {
 		let eventCorrect = 0;
 		let eventTotal = 0;
 		let actionReward = 0;
 		let actionCount = 0;
 
-		// Group event predictions by channel for continuous error calculation
-		const predictionsByChannel = new Map();
-
-		for (const { neuronId, strength, channel, type, coordinate } of inferences) {
-
-			// Track event prediction accuracy
+		for (const { neuronId, channel, type, coordinate } of inferences) {
 			if (type === 'event') {
 				eventTotal++;
 				const isCorrect = activeNeuronIds.has(neuronId);
-				if (isCorrect) eventCorrect++;
+				if (isCorrect) { eventCorrect++; continue; }
 
-				// Group for continuous error calculation
-				if (!predictionsByChannel.has(channel))
-					predictionsByChannel.set(channel, []);
-				predictionsByChannel.get(channel).push({ coordinate, strength, isCorrect });
+				// log misprediction against this channel's first observed actual coordinate
+				const actuals = actualEventCoordsByChannel.get(channel) || [];
+				if (actuals.length > 0)
+					this.mispredictions.push({ channel, predicted: coordinate, actual: actuals[0] });
 			}
-			// Track action reward from the action's channel
 			else if (type === 'action') {
-				const reward = rewards.get(channel) || 0;
+				const reward = rewards?.get(channel) || 0;
 				actionReward += reward;
 				actionCount++;
-			}
-		}
-
-		// Track mispredictions for each channel
-		for (const [channelName] of channels) {
-			const predictions = predictionsByChannel.get(channelName) || [];
-			const actuals = actualEventCoordsByChannel.get(channelName) || [];
-
-			// Find wrong predictions and record the misprediction with predicted and actual coordinates
-			for (const { coordinate, isCorrect } of predictions)
-				if (!isCorrect && actuals.length > 0)
-					this.mispredictions.push({
-						channel: channelName,
-						predicted: coordinate,
-						actual: actuals[0]
-					});
-		}
-
-		// Calculate continuous prediction errors for each channel
-		for (const [channelName, channel] of channels) {
-			const predictions = predictionsByChannel.get(channelName) || [];
-			const actuals = actualEventCoordsByChannel.get(channelName) || [];
-			if (predictions.length === 0) continue;
-
-			const error = channel.calculatePredictionError(predictions, actuals);
-			if (error !== null) {
-				this.continuousPredictionMetrics.totalError += error;
-				this.continuousPredictionMetrics.count++;
 			}
 		}
 

@@ -1,38 +1,27 @@
-import { Dimension } from '../../channels/dimension.js';
-
 /**
  * Text encoder — owns the single character-input dimension and the cursor over a training
  * string. No trader: this app is event-only, the brain just learns to predict the next
- * character. Mirrors the StockEncoder shape (channelId binding, getChannelSpec,
+ * character. Mirrors the StockEncoder shape (ID binding, getChannelSpec,
  * setData/nextFrame/resetFrames, encode) so the Job can use the same registration and
  * frame-streaming pattern as stocks.
  */
 export class TextEncoder {
 
-	constructor(name = 'text', dimensions = null) {
+	constructor(name = 'text') {
 		this.name = name;
 
-		// channelId is null until the brain registers the spec and hands back an ID via
-		// bindChannelId(); the job uses that ID as the key into the inputs Map.
+		// IDs are null until the brain registers the spec and hands them back via
+		// bindIds(); the job uses channelId as the key into the inputs Map.
 		this.channelId = null;
+		this.charDimId = null;
 
-		// Restore-from-database path reuses the Dimension instance (preserves its ID);
-		// fresh-construction path creates a new instance whose ID the Thalamus assigns.
-		this.initializeDimensions(dimensions);
+		// Dim name: referenced in the spec and by bindIds() to read back the allocated ID.
+		this.charDimName = `${name}_char`;
 
 		// Per-episode text + cursor; setData() loads, nextFrame() advances, resetFrames()
 		// rewinds without dropping the loaded text.
 		this.text = null;
 		this.index = 0;
-	}
-
-	initializeDimensions(dimensions) {
-		if (dimensions && dimensions.length > 0) {
-			this.charDim = dimensions.find(d => d.name === `${this.name}_char`);
-			if (!this.charDim)
-				throw new Error(`TextEncoder ${this.name}: Missing required dimensions in database`);
-		}
-		else this.charDim = new Dimension(`${this.name}_char`);
 	}
 
 	/**
@@ -70,7 +59,7 @@ export class TextEncoder {
 	 */
 	encode(frame) {
 		const dimMap = new Map();
-		dimMap.set(this.charDim.id, frame.charCode);
+		dimMap.set(this.charDimId, frame.charCode);
 		return dimMap;
 	}
 
@@ -85,7 +74,7 @@ export class TextEncoder {
 			learnActionSequences: false,
 			dimensions: [
 				{
-					dim: this.charDim,
+					name: this.charDimName,
 					kind: 'input',
 					resolution: 256,
 					mode: 'passthrough'
@@ -94,7 +83,8 @@ export class TextEncoder {
 		};
 	}
 
-	bindChannelId(channelId) {
+	bindIds({ channelId, dimensionIds }) {
 		this.channelId = channelId;
+		this.charDimId = dimensionIds[this.charDimName];
 	}
 }

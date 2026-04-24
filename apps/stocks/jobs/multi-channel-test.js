@@ -42,10 +42,6 @@ export default class MultiChannelTest extends Job {
 		if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) this.config.timeframe = process.argv[timeframeIndex + 1];
 	}
 
-	getChannels() {
-		return [];
-	}
-
 	/**
 	 * Create encoder + trader for each symbol and register the encoder spec with the brain.
 	 * The trader borrows the same channelId so rewards/inputs/inferences key off a single
@@ -55,8 +51,8 @@ export default class MultiChannelTest extends Job {
 		for (const symbol of this.config.symbols) {
 			const encoder = new StockEncoder(symbol);
 			const trader = new StockTrader(symbol);
-			const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
-			encoder.bindChannelId(channelId);
+			const { channelId, dimensionIds } = this.brain.registerChannelSpec(encoder.getChannelSpec());
+			encoder.bindIds({ channelId, dimensionIds });
 			trader.bindChannelId(channelId);
 			this.encoders.push(encoder);
 			this.traders.push(trader);
@@ -244,7 +240,7 @@ export default class MultiChannelTest extends Job {
 
 		// Brain returns inferences keyed by channelId plus per-frame diagnostic data;
 		// `frame` flows straight to the renderer.
-		const { inferences, frame } = this.brain.processInputs(inputs, rewards);
+		const { inferences, frame } = this.brain.processFrame(inputs, rewards);
 		for (const trader of this.traders)
 			trader.apply(inferences.get(trader.channelId) ?? []);
 

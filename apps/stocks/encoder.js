@@ -1,5 +1,3 @@
-import { Dimension } from '../../channels/dimension.js';
-
 const POSITION_OWN = 1;
 const POSITION_OUT = -1;
 
@@ -7,23 +5,25 @@ const POSITION_OUT = -1;
  * Per-symbol stock encoder. Owns the channel and dimension names, the bucket boundaries,
  * and the raw-frame → scalar translation the brain's quantizer bucketizes. Channel and
  * dimension IDs are allocated by the Thalamus when the encoder's spec is registered —
- * the encoder reads them back via `bindChannelId()` and the Dimension instances it holds.
+ * the encoder reads them back via `bindIds()`.
  */
 export class StockEncoder {
 
-	constructor(symbol, dimensions = null) {
+	constructor(symbol) {
 		this.symbol = symbol;
 
-		// channelId is null until the brain registers the spec and hands back an ID via
-		// bindChannelId(); the trader then borrows the same ID so rewards, inputs, and
-		// inferences all key off a single number per symbol.
+		// IDs are null until the brain registers the spec and hands them back via
+		// bindIds(); the trader then borrows the same channelId so rewards, inputs,
+		// and inferences all key off a single number per symbol.
 		this.channelId = null;
+		this.priceChangeDimId = null;
+		this.volumeChangeDimId = null;
+		this.activityDimId = null;
 
-		// Activity dim name is used both internally and by the trader for action coordinates.
+		// Dim names: used in the spec and for cross-channel vote-debug matching.
+		this.priceChangeDimName = `${symbol}_price_change`;
+		this.volumeChangeDimName = `${symbol}_volume_change`;
 		this.activityDimName = `${symbol}_activity`;
-
-		// Dimensions are either reused from the database (restore path) or newly created.
-		this.initializeDimensions(dimensions);
 
 		// Bucket boundaries and the display map that turns bucket IDs into percent ranges.
 		this.initializeBuckets();
@@ -36,21 +36,6 @@ export class StockEncoder {
 		this.previousVolume = null;
 	}
 
-	initializeDimensions(dimensions) {
-		if (dimensions && dimensions.length > 0) {
-			this.priceChangeDim = dimensions.find(d => d.name === `${this.symbol}_price_change`);
-			this.volumeChangeDim = dimensions.find(d => d.name === `${this.symbol}_volume_change`);
-			this.activityDim = dimensions.find(d => d.name === this.activityDimName);
-			if (!this.priceChangeDim || !this.volumeChangeDim || !this.activityDim)
-				throw new Error(`StockEncoder ${this.symbol}: Missing required dimensions in database`);
-		}
-		else {
-			this.priceChangeDim = new Dimension(`${this.symbol}_price_change`);
-			this.volumeChangeDim = new Dimension(`${this.symbol}_volume_change`);
-			this.activityDim = new Dimension(this.activityDimName);
-		}
-	}
-
 	initializeBuckets() {
 		this.priceBoundaries = [0];
 		this.volumeBoundaries = [0];
@@ -60,8 +45,8 @@ export class StockEncoder {
 	buildBucketPercentMap() {
 		const map = new Map();
 		const categories = [
-			{ dim: `${this.symbol}_price_change`,  boundaries: this.priceBoundaries },
-			{ dim: `${this.symbol}_volume_change`, boundaries: this.volumeBoundaries }
+			{ dim: this.priceChangeDimName,  boundaries: this.priceBoundaries },
+			{ dim: this.volumeChangeDimName, boundaries: this.volumeBoundaries }
 		];
 		for (const { dim, boundaries } of categories)
 			for (let bucket = 1; bucket <= boundaries.length + 1; bucket++) {
@@ -158,8 +143,8 @@ export class StockEncoder {
 		// Map of dimId → raw scalar; the brain's quantizer bucketizes these per-dim
 		// according to the registered static boundaries.
 		const dimMap = new Map();
-		dimMap.set(this.priceChangeDim.id, priceChange);
-		dimMap.set(this.volumeChangeDim.id, volumeChange);
+		dimMap.set(this.priceChangeDimId, priceChange);
+		dimMap.set(this.volumeChangeDimId, volumeChange);
 		return dimMap;
 	}
 
@@ -221,10 +206,10 @@ export class StockEncoder {
 
 	/**
 	 * Describe this encoder's channel for brain.registerChannelSpec(). Shape-only —
-	 * no behavior. Each dim spec carries the Dimension instance; the Thalamus allocates
-	 * an ID and writes it onto the instance in place. The brain stores the spec, registers
+	 * no behavior. Each dim spec carries a plain name string; the Thalamus allocates
+	 * an ID and hands it back via the return value. The brain stores the spec, registers
 	 * dims with the quantizer, and pre-creates action neurons for the activity dim. The
-	 * caller passes the returned channelId to bindChannelId().
+	 * caller passes the returned { channelId, dimensionIds } to bindIds().
 	 */
 	getChannelSpec() {
 		return {
@@ -233,21 +218,21 @@ export class StockEncoder {
 			learnActionSequences: false,
 			dimensions: [
 				{
-					dim: this.priceChangeDim,
+					name: this.priceChangeDimName,
 					kind: 'input',
 					resolution: this.priceBoundaries.length + 1,
 					mode: 'static',
 					boundaries: [...this.priceBoundaries]
 				},
 				{
-					dim: this.volumeChangeDim,
+					name: this.volumeChangeDimName,
 					kind: 'input',
 					resolution: this.volumeBoundaries.length + 1,
 					mode: 'static',
 					boundaries: [...this.volumeBoundaries]
 				},
 				{
-					dim: this.activityDim,
+					name: this.activityDimName,
 					kind: 'action',
 					resolution: 2,
 					mode: 'passthrough',
@@ -259,11 +244,13 @@ export class StockEncoder {
 	}
 
 	/**
-	 * Called after brain.registerChannelSpec() returns the allocated channel ID. Dimension
-	 * IDs are written onto the Dimension instances in place by the Thalamus, so the encoder
-	 * just needs to record its channelId here.
+	 * Called after brain.registerChannelSpec() returns the allocated IDs. Records the
+	 * channelId and the per-dim IDs so encode() can key its output Map by dim ID.
 	 */
-	bindChannelId(channelId) {
+	bindIds({ channelId, dimensionIds }) {
 		this.channelId = channelId;
+		this.priceChangeDimId = dimensionIds[this.priceChangeDimName];
+		this.volumeChangeDimId = dimensionIds[this.volumeChangeDimName];
+		this.activityDimId = dimensionIds[this.activityDimName];
 	}
 }

@@ -1,7 +1,5 @@
 import getMySQLConnection from '../db/db.js';
 import { Neuron } from './neuron.js';
-import { Thalamus } from './thalamus.js';
-import { Dimension } from '../channels/dimension.js';
 
 /**
  * Database backup and restore operations for Brain
@@ -23,61 +21,46 @@ export class Database {
 	}
 
 	/**
-	 * Load channels and dimensions from database and return instantiated channel objects.
-	 * @param {Map} channelClasses - Map of channel name to channel class
-	 * @returns {Promise<{channels: Map, channelNameToId: Object, channelIdToName: Object}>}
+	 * Load channel and dimension id↔name maps from the DB.
+	 * @returns {Promise<{channelNameToId: Object, channelIdToName: Object, dimensionNameToId: Object, dimensionIdToName: Object}>}
 	 */
-	async loadChannels(channelClasses) {
+	async loadChannelsAndDimensions() {
 
 		// Load channels and dimensions from database
 		const [channelRows] = await this.conn.query('SELECT id, name FROM channels order by id');
 		const [dimensionRows] = await this.conn.query('SELECT id, name FROM dimensions order by id');
 
-		// Create dimension objects
-		const dbDimensions = dimensionRows.map(row => new Dimension(row.name, row.id));
-
-		// Create channel instances and build ID maps
-		const channels = new Map();
+		// build channel ID maps
 		const channelNameToId = {};
 		const channelIdToName = {};
-		let maxChannelId = 0;
 		for (const row of channelRows) {
-
-			// Validate that channel class exists
-			const channelClass = channelClasses.get(row.name);
-			if (!channelClass)
-				throw new Error(`Channel class not found: ${row.name}. Code not compatible.`);
-
-			// Instantiate channel with DB id and dimensions
-			const channel = new channelClass(row.name, this.debug, row.id, dbDimensions);
-			channels.set(row.name, channel);
 			channelNameToId[row.name] = row.id;
 			channelIdToName[row.id] = row.name;
-
-			// Track max channel id
-			if (row.id > maxChannelId) maxChannelId = row.id;
 		}
 
-		// ID counters are owned by the Thalamus; it advances them past the restored max
-		// via advanceIdCountersPastMax() after setChannels() runs in restoreSnapshot.
-		console.log(`Channels loaded: ${channels.size} total, max ID: ${maxChannelId}`);
-		return { channels, channelNameToId, channelIdToName };
+		// build dimension ID maps
+		const dimensionNameToId = {};
+		const dimensionIdToName = {};
+		for (const row of dimensionRows) {
+			dimensionNameToId[row.name] = row.id;
+			dimensionIdToName[row.id] = row.name;
+		}
+
+		console.log(`Channels loaded: ${channelRows.length}, dimensions: ${dimensionRows.length}`);
+		return { channelNameToId, channelIdToName, dimensionNameToId, dimensionIdToName };
 	}
 
 	/**
 	 * Load a complete brain snapshot from MySQL (channels, dimensions, and neurons).
-	 * Returns the same format as thalamus.getSnapshot().
-	 * @param {Map} channelClasses - Map of channel name to channel class
+	 * Channel specs are expected to have been registered with the Thalamus before this
+	 * call — the DB only persists the id↔name maps so restore can reconcile IDs.
 	 * @param {Map<string, Set<number>>} channelActionIds - Live reference to thalamus's channelActions Map,
 	 *   passed into every restored neuron so alternative-action lookup works without per-frame argument threading.
-	 * @returns {Promise<{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels: Map, channelNameToId: Object, dimensionNameToId: Object}>}
+	 * @returns {Promise<{neurons: Array, channelNameToId: Object, dimensionNameToId: Object}>}
 	 */
-	async loadSnapshot(channelClasses, channelActionIds) {
+	async loadSnapshot(channelActionIds) {
 
-		const { channels, channelNameToId, channelIdToName } = await this.loadChannels(channelClasses);
-
-		// Build dimension ID maps from channel instances
-		const { nameToId: dimensionNameToId } = Thalamus.buildDimensionMaps(channels);
+		const { channelNameToId, channelIdToName, dimensionNameToId } = await this.loadChannelsAndDimensions();
 
 		// Load neurons (dimension maps must be built first — coordinate loading needs dimension ID→name lookups)
 		console.log('Loading neurons from MySQL...');
@@ -98,7 +81,7 @@ export class Database {
 			if (parentId) entry.parentId = parentId;
 			neurons.push(entry);
 		}
-		return { neurons, channels, channelNameToId, dimensionNameToId };
+		return { neurons, channelNameToId, dimensionNameToId };
 	}
 
 	/**
@@ -242,18 +225,16 @@ export class Database {
 	 * @param {Object} snapshot - Brain state snapshot from thalamus.getSnapshot()
 	 */
 	async saveSnapshot(snapshot) {
-		await this.backupChannels(snapshot.channels);
-		await this.backupDimensions(snapshot.channels);
+		await this.backupChannels(snapshot.channelNameToId);
+		await this.backupDimensions(snapshot.dimensionNameToId);
 		await this.backupNeurons(snapshot);
 	}
 
 	/**
 	 * Backup channels to MySQL.
 	 */
-	async backupChannels(channels) {
-		const rows = [];
-		for (const [channelName, channel] of channels)
-			rows.push([channel.id, channelName]);
+	async backupChannels(channelNameToId) {
+		const rows = Object.entries(channelNameToId).map(([name, id]) => [id, name]);
 		if (rows.length === 0) return;
 		await this.conn.query('INSERT IGNORE INTO channels (id, name) VALUES ?', [rows]);
 		console.log(`  Saved ${rows.length} channels`);
@@ -262,12 +243,8 @@ export class Database {
 	/**
 	 * Backup dimensions to MySQL.
 	 */
-	async backupDimensions(channels) {
-		const rows = [];
-		for (const [, channel] of channels) {
-			const dimensions = channel.getEventDimensions().concat(channel.getActionDimensions());
-			for (const dim of dimensions) rows.push([dim.id, dim.name]);
-		}
+	async backupDimensions(dimensionNameToId) {
+		const rows = Object.entries(dimensionNameToId).map(([name, id]) => [id, name]);
 		if (rows.length === 0) return;
 		await this.conn.query('INSERT IGNORE INTO dimensions (id, name) VALUES ?', [rows]);
 		console.log(`  Saved ${rows.length} dimensions`);

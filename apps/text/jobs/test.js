@@ -38,22 +38,14 @@ export default class TextTestJob extends Job {
 	}
 
 	/**
-	 * Opt out of the legacy Channel-class registration path; this job owns its encoder
-	 * directly and registers via getChannelSpec() in registerBrainChannels() below.
-	 */
-	getChannels() {
-		return [];
-	}
-
-	/**
 	 * Create the encoder and hand its spec to the brain. The brain allocates the channel
-	 * ID (and dim IDs in place on the encoder's Dimension instance); we wire that ID back
-	 * onto the encoder so encode() outputs key off the same number the job uses as a Map key.
+	 * ID and per-dim IDs; we wire those back onto the encoder so encode() outputs key off
+	 * the same numbers the job uses as Map keys.
 	 */
 	async registerBrainChannels() {
 		const encoder = new TextEncoder('text');
-		const channelId = this.brain.registerChannelSpec(encoder.getChannelSpec());
-		encoder.bindChannelId(channelId);
+		const ids = this.brain.registerChannelSpec(encoder.getChannelSpec());
+		encoder.bindIds(ids);
 		this.encoders.push(encoder);
 	}
 
@@ -177,7 +169,7 @@ export default class TextTestJob extends Job {
 
 		// Text doesn't reward (no environment feedback), so rewards stays empty. We only
 		// need `frame` from the return — no actions to dispatch since there's no trader.
-		const { frame } = this.brain.processInputs(inputs, rewards);
+		const { frame } = this.brain.processFrame(inputs, rewards);
 
 		// Host-side rendering: emits the per-frame summary line / vote debug / start-of-frame
 		// info per the flags the host owns. Text channel has no app-layer tail to append.

@@ -25,8 +25,9 @@ export class Neuron {
 
 	/**
 	 * constructor - id optional for loading from database
-	 * channelActionIds are used for alternative-action lookup during learning. Static after initializeActionNeurons.
-	 * shared across all neurons so the map is broadcast once at creation time (no per-frame traffic).
+	 * channelActionIds are used for alternative-action lookup during learning. Populated
+	 * by registerChannelSpec(); shared across all neurons so the map is broadcast once at
+	 * creation time (no per-frame traffic).
 	 */
 	constructor(patternForgetRate, mergeThreshold, channelActionIds, id = null) {
 

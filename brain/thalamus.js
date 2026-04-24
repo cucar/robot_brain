@@ -27,11 +27,12 @@ export class Thalamus {
 		this.deathLedger = new Map(); // frameNumber -> Set<number>
 		this.neuronDeathFrame = new Map(); // neuronId -> frameNumber (reverse lookup)
 
-		// Channel registry
-		this.channelClasses = new Map(); // channelName -> Channel class (not instantiated)
-		this.channels = new Map(); // channelName -> Channel instance
+		// Channel / dimension registries populated by registerChannelSpec(). Specs are the
+		// single source of truth for channel and dimension metadata.
+		this.channelSpecs = new Map(); // channelId -> ChannelSpec
+		this.dimensionSpecs = new Map(); // dimensionId -> DimSpec (flattened across all channels)
 		this.channelActions = new Map(); // channelName -> Set<number> (neuron ids)
-		this.channelDefaultActions = new Map(); // channelName -> Neuron
+		this.channelDefaultActions = new Map(); // channelName -> Neuron id
 		this.channelNameToId = {}; // channelName -> channelId
 		this.channelIdToName = {}; // channelId -> channelName
 
@@ -39,16 +40,10 @@ export class Thalamus {
 		this.dimensionNameToId = {}; // dimensionName -> dimensionId
 		this.dimensionIdToName = {}; // dimensionId -> dimensionName
 
-		// channel/dimension registry - populated by registerChannelSpec() — not yet read by the frame pipeline.
-		// Once populated, these become the source of truth for channel/dimension metadata, replacing the name-keyed maps above.
-		this.channelSpecs = new Map(); // channelId -> ChannelSpec
-		this.dimensionSpecs = new Map(); // dimensionId -> DimSpec (flattened across all channels)
 		this.quantizer = new Quantizer();
 
-		// ID allocators - single source of truth for channel and dimension IDs.
-		// Both the legacy instance path (instantiateChannels + loadDimensionMaps) and the
-		// new spec path (registerChannelSpec) pull from these counters, so IDs are unique
-		// across paths. Advanced past max when restoring from DB via advanceIdCountersPastMax().
+		// ID allocators for channel and dimension IDs. Advanced past max when restoring
+		// from a snapshot so newly allocated IDs don't collide with persisted ones.
 		this.nextChannelId = 1;
 		this.nextDimensionId = 1;
 
@@ -166,18 +161,20 @@ export class Thalamus {
 
 	/**
 	 * Restore brain state from a snapshot (same format as getSnapshot).
-	 * Channels and dimensions are restored if present in the snapshot.
-	 * @param {{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels?: Map, channelNameToId?: Object, dimensionNameToId?: Object}} snapshot
+	 * @param {{neurons: Array, channelNameToId?: Object, dimensionNameToId?: Object}} snapshot
+	 *
+	 * Channel and dimension specs are expected to have been registered via
+	 * registerChannelSpec() BEFORE restore — the snapshot only carries the persisted
+	 * id↔name maps so we can reconcile allocated-vs-persisted IDs and advance the
+	 * counters past whatever was on disk.
 	 */
 	restoreSnapshot(snapshot) {
-		// Restore channels and derive dimension mappings from them. Channels and dims
-		// arrive with their IDs already populated by the DB loader; advance the Thalamus
-		// counters past the max so any subsequently-created channels/dims don't collide.
-		if (snapshot.channels) {
-			this.setChannels(snapshot.channels);
-			this.advanceIdCountersPastMax(snapshot.channels);
-			this.loadDimensionMaps();
-		}
+		if (snapshot.channelNameToId)
+			for (const [, id] of Object.entries(snapshot.channelNameToId))
+				if (id >= this.nextChannelId) this.nextChannelId = id + 1;
+		if (snapshot.dimensionNameToId)
+			for (const [, id] of Object.entries(snapshot.dimensionNameToId))
+				if (id >= this.nextDimensionId) this.nextDimensionId = id + 1;
 
 		// Restore neurons
 		this.reset();
@@ -324,7 +321,6 @@ export class Thalamus {
 		}
 		return {
 			neurons,
-			channels: this.getChannels(),
 			channelNameToId: this.channelNameToId,
 			dimensionNameToId: this.dimensionNameToId,
 		};
@@ -348,30 +344,16 @@ export class Thalamus {
 
 
 	/**
-	 * Register a channel class (not instantiated yet)
-	 * @param {string} name - Channel name
-	 * @param {Class} channelClass - Channel class constructor
-	 */
-	registerChannel(name, channelClass) {
-		this.channelClasses.set(name, channelClass);
-		if (this.debug) console.log(`Registered channel class: ${name} (${channelClass.name})`);
-	}
-
-	/**
 	 * Register a channel spec with the brain. The Thalamus allocates a channel ID and
-	 * (if the caller supplied Dimension instances without IDs) dimension IDs, populates the
-	 * name↔id maps, registers each dimension with the quantizer, and pre-creates action
-	 * neurons for action dims with explicit bucket IDs. Returns the allocated IDs so the
-	 * caller can wire them into whatever owns the spec (encoder, trader, legacy channel).
-	 *
-	 * Each dim spec carries a Dimension instance (spec.dimensions[].dim). The instance's
-	 * `.id` field is populated in place with the allocated ID — the caller keeps its
-	 * existing reference and reads `.id` directly afterward.
+	 * per-dimension IDs, populates the name↔id maps, registers each dimension with the
+	 * quantizer, and pre-creates action neurons for action dims with explicit bucket IDs.
+	 * Returns the allocated channel ID plus a `dimensionIds` lookup keyed by dim name so
+	 * the caller can wire IDs into whatever owns the spec (encoder, trader).
 	 *
 	 * @param {object} spec
 	 * @param {string} spec.name - Channel name (used as the channel key in the frame pipeline)
 	 * @param {Array<object>} spec.dimensions - Per-dimension specs
-	 * @param {Dimension} spec.dimensions[].dim - Dimension instance (id will be allocated in place if null)
+	 * @param {string} spec.dimensions[].name - Dimension name (must be unique across all channels)
 	 * @param {string} spec.dimensions[].kind - 'input' | 'action'
 	 * @param {number} spec.dimensions[].resolution - Number of buckets (>= 2)
 	 * @param {string} [spec.dimensions[].mode='passthrough'] - Quantizer mode
@@ -381,43 +363,43 @@ export class Thalamus {
 	 * @param {number} [spec.dimensions[].warmupSamples] - Dynamic mode warmup window
 	 * @param {boolean} [spec.emitsReward=false] - Channel produces a reward signal each frame
 	 * @param {boolean} [spec.learnActionSequences=false] - Channel's action neurons participate in pattern learning
-	 * @returns {number} - The allocated channel ID
+	 * @returns {{ channelId: number, dimensionIds: Object<string, number> }}
 	 */
 	registerChannelSpec(spec) {
 		if (!spec.name) throw new Error('Thalamus: channel spec is missing required name');
 		if (this.channelNameToId[spec.name] !== undefined)
 			throw new Error(`Thalamus: channel "${spec.name}" already registered`);
 
-		// Allocate the channel ID. Single counter for both spec- and instance-registered
-		// channels, so IDs never collide across paths.
+		// Allocate the channel ID.
 		const channelId = this.nextChannelId++;
 
-		// Allocate dimension IDs in place on the passed-in Dimension instances. Encoder/channel
-		// code already reads `dim.id` off these references, so no second lookup is needed.
+		// Validate dim specs up front.
 		for (const d of spec.dimensions) {
-			if (!d.dim) throw new Error(`Thalamus: dim spec on channel "${spec.name}" is missing Dimension instance`);
-			if (!d.dim.name) throw new Error(`Thalamus: dim on channel "${spec.name}" is missing a name`);
+			if (!d.name) throw new Error(`Thalamus: dim on channel "${spec.name}" is missing a name`);
 			if (d.kind !== 'input' && d.kind !== 'action')
-				throw new Error(`Thalamus: dim "${d.dim.name}" has invalid kind '${d.kind}' (expected 'input' or 'action')`);
-			if (d.dim.id === null) d.dim.id = this.nextDimensionId++;
+				throw new Error(`Thalamus: dim "${d.name}" has invalid kind '${d.kind}' (expected 'input' or 'action')`);
 		}
 
-		// Build the stored spec with IDs baked in (decoupled from the mutable Dimension
-		// instances — storedSpec is the Thalamus's source of truth from here on).
+		// Build the stored spec with allocated IDs baked in.
+		const dimensionIds = {};
 		const storedSpec = {
 			id: channelId,
 			name: spec.name,
-			dimensions: spec.dimensions.map(d => ({
-				id: d.dim.id,
-				name: d.dim.name,
-				kind: d.kind,
-				resolution: d.resolution,
-				mode: d.mode,
-				boundaries: d.boundaries,
-				actionBuckets: d.actionBuckets,
-				defaultBucket: d.defaultBucket,
-				warmupSamples: d.warmupSamples
-			})),
+			dimensions: spec.dimensions.map(d => {
+				const id = this.nextDimensionId++;
+				dimensionIds[d.name] = id;
+				return {
+					id,
+					name: d.name,
+					kind: d.kind,
+					resolution: d.resolution,
+					mode: d.mode,
+					boundaries: d.boundaries,
+					actionBuckets: d.actionBuckets,
+					defaultBucket: d.defaultBucket,
+					warmupSamples: d.warmupSamples
+				};
+			}),
 			emitsReward: spec.emitsReward ?? false,
 			learnActionSequences: spec.learnActionSequences ?? false
 		};
@@ -454,18 +436,16 @@ export class Thalamus {
 		if (actionNeurons.size > 0) this.channelActions.set(spec.name, actionNeurons);
 
 		if (this.debug) console.log(`Registered channel spec ${channelId} "${spec.name}" (${storedSpec.dimensions.length} dimensions)`);
-		return channelId;
+		return { channelId, dimensionIds };
 	}
 
 	/**
-	 * Iterate channel names registered through either path (instance or spec).
+	 * Iterate all channel names registered via channel specs.
 	 * Used by the frame pipeline to drive buildFrame over every channel the brain knows about.
 	 * @returns {string[]}
 	 */
 	getAllChannelNames() {
-		const names = new Set(this.channels.keys());
-		for (const spec of this.channelSpecs.values()) names.add(spec.name);
-		return [...names];
+		return [...this.channelSpecs.values()].map(spec => spec.name);
 	}
 
 	/**
@@ -480,84 +460,6 @@ export class Thalamus {
 	 */
 	getDimensionSpec(dimensionId) {
 		return this.dimensionSpecs.get(dimensionId);
-	}
-
-	/**
-	 * Get registered channel classes
-	 * @returns {Map} Map of channel name to channel class
-	 */
-	getChannelClasses() {
-		return this.channelClasses;
-	}
-
-	/**
-	 * Set channels from a Map (used when loading from database)
-	 * @param {Map<string, Channel>} channels - Map of channel name to channel instance
-	 */
-	setChannels(channels) {
-		for (const [channelName, channel] of channels) {
-			this.addChannel(channelName, channel);
-			if (this.debug) console.log(`Loaded channel from DB: ${channelName} (id: ${channel.id})`);
-		}
-	}
-
-	/**
-	 * Add an instantiated channel to the thalamus
-	 * @param {string} name - Channel name
-	 * @param {Channel} channelInstance - Instantiated channel object
-	 */
-	addChannel(name, channelInstance) {
-		this.channels.set(name, channelInstance);
-		this.channelNameToId[name] = channelInstance.id;
-		this.channelIdToName[channelInstance.id] = name;
-		if (this.debug) console.log(`Added channel instance: ${name}`);
-	}
-
-	/**
-	 * Instantiate new channels (those registered but not yet in thalamus).
-	 * Called after loadChannels (if DB) or standalone (if no DB).
-	 */
-	/**
-	 * Advance the channel/dimension ID counters past the max IDs present in the given
-	 * channels (typically after a DB restore). Ensures newly allocated IDs don't collide
-	 * with ones already in use. Safe to call multiple times; counters only ever move forward.
-	 */
-	advanceIdCountersPastMax(channels) {
-		for (const [, channel] of channels) {
-			if (channel.id !== null && channel.id >= this.nextChannelId) this.nextChannelId = channel.id + 1;
-			for (const dim of [...channel.getEventDimensions(), ...channel.getActionDimensions()])
-				if (dim.id !== null && dim.id >= this.nextDimensionId) this.nextDimensionId = dim.id + 1;
-		}
-	}
-
-	instantiateChannels() {
-		for (const [channelName, channelClass] of this.channelClasses) {
-
-			// protection to not instantiate channels that already exist - should not happen - just in case
-			if (this.channels.has(channelName)) continue;
-
-			// Create new channel instance. The channel constructor leaves id=null; Thalamus
-			// allocates it here so channel and dimension IDs come from a single counter
-			// rather than leaking into channel code via a static.
-			const channel = new channelClass(channelName, this.debug);
-			if (channel.id === null) channel.id = this.nextChannelId++;
-			this.addChannel(channelName, channel);
-			if (this.debug) console.log(`Created new channel: ${channelName} (id: ${channel.id})`);
-		}
-	}
-
-	/**
-	 * Get channel instance by name
-	 */
-	getChannel(channelName) {
-		return this.channels.get(channelName);
-	}
-
-	/**
-	 * Get all channels for iteration
-	 */
-	getChannels() {
-		return Array.from(this.channels.entries());
 	}
 
 	/**
@@ -771,55 +673,14 @@ export class Thalamus {
 	}
 
 	/**
-	 * Check if a neuron should be skipped (action neuron in a channel without action sequences)
+	 * Check if a neuron should be skipped (action neuron in a channel whose spec does
+	 * not include action-sequence learning).
 	 */
 	skipActionNeuron(neuronId) {
 		if (this.neuronLevels.get(neuronId) !== 0 || this.getNeuronType(neuronId) !== 'action') return false;
-		const channelName = this.getNeuronChannel(neuronId);
-		const channel = this.channels.get(channelName);
-		if (channel) return !channel.actionSequences;
-		const channelId = this.channelNameToId[channelName];
+		const channelId = this.channelNameToId[this.getNeuronChannel(neuronId)];
 		const spec = channelId !== undefined ? this.channelSpecs.get(channelId) : null;
 		return spec ? !spec.learnActionSequences : false;
-	}
-
-	/**
-	 * Get channel metrics for all channels
-	 * @returns {Array<Object>} - Array of channel metrics
-	 */
-	getChannelMetrics() {
-		const metrics = [];
-		for (const [, channel] of this.channels)
-			metrics.push(channel.getMetrics());
-		return metrics;
-	}
-
-	/**
-	 * Get aggregate metrics by detecting distinct channel classes and calling their static methods
-	 * @returns {Object|null} - Aggregate metrics keyed by channel class name, or null if none
-	 */
-	getAggregateMetrics() {
-		if (this.channels.size === 0) return null;
-
-		// Group channels by their class constructor
-		const channelsByClass = new Map(); // ChannelClass → Map(channelName → channel)
-		for (const [channelName, channel] of this.channels) {
-			const ChannelClass = channel.constructor;
-			if (!channelsByClass.has(ChannelClass)) channelsByClass.set(ChannelClass, new Map());
-			channelsByClass.get(ChannelClass).set(channelName, channel);
-		}
-
-		// Call static getAggregateMetrics on each channel class
-		const aggregateMetrics = {};
-		for (const [ChannelClass, channelsOfType] of channelsByClass) {
-			const metrics = ChannelClass.getAggregateMetrics(channelsOfType);
-			if (metrics) {
-				const className = ChannelClass.name;
-				aggregateMetrics[className] = metrics;
-			}
-		}
-
-		return Object.keys(aggregateMetrics).length > 0 ? aggregateMetrics : null;
 	}
 
 	/**
@@ -829,110 +690,6 @@ export class Thalamus {
 	 */
 	getChannelDefaultAction(channelName) {
 		return this.channelDefaultActions.get(channelName);
-	}
-
-	/**
-	 * Execute actions for channels that have them
-	 * Groups channels by type and calls static executeChannelActions on each channel class
-	 * @param {Array} inferredNeurons - Array of { neuronId, strength, reward, probability } from memory
-	 */
-	async executeChannelActions(inferredNeurons) {
-
-		// prepare the channels map that contains their event and action inferences
-		const channelInferences = new Map(); // channelName → { actions, events }
-		for (const channelName of this.channels.keys())
-			channelInferences.set(channelName, { actions: [], events: [] });
-
-		// Add inferred neurons to their channels. Translate id-form coordinate to
-		// name-form here — channels still speak name-form at their I/O boundary.
-		for (const inference of inferredNeurons) {
-			const inferences = channelInferences.get(this.getNeuronChannel(inference.neuronId));
-			const type = this.getNeuronType(inference.neuronId);
-			const channelFacing = inference.coordinate
-				? { ...inference, coordinate: this.coordinateIdToName(inference.coordinate) }
-				: inference;
-			if (type === 'action') inferences.actions.push(channelFacing);
-			else if (type === 'event') inferences.events.push(channelFacing);
-		}
-
-		// group by channel classes for action execution
-		const channelTypes = new Map();
-		for (const [channelName, inferences] of channelInferences) {
-			const channel = this.channels.get(channelName);
-			const ChannelClass = channel.constructor;
-			if (!channelTypes.has(ChannelClass)) channelTypes.set(ChannelClass, new Map());
-			channelTypes.get(ChannelClass).set(channelName, { channel, ...inferences });
-		}
-
-		// Dispatch to each channel class
-		for (const [ChannelClass, classChannelData] of channelTypes)
-			await ChannelClass.executeChannelActions(classChannelData);
-	}
-
-	/**
-	 * Pre-create action neurons for all channels if they don't exist, so that we
-	 */
-	initializeActionNeurons() {
-
-		// populate this.channelActions in place — neurons hold a live reference to this map,
-		// so we must not reassign it. Action neurons are created once at startup; the map is
-		// static thereafter and can be broadcast once in the future MPI setup.
-		// Preserve entries already populated by registerChannelSpec() (spec-only channels);
-		// only reset entries for instance-based channels that this loop is about to rebuild.
-		for (const [channelName] of this.getChannels()) this.channelActions.delete(channelName);
-		for (const [channelName, channel] of this.getChannels()) {
-
-			// get or create the action neurons for the channel.
-			// Channels still return name-form coordinates from getActions()/getDefaultAction();
-			// translate to id-form at this boundary before lookup/creation.
-			const actionNeurons = new Set();
-			for (const coordinate of channel.getActions())
-				actionNeurons.add(this.getNeuronIdForPoint(this.coordinateNameToId(coordinate), channelName, 'action'));
-
-			// add channel's action neurons to the channelActions map
-			this.channelActions.set(channelName, actionNeurons);
-			if (this.debug) console.log(`Created ${actionNeurons.size} action neurons for ${channelName}`);
-
-			// set the default action for the channel (if one exists)
-			const defaultActionCoord = channel.getDefaultAction();
-			if (defaultActionCoord !== null)
-				this.channelDefaultActions.set(channelName, this.getNeuronIdForPoint(this.coordinateNameToId(defaultActionCoord), channelName, 'action'));
-		}
-	}
-
-	/**
-	 * Allocate dimension IDs for any legacy-path channel that doesn't have them yet and
-	 * populate the name↔id maps. Called after instantiateChannels. Dimensions restored from
-	 * the DB arrive with IDs already set; Thalamus preserves those and advances its counter
-	 * past them via advanceIdCountersPastMax().
-	 */
-	loadDimensionMaps() {
-		for (const [, channel] of this.getChannels()) {
-			for (const dim of channel.getEventDimensions()) this.assignAndMapDimension(dim);
-			for (const dim of channel.getActionDimensions()) this.assignAndMapDimension(dim);
-		}
-		if (this.debug) console.log('Dimensions loaded:', this.dimensionNameToId);
-	}
-
-	/**
-	 * Allocate an ID for a Dimension if it doesn't have one yet, then record the name↔id
-	 * mapping. Idempotent — safe to call twice for the same Dimension (second call is a no-op
-	 * since the id is already set and the maps already hold the entry).
-	 */
-	assignAndMapDimension(dim) {
-		if (dim.id === null) dim.id = this.nextDimensionId++;
-		this.dimensionNameToId[dim.name] = dim.id;
-		this.dimensionIdToName[dim.id] = dim.name;
-	}
-
-	/**
-	 * Set dimension mappings (called during init)
-	 * @param {object} nameToId - Dimension name to ID mapping
-	 * @param {object} idToName - Dimension ID to name mapping
-	 */
-	setDimensionMappings(nameToId, idToName) {
-		this.dimensionNameToId = nameToId;
-		this.dimensionIdToName = idToName;
 	}
 
 	/**
