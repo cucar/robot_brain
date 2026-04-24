@@ -368,7 +368,7 @@ export default class Brain {
 			if (activations.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
 
 			// accumulate this level's votes for consensus
-			votes.push(...levelVotes);
+			for (const vote of levelVotes) votes.push(vote);
 
 			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
 			if (level >= maxActiveLevel) break;
