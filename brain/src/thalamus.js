@@ -10,11 +10,12 @@ import { Quantizer } from './quantizer.js';
  * Named after the biological thalamus which routes sensory signals and translates reference frames.
  */
 export class Thalamus {
-	constructor(debug, patternForgetRate, mergeThreshold, errorCorrectionThreshold) {
+	constructor(debug, patternForgetRate, mergeThreshold, errorCorrectionThreshold, contextLength) {
 		this.debug = debug;
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
 		this.errorCorrectionThreshold = errorCorrectionThreshold;
+		this.contextLength = contextLength;
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
@@ -49,6 +50,16 @@ export class Thalamus {
 
 		// Level counts - tracks number of neurons at each level for efficient max level diagnostics lookup
 		this.levelCounts = []; // index = level, value = count of neurons at that level
+	}
+
+	/**
+	 * Effective forget rate for a neuron at a given level.
+	 * Level 0 (sensory) is exempt from forgetting; level N decays by contextLength per level
+	 * relative to the level-1 base rate, matching the geometric drop in observation frequency.
+	 */
+	static effectiveForgetRate(baseRate, contextLength, level) {
+		if (level === 0) return 0;
+		return baseRate / Math.pow(contextLength, level - 1);
 	}
 
 	/**
@@ -111,7 +122,7 @@ export class Thalamus {
 	 * @returns {Neuron} The newly created neuron
 	 */
 	addSensoryNeuron(coordinate, channel, type) {
-		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, this.channelActions);
+		const neuron = new Neuron(0, this.mergeThreshold, this.channelActions);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(this.makeValueKey(coordinate), neuron.id);
@@ -147,7 +158,7 @@ export class Thalamus {
 			}
 
 		// create and initialize the neuron in a single call
-		const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, this.channelActions);
+		const neuron = new Neuron(Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level), this.mergeThreshold, this.channelActions);
 		neuron.initializeConnections(connections);
 
 		// register in the thalamus

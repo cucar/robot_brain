@@ -18,7 +18,7 @@ export default class Brain {
 		this.contextLength = options?.contextLength ?? 10; // number of frames a base neuron stays active
 		this.errorCorrectionThreshold = options?.errorCorrectionThreshold ?? 0.5; // if the error is below this threshold, no need to create a new correction pattern
 		this.mergeThreshold = options?.mergeThreshold ?? 0.5; // percentage of matched entries needed for context merge
-		this.patternForgetRate = options?.patternForgetRate ?? 0.01; // how many frames will a pattern be remembered (inverse)
+		this.patternForgetRate = options?.patternForgetRate ?? 0.01; // level-1 forget rate (inverse of frames remembered); deeper levels decay by contextLength per level
 
 		// Debugging info and flags
 		this.debug = options?.debug;
@@ -32,10 +32,10 @@ export default class Brain {
 		this.diagnostics = new Diagnostics();
 
 		// Backup - file-based snapshot save/load. Used by the Job runner via --save/--load.
-		this.backupStore = new Backup(this.patternForgetRate, this.mergeThreshold);
+		this.backupStore = new Backup(this.patternForgetRate, this.mergeThreshold, this.contextLength);
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
-		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.errorCorrectionThreshold);
+		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.errorCorrectionThreshold, this.contextLength);
 
 		// Memory - manages temporal sliding window and inferred neurons
 		this.memory = new Memory(this.debug, this.contextLength);

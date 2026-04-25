@@ -97,18 +97,18 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $78247.02
-   Average per Episode: $78247.02
-   Average ROI: +521.65%
-   Average Per-Frame ROI: +0.072969%
-   Total Trades: 1723
-   Average Trades per Episode: 1723.0
+   Total Net Profit: $71498.80
+   Average per Episode: $71498.80
+   Average ROI: +476.66%
+   Average Per-Frame ROI: +0.069968%
+   Total Trades: 1739
+   Average Trades per Episode: 1739.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $78247.02 | ROI: +521.65%, +0.072969%/frame (1723 trades)
+   Episode 1: $71498.80 | ROI: +476.66%, +0.069968%/frame (1739 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 56.93%
+   Episode 1: 56.96%
 ```
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -125,18 +125,18 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $40429.13 | ROI: +269.53%, +0.052191%/frame (2275 trades)
-   Episode 2: $303486.84 | ROI: +2023.25%, +0.122052%/frame (1347 trades)
-   Episode 3: $2488788.84 | ROI: +16591.93%, +0.204501%/frame (2358 trades)
-   Episode 4: $15091093.55 | ROI: +100607.29%, +0.276421%/frame (3342 trades)
-   Episode 5: $41930865.41 | ROI: +279539.10%, +0.317312%/frame (3312 trades)
+   Episode 1: $38217.21 | ROI: +254.78%, +0.050565%/frame (2893 trades)
+   Episode 2: $466128.63 | ROI: +3107.52%, +0.138542%/frame (2323 trades)
+   Episode 3: $8407067.12 | ROI: +56047.11%, +0.253037%/frame (3344 trades)
+   Episode 4: $22922860.13 | ROI: +152819.07%, +0.293143%/frame (4323 trades)
+   Episode 5: $43740454.58 | ROI: +291603.03%, +0.319004%/frame (4530 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 57.04%
-   Episode 2: 57.79%
-   Episode 3: 58.36%
-   Episode 4: 58.54%
-   Episode 5: 58.69%
+   Episode 1: 57.07%
+   Episode 2: 57.89%
+   Episode 3: 58.33%
+   Episode 4: 58.58%
+   Episode 5: 58.73%
 ```
 
 ## Demo 5: Stock Sequence Memorization
@@ -146,7 +146,7 @@ The brain memorizes a repeating stock price sequence across 5 episodes, reaching
 Run the stock test with customized hyperparameters for sequence memorization:
 
 ```bash
-node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.0001 --error-threshold 0.3
+node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.001 --error-threshold 0.3
 ```
 
 **Expected output:**
@@ -155,26 +155,26 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $5384763364966.22
-   Average per Episode: $1076952672993.24
-   Average ROI: +7179684486.62%
-   Average Per-Frame ROI: +0.495480%
-   Total Trades: 14470
-   Average Trades per Episode: 2894.0
+   Total Net Profit: $1472265729577.45
+   Average per Episode: $294453145915.49
+   Average ROI: +1963020972.77%
+   Average Per-Frame ROI: +0.457990%
+   Total Trades: 14207
+   Average Trades per Episode: 2841.4
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $19578.05 | ROI: +130.52%, +0.033346%/frame (3172 trades)
-   Episode 2: $31795850.67 | ROI: +211972.34%, +0.306237%/frame (3037 trades)
-   Episode 3: $92251373990.90 | ROI: +615009159.94%, +0.625982%/frame (2747 trades)
-   Episode 4: $1406600435356.14 | ROI: +9377336235.71%, +0.735482%/frame (2763 trades)
-   Episode 5: $3885879740190.46 | ROI: +25905864934.60%, +0.776354%/frame (2751 trades)
+   Episode 1: $18933.81 | ROI: +126.23%, +0.032595%/frame (3176 trades)
+   Episode 2: $22675481.59 | ROI: +151169.88%, +0.292709%/frame (2998 trades)
+   Episode 3: $21427022933.80 | ROI: +142846819.56%, +0.567356%/frame (2712 trades)
+   Episode 4: $267523297963.51 | ROI: +1783488653.09%, +0.668760%/frame (2696 trades)
+   Episode 5: $1183292714264.74 | ROI: +7888618095.10%, +0.728530%/frame (2625 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 58.63%
-   Episode 2: 72.19%
-   Episode 3: 88.77%
-   Episode 4: 93.67%
-   Episode 5: 95.56%
+   Episode 1: 58.66%
+   Episode 2: 70.56%
+   Episode 3: 84.66%
+   Episode 4: 89.79%
+   Episode 5: 91.40%
 ```
 
 The brain goes from 50% accuracy (random) to 96% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
@@ -186,17 +186,17 @@ The brain learns to predict character sequences. Feed it a string, and it memori
 Run the text test with customized hyperparameters for text learning (the defaults are tuned for stock data):
 
 ```bash
-node apps/text/jobs/test.js --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001
+node apps/text/jobs/test.js --file abramov.txt --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001 --no-summary
 ```
 
 **Expected output:**
 ```
 📊 Accuracy by Episode:
-   Episode 1: 41.46% (127 frames)
-   Episode 2: 96.80% (127 frames)
-   Episode 3: 100.00% (127 frames)
-   Episode 4: 100.00% (127 frames)
-   Episode 5: 100.00% (127 frames)
+   Episode 1: 20.56% (32674 frames)
+   Episode 2: 99.96% (32674 frames)
+   Episode 3: 99.99% (32674 frames)
+   Episode 4: 100.00% (32674 frames)
+   Episode 5: 100.00% (32674 frames)
 ```
 
 The brain goes from low accuracy to 100% in 5 episodes — it has fully memorized the character sequence and can predict every next character correctly.

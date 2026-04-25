@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Neuron } from './neuron.js';
+import { Thalamus } from './thalamus.js';
 
 // Hard cap on retained backup folders. The 11th save evicts the oldest by
 // folder-name sort (timestamps sort lexicographically thanks to the format).
@@ -29,9 +30,10 @@ export class Backup {
 	 * to each freshly-rehydrated Neuron. The snapshot itself doesn't carry these
 	 * (they're brain-wide, not per-neuron), so they have to be passed in here.
 	 */
-	constructor(patternForgetRate, mergeThreshold) {
+	constructor(patternForgetRate, mergeThreshold, contextLength) {
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
+		this.contextLength = contextLength;
 	}
 
 	/**
@@ -118,9 +120,11 @@ export class Backup {
 		let maxId = 0;
 		for (const [idStr, levelStr] of readCsv(path.join(folder, 'neurons.csv'))) {
 			const id = Number(idStr);
-			const neuron = new Neuron(this.patternForgetRate, this.mergeThreshold, channelActionIds, id);
+			const level = Number(levelStr);
+			const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
+			const neuron = new Neuron(forgetRate, this.mergeThreshold, channelActionIds, id);
 			neurons.set(id, neuron);
-			levels.set(id, Number(levelStr));
+			levels.set(id, level);
 			if (id > maxId) maxId = id;
 		}
 		// Bump the global id counter past anything we just loaded — otherwise the next
