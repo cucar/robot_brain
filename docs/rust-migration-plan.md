@@ -40,7 +40,7 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 | **Brain** | Orchestrator — frame loop, learning, inference | frameNumber, error threshold |
 | **Thalamus** | Neuron registry, channel mgmt, dimension maps | neurons Map, neuronsByValue, deathLedger, channels |
 | **Memory** | Temporal sliding window of active neurons | activeNeurons[], inferredNeurons[], contextLength |
-| **Neuron** | Connections, children, voting, learning, decay | connections, children, context (coordinate held in Thalamus.baseNeurons for level-0 only) |
+| **Neuron** | Connections, children, voting, learning, decay | connections, children, context |
 | **Context** | Pattern context matching & merging | entries Map<neuron, Map<distance, strength>> |
 | **Channel** | I/O interface (stock, text, vision, etc.) | dimensions, actions, rewards |
 | **Database** | MySQL persistence | connection, backup/restore |
@@ -48,78 +48,68 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 ---
 
-## Phase 2 — Introduce Column Classes (deferred to Rust — Phase 5)
+## Phase 2 — Clean Up Persistence
+
+Clarify the two distinct persistence concerns before moving to Rust, so the library boundary is clean.
+
+**Role clarification**:
+- **Backups (dump)** = backup/restore. Serialize entire brain state to/from a portable byte format. Used for saving on exit, loading on startup, checkpointing.
+- **Database** = debugging/analysis. Indexed, queryable representation of neuron relationships for "brain deep dive" tools. Not for backup/restore.
+
+- Rust core (library) saves channels, dimensions and neurons to text files in backup folders. 
+- Each backup should be saved with a timestamp folder in the same folder as the job under a folder called backups.
+- Backup layout: apps/<app>/<jobname>/backups/<YYYY-MM-DD_HH-mm-ss>/<snapshot files>
+- When jobs are starting up --load option should trigger them to load the snapshot from the last backup (by timestamp). This includes neurons, channels and dimensions.  
+- When jobs are shutting down (SIGINT/SIGTERM handlers) --save option should trigger them to save the snapshot as a new backup to be loaded later, or analyzed in database. 
+- The files saved for the snapshot should correspond to the database tables: channels, dimensions, neurons, base_neurons, patterns, contexts (pattern_past) and connections (pattern_future)
+- The snapshot/backup files should be simple CSVs that can be loaded to the database with mysql load data command in bulk.  
+- After saving a new backup, delete old backups as well. Keep a maximum of 10 latest backups. This can be a parameter in the class, but not an adjustable one from command line. No need. Keep it simple. 
+- Rename Dump class as Backup or Persistence.
+- Test demo 5 with save in between: run one episode and save backup, load backup in new session, confirm it returns the same results as expected in the second episode ($31795850.67).
+- Create database utility jobs under apps/db/import and apps/db/export 
+- Database import utility to load the snapshot/backup files into the database should be able to load them with mysql load data command (assume local server for maximum performance)
+- Database export utility should create a new backup with the current timestamp in the current folder. User can move it to the appropriate job folder if it needs to be loaded.
+- Move database class to the apps/db folder which should be used by both import and export jobs
+- Update README and Rust migration plan
+
+---
+
+## Phase 3 — Introduce Column Classes
 
 Column abstractions (Column, Region) will be introduced directly in Rust rather than building them in JS only to throw them away 2–3 weeks later. The column classes are a Rust-native concern.
 
 The following describes the *design* for reference — implementation happens in Phase 5.
 
-### 2.1 Introduce `Column` class
+### 3.1 Introduce `Column` class
 - Owns a subset of neurons
 - Calls `neuron.processFrame()` on each of its neurons
 - Holds per-column local memory (active neuron window for its neurons)
 - Methods: `processFrame()` — iterates owned neurons, returns aggregated results
 
-### 2.2 Introduce `Region` class
+### 3.2 Introduce `Region` class
 - Wraps a set of `Column` instances
 - Owns shared state: dimension maps, channel actions
 - Aggregates votes across its columns
 - Methods: `processFrame()`, `aggregateVotes()`, `distributeInputs()`
 
-### 2.3 Refactor Brain as top-level coordinator
+### 3.3 Refactor Brain as top-level coordinator
 - Brain becomes a thin coordinator over `Region` instances
 - Brain handles: I/O (channels), global consensus across columns, action execution
 - Brain no longer directly touches individual neurons
 
-### 2.4 Refactor Thalamus for column-aware neuron ownership
+### 3.4 Refactor Thalamus for column-aware neuron ownership
 - Neurons get assigned to a specific column (owner)
 - ~~Neuron channel, type, coordinates belong to base level only - may be ok to merge as baseNeurons?~~ **Done**: Thalamus now holds a single `baseNeurons` Map (`neuronId → {channel, type, coordinate}`) for level-0 only; interneurons have no coordinate. DB `coordinates` table dropped, columns merged into `base_neurons`.
 - Thalamus tracks which region/column owns each neuron
 - Neuron lookup still global (Thalamus), but mutations route through owner
 
-### 2.5 Refactor Memory for per-column active state
+### 3.5 Refactor Memory for per-column active state
 - Each column has its own active neuron window
 - Global Memory becomes an aggregator over per-column memories
 - Inferred neurons remain global (consensus output)
 
-### 2.6 Cleanup
+### 3.6 Cleanup
 - Change offset rows to work from the end and add demo for training first and then testing accuracy with hold out data
-
----
-
-## Phase 3 — Clean Up Persistence (~1 week)
-
-Clarify the two distinct persistence concerns before moving to Rust, so the library boundary is clean.
-
-**Role clarification**:
-- **Dumps** = backup/restore. Serialize entire brain state to/from a portable byte format. Used for saving on exit, loading on startup, checkpointing.
-- **Database** = debugging/analysis. Indexed, queryable representation of neuron relationships for "brain deep dive" tools. Not for backup/restore.
-
-**Responsibility split**:
-- **Rust core (library)**: owns `serialize() → bytes` and `deserialize(bytes) → brain state`. The library knows its internal data structures — only it can produce a correct serialization. No file I/O, no database, no external dependencies.
-- **App/wrapper (JS or future bindings)**: decides *where* and *when* to persist. Calls `core.serialize()`, writes to file. Reads file, calls `core.deserialize(bytes)`. Also owns database population for analysis tools (iterates neurons via core query APIs, writes to indexed tables).
-
-### 3.0 Dump/backup connection
-- Dumps become binary serialization of full brain state (neurons, connections, contexts, routing tables)
-- Core Brain (rust) should only do file based backup/restore 
-- we need separate node.js tools for importing and exporting backups to database for debugging and analysis applications
-- Reference: https://claude.ai/share/e319c25b-5323-4313-adf2-d1720e068b16
-
-### 3.1 Convert dumps to the primary backup/restore mechanism
-- Dumps become binary serialization of full brain state (neurons, connections, contexts, routing tables)
-- Brain constructor options: `--dump-file <path>` to save on exit, `--load-dump <path>` to restore on startup
-- Remove backup/restore from Database class — it becomes analysis-only
-
-### 3.2 Refactor Database to analysis-only
-- Database no longer handles backup/restore
-- Database writes indexed neuron/connection/context data for query tools
-- Optional: populate on demand (e.g., `--analyze` flag) rather than on every shutdown
-- Brain constructor options: `--database` enables analysis writes, no longer implies backup
-
-### 3.3 Prepare serialization interface for Rust migration
-- The JS dump implementation becomes the reference for the Rust `serialize`/`deserialize` API
-- Format should be portable (not JS-specific) — binary or msgpack, not JSON
-- Version the format so Rust core can evolve internals without breaking saved dumps
 
 ---
 
