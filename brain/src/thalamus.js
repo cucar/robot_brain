@@ -804,10 +804,12 @@ export class Thalamus {
 		const moreNewlyDeletable = this.cleanupPatternFromChildContexts(pattern, currentFrame);
 		newlyDeletable.push(...moreNewlyDeletable);
 
-		// Clean up contextRefs on context neurons for all remaining children in this neuron's routing table.
-		// When this parent is deleted, orphaned children will later be processed by deletePatterns.
-		// Their cleanupPatternFromParentContext will skip (parent gone), so we must handle it here.
-		this.cleanupOrphanedChildren(pattern);
+		// Clean up contextRefs on context neurons for all remaining children in this neuron's routing table,
+		// and queue those children for cascade deletion — without their parent they can never activate,
+		// and any surviving entry would leave a dangling neuronParents pointer that corrupts snapshots.
+		const orphanedChildren = this.cleanupOrphanedChildren(pattern);
+		for (const childId of orphanedChildren)
+			if (this.neurons.has(childId)) newlyDeletable.push(childId);
 
 		// Remove pattern from its parent's routing table
 		// Parent may already be deleted during cascade — its deletePattern cleaned up all children
@@ -878,11 +880,17 @@ export class Thalamus {
 
 	/**
 	 * Clean up context references for all children in this pattern's routing table
-	 * (needed because their parent is being deleted)
+	 * (needed because their parent is being deleted). Returns the orphaned child
+	 * pattern ids so the caller can cascade-delete them — a child whose parent is
+	 * gone can never activate again, and leaving it behind would leave a dangling
+	 * neuronParents entry that breaks snapshot save/load.
 	 * @param {Neuron} pattern - Pattern being deleted
+	 * @returns {Array<number>} - Child pattern ids that are now orphaned
 	 */
 	cleanupOrphanedChildren(pattern) {
-		for (const [childPatternId, tableEntry] of pattern.routingTable)
+		const orphans = [];
+		for (const [childPatternId, tableEntry] of pattern.routingTable) {
+			orphans.push(childPatternId);
 			for (const entry of tableEntry.context.getEntries()) {
 				const isOrphaned = pattern.removeContextIndex(entry.neuronId, entry.distance, childPatternId);
 				if (isOrphaned) {
@@ -890,6 +898,8 @@ export class Thalamus {
 					if (ctxNeuron) ctxNeuron.removeContextRef(pattern.id, entry.distance);
 				}
 			}
+		}
+		return orphans;
 	}
 
 	/**

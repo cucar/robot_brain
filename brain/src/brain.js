@@ -107,6 +107,13 @@ export default class Brain {
 	 * never throws during shutdown.
 	 */
 	save(jobDir) {
+		// Materialize lazy decay before snapshotting so strengths in the file reflect
+		// the true post-decay values. Without this, lastActivationFrame (which the
+		// snapshot doesn't carry) gets implicitly reset to 0 on load and the next
+		// resetContext() applies zero decay — making save/load diverge from a
+		// continuous run by exactly the inter-episode decay step.
+		this.thalamus.materializeAndResetNeurons(this.frameNumber);
+		this.frameNumber = 0;
 		return this.backupStore.save(jobDir, this.thalamus.getSnapshot());
 	}
 

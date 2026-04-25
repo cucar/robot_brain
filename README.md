@@ -431,6 +431,38 @@ For MySQL-based analysis tooling — bulk-loading a backup into a queryable data
 or exporting MySQL state back to a backup folder — see the [`apps/db`](apps/db)
 app. It is not part of the brain core; the brain has no DB dependency.
 
+### Backup → MySQL → Backup Round-Trip
+
+Take a backup, push it through MySQL, pull it back out, and verify the rehydrated
+brain reproduces the same result. Uses the [Demo 5](#demo-5-stock-sequence-memorization)
+config (KGC,GLD,SPY) — a single episode here ends around `$22,675,481.59`.
+
+```bash
+# 1. Run one episode and save a backup
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY \
+  --context-length 3 --error-threshold 0.3 --forget-rate 0.001 --save
+
+# 2. Import that backup folder into MySQL (replace <ts> with the timestamp printed above)
+node apps/db/import.js apps/stocks/jobs/test/backups/<ts>
+
+# 3. Delete the original backup so the export is the only one left,
+#    then export MySQL back to a fresh backup folder under the job dir
+cd apps/stocks/jobs/test
+rm -rf backups/<ts>
+node ../../../../apps/db/export.js
+cd ../../../../
+
+# 4. Load the round-tripped backup and run another episode — should reach
+#    ~$22,675,481.59, matching what a continuous two-episode run produces
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY \
+  --context-length 3 --error-threshold 0.3 --forget-rate 0.001 --load
+```
+
+The `apps/db` import uses `LOAD DATA LOCAL INFILE`, which needs `local_infile=ON`
+server-side; the import script enables it automatically (`SET GLOBAL local_infile = 1`)
+as long as the connecting user has `SYSTEM_VARIABLES_ADMIN` (or `SUPER` on older
+MySQL) — root has this by default. DB credentials live in [`apps/db/.env`](apps/db/.env.example).
+
 ## License
 
 Copyright 2025-2026 Cagdas Ucar. Licensed under the [Apache License 2.0](LICENSE).

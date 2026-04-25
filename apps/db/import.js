@@ -40,19 +40,25 @@ async function main() {
 	const conn = await getMySQLConnection();
 	console.log(`📥 Importing backup: ${folder}`);
 
+	// Enable LOAD DATA LOCAL on the server side. Requires the connecting user to
+	// have SYSTEM_VARIABLES_ADMIN (or SUPER on older MySQL) — root does by default.
+	// Persists for the life of the server, but cheap to re-issue every run.
+	await conn.query('SET GLOBAL local_infile = 1');
+
 	// Truncate in reverse order so child tables go first; FK checks off as a belt-and-braces.
 	await conn.query('SET FOREIGN_KEY_CHECKS = 0');
 	for (const { table } of [...TABLES].reverse()) await conn.query(`TRUNCATE ${table}`);
 
 	for (const { file, table, columns } of TABLES) {
-		const filepath = path.join(folder, file).replace(/\\/g, '/');
+		const filepath = path.resolve(folder, file).replace(/\\/g, '/');
 		if (!fs.existsSync(filepath)) {
 			console.log(`   skip ${table}: ${file} missing`);
 			continue;
 		}
 
-		// LOAD DATA LOCAL INFILE: server reads a stream from the client. Requires
-		// `localInfile: true` on the connection and `local_infile=ON` on the server.
+		// LOAD DATA LOCAL INFILE: client streams the file to the server. Requires
+		// `localInfile: true` on the connection and `local_infile=ON` server-side
+		// (settable dynamically via `SET GLOBAL local_infile = 1;`).
 		const sql = `LOAD DATA LOCAL INFILE '${filepath}' INTO TABLE ${table} FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"' LINES TERMINATED BY '\\n' ${columns}`;
 		const [result] = await conn.query(sql);
 		console.log(`   ${table}: ${result.affectedRows} rows`);
