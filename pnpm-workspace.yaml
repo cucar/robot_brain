@@ -1,0 +1,4 @@
+packages:
+  - 'brain'
+  - 'libs/*'
+  - 'apps/*'

@@ -44,8 +44,8 @@ Each frame, the brain:
 git clone https://github.com/cucar/robot_brain.git
 cd robot_brain
 
-# Install dependencies
-npm install
+# Install dependencies (pnpm workspace — links robot-brain into each app)
+pnpm install
 ```
 
 ## Demo 1: Single-Channel Synthetic Cycle
@@ -282,16 +282,16 @@ graph BT
 
 | File | Role | Description |
 |------|------|-------------|
-| `brain/brain.js` | Orchestrator | Frame processing loop, pattern recognition, learning, inference |
-| `brain/thalamus.js` | Relay station | Neuron registry, channel management, dimension mappings |
-| `brain/memory.js` | Short-term memory | Temporal sliding window of active neurons indexed by age |
-| `brain/neuron.js` | Neuron | Connections, patterns, voting, learning, lazy decay |
-| `brain/context.js` | Pattern context | Context representation, threshold-based matching, merge logic |
-| `brain/database.js` | Persistence | Optional MySQL backup/restore (not used during processing) |
-| `brain/diagnostics.js` | Metrics | Performance tracking and debug output |
-| `brain/dump.js` | Debugging | Brain state dumps |
+| `brain/src/brain.js` | Orchestrator | Frame processing loop, pattern recognition, learning, inference |
+| `brain/src/thalamus.js` | Relay station | Neuron registry, channel management, dimension mappings |
+| `brain/src/memory.js` | Short-term memory | Temporal sliding window of active neurons indexed by age |
+| `brain/src/neuron.js` | Neuron | Connections, patterns, voting, learning, lazy decay |
+| `brain/src/context.js` | Pattern context | Context representation, threshold-based matching, merge logic |
+| `brain/src/backup.js` | Persistence | File-based backup/restore (CSVs under `<jobDir>/backups/<timestamp>/`) |
+| `brain/src/diagnostics.js` | Metrics | Performance tracking and debug output |
+| `libs/node` | Node bindings | Re-exports the brain core + Job runner; published to npm as `robot-brain` |
 
-### Channels
+### Apps
 
 Each app owns an encoder (and optionally a trader) that describes its channels to the brain via a spec (`registerChannelSpec`). The spec lists the channel's dimensions, their bucket resolutions, and whether each dim is an input (event) or output (action). Base neurons carry exactly one `(dimId, bucketId)` pair — multi-dim observations emit multiple base neurons per frame.
 
@@ -299,6 +299,7 @@ Each app owns an encoder (and optionally a trader) that describes its channels t
 |-----|-----------------|-------------------|---------------|
 | `apps/stocks` | One neuron per dim: price change, volume change | One neuron: position (own/out) | Profit/loss |
 | `apps/text`   | One neuron: character code | — | — |
+| `apps/db`     | MySQL utilities (import/export) — not a brain channel; loads/exports backup folders for analysis | — | — |
 
 ### Jobs
 
@@ -310,7 +311,9 @@ Jobs define learning scenarios — which encoders to register, how to configure 
 | `apps/stocks/jobs/multi-channel-test.js` | Multi-symbol trading across shared brain |
 | `apps/stocks/jobs/synthetic-cycle-test.js` | Cycle-learning synthetic stress test |
 | `apps/stocks/jobs/synthetic-extended-test.js` | Extended cycle synthetic with optimality analysis |
-| `apps/text/jobs/test.js` | Character sequence memorization |
+| `apps/text/jobs/test.js` | Character sequence memorization (default `data/test.txt`; override with `--file`) |
+| `apps/db/import.js` | Bulk-load a backup folder into MySQL via `LOAD DATA LOCAL INFILE` |
+| `apps/db/export.js` | Dump current MySQL state to `./backups/<timestamp>/` in cwd |
 
 ## Hyperparameters
 
@@ -345,7 +348,8 @@ node <path-to-job.js> [options]
 | `--merge-threshold <n>`| Threshold for pattern context matching |
 | `--debug` | Show detailed frame-by-frame processing |
 | `--diagnostic` | Show inference and conflict resolution details |
-| `--database` | Enable MySQL backup/restore |
+| `--save` | Save a CSV backup on shutdown (incl. crash) under `<jobDir>/backups/<timestamp>/` |
+| `--load` | Load the most recent backup before the first frame (errors if none exists) |
 | `--no-summary` | Suppress per-frame summary output |
 | `--start <date>` | Start date for data (YYYY-MM-DD) |
 | `--end <date>` | End date for data (YYYY-MM-DD) |
@@ -353,7 +357,7 @@ node <path-to-job.js> [options]
 ## Creating Custom Jobs
 
 ```javascript
-import { Job, runJob } from '#brain-node';
+import { Job, runJob } from 'robot-brain';
 import { TextEncoder } from '../encoder.js';
 
 export default class MyJob extends Job {
@@ -406,17 +410,26 @@ Save as `apps/text/jobs/my-job.js` and run with `node apps/text/jobs/my-job.js`.
 - **[Error-Driven Learning](docs/error-driven-learning.md)** — deep dive on how patterns are created from prediction errors
 - **[Technical Foundations](docs/TECHNICAL_FOUNDATIONS.md)** — architectural ideas, biological inspirations, and comparison with conventional approaches
 
-## Optional: MySQL Persistence
+## Persistence
 
-The brain runs entirely in-memory. MySQL is optional — used only for saving/restoring brain state between sessions.
+The brain runs entirely in-memory. Use `--save` and `--load` to snapshot state
+between sessions:
 
 ```bash
-# Apply schema (requires MySQL running)
-mysql -u root -p < db/db.sql
+# Run an episode and save a backup on shutdown
+node apps/stocks/jobs/test.js --episodes 1 --save
 
-# Run with database backup enabled
-node apps/stocks/jobs/test.js --timeframe 3H --database
+# Resume from the latest backup in a fresh session
+node apps/stocks/jobs/test.js --episodes 1 --load
 ```
+
+A backup is a folder of CSVs under `<jobDir>/backups/<YYYY-MM-DD_HH-mm-ss>/`. The
+Job runner keeps the 10 most recent backups; older ones are pruned automatically.
+Backups are also written on crash (uncaught error / SIGINT) when `--save` is set.
+
+For MySQL-based analysis tooling — bulk-loading a backup into a queryable database
+or exporting MySQL state back to a backup folder — see the [`apps/db`](apps/db)
+app. It is not part of the brain core; the brain has no DB dependency.
 
 ## License
 

@@ -1,0 +1,12 @@
+{
+  "name": "stocks",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Stock-trading apps for the robot-brain — encoders, traders, and runnable jobs.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "robot-brain": "workspace:*",
+    "@alpacahq/alpaca-trade-api": "^3.1.3"
+  }
+}

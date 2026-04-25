@@ -1,7 +1,6 @@
 import { Memory } from './memory.js';
-import { Database } from './database.js';
+import { Backup } from './backup.js';
 import { Diagnostics } from './diagnostics.js';
-import { Dump } from './dump.js';
 import { Neuron } from './neuron.js';
 import { Thalamus } from './thalamus.js';
 
@@ -23,21 +22,17 @@ export default class Brain {
 
 		// Debugging info and flags
 		this.debug = options?.debug;
-		this.database = options?.database; // skip database backup/restore for tests
 
 		// Frame state - populated by processFrameIO methods
 		this.frame = []; // current frame data from all channels
 		this.rewards = []; // channel rewards indexed by age (array of Maps)
 		this.frameNumber = 0; // frame number is used for death ledger and diagnostics
 
-		// Database - used for persistent storage - backup and restore
-		this.db = this.database ? new Database(this.debug, this.patternForgetRate, this.mergeThreshold) : null;
-
 		// Diagnostics - pure stats tracker. No flags — presentation flags live on the host.
 		this.diagnostics = new Diagnostics();
 
-		// Dump - used for creating brain state dumps for debugging
-		this.dump = new Dump();
+		// Backup - file-based snapshot save/load. Used by the Job runner via --save/--load.
+		this.backupStore = new Backup(this.patternForgetRate, this.mergeThreshold);
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
 		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.errorCorrectionThreshold);
@@ -54,13 +49,6 @@ export default class Brain {
 	 */
 	registerChannelSpec(spec) {
 		return this.thalamus.registerChannelSpec(spec);
-	}
-
-	/**
-	 * initializes the database connection and loads dimensions
-	 */
-	async initDB() {
-		if (this.database) await this.db.initDB();
 	}
 
 	/**
@@ -86,7 +74,7 @@ export default class Brain {
 	/**
 	 * Hard reset: clears ALL learned data (used mainly for tests)
 	 */
-	async resetBrain() {
+	resetBrain() {
 		console.log('Hard resetting brain (all learned data)...');
 
 		// reset active memory (also resets frameNumber)
@@ -97,9 +85,6 @@ export default class Brain {
 
 		// reset neuron id counter
 		Neuron.nextId = 1;
-
-		// Clear MySQL tables if using a database
-		if (this.database) await this.db.reset();
 	}
 
 	/**
@@ -117,33 +102,21 @@ export default class Brain {
 	}
 
 	/**
-	 * Backup brain state from in-memory Neuron objects to MySQL.
-	 * Called on shutdown or when job is interrupted.
+	 * Save brain state to a file-based backup under <jobDir>/backups/<timestamp>/.
+	 * Save errors are caught and logged inside Backup.save so a failure here
+	 * never throws during shutdown.
 	 */
-	async backup() {
-		if (!this.database) return;
-		await this.db.saveSnapshot(this.thalamus.getSnapshot());
+	save(jobDir) {
+		return this.backupStore.save(jobDir, this.thalamus.getSnapshot());
 	}
 
 	/**
-	 * Create a dump file with current brain state for debugging and comparison
+	 * Load the most recent backup from <jobDir>/backups/ and restore it into the
+	 * Thalamus. Throws if no backup exists — --load is an explicit user request.
 	 */
-	createDump() {
-		return this.dump.saveSnapshot(this.thalamus.getSnapshot());
-	}
-
-	/**
-	 * initializes the brain and loads dimensions
-	 */
-	async init() {
-
-		// Load full snapshot from DB (channels, dimensions, neurons). Channel specs must
-		// already be registered on the Thalamus before init() — the DB snapshot only
-		// reconciles id↔name maps and restores neurons.
-		if (this.database) {
-			const snapshot = await this.db.loadSnapshot(this.thalamus.channelActions);
-			this.thalamus.restoreSnapshot(snapshot);
-		}
+	load(jobDir) {
+		const snapshot = this.backupStore.loadLatest(jobDir, this.thalamus.channelActions);
+		this.thalamus.restoreSnapshot(snapshot);
 	}
 
 	/**

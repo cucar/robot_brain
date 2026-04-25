@@ -48,33 +48,7 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 ---
 
-## Phase 2 — Clean Up Persistence
-
-Clarify the two distinct persistence concerns before moving to Rust, so the library boundary is clean.
-
-**Role clarification**:
-- **Backups (dump)** = backup/restore. Serialize entire brain state to/from a portable byte format. Used for saving on exit, loading on startup, checkpointing.
-- **Database** = debugging/analysis. Indexed, queryable representation of neuron relationships for "brain deep dive" tools. Not for backup/restore.
-
-- Rust core (library) saves channels, dimensions and neurons to text files in backup folders. 
-- Each backup should be saved with a timestamp folder in the same folder as the job under a folder called backups.
-- Backup layout: apps/<app>/<jobname>/backups/<YYYY-MM-DD_HH-mm-ss>/<snapshot files>
-- When jobs are starting up --load option should trigger them to load the snapshot from the last backup (by timestamp). This includes neurons, channels and dimensions.  
-- When jobs are shutting down (SIGINT/SIGTERM handlers) --save option should trigger them to save the snapshot as a new backup to be loaded later, or analyzed in database. 
-- The files saved for the snapshot should correspond to the database tables: channels, dimensions, neurons, base_neurons, patterns, contexts (pattern_past) and connections (pattern_future)
-- The snapshot/backup files should be simple CSVs that can be loaded to the database with mysql load data command in bulk.  
-- After saving a new backup, delete old backups as well. Keep a maximum of 10 latest backups. This can be a parameter in the class, but not an adjustable one from command line. No need. Keep it simple. 
-- Rename Dump class as Backup or Persistence.
-- Test demo 5 with save in between: run one episode and save backup, load backup in new session, confirm it returns the same results as expected in the second episode ($31795850.67).
-- Create database utility jobs under apps/db/import and apps/db/export 
-- Database import utility to load the snapshot/backup files into the database should be able to load them with mysql load data command (assume local server for maximum performance)
-- Database export utility should create a new backup with the current timestamp in the current folder. User can move it to the appropriate job folder if it needs to be loaded.
-- Move database class to the apps/db folder which should be used by both import and export jobs
-- Update README and Rust migration plan
-
----
-
-## Phase 3 — Introduce Column Classes
+## Phase 3 — Introduce Region and Column Classes
 
 Column abstractions (Column, Region) will be introduced directly in Rust rather than building them in JS only to throw them away 2–3 weeks later. The column classes are a Rust-native concern.
 
@@ -99,7 +73,6 @@ The following describes the *design* for reference — implementation happens in
 
 ### 3.4 Refactor Thalamus for column-aware neuron ownership
 - Neurons get assigned to a specific column (owner)
-- ~~Neuron channel, type, coordinates belong to base level only - may be ok to merge as baseNeurons?~~ **Done**: Thalamus now holds a single `baseNeurons` Map (`neuronId → {channel, type, coordinate}`) for level-0 only; interneurons have no coordinate. DB `coordinates` table dropped, columns merged into `base_neurons`.
 - Thalamus tracks which region/column owns each neuron
 - Neuron lookup still global (Thalamus), but mutations route through owner
 
@@ -236,7 +209,8 @@ Memory                        →     Split: per-column window + region aggregat
 Neuron                        →     Rust struct (arena-allocated, column-owned)
 Context                       →     Rust struct (inline with neuron)
 Channel                       →     Stays in JS (I/O boundary)
-Database                      →     Stays in JS (persistence boundary)
+Backup (CSV files)            →     Owned by Rust core (mirrors DB schema)
+apps/db (MySQL utilities)     →     Stays in JS, outside brain core (analysis only)
 ```
 
 ---
@@ -246,8 +220,8 @@ Database                      →     Stays in JS (persistence boundary)
 | Phase | Scope | Estimate |
 |-------|-------|----------|
 | 1 | Unify per-neuron processing (JS refactor) | ~1.5 weeks |
-| 2 | Column class design (deferred to Rust — Phase 5) | — |
-| 3 | Clean up persistence (dumps/database) | ~1 week |
+| 2 | Clean up persistence (backups/database split) | ~1 week |
+| 3 | Column class design (deferred to Rust — Phase 5) | — |
 | 4 | Single-threaded Rust core + Node.js/npm | ~3 weeks |
 | 5 | Multi-threaded Rust core + column classes | ~1 week |
 | 6 | Scale stock processing | ~1 week |
@@ -260,8 +234,7 @@ See [future-work.md](future-work.md) for Python bindings, MPI distribution, text
 
 ## Success Criteria
 
-- **Phase 2**: Column class design documented. Implementation deferred to Phase 5 in Rust.
-- **Phase 3**: Dumps are the primary backup/restore mechanism. Database is analysis-only. Serialization format is portable and versioned, ready for Rust core to own.
+- **Phase 3**: Column class design documented. Implementation deferred to Phase 5 in Rust.
 - **Phase 4**: Single-threaded Rust core handles frame processing. Rust unit tests pass. Dump cross-compatibility verified (JS↔Rust). JS tests pass through N-API. Published to npm. Results identical to JS implementation.
 - **Phase 5**: Multi-threaded Rust core with region/column classes. Measurable speedup over single-threaded. Thread count configurable. Neurons partitioned across columns.
 - **Phase 6**: Stock processing scales with parallelism. Benchmarked against JS baseline.

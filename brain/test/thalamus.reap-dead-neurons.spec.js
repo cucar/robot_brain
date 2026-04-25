@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { Thalamus } from '../brain/thalamus.js';
+import { Thalamus } from '../src/thalamus.js';
 
 describe('Thalamus reapDeadNeurons', () => {
 	it('reaps only neurons scheduled for the current frame', () => {

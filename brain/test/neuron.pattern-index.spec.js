@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { Context } from '../brain/context.js';
-import { Neuron } from '../brain/neuron.js';
+import { Context } from '../src/context.js';
+import { Neuron } from '../src/neuron.js';
 
 const makeContext = entries => {
 	const context = new Context();

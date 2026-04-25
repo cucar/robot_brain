@@ -21,7 +21,8 @@ export function parseBrainArgs(argv = process.argv) {
 
 	return {
 		diagnostic: has('--diagnostic'),
-		database: has('--database'),
+		save: has('--save'),
+		load: has('--load'),
 		debug: has('--debug'),
 		wait: has('--wait'),
 		noSummary: has('--no-summary'),
@@ -67,5 +68,8 @@ export async function runJob(meta, JobClass, options) {
 
 	// only run when this file is the entry point - dynamic imports should not auto-execute
 	if (!meta || meta.url !== pathToFileURL(process.argv[1]).href) return;
+
+	// Stash the job module URL so Job.getJobDir() can resolve <jobDir>/backups/.
+	JobClass.moduleUrl = meta.url;
 	await executeJob(JobClass, options);
 }

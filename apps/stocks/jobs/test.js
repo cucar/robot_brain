@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Job, runJob } from '#brain-node';
+import { Job, runJob } from 'robot-brain';
 import { StockEncoder } from '../encoder.js';
 import { StockTrader } from '../trader.js';
 
@@ -94,7 +94,6 @@ export default class StockTestJob extends Job {
 	 * Create an encoder + trader per symbol and register the encoder's spec with the brain.
 	 * The trader borrows the encoder's channelId so rewards, inputs, and inferences all key
 	 * off a single number per symbol — otherwise we'd need a second id→symbol lookup.
-	 * Called before brain.init(), which then creates the dimensions/neurons from each spec.
 	 */
 	async registerBrainChannels() {
 		for (const symbol of this.config.symbols) {

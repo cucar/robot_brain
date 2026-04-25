@@ -7,7 +7,7 @@
  * surface here stays the same.
  */
 
-export { default as Brain } from '../../brain/brain.js';
-export { Quantizer } from '../../brain/quantizer.js';
+export { default as Brain } from 'brain';
+export { Quantizer } from 'brain/quantizer';
 export { Job } from './src/job.js';
 export { runJob, executeJob, parseBrainArgs } from './src/run.js';

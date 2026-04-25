@@ -1,5 +1,10 @@
-import { Job, runJob } from '#brain-node';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Job, runJob } from 'robot-brain';
 import { TextEncoder } from '../encoder.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Text Test Job - Trains the brain on a repeating character pattern and reports per-episode
@@ -11,9 +16,12 @@ export default class TextTestJob extends Job {
 	constructor() {
 		super();
 
-		// Simple configuration - edit these values as needed.
+		// Simple configuration - edit these values as needed. The training text is
+		// loaded from `file` at job start (default ../data/test.txt — the legacy
+		// hard-coded sample). Override with --file <path> to point at any text
+		// file (e.g. ../data/abramov.txt).
 		this.config = {
-			pattern: 'test123 Russia has provided Iran with information that can help WASHINGTON Russia has provided Iran with information that could',
+			file: path.join(__dirname, '..', 'data', 'test.txt'),
 			maxEpisodes: 5,
 			iterationsPerEpisode: 1
 		};
@@ -30,8 +38,15 @@ export default class TextTestJob extends Job {
 		const episodesIndex = process.argv.indexOf('--episodes');
 		if (episodesIndex !== -1 && process.argv[episodesIndex + 1]) this.config.maxEpisodes = parseInt(process.argv[episodesIndex + 1]);
 
-		const patternIndex = process.argv.indexOf('--pattern');
-		if (patternIndex !== -1 && process.argv[patternIndex + 1]) this.config.pattern = process.argv[patternIndex + 1];
+		// --file: bare names (no directory) resolve against ../data/, so `--file abramov.txt`
+		// just works. Anything containing a slash/backslash is resolved against cwd as a path.
+		const fileIndex = process.argv.indexOf('--file');
+		if (fileIndex !== -1 && process.argv[fileIndex + 1]) {
+			const arg = process.argv[fileIndex + 1];
+			this.config.file = path.basename(arg) === arg
+				? path.join(__dirname, '..', 'data', arg)
+				: path.resolve(arg);
+		}
 
 		const iterationsIndex = process.argv.indexOf('--iterations');
 		if (iterationsIndex !== -1 && process.argv[iterationsIndex + 1]) this.config.iterationsPerEpisode = parseInt(process.argv[iterationsIndex + 1]);
@@ -50,17 +65,19 @@ export default class TextTestJob extends Job {
 	}
 
 	/**
-	 * Load the training string into the encoder once per job. resetFrames() is called per
-	 * episode so the same sequence is re-streamed.
+	 * Load the training string from the configured file once per job and hand it
+	 * to the encoder. resetFrames() is called per episode so the same sequence
+	 * is re-streamed without re-reading from disk.
 	 */
 	async configureChannels() {
-		const text = this.config.pattern.repeat(this.config.iterationsPerEpisode);
+		this.pattern = fs.readFileSync(this.config.file, 'utf-8');
+		const text = this.pattern.repeat(this.config.iterationsPerEpisode);
 		for (const encoder of this.encoders) encoder.setData(text);
 	}
 
 	async showStartupInfo() {
 		console.log(`🚀 Starting Text Test Job`);
-		console.log(`📝 Pattern: "${this.config.pattern}"`);
+		console.log(`📄 File: ${this.config.file}`);
 		console.log(`🔄 Max Episodes: ${this.config.maxEpisodes}`);
 		console.log(`🔁 Iterations per Episode: ${this.config.iterationsPerEpisode}`);
 		console.log('');
@@ -92,11 +109,10 @@ export default class TextTestJob extends Job {
 
 		const episodeMetrics = {
 			episode: this.currentEpisode,
-			pattern: this.config.pattern,
 			baseAccuracy: null
 		};
 
-		const expectedFrames = this.config.pattern.length * this.config.iterationsPerEpisode;
+		const expectedFrames = this.pattern.length * this.config.iterationsPerEpisode;
 
 		let frameCount = 0;
 		while (frameCount < expectedFrames) {
@@ -196,8 +212,8 @@ export default class TextTestJob extends Job {
 
 		const grouped = new Map();
 		for (const m of mispredictions) {
-			const predChar = m.predicted.value;
-			const actualChar = m.actual.value;
+			const predChar = m.predicted.bucketId;
+			const actualChar = m.actual.bucketId;
 			const key = `${predChar}→${actualChar}`;
 			grouped.set(key, (grouped.get(key) || 0) + 1);
 		}
@@ -249,7 +265,7 @@ export default class TextTestJob extends Job {
 		const avgAccuracy = validResults.reduce((sum, ep) => sum + ep.baseAccuracy, 0) / validResults.length;
 
 		console.log(`📈 Overall Performance:`);
-		console.log(`   Pattern: "${this.config.pattern}"`);
+		console.log(`   File: ${this.config.file}`);
 		console.log(`   Iterations per Episode: ${this.config.iterationsPerEpisode}`);
 		console.log(`   Average Accuracy: ${avgAccuracy.toFixed(2)}%`);
 

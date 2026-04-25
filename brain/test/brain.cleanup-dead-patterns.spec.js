@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import Brain from '../brain/brain.js';
+import Brain from '../src/brain.js';
 
 describe('Brain cleanupDeadPatterns', () => {
 	it('reaps the previous frame bucket after getFrame increments frameNumber', () => {

@@ -1,4 +1,4 @@
-import { Job, runJob } from '#brain-node';
+import { Job, runJob } from 'robot-brain';
 import { StockEncoder } from '../encoder.js';
 import { StockTrader } from '../trader.js';
 

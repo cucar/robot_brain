@@ -1,10 +1,12 @@
 /**
  * Base Job Class - Common functionality for all episodes
  */
+import path from 'node:path';
 import process from 'node:process';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { stdin, stdout } from 'node:process';
-import Brain from '../../../brain/brain.js';
+import Brain from 'brain';
 import { formatFrameSummary, formatStartFrame, formatVoteDebug } from './renderer.js';
 
 export class Job {
@@ -12,7 +14,8 @@ export class Job {
 	constructor() {
 		this.brain = null; // Brain instance will be created in run() based on options
 		this.isShuttingDown = false;
-		this.database = false; // Default: skip database backup/restore for jobs (tests)
+		this.save = false; // --save: write a backup on shutdown (incl. crash)
+		this.load = false; // --load: restore latest backup before executing
 		this.jobStartTime = null;
 		this.hasShownExecutionTime = false;
 
@@ -64,8 +67,10 @@ export class Job {
 			// Create brain instance
 			this.brain = new Brain(this.options);
 
-			// Apply database option if provided (overrides default)
-			if (this.options?.database !== undefined) this.database = this.options.database;
+			// Backup options: --save writes a snapshot on shutdown, --load restores
+			// the latest backup from <jobDir>/backups/ before the first frame.
+			this.save = !!this.options?.save;
+			this.load = !!this.options?.load;
 
 			// Allow jobs to show custom startup info
 			await this.showStartupInfo();
@@ -73,14 +78,13 @@ export class Job {
 			// get channels defined by child class and register them with brain
 			await this.registerBrainChannels();
 
-			// initialize database connection in the brain
-			await this.brain.initDB();
-
 			// Handle brain reset strategy
 			await this.handleBrainReset();
 
-			// initialize brain (this will initialize channels and create dimensions)
-			await this.brain.init();
+			// --load: restore the latest file-based backup into the brain. Channel
+			// specs are already registered above; the backup just reconciles
+			// id↔name maps and rehydrates neurons.
+			if (this.load) this.brain.load(this.getJobDir());
 
 			// Allow jobs to configure channels after brain initialization
 			await this.configureChannels();
@@ -161,7 +165,10 @@ export class Job {
 		// Close readline if --wait opened one; otherwise the process hangs on the
 		// open stdin handle even after backup completes.
 		if (this.rl) { this.rl.close(); this.rl = null; }
-		if (this.brain && this.database) await this.brain.backup();
+		// --save also fires on the catch path in run(), so a crash still produces
+		// a backup. Backup.save catches its own errors so a save failure during
+		// shutdown can never mask the original exit.
+		if (this.brain && this.save) this.brain.save(this.getJobDir());
 	}
 
 	/* ---------- Hooks ---------- */
@@ -172,9 +179,25 @@ export class Job {
 
 	async handleBrainReset() {
 		if (this.options?.reset) {
-			console.log('Hard reset requested. Clearing all tables...');
-			await this.brain.resetBrain();
+			console.log('Hard reset requested. Clearing brain state...');
+			this.brain.resetBrain();
 		}
+	}
+
+	/**
+	 * Folder where this job's backups live: <job-file's dir>/<job-file stem>/.
+	 * For apps/stocks/jobs/test.js this resolves to apps/stocks/jobs/test/, so
+	 * each job gets its own backup namespace and multiple jobs in the same
+	 * directory don't collide. Resolved from the static `moduleUrl` set by
+	 * runJob(). Falls back to cwd if not set.
+	 */
+	getJobDir() {
+		const url = this.constructor.moduleUrl;
+		if (!url) return process.cwd();
+		const filepath = fileURLToPath(url);
+		const dir = path.dirname(filepath);
+		const stem = path.basename(filepath, path.extname(filepath));
+		return path.join(dir, stem);
 	}
 
 	async executeJob() {

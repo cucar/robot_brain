@@ -1,0 +1,20 @@
+{
+  "name": "brain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Hierarchical temporal neural network core (JS). The runtime brain — neurons, columns, thalamus, memory, persistence.",
+  "type": "module",
+  "main": "src/brain.js",
+  "exports": {
+    ".": "./src/brain.js",
+    "./quantizer": "./src/quantizer.js",
+    "./backup": "./src/backup.js"
+  },
+  "scripts": {
+    "test": "mocha test/*.spec.js"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "mocha": "^11.7.5"
+  }
+}

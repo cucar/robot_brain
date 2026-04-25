@@ -1,9 +1,23 @@
 {
-  "name": "@mi/brain-node",
+  "name": "robot-brain",
   "version": "0.0.0",
-  "description": "Node wrapper for the machine-intelligence brain core. Re-exports the brain's public surface while the core is still JavaScript; will later wrap the Rust core via NAPI.",
+  "description": "Node bindings + Job runner for the robot-brain core. Re-exports the brain's public surface; will later wrap the Rust core via NAPI without changing this surface.",
   "type": "module",
   "main": "index.js",
-  "private": true,
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "keywords": [
+    "artificial-intelligence",
+    "neural-network",
+    "temporal-learning",
+    "hierarchical-patterns",
+    "online-learning",
+    "prediction",
+    "neuroscience",
+    "brain",
+    "unsupervised-learning"
+  ],
+  "author": "Cagdas Ucar",
+  "dependencies": {
+    "brain": "workspace:*"
+  }
 }

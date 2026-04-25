@@ -1,0 +1,11 @@
+{
+  "name": "text",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Text-sequence apps for the robot-brain — encoder and runnable jobs.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "robot-brain": "workspace:*"
+  }
+}
