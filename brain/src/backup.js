@@ -22,6 +22,7 @@ const MAX_BACKUPS = 10;
  *   connections.csv   from_neuron_id,to_neuron_id,distance,strength,reward
  *   patterns.csv      pattern_neuron_id,parent_neuron_id,strength
  *   pattern_past.csv  pattern_neuron_id,context_neuron_id,context_age,strength
+ *   neuron_error_stats.csv  neuron_id,age,n,mean,m2
  */
 export class Backup {
 
@@ -30,10 +31,12 @@ export class Backup {
 	 * to each freshly-rehydrated Neuron. The snapshot itself doesn't carry these
 	 * (they're brain-wide, not per-neuron), so they have to be passed in here.
 	 */
-	constructor(patternForgetRate, mergeThreshold, contextLength) {
+	constructor(patternForgetRate, mergeThreshold, contextLength, errorMode, errorThreshold) {
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
 		this.contextLength = contextLength;
+		this.errorMode = errorMode;
+		this.errorThreshold = errorThreshold;
 	}
 
 	/**
@@ -64,6 +67,7 @@ export class Backup {
 			this.writeConnections(folder, snapshot);
 			this.writePatterns(folder, snapshot);
 			this.writePatternPast(folder, snapshot);
+			this.writeNeuronErrorStats(folder, snapshot);
 
 			console.log(`💾 Backup saved: ${folder} (${snapshot.neurons.length} neurons)`);
 
@@ -122,7 +126,7 @@ export class Backup {
 			const id = Number(idStr);
 			const level = Number(levelStr);
 			const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
-			const neuron = new Neuron(forgetRate, this.mergeThreshold, channelActionIds, id);
+			const neuron = new Neuron(forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, channelActionIds, id);
 			neurons.set(id, neuron);
 			levels.set(id, level);
 			if (id > maxId) maxId = id;
@@ -189,6 +193,20 @@ export class Backup {
 				if (!contextNeuron) throw new Error(`pattern_past context neuron not found: ${contextId}`);
 				parent.addContext(pid, cid, Number(contextAge), Number(strength));
 				contextNeuron.addContextRef(parentId, Number(contextAge));
+			}
+		}
+
+		// Per-(neuron, age) Welford error stats. Optional — older snapshots predating
+		// dynamic error thresholds won't have this file, in which case neurons start
+		// with empty errorStats and warmup-fallback to errorThreshold for their first
+		// 3 samples per age. New snapshots restore the stats verbatim so the dynamic
+		// threshold picks up exactly where it left off.
+		const errorStatsFile = path.join(folder, 'neuron_error_stats.csv');
+		if (fs.existsSync(errorStatsFile)) {
+			for (const [neuronId, age, n, mean, m2] of readCsv(errorStatsFile)) {
+				const neuron = neurons.get(Number(neuronId));
+				if (!neuron) throw new Error(`neuron_error_stats neuron not found: ${neuronId}`);
+				neuron.loadErrorStats(Number(age), Number(n), Number(mean), Number(m2));
 			}
 		}
 
@@ -324,6 +342,23 @@ export class Backup {
 			for (const { patternId, neuronId, distance, strength } of neuron.getRoutingTable())
 				rows.push([patternId, neuronId, distance, strength]);
 		writeCsv(path.join(folder, 'pattern_past.csv'), rows);
+	}
+
+	/**
+	 * Write the per-(neuron, age) Welford error-stats table. Sparse: only neurons
+	 * that have observed at least one error sample at a given age contribute a row.
+	 * Sorted by (neuron_id, age) for stable file output, matching the parent-table
+	 * convention. Used only by the dynamic error-correction modes — for `static`
+	 * mode the file is written empty (the stats are still maintained but never
+	 * consulted, so persisting them is harmless).
+	 */
+	writeNeuronErrorStats(folder, snapshot) {
+		const rows = [];
+		for (const { neuron } of snapshot.neurons)
+			for (const [age, { n, mean, M2 }] of neuron.errorStats)
+				rows.push([neuron.id, age, n, mean, M2]);
+		rows.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+		writeCsv(path.join(folder, 'neuron_error_stats.csv'), rows);
 	}
 
 	/* ---------- folder management ---------- */

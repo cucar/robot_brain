@@ -53,7 +53,7 @@ pnpm install
 A single-stock variant of the cycle test: one channel, a repeating 12-frame price/volume pattern, 20 repeats. Same idea as Demo 1 but isolated to a single channel so you can see the brain converge on optimal actions without multi-channel reinforcement doing any of the work.
 
 ```bash
-node apps/stocks/jobs/synthetic-extended-test.js --error-threshold 0.3 --merge-threshold 0.9
+node apps/stocks/jobs/synthetic-extended-test.js --error-mode static --error-threshold 0.3 --merge-threshold 0.9
 ```
 
 **Expected output:**
@@ -70,7 +70,7 @@ The brain learns to trade 3 stocks simultaneously (KGC, GLD, SPY), each as a sep
 Run the multi-channel test with customized hyperparameters:
 
 ```bash
-node apps/stocks/jobs/multi-channel-test.js --error-threshold 0.3 --merge-threshold 0.9
+node apps/stocks/jobs/multi-channel-test.js --error-mode static --error-threshold 0.3 --merge-threshold 0.9
 ```
 
 **Expected output:**
@@ -88,7 +88,7 @@ The brain learns to trade stocks from historical price and volume data. Each sto
 **Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
-node apps/stocks/jobs/test.js --error-threshold 0.65
+node apps/stocks/jobs/test.js
 ```
 
 **Expected output:**
@@ -97,18 +97,18 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $71498.80
-   Average per Episode: $71498.80
-   Average ROI: +476.66%
-   Average Per-Frame ROI: +0.069968%
-   Total Trades: 1739
-   Average Trades per Episode: 1739.0
+   Total Net Profit: $66575.27
+   Average per Episode: $66575.27
+   Average ROI: +443.84%
+   Average Per-Frame ROI: +0.067627%
+   Total Trades: 2257
+   Average Trades per Episode: 2257.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $71498.80 | ROI: +476.66%, +0.069968%/frame (1739 trades)
+   Episode 1: $66575.27 | ROI: +443.84%, +0.067627%/frame (2257 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 56.96%
+   Episode 1: 56.97%
 ```
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -125,18 +125,18 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $38217.21 | ROI: +254.78%, +0.050565%/frame (2893 trades)
-   Episode 2: $466128.63 | ROI: +3107.52%, +0.138542%/frame (2323 trades)
-   Episode 3: $8407067.12 | ROI: +56047.11%, +0.253037%/frame (3344 trades)
-   Episode 4: $22922860.13 | ROI: +152819.07%, +0.293143%/frame (4323 trades)
-   Episode 5: $43740454.58 | ROI: +291603.03%, +0.319004%/frame (4530 trades)
+   Episode 1: $66575.27 | ROI: +443.84%, +0.067627%/frame (2257 trades)
+   Episode 2: $566290.43 | ROI: +3775.27%, +0.146103%/frame (1565 trades)
+   Episode 3: $5205145.07 | ROI: +34700.97%, +0.233895%/frame (3647 trades)
+   Episode 4: $4538587.37 | ROI: +30257.25%, +0.228429%/frame (4217 trades)
+   Episode 5: $10599480.49 | ROI: +70663.20%, +0.262296%/frame (3851 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 57.07%
-   Episode 2: 57.89%
-   Episode 3: 58.33%
-   Episode 4: 58.58%
-   Episode 5: 58.73%
+   Episode 1: 56.97%
+   Episode 2: 57.76%
+   Episode 3: 58.31%
+   Episode 4: 58.64%
+   Episode 5: 58.77%
 ```
 
 ## Demo 5: Stock Sequence Memorization
@@ -146,7 +146,7 @@ The brain memorizes a repeating stock price sequence across 5 episodes, reaching
 Run the stock test with customized hyperparameters for sequence memorization:
 
 ```bash
-node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.001 --error-threshold 0.3
+node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.001 --error-mode static --error-threshold 0.3
 ```
 
 **Expected output:**
@@ -186,7 +186,7 @@ The brain learns to predict character sequences. Feed it a string, and it memori
 Run the text test with customized hyperparameters for text learning (the defaults are tuned for stock data):
 
 ```bash
-node apps/text/jobs/test.js --file abramov.txt --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001 --no-summary
+node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001 --no-summary
 ```
 
 **Expected output:**
@@ -321,7 +321,8 @@ All hyperparameters are configured via the Brain constructor options and can be 
 
 | Parameter | Default | Command Line Option | Description |
 |-----------|---------|---------------------|-------------|
-| `errorCorrectionThreshold` | 0.5 | `--error-threshold` | Prediction error threshold for creating patterns |
+| `errorCorrectionMode` | `'conservative'` | `--error-mode` | Threshold function for creating correction patterns: `static` (fixed), `conservative` (mean + σ — learn outliers), `neutral` (mean), `aggressive` (mean − σ — memorize aggressively). Per-(neuron, age) error rate stats are tracked online via Welford's algorithm. |
+| `errorCorrectionThreshold` | 0.5 | `--error-threshold` | When `errorCorrectionMode='static'`, the fixed prediction error threshold. For dynamic modes, the warmup fallback used until 3 samples have been observed at a given (neuron, age) pair. |
 | `contextLength` | 10 | `--context-length` | Frames a neuron stays active in the sliding window |
 | `mergeThreshold` | 0.5 | `--merge-threshold` | Min context match ratio for pattern recognition |
 | `patternForgetRate` | 0.01 | `--forget-rate` | Pattern prediction decay rate per frame |
@@ -344,7 +345,8 @@ node <path-to-job.js> [options]
 | `--initial-capital <n>`| Starting capital for the portfolio |
 | `--context-length <n>`| Sliding window size (frames) |
 | `--forget-rate <n>` | Pattern activation decay rate per frame |
-| `--error-threshold <n>`| Prediction error threshold |
+| `--error-mode <m>` | Error-correction threshold mode: `static`, `conservative`, `neutral`, `aggressive` |
+| `--error-threshold <n>`| Static threshold value (when mode=`static`); warmup fallback for dynamic modes |
 | `--merge-threshold <n>`| Threshold for pattern context matching |
 | `--debug` | Show detailed frame-by-frame processing |
 | `--diagnostic` | Show inference and conflict resolution details |
@@ -439,8 +441,7 @@ config (KGC,GLD,SPY) — a single episode here ends around `$22,675,481.59`.
 
 ```bash
 # 1. Run one episode and save a backup
-node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY \
-  --context-length 3 --error-threshold 0.3 --forget-rate 0.001 --save
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --save
 
 # 2. Import that backup folder into MySQL (replace <ts> with the timestamp printed above)
 node apps/db/import.js apps/stocks/jobs/test/backups/<ts>
@@ -448,14 +449,13 @@ node apps/db/import.js apps/stocks/jobs/test/backups/<ts>
 # 3. Delete the original backup so the export is the only one left,
 #    then export MySQL back to a fresh backup folder under the job dir
 cd apps/stocks/jobs/test
-rm -rf backups/<ts>
+Remove-Item -Recurse -Force backups/<ts>
 node ../../../../apps/db/export.js
 cd ../../../../
 
 # 4. Load the round-tripped backup and run another episode — should reach
 #    ~$22,675,481.59, matching what a continuous two-episode run produces
-node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY \
-  --context-length 3 --error-threshold 0.3 --forget-rate 0.001 --load
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --load
 ```
 
 The `apps/db` import uses `LOAD DATA LOCAL INFILE`, which needs `local_infile=ON`

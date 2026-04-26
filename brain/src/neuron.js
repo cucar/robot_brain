@@ -23,17 +23,31 @@ export class Neuron {
 	// Static counter for assigning unique IDs to neurons
 	static nextId = 1;
 
+	// Minimum samples per (neuron, age) before dynamic modes switch off the warmup
+	// fallback. Not a tunable knob — kept here to avoid a magic number in getErrorThreshold.
+	static ERROR_MIN_SAMPLES = 3;
+
 	/**
 	 * constructor - id optional for loading from database
 	 * channelActionIds are used for alternative-action lookup during learning. Populated
 	 * by registerChannelSpec(); shared across all neurons so the map is broadcast once at
 	 * creation time (no per-frame traffic).
+	 *
+	 * errorMode picks the error-correction threshold function:
+	 *   'static'       — fixed threshold = errorThreshold
+	 *   'conservative' — mean + σ of past per-age error rates  (learn outliers)
+	 *   'neutral'      — mean
+	 *   'aggressive'   — mean − σ (learn aggressively)
+	 * For dynamic modes, errorThreshold also serves as the warmup fallback until
+	 * ERROR_MIN_SAMPLES observations have been recorded at that age.
 	 */
-	constructor(patternForgetRate, mergeThreshold, channelActionIds, id = null) {
+	constructor(patternForgetRate, mergeThreshold, errorMode, errorThreshold, channelActionIds, id = null) {
 
 		// initialize neuron parameters
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
+		this.errorMode = errorMode;
+		this.errorThreshold = errorThreshold;
 		this.channelActionIds = channelActionIds;
 
 		// initialize neuron id if given - update nextId if we're loading a neuron with a specific ID
@@ -45,6 +59,51 @@ export class Neuron {
 		this.routingTable = new Map(); // routing table: Map<patternId, Context>
 		this.contextIndex = new Map(); // inverted index: Map<neuronId, Map<distance, Set<patternId>>>
 		this.contextRefs = new Map(); // context references: Map<parentId, Set<distance>>
+		this.errorStats = new Map(); // per-age error rate stats: Map<age, {n, mean, M2}> (Welford)
+	}
+
+	/**
+	 * Error-correction threshold for a given age, dispatched by this.errorMode.
+	 * For dynamic modes, falls back to this.errorThreshold during warmup
+	 * (fewer than Neuron.ERROR_MIN_SAMPLES observations at this age).
+	 */
+	getErrorThreshold(age) {
+		if (this.errorMode === 'static') return this.errorThreshold;
+		const stats = this.errorStats.get(age);
+		if (!stats || stats.n < Neuron.ERROR_MIN_SAMPLES) return this.errorThreshold;
+		const sigma = Math.sqrt(stats.M2 / stats.n);
+		switch (this.errorMode) {
+			case 'conservative': return stats.mean + sigma;
+			case 'neutral':      return stats.mean;
+			case 'aggressive':   return stats.mean - sigma;
+			default: throw new Error(`Unknown errorMode: ${this.errorMode}`);
+		}
+	}
+
+	/**
+	 * Restoration entry point: install a fully-formed Welford bucket for a given
+	 * age. Used by Backup.loadLatest to rehydrate per-(neuron, age) error stats
+	 * from a snapshot. Does not validate the stats — the caller owns correctness.
+	 */
+	loadErrorStats(age, n, mean, M2) {
+		this.errorStats.set(age, { n, mean, M2 });
+	}
+
+	/**
+	 * Record an observed error rate for a given age (Welford online update).
+	 * Called after the threshold comparison so the current sample does not
+	 * influence its own decision.
+	 */
+	recordError(age, errorRate) {
+		let stats = this.errorStats.get(age);
+		if (!stats) {
+			stats = { n: 0, mean: 0, M2: 0 };
+			this.errorStats.set(age, stats);
+		}
+		stats.n += 1;
+		const delta = errorRate - stats.mean;
+		stats.mean += delta / stats.n;
+		stats.M2 += delta * (errorRate - stats.mean);
 	}
 
 	/**
@@ -172,17 +231,6 @@ export class Neuron {
 			if (conn.strength > 0)
 				result.push({ neuronId, strength: conn.strength, reward: conn.reward, distance });
 		return result;
-	}
-
-	/**
-	 * sets the activation strength of a child pattern - used when loading from database
-	 */
-	setChildActivationStrength(patternId, strength, lastFrame = 0) {
-		const entry = this.routingTable.get(patternId);
-		if (entry) {
-			entry.activationStrength = strength;
-			entry.lastActivationFrame = lastFrame;
-		}
 	}
 
 	/**
@@ -432,10 +480,19 @@ export class Neuron {
 	 * @param {number} currentFrame - Current frame number
 	 * @param {Array<{patternId: number, age: number, contextEntries: Array<{neuronId, distance}>}>} corrections
 	 *        Pre-created error-correction pattern neurons to install as children at the given ages.
+	 * @param {Array<{age: number, errorRate: number}>} errorFeedback
+	 *        Resolved error rates from prior-frame votes — applied to per-age error stats
+	 *        BEFORE new votes are cast so the next vote's threshold reflects the new sample.
+	 *        Carried in-band on the existing per-frame call so MPI workers do not need a
+	 *        separate round-trip.
 	 * @returns {{ matches, correctionActivations, contextRefUpdates, votes }}
-	 *          votes: Array<{age, votes, context}> - one entry per non-suppressed voting age
+	 *          votes: Array<{age, votes, context, threshold}> - one entry per non-suppressed voting age
 	 */
-	processFrame(ageStates, memoryDepth, levelContext, newErrorPatternIds, actives, currentFrame, corrections = []) {
+	processFrame(ageStates, memoryDepth, levelContext, newErrorPatternIds, actives, currentFrame, corrections = [], errorFeedback = []) {
+
+		// fold prior-frame error feedback into per-age stats first so the threshold attached
+		// to this frame's votes (computed in generateVotes) reflects the latest sample
+		for (const { age, errorRate } of errorFeedback) this.recordError(age, errorRate);
 
 		// derive locally — ships with the neuron instead of being re-sent each frame
 		const isNewErrorPattern = newErrorPatternIds.has(this.id);
@@ -553,7 +610,10 @@ export class Neuron {
 	 * @param {Context|null} levelContext - Shared level context (source for per-age context derivation)
 	 * @param {Array<{patternId, age, activate}>} matches - This frame's recognition matches
 	 * @param {Array<{patternId, age}>} correctionActivations - This frame's error-correction installs
-	 * @returns {Array<{age, votes, context}>} One entry per non-suppressed voting age
+	 * @returns {Array<{age, votes, context, threshold}>} One entry per non-suppressed voting age.
+	 *          threshold is the dynamic error-correction threshold for this (neuron, age) at the
+	 *          moment the vote is cast — shipped with the vote so thalamus can judge it next
+	 *          frame without calling back into the neuron (MPI-friendly).
 	 */
 	generateVotes(ageStates, memoryDepth, levelContext, matches, correctionActivations) {
 
@@ -567,7 +627,12 @@ export class Neuron {
 		for (const [age, state] of ageStates) {
 			if (state.activatedPatternId || age >= memoryDepth - 1) continue;
 			if (suppressedAges.has(age)) continue;
-			votes.push({ age, votes: this.vote(age), context: this.deriveContextAtAge(levelContext, age) });
+			votes.push({
+				age,
+				votes: this.vote(age),
+				context: this.deriveContextAtAge(levelContext, age),
+				threshold: this.getErrorThreshold(age)
+			});
 		}
 		return votes;
 	}

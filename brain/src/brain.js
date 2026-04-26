@@ -16,9 +16,15 @@ export default class Brain {
 
 		// set hyperparameters
 		this.contextLength = options?.contextLength ?? 10; // number of frames a base neuron stays active
-		this.errorCorrectionThreshold = options?.errorCorrectionThreshold ?? 0.5; // if the error is below this threshold, no need to create a new correction pattern
+		this.errorCorrectionMode = options?.errorCorrectionMode ?? 'conservative'; // 'static' | 'conservative' | 'neutral' | 'aggressive' — see Neuron constructor
+		this.errorCorrectionThreshold = options?.errorCorrectionThreshold ?? 0.5; // fixed threshold when mode='static'; warmup fallback for dynamic modes
 		this.mergeThreshold = options?.mergeThreshold ?? 0.5; // percentage of matched entries needed for context merge
 		this.patternForgetRate = options?.patternForgetRate ?? 0.01; // level-1 forget rate (inverse of frames remembered); deeper levels decay by contextLength per level
+
+		// validate the error-correction mode early so a bad CLI flag fails fast
+		const validModes = ['static', 'conservative', 'neutral', 'aggressive'];
+		if (!validModes.includes(this.errorCorrectionMode))
+			throw new Error(`Invalid errorCorrectionMode '${this.errorCorrectionMode}'. Expected one of: ${validModes.join(', ')}`);
 
 		// Debugging info and flags
 		this.debug = options?.debug;
@@ -32,10 +38,10 @@ export default class Brain {
 		this.diagnostics = new Diagnostics();
 
 		// Backup - file-based snapshot save/load. Used by the Job runner via --save/--load.
-		this.backupStore = new Backup(this.patternForgetRate, this.mergeThreshold, this.contextLength);
+		this.backupStore = new Backup(this.patternForgetRate, this.mergeThreshold, this.contextLength, this.errorCorrectionMode, this.errorCorrectionThreshold);
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
-		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.errorCorrectionThreshold, this.contextLength);
+		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.contextLength, this.errorCorrectionMode, this.errorCorrectionThreshold);
 
 		// Memory - manages temporal sliding window and inferred neurons
 		this.memory = new Memory(this.debug, this.contextLength);

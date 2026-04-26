@@ -18,6 +18,10 @@ export function parseBrainArgs(argv = process.argv) {
 		const i = argv.indexOf(flag);
 		return i !== -1 && argv[i + 1] !== undefined ? parser(argv[i + 1]) : null;
 	};
+	const str = flag => {
+		const i = argv.indexOf(flag);
+		return i !== -1 && argv[i + 1] !== undefined ? argv[i + 1] : null;
+	};
 
 	return {
 		diagnostic: has('--diagnostic'),
@@ -29,6 +33,7 @@ export function parseBrainArgs(argv = process.argv) {
 		reset: has('--reset'),
 		contextLength: num('--context-length', parseInt),
 		patternForgetRate: num('--forget-rate', parseFloat),
+		errorCorrectionMode: str('--error-mode'),
 		errorCorrectionThreshold: num('--error-threshold', parseFloat),
 		mergeThreshold: num('--merge-threshold', parseFloat)
 	};

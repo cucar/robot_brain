@@ -28,7 +28,8 @@ const TABLES = [
 	{ file: 'base_neurons.csv', query: 'SELECT neuron_id, channel_id, type, dimension_id, val FROM base_neurons ORDER BY neuron_id' },
 	{ file: 'connections.csv',  query: 'SELECT from_neuron_id, to_neuron_id, distance, strength, reward FROM connections' },
 	{ file: 'patterns.csv',     query: 'SELECT pattern_neuron_id, parent_neuron_id, strength FROM patterns' },
-	{ file: 'pattern_past.csv', query: 'SELECT pattern_neuron_id, context_neuron_id, context_age, strength FROM pattern_past' }
+	{ file: 'pattern_past.csv', query: 'SELECT pattern_neuron_id, context_neuron_id, context_age, strength FROM pattern_past' },
+	{ file: 'neuron_error_stats.csv', query: 'SELECT neuron_id, age, n, mean, m2 FROM neuron_error_stats ORDER BY neuron_id, age' }
 ];
 
 /**

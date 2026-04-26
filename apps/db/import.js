@@ -23,7 +23,8 @@ const TABLES = [
 	{ file: 'base_neurons.csv', table: 'base_neurons', columns: '(neuron_id, channel_id, type, dimension_id, val)' },
 	{ file: 'connections.csv',  table: 'connections',  columns: '(from_neuron_id, to_neuron_id, distance, strength, reward)' },
 	{ file: 'patterns.csv',     table: 'patterns',     columns: '(pattern_neuron_id, parent_neuron_id, strength)' },
-	{ file: 'pattern_past.csv', table: 'pattern_past', columns: '(pattern_neuron_id, context_neuron_id, context_age, strength)' }
+	{ file: 'pattern_past.csv', table: 'pattern_past', columns: '(pattern_neuron_id, context_neuron_id, context_age, strength)' },
+	{ file: 'neuron_error_stats.csv', table: 'neuron_error_stats', columns: '(neuron_id, age, n, mean, m2)' }
 ];
 
 async function main() {

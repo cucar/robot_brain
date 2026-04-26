@@ -10,12 +10,13 @@ import { Quantizer } from './quantizer.js';
  * Named after the biological thalamus which routes sensory signals and translates reference frames.
  */
 export class Thalamus {
-	constructor(debug, patternForgetRate, mergeThreshold, errorCorrectionThreshold, contextLength) {
+	constructor(debug, patternForgetRate, mergeThreshold, contextLength, errorMode, errorThreshold) {
 		this.debug = debug;
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
-		this.errorCorrectionThreshold = errorCorrectionThreshold;
 		this.contextLength = contextLength;
+		this.errorMode = errorMode;
+		this.errorThreshold = errorThreshold;
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
@@ -122,7 +123,7 @@ export class Thalamus {
 	 * @returns {Neuron} The newly created neuron
 	 */
 	addSensoryNeuron(coordinate, channel, type) {
-		const neuron = new Neuron(0, this.mergeThreshold, this.channelActions);
+		const neuron = new Neuron(0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(this.makeValueKey(coordinate), neuron.id);
@@ -158,7 +159,7 @@ export class Thalamus {
 			}
 
 		// create and initialize the neuron in a single call
-		const neuron = new Neuron(Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level), this.mergeThreshold, this.channelActions);
+		const neuron = new Neuron(Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level), this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions);
 		neuron.initializeConnections(connections);
 
 		// register in the thalamus
@@ -526,16 +527,17 @@ export class Thalamus {
 			// skip action neurons for learning or contexts if the channel learns without them
 			if (this.skipActionNeuron(neuronId)) continue;
 
-			// get level error corrections
-			const corrections = this.getLevelCorrections(
+			// get level error corrections + per-age feedback for the neuron's own stats
+			const { corrections, errorFeedback } = this.getLevelCorrections(
 				neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, newErrorPatternIds.has(neuronId)
 			);
 
 			// also return the created pattern neuron id so that we can suppress it in higher level
 			for (const correction of corrections) newErrorPatternIds.add(correction.patternId);
 
-			// emit the task - the neuron derives its own isNewErrorPattern from newErrorPatternIds
-			tasks.push({ neuronId, ageStates, corrections });
+			// emit the task - the neuron derives its own isNewErrorPattern from newErrorPatternIds.
+			// errorFeedback rides in-band on the same per-frame call (no extra MPI round-trip).
+			tasks.push({ neuronId, ageStates, corrections, errorFeedback });
 		}
 		return { tasks, levelContext };
 	}
@@ -548,10 +550,15 @@ export class Thalamus {
 	 * itself filters out newErrorPatternIds at match time so brand-new ids don't look like
 	 * unexplained novel entries and unfairly penalize pattern scores.
 	 * Correction id allocation stays central — the driver owns the neuron-id counter.
-	 * @returns {Array<{patternId, age, contextEntries}>} corrections created for this neuron
+	 * @returns {{corrections: Array<{patternId, age, contextEntries}>, errorFeedback: Array<{age, errorRate}>}}
+	 *          corrections: error-correction patterns created for this neuron
+	 *          errorFeedback: observed error rates for every evaluable age — shipped back
+	 *                        to the neuron in the same processFrame call so it can update
+	 *                        its own stats with no extra round-trip.
 	 */
 	getLevelCorrections(neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, isNewErrorPattern) {
 		const corrections = [];
+		const errorFeedback = [];
 		for (const [age, state] of ageStates) {
 
 			// every age > 0 entry contributes to the shared level context
@@ -560,15 +567,20 @@ export class Thalamus {
 			// new error patterns skip further correction this frame
 			if (isNewErrorPattern) continue;
 
-			// create an error correction pattern for this (neuron, age) if previous votes mismatched reality
-			if (this.needsErrorCorrection(age, state.votes, sensoryNeurons[0]))
+			// evaluate the prior-frame vote at this age (if any) and record feedback
+			const result = this.evaluateVoteError(age, state, sensoryNeurons[0]);
+			if (!result) continue;
+			errorFeedback.push({ age, errorRate: result.errorRate });
+
+			// create an error correction pattern if the error crosses the dynamic threshold
+			if (result.fire)
 				corrections.push({
 					patternId: this.createPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards),
 					age,
 					contextEntries: state.context.map(c => ({ neuronId: c.neuronId, distance: c.distance }))
 				});
 		}
-		return corrections;
+		return { corrections, errorFeedback };
 	}
 
 	/**
@@ -587,10 +599,10 @@ export class Thalamus {
 
 		// call each neuron to deliver the tasks to process the frame
 		const results = [];
-		for (const { neuronId, ageStates, corrections } of tasks) {
+		for (const { neuronId, ageStates, corrections, errorFeedback } of tasks) {
 			const result = this.neurons.get(neuronId).processFrame(
 				ageStates, memoryDepth, levelContext, newErrorPatternIds,
-				newActiveNeurons, frameNumber, corrections
+				newActiveNeurons, frameNumber, corrections, errorFeedback
 			);
 			results.push({ parentId: neuronId, ...result });
 		}
@@ -615,6 +627,7 @@ export class Thalamus {
 			for (const state of ageStates.values()) {
 				state.votes = null;
 				state.context = null;
+				state.threshold = null;
 			}
 
 		for (const { parentId, matches, correctionActivations, contextRefUpdates, votes: perAgeVotes } of results) {
@@ -639,13 +652,16 @@ export class Thalamus {
 				activations.push({ parentId, patternId, age, deathFrame });
 			}
 
-			// flush per-age votes: write state.votes/state.context for storage, collect id-only votes for consensus
+			// flush per-age votes: write state.votes/state.context/state.threshold for storage,
+			// collect id-only votes for consensus. threshold is captured here so next frame's
+			// evaluateVoteError can judge these votes without reaching back into the neuron.
 			if (perAgeVotes && perAgeVotes.length > 0) {
 				const ageStates = levelNeurons.get(parentId);
-				for (const { age, votes: ageVotes, context } of perAgeVotes) {
+				for (const { age, votes: ageVotes, context, threshold } of perAgeVotes) {
 					const state = ageStates.get(age);
 					state.votes = ageVotes;
 					state.context = context;
+					state.threshold = threshold;
 					for (const vote of ageVotes) votes.push({ voterId: parentId, ...vote });
 				}
 			}
@@ -663,24 +679,37 @@ export class Thalamus {
 	 * based on its inferences in the previous frame and the actual events in the current frame
 	 * @returns {boolean} Whether error correction is needed
 	 */
-	needsErrorCorrection(age, votes, actualNeuronIds) {
+	/**
+	 * Evaluate a single (neuron, age) prior-frame vote against current actuals.
+	 * Returns the observed error rate (so it can be sent back to the neuron as
+	 * feedback) and whether it crosses the threshold the neuron supplied when it
+	 * cast the vote. The neuron owns its error stats — thalamus only judges.
+	 * @returns {{fire: boolean, errorRate: number} | null} null if not evaluable
+	 */
+	evaluateVoteError(age, state, actualNeuronIds) {
 
 		// age=0 neurons cannot need correction because they are just voting now
-		if (age === 0) return false;
+		if (age === 0) return null;
 
-		// if there are no votes from previous frame, no need for error correction
-		if (!votes || votes.length === 0) return false;
+		// if there are no votes from previous frame, no error to evaluate
+		if (!state.votes || state.votes.length === 0) return null;
 
-		// compare the inferred events to reality to determine if we need error correction
+		// compare the inferred events to reality
 		let failedEvents = 0;
 		let totalEvents = 0;
-		for (const vote of votes)
+		for (const vote of state.votes)
 			if (this.getNeuronType(vote.neuronId) === 'event') {
 				totalEvents++;
 				if (!actualNeuronIds.has(vote.neuronId)) failedEvents++;
 			}
-		const eventError = failedEvents / totalEvents;
-		return eventError > this.errorCorrectionThreshold;
+		if (totalEvents === 0) return null;
+		const errorRate = failedEvents / totalEvents;
+
+		// the threshold rode in with the vote when it was cast last frame, so this
+		// decision happens entirely from coordinator-side state (MPI-friendly: no
+		// per-neuron index here, no callback into the neuron worker).
+		const fire = errorRate > (state.threshold ?? 0.5);
+		return { fire, errorRate };
 	}
 
 	/**

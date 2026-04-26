@@ -77,3 +77,19 @@ CREATE TABLE IF NOT EXISTS pattern_past (
     PRIMARY KEY (pattern_neuron_id, context_neuron_id, context_age),
     INDEX idx_strength (strength)
 );
+
+-- neuron_error_stats: per-(neuron, age) running mean and variance of observed
+-- prediction error rates, maintained online via Welford's algorithm. Used by
+-- the dynamic error-correction modes (conservative / neutral / aggressive)
+-- to derive each neuron's own threshold for spawning correction patterns.
+-- Only neurons that have observed at least one error sample at a given age
+-- have a row here — sparse by design.
+-- DROP TABLE IF EXISTS neuron_error_stats;
+CREATE TABLE IF NOT EXISTS neuron_error_stats (
+    neuron_id BIGINT UNSIGNED NOT NULL,
+    age TINYINT UNSIGNED NOT NULL,
+    n INT UNSIGNED NOT NULL,
+    mean DOUBLE NOT NULL,
+    m2 DOUBLE NOT NULL,
+    PRIMARY KEY (neuron_id, age)
+);

@@ -21,25 +21,38 @@ Patterns are created by `brain.learnNewPatterns()` which calls `neuron.learnNewP
 
 When a neuron's event predictions have a high error rate:
 - Neuron voted for events in previous frame (has saved votes and context)
-- The ratio of failed event predictions to total event predictions > `errorCorrectionThreshold` (default: 0.5)
+- The ratio of failed event predictions to total event predictions exceeds the per-(neuron, age) threshold determined by `errorCorrectionMode`
 - Create a pattern with the predictor as parent
+
+**Threshold modes** (`errorCorrectionMode`, default `'conservative'`):
+
+| Mode | Threshold | Behavior |
+|------|-----------|----------|
+| `static` | `errorCorrectionThreshold` (fixed) | Uniform threshold across all neurons and ages |
+| `conservative` | `mean + σ` | Learn outliers — high bar for noisy neurons, low bar for clean ones (robot-brain default) |
+| `neutral` | `mean` | React to anything worse than this neuron's typical error at this age |
+| `aggressive` | `mean − σ` | Memorize aggressively — fires on most non-trivial errors |
+
+For dynamic modes, each neuron maintains per-age running mean and variance of its own observed error rates via Welford's online algorithm. Until at least 3 samples have been observed for a given (neuron, age) pair, the threshold falls back to `errorCorrectionThreshold` (warmup). The threshold ships with each cast vote so the threshold-vs-actual comparison happens entirely on the coordinator side without an extra round-trip to the neuron worker (MPI-friendly).
 
 **Implementation**:
 ```javascript
+// Coordinator side (Thalamus): threshold rode in with the prior-frame vote.
 let failedEvents = 0;
 let totalEvents = 0;
-for (const vote of votes) {
+for (const vote of state.votes) {
   if (vote.neuron.type === 'event') {
     totalEvents++;
     if (!actualEvents.has(vote.neuron)) failedEvents++;
   }
 }
 const eventError = failedEvents / totalEvents;
-if (eventError > this.errorCorrectionThreshold) {
+if (eventError > state.threshold) {
   // Error rate too high - create error pattern
-  pattern = neuron.createPattern(context, actualEvents)
-  return pattern
+  pattern = neuron.createPattern(context, actualEvents);
 }
+// errorRate is sent back to the neuron in-band on the next frame's processFrame
+// call so the neuron can update its own per-age stats locally.
 ```
 
 ### 2. Action Regret
@@ -402,8 +415,9 @@ for (const vote of votes) {
 }
 const eventError = failedEvents / totalEvents;
 
-// neuron is the pattern that voted
-if (eventError > errorCorrectionThreshold) {
+// neuron is the pattern that voted; state.threshold was sent in with the vote
+// (computed by the neuron under whatever errorCorrectionMode is active).
+if (eventError > state.threshold) {
   // Create new pattern at level+1
   newPattern = neuron.createPattern(context, newActiveNeurons)
 }
