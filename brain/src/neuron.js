@@ -622,6 +622,10 @@ export class Neuron {
 		for (const m of matches) if (m.activate) suppressedAges.add(m.age);
 		for (const c of correctionActivations) suppressedAges.add(c.age);
 
+		// pre-bucket levelContext by voting age so the loop below picks each per-age
+		// context up with a single indexed lookup
+		const contextByAge = this.deriveContextByAge(levelContext);
+
 		// cast votes for each eligible, non-suppressed age
 		const votes = [];
 		for (const [age, state] of ageStates) {
@@ -630,7 +634,7 @@ export class Neuron {
 			votes.push({
 				age,
 				votes: this.vote(age),
-				context: this.deriveContextAtAge(levelContext, age),
+				context: contextByAge[age] ?? [],
 				threshold: this.getErrorThreshold(age)
 			});
 		}
@@ -638,21 +642,24 @@ export class Neuron {
 	}
 
 	/**
-	 * Derive the per-age voting context from the shared levelContext. For voting age `a`,
-	 * returns every levelContext entry whose context-age is > a, with distance shifted to
-	 * be relative to age `a` (distance = ctxAge - a). This is a pure reshape — the caller
-	 * could ship contextByAge pre-computed, but doing it locally saves per-frame wire traffic.
+	 * Reshape levelContext into per-voting-age buckets. For each entry at context-age
+	 * `ctxAge`, emits it into every votingAge < ctxAge with distance = ctxAge - votingAge.
+	 * Indexed by voting age so generateVotes picks up each per-age context with a single
+	 * lookup — no per-age scan, no `ctxAge > age` branch. Pure reshape kept inside the
+	 * neuron to save per-frame MPI traffic.
 	 * @param {Context|null} levelContext
-	 * @param {number} age
-	 * @returns {Array<{neuronId: number, distance: number}>}
+	 * @returns {Array<Array<{neuronId: number, distance: number}>>} indexed by voting age
 	 */
-	deriveContextAtAge(levelContext, age) {
-		const result = [];
-		if (!levelContext) return result;
+	deriveContextByAge(levelContext) {
+		const contextByAge = [];
+		if (!levelContext) return contextByAge;
 		for (const [neuronId, distanceMap] of levelContext.entries)
 			for (const ctxAge of distanceMap.keys())
-				if (ctxAge > age) result.push({ neuronId, distance: ctxAge - age });
-		return result;
+				for (let a = 0; a < ctxAge; a++) {
+					if (!contextByAge[a]) contextByAge[a] = [];
+					contextByAge[a].push({ neuronId, distance: ctxAge - a });
+				}
+		return contextByAge;
 	}
 
 	/**
