@@ -128,7 +128,7 @@ export default class Brain {
 	 * Thalamus. Throws if no backup exists — --load is an explicit user request.
 	 */
 	load(jobDir) {
-		const snapshot = this.backupStore.loadLatest(jobDir, this.thalamus.channelActions);
+		const snapshot = this.backupStore.loadLatest(jobDir, this.thalamus.channelActions, this.thalamus.actionIds);
 		this.thalamus.restoreSnapshot(snapshot);
 	}
 

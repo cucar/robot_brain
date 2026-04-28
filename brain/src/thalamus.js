@@ -34,6 +34,7 @@ export class Thalamus {
 		this.channelSpecs = new Map(); // channelId -> ChannelSpec
 		this.dimensionSpecs = new Map(); // dimensionId -> DimSpec (flattened across all channels)
 		this.channelActions = new Map(); // channelName -> Set<number> (neuron ids)
+		this.actionIds = new Set(); // flat union of all action neuron ids — shared by-reference with neurons for O(1) isActionNeuron
 		this.channelDefaultActions = new Map(); // channelName -> Neuron id
 		this.channelNameToId = {}; // channelName -> channelId
 		this.channelIdToName = {}; // channelId -> channelName
@@ -123,7 +124,7 @@ export class Thalamus {
 	 * @returns {Neuron} The newly created neuron
 	 */
 	addSensoryNeuron(coordinate, channel, type) {
-		const neuron = new Neuron(0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions);
+		const neuron = new Neuron(0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(this.makeValueKey(coordinate), neuron.id);
@@ -159,7 +160,8 @@ export class Thalamus {
 			}
 
 		// create and initialize the neuron in a single call
-		const neuron = new Neuron(Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level), this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions);
+		const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
+		const neuron = new Neuron(forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
 		neuron.initializeConnections(connections);
 
 		// register in the thalamus
@@ -437,11 +439,16 @@ export class Thalamus {
 		}
 
 		// Pre-create action neurons for action dims with explicit bucket IDs so exploration can find them.
+		// actionIds is the flat union — kept in lockstep with actionNeurons so neurons can do O(1)
+		// isActionNeuron lookups without scanning every channel's set.
 		const actionNeurons = this.channelActions.get(spec.name) || new Set();
 		for (const dim of storedSpec.dimensions) {
 			if (dim.kind !== 'action' || !Array.isArray(dim.actionBuckets)) continue;
-			for (const bucketId of dim.actionBuckets)
-				actionNeurons.add(this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, spec.name, 'action'));
+			for (const bucketId of dim.actionBuckets) {
+				const id = this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, spec.name, 'action');
+				actionNeurons.add(id);
+				this.actionIds.add(id);
+			}
 			if (dim.defaultBucket !== undefined)
 				this.channelDefaultActions.set(spec.name, this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultBucket }, spec.name, 'action'));
 		}

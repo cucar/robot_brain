@@ -91,7 +91,7 @@ export class Backup {
 	 * Returns a snapshot in the same shape as Thalamus.getSnapshot(), ready for
 	 * Thalamus.restoreSnapshot().
 	 */
-	loadLatest(jobDir, channelActionIds) {
+	loadLatest(jobDir, channelActionIds, actionIds) {
 		const backupsDir = path.join(jobDir, 'backups');
 		const folder = this.findLatestBackup(backupsDir);
 		// --load is opt-in; if the user asked for it and there's nothing, that's a hard
@@ -126,7 +126,7 @@ export class Backup {
 			const id = Number(idStr);
 			const level = Number(levelStr);
 			const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
-			const neuron = new Neuron(forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, channelActionIds, id);
+			const neuron = new Neuron(forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, channelActionIds, actionIds, id);
 			neurons.set(id, neuron);
 			levels.set(id, level);
 			if (id > maxId) maxId = id;

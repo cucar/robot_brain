@@ -29,9 +29,11 @@ export class Neuron {
 
 	/**
 	 * constructor - id optional for loading from database
-	 * channelActionIds are used for alternative-action lookup during learning. Populated
-	 * by registerChannelSpec(); shared across all neurons so the map is broadcast once at
-	 * creation time (no per-frame traffic).
+	 * channelActionIds are used for alternative-action lookup during learning (per-channel
+	 * Set lookup). actionIds is the flat union of all action neuron ids across channels,
+	 * used for O(1) isActionNeuron checks during connection learning. Both are populated
+	 * by registerChannelSpec() and shared by-reference across all neurons (no per-frame
+	 * traffic; mutations from later channel registrations are seen live).
 	 *
 	 * errorMode picks the error-correction threshold function:
 	 *   'static'       — fixed threshold = errorThreshold
@@ -41,7 +43,7 @@ export class Neuron {
 	 * For dynamic modes, errorThreshold also serves as the warmup fallback until
 	 * ERROR_MIN_SAMPLES observations have been recorded at that age.
 	 */
-	constructor(patternForgetRate, mergeThreshold, errorMode, errorThreshold, channelActionIds, id = null) {
+	constructor(patternForgetRate, mergeThreshold, errorMode, errorThreshold, channelActionIds, actionIds, id = null) {
 
 		// initialize neuron parameters
 		this.patternForgetRate = patternForgetRate;
@@ -49,6 +51,7 @@ export class Neuron {
 		this.errorMode = errorMode;
 		this.errorThreshold = errorThreshold;
 		this.channelActionIds = channelActionIds;
+		this.actionIds = actionIds;
 
 		// initialize neuron id if given - update nextId if we're loading a neuron with a specific ID
 		this.id = id || Neuron.nextId++;
@@ -838,16 +841,14 @@ export class Neuron {
 	}
 
 	/**
-	 * Check if a neuron id is an action neuron in any channel. Uses channelActionIds,
-	 * the same source-of-truth used for alt-action lookup, so action detection stays
-	 * aligned with the rest of the learning path.
+	 * Check if a neuron id is an action neuron in any channel. Uses the flat actionIds
+	 * Set maintained by Thalamus alongside channelActionIds — both are kept in lockstep
+	 * at registration time, so action detection stays aligned with alt-action lookup.
 	 * @param {number} neuronId
 	 * @returns {boolean}
 	 */
 	isActionNeuron(neuronId) {
-		for (const actionIds of this.channelActionIds.values())
-			if (actionIds.has(neuronId)) return true;
-		return false;
+		return this.actionIds.has(neuronId);
 	}
 
 	/**
