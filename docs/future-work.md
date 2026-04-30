@@ -276,15 +276,54 @@ Distribute across multiple machines for large-scale workloads.
 
 ---
 
+## Hippocampal Region (Thinking, Long-Term Memory, Metacognition)
+
+The largest remaining architectural component. A separate organ that holds mapped representations of selected cortical neurons and runs counterfactual experiments on them in parallel with cortex's perception/action loop. Implements long-term memory, thinking-as-action, and offline policy improvement.
+
+See: [Hippocampus Design and Implementation Plan](./hippocampus.md)
+
+### Summary
+
+* Separate organ from cortex, with its own faster clock
+* Stores **handles** (indices) into cortical neurons — not copies
+* **Selective encoding** via Salience Module + Entorhinal Layer — only high-prediction-error / high-reward / high-novelty patterns get mapped
+* **Sliding-scale forgetting** by activation strength — no strict short/long-term boundary
+* **Heterarchy** — one cortical neuron can map to multiple handles, enabling cross-context association ("that reminds me")
+* **Stack-based experiments** — branching is just a stack push
+* **Bidirectional coupling** — cortex fires think-actions; hippocampus output updates cortex's action-value estimates at specific contexts
+* **Think parameters as parallel action neurons** — target, mode, budget, temperature, control all fire alongside the think-action
+
+### Why this matters
+
+This is the architectural commitment that separates Robot Brain from sequence-model-based AI. Long-term memory as a learned selective structure (not a context window). Thinking as an action in the policy (not a hardcoded mode). Offline policy improvement via counterfactual replay. Metacognitive control learned through reward signals — the agent learns when to think and when to react.
+
+Built on hippocampal indexing theory (Teyler & DiScenna 1986), complementary learning systems (McClelland et al. 1995), and Mattar & Daw's expected-value-of-backup model (2018).
+
+### Implementation phases
+
+1. Hippocampus skeleton with parallel-clock plumbing (no learning)
+2. Salience and selective encoding
+3. Transition model and basic replay
+4. Counterfactual experiments with branching
+5. Heterarchy and association ("that reminds me")
+6. Stack semantics and metacognitive control actions
+7. Metacognitive reward learning (when to think)
+8. Sleep/idle consolidation
+
+Full details, component specifications, interfaces, testing strategy, and open questions in the [design document](./hippocampus.md).
+
+---
+
 ## Robotics — Complete System
 
 ### Architecture
-- Brain runs constantly (always-on processing)
-- Thinking channel: a feedback text channel — brain writes to it and reads from it simultaneously
-- This is inner monologue / stream of consciousness
-- Rewards given throughout experiences by owner/trainer via remote
-- Brain reflects on rewards through the thinking channel — those are "thoughts"
-- Resulting robots will likely develop personalities based on their experiences and internal dialogue
+
+* Brain runs constantly (always-on processing)
+* Thinking happens in the Hippocampal Region (see [Hippocampus design](./hippocampus.md)) — not as a feedback text channel, but as a separate organ running counterfactual experiments on mapped memories in parallel with cortex
+* Inner monologue / stream of consciousness emerges from hippocampal replay producing outputs that affect cortex action selection
+* Rewards given throughout experiences by owner/trainer via remote
+* The Hippocampal Region is the substrate that lets the brain reflect on past rewards and find better future actions
+* Resulting robots will likely develop personalities based on their experiences and the patterns of which memories get encoded, replayed, and consolidated
 
 ### Hardware
 - The algorithm would need to be implemented in hardware (FPGA/ASIC) for real-time processing of all sensory channels simultaneously
