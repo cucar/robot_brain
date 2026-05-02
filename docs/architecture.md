@@ -460,7 +460,7 @@ Inferred actions come back from `brain.processFrame(inputs, rewards)` as part of
 The system uses **lazy decay** instead of periodic forget cycles. Strengths are computed on-demand:
 
 ```javascript
-effectiveStrength = strength - (currentFrame - lastActivationFrame) * decayRate
+effectiveStrength = strength - (frameNumber - lastActivationFrame) * decayRate
 ```
 
 When a connection or pattern context entry's effective strength drops to zero or below, it is deleted. Patterns with no remaining content or references are recursively cleaned up.

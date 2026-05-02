@@ -273,7 +273,7 @@ export default class Brain {
 		if (this.rewards.length > this.contextLength) this.rewards.pop();
 
 		// advance the age of every active neuron and drop any that fell off the window
-		this.memory.age();
+		this.memory.age(this.frameNumber);
 	}
 
 	/**

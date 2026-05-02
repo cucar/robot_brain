@@ -16,7 +16,7 @@ import { Context } from './context.js';
  *
  * Lazy Decay: Continuous decay based on frames elapsed since last activation.
  * We store lastActivationFrame and compute effective strength on-demand:
- * effectiveStrength = strength - (currentFrame - lastFrame) * rate
+ * effectiveStrength = strength - (frameNumber - lastFrame) * rate
  */
 export class Neuron {
 

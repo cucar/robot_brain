@@ -148,7 +148,7 @@ Cross-modal patterns emerge naturally when neurons from different channels form 
 Instead of periodic forget cycles, the system uses lazy decay — strengths are computed on-demand based on frames elapsed since last activation:
 
 ```
-effectiveStrength = strength - (currentFrame - lastActivationFrame) × decayRate
+effectiveStrength = strength - (frameNumber - lastActivationFrame) × decayRate
 ```
 
 This eliminates the need for batch cleanup passes and provides smooth, continuous forgetting that prevents the curse of dimensionality.

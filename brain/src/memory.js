@@ -1,5 +1,12 @@
 /**
  * Memory - manages the temporal sliding window of active and inferred neurons.
+ *
+ * Internally everything is keyed by **activation frame number**, not by age.
+ * Age is a derived quantity (`frameNumber - activationFrame`) computed on read.
+ * This means `age()` doesn't have to migrate any per-neuron state Maps each frame —
+ * it just bumps the frame counter and evicts whatever frame fell off the back of
+ * the window. Public API (depth, getLevelNeurons, getLevelAges, …) still speaks in
+ * ages, so callers (brain, thalamus) are unchanged.
  */
 export class Memory {
 
@@ -12,15 +19,24 @@ export class Memory {
 		// number of frames a base neuron stays active
 		this.contextLength = contextLength;
 
-		// active neuron states by age - Map<neuronId, Map<age, state>> - state properties:
-		// context: array of context neurons at voting time
-		// votes: array of votes cast by this neuron
-		// activatedPatternId: ID of pattern neuron activated by this neuron (recognized)
+		// current frame counter, advanced once per age() call. Activations are stored
+		// keyed by the frame they happened on; age = frameNumber - activationFrame.
+		this.frameNumber = 0;
+
+		// active neuron states by activation frame - Map<neuronId, Map<frame, state>>.
+		// state properties:
+		//   context: array of context neurons at voting time
+		//   votes: array of votes cast by this neuron
+		//   activatedPatternId: ID of pattern neuron activated by this neuron (recognized)
+		// State objects are created at activation and never copied — external mutations
+		// (thalamus.applyFrameResults sets votes/context/threshold) stay attached for the
+		// life of the entry without per-frame rebuild.
 		this.neuronStates = new Map();
 
-		// indexes to be able to retrieve neurons by age and level faster
-		this.ageIndex = []; // Array<Set<neuronId>> - neurons at each age slot (order = activation order)
-		this.levelIndex = new Map(); // Map<level, Array<Set<neuronId>>> - per-level, per-age neuron sets
+		// indexes for fast age/level queries — both keyed by activation frame so eviction
+		// is a single delete-by-frame instead of a per-neuron shift.
+		this.ageIndex = new Map(); // Map<frame, Set<neuronId>>
+		this.levelIndex = new Map(); // Map<level, Map<frame, Set<neuronId>>>
 
 		// Current frame winning inferences: Array<{neuron, strength}>
 		this.inferredNeurons = [];
@@ -33,55 +49,43 @@ export class Memory {
 	 * Reset context (active neurons, inferred neurons, votes)
 	 */
 	reset() {
-		this.ageIndex = [];
+		this.frameNumber = 0;
+		this.ageIndex = new Map();
 		this.levelIndex = new Map();
 		this.neuronStates = new Map();
 		this.inferredNeurons = [];
 	}
 
 	/**
-	 * Age all neurons by shifting age keys and deactivate aged-out neurons
+	 * Advance the sliding window to the given frame. Memory acts as a slave clock —
+	 * the brain owns the frame counter and passes it in so the two never drift.
+	 * With frame-keyed storage this is just a counter sync plus eviction of whatever
+	 * activation frame fell off the back — no per-neuron Map rebuild, regardless of
+	 * how many neurons are active.
+	 * @param {number} frameNumber - The brain's frame number for this frame
 	 */
-	age() {
+	age(frameNumber) {
 		if (this.debug) console.log('Aging neurons...');
 
-		// age index update for active neurons: add age=0 set and shift everything else
-		this.ageIndex.unshift(new Set());
+		// sync to the brain's frame number
+		this.frameNumber = frameNumber;
 
-		// do the same for the level index - ages in each level
-		for (const arr of this.levelIndex.values()) arr.unshift(new Set());
-
-		// ages also exist in neuron states - shift every neuron's state age keys by +1 (preserves insertion order)
-		for (const [neuronId, oldAges] of this.neuronStates) {
-			const newAges = new Map();
-			for (const [age, state] of oldAges) newAges.set(age + 1, state);
-			this.neuronStates.set(neuronId, newAges);
-		}
-
-		// deactivate neurons that have aged out of the context window
-		if (this.ageIndex.length > this.contextLength) this.deactivateOldNeurons();
-	}
-
-	/**
-	 * deactivates aged-out neurons
-	 */
-	deactivateOldNeurons() {
+		// nothing to evict until the window is full (frameNumber > contextLength)
+		if (this.frameNumber <= this.contextLength) return;
 
 		// we will deactivate the oldest age in the context
-		const evictedAge = this.ageIndex.length - 1;
+		const evictedFrame = this.frameNumber - this.contextLength;
+		const evictedNeuronIds = this.ageIndex.get(evictedFrame);
+		if (!evictedNeuronIds) return; // if there are no neurons in the evicted frame, nothing to do
 
-		// get rid of the oldest neurons in the age index, while retrieving their ids
-		const evictedNeuronIds = this.ageIndex.pop();
-
-		// get rid of the oldest neurons in the level index, for each age within them
-		for (const levelAges of this.levelIndex.values()) levelAges.pop();
-
-		// get rid of the oldest neuron ages in the neuron states themselves
-		for (const id of evictedNeuronIds) {
-			const ages = this.neuronStates.get(id);
-			ages.delete(evictedAge);
-			if (ages.size === 0) this.neuronStates.delete(id); // deactivate neuron if all ages are inactive
+		// drop the evicted frame from every index in one pass
+		for (const neuronId of evictedNeuronIds) {
+			const states = this.neuronStates.get(neuronId);
+			states.delete(evictedFrame);
+			if (states.size === 0) this.neuronStates.delete(neuronId); // deactivate neuron if all ages are inactive
 		}
+		this.ageIndex.delete(evictedFrame);
+		for (const levelFrames of this.levelIndex.values()) levelFrames.delete(evictedFrame);
 
 		if (this.debug && evictedNeuronIds.size > 0) console.log(`Deactivated ${evictedNeuronIds.size} aged-out neurons`);
 	}
@@ -90,22 +94,29 @@ export class Memory {
 	 * Number of age slots currently in the sliding window
 	 */
 	get depth() {
-		return this.ageIndex.length;
+		// grows from 0 up to contextLength as frames roll in, then stays pinned
+		return Math.min(this.frameNumber, this.contextLength);
 	}
 
 	/**
 	 * Get the Set of neuron IDs at a specific age (insertion-order preserved).
 	 */
 	getNeuronIdsAtAge(age) {
-		return this.ageIndex[age] ?? new Set();
+		return this.ageIndex.get(this.frameNumber - age) ?? new Set();
 	}
 
 	/**
 	 * Get the per-age Sets of neuron IDs for a level (index = age), in age-ascending order.
 	 * Returns an empty array if the level has no active neurons.
+	 * Built fresh on each call by walking ages 0..depth-1 against the frame-keyed level index.
 	 */
 	getLevelAges(level) {
-		return this.levelIndex.get(level) ?? [];
+		const levelFrames = this.levelIndex.get(level);
+		if (!levelFrames) return [];
+		const result = [];
+		for (let age = 0; age < this.depth; age++)
+			result.push(levelFrames.get(this.frameNumber - age) ?? new Set());
+		return result;
 	}
 
 	/**
@@ -113,28 +124,28 @@ export class Memory {
 	 * Shape: Map<neuronId, Map<age, state>>. The inner map is populated in
 	 * age-ascending order (Map preserves insertion order), so iterating it
 	 * yields ages ascending.
+	 * thalamus.processLevel depends on this.
 	 */
 	getLevelNeurons(level) {
 		const neurons = new Map();
-		const levelAges = this.levelIndex.get(level);
-		if (!levelAges) return neurons;
-		for (let age = 0; age < levelAges.length; age++)
-			for (const neuronId of levelAges[age]) {
+		const levelFrames = this.levelIndex.get(level);
+		if (!levelFrames) return neurons;
+
+		// walk ages ascending so the inner Map's insertion order matches
+		for (let age = 0; age < this.depth; age++) {
+			const frame = this.frameNumber - age;
+			const neuronIds = levelFrames.get(frame);
+			if (!neuronIds) continue;
+			for (const neuronId of neuronIds) {
 				let ageStates = neurons.get(neuronId);
 				if (!ageStates) {
 					ageStates = new Map();
 					neurons.set(neuronId, ageStates);
 				}
-				ageStates.set(age, this.neuronStates.get(neuronId).get(age));
+				ageStates.set(age, this.neuronStates.get(neuronId).get(frame));
 			}
+		}
 		return neurons;
-	}
-
-	/**
-	 * Get the state for a neuron at a specific age.
-	 */
-	getState(neuronId, age) {
-		return this.neuronStates.get(neuronId).get(age);
 	}
 
 	/**
@@ -146,29 +157,37 @@ export class Memory {
 
 	/**
 	 * Activate a neuron at a specific age (keyed by neuron ID)
+	 * Internally stored keyed by activation frame = frameNumber - age
+	 * so the entry naturally moves to age+1 next frame without any rewrite.
 	 */
 	activateNeuronAtAge(neuronId, age, level) {
+		const frame = this.frameNumber - age;
 
 		// add the neuron to the age index
-		while (this.ageIndex.length <= age) this.ageIndex.push(new Set());
-		this.ageIndex[age].add(neuronId);
+		let ageSet = this.ageIndex.get(frame);
+		if (!ageSet) { ageSet = new Set(); this.ageIndex.set(frame, ageSet); }
+		ageSet.add(neuronId);
 
 		// add the neuron to the level index
-		let levelAges = this.levelIndex.get(level);
-		if (!levelAges) {
-			levelAges = [];
-			this.levelIndex.set(level, levelAges);
+		let levelFrames = this.levelIndex.get(level);
+		if (!levelFrames) {
+			levelFrames = new Map();
+			this.levelIndex.set(level, levelFrames);
 		}
-		while (levelAges.length < this.ageIndex.length) levelAges.push(new Set());
-		levelAges[age].add(neuronId);
+		let levelSet = levelFrames.get(frame);
+		if (!levelSet) {
+			levelSet = new Set();
+			levelFrames.set(frame, levelSet);
+		}
+		levelSet.add(neuronId);
 
 		// add the active neuron to the neuron states with a new state
-		let ages = this.neuronStates.get(neuronId);
-		if (!ages) {
-			ages = new Map();
-			this.neuronStates.set(neuronId, ages);
+		let states = this.neuronStates.get(neuronId);
+		if (!states) {
+			states = new Map();
+			this.neuronStates.set(neuronId, states);
 		}
-		ages.set(age, { activatedPatternId: null, votes: null, context: null });
+		states.set(frame, { activatedPatternId: null, votes: null, context: null });
 	}
 
 	/**
@@ -176,7 +195,7 @@ export class Memory {
 	 */
 	activatePattern(patternId, patternLevel, parentId, age) {
 		this.activateNeuronAtAge(patternId, age, patternLevel);
-		this.neuronStates.get(parentId).get(age).activatedPatternId = patternId;
+		this.neuronStates.get(parentId).get(this.frameNumber - age).activatedPatternId = patternId;
 	}
 
 	/**
