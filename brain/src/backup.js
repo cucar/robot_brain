@@ -21,7 +21,7 @@ const MAX_BACKUPS = 10;
  *   base_neurons.csv  neuron_id,channel_id,type,dimension_id,val
  *   connections.csv   from_neuron_id,to_neuron_id,distance,strength,reward
  *   patterns.csv      pattern_neuron_id,parent_neuron_id,strength
- *   pattern_past.csv  pattern_neuron_id,context_neuron_id,context_age,strength
+ *   contexts.csv     pattern_neuron_id,context_neuron_id,context_age,strength
  *   neuron_error_stats.csv  neuron_id,age,n,mean,m2
  */
 export class Backup {
@@ -57,7 +57,7 @@ export class Backup {
 			fs.mkdirSync(folder, { recursive: true });
 
 			// Write each table in dependency order: channels/dimensions are referenced by
-			// base_neurons; neurons are referenced by connections/patterns/pattern_past.
+			// base_neurons; neurons are referenced by connections/patterns/contexts.
 			// Order doesn't matter for files (only for SQL FK loading), but we keep it
 			// stable so diffs across backups are predictable.
 			this.writeChannels(folder, snapshot);
@@ -66,7 +66,7 @@ export class Backup {
 			this.writeBaseNeurons(folder, snapshot);
 			this.writeConnections(folder, snapshot);
 			this.writePatterns(folder, snapshot);
-			this.writePatternPast(folder, snapshot);
+			this.writeContexts(folder, snapshot);
 			this.writeNeuronErrorStats(folder, snapshot);
 
 			console.log(`💾 Backup saved: ${folder} (${snapshot.neurons.length} neurons)`);
@@ -157,7 +157,7 @@ export class Backup {
 		}
 
 		// Patterns: register each pattern as a child of its parent. We also remember
-		// pattern→parent here so the pattern_past loader below can look up the parent
+		// pattern→parent here so the contexts loader below can look up the parent
 		// without re-reading the patterns file.
 		const neuronParents = new Map();
 		const patternsFile = path.join(folder, 'patterns.csv');
@@ -172,20 +172,20 @@ export class Backup {
 			}
 		}
 
-		// Pattern past (context entries): for each pattern, restore the context neurons
+		// Contexts (context entries): for each pattern, restore the context neurons
 		// and ages that define when it should activate. addContext lives on the parent;
 		// addContextRef lives on the context neuron — both halves are needed for the
 		// bidirectional lookup the runtime relies on.
-		const pastFile = path.join(folder, 'pattern_past.csv');
-		if (fs.existsSync(pastFile)) {
-			for (const [patternId, contextId, contextAge, strength] of readCsv(pastFile)) {
+		const contextsFile = path.join(folder, 'contexts.csv');
+		if (fs.existsSync(contextsFile)) {
+			for (const [patternId, contextId, contextAge, strength] of readCsv(contextsFile)) {
 				const pid = Number(patternId);
 				const cid = Number(contextId);
 				const parentId = neuronParents.get(pid);
 				const parent = neurons.get(parentId);
 				const contextNeuron = neurons.get(cid);
-				if (!parent) throw new Error(`pattern_past parent not found for pattern ${patternId}`);
-				if (!contextNeuron) throw new Error(`pattern_past context neuron not found: ${contextId}`);
+				if (!parent) throw new Error(`contexts parent not found for pattern ${patternId}`);
+				if (!contextNeuron) throw new Error(`contexts context neuron not found: ${contextId}`);
 				parent.addContext(pid, cid, Number(contextAge), Number(strength));
 				contextNeuron.addContextRef(parentId, Number(contextAge));
 			}
@@ -254,7 +254,7 @@ export class Backup {
 	/**
 	 * Write the neuron id+level table. Just the bare (id, level) tuple — every
 	 * other per-neuron field lives in base_neurons / connections / patterns /
-	 * pattern_past, joined by neuron id on import.
+	 * contexts, joined by neuron id on import.
 	 */
 	writeNeurons(folder, snapshot) {
 		const rows = snapshot.neurons.map(({ neuron, level }) => [neuron.id, level]);
@@ -331,12 +331,12 @@ export class Backup {
 	 * context entries — emit one row per tuple. This is the table that defines
 	 * *when* each pattern fires.
 	 */
-	writePatternPast(folder, snapshot) {
+	writeContexts(folder, snapshot) {
 		const rows = [];
 		for (const { neuron } of snapshot.neurons)
 			for (const { patternId, neuronId, distance, strength } of neuron.getRoutingTable())
 				rows.push([patternId, neuronId, distance, strength]);
-		writeCsv(path.join(folder, 'pattern_past.csv'), rows);
+		writeCsv(path.join(folder, 'contexts.csv'), rows);
 	}
 
 	/**

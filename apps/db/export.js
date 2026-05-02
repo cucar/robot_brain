@@ -9,7 +9,7 @@
  *
  * Output layout matches the Backup class (no header rows, comma-separated):
  *   channels.csv, dimensions.csv, neurons.csv, base_neurons.csv,
- *   connections.csv, patterns.csv, pattern_past.csv
+ *   connections.csv, patterns.csv, contexts.csv
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,7 +19,7 @@ import getMySQLConnection from './database.js';
 // Table order is irrelevant for file output (no FKs in flat CSVs), but kept
 // consistent with the Backup writer for readability and easy diffing. ORDER BY
 // id on the parent tables produces deterministic output across runs; the leaf
-// tables (connections, patterns, pattern_past) are large enough that we skip
+// tables (connections, patterns, contexts) are large enough that we skip
 // the sort to save query cost.
 const TABLES = [
 	{ file: 'channels.csv',     query: 'SELECT id, name FROM channels ORDER BY id' },
@@ -28,7 +28,7 @@ const TABLES = [
 	{ file: 'base_neurons.csv', query: 'SELECT neuron_id, channel_id, type, dimension_id, val FROM base_neurons ORDER BY neuron_id' },
 	{ file: 'connections.csv',  query: 'SELECT from_neuron_id, to_neuron_id, distance, strength, reward FROM connections' },
 	{ file: 'patterns.csv',     query: 'SELECT pattern_neuron_id, parent_neuron_id, strength FROM patterns' },
-	{ file: 'pattern_past.csv', query: 'SELECT pattern_neuron_id, context_neuron_id, context_age, strength FROM pattern_past' },
+	{ file: 'contexts.csv', query: 'SELECT pattern_neuron_id, context_neuron_id, context_age, strength FROM contexts' },
 	{ file: 'neuron_error_stats.csv', query: 'SELECT neuron_id, age, n, mean, m2 FROM neuron_error_stats ORDER BY neuron_id, age' }
 ];
 

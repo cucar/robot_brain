@@ -67,9 +67,9 @@ CREATE TABLE IF NOT EXISTS patterns (
     INDEX idx_strength (strength)
 );
 
--- pattern_past: pattern contexts for recognition/matching (cross-channel)
--- DROP TABLE IF EXISTS pattern_past;
-CREATE TABLE IF NOT EXISTS pattern_past (
+-- contexts: pattern contexts for recognition/matching (cross-channel)
+-- DROP TABLE IF EXISTS contexts;
+CREATE TABLE IF NOT EXISTS contexts (
     pattern_neuron_id BIGINT UNSIGNED,
     context_neuron_id BIGINT UNSIGNED,
     context_age TINYINT UNSIGNED,

@@ -120,8 +120,8 @@ INSERT INTO neurons (id, level) VALUES (pattern.id, 1)
 INSERT INTO patterns (pattern_neuron_id, parent_neuron_id, strength)
 VALUES (pattern.id, C.id, 1.0)
 
--- Context (pattern_past)
-INSERT INTO pattern_past (pattern_neuron_id, context_neuron_id, context_age, strength)
+-- Context (contexts)
+INSERT INTO contexts (pattern_neuron_id, context_neuron_id, context_age, strength)
 VALUES
   (pattern.id, B.id, 1, 1.0),
   (pattern.id, A.id, 2, 1.0),
@@ -155,7 +155,7 @@ Cycle 2: A → B → E → F
 
     ERROR → Create Pattern_1:
       Parent: B
-      pattern_past: {A at age=1, D at age=2, C at age=3}
+      contexts: {A at age=1, D at age=2, C at age=3}
       connections: {E at distance=1}
 ```
 
@@ -330,7 +330,7 @@ Frame 4: D observed (age=0)
     - C→D (distance=1)
 ```
 
-This means pattern_past captures the full temporal context - not just the immediate predecessor, but what happened 2, 3, 4... frames ago.
+This means contexts captures the full temporal context - not just the immediate predecessor, but what happened 2, 3, 4... frames ago.
 
 **Simple sequences don't need patterns.** If a sequence is deterministic (A→B→C→D repeating), connections alone achieve 100% accuracy. Patterns are only created when connections make errors.
 
@@ -344,7 +344,7 @@ After `A → B`, sometimes C appears (preceded by D), sometimes E appears (prece
 
 When B predicts C but E appears:
 - Pattern created with parent=B
-- pattern_past includes D at context_age=2
+- contexts includes D at context_age=2
 
 Later, when B appears with D at age=2:
 - Pattern matches, predicts E (overriding connection's prediction of C)

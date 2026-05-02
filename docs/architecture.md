@@ -271,7 +271,7 @@ Used for backup/restore between episodes, not during frame processing:
 - **`base_neurons`** - Sensory neuron metadata, one row per neuron (`neuron_id` PK, `channel_id`, `type`, `dimension_id`, `val`)
 - **`connections`** - Base neuron connections (distance, strength, reward)
 - **`patterns`** - Pattern-to-parent mappings with strength
-- **`pattern_past`** - Pattern contexts (context neurons with ages and strengths)
+- **`contexts`** - Pattern contexts (context neurons with ages and strengths)
 
 ---
 
