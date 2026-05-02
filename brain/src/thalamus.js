@@ -384,8 +384,8 @@ export class Thalamus {
 	 * @param {number} spec.dimensions[].resolution - Number of buckets (>= 2)
 	 * @param {string} [spec.dimensions[].mode='passthrough'] - Quantizer mode
 	 * @param {number[]} [spec.dimensions[].boundaries] - Static mode boundaries (length = resolution - 1)
-	 * @param {number[]} [spec.dimensions[].actionBuckets] - For action dims: explicit bucket IDs to pre-create neurons for
-	 * @param {number} [spec.dimensions[].defaultBucket] - For action dims: bucket ID of the channel's default action
+	 * @param {number[]} [spec.dimensions[].actions] - For action dims: explicit bucket IDs to pre-create neurons for
+	 * @param {number} [spec.dimensions[].defaultAction] - For action dims: bucket ID of the channel's default action
 	 * @param {number} [spec.dimensions[].warmupSamples] - Dynamic mode warmup window
 	 * @param {boolean} [spec.emitsReward=false] - Channel produces a reward signal each frame
 	 * @param {boolean} [spec.learnActionSequences=false] - Channel's action neurons participate in pattern learning
@@ -421,8 +421,8 @@ export class Thalamus {
 					resolution: d.resolution,
 					mode: d.mode,
 					boundaries: d.boundaries,
-					actionBuckets: d.actionBuckets,
-					defaultBucket: d.defaultBucket,
+					actions: d.actions,
+					defaultAction: d.defaultAction,
 					warmupSamples: d.warmupSamples
 				};
 			}),
@@ -455,14 +455,14 @@ export class Thalamus {
 		// isActionNeuron lookups without scanning every channel's set.
 		const actionNeurons = this.channelActions.get(channelId) || new Set();
 		for (const dim of storedSpec.dimensions) {
-			if (dim.kind !== 'action' || !Array.isArray(dim.actionBuckets)) continue;
-			for (const bucketId of dim.actionBuckets) {
+			if (dim.kind !== 'action' || !Array.isArray(dim.actions)) continue;
+			for (const bucketId of dim.actions) {
 				const id = this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, channelId, 'action');
 				actionNeurons.add(id);
 				this.actionIds.add(id);
 			}
-			if (dim.defaultBucket !== undefined)
-				this.channelDefaultActions.set(channelId, this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultBucket }, channelId, 'action'));
+			if (dim.defaultAction !== undefined)
+				this.channelDefaultActions.set(channelId, this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultAction }, channelId, 'action'));
 		}
 		if (actionNeurons.size > 0) this.channelActions.set(channelId, actionNeurons);
 

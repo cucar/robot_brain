@@ -489,7 +489,7 @@ Channels live entirely on the host side — the brain knows nothing about I/O, s
       mode: 'static', boundaries: [0] },
     { name: 'AAPL_activity',      kind: 'action', resolution: 2,
       mode: 'passthrough',
-      actionBuckets: [-1, 1], defaultBucket: -1 }
+      actions: [-1, 1], defaultAction: -1 }
   ]
 }
 ```

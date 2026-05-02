@@ -236,8 +236,8 @@ export class StockEncoder {
 					kind: 'action',
 					resolution: 2,
 					mode: 'passthrough',
-					actionBuckets: [ POSITION_OUT, POSITION_OWN ],
-					defaultBucket: POSITION_OUT
+					actions: [ POSITION_OUT, POSITION_OWN ],
+					defaultAction: POSITION_OUT
 				}
 			]
 		};
