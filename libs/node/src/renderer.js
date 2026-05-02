@@ -85,16 +85,16 @@ export function formatStartFrame(info) {
 
 /**
  * Render the --debug vote dump for a single frame. Takes the structured
- * voteDebugData the brain prepared (raw votes resolved to channel/type/coordinate
+ * voteDebugData the brain prepared (raw votes resolved to channelId/type/coordinate
  * metadata) and walks it per-channel, per-kind, producing a multi-line string.
  *
- * The `formatters` map is keyed by channel name and supplies label/coord
+ * The `formatters` map is keyed by channelId and supplies label/coord
  * formatters per channel (encoders for the spec path, Channel instances for
  * the legacy path). When a channel has no formatter, an inline default is used
  * so the dump still surfaces — never silently dropped.
  *
  * @param {object|null} voteDebugData - { votes, winners } from brain
- * @param {Map<string, {name, formatActionLabel?, formatCoordinates?}>} formatters
+ * @param {Map<number, {name, formatActionLabel?, formatCoordinates?}>} formatters
  * @returns {string|null}
  */
 export function formatVoteDebug(voteDebugData, formatters) {
@@ -108,15 +108,15 @@ export function formatVoteDebug(voteDebugData, formatters) {
 	// Partition votes by channel once — event vs. action split happens inside each.
 	const votesByChannel = new Map();
 	for (const vote of votes) {
-		if (!votesByChannel.has(vote.targetChannel)) votesByChannel.set(vote.targetChannel, []);
-		votesByChannel.get(vote.targetChannel).push(vote);
+		if (!votesByChannel.has(vote.targetChannelId)) votesByChannel.set(vote.targetChannelId, []);
+		votesByChannel.get(vote.targetChannelId).push(vote);
 	}
 
 	const out = [`Collected ${votes.length} votes`];
-	for (const [channelName, channelVotes] of votesByChannel) {
+	for (const [channelId, channelVotes] of votesByChannel) {
 		// Fall back to a name-only stub so unknown channels still print rather than
 		// disappearing — the renderer's job is to show data, not gate-keep it.
-		const channel = formatters?.get(channelName) ?? { name: channelName };
+		const channel = formatters?.get(channelId) ?? { name: `channel${channelId}` };
 
 		// Each channel gets up to two sections (events + actions). Either may be
 		// absent (event-only channels like text), so skip nulls instead of pushing them.

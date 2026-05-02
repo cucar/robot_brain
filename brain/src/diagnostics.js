@@ -13,7 +13,7 @@ export class Diagnostics {
 		this.accuracyStats = { correct: 0, total: 0 };
 		this.rewardStats = { totalReward: 0, count: 0 };
 		this.continuousPredictionMetrics = { totalError: 0, count: 0 };
-		this.mispredictions = []; // [{ predicted: coordinate, actual: coordinate, channel }]
+		this.mispredictions = []; // [{ predicted: coordinate, actual: coordinate, channelId }]
 	}
 
 	/**
@@ -63,43 +63,24 @@ export class Diagnostics {
 	 * Track event accuracy, action rewards, and misprediction log. Continuous prediction
 	 * error is tracked separately in trackContinuousError.
 	 *
-	 * Mispredictions pair a predicted id-form coordinate with an actual one drawn from
-	 * the same channel; the host-side renderer resolves ids to names when printing.
+	 * Each item is fully self-contained — Thalamus.getInferenceResults pre-resolves
+	 * correctness, the per-channel actual coord, and the reward, so this routine is
+	 * a single pass over a flat array with no further lookups.
 	 *
-	 * @param {Array<{neuronId, strength, channel, type, coordinate}>} inferences
-	 * @param {Set<number>} activeNeuronIds
-	 * @param {Map<string, Array<{dimId:number, bucketId:number}>>} actualEventCoordsByChannel
-	 * @param {Map<string, number>} rewards
+	 * @param {Array<{type, isCorrect, channelId, coordinate, actualCoord, reward}>} items
 	 */
-	trackInferencePerformance(inferences, activeNeuronIds, actualEventCoordsByChannel, rewards) {
-		let eventCorrect = 0;
-		let eventTotal = 0;
-		let actionReward = 0;
-		let actionCount = 0;
-
-		for (const { neuronId, channel, type, coordinate } of inferences) {
+	trackInferencePerformance(items) {
+		for (const { type, isCorrect, channelId, coordinate, actualCoord, reward } of items) {
 			if (type === 'event') {
-				eventTotal++;
-				const isCorrect = activeNeuronIds.has(neuronId);
-				if (isCorrect) { eventCorrect++; continue; }
-
-				// log misprediction against this channel's first observed actual coordinate
-				const actuals = actualEventCoordsByChannel.get(channel) || [];
-				if (actuals.length > 0)
-					this.mispredictions.push({ channel, predicted: coordinate, actual: actuals[0] });
+				this.accuracyStats.total++;
+				if (isCorrect) this.accuracyStats.correct++;
+				else if (actualCoord) this.mispredictions.push({ channelId, predicted: coordinate, actual: actualCoord });
 			}
 			else if (type === 'action') {
-				const reward = rewards?.get(channel) || 0;
-				actionReward += reward;
-				actionCount++;
+				this.rewardStats.totalReward += reward;
+				this.rewardStats.count++;
 			}
 		}
-
-		// Update cumulative stats
-		this.accuracyStats.correct += eventCorrect;
-		this.accuracyStats.total += eventTotal;
-		this.rewardStats.totalReward += actionReward;
-		this.rewardStats.count += actionCount;
 	}
 
 	/**

@@ -355,11 +355,11 @@ export default class StockTestJob extends Job {
 	/**
 	 * Vote-dump formatters for the spec-based path: each StockEncoder owns its own
 	 * action labels and bucket-to-percent map, so we hand the encoders to the
-	 * renderer keyed by channel name (== symbol).
+	 * renderer keyed by channelId.
 	 */
 	getChannelFormatters() {
 		const map = new Map();
-		for (const encoder of this.encoders) map.set(encoder.symbol, encoder);
+		for (const encoder of this.encoders) map.set(encoder.channelId, encoder);
 		return map;
 	}
 

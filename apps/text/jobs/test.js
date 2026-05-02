@@ -163,7 +163,7 @@ export default class TextTestJob extends Job {
 	 */
 	getChannelFormatters() {
 		const map = new Map();
-		for (const encoder of this.encoders) map.set(encoder.name, encoder);
+		for (const encoder of this.encoders) map.set(encoder.channelId, encoder);
 		return map;
 	}
 

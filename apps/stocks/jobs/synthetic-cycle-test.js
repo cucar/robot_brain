@@ -186,12 +186,12 @@ export default class SyntheticCycleTest extends Job {
 	}
 
 	/**
-	 * Vote-dump formatters: encoders keyed by channel name (== symbol). Each
+	 * Vote-dump formatters: encoders keyed by channelId. Each
 	 * StockEncoder provides formatActionLabel + formatCoordinates.
 	 */
 	getChannelFormatters() {
 		const map = new Map();
-		for (const encoder of this.encoders) map.set(encoder.symbol, encoder);
+		for (const encoder of this.encoders) map.set(encoder.channelId, encoder);
 		return map;
 	}
 

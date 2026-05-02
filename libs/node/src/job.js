@@ -245,13 +245,13 @@ export class Job {
 	}
 
 	/**
-	 * Hook: return Map<channelName, formatter> the --debug vote-dump renderer uses
+	 * Hook: return Map<channelId, formatter> the --debug vote-dump renderer uses
 	 * to humanize action coordinates and bucket numbers. Each formatter exposes
 	 * `name` and (optionally) `formatActionLabel(coord)` / `formatCoordinates(str)`.
 	 *
 	 * Default returns an empty map; jobs override to return a Map of their
-	 * encoders/traders keyed by channel name.
-	 * @returns {Map<string, object>}
+	 * encoders/traders keyed by channelId.
+	 * @returns {Map<number, object>}
 	 */
 	getChannelFormatters() {
 		return new Map();

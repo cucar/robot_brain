@@ -21,7 +21,7 @@ export class Thalamus {
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
 		this.neuronsByValue = new Map(); // valueKey -> neuronId (coordinate -> neuronId lookup)
-		this.baseNeurons = new Map(); // neuronId -> { channel, type, coordinate } (sensory neurons only)
+		this.baseNeurons = new Map(); // neuronId -> { channelId, type, coordinate } (sensory neurons only)
 		this.neuronParents = new Map(); // neuronId -> parentNeuronId (pattern neurons only)
 		this.neuronLevels = new Map(); // neuronId -> level (0 = sensory, 1+ = pattern)
 
@@ -33,9 +33,9 @@ export class Thalamus {
 		// single source of truth for channel and dimension metadata.
 		this.channelSpecs = new Map(); // channelId -> ChannelSpec
 		this.dimensionSpecs = new Map(); // dimensionId -> DimSpec (flattened across all channels)
-		this.channelActions = new Map(); // channelName -> Set<number> (neuron ids)
+		this.channelActions = new Map(); // channelId -> Set<number> (neuron ids)
 		this.actionIds = new Set(); // flat union of all action neuron ids — shared by-reference with neurons for O(1) isActionNeuron
-		this.channelDefaultActions = new Map(); // channelName -> Neuron id
+		this.channelDefaultActions = new Map(); // channelId -> Neuron id
 		this.channelNameToId = {}; // channelName -> channelId
 		this.channelIdToName = {}; // channelId -> channelName
 
@@ -96,14 +96,14 @@ export class Thalamus {
 	 * Get or create a sensory neuron ID from a frame point. coordinate form: {dimId, bucketId }
 	 * @returns {number} - Neuron ID
 	 */
-	getNeuronIdForPoint(coordinate, channel, type) {
+	getNeuronIdForPoint(coordinate, channelId, type) {
 
 		// Try to find existing neuron - if found, return it
 		let neuronId = this.getNeuronIdByCoordinate(coordinate);
 		if (neuronId) return neuronId;
 
 		// Create new neuron if not found
-		const neuron = this.addSensoryNeuron(coordinate, channel, type);
+		const neuron = this.addSensoryNeuron(coordinate, channelId, type);
 		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${this.makeValueKey(coordinate)}`);
 		return neuron.id;
 	}
@@ -120,16 +120,16 @@ export class Thalamus {
 	/**
 	 * Create and add a new sensory neuron to the registry
 	 * @param {{dimId: number, bucketId: number}} coordinate - id-form coordinate
-	 * @param {string} channel - Channel name
+	 * @param {number} channelId - Channel id
 	 * @param {string} type - Neuron type ('event' or 'action')
 	 * @returns {Neuron} The newly created neuron
 	 */
-	addSensoryNeuron(coordinate, channel, type) {
+	addSensoryNeuron(coordinate, channelId, type) {
 		const neuron = new Neuron(this.nextNeuronId++, 0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(this.makeValueKey(coordinate), neuron.id);
-		this.baseNeurons.set(neuron.id, { channel, type, coordinate });
+		this.baseNeurons.set(neuron.id, { channelId, type, coordinate });
 		this.incrementLevelCount(0); // for diagnostics
 		return neuron;
 	}
@@ -155,9 +155,9 @@ export class Thalamus {
 		const connections = [];
 		for (let a = 0; a < age && a < sensoryNeurons.length; a++)
 			for (const sensoryNeuronId of sensoryNeurons[a]) {
-				const channel = this.getNeuronChannel(sensoryNeuronId);
-				const reward = rewards[a].get(channel) || 0;
-				connections.push({ distance: age - a, toNeuronId: sensoryNeuronId, channel, reward });
+				const channelId = this.getNeuronChannelId(sensoryNeuronId);
+				const reward = rewards[a].get(channelId) || 0;
+				connections.push({ distance: age - a, toNeuronId: sensoryNeuronId, channelId, reward });
 			}
 
 		// create and initialize the neuron in a single call
@@ -230,12 +230,12 @@ export class Thalamus {
 	}
 
 	/**
-	 * Get the channel name for a neuron
+	 * Get the channel id for a neuron
 	 * @param {number} neuronId - Neuron ID
-	 * @returns {string} Channel name
+	 * @returns {number} Channel id
 	 */
-	getNeuronChannel(neuronId) {
-		return this.baseNeurons.get(neuronId)?.channel;
+	getNeuronChannelId(neuronId) {
+		return this.baseNeurons.get(neuronId)?.channelId;
 	}
 
 	/**
@@ -280,45 +280,54 @@ export class Thalamus {
 	/**
 	 * Get inferred actions grouped by channel from the given inferences.
 	 * @param {Array<{neuronId, strength, reward}>} inferences - Inferred neurons from memory
-	 * @returns {Map<string, Array>} - Map of channel name to array of {coordinates, strength, reward}
+	 * @returns {Map<number, Array>} - Map of channel id to array of {coordinates, strength, reward}
 	 */
 	getInferredActions(inferences) {
 		const channelOutputs = new Map();
 		for (const { neuronId, strength, reward } of inferences) {
 			if (this.getNeuronType(neuronId) !== 'action') continue;
-			const channel = this.getNeuronChannel(neuronId);
-			if (!channelOutputs.has(channel)) channelOutputs.set(channel, []);
-			channelOutputs.get(channel).push({ coordinate: this.getNeuronCoordinate(neuronId), strength, reward });
+			const channelId = this.getNeuronChannelId(neuronId);
+			if (!channelOutputs.has(channelId)) channelOutputs.set(channelId, []);
+			channelOutputs.get(channelId).push({ coordinate: this.getNeuronCoordinate(neuronId), strength, reward });
 		}
 		return channelOutputs;
 	}
 
 	/**
-	 * Get actual event coordinates grouped by channel from active neuron IDs.
-	 * @param {Set<number>} activeNeuronIds - Set of neuron IDs active at age 0
-	 * @returns {Map<string, Array>} - Map of channel name to array of coordinate objects
+	 * Per-frame inference performance bundle for diagnostics. Each item carries
+	 * everything trackInferencePerformance needs (correctness flag, first-actual
+	 * coord, pre-resolved reward) so the diagnostics call stays single-arg.
+	 * @param {Iterable<number>} activeNeuronIds - Sensory neuron ids active at age 0
+	 * @param {Array<{neuronId, strength}>} inferredNeurons - Predictions cast last frame
+	 * @param {Map<number, number>} rewards - channelId → reward for previous frame's actions
+	 * @returns {Array<{type:string, isCorrect:boolean, channelId:number, coordinate:object,
+	 *                  actualCoord:object|null, reward:number}>}
 	 */
-	getActiveEvents(activeNeuronIds) {
-		const result = new Map();
-		for (const neuronId of activeNeuronIds) {
-			const baseNeuron = this.baseNeurons.get(neuronId);
-			if (baseNeuron.type !== 'event') continue;
-			if (!result.has(baseNeuron.channel)) result.set(baseNeuron.channel, []);
-			result.get(baseNeuron.channel).push(baseNeuron.coordinate);
-		}
-		return result;
-	}
+	getInferenceResults(activeNeuronIds, inferredNeurons, rewards) {
+		const activeSet = activeNeuronIds instanceof Set ? activeNeuronIds : new Set(activeNeuronIds);
 
-	/**
-	 * Get inferences with channel metadata attached.
-	 * @param {Array<{neuronId, strength}>} inferredNeurons - Inferred neurons from memory
-	 * @returns {Array<{neuronId, strength, channel, type, coordinates}>} - Inferences with channel
-	 */
-	getInferences(inferredNeurons) {
-		const inferences = [];
-		for (const { neuronId, strength } of inferredNeurons)
-			inferences.push({ neuronId, strength, channel: this.getNeuronChannel(neuronId), type: this.getNeuronType(neuronId), coordinate: this.getNeuronCoordinate(neuronId) });
-		return inferences;
+		// per-channel first observed event coordinate (used to pair mispredictions)
+		const firstActualByChannel = new Map();
+		for (const neuronId of activeSet) {
+			const base = this.baseNeurons.get(neuronId);
+			if (!base || base.type !== 'event') continue;
+			if (!firstActualByChannel.has(base.channelId)) firstActualByChannel.set(base.channelId, base.coordinate);
+		}
+
+		const results = [];
+		for (const { neuronId } of inferredNeurons) {
+			const type = this.getNeuronType(neuronId);
+			const channelId = this.getNeuronChannelId(neuronId);
+			results.push({
+				type,
+				channelId,
+				coordinate: this.getNeuronCoordinate(neuronId),
+				isCorrect: type === 'event' ? activeSet.has(neuronId) : false,
+				actualCoord: type === 'event' ? (firstActualByChannel.get(channelId) ?? null) : null,
+				reward: type === 'action' ? (rewards?.get(channelId) ?? 0) : 0
+			});
+		}
+		return results;
 	}
 
 	/**
@@ -444,30 +453,30 @@ export class Thalamus {
 		// Pre-create action neurons for action dims with explicit bucket IDs so exploration can find them.
 		// actionIds is the flat union — kept in lockstep with actionNeurons so neurons can do O(1)
 		// isActionNeuron lookups without scanning every channel's set.
-		const actionNeurons = this.channelActions.get(spec.name) || new Set();
+		const actionNeurons = this.channelActions.get(channelId) || new Set();
 		for (const dim of storedSpec.dimensions) {
 			if (dim.kind !== 'action' || !Array.isArray(dim.actionBuckets)) continue;
 			for (const bucketId of dim.actionBuckets) {
-				const id = this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, spec.name, 'action');
+				const id = this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, channelId, 'action');
 				actionNeurons.add(id);
 				this.actionIds.add(id);
 			}
 			if (dim.defaultBucket !== undefined)
-				this.channelDefaultActions.set(spec.name, this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultBucket }, spec.name, 'action'));
+				this.channelDefaultActions.set(channelId, this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultBucket }, channelId, 'action'));
 		}
-		if (actionNeurons.size > 0) this.channelActions.set(spec.name, actionNeurons);
+		if (actionNeurons.size > 0) this.channelActions.set(channelId, actionNeurons);
 
 		if (this.debug) console.log(`Registered channel spec ${channelId} "${spec.name}" (${storedSpec.dimensions.length} dimensions)`);
 		return { channelId, dimensionIds };
 	}
 
 	/**
-	 * Iterate all channel names registered via channel specs.
+	 * Iterate all channel ids registered via channel specs.
 	 * Used by the frame pipeline to drive buildFrame over every channel the brain knows about.
-	 * @returns {string[]}
+	 * @returns {number[]}
 	 */
-	getAllChannelNames() {
-		return [...this.channelSpecs.values()].map(spec => spec.name);
+	getChannelIds() {
+		return [...this.channelSpecs.keys()];
 	}
 
 	/**
@@ -599,12 +608,12 @@ export class Thalamus {
 	 */
 	dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, age0, currentRewards, frameNumber) {
 
-		// decorate age=0 sensory neurons with channel + pre-resolved reward (MPI-ready: neuron doesn't need type)
+		// decorate age=0 sensory neurons with channel id + pre-resolved reward (MPI-ready: neuron doesn't need type)
 		const newActiveNeurons = [];
 		for (const neuronId of age0) {
-			const channel = this.getNeuronChannel(neuronId);
-			const reward = this.getNeuronType(neuronId) === 'action' ? (currentRewards.get(channel) || 0) : 0;
-			newActiveNeurons.push({ id: neuronId, channel, reward });
+			const channelId = this.getNeuronChannelId(neuronId);
+			const reward = this.getNeuronType(neuronId) === 'action' ? (currentRewards.get(channelId) || 0) : 0;
+			newActiveNeurons.push({ id: neuronId, channelId, reward });
 		}
 
 		// call each neuron to deliver the tasks to process the frame
@@ -728,18 +737,17 @@ export class Thalamus {
 	 */
 	skipActionNeuron(neuronId) {
 		if (this.neuronLevels.get(neuronId) !== 0 || this.getNeuronType(neuronId) !== 'action') return false;
-		const channelId = this.channelNameToId[this.getNeuronChannel(neuronId)];
-		const spec = channelId !== undefined ? this.channelSpecs.get(channelId) : null;
+		const spec = this.channelSpecs.get(this.getNeuronChannelId(neuronId));
 		return spec ? !spec.learnActionSequences : false;
 	}
 
 	/**
 	 * Get default action neuron id for a channel
-	 * @param {string} channelName - Channel name
+	 * @param {number} channelId - Channel id
 	 * @returns {number|undefined} - Default action neuron id or undefined
 	 */
-	getChannelDefaultAction(channelName) {
-		return this.channelDefaultActions.get(channelName);
+	getChannelDefaultAction(channelId) {
+		return this.channelDefaultActions.get(channelId);
 	}
 
 	/**

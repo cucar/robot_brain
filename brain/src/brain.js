@@ -237,20 +237,19 @@ export default class Brain {
 
 		// iterate every registered channel (instance or spec) - a channel may contribute events,
 		// carry-forward actions from the previous frame's inference, or both
-		for (const channelName of this.thalamus.getAllChannelNames()) {
-			const channelId = this.thalamus.channelNameToId[channelName];
+		for (const channelId of this.thalamus.getChannelIds()) {
 			const dimMap = inputs.get(channelId);
 
 			// quantize each dimension's scalar to a bucketId and push as event coordinate
 			if (dimMap) for (const [dimId, scalar] of dimMap) {
 				this.thalamus.quantizer.observe(dimId, scalar);
 				const bucketId = this.thalamus.quantizer.quantize(dimId, scalar);
-				this.frame.push({ coordinate: { dimId, bucketId }, channel: channelName, type: 'event' });
+				this.frame.push({ coordinate: { dimId, bucketId }, channelId, type: 'event' });
 			}
 
 			// include previously-inferred actions for this channel as sensory inputs
-			for (const action of frameActions.get(channelName) || [])
-				this.frame.push({ coordinate: action.coordinate, channel: channelName, type: 'action' });
+			for (const action of frameActions.get(channelId) || [])
+				this.frame.push({ coordinate: action.coordinate, channelId, type: 'action' });
 		}
 	}
 
@@ -261,11 +260,9 @@ export default class Brain {
 	 * @param {Map<number, number>} rewards - channelId → reward for previous frame's actions
 	 */
 	ageContext(rewards) {
-		// push this frame's rewards onto the history, keyed by channel name for now
-		const rewardsByName = new Map();
-		for (const [channelId, reward] of rewards)
-			rewardsByName.set(this.thalamus.channelIdToName[channelId], reward);
-		this.rewards.unshift(rewardsByName);
+
+		// push this frame's rewards onto the history (channelId-keyed all the way through)
+		this.rewards.unshift(rewards);
 		if (this.rewards.length > this.contextLength) this.rewards.pop();
 
 		// advance the age of every active neuron and drop any that fell off the window
@@ -285,19 +282,20 @@ export default class Brain {
 
 		// Track event accuracy, action rewards, and misprediction log. Continuous prediction
 		// error is tracked separately via diagnostics.trackContinuousError in processFrame().
-		const activeNeuronIds = new Set(this.memory.getNeuronIdsAtAge(0));
-		const actualEvents = this.thalamus.getActiveEvents(activeNeuronIds);
-		const inferences = this.thalamus.getInferences(this.memory.getInferredNeurons());
-		this.diagnostics.trackInferencePerformance(inferences, activeNeuronIds, actualEvents, this.rewards[0]);
+		this.diagnostics.trackInferencePerformance(this.thalamus.getInferenceResults(
+			this.memory.getNeuronIdsAtAge(0),
+			this.memory.getInferredNeurons(),
+			this.rewards[0]
+		));
 	}
 
 	/**
 	 * Returns neuron IDs for given frame points, creating new neurons as needed.
-	 * Points have structure: { coordinates, channel, channel_id, type }
+	 * Points have structure: { coordinate, channelId, type }
 	 */
 	getFrameNeurons(frame) {
 		const neuronIds = [];
-		for (const point of frame) neuronIds.push(this.thalamus.getNeuronIdForPoint(point.coordinate, point.channel, point.type));
+		for (const point of frame) neuronIds.push(this.thalamus.getNeuronIdForPoint(point.coordinate, point.channelId, point.type));
 		if (neuronIds.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
 		// if (this.debug) console.log('frame neurons', neuronIds);
 		return neuronIds;
@@ -395,7 +393,7 @@ export default class Brain {
 			const resolvedVotes = votes.map(v => ({
 				targetId: v.neuronId,
 				targetType: this.thalamus.getNeuronType(v.neuronId),
-				targetChannel: this.thalamus.getNeuronChannel(v.neuronId),
+				targetChannelId: this.thalamus.getNeuronChannelId(v.neuronId),
 				targetCoordinate: this.thalamus.coordinateIdToName(this.thalamus.getNeuronCoordinate(v.neuronId)),
 				voterId: v.voterId,
 				voterLevel: this.thalamus.getNeuronLevel(v.voterId),
@@ -435,7 +433,7 @@ export default class Brain {
 		for (const [neuronId, candidate] of candidates) {
 			const coordinate = this.thalamus.getNeuronCoordinate(neuronId);
 			const kind = this.thalamus.getNeuronType(neuronId);
-			const channelId = this.thalamus.channelNameToId[this.thalamus.getNeuronChannel(neuronId)];
+			const channelId = this.thalamus.getNeuronChannelId(neuronId);
 
 			const key = `${channelId}:${coordinate.dimId}`;
 			let entry = dims.get(key);
@@ -568,7 +566,7 @@ export default class Brain {
 			const winner = {
 				neuronId,
 				coordinate: this.thalamus.getNeuronCoordinate(neuronId),
-				channel: this.thalamus.getNeuronChannel(neuronId),
+				channelId: this.thalamus.getNeuronChannelId(neuronId),
 				strength: candidate.strength
 			};
 			if (this.thalamus.getNeuronType(neuronId) === 'action') winner.reward = candidate.reward;
@@ -602,14 +600,14 @@ export default class Brain {
 		// Find which channels already have an action inferred
 		const channelsWithActions = new Set();
 		for (const inf of inferences)
-			if (this.thalamus.getNeuronType(inf.neuronId) === 'action') channelsWithActions.add(this.thalamus.getNeuronChannel(inf.neuronId));
+			if (this.thalamus.getNeuronType(inf.neuronId) === 'action') channelsWithActions.add(this.thalamus.getNeuronChannelId(inf.neuronId));
 
 		// Add exploration action for channels without one (iterates instance- and spec-registered channels)
-		for (const channelName of this.thalamus.getAllChannelNames()) {
-			if (channelsWithActions.has(channelName)) continue;
+		for (const channelId of this.thalamus.getChannelIds()) {
+			if (channelsWithActions.has(channelId)) continue;
 
 			// Skip channels that have no actions defined
-			const explorationActionId = this.thalamus.getChannelDefaultAction(channelName);
+			const explorationActionId = this.thalamus.getChannelDefaultAction(channelId);
 			if (!explorationActionId) continue;
 
 			// No action inferred for this channel - use the default action for deterministic exploration
@@ -617,7 +615,7 @@ export default class Brain {
 			inferences.push({
 				neuronId: explorationActionId,
 				coordinate,
-				channel: channelName,
+				channelId,
 				strength: 0,
 				reward: 0
 			});

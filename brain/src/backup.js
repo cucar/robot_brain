@@ -100,14 +100,11 @@ export class Backup {
 
 		console.log(`📂 Loading backup: ${folder}`);
 
-		// Channels: rebuild both directions of the lookup. The id→name side is needed
-		// below to translate base_neurons rows; the name→id side is part of the snapshot.
-		const channelIdToName = {};
+		// Channels: name→id is part of the snapshot Thalamus consumes (advances its
+		// id allocator past the persisted max).
 		const channelNameToId = {};
 		for (const [idStr, name] of readCsv(path.join(folder, 'channels.csv'))) {
-			const id = Number(idStr);
-			channelIdToName[id] = name;
-			channelNameToId[name] = id;
+			channelNameToId[name] = Number(idStr);
 		}
 
 		// Dimensions: only name→id is exposed back to Thalamus (the id→name direction
@@ -137,7 +134,7 @@ export class Backup {
 		if (fs.existsSync(baseFile)) {
 			for (const [neuronId, channelId, type, dimId, val] of readCsv(baseFile)) {
 				baseNeurons.set(Number(neuronId), {
-					channel: channelIdToName[Number(channelId)],
+					channelId: Number(channelId),
 					type,
 					coordinate: { dimId: Number(dimId), bucketId: Number(val) }
 				});
@@ -273,8 +270,8 @@ export class Backup {
 		for (const { neuron, level, baseNeuron } of snapshot.neurons) {
 			// Level > 0 neurons are patterns/interneurons — they live only in patterns.csv.
 			if (level !== 0) continue;
-			const { channel, type, coordinate } = baseNeuron;
-			rows.push([neuron.id, snapshot.channelNameToId[channel], type, coordinate.dimId, coordinate.bucketId]);
+			const { channelId, type, coordinate } = baseNeuron;
+			rows.push([neuron.id, channelId, type, coordinate.dimId, coordinate.bucketId]);
 		}
 		rows.sort((a, b) => a[0] - b[0]);
 		writeCsv(path.join(folder, 'base_neurons.csv'), rows);
