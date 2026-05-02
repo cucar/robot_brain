@@ -39,7 +39,8 @@ export default class StockTestJob extends Job {
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
 			offsetRows: 0,                       // Number of rows to skip from start (can be overridden with --offset)
-			extendedHours: false                 // Include extended hours data (pre-market/after-hours) - use --extended-hours
+			extendedHours: false,                // Include extended hours data (pre-market/after-hours) - use --extended-hours
+			randomBaseline: false                // Skip the brain entirely; pick own/out + symbol uniformly at random - use --random-baseline
 		};
 
 		this.encoders = [];
@@ -88,6 +89,8 @@ export default class StockTestJob extends Job {
 			StockTrader.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
 			StockTrader.cash = StockTrader.initialCapital;
 		}
+
+		if (process.argv.includes('--random-baseline')) this.config.randomBaseline = true;
 	}
 
 	/**
@@ -160,6 +163,7 @@ export default class StockTestJob extends Job {
 		console.log(`🔄 Max Episodes: ${this.config.maxEpisodes}`);
 		console.log(`📋 Holdout Rows: ${this.config.holdoutRows}`);
 		console.log(`📋 Offset Rows: ${this.config.offsetRows}`);
+		if (this.config.randomBaseline) console.log(`🎲 Random baseline mode (brain disabled)`);
 		console.log('');
 	}
 
@@ -282,10 +286,12 @@ export default class StockTestJob extends Job {
 	async runFrame() {
 		const inputs = new Map();
 		const rewards = new Map();
+		const randomBaseline = this.config.randomBaseline;
 
 		// Pull one frame per encoder. Even frames that don't produce an encoded input
 		// (e.g. zero-volume bar, first frame) still update the trader's price/volume so
-		// valuation and reward math see the most recent reading.
+		// valuation and reward math see the most recent reading. In --random-baseline
+		// mode the encoded scalars are never consumed, so skip the encode() call.
 		let anyFrames = false;
 		for (let i = 0; i < this.encoders.length; i++) {
 			const encoder = this.encoders[i];
@@ -294,24 +300,40 @@ export default class StockTestJob extends Job {
 			if (!frame) continue;
 			anyFrames = true;
 			trader.setFrame(frame.price, frame.volume);
-			const dimMap = encoder.encode(frame);
-			if (dimMap) inputs.set(encoder.channelId, dimMap);
+			if (!randomBaseline) {
+				const dimMap = encoder.encode(frame);
+				if (dimMap) inputs.set(encoder.channelId, dimMap);
+			}
 		}
 		if (!anyFrames) return false;
 
-		// Only report reward for traders that actually acted last frame. This matches the
-		// legacy path, which called channel.getRewards() only when the channel had inferred
-		// actions in the previous frame — reporting a reward for a trader that never acted
-		// would credit/punish neurons that weren't responsible.
-		for (const trader of this.traders)
-			if (trader.lastAction !== null) rewards.set(trader.channelId, trader.getReward());
+		let frame;
+		if (randomBaseline) {
+			// Skip the brain entirely. 50% chance to be fully out; otherwise pick one
+			// trader uniformly to OWN. No reward collection, no processFrame, no encode —
+			// this is the baseline against which the brain is measured, so it must not
+			// share any of the brain's per-frame work.
+			const ownThisFrame = Math.random() < 0.5;
+			const ownedIndex = ownThisFrame ? Math.floor(Math.random() * this.traders.length) : -1;
+			for (let i = 0; i < this.traders.length; i++)
+				this.traders[i].setAction(i === ownedIndex ? 1 : -1, 0);
+		}
+		else {
+			// Only report reward for traders that actually acted last frame. This matches the
+			// legacy path, which called channel.getRewards() only when the channel had inferred
+			// actions in the previous frame — reporting a reward for a trader that never acted
+			// would credit/punish neurons that weren't responsible.
+			for (const trader of this.traders)
+				if (trader.lastAction !== null) rewards.set(trader.channelId, trader.getReward());
 
-		// Brain returns inferences keyed by channelId plus per-frame diagnostic data
-		// (timing, optional vote debug). Destructure so we can pass `frame` straight
-		// to the renderer — no separate getter call into the brain.
-		const { inferences, frame } = this.brain.processFrame(inputs, rewards);
-		for (const trader of this.traders)
-			trader.apply(inferences.get(trader.channelId) ?? []);
+			// Brain returns inferences keyed by channelId plus per-frame diagnostic data
+			// (timing, optional vote debug). Destructure so we can pass `frame` straight
+			// to the renderer — no separate getter call into the brain.
+			const result = this.brain.processFrame(inputs, rewards);
+			frame = result.frame;
+			for (const trader of this.traders)
+				trader.apply(result.inferences.get(trader.channelId) ?? []);
+		}
 
 		// Coordinated portfolio execution: ranks OWN actions, sizes positions, and runs
 		// sells-then-buys so cash is freed before it's spent.

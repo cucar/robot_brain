@@ -113,7 +113,35 @@ Final Training Results (1 episodes):
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
 
-## Demo 4: Action Learning in Low Accuracy
+### Brain P&L over time
+
+![Brain portfolio P&L by frame](images/brain_stocks.jpg)
+
+Drawdowns happen, but the brain keeps making new highs — the trajectory shape a learning system should produce.
+
+## Demo 4: Random Baseline Comparison
+
+A natural worry about Demo 3 is that the result might come from a favorable data window rather than learned trading. To rule that out, the same job can be run with `--random-baseline`, which replaces the brain's action inference with a coin flip: 50% chance to be fully out, 50% chance to own one stock chosen uniformly at random. Everything else — the same data, same portfolio sizing, same execution path — is unchanged.
+
+```bash
+node apps/stocks/jobs/test.js --random-baseline
+```
+
+`--random-baseline` skips encoding, reward collection, and `brain.processFrame()` entirely, so the run is purely the trading harness driven by random signals — no shared work with the brain path.
+
+**Two example random-baseline runs:**
+
+![Random baseline run 1](images/random_stocks1.jpg)
+![Random baseline run 2](images/random_stocks2.jpg)
+
+Random P&L varies wildly between seeds — one run drifts up to roughly +$32K and gives most of it back to end near +$8K; another finishes in the single thousands. Across the random runs we observed, none came close to the brain's +$66K. Two differences stand out:
+
+- **Endpoint magnitude.** The brain's final profit is roughly an order of magnitude above the best random run on this data — well outside the random baseline's natural variance.
+- **Trajectory shape.** Random P&L drifts up and reverts (classic undirected exposure just riding whatever the basket does). The brain has drawdowns but keeps making new highs.
+
+This is the simplest sanity check that the brain is doing real work: same harness, same data, only the decision source changes — and the results are not in the same league.
+
+## Demo 5: Action Learning in Low Accuracy
 
 The brain learns the best actions to perform in each situation over repeated episodes, even when base prediction accuracy is low.
 
@@ -139,7 +167,7 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5
    Episode 5: 58.77%
 ```
 
-## Demo 5: Stock Sequence Memorization
+## Demo 6: Stock Sequence Memorization
 
 The brain memorizes a repeating stock price sequence across 5 episodes, reaching 95%+ prediction accuracy. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
 
@@ -179,7 +207,7 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --
 
 The brain goes from 50% accuracy (random) to 96% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
-## Demo 6: Text Sequence Learning
+## Demo 7: Text Sequence Learning
 
 The brain learns to predict character sequences. Feed it a string, and it memorizes the pattern — reaching 100% prediction accuracy within a few episodes.
 
@@ -355,6 +383,7 @@ node <path-to-job.js> [options]
 | `--no-summary` | Suppress per-frame summary output |
 | `--start <date>` | Start date for data (YYYY-MM-DD) |
 | `--end <date>` | End date for data (YYYY-MM-DD) |
+| `--random-baseline` | Skip the brain entirely; pick own/out + symbol uniformly at random (sanity-check baseline for stock test) |
 
 ## Creating Custom Jobs
 
@@ -436,7 +465,7 @@ app. It is not part of the brain core; the brain has no DB dependency.
 ### Backup → MySQL → Backup Round-Trip
 
 Take a backup, push it through MySQL, pull it back out, and verify the rehydrated
-brain reproduces the same result. Uses the [Demo 5](#demo-5-stock-sequence-memorization)
+brain reproduces the same result. Uses the [Demo 6](#demo-6-stock-sequence-memorization)
 config (KGC,GLD,SPY) — a single episode here ends around `$22,675,481.59`.
 
 ```bash
