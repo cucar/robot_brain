@@ -73,24 +73,6 @@ export class Quantizer {
 	}
 
 	/**
-	 * Get the resolution (bucket count) for a dimension.
-	 */
-	getResolution(dimId) {
-		const state = this.dimensions.get(dimId);
-		if (!state) throw new Error(`Quantizer: dimension ${dimId} not registered`);
-		return state.resolution;
-	}
-
-	/**
-	 * Get current boundaries for a dimension (null if dynamic + pre-warmup).
-	 */
-	getBoundaries(dimId) {
-		const state = this.dimensions.get(dimId);
-		if (!state) throw new Error(`Quantizer: dimension ${dimId} not registered`);
-		return state.boundaries ? [...state.boundaries] : null;
-	}
-
-	/**
 	 * Feed a raw scalar to the quantizer. Two jobs:
 	 *   (1) for 'dynamic' mode, buffer samples and compute split points after warmup
 	 *   (2) for any mode with known boundaries (static always, dynamic post-warmup),
@@ -256,37 +238,4 @@ export class Quantizer {
 		return boundaries;
 	}
 
-	/**
-	 * Serialize quantizer state for persistence.
-	 * Persists boundaries (static + dynamic learned) and per-bucket empirical-mean
-	 * accumulators — the latter is learned state that takes many frames to collect
-	 * and would otherwise have to be rebuilt from scratch on every restart.
-	 * Sample buffers (dynamic mode pre-warmup reservoir) are treated as transient.
-	 */
-	serialize() {
-		const out = {};
-		for (const [dimId, state] of this.dimensions)
-			out[dimId] = {
-				mode: state.mode,
-				resolution: state.resolution,
-				boundaries: state.boundaries ? [...state.boundaries] : null,
-				bucketStats: state.bucketStats ? state.bucketStats.map(s => ({ count: s.count, sum: s.sum })) : null
-			};
-		return out;
-	}
-
-	/**
-	 * Restore previously serialized state. Dimensions must be registered first
-	 * with the same mode/resolution; this only reinstates boundaries and the
-	 * per-bucket accumulators used for empirical-mean dequantization.
-	 */
-	restore(snapshot) {
-		for (const [dimIdStr, saved] of Object.entries(snapshot)) {
-			const dimId = Number(dimIdStr);
-			const state = this.dimensions.get(dimId);
-			if (!state) continue; // unknown dimension - ignore
-			if (saved.boundaries) state.boundaries = [...saved.boundaries];
-			if (saved.bucketStats) state.bucketStats = saved.bucketStats.map(s => ({ count: s.count, sum: s.sum }));
-		}
-	}
 }

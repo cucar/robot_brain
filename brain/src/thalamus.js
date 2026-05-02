@@ -84,15 +84,6 @@ export class Thalamus {
 	}
 
 	/**
-	 * Translate a name-form coordinate to id-form for internal brain use.
-	 * @param {{dimension: string, value: number}} coordinate
-	 * @returns {{dimId: number, bucketId: number}}
-	 */
-	coordinateNameToId(coordinate) {
-		return { dimId: this.dimensionNameToId[coordinate.dimension], bucketId: coordinate.value };
-	}
-
-	/**
 	 * Get or create a sensory neuron ID from a frame point. coordinate form: {dimId, bucketId }
 	 * @returns {number} - Neuron ID
 	 */
@@ -484,13 +475,6 @@ export class Thalamus {
 	 */
 	getChannelSpec(channelId) {
 		return this.channelSpecs.get(channelId);
-	}
-
-	/**
-	 * Get stored dimension spec by ID.
-	 */
-	getDimensionSpec(dimensionId) {
-		return this.dimensionSpecs.get(dimensionId);
 	}
 
 	/**

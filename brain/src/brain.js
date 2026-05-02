@@ -97,13 +97,6 @@ export default class Brain {
 	}
 
 	/**
-	 * Get accuracy stats (for compatibility with jobs)
-	 */
-	get accuracyStats() {
-		return this.diagnostics.accuracyStats;
-	}
-
-	/**
 	 * Save brain state to a file-based backup under <jobDir>/backups/<timestamp>/.
 	 * Save errors are caught and logged inside Backup.save so a failure here
 	 * never throws during shutdown.
