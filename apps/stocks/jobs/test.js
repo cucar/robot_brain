@@ -34,8 +34,6 @@ export default class StockTestJob extends Job {
 				// 'LCID', 'PLTR', 'SOFI', 'MARA', 'RIOT', 'GME', /* 'AMC', */ 'TWLO', 'ZM', 'SNOW'
 			],
 			timeframe: '3H',                     // Timeframe for data (e.g., '1D', '1Min')
-			startDate: '2026-01-22',             // Start date for data download
-			endDate: '2026-02-22',               // End date for data download
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
 			offsetRows: 0,                       // Number of rows to skip from start (can be overridden with --offset)
@@ -66,12 +64,6 @@ export default class StockTestJob extends Job {
 
 		const timeframeIndex = process.argv.indexOf('--timeframe');
 		if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) this.config.timeframe = process.argv[timeframeIndex + 1];
-
-		const startIndex = process.argv.indexOf('--start');
-		if (startIndex !== -1 && process.argv[startIndex + 1]) this.config.startDate = process.argv[startIndex + 1];
-
-		const endIndex = process.argv.indexOf('--end');
-		if (endIndex !== -1 && process.argv[endIndex + 1]) this.config.endDate = process.argv[endIndex + 1];
 
 		if (process.argv.includes('--extended-hours')) this.config.extendedHours = true;
 
