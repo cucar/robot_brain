@@ -1,7 +1,6 @@
 import { Memory } from './memory.js';
 import { Backup } from './backup.js';
 import { Diagnostics } from './diagnostics.js';
-import { Neuron } from './neuron.js';
 import { Thalamus } from './thalamus.js';
 
 /**
@@ -88,9 +87,6 @@ export default class Brain {
 
 		// reset all neurons
 		this.thalamus.reset();
-
-		// reset neuron id counter
-		Neuron.nextId = 1;
 	}
 
 	/**

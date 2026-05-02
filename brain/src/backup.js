@@ -121,19 +121,14 @@ export class Backup {
 		// loaded later can reference them by id without ordering constraints.
 		const neurons = new Map();
 		const levels = new Map();
-		let maxId = 0;
 		for (const [idStr, levelStr] of readCsv(path.join(folder, 'neurons.csv'))) {
 			const id = Number(idStr);
 			const level = Number(levelStr);
 			const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
-			const neuron = new Neuron(forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, channelActionIds, actionIds, id);
+			const neuron = new Neuron(id, forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, channelActionIds, actionIds);
 			neurons.set(id, neuron);
 			levels.set(id, level);
-			if (id > maxId) maxId = id;
 		}
-		// Bump the global id counter past anything we just loaded — otherwise the next
-		// new neuron created by the running brain would collide with a restored id.
-		if (maxId >= Neuron.nextId) Neuron.nextId = maxId + 1;
 
 		// Base neurons: level-0 sensory metadata. File may be absent if the snapshot
 		// only has interneurons (rare, but cheap to guard for).

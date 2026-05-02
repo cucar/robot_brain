@@ -20,18 +20,16 @@ import { Context } from './context.js';
  */
 export class Neuron {
 
-	// Static counter for assigning unique IDs to neurons
-	static nextId = 1;
-
 	// Minimum samples per (neuron, age) before dynamic modes switch off the warmup
 	// fallback. Not a tunable knob — kept here to avoid a magic number in getErrorThreshold.
 	static ERROR_MIN_SAMPLES = 3;
 
 	/**
-	 * constructor - id optional for loading from database
-	 * channelActionIds are used for alternative-action lookup during learning (per-channel
-	 * Set lookup). actionIds is the flat union of all action neuron ids across channels,
-	 * used for O(1) isActionNeuron checks during connection learning. Both are populated
+	 * Neuron id is allocated by the Thalamus (mirrors how channel and dimension
+	 * ids are allocated) and passed in at construction. channelActionIds are used
+	 * for alternative-action lookup during learning (per-channel Set lookup).
+	 * actionIds is the flat union of all action neuron ids across channels, used
+	 * for O(1) isActionNeuron checks during connection learning. Both are populated
 	 * by registerChannelSpec() and shared by-reference across all neurons (no per-frame
 	 * traffic; mutations from later channel registrations are seen live).
 	 *
@@ -43,19 +41,15 @@ export class Neuron {
 	 * For dynamic modes, errorThreshold also serves as the warmup fallback until
 	 * ERROR_MIN_SAMPLES observations have been recorded at that age.
 	 */
-	constructor(patternForgetRate, mergeThreshold, errorMode, errorThreshold, channelActionIds, actionIds, id = null) {
+	constructor(id, patternForgetRate, mergeThreshold, errorMode, errorThreshold, channelActionIds, actionIds) {
 
-		// initialize neuron parameters
+		this.id = id;
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
 		this.errorMode = errorMode;
 		this.errorThreshold = errorThreshold;
 		this.channelActionIds = channelActionIds;
 		this.actionIds = actionIds;
-
-		// initialize neuron id if given - update nextId if we're loading a neuron with a specific ID
-		this.id = id || Neuron.nextId++;
-		if (id && id >= Neuron.nextId) Neuron.nextId = id + 1;
 
 		// initialize synapses
 		this.connections = new Map(); // inferences: Map<distance, Map<toNeuronId, {strength, reward}>>

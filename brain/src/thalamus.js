@@ -49,6 +49,7 @@ export class Thalamus {
 		// from a snapshot so newly allocated IDs don't collide with persisted ones.
 		this.nextChannelId = 1;
 		this.nextDimensionId = 1;
+		this.nextNeuronId = 1;
 
 		// Level counts - tracks number of neurons at each level for efficient max level diagnostics lookup
 		this.levelCounts = []; // index = level, value = count of neurons at that level
@@ -124,7 +125,7 @@ export class Thalamus {
 	 * @returns {Neuron} The newly created neuron
 	 */
 	addSensoryNeuron(coordinate, channel, type) {
-		const neuron = new Neuron(0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
+		const neuron = new Neuron(this.nextNeuronId++, 0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
 		this.neurons.set(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(this.makeValueKey(coordinate), neuron.id);
@@ -161,7 +162,7 @@ export class Thalamus {
 
 		// create and initialize the neuron in a single call
 		const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
-		const neuron = new Neuron(forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
+		const neuron = new Neuron(this.nextNeuronId++, forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
 		neuron.initializeConnections(connections);
 
 		// register in the thalamus
@@ -194,6 +195,7 @@ export class Thalamus {
 		this.reset();
 
 		for (const { neuron, level, baseNeuron, parentId } of snapshot.neurons) {
+			if (neuron.id >= this.nextNeuronId) this.nextNeuronId = neuron.id + 1;
 			this.neurons.set(neuron.id, neuron);
 			this.neuronLevels.set(neuron.id, level);
 			if (parentId) this.neuronParents.set(neuron.id, parentId);
@@ -224,6 +226,7 @@ export class Thalamus {
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
 		this.levelCounts = []; // for diagnostics
+		this.nextNeuronId = 1;
 	}
 
 	/**
