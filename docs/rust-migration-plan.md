@@ -33,60 +33,468 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 ---
 
-## Current Architecture (JS)
+## Class Architecture
 
-| Class | Role | Key State |
-|-------|------|-----------|
-| **Brain** | Orchestrator — frame loop, learning, inference | frameNumber, error threshold |
-| **Thalamus** | Neuron registry, channel mgmt, dimension maps | neurons Map, neuronsByValue, deathLedger, channels |
-| **Memory** | Temporal sliding window of active neurons | activeNeurons[], inferredNeurons[], contextLength |
-| **Neuron** | Connections, children, voting, learning, decay | connections, children, context |
-| **Context** | Pattern context matching & merging | entries Map<neuron, Map<distance, strength>> |
-| **Channel** | I/O interface (stock, text, vision, etc.) | dimensions, actions, rewards |
-| **Database** | MySQL persistence | connection, backup/restore |
-| **Diagnostics** | Debug output & accuracy tracking | accuracy stats, mispredictions |
-
----
-
-## Phase 3 — Introduce Region and Column Classes
-
-Column abstractions (Column, Region) will be introduced directly in Rust rather than building them in JS only to throw them away 2–3 weeks later. The column classes are a Rust-native concern.
-
-The following describes the *design* for reference — implementation happens in Phase 5.
-
-### 3.1 Introduce `Column` class
-- Owns a subset of neurons
-- Calls `neuron.processFrame()` on each of its neurons
-- Holds per-column local memory (active neuron window for its neurons)
-- Methods: `processFrame()` — iterates owned neurons, returns aggregated results
-
-### 3.2 Introduce `Region` class
-- Wraps a set of `Column` instances
-- Owns shared state: dimension maps, channel actions
-- Aggregates votes across its columns
-- Methods: `processFrame()`, `aggregateVotes()`, `distributeInputs()`
-
-### 3.3 Refactor Brain as top-level coordinator
-- Brain becomes a thin coordinator over `Region` instances
-- Brain handles: I/O (channels), global consensus across columns, action execution
-- Brain no longer directly touches individual neurons
-
-### 3.4 Refactor Thalamus for column-aware neuron ownership
-- Neurons get assigned to a specific column (owner)
-- Thalamus tracks which region/column owns each neuron
-- Neuron lookup still global (Thalamus), but mutations route through owner
-
-### 3.5 Refactor Memory for per-column active state
-- Each column has its own active neuron window
-- Global Memory becomes an aggregator over per-column memories
-- Inferred neurons remain global (consensus output)
-
-### 3.6 Cleanup
-- Change offset rows to work from the end and add demo for training first and then testing accuracy with hold out data
+| Class           | Role                                           | Key State                                          |
+|-----------------|------------------------------------------------|----------------------------------------------------|
+| **Brain**       | Orchestrator — frame loop, learning, inference | frameNumber, error threshold                       |
+| **Thalamus**    | Neuron registry, channel mgmt, dimension maps  | neurons Map, neuronsByValue, deathLedger, channels |
+| **Memory**      | Temporal sliding window of active neurons      | activeNeurons[], inferredNeurons[], contextLength  |
+| **Neuron**      | Connections, children, voting, learning, decay | connections, children, context                     |
+| **Context**     | Pattern context matching & merging             | entries Map<neuron, Map<distance, strength>>       |
+| **Backup**      | File persistence                               | backup/restore                                     |
+| **Quantizer**   | Bucketization of continuous values to discrete | discretization                                     |
+| **Diagnostics** | Debug output & accuracy tracking               | accuracy stats, mispredictions                     |
 
 ---
 
-## Phase 4 — Single-Threaded Rust Core + Node.js Bindings (~3 weeks)
+## Pre-Phase-3 Snapshot Test — Behavior baseline
+
+Before any Phase 3 work, capture a behavior baseline so each implementation step can be verified against it. The goal of Phase 3 (and Phase 5 at R=1, C=1) is **bit-identical results** to today; multi-column may introduce small bounded float drift that's acceptable as long as it doesn't materially affect performance.
+
+**Test plan:**
+1. Pick a fixed-seed stocks training workload (or any deterministic frame sequence available) of N frames — large enough to exercise pattern creation, error correction, and deletion cascades.
+2. Snapshot the end-state values:
+   - accuracy stats (per-channel event accuracy, action reward stats, MAPE)
+   - final neuron count and `maxLevel`
+   - cumulative pattern-creation count
+   - inferred-action sequences across the run (or a hash thereof)
+3. Save the snapshot file alongside the test.
+4. Re-run after each Phase 3 implementation step. At R=1, C=1 throughout Phase 3, every step must match the baseline exactly.
+
+Without this, drift is invisible until it's already a divergence.
+
+---
+
+## Pre-Phase-3 Experiment — Defer error pattern creation to after `processFrame`
+
+**Hypothesis.** Today, error-correction patterns are created *before* `dispatchFrame` (inside `getLevelTasks`), and `dispatchFrame` uses `newErrorPatternIds` as a mask so neurons ignore the brand-new patterns during matching. If we instead create error patterns *after* `processFrame` returns, the mask is no longer needed at all — we'd skip Op-2 entirely as a per-level operation and just install the new patterns at the end of the level.
+
+**Why test before Phase 3.** If this works, the per-level cross-region flow simplifies from four operations to three (drop the mask broadcast and the pre-dispatch allocation; allocation collapses into the post-dispatch install). That meaningfully reduces the synchronization surface of the design and makes Phase 3's plan smaller.
+
+**The behavioral question.** Today the new error patterns participate in *this* frame's `levelContext` (because they're inserted during the context-merge step before dispatch). If we defer creation, those patterns miss this frame's context propagation by exactly one frame — they only show up in the next frame's `levelContext`. Whether that one-frame lag changes accuracy/learning materially is the experiment's only real question.
+
+**Test plan.**
+1. Add a flag (e.g. `deferErrorPatternCreation`) gating the reorder in `Thalamus.processLevel`.
+   - Off: today's behavior (create in `getLevelTasks`, mask in `dispatchFrame`).
+   - On: skip pattern creation in `getLevelTasks`; collect correction requests; after `applyFrameResults`, create the patterns and register them. No mask needed.
+2. Run the existing test suite under both modes — must pass under both.
+3. Run the stocks training workload under both modes for a meaningful number of frames; compare accuracy stats and pattern-count growth.
+4. Decision:
+   - If results are statistically indistinguishable: keep `deferErrorPatternCreation = true` and update Phase 3 to drop Op-2's per-level mask-broadcast (allocation still centralized in Thalamus, but installation is post-dispatch and no broadcast is needed).
+   - If accuracy regresses: keep today's ordering and proceed with Phase 3 as written.
+
+**Estimated effort.** 1–2 days (the change is localized to `Thalamus.processLevel` and `getLevelCorrections`).
+
+---
+
+## Phase 3 — Introduce Region and Column Classes (~1 week)
+
+Column abstractions (Column, Region) will be introduced in JS so the data flow is fully laid out before Rust threading (Phase 5) and MPI add real parallelism. The JS preview is functionally equivalent to today's single-threaded brain — every region/column call is a synchronous local function — but the *boundaries* will become thread/process boundaries later, so they are designed to add **zero per-frame round-trips per neuron**. All cross-boundary chatter is one of the four operations enumerated in §3.5.
+
+### Design principle: keep central state central
+
+The minimum partitioning required for Phase 5 thread parallelism is moving the **`Neuron` instances** (compute hot path) out into Column threads. Everything else can stay where it is today.
+
+The reasoning: in Phase 5, Rust threads will run dispatch in parallel. Workers only **read** active state during `processFrame`; the writes (`state.votes`, `state.context`, `state.threshold`, `applyContextRefUpdates`) all happen at the level barrier *after* every worker has returned. So the orchestrator (Thalamus) can serialize all writes to its own central state without locking — there is no concurrent-write contention to design around. Distributing `Memory` was a solution to a non-problem.
+
+This makes Phase 3 substantially smaller than originally drafted. `Memory`, the death ledger, all metadata maps, the level/age indexes, and the id allocator all stay in Thalamus, exactly as today.
+
+### Where data lives
+
+| Data                                                                  | Owner    | Notes                                                                                          |
+|-----------------------------------------------------------------------|----------|------------------------------------------------------------------------------------------------|
+| `Neuron` instances                                                    | Column   | The only thing that physically moves out of Thalamus. Compute hot path.                        |
+| `Memory` (`neuronStates`, `ageIndex`, `levelIndex`, `inferredNeurons`)| Thalamus | Unchanged from today. Reads packaged by Thalamus; writes serialized at the level barrier.       |
+| `neuronLevels`, `neuronParents`, `baseNeurons`, `neuronsByValue`      | Thalamus | Unchanged. Thalamus uses these directly when building `levelContext` and routing cleanup.       |
+| `deathLedger`, `neuronDeathFrame`                                     | Thalamus | Unchanged.                                                                                     |
+| `levelCounts`                                                         | Thalamus | Unchanged.                                                                                     |
+| `channelSpecs`, `dimensionSpecs`, name↔id maps                        | Thalamus | Unchanged.                                                                                     |
+| `channelActions`, `actionIds`, `channelDefaultActions`                | Thalamus | Replicated read-only into each Column at init (used by `Neuron` constructors and matching).    |
+| `quantizer`                                                           | Thalamus | Unchanged.                                                                                     |
+| `nextNeuronId` allocator                                              | Thalamus | Unchanged.                                                                                     |
+| Routing rule `(R, C)`                                                 | Thalamus | New. See §3.1.                                                                                 |
+
+### 3.1 Routing rule
+
+Pure deterministic function `routeNeuron(neuronId) → {regionIdx, columnIdx}`:
+- `regionIdx = neuronId % R`
+- `columnIdx = floor(neuronId / R) % C`
+
+Interleaving (rather than `id / chunk`) keeps id-bursts (e.g. all the error-correction ids allocated in one frame) spread evenly across regions.
+
+**Stability rules:**
+- Stable for the lifetime of a *running process*.
+- Snapshots do **not** persist `R`/`C`; restore re-routes every loaded id through the *current* run's `(R, C)`. A brain saved with 10 columns can be loaded into 20.
+
+**Implementation:** add `Thalamus.routeNeuron(id)`. Start with R=1, C=1 — keep it there throughout the rest of Phase 3 so each step can be verified against the snapshot baseline (§Pre-Phase-3 Snapshot Test).
+
+> ⚠️ **Test discipline when switching to R>1 or C>1.** With multiple columns, the iteration order over `levelNeurons` changes — today it's a single Map iterated in insertion order; with partitioning it becomes "all column 0's neurons, then column 1's, ..." in some merged order. Cumulative float-accumulation order changes, which can shift accuracy stats by rounding-noise amounts and may flip tie-breakers. Same applies to the order activations are applied at level+1 (see §3.15 for sort-by-parentId contingency). Goal: zero behavior change. Reality: some small drift may be unavoidable due to parallelization. Acceptable as long as it does not materially impact performance — verify against the snapshot baseline.
+
+### 3.2 `Column` class
+
+Owns `Neuron` instances and exposes a small set of batch operations on them. Becomes a Rust thread in Phase 5.
+
+**Owned state:**
+- `neurons: Map<id, Neuron>` — the Neuron objects this column owns
+
+**Per-frame methods** (each takes a batch and returns a batch):
+- `processLevel(tasks, sensoryNeurons, rewards, levelContext, newErrorPatternIds, frameNumber)` → `{results}` — see §3.6 (Op-3)
+- `updateContextRefs(updates)` — see §3.10 (Op-4)
+- `createNewNeurons(specs)` — see §3.9 (Op-0) and §3.8 (Op-2)
+- `deleteNeurons(opBatch)` → `{outboundOps, newlyDeletableIds}` — see §3.7 (Op-1)
+
+**Save/restore methods** (parallel across columns at init/shutdown) — see §3.11:
+- `dumpAll()` → serialized neuron data for owned neurons
+- `restoreNeurons(specs)` → constructs Neuron instances from serialized data
+
+**Implementation:** create the class with the `neurons` map and method skeletons. Each method body is a thin wrapper around the equivalent code in today's Thalamus (`applyFrameResults` for the dispatch path, `cleanupPatternFromParentContext` etc. for cleanup). Sections §3.6–§3.10 refactor those code paths into clean batch operations.
+
+### 3.3 `Region` class
+
+Wraps `Column[C]`. In Phase 5, this is the MPI rank (the only rank, since MPI is future work). Owns no state — pure router and aggregator within its rank.
+
+**Per-frame methods:**
+- `processLevel(tasksByColumn, ...)` → fans out, collects results
+- `updateContextRefs(updatesByColumn)` → fans out
+- `createNewNeurons(specsByColumn)` → fans out
+- `deleteNeurons(opBatchByColumn)` → fans out, collects outbound op batches and newly-deletable ids
+
+**Implementation:** plain wrapper class. Forwards calls one-to-one to columns and concatenates results. With C=1 trivial; the structure is what matters.
+
+### 3.4 Init-time data distribution
+
+Immutable read-only state used inside `Neuron` constructors and matching is copied into each Column at init so Column threads have everything they need without reaching back to Thalamus:
+
+```
+Brain → Thalamus.init(R, C):
+        1. Thalamus registers all channel specs (existing flow).
+        2. Thalamus constructs Region[R], passing each region a copy of:
+             - channelActions, actionIds, channelDefaultActions
+        3. Each Region constructs Column[C], passing each column the same copy.
+        4. Each Column passes the action sets into every Neuron it constructs.
+```
+
+The routing rule stays entirely in Thalamus — it's the only place that actually makes routing decisions (packaging per-column batches, routing cross-column cleanup ops). Columns receive batches already grouped for them and emit cleanup ops keyed by target neuron id, not target column. Channel/dim specs, name↔id maps, and the quantizer don't need to be copied either — Columns never touch them on the per-frame path.
+
+**Implementation:** thread the copies through the constructor chain when Column / Region are introduced.
+
+### 3.5 Per-frame operations overview
+
+There are **five** cross-region operations per frame.
+
+| #  | Operation                  | Frequency      | Round-trips | Section |
+|----|----------------------------|----------------|-------------|---------|
+| 0  | Create sensory neurons     | once per frame, only when new sensory points appear | 1 (down only — fan-out) | §3.9 |
+| 1  | Delete neurons             | once per frame | **variable (loop)** — bounded by cascade chain depth | §3.7 |
+| 2  | Create error patterns      | once per level | 1 (down only — fan-out) | §3.8 |
+| 3  | Process frame              | once per level | 1 (down + up)           | §3.6 |
+| 4  | Update context references  | once per level | 1 (down only — fan-out) | §3.10 |
+
+Per-frame call order at the brain:
+
+```
+brain.processFrame(inputs, rewards):
+  buildFrame(inputs)                          // central — collects new sensory specs
+
+  ╔═ Op-0: Create sensory neurons ══════════╗  // 1 fan-out (only if new sensory
+  ╚═════════════════════════════════════════╝  //   points appeared this frame)
+
+  ╔═ Op-1: Delete neurons (cascade pulses) ═╗
+  ╚═════════════════════════════════════════╝
+
+  ageContext(rewards)                          // Thalamus mutates Memory directly
+  activateSensors()                            // Thalamus mutates Memory directly
+
+  for level = 0 .. maxActiveLevel:
+    // Thalamus reads its own Memory, walks owned active neurons at level,
+    // builds mergedLevelContext + correction requests + per-(neuron, age) tasks.
+    // All local — no cross-region traffic.
+
+    ╔═ Op-2: Create error patterns ════════╗  // 1 fan-out (no return)
+    ╚══════════════════════════════════════╝
+    ╔═ Op-3: Process frame (dispatch) ═════╗  // 1 round-trip
+    ╚══════════════════════════════════════╝
+    // Thalamus serially applies result writes to its own Memory:
+    //   - state.votes / state.context / state.threshold per (neuron, age)
+    //   - registerDeath for matched + correction patterns
+    //   - activations → activatePattern (mutates Memory directly)
+    //   - pre-aggregate votes for consensus
+    ╔═ Op-4: Update context references ════╗  // 1 fan-out (no return)
+    ╚══════════════════════════════════════╝
+
+  determineConsensus                           // central
+  saveInferredNeurons                          // central
+```
+
+> ⚠️ **Significant: level barrier.** Every Column must finish level N's dispatch before any starts N+1 (activations at N feed N+1). The level loop lives at the Brain layer; the dispatch call at each level is the synchronization point.
+
+### 3.6 Op-3: Process frame
+
+```
+Down (thalamus → region → column):
+  Per-column packages from Thalamus:
+    tasks = [{neuronId, ageStates, corrections, errorFeedback}, ...]
+            (Thalamus pulls ageStates from its own Memory and groups by
+             owning column via the routing rule)
+  Plus same-payload broadcasts:
+    mergedLevelContext, newErrorPatternIds,
+    sensoryNeurons (per-age, decorated with channelId/type),
+    rewards, frameNumber
+
+Compute (per column, parallel):
+  For each task:
+    result = neuron.processFrame(ageStates, levelContext, newErrorPatternIds,
+                                 sensoryNeurons, rewards, frameNumber, ...)
+  Pre-aggregate votes locally per (neuronId) and per (dimId).
+
+Up (column → region → thalamus):
+  Per-column results:
+    - matches + correctionActivations (for activatePattern + registerDeath)
+    - pre-aggregated votes
+    - contextRefUpdates batched by target column
+
+Thalamus, serially (no contention — workers are quiesced at the barrier):
+  - writes state.votes / state.context / state.threshold to its own Memory
+  - calls registerDeath for matched + correction patterns
+  - calls activatePattern for each activation (mutates Memory directly)
+  - merges per-region pre-aggregated votes for consensus
+```
+
+The ageStates payload on the down-trip is the only per-neuron data shipped each frame. In Phase 5 (shared-memory threads), this is essentially free (passing references). In MPI, this is the obvious target for region-side caching — see [future-work.md](future-work.md).
+
+> Op-3 payloads are self-contained — anything `neuron.processFrame` needs is included (sensory ids decorated with `channelId`/`type`, the rewards Map, `levelContext`, etc.). No callbacks back to Thalamus during compute. Already true today; preserve in Phase 5/MPI.
+
+**Implementation:** refactor `Thalamus.processLevel` to package per-column tasks and call `region.processLevel(...)` instead of looping `this.neurons.get(...).processFrame(...)` directly. Keep the result-write code (`applyFrameResults`) in Thalamus. Votes flow back as raw arrays (one entry per cast vote) — same shape as today, just routed through the column boundary. Pre-aggregation is a separate optional optimization in §3.12.
+
+### 3.7 Op-1: Delete neurons (cascade in pulses)
+
+> 🔶 **Significant: this is the only frame operation with a variable number of round-trips.**
+
+**Why it's a loop, not a fixed count:** when pattern P dies, removing P from another pattern Q's context entries may cause Q's `canDeleteChild` to flip true, queueing Q for deletion. Q's deletion may then orphan R, etc. Cascade depth is bounded by chain length (typically 1–2 pulses, occasionally more, capped by max-level depth). Collapsing this into a fixed count would require either synchronous reads back from sender (per-neuron round-trips) or deferring cleanup to the next frame (eventual consistency — risky because dangling refs would feed into Op-3's matching).
+
+**`deleteNeurons` op types** (the batch passed to `column.deleteNeurons`):
+- `DeleteSelf(neuronId)` — this neuron is dying; walk its `routingTable` / `contextRefs` / `contextIndex` and emit outbound ops; remove the Neuron from the local map
+- `RemoveFromParentRouting(parentId, childId)` — remove an entry from a live Neuron's routing table
+- `RemoveContextEntry(parentId, childId, ctxNeuronId, distance)` — remove a context entry; may flip `canDeleteChild` and add to `newlyDeletableIds`
+- `RemoveContextRef(ctxNeuronId, parentId, distance)` — drop a contextRef on a live Neuron
+- `RemoveChildFromContexts(referencingParentId, childPatternId, distances)` — remove a referenced pattern from a Neuron's context; may flip `canDeleteChild`
+- `DeleteOrphan(childId)` — child whose parent just died; treated as `DeleteSelf` on the receiver
+
+**Pulse architecture:**
+
+```
+Setup (Thalamus, local):
+  reaped = death ledger entries for this frame
+  initialBatch[col] = [DeleteSelf(id) for each id owned by col]
+
+repeat (each iteration is one round-trip):
+  Per column, parallel:
+    column.deleteNeurons(inbound[col]):
+      For each op in inbound[col]:
+        - DeleteSelf(id):
+            walk Neuron's state (routingTable, contextRefs, contextIndex);
+            emit outbound ops to target columns;
+            remove Neuron from local map
+        - other op types: apply local mutation;
+            may flip canDeleteChild → add to newlyDeletableIds
+      Returns {outboundOps, newlyDeletableIds}
+
+  Thalamus collects:
+    - removes deleted ids from Memory + metadata maps + death ledger
+    - routes outboundOps by target column → next inbound
+    - wraps newlyDeletableIds as new DeleteSelf ops → also next inbound
+
+terminate when: every column returns empty outboundOps AND empty newlyDeletableIds
+```
+
+Each iteration = one round-trip. Every op is pure data describing a local mutation on the receiver. Thalamus removes dead ids from Memory and the metadata maps as each iteration returns.
+
+**Implementation:** refactor `Thalamus.deletePatterns` into the pulse-loop driver. Move the per-Neuron mutations (today in `cleanupPatternFromParentContext`, `cleanupPatternFromChildContexts`, `cleanupOrphanedChildren`) into `Column.deleteNeurons` keyed by op type. Drop the dead `neuronLevels.get` argument at the `canDeleteChild` call site — the parameter isn't received by the method, and removing it eliminates the only would-be cross-column metadata lookup in the cascade.
+
+### 3.8 Op-2: Create error patterns
+
+> 🔶 **Significant: centralized chokepoint for id allocation.** Thalamus is the single id allocator — the natural serialization point for "what new patterns came into existence this frame".
+
+Thalamus already has all the inputs locally:
+
+```
+Pre-step (Thalamus, local):
+  Walk active neurons at this level (from Memory).
+  Build mergedLevelContext directly (used later as a parameter to Op-3).
+  For each (neuron, age > 0) where evaluateVoteError fires:
+    correctionRequest = {parentId, age, contextEntries, connectionsSpec}
+    connectionsSpec resolved using local neuronChannelId / reward lookups
+
+Op-2 fan-out:
+  Allocate a contiguous id block:
+    newIds = [nextNeuronId .. nextNeuronId + count - 1]
+    nextNeuronId += count
+  Split specs by routing rule (per-column).
+
+  ── Down (thalamus → region → column) ──
+    For each target column, send its own specs batch (per-column payload).
+    Each target column constructs its assigned new Neurons locally with the
+    connection spec already in hand.
+    Thalamus simultaneously updates its own metadata maps (neuronLevels,
+    neuronParents, levelCounts) for the new patterns. The new patterns are
+    NOT activated here — activation happens during Op-3 result writes when
+    correctionActivations come back.
+```
+
+Because Thalamus has Memory and all metadata, no fan-in from columns is needed. Thalamus also assembles `newErrorPatternIds` locally — it goes down to columns as a parameter to Op-3 (along with `mergedLevelContext`), not as part of Op-2.
+
+> Note: if the [pre-Phase-3 reorder experiment](#pre-phase-3-experiment--defer-error-pattern-creation-to-after-processframe) succeeds, error-pattern creation moves to *after* Op-3. In that variant, Op-2 happens after Op-3 returns and the `newErrorPatternIds` mask parameter to Op-3 is gone entirely.
+
+**Implementation:** refactor `Thalamus.createPatternNeuron` so the central call only allocates the id and resolves the connection spec. The actual `new Neuron(...)` move into `Column.createNewNeurons`. `Thalamus.processLevel`'s per-level orchestration calls `region.createNewNeurons(specsByColumn)` after building the corrections list.
+
+### 3.9 Op-0: Create sensory neurons
+
+When `buildFrame` quantizes a frame point into a `(dimId, bucketId)` coordinate that doesn't yet have a sensory neuron, today's code creates the Neuron inline via `addSensoryNeuron`. In the new design, Thalamus collects all new sensory specs encountered during `buildFrame`, allocates ids centrally, then fans out one `createNewNeurons` batch per owning column at the end of `buildFrame` — before the level loop starts.
+
+Most frames create zero new sensory neurons (after warmup, the coordinate space is mostly populated). When the per-frame count is zero, the fan-out is skipped entirely.
+
+**Implementation:** modify `buildFrame` to collect new sensory specs instead of creating inline. After the frame is built, call `region.createNewNeurons(specsByColumn)` once. Thalamus updates its own metadata maps (`neuronLevels`, `baseNeurons`, `neuronsByValue`, `levelCounts`) inline.
+
+### 3.10 Op-4: Update context references
+
+```
+Down (thalamus → region → column):
+  Thalamus routes the contextRefUpdates batch produced by Op-3 to target columns.
+  Each Column applies its inbound batch to its owned Neurons.
+  No return — fire-and-forget within the level barrier.
+```
+
+Batching by target column at emission time keeps this to one fan-out per level regardless of how many updates fly.
+
+**Implementation:** refactor the `applyContextRefUpdates` loop in `applyFrameResults` to emit per-column batches and call `region.updateContextRefs(updatesByColumn)`.
+
+### 3.11 Snapshot save and restore (parallel across columns)
+
+Save and restore are the only operations in the system that bulk-touch every Neuron in the brain at once. Both are fully parallel across columns — one fan-in for save, one fan-out for restore. Outside of these two operations, save/load adds no cross-region traffic.
+
+**Save** (called once at episode end / shutdown):
+
+```
+Phase 1 — Materialize lazy decay (Thalamus, local):
+  thalamus.materializeAndResetNeurons(currentFrame)
+  // every owned Neuron's child-strength values are walked into their
+  // post-decay current values with lastActivationFrame = 0.
+  // (This same call already exists today; in the new design it fans out
+  // to columns since the Neuron instances live there.)
+
+Phase 2 — Column fan-in (parallel, all columns at once):
+  column.dumpAll() → [{id, neuronData}, ...] for every owned neuron
+    neuronData = persistent Neuron state:
+      connections, routingTable, contextRefs, contextIndex,
+      patternForgetRate, ...
+
+Phase 3 — Assemble snapshot (Thalamus, local):
+  For each id collected, bundle:
+    {
+      id,
+      neuronData,    // from column
+      level,         // from thalamus.neuronLevels
+      parentId,      // from thalamus.neuronParents (pattern only)
+      baseNeuron,    // from thalamus.baseNeurons (sensory only)
+      deathFrame     // from thalamus.neuronDeathFrame (pattern only)
+    }
+  Plus channelNameToId, dimensionNameToId.
+
+Phase 4 — Write to disk (Thalamus, local):
+  Existing Backup.save flow.
+```
+
+> **Note on `deathFrame`:** today's snapshot does not persist the death ledger — restore *recomputes* each pattern's death frame by reading the parent's routingTable strength. In the new design, parent and child can live on different columns, which would turn that recomputation into a per-pattern cross-column join. Persisting `deathFrame` in the snapshot avoids that join entirely. Schema bump on the backup format; small one-time migration.
+
+**Load** (called once at startup):
+
+```
+Phase 1 — Read from disk (Thalamus, local):
+  Existing Backup.loadLatest flow.
+
+Phase 2 — Restore central state (Thalamus, local):
+  - reset all Thalamus maps + Memory
+  - advance id allocators past persisted max
+  - restore channelNameToId, dimensionNameToId
+  - for each snapshot entry, populate the central maps directly:
+      neuronLevels, neuronParents, baseNeurons, neuronsByValue,
+      levelCounts, deathLedger, neuronDeathFrame
+  // No column traffic in this phase — Thalamus has everything it needs locally.
+
+Phase 3 — Bucket by current routing rule (Thalamus, local):
+  for each snapshot entry:
+    {regionIdx, columnIdx} = thalamus.routeNeuron(entry.id)
+    bucket[regionIdx][columnIdx].push(entry)
+  // The CURRENT (R, C) is applied — not whatever was at save time.
+  // This is how a 10-column save loads cleanly into a 20-column run.
+
+Phase 4 — Column fan-out (parallel, all columns at once):
+  column.restoreNeurons(bucket[col])
+    → column constructs and stores its assigned Neuron instances locally
+       from neuronData, no further coordination needed.
+```
+
+Per-column work in Phase 2/save and Phase 4/load is independent — no barriers within a phase, no cross-column messaging. Total time is `max(per-column work)` rather than sum; in MPI later, the network shape is one bulk push from each rank for save, one bulk push to each rank for load.
+
+**Implementation:** add `dumpAll()` and `restoreNeurons(specs)` to the Column API. Bump the backup schema to persist `deathFrame` per pattern. Brain-layer save/load entry points are unchanged.
+
+### 3.12 Vote pre-aggregation (optional optimization)
+
+After Phase 3's correctness-preserving implementation lands and is verified bit-identical against the snapshot test (§Pre-Phase-3 Snapshot Test), pre-aggregating votes per column before they cross the region boundary is a straightforward perf win — shrinks the Op-3 up-trip payload from O(votes) to O(unique-voters + unique-dims).
+
+**The change:** instead of returning raw vote arrays from `Column.processLevel`, each column locally folds:
+- `candidates: Map<neuronId, {strength, weightedTotal}>` — sums `strength` and `strength * reward` per voted-for neuron
+- `dimTotalStrength: Map<dimId, number>` — accumulates dimension-wide strength totals (events only)
+
+These maps are merged at region, then at Thalamus, then handed to `Brain.determineConsensus` directly.
+
+**Behavior risk:** floating-point summation isn't associative — `(a+b)+c ≠ a+(b+c)` in low-order bits. Pre-aggregating in a different order than today's flat `aggregateVotes` loop will produce slightly different vote totals. In practice the differences are tiny (rounding-noise scale), but they can flip tie-breakers in `isBetterCandidate` where two candidates' scores are very close. The snapshot test will detect any drift.
+
+**Implementation:** modify `Column.processLevel` to fold votes locally before returning. Adapt `Region.processLevel` to merge column maps. Adapt `Thalamus`'s consensus path to skip its own re-aggregation. Then re-run the snapshot test — expect small diffs in accuracy stats; verify they're rounding-noise-scale and not material.
+
+### 3.13 `Thalamus` changes (summary)
+
+What moves out of Thalamus:
+- `neurons: Map<id, Neuron>` — the actual Neuron instances move to Column. Thalamus keeps the metadata maps but no longer holds the Neuron objects themselves.
+
+What stays in Thalamus, exactly as today:
+- `Memory` (`neuronStates`, `ageIndex`, `levelIndex`, `inferredNeurons`)
+- `deathLedger`, `neuronDeathFrame`
+- `levelCounts`
+- `neuronLevels`, `neuronParents`, `baseNeurons`, `neuronsByValue`
+- `channelSpecs`, `dimensionSpecs`, name↔id maps
+- `quantizer`, `channelActions`, `actionIds`, `channelDefaultActions`
+- `nextNeuronId` allocator
+
+What changes shape:
+- `processLevel(...)` — orchestrates per-level via `region.processLevel(...)`. See §3.6.
+- `deletePatterns(...)` — orchestrates the cascade pulse loop. See §3.7.
+- `createPatternNeuron(...)` — id + spec resolution only; Neuron construction in Column. See §3.8.
+- `addSensoryNeuron(...)` — id + spec resolution only; batched at end of `buildFrame`. See §3.9.
+- `getSnapshot()` / `restoreSnapshot()` — fan-in/fan-out across columns. See §3.11.
+
+### 3.14 Brain changes (summary)
+
+Almost none. `Brain.processFrame` is structurally unchanged. The only differences:
+- `cleanupDeadPatterns` → calls Thalamus's new pulse-loop cleanup (§3.7)
+- `processLevels` → unchanged orchestration; `thalamus.processLevel` uses column-batched dispatch internally (§3.6)
+- `determineConsensus` may later consume pre-aggregated `(candidates, dimTotalStrength)` maps if §3.12 is applied (perf, not correctness)
+
+### 3.15 Behavior preservation discipline
+
+Phase 3 is meant to preserve today's behavior exactly at R=1, C=1. Multi-column (R>1 or C>1) and vote pre-aggregation (§3.12) may introduce small bounded float drift; that's acceptable as long as it doesn't materially affect performance.
+
+**Audit before starting Phase 3:**
+- **Tie-breakers.** `isBetterCandidate` already breaks ties by `neuronId < best.neuronId` — order-independent, good. Sweep the codebase for any other tie-breakers that rely on iteration order; convert to id-based or some other order-independent rule.
+
+**Contingency fixes (apply only if snapshot drift turns out material):**
+- **Sort activations by `parentId`** (or any stable key) before applying via `memory.activatePattern`. Determinizes activation order across topologies. Cheap; suspect it's only needed if multi-column drift turns out non-trivial.
+- **Stable concatenation in Phase 5.** When collecting per-thread results in the Rust core, concatenate by column index (not arrival order) so results are deterministic regardless of thread scheduling. Same discipline applies in MPI later.
+
+---
+
+## Phase 4 — Single-Threaded Rust Core + Node.js Bindings (~2 weeks)
 
 Rewrite the core brain computation in Rust as a single-threaded library. Publish as an npm package with N-API bindings so the existing Node.js app can call into it. Extra week budgeted for Rust learning curve (ownership/borrow checker will fight neuron graph patterns).
 
@@ -154,9 +562,9 @@ Add threading within the Rust core. Introduce the region/column abstractions dir
 - When saving, Brain collects neuron state from each thread/column and serializes centrally
 
 ### 5.6 Neuron partitioning strategy
-- Sensory neurons partitioned by channel/dimension hash
-- Pattern neurons live on same column as parent
-- Dynamic rebalancing deferred to MPI phase (see [future-work.md](future-work.md))
+- All neurons (sensory and pattern) partitioned by mod over `neuronId` per the routing rule from Phase 3 §3.1: `regionIdx = neuronId % R`, `columnIdx = floor(neuronId / R) % C`
+- No special-casing for sensory vs pattern, and no parent-co-location — every neuron's owner is purely a function of its id
+- No dynamic rebalancing planned; revisit only if profiling surfaces a hot path
 
 ---
 
@@ -174,17 +582,23 @@ With multi-threaded Rust core in place, focus on scaling the stock trading workl
 - Optimize memory layout for cache locality (arena allocation, struct-of-arrays where beneficial)
 - Tune thread count and neuron partitioning for stock workloads
 
+### 6.3 Add pre-training demo
+- Change offset rows to work from the end and add demo for training first and then testing accuracy with hold out data
+
 ---
 
-## Key Design Decisions (To Refine)
+## Key Design Decisions
 
-1. **Neuron ownership granularity** — how many neurons per column? Fixed partition or dynamic?
-2. **Cross-column connections** — neurons in different columns can have connections. How are these resolved? Proxy neurons? Message passing?
-3. **Synchronization model** — lock-step frame processing across all columns, or async with eventual consistency?
-4. **Memory/context scope** — is the active neuron window per-column, per-region, or global?
-5. **Pattern creation across boundaries** — what happens when a pattern's parent and context neurons are on different columns?
-6. **Channel assignment** — one channel per column, or all channels visible to all columns?
-7. **Serialization format** — what binary format for dumps? msgpack, protobuf, custom?
+Resolved by the Phase 3 design above:
+- **Neuron ownership granularity**: fixed partition by `neuronId` mod `(R, C)`; no dynamic rebalancing (§3.1, §5.6).
+- **Cross-column connections**: connections are id-only; metadata is decorated onto the Op-3 payloads (§3.6); no proxy neurons.
+- **Synchronization model**: lock-step per level. Workers only read during dispatch; Thalamus serializes all state writes at the level barrier — no locks needed.
+- **Memory/context scope**: `Memory` stays central in Thalamus. `Neuron` instances move out to Columns. Thalamus reads Memory locally to build `levelContext` and packages per-column ageStates for Op-3.
+- **Pattern creation across boundaries**: Thalamus allocates the id and resolves the connection spec from its own metadata; Op-2 broadcasts the install batch down for the owning Column to construct (§3.5 Op-2).
+- **Channel assignment**: all channels visible to all columns via init-time replication of action sets (§3.2).
+
+Still open:
+- **Serialization format** — what binary format for dumps? msgpack, protobuf, custom?
 
 ---
 
@@ -219,22 +633,11 @@ apps/db (MySQL utilities)     →     Stays in JS, outside brain core (analysis 
 
 | Phase | Scope | Estimate |
 |-------|-------|----------|
-| 1 | Unify per-neuron processing (JS refactor) | ~1.5 weeks |
-| 2 | Clean up persistence (backups/database split) | ~1 week |
-| 3 | Column class design (deferred to Rust — Phase 5) | — |
-| 4 | Single-threaded Rust core + Node.js/npm | ~3 weeks |
-| 5 | Multi-threaded Rust core + column classes | ~1 week |
-| 6 | Scale stock processing | ~1 week |
+| 3 | Column class design | ~1 week  |
+| 4 | Single-threaded Rust core + Node.js/npm | ~2 weeks |
+| 5 | Multi-threaded Rust core + column classes | ~1 week  |
+| 6 | Scale stock processing | ~1 week  |
 
-**Total: ~8 weeks**
+**Total: ~5 weeks**
 
 See [future-work.md](future-work.md) for Python bindings, MPI distribution, text/vision/audio channels, robotics, and other longer-term plans.
-
----
-
-## Success Criteria
-
-- **Phase 3**: Column class design documented. Implementation deferred to Phase 5 in Rust.
-- **Phase 4**: Single-threaded Rust core handles frame processing. Rust unit tests pass. Dump cross-compatibility verified (JS↔Rust). JS tests pass through N-API. Published to npm. Results identical to JS implementation.
-- **Phase 5**: Multi-threaded Rust core with region/column classes. Measurable speedup over single-threaded. Thread count configurable. Neurons partitioned across columns.
-- **Phase 6**: Stock processing scales with parallelism. Benchmarked against JS baseline.

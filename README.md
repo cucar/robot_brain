@@ -6,7 +6,7 @@ No training epochs. No backpropagation. No labeled data.
 
 You feed it streams of events — stock prices, text characters, sensor data — and it self-organizes. Neurons form, compete, decay, and die. The ones that make good predictions survive.
 
-This is the Node.js reference implementation. A high-performance C++ core with Python and Node.js bindings is in development.
+This is the Node.js reference implementation. A high-performance Rust core with Python and Node.js bindings is in development.
 
 ## How It Works
 
