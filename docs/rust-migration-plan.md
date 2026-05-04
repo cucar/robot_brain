@@ -50,19 +50,22 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 ## Pre-Phase-3 Snapshot Test — Behavior baseline
 
-Before any Phase 3 work, capture a behavior baseline so each implementation step can be verified against it. The goal of Phase 3 (and Phase 5 at R=1, C=1) is **bit-identical results** to today; multi-column may introduce small bounded float drift that's acceptable as long as it doesn't materially affect performance.
+Before any Phase 3 work, capture a behavior baseline so each implementation step can be verified against it. The goal of Phase 3 (and Phase 5 at R=1, C=1) is **bit-identical results** to today; multi-column may introduce ordering changes — see §3.15 for the discipline of resolving them by introducing stable tie-breakers rather than tolerating drift.
 
-**Test plan:**
-1. Pick a fixed-seed stocks training workload (or any deterministic frame sequence available) of N frames — large enough to exercise pattern creation, error correction, and deletion cascades.
-2. Snapshot the end-state values:
-   - accuracy stats (per-channel event accuracy, action reward stats, MAPE)
-   - final neuron count and `maxLevel`
-   - cumulative pattern-creation count
-   - inferred-action sequences across the run (or a hash thereof)
-3. Save the snapshot file alongside the test.
-4. Re-run after each Phase 3 implementation step. At R=1, C=1 throughout Phase 3, every step must match the baseline exactly.
+**Baseline = the four documented demos in [README](../README.md), run at R=1, C=1.** They cover synthetic cycles, real stock data, sequence memorization, and text learning — together they exercise pattern creation, error correction, deletion cascades, and convergence dynamics.
 
-Without this, drift is invisible until it's already a divergence.
+| # | Demo | Command | Headline numbers to verify |
+|---|------|---------|----------------------------|
+| 1 | [Demo 1 — Single-channel synthetic cycle](../README.md#demo-1-single-channel-synthetic-cycle) | `node apps/stocks/jobs/synthetic-extended-test.js --error-mode static --error-threshold 0.3 --merge-threshold 0.9` | Overall Optimal Rate (e.g. `233/240 = 97.1%`) |
+| 2 | [Demo 3 — Stock trading, 1 episode](../README.md#demo-3-stock-trading) | `node apps/stocks/jobs/test.js` | Episode 1 net profit, total trades, base-level accuracy |
+| 3 | [Demo 6 — Sequence memorization, **1 episode only**](../README.md#demo-6-stock-sequence-memorization) | `node apps/stocks/jobs/test.js --no-summary --episodes 1 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.001 --error-mode static --error-threshold 0.3` | Episode 1 net profit, total trades, base-level accuracy |
+| 4 | [Demo 7 — Text sequence learning](../README.md#demo-7-text-sequence-learning) | `node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001 --no-summary` | Per-episode accuracy across all 5 episodes |
+
+**Verification cadence:** record the headline numbers above before starting Phase 3. Re-run after each Phase 3 implementation step (§3.1, §3.2, §3.3, §3.6, §3.7, §3.8, §3.9, §3.10, §3.11, §3.12). At R=1, C=1 every step must match the baseline exactly. Visual diff is sufficient — no programmatic snapshot file.
+
+**Backup/restore-touching steps (§3.11) additionally verify with the [Backup → MySQL → Backup round-trip](../README.md#backup--mysql--backup-round-trip).** That test asserts a rehydrated brain reproduces the same continuation result, which is exactly what changes if save/restore drifts.
+
+Without these baselines, drift is invisible until it's already a divergence.
 
 ---
 
@@ -483,14 +486,25 @@ Almost none. `Brain.processFrame` is structurally unchanged. The only difference
 
 ### 3.15 Behavior preservation discipline
 
-Phase 3 is meant to preserve today's behavior exactly at R=1, C=1. Multi-column (R>1 or C>1) and vote pre-aggregation (§3.12) may introduce small bounded float drift; that's acceptable as long as it doesn't materially affect performance.
+Phase 3 must preserve today's behavior exactly — at R=1, C=1 *and* at R>1 / C>1. The plan is **not** to tolerate drift: when an implementation step changes an iteration order or aggregation order, the fix is to introduce a stable tie-breaker / sort key that reproduces today's order on the new code path. Each such tie-breaker is recorded here as it is discovered, so the set of ordering rules the system relies on is explicit.
 
-**Audit before starting Phase 3:**
-- **Tie-breakers.** `isBetterCandidate` already breaks ties by `neuronId < best.neuronId` — order-independent, good. Sweep the codebase for any other tie-breakers that rely on iteration order; convert to id-based or some other order-independent rule.
+**Working loop.** After each implementation step, re-run the four baselines (§Pre-Phase-3 Snapshot Test). If a number changes:
+1. Find the iteration / aggregation site whose order changed.
+2. Identify the order today's code happened to produce.
+3. Add an explicit sort or stable key on the new code path that reproduces it.
+4. Document the tie-breaker in the table below.
+5. Re-run the baselines — must match exactly before moving on.
 
-**Contingency fixes (apply only if snapshot drift turns out material):**
-- **Sort activations by `parentId`** (or any stable key) before applying via `memory.activatePattern`. Determinizes activation order across topologies. Cheap; suspect it's only needed if multi-column drift turns out non-trivial.
-- **Stable concatenation in Phase 5.** When collecting per-thread results in the Rust core, concatenate by column index (not arrival order) so results are deterministic regardless of thread scheduling. Same discipline applies in MPI later.
+**Known tie-breakers (today's behavior already depends on these; preserve them):**
+- `isBetterCandidate` breaks ties by `neuronId < best.neuronId` — order-independent, no action needed.
+
+**Tie-breakers introduced during Phase 3:** *(none yet — populated as drift surfaces)*
+
+| # | Site | Order today | Stable key applied |
+|---|------|-------------|--------------------|
+| — | — | — | — |
+
+**Phase 5 / MPI extension of the same discipline.** When collecting per-thread results in the Rust core, concatenate by column index (not arrival order) so results are deterministic regardless of thread scheduling. Same discipline applies in MPI later.
 
 ---
 
