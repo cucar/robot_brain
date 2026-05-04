@@ -69,28 +69,6 @@ Without these baselines, drift is invisible until it's already a divergence.
 
 ---
 
-## Pre-Phase-3 Experiment — Defer error pattern creation to after `processFrame`
-
-**Hypothesis.** Today, error-correction patterns are created *before* `dispatchFrame` (inside `getLevelTasks`), and `dispatchFrame` uses `newErrorPatternIds` as a mask so neurons ignore the brand-new patterns during matching. If we instead create error patterns *after* `processFrame` returns, the mask is no longer needed at all — we'd skip Op-2 entirely as a per-level operation and just install the new patterns at the end of the level.
-
-**Why test before Phase 3.** If this works, the per-level cross-region flow simplifies from four operations to three (drop the mask broadcast and the pre-dispatch allocation; allocation collapses into the post-dispatch install). That meaningfully reduces the synchronization surface of the design and makes Phase 3's plan smaller.
-
-**The behavioral question.** Today the new error patterns participate in *this* frame's `levelContext` (because they're inserted during the context-merge step before dispatch). If we defer creation, those patterns miss this frame's context propagation by exactly one frame — they only show up in the next frame's `levelContext`. Whether that one-frame lag changes accuracy/learning materially is the experiment's only real question.
-
-**Test plan.**
-1. Add a flag (e.g. `deferErrorPatternCreation`) gating the reorder in `Thalamus.processLevel`.
-   - Off: today's behavior (create in `getLevelTasks`, mask in `dispatchFrame`).
-   - On: skip pattern creation in `getLevelTasks`; collect correction requests; after `applyFrameResults`, create the patterns and register them. No mask needed.
-2. Run the existing test suite under both modes — must pass under both.
-3. Run the stocks training workload under both modes for a meaningful number of frames; compare accuracy stats and pattern-count growth.
-4. Decision:
-   - If results are statistically indistinguishable: keep `deferErrorPatternCreation = true` and update Phase 3 to drop Op-2's per-level mask-broadcast (allocation still centralized in Thalamus, but installation is post-dispatch and no broadcast is needed).
-   - If accuracy regresses: keep today's ordering and proceed with Phase 3 as written.
-
-**Estimated effort.** 1–2 days (the change is localized to `Thalamus.processLevel` and `getLevelCorrections`).
-
----
-
 ## Phase 3 — Introduce Region and Column Classes (~1 week)
 
 Column abstractions (Column, Region) will be introduced in JS so the data flow is fully laid out before Rust threading (Phase 5) and MPI add real parallelism. The JS preview is functionally equivalent to today's single-threaded brain — every region/column call is a synchronous local function — but the *boundaries* will become thread/process boundaries later, so they are designed to add **zero per-frame round-trips per neuron**. All cross-boundary chatter is one of the four operations enumerated in §3.5.
@@ -346,8 +324,6 @@ Op-2 fan-out:
 ```
 
 Because Thalamus has Memory and all metadata, no fan-in from columns is needed. Thalamus also assembles `newErrorPatternIds` locally — it goes down to columns as a parameter to Op-3 (along with `mergedLevelContext`), not as part of Op-2.
-
-> Note: if the [pre-Phase-3 reorder experiment](#pre-phase-3-experiment--defer-error-pattern-creation-to-after-processframe) succeeds, error-pattern creation moves to *after* Op-3. In that variant, Op-2 happens after Op-3 returns and the `newErrorPatternIds` mask parameter to Op-3 is gone entirely.
 
 **Implementation:** refactor `Thalamus.createPatternNeuron` so the central call only allocates the id and resolves the connection spec. The actual `new Neuron(...)` move into `Column.createNewNeurons`. `Thalamus.processLevel`'s per-level orchestration calls `region.createNewNeurons(specsByColumn)` after building the corrections list.
 
