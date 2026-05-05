@@ -96,22 +96,6 @@ This makes Phase 3 substantially smaller than originally drafted. `Memory`, the 
 | `nextNeuronId` allocator                                              | Thalamus | Unchanged.                                                                                     |
 | Routing rule `(R, C)`                                                 | Thalamus | New. See §3.1.                                                                                 |
 
-### 3.1 Routing rule
-
-Pure deterministic function `routeNeuron(neuronId) → {regionIdx, columnIdx}`:
-- `regionIdx = neuronId % R`
-- `columnIdx = floor(neuronId / R) % C`
-
-Interleaving (rather than `id / chunk`) keeps id-bursts (e.g. all the error-correction ids allocated in one frame) spread evenly across regions.
-
-**Stability rules:**
-- Stable for the lifetime of a *running process*.
-- Snapshots do **not** persist `R`/`C`; restore re-routes every loaded id through the *current* run's `(R, C)`. A brain saved with 10 columns can be loaded into 20.
-
-**Implementation:** add `Thalamus.routeNeuron(id)`. Start with R=1, C=1 — keep it there throughout the rest of Phase 3 so each step can be verified against the snapshot baseline (§Pre-Phase-3 Snapshot Test).
-
-> ⚠️ **Test discipline when switching to R>1 or C>1.** With multiple columns, the iteration order over `levelNeurons` changes — today it's a single Map iterated in insertion order; with partitioning it becomes "all column 0's neurons, then column 1's, ..." in some merged order. Cumulative float-accumulation order changes, which can shift accuracy stats by rounding-noise amounts and may flip tie-breakers. Same applies to the order activations are applied at level+1 (see §3.15 for sort-by-parentId contingency). Goal: zero behavior change. Reality: some small drift may be unavoidable due to parallelization. Acceptable as long as it does not materially impact performance — verify against the snapshot baseline.
-
 ### 3.2 `Column` class
 
 Owns `Neuron` instances and exposes a small set of batch operations on them. Becomes a Rust thread in Phase 5.

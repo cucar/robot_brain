@@ -19,6 +19,8 @@ export default class Brain {
 		this.errorCorrectionThreshold = options?.errorCorrectionThreshold ?? 0.5; // fixed threshold when mode='static'; warmup fallback for dynamic modes
 		this.mergeThreshold = options?.mergeThreshold ?? 0.5; // percentage of matched entries needed for context merge
 		this.patternForgetRate = options?.patternForgetRate ?? 0.01; // level-1 forget rate (inverse of frames remembered); deeper levels decay by contextLength per level
+		this.regions = options?.regions ?? 1; // R — number of MPI ranks - 1 for single-process
+		this.columns = options?.columns ?? 1; // C — number of threads per region - 1 for single-thread
 
 		// validate the error-correction mode early so a bad CLI flag fails fast
 		const validModes = ['static', 'conservative', 'neutral', 'aggressive'];
@@ -40,7 +42,7 @@ export default class Brain {
 		this.backupStore = new Backup(this.patternForgetRate, this.mergeThreshold, this.contextLength, this.errorCorrectionMode, this.errorCorrectionThreshold);
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
-		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.contextLength, this.errorCorrectionMode, this.errorCorrectionThreshold);
+		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.contextLength, this.errorCorrectionMode, this.errorCorrectionThreshold, this.regions, this.columns);
 
 		// Memory - manages temporal sliding window and inferred neurons
 		this.memory = new Memory(this.debug, this.contextLength);

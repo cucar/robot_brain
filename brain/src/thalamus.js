@@ -10,13 +10,15 @@ import { Quantizer } from './quantizer.js';
  * Named after the biological thalamus which routes sensory signals and translates reference frames.
  */
 export class Thalamus {
-	constructor(debug, patternForgetRate, mergeThreshold, contextLength, errorMode, errorThreshold) {
+	constructor(debug, patternForgetRate, mergeThreshold, contextLength, errorMode, errorThreshold, regions = 1, columns = 1) {
 		this.debug = debug;
 		this.patternForgetRate = patternForgetRate;
 		this.mergeThreshold = mergeThreshold;
 		this.contextLength = contextLength;
 		this.errorMode = errorMode;
 		this.errorThreshold = errorThreshold;
+		this.regions = regions;
+		this.columns = columns;
 
 		// Neuron registry
 		this.neurons = new Map(); // neuronId -> Neuron
@@ -106,6 +108,21 @@ export class Thalamus {
 	 */
 	getNeuronIdByCoordinate(coordinate) {
 		return this.neuronsByValue.get(this.makeValueKey(coordinate)) || null;
+	}
+
+	/**
+	 * Pure deterministic routing function: maps a neuron id to its owning (region, column).
+	 * Interleaving (rather than chunking by id range) keeps id-bursts.
+	 * All the error-correction pattern ids created/allocated in one frame are spread evenly across regions/columns.
+	 * Stable for the lifetime of a running process; snapshots do NOT persist (R, C).
+	 * So a brain saved with one (R, C) reroutes through the current run's (R, C) on load.
+	 * @param {number} neuronId
+	 * @returns {{regionIdx: number, columnIdx: number}}
+	 */
+	routeNeuron(neuronId) {
+		const regionIdx = neuronId % this.regions;
+		const columnIdx = Math.floor(neuronId / this.regions) % this.columns;
+		return { regionIdx, columnIdx };
 	}
 
 	/**

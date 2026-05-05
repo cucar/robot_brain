@@ -35,7 +35,9 @@ export function parseBrainArgs(argv = process.argv) {
 		patternForgetRate: num('--forget-rate', parseFloat),
 		errorCorrectionMode: str('--error-mode'),
 		errorCorrectionThreshold: num('--error-threshold', parseFloat),
-		mergeThreshold: num('--merge-threshold', parseFloat)
+		mergeThreshold: num('--merge-threshold', parseFloat),
+		regions: num('--regions', parseInt),
+		columns: num('--columns', parseInt)
 	};
 }
 
