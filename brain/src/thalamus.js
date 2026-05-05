@@ -111,18 +111,18 @@ export class Thalamus {
 	}
 
 	/**
-	 * Pure deterministic routing function: maps a neuron id to its owning (region, column).
-	 * Interleaving (rather than chunking by id range) keeps id-bursts.
-	 * All the error-correction pattern ids created/allocated in one frame are spread evenly across regions/columns.
-	 * Stable for the lifetime of a running process; snapshots do NOT persist (R, C).
-	 * So a brain saved with one (R, C) reroutes through the current run's (R, C) on load.
+	 * Pure deterministic region-routing function. Maps a neuron id to its owning region.
+	 * Interleaving (rather than chunking by id range) keeps id-bursts spread evenly:
+	 * the error-correction pattern ids allocated in one frame all fan out across regions
+	 * instead of piling onto one. Region.routeNeuron picks up where this leaves off and
+	 * chooses a column within that region.
+	 * Stable for the lifetime of a running process; snapshots do NOT persist R or C, so
+	 * a brain saved with one (R, C) reroutes through the current run's on load.
 	 * @param {number} neuronId
-	 * @returns {{regionIdx: number, columnIdx: number}}
+	 * @returns {number} regionIdx
 	 */
 	routeNeuron(neuronId) {
-		const regionIdx = neuronId % this.regions;
-		const columnIdx = Math.floor(neuronId / this.regions) % this.columns;
-		return { regionIdx, columnIdx };
+		return neuronId % this.regions;
 	}
 
 	/**
