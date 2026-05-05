@@ -2,318 +2,311 @@
 
 ## Overview
 
-The Hippocampal Region is a separate organ in the brain hierarchy that holds **mapped representations** (moments) of selected cortical neurons and runs **counterfactual experiments** on them in parallel with the cortex's perception/action loop. Its primary purpose is to replay previously encountered events with alternative actions injected, identify better policies, and feed those policy improvements back to the cortex.
+Robot Brain is a dual-system predictive architecture. Two organs run continuously in parallel over the same neuronal substrate:
 
-Thinking happens in two modes:
+- **Cortex (System 1)** — fast, reflexive, short-term. Observes the environment, splits reality into hierarchical patterns, predicts the next frame, picks short-term actions by habit. Probabilistic and statistical: many experiences smooth into action votes.
+- **Hippocampus (System 2)** — slow, deliberate, long-term. Mints moment and class neurons in the cortical columns, runs counterfactual experiments over them, and writes *decided* long-term-optimum actions back onto those neurons.
 
-- **Involuntary** — every cortex frame ends with an automatic forecast pass: the brain takes the highest-level active cortical patterns, looks up matching moments in the hippocampus, and triggers short replays. This is the always-on background channel ("that reminds me," mind-wandering, gut-feel forecasting).
-- **Voluntary** — the cortex can also emit explicit think-actions ("someone told me to think about this; I am thinking about it") with parameters controlling depth, breadth, and how to combine with whatever the hippocampus is already doing.
+The deep insight that organizes this design:
 
-This is the architectural substrate for thinking, long-term memory, and — arguably — consciousness.
+> **Cortex splits reality into patterns. Hippocampus groups patterns to generalize.**
+
+Both organs operate on the same cortical neurons. The hippocampus is not a separate store. It is the **executor** that creates and operates on a particular kind of cortical neuron — one with tight enough context-matching tolerance to function as an episodic moment, or wider tolerance to function as a class. **Storage is always cortical. The hippocampus is the operator.**
+
+This is the architectural commitment that makes Robot Brain different. A consequence: hippocampal experiment outputs become part of the cortex's vocabulary. System 2 continuously enriches System 1. This is the architectural substrate for expertise development — what cognitive psychology observes behaviorally as System 2 reflexes hardening into System 1 reflexes is, in this design, a structural inevitability.
+
+### Thinkability = reachability by the executor
+
+In the original cortex design, ordinary cortical neurons fire when their context matches and otherwise sit dormant — they are not deliberately summonable. Moment and class neurons are different: the hippocampus can reach them, reactivate them, traverse their connections, and run experiments over them. **A neuron is "thinkable" iff the hippocampal executor can reach it.** Thinkability is not a property of the neuron's location or type; it is a property of being operated on by the hippocampus.
+
+Moment and class neurons live in cortical columns alongside sensory and pattern neurons. The thalamus is the bus that translates neuron ids ↔ properties (region/column-aware), so the hippocampus can address specific cortical neurons by id.
+
+### The HM test
+
+This architecture predicts HM directly. Removing the hippocampus removes the executor. After removal:
+
+- Pre-existing moment and class neurons survive — they are cortical, with stable context-matching connections, reactivatable by sensory cues (cued recall).
+- New moments cannot be minted — the operation that creates tight-tolerance neurons on demand is gone.
+- Deliberate recall, planning, and counterfactual reasoning are gone — these all required executor reachability.
+- Skills, perception, statistical learning, and cued recall continue normally — these are pure cortex.
+
+If a Robot Brain with a fully populated cortex loses its hippocampus, that is the behavioral profile it should exhibit.
+
+---
 
 ## Theoretical grounding
 
-This design implements **hippocampal indexing theory** (Teyler & DiScenna 1986, updated by Teyler & Rudy 2007): the hippocampus stores indices into cortical patterns, not the patterns themselves. Retrieval works by reactivating the index, which drives reactivation of the cortical pattern.
+- **Hippocampal indexing theory** (Teyler & DiScenna 1986; Teyler & Rudy 2007) — the hippocampus indexes cortical patterns, doesn't store them. This design takes the further step: the indices themselves are also cortical (moment and class neurons), and the hippocampus is purely operator.
+- **Complementary Learning Systems** (McClelland, McNaughton, O'Reilly 1995) — fast experimental learning (System 2) + slow statistical learning (System 1), bridged by experiment-driven writeback.
+- **Mattar & Daw (2018)** — replay prioritized by expected value of backup (prediction error magnitude).
+- **Buzsáki's "brain from inside out"** — the brain as a generative system; replay/preplay are the same intrinsic dynamics under different conditions.
+- **Kahneman dual-process theory** — Robot Brain implements System 1 and System 2 as separate organs over a shared substrate, rather than as a behavioral metaphor.
+- **Recent hippocampal scenario-construction literature** — patients with hippocampal damage cannot imagine novel scenes either, not just remember old ones. The hippocampus is the executor; memory is one of its uses.
 
-It also draws on:
-
-- **Complementary Learning Systems** (McClelland, McNaughton, O'Reilly 1995) — fast hippocampal episodic learning + slow cortical statistical learning, with replay as the bridge
-- **Mattar & Daw (2018)** — replay prioritized by expected value of backup (prediction error magnitude)
-- **Buzsáki's "brain from inside out"** — the brain as a generative system; replay/preplay are the same intrinsic dynamics under different conditions
-- **Global Workspace Theory** — content broadcast into a workspace becomes available for cross-system operations
-- **Formal Concept Analysis** — moment-classes form a hierarchy of common cortical-neuron subsets, conceptually the same lattice FCA builds, approximated online by agglomerative clustering
+---
 
 ## Architectural principles
 
-1. **The hippocampus is a separate organ with its own clock** — runs faster than cortex, executes many experiment frames per cortex frame
-2. **Moments, not copies** — a moment is a *weighted* set of cortical-neuron references — each entry is `(neuron_id, strength)` where the strength is that neuron's activation at the moment of encoding — plus the frame number, plus the reward/error that triggered remembering, plus the actions that were taken during the encoded context
-3. **Selective encoding** — only frames whose reward or prediction error exceeds a z-score threshold get encoded; ordinary experience is never thinkable
-4. **Two thinking modes** — involuntary per-frame forecast + voluntary cortex-issued think-actions, both running on the same experiment machinery
-5. **Sliding-scale forgetting** — moments decay by activation strength; classes decay slower than instances; a death ledger tracks evictions
-6. **Heterarchy at the moment layer** — one cortical neuron can belong to many moments and many classes, breaking strict cortical hierarchy and enabling cross-context association
-7. **Hierarchical moment classes** — moments with overlapping cortical-neuron sets are abstracted into class moments by online agglomerative clustering; classes activate when their children do, the same way cortical pattern neurons activate from their children
-8. **Stack-based experiments** — branching is just a stack push; a single experiment runs at a time initially (multi-experiment parallelism is a future optimization)
-9. **Bidirectional coupling** — cortex initiates voluntary thinking via think-actions; hippocampus output updates cortical action-value estimates *at the specific cortical contexts where they apply*, never globally
+1. **One substrate, two operators.** Cortex and hippocampus operate on the same cortical neurons in the same columns. Thalamus mediates id↔property addressing.
+2. **Cortex splits, hippocampus groups.** Cortex divides experience into hierarchical patterns through prediction-error-driven learning. Hippocampus groups moments into classes through deliberate clustering during encoding and consolidation.
+3. **Moments and classes are cortical neurons.** A moment neuron is a tight-tolerance pattern neuron minted in one shot from a salient frame. A class neuron is a looser-tolerance pattern neuron grouping similar moments. Same substrate as sensory/pattern neurons; different minting process and different vote semantics (see below).
+4. **Hippocampus is the executor, not the store.** It mints moment and class neurons, traverses them, runs experiments on them, and writes decided actions back onto them. It does not hold them.
+5. **Recall is by context, not by handle.** The executor's primitive reactivation operation is "drive a partial context and let cortex pattern-complete." Handles are not part of the user-visible recall mechanism. (The hippocampus maintains transient experiment-local references; nothing more.)
+6. **Decided actions, not probabilistic ones.** Sensory and pattern neurons accumulate action votes statistically across many experiences — probabilistic, smoothed. Moment and class neurons carry *decided* actions written by the hippocampus after experimentation. The decision is black-and-white: this is the action to take. When such a neuron is activated and votes, its decided action dominates the probabilistic votes from sensory/pattern neurons for the same action slot.
+7. **Selective minting.** Only frames with reward or prediction error above a z-score threshold trigger moment minting. Ordinary experience never becomes thinkable.
+8. **Heterarchy at the moment layer.** A cortical neuron can be inside many moments' contexts and many classes' centroids. Moments can be children of many classes. This breaks strict cortical hierarchy and enables cross-context association.
+9. **Two clocks.** The hippocampus runs at a faster clock than the cortex, executing many experiment frames per cortex frame.
+10. **Same death ledger, different aging.** Forgetting is unified through one death ledger, but moment and class neurons age and die on schedules distinct from sensory/pattern neurons because they represent different things on different timelines.
+11. **Bidirectional coupling via thalamus.** Cortex emits think-actions that reach the hippocampus. Hippocampus reads currently active cortical state and writes decided actions back to specific moment/class neurons. Updates are local to the neuron written, never global.
 
 ---
 
-## Component breakdown
+## The cortical substrate (what lives in columns)
 
-### 1. The Hippocampus (the thinking organ)
+A column already contains sensory neurons and pattern neurons. To this design we add two additional neuron kinds, **living in the same columns**, addressable by the same thalamic translation layer:
 
-Owns moments, classes, the temporal moment graph, the experiment stack, and the encoding/forgetting machinery. Encoding (what the biology calls the entorhinal pathway) is just a method on this class — there is no separate component for it.
+- **Moment neuron** — a pattern neuron minted in one shot by the hippocampus from a salient frame. Tight context-matching tolerance: it fires when most (not necessarily all) of the encoded context is currently active. Carries:
+  - Connections to the cortical neurons that constituted its encoded context, weighted by each neuron's activation strength at minting time. These weights are the substrate forgetting acts on at the link level.
+  - Connections to action neurons, recording every action that fired during the encoded context (each with frame-offset and activation strength). This is the causal substrate for counterfactual replay.
+  - Connections to other moment neurons (the temporal moment graph).
+  - Membership in zero or more class neurons.
+  - A **decided action** slot (initially empty), filled by the hippocampus after experiments converge.
+  - Salience at birth, last-access frame, and a strength field that decays on the moment timeline.
+- **Class neuron** — a pattern neuron at looser tolerance grouping similar moments. Centroid is the running weighted intersection of its children's contexts. Carries decided actions just like moments, applied to anything matching the class. Decays on the class timeline (slower than moments).
 
-**State:**
-- `MomentIndex` — all known moments, keyed by id, each carrying:
-  - `cortical_activations: Map<NeuronId, f32>` — what cortex was holding when this moment was minted, *with each neuron's activation strength at that instant*. These per-neuron strengths are the weights of the cortical → moment connections; they are what forgetting acts on at the link level.
-  - `actions_taken: [ActionRecord]` — every action neuron that fired during the encoded context, each as `{action_neuron_id, frame_offset_within_context, activation_strength}`. This is the substrate for causal reasoning during counterfactual replay (which action was taken at this moment, what alternatives existed).
-  - `frame_number: u64` — when it happened
-  - `trigger: { reward: f32, prediction_error: f32 }` — the salience that caused encoding
-  - `strength: f32` — moment-level activation strength (used for moment-level forgetting and eviction); distinct from the per-link strengths in `cortical_activations`
-  - `last_access: Frame` — for decay calculations
-  - `parent_classes: Set<MomentId>` — which class moments abstract this one
-  - `temporal_edges: Map<MomentId, f32>` — weighted edges to neighboring moments in time
-- `ClassIndex` — moment-class neurons, structurally identical to moments but with `children: Set<MomentId>` and a `centroid: Map<NeuronId, f32>` (a weighted neuron set, see "Moment classes" below)
-- `ActiveSet` — currently activated moments (top of experiment stack's view)
-- `ExperimentStack` — saved experiment states (single experiment at a time runs in Phase 1; stack stores branches and interrupts)
-- `DeathLedger` — append-only log of evicted moment ids and the reason (low strength, cortical refs deleted, capacity pressure); used for debugging, observability, and to prevent immediate re-encoding of just-evicted patterns
+Both kinds participate in normal cortical activity: when their context matches the current frame within tolerance, they fire and contribute their votes. The difference from sensory/pattern neurons:
 
-**Operations:**
-- `encode_moment(cortical_ids, frame, trigger) → MomentId` — creates a moment, attaches it to classes (creating new classes as needed), wires temporal edges to recent moments
-- `activate(moment_ids)` — sets the active set; class moments activate automatically when enough of their children are active
-- `advance_experiment_frame()` — predict next state via temporal graph, evaluate, possibly branch
-- `push_branch() / pop_branch()` — stack manipulation for counterfactual exploration
-- `decay()` — per-cortex-frame strength reduction, eviction pass, death ledger updates
-- `match_to_active_cortex(top_level_active) → [MomentId]` — context-match moments for the involuntary forecast pass
+- They were minted by the hippocampus, not by gradual statistical learning.
+- Their action votes are *decided*, not *probabilistic*. When a moment or class neuron is active and has a written decided action, that action wins over sensory/pattern probabilistic votes for the same slot.
+- They are reachable by the hippocampal executor for experiments.
 
-### 2. The Salience Module
+---
 
-Computes a scalar "remember this" signal per cortex frame:
+## The hippocampal executor
+
+The hippocampus owns no permanent store. It owns:
+
+- The salience module (windowed z-scoring of reward and prediction error).
+- The experiment buffer (single experiment in flight in Phase 1; parallel pool in a later phase).
+- A transient working set of currently-relevant moment/class neuron ids while an experiment runs.
+- The death-ledger writer (the ledger itself is shared across cortex and hippocampus).
+
+Its operations, in conceptual terms (the precise instruction set is left for implementation to discover — biology did not design its hippocampus all at once and we should not pretend to either):
+
+- **Mint moment** — given the currently active cortical state and a salience trigger, create a tight-tolerance moment neuron in the appropriate column with connections to the active context, the active action neurons, and recent moments (temporal edges).
+- **Group into class** — apply the class-formation rule (online weighted-Jaccard against existing class centroids) to attach the new moment to an existing class, merge classes, or spawn a new class.
+- **Activate by context** — take a partial cortical context (either currently active patterns from the cortex's frame, or the cue field of a think-action) and drive cortex to pattern-complete the matching moment(s) and class(es). This is the recall primitive.
+- **Traverse** — given an active moment, walk its temporal edges and class siblings to surface candidate next states.
+- **Run an experiment** — replay or counterfactual exploration over the moment graph (see "Experiment execution").
+- **Decide and write** — at the conclusion of an experiment, write decided actions to specific moment/class neurons.
+- **Decay and evict** — apply moment-timeline and class-timeline decay; emit eviction records to the death ledger.
+
+The cortex does not know about moments or classes. It just sees neurons firing and contributing votes. The hippocampus is the only thing that knows which neurons are moments, which are classes, and what experiments are running.
+
+---
+
+## The salience module
+
+Computes a scalar "mint this moment" signal per cortex frame:
 
 - `z_reward = (reward − μ_reward) / σ_reward` over a sliding window
 - `z_pe = (prediction_error − μ_pe) / σ_pe` over a sliding window
-- Encode iff `|z_reward| > θ_r` or `|z_pe| > θ_pe`
+- Mint iff `|z_reward| > θ_r` or `|z_pe| > θ_pe`
 
-Novelty is **not** an input. Every observation contains some novelty; that does not make it worth remembering. What the literature calls "novelty effects" is in practice prediction error, and prediction error is already covered above.
+Novelty is not an input. Every observation contains some novelty; that does not make it worth remembering. What the literature calls "novelty effects" is in practice prediction error, already covered.
 
-The salience trigger fires `encode_moment(currently_active_cortical_ids, current_frame, {reward, prediction_error})`.
-
-### 3. The Brain Coordinator (cortex ↔ hippocampus glue)
-
-Orchestrates the parallel clocks. Manages semaphores. Routes inputs and outputs.
-
-**Per cortex frame:**
-1. Read sensory inputs; cortex thread propagates and picks actions
-2. Wait on `SignalCortexDone`
-3. If salience triggered, push an encoding request to the hippocampus
-4. If cortex emitted think-actions, push them as voluntary experiments
-5. Take the top-level active cortical patterns and push an involuntary forecast request
-6. Drain any pending policy updates from the hippocampus into cortex action-values
-7. Continue to next frame
-
-**Per hippocampus frame (faster, in parallel):**
-1. Service any pending encoding request (cheap, runs immediately)
-2. If an experiment is on the stack, advance one frame
-3. Otherwise pull the next request: voluntary think-actions take priority over involuntary forecasts
-4. If idle, run consolidation: decay, eviction, death-ledger maintenance, optional class re-clustering
+When the trigger fires, the hippocampus calls Mint over the currently active cortical state.
 
 ---
 
-## Moment classes — online agglomerative clustering with Jaccard
+## Class formation — online agglomerative weighted Jaccard
 
-Classes form a hierarchy of common cortical-neuron subsets across moments. The cortex's pattern neurons do this for sensory neurons; class moments do it for the cortical-neuron sets of moments. The mechanism:
+When a moment is minted, the hippocampus groups it into the class hierarchy:
 
-**On each `encode_moment(cortical_activations, ...)`:**
-
-1. Compute weighted Jaccard similarity between the new moment's neuron set (keys of `cortical_activations`) and every existing class centroid (keys of `centroid`):
-   `J(A, B) = |A ∩ B| / |A ∪ B|`
-   In practice this is bounded by an inverted index `cortical_neuron_id → [class_ids]` so we only compare against classes that share at least one neuron — the full pairwise scan is never needed.
+1. Compute weighted Jaccard between the new moment's context (the set of cortical neurons it connects to) and every existing class centroid. An inverted index `cortical_neuron_id → [class_ids]` bounds the comparison to classes that share at least one context neuron.
 2. Let `best_class` be the class with the highest Jaccard.
-3. **Attach** if `J ≥ θ_attach` (e.g., 0.6): make the moment a child of `best_class`. Update the class centroid as the *weighted* running intersection of children's cortical activations: for each neuron `n` present in every child's `cortical_activations`, set `centroid[n] = mean(child.cortical_activations[n] for child in children)`. The set of keys is the intersection (a class represents *what its children share*); the values are the average strength of that shared neuron across the class. This makes the centroid both a membership signature and a strength profile.
-4. **Merge classes** if attaching causes `best_class` and another class to now share `J ≥ θ_merge` (e.g., 0.85): merge into a single class, all children re-parented.
-5. **Spawn a new class** if the new moment has Jaccard `≥ θ_spawn` (e.g., 0.5) with at least one existing *moment* (not class) but no class accepted it: create a new class with the new moment and that sibling moment as children, centroid keys = intersection of their neuron sets, centroid values = mean of paired activation strengths.
-6. **Build hierarchy**: classes themselves are clustered the same way against other classes, at progressively lower thresholds. A class whose centroid is a subset of another class's centroid becomes its child. This produces the multi-level tree you wanted — instances at the leaves, increasingly abstract classes toward the root.
-7. **Activation propagation**: when ≥ K of a class's children are in the active set, the class itself is activated. This is identical to cortical pattern activation: children activate parents.
+3. **Attach** if `J ≥ θ_attach` (e.g., 0.6): make the moment a child of `best_class`. Update the class centroid as the weighted running intersection of children's contexts: keys = the intersection, values = mean activation strength across children for each shared neuron.
+4. **Merge** classes if attaching causes `best_class` and another class to share `J ≥ θ_merge` (e.g., 0.85).
+5. **Spawn** a new class if the new moment has Jaccard `≥ θ_spawn` (e.g., 0.5) with an existing moment (not class) but no class accepted it. New class's centroid keys = intersection, values = paired-strength means.
+6. **Multi-level hierarchy** — classes are themselves clustered against other classes at progressively lower thresholds.
+7. **Activation propagation** — when ≥ K of a class's children are active, the class itself activates. This is identical to ordinary cortical pattern activation: children activate parents.
 
-8. **Class strength is independent, not derived.** Class moments carry their own `strength` field that decays on its own loop, exactly like cortical pattern neurons and instance moments do. Activation refreshes it: every time a class is activated — by its children firing, by being surfaced as a candidate in cue resolution, by participating in an experiment as a transition target, or by being a parent of an active class — its strength gets a boost. This is "thinking to keep remembering": classes that get used in experiments live longer.
+The centroid is recomputed whenever the surviving child set changes. When the last child is evicted, the centroid is frozen at its last computed state and the class persists as an abstract signature — still matchable, still decay-eligible, still reward-carrying. This matches *"I've had cases like this many times"* with no recallable specific instance.
 
-   The centroid (`Map<NeuronId, f32>`) is recomputed whenever the set of surviving children changes — keys remain the running intersection, values the mean activation across surviving children. When the *last* child is evicted, the centroid is frozen at its last computed state and the class continues to live as an abstract signature with reward associations and connections to other classes. It can no longer be refined, but it can still be matched against future cues (its centroid neurons are real cortical-neuron ids), still be activated during experiments, and still participate in the temporal moment graph and class hierarchy. This matches the human experience of "I've had cases like this many times" without being able to bring up a single specific instance.
-
-   Classes are evicted only when their own `strength` drops below the eviction threshold — never automatically because of child count.
-
-**Idle re-clustering.** During consolidation, the hippocampus can revisit recently changed classes and rebalance: split classes whose centroids have drifted, merge classes that have converged, prune classes with fewer than 2 surviving children. This is the offline pass that Formal Concept Analysis would do exhaustively; we do it incrementally.
-
-**Why this works.** Online agglomerative clustering with Jaccard distance is O(active classes per encoding), bounded by the inverted index. It's what the cortex already does in spirit, lifted one level. And it gives counterfactuals for free: sibling moments under a shared class differ in which action neuron fired, so the class *is* the counterfactual machinery.
+**Idle re-clustering** during consolidation revisits recently changed classes: split drifted ones, merge converged ones, prune classes with too few surviving children. This is the offline pass FCA would do exhaustively; we do it incrementally.
 
 ---
 
-## The temporal moment graph (replaces "transition model")
+## The temporal moment graph
 
-When a moment `M_new` is encoded at frame `f_new`, the hippocampus draws weighted edges to the K most recent moments encoded before it:
+When a moment `M_new` is minted at frame `f_new`, the hippocampus draws weighted edges to the K most recent moments:
 
 ```
 edge_weight(M_new, M_prev) = 1 / (f_new − f_prev)
 ```
 
-If an edge already exists, its weight is incremented (Hebbian — co-occurrence reinforces). No model is trained; the graph *is* the transition model. Sampling a successor moment given the current active set means: walk outgoing edges weighted by `edge_weight × class_overlap × temperature_kernel`, draw one.
+Existing edges have their weight incremented (Hebbian — co-occurrence reinforces). No model is trained; the graph is the transition model. Sampling a successor moment given the current active set means walking outgoing edges weighted by `edge_weight × class_overlap × temperature_kernel`.
 
-This mirrors the existing cortical context-distance machinery, which the codebase already implements.
+This mirrors the cortical context-distance machinery already in the codebase, lifted one level.
 
 ---
 
-## Actions stored with moments (causal substrate)
+## Actions stored with moments
 
-Every moment records *all* the action neurons that fired during its encoded context — not just the single action at the trigger frame. The field is:
+Each moment records all action neurons that fired during its encoded context window — not just a single action at the trigger frame:
 
 ```
 actions_taken: [{ action_neuron_id, frame_offset_within_context, activation_strength }, ...]
 ```
 
-The intent: causal relationships are formed by what actions were taken in the lead-up to a salient outcome, not by a single action at a single instant. A moment that ends in a large reward needs to remember the sequence of actions that led to it, not just the last one. Counterfactual replay then asks "what if action X had been suppressed at frame_offset −5, or replaced by Y?" — and the class hierarchy supplies sibling moments where exactly that variation actually happened.
+A moment that ends in large reward needs to remember the *sequence* leading there, not just the last action. Counterfactual replay can then ask "what if action X had been suppressed at frame_offset −5, or replaced by Y?" — and class siblings under M's parent class supply moments where exactly that variation actually happened.
 
-This is **deliberately under-specified** at this stage. Open sub-questions:
-- What is the "context window" — the last N cortex frames before encoding? The current cortex working-memory span? Something keyed off prediction-error rises?
-- Are action records decayed at the link level the same way cortical activations are, or kept as a fixed sequence stamp?
-- When the experiment substitutes an alternative action for replay, does it substitute at one frame_offset or rewrite the whole sequence?
+Sub-questions deferred until Phases 1–4 produce a real moment population:
 
-These get pinned down once Phases 1–4 produce a real moment store to experiment against.
+- Context-window definition (last N frames, working-memory span, PE-rise-keyed).
+- Are action records decayed at the link level the same way context links are, or kept as a fixed sequence stamp?
+- When substituting an alternative action for replay, substitute at one offset or rewrite the sequence?
+
+---
+
+## Recall by context — the involuntary forecast pass
+
+After cortex finishes its frame, the brain takes the top-level active cortical patterns and asks the hippocampus to pattern-complete any matching moments. Match algorithm: set overlap weighted by class-membership boost (a moment whose parent class is also active gets a boost). No distance terms — this is set-overlap context matching.
+
+For each surfaced moment above threshold:
+
+- Activate it (which lets it cast its decided-action vote, if any, into the cortex's action selection).
+- Run a small-budget Replay or Counterfactual experiment from it.
+- The experiment may write updated decided actions to moments it visits.
+
+This pass fires every cortex frame, even with zero think-actions from the cortex. It is the always-on background channel — *"that reminds me…"*, mind-wandering, gut-feel forecasting.
+
+When a voluntary think-action arrives mid-forecast, the forecast is pushed onto the experiment stack and the think-action runs. The forecast resumes after.
 
 ---
 
 ## The think-action interface (voluntary thinking)
 
-The cortex fires think-actions as ordinary actions. Critically, **the cortex does not know about moments.** Its world is cortical neurons and patterns. A think-action says "think about *this cortical content*," and the hippocampus is responsible for translating that into the relevant moments via the inverted index `cortical_neuron_id → [moment_ids]` and class-membership lookup. This is the silicon analog of "remember the time when we…" — the cortex supplies the cue (the "when we…" pattern), the hippocampus finds the moment.
+The cortex fires think-actions as ordinary actions. Critically, **the cortex does not address moments by id**. Its world is neurons and patterns. A think-action says "think about *this cortical content*"; the hippocampus resolves the cue to candidate moments by activating the cue and reading off which moment/class neurons fire.
 
 ```
 think_action {
   cue: [cortical_neuron_id, ...],   // cortical content to think about — patterns,
                                      //   sensory ids, action ids, or any mix.
-                                     //   Hippocampus resolves these to candidate moments.
   mode: enum {
     Replay,                          // run forward as-original
     Counterfactual,                  // inject alternative actions and explore
-    Retrieve,                        // search for related moments via class siblings
-    Compare,                         // run two cued states in parallel and measure difference
+    Retrieve,                        // surface related moments via class siblings
+    Compare,                         // run two cued states in parallel, measure delta
     Compress,                        // find common structure across cued moments
   },
-  budget: integer,                  // number of hippocampus frames to spend
-  temperature: float (0.0 - 1.0),   // breadth of sampling (focused vs free-associative)
+  budget: integer,                  // hippocampus frames to spend
+  temperature: float (0.0 - 1.0),   // breadth of sampling
   control: enum {
-    Interrupt,                       // push current experiment to stack, start new
+    Interrupt,                       // push current experiment, start new
     Integrate,                       // add cue to current experiment
-    Remember,                        // build the mapping but don't start an experiment
+    Remember,                        // mint without starting an experiment
   }
 }
 ```
 
-**Cue → moment resolution** (done inside the hippocampus, not the cortex):
-1. Look up moments via the inverted index for each neuron in `cue`
-2. Score each candidate moment by overlap with `cue`, boosted if the moment's parent class also matches the cue
-3. Take the top-scoring moments above a match threshold as the experiment's starting `ActiveSet`
+**Cue → moment activation** (inside the hippocampus):
 
-This is the same machinery as `match_to_active_cortex` used by the involuntary forecast pass — the only difference is the source of the cortical pattern (cortex's currently-active top-level patterns for involuntary, the explicit `cue` parameter for voluntary).
+1. Drive the cue neurons.
+2. Let cortex pattern-complete; collect the moment/class neurons that fire above threshold.
+3. The active set becomes the experiment's starting state.
+
+This is the same machinery as the involuntary forecast pass. The only difference is the source of the cue — cortex's currently-active top-level patterns for involuntary, the explicit `cue` parameter for voluntary.
 
 Each parameter is independently learnable through the metacognitive reward signal (Phase 7).
 
 ---
 
-## Per-frame involuntary forecast pass
-
-After cortex finishes its frame, the brain takes the top-level active cortical patterns and calls `Hippocampus.match_to_active_cortex(active)`. The match algorithm is the same as cortical context-matching but without the distance terms — pure set overlap, weighted by class-membership boost (a moment whose parent class is active gets a boost).
-
-For each surfaced moment above a match threshold:
-- Activate it
-- Run a small-budget Replay or Counterfactual experiment via the temporal moment graph
-- Push policy-update tuples to the result queue
-
-This pass is unconditional and budget-bounded. It is the "always thinking in the background" channel. It fires every cortex frame even when the cortex emits no think-actions.
-
-When a voluntary think-action arrives mid-forecast, it pushes the forecast onto the stack (`control: Interrupt` is the default) and runs. When it finishes, the forecast resumes — the same machinery as branch-push.
-
----
-
 ## Experiment execution
+
+### Phase 1 — single-track
+
+One experiment runs at a time. Branching is implemented as an experiment stack: branch = push, terminate = pop. A higher-priority think-action arriving mid-experiment pushes the current one and runs.
 
 ### Single experiment frame
 
-**Step 1 — Determine active state.** Read `ActiveSet` from top of stack.
+1. **Determine active state.** Read the active set from the top of the stack.
+2. **Predict next state.** Sample a successor moment by walking the temporal moment graph from the active moments, weighted by edge weight × class overlap × temperature. Low temperature = peaked; high = associative drift.
+3. **Evaluate.** Map the predicted moment back to its cortical context. Read off predicted reward via the cortex's value estimates for those neurons, plus any decided actions already attached to the moment.
+4. **Continue, branch, or terminate.**
+   - Continue: transition, decrement budget.
+   - Branch: original action led to bad reward and an alternative is available — push parent, start sub-experiment with the alternative substituted (see counterfactual via class siblings below).
+   - Terminate: budget exhausted, predicted reward stable, or convergence reached. Pop stack.
+5. **Update state.** Apply the chosen transition.
 
-**Step 2 — Predict next state.** Sample a successor moment by walking the temporal moment graph from current active moments, weighted by edge weight × class overlap × temperature. Low temperature = peaked sampling around most-likely next moment. High temperature = broad sampling, allowing class siblings and weakly-connected moments to surface (associative drift).
+### Counterfactual via class siblings
 
-**Step 3 — Evaluate predicted state.** Map predicted moment back to its cortical neurons. Read off the predicted reward of those cortical patterns from cortex's value estimates.
+When the experiment asks "what if I had taken action B at moment M instead of A?", it walks up to M's parent class, finds sibling moments under that class where action B was the active action, and replays forward from one. Class siblings differ in action and outcome but share context. This is exactly the substitution semantics counterfactuals require, and it falls out of the class hierarchy at no extra cost.
 
-**Step 4 — Decide: continue, branch, or terminate.**
-- Continue (default): transition, decrement budget
-- Branch: original action led to bad reward and an alternative action is available — push parent, start sub-experiment with alternative action substituted
-- Terminate: budget exhausted, predicted reward stable, or convergence reached. Pop stack.
+### Action writeback (the genius part)
 
-**Step 5 — Update state.** Apply the chosen transition.
+When an experiment converges on a long-term-optimum action for a context, the hippocampus writes that action onto the moment neuron whose context it applies to. Concretely: the moment's decided-action slot (or the corresponding action-neuron connection) is set to the chosen action. From that point forward, whenever the moment is activated by context match — voluntarily through a think-action or involuntarily through the forecast pass — its decided action votes into the cortex's action selection at that frame.
 
-### Counterfactual actions via class siblings
+If the conclusion generalizes across a class's children, the writeback lands on the class neuron, and any future context matching the class inherits the decision.
 
-When the experiment wants to ask "what if I had taken action B instead of action A at moment M?", it walks up to M's parent class, finds sibling moments under that class where action B was the active action, and replays forward from one of them. Class siblings differ in action and outcome but share the cortical context — this is exactly the substitution semantics counterfactuals require, and it falls out of the class hierarchy at no extra cost.
+This is what makes System 2 enrich System 1. The hippocampus does deliberate analysis; the result becomes a cortical neuron that fires reflexively when its context recurs. Repeated experience of the same class hardens the habit.
 
-### Branching as stack push
+---
 
-When branching is triggered:
-1. Save current experiment state (active moments, accumulated reward, remaining budget) as a stack entry
-2. Allocate budget to sub-experiment (some fraction of remaining budget)
-3. Switch to sibling moment with alternative action
-4. Continue from step 1
+## Decided vs. probabilistic action voting
 
-When sub-experiment terminates: pop, compare, flag better-than-original alternatives as candidate policy updates.
+This is the structural difference between moment/class neurons and ordinary sensory/pattern neurons:
 
-### Output integration
+- A **sensory or pattern neuron** votes for actions probabilistically — the votes are accumulated statistical evidence, smoothed across many experiences. Many neurons vote; the cortex's existing action-selection machinery aggregates.
+- A **moment or class neuron** carries a *decided* action written by deliberate experimentation. When activated, it votes its decided action with high authority — black-and-white, the conclusion of analysis. A decided vote dominates probabilistic votes for the same action slot.
 
-Outputs flow back to the Brain Coordinator as `(cortical_context, alternative_action, predicted_reward_delta)` tuples and update cortex action-value estimates at the specific contexts where they apply. No global updates.
+The two operations look the same from the cortex's perspective (a neuron firing contributes to action selection), but the underlying mechanism and timeline differ. Sensory/pattern neurons learn slowly, statistically, over long experience. Moment/class neurons learn one-shot, deliberately, via experiment.
 
 ---
 
 ## Forgetting
 
-Forgetting acts at two granularities — *links* (per-cortical-neuron connections inside a moment) and *moments* themselves — with classes derived from whatever survives below them.
+The same death-ledger mechanism applies to all neuron kinds, but moment and class neurons age on their own schedules, distinct from sensory/pattern neurons.
 
-**1. Per-link decay (inside each moment).**
-Each entry in a moment's `cortical_activations` map decays independently:
+**1. Per-link decay (inside a moment's context connections).**
+Each context-connection strength decays independently:
 ```
-cortical_activations[n][t] = cortical_activations[n][t-1] * decay_rate_link
-                              + activation_boost_if_n_active_now
-decay_rate_link ≈ 0.995 per cortex frame
+strength(link, t) = strength(link, t-1) * decay_rate_link + activation_boost_if_active_now
 ```
-The initial value is the cortical neuron's activation strength *at the moment of encoding* — so neurons that were strongly active when the moment was minted survive much longer in that moment than neurons that were barely active. This is what your design intent specified: "the strength values come from when the moments were captured." When a link's strength falls below `link_eviction_threshold`, that neuron is dropped from the moment.
+Initial value is the cortical neuron's activation at minting time. Strongly active context neurons survive far longer than weakly active ones. When a link's strength falls below `link_eviction_threshold`, that connection is dropped from the moment.
 
-**2. Moment-level decay.**
-```
-strength(M, t) = strength(M, t-1) * decay_rate_moment + activation_boost
-decay_rate_moment ≈ 0.995 per cortex frame
-```
-A moment's overall `strength` is initialized from the salience that triggered encoding (large |z_reward| or |z_pe| → high initial strength). When `strength < eviction_threshold`, or when `MomentIndex` is at capacity, the lowest-strength moment is evicted. A moment is also evicted if its `cortical_activations` map drops below `min_cortical_refs` (e.g., 3) due to link-level eviction or cortical deletion.
+**2. Moment-level decay.** A moment's overall `strength` is initialized from its salience at minting and decays per cortex frame. Activation boosts it. Below `moment_eviction_threshold`, or when capacity is pressured, the lowest-strength moments are evicted. A moment is also evicted if its surviving context-connection count drops below `min_context_refs`.
 
-**3. Class moments — independent decay, slower than instances.**
-Classes have their own decay loop, like pattern neurons:
-```
-strength(C, t) = strength(C, t-1) * decay_rate_class + activation_boost(C, t)
-decay_rate_class > decay_rate_moment   // classes age more slowly
-```
-`activation_boost` fires whenever the class is activated — by its children, by cue resolution, by being a transition target in an experiment, or by being a parent of an activated class. This is the "thinking to keep remembering" mechanism: a class that participates in many experiments stays alive indefinitely, even after every instance moment under it has been evicted.
+**3. Class-level decay — slower.** Classes have their own decay loop with `decay_rate_class > decay_rate_moment`. Activation boosts apply whenever the class is activated — by its children, by cue resolution, by being a transition target in an experiment, or by being a parent of an activated class. This is "thinking to keep remembering": classes used in many experiments live indefinitely, even after every instance moment under them has been evicted. When the last child is evicted, the centroid is frozen at its last computed state and the class persists as an abstract reward-carrying signature.
 
-When the last child is evicted, the centroid is frozen at its last computed state. The class persists as an abstract signature — still matchable by cue (its centroid neurons are real cortical-neuron ids), still carrying reward associations from its trigger history, still connected to other classes in the hierarchy and to other moments through the temporal graph. It can be activated and used in experiments; its predicted reward signifies "this is the kind of situation that tends to go well/badly," even when no specific case can be brought up. This matches the everyday experience of *"I've had cases like this many times"* with no recallable instance.
+**4. Cascade on cortical deletion.** When a context neuron is deleted, every moment removes that connection and every class removes that centroid key. Moments dropping below `min_context_refs` are evicted. Classes are not auto-evicted on cortical deletion — they keep living by their own strength.
 
-A class is evicted only when its own `strength` drops below the class eviction threshold — never automatically due to child count. Eviction is logged to the death ledger.
+**5. Death ledger.** Every eviction appends `{neuron_id, kind, frame, reason, salience_at_birth}` to the shared append-only ledger (ring-bounded). Uses:
+- Debugging — "why don't I remember X?"
+- Observability — shape of forgetting over time.
+- Re-encoding suppression — don't immediately re-mint a just-evicted moment unless its salience is now substantially higher.
 
-**4. Cascade-on-cortical-deletion.**
-When a cortical neuron is deleted upstream, every moment removes that key from its `cortical_activations` map, and every class removes that key from its `centroid` map. If a moment's map drops below `min_cortical_refs`, the moment is evicted. Classes are *not* evicted on cortical deletion — they continue to live by their own strength even if their centroid shrinks, and even if their centroid empties entirely they remain as abstract reward-carrying nodes in the class graph until their own strength decays past the eviction threshold.
-
-**The death ledger.** Every eviction appends `{moment_id, frame, reason, salience_at_birth}` to an append-only log, kept bounded by ring buffer. Uses:
-- Debugging: "why don't I remember X?"
-- Observability: shape of forgetting over time
-- Re-encoding suppression: don't immediately re-encode something that was just evicted unless its salience is now substantially higher
-
-**Sleep / idle consolidation.** When the hippocampus has free cycles, it runs a consolidation pass: replay high-salience moments to reinforce them, prune low-strength moments and orphan classes, and rebalance class clusters (merges, splits, re-parenting). This is the analog of biological sleep replay.
+**6. Sleep / idle consolidation.** When the hippocampus has free cycles, it replays high-salience moments to reinforce them, prunes low-strength moment/class neurons, and rebalances class clusters (merge / split / re-parent). The biological-sleep-replay analog.
 
 ---
 
-## Heterarchy implementation
+## The brain coordinator
 
-One cortical neuron can be referenced by many moments and many classes. One moment can be a child of many classes.
+Orchestrates the parallel clocks. Manages semaphores. Routes inputs and outputs.
 
-**Concrete data:**
-- `MomentIndex: {moment_id → Moment}`
-- `ClassIndex: {class_id → Class}`
-- Reverse mapping: `{cortical_neuron_id → [moment_ids]}` — the inverted index used by `match_to_active_cortex` and by the Jaccard search during encoding
+**Per cortex frame:**
+1. Read sensory inputs; cortex propagates patterns and picks actions.
+2. Wait on `SignalCortexDone`.
+3. If salience triggered, push a mint request to the hippocampus.
+4. If cortex emitted think-actions, push them as voluntary experiments.
+5. Push the top-level active cortical patterns as an involuntary forecast request.
+6. Continue to the next frame. (Decided-action writebacks land directly on moment/class neurons via the thalamic bus; nothing to drain here.)
 
-This breaks strict cortical hierarchy and gives the system "that reminds me" — when active cortical patterns overlap a moment from a different context, it surfaces.
-
----
-
-## Stack semantics for "what was I thinking about?"
-
-The experiment stack is the mechanism. Its contents:
-- Currently active experiment (top)
-- Saved experiments below (interrupted by newer think-actions or by encoding events)
-- Each entry has a timestamp; entries decay over time
-
-Querying "what was I thinking about?" returns the topmost stack item still above decay threshold, optionally re-triggered as a new experiment. If everything has decayed, the thought is lost — the right phenomenology.
+**Per hippocampus frame (faster, in parallel):**
+1. Service any pending mint request (cheap, runs immediately).
+2. If an experiment is on the stack, advance one frame.
+3. Otherwise pop the next request: voluntary think-actions take priority over involuntary forecasts.
+4. If idle, run consolidation: decay, eviction, death-ledger maintenance, optional class re-clustering.
 
 ---
 
@@ -322,198 +315,194 @@ Querying "what was I thinking about?" returns the topmost stack item still above
 ```
 // shared
 SignalCortexDone:    semaphore (cortex → brain: frame done)
-EncodeQueue:         channel<EncodeRequest>
+MintQueue:           channel<MintRequest>
 ExperimentQueue:     channel<ThinkAction>     // voluntary, high priority
 ForecastQueue:       channel<MomentSet>       // involuntary, low priority
-ResultQueue:         channel<PolicyUpdate>
 
 // cortex thread (1 frame per tick)
 loop:
     inputs = read_sensory()
-    cortex.activate(inputs)
+    cortex.activate(inputs)                  // sensory, pattern, moment, class neurons
+                                              //   all fire by context match; moment/class
+                                              //   decided votes dominate sensory/pattern
+                                              //   probabilistic votes
     cortex.propagate_patterns()
-    actions = cortex.pick_actions()              // may include think-actions
+    actions = cortex.pick_actions()          // may include think-actions
     cortex.emit(actions)
     SignalCortexDone.post()
 
 // brain thread (orchestrator)
 loop:
     SignalCortexDone.wait()
-    if salience.should_remember(cortex.last_frame):
-        EncodeQueue.push({active_ids, frame, trigger})
+    if salience.should_mint(cortex.last_frame):
+        MintQueue.push({active_ids, frame, trigger})
     for ta in actions.think_actions:
         ExperimentQueue.push(ta)
     ForecastQueue.push(cortex.top_level_active_patterns())
-    integrate(ResultQueue.drain_nonblocking())   // apply pending policy updates
 
 // hippocampus thread (free-running, faster clock)
 loop:
-    // 1. Encoding is cheap and time-sensitive: always serve first
-    while req = EncodeQueue.try_pop():
-        hippocampus.encode_moment(req)           // builds moment, attaches to classes,
-                                                  // wires temporal edges
+    while req = MintQueue.try_pop():
+        hippocampus.mint_moment(req)         // creates a moment neuron in the right column,
+                                              //   wires context connections, attaches to
+                                              //   class hierarchy, draws temporal edges
 
-    // 2. If an experiment is in flight, keep advancing it
     if hippocampus.experiment_stack.has_active():
-        result = hippocampus.advance_experiment_frame()
-        if result.policy_update:
-            ResultQueue.push(result.policy_update)
-        if result.terminated:
-            hippocampus.experiment_stack.pop()
+        hippocampus.advance_experiment_frame()
+        // any decided-action writeback during advance lands directly on the target
+        //   moment/class neuron via thalamic addressing
         continue
 
-    // 3. Voluntary think-actions take priority over involuntary forecasts
     if ta = ExperimentQueue.try_pop():
         hippocampus.start_experiment(ta)
         continue
     if forecast = ForecastQueue.try_pop():
-        moments = hippocampus.match_to_active_cortex(forecast)
+        moments = hippocampus.activate_by_context(forecast)
         if moments.non_empty():
             hippocampus.start_experiment(forecast_as_replay(moments, small_budget))
         continue
 
-    // 4. Idle: run forgetting + consolidation
-    hippocampus.decay()                          // strength reduction across moments+classes
+    // idle
+    hippocampus.decay()
     evicted = hippocampus.evict_below_threshold()
-    for m in evicted:
-        DeathLedger.append({m.id, current_frame, reason, m.trigger.salience})
-    hippocampus.cascade_cortical_deletions()     // drop refs to deleted cortical neurons
-    hippocampus.consolidate_classes()            // merge/split/re-parent if drifted
+    for n in evicted:
+        DeathLedger.append({n.id, n.kind, current_frame, reason, n.salience_at_birth})
+    hippocampus.cascade_cortical_deletions()
+    hippocampus.consolidate_classes()
 ```
 
-A high-priority voluntary think-action arriving mid-experiment pushes the current experiment onto the stack via `control: Interrupt` (the default) and runs. When it finishes, the older experiment resumes — same stack machinery as counterfactual branching.
+---
 
-Multi-experiment parallelism (running several experiments concurrently rather than one at a time with a stack) is deferred. Phase 1 is strictly one-experiment-at-a-time.
+## Heterarchy
+
+A cortical neuron can be inside many moments' contexts and many classes' centroids. A moment can be a child of many classes. The reverse mapping `cortical_neuron_id → [moment_ids, class_ids]` is maintained for cue resolution and Jaccard search during minting.
+
+This breaks strict cortical hierarchy and gives the system *"that reminds me"* — when active patterns overlap a moment from a different context, it surfaces.
+
+---
+
+## Stack semantics for "what was I thinking about?"
+
+The experiment stack is the mechanism. Each entry has a timestamp; entries decay over time. Querying "what was I thinking about?" returns the topmost stack item still above decay threshold, optionally re-triggered as a new experiment. If everything has decayed, the thought is lost — the right phenomenology.
 
 ---
 
 ## Implementation phases
 
-### Phase 1 — Hippocampus skeleton (no learning yet)
+### Phase 1 — Skeleton and parallel clocks
 
-Goal: wire up the architecture with hand-coded behaviors, verify the parallel clocks and semaphores work.
+- Create `hippocampus` module.
+- Add moment-neuron and class-neuron kinds to the column/region types so they live alongside sensory/pattern neurons. Reuse the existing thalamic id-translation layer.
+- Implement the brain coordinator with two-thread async (cortex + hippocampus, semaphore-coordinated).
+- Implement `mint_moment` driven by simple z-score salience (reward and prediction error only, no novelty).
+- Hard-code a trivial temporal graph (just record edges) and a trivial replay (return current moment).
+- Verify: cortex fires a think-action, hippocampus runs experiment frames, decided action writeback lands on a moment neuron, that moment's decided action shows up in cortex's next action selection.
 
-Tasks:
-- Create `hippocampus` module
-- Define `Moment`, `Class`, `MomentIndex`, `ClassIndex`, `ExperimentStack`, `DeathLedger` types
-- Implement Brain Coordinator with two-thread async model (cortex + hippocampus, semaphore-coordinated)
-- Implement `encode_moment` driven by simple z-score salience (reward and prediction error only, no novelty)
-- Hard-code a trivial temporal graph (just record edges) and a trivial replay (return current moment) — verify plumbing
-- Verify: cortex fires think-action, hippocampus runs experiment frames, result returns, cortex action values update
+### Phase 2 — Salience and selective minting
 
-### Phase 2 — Salience and selective encoding
+- Z-scored reward and prediction error over sliding windows.
+- Gating (mint iff `|z|` over threshold).
+- Strength-based decay and eviction on the moment timeline.
+- Death ledger and re-mint suppression.
 
-- Implement z-scored reward and prediction error over sliding windows
-- Implement gating (encode iff |z| > threshold)
-- Implement strength-based decay and eviction
-- Implement death ledger and re-encoding suppression
-- Test: high-z events encoded, low-z events not, capacity respected, eviction logged
+### Phase 3 — Class formation (online agglomerative weighted Jaccard)
 
-### Phase 3 — Moment classes (online agglomerative Jaccard clustering)
-
-- Implement the inverted index `cortical_neuron_id → [class_ids]`
-- Implement `attach / merge / spawn` decisions on each encode
-- Implement class centroid as running intersection of children's cortical-neuron sets
-- Implement multi-level hierarchy (classes clustered against classes at lower thresholds)
-- Implement child→parent activation propagation
-- Test: similar moments land in the same class, classes form a tree, class activation follows children
+- Inverted index `cortical_neuron_id → [class_ids]`.
+- `attach / merge / spawn` decisions on each mint.
+- Class centroid as weighted running intersection of children's contexts.
+- Multi-level hierarchy (classes clustered against classes at lower thresholds).
+- Child→parent activation propagation.
+- Class-timeline decay (slower than moment timeline).
 
 ### Phase 4 — Temporal moment graph and replay
 
-- On each encode, draw weighted edges to recent moments
-- Implement edge-weighted sampling for next-state prediction
-- Implement `mode: Replay` end-to-end
-- Test: replay sequences match observed sequences at low temperature; diverge at high
+- On each mint, draw weighted edges to recent moments.
+- Edge-weighted sampling for next-state prediction.
+- `mode: Replay` end-to-end.
 
-### Phase 5 — Counterfactual experiments via class siblings
+### Phase 5 — Counterfactual experiments and decided-action writeback
 
-- Implement branch-via-class-sibling: find sibling under parent class with alternative action, replay forward
-- Implement stack-based push/pop for branches
-- Implement output integration into cortex action-values at specific contexts
-- Test: replaying a bad outcome with alternative actions discovers better policies; subsequent encounters use the improved policy
+- Branch via class sibling: find sibling under parent class with alternative action, replay forward.
+- Stack-based push/pop for branches.
+- Write decided actions to specific moment/class neurons at experiment conclusion.
+- Verify: replaying a bad outcome with alternatives discovers a better policy; subsequent encounters of the same context use the improved policy via the decided-action vote dominating sensory/pattern probabilistic votes.
 
 ### Phase 6 — Involuntary forecast pass
 
-- Implement `match_to_active_cortex` (set overlap with class-membership boost, no distances)
-- Wire the per-frame forecast push from brain to hippocampus
-- Verify: even with zero think-actions, the hippocampus is producing background forecasts and small policy updates every frame
+- `activate_by_context` (set overlap with class-membership boost, no distances).
+- Wire the per-frame forecast push.
+- Verify: with zero think-actions, the hippocampus produces background forecasts and decided-action updates every frame.
 
 ### Phase 7 — Voluntary think-actions and metacognitive control
 
-- Implement full think-action parameters (mode, budget, temperature, control)
-- Implement Interrupt / Integrate / Remember semantics
-- Implement reward signals for think-actions (PE reduction, downstream action improvement, opportunity cost)
-- Train cortex to fire think-actions when expected value exceeds external action value
-- Test: system learns to think more in low-pressure / high-uncertainty situations and react immediately when pressed
+- Full think-action parameters (mode, budget, temperature, control).
+- Interrupt / Integrate / Remember semantics.
+- Reward signals for think-actions (PE reduction, downstream action improvement, opportunity cost).
+- Train cortex to fire think-actions when expected value exceeds external action value.
 
 ### Phase 8 — Sleep / idle consolidation
 
-- Detect idle state
-- Run high-temperature integrative replay over recent high-salience moments
-- Run class re-clustering (merge, split, re-parent)
-- Reinforce strong moments, prune weak ones
-- Test: after sleep, MomentIndex is more compact and class hierarchy has rebalanced
+- Detect idle.
+- High-temperature integrative replay over recent high-salience moments.
+- Class re-clustering (merge, split, re-parent).
+- Reinforce strong moments, prune weak ones.
 
-### Phase 9 (deferred) — Multi-experiment parallelism
+### Phase 9 (deferred) — Parallel experiments
 
-Run multiple experiments concurrently rather than one-at-a-time with stack interrupts. Optimization, not correctness.
+Move from single-track-with-stack to a pool of N concurrent experiments sharing a "what's been visited" structure to prevent redundant exploration. Optimization, not correctness — Phase 1 is strictly single-track.
 
 ---
 
 ## Testing strategy
 
 ### Unit tests
-- MomentIndex / ClassIndex: encoding, retrieval, capacity, decay, eviction, death ledger
-- Jaccard clustering: attach, merge, spawn decisions; centroid as running intersection
-- Temporal graph: edge construction, weighted sampling
-- Experiment stack: push, pop, decay, recovery
-- Salience: z-score thresholding over sliding windows
+- Moment / class neuron minting, retrieval, capacity, decay, eviction, death ledger.
+- Jaccard clustering: attach, merge, spawn; centroid as running intersection.
+- Temporal graph: edge construction, weighted sampling.
+- Experiment stack: push, pop, decay, recovery.
+- Salience: z-score thresholding over sliding windows.
+- Decided-vote-dominates-probabilistic-vote action selection.
 
 ### Integration tests
-- Full encode → class attach → temporal edge → replay → policy update flow
-- Counterfactual via class sibling produces better-than-original alternatives
-- Involuntary forecast fires every frame with no cortex prompting
-- Voluntary think-action interrupts in-flight forecast and resumes after
+- Full mint → class attach → temporal edge → replay → decided-action writeback flow.
+- Counterfactual via class sibling produces a better-than-original alternative and the moment's decided action reflects it.
+- Involuntary forecast fires every frame with no cortex prompting.
+- Voluntary think-action interrupts in-flight forecast and resumes after.
+- Hippocampus removal experiment: a fully populated cortex with the hippocampus disabled still does cued recall and skill execution but cannot mint new moments, plan, or run counterfactuals (HM profile).
 
 ### Behavioral tests
-- Trading backtest with vs. without hippocampus — measure improvement on bad-trade scenarios
-- ADHD-like profile: tune salience too lax, observe distractibility
-- Rigidity profile: tune salience too tight, observe perseveration
+- Trading backtest with vs. without hippocampus on bad-trade scenarios.
+- ADHD-like profile: salience too lax, observe distractibility.
+- Rigidity profile: salience too tight, observe perseveration.
 
 ### Stress tests
-- High-throughput cortex with many think-actions
-- Capacity limits and graceful eviction
-- Cortical deletion cascades
+- High-throughput cortex with many think-actions.
+- Capacity limits and graceful eviction.
+- Cortical deletion cascades.
 
 ---
 
 ## Open questions
 
-1. **Jaccard thresholds.** `θ_attach`, `θ_merge`, `θ_spawn` need tuning. Start with 0.6 / 0.85 / 0.5 and adjust by observing class-tree shape on real data.
-
-2. **Salience window length.** How many frames to compute σ over? Probably 100–1000 cortex frames; tunable.
-
-3. **Hippocampus frame rate.** What's the right multiplier vs. cortex? Biology suggests 5–20×. Start with 10×.
-
-4. **Reward integration timing.** Apply policy updates immediately (interrupting current cortex frame) or queue for next frame? Latter is simpler; former may be needed for fast-moving situations.
-
-5. **Persistence.** Do moments persist across brain restarts? For long-term memory to be meaningful, yes. Need serialization for MomentIndex, ClassIndex, temporal graph, and death ledger.
-
-6. **Cross-channel moments.** Can a single moment index cortical neurons from multiple channels (stock + text + vision)? Strongly suggests yes — this is where cross-channel association happens. Interface complexity grows.
-
-7. **Multi-experiment parallelism.** Deferred to Phase 9. Single-experiment with stack is the Phase 1–8 contract.
+1. **Jaccard thresholds.** `θ_attach`, `θ_merge`, `θ_spawn` need tuning. Start with 0.6 / 0.85 / 0.5; adjust by observing class-tree shape on real data.
+2. **Salience window length.** Probably 100–1000 cortex frames; tunable.
+3. **Hippocampus frame rate.** Multiplier vs. cortex. Biology suggests 5–20×; start at 10×.
+4. **The actual instruction set the cortex uses to invoke the hippocampus.** This will emerge from implementation rather than be designed up front. The conceptual operations are listed above; their precise signatures and the cortex-side action neurons that trigger them are TBD.
+5. **Persistence.** Do moment/class neurons persist across brain restarts? For long-term memory to be meaningful, yes. Need serialization for the column state plus the death ledger and temporal graph.
+6. **Cross-channel moments.** Can a single moment's context include cortical neurons from multiple channels (stock + text + vision)? Strongly suggests yes — this is where cross-channel association happens. Interface complexity grows.
+7. **Decided-vote dominance arithmetic.** Exactly how a decided vote suppresses or overrides probabilistic votes for the same action slot — full override, weighted override, or a multiplicative authority factor — needs implementation to settle.
+8. **Search-policy for experiments.** Time-budgeted best-first is the default. The scoring function needs to fall out of existing primitives (prediction error against accumulated path context, predicted reward) rather than being a hand-tuned linear combination of heuristics.
 
 ---
 
 ## Why this matters
 
-This is the architectural commitment that makes Robot Brain different from transformer-based AI:
+- **Long-term memory** as cortical neurons minted by deliberate experimentation — not as a separate store, not as a context window.
+- **Two thinking modes** — involuntary background forecasting + voluntary think-actions — both running on the same machinery.
+- **System 2 enriches System 1** — hippocampal experiment outputs become cortical neurons that fire reflexively. Expertise development is structural, not behavioral.
+- **Decided actions** — moments and classes carry the conclusions of analysis, not statistics. Reflexes hardened by deliberation, voting with authority.
+- **Forgetting that judges** — instances fade fast, classes persist, the death ledger remembers what was lost.
+- **Biological grounding** — implements hippocampal indexing, complementary learning systems, predictive processing, scenario construction, and FCA-style abstraction in one architecture, with HM as a direct architectural prediction.
+- **One substrate, two operators, thalamic bus.** Cortex is the store. Hippocampus is the executor. Thinkability is reachability.
 
-- **Long-term memory** as a learned, selective, replayable structure — not a context window
-- **Two thinking modes** — involuntary background forecasting + voluntary think-actions — both running on the same machinery
-- **Offline policy improvement** via counterfactual replay through class siblings — not just online updates from experience
-- **Metacognitive control** learned through reward signals — agent learns when to think and when to react
-- **Forgetting that judges** — instances fade fast, classes persist, the death ledger remembers what was lost
-- **Biological grounding** — implements hippocampal indexing, complementary learning systems, predictive processing, and FCA-style abstraction in one architecture
-
-The thesis Robot Brain is built around: the next generation of AI architectures will not come from scaling sequence models. It will come from systems that have the structures biological brains have — separate organs for perception, memory, and thinking, coupled bidirectionally and operating on different clocks. This document specifies the most important of those structures.
+The thesis: the next generation of AI architectures will not come from scaling sequence models. It will come from systems that have the structures biological brains have — separate organs for perception, memory, and thinking, coupled bidirectionally and operating on different clocks over a shared substrate.
