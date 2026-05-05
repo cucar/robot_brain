@@ -278,39 +278,51 @@ Distribute across multiple machines for large-scale workloads.
 
 ## Hippocampal Region (Thinking, Long-Term Memory, Metacognition)
 
-The largest remaining architectural component. A separate organ that holds mapped representations of selected cortical neurons and runs counterfactual experiments on them in parallel with cortex's perception/action loop. Implements long-term memory, thinking-as-action, and offline policy improvement.
+The largest remaining architectural component. A second organ — the **executor** — that operates on cortical neurons in parallel with the cortex's own perception/action loop. Implements long-term memory, thinking-as-action, and offline policy improvement.
 
 See: [Hippocampus Design and Implementation Plan](./hippocampus.md)
 
 ### Summary
 
-* Separate organ from cortex, with its own faster clock
-* Stores **handles** (indices) into cortical neurons — not copies
-* **Selective encoding** via Salience Module + Entorhinal Layer — only high-prediction-error / high-reward / high-novelty patterns get mapped
-* **Sliding-scale forgetting** by activation strength — no strict short/long-term boundary
-* **Heterarchy** — one cortical neuron can map to multiple handles, enabling cross-context association ("that reminds me")
-* **Stack-based experiments** — branching is just a stack push
-* **Bidirectional coupling** — cortex fires think-actions; hippocampus output updates cortex's action-value estimates at specific contexts
-* **Think parameters as parallel action neurons** — target, mode, budget, temperature, control all fire alongside the think-action
+Robot Brain is a dual-system architecture. **Cortex splits reality into patterns; hippocampus groups patterns to generalize.**
+
+* **One substrate, two operators.** Storage is always cortical. The hippocampus is the executor — it does not hold moments, it mints them.
+* **Moment and class neurons live in cortical columns** alongside sensory and pattern neurons, addressed via the same thalamic id↔property bus. A moment is a tight-tolerance cortical pattern neuron minted in one shot from a salient frame; a class is a looser-tolerance neuron grouping similar moments.
+* **Thinkability = reachability by the executor.** A neuron is thinkable iff the hippocampus can reach it — not a property of the neuron's location or kind.
+* **Selective minting** via z-scored reward and prediction error — only salient frames produce moments. Novelty is not an input.
+* **Hippocampus runs at a faster clock** than the cortex, executing many experiment frames per cortex frame.
+* **Decided actions, not probabilistic ones.** Sensory and pattern neurons accumulate statistical action votes. Moment and class neurons carry *decided* actions written by the hippocampus after experimentation. When activated, a decided vote dominates probabilistic votes for the same action slot.
+* **Action writeback closes the loop.** Experiment conclusions are written directly onto the moment (or class) neuron whose context they apply to. From then on, that neuron fires reflexively on context match and votes its decided action into cortex's action selection. **System 2 outputs become System 1 reflexes.** This is the architectural substrate for expertise development.
+* **Recall is by context, not by handle.** The executor's primitive is "drive a partial context and let cortex pattern-complete."
+* **Heterarchy at the moment layer** — one cortical neuron can be inside many moments and many classes; one moment can be a child of many classes.
+* **Single-track experiments first; parallel later.** Phase 1 uses a stack (branching = push, terminate = pop, higher-priority think-actions interrupt). Concurrent experiment pools are deferred to Phase 9.
+* **Same death ledger, different aging.** Moment and class neurons decay on their own timelines (classes slower than moments), but use one shared ledger.
 
 ### Why this matters
 
-This is the architectural commitment that separates Robot Brain from sequence-model-based AI. Long-term memory as a learned selective structure (not a context window). Thinking as an action in the policy (not a hardcoded mode). Offline policy improvement via counterfactual replay. Metacognitive control learned through reward signals — the agent learns when to think and when to react.
+This is the architectural commitment that separates Robot Brain from sequence-model-based AI:
 
-Built on hippocampal indexing theory (Teyler & DiScenna 1986), complementary learning systems (McClelland et al. 1995), and Mattar & Daw's expected-value-of-backup model (2018).
+* Long-term memory as cortical neurons minted by deliberate experimentation — not a context window, not a separate store.
+* Thinking as an action in the policy — not a hardcoded mode.
+* Offline policy improvement via counterfactual replay through class siblings.
+* Metacognitive control learned through reward signals — the agent learns when to think and when to react.
+* **HM falls out as a direct architectural prediction.** Removing the executor leaves cued recall and skills intact but kills new-moment formation, deliberate recall, and counterfactual reasoning.
+
+Built on hippocampal indexing theory (Teyler & DiScenna 1986; Teyler & Rudy 2007), complementary learning systems (McClelland et al. 1995), Mattar & Daw's expected-value-of-backup model (2018), and Kahneman dual-process theory implemented as architecture rather than metaphor.
 
 ### Implementation phases
 
-1. Hippocampus skeleton with parallel-clock plumbing (no learning)
-2. Salience and selective encoding
-3. Transition model and basic replay
-4. Counterfactual experiments with branching
-5. Heterarchy and association ("that reminds me")
-6. Stack semantics and metacognitive control actions
-7. Metacognitive reward learning (when to think)
+1. Hippocampus skeleton with parallel-clock plumbing — moment and class neuron kinds wired into existing columns, decided-action writeback verified end-to-end
+2. Salience module and selective minting (z-scored reward and prediction error)
+3. Class formation (online agglomerative weighted Jaccard, multi-level hierarchy)
+4. Temporal moment graph and basic replay
+5. Counterfactual experiments via class siblings, decided-action writeback to moment/class neurons
+6. Involuntary forecast pass (per-frame context-driven recall)
+7. Voluntary think-actions and metacognitive reward learning (when to think)
 8. Sleep/idle consolidation
+9. (Deferred) Parallel experiment pool
 
-Full details, component specifications, interfaces, testing strategy, and open questions in the [design document](./hippocampus.md).
+Full details, neuron-kind specifications, executor operations, decided-vs-probabilistic vote semantics, testing strategy, and open questions in the [design document](./hippocampus.md).
 
 ---
 
@@ -319,11 +331,12 @@ Full details, component specifications, interfaces, testing strategy, and open q
 ### Architecture
 
 * Brain runs constantly (always-on processing)
-* Thinking happens in the Hippocampal Region (see [Hippocampus design](./hippocampus.md)) — not as a feedback text channel, but as a separate organ running counterfactual experiments on mapped memories in parallel with cortex
-* Inner monologue / stream of consciousness emerges from hippocampal replay producing outputs that affect cortex action selection
+* Thinking happens in the Hippocampal Region (see [Hippocampus design](./hippocampus.md)) — not as a feedback text channel, but as a second organ (the executor) running counterfactual experiments over moment and class neurons that live in cortical columns
+* Inner monologue / stream of consciousness emerges from the always-on involuntary forecast pass plus voluntary think-actions, both surfacing and writing decided actions back onto moment/class neurons
+* System 2 → System 1 enrichment: deliberated conclusions become cortical neurons that fire reflexively on context match — over a robot's lifetime, its experience-shaped reflexes are exactly what its hippocampus has decided
 * Rewards given throughout experiences by owner/trainer via remote
 * The Hippocampal Region is the substrate that lets the brain reflect on past rewards and find better future actions
-* Resulting robots will likely develop personalities based on their experiences and the patterns of which memories get encoded, replayed, and consolidated
+* Resulting robots will likely develop personalities based on which moments get minted, which classes get formed, and which decided actions get written back to them
 
 ### Hardware
 - The algorithm would need to be implemented in hardware (FPGA/ASIC) for real-time processing of all sensory channels simultaneously
