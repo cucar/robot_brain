@@ -3,9 +3,8 @@
  * on them. Becomes a worker thread in Phase 5; in single-process JS every
  * method is a synchronous local call.
  *
- * Action sets (channelActions, actionIds, channelDefaultActions) are passed
- * in at init time so per-frame calls never reach back to Thalamus for them.
- * `this.neurons` is the sole storage for owned Neurons.
+ * Action sets are passed at init time so per-frame calls never reach back
+ * to Thalamus. `this.neurons` is the sole storage for owned Neurons.
  */
 export class Column {
 
@@ -33,7 +32,146 @@ export class Column {
 	}
 
 	/**
-	 * Apply contextRef updates to owned Neurons. One call per target neuron
+	 * Process a batch of delete operations against owned neurons.
+	 * Returns outbound operations for other columns, deleted neuron ids, and neuron ids that just became deletable to cascade.
+	 */
+	deleteNeurons(opBatch, currentFrame) {
+		const outboundOps = [];
+		const deletedIds = [];
+		const newlyDeletableIds = [];
+
+		// loop over requested operations and execute them on the neurons owned
+		for (const op of opBatch) {
+			switch (op.type) {
+
+				// destroy a dying neuron: walk its state, emit cleanup ops, remove it
+				case 'DeleteNeuron': {
+					const result = this.deleteNeuron(op);
+					if (!result) break; // neuron already destroyed by an earlier op in this cascade
+					for (const outboundOp of result.outboundOps) outboundOps.push(outboundOp);
+					deletedIds.push(result.deletedId);
+					break;
+				}
+
+				// remove a dead child pattern from its parent's routing table
+				case 'RemovePattern':
+					for (const outboundOp of this.removePattern(op)) outboundOps.push(outboundOp);
+					break;
+
+				// scrub a dead neuron from a parent's children's context entries
+				case 'PurgeContextNeuron':
+					this.purgeContextNeuron(op, currentFrame, newlyDeletableIds);
+					break;
+
+				// drop a stale contextRef on a context neuron
+				case 'RemoveContextRef':
+					this.removeContextRef(op);
+					break;
+			}
+		}
+
+		return { outboundOps, deletedIds, newlyDeletableIds };
+	}
+
+	/**
+	 * Destroy a dying neuron. Walk its state to emit cleanup ops, then remove it.
+	 */
+	deleteNeuron(op) {
+		const neuron = this.neurons.get(op.targetId);
+		if (!neuron) return null;
+
+		const outboundOps = [];
+
+		// tell each parent that referenced this neuron in its children's contexts to scrub it
+		for (const [referencingParentId, distances] of neuron.contextRefs)
+			outboundOps.push({ type: 'PurgeContextNeuron', targetId: referencingParentId, dyingNeuronId: neuron.id, distances });
+
+		// orphan each child: clean up context refs, then queue child for deletion
+		for (const [childPatternId, tableEntry] of neuron.routingTable) {
+			for (const entry of tableEntry.context.getEntries()) {
+				const isOrphaned = neuron.removeContextIndex(entry.neuronId, entry.distance, childPatternId);
+				if (isOrphaned)
+					outboundOps.push({ type: 'RemoveContextRef', targetId: entry.neuronId, parentId: neuron.id, distance: entry.distance });
+			}
+			outboundOps.push({ type: 'DeleteNeuron', targetId: childPatternId, parentId: neuron.id });
+		}
+
+		// tell parent to remove this pattern from its routing table
+		outboundOps.push({ type: 'RemovePattern', targetId: op.parentId, patternId: neuron.id });
+
+		// free neuron memory
+		this.neurons.delete(neuron.id);
+		neuron.routingTable = null;
+		neuron.contextIndex = null;
+		neuron.contextRefs = null;
+		neuron.connections = null;
+
+		// return
+		return { outboundOps, deletedId: neuron.id };
+	}
+
+	/**
+	 * Remove a dead child pattern from a parent's routing table and context entries.
+	 * Returns RemoveContextRef ops for orphaned context references.
+	 */
+	removePattern(op) {
+		const parent = this.neurons.get(op.targetId);
+		if (!parent) return []; // parent already destroyed in this cascade
+
+		const entry = parent.routingTable.get(op.patternId);
+		if (!entry) return []; // pattern already removed by parent's own DeleteNeuron cleanup
+
+		const outboundOps = [];
+		for (const ctxEntry of entry.context.getEntries()) {
+			// same-pulse PurgeContextNeuron may have already removed this entry
+			if (!entry.context.hasKey(ctxEntry.neuronId, ctxEntry.distance)) continue;
+			const isOrphaned = parent.removeContext(op.patternId, ctxEntry.neuronId, ctxEntry.distance);
+			if (isOrphaned)
+				outboundOps.push({ type: 'RemoveContextRef', targetId: ctxEntry.neuronId, parentId: parent.id, distance: ctxEntry.distance });
+		}
+
+		parent.routingTable.delete(op.patternId);
+		return outboundOps;
+	}
+
+	/**
+	 * Scrub a dead neuron from a parent's children's context entries.
+	 * Affected children whose activation strength decayed to zero become cascade candidates.
+	 */
+	purgeContextNeuron(op, currentFrame, newlyDeletableIds) {
+		const parent = this.neurons.get(op.targetId);
+		if (!parent) return;
+
+		// same-pulse RemovePattern may have already cleaned some distances
+		const distMap = parent.contextIndex.get(op.dyingNeuronId);
+		if (!distMap) return;
+		const remainingDistances = new Set();
+		for (const d of op.distances)
+			if (distMap.has(d)) remainingDistances.add(d);
+		if (remainingDistances.size === 0) return;
+
+		const affectedPatterns = parent.removeContextNeuron(op.dyingNeuronId, remainingDistances);
+		for (const patternId of affectedPatterns)
+			if (parent.canDeleteChild(patternId, currentFrame))
+				newlyDeletableIds.push(patternId);
+	}
+
+	/**
+	 * Drop a single contextRef entry on a context neuron.
+	 */
+	removeContextRef(op) {
+		const neuron = this.neurons.get(op.targetId);
+		if (!neuron) return;
+
+		// same-pulse op may have already removed this ref
+		const distances = neuron.contextRefs.get(op.parentId);
+		if (!distances || !distances.has(op.distance)) return;
+
+		neuron.removeContextRef(op.parentId, op.distance);
+	}
+
+	/**
+	 * Op-5: Apply contextRef updates to owned Neurons. One call per target neuron
 	 * the batch carries an update for; foreign updates are routed by the caller.
 	 */
 	updateContextRefs(updates) {
@@ -41,22 +179,12 @@ export class Column {
 	}
 
 	/**
-	 * Construct new Neuron instances locally from specs and store them in the
+	 * Op-1/Op-3: Construct new Neuron instances locally from specs and store them in the
 	 * owned neurons map. Used for both freshly observed sensory points and
 	 * error-correction patterns.
 	 */
 	createNewNeurons(specs) {
 		throw new Error('Column.createNewNeurons not yet implemented');
-	}
-
-	/**
-	 * Apply a batch of delete operations against owned Neurons. Returns the
-	 * outbound ops produced (to be routed by the caller to other columns) and
-	 * the ids whose canDeleteChild flipped this round (to be re-queued as
-	 * DeleteSelf next pulse).
-	 */
-	deleteNeurons(opBatch) {
-		throw new Error('Column.deleteNeurons not yet implemented');
 	}
 
 	/**

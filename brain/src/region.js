@@ -1,20 +1,14 @@
 import { Column } from './column.js';
 
 /**
- * Region — wraps an array of Columns. Eventually represents an MPI rank;
- * in single-process JS it's a pure router/aggregator with no state of its own
- * beyond the column list. Region NEVER exposes single-neuron access — every
- * cross-region call is one of the batched ops in §3.5.
- *
- * Per-frame methods take a flat batch (already filtered to ids this region owns)
- * and bucket internally by column. Each method knows which field on its batch
- * elements to route by — the shape of each method's inputs is its own contract.
+ * Region — wraps Column[C]. Becomes an MPI rank in Phase 5; in single-process
+ * JS it's a pure router/aggregator. Never exposes single-neuron access.
  */
 export class Region {
 
 	constructor(C, channelActions, actionIds, channelDefaultActions) {
 		this.C = C;
-		this.columns = []; // index = columnIdx
+		this.columns = [];
 		for (let c = 0; c < C; c++)
 			this.columns.push(new Column(channelActions, actionIds, channelDefaultActions));
 	}
@@ -56,7 +50,7 @@ export class Region {
 	}
 
 	/**
-	 * Apply contextRef updates against owned Neurons. Updates are routed by
+	 * Op-5: Apply contextRef updates against owned Neurons. Updates are routed by
 	 * update.neuronId (the target neuron whose contextRefs change).
 	 * No return — fire-and-forget within the level barrier.
 	 */
@@ -67,7 +61,7 @@ export class Region {
 	}
 
 	/**
-	 * Construct new Neurons in their owning columns. Specs are routed by spec.id
+	 * Op-1/Op-3: Construct new Neurons in their owning columns. Specs are routed by spec.id
 	 * (the freshly allocated neuron id).
 	 */
 	createNewNeurons(specs) {
@@ -77,12 +71,22 @@ export class Region {
 	}
 
 	/**
-	 * Apply a batch of delete operations. The receiver of an op depends on its type
-	 * (DeleteSelf → neuronId, RemoveContextEntry → parentId, RemoveContextRef →
-	 * ctxNeuronId, etc.), so the per-op-type bucketer lands when the op vocabulary
-	 * is defined alongside the cleanup pulse loop.
+	 * Op-2: Apply a batch of delete operations in the columns owned
 	 */
-	deleteNeurons(opBatch) {
-		throw new Error('Region.deleteNeurons not yet implemented');
+	deleteNeurons(opBatch, currentFrame) {
+		const opsByColumn = this.bucketByColumn(opBatch, 'targetId');
+		const outboundOps = [];
+		const deletedIds = [];
+		const newlyDeletableIds = [];
+
+		for (let c = 0; c < this.C; c++) {
+			const result = this.columns[c].deleteNeurons(opsByColumn[c], currentFrame);
+			for (const op of result.outboundOps) outboundOps.push(op);
+			for (const id of result.deletedIds) deletedIds.push(id);
+			for (const id of result.newlyDeletableIds) newlyDeletableIds.push(id);
+		}
+
+		return { outboundOps, deletedIds, newlyDeletableIds };
 	}
+
 }

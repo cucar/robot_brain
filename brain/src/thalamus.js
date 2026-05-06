@@ -851,188 +851,87 @@ export class Thalamus {
 	}
 
 	/**
-	 * Delete dead pattern neurons with recursive cascade.
-	 * When a pattern is deleted, other patterns that referenced it may become deletable too.
-	 * @param {Array<number>} patternIds - Initial list of pattern ids to delete
-	 * @param {number} currentFrame - Current frame number for lazy decay checks
-	 * @returns {Array<number>} - All deleted pattern ids
+	 * Op-2: Delete dead patterns via cascade pulses through region/column.
+	 * Each pulse fans out ops, collects results, cleans metadata, and feeds
+	 * outbound ops + newly deletable ids into the next pulse until empty.
 	 */
 	deletePatterns(patternIds, currentFrame) {
-		const toDelete = [...patternIds];
-		const queuedIds = new Set(patternIds);
-		const deletedIds = [];
+		const allDeletedIds = [];
 		const deletedIdSet = new Set();
+		const queuedIds = new Set(patternIds);
 
-		while (toDelete.length > 0) {
-			const patternId = toDelete.shift();
-			if (deletedIdSet.has(patternId)) continue;
+		// seed the first pulse with DeleteNeuron ops for reaped patterns
+		let inboundOps = this.buildDeleteNeuronOps(patternIds);
 
-			const newlyDeletable = this.deletePattern(patternId, currentFrame);
-			deletedIds.push(patternId);
-			deletedIdSet.add(patternId);
+		// cascade: each pulse may produce outbound ops and new cascade candidates
+		while (inboundOps.length > 0) {
+			const { outboundOps, deletedIds, newlyDeletableIds } = this.fanOutDeleteOps(inboundOps, currentFrame);
 
-			for (const newlyDeletableId of newlyDeletable) {
-				if (deletedIdSet.has(newlyDeletableId) || queuedIds.has(newlyDeletableId)) continue;
-				toDelete.push(newlyDeletableId);
-				queuedIds.add(newlyDeletableId);
+			// remove destroyed neurons from Thalamus metadata
+			for (const id of deletedIds) {
+				if (deletedIdSet.has(id)) continue;
+				deletedIdSet.add(id);
+				allDeletedIds.push(id);
+				this.cleanupDeletedNeuronMetadata(id);
+			}
+
+			// feed outbound ops into next pulse, plus new DeleteNeuron ops for cascade candidates
+			inboundOps = outboundOps;
+			for (const id of newlyDeletableIds) {
+				if (deletedIdSet.has(id) || queuedIds.has(id)) continue;
+				queuedIds.add(id);
+				const parentId = this.neuronParents.get(id);
+				if (parentId !== undefined)
+					inboundOps.push({ type: 'DeleteNeuron', targetId: id, parentId });
 			}
 		}
 
-		return deletedIds;
+		return allDeletedIds;
 	}
 
 	/**
-	 * Delete a pattern neuron and clean up all references to it.
-	 * Returns pattern ids that became deletable as a result of cleanup.
-	 * @param {number} patternId - Id of the pattern to delete
-	 * @param {number} currentFrame - Current frame number for lazy decay checks
-	 * @returns {Array<number>} - Pattern ids that became deletable after cleanup
+	 * Build initial DeleteNeuron ops from a list of pattern ids.
 	 */
-	deletePattern(patternId, currentFrame) {
-
-		// ignore double delete requests - also the single cleanup-path lookup for this neuron
-		const pattern = this.neurons.get(patternId);
-		if (!pattern) return [];
-
-		// Clean up forward references: remove this pattern from its parent's context entries
-		const newlyDeletable = this.cleanupPatternFromParentContext(patternId);
-
-		// Clean up reverse references: remove this pattern from other parents' child contexts
-		const moreNewlyDeletable = this.cleanupPatternFromChildContexts(pattern, currentFrame);
-		newlyDeletable.push(...moreNewlyDeletable);
-
-		// Clean up contextRefs on context neurons for all remaining children in this neuron's routing table,
-		// and queue those children for cascade deletion — without their parent they can never activate,
-		// and any surviving entry would leave a dangling neuronParents pointer that corrupts snapshots.
-		const orphanedChildren = this.cleanupOrphanedChildren(pattern);
-		for (const childId of orphanedChildren)
-			if (this.neurons.has(childId)) newlyDeletable.push(childId);
-
-		// Remove pattern from its parent's routing table
-		// Parent may already be deleted during cascade — its deletePattern cleaned up all children
-		this.deregisterFromParent(pattern);
-
-		// Remove from death ledger
-		this.unregisterDeath(patternId);
-
-		// Delete this pattern neuron from the index and decrement level count
-		this.removeFromIndexes(pattern);
-
-		// Free memory - clear internal properties
-		this.freeMemory(pattern);
-
-		return newlyDeletable;
+	buildDeleteNeuronOps(patternIds) {
+		const ops = [];
+		for (const id of patternIds) {
+			const parentId = this.neuronParents.get(id);
+			if (!parentId) continue; // sensory neurons have no parent
+			ops.push({ type: 'DeleteNeuron', targetId: id, parentId });
+		}
+		return ops;
 	}
 
 	/**
-	 * Remove this pattern from its parent's context entries
-	 * @param {number} patternId - Pattern being deleted
-	 * @returns {Array<number>} - Pattern ids that became deletable after cleanup
+	 * Fan out delete ops to regions, collect and merge results.
 	 */
-	cleanupPatternFromParentContext(patternId) {
-		const newlyDeletable = [];
-		const parentId = this.neuronParents.get(patternId);
-		if (!parentId) throw new Error(`Cannot find parent of pattern for cleanup: ${patternId}`);
-		const parentNeuron = this.neurons.get(parentId);
+	fanOutDeleteOps(ops, currentFrame) {
+		const opsByRegion = this.bucketByRegion(ops, 'targetId');
+		const outboundOps = [];
+		const deletedIds = [];
+		const newlyDeletableIds = [];
 
-		// If parent was already deleted during cascade, its deletePattern already cleaned up
-		// all remaining children's contextRefs — nothing left for us to do.
-		if (parentNeuron)
-			for (const entry of parentNeuron.getPatternContext(patternId)) {
-				const ctxNeuron = this.neurons.get(entry.neuronId);
-				if (!ctxNeuron) continue;
-				const isOrphaned = parentNeuron.removeContext(patternId, entry.neuronId, entry.distance);
-				if (isOrphaned) ctxNeuron.removeContextRef(parentNeuron.id, entry.distance);
-			}
-
-		return newlyDeletable;
-	}
-
-	/**
-	 * Remove this pattern from other parents' children's contexts
-	 * @param {Neuron} pattern - Pattern being deleted
-	 * @param {number} currentFrame - Current frame number for lazy decay checks
-	 * @returns {Array<number>} - Pattern ids that became deletable after cleanup
-	 */
-	cleanupPatternFromChildContexts(pattern, currentFrame) {
-		const newlyDeletable = [];
-
-		// Iterate through all parents that have this pattern in their children's contexts
-		for (const [referencingParentId, distances] of pattern.contextRefs) {
-			const referencingParent = this.neurons.get(referencingParentId);
-			if (!referencingParent) continue;
-
-			// Remove this pattern from the parent's context and get affected child patterns
-			const affectedPatterns = referencingParent.removeContextNeuron(pattern.id, distances);
-			for (const patternId of affectedPatterns) {
-				if (!this.neurons.has(patternId)) continue;
-				const parent = this.neurons.get(this.neuronParents.get(patternId));
-				if (parent && parent.canDeleteChild(patternId, currentFrame, this.neuronLevels.get(patternId)))
-					newlyDeletable.push(patternId);
-			}
+		for (let r = 0; r < this.regions; r++) {
+			if (opsByRegion[r].length === 0) continue;
+			const result = this.regionList[r].deleteNeurons(opsByRegion[r], currentFrame);
+			for (const op of result.outboundOps) outboundOps.push(op);
+			for (const id of result.deletedIds) deletedIds.push(id);
+			for (const id of result.newlyDeletableIds) newlyDeletableIds.push(id);
 		}
 
-		return newlyDeletable;
+		return { outboundOps, deletedIds, newlyDeletableIds };
 	}
 
 	/**
-	 * Clean up context references for all children in this pattern's routing table
-	 * (needed because their parent is being deleted). Returns the orphaned child
-	 * pattern ids so the caller can cascade-delete them — a child whose parent is
-	 * gone can never activate again, and leaving it behind would leave a dangling
-	 * neuronParents entry that breaks snapshot save/load.
-	 * @param {Neuron} pattern - Pattern being deleted
-	 * @returns {Array<number>} - Child pattern ids that are now orphaned
+	 * Remove a destroyed neuron from Thalamus-owned metadata maps.
 	 */
-	cleanupOrphanedChildren(pattern) {
-		const orphans = [];
-		for (const [childPatternId, tableEntry] of pattern.routingTable) {
-			orphans.push(childPatternId);
-			for (const entry of tableEntry.context.getEntries()) {
-				const isOrphaned = pattern.removeContextIndex(entry.neuronId, entry.distance, childPatternId);
-				if (isOrphaned) {
-					const ctxNeuron = this.neurons.get(entry.neuronId);
-					if (ctxNeuron) ctxNeuron.removeContextRef(pattern.id, entry.distance);
-				}
-			}
-		}
-		return orphans;
-	}
-
-	/**
-	 * Remove pattern from its parent's routing table
-	 * @param {Neuron} pattern - Pattern being deleted
-	 */
-	deregisterFromParent(pattern) {
-		const parentId = this.neuronParents.get(pattern.id);
-		if (!parentId) throw new Error(`Cannot find parent of pattern for deletion: ${pattern.id}`);
-		const parentNeuron = this.neurons.get(parentId);
-		if (parentNeuron) parentNeuron.removeChild(pattern.id);
-	}
-
-	/**
-	 * Remove pattern from all neuron indexes and decrement level count
-	 * @param {Neuron} pattern - Pattern being deleted
-	 */
-	removeFromIndexes(pattern) {
-		const level = this.neuronLevels.get(pattern.id);
-		this.neurons.delete(pattern.id);
-		this._removeFromColumn(pattern.id);
-		this.neuronLevels.delete(pattern.id);
-		this.neuronParents.delete(pattern.id);
-		this.decrementLevelCount(level);
-	}
-
-	/**
-	 * Free memory by clearing pattern's internal properties
-	 * @param {Neuron} pattern - Pattern being deleted
-	 */
-	freeMemory(pattern) {
-		delete pattern.routingTable;
-		delete pattern.contextIndex;
-		delete pattern.contextRefs;
-		delete pattern.connections;
-		pattern = null;
+	cleanupDeletedNeuronMetadata(id) {
+		this.unregisterDeath(id);
+		this.neurons.delete(id);
+		const level = this.neuronLevels.get(id);
+		this.neuronLevels.delete(id);
+		this.neuronParents.delete(id);
+		if (level !== undefined) this.decrementLevelCount(level);
 	}
 
 	/**
