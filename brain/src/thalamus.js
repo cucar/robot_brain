@@ -1,6 +1,7 @@
 import { Context } from './context.js';
 import { Neuron } from './neuron.js';
 import { Quantizer } from './quantizer.js';
+import { Region } from './region.js';
 
 /**
  * Thalamus - Brain's relay station for reference frame transfers
@@ -55,6 +56,15 @@ export class Thalamus {
 
 		// Level counts - tracks number of neurons at each level for efficient max level diagnostics lookup
 		this.levelCounts = []; // index = level, value = count of neurons at that level
+
+		// Construct the Region[R] tree. Each Region constructs its Column[C]. Columns are
+		// handed the action sets they need so per-frame calls don't reach back to Thalamus.
+		// In single-process JS the Maps/Sets are shared-by-reference with Thalamus so
+		// channel registration (which mutates them after this point) is reflected in every
+		// column. In Phase 5 these become per-thread copies materialized at init.
+		this.regionList = []; // index = regionIdx
+		for (let r = 0; r < this.regions; r++)
+			this.regionList.push(new Region(this.columns, this.channelActions, this.actionIds, this.channelDefaultActions));
 	}
 
 	/**

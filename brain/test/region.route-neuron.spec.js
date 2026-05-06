@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Region } from '../src/region.js';
 
-const make = (C) => new Region(C, new Map(), new Set());
+const make = (C) => new Region(C, new Map(), new Set(), new Map());
 
 describe('Region routeNeuron', () => {
 

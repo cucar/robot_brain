@@ -140,9 +140,7 @@ Brain → Thalamus.init(R, C):
         4. Each Column passes the action sets into every Neuron it constructs.
 ```
 
-The routing rule stays entirely in Thalamus — it's the only place that actually makes routing decisions (packaging per-column batches, routing cross-column cleanup ops). Columns receive batches already grouped for them and emit cleanup ops keyed by target neuron id, not target column. Channel/dim specs, name↔id maps, and the quantizer don't need to be copied either — Columns never touch them on the per-frame path.
-
-**Implementation:** thread the copies through the constructor chain when Column / Region are introduced.
+Columns receive batches already grouped for them and emit batched results. We will thread the copies through the constructor chain in Phase 5.
 
 ### 3.5 Per-frame operations overview
 

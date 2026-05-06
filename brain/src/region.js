@@ -11,11 +11,11 @@ import { Column } from './column.js';
  */
 export class Region {
 
-	constructor(C, channelActions, actionIds) {
+	constructor(C, channelActions, actionIds, channelDefaultActions) {
 		this.C = C;
 		this.columns = []; // index = columnIdx
 		for (let c = 0; c < C; c++)
-			this.columns.push(new Column(channelActions, actionIds));
+			this.columns.push(new Column(channelActions, actionIds, channelDefaultActions));
 	}
 
 	/**

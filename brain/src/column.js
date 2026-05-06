@@ -4,14 +4,18 @@
  * method is a synchronous local call.
  *
  * The constructor receives the read-only action sets needed by Neuron
- * internals (channel→action ids, the flat action id set) at init time so
- * per-frame calls never reach back to Thalamus for them.
+ * internals (channel→action ids, the flat action id set, channel→default
+ * action id) at init time so per-frame calls never reach back to Thalamus
+ * for them. In Phase 5 these become per-thread copies; in single-process
+ * JS they are shared-by-reference with Thalamus and remain functionally
+ * equivalent.
  */
 export class Column {
 
-	constructor(channelActions, actionIds) {
+	constructor(channelActions, actionIds, channelDefaultActions) {
 		this.channelActions = channelActions;
 		this.actionIds = actionIds;
+		this.channelDefaultActions = channelDefaultActions;
 		this.neurons = new Map(); // id -> Neuron
 	}
 
