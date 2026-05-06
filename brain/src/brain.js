@@ -162,7 +162,10 @@ export default class Brain {
 		if (this.frame.length === 0)
 			return { inferences: new Map(), frame: { elapsed: performance.now() - frameStart, voteDebug: null } };
 
-		// forget connections and patterns in all neurons to avoid curse of dimensionality
+		// Op-1: create sensory neurons for any new (dimId, bucketId) coordinates this frame
+		// (today still inlined in activateSensors → getNeuronIdForPoint)
+
+		// Op-2: forget connections and patterns to avoid curse of dimensionality (cascade pulses)
 		this.cleanupDeadPatterns();
 
 		// slide the temporal window: age active neurons and push the new rewards frame
@@ -172,6 +175,7 @@ export default class Brain {
 		this.activateSensors();
 
 		// process neurons level-by-level in parallel - collects votes inline per level
+		// (Op-3 create error patterns, Op-4 process frame, Op-5 update context refs — see processLevels)
 		const votes = this.processLevels();
 
 		// do inferences with age>0 neurons. Returns the scalar-space inferences plus an
@@ -306,8 +310,9 @@ export default class Brain {
 
 	/**
 	 * Detects patterns at all levels starting from base - goes as high as possible until no patterns found.
-	 * Each level's processFrame pass produces both activations and votes; votes are accumulated
-	 * across levels for consensus.
+	 * Each level fires three cross-region ops in order: Op-3 (create error patterns),
+	 * Op-4 (process frame dispatch), Op-5 (update context refs). Activations at level N
+	 * feed the level-N+1 walk, so the loop is the level barrier.
 	 * @returns {Array} Accumulated votes across all processed levels
 	 */
 	processLevels() {
@@ -326,11 +331,11 @@ export default class Brain {
 		const votes = [];
 
 		// process neurons level-by-level - each level in parallel
-		let level = 0;
-		while (true) {
+		for (let level = 0; ; level++) {
 			if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 			// process level: aggregate view, recognize patterns, create error corrections, collect votes
+			// (bundles Op-3, Op-4, Op-5 — split onto the Region boundary inside Thalamus.processLevel)
 			const { activations, votes: levelVotes } = this.thalamus.processLevel(
 				level, this.memory.getLevelNeurons(level), this.memory.depth,
 				sensoryNeurons, this.rewards, this.frameNumber, newErrorPatternIds
@@ -346,10 +351,8 @@ export default class Brain {
 			for (const vote of levelVotes) votes.push(vote);
 
 			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
-			if (level >= maxActiveLevel) break;
-
 			// otherwise, increment the level and process the next level
-			level++;
+			if (level >= maxActiveLevel) break;
 		}
 
 		return votes;

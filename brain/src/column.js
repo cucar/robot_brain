@@ -1,14 +1,11 @@
 /**
  * Column — owns a partition of Neuron instances and exposes batch operations
- * on them. Eventually becomes a worker thread; in single-process JS every
+ * on them. Becomes a worker thread in Phase 5; in single-process JS every
  * method is a synchronous local call.
  *
- * The constructor receives the read-only action sets needed by Neuron
- * internals (channel→action ids, the flat action id set, channel→default
- * action id) at init time so per-frame calls never reach back to Thalamus
- * for them. In Phase 5 these become per-thread copies; in single-process
- * JS they are shared-by-reference with Thalamus and remain functionally
- * equivalent.
+ * Action sets (channelActions, actionIds, channelDefaultActions) are passed
+ * in at init time so per-frame calls never reach back to Thalamus for them.
+ * `this.neurons` is the sole storage for owned Neurons.
  */
 export class Column {
 
@@ -20,12 +17,19 @@ export class Column {
 	}
 
 	/**
-	 * Process one frame for every (neuron, age) task in this batch.
-	 * Each task is a self-contained payload describing one owned neuron's
-	 * per-age work. Returns the per-neuron processFrame results.
+	 * Op-4 down-trip body. Calls neuron.processFrame on every task and returns
+	 * results parentId-tagged in task order.
 	 */
-	processLevel(tasks, sensoryNeurons, rewards, levelContext, newErrorPatternIds, frameNumber) {
-		throw new Error('Column.processLevel not yet implemented');
+	processLevel(tasks, memoryDepth, levelContext, newErrorPatternIds, newActiveNeurons, frameNumber) {
+		const results = [];
+		for (const { neuronId, ageStates, corrections, errorFeedback } of tasks) {
+			const result = this.neurons.get(neuronId).processFrame(
+				ageStates, memoryDepth, levelContext, newErrorPatternIds,
+				newActiveNeurons, frameNumber, corrections, errorFeedback
+			);
+			results.push({ parentId: neuronId, ...result });
+		}
+		return results;
 	}
 
 	/**

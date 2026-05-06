@@ -3,7 +3,8 @@ import { Column } from './column.js';
 /**
  * Region — wraps an array of Columns. Eventually represents an MPI rank;
  * in single-process JS it's a pure router/aggregator with no state of its own
- * beyond the column list.
+ * beyond the column list. Region NEVER exposes single-neuron access — every
+ * cross-region call is one of the batched ops in §3.5.
  *
  * Per-frame methods take a flat batch (already filtered to ids this region owns)
  * and bucket internally by column. Each method knows which field on its batch
@@ -38,15 +39,16 @@ export class Region {
 	}
 
 	/**
-	 * Process one frame for every (neuron, age) task in this region's batch.
-	 * Tasks are routed by task.neuronId.
+	 * Op-4 down-trip. Bucket tasks by owning column, fan out, concatenate
+	 * results in column-index order (stable regardless of thread scheduling).
+	 * Broadcast params are passed by reference and not mutated inside the call.
 	 */
-	processLevel(tasks, sensoryNeurons, rewards, levelContext, newErrorPatternIds, frameNumber) {
+	processLevel(tasks, memoryDepth, levelContext, newErrorPatternIds, newActiveNeurons, frameNumber) {
 		const tasksByColumn = this.bucketByColumn(tasks, 'neuronId');
 		const results = [];
 		for (let c = 0; c < this.C; c++) {
 			const colResults = this.columns[c].processLevel(
-				tasksByColumn[c], sensoryNeurons, rewards, levelContext, newErrorPatternIds, frameNumber
+				tasksByColumn[c], memoryDepth, levelContext, newErrorPatternIds, newActiveNeurons, frameNumber
 			);
 			for (const r of colResults) results.push(r);
 		}

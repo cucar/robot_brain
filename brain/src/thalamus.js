@@ -21,8 +21,11 @@ export class Thalamus {
 		this.regions = regions;
 		this.columns = columns;
 
-		// Neuron registry
-		this.neurons = new Map(); // neuronId -> Neuron
+		// Neuron registry — Thalamus keeps a flat map for non-Op-4 code paths (delete
+		// cascade, snapshot, contextRef delivery) that haven't been migrated to batch ops
+		// yet. Column.neurons holds the same references for Op-4 dispatch. Kept in sync
+		// via _syncToColumn/_removeFromColumn. Both go away when §3.7–§3.11 land.
+		this.neurons = new Map(); // neuronId -> Neuron (flat, all neurons)
 		this.neuronsByValue = new Map(); // valueKey -> neuronId (coordinate -> neuronId lookup)
 		this.baseNeurons = new Map(); // neuronId -> { channelId, type, coordinate } (sensory neurons only)
 		this.neuronParents = new Map(); // neuronId -> parentNeuronId (pattern neurons only)
@@ -65,6 +68,26 @@ export class Thalamus {
 		this.regionList = []; // index = regionIdx
 		for (let r = 0; r < this.regions; r++)
 			this.regionList.push(new Region(this.columns, this.channelActions, this.actionIds, this.channelDefaultActions));
+	}
+
+	// ── Internal sync: keep Column.neurons in lockstep with this.neurons ────
+	// These are private plumbing — Region/Column never expose single-neuron APIs.
+
+	_syncToColumn(id, neuron) {
+		const r = this.routeNeuron(id);
+		const c = this.regionList[r].routeNeuron(id);
+		this.regionList[r].columns[c].neurons.set(id, neuron);
+	}
+
+	_removeFromColumn(id) {
+		const r = this.routeNeuron(id);
+		const c = this.regionList[r].routeNeuron(id);
+		this.regionList[r].columns[c].neurons.delete(id);
+	}
+
+	_clearColumns() {
+		for (const r of this.regionList)
+			for (const col of r.columns) col.neurons.clear();
 	}
 
 	/**
@@ -136,6 +159,16 @@ export class Thalamus {
 	}
 
 	/**
+	 * Bucket a flat batch by owning region using a key extractor.
+	 * Returns an array indexed by regionIdx, each entry the sub-list for that region.
+	 */
+	bucketByRegion(batch, key) {
+		const buckets = Array.from({ length: this.regions }, () => []);
+		for (const item of batch) buckets[this.routeNeuron(item[key])].push(item);
+		return buckets;
+	}
+
+	/**
 	 * Create and add a new sensory neuron to the registry
 	 * @param {{dimId: number, bucketId: number}} coordinate - id-form coordinate
 	 * @param {number} channelId - Channel id
@@ -145,6 +178,7 @@ export class Thalamus {
 	addSensoryNeuron(coordinate, channelId, type) {
 		const neuron = new Neuron(this.nextNeuronId++, 0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
 		this.neurons.set(neuron.id, neuron);
+		this._syncToColumn(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, 0);
 		this.neuronsByValue.set(this.makeValueKey(coordinate), neuron.id);
 		this.baseNeurons.set(neuron.id, { channelId, type, coordinate });
@@ -185,6 +219,7 @@ export class Thalamus {
 
 		// register in the thalamus
 		this.neurons.set(neuron.id, neuron);
+		this._syncToColumn(neuron.id, neuron);
 		this.neuronLevels.set(neuron.id, level);
 		this.neuronParents.set(neuron.id, parentId);
 		this.incrementLevelCount(level); // for diagnostics
@@ -215,6 +250,7 @@ export class Thalamus {
 		for (const { neuron, level, baseNeuron, parentId } of snapshot.neurons) {
 			if (neuron.id >= this.nextNeuronId) this.nextNeuronId = neuron.id + 1;
 			this.neurons.set(neuron.id, neuron);
+			this._syncToColumn(neuron.id, neuron);
 			this.neuronLevels.set(neuron.id, level);
 			if (parentId) this.neuronParents.set(neuron.id, parentId);
 			this.incrementLevelCount(level);
@@ -237,6 +273,7 @@ export class Thalamus {
 	 */
 	reset() {
 		this.neurons.clear();
+		this._clearColumns();
 		this.neuronLevels.clear();
 		this.neuronsByValue.clear();
 		this.baseNeurons.clear();
@@ -614,8 +651,10 @@ export class Thalamus {
 	}
 
 	/**
-	 * Pass 2: dispatch exactly one neuron.processFrame call per active neuron.
-	 * Returns raw results tagged with parentId for post-processing.
+	 * Pass 2: Op-4 dispatch. Bucket tasks by region and fan out to
+	 * region.processLevel; each region buckets per column. Result writes
+	 * (applyFrameResults) run in Thalamus after every column has returned.
+	 * Concatenation order is region-index then column-index, stable across runs.
 	 */
 	dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, age0, currentRewards, frameNumber) {
 
@@ -627,14 +666,14 @@ export class Thalamus {
 			newActiveNeurons.push({ id: neuronId, channelId, reward });
 		}
 
-		// call each neuron to deliver the tasks to process the frame
+		// bucket tasks by region, fan out, concatenate in region-index order
+		const tasksByRegion = this.bucketByRegion(tasks, 'neuronId');
 		const results = [];
-		for (const { neuronId, ageStates, corrections, errorFeedback } of tasks) {
-			const result = this.neurons.get(neuronId).processFrame(
-				ageStates, memoryDepth, levelContext, newErrorPatternIds,
-				newActiveNeurons, frameNumber, corrections, errorFeedback
+		for (let r = 0; r < this.regions; r++) {
+			const regionResults = this.regionList[r].processLevel(
+				tasksByRegion[r], memoryDepth, levelContext, newErrorPatternIds, newActiveNeurons, frameNumber
 			);
-			results.push({ parentId: neuronId, ...result });
+			for (const x of regionResults) results.push(x);
 		}
 		return results;
 	}
@@ -978,6 +1017,7 @@ export class Thalamus {
 	removeFromIndexes(pattern) {
 		const level = this.neuronLevels.get(pattern.id);
 		this.neurons.delete(pattern.id);
+		this._removeFromColumn(pattern.id);
 		this.neuronLevels.delete(pattern.id);
 		this.neuronParents.delete(pattern.id);
 		this.decrementLevelCount(level);
