@@ -167,7 +167,7 @@ brain.processFrame(inputs, rewards):
   ╚═════════════════════════════════════════╝
 
   ageContext(rewards)                          // Thalamus mutates Memory directly
-  activateSensors()                            // Thalamus mutates Memory directly
+  activateNewNeurons()                            // Thalamus mutates Memory directly
 
   for level = 0 .. maxActiveLevel:
     // Thalamus reads its own Memory, walks owned active neurons at level,

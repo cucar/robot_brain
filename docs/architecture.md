@@ -331,17 +331,17 @@ if (activeNeurons.length > contextLength) {
 }
 ```
 
-### 4. activateSensors()
+### 4. activateNewNeurons()
 **Purpose**: Activate sensory neurons for current frame
 
 ```javascript
 // Find or create neurons for frame points
-neurons = getFrameNeurons(frame)  // via Thalamus
+neurons = getFrameNeuronIds(frame)  // via Thalamus
 
 // Activate at age 0
 for (neuron of neurons) {
-  memory.activateNeuron(neuron)
-  neuron.strengthenActivation()
+	memory.activateNeuron(neuron)
+	neuron.strengthenActivation()
 }
 
 // Track inference accuracy

@@ -6,11 +6,11 @@ import { Column } from './column.js';
  */
 export class Region {
 
-	constructor(C, channelActions, actionIds, channelDefaultActions) {
+	constructor(C, channelActions, actionIds, channelDefaultActions, mergeThreshold, errorMode, errorThreshold) {
 		this.C = C;
 		this.columns = [];
 		for (let c = 0; c < C; c++)
-			this.columns.push(new Column(channelActions, actionIds, channelDefaultActions));
+			this.columns.push(new Column(channelActions, actionIds, channelDefaultActions, mergeThreshold, errorMode, errorThreshold));
 	}
 
 	/**
@@ -66,8 +66,11 @@ export class Region {
 	 */
 	createNewNeurons(specs) {
 		const specsByColumn = this.bucketByColumn(specs, 'id');
+		const created = [];
 		for (let c = 0; c < this.C; c++)
-			this.columns[c].createNewNeurons(specsByColumn[c]);
+			for (const neuron of this.columns[c].createNewNeurons(specsByColumn[c]))
+				created.push(neuron);
+		return created;
 	}
 
 	/**

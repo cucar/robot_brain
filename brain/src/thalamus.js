@@ -24,7 +24,7 @@ export class Thalamus {
 		// Neuron registry — Thalamus keeps a flat map for non-Op-4 code paths (delete
 		// cascade, snapshot, contextRef delivery) that haven't been migrated to batch ops
 		// yet. Column.neurons holds the same references for Op-4 dispatch. Kept in sync
-		// via _syncToColumn/_removeFromColumn. Both go away when §3.7–§3.11 land.
+		// via _syncToColumn/_removeFromColumn. Both go away when §3.11 lands.
 		this.neurons = new Map(); // neuronId -> Neuron (flat, all neurons)
 		this.neuronsByValue = new Map(); // valueKey -> neuronId (coordinate -> neuronId lookup)
 		this.baseNeurons = new Map(); // neuronId -> { channelId, type, coordinate } (sensory neurons only)
@@ -67,7 +67,7 @@ export class Thalamus {
 		// column. In Phase 5 these become per-thread copies materialized at init.
 		this.regionList = []; // index = regionIdx
 		for (let r = 0; r < this.regions; r++)
-			this.regionList.push(new Region(this.columns, this.channelActions, this.actionIds, this.channelDefaultActions));
+			this.regionList.push(new Region(this.columns, this.channelActions, this.actionIds, this.channelDefaultActions, this.mergeThreshold, this.errorMode, this.errorThreshold));
 	}
 
 	// ── Internal sync: keep Column.neurons in lockstep with this.neurons ────
@@ -120,18 +120,18 @@ export class Thalamus {
 
 	/**
 	 * Get or create a sensory neuron ID from a frame point. coordinate form: {dimId, bucketId }
-	 * @returns {number} - Neuron ID
+	 * @returns {{id: number, isNew: boolean}} id and whether a new neuron was allocated
 	 */
 	getNeuronIdForPoint(coordinate, channelId, type) {
 
 		// Try to find existing neuron - if found, return it
-		let neuronId = this.getNeuronIdByCoordinate(coordinate);
-		if (neuronId) return neuronId;
+		const neuronId = this.getNeuronIdByCoordinate(coordinate);
+		if (neuronId) return { id: neuronId, isNew: false };
 
-		// Create new neuron if not found
-		const neuron = this.addSensoryNeuron(coordinate, channelId, type);
-		if (this.debug) console.log(`Created new sensory neuron ${neuron.id} for ${this.makeValueKey(coordinate)}`);
-		return neuron.id;
+		// Allocate id and register metadata; Neuron construction deferred to createNeuronsInColumns
+		const id = this.allocateSensoryNeuron(coordinate, channelId, type);
+		if (this.debug) console.log(`Created new sensory neuron ${id} for ${this.makeValueKey(coordinate)}`);
+		return { id, isNew: true };
 	}
 
 	/**
@@ -146,7 +146,7 @@ export class Thalamus {
 	/**
 	 * Pure deterministic region-routing function. Maps a neuron id to its owning region.
 	 * Interleaving (rather than chunking by id range) keeps id-bursts spread evenly:
-	 * the error-correction pattern ids allocated in one frame all fan out across regions
+	 * the error-correction pattern ids allocated in one frame spread evenly across regions
 	 * instead of piling onto one. Region.routeNeuron picks up where this leaves off and
 	 * chooses a column within that region.
 	 * Stable for the lifetime of a running process; snapshots do NOT persist R or C, so
@@ -169,41 +169,37 @@ export class Thalamus {
 	}
 
 	/**
-	 * Create and add a new sensory neuron to the registry
-	 * @param {{dimId: number, bucketId: number}} coordinate - id-form coordinate
-	 * @param {number} channelId - Channel id
-	 * @param {string} type - Neuron type ('event' or 'action')
-	 * @returns {Neuron} The newly created neuron
+	 * Allocate a sensory neuron id and register its metadata. Does NOT construct
+	 * the Neuron — that happens when the caller sends specs to createNeuronsInColumns.
+	 * @returns {number} The allocated neuron id
 	 */
-	addSensoryNeuron(coordinate, channelId, type) {
-		const neuron = new Neuron(this.nextNeuronId++, 0, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
-		this.neurons.set(neuron.id, neuron);
-		this._syncToColumn(neuron.id, neuron);
-		this.neuronLevels.set(neuron.id, 0);
-		this.neuronsByValue.set(this.makeValueKey(coordinate), neuron.id);
-		this.baseNeurons.set(neuron.id, { channelId, type, coordinate });
-		this.incrementLevelCount(0); // for diagnostics
-		return neuron;
+	allocateSensoryNeuron(coordinate, channelId, type) {
+		const id = this.nextNeuronId++;
+		this.neuronLevels.set(id, 0);
+		this.neuronsByValue.set(this.makeValueKey(coordinate), id);
+		this.baseNeurons.set(id, { channelId, type, coordinate });
+		this.incrementLevelCount(0);
+		return id;
 	}
 
 	/**
-	 * Create a new pattern neuron and register it in the thalamus. Pure factory:
-	 * wires the pattern's own connections to sensory history but does NOT touch the
-	 * parent's routing table (that happens inside parent.processFrame via addPattern)
-	 * and does NOT deliver contextRef updates or register death (death frame is known
-	 * only after parent.addPattern runs).
+	 * Allocate a pattern neuron id and build its creation spec. Resolves connection
+	 * data (channel, reward) using Thalamus-local lookups so the spec is self-contained
+	 * and can cross the MPI boundary. Does NOT construct the Neuron — that happens in
+	 * Column.createNewNeurons via createNeuronsInColumns.
+	 * Does NOT touch the parent's routing table (that happens inside parent.processFrame
+	 * via addPattern) and does NOT register death (death frame is known only after
+	 * parent.addPattern runs).
 	 * @param {number} level - Neuron level (1+ = pattern)
 	 * @param {number} parentId - Parent neuron ID
 	 * @param {number} age - Distance in time between the observation and the error
 	 * @param {Array<Set<number>>} sensoryNeurons - Recent sensory neuron ids by age
 	 * @param {Array<Map<string, number>>} rewards - Rewards by age
-	 * @returns {number} The newly created pattern neuron
+	 * @returns {{id, forgetRate, connections}} creation spec for Column.createNewNeurons
 	 */
-	createPatternNeuron(level, parentId, age, sensoryNeurons, rewards) {
+	allocatePatternNeuron(level, parentId, age, sensoryNeurons, rewards) {
 
-		// build the future connection spec of the pattern from currently observed neurons
-		// (thalamus-side lookups - channel, reward - are resolved here so the neuron can be
-		// initialized with a single self-contained call; MPI-ready boundary)
+		// resolve connection spec using thalamus-local lookups (channel, reward)
 		const connections = [];
 		for (let a = 0; a < age && a < sensoryNeurons.length; a++)
 			for (const sensoryNeuronId of sensoryNeurons[a]) {
@@ -212,19 +208,16 @@ export class Thalamus {
 				connections.push({ distance: age - a, toNeuronId: sensoryNeuronId, channelId, reward });
 			}
 
-		// create and initialize the neuron in a single call
+		// allocate id and build the spec for Column.createNewNeurons
+		const id = this.nextNeuronId++;
 		const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
-		const neuron = new Neuron(this.nextNeuronId++, forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, this.channelActions, this.actionIds);
-		neuron.initializeConnections(connections);
 
-		// register in the thalamus
-		this.neurons.set(neuron.id, neuron);
-		this._syncToColumn(neuron.id, neuron);
-		this.neuronLevels.set(neuron.id, level);
-		this.neuronParents.set(neuron.id, parentId);
-		this.incrementLevelCount(level); // for diagnostics
+		// register metadata centrally (Neuron construction deferred to createNeuronsInColumns)
+		this.neuronLevels.set(id, level);
+		this.neuronParents.set(id, parentId);
+		this.incrementLevelCount(level);
 
-		return neuron.id;
+		return { id, forgetRate, connections };
 	}
 
 	/**
@@ -451,17 +444,38 @@ export class Thalamus {
 		if (this.channelNameToId[spec.name] !== undefined)
 			throw new Error(`Thalamus: channel "${spec.name}" already registered`);
 
-		// Allocate the channel ID.
+		// allocate channel id and validate dimension specs
 		const channelId = this.nextChannelId++;
+		this.validateDimSpecs(spec);
 
-		// Validate dim specs up front.
+		// build the stored spec with allocated dimension ids baked in
+		const { storedSpec, dimensionIds } = this.buildStoredSpec(channelId, spec);
+		this.channelSpecs.set(channelId, storedSpec);
+
+		// populate name↔id maps so the frame pipeline can resolve this channel by name
+		this.channelNameToId[spec.name] = channelId;
+		this.channelIdToName[channelId] = spec.name;
+
+		// register dimensions with the quantizer and create action neurons in columns
+		this.registerDimensions(storedSpec);
+		this.registerActionNeurons(channelId, storedSpec);
+
+		if (this.debug) console.log(`Registered channel spec ${channelId} "${spec.name}" (${storedSpec.dimensions.length} dimensions)`);
+		return { channelId, dimensionIds };
+	}
+
+	validateDimSpecs(spec) {
 		for (const d of spec.dimensions) {
 			if (!d.name) throw new Error(`Thalamus: dim on channel "${spec.name}" is missing a name`);
 			if (d.kind !== 'input' && d.kind !== 'action')
 				throw new Error(`Thalamus: dim "${d.name}" has invalid kind '${d.kind}' (expected 'input' or 'action')`);
 		}
+	}
 
-		// Build the stored spec with allocated IDs baked in.
+	/**
+	 * Allocate dimension ids and build the immutable stored spec for a channel.
+	 */
+	buildStoredSpec(channelId, spec) {
 		const dimensionIds = {};
 		const storedSpec = {
 			id: channelId,
@@ -484,16 +498,16 @@ export class Thalamus {
 			emitsReward: spec.emitsReward ?? false,
 			learnActionSequences: spec.learnActionSequences ?? false
 		};
-		this.channelSpecs.set(channelId, storedSpec);
+		return { storedSpec, dimensionIds };
+	}
 
-		// Populate name↔id maps so the frame pipeline can resolve this channel by name.
-		this.channelNameToId[spec.name] = channelId;
-		this.channelIdToName[channelId] = spec.name;
-
-		// Register each dimension: store spec, register with quantizer, populate dim name↔id maps.
+	/**
+	 * Store dimension specs, register with quantizer, and populate dim name↔id maps.
+	 */
+	registerDimensions(storedSpec) {
 		for (const dim of storedSpec.dimensions) {
 			if (this.dimensionSpecs.has(dim.id))
-				throw new Error(`Thalamus: dimension ${dim.id} already registered (channel "${spec.name}")`);
+				throw new Error(`Thalamus: dimension ${dim.id} already registered (channel "${storedSpec.name}")`);
 			this.dimensionSpecs.set(dim.id, dim);
 			this.dimensionNameToId[dim.name] = dim.id;
 			this.dimensionIdToName[dim.id] = dim.name;
@@ -504,25 +518,42 @@ export class Thalamus {
 				warmupSamples: dim.warmupSamples
 			});
 		}
+	}
 
-		// Pre-create action neurons for action dims with explicit bucket IDs so exploration can find them.
-		// actionIds is the flat union — kept in lockstep with actionNeurons so neurons can do O(1)
-		// isActionNeuron lookups without scanning every channel's set.
+	/**
+	 * Pre-create action neurons for action dims so exploration can find them.
+	 * actionIds is the flat union — kept in lockstep with per-channel sets so
+	 * neurons can do O(1) isActionNeuron lookups.
+	 */
+	registerActionNeurons(channelId, storedSpec) {
 		const actionNeurons = this.channelActions.get(channelId) || new Set();
+		const newNeuronSpecs = [];
 		for (const dim of storedSpec.dimensions) {
+
+			// only processing action dimensions
 			if (dim.kind !== 'action' || !Array.isArray(dim.actions)) continue;
+
+			// all action dimensions should have defaults
+			if (!dim.defaultAction) throw new Error(`Invalid action dimension without default: ${JSON.stringify(dim)}`);
+
+			// allocate action neuron ids
 			for (const bucketId of dim.actions) {
-				const id = this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, channelId, 'action');
+				const { id, isNew } = this.getNeuronIdForPoint({ dimId: dim.id, bucketId }, channelId, 'action');
 				actionNeurons.add(id);
 				this.actionIds.add(id);
+				if (isNew) newNeuronSpecs.push({ id, forgetRate: 0 });
 			}
-			if (dim.defaultAction !== undefined)
-				this.channelDefaultActions.set(channelId, this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultAction }, channelId, 'action'));
+
+			// default action neuron already created in the actions loop above - get its id and save it
+			const { id } = this.getNeuronIdForPoint({ dimId: dim.id, bucketId: dim.defaultAction }, channelId, 'action');
+			this.channelDefaultActions.set(channelId, id);
 		}
+
+		// index the action neurons
 		if (actionNeurons.size > 0) this.channelActions.set(channelId, actionNeurons);
 
-		if (this.debug) console.log(`Registered channel spec ${channelId} "${spec.name}" (${storedSpec.dimensions.length} dimensions)`);
-		return { channelId, dimensionIds };
+		// important: create action neurons in columns in parallel
+		if (newNeuronSpecs.length > 0) this.createNeuronsInColumns(newNeuronSpecs);
 	}
 
 	/**
@@ -555,16 +586,20 @@ export class Thalamus {
 	 */
 	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, frameNumber, newErrorPatternIds) {
 
-		// pass 1: aggregate per-neuron work, build the shared level context, pre-create corrections.
-		// Per-age task derivation and per-age context reshape both happen inside the neuron —
+		// aggregate per-neuron work, build the shared level context, allocate error pattern specs.
+		// Per-age task derivation and per-age context reshape both happen inside the neuron.
 		// the only cross-neuron data shipped is the shared levelContext and the small
 		// newErrorPatternIds set (used by the neuron to mask brand-new ids out of matching).
-		const { tasks, levelContext } = this.getLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds);
+		const { tasks, levelContext, newNeuronSpecs } = this.getLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds);
 
-		// pass 2: dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
+		// Op-3 create new neurons: construct the new error pattern neurons in their owning columns.
+		// Must complete before Op-4 so that processFrame can access the new neurons.
+		if (newNeuronSpecs.length > 0) this.createNeuronsInColumns(newNeuronSpecs);
+
+		// dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
 		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, sensoryNeurons[0], rewards[0], frameNumber);
 
-		// pass 3: applyFrameResults - batch contextRef updates by target, register deaths, collect activations + votes
+		// applyFrameResults - batch contextRef updates by target, register deaths, collect activations + votes
 		const { activations, votes } = this.applyFrameResults(results, levelNeurons);
 
 		if (this.debug && activations.length > 0)
@@ -589,6 +624,7 @@ export class Thalamus {
 	getLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds) {
 		const tasks = [];
 		const levelContext = new Context();
+		const newNeuronSpecs = [];
 		for (const [neuronId, ageStates] of levelNeurons) {
 
 			// skip action neurons for learning or contexts if the channel learns without them
@@ -599,14 +635,17 @@ export class Thalamus {
 				neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, newErrorPatternIds.has(neuronId)
 			);
 
-			// also return the created pattern neuron id so that we can suppress it in higher level
-			for (const correction of corrections) newErrorPatternIds.add(correction.patternId);
+			// extract creation specs for Op-3, suppress new ids in higher levels
+			for (const correction of corrections) {
+				newNeuronSpecs.push({ id: correction.id, forgetRate: correction.forgetRate, connections: correction.connections });
+				newErrorPatternIds.add(correction.patternId);
+			}
 
 			// emit the task - the neuron derives its own isNewErrorPattern from newErrorPatternIds.
 			// errorFeedback rides in-band on the same per-frame call (no extra MPI round-trip).
 			tasks.push({ neuronId, ageStates, corrections, errorFeedback });
 		}
-		return { tasks, levelContext };
+		return { tasks, levelContext, newNeuronSpecs };
 	}
 
 	/**
@@ -640,18 +679,21 @@ export class Thalamus {
 			errorFeedback.push({ age, errorRate: result.errorRate });
 
 			// create an error correction pattern if the error crosses the dynamic threshold
-			if (result.fire)
+			if (result.fire) {
+				const spec = this.allocatePatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards);
 				corrections.push({
-					patternId: this.createPatternNeuron(level + 1, neuronId, age, sensoryNeurons, rewards),
+					...spec,
+					patternId: spec.id,
 					age,
 					contextEntries: state.context.map(c => ({ neuronId: c.neuronId, distance: c.distance }))
 				});
+			}
 		}
 		return { corrections, errorFeedback };
 	}
 
 	/**
-	 * Pass 2: Op-4 dispatch. Bucket tasks by region and fan out to
+	 * Pass 2: Op-4 dispatch. Bucket tasks by region and dispatch to
 	 * region.processLevel; each region buckets per column. Result writes
 	 * (applyFrameResults) run in Thalamus after every column has returned.
 	 * Concatenation order is region-index then column-index, stable across runs.
@@ -666,7 +708,7 @@ export class Thalamus {
 			newActiveNeurons.push({ id: neuronId, channelId, reward });
 		}
 
-		// bucket tasks by region, fan out, concatenate in region-index order
+		// bucket tasks by region, dispatch, concatenate in region-index order
 		const tasksByRegion = this.bucketByRegion(tasks, 'neuronId');
 		const results = [];
 		for (let r = 0; r < this.regions; r++) {
@@ -852,7 +894,7 @@ export class Thalamus {
 
 	/**
 	 * Op-2: Delete dead patterns via cascade pulses through region/column.
-	 * Each pulse fans out ops, collects results, cleans metadata, and feeds
+	 * Each pulse dispatches ops, collects results, cleans metadata, and feeds
 	 * outbound ops + newly deletable ids into the next pulse until empty.
 	 */
 	deletePatterns(patternIds, currentFrame) {
@@ -865,7 +907,7 @@ export class Thalamus {
 
 		// cascade: each pulse may produce outbound ops and new cascade candidates
 		while (inboundOps.length > 0) {
-			const { outboundOps, deletedIds, newlyDeletableIds } = this.fanOutDeleteOps(inboundOps, currentFrame);
+			const { outboundOps, deletedIds, newlyDeletableIds } = this.dispatchDeleteOps(inboundOps, currentFrame);
 
 			// remove destroyed neurons from Thalamus metadata
 			for (const id of deletedIds) {
@@ -905,7 +947,7 @@ export class Thalamus {
 	/**
 	 * Fan out delete ops to regions, collect and merge results.
 	 */
-	fanOutDeleteOps(ops, currentFrame) {
+	dispatchDeleteOps(ops, currentFrame) {
 		const opsByRegion = this.bucketByRegion(ops, 'targetId');
 		const outboundOps = [];
 		const deletedIds = [];
@@ -920,6 +962,19 @@ export class Thalamus {
 		}
 
 		return { outboundOps, deletedIds, newlyDeletableIds };
+	}
+
+	/**
+	 * Op-1/Op-3: Route neuron specs to owning regions/columns for construction.
+	 * Stores refs in the Thalamus flat map (temporary dual-map scaffolding).
+	 */
+	createNeuronsInColumns(specs) {
+		const specsByRegion = this.bucketByRegion(specs, 'id');
+		for (let r = 0; r < this.regions; r++) {
+			if (specsByRegion[r].length === 0) continue;
+			for (const neuron of this.regionList[r].createNewNeurons(specsByRegion[r]))
+				this.neurons.set(neuron.id, neuron);
+		}
 	}
 
 	/**

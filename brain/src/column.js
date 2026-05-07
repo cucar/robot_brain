@@ -1,3 +1,5 @@
+import { Neuron } from './neuron.js';
+
 /**
  * Column — owns a partition of Neuron instances and exposes batch operations
  * on them. Becomes a worker thread in Phase 5; in single-process JS every
@@ -8,10 +10,13 @@
  */
 export class Column {
 
-	constructor(channelActions, actionIds, channelDefaultActions) {
+	constructor(channelActions, actionIds, channelDefaultActions, mergeThreshold, errorMode, errorThreshold) {
 		this.channelActions = channelActions;
 		this.actionIds = actionIds;
 		this.channelDefaultActions = channelDefaultActions;
+		this.mergeThreshold = mergeThreshold;
+		this.errorMode = errorMode;
+		this.errorThreshold = errorThreshold;
 		this.neurons = new Map(); // id -> Neuron
 	}
 
@@ -179,12 +184,24 @@ export class Column {
 	}
 
 	/**
-	 * Op-1/Op-3: Construct new Neuron instances locally from specs and store them in the
-	 * owned neurons map. Used for both freshly observed sensory points and
-	 * error-correction patterns.
+	 * Op-1/Op-3: Construct new Neuron instances from specs and store them locally.
+	 * Each spec carries everything needed to build the Neuron without reaching back
+	 * to Thalamus: id, forgetRate, connections, and shared config is on the Column.
+	 * Returns the created neurons so Thalamus can store refs in its flat map
+	 * (temporary dual-map scaffolding until §3.11 lands).
 	 */
 	createNewNeurons(specs) {
-		throw new Error('Column.createNewNeurons not yet implemented');
+		const created = [];
+		for (const spec of specs) {
+			const neuron = new Neuron(
+				spec.id, spec.forgetRate, this.mergeThreshold, this.errorMode,
+				this.errorThreshold, this.channelActions, this.actionIds
+			);
+			if (spec.connections) neuron.initializeConnections(spec.connections);
+			this.neurons.set(neuron.id, neuron);
+			created.push(neuron);
+		}
+		return created;
 	}
 
 	/**

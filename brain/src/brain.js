@@ -159,11 +159,12 @@ export default class Brain {
 
 		// build the current frame from quantized inputs and previously inferred actions
 		this.buildFrame(inputs);
-		if (this.frame.length === 0)
-			return { inferences: new Map(), frame: { elapsed: performance.now() - frameStart, voteDebug: null } };
+		if (this.frame.length === 0) return { inferences: new Map(), frame: { elapsed: performance.now() - frameStart, voteDebug: null } };
+		const frameNeurons = this.getFrameNeurons(this.frame); // array of { id, isNew }
 
-		// Op-1: create sensory neurons for any new (dimId, bucketId) coordinates this frame
-		// (today still inlined in activateSensors → getNeuronIdForPoint)
+		// Op-1: construct any new sensory neurons in their owning columns
+		const newSensoryNeurons = frameNeurons.filter(({ id, isNew }) => isNew);
+		if (newSensoryNeurons.length > 0) this.thalamus.createNeuronsInColumns(newSensoryNeurons.map(({ id }) => ({ id, forgetRate: 0 })));
 
 		// Op-2: forget connections and patterns to avoid curse of dimensionality (cascade pulses)
 		this.cleanupDeadPatterns();
@@ -171,8 +172,8 @@ export default class Brain {
 		// slide the temporal window: age active neurons and push the new rewards frame
 		this.ageContext(rewards);
 
-		// activate sensory neurons in age=0, level=0 - inputs from the world
-		this.activateSensors();
+		// activate new neurons in age=0, level=0 - inputs from the world
+		this.activateNewNeurons(frameNeurons.map(({ id }) => id));
 
 		// process neurons level-by-level in parallel - collects votes inline per level
 		// (Op-3 create error patterns, Op-4 process frame, Op-5 update context refs — see processLevels)
@@ -271,10 +272,7 @@ export default class Brain {
 	/**
 	 * activates base level neurons from frame coordinates and tracks inference performance.
 	 */
-	activateSensors() {
-
-		// bulk find/create neurons for all input points
-		const neuronIds = this.getFrameNeurons(this.frame);
+	activateNewNeurons(neuronIds) {
 
 		// activate the neurons in the in-memory context
 		this.activateNeurons(neuronIds);
@@ -291,13 +289,12 @@ export default class Brain {
 	/**
 	 * Returns neuron IDs for given frame points, creating new neurons as needed.
 	 * Points have structure: { coordinate, channelId, type }
+	 * Any newly allocated sensory neurons are fanned out to columns before returning.
 	 */
 	getFrameNeurons(frame) {
-		const neuronIds = [];
-		for (const point of frame) neuronIds.push(this.thalamus.getNeuronIdForPoint(point.coordinate, point.channelId, point.type));
-		if (neuronIds.length === 0) throw new Error(`Failed to get neurons for frame: ${JSON.stringify(frame)}`);
-		// if (this.debug) console.log('frame neurons', neuronIds);
-		return neuronIds;
+		const neurons = [];
+		for (const point of frame) neurons.push(this.thalamus.getNeuronIdForPoint(point.coordinate, point.channelId, point.type));
+		return neurons;
 	}
 
 	/**
