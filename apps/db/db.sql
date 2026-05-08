@@ -4,6 +4,14 @@ USE machine_intelligence;
 
 -- 1 = up, 2 = down, 3 = buy, 4 = sell (not created yet)
 
+select * from channels;
+select * from dimensions;
+select * from neurons;
+select * from base_neurons;
+select * from connections;
+select * from contexts;
+select * from neuron_error_stats;
+
 -- channels table for efficient storage (neurons reference by id instead of varchar)
 -- IDs come from static class counters in Channel class (not auto-increment)
 -- DROP TABLE IF EXISTS channels;

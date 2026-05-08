@@ -78,9 +78,75 @@ export class Neuron {
 	}
 
 	/**
+	 * Serialize persistent state into a plain object for snapshotting and backup.
+	 * Returns everything needed to reconstruct this Neuron via Column.loadNeuron.
+	 * contextIndex is omitted — it is rebuilt from children's context entries on load.
+	 */
+	serialize() {
+		return {
+			id: this.id,
+			patternForgetRate: this.patternForgetRate,
+			connections: this.serializeConnections(),
+			children: this.serializeChildren(),
+			contextRefs: this.serializeContextRefs(),
+			errorStats: this.serializeErrorStats(),
+		};
+	}
+
+	/**
+	 * Serialize directed connections. Flattens the nested Map<distance, Map<toNeuronId, conn>>
+	 * into a flat array of {distance, toNeuronId, strength, reward} entries.
+	 */
+	serializeConnections() {
+		const result = [];
+		for (const [distance, targets] of this.connections)
+			for (const [toNeuronId, conn] of targets)
+				result.push({ distance, toNeuronId, strength: conn.strength, reward: conn.reward || 0 });
+		return result;
+	}
+
+	/**
+	 * Serialize the routing table (child patterns). Each child carries its activation
+	 * strength, last activation frame, and flattened context entries from Context.getEntries().
+	 */
+	serializeChildren() {
+		const result = [];
+		for (const [patternId, entry] of this.routingTable)
+			result.push({
+				patternId,
+				activationStrength: entry.activationStrength,
+				lastActivationFrame: entry.lastActivationFrame,
+				context: entry.context.getEntries()
+			});
+		return result;
+	}
+
+	/**
+	 * Serialize context references. Converts Map<parentId, Set<distance>> into an array
+	 * of {parentId, distances} entries with distances expanded from the Set.
+	 */
+	serializeContextRefs() {
+		const result = [];
+		for (const [parentId, distances] of this.contextRefs)
+			result.push({ parentId, distances: [...distances] });
+		return result;
+	}
+
+	/**
+	 * Serialize per-age Welford error stats. Converts Map<age, {n, mean, M2}>
+	 * into a flat array of {age, n, mean, M2} entries.
+	 */
+	serializeErrorStats() {
+		const result = [];
+		for (const [age, stats] of this.errorStats)
+			result.push({ age, n: stats.n, mean: stats.mean, M2: stats.M2 });
+		return result;
+	}
+
+	/**
 	 * Restoration entry point: install a fully-formed Welford bucket for a given
-	 * age. Used by Backup.loadLatest to rehydrate per-(neuron, age) error stats
-	 * from a snapshot. Does not validate the stats — the caller owns correctness.
+	 * age. Used by Column.restoreNeurons to rehydrate per-(neuron, age) error stats
+	 * from serialized neuron. Does not validate the stats — the caller owns correctness.
 	 */
 	loadErrorStats(age, n, mean, M2) {
 		this.errorStats.set(age, { n, mean, M2 });

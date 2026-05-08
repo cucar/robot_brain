@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Neuron } from './neuron.js';
 import { Thalamus } from './thalamus.js';
 
 // Hard cap on retained backup folders. The 11th save evicts the oldest by
@@ -27,16 +26,12 @@ const MAX_BACKUPS = 10;
 export class Backup {
 
 	/**
-	 * Stash the Neuron-construction hyperparameters so loadLatest() can hand them
-	 * to each freshly-rehydrated Neuron. The snapshot itself doesn't carry these
-	 * (they're brain-wide, not per-neuron), so they have to be passed in here.
+	 * Stash the brain-wide hyperparameters needed to compute per-level forget rates
+	 * when loading neuron from disk. The snapshot doesn't carry these.
 	 */
-	constructor(patternForgetRate, mergeThreshold, contextLength, errorMode, errorThreshold) {
+	constructor(patternForgetRate, contextLength) {
 		this.patternForgetRate = patternForgetRate;
-		this.mergeThreshold = mergeThreshold;
 		this.contextLength = contextLength;
-		this.errorMode = errorMode;
-		this.errorThreshold = errorThreshold;
 	}
 
 	/**
@@ -91,122 +86,126 @@ export class Backup {
 	 * Returns a snapshot in the same shape as Thalamus.getSnapshot(), ready for
 	 * Thalamus.restoreSnapshot().
 	 */
-	loadLatest(jobDir, channelActionIds, actionIds) {
+	loadLatest(jobDir) {
 		const backupsDir = path.join(jobDir, 'backups');
 		const folder = this.findLatestBackup(backupsDir);
+
 		// --load is opt-in; if the user asked for it and there's nothing, that's a hard
 		// error (silently starting from a fresh brain would mask the misconfiguration).
 		if (!folder) throw new Error(`--load requested but no backups found in ${backupsDir}`);
-
 		console.log(`📂 Loading backup: ${folder}`);
 
 		// Channels: name→id is part of the snapshot Thalamus consumes (advances its
 		// id allocator past the persisted max).
 		const channelNameToId = {};
-		for (const [idStr, name] of readCsv(path.join(folder, 'channels.csv'))) {
+		for (const [idStr, name] of readCsv(path.join(folder, 'channels.csv')))
 			channelNameToId[name] = Number(idStr);
-		}
 
 		// Dimensions: only name→id is exposed back to Thalamus (the id→name direction
 		// isn't needed during restore since base_neurons already carries dimId numerically).
 		const dimensionNameToId = {};
-		for (const [idStr, name] of readCsv(path.join(folder, 'dimensions.csv'))) {
+		for (const [idStr, name] of readCsv(path.join(folder, 'dimensions.csv')))
 			dimensionNameToId[name] = Number(idStr);
-		}
 
-		// Neurons: create the empty Neuron objects first so that connections/patterns
-		// loaded later can reference them by id without ordering constraints.
-		const neurons = new Map();
+		// Neurons: build neuron shells keyed by id. Each starts with just id and
+		// patternForgetRate; connections/children/contextRefs/errorStats are populated
+		// from the subsequent CSV files.
+		const neurons = new Map(); // id -> neuron
 		const levels = new Map();
 		for (const [idStr, levelStr] of readCsv(path.join(folder, 'neurons.csv'))) {
 			const id = Number(idStr);
 			const level = Number(levelStr);
 			const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
-			const neuron = new Neuron(id, forgetRate, this.mergeThreshold, this.errorMode, this.errorThreshold, channelActionIds, actionIds);
-			neurons.set(id, neuron);
+			neurons.set(id, {
+				id,
+				patternForgetRate: forgetRate,
+				connections: [],
+				children: [],
+				contextRefs: [],
+				errorStats: [],
+			});
 			levels.set(id, level);
 		}
 
-		// Base neurons: level-0 sensory metadata. File may be absent if the snapshot
-		// only has interneurons (rare, but cheap to guard for).
+		// Base neurons: level-0 sensory metadata.
 		const baseNeurons = new Map();
 		const baseFile = path.join(folder, 'base_neurons.csv');
-		if (fs.existsSync(baseFile)) {
-			for (const [neuronId, channelId, type, dimId, val] of readCsv(baseFile)) {
-				baseNeurons.set(Number(neuronId), {
-					channelId: Number(channelId),
-					type,
-					coordinate: { dimId: Number(dimId), bucketId: Number(val) }
-				});
-			}
+		for (const [neuronId, channelId, type, dimId, val] of readCsv(baseFile)) {
+			baseNeurons.set(Number(neuronId), {
+				channelId: Number(channelId),
+				type,
+				coordinate: { dimId: Number(dimId), bucketId: Number(val) }
+			});
 		}
 
-		// Connections: each row reattaches a directed (from→to, distance) link with its
-		// strength and reward. Both endpoints must already be in the neuron map.
+		// Connections: each row is a directed (from→to, distance) link.
 		const connFile = path.join(folder, 'connections.csv');
-		if (fs.existsSync(connFile)) {
-			for (const [fromId, toId, distance, strength, reward] of readCsv(connFile)) {
-				const fromNeuron = neurons.get(Number(fromId));
-				if (!fromNeuron) throw new Error(`Connection source neuron not found: ${fromId}`);
-				if (!neurons.has(Number(toId))) throw new Error(`Connection target neuron not found: ${toId}`);
-				fromNeuron.createConnection(Number(distance), Number(toId), Number(strength), Number(reward));
-			}
+		for (const [fromId, toId, distance, strength, reward] of readCsv(connFile)) {
+			const fromNeuron = neurons.get(Number(fromId));
+			if (!fromNeuron) throw new Error(`Connection source neuron not found: ${fromId}`);
+			if (!neurons.has(Number(toId))) throw new Error(`Connection target neuron not found: ${toId}`);
+			fromNeuron.connections.push({ distance: Number(distance), toNeuronId: Number(toId), strength: Number(strength), reward: Number(reward) });
 		}
 
-		// Patterns: register each pattern as a child of its parent. We also remember
-		// pattern→parent here so the contexts loader below can look up the parent
-		// without re-reading the patterns file.
+		// Patterns: register each pattern as a child of its parent neuron.
+		// childrenMap tracks which children belong to which parent so the contexts
+		// loader can attach context entries to the right child.
 		const neuronParents = new Map();
+		const childrenMap = new Map(); // parentId -> Map<patternId, childEntry>
 		const patternsFile = path.join(folder, 'patterns.csv');
 		if (fs.existsSync(patternsFile)) {
 			for (const [patternId, parentId, strength] of readCsv(patternsFile)) {
 				const pid = Number(patternId);
 				const ppid = Number(parentId);
 				neuronParents.set(pid, ppid);
-				const parent = neurons.get(ppid);
-				if (!parent) throw new Error(`Pattern parent not found: ${parentId}`);
-				parent.addChild(pid, Number(strength));
+				const parentData = neurons.get(ppid);
+				if (!parentData) throw new Error(`Pattern parent not found: ${parentId}`);
+				const childEntry = { patternId: pid, activationStrength: Number(strength), lastActivationFrame: 0, context: [] };
+				parentData.children.push(childEntry);
+				if (!childrenMap.has(ppid)) childrenMap.set(ppid, new Map());
+				childrenMap.get(ppid).set(pid, childEntry);
 			}
 		}
 
-		// Contexts (context entries): for each pattern, restore the context neurons
-		// and ages that define when it should activate. addContext lives on the parent;
-		// addContextRef lives on the context neuron — both halves are needed for the
-		// bidirectional lookup the runtime relies on.
+		// Contexts: for each pattern, restore the context neurons and ages that define
+		// when it should activate. Also build contextRefs on the context neurons.
 		const contextsFile = path.join(folder, 'contexts.csv');
 		if (fs.existsSync(contextsFile)) {
 			for (const [patternId, contextId, contextAge, strength] of readCsv(contextsFile)) {
 				const pid = Number(patternId);
 				const cid = Number(contextId);
 				const parentId = neuronParents.get(pid);
-				const parent = neurons.get(parentId);
-				const contextNeuron = neurons.get(cid);
-				if (!parent) throw new Error(`contexts parent not found for pattern ${patternId}`);
-				if (!contextNeuron) throw new Error(`contexts context neuron not found: ${contextId}`);
-				parent.addContext(pid, cid, Number(contextAge), Number(strength));
-				contextNeuron.addContextRef(parentId, Number(contextAge));
+				const parentChildren = childrenMap.get(parentId);
+				if (!parentChildren) throw new Error(`contexts parent not found for pattern ${patternId}`);
+				const childEntry = parentChildren.get(pid);
+				if (!childEntry) throw new Error(`contexts child entry not found for pattern ${patternId}`);
+				childEntry.context.push({ neuronId: cid, distance: Number(contextAge), strength: Number(strength) });
+
+				// Build contextRef on the context neuron
+				const ctxData = neurons.get(cid);
+				if (!ctxData) throw new Error(`contexts context neuron not found: ${contextId}`);
+				let refEntry = ctxData.contextRefs.find(r => r.parentId === parentId);
+				if (!refEntry) {
+					refEntry = { parentId, distances: [] };
+					ctxData.contextRefs.push(refEntry);
+				}
+				const dist = Number(contextAge);
+				if (!refEntry.distances.includes(dist)) refEntry.distances.push(dist);
 			}
 		}
 
-		// Per-(neuron, age) Welford error stats. Optional — older snapshots predating
-		// dynamic error thresholds won't have this file, in which case neurons start
-		// with empty errorStats and warmup-fallback to errorThreshold for their first
-		// 3 samples per age. New snapshots restore the stats verbatim so the dynamic
-		// threshold picks up exactly where it left off.
+		// Per-(neuron, age) Welford error stats. Optional — older snapshots won't have
+		// this file, in which case neurons start with empty errorStats.
 		const errorStatsFile = path.join(folder, 'neuron_error_stats.csv');
 		if (fs.existsSync(errorStatsFile)) {
 			for (const [neuronId, age, n, mean, m2] of readCsv(errorStatsFile)) {
 				const neuron = neurons.get(Number(neuronId));
 				if (!neuron) throw new Error(`neuron_error_stats neuron not found: ${neuronId}`);
-				neuron.loadErrorStats(Number(age), Number(n), Number(mean), Number(m2));
+				neuron.errorStats.push({ age: Number(age), n: Number(n), mean: Number(mean), M2: Number(m2) });
 			}
 		}
 
-		// Flatten neurons back into the snapshot shape Thalamus expects: an array of
-		// per-neuron entries, each with optional baseNeuron (level 0) and parentId
-		// (patterns). The ordering is the iteration order of the Map, which matches
-		// the file order on most engines but isn't strictly guaranteed — Thalamus
-		// shouldn't depend on it.
+		// Assemble the snapshot shape Thalamus expects: neuron + metadata per neuron.
 		const neuronEntries = [];
 		for (const [neuronId, neuron] of neurons) {
 			const level = levels.get(neuronId);
@@ -286,11 +285,8 @@ export class Backup {
 	writeConnections(folder, snapshot) {
 		const rows = [];
 		for (const { neuron } of snapshot.neurons)
-			for (const [distance, targets] of neuron.connections)
-				for (const [toNeuronId, conn] of targets)
-					// reward defaults to 0 when the connection has never carried one — keeps
-					// the file column count fixed.
-					rows.push([neuron.id, toNeuronId, distance, conn.strength, conn.reward || 0]);
+			for (const conn of neuron.connections)
+				rows.push([neuron.id, conn.toNeuronId, conn.distance, conn.strength, conn.reward]);
 		writeCsv(path.join(folder, 'connections.csv'), rows);
 	}
 
@@ -300,7 +296,7 @@ export class Backup {
 	 * so we look it up parent-side rather than reading it off the pattern neuron.
 	 */
 	writePatterns(folder, snapshot) {
-		// Build an id→neuron lookup once so the inner loop is O(1) per pattern.
+		// Build an id→neuron lookup so we can find activation strength on the parent side.
 		const neuronMap = new Map();
 		for (const entry of snapshot.neurons) neuronMap.set(entry.neuron.id, entry.neuron);
 
@@ -311,11 +307,8 @@ export class Backup {
 			let strength = 0;
 			const parent = neuronMap.get(parentId);
 			if (parent) {
-				// Pull the child's current activation strength from the parent's routing
-				// table. If the entry has been evicted, default to 0 — restore will
-				// recompute on first activation.
-				const ctx = parent.routingTable.get(neuron.id);
-				if (ctx) strength = ctx.activationStrength;
+				const child = parent.children.find(c => c.patternId === neuron.id);
+				if (child) strength = child.activationStrength;
 			}
 			rows.push([neuron.id, parentId, strength]);
 		}
@@ -331,8 +324,9 @@ export class Backup {
 	writeContexts(folder, snapshot) {
 		const rows = [];
 		for (const { neuron } of snapshot.neurons)
-			for (const { patternId, neuronId, distance, strength } of neuron.getRoutingTable())
-				rows.push([patternId, neuronId, distance, strength]);
+			for (const child of neuron.children)
+				for (const ctx of child.context)
+					rows.push([child.patternId, ctx.neuronId, ctx.distance, ctx.strength]);
 		writeCsv(path.join(folder, 'contexts.csv'), rows);
 	}
 
@@ -347,8 +341,8 @@ export class Backup {
 	writeNeuronErrorStats(folder, snapshot) {
 		const rows = [];
 		for (const { neuron } of snapshot.neurons)
-			for (const [age, { n, mean, M2 }] of neuron.errorStats)
-				rows.push([neuron.id, age, n, mean, M2]);
+			for (const stat of neuron.errorStats)
+				rows.push([neuron.id, stat.age, stat.n, stat.mean, stat.M2]);
 		rows.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 		writeCsv(path.join(folder, 'neuron_error_stats.csv'), rows);
 	}

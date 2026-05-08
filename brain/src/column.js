@@ -188,8 +188,6 @@ export class Column {
 	 * Op-1/Op-4: Construct new Neuron instances from specs and store them locally.
 	 * Each spec carries everything needed to build the Neuron without reaching back
 	 * to Thalamus: id, forgetRate, connections, and shared config is on the Column.
-	 * Returns the created neurons so Thalamus can store refs in its flat map
-	 * (temporary dual-map scaffolding until §3.11 lands).
 	 */
 	createNeurons(specs) {
 		const created = [];
@@ -206,19 +204,109 @@ export class Column {
 	}
 
 	/**
-	 * Serialize every owned Neuron's persistent state for snapshotting.
-	 * Caller assembles the full snapshot by combining this output with the
-	 * central metadata maps held by Thalamus.
+	 * Serialize owned Neurons into plain data for snapshotting and backup.
+	 * Returns {id, neuron} entries. Thalamus decorates each entry with
+	 * metadata (level, parentId, baseNeuron) from its central maps before
+	 * handing the assembled snapshot to Backup.
 	 */
-	dumpAll() {
-		throw new Error('Column.dumpAll not yet implemented');
+	getSnapshot() {
+		const entries = [];
+		for (const neuron of this.neurons.values())
+			entries.push({ id: neuron.id, neuron: neuron.serialize() });
+		return entries;
 	}
 
 	/**
-	 * Construct owned Neuron instances from serialized state on load. Caller
-	 * has already routed each spec to its owning column via routeNeuron.
+	 * Reconstruct Neuron instances from serialized snapshot data on load.
+	 * Each spec carries a plain {neuron} object (from Neuron.serialize) that
+	 * Thalamus has routed to this column via the routing rule.
 	 */
-	restoreNeurons(specs) {
-		throw new Error('Column.restoreNeurons not yet implemented');
+	restoreSnapshot(specs) {
+		for (const spec of specs) this.loadNeuron(spec.neuron);
+	}
+
+	/**
+	 * Construct a single Neuron from its serialized data, restoring connections,
+	 * routing table with context entries, contextRefs, and error stats.
+	 * Stores the reconstructed Neuron in this column's neuron map.
+	 */
+	loadNeuron(data) {
+		const neuron = new Neuron(
+			data.id, data.patternForgetRate, this.mergeThreshold,
+			this.errorMode, this.errorThreshold, this.channelActions, this.actionIds
+		);
+		this.loadConnections(neuron, data.connections);
+		this.loadChildren(neuron, data.children);
+		this.loadContextRefs(neuron, data.contextRefs);
+		this.loadErrorStats(neuron, data.errorStats);
+		this.neurons.set(neuron.id, neuron);
+	}
+
+	/**
+	 * Load directed connections (distance → target neuron id with strength and reward).
+	 */
+	loadConnections(neuron, connections) {
+		for (const conn of connections)
+			neuron.createConnection(conn.distance, conn.toNeuronId, conn.strength, conn.reward);
+	}
+
+	/**
+	 * Load child patterns into the routing table with their activation strengths and context entries.
+	 */
+	loadChildren(neuron, children) {
+		for (const child of children) {
+			neuron.addChild(child.patternId, child.activationStrength);
+			const entry = neuron.routingTable.get(child.patternId);
+			entry.lastActivationFrame = child.lastActivationFrame;
+			for (const ctx of child.context)
+				neuron.addContext(child.patternId, ctx.neuronId, ctx.distance, ctx.strength);
+		}
+	}
+
+	/**
+	 * Load bidirectional context references that track which parents reference this neuron.
+	 */
+	loadContextRefs(neuron, contextRefs) {
+		for (const ref of contextRefs)
+			for (const distance of ref.distances)
+				neuron.addContextRef(ref.parentId, distance);
+	}
+
+	/**
+	 * Load per-(neuron, age) Welford error stats for dynamic error correction modes.
+	 */
+	loadErrorStats(neuron, errorStats) {
+		for (const stat of errorStats)
+			neuron.loadErrorStats(stat.age, stat.n, stat.mean, stat.M2);
+	}
+
+	/**
+	 * Walk routing tables and compute death frames from current activation
+	 * strengths. Used on restore to rebuild the death ledger without mutating
+	 * any neuron state.
+	 */
+	collectDeathFrames() {
+		const entries = [];
+		for (const neuron of this.neurons.values())
+			for (const [patternId, ctx] of neuron.routingTable)
+				entries.push({ patternId, deathFrame: Math.ceil(ctx.activationStrength / neuron.patternForgetRate) });
+		return entries;
+	}
+
+	/**
+	 * Materialize lazy decay into actual activation strengths and reset
+	 * lastActivationFrame to 0 for all children. Returns {patternId, deathFrame}
+	 * entries so Thalamus can rebuild the death ledger.
+	 */
+	materializeAndResetNeurons(currentFrame) {
+		const deathEntries = [];
+		for (const neuron of this.neurons.values()) {
+			for (const [patternId, ctx] of neuron.routingTable) {
+				neuron.materializeChildStrength(patternId, currentFrame);
+				ctx.lastActivationFrame = 0;
+				deathEntries.push({ patternId, deathFrame: Math.ceil(ctx.activationStrength / neuron.patternForgetRate) });
+			}
+		}
+		return deathEntries;
 	}
 }

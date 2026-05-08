@@ -74,6 +74,58 @@ export class Region {
 	}
 
 	/**
+	 * Clear all neurons from all columns. Used during reset before restore.
+	 */
+	clear() {
+		for (let c = 0; c < this.C; c++)
+			this.columns[c].neurons.clear();
+	}
+
+	/**
+	 * Collect serialized {id, neuron} entries from columns for snapshotting.
+	 */
+	getSnapshot() {
+		const entries = [];
+		for (let c = 0; c < this.C; c++)
+			for (const entry of this.columns[c].getSnapshot())
+				entries.push(entry);
+		return entries;
+	}
+
+	/**
+	 * Distribute serialized neuron specs to columns for reconstruction on load.
+	 * specsByColumn is an array indexed by columnIdx, each entry a list of {neuron} specs.
+	 */
+	restoreSnapshot(specsByColumn) {
+		for (let c = 0; c < this.C; c++)
+			this.columns[c].restoreSnapshot(specsByColumn[c]);
+	}
+
+	/**
+	 * Collect computed death frames from all columns' routing tables.
+	 * Read-only — does not mutate neuron state.
+	 */
+	collectDeathFrames() {
+		const entries = [];
+		for (let c = 0; c < this.C; c++)
+			for (const entry of this.columns[c].collectDeathFrames())
+				entries.push(entry);
+		return entries;
+	}
+
+	/**
+	 * Materialize lazy decay across all columns and collect death frame entries
+	 * so Thalamus can rebuild the death ledger.
+	 */
+	materializeAndResetNeurons(currentFrame) {
+		const deathEntries = [];
+		for (let c = 0; c < this.C; c++)
+			for (const entry of this.columns[c].materializeAndResetNeurons(currentFrame))
+				deathEntries.push(entry);
+		return deathEntries;
+	}
+
+	/**
 	 * Op-2: Apply a batch of delete operations in the columns owned
 	 */
 	deleteNeurons(opBatch, currentFrame) {

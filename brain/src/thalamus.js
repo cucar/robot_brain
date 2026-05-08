@@ -1,5 +1,4 @@
 import { Context } from './context.js';
-import { Neuron } from './neuron.js';
 import { Quantizer } from './quantizer.js';
 import { Region } from './region.js';
 
@@ -21,11 +20,7 @@ export class Thalamus {
 		this.regions = regions;
 		this.columns = columns;
 
-		// Neuron registry — Thalamus keeps a flat map for snapshot and materialize
-		// operations that haven't been migrated to batch ops yet (§3.11).
-		// Column.neurons holds the same references for Op-1 through Op-5 dispatch.
-		// Kept in sync via _syncToColumn/_removeFromColumn. Both go away when §3.11 lands.
-		this.neurons = new Map(); // neuronId -> Neuron (flat, all neurons)
+		// Neuron instances live exclusively in Column.neurons (§3.11).
 		this.neuronsByValue = new Map(); // valueKey -> neuronId (coordinate -> neuronId lookup)
 		this.baseNeurons = new Map(); // neuronId -> { channelId, type, coordinate } (sensory neurons only)
 		this.neuronParents = new Map(); // neuronId -> parentNeuronId (pattern neurons only)
@@ -68,26 +63,6 @@ export class Thalamus {
 		this.regionList = []; // index = regionIdx
 		for (let r = 0; r < this.regions; r++)
 			this.regionList.push(new Region(this.columns, this.channelActions, this.actionIds, this.channelDefaultActions, this.mergeThreshold, this.errorMode, this.errorThreshold));
-	}
-
-	// ── Internal sync: keep Column.neurons in lockstep with this.neurons ────
-	// These are private plumbing — Region/Column never expose single-neuron APIs.
-
-	_syncToColumn(id, neuron) {
-		const r = this.routeNeuron(id);
-		const c = this.regionList[r].routeNeuron(id);
-		this.regionList[r].columns[c].neurons.set(id, neuron);
-	}
-
-	_removeFromColumn(id) {
-		const r = this.routeNeuron(id);
-		const c = this.regionList[r].routeNeuron(id);
-		this.regionList[r].columns[c].neurons.delete(id);
-	}
-
-	_clearColumns() {
-		for (const r of this.regionList)
-			for (const col of r.columns) col.neurons.clear();
 	}
 
 	/**
@@ -240,10 +215,14 @@ export class Thalamus {
 		// Restore neurons
 		this.reset();
 
+		// Restore central metadata maps and bucket neurons by routing rule
+		const buckets = [];
+		for (let r = 0; r < this.regions; r++)
+			buckets.push(Array.from({ length: this.columns }, () => []));
+
+		// restore base neurons and their value maps
 		for (const { neuron, level, baseNeuron, parentId } of snapshot.neurons) {
 			if (neuron.id >= this.nextNeuronId) this.nextNeuronId = neuron.id + 1;
-			this.neurons.set(neuron.id, neuron);
-			this._syncToColumn(neuron.id, neuron);
 			this.neuronLevels.set(neuron.id, level);
 			if (parentId) this.neuronParents.set(neuron.id, parentId);
 			this.incrementLevelCount(level);
@@ -251,22 +230,28 @@ export class Thalamus {
 				this.neuronsByValue.set(this.makeValueKey(baseNeuron.coordinate), neuron.id);
 				this.baseNeurons.set(neuron.id, baseNeuron);
 			}
-			else if (level > 0 && parentId) {
-				const parent = this.neurons.get(parentId);
-				if (parent) {
-					const ctx = parent.routingTable.get(neuron.id);
-					if (ctx) this.registerDeath(neuron.id, Math.ceil(ctx.activationStrength / neuron.patternForgetRate));
-				}
-			}
+			const r = this.routeNeuron(neuron.id);
+			const c = this.regionList[r].routeNeuron(neuron.id);
+			buckets[r][c].push({ neuron });
 		}
+
+		// Distribute neurons to their owning columns
+		for (let r = 0; r < this.regions; r++)
+			this.regionList[r].restoreSnapshot(buckets[r]);
+
+		// Rebuild the death ledger from materialized activation strengths.
+		// Neurons were materialized before save, so activationStrength is current
+		// and lastActivationFrame is 0.
+		for (const region of this.regionList)
+			for (const { patternId, deathFrame } of region.collectDeathFrames())
+				this.registerDeath(patternId, deathFrame);
 	}
 
 	/**
 	 * Reset all neurons and neuron ID counter
 	 */
 	reset() {
-		this.neurons.clear();
-		this._clearColumns();
+		for (const region of this.regionList) region.clear();
 		this.neuronLevels.clear();
 		this.neuronsByValue.clear();
 		this.baseNeurons.clear();
@@ -380,19 +365,21 @@ export class Thalamus {
 
 	/**
 	 * Get a self-contained snapshot of all brain state for external consumers (backup, dump).
-	 * Each neuron entry carries its resolved metadata — consumers never need separate lookups.
-	 * @returns {{neurons: Array<{neuron: Neuron, channel: string|undefined}>, channels: Array, channelNameToId: Object, dimensionNameToId: Object}}
+	 * Each neuron entry carries serialized neuron data plus resolved metadata — consumers
+	 * never need separate lookups or access to live Neuron objects.
+	 * @returns {{neurons: Array<{neuron, level, baseNeuron?, parentId?}>, channelNameToId: Object, dimensionNameToId: Object}}
 	 */
 	getSnapshot() {
 		const neurons = [];
-		for (const neuron of this.neurons.values()) {
-			const level = this.neuronLevels.get(neuron.id);
-			const entry = { neuron, level };
-			if (level === 0) entry.baseNeuron = this.baseNeurons.get(neuron.id);
-			const parentId = this.neuronParents.get(neuron.id);
-			if (parentId) entry.parentId = parentId;
-			neurons.push(entry);
-		}
+		for (const region of this.regionList)
+			for (const { id, neuron } of region.getSnapshot()) {
+				const level = this.neuronLevels.get(id);
+				const entry = { neuron, level };
+				if (level === 0) entry.baseNeuron = this.baseNeurons.get(id);
+				const parentId = this.neuronParents.get(id);
+				if (parentId) entry.parentId = parentId;
+				neurons.push(entry);
+			}
 		return {
 			neurons,
 			channelNameToId: this.channelNameToId,
@@ -407,13 +394,9 @@ export class Thalamus {
 	materializeAndResetNeurons(currentFrame) {
 		this.deathLedger.clear();
 		this.neuronDeathFrame.clear();
-		for (const neuron of this.neurons.values()) {
-			for (const [patternId, ctx] of neuron.routingTable) {
-				neuron.materializeChildStrength(patternId, currentFrame);
-				ctx.lastActivationFrame = 0;
-				this.registerDeath(patternId, Math.ceil(ctx.activationStrength / neuron.patternForgetRate));
-			}
-		}
+		for (const region of this.regionList)
+			for (const { patternId, deathFrame } of region.materializeAndResetNeurons(currentFrame))
+				this.registerDeath(patternId, deathFrame);
 	}
 
 
@@ -922,7 +905,7 @@ export class Thalamus {
 		// reap the dead neuron ids and return them
 		const dead = [];
 		for (const neuronId of neuronIds) {
-			if (this.neurons.has(neuronId)) dead.push(neuronId);
+			if (this.neuronLevels.has(neuronId)) dead.push(neuronId);
 			this.neuronDeathFrame.delete(neuronId);
 		}
 		this.deathLedger.delete(currentFrame);
@@ -1003,15 +986,13 @@ export class Thalamus {
 
 	/**
 	 * Op-1/Op-4: Route neuron specs to owning regions/columns for construction.
-	 * Stores refs in the Thalamus flat map (temporary dual-map scaffolding).
 	 */
 	createNeurons(specs) {
-		if (specs.length === 0) return; // nothing to do if there are no new neurons
+		if (specs.length === 0) return;
 		const specsByRegion = this.bucketByRegion(specs, 'id');
 		for (let r = 0; r < this.regions; r++) {
 			if (specsByRegion[r].length === 0) continue;
-			for (const neuron of this.regionList[r].createNeurons(specsByRegion[r]))
-				this.neurons.set(neuron.id, neuron);
+			this.regionList[r].createNeurons(specsByRegion[r]);
 		}
 	}
 
@@ -1032,7 +1013,6 @@ export class Thalamus {
 	 */
 	cleanupDeletedNeuronMetadata(id) {
 		this.unregisterDeath(id);
-		this.neurons.delete(id);
 		const level = this.neuronLevels.get(id);
 		this.neuronLevels.delete(id);
 		this.neuronParents.delete(id);
@@ -1059,7 +1039,7 @@ export class Thalamus {
 	 * @returns {number}
 	 */
 	getNeuronCount() {
-		return this.neurons.size;
+		return this.neuronLevels.size;
 	}
 
 	/**

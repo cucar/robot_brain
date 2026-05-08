@@ -39,7 +39,7 @@ export default class Brain {
 		this.diagnostics = new Diagnostics();
 
 		// Backup - file-based snapshot save/load. Used by the Job runner via --save/--load.
-		this.backupStore = new Backup(this.patternForgetRate, this.mergeThreshold, this.contextLength, this.errorCorrectionMode, this.errorCorrectionThreshold);
+		this.backupStore = new Backup(this.patternForgetRate, this.contextLength);
 
 		// Thalamus - relay station for neuron/channel/dimension mappings
 		this.thalamus = new Thalamus(this.debug, this.patternForgetRate, this.mergeThreshold, this.contextLength, this.errorCorrectionMode, this.errorCorrectionThreshold, this.regions, this.columns);
@@ -119,7 +119,7 @@ export default class Brain {
 	 * Thalamus. Throws if no backup exists — --load is an explicit user request.
 	 */
 	load(jobDir) {
-		const snapshot = this.backupStore.loadLatest(jobDir, this.thalamus.channelActions, this.thalamus.actionIds);
+		const snapshot = this.backupStore.loadLatest(jobDir);
 		this.thalamus.restoreSnapshot(snapshot);
 	}
 
