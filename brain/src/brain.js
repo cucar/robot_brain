@@ -30,7 +30,7 @@ export default class Brain {
 		// Debugging info and flags
 		this.debug = options?.debug;
 
-		// Frame state - populated by processFrameIO methods
+		// Frame state
 		this.frame = []; // current frame data from all channels
 		this.rewards = []; // channel rewards indexed by age (array of Maps)
 		this.frameNumber = 0; // frame number is used for death ledger and diagnostics
@@ -158,13 +158,11 @@ export default class Brain {
 		this.frameNumber++;
 
 		// build the current frame from quantized inputs and previously inferred actions
-		this.buildFrame(inputs);
-		if (this.frame.length === 0) return { inferences: new Map(), frame: { elapsed: performance.now() - frameStart, voteDebug: null } };
-		const frameNeurons = this.getFrameNeurons(this.frame); // array of { id, isNew }
+		const frameNeurons = this.getFrameNeurons(inputs);
+		if (frameNeurons.length === 0) return { inferences: new Map(), frame: { elapsed: performance.now() - frameStart, voteDebug: null } };
 
 		// Op-1: construct any new sensory neurons in their owning columns
-		const newSensoryNeurons = frameNeurons.filter(({ id, isNew }) => isNew);
-		if (newSensoryNeurons.length > 0) this.thalamus.createNeuronsInColumns(newSensoryNeurons.map(({ id }) => ({ id, forgetRate: 0 })));
+		this.createNewSensoryNeurons(frameNeurons);
 
 		// Op-2: forget connections and patterns to avoid curse of dimensionality (cascade pulses)
 		this.cleanupDeadPatterns();
@@ -173,7 +171,7 @@ export default class Brain {
 		this.ageContext(rewards);
 
 		// activate new neurons in age=0, level=0 - inputs from the world
-		this.activateNewNeurons(frameNeurons.map(({ id }) => id));
+		this.activateNeurons(frameNeurons.map(({ id }) => id));
 
 		// process neurons level-by-level in parallel - collects votes inline per level
 		// (Op-3 create error patterns, Op-4 process frame, Op-5 update context refs — see processLevels)
@@ -190,6 +188,15 @@ export default class Brain {
 		// Bundle the per-frame byproducts (timing + optional debug data) with the inferences
 		// so the host gets everything from one call. No "last frame" state is kept on Brain.
 		return { inferences, frame: { elapsed: performance.now() - frameStart, voteDebug } };
+	}
+
+	/**
+	 * creates new sensory neurons that came in the frame
+	 */
+	createNewSensoryNeurons(frameNeurons) {
+		const newSensoryNeurons = frameNeurons.filter(({ isNew }) => isNew);
+		const newNeuronSpecs = newSensoryNeurons.map(({ id }) => ({ id, forgetRate: 0 }));
+		return this.thalamus.createNeurons(newNeuronSpecs);
 	}
 
 	/**
@@ -270,30 +277,20 @@ export default class Brain {
 	}
 
 	/**
-	 * activates base level neurons from frame coordinates and tracks inference performance.
-	 */
-	activateNewNeurons(neuronIds) {
-
-		// activate the neurons in the in-memory context
-		this.activateNeurons(neuronIds);
-
-		// Track event accuracy, action rewards, and misprediction log. Continuous prediction
-		// error is tracked separately via diagnostics.trackContinuousError in processFrame().
-		this.diagnostics.trackInferencePerformance(this.thalamus.getInferenceResults(
-			this.memory.getNeuronIdsAtAge(0),
-			this.memory.getInferredNeurons(),
-			this.rewards[0]
-		));
-	}
-
-	/**
 	 * Returns neuron IDs for given frame points, creating new neurons as needed.
 	 * Points have structure: { coordinate, channelId, type }
 	 * Any newly allocated sensory neurons are fanned out to columns before returning.
+	 * @param {Map<number, Map<number, number>>} inputs - channelId → (dimId → raw scalar)
 	 */
-	getFrameNeurons(frame) {
+	getFrameNeurons(inputs) {
+
+		// build the current frame from quantized inputs and previously inferred actions and save to this.frame
+		this.buildFrame(inputs);
+
+		// get the neuron ids for each neuron in the frame
 		const neurons = [];
-		for (const point of frame) neurons.push(this.thalamus.getNeuronIdForPoint(point.coordinate, point.channelId, point.type));
+		for (const point of this.frame) // array of { id, isNew }
+			neurons.push(this.thalamus.getNeuronIdForPoint(point.coordinate, point.channelId, point.type));
 		return neurons;
 	}
 
@@ -302,7 +299,18 @@ export default class Brain {
 	 * @param {Array<number>} neuronIds - Array of neuron IDs to activate
 	 */
 	activateNeurons(neuronIds) {
-		for (const neuronId of neuronIds) this.memory.activateNeuron(neuronId, this.thalamus.getNeuronLevel(neuronId));
+
+		// activate the neurons in the in-memory context
+		for (const neuronId of neuronIds)
+			this.memory.activateNeuron(neuronId, this.thalamus.getNeuronLevel(neuronId));
+
+		// Track event accuracy, action rewards, and misprediction log. Continuous prediction
+		// error is tracked separately via diagnostics.trackContinuousError in processFrame().
+		this.diagnostics.trackInferencePerformance(this.thalamus.getInferenceResults(
+			this.memory.getNeuronIdsAtAge(0),
+			this.memory.getInferredNeurons(),
+			this.rewards[0]
+		));
 	}
 
 	/**

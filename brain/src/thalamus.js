@@ -128,7 +128,7 @@ export class Thalamus {
 		const neuronId = this.getNeuronIdByCoordinate(coordinate);
 		if (neuronId) return { id: neuronId, isNew: false };
 
-		// Allocate id and register metadata; Neuron construction deferred to createNeuronsInColumns
+		// Allocate id and register metadata; Neuron construction deferred to createNeurons
 		const id = this.allocateSensoryNeuron(coordinate, channelId, type);
 		if (this.debug) console.log(`Created new sensory neuron ${id} for ${this.makeValueKey(coordinate)}`);
 		return { id, isNew: true };
@@ -170,7 +170,7 @@ export class Thalamus {
 
 	/**
 	 * Allocate a sensory neuron id and register its metadata. Does NOT construct
-	 * the Neuron — that happens when the caller sends specs to createNeuronsInColumns.
+	 * the Neuron — that happens when the caller sends specs to createNeurons.
 	 * @returns {number} The allocated neuron id
 	 */
 	allocateSensoryNeuron(coordinate, channelId, type) {
@@ -186,7 +186,7 @@ export class Thalamus {
 	 * Allocate a pattern neuron id and build its creation spec. Resolves connection
 	 * data (channel, reward) using Thalamus-local lookups so the spec is self-contained
 	 * and can cross the MPI boundary. Does NOT construct the Neuron — that happens in
-	 * Column.createNewNeurons via createNeuronsInColumns.
+	 * Column.createNeurons via createNeurons.
 	 * Does NOT touch the parent's routing table (that happens inside parent.processFrame
 	 * via addPattern) and does NOT register death (death frame is known only after
 	 * parent.addPattern runs).
@@ -195,7 +195,7 @@ export class Thalamus {
 	 * @param {number} age - Distance in time between the observation and the error
 	 * @param {Array<Set<number>>} sensoryNeurons - Recent sensory neuron ids by age
 	 * @param {Array<Map<string, number>>} rewards - Rewards by age
-	 * @returns {{id, forgetRate, connections}} creation spec for Column.createNewNeurons
+	 * @returns {{id, forgetRate, connections}} creation spec for Column.createNeurons
 	 */
 	allocatePatternNeuron(level, parentId, age, sensoryNeurons, rewards) {
 
@@ -208,11 +208,11 @@ export class Thalamus {
 				connections.push({ distance: age - a, toNeuronId: sensoryNeuronId, channelId, reward });
 			}
 
-		// allocate id and build the spec for Column.createNewNeurons
+		// allocate id and build the spec for Column.createNeurons
 		const id = this.nextNeuronId++;
 		const forgetRate = Thalamus.effectiveForgetRate(this.patternForgetRate, this.contextLength, level);
 
-		// register metadata centrally (Neuron construction deferred to createNeuronsInColumns)
+		// register metadata centrally (Neuron construction deferred to createNeurons)
 		this.neuronLevels.set(id, level);
 		this.neuronParents.set(id, parentId);
 		this.incrementLevelCount(level);
@@ -464,6 +464,9 @@ export class Thalamus {
 		return { channelId, dimensionIds };
 	}
 
+	/**
+	 * checks dimension specifications
+	 */
 	validateDimSpecs(spec) {
 		for (const d of spec.dimensions) {
 			if (!d.name) throw new Error(`Thalamus: dim on channel "${spec.name}" is missing a name`);
@@ -553,7 +556,7 @@ export class Thalamus {
 		if (actionNeurons.size > 0) this.channelActions.set(channelId, actionNeurons);
 
 		// important: create action neurons in columns in parallel
-		if (newNeuronSpecs.length > 0) this.createNeuronsInColumns(newNeuronSpecs);
+		if (newNeuronSpecs.length > 0) this.createNeurons(newNeuronSpecs);
 	}
 
 	/**
@@ -594,7 +597,7 @@ export class Thalamus {
 
 		// Op-3 create new neurons: construct the new error pattern neurons in their owning columns.
 		// Must complete before Op-4 so that processFrame can access the new neurons.
-		if (newNeuronSpecs.length > 0) this.createNeuronsInColumns(newNeuronSpecs);
+		if (newNeuronSpecs.length > 0) this.createNeurons(newNeuronSpecs);
 
 		// dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
 		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, sensoryNeurons[0], rewards[0], frameNumber);
@@ -968,11 +971,12 @@ export class Thalamus {
 	 * Op-1/Op-3: Route neuron specs to owning regions/columns for construction.
 	 * Stores refs in the Thalamus flat map (temporary dual-map scaffolding).
 	 */
-	createNeuronsInColumns(specs) {
+	createNeurons(specs) {
+		if (specs.length === 0) return; // nothing to do if there are no new neurons
 		const specsByRegion = this.bucketByRegion(specs, 'id');
 		for (let r = 0; r < this.regions; r++) {
 			if (specsByRegion[r].length === 0) continue;
-			for (const neuron of this.regionList[r].createNewNeurons(specsByRegion[r]))
+			for (const neuron of this.regionList[r].createNeurons(specsByRegion[r]))
 				this.neurons.set(neuron.id, neuron);
 		}
 	}

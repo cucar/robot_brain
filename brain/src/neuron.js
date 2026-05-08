@@ -491,14 +491,12 @@ export class Neuron {
 		// to this frame's votes (computed in generateVotes) reflects the latest sample
 		for (const { age, errorRate } of errorFeedback) this.recordError(age, errorRate);
 
-		// derive locally — ships with the neuron instead of being re-sent each frame
-		const isNewErrorPattern = newErrorPatternIds.has(this.id);
-
 		// learn connections across all active ages (age=0 skipped internally)
-		this.learnConnections(ageStates, isNewErrorPattern, actives);
+		// but, if this neuron was just created, it was already created with the current connections - no need to learn again
+		if (!newErrorPatternIds.has(this.id)) this.learnConnections(ageStates, actives);
 
 		// match patterns if we have context and eligible ages
-		const { matches, contextRefUpdates: matchRefs } = this.recognizePatterns(ageStates, memoryDepth, isNewErrorPattern, levelContext, newErrorPatternIds, currentFrame);
+		const { matches, contextRefUpdates: matchRefs } = this.recognizePatterns(ageStates, memoryDepth, levelContext, newErrorPatternIds, currentFrame);
 
 		// install pre-created error-correction patterns as children and emit their contextRef adds
 		const { correctionActivations, contextRefUpdates: correctionRefs } = this.correctErrors(corrections, currentFrame);
@@ -522,7 +520,6 @@ export class Neuron {
 	 * future context exists to match against).
 	 * @param {Map<number, {activatedPatternId?: number}>} ageStates
 	 * @param {number} memoryDepth - Sliding window depth
-	 * @param {boolean} isNewErrorPattern - True if this neuron was just created this frame
 	 * @param {Context|null} levelContext - Level context for matching, or null if recognition is off
 	 * @param {Set<number>} newErrorPatternIds - Ids to mask out of the observed context during
 	 *        match scoring (brand-new neurons created earlier this frame)
@@ -532,10 +529,10 @@ export class Neuron {
 	 *   contextRefUpdates: Array<{ type: 'add'|'remove', neuronId, distance }>
 	 * }}
 	 */
-	recognizePatterns(ageStates, memoryDepth, isNewErrorPattern, levelContext, newErrorPatternIds, currentFrame) {
+	recognizePatterns(ageStates, memoryDepth, levelContext, newErrorPatternIds, currentFrame) {
 		const matches = [];
 		const contextRefUpdates = [];
-		if (isNewErrorPattern || !levelContext || levelContext.size === 0) return { matches, contextRefUpdates };
+		if (!levelContext || levelContext.size === 0) return { matches, contextRefUpdates };
 		const activatedPatternIds = new Set();
 		for (const [age, state] of ageStates) {
 			if (state.activatedPatternId || age === memoryDepth - 1) continue;
@@ -794,11 +791,9 @@ export class Neuron {
 	 * (0 for events, observed value for actions). Skipped entirely for new error patterns
 	 * (they were just created this frame and have nothing yet to reinforce).
 	 * @param {Map<number, object>} ageStates - This neuron's per-age state
-	 * @param {boolean} isNewErrorPattern - True if this neuron was just created this frame
 	 * @param {Array<{id: number, channelId: number, reward: number}>} neurons - Currently observed neurons (age=0) with pre-resolved rewards
 	 */
-	learnConnections(ageStates, isNewErrorPattern, neurons) {
-		if (isNewErrorPattern) return;
+	learnConnections(ageStates, neurons) {
 		for (const age of ageStates.keys()) {
 
 			// skip age 0 - connection learning only applies to context neurons (age > 0)

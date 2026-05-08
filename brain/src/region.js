@@ -64,11 +64,11 @@ export class Region {
 	 * Op-1/Op-3: Construct new Neurons in their owning columns. Specs are routed by spec.id
 	 * (the freshly allocated neuron id).
 	 */
-	createNewNeurons(specs) {
+	createNeurons(specs) {
 		const specsByColumn = this.bucketByColumn(specs, 'id');
 		const created = [];
 		for (let c = 0; c < this.C; c++)
-			for (const neuron of this.columns[c].createNewNeurons(specsByColumn[c]))
+			for (const neuron of this.columns[c].createNeurons(specsByColumn[c]))
 				created.push(neuron);
 		return created;
 	}

@@ -190,7 +190,7 @@ export class Column {
 	 * Returns the created neurons so Thalamus can store refs in its flat map
 	 * (temporary dual-map scaffolding until §3.11 lands).
 	 */
-	createNewNeurons(specs) {
+	createNeurons(specs) {
 		const created = [];
 		for (const spec of specs) {
 			const neuron = new Neuron(
