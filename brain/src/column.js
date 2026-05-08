@@ -176,11 +176,12 @@ export class Column {
 	}
 
 	/**
-	 * Op-5: Apply contextRef updates to owned Neurons. One call per target neuron
-	 * the batch carries an update for; foreign updates are routed by the caller.
+	 * Op-5: Apply contextRef updates to owned neurons. Each entry carries the
+	 * target neuronId and a batch of {type, parentId, distance} updates for it.
 	 */
-	updateContextRefs(updates) {
-		throw new Error('Column.updateContextRefs not yet implemented');
+	updateContextRefs(updateBatch) {
+		for (const { neuronId, updates } of updateBatch)
+			this.neurons.get(neuronId).applyContextRefUpdates(updates);
 	}
 
 	/**

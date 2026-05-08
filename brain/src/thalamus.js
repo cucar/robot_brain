@@ -21,10 +21,10 @@ export class Thalamus {
 		this.regions = regions;
 		this.columns = columns;
 
-		// Neuron registry — Thalamus keeps a flat map for non-Op-4 code paths (delete
-		// cascade, snapshot, contextRef delivery) that haven't been migrated to batch ops
-		// yet. Column.neurons holds the same references for Op-4 dispatch. Kept in sync
-		// via _syncToColumn/_removeFromColumn. Both go away when §3.11 lands.
+		// Neuron registry — Thalamus keeps a flat map for snapshot and materialize
+		// operations that haven't been migrated to batch ops yet (§3.11).
+		// Column.neurons holds the same references for Op-1 through Op-5 dispatch.
+		// Kept in sync via _syncToColumn/_removeFromColumn. Both go away when §3.11 lands.
 		this.neurons = new Map(); // neuronId -> Neuron (flat, all neurons)
 		this.neuronsByValue = new Map(); // valueKey -> neuronId (coordinate -> neuronId lookup)
 		this.baseNeurons = new Map(); // neuronId -> { channelId, type, coordinate } (sensory neurons only)
@@ -595,12 +595,12 @@ export class Thalamus {
 		// newErrorPatternIds set (used by the neuron to mask brand-new ids out of matching).
 		const { tasks, levelContext, newNeuronSpecs } = this.getLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds);
 
+		// dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
+		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, sensoryNeurons[0], rewards[0], frameNumber);
+
 		// Op-3 create new neurons: construct the new error pattern neurons in their owning columns.
 		// Must complete before Op-4 so that processFrame can access the new neurons.
 		if (newNeuronSpecs.length > 0) this.createNeurons(newNeuronSpecs);
-
-		// dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
-		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, sensoryNeurons[0], rewards[0], frameNumber);
 
 		// applyFrameResults - batch contextRef updates by target, register deaths, collect activations + votes
 		const { activations, votes } = this.applyFrameResults(results, levelNeurons);
@@ -732,60 +732,94 @@ export class Thalamus {
 	 * @returns {{activations: Array<{parentId, patternId, age, deathFrame}>, votes: Array}}
 	 */
 	applyFrameResults(results, levelNeurons) {
-		const perTarget = new Map(); // targetNeuronId -> [{type, parentId, distance}]
+
+		// clear stale votes/context so suppressed ages don't carry data from previous frames
+		this.clearStaleState(levelNeurons);
+
+		// walk results from all neurons: collect activations, votes, and contextRef updates
 		const activations = [];
 		const votes = [];
+		const contextRefUpdates = new Map(); // targetNeuronId -> [{type, parentId, distance}]
+		for (const result of results) {
+			this.collectActivations(result, activations);
+			this.collectVotes(result, levelNeurons, votes);
+			this.collectContextRefUpdates(result, contextRefUpdates);
+		}
 
-		// clear stale votes/context for this level's neurons so suppressed ages don't carry stale data
+		// Op-5: route contextRef updates to owning columns
+		if (contextRefUpdates.size > 0) {
+			const updateBatch = [];
+			for (const [neuronId, updates] of contextRefUpdates)
+				updateBatch.push({ neuronId, updates });
+			this.dispatchContextRefUpdates(updateBatch);
+		}
+
+		return { activations, votes };
+	}
+
+	/**
+	 * Clear stale votes/context/threshold for this level's neurons so suppressed
+	 * ages don't retain data from a previous frame.
+	 */
+	clearStaleState(levelNeurons) {
 		for (const ageStates of levelNeurons.values())
 			for (const state of ageStates.values()) {
 				state.votes = null;
 				state.context = null;
 				state.threshold = null;
 			}
+	}
 
-		for (const { parentId, matches, correctionActivations, contextRefUpdates, votes: perAgeVotes } of results) {
+	/**
+	 * Register deaths and collect activations from recognition matches
+	 * and error-correction patterns.
+	 */
+	collectActivations(result, activations) {
+		const { parentId, matches, correctionActivations } = result;
 
-			// batch contextRef updates by target neuron (delivered in the loop below)
-			for (const { type, neuronId, distance } of contextRefUpdates) {
-				let list = perTarget.get(neuronId);
-				if (!list) { list = []; perTarget.set(neuronId, list); }
-				list.push({ type, parentId, distance });
+		// recognition matches that fired
+		for (const match of matches)
+			if (match.activate) {
+				this.registerDeath(match.patternId, match.deathFrame);
+				activations.push({ parentId, patternId: match.patternId, age: match.age, deathFrame: match.deathFrame });
 			}
 
-			// register deaths + collect activations for recognition matches
-			for (const match of matches)
-				if (match.activate) {
-					this.registerDeath(match.patternId, match.deathFrame);
-					activations.push({ parentId, patternId: match.patternId, age: match.age, deathFrame: match.deathFrame });
-				}
-
-			// register deaths + collect activations for error-correction patterns
-			for (const { patternId, age, deathFrame } of correctionActivations) {
-				this.registerDeath(patternId, deathFrame);
-				activations.push({ parentId, patternId, age, deathFrame });
-			}
-
-			// flush per-age votes: write state.votes/state.context/state.threshold for storage,
-			// collect id-only votes for consensus. threshold is captured here so next frame's
-			// evaluateVoteError can judge these votes without reaching back into the neuron.
-			if (perAgeVotes && perAgeVotes.length > 0) {
-				const ageStates = levelNeurons.get(parentId);
-				for (const { age, votes: ageVotes, context, threshold } of perAgeVotes) {
-					const state = ageStates.get(age);
-					state.votes = ageVotes;
-					state.context = context;
-					state.threshold = threshold;
-					for (const vote of ageVotes) votes.push({ voterId: parentId, ...vote });
-				}
-			}
+		// error-correction patterns installed this frame
+		for (const { patternId, age, deathFrame } of correctionActivations) {
+			this.registerDeath(patternId, deathFrame);
+			activations.push({ parentId, patternId, age, deathFrame });
 		}
+	}
 
-		// deliver contextRef updates: one call per target neuron
-		for (const [targetId, updates] of perTarget)
-			this.neurons.get(targetId).applyContextRefUpdates(updates);
+	/**
+	 * Write per-age votes back to level state and collect flat votes for consensus.
+	 * Threshold is captured here so next frame's evaluateVoteError can judge these
+	 * votes without reaching back into the neuron.
+	 */
+	collectVotes(result, levelNeurons, votes) {
+		const { parentId, votes: perAgeVotes } = result;
+		if (!perAgeVotes || perAgeVotes.length === 0) return;
 
-		return { activations, votes };
+		const ageStates = levelNeurons.get(parentId);
+		for (const { age, votes: ageVotes, context, threshold } of perAgeVotes) {
+			const state = ageStates.get(age);
+			state.votes = ageVotes;
+			state.context = context;
+			state.threshold = threshold;
+			for (const vote of ageVotes) votes.push({ voterId: parentId, ...vote });
+		}
+	}
+
+	/**
+	 * Batch contextRef updates by target neuron for Op-5 dispatch.
+	 */
+	collectContextRefUpdates(result, perTarget) {
+		const { parentId, contextRefUpdates } = result;
+		for (const { type, neuronId, distance } of contextRefUpdates) {
+			let list = perTarget.get(neuronId);
+			if (!list) { list = []; perTarget.set(neuronId, list); }
+			list.push({ type, parentId, distance });
+		}
 	}
 
 	/**
@@ -978,6 +1012,18 @@ export class Thalamus {
 			if (specsByRegion[r].length === 0) continue;
 			for (const neuron of this.regionList[r].createNeurons(specsByRegion[r]))
 				this.neurons.set(neuron.id, neuron);
+		}
+	}
+
+	/**
+	 * Op-5: Route contextRef updates to owning regions/columns.
+	 * Each entry is { neuronId, updates } where updates is the batch for that neuron.
+	 */
+	dispatchContextRefUpdates(updateBatch) {
+		const batchByRegion = this.bucketByRegion(updateBatch, 'neuronId');
+		for (let r = 0; r < this.regions; r++) {
+			if (batchByRegion[r].length === 0) continue;
+			this.regionList[r].updateContextRefs(batchByRegion[r]);
 		}
 	}
 
