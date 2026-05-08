@@ -29,7 +29,7 @@ export class Memory {
 		//   votes: array of votes cast by this neuron
 		//   activatedPatternId: ID of pattern neuron activated by this neuron (recognized)
 		// State objects are created at activation and never copied — external mutations
-		// (thalamus.applyFrameResults sets votes/context/threshold) stay attached for the
+		// (thalamus.processLevel sets votes/context/threshold inline) stay attached for the
 		// life of the entry without per-frame rebuild.
 		this.neuronStates = new Map();
 

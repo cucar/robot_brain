@@ -21,7 +21,7 @@ export class Column {
 	}
 
 	/**
-	 * Op-4 down-trip body. Calls neuron.processFrame on every task and returns
+	 * Op-3 down-trip body. Calls neuron.processFrame on every task and returns
 	 * results parentId-tagged in task order.
 	 */
 	processLevel(tasks, memoryDepth, levelContext, newErrorPatternIds, newActiveNeurons, frameNumber) {
@@ -176,7 +176,7 @@ export class Column {
 	}
 
 	/**
-	 * Op-5: Apply contextRef updates to owned neurons. Each entry carries the
+	 * Op-5 (deferred): Apply contextRef updates to owned neurons. Each entry carries the
 	 * target neuronId and a batch of {type, parentId, distance} updates for it.
 	 */
 	updateContextRefs(updateBatch) {
@@ -185,7 +185,7 @@ export class Column {
 	}
 
 	/**
-	 * Op-1/Op-3: Construct new Neuron instances from specs and store them locally.
+	 * Op-1/Op-4: Construct new Neuron instances from specs and store them locally.
 	 * Each spec carries everything needed to build the Neuron without reaching back
 	 * to Thalamus: id, forgetRate, connections, and shared config is on the Column.
 	 * Returns the created neurons so Thalamus can store refs in its flat map

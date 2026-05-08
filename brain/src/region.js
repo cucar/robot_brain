@@ -33,7 +33,7 @@ export class Region {
 	}
 
 	/**
-	 * Op-4 down-trip. Bucket tasks by owning column, fan out, concatenate
+	 * Op-3 down-trip. Bucket tasks by owning column, fan out, concatenate
 	 * results in column-index order (stable regardless of thread scheduling).
 	 * Broadcast params are passed by reference and not mutated inside the call.
 	 */
@@ -50,9 +50,9 @@ export class Region {
 	}
 
 	/**
-	 * Op-5: Apply contextRef updates against owned Neurons. Updates are routed by
+	 * Op-5 (deferred): Apply contextRef updates against owned Neurons. Updates are routed by
 	 * update.neuronId (the target neuron whose contextRefs change).
-	 * No return — fire-and-forget within the level barrier.
+	 * No return — fire-and-forget, batched after the level loop.
 	 */
 	updateContextRefs(updates) {
 		const updatesByColumn = this.bucketByColumn(updates, 'neuronId');
@@ -61,7 +61,7 @@ export class Region {
 	}
 
 	/**
-	 * Op-1/Op-3: Construct new Neurons in their owning columns. Specs are routed by spec.id
+	 * Op-1/Op-4: Construct new Neurons in their owning columns. Specs are routed by spec.id
 	 * (the freshly allocated neuron id).
 	 */
 	createNeurons(specs) {

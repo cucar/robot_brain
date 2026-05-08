@@ -576,8 +576,18 @@ export class Thalamus {
 	}
 
 	/**
-	 * Process one level end-to-end: aggregate the level view, match patterns, create
-	 * error-correction pattern neurons, collect votes, and return activations + votes.
+	 * Process one level: aggregate the level view, dispatch processFrame (Op-3),
+	 * and extract activations for the next level. Returns deferred work (neuron
+	 * creation specs, raw dispatch results) alongside activations and votes.
+	 * The caller accumulates deferred work across levels and flushes it once
+	 * after the loop via applyLevelResults.
+	 *
+	 * New error patterns are skipped as task targets (they have no children,
+	 * history, or votes in their birth frame) so their Neuron instances don't
+	 * need to exist until post-loop creation. This keeps the per-level hot loop
+	 * to a single dispatch round-trip (Op-3), reducing per-frame ops from
+	 * 2 + 3L to 4 + L.
+	 *
 	 * @param {number} level - Current level being processed
 	 * @param {Map<number, Map<number, object>>} levelNeurons - Active neurons at this level: neuronId -> age -> state (ages ascending)
 	 * @param {number} memoryDepth - Current sliding-window depth (age count)
@@ -585,31 +595,57 @@ export class Thalamus {
 	 * @param {Array<Map>} rewards - Rewards by age (rewards[0] = current frame)
 	 * @param {number} frameNumber - Current frame number
 	 * @param {Set<number>} newErrorPatternIds - Accumulator of error pattern ids created this frame (mutated)
-	 * @returns {{activations: Array<{parentId, patternId, age, deathFrame}>, votes: Array}}
+	 * @returns {{activations: Array, votes: Array, neuronSpecs: Array, results: Array}}
 	 */
 	processLevel(level, levelNeurons, memoryDepth, sensoryNeurons, rewards, frameNumber, newErrorPatternIds) {
 
 		// aggregate per-neuron work, build the shared level context, allocate error pattern specs.
-		// Per-age task derivation and per-age context reshape both happen inside the neuron.
-		// the only cross-neuron data shipped is the shared levelContext and the small
-		// newErrorPatternIds set (used by the neuron to mask brand-new ids out of matching).
 		const { tasks, levelContext, newNeuronSpecs } = this.getLevelTasks(level, levelNeurons, sensoryNeurons, rewards, newErrorPatternIds);
 
-		// dispatchFrame - one neuron.processFrame call per active neuron (learn, match, correct, vote)
+		// Op-3: dispatch processFrame — the only cross-region round-trip in the level loop
 		const results = this.dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, sensoryNeurons[0], rewards[0], frameNumber);
 
-		// Op-3 create new neurons: construct the new error pattern neurons in their owning columns.
-		// Must complete before Op-4 so that processFrame can access the new neurons.
-		if (newNeuronSpecs.length > 0) this.createNeurons(newNeuronSpecs);
+		// extract activations inline — needed to feed the next level
+		const activations = [];
+		for (const result of results) this.collectActivations(result, activations);
 
-		// applyFrameResults - batch contextRef updates by target, register deaths, collect activations + votes
-		const { activations, votes } = this.applyFrameResults(results, levelNeurons);
+		// collect votes inline — needed for consensus after the loop
+		this.clearStaleState(levelNeurons);
+		const votes = [];
+		for (const result of results) this.collectVotes(result, levelNeurons, votes);
 
 		if (this.debug && activations.length > 0)
 			console.log(`Level ${level}: ${activations.length} activations`,
 				activations.map(a => `parent=${a.parentId}, age=${a.age}, pattern=${a.patternId}`).join('; '));
 
-		return { activations, votes };
+		return { activations, votes, neuronSpecs: newNeuronSpecs, results };
+	}
+
+	/**
+	 * Flush deferred work accumulated across all levels in the level loop.
+	 * Runs once per frame after the loop exits, replacing L per-level dispatches
+	 * with a single batch for each operation.
+	 *
+	 * Op-4: Create error pattern neurons (batch across all levels)
+	 * Op-5: Dispatch contextRef updates (batch across all levels)
+	 */
+	applyLevelResults(neuronSpecs, dispatchResults) {
+
+		// Op-4: batch-create error pattern neurons accumulated across levels
+		if (neuronSpecs.length > 0) this.createNeurons(neuronSpecs);
+
+		// Op-5: batch contextRef updates across levels, then dispatch once
+		const contextRefUpdates = new Map();
+		for (const results of dispatchResults)
+			for (const result of results)
+				this.collectContextRefUpdates(result, contextRefUpdates);
+
+		if (contextRefUpdates.size > 0) {
+			const updateBatch = [];
+			for (const [neuronId, updates] of contextRefUpdates)
+				updateBatch.push({ neuronId, updates });
+			this.dispatchContextRefUpdates(updateBatch);
+		}
 	}
 
 	/**
@@ -633,19 +669,25 @@ export class Thalamus {
 			// skip action neurons for learning or contexts if the channel learns without them
 			if (this.skipActionNeuron(neuronId)) continue;
 
+			// new error patterns only contribute to levelContext — they have no children,
+			// history, or votes in their birth frame, so they skip dispatch and corrections.
+			if (newErrorPatternIds.has(neuronId)) {
+				for (const [age] of ageStates) if (age > 0) levelContext.addNeuron(neuronId, age);
+				continue;
+			}
+
 			// get level error corrections + per-age feedback for the neuron's own stats
 			const { corrections, errorFeedback } = this.getLevelCorrections(
-				neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, newErrorPatternIds.has(neuronId)
+				neuronId, level, levelContext, ageStates, sensoryNeurons, rewards
 			);
 
-			// extract creation specs for Op-3, suppress new ids in higher levels
+			// extract creation specs for Op-4
 			for (const correction of corrections) {
 				newNeuronSpecs.push({ id: correction.id, forgetRate: correction.forgetRate, connections: correction.connections });
 				newErrorPatternIds.add(correction.patternId);
 			}
 
-			// emit the task - the neuron derives its own isNewErrorPattern from newErrorPatternIds.
-			// errorFeedback rides in-band on the same per-frame call (no extra MPI round-trip).
+			// emit the task to be dispatched to the neuron
 			tasks.push({ neuronId, ageStates, corrections, errorFeedback });
 		}
 		return { tasks, levelContext, newNeuronSpecs };
@@ -654,27 +696,20 @@ export class Thalamus {
 	/**
 	 * For a single active neuron: add its age>0 entries to the shared levelContext and create
 	 * error-correction pattern neurons for ages whose previous votes mismatched reality.
-	 * Every age>0 entry contributes to levelContext, including new error patterns — their ids
-	 * must propagate into downstream state.context for next-frame corrections. The neuron
-	 * itself filters out newErrorPatternIds at match time so brand-new ids don't look like
-	 * unexplained novel entries and unfairly penalize pattern scores.
-	 * Correction id allocation stays central — the driver owns the neuron-id counter.
+	 * New error patterns are filtered out by the caller before reaching this method.
 	 * @returns {{corrections: Array<{patternId, age, contextEntries}>, errorFeedback: Array<{age, errorRate}>}}
 	 *          corrections: error-correction patterns created for this neuron
 	 *          errorFeedback: observed error rates for every evaluable age — shipped back
 	 *                        to the neuron in the same processFrame call so it can update
 	 *                        its own stats with no extra round-trip.
 	 */
-	getLevelCorrections(neuronId, level, levelContext, ageStates, sensoryNeurons, rewards, isNewErrorPattern) {
+	getLevelCorrections(neuronId, level, levelContext, ageStates, sensoryNeurons, rewards) {
 		const corrections = [];
 		const errorFeedback = [];
 		for (const [age, state] of ageStates) {
 
 			// every age > 0 entry contributes to the shared level context
 			if (age > 0) levelContext.addNeuron(neuronId, age);
-
-			// new error patterns skip further correction this frame
-			if (isNewErrorPattern) continue;
 
 			// evaluate the prior-frame vote at this age (if any) and record feedback
 			const result = this.evaluateVoteError(age, state, sensoryNeurons[0]);
@@ -696,9 +731,8 @@ export class Thalamus {
 	}
 
 	/**
-	 * Pass 2: Op-4 dispatch. Bucket tasks by region and dispatch to
-	 * region.processLevel; each region buckets per column. Result writes
-	 * (applyFrameResults) run in Thalamus after every column has returned.
+	 * Op-3 dispatch. Bucket tasks by region and dispatch to
+	 * region.processLevel; each region buckets per column.
 	 * Concatenation order is region-index then column-index, stable across runs.
 	 */
 	dispatchFrame(tasks, memoryDepth, levelContext, newErrorPatternIds, age0, currentRewards, frameNumber) {
@@ -721,40 +755,6 @@ export class Thalamus {
 			for (const x of regionResults) results.push(x);
 		}
 		return results;
-	}
-
-	/**
-	 * Pass 3: deliver contextRef updates (one call per target neuron), register deaths
-	 * for both recognition matches and error-correction patterns, collect the unified
-	 * activation list to feed into level+1, and flush per-age votes onto neuron state
-	 * while building the flat vote array for consensus. Clears state.votes/state.context
-	 * for every level neuron first so suppressed ages don't retain stale data.
-	 * @returns {{activations: Array<{parentId, patternId, age, deathFrame}>, votes: Array}}
-	 */
-	applyFrameResults(results, levelNeurons) {
-
-		// clear stale votes/context so suppressed ages don't carry data from previous frames
-		this.clearStaleState(levelNeurons);
-
-		// walk results from all neurons: collect activations, votes, and contextRef updates
-		const activations = [];
-		const votes = [];
-		const contextRefUpdates = new Map(); // targetNeuronId -> [{type, parentId, distance}]
-		for (const result of results) {
-			this.collectActivations(result, activations);
-			this.collectVotes(result, levelNeurons, votes);
-			this.collectContextRefUpdates(result, contextRefUpdates);
-		}
-
-		// Op-5: route contextRef updates to owning columns
-		if (contextRefUpdates.size > 0) {
-			const updateBatch = [];
-			for (const [neuronId, updates] of contextRefUpdates)
-				updateBatch.push({ neuronId, updates });
-			this.dispatchContextRefUpdates(updateBatch);
-		}
-
-		return { activations, votes };
 	}
 
 	/**
@@ -1002,7 +1002,7 @@ export class Thalamus {
 	}
 
 	/**
-	 * Op-1/Op-3: Route neuron specs to owning regions/columns for construction.
+	 * Op-1/Op-4: Route neuron specs to owning regions/columns for construction.
 	 * Stores refs in the Thalamus flat map (temporary dual-map scaffolding).
 	 */
 	createNeurons(specs) {
@@ -1016,7 +1016,7 @@ export class Thalamus {
 	}
 
 	/**
-	 * Op-5: Route contextRef updates to owning regions/columns.
+	 * Op-5 (deferred): Route contextRef updates to owning regions/columns.
 	 * Each entry is { neuronId, updates } where updates is the batch for that neuron.
 	 */
 	dispatchContextRefUpdates(updateBatch) {

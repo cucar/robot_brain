@@ -104,16 +104,16 @@ Owns `Neuron` instances and exposes a small set of batch operations on them. Bec
 - `neurons: Map<id, Neuron>` — the Neuron objects this column owns
 
 **Per-frame methods** (each takes a batch and returns a batch):
-- `processLevel(tasks, sensoryNeurons, rewards, levelContext, newErrorPatternIds, frameNumber)` → `{results}` — see §3.6 (Op-4)
-- `updateContextRefs(updates)` — see §3.10 (Op-5)
-- `createNewNeurons(specs)` — see §3.9 (Op-1) and §3.8 (Op-3)
+- `processLevel(tasks, sensoryNeurons, rewards, levelContext, newErrorPatternIds, frameNumber)` → `{results}` — see §3.6 (Op-3)
+- `updateContextRefs(updates)` — see §3.10 (Op-5, deferred)
+- `createNewNeurons(specs)` — see §3.9 (Op-1) and §3.8 (Op-4, deferred)
 - `deleteNeurons(opBatch)` → `{outboundOps, newlyDeletableIds}` — see §3.7 (Op-2)
 
 **Save/restore methods** (parallel across columns at init/shutdown) — see §3.11:
 - `dumpAll()` → serialized neuron data for owned neurons
 - `restoreNeurons(specs)` → constructs Neuron instances from serialized data
 
-**Implementation:** create the class with the `neurons` map and method skeletons. Each method body is a thin wrapper around the equivalent code in today's Thalamus (`applyFrameResults` for the dispatch path, `cleanupPatternFromParentContext` etc. for cleanup). Sections §3.6–§3.10 refactor those code paths into clean batch operations.
+**Implementation:** create the class with the `neurons` map and method skeletons. Each method body is a thin wrapper around the equivalent code in today's Thalamus (`processLevel` / `dispatchFrame` for the dispatch path, `deleteNeurons` etc. for cleanup). Sections §3.6–§3.10 refactor those code paths into clean batch operations.
 
 ### 3.3 `Region` class
 
@@ -144,15 +144,15 @@ Columns receive batches already grouped for them and emit batched results. We wi
 
 ### 3.5 Per-frame operations overview
 
-There are **five** cross-region operations per frame.
+There are **five** cross-region operations per frame. The level loop contains only a single dispatch round-trip (Op-3); neuron creation (Op-4) and context reference updates (Op-5) are deferred and batched after the loop exits. New error patterns are skipped as task targets in their birth frame (they have no children, history, or votes) so their Neuron instances don't need to exist until post-loop creation. This reduces per-frame cross-region dispatches from `2 + 3L` to `4 + L`.
 
 | #  | Operation                  | Frequency      | Round-trips | Section |
 |----|----------------------------|----------------|-------------|---------|
 | 1  | Create sensory neurons     | once per frame, only when new sensory points appear | 1 (down only — fan-out) | §3.9 |
 | 2  | Delete neurons             | once per frame | **variable (loop)** — bounded by cascade chain depth | §3.7 |
-| 3  | Create error patterns      | once per level | 1 (down only — fan-out) | §3.8 |
-| 4  | Process frame              | once per level | 1 (down + up)           | §3.6 |
-| 5  | Update context references  | once per level | 1 (down only — fan-out) | §3.10 |
+| 3  | Process frame (dispatch)   | once per level | 1 (down + up)           | §3.6 |
+| 4  | Create error patterns      | once per frame (batched after loop) | 1 (down only — fan-out) | §3.8 |
+| 5  | Update context references  | once per frame (batched after loop) | 1 (down only — fan-out) | §3.10 |
 
 Per-frame call order at the brain:
 
@@ -167,24 +167,25 @@ brain.processFrame(inputs, rewards):
   ╚═════════════════════════════════════════╝
 
   ageContext(rewards)                          // Thalamus mutates Memory directly
-  activateNewNeurons()                            // Thalamus mutates Memory directly
+  activateNewNeurons()                         // Thalamus mutates Memory directly
 
   for level = 0 .. maxActiveLevel:
     // Thalamus reads its own Memory, walks owned active neurons at level,
     // builds mergedLevelContext + correction requests + per-(neuron, age) tasks.
-    // All local — no cross-region traffic.
+    // Allocates error pattern ids centrally. All local — no cross-region traffic.
 
-    ╔═ Op-3: Create error patterns ════════╗  // 1 fan-out (no return)
+    ╔═ Op-3: Process frame (dispatch) ═════╗  // 1 round-trip (the only per-level dispatch)
     ╚══════════════════════════════════════╝
-    ╔═ Op-4: Process frame (dispatch) ═════╗  // 1 round-trip
-    ╚══════════════════════════════════════╝
-    // Thalamus serially applies result writes to its own Memory:
-    //   - state.votes / state.context / state.threshold per (neuron, age)
-    //   - registerDeath for matched + correction patterns
-    //   - activations → activatePattern (mutates Memory directly)
-    //   - pre-aggregate votes for consensus
-    ╔═ Op-5: Update context references ════╗  // 1 fan-out (no return)
-    ╚══════════════════════════════════════╝
+    // Thalamus inline (no dispatch):
+    //   - collectActivations: extract activations for level+1, register deaths
+    //   - collectVotes: write state.votes/context/threshold, accumulate for consensus
+    //   - defer: neuron creation specs and contextRef updates for post-loop batch
+
+  // flush deferred work once after the loop:
+  ╔═ Op-4: Create error patterns ══════════╗  // 1 fan-out (batched across all levels)
+  ╚════════════════════════════════════════╝
+  ╔═ Op-5: Update context references ══════╗  // 1 fan-out (batched across all levels)
+  ╚════════════════════════════════════════╝
 
   determineConsensus                           // central
   saveInferredNeurons                          // central
@@ -192,7 +193,7 @@ brain.processFrame(inputs, rewards):
 
 > ⚠️ **Significant: level barrier.** Every Column must finish level N's dispatch before any starts N+1 (activations at N feed N+1). The level loop lives at the Brain layer; the dispatch call at each level is the synchronization point.
 
-### 3.6 Op-4: Process frame
+### 3.6 Op-3: Process frame
 
 ```
 Down (thalamus → region → column):
@@ -217,18 +218,17 @@ Up (column → region → thalamus):
     - pre-aggregated votes
     - contextRefUpdates batched by target column
 
-Thalamus, serially (no contention — workers are quiesced at the barrier):
-  - writes state.votes / state.context / state.threshold to its own Memory
-  - calls registerDeath for matched + correction patterns
-  - calls activatePattern for each activation (mutates Memory directly)
-  - merges per-region pre-aggregated votes for consensus
+Thalamus, inline at the level barrier (no dispatch — no contention):
+  - collectActivations: extract activations for level+1, registerDeath
+  - collectVotes: write state.votes/context/threshold, accumulate for consensus
+  - defer: neuron creation specs → Op-4 batch; contextRef updates → Op-5 batch
 ```
 
 The ageStates payload on the down-trip is the only per-neuron data shipped each frame. In Phase 5 (shared-memory threads), this is essentially free (passing references). In MPI, this is the obvious target for region-side caching — see [future-work.md](future-work.md).
 
-> Op-4 payloads are self-contained — anything `neuron.processFrame` needs is included (sensory ids decorated with `channelId`/`type`, the rewards Map, `levelContext`, etc.). No callbacks back to Thalamus during compute. Already true today; preserve in Phase 5/MPI.
+> Op-3 payloads are self-contained — anything `neuron.processFrame` needs is included (sensory ids decorated with `channelId`/`type`, the rewards Map, `levelContext`, etc.). No callbacks back to Thalamus during compute. Already true today; preserve in Phase 5/MPI.
 
-**Implementation:** refactor `Thalamus.processLevel` to package per-column tasks and call `region.processLevel(...)` instead of looping `this.neurons.get(...).processFrame(...)` directly. Keep the result-write code (`applyFrameResults`) in Thalamus. Votes flow back as raw arrays (one entry per cast vote) — same shape as today, just routed through the column boundary. Pre-aggregation is a separate optional optimization in §3.12.
+**Implementation:** `Thalamus.processLevel` packages per-column tasks and calls `region.processLevel(...)`. Activations and votes are collected inline at the level barrier (needed for next-level feed and consensus). Neuron creation specs and contextRef updates are accumulated into a deferred collector and flushed once after the loop via `applyLevelResults`. Votes flow back as raw arrays (one entry per cast vote) — same shape as today, just routed through the column boundary. Pre-aggregation is a separate optional optimization in §3.12.
 
 ### 3.7 Op-2: Delete neurons (cascade in pulses)
 
@@ -275,25 +275,23 @@ Each iteration = one round-trip. Every op is pure data describing a local mutati
 
 **Implementation:** refactor `Thalamus.deletePatterns` into the pulse-loop driver. Move the per-Neuron mutations (today in `cleanupPatternFromParentContext`, `cleanupPatternFromChildContexts`, `cleanupOrphanedChildren`) into `Column.deleteNeurons` keyed by op type. Drop the dead `neuronLevels.get` argument at the `canDeleteChild` call site — the parameter isn't received by the method, and removing it eliminates the only would-be cross-column metadata lookup in the cascade.
 
-### 3.8 Op-3: Create error patterns
+### 3.8 Op-4: Create error patterns (deferred, batched after loop)
 
 > 🔶 **Significant: centralized chokepoint for id allocation.** Thalamus is the single id allocator — the natural serialization point for "what new patterns came into existence this frame".
 
 Thalamus already has all the inputs locally:
 
 ```
-Pre-step (Thalamus, local):
+Per-level (Thalamus, local — during getLevelTasks, before Op-3 dispatch):
   Walk active neurons at this level (from Memory).
-  Build mergedLevelContext directly (used later as a parameter to Op-4).
+  Build mergedLevelContext directly (used as a parameter to Op-3).
   For each (neuron, age > 0) where evaluateVoteError fires:
     correctionRequest = {parentId, age, contextEntries, connectionsSpec}
     connectionsSpec resolved using local neuronChannelId / reward lookups
+  Allocate ids centrally, accumulate specs into deferred.neuronSpecs.
 
-Op-3 fan-out:
-  Allocate a contiguous id block:
-    newIds = [nextNeuronId .. nextNeuronId + count - 1]
-    nextNeuronId += count
-  Split specs by routing rule (per-column).
+Op-4 fan-out (once per frame, after the level loop exits):
+  Split all accumulated specs by routing rule (per-column).
 
   ── Down (thalamus → region → column) ──
     For each target column, send its own specs batch (per-column payload).
@@ -301,13 +299,16 @@ Op-3 fan-out:
     connection spec already in hand.
     Thalamus simultaneously updates its own metadata maps (neuronLevels,
     neuronParents, levelCounts) for the new patterns. The new patterns are
-    NOT activated here — activation happens during Op-4 result writes when
-    correctionActivations come back.
+    NOT activated here — activation happens inline at the level barrier when
+    correctionActivations come back from Op-3.
 ```
 
-Because Thalamus has Memory and all metadata, no fan-in from columns is needed. Thalamus also assembles `newErrorPatternIds` locally — it goes down to columns as a parameter to Op-4 (along with `mergedLevelContext`), not as part of Op-3.
+Because Thalamus has Memory and all metadata, no fan-in from columns is needed. Thalamus assembles `newErrorPatternIds` locally during getLevelTasks — it goes down to columns as a parameter to Op-3 (along with `mergedLevelContext`). Error pattern neuron construction is deferred to a single post-loop batch because:
+- Corrections ride in-band on the parent's task — Op-3 dispatch does not need the Neuron instances to exist.
+- New error patterns are skipped as task targets at their own level (`getLevelTasks` filters `newErrorPatternIds`) — they have no children, history, or votes in their birth frame, so dispatch would be a no-op.
+- They still contribute to `levelContext` via their allocated id (context only needs the id, not the Neuron instance).
 
-**Implementation:** refactor `Thalamus.createPatternNeuron` so the central call only allocates the id and resolves the connection spec. The actual `new Neuron(...)` move into `Column.createNewNeurons`. `Thalamus.processLevel`'s per-level orchestration calls `region.createNewNeurons(specsByColumn)` after building the corrections list.
+**Implementation:** `Thalamus.allocatePatternNeuron` allocates the id and resolves the connection spec. Specs accumulate into a deferred collector across levels. `applyLevelResults` calls `createNeurons` once after the loop with the full batch.
 
 ### 3.9 Op-1: Create sensory neurons
 
@@ -317,18 +318,19 @@ Most frames create zero new sensory neurons (after warmup, the coordinate space 
 
 **Implementation:** modify `buildFrame` to collect new sensory specs instead of creating inline. After the frame is built, call `region.createNewNeurons(specsByColumn)` once. Thalamus updates its own metadata maps (`neuronLevels`, `baseNeurons`, `neuronsByValue`, `levelCounts`) inline.
 
-### 3.10 Op-5: Update context references
+### 3.10 Op-5: Update context references (deferred, batched after loop)
 
 ```
 Down (thalamus → region → column):
-  Thalamus routes the contextRefUpdates batch produced by Op-4 to target columns.
+  Thalamus accumulates contextRefUpdates from Op-3 results across all levels.
+  After the level loop, routes the merged batch to target columns.
   Each Column applies its inbound batch to its owned Neurons.
-  No return — fire-and-forget within the level barrier.
+  No return — fire-and-forget.
 ```
 
-Batching by target column at emission time keeps this to one fan-out per level regardless of how many updates fly.
+Batching across all levels into a single post-loop dispatch eliminates L per-level fan-outs.
 
-**Implementation:** refactor the `applyContextRefUpdates` loop in `applyFrameResults` to emit per-column batches and call `region.updateContextRefs(updatesByColumn)`.
+**Implementation:** `collectContextRefUpdates` accumulates into a deferred Map during the level loop. `applyLevelResults` merges all levels and calls `dispatchContextRefUpdates` once.
 
 ### 3.11 Snapshot save and restore (parallel across columns)
 
@@ -429,17 +431,17 @@ What stays in Thalamus, exactly as today:
 - `nextNeuronId` allocator
 
 What changes shape:
-- `processLevel(...)` — orchestrates per-level via `region.processLevel(...)`. See §3.6.
+- `processLevel(...)` — orchestrates per-level Op-3 dispatch via `region.processLevel(...)`, collects activations/votes inline, defers Op-4/Op-5 work. See §3.6.
+- `applyLevelResults(...)` — new method; flushes batched neuron creation (Op-4) and contextRef updates (Op-5) once after the level loop.
 - `deletePatterns(...)` — orchestrates the cascade pulse loop. See §3.7.
-- `createPatternNeuron(...)` — id + spec resolution only; Neuron construction in Column. See §3.8.
+- `allocatePatternNeuron(...)` — id + spec resolution only; Neuron construction deferred to post-loop batch. See §3.8.
 - `addSensoryNeuron(...)` — id + spec resolution only; batched at end of `buildFrame`. See §3.9.
 - `getSnapshot()` / `restoreSnapshot()` — fan-in/fan-out across columns. See §3.11.
 
 ### 3.14 Brain changes (summary)
 
-Almost none. `Brain.processFrame` is structurally unchanged. The only differences:
+`Brain.processLevels` accumulates a `deferred` collector and calls `thalamus.applyLevelResults(deferred)` after the level loop exits. Other differences:
 - `cleanupDeadPatterns` → calls Thalamus's new pulse-loop cleanup (§3.7)
-- `processLevels` → unchanged orchestration; `thalamus.processLevel` uses column-batched dispatch internally (§3.6)
 - `determineConsensus` may later consume pre-aggregated `(candidates, dimTotalStrength)` maps if §3.12 is applied (perf, not correctness)
 
 ### 3.15 Behavior preservation discipline

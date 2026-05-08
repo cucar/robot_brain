@@ -173,9 +173,11 @@ export default class Brain {
 		// activate new neurons in age=0, level=0 - inputs from the world
 		this.activateNeurons(frameNeurons.map(({ id }) => id));
 
-		// process neurons level-by-level in parallel - collects votes inline per level
-		// (Op-3 create error patterns, Op-4 process frame, Op-5 update context refs — see processLevels)
-		const votes = this.processLevels();
+		// process neurons level-by-level — Op-3 dispatch is the only per-level round-trip
+		const { votes, neuronSpecs, dispatchResults } = this.processLevels();
+
+		// Op-4 + Op-5: flush deferred neuron creation and contextRef updates in one batch
+		this.thalamus.applyLevelResults(neuronSpecs, dispatchResults);
 
 		// do inferences with age>0 neurons. Returns the scalar-space inferences plus an
 		// optional voteDebug dump (populated only when this.debug is set, null otherwise).
@@ -314,11 +316,12 @@ export default class Brain {
 	}
 
 	/**
-	 * Detects patterns at all levels starting from base - goes as high as possible until no patterns found.
-	 * Each level fires three cross-region ops in order: Op-3 (create error patterns),
-	 * Op-4 (process frame dispatch), Op-5 (update context refs). Activations at level N
-	 * feed the level-N+1 walk, so the loop is the level barrier.
-	 * @returns {Array} Accumulated votes across all processed levels
+	 * Detects patterns at all levels starting from base — goes as high as possible
+	 * until no patterns found. Only Op-3 (process frame dispatch) runs per level;
+	 * neuron creation (Op-4) and contextRef updates (Op-5) are returned for the
+	 * caller to flush once after the loop. Activations at level N feed the level-N+1
+	 * walk, so the loop is the level barrier.
+	 * @returns {{votes: Array, neuronSpecs: Array, dispatchResults: Array}}
 	 */
 	processLevels() {
 
@@ -332,16 +335,17 @@ export default class Brain {
 		// pass at their own level (prevents double connection-learning and context leak)
 		const newErrorPatternIds = new Set();
 
-		// accumulate votes across levels for consensus
+		// accumulate votes, new neuron specs and context updates across levels
 		const votes = [];
+		const neuronSpecs = [];
+		const dispatchResults = [];
 
 		// process neurons level-by-level - each level in parallel
 		for (let level = 0; ; level++) {
 			if (this.debug) console.log(`Processing level ${level} for pattern recognition`);
 
 			// process level: aggregate view, recognize patterns, create error corrections, collect votes
-			// (bundles Op-3, Op-4, Op-5 — split onto the Region boundary inside Thalamus.processLevel)
-			const { activations, votes: levelVotes } = this.thalamus.processLevel(
+			const { activations, votes: levelVotes, neuronSpecs: levelNeuronSpecs, results } = this.thalamus.processLevel(
 				level, this.memory.getLevelNeurons(level), this.memory.depth,
 				sensoryNeurons, this.rewards, this.frameNumber, newErrorPatternIds
 			);
@@ -352,15 +356,17 @@ export default class Brain {
 			// if we produced any activations, increment the max active level as needed
 			if (activations.length > 0) maxActiveLevel = Math.max(maxActiveLevel, level + 1);
 
-			// accumulate this level's votes for consensus
+			// accumulate this level's votes, neuron specs and context updates
 			for (const vote of levelVotes) votes.push(vote);
+			for (const spec of levelNeuronSpecs) neuronSpecs.push(spec);
+			dispatchResults.push(results);
 
 			// if we reached the maximum level and no more patterns are recognized, exit the level processing loop
 			// otherwise, increment the level and process the next level
 			if (level >= maxActiveLevel) break;
 		}
 
-		return votes;
+		return { votes, neuronSpecs, dispatchResults };
 	}
 
 	/**
