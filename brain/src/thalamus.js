@@ -62,7 +62,7 @@ export class Thalamus {
 		// column. In Phase 5 these become per-thread copies materialized at init.
 		this.regionList = []; // index = regionIdx
 		for (let r = 0; r < this.regions; r++)
-			this.regionList.push(new Region(this.columns, this.channelActions, this.actionIds, this.channelDefaultActions, this.mergeThreshold, this.errorMode, this.errorThreshold));
+			this.regionList.push(new Region(this.columns, this.channelActions, this.actionIds, this.mergeThreshold, this.errorMode, this.errorThreshold));
 	}
 
 	/**

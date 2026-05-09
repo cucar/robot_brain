@@ -144,17 +144,19 @@ struct CorrectResult {
 }
 
 pub struct Neuron {
+    /// Neuron ID — public because Column reads it after removing the neuron from its map.
     pub id: NeuronId,
-    pub pattern_forget_rate: f64,
-    pub merge_threshold: f64,
-    pub error_mode: ErrorMode,
-    pub error_threshold: f64,
+
+    pattern_forget_rate: f64,
+    merge_threshold: f64,
+    error_mode: ErrorMode,
+    error_threshold: f64,
 
     /// Per-channel action neuron IDs — shared reference for alternative-action lookup during learning.
-    pub channel_action_ids: FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+    channel_action_ids: FxHashMap<ChannelId, FxHashSet<NeuronId>>,
 
     /// Flat union of all action neuron IDs across channels — used for O(1) is_action_neuron checks.
-    pub action_ids: FxHashSet<NeuronId>,
+    action_ids: FxHashSet<NeuronId>,
 
     /// Inferences: Vec<FxHashMap<toNeuronId, ConnectionData>> indexed by distance.
     /// Distance 0 is unused (connections start at distance 1).
@@ -475,7 +477,7 @@ impl Neuron {
     }
 
     /// Materialize lazy decay for a child pattern.
-    fn materialize_child_strength(&mut self, pattern_id: NeuronId, current_frame: FrameNumber) {
+    pub fn materialize_child_strength(&mut self, pattern_id: NeuronId, current_frame: FrameNumber) {
         let effective = self.get_child_effective_activation_strength(pattern_id, current_frame);
         if let Some(entry) = self.routing_table.get_mut(&pattern_id) {
             entry.activation_strength = effective;
@@ -580,7 +582,7 @@ impl Neuron {
 
     /// Remove a pattern from the context inverted index for a given neuron/distance.
     /// Returns true if no pattern references this neuron at this distance anymore (orphaned).
-    fn remove_context_index(&mut self, neuron_id: NeuronId, distance: Distance, pattern_id: NeuronId) -> bool {
+    pub fn remove_context_index(&mut self, neuron_id: NeuronId, distance: Distance, pattern_id: NeuronId) -> bool {
         let dist_map = self.context_index.get_mut(&neuron_id)
             .unwrap_or_else(|| panic!("remove_context_index: neuron {} not found in context_index of neuron {}", neuron_id, self.id));
         let patterns = dist_map.get_mut(&distance)
@@ -660,6 +662,38 @@ impl Neuron {
     /// Get context refs (for delete cascade).
     pub fn get_context_refs(&self) -> &FxHashMap<NeuronId, FxHashSet<Distance>> {
         &self.context_refs
+    }
+
+    /// Read-only access to the routing table (for Column snapshot/death-frame/delete ops).
+    pub fn get_routing_table(&self) -> &FxHashMap<NeuronId, RoutingEntry> {
+        &self.routing_table
+    }
+
+    /// Mutable access to the routing table (for Column restore — sets last_activation_frame).
+    pub fn get_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, RoutingEntry> {
+        &mut self.routing_table
+    }
+
+    /// Remove a child pattern from the routing table (for Column delete cascade).
+    pub fn remove_routing_entry(&mut self, pattern_id: NeuronId) {
+        self.routing_table.remove(&pattern_id);
+    }
+
+    /// Check if a context key exists for a child pattern (for Column delete cascade).
+    pub fn has_context_key(&self, pattern_id: NeuronId, neuron_id: NeuronId, distance: Distance) -> bool {
+        self.routing_table.get(&pattern_id)
+            .map_or(false, |e| e.context.has_key(neuron_id, distance))
+    }
+
+    /// Check if a neuron+distance exists in the context index (for Column purge).
+    pub fn has_context_index_entry(&self, neuron_id: NeuronId, distance: Distance) -> bool {
+        self.context_index.get(&neuron_id)
+            .map_or(false, |dist_map| dist_map.contains_key(&distance))
+    }
+
+    /// Pattern forget rate (for Column death-frame calculation).
+    pub fn get_pattern_forget_rate(&self) -> f64 {
+        self.pattern_forget_rate
     }
 
     // ── Frame processing ─────────────────────────────────────────────────────

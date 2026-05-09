@@ -10,10 +10,9 @@ import { Neuron } from './neuron.js';
  */
 export class Column {
 
-	constructor(channelActions, actionIds, channelDefaultActions, mergeThreshold, errorMode, errorThreshold) {
+	constructor(channelActions, actionIds, mergeThreshold, errorMode, errorThreshold) {
 		this.channelActions = channelActions;
 		this.actionIds = actionIds;
-		this.channelDefaultActions = channelDefaultActions;
 		this.mergeThreshold = mergeThreshold;
 		this.errorMode = errorMode;
 		this.errorThreshold = errorThreshold;

@@ -13,8 +13,10 @@
 /// - Context: pattern context matching & merging
 /// - Quantizer: scalar-to-bucket discretization
 /// - Diagnostics: accuracy tracking
+pub mod column;
 pub mod context;
 pub mod diagnostics;
 pub mod neuron;
 pub mod quantizer;
+pub mod region;
 pub mod types;

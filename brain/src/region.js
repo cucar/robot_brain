@@ -6,11 +6,11 @@ import { Column } from './column.js';
  */
 export class Region {
 
-	constructor(C, channelActions, actionIds, channelDefaultActions, mergeThreshold, errorMode, errorThreshold) {
+	constructor(C, channelActions, actionIds, mergeThreshold, errorMode, errorThreshold) {
 		this.C = C;
 		this.columns = [];
 		for (let c = 0; c < C; c++)
-			this.columns.push(new Column(channelActions, actionIds, channelDefaultActions, mergeThreshold, errorMode, errorThreshold));
+			this.columns.push(new Column(channelActions, actionIds, mergeThreshold, errorMode, errorThreshold));
 	}
 
 	/**
