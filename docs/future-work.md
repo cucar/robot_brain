@@ -100,10 +100,11 @@ The reasoning that motivates running this experiment:
 
 * Sensory neurons for digit-0 patterns and digit-2 patterns have **disjoint context fingerprints** — the pixel sequences are different, so they activate different patterns.
 * When training Task 2, no Task 1 patterns fire (their contexts don't match), so their action connections aren't modified.
-* Forget rate decays unused connections slowly; with low forget rate (0.001–0.01) and the timescale of 5 sequential tasks, Task 1 patterns should still be intact when re-tested after Task 5.
-* Action-to-digit connections established during Task 1 are not overwritten by Task 2 training because the activating patterns are different.
+* **Higher-level patterns live exponentially longer than lower-level ones.** The decay schedule is stratified by level: base sensory neurons decay fastest, level-1 patterns slower, level-2 patterns slower still, and so on. Whatever digit-0 patterns the brain consolidated up the hierarchy during Task 1 training have decay timescales that comfortably exceed the duration of Tasks 2–5.
+* This means the relevant retention question is not "does the forget rate eat Task 1 patterns" but "did Task 1 train long enough to push patterns up to durable levels." If yes, retention is essentially free.
+* Action connections on those high-level patterns are similarly persistent — they were established when the patterns were the strong predictors of the digit-0 reward, and nothing in Tasks 2–5 fires those patterns to modify them.
 
-The risk: if forget rate is too aggressive, old-task patterns decay during the long stretch of new-task training. This is the experiment's failure mode and the parameter to tune.
+The risk shifts accordingly: it's not "forget rate too aggressive" but "Task 1 trained too briefly to consolidate to durable levels." This is a training-schedule question, not a decay-parameter question.
 
 #### Evaluation
 
@@ -132,7 +133,12 @@ We cite these numbers rather than re-running. Reproduction is a separate effort 
 
 #### Hyperparameter notes for Phase 2
 
-Forget rate is the critical parameter. Recommend running a small sweep (0.0001, 0.001, 0.01) to characterize the retention/plasticity tradeoff. The lower the forget rate, the better the retention but the slower new-task learning.
+The critical knob is **per-task training duration**, not forget rate. Each task must train long enough for digit patterns to consolidate up the hierarchy to levels with decay timescales exceeding the remaining experiment duration. Under-training a task leaves its representations at low levels that decay during subsequent tasks; over-training is harmless beyond saturation.
+
+Recommended starting point:
+* Match the per-task episode count to whatever achieved >95% within-task accuracy in Phase 1 (vanilla MNIST). If Phase 1 converged in 30 episodes, use 30+ episodes per task in Phase 2.
+* Forget rate stays at the Phase 1 value (0.001–0.01). The level-stratified decay schedule does the work.
+* If retention is weak, the first diagnostic is to inspect the level distribution of digit-0 patterns after Task 1 training. If they're concentrated at low levels, train Task 1 longer. If they're at high levels and still being lost, then forget rate is the issue.
 
 #### What this is NOT
 
