@@ -1,0 +1,16 @@
+[package]
+name = "brain-napi"
+version = "0.1.0"
+edition = "2021"
+description = "N-API bindings exposing brain-core to Node.js"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+brain-core = { path = "../brain-core" }
+napi = { version = "2", features = ["full"] }
+napi-derive = "2"
+
+[build-dependencies]
+napi-build = "2"

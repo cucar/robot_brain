@@ -1,0 +1,3 @@
+[workspace]
+members = ["brain-core", "brain-napi"]
+resolver = "2"
