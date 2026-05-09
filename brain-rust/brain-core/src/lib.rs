@@ -14,4 +14,5 @@
 /// - Quantizer: scalar-to-bucket discretization
 /// - Diagnostics: accuracy tracking
 pub mod context;
+pub mod neuron;
 pub mod types;
