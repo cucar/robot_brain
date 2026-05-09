@@ -15,4 +15,5 @@
 /// - Diagnostics: accuracy tracking
 pub mod context;
 pub mod neuron;
+pub mod quantizer;
 pub mod types;
