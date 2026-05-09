@@ -382,26 +382,6 @@ export class Neuron {
 	}
 
 	/**
-	 * returns pattern context entries
-	 */
-	getPatternContext(patternId) {
-		const entry = this.routingTable.get(patternId);
-		if (!entry) throw new Error(`getPatternContext: pattern ${patternId} not found in routing table of neuron ${this.id}`);
-		return entry.context.getEntries();
-	}
-
-	/**
-	 * returns all pattern context entries for all patterns in the routing table
-	 */
-	getRoutingTable() {
-		const result = [];
-		for (const [patternId, entry] of this.routingTable)
-			for (const ctxEntry of entry.context.getEntries())
-				result.push({ patternId, ...ctxEntry });
-		return result;
-	}
-
-	/**
 	 * adds an entry to the pattern context by neuron ID
 	 */
 	addContext(patternId, neuronId, distance, strength = 1) {
