@@ -14,6 +14,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::memory::InferredNeuron;
 use crate::column::{
     ColumnProcessResult, ConnectionSpec, DeleteOp,
     NeuronCreateSpec,
@@ -437,21 +438,21 @@ impl Thalamus {
 
     /// Get inferred actions grouped by channel from the given inferences.
     /// Returns a map of channel_id → list of {coordinate, strength, reward}.
-    pub fn get_inferred_actions(&self, inferences: &[(NeuronId, f64, f64)]) -> FxHashMap<ChannelId, Vec<InferredAction>> {
+    pub fn get_inferred_actions(&self, inferences: &[InferredNeuron]) -> FxHashMap<ChannelId, Vec<InferredAction>> {
         let mut channel_outputs: FxHashMap<ChannelId, Vec<InferredAction>> = FxHashMap::default();
-        for &(neuron_id, strength, reward) in inferences {
-            if self.get_neuron_type(neuron_id) != Some(NeuronType::Action) { continue; }
-            let channel_id = match self.get_neuron_channel_id(neuron_id) {
+        for inf in inferences {
+            if self.get_neuron_type(inf.neuron_id) != Some(NeuronType::Action) { continue; }
+            let channel_id = match self.get_neuron_channel_id(inf.neuron_id) {
                 Some(c) => c,
                 None => continue,
             };
-            let coordinate = match self.get_neuron_coordinate(neuron_id) {
+            let coordinate = match self.get_neuron_coordinate(inf.neuron_id) {
                 Some(c) => c.clone(),
                 None => continue,
             };
             channel_outputs.entry(channel_id)
                 .or_insert_with(Vec::new)
-                .push(InferredAction { coordinate, strength, reward });
+                .push(InferredAction { coordinate, strength: inf.strength, reward: inf.reward });
         }
         channel_outputs
     }
@@ -462,7 +463,7 @@ impl Thalamus {
     pub fn get_inference_results(
         &self,
         active_neuron_ids: &FxHashSet<NeuronId>,
-        inferred_neurons: &[(NeuronId, f64)],
+        inferred_neurons: &[InferredNeuron],
         rewards: &FxHashMap<ChannelId, Reward>,
     ) -> Vec<InferenceResultItem> {
 
@@ -478,7 +479,8 @@ impl Thalamus {
         }
 
         let mut results = Vec::with_capacity(inferred_neurons.len());
-        for &(neuron_id, _strength) in inferred_neurons {
+        for inf in inferred_neurons {
+            let neuron_id = inf.neuron_id;
             let neuron_type = match self.get_neuron_type(neuron_id) {
                 Some(t) => t,
                 None => continue,
@@ -1371,6 +1373,11 @@ impl Thalamus {
         }
         0
     }
+
+    /// Get the dimension_id → name mapping (for diagnostic display).
+    pub fn get_dimension_id_to_name(&self) -> FxHashMap<DimensionId, String> {
+        self.dimension_id_to_name.clone()
+    }
 }
 
 // ── Internal task/spec types ────────────────────────────────────────────────
@@ -1699,7 +1706,14 @@ mod tests {
         let mut active = FxHashSet::default();
         active.insert(lookup1.id);
 
-        let inferred = vec![(lookup2.id, 1.0)]; // predicted neuron 2
+        let inferred = vec![InferredNeuron {
+            neuron_id: lookup2.id,
+            coordinate: coord2.clone(),
+            channel_id: 1,
+            strength: 1.0,
+            reward: 0.0,
+            probability: 0.0,
+        }]; // predicted neuron 2
         let rewards = FxHashMap::default();
 
         let results = t.get_inference_results(&active, &inferred, &rewards);

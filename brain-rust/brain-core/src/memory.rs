@@ -10,13 +10,19 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::thalamus::LevelAgeState;
-use crate::types::{Distance, FrameNumber, Level, NeuronId};
+use crate::types::{ChannelId, Coordinate, Distance, FrameNumber, Level, NeuronId};
 
-/// A single inferred neuron with its strength.
+/// A single inferred neuron — winner from the voting consensus.
+/// Carries the fields that buildFrame needs on the next frame:
+/// strength for all neurons, reward for actions, probability for events.
 #[derive(Debug, Clone)]
 pub struct InferredNeuron {
     pub neuron_id: NeuronId,
+    pub coordinate: Coordinate,
+    pub channel_id: ChannelId,
     pub strength: f64,
+    pub reward: f64,
+    pub probability: f64,
 }
 
 pub struct Memory {
@@ -375,8 +381,8 @@ mod tests {
     fn test_inferred_neurons() {
         let mut m = Memory::new(false, 4);
         m.save_inferred_neurons(vec![
-            InferredNeuron { neuron_id: 1, strength: 0.8 },
-            InferredNeuron { neuron_id: 2, strength: 0.6 },
+            InferredNeuron { neuron_id: 1, coordinate: Coordinate { dim_id: 0, bucket_id: 1 }, channel_id: 0, strength: 0.8, reward: 0.0, probability: 0.0 },
+            InferredNeuron { neuron_id: 2, coordinate: Coordinate { dim_id: 0, bucket_id: 2 }, channel_id: 0, strength: 0.6, reward: 0.0, probability: 0.0 },
         ]);
         assert_eq!(m.get_inferred_neurons().len(), 2);
 
@@ -389,7 +395,7 @@ mod tests {
         let mut m = Memory::new(false, 4);
         m.age(1);
         m.activate_neuron(10, 0);
-        m.save_inferred_neurons(vec![InferredNeuron { neuron_id: 1, strength: 1.0 }]);
+        m.save_inferred_neurons(vec![InferredNeuron { neuron_id: 1, coordinate: Coordinate { dim_id: 0, bucket_id: 1 }, channel_id: 0, strength: 1.0, reward: 0.0, probability: 0.0 }]);
 
         m.reset();
         assert_eq!(m.depth(), 0);
