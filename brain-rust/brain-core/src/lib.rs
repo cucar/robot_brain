@@ -19,4 +19,5 @@ pub mod diagnostics;
 pub mod neuron;
 pub mod quantizer;
 pub mod region;
+pub mod thalamus;
 pub mod types;
