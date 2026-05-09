@@ -287,12 +287,15 @@ If no sibling moments exist for the desired alternative action, the experiment c
 
 ### Action reinforcement (writeback)
 
-When an experiment converges on a long-term-optimum trajectory, the hippocampus reinforces action connections on moments along the trajectory. For each moment M_b in the trajectory at simulated-time-offset Δt from the start:
+When an experiment converges on a long-term-optimum trajectory, the hippocampus updates action connections on moments along the trajectory. For each moment M_b in the trajectory at simulated-time-offset Δt from the start:
 
 1. Determine the long-term temporal bin matching Δt under the soft bin assignment kernel.
-2. Strengthen M_b's connection to the trajectory-optimum action in those bins.
+2. Compute the simulated expected reward for the trajectory-optimum action from M_b.
+3. If the simulated expected reward exceeds the current expected reward of M_b's strongest connection in those bins, update M_b's connection to that action — increasing its strength to reflect the higher expected reward.
 
-The strength of the reinforcement is calibrated against ordinary statistical action-vote strength — strong enough to influence behavior, not so strong it overrides recent direct experience. The exact calibration constant is a tunable.
+The update can only raise expected-reward; it cannot lower another action's record. Every action ever explored from M_b retains its connection at the best expected reward observed for it, and the highest-reward connection wins voting when M_b fires.
+
+This preserves exploration. Actions that haven't been tried (or that have low observed reward so far) keep their connections; if the hippocampus later simulates a better outcome for them via replay, those connections strengthen. Nothing forces the brain to commit to whichever action it tried first.
 
 Generalization is left to the substrate. Don't try to write the lesson onto multiple moments simultaneously — write it onto the moment where the substitution applies. Over time, when M_b reactivates in similar contexts and votes its reinforced action successfully, the cortex builds patterns over the situations where that vote helped, and those patterns inherit the lesson through normal cortical abstraction.
 
@@ -322,7 +325,9 @@ This is the mechanism that drives moments-becoming-classes. Do not apply renorma
 
 **2. Moment-level decay.** A moment's overall strength is initialized from its salience at minting and decays per cortex frame. Activation boosts it. Below `moment_eviction_threshold`, or when capacity is pressured, the lowest-strength moments are evicted. A moment is also evicted if its surviving link count drops below `min_context_refs`.
 
-**3. Action-connection decay.** Action connections in each temporal bin decay independently and are reinforced by use (either statistical reinforcement from observed action-reward pairs, or experiment-driven reinforcement from replay). Connections in bins that never get reinforced fade out.
+**3. Action connections do not decay.** Action connections grow or stay stable; they are never weakened. The brain executes only one action per channel per frame, so an un-chosen action isn't a wrong prediction — it just wasn't tried. Weakening unchosen actions would collapse the brain onto whichever action it happened to try first and destroy exploration. Action connections are removed only when the node holding them dies.
+
+Reinforcement comes from two sources: statistical reinforcement from observed action-reward pairs (cortex), and experiment-driven reinforcement from replay (hippocampus). Both grow connection strength; neither weakens it. When the hippocampus updates a moment's action via experiment, the simulated reward must exceed the current strongest connection's expected reward for the update to take effect — otherwise the existing connection wins. This way the moment accumulates a record of every action explored, each tagged with its best-observed (or best-simulated) expected reward, and the highest-reward action wins votes when the moment fires.
 
 **4. Cascade on cortical deletion.** When a context neuron is deleted, every node removes that connection. Moments dropping below `min_context_refs` are evicted.
 
@@ -457,8 +462,7 @@ loop:
 
 - Branch via parent-pattern sibling: walk up to a moment's parent patterns, find sibling moments under shared parents with the alternative action, replay forward from one.
 - Stack-based push/pop for branches.
-- Action reinforcement: at experiment conclusion, strengthen action connections on moments along the trajectory in the temporal bin matching the summed Δt of the lesson.
-- Calibration of writeback strength against ordinary statistical action-vote strength.
+- Action update: at experiment conclusion, the trajectory-optimum action's simulated expected reward is compared against the moment's current strongest connection in the matching temporal bins. If higher, the connection updates to reflect the new expected reward. Action connections never weaken — every action explored retains its best-observed-or-simulated record.
 - Verify: replaying a bad outcome with alternatives discovers a better policy; subsequent encounters of the same context use the improved policy via the moment's reinforced action connections out-voting the old habit.
 
 ### Phase 6 — Involuntary forecast pass
@@ -505,7 +509,7 @@ Extend the union-creation rule recursively: detect salience-density triggers ove
 - Wavefront replay: starting from a multi-moment set, step forward, accumulate simulated time.
 - Termination conditions: budget, horizon, convergence, salience drop — each fires correctly in isolation.
 - Counterfactual via parent-pattern sibling: find the right sibling under shared parents.
-- Action reinforcement writeback: lands in the correct temporal bin on the correct moment.
+- Action-connection updates: writeback only takes effect when simulated expected reward exceeds current strongest connection; existing connections never weaken.
 - Salience: z-score thresholding over sliding windows.
 - Death ledger: eviction records, re-mint suppression.
 
@@ -537,15 +541,14 @@ Extend the union-creation rule recursively: detect salience-density triggers ove
 
 1. **Wavefront writeback granularity.** When the trajectory is a wavefront with multiple active moments at each step, which member(s) of the wavefront receive the action-reinforcement writeback? Strongest-firing? All members weighted by firing strength? Only those whose stored actions matched the substituted action? Specify during Phase 5 with real experiment data.
 2. **Salience-drop computation.** What signal exactly is the running average computed over (mean activation strength of the active set?), and what threshold ratio terminates? Default proposal: drop below 30% of starting average. Tune from observation.
-3. **Writeback strength calibration.** How strongly do experiment-driven action-connection updates compete with statistical updates? Too strong and one experiment overrides genuine recent experience; too weak and lessons get washed out. Initial proposal: writeback strength equivalent to N=10 statistical reinforcements. Tune from behavioral tests.
-4. **Number of bins (short-term and long-term).** Default 10 each. Domain-dependent — algorithmic trading might want more long-term bins for finer-grain horizons; raw control tasks might want fewer.
-5. **Cold-start K.** How many activations before a new moment contributes to votes? Default 3. Should be the same as the cortex's existing pattern cold-start gating, whatever that turns out to be.
-6. **Moment sampling rate.** How often do we mint a non-salient moment to maintain baseline graph connectivity? Probably every few thousand cortex frames. Defer until we observe whether the temporal graph becomes too sparse with pure salience-triggered minting.
-7. **Δt-kernel shape for replay step sampling.** Gaussian over log-Δt is the default. Alternative kernels could bias toward specific horizons. Implementation detail.
-8. **Cross-channel moments.** Can a single moment's parent set include patterns from multiple channels (stock + text + vision)? With unification, the answer is structurally yes — any high-level pattern active at mint time becomes a parent regardless of channel. Worth verifying in implementation that cross-channel parent registration is permitted and that cross-channel moments behave sensibly under replay.
-9. **Persistence.** Do moments persist across brain restarts? For long-term memory to be meaningful, yes. Need serialization for the column state plus the death ledger and temporal graph.
-10. **Higher-order moments.** Whether and when to add the recursive layer (episodes-of-moments, eras-of-episodes). Deferred to Phase 10. The architectural shape is clear (same union-creation rule, lifted one level); the trigger criteria at higher scales need design when the time comes.
-11. **The actual instruction set the cortex uses to invoke the hippocampus.** Will emerge from implementation rather than be designed up front. The conceptual operations are listed above; their precise signatures and the cortex-side action neurons that trigger them are TBD.
+3. **Number of bins (short-term and long-term).** Default 10 each. Domain-dependent — algorithmic trading might want more long-term bins for finer-grain horizons; raw control tasks might want fewer.
+4. **Cold-start K.** How many activations before a new moment contributes to votes? Default 3. Should be the same as the cortex's existing pattern cold-start gating, whatever that turns out to be.
+5. **Moment sampling rate.** How often do we mint a non-salient moment to maintain baseline graph connectivity? Probably every few thousand cortex frames. Defer until we observe whether the temporal graph becomes too sparse with pure salience-triggered minting.
+6. **Δt-kernel shape for replay step sampling.** Gaussian over log-Δt is the default. Alternative kernels could bias toward specific horizons. Implementation detail.
+7. **Cross-channel moments.** Can a single moment's parent set include patterns from multiple channels (stock + text + vision)? With unification, the answer is structurally yes — any high-level pattern active at mint time becomes a parent regardless of channel. Worth verifying in implementation that cross-channel parent registration is permitted and that cross-channel moments behave sensibly under replay.
+8. **Persistence.** Do moments persist across brain restarts? For long-term memory to be meaningful, yes. Need serialization for the column state plus the death ledger and temporal graph.
+9. **Higher-order moments.** Whether and when to add the recursive layer (episodes-of-moments, eras-of-episodes). Deferred to Phase 10. The architectural shape is clear (same union-creation rule, lifted one level); the trigger criteria at higher scales need design when the time comes.
+10. **The actual instruction set the cortex uses to invoke the hippocampus.** Will emerge from implementation rather than be designed up front. The conceptual operations are listed above; their precise signatures and the cortex-side action neurons that trigger them are TBD.
 
 ---
 
