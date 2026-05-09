@@ -16,6 +16,7 @@
 pub mod column;
 pub mod context;
 pub mod diagnostics;
+pub mod memory;
 pub mod neuron;
 pub mod quantizer;
 pub mod region;
