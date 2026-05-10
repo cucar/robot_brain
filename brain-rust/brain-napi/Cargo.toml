@@ -11,6 +11,7 @@ crate-type = ["cdylib"]
 brain-core = { path = "../brain-core" }
 napi = { version = "2", features = ["full"] }
 napi-derive = "2"
+rustc-hash = "2"
 
 [build-dependencies]
 napi-build = "2"

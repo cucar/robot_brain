@@ -4,9 +4,9 @@
   "private": true,
   "description": "Hierarchical temporal neural network core (JS). The runtime brain — neurons, columns, thalamus, memory, persistence.",
   "type": "module",
-  "main": "src/brain.js",
+  "main": "src/index.js",
   "exports": {
-    ".": "./src/brain.js",
+    ".": "./src/index.js",
     "./quantizer": "./src/quantizer.js",
     "./backup": "./src/backup.js"
   },

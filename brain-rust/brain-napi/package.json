@@ -1,0 +1,13 @@
+{
+  "name": "brain-napi",
+  "version": "0.1.0",
+  "description": "N-API bindings for brain-core",
+  "main": "index.js",
+  "napi": {
+    "name": "brain-napi",
+    "triples": {}
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  }
+}

@@ -644,8 +644,10 @@ impl Neuron {
     /// Remove a context reference from another neuron to this neuron.
     /// Called when this neuron is removed from another neuron's context.
     pub fn remove_context_ref(&mut self, referencing_neuron_id: NeuronId, distance: Distance) {
-        let distances = self.context_refs.get_mut(&referencing_neuron_id)
-            .unwrap_or_else(|| panic!("Context ref not found: {}", referencing_neuron_id));
+        let distances = match self.context_refs.get_mut(&referencing_neuron_id) {
+            Some(d) => d,
+            None => return,
+        };
         distances.remove(&distance);
         if distances.is_empty() { self.context_refs.remove(&referencing_neuron_id); }
     }

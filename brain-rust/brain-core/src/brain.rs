@@ -22,16 +22,21 @@ use std::time::Instant;
 
 use crate::backup::Backup;
 use crate::column::NeuronCreateSpec;
-use crate::diagnostics::{DiagnosticStats, DimInference, Diagnostics, InferenceType};
+use crate::diagnostics::{DimInference, Diagnostics, InferenceType};
 use crate::memory::{InferredNeuron, Memory};
 use crate::thalamus::{
-    ChannelRegistration, DimSpecInput, FlatVote,
+    FlatVote,
     PointLookup, Thalamus,
 };
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
     Level, NeuronId, NeuronType, Reward,
 };
+
+// ── Re-exports for the N-API layer ──────────────────────────────────────────
+// These types live in crate-private modules but are part of Brain's public API.
+pub use crate::diagnostics::DiagnosticStats;
+pub use crate::thalamus::{ChannelRegistration, DimKind, DimSpecInput};
 
 // ── Supporting structs ──────────────────────────────────────────────────────
 
