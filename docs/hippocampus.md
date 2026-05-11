@@ -18,11 +18,34 @@ There is one neuron kind that lives in cortical columns: a node with a context f
 
 Storage is always cortical. The hippocampus is the operator that mints moments and runs experiments — it owns no permanent store of its own.
 
+## Core Principles
+
+The hippocampus is not a database. Memories are not retrieved through global similarity search. 
+Instead, memories are re-instantiated through distributed contextual routing.
+
+The cortex continuously forms sparse hierarchical patterns.
+The hippocampus binds those patterns into moments.
+Replay strengthens useful routes and weakens irrelevant ones.
+Forgetting is not cleanup; forgetting is abstraction.
+
+Thought emerges from replay traversal through compressed contextual structure.
+
 ### Moments age into classes
 
-A moment is born with many parents (the union at mint time). Per-link decay applies independently to each parent connection. Use-driven reinforcement strengthens links that match real recurring contexts. Over time, weak (incidental) parent links drop out; strong (real-context) parent links survive and sharpen. The moment ends up connected only to its core parents — a class-shaped node, structurally indistinguishable from a statistically-formed pattern.
+A moment is born with many parents (the union at mint time). 
+Per-link decay applies independently to each parent connection. 
+Use-driven reinforcement strengthens links that match real recurring contexts. 
+Over time, weak (incidental) parent links drop out; strong (real-context) parent links survive and sharpen. 
+The moment ends up connected only to its core parents — a class-shaped node, structurally indistinguishable from a statistically-formed pattern.
 
-Classes are not a separate neuron kind. They are aged moments. The forgetting curve is the abstraction mechanism. This is the architectural analog of episodic-to-semantic consolidation as observed empirically: vivid specific memories lose incidental detail and survive as gist.
+Moments are not stored as immutable records.
+A recalled moment is a partial reconstruction assembled from surviving contextual routes across many parent neurons.
+As forgetting removes weak or incidental routes, moments gradually lose episodic specificity and become semantic abstractions (classes).
+
+Classes are not a separate neuron kind. 
+They are aged moments. 
+The forgetting curve is the abstraction mechanism. 
+This is the architectural analog of episodic-to-semantic consolidation as observed empirically: vivid specific memories lose incidental detail and survive as gist.
 
 ### Thinkability = reachability by the executor
 
@@ -68,6 +91,16 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 
 ---
 
+## Context overlap
+
+Context overlap is not a global semantic similarity operation. 
+Each neuron stores child routing entries with the full activation context present when that child was created or reinforced.
+When the neuron activates again, the current activation context is compared against the stored routing contexts of its child entries.
+Children receiving strong contextual matches receive stronger votes.
+Memory retrieval therefore emerges from distributed agreement across many independent local routing decisions.
+
+---
+
 ## The cortical substrate
 
 A cortical node, regardless of whether it was minted as a pattern or as a moment, has:
@@ -85,6 +118,19 @@ What distinguishes patterns from moments structurally:
 - **Moments** were minted by the hippocampus by union over the active high-level pattern set at a salience trigger. They have many parents at birth. Their action connections live on a *long-term temporal bin scheme* (exponential, broad horizon — e.g., 10 bins covering 1 to 10^10 frames).
 
 Both kinds participate in normal cortical activity. The hippocampus's special access is by id, not by kind.
+
+---
+
+## Implicit Inhibition
+
+When higher-level neurons activate, the lower-level patterns that triggered
+them do not independently vote.
+
+This creates a natural hierarchical inhibition mechanism:
+higher-order abstractions suppress redundant lower-level participation.
+
+Inhibition may also emerge behaviorally through competing actions, such as
+suppressive or muting actions.
 
 ---
 
@@ -135,6 +181,18 @@ Its operations:
 - **Decay and evict** — apply moment-timeline decay; emit eviction records to the death ledger.
 
 The cortex does not know about the moment/pattern distinction. It just sees nodes firing and contributing votes. The hippocampus is the only thing that knows which nodes are moments and what experiments are running.
+
+Replay is intentionally approximate and resource bounded.
+
+The goal is not exhaustive planning but salience-guided exploration.
+
+Replay may:
+- loop,
+- terminate early,
+- become distracted,
+- or converge on emotionally reinforced regions.
+
+This behavior is considered a feature rather than a defect and mirrors many properties of biological cognition.
 
 ---
 
@@ -250,6 +308,18 @@ This is the same machinery as the involuntary forecast pass. The only difference
 
 Each parameter is independently learnable through the metacognitive reward signal (Phase 7).
 
+Think-actions are replay-control directives.
+
+They bias:
+- replay initialization,
+- traversal direction,
+- salience weighting,
+- reinforcement,
+- or memory persistence.
+
+Language may trigger think-actions directly, allowing external instructions
+such as "remember this" or "think about this" to shape replay behavior.
+
 ---
 
 ## Experiment execution
@@ -337,6 +407,39 @@ Reinforcement comes from two sources: statistical reinforcement from observed ac
 - Re-encoding suppression — don't immediately re-mint a just-evicted moment unless its salience is now substantially higher.
 
 **6. Sleep / idle consolidation.** When the hippocampus has free cycles, it replays high-salience moments to reinforce them and prunes low-strength moments. This is the biological-sleep-replay analog. The class-rebalancing pass from the previous design is gone — there are no classes as separate entities to rebalance.
+
+---
+
+## Forgetting as Compression
+
+The system is designed around the assumption that intelligence requires continuous forgetting.
+
+Without forgetting:
+- contextual noise accumulates,
+- routing tables explode,
+- memories become overly specific,
+- and generalization fails.
+
+Forgetting removes weak contextual routes while preserving highly reinforced structure.
+
+Over time, this transforms detailed episodic moments into compressed semantic classes.
+
+---
+
+## Attention
+
+The cortex continuously processes sensory and internal activation.
+
+Attention is defined as whatever replay process currently occupies the hippocampus.
+
+In this model:
+- attention,
+- working memory,
+- deliberate thought,
+- imagination,
+- and planning
+
+are all forms of constrained replay occupancy.
 
 ---
 
@@ -552,7 +655,38 @@ Extend the union-creation rule recursively: detect salience-density triggers ove
 
 ---
 
+## Replay Pathologies
+
+Because replay reinforces future routing and behavior, the system may develop:
+- obsessive replay loops,
+- irrational associations,
+- overgeneralizations,
+- false abstractions,
+- or self-reinforcing beliefs.
+
+These are considered expected emergent properties of replay-driven cognition rather than implementation bugs.
+
+The architecture assumes that environmental interaction, prediction failure, and sensory correction will counterbalance pathological replay over time.
+
+---
+
 ## Why this matters
+
+The architecture does not use:
+- vector embeddings,
+- transformer attention,
+- symbolic logic trees,
+- immutable memory records,
+- exhaustive planning,
+- centralized retrieval,
+- or static semantic representations.
+
+All cognition emerges from:
+- sparse hierarchical pattern formation,
+- contextual routing,
+- replay traversal,
+- reinforcement,
+- and forgetting.
 
 - **Long-term memory** as cortical neurons minted by deliberate experimentation — not as a separate store, not as a context window.
 - **Episodic-to-semantic consolidation** as a structural consequence of per-link decay on multi-parent nodes, not as a separate process.
@@ -565,3 +699,5 @@ Extend the union-creation rule recursively: detect salience-density triggers ove
 - **One substrate, two operators, thalamic bus.** Cortex builds by intersection. Hippocampus binds by union. Activation, voting, and decay are unified across both.
 
 The thesis: the next generation of AI architectures will not come from scaling sequence models. It will come from systems that have the structures biological brains have — separate organs for perception, memory, and thinking, coupled bidirectionally and operating on different clocks over a shared substrate, with one substrate underneath that both organs act on through different creation rules.
+
+Intelligence emerges not from storing information, but from continuously reconstructing compressed experience through replay.
