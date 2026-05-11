@@ -158,7 +158,8 @@ impl Context {
 
                 // if the observed context has the neuron at the absolute distance, it is a common entry - otherwise missing
                 let entry = ContextEntry { neuron_id, distance, strength };
-                if observed_distances.map_or(false, |od| od.contains_key(&absolute_distance)) { common.push(entry); }
+                let is_common = observed_distances.map_or(false, |od| od.contains_key(&absolute_distance));
+                if is_common { common.push(entry); }
                 else { missing.push(entry); }
 
                 // add the match score for the entry (using absolute distance against observed)

@@ -62,8 +62,8 @@ pub struct DimSpec {
     pub resolution: u32,
     pub mode: Option<String>,
     pub boundaries: Option<Vec<f64>>,
-    pub actions: Option<Vec<u32>>,
-    pub default_action: Option<u32>,
+    pub actions: Option<Vec<i32>>,
+    pub default_action: Option<i32>,
     pub warmup_samples: Option<usize>,
 }
 
@@ -390,6 +390,7 @@ impl Thalamus {
                     to_neuron_id: sensory_neuron_id,
                     strength: 1.0,
                     reward,
+                    channel_id,
                 });
             }
         }
@@ -685,7 +686,7 @@ impl Thalamus {
     }
 
     /// Translate an id-form coordinate to name-form.
-    pub fn coordinate_id_to_name(&self, coordinate: &Coordinate) -> Option<(String, u32)> {
+    pub fn coordinate_id_to_name(&self, coordinate: &Coordinate) -> Option<(String, i32)> {
         self.dimension_id_to_name.get(&coordinate.dim_id)
             .map(|name| (name.clone(), coordinate.bucket_id))
     }
@@ -786,7 +787,6 @@ impl Thalamus {
             .iter()
             .map(|(&nid, ages)| (nid, ages.clone()))
             .collect();
-
         for (neuron_id, age_states) in &neuron_entries {
 
             // skip action neurons for learning or contexts if the channel learns without them
@@ -847,13 +847,15 @@ impl Thalamus {
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
 
-        for (&age, state) in age_states {
+        let ages: Vec<Distance> = age_states.keys().copied().collect();
+        for age in ages {
+            let state = &age_states[&age];
 
             // every age > 0 entry contributes to the shared level context
             if age > 0 { level_context.add_neuron(neuron_id, age, 1.0); }
 
             // evaluate the prior-frame vote at this age (if any) and record feedback
-            let result = match Self::evaluate_vote_error(age, state, &sensory_neurons[0]) {
+            let result = match self.evaluate_vote_error(age, state, &sensory_neurons[0]) {
                 Some(r) => r,
                 None => continue,
             };
@@ -1007,11 +1009,14 @@ impl Thalamus {
     }
 
     /// Batch contextRef updates by target neuron for Op-5 dispatch.
+    /// Fills in `parent_id` from the result (neuron-level code emits it as 0).
     fn collect_context_ref_updates(result: &ColumnProcessResult, per_target: &mut FxHashMap<NeuronId, Vec<ContextRefUpdate>>) {
         for update in &result.context_ref_updates {
-            per_target.entry(update.neuron_id)
+            let mut u = update.clone();
+            u.parent_id = result.parent_id;
+            per_target.entry(u.neuron_id)
                 .or_insert_with(Vec::new)
-                .push(update.clone());
+                .push(u);
         }
     }
 
@@ -1019,7 +1024,7 @@ impl Thalamus {
     /// Returns the observed error rate (so it can be sent back to the neuron as
     /// feedback) and whether it crosses the threshold the neuron supplied when it
     /// cast the vote. The neuron owns its error stats — thalamus only judges.
-    fn evaluate_vote_error(age: Distance, state: &LevelAgeState, actual_neuron_ids: &FxHashSet<NeuronId>) -> Option<VoteErrorResult> {
+    fn evaluate_vote_error(&self, age: Distance, state: &LevelAgeState, actual_neuron_ids: &FxHashSet<NeuronId>) -> Option<VoteErrorResult> {
 
         // age=0 neurons cannot need correction because they are just voting now
         if age == 0 { return None; }
@@ -1030,16 +1035,15 @@ impl Thalamus {
             _ => return None,
         };
 
-        // compare the inferred events to reality
+        // compare the inferred events to reality — events only, actions are
+        // judged by reward not hit/miss
         let mut failed_events = 0u32;
         let mut total_events = 0u32;
         for vote in votes {
-            // events only — actions are judged by reward, not hit/miss
-            // Note: we don't have neuron type info here, but all votes in the level loop
-            // are from event neurons (action neurons are filtered by skip_action_neuron).
-            // For safety, we count all votes as events.
-            total_events += 1;
-            if !actual_neuron_ids.contains(&vote.neuron_id) { failed_events += 1; }
+            if self.get_neuron_type(vote.neuron_id) == Some(NeuronType::Event) {
+                total_events += 1;
+                if !actual_neuron_ids.contains(&vote.neuron_id) { failed_events += 1; }
+            }
         }
         if total_events == 0 { return None; }
         let error_rate = failed_events as f64 / total_events as f64;
@@ -1434,8 +1438,8 @@ pub struct DimSpecInput {
     pub resolution: u32,
     pub mode: Option<String>,
     pub boundaries: Option<Vec<f64>>,
-    pub actions: Option<Vec<u32>>,
-    pub default_action: Option<u32>,
+    pub actions: Option<Vec<i32>>,
+    pub default_action: Option<i32>,
     pub warmup_samples: Option<usize>,
 }
 
@@ -1625,24 +1629,37 @@ mod tests {
         assert!(t.skip_action_neuron(action_id));
     }
 
+    /// Helper: create a thalamus with event neurons registered at IDs 1 and 2.
+    fn make_thalamus_with_events() -> Thalamus {
+        let mut t = make_thalamus();
+        // register neuron 1 as event at coord (dim=1, bucket=1)
+        t.get_neuron_id_for_point(&Coordinate { dim_id: 1, bucket_id: 1 }, 1, NeuronType::Event);
+        // register neuron 2 as event at coord (dim=1, bucket=2)
+        t.get_neuron_id_for_point(&Coordinate { dim_id: 1, bucket_id: 2 }, 1, NeuronType::Event);
+        t
+    }
+
     #[test]
     fn test_evaluate_vote_error_no_votes() {
+        let t = make_thalamus_with_events();
         let state = LevelAgeState::default();
-        assert!(Thalamus::evaluate_vote_error(1, &state, &FxHashSet::default()).is_none());
+        assert!(t.evaluate_vote_error(1, &state, &FxHashSet::default()).is_none());
     }
 
     #[test]
     fn test_evaluate_vote_error_age_zero() {
+        let t = make_thalamus_with_events();
         let state = LevelAgeState {
             votes: Some(vec![Vote { neuron_id: 1, strength: 1.0, reward: 0.0, distance: 1 }]),
             ..Default::default()
         };
         // age 0 always returns None
-        assert!(Thalamus::evaluate_vote_error(0, &state, &FxHashSet::default()).is_none());
+        assert!(t.evaluate_vote_error(0, &state, &FxHashSet::default()).is_none());
     }
 
     #[test]
     fn test_evaluate_vote_error_fires() {
+        let t = make_thalamus_with_events();
         let state = LevelAgeState {
             votes: Some(vec![
                 Vote { neuron_id: 1, strength: 1.0, reward: 0.0, distance: 1 },
@@ -1652,13 +1669,14 @@ mod tests {
             ..Default::default()
         };
         // neither neuron is in actuals → 100% error → fires (> 0.3)
-        let result = Thalamus::evaluate_vote_error(1, &state, &FxHashSet::default()).unwrap();
+        let result = t.evaluate_vote_error(1, &state, &FxHashSet::default()).unwrap();
         assert!(result.fire);
         assert!((result.error_rate - 1.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_evaluate_vote_error_does_not_fire() {
+        let t = make_thalamus_with_events();
         let mut actuals = FxHashSet::default();
         actuals.insert(1);
         actuals.insert(2);
@@ -1671,7 +1689,7 @@ mod tests {
             ..Default::default()
         };
         // both correct → 0% error → does not fire
-        let result = Thalamus::evaluate_vote_error(1, &state, &actuals).unwrap();
+        let result = t.evaluate_vote_error(1, &state, &actuals).unwrap();
         assert!(!result.fire);
         assert!((result.error_rate - 0.0).abs() < 1e-10);
     }

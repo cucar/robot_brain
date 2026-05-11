@@ -147,7 +147,7 @@ impl Backup {
                     _ => NeuronType::Event,
                 };
                 let dim_id: DimensionId = row[3].parse().map_err(|e| format!("Bad dim id: {}", e))?;
-                let bucket_id: u32 = row[4].parse().map_err(|e| format!("Bad bucket id: {}", e))?;
+                let bucket_id: i32 = row[4].parse().map_err(|e| format!("Bad bucket id: {}", e))?;
                 base_neurons.insert(neuron_id, BaseNeuron {
                     channel_id,
                     neuron_type,

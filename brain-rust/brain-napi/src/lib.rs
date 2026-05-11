@@ -156,8 +156,8 @@ impl JsBrain {
             let resolution = dim.get_named_property::<JsNumber>("resolution")?.get_uint32()?;
             let mode = get_opt_string(&dim, "mode")?;
             let boundaries = get_opt_f64_array(&dim, "boundaries")?;
-            let actions = get_opt_u32_array(&dim, "actions")?;
-            let default_action = get_opt_u32(&dim, "defaultAction")?;
+            let actions = get_opt_i32_array(&dim, "actions")?;
+            let default_action = get_opt_i32(&dim, "defaultAction")?;
             let warmup_samples = get_opt_u32(&dim, "warmupSamples")?.map(|v| v as usize);
 
             dimensions.push(brain_core::brain::DimSpecInput {
@@ -310,7 +310,7 @@ impl JsBrain {
                     let mut pt = env.create_object()?;
                     let mut coord = env.create_object()?;
                     coord.set_named_property("dimId", env.create_uint32(point.coordinate.dim_id)?)?;
-                    coord.set_named_property("bucketId", env.create_uint32(point.coordinate.bucket_id)?)?;
+                    coord.set_named_property("bucketId", env.create_int32(point.coordinate.bucket_id)?)?;
                     pt.set_named_property("coordinate", coord)?;
                     pt.set_named_property("channelId", env.create_uint32(point.channel_id)?)?;
                     let type_str = match point.neuron_type {
@@ -434,7 +434,7 @@ fn set_diagnostic_stats(env: &Env, obj: &mut JsObject, stats: &brain_core::brain
 fn set_coordinate(env: &Env, parent: &mut JsObject, key: &str, coord: &Coordinate) -> Result<()> {
     let mut obj = env.create_object()?;
     obj.set_named_property("dimId", env.create_uint32(coord.dim_id)?)?;
-    obj.set_named_property("bucketId", env.create_uint32(coord.bucket_id)?)?;
+    obj.set_named_property("bucketId", env.create_int32(coord.bucket_id)?)?;
     parent.set_named_property(key, obj)?;
     Ok(())
 }
@@ -526,6 +526,39 @@ fn get_opt_u32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<u32>>> {
                 for i in 0..len {
                     let v: JsNumber = arr.get_element(i)?;
                     result.push(v.get_uint32()?);
+                }
+                Ok(Some(result))
+            }
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+fn get_opt_i32(obj: &JsObject, key: &str) -> Result<Option<i32>> {
+    match obj.get_named_property::<JsUnknown>(key) {
+        Ok(val) => {
+            if val.get_type()? == napi::ValueType::Undefined || val.get_type()? == napi::ValueType::Null {
+                Ok(None)
+            } else {
+                Ok(Some(val.coerce_to_number()?.get_int32()?))
+            }
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+fn get_opt_i32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<i32>>> {
+    match obj.get_named_property::<JsUnknown>(key) {
+        Ok(val) => {
+            if val.get_type()? == napi::ValueType::Undefined || val.get_type()? == napi::ValueType::Null {
+                Ok(None)
+            } else {
+                let arr: JsObject = val.coerce_to_object()?;
+                let len = arr.get_array_length()?;
+                let mut result = Vec::with_capacity(len as usize);
+                for i in 0..len {
+                    let v: JsNumber = arr.get_element(i)?;
+                    result.push(v.get_int32()?);
                 }
                 Ok(Some(result))
             }

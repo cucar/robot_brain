@@ -1,0 +1,2 @@
+[alias]
+napi = ["build", "--release", "-p", "brain-napi"]

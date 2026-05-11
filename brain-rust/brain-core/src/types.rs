@@ -12,8 +12,9 @@ pub type ChannelId = u32;
 /// Unique identifier for a dimension within a channel (e.g. "close", "volume").
 pub type DimensionId = u32;
 
-/// Bucket index within a dimension (1-indexed: valid range is [1..=resolution]).
-pub type BucketId = u32;
+/// Bucket index within a dimension. Signed because action dimensions use negative
+/// values (e.g. -1 for "OUT"). Event buckets are 1-indexed: [1..=resolution].
+pub type BucketId = i32;
 
 /// Temporal distance in the context window (0 = current frame, 1 = one frame ago, etc.).
 pub type Distance = u32;
@@ -38,7 +39,7 @@ pub struct Coordinate {
 }
 
 /// The type of a sensory neuron — either an observable event or a choosable action.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NeuronType {
     Event,
     Action,

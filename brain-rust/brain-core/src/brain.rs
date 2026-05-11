@@ -91,7 +91,7 @@ pub struct ResolvedVote {
     pub target_id: NeuronId,
     pub target_type: Option<NeuronType>,
     pub target_channel_id: Option<ChannelId>,
-    pub target_coordinate: Option<(String, u32)>,
+    pub target_coordinate: Option<(String, i32)>,
     pub voter_id: NeuronId,
     pub voter_level: Option<Level>,
     pub voter_label: String,
@@ -138,6 +138,7 @@ pub struct EpisodeSummary {
 struct Candidate {
     strength: f64,
     weighted_total: f64,
+    reward: f64,
     probability: f64,
 }
 
@@ -579,11 +580,11 @@ impl Brain {
         }
 
         // Aggregate votes and determine winners
-        let (inferences, candidates, dim_best) = self.determine_consensus(votes);
+        let (inferences, mut candidates, mut dim_best) = self.determine_consensus(votes);
 
         // Ensure every channel has an action — explore if none inferred
         let mut inferences = inferences;
-        self.ensure_channel_actions(&mut inferences, &candidates, &dim_best);
+        self.ensure_channel_actions(&mut inferences, &mut candidates, &mut dim_best);
 
         // Build the resolved vote dump only when debug is on
         let vote_debug = if self.debug {
@@ -623,10 +624,10 @@ impl Brain {
     /// Events win by strength (probability), actions win by reward.
     fn determine_consensus(&self, votes: &[FlatVote]) -> (Vec<InferredNeuron>, FxHashMap<NeuronId, Candidate>, FxHashMap<DimensionId, DimBestEntry>) {
         // Aggregate votes into candidates and dimension totals
-        let (candidates, dim_total_strength) = self.aggregate_votes(votes);
+        let (mut candidates, dim_total_strength) = self.aggregate_votes(votes);
 
-        // Determine the best neuron per dimension
-        let dim_best = self.determine_dimension_winners(&candidates, &dim_total_strength);
+        // Determine the best neuron per dimension (also sets reward/probability on each candidate)
+        let dim_best = self.determine_dimension_winners(&mut candidates, &dim_total_strength);
 
         // Build winner objects from dimension winners
         let winner_ids: FxHashSet<NeuronId> = dim_best.values().map(|w| w.neuron_id).collect();
@@ -644,6 +645,7 @@ impl Brain {
             let candidate = candidates.entry(v.neuron_id).or_insert_with(|| Candidate {
                 strength: 0.0,
                 weighted_total: 0.0,
+                reward: 0.0,
                 probability: 0.0,
             });
 
@@ -661,14 +663,15 @@ impl Brain {
     }
 
     /// Determine the best neuron per dimension (events by probability, actions by reward).
+    /// Also sets reward/probability on each candidate (JS mutates candidates in-place here).
     fn determine_dimension_winners(
         &self,
-        candidates: &FxHashMap<NeuronId, Candidate>,
+        candidates: &mut FxHashMap<NeuronId, Candidate>,
         dim_total_strength: &FxHashMap<DimensionId, f64>,
     ) -> FxHashMap<DimensionId, DimBestEntry> {
         let mut dim_best: FxHashMap<DimensionId, DimBestEntry> = FxHashMap::default();
 
-        for (&neuron_id, candidate) in candidates {
+        for (&neuron_id, candidate) in candidates.iter_mut() {
             let coordinate = match self.thalamus.get_neuron_coordinate(neuron_id) {
                 Some(c) => c,
                 None => continue,
@@ -681,11 +684,16 @@ impl Brain {
 
             // for actions, reward = weighted_total / strength
             // for events, probability = strength / dimension total strength
+            // Store the computed score back on the candidate (matches JS behavior)
             let score = if neuron_type == NeuronType::Action {
-                if candidate.strength > 0.0 { candidate.weighted_total / candidate.strength } else { 0.0 }
+                let reward = if candidate.strength > 0.0 { candidate.weighted_total / candidate.strength } else { 0.0 };
+                candidate.reward = reward;
+                reward
             } else {
                 let total = dim_total_strength.get(&coordinate.dim_id).copied().unwrap_or(0.0);
-                if total > 0.0 { candidate.strength / total } else { 0.0 }
+                let probability = if total > 0.0 { candidate.strength / total } else { 0.0 };
+                candidate.probability = probability;
+                probability
             };
 
             // set the best neuron for this dimension — break ties by strength, then neuron ID
@@ -724,7 +732,7 @@ impl Brain {
             let neuron_type = self.thalamus.get_neuron_type(neuron_id);
 
             let (reward, probability) = if neuron_type == Some(NeuronType::Action) {
-                (if candidate.strength > 0.0 { candidate.weighted_total / candidate.strength } else { 0.0 }, 0.0)
+                (candidate.reward, 0.0)
             } else {
                 (0.0, candidate.probability)
             };
@@ -743,11 +751,12 @@ impl Brain {
 
     /// Ensure every channel has an action in the inferences array.
     /// If a channel has no inferred action, add an exploration action.
+    /// Also seeds candidates and dim_best so buildInferencesByChannel includes the fallback.
     fn ensure_channel_actions(
         &self,
         inferences: &mut Vec<InferredNeuron>,
-        _candidates: &FxHashMap<NeuronId, Candidate>,
-        _dim_best: &FxHashMap<DimensionId, DimBestEntry>,
+        candidates: &mut FxHashMap<NeuronId, Candidate>,
+        dim_best: &mut FxHashMap<DimensionId, DimBestEntry>,
     ) {
         // find which channels already have an action inferred
         let channels_with_actions: FxHashSet<ChannelId> = inferences.iter()
@@ -779,10 +788,22 @@ impl Brain {
                 probability: 0.0,
             });
 
-            // Note: in JS, candidates and dimBest are also seeded here.
-            // In Rust, candidates/dimBest are not mutated (passed as immutable refs).
-            // The exploration action will be picked up by buildInferencesByChannel
-            // via the inferences list directly.
+            // seed candidates + dimBest so buildInferencesByChannel surfaces this action
+            if !candidates.contains_key(&exploration_action_id) {
+                candidates.insert(exploration_action_id, Candidate {
+                    strength: 0.0,
+                    reward: 0.0,
+                    weighted_total: 0.0,
+                    probability: 0.0,
+                });
+            }
+            if !dim_best.contains_key(&coordinate.dim_id) {
+                dim_best.insert(coordinate.dim_id, DimBestEntry {
+                    neuron_id: exploration_action_id,
+                    score: 0.0,
+                    strength: 0.0,
+                });
+            }
         }
     }
 
@@ -835,11 +856,9 @@ impl Brain {
             };
 
             let score = if kind == NeuronType::Action {
-                if candidate.strength > 0.0 { candidate.weighted_total / candidate.strength } else { 0.0 }
+                candidate.reward
             } else {
-                // probability was computed during determine_dimension_winners; recompute here
-                // since Candidate doesn't store per-candidate probability
-                candidate.strength // use strength as weight for continuous prediction
+                candidate.probability
             };
             entry.weighted_sum += score * value;
             entry.total_score += score;

@@ -349,7 +349,15 @@ impl Column {
             );
             if let Some(ref connections) = spec.connections {
                 for conn in connections {
+                    // save the event/action connection
                     neuron.create_connection(conn.distance, conn.to_neuron_id, conn.strength, conn.reward);
+
+                    // for actions with negative rewards, save an alternative with neutral reward
+                    if conn.reward < 0.0 {
+                        if let Some(alt) = neuron.find_alternative_action(conn.distance, conn.channel_id, conn.to_neuron_id) {
+                            neuron.create_connection(conn.distance, alt, 1.0, 0.0);
+                        }
+                    }
                 }
             }
             self.neurons.insert(neuron.id, neuron);
@@ -492,6 +500,7 @@ pub struct ConnectionSpec {
     pub to_neuron_id: NeuronId,
     pub strength: Strength,
     pub reward: Reward,
+    pub channel_id: ChannelId,
 }
 
 #[cfg(test)]
@@ -538,7 +547,7 @@ mod tests {
                 id: 2,
                 forget_rate: 0.1,
                 connections: Some(vec![
-                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.0 },
+                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.0, channel_id: 0 },
                 ]),
             },
         ]);
@@ -555,7 +564,7 @@ mod tests {
                 id: 2,
                 forget_rate: 0.1,
                 connections: Some(vec![
-                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.5 },
+                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.5, channel_id: 0 },
                 ]),
             },
         ]);

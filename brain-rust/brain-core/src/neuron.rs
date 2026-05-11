@@ -56,11 +56,16 @@ pub struct PatternMatch {
 }
 
 /// A context reference update (add or remove).
+/// `neuron_id` is the context neuron being referenced.
+/// `parent_id` is the parent neuron that owns the routing table referencing it.
+/// `parent_id` is set to 0 when emitted from neuron-level code and filled in
+/// by thalamus during `collect_context_ref_updates`.
 #[derive(Debug, Clone)]
 pub struct ContextRefUpdate {
     pub update_type: ContextRefUpdateType,
     pub neuron_id: NeuronId,
     pub distance: Distance,
+    pub parent_id: NeuronId,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -656,8 +661,8 @@ impl Neuron {
     /// One call per target neuron per frame (callers aggregate by target).
     pub fn apply_context_ref_updates(&mut self, updates: &[ContextRefUpdate]) {
         for update in updates {
-            if update.update_type == ContextRefUpdateType::Add { self.add_context_ref(update.neuron_id, update.distance); }
-            else { self.remove_context_ref(update.neuron_id, update.distance); }
+            if update.update_type == ContextRefUpdateType::Add { self.add_context_ref(update.parent_id, update.distance); }
+            else { self.remove_context_ref(update.parent_id, update.distance); }
         }
     }
 
@@ -767,9 +772,7 @@ impl Neuron {
         };
         let mut activated_pattern_ids = FxHashSet::default();
 
-        // sort ages ascending so most recent ages are processed first
-        let mut ages: Vec<Distance> = age_states.keys().copied().collect();
-        ages.sort();
+        let ages: Vec<Distance> = age_states.keys().copied().collect();
 
         for age in ages {
             let state = &age_states[&age];
@@ -786,10 +789,10 @@ impl Neuron {
             // refine the context — returns cross-neuron contextRef side effects for later delivery
             let removed_refs = self.refine_context(best.pattern_id, &best.common, &best.novel, &best.missing);
             for entry in &best.novel {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Add, neuron_id: entry.neuron_id, distance: entry.distance });
+                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Add, neuron_id: entry.neuron_id, distance: entry.distance, parent_id: 0 });
             }
             for r in &removed_refs {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Remove, neuron_id: r.neuron_id, distance: r.distance });
+                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Remove, neuron_id: r.neuron_id, distance: r.distance, parent_id: 0 });
             }
 
             // activate the matched pattern if it was not elected to be activated already
@@ -964,7 +967,7 @@ impl Neuron {
 
             // also update the context reference updates to be returned for the new patterns
             for entry in &correction.context_entries {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Add, neuron_id: entry.neuron_id, distance: entry.distance });
+                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Add, neuron_id: entry.neuron_id, distance: entry.distance, parent_id: 0 });
             }
         }
         CorrectResult { correction_activations, context_ref_updates }
@@ -998,8 +1001,7 @@ impl Neuron {
 
         // cast votes for each eligible, non-suppressed age
         let mut votes = Vec::new();
-        let mut ages: Vec<Distance> = age_states.keys().copied().collect();
-        ages.sort();
+        let ages: Vec<Distance> = age_states.keys().copied().collect();
         for age in ages {
             let state = &age_states[&age];
             if state.activated_pattern_id.is_some() || age >= memory_depth - 1 { continue; }
@@ -1045,8 +1047,7 @@ impl Neuron {
     /// (0 for events, observed value for actions). Skipped entirely for new error patterns
     /// (they were just created this frame and have nothing yet to reinforce).
     fn learn_connections(&mut self, age_states: &FxHashMap<Distance, AgeState>, actives: &[ActiveNeuron]) {
-        let mut ages: Vec<Distance> = age_states.keys().copied().collect();
-        ages.sort();
+        let ages: Vec<Distance> = age_states.keys().copied().collect();
         for age in ages {
 
             // skip age 0 - connection learning only applies to context neurons (age > 0)
@@ -1092,7 +1093,7 @@ impl Neuron {
     }
 
     /// Find an alternative action for a channel that hasn't been tried yet.
-    fn find_alternative_action(&self, distance: Distance, channel_id: ChannelId, current_action_id: NeuronId) -> Option<NeuronId> {
+    pub(crate) fn find_alternative_action(&self, distance: Distance, channel_id: ChannelId, current_action_id: NeuronId) -> Option<NeuronId> {
         if let Some(action_ids) = self.channel_action_ids.get(&channel_id) {
             for &alt_neuron_id in action_ids {
                 if alt_neuron_id != current_action_id && !self.has_connection(distance, alt_neuron_id) {
