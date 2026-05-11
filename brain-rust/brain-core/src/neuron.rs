@@ -772,7 +772,9 @@ impl Neuron {
         };
         let mut activated_pattern_ids = FxHashSet::default();
 
-        let ages: Vec<Distance> = age_states.keys().copied().collect();
+        // sort the ages so that we loop them in order
+        let mut ages: Vec<Distance> = age_states.keys().copied().collect();
+        ages.sort_unstable();
 
         for age in ages {
             let state = &age_states[&age];
