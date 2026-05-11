@@ -2,19 +2,11 @@
   "name": "brain",
   "version": "0.0.0",
   "private": true,
-  "description": "Hierarchical temporal neural network core (JS). The runtime brain — neurons, columns, thalamus, memory, persistence.",
+  "description": "Hierarchical temporal neural network core (Rust via N-API). Entry point loads the compiled native addon.",
   "type": "module",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js",
-    "./quantizer": "./src/quantizer.js",
-    "./backup": "./src/backup.js"
+    ".": "./src/index.js"
   },
-  "scripts": {
-    "test": "mocha test/*.spec.js"
-  },
-  "license": "Apache-2.0",
-  "devDependencies": {
-    "mocha": "^11.7.5"
-  }
+  "license": "Apache-2.0"
 }

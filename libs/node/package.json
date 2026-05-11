@@ -1,7 +1,7 @@
 {
   "name": "robot-brain",
   "version": "0.0.0",
-  "description": "Node bindings + Job runner for the robot-brain core. Re-exports the brain's public surface; will later wrap the Rust core via NAPI without changing this surface.",
+  "description": "Node bindings + Job runner for the robot-brain core. Re-exports the brain's public surface (Rust core via N-API).",
   "type": "module",
   "main": "index.js",
   "license": "Apache-2.0",
