@@ -297,6 +297,18 @@ impl Brain {
         Ok(())
     }
 
+    // ── Lookup helpers ─────────────────────────────────────────────────────────
+
+	/// returns dimension id for a given dimension name
+    pub fn get_dimension_id_by_name(&self, name: &str) -> Option<DimensionId> {
+        self.thalamus.get_dimension_id_by_name(name)
+    }
+
+    /// returns neuron id for a given coordinate
+    pub fn get_neuron_id_by_coordinate(&self, coordinate: &Coordinate) -> Option<NeuronId> {
+        self.thalamus.get_neuron_id_by_coordinate(coordinate)
+    }
+
     // ── Diagnostics ─────────────────────────────────────────────────────────
 
     /// Episode summary with all diagnostic information.

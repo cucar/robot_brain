@@ -99,6 +99,20 @@ export default class Brain {
 	}
 
 	/**
+	 * returns dimension id for a given dimension name
+	 */
+	getDimensionIdByName(name) {
+		return this.thalamus.dimensionNameToId[name] ?? null;
+	}
+
+	/**
+	 * returns neuron id for a given coordinate
+	 */
+	getNeuronIdByCoordinate(dimId, bucketId) {
+		return this.thalamus.getNeuronIdByCoordinate({ dimId, bucketId }) ?? null;
+	}
+
+	/**
 	 * Save brain state to a file-based backup under <jobDir>/backups/<timestamp>/.
 	 * Save errors are caught and logged inside Backup.save so a failure here
 	 * never throws during shutdown.

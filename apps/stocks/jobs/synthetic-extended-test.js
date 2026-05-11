@@ -246,8 +246,8 @@ export default class SyntheticExtendedTest extends Job {
 	 * which price/volume/activity buckets in the optimality table.
 	 */
 	async getNeuronIdForDimensionValue(dimensionName, value) {
-		const dimId = this.brain.thalamus.dimensionNameToId[dimensionName];
-		return this.brain.thalamus.getNeuronIdByCoordinate({ dimId, bucketId: value });
+		const dimId = this.brain.getDimensionIdByName(dimensionName);
+		return this.brain.getNeuronIdByCoordinate(dimId, value);
 	}
 
 	async showOptimalityAnalysis(decisionStats, cycleLength) {

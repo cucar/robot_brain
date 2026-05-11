@@ -1382,6 +1382,11 @@ impl Thalamus {
     pub fn get_dimension_id_to_name(&self) -> FxHashMap<DimensionId, String> {
         self.dimension_id_to_name.clone()
     }
+
+    /// Get the dimension_name → id mapping (for diagnostic display).
+    pub fn get_dimension_id_by_name(&self, name: &str) -> Option<DimensionId> {
+        self.dimension_name_to_id.get(name).copied()
+    }
 }
 
 // ── Internal task/spec types ────────────────────────────────────────────────

@@ -228,6 +228,25 @@ impl JsBrain {
         Ok(())
     }
 
+    /// Look up a dimension ID by its registered name.
+    #[napi(js_name = "getDimensionIdByName")]
+    pub fn get_dimension_id_by_name(&self, env: Env, name: String) -> Result<JsUnknown> {
+        match self.inner.borrow().get_dimension_id_by_name(&name) {
+            Some(id) => Ok(env.create_uint32(id)?.into_unknown()),
+            None => Ok(env.get_null()?.into_unknown()),
+        }
+    }
+
+    /// Look up a neuron ID by its (dimId, bucketId) coordinate.
+    #[napi(js_name = "getNeuronIdByCoordinate")]
+    pub fn get_neuron_id_by_coordinate(&self, env: Env, dim_id: u32, bucket_id: i32) -> Result<JsUnknown> {
+        let coord = brain_core::types::Coordinate { dim_id, bucket_id };
+        match self.inner.borrow().get_neuron_id_by_coordinate(&coord) {
+            Some(id) => Ok(env.create_uint32(id as u32)?.into_unknown()),
+            None => Ok(env.get_null()?.into_unknown()),
+        }
+    }
+
     /// Save brain state to disk.
     #[napi]
     pub fn save(&self, job_dir: String) -> Result<()> {
