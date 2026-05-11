@@ -61,39 +61,101 @@ Migrate the brain's core computation from single-threaded JavaScript to a Rust c
 
 ---
 
-## Phase 1 — Multi-Threaded Rust Core + Column Classes (~1 week)
+## Phase 1 — Rayon Column Parallelism (single region)
 
-Add threading within the Rust core. Introduce the region/column abstractions directly in Rust.
+Parallelize column processing within a Region using Rayon's work-stealing thread pool.
+Single region assumed (R=1) — the Brain/Thalamus/Memory orchestration stays single-threaded.
+MPI multi-region is deferred to a later phase.
 
-### 1.1 Implement `Column` in Rust
-- Owns a partition of neurons (arena-allocated)
-- Calls `neuron.process_frame()` on each owned neuron
-- No locks needed — single-owner per thread
+### Rayon parallelism in Region
 
-### 1.2 Implement `Region` with thread pool
-- Spawns N worker threads, each running a `Column`
-- Uses channels (crossbeam) or shared memory for intra-column communication
-- Barrier synchronization at frame boundaries
-- Vote aggregation across columns
+The only file that changes meaningfully is `region.rs`. Every method that loops over `self.columns` sequentially switches to Rayon's `par_iter_mut()` (or `par_iter()` for read-only).
 
-### 1.3 Neuron metadata storage for multi-threaded
-- Each Region holds the metadata lookup tables (channel, type, dimension, value, level, parentId) for its owned neurons (dimension/value are level-0 only)
-- Columns within the same Region read from the parent region's tables via shared memory — no copies needed
-- All neuron metadata is immutable after creation, so no synchronization is required for reads
-- Lookup interface remains the same as single-threaded (`get_channel(neuron_id)`, `get_type(neuron_id)`, etc.)
+No locks, barriers, or channels needed — each column gets exclusive `&mut` access via Rayon's parallel iterator, and all shared inputs are immutable references.
 
-### 1.4 Neuron-to-thread ownership map
-- Maintain a 2-way map: `neuronId ↔ threadId/columnId`
-- When a neuron is created, Brain decides which thread/column owns it
-- This map is used for routing: when a neuron references a foreign ID, the system knows which thread to query
+### 1.1 Add Rayon dependency
 
-### 1.5 Neuron distribution on load, collection on save
-- When loading from a dump, neurons are distributed to the thread/column pool based on partitioning strategy
-- When saving, Brain collects neuron state from each thread/column and serializes centrally
+**File: `brain-core/Cargo.toml`**
 
-### 1.6 Neuron partitioning strategy
-- No special-casing for sensory vs pattern, and no parent-co-location — every neuron's owner is purely a function of its id
-- No dynamic rebalancing planned; revisit only if profiling surfaces a hot path
+```toml
+[dependencies]
+rayon = "1"
+```
+
+### 1.2 Parallelize `Region.process_level()` — Op-3 hot path
+
+**File: `brain-core/src/region.rs`**
+
+This is the critical change. Currently:
+```rust
+for (col_idx, task_indices) in indices_by_column.iter().enumerate() {
+    let col_results = self.columns[col_idx].process_level(...);
+    results.extend(col_results);
+}
+```
+
+Changes to:
+```rust
+// pre-build per-column task lists before entering par_iter
+let column_tasks: Vec<Vec<_>> = indices_by_column.iter()
+    .map(|task_indices| task_indices.iter().map(|&i| tasks[i].clone()).collect())
+    .collect();
+
+// parallel dispatch — Rayon gives each column exclusive &mut access
+// par_iter_mut().zip().map().collect() preserves column-index order
+let results: Vec<Vec<ColumnProcessResult>> = self.columns.par_iter_mut()
+    .zip(column_tasks.into_par_iter())
+    .map(|(col, col_tasks)| {
+        if col_tasks.is_empty() { return Vec::new(); }
+        col.process_level(&col_tasks, memory_depth, level_context,
+            new_error_pattern_ids, new_active_neurons, frame_number)
+    })
+    .collect();
+
+results.into_iter().flatten().collect()
+```
+
+**Why this is safe:**
+- Each column exclusively owns its neurons — `&mut Column` gives sole access
+- Shared inputs are all immutable references that implement `Sync`:
+  - `level_context: Option<&Context>` — read-only snapshot
+  - `new_error_pattern_ids: &FxHashSet<NeuronId>` — read-only set
+  - `new_active_neurons: &[ActiveNeuron]` — read-only slice
+  - `memory_depth: u32`, `frame_number: FrameNumber` — Copy types
+- Result order is deterministic: `par_iter_mut().zip().map().collect()` preserves index order in Rayon
+
+### 1.3 Parallelize other Region methods
+
+**File: `brain-core/src/region.rs`**
+
+Same pattern for all column-iterating methods. Lower priority than 1.2 since these run once per frame or less:
+
+| Method | Op | Pattern |
+|--------|-----|---------|
+| `create_neurons()` | Op-1/Op-4 | `par_iter_mut().zip(by_column).for_each()` |
+| `update_context_refs()` | Op-5 | `par_iter_mut().zip(by_column).for_each()` |
+| `delete_neurons()` | Op-2 | `par_iter_mut().zip(by_column).map().collect()` then merge results |
+| `get_snapshot()` | save | `par_iter().flat_map_iter().collect()` |
+| `materialize_and_reset_neurons()` | reset | `par_iter_mut().flat_map_iter().collect()` |
+| `collect_death_frames()` | restore | `par_iter().flat_map_iter().collect()` |
+| `restore_snapshot()` | load | `par_iter_mut().zip(specs_by_column).for_each()` |
+| `clear()` | reset | `par_iter_mut().for_each()` |
+| `update_action_sets()` | channel reg | `par_iter_mut().for_each()` — needs cloned refs |
+
+### 1.4 Verify baseline demos at C=1
+
+Run all four baseline demos with C=1 to confirm Rayon introduces no behavioral change. At C=1, Rayon's `par_iter` over a single-element Vec runs inline (no thread overhead). Output must be **identical** to the pre-Rayon commit.
+
+| # | Demo | Key metric |
+|---|------|------------|
+| 1 | Synthetic cycle | Overall Optimal Rate |
+| 2 | Stock trading (1 episode) | Net profit, total trades, base accuracy |
+| 3 | Sequence memorization (1 episode) | Net profit, total trades, base accuracy |
+| 4 | Text sequence learning | Per-episode accuracy across 5 episodes |
+
+### 1.5 Test with C>1
+
+Run the same demos with C=2 and C=4. The results won't be identical to C=1 (neurons route to different columns, affecting discovery order), but they should converge to similar accuracy levels and not crash or deadlock.
 
 ---
 
@@ -119,26 +181,22 @@ With multi-threaded Rust core in place, focus on scaling the stock trading workl
 ## Mapping: Current Architecture → Target Architecture
 
 ```
-Current (Single-Threaded Rust)          Target (Multi-Threaded Rust + MPI)
+Current (Sequential Rust, R=1 C=1)     Phase 1 Target (Rayon, R=1 C>1)
 ─────────────────────────────────────   ─────────────────────────────────
-Brain (Rust via N-API)            →     Brain (Rust via N-API)
-                                          ├── Region (MPI rank 0)
-                                          │     ├── Column thread 0
-                                          │     │     ├── Neuron pool
-                                          │     │     ├── Local memory
-                                          │     │     └── Local pattern recognition
-                                          │     ├── Column thread 1
-                                          │     └── Vote aggregator
-                                          ├── Region (MPI rank 1)
-                                          └── Global consensus (MPI)
-
-Thalamus                          →     Split: per-column registry + global lookup
-Memory                            →     Split: per-column window + region aggregator
-Neuron                            →     Rust struct (arena-allocated, column-owned)
-Context                           →     Rust struct (inline with neuron)
-Backup (CSV files)                →     Owned by Rust core (mirrors DB schema)
-apps/db (MySQL utilities)         →     Stays in JS, outside brain core (analysis only)
+Brain                             →     Brain (unchanged, single-thread orchestrator)
+Thalamus                          →     Thalamus (unchanged, centralized metadata)
+  └─ Region (sequential columns)  →       └─ Region (Rayon par_iter over columns)
+       └─ Column (sequential)     →            └─ Column (one per Rayon work unit)
+            └─ Neurons            →                 └─ Neurons (column-owned, exclusive)
+Memory                            →     Memory (unchanged, centralized)
+Quantizer                         →     Quantizer (unchanged, read-only during dispatch)
+Backup                            →     Backup (unchanged)
 ```
+
+Phase 2+ (MPI, future):
+- Region becomes an MPI rank, each on a separate process
+- Thalamus metadata may need to be replicated or sharded per region
+- Memory may need per-region partitioning with cross-region aggregation
 
 ---
 
