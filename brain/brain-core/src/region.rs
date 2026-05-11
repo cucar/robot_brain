@@ -1,6 +1,49 @@
-/// Region — wraps Column[C]. Becomes an MPI rank in Phase 2; in single-threaded
-/// Phase 1 it's a pure router/aggregator. Never exposes single-neuron access.
+/// Region — wraps Column[C] and parallelizes work across them using Rayon.
+///
+/// # Threading model
+///
+/// Every method that touches columns follows the same three-phase pattern:
+///
+///   1. **Route** — partition items into per-column work lists by `neuron_id % C`
+///   2. **Dispatch** — hand each column its work list and let them run in parallel
+///   3. **Collect** — gather results back in column-index order
+///
+/// No locks, barriers, or channels are needed because columns never share mutable
+/// state — each column exclusively owns its neuron partition. Shared inputs
+/// (level context, error pattern ids, active neurons) are passed as immutable
+/// references, safe to read from any thread without synchronization.
+///
+/// # Rayon primitives used
+///
+/// The three phases map to Rayon calls like this (using process_level as example):
+///
+/// ```text
+/// // Phase 1 — Route: build per-column task lists (sequential, before parallelism starts)
+/// let column_tasks: Vec<Vec<Task>> = self.build_column_tasks(tasks);
+///
+/// // Phase 2 — Dispatch:
+/// let nested: Vec<Vec<Result>> = self.columns
+///     .par_iter_mut()                     // iterate columns in parallel; each thread
+///                                         // gets exclusive &mut to one Column
+///     .zip(column_tasks.into_par_iter())  // pair each column with its task list;
+///                                         // into_par_iter consumes the Vec so each
+///                                         // thread owns its tasks (no sharing)
+///     .map(|(col, col_tasks)| {           // each thread runs this closure independently
+///         col.process_level(&col_tasks, ...)
+///     })
+///     .collect();                         // gather Vec<Vec<Result>> in column-index order;
+///                                         // Rayon preserves the original ordering
+///
+/// // Phase 3 — Collect: flatten nested results (sequential, parallelism is done)
+/// nested.into_iter()                      // plain (non-parallel) iterator over outer Vec
+///     .flatten()                          // unwrap each inner Vec into a flat stream
+///     .collect()                          // gather into final Vec<Result>
+/// ```
+///
+/// Becomes an MPI rank in a future phase; currently a pure router/aggregator.
+/// Never exposes single-neuron access.
 
+use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::column::{
@@ -45,28 +88,33 @@ impl Region {
         Self { c, columns }
     }
 
+    // ── Routing ────────────────────────────────────────────────────────────
+
     /// Pure deterministic column-routing function.
     /// Maps a neuron id to its owning column within this region.
     pub fn route_neuron(&self, neuron_id: NeuronId) -> usize {
         (neuron_id as usize) % self.c
     }
 
-    /// Bucket a flat batch by owning column using a key extractor function.
-    /// Returns a Vec indexed by column_idx, each entry the sub-list for that column.
-    fn bucket_by_column<T, F>(&self, batch: &[T], key: F) -> Vec<Vec<usize>>
+    /// Partition a flat batch into per-column index lists using a key extractor.
+    /// Returns a Vec indexed by column, each entry holding the source indices
+    /// whose items route to that column.
+    fn partition_by_column<T, F>(&self, batch: &[T], key: F) -> Vec<Vec<usize>>
     where
         F: Fn(&T) -> NeuronId,
     {
-        let mut buckets: Vec<Vec<usize>> = (0..self.c).map(|_| Vec::new()).collect();
+        let mut per_column: Vec<Vec<usize>> = (0..self.c).map(|_| Vec::new()).collect();
         for (i, item) in batch.iter().enumerate() {
             let col = self.route_neuron(key(item));
-            buckets[col].push(i);
+            per_column[col].push(i);
         }
-        buckets
+        per_column
     }
 
-    /// Op-3 down-trip. Bucket tasks by owning column, fan out, concatenate
-    /// results in column-index order (stable regardless of thread scheduling).
+    // ── Op-3: Process level (hot path) ─────────────────────────────────────
+
+    /// Route tasks to owning columns, fan out in parallel, concatenate results
+    /// in column-index order (stable regardless of thread scheduling).
     pub fn process_level(
         &mut self,
         tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)],
@@ -76,136 +124,213 @@ impl Region {
         new_active_neurons: &[ActiveNeuron],
         frame_number: FrameNumber,
     ) -> Vec<ColumnProcessResult> {
-        // bucket task indices by column
-        let indices_by_column = self.bucket_by_column(tasks, |t| t.0);
+        // Phase 1: Route — clone each task into its owning column's work list.
+        // Must happen before par_iter so each column gets an owned Vec it can
+        // consume independently.
+        let column_tasks = self.build_column_tasks(tasks);
 
-        let mut results = Vec::new();
-        for (col_idx, task_indices) in indices_by_column.iter().enumerate() {
-            if task_indices.is_empty() { continue; }
+        // Phase 2: Dispatch — each column processes its tasks in parallel.
+        // Shared refs (level_context, new_error_pattern_ids, new_active_neurons)
+        // are read-only and implement Sync, so no synchronization needed.
+        let nested: Vec<Vec<ColumnProcessResult>> = self.columns.par_iter_mut()
+            .zip(column_tasks.into_par_iter())
+            .map(|(col, col_tasks)| {
+                if col_tasks.is_empty() { return Vec::new(); }
+                col.process_level(
+                    &col_tasks, memory_depth, level_context, new_error_pattern_ids,
+                    new_active_neurons, frame_number,
+                )
+            })
+            .collect();
 
-            // collect the tasks for this column
-            let col_tasks: Vec<_> = task_indices.iter()
-                .map(|&i| tasks[i].clone())
-                .collect();
-
-            let col_results = self.columns[col_idx].process_level(
-                &col_tasks, memory_depth, level_context, new_error_pattern_ids,
-                new_active_neurons, frame_number,
-            );
-            results.extend(col_results);
-        }
-        results
+        // Phase 3: Collect — flatten in column-index order (Rayon preserves it).
+        nested.into_iter().flatten().collect()
     }
 
-    /// Op-5 (deferred): Apply contextRef updates against owned Neurons. Updates are routed by
+    /// Route tasks to their owning columns by neuron_id. Returns a Vec indexed
+    /// by column, each entry holding the cloned tasks for that column.
+    fn build_column_tasks(
+        &self,
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)],
+    ) -> Vec<Vec<(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)>> {
+        let per_column_indices = self.partition_by_column(tasks, |t| t.0);
+        per_column_indices.iter()
+            .map(|task_indices| {
+                task_indices.iter().map(|&i| tasks[i].clone()).collect()
+            })
+            .collect()
+    }
+
+    // ── Op-5: Context ref updates ──────────────────────────────────────────
+
+    /// Apply contextRef updates against owned Neurons. Updates are routed by
     /// neuron_id (the target neuron whose contextRefs change).
     pub fn update_context_refs(&mut self, updates: &[(NeuronId, Vec<ContextRefUpdate>)]) {
-        // bucket by column
-        let mut by_column: Vec<Vec<(NeuronId, Vec<ContextRefUpdate>)>> = (0..self.c).map(|_| Vec::new()).collect();
+        // Phase 1: Route updates to owning columns.
+        let by_column = self.route_context_ref_updates(updates);
+
+        // Phase 2: Dispatch — each column applies its updates in parallel.
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_updates)| {
+                if !col_updates.is_empty() {
+                    col.update_context_refs(&col_updates);
+                }
+            });
+    }
+
+    /// Partition context ref updates into per-column work lists by target neuron_id.
+    fn route_context_ref_updates(
+        &self,
+        updates: &[(NeuronId, Vec<ContextRefUpdate>)],
+    ) -> Vec<Vec<(NeuronId, Vec<ContextRefUpdate>)>> {
+        let mut by_column: Vec<Vec<(NeuronId, Vec<ContextRefUpdate>)>> =
+            (0..self.c).map(|_| Vec::new()).collect();
         for (neuron_id, upd) in updates {
             let col = self.route_neuron(*neuron_id);
             by_column[col].push((*neuron_id, upd.clone()));
         }
-        for (col_idx, col_updates) in by_column.iter().enumerate() {
-            if !col_updates.is_empty() {
-                self.columns[col_idx].update_context_refs(col_updates);
-            }
-        }
+        by_column
     }
 
-    /// Op-1/Op-4: Construct new Neurons in their owning columns. Specs are routed by spec.id.
+    // ── Op-1/Op-4: Neuron creation ─────────────────────────────────────────
+
+    /// Construct new Neurons in their owning columns. Specs are routed by spec.id.
     pub fn create_neurons(&mut self, specs: &[NeuronCreateSpec]) {
-        let mut by_column: Vec<Vec<NeuronCreateSpec>> = (0..self.c).map(|_| Vec::new()).collect();
+        // Phase 1: Route specs to owning columns.
+        let by_column = self.route_neuron_specs(specs);
+
+        // Phase 2: Dispatch — each column creates its neurons in parallel.
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_specs)| {
+                if !col_specs.is_empty() {
+                    col.create_neurons(&col_specs);
+                }
+            });
+    }
+
+    /// Partition neuron creation specs into per-column work lists by neuron id.
+    fn route_neuron_specs(&self, specs: &[NeuronCreateSpec]) -> Vec<Vec<NeuronCreateSpec>> {
+        let mut by_column: Vec<Vec<NeuronCreateSpec>> =
+            (0..self.c).map(|_| Vec::new()).collect();
         for spec in specs {
             let col = self.route_neuron(spec.id);
             by_column[col].push(spec.clone());
         }
-        for (col_idx, col_specs) in by_column.iter().enumerate() {
-            if !col_specs.is_empty() {
-                self.columns[col_idx].create_neurons(col_specs);
-            }
-        }
+        by_column
     }
 
-    /// Clear all neurons from all columns. Used during reset before restore.
-    pub fn clear(&mut self) {
-        for col in &mut self.columns {
-            col.clear();
-        }
+    // ── Op-2: Delete cascade ───────────────────────────────────────────────
+
+    /// Apply a batch of delete operations across columns in parallel.
+    /// Each column processes its ops independently; results are merged afterward.
+    pub fn delete_neurons(&mut self, op_batch: &[DeleteOp], current_frame: FrameNumber) -> DeleteResult {
+        // Phase 1: Route delete ops to owning columns.
+        let by_column = self.route_delete_ops(op_batch);
+
+        // Phase 2: Dispatch — each column runs its deletes in parallel,
+        // producing outbound ops (for other columns), deleted ids, and
+        // cascade candidates.
+        let per_column_results: Vec<DeleteResult> = self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .map(|(col, col_ops)| {
+                if col_ops.is_empty() {
+                    return DeleteResult {
+                        outbound_ops: Vec::new(),
+                        deleted_ids: Vec::new(),
+                        newly_deletable_ids: Vec::new(),
+                    };
+                }
+                col.delete_neurons(&col_ops, current_frame)
+            })
+            .collect();
+
+        // Phase 3: Merge — combine results from all columns. The caller
+        // (Thalamus) feeds outbound_ops into the next cascade pulse.
+        Self::merge_delete_results(per_column_results)
     }
 
-    /// Collect serialized {id, neuron} entries from columns for snapshotting.
+    /// Partition delete ops into per-column work lists by target_id.
+    fn route_delete_ops(&self, op_batch: &[DeleteOp]) -> Vec<Vec<DeleteOp>> {
+        let mut by_column: Vec<Vec<DeleteOp>> =
+            (0..self.c).map(|_| Vec::new()).collect();
+        for op in op_batch {
+            let col = self.route_neuron(op.target_id());
+            by_column[col].push(op.clone());
+        }
+        by_column
+    }
+
+    /// Flatten per-column delete results into a single merged result.
+    fn merge_delete_results(per_column: Vec<DeleteResult>) -> DeleteResult {
+        let mut outbound_ops = Vec::new();
+        let mut deleted_ids = Vec::new();
+        let mut newly_deletable_ids = Vec::new();
+        for result in per_column {
+            outbound_ops.extend(result.outbound_ops);
+            deleted_ids.extend(result.deleted_ids);
+            newly_deletable_ids.extend(result.newly_deletable_ids);
+        }
+        DeleteResult { outbound_ops, deleted_ids, newly_deletable_ids }
+    }
+
+    // ── Snapshot / restore ─────────────────────────────────────────────────
+
+    /// Collect serialized {id, neuron} entries from all columns for snapshotting.
     pub fn get_snapshot(&self) -> Vec<SnapshotEntry> {
-        let mut entries = Vec::new();
-        for col in &self.columns {
-            entries.extend(col.get_snapshot());
-        }
-        entries
+        self.columns.par_iter()
+            .flat_map_iter(|col| col.get_snapshot())
+            .collect()
     }
 
     /// Distribute serialized neuron specs to columns for reconstruction on load.
-    /// specs_by_column is a Vec indexed by column_idx, each entry a list of serialized neurons.
+    /// specs_by_column is a Vec indexed by column_idx, each entry a list of
+    /// serialized neurons already routed to that column.
     pub fn restore_snapshot(&mut self, specs_by_column: Vec<Vec<SerializedNeuron>>) {
-        for (col_idx, specs) in specs_by_column.into_iter().enumerate() {
-            if col_idx < self.c {
-                self.columns[col_idx].restore_snapshot(&specs);
-            }
-        }
+        self.columns.par_iter_mut()
+            .zip(specs_by_column.into_par_iter())
+            .for_each(|(col, specs)| {
+                col.restore_snapshot(&specs);
+            });
     }
+
+    // ── Death ledger support ───────────────────────────────────────────────
 
     /// Collect computed death frames from all columns' routing tables.
     /// Read-only — does not mutate neuron state.
     pub fn collect_death_frames(&self) -> Vec<DeathFrameEntry> {
-        let mut entries = Vec::new();
-        for col in &self.columns {
-            entries.extend(col.collect_death_frames());
-        }
-        entries
+        self.columns.par_iter()
+            .flat_map_iter(|col| col.collect_death_frames())
+            .collect()
     }
 
     /// Materialize lazy decay across all columns and collect death frame entries
     /// so Thalamus can rebuild the death ledger.
     pub fn materialize_and_reset_neurons(&mut self, current_frame: FrameNumber) -> Vec<DeathFrameEntry> {
-        let mut death_entries = Vec::new();
-        for col in &mut self.columns {
-            death_entries.extend(col.materialize_and_reset_neurons(current_frame));
-        }
-        death_entries
+        self.columns.par_iter_mut()
+            .flat_map_iter(|col| col.materialize_and_reset_neurons(current_frame))
+            .collect()
     }
 
-    /// Op-2: Apply a batch of delete operations in the columns owned.
-    pub fn delete_neurons(&mut self, op_batch: &[DeleteOp], current_frame: FrameNumber) -> DeleteResult {
-        // bucket ops by column using target_id
-        let mut by_column: Vec<Vec<DeleteOp>> = (0..self.c).map(|_| Vec::new()).collect();
-        for op in op_batch {
-            let col = self.route_neuron(op.target_id());
-            by_column[col].push(op.clone());
-        }
+    // ── Lifecycle ──────────────────────────────────────────────────────────
 
-        let mut outbound_ops = Vec::new();
-        let mut deleted_ids = Vec::new();
-        let mut newly_deletable_ids = Vec::new();
-
-        for (col_idx, col_ops) in by_column.iter().enumerate() {
-            if col_ops.is_empty() { continue; }
-            let result = self.columns[col_idx].delete_neurons(col_ops, current_frame);
-            outbound_ops.extend(result.outbound_ops);
-            deleted_ids.extend(result.deleted_ids);
-            newly_deletable_ids.extend(result.newly_deletable_ids);
-        }
-
-        DeleteResult { outbound_ops, deleted_ids, newly_deletable_ids }
+    /// Clear all neurons from all columns. Used during reset before restore.
+    pub fn clear(&mut self) {
+        self.columns.par_iter_mut().for_each(|col| col.clear());
     }
 
     /// Update shared action sets when a new channel is registered.
+    /// Each column gets a clone of the current action sets so per-frame
+    /// calls never reach back to Thalamus.
     pub fn update_action_sets(
         &mut self,
         channel_actions: &FxHashMap<ChannelId, FxHashSet<NeuronId>>,
         action_ids: &FxHashSet<NeuronId>,
     ) {
-        for col in &mut self.columns {
+        self.columns.par_iter_mut().for_each(|col| {
             col.update_action_sets(channel_actions, action_ids);
-        }
+        });
     }
 }
 
