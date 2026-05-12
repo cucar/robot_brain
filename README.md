@@ -6,7 +6,7 @@ No training epochs. No backpropagation. No labeled data.
 
 You feed it streams of events — stock prices, text characters, sensor data — and it self-organizes. Neurons form, compete, decay, and die. The ones that make good predictions survive.
 
-This is the Node.js reference implementation. A high-performance Rust core with Python and Node.js bindings is in development.
+The brain core is implemented in Rust (with Rayon multi-threading) and exposed to Node.js via N-API. Python bindings are planned.
 
 ## How It Works
 
@@ -205,7 +205,7 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --
    Episode 5: 91.40%
 ```
 
-The brain goes from 50% accuracy (random) to 96% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.0001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
+The brain goes from 50% accuracy (random) to 91% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
 ## Demo 7: Text Sequence Learning
 
@@ -308,16 +308,22 @@ graph BT
 
 ### Core Components
 
-| File | Role | Description |
+The brain core is a Rust workspace (`brain/`) with two crates:
+
+| Crate / File | Role | Description |
 |------|------|-------------|
-| `brain/src/brain.js` | Orchestrator | Frame processing loop, pattern recognition, learning, inference |
-| `brain/src/thalamus.js` | Relay station | Neuron registry, channel management, dimension mappings |
-| `brain/src/memory.js` | Short-term memory | Temporal sliding window of active neurons indexed by age |
-| `brain/src/neuron.js` | Neuron | Connections, patterns, voting, learning, lazy decay |
-| `brain/src/context.js` | Pattern context | Context representation, threshold-based matching, merge logic |
-| `brain/src/backup.js` | Persistence | File-based backup/restore (CSVs under `<jobDir>/backups/<timestamp>/`) |
-| `brain/src/diagnostics.js` | Metrics | Performance tracking and debug output |
-| `libs/node` | Node bindings | Re-exports the brain core + Job runner; published to npm as `robot-brain` |
+| `brain-core/src/brain.rs` | Orchestrator | Frame processing loop, pattern recognition, learning, inference |
+| `brain-core/src/thalamus.rs` | Relay station | Neuron registry, channel management, dimension mappings, quantizer |
+| `brain-core/src/region.rs` | Parallelism | Column partitioner, Rayon-based multi-threaded dispatch |
+| `brain-core/src/column.rs` | Worker | Owns a neuron partition, batch operations (becomes a thread in multi-column mode) |
+| `brain-core/src/memory.rs` | Short-term memory | Temporal sliding window of active neurons indexed by age |
+| `brain-core/src/neuron.rs` | Neuron | Connections, routing table, voting, learning, lazy decay |
+| `brain-core/src/context.rs` | Pattern context | Context representation, threshold-based matching, merge logic |
+| `brain-core/src/quantizer.rs` | Quantization | Scalar-to-bucket discretization (static, dynamic, passthrough) |
+| `brain-core/src/backup.rs` | Persistence | File-based backup/restore (CSVs under `<jobDir>/backups/<timestamp>/`) |
+| `brain-core/src/diagnostics.rs` | Metrics | Accuracy tracking and continuous error measurement |
+| `brain-napi/` | N-API bridge | Exposes Rust Brain as a native Node.js addon |
+| `libs/node` | Node bindings | Re-exports the native addon + Job runner; published to npm as `robot-brain` |
 
 ### Apps
 
@@ -421,7 +427,7 @@ export default class MyJob extends Job {
                 inputs.set(encoder.channelId, encoder.encode(frame));
             }
             if (!any) break;
-            this.brain.processInputs(inputs, new Map());
+            this.brain.processFrame(inputs, new Map());
         }
     }
 
@@ -440,6 +446,9 @@ Save as `apps/text/jobs/my-job.js` and run with `node apps/text/jobs/my-job.js`.
 - **[Architecture Design](docs/architecture.md)** — detailed design document covering voting, patterns, frame processing, and data structures
 - **[Error-Driven Learning](docs/error-driven-learning.md)** — deep dive on how patterns are created from prediction errors
 - **[Technical Foundations](docs/TECHNICAL_FOUNDATIONS.md)** — architectural ideas, biological inspirations, and comparison with conventional approaches
+- **[Hippocampus Design](docs/hippocampus.md)** — design and implementation plan for the hippocampal region (long-term memory, thinking, metacognition)
+- **[Future Work](docs/future-work.md)** — MNIST benchmarks, Python bindings, MPI distribution, and other planned work
+- **[Scale Stock Processing](docs/scale-stock-processing.md)** — scaling plan for stock trading workloads
 
 ## Persistence
 

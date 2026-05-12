@@ -36,11 +36,11 @@ Note: level 1 is a special case of this — bins are narrow enough that low dist
 
 ## Changes required
 
-### 1. Context class (`brain/src/context.js`)
+### 1. Context struct (`brain-core/src/context.rs`)
 
-Currently: `Map<neuronId, Map<distance, strength>>` where distance is an exact frame count.
+Currently: `FxHashMap<NeuronId, FxHashMap<Distance, Strength>>` where distance is an exact frame count.
 
-After: `Map<neuronId, Map<bin, strength>>` where bin is a small integer (0 to numBins-1).
+After: `FxHashMap<NeuronId, FxHashMap<Bin, Strength>>` where bin is a small integer (0 to numBins-1).
 
 - `addNeuron(neuronId, distance, strength)` — convert distance to bin before storing. If the bin already has an entry for this neuron, merge (add strengths) instead of throwing.
 - `find(neuronId, distance)` — convert distance to bin, then look up.
@@ -55,7 +55,7 @@ Context needs to know level and contextLength to do the conversion. Options:
 
 Recommendation: constructor params. A context is always owned by a specific neuron at a specific level.
 
-### 2. Neuron / routing table creation (`brain/src/thalamus.js`)
+### 2. Neuron / routing table creation (`brain-core/src/thalamus.rs`)
 
 When a pattern is created via `recognizePatterns`, its context entries are built from observed context neurons with exact distances. These distances must be converted to bins at the pattern's level before storing.
 

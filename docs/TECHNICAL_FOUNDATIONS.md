@@ -1,7 +1,5 @@
 # Robot Brain — Technical Foundations
 
-**Last Updated**: March 2026
-
 ## Overview
 
 This document describes the technical foundations of the Robot Brain architecture — a biologically-inspired learning system that discovers patterns from raw sequential data through prediction and error correction.
@@ -199,12 +197,12 @@ The architecture draws from several neuroscience concepts:
 - **No transfer learning** — patterns are context-specific to the data stream
 - **No pre-training** — must learn from scratch (though it learns quickly)
 - **Discrete time steps** — processes frames, not continuous time
-- **Single-threaded reference implementation** — the architecture is parallelizable but this Node.js implementation is sequential
+- **Single-process** — the architecture supports MPI distribution across machines, but the current Rust implementation runs in a single process (multi-threaded via Rayon)
 - **No spiking neurons** — uses simplified activation model
 
 ## Future Directions
 
-- **High-performance C++ core** with Python and Node.js bindings
+- **Python bindings** (PyO3/maturin) for broader adoption
 - **Spatial connection encoding** (dx, dy alongside temporal distance) for vision and motion tracking
 - **Hardware implementation** (FPGA/ASIC) leveraging the architecture's inherent parallelism
-- **Metacognitive feedback** — thinking channel where the brain reads its own outputs as inputs
+- **Hippocampal region** — a second organ (the executor) for long-term memory, thinking, and metacognitive control (see [hippocampus.md](hippocampus.md))

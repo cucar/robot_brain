@@ -33,11 +33,11 @@ When a neuron's event predictions have a high error rate:
 | `neutral` | `mean` | React to anything worse than this neuron's typical error at this age |
 | `aggressive` | `mean − σ` | Memorize aggressively — fires on most non-trivial errors |
 
-For dynamic modes, each neuron maintains per-age running mean and variance of its own observed error rates via Welford's online algorithm. Until at least 3 samples have been observed for a given (neuron, age) pair, the threshold falls back to `errorCorrectionThreshold` (warmup). The threshold ships with each cast vote so the threshold-vs-actual comparison happens entirely on the coordinator side without an extra round-trip to the neuron worker (MPI-friendly).
+For dynamic modes, each neuron maintains per-age running mean and variance of its own observed error rates via Welford's online algorithm. Until at least 3 samples have been observed for a given (neuron, age) pair, the threshold falls back to `errorCorrectionThreshold` (warmup). The threshold ships with each cast vote so the threshold-vs-actual comparison happens at the dispatch level (Brain → Thalamus → Region → Column) without an extra round-trip to the neuron.
 
-**Implementation**:
+**Implementation** (conceptual — actual code is Rust):
 ```javascript
-// Coordinator side (Thalamus): threshold rode in with the prior-frame vote.
+// Dispatch side: threshold rode in with the prior-frame vote.
 let failedEvents = 0;
 let totalEvents = 0;
 for (const vote of state.votes) {
@@ -51,29 +51,27 @@ if (eventError > state.threshold) {
   // Error rate too high - create error pattern
   pattern = neuron.createPattern(context, actualEvents);
 }
-// errorRate is sent back to the neuron in-band on the next frame's processFrame
+// errorRate is sent back to the neuron in-band on the next frame's processLevel
 // call so the neuron can update its own per-age stats locally.
 ```
 
-### 2. Action Regret
+### 2. Negative Reward Handling (Actions)
 
-Action regret is handled simultaneously during pattern creation. When an error pattern is created, it saves the observed actions and their rewards. If an action had a negative reward, the pattern also creates a connection to an alternative action with a neutral reward, to try it next time.
+Actions do not trigger error correction patterns. Instead, negative reward is handled during **connection learning**: when an action connection's smoothed reward drops below zero, the brain injects an alternative action connection at neutral reward (0.0). This gives the brain an unexplored alternative to try next time without penalizing the original action — over time, reward-weighted selection favors whichever action performs best.
+
+Action connections are also never weakened when a predicted action doesn't appear — the brain executes exactly one action per channel per frame, so any non-chosen action wasn't a wrong prediction, it just wasn't tried.
 
 ```mermaid
 flowchart TD
     V["Neuron voted in previous frame"]
     V --> ET{"Event vote?"}
     V --> AT{"Action vote?"}
-    ET --> ES{"strength ≥ 1?"}
-    ES --> EP{"Predicted neuron<br/>appeared?"}
-    EP -- "No" --> CREATE1["Create error pattern<br/>parent = predictor<br/>prediction = actual outcome"]
-    EP -- "Yes" --> SKIP1["No pattern needed"]
-    ES -- "No" --> SKIP2["Too weak to matter"]
-    AT --> AS{"strength ≥ 3?"}
-    AS --> AR{"reward < 0?"}
-    AR -- "Yes" --> CREATE2["Create regret pattern<br/>parent = predictor<br/>prediction = better action"]
-    AR -- "No" --> SKIP3["No regret"]
-    AS -- "No" --> SKIP4["Too weak to matter"]
+    ET --> EE{"Event error rate<br/>exceeds threshold?"}
+    EE -- "Yes" --> CREATE["Create error pattern<br/>parent = predictor<br/>prediction = actual outcome"]
+    EE -- "No" --> SKIP1["No pattern needed"]
+    AT --> AR{"Connection reward<br/>< 0?"}
+    AR -- "Yes" --> ALT["Inject alternative action<br/>connection at neutral reward"]
+    AR -- "No" --> SKIP2["No action needed"]
 ```
 
 ---
@@ -615,7 +613,7 @@ Pattern errors at level N create patterns at level N+1, enabling hierarchical ab
 | Concept | Description | Implementation |
 |---------|-------------|----------------|
 | **Pattern creation** | Only on confident prediction errors | `neuron.learnNewPattern()` checks vote strength and outcome |
-| **Parent neuron** | The predictor that made the error | Pattern stored in parent's routing table (`parent.children`) |
+| **Parent neuron** | The predictor that made the error | Pattern stored in parent's routing table |
 | **Pattern context** | Context neurons with relative distances | `pattern.context` (Context class with entries) |
 | **Pattern predictions** | Corrected predictions | `pattern.connections` (same as base neurons) |
 | **Pattern matching** | Threshold-based (default 50%) | `context.match()` compares observed vs known context |
@@ -626,10 +624,10 @@ Pattern errors at level N create patterns at level N+1, enabling hierarchical ab
 ### Implementation Highlights
 
 **In-Memory Structure**:
-- Patterns are Neuron objects (level > 0)
-- Context stored in Context class (fast matching)
-- Predictions stored in connections Map (same as base neurons)
-- Parent's routing table (children Set) enables multiple patterns per parent
+- Patterns are Neuron structs (level > 0)
+- Context stored in Context struct (FxHashMap-based, fast matching)
+- Predictions stored in connections Vec (same as base neurons)
+- Parent's routing table enables multiple patterns per parent
 
 **Pattern Lifecycle**:
 1. **Creation**: Prediction error triggers `neuron.learnNewPattern()`
