@@ -266,7 +266,8 @@ export default class StockTestJob extends Job {
 		const roiStr = episodeMetrics.totalROIPercent >= 0 ? `+${episodeMetrics.totalROIPercent.toFixed(2)}%` : `${episodeMetrics.totalROIPercent.toFixed(2)}%`;
 		const perFrameROIStr = episodeMetrics.perFrameROI !== undefined ? `, ${(episodeMetrics.perFrameROIPercent >= 0 ? '+' : '')}${episodeMetrics.perFrameROIPercent.toFixed(6)}%/frame` : '';
 
-		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} | ROI: ${roiStr} over ${episodeMetrics.frames} frames${perFrameROIStr} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
+		const accuracyStr = episodeMetrics.baseAccuracy !== null ? ` | Accuracy: ${episodeMetrics.baseAccuracy.toFixed(2)}%` : '';
+		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} | ROI: ${roiStr} over ${episodeMetrics.frames} frames${perFrameROIStr}${accuracyStr} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
 	}
 
 	/**
