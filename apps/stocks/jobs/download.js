@@ -17,6 +17,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 // Configuration - edit these values as needed
 const config = {
+	timeframe: '1Min',
 	symbols: [
 		'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
 		'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
@@ -37,7 +38,7 @@ const config = {
  * Parse command line arguments
  */
 function parseArgs() {
-	let timeframe = '1Min'; // default
+	let timeframe = config.timeframe;
 	const timeframeIndex = process.argv.indexOf('--timeframe');
 	if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) timeframe = process.argv[timeframeIndex + 1];
 

@@ -12,9 +12,7 @@ export default class Alpaca {
 			secretKey: process.env.ALPACA_SECRET_KEY,
 			paper: true
 		});
-
-		// alpaca allows 200 api calls per minute - leaving 10 requests headroom just in case
-		this.rateLimiter = new RateLimiter(190, 60_000);
+		this.rateLimiter = new RateLimiter();
 	}
 
 	/**

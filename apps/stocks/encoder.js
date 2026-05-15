@@ -9,6 +9,12 @@ const POSITION_OUT = -1;
  */
 export class StockEncoder {
 
+	/**
+	 * Create a new encoder for the given ticker symbol. Allocates dimension
+	 * names and bucket boundaries but leaves IDs null until bindIds() is
+	 * called after brain registration.
+	 * @param {string} symbol
+	 */
 	constructor(symbol) {
 		this.symbol = symbol;
 
@@ -36,12 +42,22 @@ export class StockEncoder {
 		this.previousVolume = null;
 	}
 
+	/**
+	 * Set up the price and volume bucket boundaries and build the
+	 * bucket-to-percent display map used by formatCoordinates().
+	 */
 	initializeBuckets() {
 		this.priceBoundaries = [0];
 		this.volumeBoundaries = [0];
 		this.bucketToPercent = this.buildBucketPercentMap();
 	}
 
+	/**
+	 * Build a Map keyed by "dimName:bucketId" whose values are human-readable
+	 * percent-range strings. Used by formatCoordinates() to annotate vote-debug
+	 * output with what each bucket number actually represents.
+	 * @returns {Map<string, string>}
+	 */
 	buildBucketPercentMap() {
 		const map = new Map();
 		const categories = [
@@ -56,6 +72,14 @@ export class StockEncoder {
 		return map;
 	}
 
+	/**
+	 * Return the lower and upper bounds for a 1-based bucket index given an
+	 * ordered array of split points. The first bucket extends to -Infinity
+	 * and the last to +Infinity.
+	 * @param {number} bucketValue
+	 * @param {number[]} boundaries
+	 * @returns {{ lo: number, hi: number }}
+	 */
 	getBucketRange(bucketValue, boundaries) {
 		const idx = bucketValue - 1;
 		const lo = idx === 0 ? -Infinity : boundaries[idx - 1];
@@ -63,12 +87,27 @@ export class StockEncoder {
 		return { lo, hi };
 	}
 
+	/**
+	 * Format a bucket's lower/upper bounds into a compact percent-range string
+	 * (e.g. "<0.00%", ">0.00%", or "0.00%~1.00%").
+	 * @param {number} min
+	 * @param {number} max
+	 * @returns {string}
+	 */
 	formatBucketRange(min, max) {
 		if (min === -Infinity) return `<${max.toFixed(2)}%`;
 		if (max === Infinity) return `>${min.toFixed(2)}%`;
 		return `${min.toFixed(2)}%~${max.toFixed(2)}%`;
 	}
 
+	/**
+	 * Map a continuous change value into a 1-based bucket index by walking
+	 * the ordered boundary array. Values beyond the last boundary fall into
+	 * the final overflow bucket.
+	 * @param {number} value
+	 * @param {number[]} boundaries
+	 * @returns {number}
+	 */
 	discretizeChange(value, boundaries) {
 		for (let i = 0; i < boundaries.length; i++)
 			if (value <= boundaries[i]) return i + 1;
@@ -133,6 +172,9 @@ export class StockEncoder {
 	 */
 	encode(frame) {
 		if (frame.previousPrice === null || frame.previousVolume === null) return null;
+
+		// Zero price or volume means no trading happened (gap-filled by setup.js) —
+		// skip so the brain doesn't see a non-event as real market activity.
 		if (!frame.price || !frame.volume) return null;
 
 		// Percent change since last frame; volume jumps from a zero-volume bar are
@@ -146,17 +188,6 @@ export class StockEncoder {
 		dimMap.set(this.priceChangeDimId, priceChange);
 		dimMap.set(this.volumeChangeDimId, volumeChange);
 		return dimMap;
-	}
-
-	/**
-	 * Convert a (possibly fractional) bucket value back to an approximate percentage change.
-	 * Midpoint of the bucket range, with open-ended outer buckets reflected.
-	 */
-	bucketValueToPercentage(bucketValue) {
-		const { lo, hi } = this.getBucketRange(bucketValue, this.priceBoundaries);
-		const loVal = lo === -Infinity ? hi - Math.abs(hi || 1) * 2 : lo;
-		const hiVal = hi === Infinity ? lo + Math.abs(lo || 1) * 2 : hi;
-		return (loVal + hiVal) / 2;
 	}
 
 	/**

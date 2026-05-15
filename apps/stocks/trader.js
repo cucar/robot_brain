@@ -22,6 +22,13 @@ export class StockTrader {
 		StockTrader.cash = StockTrader.initialCapital;
 	}
 
+	/**
+	 * Create a trader for the given ticker symbol. Position state is zeroed
+	 * and the channelId is left null until bindChannelId() links this trader
+	 * to its encoder's brain-allocated channel.
+	 * @param {string} symbol
+	 * @param {boolean} debug
+	 */
 	constructor(symbol, debug = false) {
 		this.symbol = symbol;
 		this.debug = debug;
@@ -37,6 +44,10 @@ export class StockTrader {
 		this.channelId = channelId;
 	}
 
+	/**
+	 * Zero out all per-episode mutable state: position, frame readings, and
+	 * the last action/reward. Called at construction and once per episode.
+	 */
 	resetContext() {
 		this.shares = 0;
 		this.investment = 0;
@@ -63,6 +74,10 @@ export class StockTrader {
 		if (this.currentPrice !== null) this.lastKnownPrice = this.currentPrice;
 	}
 
+	/**
+	 * True when the trader has a valid (previous, current) frame pair with
+	 * nonzero price and volume — the minimum needed for reward calculation.
+	 */
 	get hasData() {
 		return this.previousPrice !== null && this.currentPrice !== null && this.currentPrice > 0 && this.currentVolume > 0;
 	}
@@ -110,6 +125,11 @@ export class StockTrader {
 		return reward;
 	}
 
+	/**
+	 * Log a human-readable reward breakdown to the console. Shows the price
+	 * move, computed reward, and unrealized P&L when holding a position.
+	 * @param {number} reward
+	 */
 	debugReward(reward) {
 		const recentChange = this.currentPrice - this.previousPrice;
 		const currentValue = this.shares * this.currentPrice;
@@ -125,6 +145,11 @@ export class StockTrader {
 		}
 	}
 
+	/**
+	 * Buy shares at the current price, deducting cost from portfolio cash.
+	 * Throws if the portfolio lacks sufficient funds.
+	 * @param {number} sharesToBuy
+	 */
 	async executeBuy(sharesToBuy) {
 		const cost = sharesToBuy * this.getCurrentPrice();
 
@@ -141,6 +166,12 @@ export class StockTrader {
 			console.log(`${this.symbol}: BOUGHT ${sharesToBuy} shares @ $${this.getCurrentPrice().toFixed(2)} = $${cost.toFixed(2)} | Cash: $${StockTrader.cash.toFixed(2)}`);
 	}
 
+	/**
+	 * Sell shares at the current price, crediting proceeds to portfolio cash
+	 * and reducing the cost basis proportionally. Throws if the trader holds
+	 * fewer shares than requested.
+	 * @param {number} sharesToSell
+	 */
 	async executeSell(sharesToSell) {
 		if (sharesToSell > this.shares)
 			throw new Error(`${this.symbol}: Cannot sell ${sharesToSell} shares, only have ${this.shares}`);
@@ -250,8 +281,8 @@ export class StockTrader {
 
 	/**
 	 * Pick the winning OWN traders (respecting maxPositions and maxPrice), then split
-	 * portfolio value equally across them. Traders not in the winning set get a zero-
-	 * dollar OUT allocation. Returned Map is keyed by trader for O(1) lookup in the planner.
+	 * portfolio value equally across them. Traders not in the winning set get a zero-dollar OUT allocation.
+	 * Returned Map is keyed by trader for O(1) lookup in the planner.
 	 */
 	static distributeAllocations(traders, ranked, totalValue) {
 		let ownActions = ranked.filter(a => a.isOwn);

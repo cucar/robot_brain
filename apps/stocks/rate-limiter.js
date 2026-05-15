@@ -5,10 +5,11 @@
 export default class RateLimiter {
 
 	/**
+	 * Alpaca is supposed to allow 200 api calls per minute but practically it's much less on the free plan
 	 * @param maxRequests - maximum requests allowed within the window
 	 * @param windowMs - sliding window duration in milliseconds
 	 */
-	constructor(maxRequests = 190, windowMs = 60_000) {
+	constructor(maxRequests = 8, windowMs = 60_000) {
 		this.maxRequests = maxRequests;
 		this.windowMs = windowMs;
 		this.timestamps = [];
