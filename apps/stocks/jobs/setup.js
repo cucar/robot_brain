@@ -75,24 +75,6 @@ function isRegularHours(utcDate) {
 }
 
 /**
- * Collect every timestamp across all symbols where at least one stock traded. Intraday
- * timeframes filter by market hours; the union is our set of "valid intervals" that
- * every symbol will be aligned against — so multi-symbol frames stay in lockstep even
- * when individual stocks have missing bars.
- */
-function findValidIntervals(allBarMaps, extendedHours) {
-	const intervals = new Set();
-	for (const barMap of allBarMaps.values())
-		for (const timestamp of barMap.keys())
-			if (extendedHours || isRegularHours(new Date(timestamp + ':00Z')))
-				intervals.add(timestamp);
-
-	const hoursLabel = extendedHours ? 'extended hours' : 'regular hours';
-	console.log(`   Found ${intervals.size} valid intervals (${hoursLabel}) where at least one stock has data`);
-	return intervals;
-}
-
-/**
  * Find the first available price for a symbol in the valid intervals — used as the fill
  * value for missing bars at the start of the series (before this symbol's first trade).
  * Throws if the symbol has no bars at all, since there's nothing to fill with.
@@ -136,7 +118,7 @@ function extractValidIntervals(symbol, barMap, validIntervals) {
  * Intraday bars are aligned to the shared valid-interval grid so every symbol's CSV
  * has identical row count and timestamp ordering.
  */
-function processAndSaveSymbolData(symbol, barMap, dataDir, timeframe, startDate, endDate, validIntervals = null) {
+function processAndSaveSymbolData(symbol, barMap, dataDir, timeframe, startDate, endDate, validIntervals = null, progress = '') {
 	let filledData;
 	if (timeframe === '1D') {
 		const timestamps = Array.from(barMap.keys()).sort();
@@ -157,7 +139,7 @@ function processAndSaveSymbolData(symbol, barMap, dataDir, timeframe, startDate,
 	const filePath = path.join(dataDir, `${symbol}.csv`);
 	fs.writeFileSync(filePath, rows.join('\n'));
 
-	console.log(`   ✅ ${symbol}.csv: ${rows.length} bars`);
+	console.log(`   ${progress} ✅ ${symbol}.csv: ${rows.length} bars`);
 }
 
 async function main() {
@@ -181,12 +163,34 @@ async function main() {
 	}
 
 	console.log('');
-	console.log('📊 Processing data into training files...');
 
-	// Load every symbol's bars up front into Maps keyed by truncated timestamp (minute-
-	// precision) — lets findValidIntervals and extractValidIntervals do O(1) lookups.
-	const allBarMaps = new Map();
-	for (const symbol of symbols) {
+	// For intraday timeframes, we need the union of all timestamps to align bars.
+	// Pass 1: collect timestamps from each file without keeping bar data in memory.
+	let validIntervals = null;
+	if (timeframe !== '1D') {
+		console.log('📊 Building interval grid...');
+		const intervals = new Set();
+		for (let i = 0; i < symbols.length; i++) {
+			const symbol = symbols[i];
+			process.stdout.write(`   [${i + 1}/${symbols.length}] Scanning ${symbol}...\r`);
+			const jsonPath = path.join(dataDir, `${symbol}.json`);
+			const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+			for (const bar of bars) {
+				const timestamp = bar.Timestamp.substring(0, 16);
+				if (extendedHours || isRegularHours(new Date(timestamp + ':00Z')))
+					intervals.add(timestamp);
+			}
+		}
+		validIntervals = intervals;
+		const hoursLabel = extendedHours ? 'extended hours' : 'regular hours';
+		console.log(`   Found ${intervals.size} valid intervals (${hoursLabel}) where at least one stock has data`);
+		console.log('');
+	}
+
+	// Pass 2: load, process, and write each symbol one at a time.
+	console.log('📊 Processing data into training files...');
+	for (let i = 0; i < symbols.length; i++) {
+		const symbol = symbols[i];
 		const jsonPath = path.join(dataDir, `${symbol}.json`);
 		const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
 
@@ -195,18 +199,11 @@ async function main() {
 			const timestamp = bar.Timestamp.substring(0, 16);
 			barMap.set(timestamp, { open: bar.OpenPrice, volume: bar.Volume });
 		}
-		allBarMaps.set(symbol, barMap);
-	}
 
-	// Daily data has no intraday grid to align against; the date filter in
-	// processAndSaveSymbolData handles range selection directly.
-	let validIntervals = null;
-	if (timeframe !== '1D') validIntervals = findValidIntervals(allBarMaps, extendedHours);
-
-	for (const symbol of symbols) {
-		const barMap = allBarMaps.get(symbol);
-		processAndSaveSymbolData(symbol, barMap, dataDir, timeframe, startDate, endDate, validIntervals);
+		const progress = `[${i + 1}/${symbols.length}]`;
+		processAndSaveSymbolData(symbol, barMap, dataDir, timeframe, startDate, endDate, validIntervals, progress);
 	}
+	console.log('');
 
 	console.log('');
 	console.log('✅ All data processed successfully!');
