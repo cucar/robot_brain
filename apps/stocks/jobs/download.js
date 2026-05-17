@@ -17,8 +17,9 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 // Configuration - edit these values as needed
 const config = {
-	timeframe: '1Min',
+	timeframe: '5Min',
 	symbols: [
+		// 100 stocks - expected to be good
 		'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
 		'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
 		'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
@@ -29,6 +30,12 @@ const config = {
 		'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
 		'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
 		'HL', 'CCJ', 'COP', 'USAR', 'XOM', 'AMD', 'LAC', 'MSFT', 'MUX', 'SPY'
+
+		// loser batch 1 - it's very bad, but alive
+		// 'PTON', 'RIVN', 'BABA', 'MRNA', 'PARA', 'SNAP', 'PYPL', 'INTC', 'KSS', 'PLUG'
+
+		// loser batch 2 - catastrophic losses - going to zero - de-listings
+		// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 	],
 	startDate: '2021-05-13',
 	endDate: '2026-05-13'

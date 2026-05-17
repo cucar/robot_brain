@@ -22,6 +22,7 @@ export default class StockTestJob extends Job {
 		this.config = {
 			// Stock symbols to train on
 			symbols: [
+				// 100 stocks - expected to be good
 				'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
 				'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
 				'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
@@ -32,6 +33,12 @@ export default class StockTestJob extends Job {
 				'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
 				'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
 				'HL', 'CCJ', 'COP', 'USAR', 'XOM', 'AMD', 'LAC', 'MSFT', 'MUX', 'SPY'
+
+				// loser batch 1 - it's very bad, but alive
+				// 'PTON', 'RIVN', 'BABA', 'MRNA', 'PARA', 'SNAP', 'PYPL', 'INTC', 'KSS', 'PLUG'
+
+				// loser batch 2 - catastrophic losses - going to zero - de-listings
+				// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 			],
 			timeframe: '3H',                     // Timeframe for data (e.g., '1D', '1Min')
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
@@ -83,6 +90,15 @@ export default class StockTestJob extends Job {
 		}
 
 		if (process.argv.includes('--random-baseline')) this.config.randomBaseline = true;
+
+		const maxFramesIndex = process.argv.indexOf('--max-frames');
+		if (maxFramesIndex !== -1 && process.argv[maxFramesIndex + 1]) this.config.maxFrames = parseInt(process.argv[maxFramesIndex + 1]);
+
+		const saveSessionIndex = process.argv.indexOf('--save-session');
+		if (saveSessionIndex !== -1 && process.argv[saveSessionIndex + 1]) this.config.saveSession = process.argv[saveSessionIndex + 1];
+
+		const loadSessionIndex = process.argv.indexOf('--load-session');
+		if (loadSessionIndex !== -1 && process.argv[loadSessionIndex + 1]) this.config.loadSession = process.argv[loadSessionIndex + 1];
 	}
 
 	/**
@@ -201,6 +217,11 @@ export default class StockTestJob extends Job {
 		for (const encoder of this.encoders) encoder.resetFrames();
 		for (const trader of this.traders) trader.resetContext();
 
+		// Restore saved state after resets (overrides the clean slate above).
+		const resuming = !!(this.loadContext || this.config.loadSession);
+		if (this.loadContext) this.brain.loadContext(this.getJobDir(), this.loadContext);
+		if (this.config.loadSession) this.loadSession(this.config.loadSession);
+
 		// Initialize episode metrics
 		const episodeMetrics = {
 			episode: this.currentEpisode,
@@ -212,21 +233,24 @@ export default class StockTestJob extends Job {
 		};
 
 		// Warmup: consume the first frame per encoder so the first real processed frame
-		// has a full (previous, current) pair. Mirrors the legacy frame-1 double-read in
-		// StockChannel — without this, the first encoded frame would have previousPrice=null
-		// and be skipped, and the trader would start one frame behind the encoder.
-		for (let i = 0; i < this.encoders.length; i++) {
-			const frame = this.encoders[i].nextFrame();
-			if (frame) this.traders[i].setFrame(frame.price, frame.volume);
+		// has a full (previous, current) pair. Skip when resuming — the session already
+		// carries previousPrice/previousVolume from the last processed frame.
+		if (!resuming) {
+			for (let i = 0; i < this.encoders.length; i++) {
+				const frame = this.encoders[i].nextFrame();
+				if (frame) this.traders[i].setFrame(frame.price, frame.volume);
+			}
 		}
 
-		// Every encoder has the same row count by construction (aligned intervals). One
-		// frame was consumed by the warmup above, so the main loop processes one fewer.
-		const expectedFrames = this.encoders[0].rows.length - 1;
+		// Every encoder has the same row count by construction (aligned intervals).
+		// When starting fresh, one frame was consumed by warmup. When resuming,
+		// --offset positions the data so rowIndex 0 is the first frame to process.
+		const remainingFrames = this.encoders[0].rows.length - this.encoders[0].rowIndex;
+		const maxFrames = this.config.maxFrames || Infinity;
 
 		// Process all frames for the episode duration
 		let frameCount = 0;
-		while (frameCount < expectedFrames) {
+		while (frameCount < remainingFrames && frameCount < maxFrames) {
 
 			// Process frame
 			const hasMore = await this.runFrame();
@@ -235,7 +259,7 @@ export default class StockTestJob extends Job {
 
 			// Show progress every 100 frames
 			if (frameCount % 100 === 0)
-				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${expectedFrames}... `);
+				process.stdout.write(`\r📈 Episode ${this.currentEpisode}/${this.config.maxEpisodes} - Frame ${frameCount}/${remainingFrames}... `);
 
 			// if interrupt is received, stop processing
 			if (this.isShuttingDown) return;
@@ -502,6 +526,96 @@ export default class StockTestJob extends Job {
 		}
 
 		console.log('='.repeat(60));
+	}
+
+	/**
+	 * save session on shutdown if configured
+	 */
+	async shutdown() {
+		if (this.isShuttingDown) return;
+		if (this.config.saveSession) this.saveSession(this.config.saveSession);
+		await super.shutdown();
+	}
+
+	/**
+	 * Save trader and encoder runtime state to a labeled JSON file.
+	 * Folder: <jobDir>/sessions/<label>/session.json
+	 */
+	saveSession(label) {
+		const sessionsDir = path.join(this.getJobDir(), 'sessions');
+		const folder = path.join(sessionsDir, label);
+		fs.mkdirSync(folder, { recursive: true });
+
+		const state = {
+			traders: this.traders.map(t => ({
+				symbol: t.symbol,
+				channelId: t.channelId,
+				shares: t.shares,
+				investment: t.investment,
+				lastKnownPrice: t.lastKnownPrice,
+				previousPrice: t.previousPrice,
+				previousVolume: t.previousVolume,
+				currentPrice: t.currentPrice,
+				currentVolume: t.currentVolume,
+				lastAction: t.lastAction,
+				lastActionReward: t.lastActionReward
+			})),
+			encoders: this.encoders.map(e => ({
+				symbol: e.symbol,
+				channelId: e.channelId,
+				previousPrice: e.previousPrice,
+				previousVolume: e.previousVolume
+			})),
+			portfolio: {
+				cash: StockTrader.cash
+			}
+		};
+
+		fs.writeFileSync(path.join(folder, 'session.json'), JSON.stringify(state, null, 2));
+		console.log(`💾 Session saved: ${folder}`);
+	}
+
+	/**
+	 * Restore trader and encoder runtime state from a labeled JSON file.
+	 * Matches by symbol so order doesn't matter.
+	 */
+	loadSession(label) {
+		const folder = path.join(this.getJobDir(), 'sessions', label);
+		const filePath = path.join(folder, 'session.json');
+		if (!fs.existsSync(filePath)) {
+			throw new Error(`--load-session ${label} requested but file does not exist: ${filePath}`);
+		}
+
+		const state = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+		console.log(`📂 Loading session: ${folder}`);
+
+		// Restore portfolio cash
+		if (state.portfolio) StockTrader.cash = state.portfolio.cash;
+
+		// Restore trader state by symbol
+		for (const saved of state.traders) {
+			const trader = this.traders.find(t => t.symbol === saved.symbol);
+			if (!trader) continue;
+			trader.shares = saved.shares;
+			trader.investment = saved.investment;
+			trader.lastKnownPrice = saved.lastKnownPrice;
+			trader.previousPrice = saved.previousPrice;
+			trader.previousVolume = saved.previousVolume;
+			trader.currentPrice = saved.currentPrice;
+			trader.currentVolume = saved.currentVolume;
+			trader.lastAction = saved.lastAction;
+			trader.lastActionReward = saved.lastActionReward;
+		}
+
+		// Restore encoder state by symbol
+		for (const saved of state.encoders) {
+			const encoder = this.encoders.find(e => e.symbol === saved.symbol);
+			if (!encoder) continue;
+			encoder.previousPrice = saved.previousPrice;
+			encoder.previousVolume = saved.previousVolume;
+		}
+
+		console.log(`   Restored ${state.traders.length} traders, ${state.encoders.length} encoders`);
 	}
 }
 
