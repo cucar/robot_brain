@@ -1,11 +1,11 @@
 /**
- * Database export utility — dumps the MySQL brain tables to a fresh backup
- * folder (`./backups/<timestamp>/`) in the current working directory. The
- * user can then move the folder under any job's `backups/` directory to make
- * it loadable via `--load`.
+ * Database export utility — dumps the MySQL brain tables to a backup folder.
  *
  * Usage:
- *   node apps/db/export.js
+ *   node apps/db/export.js [output-path]
+ *
+ * If output-path is provided, writes directly to that folder (creating it if
+ * needed). Otherwise falls back to `./backups/<timestamp>/` in cwd.
  *
  * Output layout matches the Backup class (no header rows, comma-separated):
  *   channels.csv, dimensions.csv, neurons.csv, base_neurons.csv,
@@ -67,10 +67,9 @@ async function main() {
 	// session has REPEATABLE READ (the MySQL default).
 	const conn = await getMySQLConnection();
 
-	// Folder layout: `./backups/<timestamp>/` under cwd. Caller chooses cwd, so
-	// running this from a job dir lands the export right next to that job's
-	// existing backups.
-	const folder = path.join(process.cwd(), 'backups', formatTimestamp(new Date()));
+	const folder = process.argv[2]
+		? path.resolve(process.argv[2])
+		: path.join(process.cwd(), 'backups', formatTimestamp(new Date()));
 	fs.mkdirSync(folder, { recursive: true });
 	console.log(`📤 Exporting brain to: ${folder}`);
 

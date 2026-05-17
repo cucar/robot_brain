@@ -25,8 +25,10 @@ export function parseBrainArgs(argv = process.argv) {
 
 	return {
 		diagnostic: has('--diagnostic'),
-		save: has('--save'),
-		load: has('--load'),
+		saveBrain: str('--save-brain'),
+		loadBrain: str('--load-brain'),
+		saveContext: str('--save-context'),
+		loadContext: str('--load-context'),
 		debug: has('--debug'),
 		wait: has('--wait'),
 		noSummary: has('--no-summary'),

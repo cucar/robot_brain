@@ -18,14 +18,17 @@
 /// The host (N-API binding or CLI runner) feeds inputs and reads the return value.
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::fs;
+use std::path::PathBuf;
 use std::time::Instant;
 
-use crate::backup::Backup;
+use crate::backup::{Backup, read_csv, write_csv};
 use crate::column::NeuronCreateSpec;
 use crate::diagnostics::{DimInference, Diagnostics, InferenceType};
 use crate::memory::{InferredNeuron, Memory};
+use crate::neuron::{ContextRefEntry, Vote};
 use crate::thalamus::{
-    FlatVote,
+    FlatVote, LevelAgeState,
     PointLookup, Thalamus,
 };
 use crate::types::{
@@ -277,24 +280,266 @@ impl Brain {
         self.diagnostics.reset_accuracy_stats();
     }
 
-    // ── Save / load ─────────────────────────────────────────────────────────
+    // ── Save / load ──────────────────────────────────���──────────────────────
 
-    /// Save brain state to a file-based backup under `<job_dir>/backups/<timestamp>/`.
-    /// Materializes lazy decay before snapshotting so strengths reflect true
-    /// post-decay values. Returns the folder path on success.
-    pub fn save(&mut self, job_dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    /// Save brain state to `<job_dir>/backups/<label>/`. Materializes lazy decay
+    /// before snapshotting so strengths reflect true post-decay values.
+    pub fn save(&mut self, job_dir: &std::path::Path, label: &str) -> Result<std::path::PathBuf, String> {
         self.thalamus.materialize_and_reset_neurons(self.frame_number);
         self.frame_number = 0;
         let snapshot = self.thalamus.get_snapshot();
-        self.backup_store.save(job_dir, &snapshot)
+        self.backup_store.save(job_dir, label, &snapshot)
     }
 
-    /// Load the most recent backup from `<job_dir>/backups/` and restore it.
-    /// Returns an error if no backup exists.
-    pub fn load(&mut self, job_dir: &std::path::Path) -> Result<(), String> {
-        let snapshot = self.backup_store.load_latest(job_dir)?;
+    /// Load a backup by label from `<job_dir>/backups/<label>/`.
+    pub fn load(&mut self, job_dir: &std::path::Path, label: &str) -> Result<(), String> {
+        let snapshot = self.backup_store.load(job_dir, label)?;
         self.thalamus.restore_snapshot(&snapshot);
         Ok(())
+    }
+
+    // ── Context save / load ─────────────────────────────────────────────────
+
+    /// Save the brain's runtime context (active neurons, frame number, rewards,
+    /// inferred neurons) to `<job_dir>/contexts/<label>/`. Uses "latest" semantics
+    /// identical to brain save: timestamped folder vs named folder.
+    ///
+    /// Active neuron activation frames are stored as offsets relative to the
+    /// current frame_number (always ≤ 0). On restore, frame_number is set to 0
+    /// and the offsets become the activation_frames directly — no timestamp
+    /// fixup needed.
+    pub fn save_context(&self, job_dir: &std::path::Path, label: &str) -> Result<PathBuf, String> {
+        let contexts_dir = job_dir.join("contexts");
+        fs::create_dir_all(&contexts_dir)
+            .map_err(|e| format!("Failed to create contexts dir: {}", e))?;
+
+        let folder = if label == "latest" {
+            let timestamp = crate::backup::format_timestamp();
+            contexts_dir.join(&timestamp)
+        } else {
+            contexts_dir.join(label)
+        };
+
+        if label != "latest" && folder.exists() {
+            fs::remove_dir_all(&folder)
+                .map_err(|e| format!("Failed to clear context folder: {}", e))?;
+        }
+        fs::create_dir_all(&folder)
+            .map_err(|e| format!("Failed to create context folder: {}", e))?;
+
+        // active_neurons.csv: neuron_id, activation_offset, level, activated_pattern_id, threshold
+        // activation_offset = activation_frame - frame_number (always ≤ 0)
+        let activations = self.memory.get_context_snapshot();
+        let rows: Vec<Vec<String>> = activations.iter()
+            .map(|(id, frame, level, state)| {
+                let offset = frame - self.frame_number;
+                let pattern_id_str = state.activated_pattern_id.map_or(String::new(), |p| p.to_string());
+                let threshold_str = state.threshold.map_or(String::new(), |t| t.to_string());
+                vec![id.to_string(), offset.to_string(), level.to_string(), pattern_id_str, threshold_str]
+            })
+            .collect();
+        write_csv(&folder.join("active_neurons.csv"), &rows)?;
+
+        // votes.csv: neuron_id, activation_offset, voted_neuron_id, strength, reward, distance
+        let mut vote_rows: Vec<Vec<String>> = Vec::new();
+        for (id, frame, _level, state) in &activations {
+            let offset = frame - self.frame_number;
+            if let Some(ref votes) = state.votes {
+                for vote in votes {
+                    vote_rows.push(vec![
+                        id.to_string(), offset.to_string(),
+                        vote.neuron_id.to_string(), vote.strength.to_string(),
+                        vote.reward.to_string(), vote.distance.to_string(),
+                    ]);
+                }
+            }
+        }
+        write_csv(&folder.join("votes.csv"), &vote_rows)?;
+
+        // context_refs.csv: neuron_id, activation_offset, ref_neuron_id, ref_distance
+        let mut ref_rows: Vec<Vec<String>> = Vec::new();
+        for (id, frame, _level, state) in &activations {
+            let offset = frame - self.frame_number;
+            if let Some(ref ctx) = state.context {
+                for entry in ctx {
+                    ref_rows.push(vec![
+                        id.to_string(), offset.to_string(),
+                        entry.neuron_id.to_string(), entry.distance.to_string(),
+                    ]);
+                }
+            }
+        }
+        write_csv(&folder.join("context_refs.csv"), &ref_rows)?;
+
+        // rewards.csv: age, channel_id, reward (one row per entry in the rewards vec)
+        let mut reward_rows: Vec<Vec<String>> = Vec::new();
+        for (age, reward_map) in self.rewards.iter().enumerate() {
+            for (&channel_id, &reward) in reward_map {
+                reward_rows.push(vec![age.to_string(), channel_id.to_string(), reward.to_string()]);
+            }
+        }
+        write_csv(&folder.join("rewards.csv"), &reward_rows)?;
+
+        // inferred_neurons.csv: neuron_id, dim_id, bucket_id, channel_id, strength, reward, probability
+        let inferred = self.memory.get_inferred_snapshot();
+        let inferred_rows: Vec<Vec<String>> = inferred.iter()
+            .map(|inf| vec![
+                inf.neuron_id.to_string(),
+                inf.coordinate.dim_id.to_string(),
+                inf.coordinate.bucket_id.to_string(),
+                inf.channel_id.to_string(),
+                inf.strength.to_string(),
+                inf.reward.to_string(),
+                inf.probability.to_string(),
+            ])
+            .collect();
+        write_csv(&folder.join("inferred_neurons.csv"), &inferred_rows)?;
+
+        println!("💾 Context saved: {} ({} active neurons, frame {})",
+            folder.display(), activations.len(), self.frame_number);
+        Ok(folder)
+    }
+
+    /// Load a context snapshot from `<job_dir>/contexts/<label>/`.
+    /// Activation frames are stored as negative offsets — on restore,
+    /// frame_number is 0 so the offsets become the activation_frames directly.
+    pub fn load_context(&mut self, job_dir: &std::path::Path, label: &str) -> Result<(), String> {
+        let contexts_dir = job_dir.join("contexts");
+
+        let folder = if label == "latest" {
+            self.find_latest_context_folder(&contexts_dir)
+                .ok_or_else(|| format!("--load-context latest requested but no contexts found in {}", contexts_dir.display()))?
+        } else {
+            let named = contexts_dir.join(label);
+            if !named.exists() {
+                return Err(format!("--load-context {} requested but folder does not exist: {}", label, named.display()));
+            }
+            named
+        };
+
+        println!("📂 Loading context: {}", folder.display());
+
+        // active_neurons.csv: neuron_id, activation_offset, level [, activated_pattern_id, threshold]
+        let neuron_rows = read_csv(&folder.join("active_neurons.csv"))?;
+        let mut activations: Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> = Vec::with_capacity(neuron_rows.len());
+        for row in &neuron_rows {
+            if row.len() < 3 { continue; }
+            let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad neuron_id: {}", e))?;
+            let activation_frame: FrameNumber = row[1].parse().map_err(|e| format!("Bad activation_frame: {}", e))?;
+            let level: Level = row[2].parse().map_err(|e| format!("Bad level: {}", e))?;
+            let activated_pattern_id = row.get(3).and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
+            let threshold = row.get(4).and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
+            activations.push((neuron_id, activation_frame, level, LevelAgeState {
+                activated_pattern_id,
+                threshold,
+                votes: None,
+                context: None,
+            }));
+        }
+
+        // votes.csv: neuron_id, activation_offset, voted_neuron_id, strength, reward, distance
+        let votes_file = folder.join("votes.csv");
+        if votes_file.exists() {
+            let vote_rows = read_csv(&votes_file)?;
+            for row in &vote_rows {
+                if row.len() < 6 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad vote neuron_id: {}", e))?;
+                let offset: FrameNumber = row[1].parse().map_err(|e| format!("Bad vote offset: {}", e))?;
+                let vote = Vote {
+                    neuron_id: row[2].parse().map_err(|e| format!("Bad voted_neuron_id: {}", e))?,
+                    strength: row[3].parse().map_err(|e| format!("Bad vote strength: {}", e))?,
+                    reward: row[4].parse().map_err(|e| format!("Bad vote reward: {}", e))?,
+                    distance: row[5].parse().map_err(|e| format!("Bad vote distance: {}", e))?,
+                };
+                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _)| *id == neuron_id && *frame == offset) {
+                    entry.3.votes.get_or_insert_with(Vec::new).push(vote);
+                }
+            }
+        }
+
+        // context_refs.csv: neuron_id, activation_offset, ref_neuron_id, ref_distance
+        let refs_file = folder.join("context_refs.csv");
+        if refs_file.exists() {
+            let ref_rows = read_csv(&refs_file)?;
+            for row in &ref_rows {
+                if row.len() < 4 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad ref neuron_id: {}", e))?;
+                let offset: FrameNumber = row[1].parse().map_err(|e| format!("Bad ref offset: {}", e))?;
+                let ctx_entry = ContextRefEntry {
+                    neuron_id: row[2].parse().map_err(|e| format!("Bad ref_neuron_id: {}", e))?,
+                    distance: row[3].parse().map_err(|e| format!("Bad ref_distance: {}", e))?,
+                };
+                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _)| *id == neuron_id && *frame == offset) {
+                    entry.3.context.get_or_insert_with(Vec::new).push(ctx_entry);
+                }
+            }
+        }
+
+        self.memory.restore_context_snapshot(self.frame_number, &activations);
+
+        // rewards.csv
+        self.rewards.clear();
+        let rewards_file = folder.join("rewards.csv");
+        if rewards_file.exists() {
+            let reward_rows = read_csv(&rewards_file)?;
+            for row in &reward_rows {
+                if row.len() < 3 { continue; }
+                let age: usize = row[0].parse().map_err(|e| format!("Bad reward age: {}", e))?;
+                let channel_id: ChannelId = row[1].parse().map_err(|e| format!("Bad reward channel: {}", e))?;
+                let reward: Reward = row[2].parse().map_err(|e| format!("Bad reward value: {}", e))?;
+                while self.rewards.len() <= age {
+                    self.rewards.push(FxHashMap::default());
+                }
+                self.rewards[age].insert(channel_id, reward);
+            }
+        }
+
+        // inferred_neurons.csv
+        let inferred_file = folder.join("inferred_neurons.csv");
+        if inferred_file.exists() {
+            let inferred_rows = read_csv(&inferred_file)?;
+            let mut inferred = Vec::with_capacity(inferred_rows.len());
+            for row in &inferred_rows {
+                if row.len() < 7 { continue; }
+                inferred.push(InferredNeuron {
+                    neuron_id: row[0].parse().map_err(|e| format!("Bad inferred neuron_id: {}", e))?,
+                    coordinate: Coordinate {
+                        dim_id: row[1].parse().map_err(|e| format!("Bad inferred dim_id: {}", e))?,
+                        bucket_id: row[2].parse().map_err(|e| format!("Bad inferred bucket_id: {}", e))?,
+                    },
+                    channel_id: row[3].parse().map_err(|e| format!("Bad inferred channel_id: {}", e))?,
+                    strength: row[4].parse().map_err(|e| format!("Bad inferred strength: {}", e))?,
+                    reward: row[5].parse().map_err(|e| format!("Bad inferred reward: {}", e))?,
+                    probability: row[6].parse().map_err(|e| format!("Bad inferred probability: {}", e))?,
+                });
+            }
+            self.memory.restore_inferred_snapshot(inferred);
+        }
+
+        println!("   Restored {} active neurons", activations.len());
+        Ok(())
+    }
+
+    /// Find the most recent timestamped context folder under `contexts_dir`.
+    /// Only considers folders matching the `YYYY-MM-DD_HH-mm-ss` format (same
+    /// convention as brain backups). Named label folders are ignored — they are
+    /// loaded by exact name, not by recency. Returns None if no timestamped
+    /// folders exist.
+    fn find_latest_context_folder(&self, contexts_dir: &std::path::Path) -> Option<PathBuf> {
+        if !contexts_dir.exists() { return None; }
+
+        // Collect only timestamp-formatted folder names (named labels are skipped)
+        let mut folders: Vec<String> = fs::read_dir(contexts_dir).ok()?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|name| crate::backup::is_timestamp_folder(name))
+            .collect();
+        if folders.is_empty() { return None; }
+
+        // Lex-sort puts newest last thanks to zero-padded timestamps
+        folders.sort();
+        Some(contexts_dir.join(folders.last().unwrap()))
     }
 
     // ── Lookup helpers ─────────────────────────────────────────────────────────

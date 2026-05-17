@@ -247,20 +247,38 @@ impl JsBrain {
         }
     }
 
-    /// Save brain state to disk.
+    /// Save brain state to a labeled backup folder.
     #[napi]
-    pub fn save(&self, job_dir: String) -> Result<()> {
+    pub fn save(&self, job_dir: String, label: String) -> Result<()> {
         self.inner.borrow_mut()
-            .save(std::path::Path::new(&job_dir))
+            .save(std::path::Path::new(&job_dir), &label)
             .map_err(|e| Error::from_reason(e))?;
         Ok(())
     }
 
-    /// Load the most recent backup from disk.
+    /// Load a backup by label.
     #[napi]
-    pub fn load(&self, job_dir: String) -> Result<()> {
+    pub fn load(&self, job_dir: String, label: String) -> Result<()> {
         self.inner.borrow_mut()
-            .load(std::path::Path::new(&job_dir))
+            .load(std::path::Path::new(&job_dir), &label)
+            .map_err(|e| Error::from_reason(e))?;
+        Ok(())
+    }
+
+    /// Save brain context (active neurons, frame number, rewards) to a labeled folder.
+    #[napi(js_name = "saveContext")]
+    pub fn save_context(&self, job_dir: String, label: String) -> Result<()> {
+        self.inner.borrow()
+            .save_context(std::path::Path::new(&job_dir), &label)
+            .map_err(|e| Error::from_reason(e))?;
+        Ok(())
+    }
+
+    /// Load brain context from a labeled folder.
+    #[napi(js_name = "loadContext")]
+    pub fn load_context(&self, job_dir: String, label: String) -> Result<()> {
+        self.inner.borrow_mut()
+            .load_context(std::path::Path::new(&job_dir), &label)
             .map_err(|e| Error::from_reason(e))?;
         Ok(())
     }

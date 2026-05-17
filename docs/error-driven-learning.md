@@ -514,19 +514,16 @@ If contextLength frames isn't enough context, patterns can form hierarchies:
 - Created when base neurons make prediction errors
 - Context: base neurons at various distances
 - Predictions: base neurons at distance 1
-- Vote with 5.25x weight (1 + 1*4.25)
 
 **Level 2 (Second-order patterns)**:
 - Created when level 1 patterns make prediction errors
 - Context: level 1 patterns at various distances
 - Predictions: base neurons at distance 1
-- Vote with 9.5x weight (1 + 2*4.25)
 
 **Level N**:
 - Created when level N-1 patterns make prediction errors
 - Context: level N-1 patterns at various distances
 - Predictions: base neurons at distance 1
-- Vote with (1 + N*4.25)x weight
 
 ### Hierarchical Recognition
 

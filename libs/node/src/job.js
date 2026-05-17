@@ -14,8 +14,10 @@ export class Job {
 	constructor() {
 		this.brain = null; // Brain instance will be created in run() based on options
 		this.isShuttingDown = false;
-		this.save = false; // --save: write a backup on shutdown (incl. crash)
-		this.load = false; // --load: restore latest backup before executing
+		this.saveBrain = null; // --save-brain <label>: write a backup on shutdown
+		this.loadBrain = null; // --load-brain <label>: restore backup before executing
+		this.saveContext = null; // --save-context <label>: save runtime context on shutdown
+		this.loadContext = null; // --load-context <label>: restore runtime context
 		this.jobStartTime = null;
 		this.hasShownExecutionTime = false;
 
@@ -67,10 +69,13 @@ export class Job {
 			// Create brain instance
 			this.brain = new Brain(this.options);
 
-			// Backup options: --save writes a snapshot on shutdown, --load restores
-			// the latest backup from <jobDir>/backups/ before the first frame.
-			this.save = !!this.options?.save;
-			this.load = !!this.options?.load;
+			// Backup options: --save-brain <label> writes a snapshot on shutdown,
+			// --load-brain <label> restores a labeled backup before the first frame.
+			// --save-context / --load-context do the same for runtime context.
+			this.saveBrain = this.options?.saveBrain || null;
+			this.loadBrain = this.options?.loadBrain || null;
+			this.saveContext = this.options?.saveContext || null;
+			this.loadContext = this.options?.loadContext || null;
 
 			// Allow jobs to show custom startup info
 			await this.showStartupInfo();
@@ -81,10 +86,14 @@ export class Job {
 			// Handle brain reset strategy
 			await this.handleBrainReset();
 
-			// --load: restore the latest file-based backup into the brain. Channel
+			// --load-brain: restore a labeled backup into the brain. Channel
 			// specs are already registered above; the backup just reconciles
 			// id↔name maps and rehydrates neurons.
-			if (this.load) this.brain.load(this.getJobDir());
+			if (this.loadBrain) this.brain.load(this.getJobDir(), this.loadBrain);
+
+			// --load-context: restore the memory window (active neurons, rewards,
+			// inferred neurons). Must happen after load-brain so neurons exist.
+			if (this.loadContext) this.brain.loadContext(this.getJobDir(), this.loadContext);
 
 			// Allow jobs to configure channels after brain initialization
 			await this.configureChannels();
@@ -165,10 +174,10 @@ export class Job {
 		// Close readline if --wait opened one; otherwise the process hangs on the
 		// open stdin handle even after backup completes.
 		if (this.rl) { this.rl.close(); this.rl = null; }
-		// --save also fires on the catch path in run(), so a crash still produces
-		// a backup. Backup.save catches its own errors so a save failure during
-		// shutdown can never mask the original exit.
-		if (this.brain && this.save) this.brain.save(this.getJobDir());
+		// Context must be saved BEFORE brain — brain.save() materializes decay
+		// and resets frame_number to 0, which would destroy the context state.
+		if (this.brain && this.saveContext) this.brain.saveContext(this.getJobDir(), this.saveContext);
+		if (this.brain && this.saveBrain) this.brain.save(this.getJobDir(), this.saveBrain);
 	}
 
 	/* ---------- Hooks ---------- */

@@ -607,6 +607,11 @@ export default class StockTestJob extends Job {
 			trader.lastActionReward = saved.lastActionReward;
 		}
 
+		// Rebase initial capital to restored portfolio value so ROI reflects this run
+		let marketValue = 0;
+		for (const trader of this.traders) marketValue += trader.shares * trader.currentPrice;
+		StockTrader.initialCapital = StockTrader.cash + marketValue;
+
 		// Restore encoder state by symbol
 		for (const saved of state.encoders) {
 			const encoder = this.encoders.find(e => e.symbol === saved.symbol);

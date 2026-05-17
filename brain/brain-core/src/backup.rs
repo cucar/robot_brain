@@ -52,18 +52,27 @@ impl Backup {
 
     // ── Save ────────────────────────────────────────────────────────────────
 
-    /// Save a snapshot under `<job_dir>/backups/<timestamp>/`. Returns the folder
-    /// path on success, or an error string on failure. Errors are logged so a
-    /// save failure during shutdown never masks the original exit.
-    pub fn save(&self, job_dir: &Path, snapshot: &Snapshot) -> Result<PathBuf, String> {
-        // Ensure the per-job backups root exists
+    /// Save a snapshot under `<job_dir>/backups/<label>/`. When label is "latest",
+    /// a timestamped subfolder is created and old ones are pruned. Any other label
+    /// writes directly to that named folder (overwriting prior content).
+    pub fn save(&self, job_dir: &Path, label: &str, snapshot: &Snapshot) -> Result<PathBuf, String> {
         let backups_dir = job_dir.join("backups");
         fs::create_dir_all(&backups_dir)
             .map_err(|e| format!("Failed to create backups dir: {}", e))?;
 
-        // Each save gets its own timestamped folder — sortable lexicographically
-        let timestamp = format_timestamp();
-        let folder = backups_dir.join(&timestamp);
+        let folder = if label == "latest" {
+            let timestamp = format_timestamp();
+            backups_dir.join(&timestamp)
+        } else {
+            backups_dir.join(label)
+        };
+
+        // For named labels, wipe the folder so stale CSVs from a prior save
+        // don't bleed through if the new snapshot is smaller.
+        if label != "latest" && folder.exists() {
+            fs::remove_dir_all(&folder)
+                .map_err(|e| format!("Failed to clear labeled backup folder: {}", e))?;
+        }
         fs::create_dir_all(&folder)
             .map_err(|e| format!("Failed to create backup folder: {}", e))?;
 
@@ -79,21 +88,31 @@ impl Backup {
 
         println!("💾 Backup saved: {} ({} neurons)", folder.display(), snapshot.neurons.len());
 
-        // Evict any folders past MAX_BACKUPS *after* the new one is on disk
-        self.prune_old_backups(&backups_dir);
+        // Pruning only applies to timestamped "latest" saves
+        if label == "latest" {
+            self.prune_old_backups(&backups_dir);
+        }
 
         Ok(folder)
     }
 
     // ── Load ────────────────────────────────────────────────────────────────
 
-    /// Load the latest backup (newest timestamp folder) under `<job_dir>/backups/`.
-    /// Returns a Snapshot ready for `Thalamus.restore_snapshot()`.
-    /// Returns an error if no backups exist — `--load` is an explicit user request.
-    pub fn load_latest(&self, job_dir: &Path) -> Result<Snapshot, String> {
+    /// Load a backup by label. When label is "latest", loads the newest
+    /// timestamped folder. Any other label loads from that named folder directly.
+    pub fn load(&self, job_dir: &Path, label: &str) -> Result<Snapshot, String> {
         let backups_dir = job_dir.join("backups");
-        let folder = self.find_latest_backup(&backups_dir)
-            .ok_or_else(|| format!("--load requested but no backups found in {}", backups_dir.display()))?;
+
+        let folder = if label == "latest" {
+            self.find_latest_backup(&backups_dir)
+                .ok_or_else(|| format!("--load-brain latest requested but no backups found in {}", backups_dir.display()))?
+        } else {
+            let named = backups_dir.join(label);
+            if !named.exists() {
+                return Err(format!("--load-brain {} requested but folder does not exist: {}", label, named.display()));
+            }
+            named
+        };
 
         println!("📂 Loading backup: {}", folder.display());
 
@@ -486,7 +505,7 @@ impl Backup {
 // ── Free functions ──────────────────────────────────────────────────────────
 
 /// Check if a folder name matches the timestamp format `YYYY-MM-DD_HH-mm-ss`.
-fn is_timestamp_folder(name: &str) -> bool {
+pub(crate) fn is_timestamp_folder(name: &str) -> bool {
     if name.len() != 19 { return false; }
     let bytes = name.as_bytes();
     // Check pattern: NNNN-NN-NN_NN-NN-NN where N is digit
@@ -498,7 +517,7 @@ fn is_timestamp_folder(name: &str) -> bool {
 }
 
 /// Build a `YYYY-MM-DD_HH-mm-ss` timestamp using local time.
-fn format_timestamp() -> String {
+pub(crate) fn format_timestamp() -> String {
     let duration = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
@@ -530,7 +549,7 @@ fn format_timestamp() -> String {
 /// Write `rows` (vec of vec of strings) to `filepath` as CSV. Each cell is
 /// escaped via `escape_field`, fields joined by commas, lines by '\n'.
 /// Empty input produces a zero-byte file.
-fn write_csv(filepath: &Path, rows: &[Vec<String>]) -> Result<(), String> {
+pub(crate) fn write_csv(filepath: &Path, rows: &[Vec<String>]) -> Result<(), String> {
     let lines: Vec<String> = rows.iter()
         .map(|row| row.iter().map(|f| escape_field(f)).collect::<Vec<_>>().join(","))
         .collect();
@@ -554,7 +573,7 @@ fn escape_field(value: &str) -> String {
 }
 
 /// Read a CSV file, returning a vec of row vecs. Splits on '\n' matching the writer.
-fn read_csv(filepath: &Path) -> Result<Vec<Vec<String>>, String> {
+pub(crate) fn read_csv(filepath: &Path) -> Result<Vec<Vec<String>>, String> {
     let content = fs::read_to_string(filepath)
         .map_err(|e| format!("Failed to read {}: {}", filepath.display(), e))?;
     let mut rows = Vec::new();
@@ -728,11 +747,11 @@ mod tests {
         };
 
         // Save
-        let folder = backup.save(&dir, &snapshot).unwrap();
+        let folder = backup.save(&dir, "latest", &snapshot).unwrap();
         assert!(folder.exists());
 
         // Load
-        let loaded = backup.load_latest(&dir).unwrap();
+        let loaded = backup.load(&dir, "latest").unwrap();
         assert_eq!(loaded.neurons.len(), 2);
         assert_eq!(loaded.channel_name_to_id.get("test_channel"), Some(&1));
         assert_eq!(loaded.dimension_name_to_id.get("price"), Some(&1));

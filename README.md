@@ -320,7 +320,7 @@ The brain core is a Rust workspace (`brain/`) with two crates:
 | `brain-core/src/neuron.rs` | Neuron | Connections, routing table, voting, learning, lazy decay |
 | `brain-core/src/context.rs` | Pattern context | Context representation, threshold-based matching, merge logic |
 | `brain-core/src/quantizer.rs` | Quantization | Scalar-to-bucket discretization (static, dynamic, passthrough) |
-| `brain-core/src/backup.rs` | Persistence | File-based backup/restore (CSVs under `<jobDir>/backups/<timestamp>/`) |
+| `brain-core/src/backup.rs` | Persistence | File-based backup/restore (CSVs under `<jobDir>/backups/<label>/`) |
 | `brain-core/src/diagnostics.rs` | Metrics | Accuracy tracking and continuous error measurement |
 | `brain-napi/` | N-API bridge | Exposes Rust Brain as a native Node.js addon |
 | `libs/node` | Node bindings | Re-exports the native addon + Job runner; published to npm as `robot-brain` |
@@ -384,8 +384,12 @@ node <path-to-job.js> [options]
 | `--merge-threshold <n>`| Threshold for pattern context matching |
 | `--debug` | Show detailed frame-by-frame processing |
 | `--diagnostic` | Show inference and conflict resolution details |
-| `--save` | Save a CSV backup on shutdown (incl. crash) under `<jobDir>/backups/<timestamp>/` |
-| `--load` | Load the most recent backup before the first frame (errors if none exists) |
+| `--save-brain <label>` | Save a CSV backup on shutdown (incl. crash) under `<jobDir>/backups/<label>/` |
+| `--load-brain <label>` | Load a labeled backup before the first frame (errors if none exists) |
+| `--save-context <label>` | Save the memory context window on shutdown under `<jobDir>/contexts/<label>/` |
+| `--load-context <label>` | Restore the memory context window (active neurons, votes, rewards) |
+| `--save-session <label>` | Save trader/portfolio state on shutdown under `<jobDir>/sessions/<label>/` |
+| `--load-session <label>` | Restore trader/portfolio state (positions, cash, prices) |
 | `--no-summary` | Suppress per-frame summary output |
 | `--start <date>` | Start date for data (YYYY-MM-DD) |
 | `--end <date>` | End date for data (YYYY-MM-DD) |
@@ -452,20 +456,25 @@ Save as `apps/text/jobs/my-job.js` and run with `node apps/text/jobs/my-job.js`.
 
 ## Persistence
 
-The brain runs entirely in-memory. Use `--save` and `--load` to snapshot state
-between sessions:
+The brain runs entirely in-memory. Three labeled save/load pairs let you snapshot
+and resume across sessions:
+
+| Pair | What it persists | Storage path |
+|------|-----------------|--------------|
+| `--save-brain` / `--load-brain` | Learned neurons and connections | `<jobDir>/backups/<label>/` |
+| `--save-context` / `--load-context` | Memory context window (active neurons, votes, rewards) | `<jobDir>/contexts/<label>/` |
+| `--save-session` / `--load-session` | Trader/portfolio state (positions, cash, prices) | `<jobDir>/sessions/<label>/` |
 
 ```bash
-# Run an episode and save a backup on shutdown
-node apps/stocks/jobs/test.js --episodes 1 --save
+# Run the first half and save everything
+node apps/stocks/jobs/test.js --episodes 1 --frames 1250 --save-brain day1 --save-context day1 --save-session day1
 
-# Resume from the latest backup in a fresh session
-node apps/stocks/jobs/test.js --episodes 1 --load
+# Resume from where we left off
+node apps/stocks/jobs/test.js --episodes 1 --offset 1251 --load-brain day1 --load-context day1 --load-session day1
 ```
 
-A backup is a folder of CSVs under `<jobDir>/backups/<YYYY-MM-DD_HH-mm-ss>/`. The
-Job runner keeps the 10 most recent backups; older ones are pruned automatically.
-Backups are also written on crash (uncaught error / SIGINT) when `--save` is set.
+Each save is a folder of CSVs under the label you choose. Brain backups are also
+written on crash (uncaught error / SIGINT) when `--save-brain` is set.
 
 For MySQL-based analysis tooling — bulk-loading a backup into a queryable database
 or exporting MySQL state back to a backup folder — see the [`apps/db`](apps/db)
@@ -479,21 +488,18 @@ config (KGC,GLD,SPY) — a single episode here ends around `$22,675,481.59`.
 
 ```bash
 # 1. Run one episode and save a backup
-node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --save
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --save-brain roundtrip
 
-# 2. Import that backup folder into MySQL (replace <ts> with the timestamp printed above)
-node apps/db/import.js apps/stocks/jobs/test/backups/<ts>
+# 2. Import that backup folder into MySQL
+node apps/db/import.js apps/stocks/jobs/test/backups/roundtrip
 
-# 3. Delete the original backup so the export is the only one left,
-#    then export MySQL back to a fresh backup folder under the job dir
-cd apps/stocks/jobs/test
-Remove-Item -Recurse -Force backups/<ts>
-node ../../../../apps/db/export.js
-cd ../../../../
+# 3. Delete the original backup, then export MySQL back to the same label
+Remove-Item -Recurse -Force apps/stocks/jobs/test/backups/roundtrip
+node apps/db/export.js apps/stocks/jobs/test/backups/roundtrip
 
 # 4. Load the round-tripped backup and run another episode — should reach
 #    ~$8,441,629.32, matching what a continuous two-episode run produces
-node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --load
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --load-brain roundtrip
 ```
 
 The `apps/db` import uses `LOAD DATA LOCAL INFILE`, which needs `local_infile=ON`

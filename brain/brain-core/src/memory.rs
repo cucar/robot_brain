@@ -87,11 +87,8 @@ impl Memory {
         // sync to the brain's frame number
         self.frame_number = frame_number;
 
-        // nothing to evict until the window is full (frame_number > context_length)
-        if self.frame_number <= self.context_length as u64 { return; }
-
-        // we will deactivate the oldest age in the context
-        let evicted_frame = self.frame_number - self.context_length as u64;
+        // evict the frame that just fell off the back of the window
+        let evicted_frame = self.frame_number - self.context_length as i64;
         let evicted_neuron_ids = match self.age_index.remove(&evicted_frame) {
             Some(ids) => ids,
             None => return, // if there are no neurons in the evicted frame, nothing to do
@@ -115,7 +112,9 @@ impl Memory {
 
     /// Number of age slots currently in the sliding window.
     pub fn depth(&self) -> u32 {
-        (self.frame_number as u32).min(self.context_length)
+        if self.age_index.is_empty() { return 0; }
+        let min_frame = *self.age_index.keys().min().unwrap();
+        ((self.frame_number - min_frame + 1) as u32).min(self.context_length)
     }
 
     /// Get the current frame number.
@@ -125,7 +124,7 @@ impl Memory {
 
     /// Get the Set of neuron IDs at a specific age.
     pub fn get_neuron_ids_at_age(&self, age: Distance) -> FxHashSet<NeuronId> {
-        let frame = self.frame_number - age as u64;
+        let frame = self.frame_number - age as i64;
         self.age_index.get(&frame).cloned().unwrap_or_default()
     }
 
@@ -139,7 +138,7 @@ impl Memory {
         };
         let mut result = Vec::with_capacity(self.depth() as usize);
         for age in 0..self.depth() {
-            let frame = self.frame_number - age as u64;
+            let frame = self.frame_number - age as i64;
             result.push(level_frames.get(&frame).cloned().unwrap_or_default());
         }
         result
@@ -157,7 +156,7 @@ impl Memory {
 
         // walk ages ascending so iteration order matches
         for age in 0..self.depth() {
-            let frame = self.frame_number - age as u64;
+            let frame = self.frame_number - age as i64;
             let neuron_ids = match level_frames.get(&frame) {
                 Some(ids) => ids,
                 None => continue,
@@ -181,7 +180,7 @@ impl Memory {
     pub fn write_back_level_neurons(&mut self, level_neurons: &FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>) {
         for (&neuron_id, age_states) in level_neurons {
             for (&age, state) in age_states {
-                let frame = self.frame_number - age as u64;
+                let frame = self.frame_number - age as i64;
                 if let Some(states) = self.neuron_states.get_mut(&neuron_id) {
                     if let Some(stored) = states.get_mut(&frame) {
                         stored.votes = state.votes.clone();
@@ -203,7 +202,7 @@ impl Memory {
     /// Internally stored keyed by activation frame = frame_number - age
     /// so the entry naturally moves to age+1 next frame without any rewrite.
     pub fn activate_neuron_at_age(&mut self, neuron_id: NeuronId, age: Distance, level: Level) {
-        let frame = self.frame_number - age as u64;
+        let frame = self.frame_number - age as i64;
 
         // add the neuron to the age index
         self.age_index.entry(frame).or_insert_with(FxHashSet::default).insert(neuron_id);
@@ -226,7 +225,7 @@ impl Memory {
         self.activate_neuron_at_age(pattern_id, age, pattern_level);
 
         // set the parent's activated_pattern_id at this age
-        let frame = self.frame_number - age as u64;
+        let frame = self.frame_number - age as i64;
         if let Some(states) = self.neuron_states.get_mut(&parent_id) {
             if let Some(state) = states.get_mut(&frame) {
                 state.activated_pattern_id = Some(pattern_id);
@@ -262,6 +261,59 @@ impl Memory {
     /// Get the maximum active level from the level index.
     pub fn get_max_active_level(&self) -> usize {
         self.level_index.len()
+    }
+
+    // ── Context snapshot ────────────────────────────────────────────────────
+
+    /// Export active neuron activations with their full per-age state.
+    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
+        let mut entries = Vec::new();
+        for (&frame, neuron_ids) in &self.age_index {
+            for &neuron_id in neuron_ids {
+                let level = self.level_index.iter()
+                    .find_map(|(&lvl, frames)| {
+                        frames.get(&frame).and_then(|ids| {
+                            if ids.contains(&neuron_id) { Some(lvl) } else { None }
+                        })
+                    })
+                    .unwrap_or(0);
+                let state = self.neuron_states.get(&neuron_id)
+                    .and_then(|states| states.get(&frame))
+                    .cloned()
+                    .unwrap_or_default();
+                entries.push((neuron_id, frame, level, state));
+            }
+        }
+        entries
+    }
+
+    /// Restore active neurons from a saved context snapshot (with full state).
+    pub fn restore_context_snapshot(&mut self, frame_number: FrameNumber, entries: &[(NeuronId, FrameNumber, Level, LevelAgeState)]) {
+        self.reset();
+        self.frame_number = frame_number;
+        for (neuron_id, activation_frame, level, state) in entries {
+            self.age_index.entry(*activation_frame)
+                .or_insert_with(FxHashSet::default)
+                .insert(*neuron_id);
+            self.level_index.entry(*level)
+                .or_insert_with(FxHashMap::default)
+                .entry(*activation_frame)
+                .or_insert_with(FxHashSet::default)
+                .insert(*neuron_id);
+            self.neuron_states.entry(*neuron_id)
+                .or_insert_with(FxHashMap::default)
+                .insert(*activation_frame, state.clone());
+        }
+    }
+
+    /// Export inferred neurons for context serialization.
+    pub fn get_inferred_snapshot(&self) -> Vec<InferredNeuron> {
+        self.inferred_neurons.clone()
+    }
+
+    /// Restore inferred neurons from a saved context snapshot.
+    pub fn restore_inferred_snapshot(&mut self, inferred: Vec<InferredNeuron>) {
+        self.inferred_neurons = inferred;
     }
 }
 
@@ -408,11 +460,35 @@ mod tests {
     fn test_depth_grows_to_context_length() {
         let mut m = Memory::new(false, 3);
         assert_eq!(m.depth(), 0);
-        m.age(1); assert_eq!(m.depth(), 1);
-        m.age(2); assert_eq!(m.depth(), 2);
-        m.age(3); assert_eq!(m.depth(), 3);
-        m.age(4); assert_eq!(m.depth(), 3); // pinned at context_length
-        m.age(5); assert_eq!(m.depth(), 3);
+        m.age(1); m.activate_neuron(1, 0); assert_eq!(m.depth(), 1);
+        m.age(2); m.activate_neuron(2, 0); assert_eq!(m.depth(), 2);
+        m.age(3); m.activate_neuron(3, 0); assert_eq!(m.depth(), 3);
+        m.age(4); m.activate_neuron(4, 0); assert_eq!(m.depth(), 3); // pinned at context_length
+        m.age(5); m.activate_neuron(5, 0); assert_eq!(m.depth(), 3);
+    }
+
+    #[test]
+    fn test_context_restore_with_negative_frames() {
+        let mut m = Memory::new(false, 10);
+        m.restore_context_snapshot(0, &[
+            (10, -1, 0, LevelAgeState::default()),
+            (20, -3, 0, LevelAgeState::default()),
+            (30, -5, 0, LevelAgeState::default()),
+        ]);
+        assert_eq!(m.depth(), 6); // span: 0 - (-5) + 1 = 6
+        assert_eq!(m.get_frame_number(), 0);
+
+        // after first frame advance, depth grows by 1
+        m.age(1);
+        assert_eq!(m.depth(), 7); // span: 1 - (-5) + 1 = 7
+
+        // restored neurons are reachable at correct ages
+        let ids = m.get_neuron_ids_at_age(2); // frame 1 - 2 = -1
+        assert!(ids.contains(&10));
+        let ids = m.get_neuron_ids_at_age(4); // frame 1 - 4 = -3
+        assert!(ids.contains(&20));
+        let ids = m.get_neuron_ids_at_age(6); // frame 1 - 6 = -5
+        assert!(ids.contains(&30));
     }
 
     #[test]

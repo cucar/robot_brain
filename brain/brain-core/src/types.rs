@@ -22,8 +22,9 @@ pub type Distance = u32;
 /// Hierarchical level (0 = sensory, 1+ = pattern).
 pub type Level = u32;
 
-/// Absolute frame number since brain start (or since last reset).
-pub type FrameNumber = u64;
+/// Frame number — signed so context restore can use negative activation
+/// frames (representing neurons activated before the current frame 0).
+pub type FrameNumber = i64;
 
 /// Connection strength (f64 to match JS behavior).
 pub type Strength = f64;

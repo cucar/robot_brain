@@ -40,10 +40,18 @@ export declare class Brain {
   resetBrain(): void
   /** Reset accuracy and reward stats for a new episode. */
   resetAccuracyStats(): void
-  /** Save brain state to disk. */
-  save(jobDir: string): void
-  /** Load the most recent backup from disk. */
-  load(jobDir: string): void
+  /** Look up a dimension ID by its registered name. */
+  getDimensionIdByName(name: string): unknown
+  /** Look up a neuron ID by its (dimId, bucketId) coordinate. */
+  getNeuronIdByCoordinate(dimId: number, bucketId: number): unknown
+  /** Save brain state to a labeled backup folder. */
+  save(jobDir: string, label: string): void
+  /** Load a backup by label. */
+  load(jobDir: string, label: string): void
+  /** Save brain context (active neurons, frame number, rewards) to a labeled folder. */
+  saveContext(jobDir: string, label: string): void
+  /** Load brain context from a labeled folder. */
+  loadContext(jobDir: string, label: string): void
   /** Get the per-frame summary for the renderer. */
   getFrameSummary(): object
   /** Get episode summary with all diagnostic information. */

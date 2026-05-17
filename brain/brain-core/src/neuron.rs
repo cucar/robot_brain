@@ -506,7 +506,7 @@ impl Neuron {
         entry.last_activation_frame = current_frame;
 
         // return death frame for pattern neurons
-        Some(current_frame + (entry.activation_strength / self.pattern_forget_rate).ceil() as u64)
+        Some(current_frame + (entry.activation_strength / self.pattern_forget_rate).ceil() as i64)
     }
 
     /// Add a child pattern to the routing table and populate its context.
