@@ -84,11 +84,11 @@ The brain learns when to own vs. not own each stock based on upcoming price move
 
 The brain learns to trade stocks from historical price and volume data. Each stock is a separate channel — the brain discovers cross-stock patterns and makes buy/sell/hold decisions optimized by reward feedback.
 
-**The included 3-hour timeframe data is ready to use** — no API key needed for this demo.
+**The included timeframe data is ready to use** — no API key needed for this demo.
 **Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
-node apps/stocks/jobs/test.js
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --context-length 3 --columns 20
 ```
 
 **Expected output:**
@@ -97,18 +97,18 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $66575.27
-   Average per Episode: $66575.27
-   Average ROI: +443.84%
-   Average Per-Frame ROI: +0.067627%
-   Total Trades: 2257
-   Average Trades per Episode: 2257.0
+   Total Net Profit: $90497.29
+   Average per Episode: $90497.29
+   Average ROI: +603.32%
+   Average Per-Frame ROI: +0.077900%
+   Total Trades: 4001
+   Average Trades per Episode: 4001.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $66575.27 | ROI: +443.84%, +0.067627%/frame (2257 trades)
+   Episode 1: $90497.29 | ROI: +603.32%, +0.077900%/frame (4001 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 56.97%
+   Episode 1: 56.36%
 ```
 
 The brain achieves 56% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -147,24 +147,24 @@ The brain learns the best actions to perform in each situation over repeated epi
 
 Run the test:
 ```bash
-node apps/stocks/jobs/test.js --no-summary --episodes 5
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --context-length 3 --columns 20 --no-summary --episodes 5
 ```
 
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $66575.27 | ROI: +443.84%, +0.067627%/frame (2257 trades)
-   Episode 2: $566290.43 | ROI: +3775.27%, +0.146103%/frame (1565 trades)
-   Episode 3: $5205145.07 | ROI: +34700.97%, +0.233895%/frame (3647 trades)
-   Episode 4: $4538587.37 | ROI: +30257.25%, +0.228429%/frame (4217 trades)
-   Episode 5: $10599480.49 | ROI: +70663.20%, +0.262296%/frame (3851 trades)
+   Episode 1: $90497.29 | ROI: +603.32%, +0.077900%/frame (4001 trades)
+   Episode 2: $1798191.62 | ROI: +11987.94%, +0.191592%/frame (3890 trades)
+   Episode 3: $92763626.75 | ROI: +618424.18%, +0.349108%/frame (3238 trades)
+   Episode 4: $889638751.05 | ROI: +5930925.01%, +0.439708%/frame (3427 trades)
+   Episode 5: $856062876.04 | ROI: +5707085.84%, +0.438165%/frame (3564 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 56.97%
-   Episode 2: 57.76%
-   Episode 3: 58.31%
-   Episode 4: 58.64%
-   Episode 5: 58.77%
+   Episode 1: 56.36%
+   Episode 2: 57.15%
+   Episode 3: 57.94%
+   Episode 4: 58.23%
+   Episode 5: 58.49%
 ```
 
 ## Demo 6: Stock Sequence Memorization
@@ -174,7 +174,7 @@ The brain memorizes a repeating stock price sequence across 5 episodes, reaching
 Run the stock test with customized hyperparameters for sequence memorization:
 
 ```bash
-node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --context-length 3 --forget-rate 0.001 --error-mode static --error-threshold 0.3
+node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY --context-length 3 --forget-rate 0.001 --error-mode static --error-threshold 0.3
 ```
 
 **Expected output:**
@@ -183,26 +183,26 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GLD,SPY --
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $1472265729577.45
-   Average per Episode: $294453145915.49
-   Average ROI: +1963020972.77%
-   Average Per-Frame ROI: +0.457990%
-   Total Trades: 14207
-   Average Trades per Episode: 2841.4
+   Total Net Profit: $56187807695468.90
+   Average per Episode: $11237561539093.78
+   Average ROI: +74917076927.29%
+   Average Per-Frame ROI: +0.537851%
+   Total Trades: 14386
+   Average Trades per Episode: 2877.2
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $18933.81 | ROI: +126.23%, +0.032595%/frame (3176 trades)
-   Episode 2: $22675481.59 | ROI: +151169.88%, +0.292709%/frame (2998 trades)
-   Episode 3: $21427022933.80 | ROI: +142846819.56%, +0.567356%/frame (2712 trades)
-   Episode 4: $267523297963.51 | ROI: +1783488653.09%, +0.668760%/frame (2696 trades)
-   Episode 5: $1183292714264.74 | ROI: +7888618095.10%, +0.728530%/frame (2625 trades)
+   Episode 1: $55753.57 | ROI: +371.69%, +0.061941%/frame (2690 trades)
+   Episode 2: $8441629.32 | ROI: +56277.53%, +0.253200%/frame (3089 trades)
+   Episode 3: $229111265294.91 | ROI: +1527408435.30%, +0.662531%/frame (2939 trades)
+   Episode 4: $27229867744458.89 | ROI: +181532451629.73%, +0.854711%/frame (2834 trades)
+   Episode 5: $28728820188332.21 | ROI: +191525467922.21%, +0.856869%/frame (2834 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 58.66%
-   Episode 2: 70.56%
-   Episode 3: 84.66%
-   Episode 4: 89.79%
-   Episode 5: 91.40%
+   Episode 1: 59.32%
+   Episode 2: 64.86%
+   Episode 3: 77.93%
+   Episode 4: 85.43%
+   Episode 5: 85.04%
 ```
 
 The brain goes from 50% accuracy (random) to 91% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
@@ -479,7 +479,7 @@ config (KGC,GLD,SPY) — a single episode here ends around `$22,675,481.59`.
 
 ```bash
 # 1. Run one episode and save a backup
-node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --save
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --save
 
 # 2. Import that backup folder into MySQL (replace <ts> with the timestamp printed above)
 node apps/db/import.js apps/stocks/jobs/test/backups/<ts>
@@ -492,7 +492,7 @@ node ../../../../apps/db/export.js
 cd ../../../../
 
 # 4. Load the round-tripped backup and run another episode — should reach
-#    ~$22,675,481.59, matching what a continuous two-episode run produces
+#    ~$8,441,629.32, matching what a continuous two-episode run produces
 node apps/stocks/jobs/test.js --no-summary --symbols KGC,GLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --load
 ```
 
