@@ -232,6 +232,9 @@ export default class StockTestJob extends Job {
 			overallAccuracy: null
 		};
 
+		// Track per-frame portfolio values for Sharpe ratio calculation
+		const frameValues = [StockTrader.getTotalValue(this.traders)];
+
 		// Warmup: consume the first frame per encoder so the first real processed frame
 		// has a full (previous, current) pair. Skip when resuming — the session already
 		// carries previousPrice/previousVolume from the last processed frame.
@@ -256,6 +259,7 @@ export default class StockTestJob extends Job {
 			const hasMore = await this.runFrame();
 			if (!hasMore) break;
 			frameCount++;
+			frameValues.push(StockTrader.getTotalValue(this.traders));
 
 			// Show progress every 100 frames
 			if (frameCount % 100 === 0)
@@ -277,8 +281,8 @@ export default class StockTestJob extends Job {
 		episodeMetrics.duration = duration;
 		episodeMetrics.frames = frameCount;
 
-		// Collect episode results from all channels (includes ROI calculation)
-		this.collectEpisodeResults(episodeMetrics);
+		// Collect episode results from all channels (includes ROI and Sharpe calculation)
+		this.collectEpisodeResults(episodeMetrics, frameValues);
 
 		// Capture base level accuracy stats
 		const summary = this.brain.getEpisodeSummary();
@@ -290,8 +294,9 @@ export default class StockTestJob extends Job {
 		const roiStr = episodeMetrics.totalROIPercent >= 0 ? `+${episodeMetrics.totalROIPercent.toFixed(2)}%` : `${episodeMetrics.totalROIPercent.toFixed(2)}%`;
 		const perFrameROIStr = episodeMetrics.perFrameROI !== undefined ? `, ${(episodeMetrics.perFrameROIPercent >= 0 ? '+' : '')}${episodeMetrics.perFrameROIPercent.toFixed(6)}%/frame` : '';
 
+		const sharpeStr = episodeMetrics.sharpe !== null ? ` | Sharpe: ${episodeMetrics.sharpe.toFixed(2)}` : '';
 		const accuracyStr = episodeMetrics.baseAccuracy !== null ? ` | Accuracy: ${episodeMetrics.baseAccuracy.toFixed(2)}%` : '';
-		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} | ROI: ${roiStr} over ${episodeMetrics.frames} frames${perFrameROIStr}${accuracyStr} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
+		console.log(`✅ Net: $${episodeMetrics.netProfit.toFixed(2)} | ROI: ${roiStr} over ${episodeMetrics.frames} frames${perFrameROIStr}${sharpeStr}${accuracyStr} (${episodeMetrics.totalTrades} trades, ${duration}ms)`);
 	}
 
 	/**
@@ -393,10 +398,12 @@ export default class StockTestJob extends Job {
 
 	/**
 	 * Populate episodeMetrics from the traders themselves — no Channel class aggregation.
-	 * Computes portfolio-level ROI (total and compounded per-frame) plus per-symbol stats
-	 * for the results display.
+	 * Computes portfolio-level ROI (total and compounded per-frame), Sharpe ratio, plus
+	 * per-symbol stats for the results display.
+	 * @param {object} episodeMetrics
+	 * @param {number[]} frameValues - portfolio value after each frame (index 0 = initial)
 	 */
-	collectEpisodeResults(episodeMetrics) {
+	collectEpisodeResults(episodeMetrics, frameValues) {
 
 		// Portfolio profit = (cash + market value of all positions) - initial capital.
 		episodeMetrics.netProfit = StockTrader.getPortfolioProfit(this.traders);
@@ -416,6 +423,9 @@ export default class StockTestJob extends Job {
 			episodeMetrics.perFrameROIPercent = perFrameROI * 100;
 		}
 
+		// Sharpe ratio: annualized (return - risk-free) / volatility.
+		episodeMetrics.sharpe = this.calculateSharpe(frameValues);
+
 		// Per-symbol breakdown for the results table. Unrealized profit uses current market
 		// price vs. cost basis — realized P&L is already baked into StockTrader.cash.
 		for (const trader of this.traders) {
@@ -432,6 +442,60 @@ export default class StockTestJob extends Job {
 			episodeMetrics.channelResults.set(trader.symbol, channelResult);
 			episodeMetrics.totalTrades += trader.totalTrades;
 		}
+	}
+
+	/**
+	 * Compute annualized Sharpe ratio from a series of portfolio values.
+	 * Uses per-frame log returns, annualizes mean and std dev based on timeframe,
+	 * and subtracts the risk-free rate (assumed 5%/year).
+	 * @param {number[]} frameValues - portfolio value at each frame boundary
+	 * @returns {number|null} annualized Sharpe ratio, or null if insufficient data
+	 */
+	calculateSharpe(frameValues) {
+		if (frameValues.length < 3) return null;
+
+		// Per-frame log returns: ln(V[i] / V[i-1])
+		const returns = [];
+		for (let i = 1; i < frameValues.length; i++) {
+			if (frameValues[i - 1] <= 0) continue;
+			returns.push(Math.log(frameValues[i] / frameValues[i - 1]));
+		}
+		if (returns.length < 2) return null;
+
+		// Mean and standard deviation of per-frame returns
+		const mean = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+		const variance = returns.reduce((sum, r) => sum + (r - mean) ** 2, 0) / (returns.length - 1);
+		const stdDev = Math.sqrt(variance);
+		if (stdDev === 0) return null;
+
+		// Annualize: scale by sqrt(framesPerYear) for volatility, framesPerYear for return
+		const framesPerYear = this.getFramesPerYear();
+		const annualizedReturn = mean * framesPerYear;
+		const annualizedStdDev = stdDev * Math.sqrt(framesPerYear);
+
+		// Risk-free rate ~5%/year (treasury baseline)
+		const riskFreeRate = 0.05;
+
+		return (annualizedReturn - riskFreeRate) / annualizedStdDev;
+	}
+
+	/**
+	 * Return the number of trading frames per year for the configured timeframe.
+	 * Based on 252 trading days × bars per day (regular hours only).
+	 * @returns {number}
+	 */
+	getFramesPerYear() {
+		const barsPerDay = {
+			'1Min': 390,
+			'5Min': 78,
+			'15Min': 26,
+			'30Min': 13,
+			'1H': 7,
+			'3H': 3,
+			'1D': 1
+		};
+		const perDay = barsPerDay[this.config.timeframe] || 13;
+		return perDay * 252;
 	}
 
 	/**
@@ -472,12 +536,19 @@ export default class StockTestJob extends Job {
 		const avgTotalROI = this.episodeResults.reduce((sum, ep) => sum + (ep.totalROIPercent || 0), 0) / this.episodeResults.length;
 		const avgPerFrameROI = this.episodeResults.reduce((sum, ep) => sum + (ep.perFrameROIPercent || 0), 0) / this.episodeResults.length;
 
+		// Average Sharpe (only from episodes that have one)
+		const sharpeEpisodes = this.episodeResults.filter(ep => ep.sharpe !== null);
+		const avgSharpe = sharpeEpisodes.length > 0
+			? sharpeEpisodes.reduce((sum, ep) => sum + ep.sharpe, 0) / sharpeEpisodes.length
+			: null;
+
 		console.log(`📈 Overall Performance:`);
 		console.log(`   Starting Capital: $${StockTrader.initialCapital.toFixed(2)}`);
 		console.log(`   Total Net Profit: $${totalNetProfit.toFixed(2)}`);
 		console.log(`   Average per Episode: $${avgNetProfit.toFixed(2)}`);
 		console.log(`   Average ROI: ${avgTotalROI >= 0 ? '+' : ''}${avgTotalROI.toFixed(2)}%`);
 		console.log(`   Average Per-Frame ROI: ${avgPerFrameROI >= 0 ? '+' : ''}${avgPerFrameROI.toFixed(6)}%`);
+		if (avgSharpe !== null) console.log(`   Average Sharpe Ratio: ${avgSharpe.toFixed(2)}`);
 		console.log(`   Total Trades: ${totalTrades}`);
 		console.log(`   Average Trades per Episode: ${avgTrades.toFixed(1)}`);
 
@@ -486,7 +557,8 @@ export default class StockTestJob extends Job {
 		for (const ep of this.episodeResults) {
 			const roiStr = ep.totalROIPercent >= 0 ? `+${ep.totalROIPercent.toFixed(2)}%` : `${ep.totalROIPercent.toFixed(2)}%`;
 			const perFrameROIStr = ep.perFrameROI !== undefined ? `, ${(ep.perFrameROIPercent >= 0 ? '+' : '')}${ep.perFrameROIPercent.toFixed(6)}%/frame` : '';
-			console.log(`   Episode ${ep.episode}: $${ep.netProfit.toFixed(2)} | ROI: ${roiStr}${perFrameROIStr} (${ep.totalTrades} trades)`);
+			const epSharpeStr = ep.sharpe !== null ? `, Sharpe: ${ep.sharpe.toFixed(2)}` : '';
+			console.log(`   Episode ${ep.episode}: $${ep.netProfit.toFixed(2)} | ROI: ${roiStr}${perFrameROIStr}${epSharpeStr} (${ep.totalTrades} trades)`);
 		}
 
 		// Show base level accuracy per episode
