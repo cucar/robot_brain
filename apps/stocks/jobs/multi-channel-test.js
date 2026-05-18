@@ -47,7 +47,7 @@ export default class MultiChannelTest extends Job {
 	 * The trader borrows the same channelId so rewards/inputs/inferences key off a single
 	 * number per symbol.
 	 */
-	async registerBrainChannels() {
+	async initialize() {
 		for (const symbol of this.config.symbols) {
 			const encoder = new StockEncoder(symbol);
 			const trader = new StockTrader(symbol);

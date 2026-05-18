@@ -60,7 +60,11 @@ export default class SyntheticExtendedTest extends Job {
 		this.traders = [];
 	}
 
-	async registerBrainChannels() {
+	/**
+	 * Create encoder + trader and register the encoder spec with the brain. The trader
+	 * borrows the same channelId so rewards/inputs/inferences key off a single number.
+	 */
+	async initialize() {
 		const encoder = new StockEncoder(this.config.symbol);
 		const trader = new StockTrader(this.config.symbol);
 		const { channelId, dimensionIds } = this.brain.registerChannelSpec(encoder.getChannelSpec());

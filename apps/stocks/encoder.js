@@ -9,11 +9,14 @@ const POSITION_OUT = -1;
  */
 export class StockEncoder {
 
+	// emulated transaction cost - not used in live trading - historical data
+	// does not have bid/ask, so we use this to emulate the spread during training
+	static transactionCost = 0;
+
 	/**
 	 * Create a new encoder for the given ticker symbol. Allocates dimension
 	 * names and bucket boundaries but leaves IDs null until bindIds() is
 	 * called after brain registration.
-	 * @param {string} symbol
 	 */
 	constructor(symbol) {
 		this.symbol = symbol;
@@ -177,9 +180,14 @@ export class StockEncoder {
 		// skip so the brain doesn't see a non-event as real market activity.
 		if (!frame.price || !frame.volume) return null;
 
-		// Percent change since last frame; volume jumps from a zero-volume bar are
-		// capped at 1000% to avoid infinities when the previous frame had no trades.
-		const priceChange = ((frame.price - frame.previousPrice) / frame.previousPrice) * 100;
+		// Spread-adjusted price change: "up" means current bid > previous ask,
+		// i.e. the move exceeded transaction friction. When transactionCost is 0
+		// this reduces to plain percent change.
+		const costMul = StockEncoder.transactionCost / 100;
+		const currentBid = frame.price * (1 - costMul);
+		const previousAsk = frame.previousPrice * (1 + costMul);
+		const priceChange = ((currentBid - previousAsk) / previousAsk) * 100;
+
 		const volumeChange = frame.previousVolume === 0 ? 1000 : ((frame.volume - frame.previousVolume) / frame.previousVolume) * 100;
 
 		// Map of dimId → raw scalar; the brain's quantizer bucketizes these per-dim

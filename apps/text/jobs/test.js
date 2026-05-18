@@ -57,7 +57,7 @@ export default class TextTestJob extends Job {
 	 * ID and per-dim IDs; we wire those back onto the encoder so encode() outputs key off
 	 * the same numbers the job uses as Map keys.
 	 */
-	async registerBrainChannels() {
+	async initialize() {
 		const encoder = new TextEncoder('text');
 		const ids = this.brain.registerChannelSpec(encoder.getChannelSpec());
 		encoder.bindIds(ids);

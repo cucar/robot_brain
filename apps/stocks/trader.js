@@ -14,8 +14,8 @@ export class StockTrader {
 	static cash = StockTrader.initialCapital;
 	static maxPositions = 1;
 	static maxPrice = 5000;
-	static transactionCost = 0;             // simulated transaction cost per trade, as a percentage (e.g. 0.01 = 0.01%)
-	static totalTransactionCostPaid = 0;        // cumulative dollar cost of transactions across all trades
+	static transactionCost = 0;
+	static totalTransactionCostPaid = 0;
 
 	/**
 	 * Reset portfolio-wide shared state (called once per episode before per-symbol resets).
@@ -122,7 +122,10 @@ export class StockTrader {
 	 */
 	getReward() {
 		if (!this.hasData) return 0;
-		const percentChange = ((this.currentPrice - this.previousPrice) / this.previousPrice) * 100;
+		const costMul = StockTrader.transactionCost / 100;
+		const currentBid = this.currentPrice * (1 - costMul);
+		const previousAsk = this.previousPrice * (1 + costMul);
+		const percentChange = ((currentBid - previousAsk) / previousAsk) * 100;
 		const reward = this.lastAction === POSITION_OWN ? percentChange : -percentChange;
 		if (this.debug) this.debugReward(reward);
 		return reward;

@@ -410,7 +410,7 @@ export default class MyJob extends Job {
         this.encoders = [];
     }
 
-    async registerBrainChannels() {
+    async initialize() {
         const encoder = new TextEncoder('text');
         const ids = this.brain.registerChannelSpec(encoder.getChannelSpec());
         encoder.bindIds(ids);

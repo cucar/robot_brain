@@ -45,7 +45,11 @@ export default class StockTestJob extends Job {
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
 			offsetRows: 0,                       // Number of rows to skip from start (can be overridden with --offset)
 			extendedHours: false,                // Include extended hours data (pre-market/after-hours) - use --extended-hours
-			randomBaseline: false                // Skip the brain entirely; pick own/out + symbol uniformly at random - use --random-baseline
+			randomBaseline: false,               // Skip the brain entirely; pick own/out + symbol uniformly at random - use --random-baseline
+			transactionCost: 0,                  // Simulated transaction cost per trade, as a percentage (e.g. 0.01 = 0.01%) - use --transaction-cost
+			initialCapital: 15000,               // Starting portfolio cash - use --initial-capital
+			maxPositions: 1,                     // Maximum simultaneous positions - use --max-positions
+			maxPrice: 5000                       // Maximum stock price for allocation - use --max-price
 		};
 
 		this.encoders = [];
@@ -78,19 +82,16 @@ export default class StockTestJob extends Job {
 		if (symbolsIndex !== -1 && process.argv[symbolsIndex + 1]) this.config.symbols = process.argv[symbolsIndex + 1].split(',');
 
 		const maxPositionsIndex = process.argv.indexOf('--max-positions');
-		if (maxPositionsIndex !== -1 && process.argv[maxPositionsIndex + 1]) StockTrader.maxPositions = parseInt(process.argv[maxPositionsIndex + 1]);
+		if (maxPositionsIndex !== -1 && process.argv[maxPositionsIndex + 1]) this.config.maxPositions = parseInt(process.argv[maxPositionsIndex + 1]);
 
 		const maxPriceIndex = process.argv.indexOf('--max-price');
-		if (maxPriceIndex !== -1 && process.argv[maxPriceIndex + 1]) StockTrader.maxPrice = parseFloat(process.argv[maxPriceIndex + 1]);
+		if (maxPriceIndex !== -1 && process.argv[maxPriceIndex + 1]) this.config.maxPrice = parseFloat(process.argv[maxPriceIndex + 1]);
 
 		const initialCapitalIndex = process.argv.indexOf('--initial-capital');
-		if (initialCapitalIndex !== -1 && process.argv[initialCapitalIndex + 1]) {
-			StockTrader.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
-			StockTrader.cash = StockTrader.initialCapital;
-		}
+		if (initialCapitalIndex !== -1 && process.argv[initialCapitalIndex + 1]) this.config.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
 
 		const transactionCostIndex = process.argv.indexOf('--transaction-cost');
-		if (transactionCostIndex !== -1 && process.argv[transactionCostIndex + 1]) StockTrader.transactionCost = parseFloat(process.argv[transactionCostIndex + 1]);
+		if (transactionCostIndex !== -1 && process.argv[transactionCostIndex + 1]) this.config.transactionCost = parseFloat(process.argv[transactionCostIndex + 1]);
 
 		if (process.argv.includes('--random-baseline')) this.config.randomBaseline = true;
 
@@ -105,11 +106,20 @@ export default class StockTestJob extends Job {
 	}
 
 	/**
-	 * Create an encoder + trader per symbol and register the encoder's spec with the brain.
-	 * The trader borrows the encoder's channelId so rewards, inputs, and inferences all key
-	 * off a single number per symbol — otherwise we'd need a second id→symbol lookup.
+	 * Push config into class statics, then create an encoder + trader per symbol and
+	 * register their specs with the brain.
 	 */
-	async registerBrainChannels() {
+	async initialize() {
+
+		// initialize static properties for the stock trader and encoder
+		StockTrader.initialCapital = this.config.initialCapital;
+		StockTrader.cash = this.config.initialCapital;
+		StockTrader.maxPositions = this.config.maxPositions;
+		StockTrader.maxPrice = this.config.maxPrice;
+		StockTrader.transactionCost = this.config.transactionCost;
+		StockEncoder.transactionCost = this.config.transactionCost;
+
+		// create traders and encoders for each ticker
 		for (const symbol of this.config.symbols) {
 			const encoder = new StockEncoder(symbol);
 			const trader = new StockTrader(symbol);
@@ -175,7 +185,7 @@ export default class StockTestJob extends Job {
 		console.log(`📋 Holdout Rows: ${this.config.holdoutRows}`);
 		console.log(`📋 Offset Rows: ${this.config.offsetRows}`);
 		if (this.config.randomBaseline) console.log(`🎲 Random baseline mode (brain disabled)`);
-		if (StockTrader.transactionCost > 0) console.log(`💸 Transaction cost: ${StockTrader.transactionCost}% per trade`);
+		if (this.config.transactionCost > 0) console.log(`💸 Transaction cost: ${this.config.transactionCost}% per trade`);
 		console.log('');
 	}
 
@@ -553,7 +563,7 @@ export default class StockTestJob extends Job {
 		console.log(`   Average ROI: ${avgTotalROI >= 0 ? '+' : ''}${avgTotalROI.toFixed(2)}%`);
 		console.log(`   Average Per-Frame ROI: ${avgPerFrameROI >= 0 ? '+' : ''}${avgPerFrameROI.toFixed(6)}%`);
 		if (avgSharpe !== null) console.log(`   Average Sharpe Ratio: ${avgSharpe.toFixed(2)}`);
-		if (StockTrader.transactionCost > 0) console.log(`   Total Transaction Cost: $${StockTrader.totalTransactionCostPaid.toFixed(2)} (${StockTrader.transactionCost}% per trade)`);
+		if (this.config.transactionCost > 0) console.log(`   Total Transaction Cost: $${StockTrader.totalTransactionCostPaid.toFixed(2)} (${this.config.transactionCost}% per trade)`);
 		console.log(`   Total Trades: ${totalTrades}`);
 		console.log(`   Average Trades per Episode: ${avgTrades.toFixed(1)}`);
 

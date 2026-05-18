@@ -80,8 +80,8 @@ export class Job {
 			// Allow jobs to show custom startup info
 			await this.showStartupInfo();
 
-			// get channels defined by child class and register them with brain
-			await this.registerBrainChannels();
+			// Job-specific initialization: register brain channels, configure statics, etc.
+			await this.initialize();
 
 			// Handle brain reset strategy
 			await this.handleBrainReset();
@@ -267,8 +267,8 @@ export class Job {
 	}
 
 	/**
-	 * Register channels with the brain. Jobs override this to call
-	 * brain.registerChannelSpec() for each channel they own.
+	 * Job-specific initialization hook. Jobs override this to configure
+	 * shared state, register brain channels, and create encoders/traders.
 	 */
-	async registerBrainChannels() {}
+	async initialize() {}
 }
