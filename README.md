@@ -101,11 +101,12 @@ Final Training Results (1 episodes):
    Average per Episode: $90497.29
    Average ROI: +603.32%
    Average Per-Frame ROI: +0.077900%
+   Average Sharpe Ratio: 0.77
    Total Trades: 4001
    Average Trades per Episode: 4001.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $90497.29 | ROI: +603.32%, +0.077900%/frame (4001 trades)
+   Episode 1: $90497.29 | ROI: +603.32%, +0.077900%/frame, Sharpe: 0.77 (4001 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 56.36%
@@ -377,6 +378,7 @@ node <path-to-job.js> [options]
 | `--max-positions <n>`| Maximum number of stock positions to hold at once |
 | `--max-price <n>` | Maximum price limit for stocks |
 | `--initial-capital <n>`| Starting capital for the portfolio |
+| `--transaction-cost <n>`| Simulated transaction cost per trade, as a percentage (e.g. `0.01` = 0.01%). Buys pay more, sells receive less. Reports total cost at end of run |
 | `--context-length <n>`| Sliding window size (frames) |
 | `--forget-rate <n>` | Pattern activation decay rate per frame |
 | `--error-mode <m>` | Error-correction threshold mode: `static`, `conservative`, `neutral`, `aggressive` |
@@ -452,7 +454,6 @@ Save as `apps/text/jobs/my-job.js` and run with `node apps/text/jobs/my-job.js`.
 - **[Technical Foundations](docs/TECHNICAL_FOUNDATIONS.md)** — architectural ideas, biological inspirations, and comparison with conventional approaches
 - **[Hippocampus Design](docs/hippocampus.md)** — design and implementation plan for the hippocampal region (long-term memory, thinking, metacognition)
 - **[Future Work](docs/future-work.md)** — MNIST benchmarks, Python bindings, MPI distribution, and other planned work
-- **[Scale Stock Processing](docs/scale-stock-processing.md)** — scaling plan for stock trading workloads
 
 ## Persistence
 

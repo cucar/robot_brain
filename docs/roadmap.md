@@ -7,9 +7,6 @@
 ### Calculate up/down accuracy separately
 - Report directional accuracy (up vs down) independently to identify prediction bias
 
-### Add Sharpe ratio calculation to jobs
-- Calculate and report Sharpe ratio alongside existing profit/accuracy metrics
-
 ### Rename test.js → run.js
 - Rename `apps/stocks/jobs/test.js` to `run.js` to reflect its role as the primary entry point
 

@@ -89,6 +89,9 @@ export default class StockTestJob extends Job {
 			StockTrader.cash = StockTrader.initialCapital;
 		}
 
+		const transactionCostIndex = process.argv.indexOf('--transaction-cost');
+		if (transactionCostIndex !== -1 && process.argv[transactionCostIndex + 1]) StockTrader.transactionCost = parseFloat(process.argv[transactionCostIndex + 1]);
+
 		if (process.argv.includes('--random-baseline')) this.config.randomBaseline = true;
 
 		const maxFramesIndex = process.argv.indexOf('--max-frames');
@@ -172,6 +175,7 @@ export default class StockTestJob extends Job {
 		console.log(`📋 Holdout Rows: ${this.config.holdoutRows}`);
 		console.log(`📋 Offset Rows: ${this.config.offsetRows}`);
 		if (this.config.randomBaseline) console.log(`🎲 Random baseline mode (brain disabled)`);
+		if (StockTrader.transactionCost > 0) console.log(`💸 Transaction cost: ${StockTrader.transactionCost}% per trade`);
 		console.log('');
 	}
 
@@ -549,6 +553,7 @@ export default class StockTestJob extends Job {
 		console.log(`   Average ROI: ${avgTotalROI >= 0 ? '+' : ''}${avgTotalROI.toFixed(2)}%`);
 		console.log(`   Average Per-Frame ROI: ${avgPerFrameROI >= 0 ? '+' : ''}${avgPerFrameROI.toFixed(6)}%`);
 		if (avgSharpe !== null) console.log(`   Average Sharpe Ratio: ${avgSharpe.toFixed(2)}`);
+		if (StockTrader.transactionCost > 0) console.log(`   Total Transaction Cost: $${StockTrader.totalTransactionCostPaid.toFixed(2)} (${StockTrader.transactionCost}% per trade)`);
 		console.log(`   Total Trades: ${totalTrades}`);
 		console.log(`   Average Trades per Episode: ${avgTrades.toFixed(1)}`);
 

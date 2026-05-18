@@ -14,12 +14,15 @@ export class StockTrader {
 	static cash = StockTrader.initialCapital;
 	static maxPositions = 1;
 	static maxPrice = 5000;
+	static transactionCost = 0;             // simulated transaction cost per trade, as a percentage (e.g. 0.01 = 0.01%)
+	static totalTransactionCostPaid = 0;        // cumulative dollar cost of transactions across all trades
 
 	/**
 	 * Reset portfolio-wide shared state (called once per episode before per-symbol resets).
 	 */
 	static resetPortfolio() {
 		StockTrader.cash = StockTrader.initialCapital;
+		StockTrader.totalTransactionCostPaid = 0;
 	}
 
 	/**
@@ -151,19 +154,25 @@ export class StockTrader {
 	 * @param {number} sharesToBuy
 	 */
 	async executeBuy(sharesToBuy) {
-		const cost = sharesToBuy * this.getCurrentPrice();
+		const price = this.getCurrentPrice();
+		const transactionPenalty = price * (StockTrader.transactionCost / 100);
+		const effectivePrice = price + transactionPenalty;
 
-		// Check if we have enough cash - give a dollar wiggle room for rounding and stuff
-		if (StockTrader.cash < (cost - 1))
-			throw new Error(`${this.symbol}: Insufficient cash to buy ${sharesToBuy} shares at $${this.getCurrentPrice()} (need $${cost.toFixed(2)}, have $${StockTrader.cash.toFixed(2)})`);
+		// Clamp to what we can actually afford — floating-point drift between the
+		// planner's projection and execution can leave us a few cents short.
+		const affordable = Math.floor(StockTrader.cash / effectivePrice);
+		sharesToBuy = Math.min(sharesToBuy, affordable);
+		if (sharesToBuy <= 0) return;
 
+		const cost = sharesToBuy * effectivePrice;
 		StockTrader.cash -= cost;
+		StockTrader.totalTransactionCostPaid += sharesToBuy * transactionPenalty;
 		this.shares += sharesToBuy;
 		this.investment += cost;
 		this.totalTrades++;
 
 		if (this.debug)
-			console.log(`${this.symbol}: BOUGHT ${sharesToBuy} shares @ $${this.getCurrentPrice().toFixed(2)} = $${cost.toFixed(2)} | Cash: $${StockTrader.cash.toFixed(2)}`);
+			console.log(`${this.symbol}: BOUGHT ${sharesToBuy} shares @ $${effectivePrice.toFixed(2)} = $${cost.toFixed(2)} | Cash: $${StockTrader.cash.toFixed(2)}`);
 	}
 
 	/**
@@ -176,16 +185,20 @@ export class StockTrader {
 		if (sharesToSell > this.shares)
 			throw new Error(`${this.symbol}: Cannot sell ${sharesToSell} shares, only have ${this.shares}`);
 
-		const proceeds = sharesToSell * this.getCurrentPrice();
+		const price = this.getCurrentPrice();
+		const transactionPenalty = price * (StockTrader.transactionCost / 100);
+		const effectivePrice = price - transactionPenalty;
+		const proceeds = sharesToSell * effectivePrice;
 		const costBasis = (this.investment / this.shares) * sharesToSell;
 
 		StockTrader.cash += proceeds;
+		StockTrader.totalTransactionCostPaid += sharesToSell * transactionPenalty;
 		this.shares -= sharesToSell;
 		this.investment -= costBasis;
 		this.totalTrades++;
 
 		if (this.debug)
-			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${this.getCurrentPrice().toFixed(2)} = $${proceeds.toFixed(2)} | Cash: $${StockTrader.cash.toFixed(2)}`);
+			console.log(`${this.symbol}: SOLD ${sharesToSell} shares @ $${effectivePrice.toFixed(2)} = $${proceeds.toFixed(2)} | Cash: $${StockTrader.cash.toFixed(2)}`);
 	}
 
 	/**
@@ -328,41 +341,46 @@ export class StockTrader {
 	static getActionPlan(traders, allocations) {
 		const sells = [];
 		const buys = [];
+		const transactionMul = this.transactionCost / 100;
 		const state = { remainingCash: this.cash, cheapestOwnTrader: null };
 
 		for (const trader of traders) {
 			const allocation = allocations.get(trader);
+			const price = trader.getCurrentPrice();
 
 			// OUT allocation: liquidate any existing position and credit projected cash.
+			// Sells receive price minus spread.
 			if (allocation.action === POSITION_OUT) {
 				if (trader.shares > 0) {
 					sells.push({ trader, shares: trader.shares });
-					state.remainingCash += trader.shares * trader.getCurrentPrice();
+					state.remainingCash += trader.shares * price * (1 - transactionMul);
 				}
 				continue;
 			}
 
 			// Remember the cheapest OWN trader so we can dump leftover cash into it below.
-			if (!state.cheapestOwnTrader || trader.getCurrentPrice() < state.cheapestOwnTrader.getCurrentPrice())
+			if (!state.cheapestOwnTrader || price < state.cheapestOwnTrader.getCurrentPrice())
 				state.cheapestOwnTrader = trader;
 
-			// Whole-share target from dollar allocation; sign of diff picks buy vs sell.
-			const targetShares = Math.floor(allocation.amount / trader.getCurrentPrice());
+			// Whole-share target from dollar allocation; buys cost price plus spread.
+			const buyPrice = price * (1 + transactionMul);
+			const targetShares = Math.floor(allocation.amount / buyPrice);
 			const sharesDiff = targetShares - trader.shares;
 			if (sharesDiff < 0) {
 				sells.push({ trader, shares: -sharesDiff });
-				state.remainingCash += (-sharesDiff) * trader.getCurrentPrice();
+				state.remainingCash += (-sharesDiff) * price * (1 - transactionMul);
 			}
 			else if (sharesDiff > 0) {
 				buys.push({ trader, shares: sharesDiff });
-				state.remainingCash -= sharesDiff * trader.getCurrentPrice();
+				state.remainingCash -= sharesDiff * buyPrice;
 			}
 		}
 
 		// Flooring leaves sub-share dollars on the table; sweep them into the cheapest
 		// owned symbol so we stay as fully invested as the allocation intended.
 		if (state.cheapestOwnTrader && state.remainingCash > 0) {
-			const additional = Math.floor(state.remainingCash / state.cheapestOwnTrader.getCurrentPrice());
+			const sweepPrice = state.cheapestOwnTrader.getCurrentPrice() * (1 + transactionMul);
+			const additional = Math.floor(state.remainingCash / sweepPrice);
 			if (additional > 0) {
 				const existing = buys.find(b => b.trader === state.cheapestOwnTrader);
 				if (existing) existing.shares += additional;
