@@ -40,7 +40,7 @@ export default class StockTestJob extends Job {
 				// loser batch 2 - catastrophic losses - going to zero - de-listings
 				// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 			],
-			timeframe: '3H',                     // Timeframe for data (e.g., '1D', '1Min')
+			timeframe: '1D',                     // Timeframe for data (e.g., '1D', '1Min')
 			maxEpisodes: 1,                      // Number of training episodes (can be overridden with --episodes)
 			holdoutRows: 0,                      // Number of rows to hold out from end for prediction testing (can be overridden with --holdout)
 			offsetRows: 0,                       // Number of rows to skip from start (can be overridden with --offset)

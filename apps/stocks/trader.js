@@ -158,6 +158,7 @@ export class StockTrader {
 	 */
 	async executeBuy(sharesToBuy) {
 		const price = this.getCurrentPrice();
+		if (price <= 0) return; // exclude $0 stocks - they are de-listed
 		const transactionPenalty = price * (StockTrader.transactionCost / 100);
 		const effectivePrice = price + transactionPenalty;
 
@@ -312,7 +313,10 @@ export class StockTrader {
 				b.trader.getCurrentPrice() - a.trader.getCurrentPrice() ||
 				a.trader.symbol.localeCompare(b.trader.symbol)
 			);
-			ownActions = ownActions.filter(a => a.trader.getCurrentPrice() < this.maxPrice);
+			ownActions = ownActions.filter(a => {
+				const p = a.trader.getCurrentPrice();
+				return p > 0 && p < this.maxPrice; // exclude $0 stocks - they are de-listed
+			});
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}
 
@@ -350,6 +354,9 @@ export class StockTrader {
 		for (const trader of traders) {
 			const allocation = allocations.get(trader);
 			const price = trader.getCurrentPrice();
+
+			// exclude $0 stocks - they are de-listed
+			if (price <= 0) continue;
 
 			// OUT allocation: liquidate any existing position and credit projected cash.
 			// Sells receive price minus spread.

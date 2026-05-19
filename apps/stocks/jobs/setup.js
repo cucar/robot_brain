@@ -36,7 +36,7 @@ const config = {
 		// loser batch 2 - catastrophic losses - going to zero - de-listings
 		// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 	],
-	startDate: '2021-05-13',
+	startDate: '2019-05-13',
 	endDate: '2026-05-13'
 };
 

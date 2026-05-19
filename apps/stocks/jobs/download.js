@@ -17,7 +17,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 // Configuration - edit these values as needed
 const config = {
-	timeframe: '5Min',
+	timeframe: '1D',
 	symbols: [
 		// 100 stocks - expected to be good
 		'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
@@ -37,7 +37,7 @@ const config = {
 		// loser batch 2 - catastrophic losses - going to zero - de-listings
 		// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 	],
-	startDate: '2021-05-13',
+	startDate: '2019-05-13',
 	endDate: '2026-05-13'
 };
 
