@@ -1,0 +1,11 @@
+{
+  "name": "mnist",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MNIST digit recognition for Robot Brain — retinotopic 784-channel architecture.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "robot-brain": "workspace:*"
+  }
+}

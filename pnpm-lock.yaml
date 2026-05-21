@@ -15,6 +15,12 @@ importers:
         specifier: ^3.14.3
         version: 3.22.2(@types/node@25.6.0)
 
+  apps/mnist:
+    dependencies:
+      robot-brain:
+        specifier: workspace:*
+        version: link:../../libs/node
+
   apps/stocks:
     dependencies:
       '@alpacahq/alpaca-trade-api':
