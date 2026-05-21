@@ -2,51 +2,6 @@
 
 ---
 
-## Metrics & Quick Wins
-
-### Calculate up/down accuracy separately
-- Report directional accuracy (up vs down) independently to identify prediction bias
-
-### Rename test.js → run.js
-- Rename `apps/stocks/jobs/test.js` to `run.js` to reflect its role as the primary entry point
-
----
-
-## Neuron Limits
-
-### Max neuron count hyperparameter
-- Add configurable cap on neuron count per region/column
-
-### Capacity enforcement
-- When capacity is reached, stop learning new patterns
-- Once forgetting frees space, resume learning automatically
-
-### Overflow warning
-- Emit warning when capacity is hit so the operator knows the brain is saturated
-- Test that learning resumes correctly after decay opens capacity
-
----
-
-## Exponential Temporal Binning Test
-
-Implement the cortical temporal binning scheme described in [experiment-temporal-binning.md](./experiment-temporal-binning.md).
-
-### Summary
-Higher-level patterns currently store context at exact frame distances — meaningless precision at their timescale. Exponential bins give every level the same number of bins but scale bin width with level, letting higher-level patterns represent long-range temporal relationships without explosion in context entries.
-
-### Key changes
-- Context struct stores bin index instead of exact distance
-- Bin conversion: `distanceToBin(distance, level, contextLength, numBins)`
-- Pattern matching uses bin-space comparison
-- Voting carries bin index instead of exact distance
-
-### Validation
-- Level-1 patterns behave nearly identically to current (regression)
-- Higher-level patterns form with fewer, coarser context entries
-- Prediction accuracy on existing benchmarks does not regress
-
----
-
 ## MNIST: Vision + Continual Learning Benchmark
 
 ### Why this matters
@@ -62,66 +17,110 @@ The deeper claim Split-MNIST validates: **Robot Brain is constitutionally immune
 
 Before tackling continual learning, confirm the architecture handles 10-way digit classification at all.
 
-#### Approach — sequential pixel reading with action-based classification
+#### Approach — retinotopic parallel channels with action-based classification
 
-Robot Brain cannot process static images. Each MNIST image (28×28 grayscale) is presented as a **784-frame episode**, reading pixels sequentially in raster scan order. Each frame contains a single grayscale value (0–255).
+Rather than scanning pixels sequentially (which imposes an arbitrary temporal order on spatial data), the architecture treats every pixel position as its own parallel channel — analogous to a retinotopic map where each spatial position has a dedicated cortical column.
 
-> **Single-dim model note**: under the current single-dimension-per-base-neuron rule, each pixel position is its own dimension (e.g. `pixel_12_5`), and a frame emits exactly one base neuron `{dimension: pixel_x_y, value: brightness}`. Multi-dim packing of position + color into one neuron is no longer supported.
+**Architecture:**
 
-Classification is modeled as an **action selection problem**:
+* **784 channels** (one per pixel position in the 28×28 grid), running in parallel
+* Sensory neurons per channel depend on quantization level (see phased quantization below)
+* **10 shared action neurons** for digit classification (digits 0–9), aggregating votes from all channels
 
-* The brain has 10 possible actions (digits 0–9)
-* At each frame (after passing the context length threshold), the brain outputs a digit prediction as its action
-* During training, the correct digit action receives positive reward; incorrect actions receive negative reward
-* Over many episodes, the brain learns which pixel-value sequences correlate with which digit actions
-* The brain discovers spatial structure implicitly — e.g., dark pixels at positions spaced 28 apart represent a vertical line — without any geometric encoding
+This is analogous to how the visual cortex maps spatial positions to cortical columns. Each pixel-column doesn't "know" it's part of a grid — it only knows what value it sees and, through learned connections, what its neighbors' values are.
 
-This is analogous to the stock channel (sequential price events → directional actions with reward) and the text channel (sequential character events → character actions with reward). Same mechanism, different domain.
+#### Phased sensory quantization — binary first
 
-#### Spatial feature discovery
+Robot Brain learns through co-activation frequency and combinatorial reuse, not gradient averaging. Sensory precision directly trades off against pattern stability: with 256 grayscale buckets, two handwritten "3"s that differ by a few brightness levels at a few pixels become completely different activation sets, fragmenting the representation. With binary, those same two "3"s likely collapse into the identical activation pattern, and one training example reinforces the next.
 
-The system has no knowledge that pixels are arranged in a 28×28 grid. All spatial relationships must be discovered through temporal prediction:
+This mirrors biological vision: retinal ganglion cells don't transmit raw luminance — they transmit contrast, edges, on/off transitions. The brain aggressively compresses before pattern formation. If Robot Brain needs the same compression to work well, that's convergent design, not a limitation.
 
-* **Horizontal adjacency**: consecutive pixels in the sequence (distance 1)
-* **Vertical adjacency**: pixels 28 frames apart (distance 28) — requires sufficient context length
-* **Diagonal features**: pixels at distance 27 or 29
-* **Larger structures**: hierarchical pattern neurons combine lower-level detections across longer timescales
+The connection density argument is decisive. With binary, each pixel has 2 possible neurons, so a connection between two pixels has 4 possible state combinations — all of which recur constantly, building strong statistics fast. With 256 buckets, the same two pixels have 65,536 combinations, most seen rarely or once. The system would need astronomically more training data to build stable connections.
 
-Context length directly determines what spatial features the system can discover. A context length of 100+ is recommended to capture cross-row relationships.
+**Phase A — Binary (2 buckets)**
 
-#### Parallelization variant — row-at-a-time (28 channels)
+Threshold MNIST to black/white only. This gives:
 
-For practical compute reasons, a parallelized variant reads one full row per frame across 28 simultaneous channels (one per column position). This reduces episode length from 784 to 28 frames while preserving the need to discover vertical relationships across frames. This maps naturally to the multi-channel architecture already validated with 30 stock channels.
+* **1,568 total sensory neurons** (784 × 2) — orders of magnitude more tractable than 200K
+* Maximum overlap between examples of the same digit class
+* Minimal entropy, fastest connection stabilization
+* Smallest possible connection space — the architectural proof of concept
+
+If binary fails, the issue is architectural. If binary succeeds, the core mechanism is validated.
+
+**Phase B — 4 or 8 buckets**
+
+Quantize to coarse levels (e.g., black / dark gray / light gray / white). This adds stroke thickness information, anti-aliasing structure, and soft edge detail without exploding the representation space. ~3,136 sensory neurons at 4 buckets, ~6,272 at 8.
+
+**Phase C — 16 buckets**
+
+Likely enough precision for anything useful in MNIST. ~12,544 sensory neurons. 256 buckets are unlikely to provide additional benefit for this architecture and may actively hurt generalization through fragmentation.
+
+**The quantization curve itself is a publishable result.** It characterizes something fundamental about how non-gradient architectures interact with sensory resolution — the optimal quantization level reveals the architecture's natural operating point for balancing discriminative power against pattern stability.
+
+#### Two-frame episode structure
+
+A static image cannot drive connection-based learning in a single frame, because Robot Brain learns by observing temporal co-occurrences across frames. The solution:
+
+* **Frame 1**: all 784 channels fire their respective grayscale values simultaneously. This populates the sensory state across the entire "retina."
+* **Frame 2**: the identical image is presented again. Now each channel can observe what fired in the *previous* frame across all other channels, enabling inter-channel connection formation.
+* After frame 2, the brain outputs a digit prediction via the shared action neurons.
+* Reward is delivered: positive for correct digit, negative for incorrect.
+
+The repetition is the minimal structure needed for Robot Brain's connection mechanism to operate on spatial data. Each pixel-column learns: "when I saw value X, and my neighbors saw values Y, Z, W in the previous frame, the correct digit was D."
+
+#### What gets learned
+
+The sensory neurons form connections to neurons in other channels based on co-activation across frames. In practice, connection creation is demand-driven (only when co-activation occurs), so the actual connection count is a fraction of the theoretical maximum. With binary quantization, the connection space is highly tractable — 1,568 neurons with ~2.5M possible connections, most of which will be frequently reinforced. The system learns:
+
+* **Local spatial correlations**: pixel (14,14) being dark while pixel (14,15) is also dark is a learned association, not a geometric prior
+* **Global digit signatures**: the full constellation of pixel activations that characterize each digit class
+* **Discriminative features**: through reward, the system reinforces connections whose activation patterns reliably predict specific digits
+
+The brain discovers that certain combinations of pixel values across specific spatial positions predict specific digits — without ever being told that pixels are arranged in a grid, or that adjacent pixels tend to co-vary.
+
+#### Output mechanism — shared action neurons
+
+A single set of 10 action neurons (digits 0–9) aggregates votes from all 784 channels. This is critical: individual pixel positions carry vastly different amounts of information about digit identity. A corner pixel that's always black has no discriminative power. The shared voting pool lets the system naturally weight contributions — channels with strong, reward-reinforced action connections dominate the vote; uninformative channels contribute noise that washes out.
+
+This mirrors the stock experiment architecture where multiple channels (stocks) vote on a shared action space (up/down), and the consensus mechanism extracts signal from the aggregate.
 
 #### Training and evaluation
 
-1. Generate episodes from the 60,000 MNIST training images — each image becomes one 784-frame episode (or 28-frame episode in the 28-channel variant)
-2. Run multiple training passes (episodes repeated 10–100 times) with low forget rate to build stable representations
-3. **Training accuracy**: percentage of training-set episodes where the brain's final-frame action matches the correct digit
-4. **Test accuracy (generalization)**: present the 10,000 held-out test images as new episodes the brain has never seen. Brain continues learning during test (no freeze mode) — accuracy measured on **first exposure** to each test image, randomized order.
+1. Generate episodes from the 60,000 MNIST training images — each image becomes one 2-frame episode across 784 parallel channels
+2. Run multiple training passes (episodes repeated 10–100 times) with low forget rate to build stable inter-channel representations
+3. **Training accuracy**: percentage of training-set episodes where the brain's post-frame-2 action matches the correct digit
+4. **Test accuracy (generalization)**: present the 10,000 held-out test images as new 2-frame episodes the brain has never seen. Brain continues learning during test (no freeze mode) — accuracy measured on **first exposure** to each test image, randomized order.
 
 #### Compute requirements
 
-* **Single-channel (784 frames/episode)**: 60,000 images × 100 episodes × 784 frames ≈ 4.7B frames. At 0.007ms/frame (Rust target) ≈ 9 hours. Requires Rust + Rayon threading.
-* **28-channel (28 frames/episode)**: 60,000 images × 100 episodes × 28 frames ≈ 168M frames. Significantly more tractable — under 1 hour in Rust.
+Compute scales directly with quantization level:
+
+* **Binary (Phase A)**: 1,568 sensory neurons, ~2.5M possible connections. 60,000 images × 100 passes × 2 frames = 12M episodes. With the small neuron count and high connection reuse, this should be highly tractable — fast enough to iterate on hyperparameters rapidly.
+* **Phase B/C**: scales linearly with bucket count. 4 buckets ≈ 2× binary compute; 16 buckets ≈ 8× binary compute. Still far more tractable than the original 256-bucket design.
+* Connection processing is the bottleneck: each channel checks connections to other channels' previous-frame activations. With binary, connection density saturates quickly (only 4 combinations per pixel pair), so per-frame cost stabilizes early.
+* Requires Rust + Rayon threading. Start with Phase A on a small subset (1,000 images) to calibrate timing.
 * **For comparison**: conventional CNNs train on MNIST in 2–5 minutes on GPU. The compute gap is expected and irrelevant to the architectural claim.
 
 #### Recommended hyperparameters (starting point)
 
 Based on stock and text experiments:
 
-* Context length: 100 (single-channel) or 10 (28-channel variant)
+* Context length: 2 (only two frames per episode — context is spatial, not temporal)
 * Forget rate: 0.001–0.01 (low, to retain learned digit patterns across episodes)
 * Error threshold: 0.3 (same as text memorization experiments)
 * Merge threshold: 0.9
 
 #### Phase 1 success criteria
 
-* Test accuracy meaningfully above chance (>50% as a soft floor; 80%+ would be excellent)
-* Training accuracy converges to >90% with sufficient repetition (mirroring the text memorization curve: 41% → 100% over 3–5 episodes)
-* No architectural changes vs stock/text channels — same brain code
+* **Phase A (binary)**: test accuracy meaningfully above chance (>50% as a soft floor; 70%+ would validate the mechanism). This is the gate — if binary fails, debug the architecture before adding precision.
+* **Phases B/C**: test accuracy improves over binary as quantization adds discriminative detail, peaking at some optimal bucket count. 80%+ at the optimal level would be excellent.
+* Training accuracy converges to >90% with sufficient repetition at the optimal quantization level
+* No architectural changes vs stock/text channels — same brain code, same connection mechanism, just more channels
+* Inter-channel connections demonstrably encode spatial structure (inspectable: which pixel positions form strong connections should roughly correspond to spatial proximity and shared digit-class membership)
+* The quantization-vs-accuracy curve is documented as an empirical result characterizing the architecture's sensory resolution tradeoff
 
-This is not an attempt to beat CNNs. It is a demonstration that a single prediction-only architecture, designed for temporal sequences, can learn visual recognition without any vision-specific components. The benchmark exists to make the architectural claim legible to the ML community using a universally understood task.
+This is not an attempt to beat CNNs. It is a demonstration that a single prediction-only architecture, designed for temporal sequences, can learn visual recognition through spatial co-occurrence across parallel channels — without any vision-specific components. The retinotopic channel layout is the most biologically plausible framing: it mirrors cortical organization rather than imposing an arbitrary scan order. The benchmark exists to make the architectural claim legible to the ML community using a universally understood task.
 
 ### Phase 2 — Split-MNIST (class-incremental continual learning)
 
@@ -145,8 +144,8 @@ Standard class-incremental Split-MNIST as defined in the continual learning lite
 
 The reasoning that motivates running this experiment:
 
-* Sensory neurons for digit-0 patterns and digit-2 patterns have **disjoint context fingerprints** — the pixel sequences are different, so they activate different patterns.
-* When training Task 2, no Task 1 patterns fire (their contexts don't match), so their action connections aren't modified.
+* Sensory neurons for digit-0 patterns and digit-2 patterns have **disjoint context fingerprints** — the spatial co-activation patterns across 784 channels are different, so they activate different inter-channel connections.
+* When training Task 2, no Task 1 patterns fire (their spatial contexts don't match), so their action connections aren't modified.
 * **Higher-level patterns live exponentially longer than lower-level ones.** The decay schedule is stratified by level: base sensory neurons decay fastest, level-1 patterns slower, level-2 patterns slower still, and so on. Whatever digit-0 patterns the brain consolidated up the hierarchy during Task 1 training have decay timescales that comfortably exceed the duration of Tasks 2–5.
 * This means the relevant retention question is not "does the forget rate eat Task 1 patterns" but "did Task 1 train long enough to push patterns up to durable levels." If yes, retention is essentially free.
 * Action connections on those high-level patterns are similarly persistent — they were established when the patterns were the strong predictors of the digit-0 reward, and nothing in Tasks 2–5 fires those patterns to modify them.
@@ -197,6 +196,47 @@ Not an attempt to beat continual learning SOTA methods that use replay. The clai
 * Same Rust core, same channel code — no architectural changes
 * Sequential task scheduler (trivial — just feed task data in order)
 * Per-task evaluation harness (trivial)
+
+---
+
+## Stock Metrics - Calculate up/down accuracy separately
+
+- Report directional accuracy (up vs down) independently to identify prediction bias
+
+---
+
+## Neuron Limits
+
+### Max neuron count hyperparameter
+- Add configurable cap on neuron count per region/column
+
+### Capacity enforcement
+- When capacity is reached, stop learning new patterns
+- Once forgetting frees space, resume learning automatically
+
+### Overflow warning
+- Emit warning when capacity is hit so the operator knows the brain is saturated
+- Test that learning resumes correctly after decay opens capacity
+
+---
+
+## Exponential Temporal Binning Test
+
+Implement the cortical temporal binning scheme described in [experiment-temporal-binning.md](./experiment-temporal-binning.md).
+
+### Summary
+Higher-level patterns currently store context at exact frame distances — meaningless precision at their timescale. Exponential bins give every level the same number of bins but scale bin width with level, letting higher-level patterns represent long-range temporal relationships without explosion in context entries.
+
+### Key changes
+- Context struct stores bin index instead of exact distance
+- Bin conversion: `distanceToBin(distance, level, contextLength, numBins)`
+- Pattern matching uses bin-space comparison
+- Voting carries bin index instead of exact distance
+
+### Validation
+- Level-1 patterns behave nearly identically to current (regression)
+- Higher-level patterns form with fewer, coarser context entries
+- Prediction accuracy on existing benchmarks does not regress
 
 ---
 
