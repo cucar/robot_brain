@@ -47,6 +47,38 @@ They are aged moments.
 The forgetting curve is the abstraction mechanism. 
 This is the architectural analog of episodic-to-semantic consolidation as observed empirically: vivid specific memories lose incidental detail and survive as gist.
 
+### The three-tier graph
+
+The full architecture forms a graph with three tiers:
+
+- **Bottom tier: sensory and motor neurons.** Input and output. The raw interface with the environment.
+- **Middle tier: pattern neurons.** Created by the cortex through intersection — statistical compression of recurring co-activations. Many levels, each at exponentially coarser timescale. Patterns connect downward to sensory neurons and upward to higher patterns. The cortex builds this tier bottom-up.
+- **Top tier: moment/class neurons.** Created by the hippocampus through union — one-shot binding of the active pattern set at salience triggers. Moments connect downward to patterns (their parents) and laterally to other moments (the temporal moment graph) and to action neurons.
+
+The cortex and hippocampus perform symmetric but opposite operations on this graph:
+
+- **Cortex (intersection):** selectivity at creation. Observes many instances, finds what recurs, creates a narrow node representing only the common signal. Patterns start narrow and stay narrow.
+- **Hippocampus (union):** selectivity deferred to decay. Observes one salient instant, binds everything active, creates a broad node. Moments start broad and narrow through per-link decay as incidental parents fade and core parents survive. A moment converges toward a class — structurally identical to a pattern that was narrow from the start.
+
+Both create nodes in the same substrate. Both fire by context match. The difference is when selectivity happens: at birth (intersection) or through life (union, pruned by forgetting).
+
+### Multi-level moment hierarchy (union of unions)
+
+The pattern hierarchy has many levels: level-1 patterns detect sensory co-activations, level-2 patterns detect recurring combinations of level-1 patterns, and so on — each level at an exponentially coarser timescale. The same recursive structure applies to moments.
+
+- **Level-1 moments** bind co-active patterns at a single salient instant. This is what the rest of this document describes as the baseline system.
+- **Level-2 moments** bind co-active level-1 moments that fired within a level-2 timescale window, at a level-2 salience trigger. A level-2 moment represents an episode — "this sequence of important instants forms a recognizable whole."
+- **Level-3 moments** bind co-active level-2 moments over an even longer window. An era — "this sequence of episodes forms a recognizable phase."
+- **Level-N moments** follow the same rule recursively. Each level applies union at its own exponential timescale.
+
+The operation at every level is the same: union over the currently-active lower-level moments when salience triggers at that level's timescale. The temporal bins at each level scale exponentially with the level, matching the cortical pattern hierarchy's temporal scaling.
+
+The inhibition rule (see "Implicit Inhibition" below) applies across moment levels: when a level-2 moment fires, it suppresses the level-1 moments that are its parents from independently voting. This means the system automatically selects the appropriate planning horizon — a level-2 moment's action connections operate at level-2 temporal bins (longer horizons), and inhibition ensures they aren't drowned out by level-1 noise. If a level-2 moment stops firing (because aging narrowed its context beyond the current situation), inhibition lifts and level-1 moments resume voting. The system gracefully degrades down the hierarchy.
+
+This is the architectural realization of hierarchical temporal abstraction: instants → episodes → eras → life-chapters, with each level binding the one below by union and projecting actions at its own timescale. No planning module, no horizon selector — the inhibition hierarchy *is* the horizon selector.
+
+Implementation note: the multi-level extension is architecturally locked in but the mechanics at level 2+ (salience triggers, co-activation windows, replay across levels) are best discovered empirically from a working single-level system. See "Open questions" and "Phase 10" for specifics.
+
 ### Thinkability = reachability by the executor
 
 Ordinary cortical neurons fire when their context matches and otherwise sit dormant — they are not deliberately summonable. Moments are different: the hippocampus can address them by id (via the thalamic translation layer), reactivate them, traverse their connections, and run experiments over them. **A neuron is "thinkable" iff the hippocampal executor can reach it.** Thinkability is not a property of the neuron's location or type; it is a property of being operated on by the hippocampus.
@@ -79,7 +111,7 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 ## Architectural principles
 
 1. **One substrate, two operators.** Cortex and hippocampus operate on the same cortical neurons in the same columns. Thalamus mediates id↔property addressing.
-2. **Cortex splits by intersection, hippocampus binds by union.** Cortex divides experience into hierarchical patterns through prediction-error-driven statistical learning. Hippocampus binds salient instants into multi-parent moment nodes in one shot.
+2. **Cortex splits by intersection, hippocampus binds by union.** Cortex divides experience into hierarchical patterns through prediction-error-driven statistical learning (selectivity at creation — only recurring signals enter). Hippocampus binds salient instants into multi-parent moment nodes in one shot (selectivity deferred to decay — everything enters, reality prunes).
 3. **One neuron kind in routing tables.** Patterns and moments are the same kind of node. They differ in how they were created (intersection vs union), in fan-in (typically few parents vs many parents), and in the temporal grain over which their action connections are organized.
 4. **Hippocampus is the executor, not the store.** It mints moments, runs experiments over them, and updates action connections on moments. It does not hold them.
 5. **Recall is by context.** A moment fires when its parent patterns fire with sufficient context overlap. This is normal cortical activation, not a special operation.
@@ -88,6 +120,8 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 8. **Two clocks.** The hippocampus runs at a faster clock than the cortex, executing many experiment frames per cortex frame.
 9. **Same death ledger, different aging.** Forgetting is unified through one death ledger. Moments age on a slower timeline than patterns because they represent rarer, more salient information.
 10. **Bidirectional coupling via thalamus.** Cortex emits think-actions that reach the hippocampus. Hippocampus reads currently active cortical state and writes action-connection updates back to specific moment neurons. Updates are local to the neuron written, never global.
+11. **Multi-level moment hierarchy.** The union-creation rule applies recursively: level-1 moments bind patterns, level-2 moments bind level-1 moments, level-N moments bind level-(N-1) moments. Each level operates at an exponentially coarser timescale, mirroring the pattern hierarchy's exponential scaling. The same structural machinery (context fingerprint, action connections, temporal bins, decay, inhibition) applies at every moment level.
+12. **Inhibition selects the planning horizon.** When a higher-level moment fires, it suppresses lower-level moments from voting independently. The highest-level moment that matches the current context dominates action selection at its temporal scale. No separate planning module or horizon selector is needed.
 
 ---
 
@@ -123,11 +157,33 @@ Both kinds participate in normal cortical activity. The hippocampus's special ac
 
 ## Implicit Inhibition
 
-When higher-level neurons activate, the lower-level patterns that triggered
+When higher-level neurons activate, the lower-level neurons that triggered
 them do not independently vote.
 
 This creates a natural hierarchical inhibition mechanism:
 higher-order abstractions suppress redundant lower-level participation.
+
+### Inhibition across the pattern hierarchy
+
+When a level-3 pattern fires, it subsumes the level-2 and level-1 patterns below it. Those lower patterns don't independently vote — the higher pattern already captures their information more precisely in context.
+
+### Inhibition across the moment hierarchy
+
+The same rule applies across moment levels. When a level-2 moment fires (an episode recognized), it inhibits its level-1 moment parents from voting independently. When a level-3 moment fires (an era recognized), it inhibits the level-2 episodes below it.
+
+The consequence for action selection: each moment level's action connections operate at that level's temporal bins. Level-2 moments vote at longer horizons than level-1 moments. When a level-2 moment fires and suppresses its children, short-horizon action votes from level-1 go quiet and long-horizon action votes from level-2 dominate. The system automatically selects the appropriate planning horizon based on which level of moment recognition fires.
+
+When a higher-level moment ages and loses weak parent links, it may stop firing in contexts where it used to fire. When it stops, inhibition lifts, and the lower-level moments below it resume voting with their shorter-horizon actions. The system gracefully falls back down the hierarchy as abstractions sharpen and narrow.
+
+### Inhibition as the horizon selector
+
+No planning module is needed to choose between tactical and strategic action. The hierarchy does it:
+
+- Novel situation, only level-1 moments match → short-horizon tactical behavior.
+- Recognized episode, level-2 fires → long-horizon strategic action dominates.
+- Recognized era, level-3 fires → very-long-horizon actions dominate.
+
+The inhibition hierarchy *is* the horizon selector.
 
 Inhibition may also emerge behaviorally through competing actions, such as
 suppressive or muting actions.
@@ -592,9 +648,32 @@ loop:
 
 Move from single-track-with-stack to a pool of N concurrent experiments sharing a "what's been visited" structure to prevent redundant exploration. Optimization, not correctness — Phase 1 is strictly single-track.
 
-### Phase 10 (deferred) — Higher-order moments
+### Phase 10 — Multi-level moment hierarchy (union of unions)
 
-Extend the union-creation rule recursively: detect salience-density triggers over windows of moment-firings, mint higher-order nodes whose parents are sets of co-active moments. Same machinery, different temporal scale. Enables hierarchical episodic structure (instants → episodes → eras) for very-long-horizon planning. Deferred until single-level moments are validated and the limits of sequential traversal become apparent.
+The architectural principle is locked in: the union-creation rule applies recursively at exponentially coarser timescales. Level-1 moments bind patterns. Level-2 moments bind level-1 moments. Level-N moments bind level-(N-1) moments. Inhibition across moment levels selects the planning horizon automatically.
+
+Deferred until single-level moments (Phases 1-8) are validated, because the mechanics at level 2+ are best discovered empirically from a working level-1 system.
+
+**What is clear:**
+
+- Each moment level uses the same structural machinery: context fingerprint, action connections in exponential temporal bins scaled to the level, per-link decay, use-driven reinforcement, cold-start gating, inhibition of lower levels.
+- A level-N moment is minted by union over co-active level-(N-1) moments when a level-N salience trigger fires.
+- The temporal moment graph at each level connects moments of the same level, with edge Δt-histograms at that level's bin scheme.
+- Action connections at level N operate at level-N exponential bins — much longer horizons than level-(N-1). The action intrinsic horizon mechanism already handles timescale selection: long-horizon actions naturally have strong connections in the appropriate bins.
+- Inhibition: when a level-2 moment fires, its level-1 parents don't independently vote. The highest-level moment that matches the current context dominates action selection at its appropriate timescale.
+- Graceful degradation: when a higher-level moment ages out of a context (per-link decay narrows it), inhibition lifts and lower-level moments resume voting. The system falls back down the hierarchy.
+
+**What single-level implementation will inform (open questions for Phase 10):**
+
+1. **Level-2+ salience triggers.** At level 1, salience is z-scored reward and prediction error per cortex frame. At level 2, the natural candidate is meta-prediction-error: "the sequence of level-1 moments that just fired doesn't match the expected pattern of moment-sequences." This requires patterns to form over moment-sequences (which should happen naturally — moments are cortical neurons that patterns can observe). The cortex's prediction error over those moment-level patterns would be the level-2 salience signal. Verify empirically that this falls out from the existing cortex machinery rather than requiring a separate salience module per level.
+
+2. **Co-activation window at each level.** At level 1, union binds everything active at one instant. At level 2, union binds level-1 moments that fired within a level-2 timescale window. The window width should follow the exponential scheme — approximately `contextLength^level` frames. The precise rule (fixed window? decaying activation strength? pattern-driven boundary detection?) needs empirical tuning.
+
+3. **Replay across moment levels.** Level-1 replay walks the level-1 temporal moment graph. Level-2 replay should walk a level-2 temporal graph (edges between level-2 moments) at coarser temporal steps. Whether this uses the same hippocampal clock (operating over coarser-grained steps) or needs a separate clock per level is an implementation question. The simplest approach: one hippocampal clock, but level-2 replay steps traverse level-2 edges with inherently larger Δt values, so each step covers more simulated time.
+
+4. **Where level-2+ moments live.** Level-1 moments live in cortical columns alongside patterns. Level-2 moments should live in the same substrate (same neuron kind, same columns). Their context fingerprints point to level-1 moments rather than to patterns. Verify that the existing column and routing-table infrastructure handles this without modification.
+
+5. **Number of levels.** Unlike the pattern hierarchy where levels emerge from the cortex's hierarchical recognition, moment levels are minted by the hippocampus. How many levels should exist? Likely determined by the system's experience horizon — a system that has only seen minutes of data won't have level-3 moments. The number of levels should emerge from the data, not be configured. A level-N moment is only minted when enough level-(N-1) moments exist and co-activate with sufficient salience.
 
 ---
 
@@ -632,6 +711,14 @@ Extend the union-creation rule recursively: detect salience-density triggers ove
 - Rigidity profile: salience too tight, observe perseveration (too few moments, can't escape habits).
 - Rumination profile: high-magnitude negative-reward moments without escape counterfactuals; verify the salience-drop terminator still eventually fires (and verify that raising the terminator threshold or introducing competing high-salience moments shortens the rumination loop).
 
+### Multi-level moment hierarchy tests (Phase 10)
+- Level-2 moment minting: verify a level-2 moment is created when level-1 moments co-activate within the level-2 window and level-2 salience triggers.
+- Level-2 inhibition: when a level-2 moment fires, verify its level-1 parents stop voting independently.
+- Graceful degradation: when a level-2 moment ages out (per-link decay narrows its context), verify inhibition lifts and level-1 moments resume voting.
+- Horizon selection: verify that level-2 moments vote at longer-horizon temporal bins than level-1 moments, and that inhibition causes the appropriate horizon to dominate.
+- Level emergence: verify that the number of moment levels emerges from data — systems with short experience don't mint level-2+, systems with long diverse experience do.
+- Cross-level replay: verify that level-2 replay walks level-2 temporal graph edges with appropriate coarser-grained Δt steps.
+
 ### Stress tests
 - High-throughput cortex with many think-actions.
 - Capacity limits and graceful eviction.
@@ -650,8 +737,11 @@ Extend the union-creation rule recursively: detect salience-density triggers ove
 6. **Δt-kernel shape for replay step sampling.** Gaussian over log-Δt is the default. Alternative kernels could bias toward specific horizons. Implementation detail.
 7. **Cross-channel moments.** Can a single moment's parent set include patterns from multiple channels (stock + text + vision)? With unification, the answer is structurally yes — any high-level pattern active at mint time becomes a parent regardless of channel. Worth verifying in implementation that cross-channel parent registration is permitted and that cross-channel moments behave sensibly under replay.
 8. **Persistence.** Do moments persist across brain restarts? For long-term memory to be meaningful, yes. Need serialization for the column state plus the death ledger and temporal graph.
-9. **Higher-order moments.** Whether and when to add the recursive layer (episodes-of-moments, eras-of-episodes). Deferred to Phase 10. The architectural shape is clear (same union-creation rule, lifted one level); the trigger criteria at higher scales need design when the time comes.
-10. **The actual instruction set the cortex uses to invoke the hippocampus.** Will emerge from implementation rather than be designed up front. The conceptual operations are listed above; their precise signatures and the cortex-side action neurons that trigger them are TBD.
+9. **Multi-level salience triggers.** How does the system detect salience at level 2+ without a dedicated salience module per level? The hypothesis: patterns form over moment-sequences (moments are cortical neurons), prediction errors against those patterns serve as level-2 salience, and the same process recurses. Verify empirically in Phase 10.
+10. **Multi-level co-activation window.** At level 1, union binds everything active at one instant. At level 2+, union binds lower-level moments that fired within a window proportional to `contextLength^level` frames. The precise window boundary rule (fixed width? decaying activation? pattern-driven?) needs empirical tuning from a working level-1 system.
+11. **Replay across moment levels.** Does level-2 replay walk a separate level-2 temporal graph? Does it use the same hippocampal clock with coarser steps, or a separate clock? Simplest hypothesis: one clock, coarser edges with larger Δt values per step.
+12. **Number of moment levels.** Should emerge from data, not configuration. A level-N moment is only minted when enough level-(N-1) moments exist and co-activate with sufficient salience. Systems with short experience horizons will have fewer levels.
+13. **The actual instruction set the cortex uses to invoke the hippocampus.** Will emerge from implementation rather than be designed up front. The conceptual operations are listed above; their precise signatures and the cortex-side action neurons that trigger them are TBD.
 
 ---
 
@@ -694,6 +784,8 @@ All cognition emerges from:
 - **System 2 enriches System 1** — moments enter the cortical substrate and become raw material for further pattern formation. Expertise development is structural, not behavioral.
 - **One activation rule, one voting rule** — patterns and moments share the same machinery once they exist; the hippocampus's distinct role is purely in *creating* moments and *running experiments* to update their action connections.
 - **Strategic vs reflexive action selection emerges from the data**, not from a planning module — actions carry their own intrinsic horizon, moments hold action evidence in matching bins, and the votes aggregate naturally at whatever horizon the current context engages.
+- **Union of unions** — the moment hierarchy recurses: level-1 moments bind patterns, level-2 moments bind level-1 moments, level-N moments bind level-(N-1) moments. Each level at exponentially coarser timescale. Inhibition across levels makes the hierarchy itself the planning-horizon selector — no separate mechanism needed.
+- **Symmetric hierarchies, opposite operations** — cortex builds up from sensory through pattern levels by intersection (compression). Hippocampus builds up from moments through moment levels by union (binding). Same exponential timescale structure, opposite information operations. The full graph has sensory at the bottom, patterns in the middle, moments at the top, with both hierarchies speaking the same temporal language.
 - **Forgetting that judges** — uses moments fade or sharpen by their honest match with recurring reality; the death ledger remembers what was lost.
 - **Biological grounding** — implements hippocampal indexing, complementary learning systems, predictive processing, scenario construction, and episodic-semantic consolidation in one architecture, with HM and rumination as direct architectural predictions.
 - **One substrate, two operators, thalamic bus.** Cortex builds by intersection. Hippocampus binds by union. Activation, voting, and decay are unified across both.
