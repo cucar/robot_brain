@@ -49,6 +49,8 @@ This is the architectural analog of episodic-to-semantic consolidation as observ
 
 ### The three-tier graph
 
+![The Three-Tier Graph: The Brain](../images/graph.png)
+
 The full architecture forms a graph with three tiers:
 
 - **Bottom tier: sensory and motor neurons.** Input and output. The raw interface with the environment.
