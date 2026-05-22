@@ -198,8 +198,8 @@ pub struct Thalamus {
     /// Dimension specs: dimension id → stored spec (flattened across all channels).
     dimension_specs: FxHashMap<DimensionId, DimSpec>,
 
-    /// Per-channel action neuron ids.
-    channel_actions: FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+    /// Per-channel action neuron ids — ordered Vec for deterministic exploration.
+    channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
 
     /// Flat union of all action neuron ids — O(1) is_action_neuron lookup.
     action_ids: FxHashSet<NeuronId>,
@@ -613,7 +613,7 @@ impl Thalamus {
     /// action_ids is the flat union — kept in lockstep with per-channel sets so
     /// neurons can do O(1) is_action_neuron lookups.
     fn register_action_neurons(&mut self, channel_id: ChannelId, stored_spec: &ChannelSpec) {
-        let mut action_neurons: FxHashSet<NeuronId> = self.channel_actions.get(&channel_id).cloned().unwrap_or_default();
+        let mut action_neurons: Vec<NeuronId> = self.channel_actions.get(&channel_id).cloned().unwrap_or_default();
         let mut new_neuron_specs = Vec::new();
 
         for dim in &stored_spec.dimensions {
@@ -630,14 +630,16 @@ impl Thalamus {
                 panic!("Invalid action dimension without default: {:?}", dim.name);
             }
 
-            // allocate action neuron ids
+            // allocate action neuron ids — push in registration order, skip duplicates
             for &bucket_id in action_buckets {
                 let lookup = self.get_neuron_id_for_point(
                     &Coordinate { dim_id: dim.id, bucket_id },
                     channel_id,
                     NeuronType::Action,
                 );
-                action_neurons.insert(lookup.id);
+                if !action_neurons.contains(&lookup.id) {
+                    action_neurons.push(lookup.id);
+                }
                 self.action_ids.insert(lookup.id);
                 if lookup.is_new {
                     new_neuron_specs.push(NeuronCreateSpec { id: lookup.id, forget_rate: 0.0, connections: None });

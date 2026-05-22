@@ -157,8 +157,9 @@ pub struct Neuron {
     error_mode: ErrorMode,
     error_threshold: f64,
 
-    /// Per-channel action neuron IDs — shared reference for alternative-action lookup during learning.
-    channel_action_ids: FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+    /// Per-channel action neuron IDs — ordered Vec for deterministic alternative-action
+    /// exploration (neurons are tried in registration order, not hash-iteration order).
+    channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
 
     /// Flat union of all action neuron IDs across channels — used for O(1) is_action_neuron checks.
     action_ids: FxHashSet<NeuronId>,
@@ -186,7 +187,7 @@ pub struct Neuron {
 impl Neuron {
     /// Neuron id is allocated by the Thalamus (mirrors how channel and dimension
     /// ids are allocated) and passed in at construction. channel_action_ids are used
-    /// for alternative-action lookup during learning (per-channel Set lookup).
+    /// for alternative-action lookup during learning (per-channel Vec iteration).
     /// action_ids is the flat union of all action neuron ids across channels, used
     /// for O(1) is_action_neuron checks during connection learning. Both are populated
     /// by register_channel_spec() and shared across all neurons.
@@ -204,7 +205,7 @@ impl Neuron {
         merge_threshold: f64,
         error_mode: ErrorMode,
         error_threshold: f64,
-        channel_action_ids: FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+        channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: FxHashSet<NeuronId>,
     ) -> Self {
         Self {
@@ -1088,7 +1089,7 @@ impl Neuron {
     }
 
     /// Check if a neuron id is an action neuron in any channel. Uses the flat action_ids
-    /// Set maintained by Thalamus alongside channel_action_ids — both are kept in lockstep
+    /// set maintained by Thalamus alongside channel_action_ids — both are kept in lockstep
     /// at registration time, so action detection stays aligned with alt-action lookup.
     fn is_action_neuron(&self, neuron_id: NeuronId) -> bool {
         self.action_ids.contains(&neuron_id)
@@ -1171,7 +1172,7 @@ mod tests {
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let action_set: FxHashSet<NeuronId> = action_ids.iter().copied().collect();
         let mut channel_actions = FxHashMap::default();
-        channel_actions.insert(channel_id, action_set.clone());
+        channel_actions.insert(channel_id, action_ids);
         Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, action_set)
     }
 

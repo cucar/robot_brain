@@ -69,7 +69,7 @@ pub struct Region {
 impl Region {
     pub fn new(
         c: usize,
-        channel_actions: &FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+        channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: &FxHashSet<NeuronId>,
         merge_threshold: f64,
         error_mode: ErrorMode,
@@ -325,7 +325,7 @@ impl Region {
     /// calls never reach back to Thalamus.
     pub fn update_action_sets(
         &mut self,
-        channel_actions: &FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+        channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: &FxHashSet<NeuronId>,
     ) {
         self.columns.par_iter_mut().for_each(|col| {

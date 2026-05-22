@@ -76,9 +76,10 @@ pub struct SnapshotEntry {
 }
 
 pub struct Column {
-    /// Shared action neuron sets — per-channel action neuron ids. In single-threaded JS
-    /// these are shared by reference with Thalamus; in Rust they're cloned at construction.
-    channel_actions: FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+    /// Shared action neuron sets — per-channel action neuron ids in registration order.
+    /// In single-threaded JS these are shared by reference with Thalamus; in Rust
+    /// they're cloned at construction.
+    channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
 
     /// Flat union of all action neuron ids — O(1) is_action_neuron lookup.
     action_ids: FxHashSet<NeuronId>,
@@ -98,7 +99,7 @@ pub struct Column {
 
 impl Column {
     pub fn new(
-        channel_actions: FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+        channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: FxHashSet<NeuronId>,
         merge_threshold: f64,
         error_mode: ErrorMode,
@@ -471,7 +472,7 @@ impl Column {
     /// after registerChannelSpec to keep column-local copies in sync.
     pub fn update_action_sets(
         &mut self,
-        channel_actions: &FxHashMap<ChannelId, FxHashSet<NeuronId>>,
+        channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: &FxHashSet<NeuronId>,
     ) {
         self.channel_actions = channel_actions.clone();
