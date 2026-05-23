@@ -88,7 +88,7 @@ The brain learns to trade stocks from historical price and volume data. Each sto
 **Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
-node apps/stocks/jobs/test.js --context-length 3 --columns 20 --transaction-cost 0.02
+node apps/stocks/jobs/test.js --context-length 3 --columns 20 --transaction-cost 0.02 --max-positions 10
 ```
 
 **Expected output:**
@@ -97,20 +97,20 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $3569252.21
-   Average per Episode: $3569252.21
-   Average ROI: +23795.01%
-   Average Per-Frame ROI: +0.377344%
-   Average Sharpe Ratio: 1.19
-   Total Transaction Cost: $180929.11 (0.02% per trade)
-   Total Trades: 2831
-   Average Trades per Episode: 2831.0
+   Total Net Profit: $7847124.83
+   Average per Episode: $7847124.83
+   Average ROI: +52314.17%
+   Average Per-Frame ROI: +0.431586%
+   Average Sharpe Ratio: 3.22
+   Total Transaction Cost: $259924.73 (0.02% per trade)
+   Total Trades: 24001
+   Average Trades per Episode: 24001.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $3569252.21 | ROI: +23795.01%, +0.377344%/frame, Sharpe: 1.19 (2831 trades)
+   Episode 1: $7847124.83 | ROI: +52314.17%, +0.431586%/frame, Sharpe: 3.22 (24001 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.38%
+   Episode 1: 50.42%
 ```
 
 The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
