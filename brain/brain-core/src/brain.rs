@@ -837,11 +837,7 @@ impl Brain {
         }
 
         // Aggregate votes and determine winners
-        let (inferences, mut candidates, mut dim_best) = self.determine_consensus(votes);
-
-        // Ensure every channel has an action — explore if none inferred
-        let mut inferences = inferences;
-        self.ensure_channel_actions(&mut inferences, &mut candidates, &mut dim_best);
+        let (inferences, candidates, dim_best) = self.determine_consensus(votes);
 
         // Build the resolved vote dump only when debug is on
         let vote_debug = if self.debug {
@@ -1004,64 +1000,6 @@ impl Brain {
             });
         }
         winners
-    }
-
-    /// Ensure every channel has an action in the inferences array.
-    /// If a channel has no inferred action, add an exploration action.
-    /// Also seeds candidates and dim_best so buildInferencesByChannel includes the fallback.
-    fn ensure_channel_actions(
-        &self,
-        inferences: &mut Vec<InferredNeuron>,
-        candidates: &mut FxHashMap<NeuronId, Candidate>,
-        dim_best: &mut FxHashMap<DimensionId, DimBestEntry>,
-    ) {
-        // find which channels already have an action inferred
-        let channels_with_actions: FxHashSet<ChannelId> = inferences.iter()
-            .filter(|inf| self.thalamus.get_neuron_type(inf.neuron_id) == Some(NeuronType::Action))
-            .filter_map(|inf| self.thalamus.get_neuron_channel_id(inf.neuron_id))
-            .collect();
-
-        // add exploration action for channels without one
-        for channel_id in self.thalamus.get_channel_ids() {
-            if channels_with_actions.contains(&channel_id) { continue; }
-
-            // skip channels that have no actions defined
-            let exploration_action_id = match self.thalamus.get_channel_default_action(channel_id) {
-                Some(id) => id,
-                None => continue,
-            };
-
-            let coordinate = match self.thalamus.get_neuron_coordinate(exploration_action_id) {
-                Some(c) => c.clone(),
-                None => continue,
-            };
-
-            inferences.push(InferredNeuron {
-                neuron_id: exploration_action_id,
-                coordinate: coordinate.clone(),
-                channel_id,
-                strength: 0.0,
-                reward: 0.0,
-                probability: 0.0,
-            });
-
-            // seed candidates + dimBest so buildInferencesByChannel surfaces this action
-            if !candidates.contains_key(&exploration_action_id) {
-                candidates.insert(exploration_action_id, Candidate {
-                    strength: 0.0,
-                    reward: 0.0,
-                    weighted_total: 0.0,
-                    probability: 0.0,
-                });
-            }
-            if !dim_best.contains_key(&coordinate.dim_id) {
-                dim_best.insert(coordinate.dim_id, DimBestEntry {
-                    neuron_id: exploration_action_id,
-                    score: 0.0,
-                    strength: 0.0,
-                });
-            }
-        }
     }
 
     /// Build the per-channel, per-dimension inference output in scalar space.

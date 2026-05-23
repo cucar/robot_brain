@@ -84,6 +84,13 @@ pub struct Column {
     /// Flat union of all action neuron ids — O(1) is_action_neuron lookup.
     action_ids: FxHashSet<NeuronId>,
 
+    /// Per-channel default action neuron id.
+    channel_default_actions: FxHashMap<ChannelId, NeuronId>,
+
+    /// Context length — determines the range of distances (1..context_length-1)
+    /// at which default action connections are pre-wired on new neurons.
+    context_length: u32,
+
     /// Context merge threshold.
     merge_threshold: f64,
 
@@ -101,6 +108,8 @@ impl Column {
     pub fn new(
         channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: FxHashSet<NeuronId>,
+        channel_default_actions: FxHashMap<ChannelId, NeuronId>,
+        context_length: u32,
         merge_threshold: f64,
         error_mode: ErrorMode,
         error_threshold: f64,
@@ -108,6 +117,8 @@ impl Column {
         Self {
             channel_actions,
             action_ids,
+            channel_default_actions,
+            context_length,
             merge_threshold,
             error_mode,
             error_threshold,
@@ -348,6 +359,13 @@ impl Column {
                 self.channel_actions.clone(),
                 self.action_ids.clone(),
             );
+            // pre-wire default action connections at neutral reward across all voting distances
+            for distance in 1..self.context_length {
+                for &default_id in self.channel_default_actions.values() {
+                    neuron.create_connection(distance, default_id, 1.0, 0.0);
+                }
+            }
+
             if let Some(ref connections) = spec.connections {
                 for conn in connections {
                     // save the event/action connection
@@ -474,9 +492,11 @@ impl Column {
         &mut self,
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: &FxHashSet<NeuronId>,
+        channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
     ) {
         self.channel_actions = channel_actions.clone();
         self.action_ids = action_ids.clone();
+        self.channel_default_actions = channel_default_actions.clone();
     }
 }
 
@@ -512,6 +532,8 @@ mod tests {
         Column::new(
             FxHashMap::default(),
             FxHashSet::default(),
+            FxHashMap::default(),
+            2,
             0.5,
             ErrorMode::Static,
             0.5,

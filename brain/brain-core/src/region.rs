@@ -71,6 +71,8 @@ impl Region {
         c: usize,
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: &FxHashSet<NeuronId>,
+        channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
+        context_length: u32,
         merge_threshold: f64,
         error_mode: ErrorMode,
         error_threshold: f64,
@@ -80,6 +82,8 @@ impl Region {
             columns.push(Column::new(
                 channel_actions.clone(),
                 action_ids.clone(),
+                channel_default_actions.clone(),
+                context_length,
                 merge_threshold,
                 error_mode,
                 error_threshold,
@@ -327,9 +331,10 @@ impl Region {
         &mut self,
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: &FxHashSet<NeuronId>,
+        channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
     ) {
         self.columns.par_iter_mut().for_each(|col| {
-            col.update_action_sets(channel_actions, action_ids);
+            col.update_action_sets(channel_actions, action_ids, channel_default_actions);
         });
     }
 }
@@ -343,6 +348,8 @@ mod tests {
             2, // 2 columns
             &FxHashMap::default(),
             &FxHashSet::default(),
+            &FxHashMap::default(),
+            2,
             0.5,
             ErrorMode::Static,
             0.5,

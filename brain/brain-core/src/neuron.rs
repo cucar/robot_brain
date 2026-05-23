@@ -376,41 +376,14 @@ impl Neuron {
     /// strengthen (smoothing the reward). If the resulting reward is negative, wire an
     /// alternative action with neutral reward so it can be tried next time.
     pub fn upsert_connection(&mut self, distance: Distance, to_neuron_id: NeuronId, channel_id: ChannelId, reward: Reward) {
-
-        // New connections are created with reward * 0.5 rather than the full observed reward to prevent a permanent exploration dead-lock.
-        // Without halving, the first-tried action starts at -1.0 while alternatives from find_alternative_action start at 0.0.
-        // The running-average in strengthen_connection keeps an action at exactly -1.0 after repeated -1 observations,
-        // but an alternative starting at 0.0 converges only to -N/(N+1) — asymptotically approaching -1.0 but never reaching it.
-        // Halving gives both the first action and alternatives comparable neutral priors so alternatives CAN drop below and the brain can revisit all actions.
         if self.has_connection(distance, to_neuron_id) { self.strengthen_connection(distance, to_neuron_id, reward); }
-        else { self.create_connection(distance, to_neuron_id, 1.0, reward * 0.5); }
+        else { self.create_connection(distance, to_neuron_id, 1.0, reward); }
 
         // for actions with negative (smoothed) rewards, save an alternative with neutral reward - we'll try it next time
         let conn_reward = self.connections[distance as usize].get(&to_neuron_id).unwrap().reward;
         if conn_reward < 0.0 {
             if let Some(alt) = self.find_alternative_action(distance, channel_id, to_neuron_id) {
                 self.create_connection(distance, alt, 1.0, 0.0);
-            }
-        }
-    }
-
-    /// Bulk-initialize this neuron's connections from a pre-built spec. Single entry point
-    /// for wiring a freshly-created pattern neuron: all thalamus-side lookups (channel, reward)
-    /// are already resolved in the spec; alternative-action substitution for negative rewards
-    /// is resolved locally against this neuron's own (mutating) connection state. Each spec
-    /// entry is a single observation, so connections are always created (strength=1) - never
-    /// strengthened - even if a later entry targets a slot that a prior alt-action filled.
-    pub fn initialize_connections(&mut self, connections: &[ActiveNeuron], distance: Distance) {
-        for active in connections {
-
-            // save the event/action - include observed reward for actions - for events it's zero
-            self.create_connection(distance, active.id, 1.0, active.reward);
-
-            // for actions with negative rewards, save an alternative with neutral reward - we'll try it next time
-            if active.reward < 0.0 {
-                if let Some(alt) = self.find_alternative_action(distance, active.channel_id, active.id) {
-                    self.create_connection(distance, alt, 1.0, 0.0);
-                }
             }
         }
     }

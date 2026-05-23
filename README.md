@@ -58,7 +58,7 @@ node apps/stocks/jobs/synthetic-extended-test.js --error-mode static --error-thr
 
 **Expected output:**
 ```
-Overall Optimal Rate: 233/240 = 97.5%
+Overall Optimal Rate: 233/240 = 97.1%
 ```
 
 With the right thresholds the brain converges to 97%+ optimal action decisions on a single-channel cyclical pattern — confirming that hierarchy and action inference work without cross-channel consensus.
@@ -88,7 +88,7 @@ The brain learns to trade stocks from historical price and volume data. Each sto
 **Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
-node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --columns 20
+node apps/stocks/jobs/test.js --context-length 3 --columns 20 --transaction-cost 0.02
 ```
 
 **Expected output:**
@@ -97,19 +97,20 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $83167.39
-   Average per Episode: $83167.39
-   Average ROI: +554.45%
-   Average Per-Frame ROI: +0.129287%
-   Average Sharpe Ratio: 0.35
-   Total Trades: 694
-   Average Trades per Episode: 694.0
+   Total Net Profit: $3569252.21
+   Average per Episode: $3569252.21
+   Average ROI: +23795.01%
+   Average Per-Frame ROI: +0.377344%
+   Average Sharpe Ratio: 1.19
+   Total Transaction Cost: $180929.11 (0.02% per trade)
+   Total Trades: 2831
+   Average Trades per Episode: 2831.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $83167.39 | ROI: +554.45%, +0.129287%/frame, Sharpe: 0.35 (694 trades)
+   Episode 1: $3569252.21 | ROI: +23795.01%, +0.377344%/frame, Sharpe: 1.19 (2831 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.62%
+   Episode 1: 50.38%
 ```
 
 The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -154,11 +155,11 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $52248.99 | ROI: +348.33%, +0.103241%/frame, Sharpe: 0.27 (1221 trades)
-   Episode 2: $9776467.05 | ROI: +65176.45%, +0.446746%/frame, Sharpe: 1.38 (1483 trades)
-   Episode 3: $10510324.91 | ROI: +70068.83%, +0.451739%/frame, Sharpe: 1.42 (1235 trades)
-   Episode 4: $12475688.51 | ROI: +83171.26%, +0.463567%/frame, Sharpe: 1.50 (1346 trades)
-   Episode 5: $50061490.25 | ROI: +333743.27%, +0.559555%/frame, Sharpe: 1.86 (1587 trades)
+   Episode 1: $70857.08 | ROI: +472.38%, +0.120061%/frame, Sharpe: 0.33 (1198 trades)
+   Episode 2: $10343747.16 | ROI: +68958.31%, +0.450637%/frame, Sharpe: 1.39 (1437 trades)
+   Episode 3: $84937848.53 | ROI: +566252.32%, +0.596116%/frame, Sharpe: 1.92 (1637 trades)
+   Episode 4: $306664664.03 | ROI: +2044431.09%, +0.684970%/frame, Sharpe: 2.24 (1849 trades)
+   Episode 5: $448060597.69 | ROI: +2987070.65%, +0.711229%/frame, Sharpe: 2.33 (1986 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 51.35%
@@ -184,20 +185,20 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY -
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $1819956432210305.50
-   Average per Episode: $363991286442061.13
-   Average ROI: +2426608576280.41%
-   Average Per-Frame ROI: +1.080657%
-   Average Sharpe Ratio: 6.55
-   Total Trades: 8875
-   Average Trades per Episode: 1775.0
+   Total Net Profit: $4846725974934582.00
+   Average per Episode: $969345194986916.38
+   Average ROI: +6462301299912.78%
+   Average Per-Frame ROI: +1.154055%
+   Average Sharpe Ratio: 7.09
+   Total Trades: 8916
+   Average Trades per Episode: 1783.2
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $59467.62 | ROI: +396.45%, +0.110261%/frame, Sharpe: 0.52 (1730 trades)
-   Episode 2: $290374596.98 | ROI: +1935830.65%, +0.681191%/frame, Sharpe: 3.91 (1888 trades)
-   Episode 3: $778256088501.99 | ROI: +5188373923.35%, +1.229263%/frame, Sharpe: 7.29 (1782 trades)
-   Episode 4: $212326770958524.81 | ROI: +1415511806390.17%, +1.620510%/frame, Sharpe: 9.98 (1738 trades)
-   Episode 5: $1606851114729214.00 | ROI: +10712340764861.43%, +1.762060%/frame, Sharpe: 11.05 (1737 trades)
+   Episode 1: $93500.16 | ROI: +623.33%, +0.136179%/frame, Sharpe: 0.66 (1814 trades)
+   Episode 2: $743700488.67 | ROI: +4958003.26%, +0.746331%/frame, Sharpe: 4.29 (1856 trades)
+   Episode 3: $5823050387564.16 | ROI: +38820335917.09%, +1.369474%/frame, Sharpe: 8.22 (1790 trades)
+   Episode 4: $553730853076077.06 | ROI: +3691539020507.18%, +1.687526%/frame, Sharpe: 10.50 (1727 trades)
+   Episode 5: $4287171327676952.00 | ROI: +28581142184513.01%, +1.830766%/frame, Sharpe: 11.76 (1729 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 51.02%

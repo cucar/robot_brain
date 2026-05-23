@@ -250,12 +250,15 @@ impl Thalamus {
         // construct the Region[R] tree — each Region constructs its Column[C]
         let channel_actions = FxHashMap::default();
         let action_ids = FxHashSet::default();
+        let channel_default_actions = FxHashMap::default();
         let mut region_list = Vec::with_capacity(regions);
         for _ in 0..regions {
             region_list.push(Region::new(
                 columns,
                 &channel_actions,
                 &action_ids,
+                &channel_default_actions,
+                context_length,
                 merge_threshold,
                 error_mode,
                 error_threshold,
@@ -663,7 +666,7 @@ impl Thalamus {
 
         // sync action sets to all regions/columns so per-frame calls don't reach back to Thalamus
         for region in &mut self.region_list {
-            region.update_action_sets(&self.channel_actions, &self.action_ids);
+            region.update_action_sets(&self.channel_actions, &self.action_ids, &self.channel_default_actions);
         }
 
         // create action neurons in columns
@@ -680,11 +683,6 @@ impl Thalamus {
     /// Get stored channel spec by ID.
     pub fn get_channel_spec(&self, channel_id: ChannelId) -> Option<&ChannelSpec> {
         self.channel_specs.get(&channel_id)
-    }
-
-    /// Get default action neuron id for a channel.
-    pub fn get_channel_default_action(&self, channel_id: ChannelId) -> Option<NeuronId> {
-        self.channel_default_actions.get(&channel_id).copied()
     }
 
     /// Translate an id-form coordinate to name-form.
@@ -1559,7 +1557,7 @@ mod tests {
         // action neurons should have been created
         assert!(t.channel_actions.contains_key(&reg.channel_id));
         assert_eq!(t.channel_actions.get(&reg.channel_id).unwrap().len(), 3);
-        assert!(t.get_channel_default_action(reg.channel_id).is_some());
+        assert!(t.channel_default_actions.contains_key(&reg.channel_id));
         assert_eq!(t.get_neuron_count(), 3);
     }
 
