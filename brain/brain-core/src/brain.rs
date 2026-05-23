@@ -250,7 +250,7 @@ impl Brain {
     /// Materializes all lazy decay, resets frame counter and death ledger so
     /// the next episode starts clean while preserving learned knowledge.
     pub fn reset_context(&mut self) {
-        println!("Resetting brain context...");
+        // println!("Resetting brain context...");
 
         // Materialize all lazy decay and reset timestamps so frameNumber can restart at 0
         self.thalamus.materialize_and_reset_neurons(self.frame_number);
