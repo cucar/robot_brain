@@ -220,6 +220,32 @@ impl Memory {
             .insert(frame, LevelAgeState::default());
     }
 
+    /// Replace one neuron with another at age 0, level 0.
+    /// Used during frozen-context drilling to swap the active action neuron
+    /// so that learn_connections updates the correct action's connections.
+    pub fn replace_active_neuron(&mut self, old_id: NeuronId, new_id: NeuronId) {
+        let frame = self.frame_number;
+        let level: Level = 0;
+
+        // remove old from age index
+        if let Some(set) = self.age_index.get_mut(&frame) {
+            set.remove(&old_id);
+        }
+        // remove old from level index
+        if let Some(level_map) = self.level_index.get_mut(&level) {
+            if let Some(set) = level_map.get_mut(&frame) {
+                set.remove(&old_id);
+            }
+        }
+        // remove old neuron state
+        if let Some(states) = self.neuron_states.get_mut(&old_id) {
+            states.remove(&frame);
+        }
+
+        // activate new
+        self.activate_neuron_at_age(new_id, 0, level);
+    }
+
     /// Activate a pattern neuron and link it to its parent.
     pub fn activate_pattern(&mut self, pattern_id: NeuronId, pattern_level: Level, parent_id: NeuronId, age: Distance) {
         self.activate_neuron_at_age(pattern_id, age, pattern_level);
@@ -256,6 +282,34 @@ impl Memory {
                 panic!("BUG: deleting active neuron {}", pattern_id);
             }
         }
+    }
+
+    /// Get all non-suppressed, non-oldest-age neurons across all levels.
+    /// These are the neurons eligible to vote or have connections wired to action neurons.
+    pub fn get_votable_entries(&self) -> Vec<(NeuronId, Distance)> {
+        let depth = self.depth();
+        if depth == 0 { return Vec::new(); }
+
+        let mut result = Vec::new();
+
+        for (_level, level_frames) in &self.level_index {
+            for age in 0..depth - 1 {
+                let frame = self.frame_number - age as i64;
+                if let Some(neuron_ids) = level_frames.get(&frame) {
+                    for &nid in neuron_ids {
+                        if let Some(states) = self.neuron_states.get(&nid) {
+                            if let Some(state) = states.get(&frame) {
+                                if state.activated_pattern_id.is_none() {
+                                    result.push((nid, age));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        result
     }
 
     /// Get the maximum active level from the level index.

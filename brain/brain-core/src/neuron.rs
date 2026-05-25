@@ -157,12 +157,21 @@ pub struct Neuron {
     error_mode: ErrorMode,
     error_threshold: f64,
 
+    /// Brain-wide context_length, replicated on each neuron so recognize_patterns
+    /// can implement the warmup gate (skip matching until the context window
+    /// has had a chance to fill up at the start of a sequence).
+    context_length: u32,
+
     /// Per-channel action neuron IDs — ordered Vec for deterministic alternative-action
     /// exploration (neurons are tried in registration order, not hash-iteration order).
     channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
 
     /// Flat union of all action neuron IDs across channels — used for O(1) is_action_neuron checks.
     action_ids: FxHashSet<NeuronId>,
+
+    /// Optional fixed learning rate for action connection reward updates.
+    /// None = dynamic alpha (1/strength), Some(v) = static alpha.
+    action_alpha: Option<f64>,
 
     /// Inferences: Vec<FxHashMap<toNeuronId, ConnectionData>> indexed by distance.
     /// Distance 0 is unused (connections start at distance 1).
@@ -207,6 +216,8 @@ impl Neuron {
         error_threshold: f64,
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: FxHashSet<NeuronId>,
+        action_alpha: Option<f64>,
+        context_length: u32,
     ) -> Self {
         Self {
             id,
@@ -216,6 +227,8 @@ impl Neuron {
             error_threshold,
             channel_action_ids,
             action_ids,
+            action_alpha,
+            context_length,
             connections: Vec::new(),
             routing_table: FxHashMap::default(),
             context_index: FxHashMap::default(),
@@ -372,9 +385,64 @@ impl Neuron {
         self.connections[idx].insert(to_neuron_id, ConnectionData { strength, reward });
     }
 
-    /// Upsert a connection at distance to the target neuron: create if missing, else
-    /// strengthen (smoothing the reward). If the resulting reward is negative, wire an
-    /// alternative action with neutral reward so it can be tried next time.
+    /// Supervised action learning. Updates every action connection at the
+    /// given distance using a SINGLE smoothing alpha = 1/N, where N is the
+    /// total action-connection strength on this voter at this distance
+    /// AFTER the current call's increment.
+    ///
+    /// Why unified alpha: we want the running reward on each X→action_D
+    /// connection to converge to the empirical proportion freq(D)/freq(any
+    /// action) for this voter. With a per-connection alpha (1/strength_D),
+    /// the smoothing was per-connection and the rewards did not converge to
+    /// the true proportions — voters wired to multiple digits would over-
+    /// represent the rarely-trained ones at consensus.
+    ///
+    /// Correct action: strength += 1 and reward smoothed toward `reward`
+    /// (typically +1). New connections start at reward=0 so the first
+    /// smoothing step yields exactly `alpha * reward = reward / N`.
+    /// Other action connections at this distance: reward smoothed toward 0
+    /// with the same alpha; strength unchanged.
+    ///
+    /// `action_alpha` (constructor option), if set, overrides the computed
+    /// 1/N — preserved as a manual knob.
+    pub fn learn_supervised_action(&mut self, distance: Distance, correct_id: NeuronId, _channel_id: ChannelId, reward: Reward) {
+        let idx = distance as usize;
+
+        // Compute total action strength at this distance BEFORE the increment,
+        // then +1 for this call. This gives the count of action wirings on
+        // this voter at this distance, including the current one.
+        let mut total = 1.0;  // counts this call
+        if idx < self.connections.len() {
+            for (id, c) in &self.connections[idx] {
+                if self.action_ids.contains(id) { total += c.strength; }
+            }
+        }
+        let alpha = self.action_alpha.unwrap_or(1.0 / total);
+
+        // 1. Upsert the correct action with reward smoothed toward `reward`.
+        //    New connections start at reward=0 so alpha*reward + (1-alpha)*0
+        //    gives the proportional first value.
+        if self.has_connection(distance, correct_id) {
+            let conn = self.connections[idx].get_mut(&correct_id).unwrap();
+            conn.strength += 1.0;
+            conn.reward = alpha * reward + (1.0 - alpha) * conn.reward;
+        } else {
+            self.create_connection(distance, correct_id, 1.0, 0.0);
+            let conn = self.connections[idx].get_mut(&correct_id).unwrap();
+            conn.reward = alpha * reward;
+        }
+
+        // 2. Smooth OTHER action connections at this distance toward 0.
+        let other_ids: Vec<NeuronId> = self.connections[idx].keys()
+            .filter(|&&id| id != correct_id && self.action_ids.contains(&id))
+            .copied()
+            .collect();
+        for other_id in other_ids {
+            let conn = self.connections[idx].get_mut(&other_id).unwrap();
+            conn.reward = (1.0 - alpha) * conn.reward;
+        }
+    }
+
     pub fn upsert_connection(&mut self, distance: Distance, to_neuron_id: NeuronId, channel_id: ChannelId, reward: Reward) {
         if self.has_connection(distance, to_neuron_id) { self.strengthen_connection(distance, to_neuron_id, reward); }
         else { self.create_connection(distance, to_neuron_id, 1.0, reward); }
@@ -396,8 +464,13 @@ impl Neuron {
         let conn = distance_map.get_mut(&to_neuron_id).expect("Unknown connection");
         conn.strength += 1.0;
 
-        // update reward with dynamic exponential smoothing - calculates exact expected value based on means
-        let alpha = 1.0 / conn.strength;
+        // update reward: static alpha for action neurons (if configured),
+        // dynamic alpha (1/strength) for events and when no static alpha is set
+        let alpha = if self.action_ids.contains(&to_neuron_id) {
+            self.action_alpha.unwrap_or(1.0 / conn.strength)
+        } else {
+            1.0 / conn.strength
+        };
         conn.reward = alpha * reward + (1.0 - alpha) * conn.reward;
     }
 
@@ -538,7 +611,15 @@ impl Neuron {
         // add the neuron to the pattern context at the given distance
         let entry = self.routing_table.get_mut(&pattern_id)
             .unwrap_or_else(|| panic!("add_context: pattern not found in routing table: {}", pattern_id));
-        entry.context.add_neuron(neuron_id, distance, strength);
+
+        // Idempotent: when the (parent, age) dedupe reuses an existing
+        // pattern, the same context entry may be re-installed. Treat duplicate
+        // entries as a strengthen rather than a panic.
+        if entry.context.find(neuron_id, distance).is_some() {
+            entry.context.strengthen_neuron(neuron_id, distance);
+        } else {
+            entry.context.add_neuron(neuron_id, distance, strength);
+        }
 
         // add the neuron to the context index so that we can search efficiently
         self.add_context_index(neuron_id, distance, pattern_id);
@@ -656,6 +737,21 @@ impl Neuron {
         &self.routing_table
     }
 
+    /// Inspection: flatten this neuron's outgoing connections into
+    /// (distance, target_neuron_id, strength, reward) tuples. Distance is
+    /// the slot index in the connections Vec. Used by the diagnostic API
+    /// to dump connection state for tipping-point analysis.
+    pub fn dump_connections(&self) -> Vec<(Distance, NeuronId, f64, f64)> {
+        let mut out = Vec::new();
+        for (idx, dist_map) in self.connections.iter().enumerate() {
+            let dist = idx as Distance;
+            for (&target_id, conn) in dist_map {
+                out.push((dist, target_id, conn.strength, conn.reward));
+            }
+        }
+        out
+    }
+
     /// Mutable access to the routing table (for Column restore — sets last_activation_frame).
     pub fn get_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, RoutingEntry> {
         &mut self.routing_table
@@ -700,6 +796,7 @@ impl Neuron {
         current_frame: FrameNumber,
         corrections: &[Correction],
         error_feedback: &[ErrorFeedback],
+        learning: bool,
     ) -> ProcessFrameResult {
 
         // fold prior-frame error feedback into per-age stats first so the threshold attached
@@ -708,7 +805,7 @@ impl Neuron {
 
         // learn connections across all active ages (age=0 skipped internally)
         // but, if this neuron was just created, it was already created with the current connections - no need to learn again
-        if !new_error_pattern_ids.contains(&self.id) { self.learn_connections(age_states, actives); }
+        if learning && !new_error_pattern_ids.contains(&self.id) { self.learn_connections(age_states, actives); }
 
         // match patterns if we have context and eligible ages
         let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame);
@@ -746,6 +843,18 @@ impl Neuron {
     ) -> RecognizeResult {
         let mut matches = Vec::new();
         let mut context_ref_updates = Vec::new();
+
+        // Warmup gate: skip pattern recognition until the context window has
+        // had a chance to fill up at the start of a sequence. Without this,
+        // patterns whose stored contexts include entries at distances >
+        // current_frame are unfairly penalized — their unreachable entries
+        // count as "missing", letting smaller new patterns win matches by
+        // default and displacing established ones (the root cause of the
+        // training-degrades-accuracy regression).
+        if (current_frame as u32) < self.context_length {
+            return RecognizeResult { matches, context_ref_updates };
+        }
+
         let ctx = match level_context {
             Some(c) if c.size() > 0 => c,
             _ => return RecognizeResult { matches, context_ref_updates },
@@ -1024,10 +1133,19 @@ impl Neuron {
     // ── Connection learning ──────────────────────────────────────────────────
 
     /// Update connections based on the currently observed actives. For each active age > 0:
-    /// upsert a connection per active (create-or-strengthen + alt-action), then weaken
-    /// predictions at that distance that did not occur. Rewards are pre-resolved thalamus-side
-    /// (0 for events, observed value for actions). Skipped entirely for new error patterns
-    /// (they were just created this frame and have nothing yet to reinforce).
+    /// upsert a connection per active (create-or-strengthen + alt-action).
+    /// Rewards are pre-resolved thalamus-side (0 for events, observed value for actions).
+    /// Skipped entirely for new error patterns (they were just created this frame and have
+    /// nothing yet to reinforce).
+    ///
+    /// Note: connections are no longer negatively reinforced. Previously, predictions at this
+    /// distance that didn't occur were weakened (with eventual deletion at strength=0). This
+    /// produced periodic discrete-death bursts during multi-image training (a connection drifts
+    /// down by ~1/episode until it finally hits 0, then dies abruptly, shifting the neuron's
+    /// vote profile and triggering a cascade of error-pattern creation). For deterministic
+    /// memorization scenarios we want predictions that ever occurred to remain available;
+    /// non-occurrences should not erase them. Mirrors the action-connection behaviour, which
+    /// was already kept-only-strengthen.
     fn learn_connections(&mut self, age_states: &FxHashMap<Distance, AgeState>, actives: &[ActiveNeuron]) {
         let ages: Vec<Distance> = age_states.keys().copied().collect();
         for age in ages {
@@ -1036,20 +1154,8 @@ impl Neuron {
             if age == 0 { continue; }
 
             // learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
-            let mut neuron_ids = FxHashSet::default();
             for active in actives {
                 self.upsert_connection(age, active.id, active.channel_id, active.reward);
-                neuron_ids.insert(active.id);
-            }
-
-            // negatively reinforce connections at this distance whose predictions didn't occur
-            // events only. Action connections are never weakened: the brain executes exactly one
-            // action per channel per frame, so any non-chosen action wasn't a "wrong prediction",
-            // it just wasn't tried. Weakening it would collapse the brain onto whichever action
-            // it happened to try first and destroy the alt-action exploration mechanism.
-            let not_found = self.get_neurons_not_found(age, &neuron_ids);
-            for neuron_id in not_found {
-                if !self.is_action_neuron(neuron_id) { self.weaken_connection(age, neuron_id); }
             }
         }
     }
@@ -1145,14 +1251,14 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), FxHashSet::default())
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), FxHashSet::default(), None, 10)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let action_set: FxHashSet<NeuronId> = action_ids.iter().copied().collect();
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, action_set)
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, action_set, None, 10)
     }
 
     #[test]
@@ -1256,7 +1362,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), FxHashSet::default());
+        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), FxHashSet::default(), None, 10);
         // fewer than ERROR_MIN_SAMPLES → falls back to error_threshold
         n.record_error(0, 0.5);
         n.record_error(0, 0.5);

@@ -105,7 +105,7 @@ impl JsBrain {
     #[napi(constructor)]
     pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
         let (context_length, error_mode, error_threshold, merge_threshold,
-             pattern_forget_rate, regions, columns, debug) = match options {
+             pattern_forget_rate, regions, columns, debug, action_alpha) = match options {
             Some(ref opts) => {
                 let cl = get_opt_u32(opts, "contextLength")?.unwrap_or(10);
                 let mode_str = get_opt_string(opts, "errorCorrectionMode")?
@@ -117,15 +117,22 @@ impl JsBrain {
                 let r = get_opt_u32(opts, "regions")?.unwrap_or(1) as usize;
                 let c = get_opt_u32(opts, "columns")?.unwrap_or(1) as usize;
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
-                (cl, mode, et, mt, pfr, r, c, d)
+                let action_mode_str = get_opt_string(opts, "actionMode")?
+                    .unwrap_or_else(|| "dynamic".to_string());
+                let aa = if action_mode_str == "static" {
+                    Some(get_opt_f64(opts, "actionAlpha")?.unwrap_or(0.1))
+                } else {
+                    None
+                };
+                (cl, mode, et, mt, pfr, r, c, d, aa)
             }
-            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, false),
+            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, false, None),
         };
 
         Ok(Self {
             inner: RefCell::new(CoreBrain::new(
                 context_length, error_mode, error_threshold, merge_threshold,
-                pattern_forget_rate, regions, columns, debug,
+                pattern_forget_rate, regions, columns, debug, action_alpha,
             )),
         })
     }
@@ -191,20 +198,101 @@ impl JsBrain {
 
     /// Process a single frame. Accepts Maps matching JS Brain.processFrame.
     ///
-    /// inputs: Map<channelId, Map<dimId, scalar>>
-    /// rewards: Map<channelId, reward>
+    /// events: Map<channelId, Map<dimId, scalar>> — sensory inputs
+    /// actions: Map<channelId, Map<dimId, actionValue>> — forced actions (empty = infer)
+    /// rewards: Map<channelId, reward> — reward for previous frame's actions
     /// Returns: { inferences: Map<channelId, [...]>, frame: { elapsed, voteDebug } }
     #[napi(js_name = "processFrame")]
-    pub fn process_frame(&self, env: Env, inputs: JsObject, rewards: JsObject) -> Result<JsObject> {
-        // Marshal inputs: Map<number, Map<number, number>> → FxHashMap
-        let rust_inputs = read_nested_map(&env, &inputs)?;
+    pub fn process_frame(&self, env: Env, events: JsObject, actions: JsObject, rewards: JsObject) -> Result<JsObject> {
+        let rust_events = read_nested_map(&env, &events)?;
+        let rust_actions = read_nested_map(&env, &actions)?;
         let rust_rewards = read_number_map(&env, &rewards)?;
 
-        // Call core
-        let frame_result = self.inner.borrow_mut().process_frame(&rust_inputs, &rust_rewards);
+        let frame_result = self.inner.borrow_mut().process_frame(&rust_events, &rust_actions, &rust_rewards);
 
-        // Marshal result back to JS
         build_frame_result(&env, &frame_result)
+    }
+
+    /// Direct supervised learning: wire action connections from context neurons
+    /// and return inference result to test if learning took effect.
+    #[napi]
+    pub fn learn(&self, env: Env, actions: JsObject, rewards: JsObject) -> Result<JsObject> {
+        let rust_actions = read_nested_map(&env, &actions)?;
+        let rust_rewards = read_number_map(&env, &rewards)?;
+        let frame_result = self.inner.borrow_mut().learn(&rust_actions, &rust_rewards);
+        build_frame_result(&env, &frame_result)
+    }
+
+    /// Run inference on the current context without advancing the frame.
+    #[napi]
+    pub fn infer(&self, env: Env) -> Result<JsObject> {
+        let frame_result = self.inner.borrow_mut().infer();
+        build_frame_result(&env, &frame_result)
+    }
+
+    /// Get active neurons in context with their levels.
+    /// Returns an array of { neuronId, level, suppressed } objects.
+    /// suppressed=true means the neuron activated a higher-level pattern and
+    /// should not be counted as an independent voter.
+    #[napi(js_name = "getActiveNeurons")]
+    pub fn get_active_neurons(&self, env: Env) -> Result<JsObject> {
+        let brain = self.inner.borrow();
+        let snapshot = brain.get_context_snapshot();
+        let mut arr = env.create_array_with_length(snapshot.len())?;
+        for (i, (neuron_id, _frame, level, state)) in snapshot.iter().enumerate() {
+            let mut obj = env.create_object()?;
+            obj.set_named_property("neuronId", env.create_uint32(*neuron_id as u32)?)?;
+            obj.set_named_property("level", env.create_uint32(*level as u32)?)?;
+            obj.set_named_property("suppressed", env.get_boolean(state.activated_pattern_id.is_some())?)?;
+            arr.set_element(i as u32, obj)?;
+        }
+        Ok(arr)
+    }
+
+    /// Inspect one neuron: returns { neuronId, level, parentId | null,
+    /// context: [{ neuronId, distance, strength }, ...] }.
+    /// Context entries come from the parent neuron's routing-table entry
+    /// for this child pattern. Level-0 sensory neurons have parent_id=null
+    /// and empty context.
+    #[napi(js_name = "inspectNeuron")]
+    pub fn inspect_neuron(&self, env: Env, neuron_id: u32) -> Result<JsObject> {
+        let brain = self.inner.borrow();
+        let info = brain.inspect_neuron(neuron_id as u64);
+        let mut obj = env.create_object()?;
+        obj.set_named_property("neuronId", env.create_uint32(info.neuron_id as u32)?)?;
+        obj.set_named_property("level", env.create_uint32(info.level as u32)?)?;
+        match info.parent_id {
+            Some(p) => obj.set_named_property("parentId", env.create_uint32(p as u32)?)?,
+            None => obj.set_named_property("parentId", env.get_null()?)?,
+        }
+        let mut ctx_arr = env.create_array_with_length(info.context.len())?;
+        for (i, (nid, dist, strength)) in info.context.iter().enumerate() {
+            let mut e = env.create_object()?;
+            e.set_named_property("neuronId", env.create_uint32(*nid as u32)?)?;
+            e.set_named_property("distance", env.create_uint32(*dist as u32)?)?;
+            e.set_named_property("strength", env.create_double(*strength)?)?;
+            ctx_arr.set_element(i as u32, e)?;
+        }
+        obj.set_named_property("context", ctx_arr)?;
+        Ok(obj)
+    }
+
+    /// Dump a neuron's outgoing connections.
+    /// Returns [{ distance, targetId, strength, reward }, ...].
+    #[napi(js_name = "dumpNeuronConnections")]
+    pub fn dump_neuron_connections(&self, env: Env, neuron_id: u32) -> Result<JsObject> {
+        let brain = self.inner.borrow();
+        let conns = brain.dump_neuron_connections(neuron_id as u64);
+        let mut arr = env.create_array_with_length(conns.len())?;
+        for (i, (dist, target, strength, reward)) in conns.iter().enumerate() {
+            let mut obj = env.create_object()?;
+            obj.set_named_property("distance", env.create_uint32(*dist as u32)?)?;
+            obj.set_named_property("targetId", env.create_uint32(*target as u32)?)?;
+            obj.set_named_property("strength", env.create_double(*strength)?)?;
+            obj.set_named_property("reward", env.create_double(*reward)?)?;
+            arr.set_element(i as u32, obj)?;
+        }
+        Ok(arr)
     }
 
     /// Reset brain memory state for a clean episode start.
@@ -225,6 +313,16 @@ impl JsBrain {
     #[napi(js_name = "resetAccuracyStats")]
     pub fn reset_accuracy_stats(&self) -> Result<()> {
         self.inner.borrow_mut().reset_accuracy_stats();
+        Ok(())
+    }
+
+    /// Set processing mode flags.
+    /// eventProcessing: when false, freezes context (no aging, no new activations).
+    /// actionProcessing: when false, suppresses action inference and rewards.
+    /// learning: when false, skips pattern creation and connection learning (recognition only).
+    #[napi(js_name = "setProcessingMode")]
+    pub fn set_processing_mode(&self, event_processing: bool, action_processing: bool, learning: bool) -> Result<()> {
+        self.inner.borrow_mut().set_processing_mode(event_processing, action_processing, learning);
         Ok(())
     }
 
@@ -435,6 +533,20 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
         }
     }
     obj.set_named_property("frame", frame_obj)?;
+
+    // actionVoteStats: Array<{ value, voteCount, totalStrength, avgReward, minReward, maxReward }>
+    let mut stats_arr = env.create_array_with_length(result.action_vote_stats.len())?;
+    for (i, stat) in result.action_vote_stats.iter().enumerate() {
+        let mut stat_obj = env.create_object()?;
+        stat_obj.set_named_property("value", env.create_int32(stat.value)?)?;
+        stat_obj.set_named_property("voteCount", env.create_uint32(stat.vote_count as u32)?)?;
+        stat_obj.set_named_property("totalStrength", env.create_double(stat.total_strength)?)?;
+        stat_obj.set_named_property("avgReward", env.create_double(stat.avg_reward)?)?;
+        stat_obj.set_named_property("minReward", env.create_double(stat.min_reward)?)?;
+        stat_obj.set_named_property("maxReward", env.create_double(stat.max_reward)?)?;
+        stats_arr.set_element(i as u32, stat_obj)?;
+    }
+    obj.set_named_property("actionVoteStats", stats_arr)?;
 
     Ok(obj)
 }

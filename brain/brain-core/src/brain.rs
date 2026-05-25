@@ -79,6 +79,28 @@ pub struct FrameResult {
     pub elapsed: f64,
     /// Optional vote debug dump — only populated when debug is set.
     pub vote_debug: Option<VoteDebug>,
+    /// Per-action-value vote statistics — one entry per digit that received
+    /// at least one vote. Shows the number of individual neuron votes, total
+    /// strength, and reward distribution (min/max/avg) across those votes.
+    pub action_vote_stats: Vec<ActionVoteStats>,
+}
+
+/// Per-action-value vote statistics aggregated from raw FlatVotes.
+/// Groups all votes targeting action neurons with the same bucket_id (digit).
+#[derive(Debug, Clone)]
+pub struct ActionVoteStats {
+    /// The action value (e.g. digit 0–9).
+    pub value: i32,
+    /// Number of individual neuron votes for this action.
+    pub vote_count: usize,
+    /// Sum of vote strengths.
+    pub total_strength: f64,
+    /// Average reward across votes (strength-weighted).
+    pub avg_reward: f64,
+    /// Minimum reward across individual votes.
+    pub min_reward: f64,
+    /// Maximum reward across individual votes.
+    pub max_reward: f64,
 }
 
 /// Resolved vote snapshot for host-side debug rendering.
@@ -110,6 +132,17 @@ pub struct FrameSummary {
     pub neuron_count: usize,
     pub max_level: Level,
     pub stats: DiagnosticStats,
+}
+
+/// Neuron inspection result — parent + level + stored context entries.
+#[derive(Debug, Clone)]
+pub struct InspectedNeuron {
+    pub neuron_id: NeuronId,
+    pub level: Level,
+    pub parent_id: Option<NeuronId>,
+    /// (context_neuron_id, distance, strength) tuples from the parent's
+    /// routing-table entry for this child pattern.
+    pub context: Vec<(NeuronId, Distance, f64)>,
 }
 
 /// Start-of-frame diagnostic snapshot (rewards, observations, dim names).
@@ -162,6 +195,22 @@ pub struct Brain {
     /// Debug flag — when set, enables verbose logging and vote debug output.
     debug: bool,
 
+    /// When false, skip sensory neuron activation, aging, event learning, and
+    /// pattern creation. The context is frozen — existing neurons stay at their
+    /// current ages. Used for action-only training on a frozen image context.
+    event_processing: bool,
+
+    /// When false, skip action neuron inclusion in frame building, action
+    /// inference in consensus, and action reward processing. Used during
+    /// pure event learning phases (e.g. image scanning before digit prediction).
+    action_processing: bool,
+
+    /// When false, skip error correction pattern creation and connection
+    /// learning during processFrame. Existing patterns still activate
+    /// (recognition), but no new neurons are created and no connections
+    /// are updated. Used during test/inference event scanning.
+    learning: bool,
+
     /// Current frame data from all channels (rebuilt each frame).
     frame: Vec<FramePoint>,
 
@@ -207,10 +256,14 @@ impl Brain {
         regions: usize,
         columns: usize,
         debug: bool,
+        action_alpha: Option<f64>,
     ) -> Self {
         Self {
             context_length,
             debug,
+            event_processing: true,
+            action_processing: true,
+            learning: true,
             frame: Vec::new(),
             rewards: Vec::new(),
             frame_number: 0,
@@ -225,6 +278,7 @@ impl Brain {
                 error_correction_threshold,
                 regions,
                 columns,
+                action_alpha,
             ),
             memory: Memory::new(debug, context_length),
         }
@@ -280,7 +334,111 @@ impl Brain {
         self.diagnostics.reset_accuracy_stats();
     }
 
+    /// Set processing mode flags that control which parts of the pipeline run.
+    ///
+    /// * `event_processing` — when false, skips sensory activation, aging,
+    ///   event learning, and pattern creation. Context is frozen.
+    /// * `action_processing` — when false, skips action neurons in frame
+    ///   building, action inference, and action reward processing.
+    /// * `learning` — when false, skips error correction pattern creation,
+    ///   connection learning, and new neuron default-action pre-wiring.
+    ///   Existing patterns still activate (recognition only).
+    pub fn set_processing_mode(&mut self, event_processing: bool, action_processing: bool, learning: bool) {
+        self.event_processing = event_processing;
+        self.action_processing = action_processing;
+        self.learning = learning;
+        self.thalamus.set_action_processing(action_processing && learning);
+        self.thalamus.set_learning(learning);
+    }
+
     // ── Save / load ──────────────────────────────────���──────────────────────
+
+    // ── Direct learning / inference ───────────────────────────────────────
+
+    /// Direct supervised learning: resolve action neurons from the given action
+    /// coordinates, wire connections from all votable context neurons to those
+    /// action neurons with the given reward. Then run inference to test if
+    /// the brain now returns the learned action.
+    ///
+    /// Does not advance the frame or age the context. The caller feeds events
+    /// via process_frame first to build context, then calls learn() to wire
+    /// action connections and verify.
+    pub fn learn(
+        &mut self,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+        rewards: &FxHashMap<ChannelId, Reward>,
+    ) -> FrameResult {
+        let frame_start = Instant::now();
+
+        // 1. Resolve action coordinates to neuron IDs
+        let mut action_neurons: Vec<(NeuronId, ChannelId)> = Vec::new();
+        for (&channel_id, dim_map) in actions {
+            for (&dim_id, &scalar) in dim_map {
+                let bucket_id = scalar as i32;
+                let coord = Coordinate { dim_id, bucket_id };
+                let lookup = self.thalamus.get_neuron_id_for_point(
+                    &coord, channel_id, NeuronType::Action,
+                );
+                if lookup.is_new {
+                    self.thalamus.create_neurons(&[NeuronCreateSpec {
+                        id: lookup.id,
+                        forget_rate: 0.0,
+                        connections: None,
+                    }]);
+                }
+                action_neurons.push((lookup.id, channel_id));
+            }
+        }
+
+        // 2. Get votable (non-suppressed, non-oldest) entries from context
+        let votable = self.memory.get_votable_entries();
+
+        // 3. Build connection tasks: voter -> action at distance = age + 1
+        //    Every votable neuron connects to every action neuron — no channel
+        //    matching. Pattern neurons span channels, so filtering by channel
+        //    would exclude them (they aren't in base_neurons). The normal
+        //    learn_connections() path also connects regardless of channel.
+        let mut tasks: Vec<(NeuronId, NeuronId, Distance, ChannelId, Reward)> = Vec::new();
+        for &(voter_id, age) in &votable {
+            let distance = age + 1;
+            for &(action_id, action_channel) in &action_neurons {
+                let reward = rewards.get(&action_channel).copied().unwrap_or(0.0);
+                tasks.push((voter_id, action_id, distance, action_channel, reward));
+            }
+        }
+
+        // 4. Dispatch learned connections
+        self.thalamus.learn_action_connections(&tasks);
+
+        // 5. Infer to test if learning took effect
+        let mut infer_result = self.infer();
+        infer_result.elapsed = frame_start.elapsed().as_secs_f64();
+        infer_result
+    }
+
+    /// Run inference on the current context without advancing the frame.
+    /// Collects votes from all votable neurons and determines action consensus.
+    /// No side effects -- no frame advancement, no aging, no pattern creation,
+    /// no connection learning.
+    pub fn infer(&mut self) -> FrameResult {
+        let frame_start = Instant::now();
+
+        // Get votable entries from memory
+        let votable = self.memory.get_votable_entries();
+
+        // Collect votes via the thalamus -> region -> column -> neuron.vote() path
+        let votes = self.thalamus.collect_votes(&votable);
+
+        // Run consensus and build inference output
+        let (inferences_map, vote_debug, _winners, action_vote_stats) = self.infer_neurons(&votes);
+
+        FrameResult {
+            inferences: inferences_map,
+            elapsed: frame_start.elapsed().as_secs_f64(),
+            vote_debug,
+            action_vote_stats,
+        }
+    }
 
     /// Save brain state to `<job_dir>/backups/<label>/`. Materializes lazy decay
     /// before snapshotting so strengths reflect true post-decay values.
@@ -554,6 +712,31 @@ impl Brain {
         self.thalamus.get_neuron_id_by_coordinate(coordinate)
     }
 
+    /// Inspection: { parent_id, level, context_entries } for a pattern neuron.
+    /// Returns parent_id and level for any neuron; context_entries is empty
+    /// for level-0 sensory neurons (no parent → no stored context).
+    pub fn inspect_neuron(&self, neuron_id: NeuronId) -> InspectedNeuron {
+        let level = self.thalamus.get_neuron_level(neuron_id).unwrap_or(0);
+        let parent = self.thalamus.get_neuron_parent(neuron_id);
+        let context = parent
+            .and_then(|_| self.thalamus.get_pattern_context_entries(neuron_id))
+            .unwrap_or_default();
+        InspectedNeuron { neuron_id, level, parent_id: parent, context }
+    }
+
+    /// Inspection: dump a neuron's outgoing connections. Returns
+    /// (distance, target_neuron_id, strength, reward) tuples.
+    pub fn dump_neuron_connections(&self, neuron_id: NeuronId) -> Vec<(Distance, NeuronId, f64, f64)> {
+        self.thalamus.dump_neuron_connections(neuron_id).unwrap_or_default()
+    }
+
+    // ── Context inspection ───────────────────────────────────────────────────
+
+    /// Export a snapshot of all active neurons in context with their levels.
+    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
+        self.memory.get_context_snapshot()
+    }
+
     // ── Diagnostics ─────────────────────────────────────────────────────────
 
     /// Episode summary with all diagnostic information.
@@ -598,76 +781,179 @@ impl Brain {
     /// pure compute function — no channel I/O, no action dispatch, no printing.
     ///
     /// # Arguments
-    /// * `inputs` — channelId → (dimId → raw scalar)
+    /// * `events` — channelId → (dimId → raw scalar) — sensory inputs
+    /// * `actions` — channelId → (dimId → action value) — forced actions (empty = infer)
     /// * `rewards` — channelId → reward for previous frame's actions
     pub fn process_frame(
         &mut self,
-        inputs: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+        events: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
         rewards: &FxHashMap<ChannelId, Reward>,
     ) -> FrameResult {
         let frame_start = Instant::now();
-        self.frame_number += 1;
 
-        // build the current frame from quantized inputs and previously inferred actions
-        let frame_neurons = self.get_frame_neurons(inputs);
-        if frame_neurons.is_empty() {
-            return FrameResult {
-                inferences: FxHashMap::default(),
+        // ── Event processing: build frame, age context, activate neurons,
+        //    process levels (pattern recognition + error correction).
+        //    When disabled, the context is frozen — no new activations, no aging.
+        if self.event_processing {
+            self.frame_number += 1;
+
+            // build the current frame from quantized events and forced/inferred actions
+            let frame_neurons = self.get_frame_neurons(events, actions);
+            if frame_neurons.is_empty() {
+                return FrameResult {
+                    inferences: FxHashMap::default(),
+                    elapsed: frame_start.elapsed().as_secs_f64(),
+                    vote_debug: None,
+                    action_vote_stats: Vec::new(),
+                };
+            }
+
+            // Op-1: construct any new sensory neurons in their owning columns
+            self.create_new_sensory_neurons(&frame_neurons);
+
+            // Op-2: forget connections and patterns to avoid curse of dimensionality
+            // Skipped when learning is off (test/inference) — preserve trained state.
+            if self.learning {
+                self.cleanup_dead_patterns();
+            }
+
+            // slide the temporal window: age active neurons and push the new rewards frame
+            self.age_context(rewards);
+
+            // activate new neurons in age=0, level=0 — inputs from the world
+            let neuron_ids: Vec<NeuronId> = frame_neurons.iter().map(|p| p.id).collect();
+            self.activate_neurons(&neuron_ids);
+
+            // process neurons level-by-level — Op-3 dispatch is the only per-level round-trip
+            let (votes, neuron_specs, dispatch_results) = self.process_levels();
+
+            if self.debug && !neuron_specs.is_empty() {
+                println!("  frame {}: {} new error patterns created", self.frame_number, neuron_specs.len());
+            }
+
+            // Op-4 + Op-5: flush deferred neuron creation and contextRef updates in one batch
+            self.thalamus.apply_level_results(&neuron_specs, &dispatch_results);
+
+            // do inferences with age>0 neurons
+            let (inferences_map, vote_debug, _winners, action_vote_stats) = self.infer_neurons(&votes);
+
+            // accumulate MAPE by comparing continuous event predictions to the actual input scalars
+            let dim_inferences = self.build_dim_inferences(&inferences_map);
+            self.diagnostics.track_continuous_error(&dim_inferences, events, &self.thalamus.quantizer);
+
+            FrameResult {
+                inferences: inferences_map,
                 elapsed: frame_start.elapsed().as_secs_f64(),
-                vote_debug: None,
-            };
-        }
+                vote_debug,
+                action_vote_stats,
+            }
+        } else {
+            // ── Frozen context: no event processing, no aging.
+            //    Only action inference runs (if action_processing is enabled).
+            //    Push rewards so action connections can learn from them.
+            if !rewards.is_empty() {
+                if let Some(first) = self.rewards.first_mut() {
+                    for (&ch, &r) in rewards {
+                        first.insert(ch, r);
+                    }
+                }
+            }
 
-        // Op-1: construct any new sensory neurons in their owning columns
-        self.create_new_sensory_neurons(&frame_neurons);
+            // Swap in the previously inferred action neurons at age 0 so
+            // dispatch_frame applies rewards to the correct action connections.
+            if self.action_processing {
+                let prev_inferred = self.memory.get_inferred_neurons().to_vec();
 
-        // Op-2: forget connections and patterns to avoid curse of dimensionality
-        self.cleanup_dead_patterns();
+                // Build a map of channel_id → inferred action neuron_id
+                let mut inferred_by_channel: FxHashMap<ChannelId, NeuronId> = FxHashMap::default();
+                for inf in &prev_inferred {
+                    if self.thalamus.get_neuron_type(inf.neuron_id) == Some(NeuronType::Action) {
+                        inferred_by_channel.insert(inf.channel_id, inf.neuron_id);
+                    }
+                }
 
-        // slide the temporal window: age active neurons and push the new rewards frame
-        self.age_context(rewards);
+                if !inferred_by_channel.is_empty() {
+                    // Find stale action neurons at age 0 that need replacing
+                    let age0 = self.memory.get_level_ages(0);
+                    let mut swaps: Vec<(NeuronId, NeuronId)> = Vec::new();
+                    let mut activations: Vec<NeuronId> = Vec::new();
 
-        // activate new neurons in age=0, level=0 — inputs from the world
-        let neuron_ids: Vec<NeuronId> = frame_neurons.iter().map(|p| p.id).collect();
-        self.activate_neurons(&neuron_ids);
+                    if let Some(set) = age0.first() {
+                        // Collect stale action neurons to replace
+                        for &nid in set {
+                            if self.thalamus.get_neuron_type(nid) == Some(NeuronType::Action) {
+                                if let Some(ch) = self.thalamus.get_neuron_channel_id(nid) {
+                                    if let Some(&new_id) = inferred_by_channel.get(&ch) {
+                                        if new_id != nid {
+                                            swaps.push((nid, new_id));
+                                        }
+                                        inferred_by_channel.remove(&ch);
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-        // process neurons level-by-level — Op-3 dispatch is the only per-level round-trip
-        let (votes, neuron_specs, dispatch_results) = self.process_levels();
+                    // Any remaining inferred actions without a stale counterpart
+                    for (_, new_id) in &inferred_by_channel {
+                        activations.push(*new_id);
+                    }
 
-        // Op-4 + Op-5: flush deferred neuron creation and contextRef updates in one batch
-        self.thalamus.apply_level_results(&neuron_specs, &dispatch_results);
+                    // Apply swaps and activations
+                    for (old_id, new_id) in swaps {
+                        self.memory.replace_active_neuron(old_id, new_id);
+                    }
+                    for new_id in activations {
+                        self.memory.activate_neuron(new_id, 0);
+                    }
+                }
+            }
 
-        // do inferences with age>0 neurons
-        let (inferences_map, vote_debug, _winners) = self.infer_neurons(&votes);
+            // Re-run voting from existing active neurons (frozen ages)
+            let (votes, _neuron_specs, _dispatch_results) = self.process_levels();
+            let (inferences_map, vote_debug, _winners, action_vote_stats) = self.infer_neurons(&votes);
 
-        // accumulate MAPE by comparing continuous event predictions to the actual input scalars
-        let dim_inferences = self.build_dim_inferences(&inferences_map);
-        self.diagnostics.track_continuous_error(&dim_inferences, inputs, &self.thalamus.quantizer);
-
-        FrameResult {
-            inferences: inferences_map,
-            elapsed: frame_start.elapsed().as_secs_f64(),
-            vote_debug,
+            FrameResult {
+                inferences: inferences_map,
+                elapsed: frame_start.elapsed().as_secs_f64(),
+                vote_debug,
+                action_vote_stats,
+            }
         }
     }
 
     // ── Frame building ──────────────────────────────────────────────────────
 
-    /// Build this.frame from id-keyed inputs: quantize scalars to bucket IDs and push
-    /// event coordinates, then append previously-inferred action coordinates from memory.
-    fn build_frame(&mut self, inputs: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>) {
+    /// Build this.frame from events and actions. Events are quantized to bucket IDs
+    /// and pushed as Event coordinates. Actions come from one of three sources:
+    ///   1. Forced actions map (training — caller provides the correct answer)
+    ///   2. Previously inferred actions from memory (test — brain predicts)
+    ///   3. Nothing (action processing is off)
+    fn build_frame(
+        &mut self,
+        events: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+    ) {
         self.frame.clear();
-        let inferred = self.memory.get_inferred_neurons();
 
-        // convert InferredNeuron slice to the tuple format get_inferred_actions expects
-        let frame_actions = self.thalamus.get_inferred_actions(inferred);
+        // Resolve action coordinates: forced actions take priority, then inferred
+        let inferred_actions = if !actions.is_empty() {
+            // Forced actions — skip inference entirely
+            FxHashMap::default()
+        } else if self.action_processing {
+            let inferred = self.memory.get_inferred_neurons();
+            self.thalamus.get_inferred_actions(inferred)
+        } else {
+            FxHashMap::default()
+        };
 
         // iterate every registered channel — a channel may contribute events,
-        // carry-forward actions from the previous frame's inference, or both
+        // forced/inferred actions, or both
         for channel_id in self.thalamus.get_channel_ids() {
 
             // quantize each dimension's scalar to a bucketId and push as event coordinate
-            if let Some(dim_map) = inputs.get(&channel_id) {
+            if let Some(dim_map) = events.get(&channel_id) {
                 for (&dim_id, &scalar) in dim_map {
                     self.thalamus.quantizer.observe(dim_id, scalar);
                     let bucket_id = self.thalamus.quantizer.quantize(dim_id, scalar);
@@ -679,23 +965,39 @@ impl Brain {
                 }
             }
 
-            // include previously-inferred actions for this channel as sensory inputs
-            if let Some(actions) = frame_actions.get(&channel_id) {
-                for action in actions {
+            // forced actions from caller — push directly as action coordinates
+            if let Some(dim_map) = actions.get(&channel_id) {
+                for (&dim_id, &scalar) in dim_map {
+                    let bucket_id = scalar as i32;
                     self.frame.push(FramePoint {
-                        coordinate: action.coordinate.clone(),
+                        coordinate: Coordinate { dim_id, bucket_id },
                         channel_id,
                         neuron_type: NeuronType::Action,
                     });
+                }
+            } else if self.action_processing {
+                // no forced action for this channel — use inferred from previous frame
+                if let Some(inf_actions) = inferred_actions.get(&channel_id) {
+                    for action in inf_actions {
+                        self.frame.push(FramePoint {
+                            coordinate: action.coordinate.clone(),
+                            channel_id,
+                            neuron_type: NeuronType::Action,
+                        });
+                    }
                 }
             }
         }
     }
 
     /// Returns neuron IDs for given frame points, creating new base neurons as needed.
-    /// Builds the frame first from quantized inputs + inferred actions.
-    fn get_frame_neurons(&mut self, inputs: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>) -> Vec<PointLookup> {
-        self.build_frame(inputs);
+    /// Builds the frame first from quantized events + forced/inferred actions.
+    fn get_frame_neurons(
+        &mut self,
+        events: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+    ) -> Vec<PointLookup> {
+        self.build_frame(events, actions);
 
         let mut neurons = Vec::with_capacity(self.frame.len());
         for point in &self.frame {
@@ -761,6 +1063,7 @@ impl Brain {
     /// Only Op-3 (process frame dispatch) runs per level; neuron creation (Op-4)
     /// and contextRef updates (Op-5) are returned for the caller to flush once.
     fn process_levels(&mut self) -> (Vec<FlatVote>, Vec<NeuronCreateSpec>, Vec<Vec<crate::column::ColumnProcessResult>>) {
+        let learning = self.learning;
         // get the active sensory neurons at level 0
         let sensory_neurons = self.memory.get_level_ages(0);
 
@@ -775,6 +1078,23 @@ impl Brain {
         let mut votes = Vec::new();
         let mut neuron_specs = Vec::new();
         let mut dispatch_results = Vec::new();
+
+        // Warmup gate: until the context window has had a chance to fill up
+        // (i.e. frame_number < context_length), skip pattern recognition for
+        // levels above 0. Sensory activation at level 0 still runs so the
+        // brain can build memory state and learn base connections, but no
+        // L1+ patterns are matched until the full context is reachable.
+        //
+        // Without this gate, early frames produce structurally unfair matches:
+        // a richer pattern whose stored context references distances beyond
+        // the current frame fails the merge_threshold ratio (its unreachable
+        // entries count as "missing"), while a smaller pattern wins by
+        // default. The displaced richer pattern then doesn't refine its
+        // context, and subsequent training pollutes the brain with new
+        // sibling patterns that displace established ones — the root cause
+        // of "training-makes-accuracy-go-down" drift.
+        let warmup = (self.frame_number as u32) < self.context_length;
+        let max_level_to_process: Level = if warmup { 0 } else { Level::MAX };
 
         // process neurons level-by-level
         let mut level: Level = 0;
@@ -793,6 +1113,7 @@ impl Brain {
                 &self.rewards,
                 self.frame_number,
                 &mut new_error_pattern_ids,
+                learning,
             );
 
             // write back mutated level neurons to memory
@@ -818,6 +1139,8 @@ impl Brain {
 
             // if we reached the maximum level and no more patterns are recognized, exit
             if level as usize >= max_active_level { break; }
+            // Honour the warmup cap — stop after level 0 when in warmup.
+            if level >= max_level_to_process { break; }
             level += 1;
         }
 
@@ -829,11 +1152,11 @@ impl Brain {
     /// Infer predictions and outputs using voting architecture.
     /// Returns the per-channel scalar-space inferences, optional vote debug, and
     /// the raw winner list for memory persistence.
-    fn infer_neurons(&mut self, votes: &[FlatVote]) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Option<VoteDebug>, Vec<InferredNeuron>) {
+    fn infer_neurons(&mut self, votes: &[FlatVote]) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Option<VoteDebug>, Vec<InferredNeuron>, Vec<ActionVoteStats>) {
         // if no inference votes, wait for more data
         if votes.is_empty() {
             if self.debug { println!("No inferences found. Waiting for more data in future frames."); }
-            return (FxHashMap::default(), None, Vec::new());
+            return (FxHashMap::default(), None, Vec::new(), Vec::new());
         }
 
         // Aggregate votes and determine winners
@@ -864,13 +1187,79 @@ impl Brain {
             None
         };
 
-        // Save inferences to memory (clears old inferences first)
-        self.memory.save_inferred_neurons(inferences.clone());
+        // Save inferences to memory (clears old inferences first).
+        // When action processing is off, filter out action neurons so they
+        // don't carry over as stale sensory input on the next frame.
+        if self.action_processing {
+            self.memory.save_inferred_neurons(inferences.clone());
+        } else {
+            let event_only: Vec<_> = inferences.iter()
+                .filter(|inf| self.thalamus.get_neuron_type(inf.neuron_id) != Some(NeuronType::Action))
+                .cloned()
+                .collect();
+            self.memory.save_inferred_neurons(event_only);
+        }
 
         // Build the scalar-space output
         let inferences_map = self.build_inferences_by_channel(&candidates, &dim_best);
 
-        (inferences_map, vote_debug, inferences)
+        // Compute per-digit action vote stats from raw votes
+        let action_vote_stats = self.compute_action_vote_stats(votes);
+
+        (inferences_map, vote_debug, inferences, action_vote_stats)
+    }
+
+    /// Compute per-action-value vote statistics from raw FlatVotes.
+    ///
+    /// Groups all votes targeting action neurons by their bucket_id (digit),
+    /// then computes vote count, total strength, and reward distribution
+    /// (min/max/strength-weighted average) for each group.
+    fn compute_action_vote_stats(&self, votes: &[FlatVote]) -> Vec<ActionVoteStats> {
+        // Intermediate accumulator per digit value
+        struct Acc {
+            vote_count: usize,
+            total_strength: f64,
+            weighted_reward: f64,
+            min_reward: f64,
+            max_reward: f64,
+        }
+        let mut by_digit: FxHashMap<i32, Acc> = FxHashMap::default();
+
+        for v in votes {
+            // Only count action neuron votes
+            if self.thalamus.get_neuron_type(v.neuron_id) != Some(NeuronType::Action) {
+                continue;
+            }
+            let digit = match self.thalamus.get_neuron_coordinate(v.neuron_id) {
+                Some(coord) => coord.bucket_id,
+                None => continue,
+            };
+            let acc = by_digit.entry(digit).or_insert_with(|| Acc {
+                vote_count: 0,
+                total_strength: 0.0,
+                weighted_reward: 0.0,
+                min_reward: f64::INFINITY,
+                max_reward: f64::NEG_INFINITY,
+            });
+            acc.vote_count += 1;
+            acc.total_strength += v.strength;
+            acc.weighted_reward += v.strength * v.reward;
+            if v.reward < acc.min_reward { acc.min_reward = v.reward; }
+            if v.reward > acc.max_reward { acc.max_reward = v.reward; }
+        }
+
+        let mut stats: Vec<ActionVoteStats> = by_digit.into_iter().map(|(digit, acc)| {
+            ActionVoteStats {
+                value: digit,
+                vote_count: acc.vote_count,
+                total_strength: acc.total_strength,
+                avg_reward: if acc.total_strength > 0.0 { acc.weighted_reward / acc.total_strength } else { 0.0 },
+                min_reward: acc.min_reward,
+                max_reward: acc.max_reward,
+            }
+        }).collect();
+        stats.sort_by(|a, b| b.avg_reward.partial_cmp(&a.avg_reward).unwrap_or(std::cmp::Ordering::Equal));
+        stats
     }
 
     /// Aggregate votes and determine winners per dimension.
@@ -905,6 +1294,9 @@ impl Brain {
             candidate.strength += v.strength;
 
             // for actions, calculate weighted total — for events, accumulate strength on the dimension
+            // Action scoring is always active: even when action_processing is off (no action
+            // neurons in the frame), votes from learned connections must still use reward-based
+            // scoring so infer() and learn() produce correct consensus.
             if self.thalamus.get_neuron_type(v.neuron_id) == Some(NeuronType::Action) {
                 candidate.weighted_total += v.strength * v.reward;
             } else if let Some(coord) = self.thalamus.get_neuron_coordinate(v.neuron_id) {
@@ -1171,6 +1563,7 @@ mod tests {
             1,                        // regions
             1,                        // columns
             false,                    // debug
+            None,                     // action_alpha
         )
     }
 
@@ -1205,7 +1598,7 @@ mod tests {
         assert!(reg.dimension_ids.contains_key("price"));
 
         // process an empty frame — should return empty inferences
-        let result = brain.process_frame(&FxHashMap::default(), &FxHashMap::default());
+        let result = brain.process_frame(&FxHashMap::default(), &FxHashMap::default(), &FxHashMap::default());
         assert!(result.inferences.is_empty());
         assert!(result.vote_debug.is_none());
     }
@@ -1239,7 +1632,7 @@ mod tests {
         dim_vals.insert(dim_id, 25.0);
         inputs.insert(channel_id, dim_vals);
 
-        let result = brain.process_frame(&inputs, &FxHashMap::default());
+        let result = brain.process_frame(&inputs, &FxHashMap::default(), &FxHashMap::default());
         assert_eq!(brain.frame_number, 1);
         // first frame won't have inferences yet (no prior context)
         assert!(result.inferences.is_empty());

@@ -29,17 +29,32 @@ export declare class Brain {
   /**
    * Process a single frame. Accepts Maps matching JS Brain.processFrame.
    *
-   * inputs: Map<channelId, Map<dimId, scalar>>
-   * rewards: Map<channelId, reward>
+   * events: Map<channelId, Map<dimId, scalar>> — sensory inputs
+   * actions: Map<channelId, Map<dimId, actionValue>> — forced actions (empty = infer)
+   * rewards: Map<channelId, reward> — reward for previous frame's actions
    * Returns: { inferences: Map<channelId, [...]>, frame: { elapsed, voteDebug } }
    */
-  processFrame(inputs: object, rewards: object): object
+  processFrame(events: object, actions: object, rewards: object): object
+  /**
+   * Direct supervised learning: wire action connections from context neurons
+   * and return inference result to test if learning took effect.
+   */
+  learn(actions: object, rewards: object): object
+  /** Run inference on the current context without advancing the frame. */
+  infer(): object
   /** Reset brain memory state for a clean episode start. */
   resetContext(): void
   /** Hard reset: clears ALL learned data. */
   resetBrain(): void
   /** Reset accuracy and reward stats for a new episode. */
   resetAccuracyStats(): void
+  /**
+   * Set processing mode flags.
+   * eventProcessing: when false, freezes context (no aging, no new activations).
+   * actionProcessing: when false, suppresses action inference and rewards.
+   * learning: when false, skips pattern creation and connection learning (recognition only).
+   */
+  setProcessingMode(eventProcessing: boolean, actionProcessing: boolean, learning: boolean): void
   /** Look up a dimension ID by its registered name. */
   getDimensionIdByName(name: string): unknown
   /** Look up a neuron ID by its (dimId, bucketId) coordinate. */

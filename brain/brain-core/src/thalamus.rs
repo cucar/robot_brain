@@ -246,6 +246,7 @@ impl Thalamus {
         error_threshold: f64,
         regions: usize,
         columns: usize,
+        action_alpha: Option<f64>,
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
         let channel_actions = FxHashMap::default();
@@ -262,6 +263,7 @@ impl Thalamus {
                 merge_threshold,
                 error_mode,
                 error_threshold,
+                action_alpha,
             ));
         }
 
@@ -426,6 +428,22 @@ impl Thalamus {
     /// Get the parent neuron ID for a pattern neuron.
     pub fn get_neuron_parent(&self, neuron_id: NeuronId) -> Option<NeuronId> {
         self.neuron_parents.get(&neuron_id).copied()
+    }
+
+    /// Inspection helper: get the stored context entries for a child pattern
+    /// (looked up via its parent's routing table). Returns Vec of
+    /// (context_neuron_id, distance, strength) tuples, or None if the
+    /// pattern_id has no recorded parent or the parent doesn't own it.
+    pub fn get_pattern_context_entries(&self, pattern_id: NeuronId) -> Option<Vec<(NeuronId, Distance, f64)>> {
+        let parent_id = self.get_neuron_parent(pattern_id)?;
+        let r = self.route_neuron(parent_id);
+        self.region_list[r].get_child_context_entries(parent_id, pattern_id)
+    }
+
+    /// Inspection: dump a neuron's outgoing connections (distance, target, strength, reward).
+    pub fn dump_neuron_connections(&self, neuron_id: NeuronId) -> Option<Vec<(Distance, NeuronId, f64, f64)>> {
+        let r = self.route_neuron(neuron_id);
+        self.region_list[r].dump_neuron_connections(neuron_id)
     }
 
     /// Get the level for a neuron (0 = sensory, 1+ = pattern).
@@ -691,6 +709,55 @@ impl Thalamus {
             .map(|name| (name.clone(), coordinate.bucket_id))
     }
 
+    // ── Vote collection / action learning ────────────────────────────────
+
+    /// Collect votes from votable neurons by routing to regions.
+    pub fn collect_votes(&self, entries: &[(NeuronId, Distance)]) -> Vec<FlatVote> {
+        let region_buckets = self.bucket_by_region_indices(entries, |e| e.0);
+        let mut votes = Vec::new();
+        for (r, indices) in region_buckets.iter().enumerate() {
+            if indices.is_empty() { continue; }
+            let region_entries: Vec<_> = indices.iter().map(|&i| entries[i]).collect();
+            let region_votes = self.region_list[r].collect_votes(&region_entries);
+            for (voter_id, vote) in region_votes {
+                votes.push(FlatVote {
+                    voter_id,
+                    neuron_id: vote.neuron_id,
+                    strength: vote.strength,
+                    reward: vote.reward,
+                    distance: vote.distance,
+                });
+            }
+        }
+        votes
+    }
+
+    /// Apply learned action connections by routing to regions.
+    pub fn learn_action_connections(&mut self, tasks: &[(NeuronId, NeuronId, Distance, ChannelId, Reward)]) {
+        let region_buckets = self.bucket_by_region_indices(tasks, |t| t.0);
+        for (r, indices) in region_buckets.iter().enumerate() {
+            if indices.is_empty() { continue; }
+            let region_tasks: Vec<_> = indices.iter().map(|&i| tasks[i]).collect();
+            self.region_list[r].learn_action_connections(&region_tasks);
+        }
+    }
+
+    /// Toggle action processing on all regions/columns. Controls whether
+    /// newly created neurons get pre-wired default action connections.
+    pub fn set_action_processing(&mut self, enabled: bool) {
+        for region in &mut self.region_list {
+            region.set_action_processing(enabled);
+        }
+    }
+
+    /// Toggle learning on all regions/columns. Controls connection
+    /// learning in neuron.process_frame.
+    pub fn set_learning(&mut self, enabled: bool) {
+        for region in &mut self.region_list {
+            region.set_learning(enabled);
+        }
+    }
+
     // ── Level processing ────────────────────────────────────────────────────
 
     /// Process one level: aggregate the level view, dispatch processFrame (Op-3),
@@ -707,11 +774,12 @@ impl Thalamus {
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
+        learning: bool,
     ) -> ProcessLevelResult {
 
         // aggregate per-neuron work, build the shared level context, allocate error pattern specs
         let (tasks, level_context, new_neuron_specs) =
-            self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, new_error_pattern_ids);
+            self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids, learning);
 
         // Op-3: dispatch processFrame — the only cross-region round-trip in the level loop
         let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], &rewards[0], frame_number);
@@ -726,7 +794,7 @@ impl Thalamus {
         Self::clear_stale_state(level_neurons);
         let mut votes = Vec::new();
         for result in &results {
-            Self::collect_votes(result, level_neurons, &mut votes);
+            Self::collect_level_votes(result, level_neurons, &mut votes);
         }
 
         if self.debug && !activations.is_empty() {
@@ -775,7 +843,9 @@ impl Thalamus {
         level_neurons: &FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>,
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
+        frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
+        learning: bool,
     ) -> (Vec<LevelTask>, Context, Vec<NeuronCreateSpec>) {
         let mut tasks = Vec::new();
         let mut level_context = Context::new();
@@ -802,9 +872,19 @@ impl Thalamus {
             }
 
             // get level error corrections + per-age feedback for the neuron's own stats
-            let (corrections, error_feedback) = self.get_level_corrections(
-                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards,
-            );
+            // skip error correction when event processing is disabled (frozen context) —
+            // no new pattern neurons should be created while the context is frozen.
+            let (corrections, error_feedback) = if learning {
+                self.get_level_corrections(
+                    *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number,
+                )
+            } else {
+                // still need to populate level_context for voting
+                for (&age, _) in age_states {
+                    if age > 0 { level_context.add_neuron(*neuron_id, age, 1.0); }
+                }
+                (Vec::new(), Vec::new())
+            };
 
             // extract creation specs for Op-4
             for correction in &corrections {
@@ -843,6 +923,7 @@ impl Thalamus {
         age_states: &FxHashMap<Distance, LevelAgeState>,
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
+        frame_number: FrameNumber,
     ) -> (Vec<CorrectionSpec>, Vec<ErrorFeedback>) {
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
@@ -855,7 +936,7 @@ impl Thalamus {
             if age > 0 { level_context.add_neuron(neuron_id, age, 1.0); }
 
             // evaluate the prior-frame vote at this age (if any) and record feedback
-            let result = match self.evaluate_vote_error(age, state, &sensory_neurons[0]) {
+            let result = match self.evaluate_vote_error(age, state, &sensory_neurons[0], frame_number) {
                 Some(r) => r,
                 None => continue,
             };
@@ -863,10 +944,52 @@ impl Thalamus {
 
             // create an error correction pattern if the error crosses the dynamic threshold
             if result.fire {
-                let spec = self.allocate_pattern_neuron(level + 1, neuron_id, age, sensory_neurons, rewards);
+                if self.debug {
+                    // Log what was predicted vs what actually fired
+                    let votes = state.votes.as_ref().unwrap();
+                    let mut predicted: Vec<String> = Vec::new();
+                    let mut missed: Vec<String> = Vec::new();
+                    for vote in votes {
+                        if self.get_neuron_type(vote.neuron_id) == Some(NeuronType::Event) {
+                            let label = self.get_neuron_coordinate(vote.neuron_id)
+                                .and_then(|c| self.coordinate_id_to_name(c))
+                                .map(|(name, bucket)| format!("{}:{}", name, bucket))
+                                .unwrap_or_else(|| format!("n{}", vote.neuron_id));
+                            if !sensory_neurons[0].contains(&vote.neuron_id) {
+                                missed.push(label.clone());
+                            }
+                            predicted.push(label);
+                        }
+                    }
+                    let mut actual: Vec<String> = sensory_neurons[0].iter()
+                        .filter_map(|&nid| {
+                            if self.get_neuron_type(nid) == Some(NeuronType::Event) {
+                                self.get_neuron_coordinate(nid)
+                                    .and_then(|c| self.coordinate_id_to_name(c))
+                                    .map(|(name, bucket)| format!("{}:{}", name, bucket))
+                            } else { None }
+                        })
+                        .collect();
+                    actual.sort();
+                    predicted.sort();
+                    missed.sort();
+                    let neuron_level = self.neuron_levels.get(&neuron_id).copied().unwrap_or(0);
+                    println!("  ERROR CORRECTION: neuron {} (level {}) age {} | error={:.2} threshold={:.2}",
+                        neuron_id, neuron_level, age, result.error_rate, state.threshold.unwrap_or(0.5));
+                    println!("    predicted: {:?}", predicted);
+                    println!("    missed:    {:?}", missed);
+                    println!("    actual:    {:?}", actual);
+                }
+
+                // Pull context first; if empty, skip the entire allocation —
+                // an empty-context pattern can never match anything in future
+                // frames and would just keep regenerating useless siblings.
                 let context_entries: Vec<ContextRefEntry> = state.context.as_ref()
                     .map(|ctx| ctx.iter().map(|c| ContextRefEntry { neuron_id: c.neuron_id, distance: c.distance }).collect())
                     .unwrap_or_default();
+                if context_entries.is_empty() { continue; }
+
+                let spec = self.allocate_pattern_neuron(level + 1, neuron_id, age, sensory_neurons, rewards);
                 corrections.push(CorrectionSpec {
                     pattern_id: spec.id,
                     forget_rate: spec.forget_rate,
@@ -978,7 +1101,7 @@ impl Thalamus {
     /// Write per-age votes back to level state and collect flat votes for consensus.
     /// Threshold is captured here so next frame's evaluate_vote_error can judge these
     /// votes without reaching back into the neuron.
-    fn collect_votes(
+    fn collect_level_votes(
         result: &ColumnProcessResult,
         level_neurons: &mut FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>,
         votes: &mut Vec<FlatVote>,
@@ -1024,10 +1147,18 @@ impl Thalamus {
     /// Returns the observed error rate (so it can be sent back to the neuron as
     /// feedback) and whether it crosses the threshold the neuron supplied when it
     /// cast the vote. The neuron owns its error stats — thalamus only judges.
-    fn evaluate_vote_error(&self, age: Distance, state: &LevelAgeState, actual_neuron_ids: &FxHashSet<NeuronId>) -> Option<VoteErrorResult> {
+    fn evaluate_vote_error(&self, age: Distance, state: &LevelAgeState, actual_neuron_ids: &FxHashSet<NeuronId>, frame_number: FrameNumber) -> Option<VoteErrorResult> {
 
         // age=0 neurons cannot need correction because they are just voting now
         if age == 0 { return None; }
+
+        // Warmup: don't fire error corrections before the context window has
+        // had a chance to fill up. Without this, the very first frames of a
+        // sequence (when level_context is mostly empty) generate empty-context
+        // error patterns that can never match anything on subsequent passes,
+        // producing unbounded creation of useless siblings episode after
+        // episode. context_length frames is the natural horizon.
+        if (frame_number as u32) < self.context_length { return None; }
 
         // if there are no votes from previous frame, no error to evaluate
         let votes = match &state.votes {
@@ -1035,18 +1166,32 @@ impl Thalamus {
             _ => return None,
         };
 
-        // compare the inferred events to reality — events only, actions are
-        // judged by reward not hit/miss
-        let mut failed_events = 0u32;
-        let mut total_events = 0u32;
+        // Per-dimension error: a voter's "prediction" for each event dimension
+        // is its strongest-strength vote for that dimension. A dimension fails
+        // if that argmax neuron didn't actually fire. error_rate = failed_dims
+        // / total_dims. This is the right semantics — counting individual votes
+        // double-penalizes voters that have learned multiple buckets of the
+        // same dim across past contexts (e.g. binary channels where the voter
+        // has occasionally seen both 0 and 1 follow it), inflating apparent
+        // error rate even when the strongest prediction is correct.
+        let mut best_per_dim: FxHashMap<DimensionId, (NeuronId, f64)> = FxHashMap::default();
         for vote in votes {
-            if self.get_neuron_type(vote.neuron_id) == Some(NeuronType::Event) {
-                total_events += 1;
-                if !actual_neuron_ids.contains(&vote.neuron_id) { failed_events += 1; }
-            }
+            if self.get_neuron_type(vote.neuron_id) != Some(NeuronType::Event) { continue; }
+            let dim_id = match self.get_neuron_coordinate(vote.neuron_id) {
+                Some(c) => c.dim_id,
+                None => continue,
+            };
+            let entry = best_per_dim.entry(dim_id).or_insert((vote.neuron_id, vote.strength));
+            if vote.strength > entry.1 { *entry = (vote.neuron_id, vote.strength); }
         }
-        if total_events == 0 { return None; }
-        let error_rate = failed_events as f64 / total_events as f64;
+        if best_per_dim.is_empty() { return None; }
+
+        let total_dims = best_per_dim.len() as u32;
+        let mut failed_dims = 0u32;
+        for (_, (best_neuron, _)) in &best_per_dim {
+            if !actual_neuron_ids.contains(best_neuron) { failed_dims += 1; }
+        }
+        let error_rate = failed_dims as f64 / total_dims as f64;
 
         // the threshold rode in with the vote when it was cast last frame
         let threshold = state.threshold.unwrap_or(0.5);

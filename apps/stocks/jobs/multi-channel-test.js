@@ -240,7 +240,7 @@ export default class MultiChannelTest extends Job {
 
 		// Brain returns inferences keyed by channelId plus per-frame diagnostic data;
 		// `frame` flows straight to the renderer.
-		const { inferences, frame } = this.brain.processFrame(inputs, rewards);
+		const { inferences, frame } = this.brain.processFrame(inputs, new Map(), rewards);
 		for (const trader of this.traders)
 			trader.apply(inferences.get(trader.channelId) ?? []);
 

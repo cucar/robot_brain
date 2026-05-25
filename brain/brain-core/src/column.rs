@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::context::Context;
 use crate::neuron::{
     ActiveNeuron, AgeState, AgeVotes, Correction, ContextRefUpdate,
-    CorrectionActivation, ErrorFeedback, Neuron, PatternMatch,
+    CorrectionActivation, ErrorFeedback, Neuron, PatternMatch, Vote,
 };
 use crate::types::{
     ChannelId, Distance, ErrorMode, FrameNumber,
@@ -100,6 +100,17 @@ pub struct Column {
     /// Static error threshold (used when error_mode == Static).
     error_threshold: f64,
 
+    /// Optional fixed learning rate for action connection reward updates.
+    action_alpha: Option<f64>,
+
+    /// When false, skip default-action pre-wiring on newly created neurons.
+    /// Toggled by Brain.set_processing_mode().
+    action_processing: bool,
+
+    /// When false, skip connection learning in process_frame.
+    /// Existing patterns still activate (recognition only).
+    learning: bool,
+
     /// The sole storage for owned Neurons. Keyed by neuron id.
     neurons: FxHashMap<NeuronId, Neuron>,
 }
@@ -113,6 +124,7 @@ impl Column {
         merge_threshold: f64,
         error_mode: ErrorMode,
         error_threshold: f64,
+        action_alpha: Option<f64>,
     ) -> Self {
         Self {
             channel_actions,
@@ -122,6 +134,9 @@ impl Column {
             merge_threshold,
             error_mode,
             error_threshold,
+            action_alpha,
+            action_processing: true,
+            learning: true,
             neurons: FxHashMap::default(),
         }
     }
@@ -144,6 +159,7 @@ impl Column {
             let result = neuron.process_frame(
                 age_states, memory_depth, level_context, new_error_pattern_ids,
                 new_active_neurons, frame_number, corrections, error_feedback,
+                self.learning,
             );
             results.push(ColumnProcessResult {
                 parent_id: *neuron_id,
@@ -335,6 +351,49 @@ impl Column {
         neuron.remove_context_ref(parent_id, distance);
     }
 
+    /// Collect votes from neurons at their given ages. Pure read, no mutations.
+    pub fn collect_votes(&self, entries: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Vote)> {
+        let mut result = Vec::new();
+        for &(neuron_id, age) in entries {
+            if let Some(neuron) = self.neurons.get(&neuron_id) {
+                for vote in neuron.vote(age) {
+                    result.push((neuron_id, vote));
+                }
+            }
+        }
+        result
+    }
+
+    /// Apply learned action connections: upsert from voter to action neuron.
+    /// Inspection: dump a neuron's outgoing connections as
+    /// (distance, target_id, strength, reward) tuples.
+    pub fn dump_neuron_connections(&self, neuron_id: NeuronId) -> Option<Vec<(Distance, NeuronId, f64, f64)>> {
+        self.neurons.get(&neuron_id).map(|n| n.dump_connections())
+    }
+
+    /// Return (parent_id, distance, strength) context entries for a child
+    /// pattern stored under the given parent neuron's routing table. Used
+    /// by the inspection API to dump a pattern's stored context.
+    pub fn get_child_context_entries(&self, parent_id: NeuronId, child_id: NeuronId) -> Option<Vec<(NeuronId, Distance, f64)>> {
+        let parent = self.neurons.get(&parent_id)?;
+        let entry = parent.get_routing_table().get(&child_id)?;
+        let mut out = Vec::new();
+        for (nid, dist_map) in entry.context.entries() {
+            for (dist, strength) in dist_map {
+                out.push((*nid, *dist, *strength));
+            }
+        }
+        Some(out)
+    }
+
+    pub fn learn_action_connections(&mut self, tasks: &[(NeuronId, NeuronId, Distance, ChannelId, Reward)]) {
+        for &(voter_id, action_id, distance, channel_id, reward) in tasks {
+            if let Some(neuron) = self.neurons.get_mut(&voter_id) {
+                neuron.learn_supervised_action(distance, action_id, channel_id, reward);
+            }
+        }
+    }
+
     /// Op-5 (deferred): Apply contextRef updates to owned neurons. Each entry carries the
     /// target neuron_id and a batch of updates for it.
     pub fn update_context_refs(&mut self, update_batch: &[(NeuronId, Vec<ContextRefUpdate>)]) {
@@ -358,11 +417,16 @@ impl Column {
                 self.error_threshold,
                 self.channel_actions.clone(),
                 self.action_ids.clone(),
+                self.action_alpha,
+                self.context_length,
             );
             // pre-wire default action connections at neutral reward across all voting distances
-            for distance in 1..self.context_length {
-                for &default_id in self.channel_default_actions.values() {
-                    neuron.create_connection(distance, default_id, 1.0, 0.0);
+            // (skipped when action processing is disabled — learn() handles action wiring)
+            if self.action_processing {
+                for distance in 1..self.context_length {
+                    for &default_id in self.channel_default_actions.values() {
+                        neuron.create_connection(distance, default_id, 1.0, 0.0);
+                    }
                 }
             }
 
@@ -414,6 +478,8 @@ impl Column {
             self.error_threshold,
             self.channel_actions.clone(),
             self.action_ids.clone(),
+            self.action_alpha,
+            self.context_length,
         );
 
         // load directed connections (distance → target neuron id with strength and reward)
@@ -473,6 +539,12 @@ impl Column {
                 neuron.materialize_child_strength(pattern_id, current_frame);
                 if let Some(entry) = neuron.get_routing_table_mut().get_mut(&pattern_id) {
                     entry.last_activation_frame = 0;
+                    // Reset activation_strength to a neutral baseline so cross-
+                    // image (or cross-episode) accumulation doesn't keep stale
+                    // patterns artificially "alive" forever when forget_rate=0.
+                    // The pattern is still considered alive (>0), but starts
+                    // each new context from equal footing with siblings.
+                    if entry.activation_strength > 1.0 { entry.activation_strength = 1.0; }
                     let death_frame = (entry.activation_strength / neuron.get_pattern_forget_rate()).ceil() as FrameNumber;
                     death_entries.push(DeathFrameEntry { pattern_id, death_frame });
                 }
@@ -497,6 +569,17 @@ impl Column {
         self.channel_actions = channel_actions.clone();
         self.action_ids = action_ids.clone();
         self.channel_default_actions = channel_default_actions.clone();
+    }
+
+    /// Toggle action processing — controls whether newly created neurons
+    /// get pre-wired default action connections.
+    pub fn set_action_processing(&mut self, enabled: bool) {
+        self.action_processing = enabled;
+    }
+
+    /// Toggle learning — controls connection learning and pattern creation.
+    pub fn set_learning(&mut self, enabled: bool) {
+        self.learning = enabled;
     }
 }
 
@@ -537,6 +620,7 @@ mod tests {
             0.5,
             ErrorMode::Static,
             0.5,
+            None,
         )
     }
 

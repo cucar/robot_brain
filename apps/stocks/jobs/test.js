@@ -368,7 +368,7 @@ export default class StockTestJob extends Job {
 			// Brain returns inferences keyed by channelId plus per-frame diagnostic data
 			// (timing, optional vote debug). Destructure so we can pass `frame` straight
 			// to the renderer — no separate getter call into the brain.
-			const result = this.brain.processFrame(inputs, rewards);
+			const result = this.brain.processFrame(inputs, new Map(), rewards);
 			frame = result.frame;
 			for (const trader of this.traders)
 				trader.apply(result.inferences.get(trader.channelId) ?? []);

@@ -53,10 +53,10 @@ use crate::column::{
 use crate::context::Context;
 use crate::neuron::{
     ActiveNeuron, AgeState, Correction, ContextRefUpdate, ErrorFeedback,
-    SerializedNeuron,
+    SerializedNeuron, Vote,
 };
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId,
+    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
 };
 
 pub struct Region {
@@ -76,6 +76,7 @@ impl Region {
         merge_threshold: f64,
         error_mode: ErrorMode,
         error_threshold: f64,
+        action_alpha: Option<f64>,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -87,6 +88,7 @@ impl Region {
                 merge_threshold,
                 error_mode,
                 error_threshold,
+                action_alpha,
             ));
         }
         Self { c, columns }
@@ -279,6 +281,66 @@ impl Region {
         DeleteResult { outbound_ops, deleted_ids, newly_deletable_ids }
     }
 
+    // ── Vote collection / action learning ────────────────────────────────
+
+    /// Collect votes from votable neurons. Routes to columns by neuron_id.
+    pub fn collect_votes(&self, entries: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Vote)> {
+        let by_column = self.route_vote_entries(entries);
+        let nested: Vec<Vec<(NeuronId, Vote)>> = self.columns.par_iter()
+            .zip(by_column.into_par_iter())
+            .map(|(col, col_entries)| {
+                if col_entries.is_empty() { return Vec::new(); }
+                col.collect_votes(&col_entries)
+            })
+            .collect();
+        nested.into_iter().flatten().collect()
+    }
+
+    /// Partition vote entries into per-column work lists by neuron_id.
+    fn route_vote_entries(&self, entries: &[(NeuronId, Distance)]) -> Vec<Vec<(NeuronId, Distance)>> {
+        let mut by_column: Vec<Vec<(NeuronId, Distance)>> = (0..self.c).map(|_| Vec::new()).collect();
+        for &(nid, age) in entries {
+            let col = self.route_neuron(nid);
+            by_column[col].push((nid, age));
+        }
+        by_column
+    }
+
+    /// Apply learned action connections. Routes to columns by voter neuron_id.
+    /// Look up the stored context entries for a child pattern on a given parent.
+    /// Returns None if the parent doesn't live in this region or has no such child.
+    pub fn get_child_context_entries(&self, parent_id: NeuronId, child_id: NeuronId) -> Option<Vec<(NeuronId, Distance, f64)>> {
+        let c = self.route_neuron(parent_id);
+        self.columns[c].get_child_context_entries(parent_id, child_id)
+    }
+
+    /// Dump a neuron's outgoing connections (distance, target, strength, reward).
+    pub fn dump_neuron_connections(&self, neuron_id: NeuronId) -> Option<Vec<(Distance, NeuronId, f64, f64)>> {
+        let c = self.route_neuron(neuron_id);
+        self.columns[c].dump_neuron_connections(neuron_id)
+    }
+
+    pub fn learn_action_connections(&mut self, tasks: &[(NeuronId, NeuronId, Distance, ChannelId, Reward)]) {
+        let by_column = self.route_learn_tasks(tasks);
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_tasks)| {
+                if !col_tasks.is_empty() {
+                    col.learn_action_connections(&col_tasks);
+                }
+            });
+    }
+
+    /// Partition learn tasks into per-column work lists by voter neuron_id.
+    fn route_learn_tasks(&self, tasks: &[(NeuronId, NeuronId, Distance, ChannelId, Reward)]) -> Vec<Vec<(NeuronId, NeuronId, Distance, ChannelId, Reward)>> {
+        let mut by_column: Vec<Vec<_>> = (0..self.c).map(|_| Vec::new()).collect();
+        for task in tasks {
+            let col = self.route_neuron(task.0);
+            by_column[col].push(*task);
+        }
+        by_column
+    }
+
     // ── Snapshot / restore ─────────────────────────────────────────────────
 
     /// Collect serialized {id, neuron} entries from all columns for snapshotting.
@@ -335,6 +397,20 @@ impl Region {
     ) {
         self.columns.par_iter_mut().for_each(|col| {
             col.update_action_sets(channel_actions, action_ids, channel_default_actions);
+        });
+    }
+
+    /// Toggle action processing on all columns.
+    pub fn set_action_processing(&mut self, enabled: bool) {
+        self.columns.par_iter_mut().for_each(|col| {
+            col.set_action_processing(enabled);
+        });
+    }
+
+    /// Toggle learning on all columns.
+    pub fn set_learning(&mut self, enabled: bool) {
+        self.columns.par_iter_mut().for_each(|col| {
+            col.set_learning(enabled);
         });
     }
 }
