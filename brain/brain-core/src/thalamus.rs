@@ -129,6 +129,27 @@ pub struct ProcessLevelResult {
     pub votes: Vec<FlatVote>,
     pub neuron_specs: Vec<NeuronCreateSpec>,
     pub results: Vec<ColumnProcessResult>,
+    pub orchestration: OrchestrationTimings,
+}
+
+/// Wall-clock for the orchestration steps inside thalamus.process_level that
+/// wrap the per-neuron dispatch. Lets us see how much of process_levels is
+/// spent outside neuron op execution.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OrchestrationTimings {
+    pub get_level_tasks: f64,
+    pub dispatch_frame: f64,
+    pub collect_activations: f64,
+    pub collect_votes: f64,
+}
+
+impl OrchestrationTimings {
+    pub fn add(&mut self, other: &OrchestrationTimings) {
+        self.get_level_tasks     += other.get_level_tasks;
+        self.dispatch_frame      += other.dispatch_frame;
+        self.collect_activations += other.collect_activations;
+        self.collect_votes       += other.collect_votes;
+    }
 }
 
 /// A flat vote with voter id attached — used for consensus after the level loop.
@@ -867,25 +888,35 @@ impl Thalamus {
         learning: bool,
     ) -> ProcessLevelResult {
 
+        let mut orchestration = OrchestrationTimings::default();
+
         // aggregate per-neuron work, build the shared level context, allocate error pattern specs
+        let t = std::time::Instant::now();
         let (tasks, level_context, new_neuron_specs) =
             self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids, learning);
+        orchestration.get_level_tasks = t.elapsed().as_secs_f64();
 
         // Op-3: dispatch processFrame — the only cross-region round-trip in the level loop
+        let t = std::time::Instant::now();
         let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], &rewards[0], frame_number);
+        orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
         // extract activations inline — needed to feed the next level
+        let t = std::time::Instant::now();
         let mut activations = Vec::new();
         for result in &results {
             self.collect_activations(result, &mut activations);
         }
+        orchestration.collect_activations = t.elapsed().as_secs_f64();
 
         // collect votes inline — needed for consensus after the loop
+        let t = std::time::Instant::now();
         Self::clear_stale_state(level_neurons);
         let mut votes = Vec::new();
         for result in &results {
             Self::collect_level_votes(result, level_neurons, &mut votes);
         }
+        orchestration.collect_votes = t.elapsed().as_secs_f64();
 
         if self.debug && !activations.is_empty() {
             let detail: Vec<String> = activations.iter()
@@ -894,7 +925,7 @@ impl Thalamus {
             println!("Level {}: {} activations {}", level, activations.len(), detail.join("; "));
         }
 
-        ProcessLevelResult { activations, votes, neuron_specs: new_neuron_specs, results }
+        ProcessLevelResult { activations, votes, neuron_specs: new_neuron_specs, results, orchestration }
     }
 
     /// Flush deferred work accumulated across all levels in the level loop.

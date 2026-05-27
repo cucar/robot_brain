@@ -1,8 +1,10 @@
 import { DIGITS, DIGIT_ACTIONS } from './digits.js';
 
 /**
- * One channel per pixel (784 total), binary resolution → 1568 sensory
- * neurons total; exactly 784 fire per frame. A whole image is one frame —
+ * One channel per pixel at the configured imageSize (28 → 784 channels,
+ * 14 → 196, 7 → 49). Source MNIST images are always 28×28; smaller sizes
+ * are produced by block-average downsampling before quantization. Exactly
+ * `pixels` sensory neurons fire per frame. A whole image is one frame —
  * intra-frame co-activation builds the image pattern. Action neuron lives
  * on a separate "digit" channel.
  */
@@ -10,9 +12,18 @@ export class MNISTPixelChannelsEncoder {
 
 	/**
 	 * @param {number} buckets - pixel quantization levels (2 = binary)
+	 * @param {number} imageSize - output image side length. Source images are
+	 *   always 28×28; smaller sizes are produced by block-average downsampling
+	 *   (28 must be divisible by imageSize). Used for scaling experiments.
 	 */
-	constructor(buckets = 2) {
+	constructor(buckets = 2, imageSize = 28) {
+		if (28 % imageSize !== 0) {
+			throw new Error(`imageSize must divide 28 evenly, got ${imageSize}`);
+		}
 		this.buckets = buckets;
+		this.imageSize = imageSize;
+		this.pixels = imageSize * imageSize;
+		this.downsampleFactor = 28 / imageSize;
 		// Parallel arrays so encodeImage() can do an O(1) channel/dim lookup per pixel.
 		this.pixelChannelIds = [];
 		this.pixelDimIds = [];
@@ -28,8 +39,9 @@ export class MNISTPixelChannelsEncoder {
 	 * Called once at job startup, before any frames are processed.
 	 */
 	registerChannels(brain) {
-		// One channel per pixel — names "px_0".."px_783" line up with row-major order.
-		for (let p = 0; p < 784; p++) {
+		// One channel per pixel — names "px_0".."px_N-1" line up with row-major
+		// order at the current imageSize.
+		for (let p = 0; p < this.pixels; p++) {
 			const { channelId, dimensionIds } = brain.registerChannelSpec({
 				name: `px_${p}`,
 				emitsReward: false,             // pixels don't emit reward; the digit channel does
@@ -72,11 +84,33 @@ export class MNISTPixelChannelsEncoder {
 	}
 
 	/**
-	 * Quantize a full 28x28 image into a 784-length row-major Uint8Array.
+	 * Quantize a full 28x28 image into an (imageSize × imageSize) row-major
+	 * Uint8Array. When imageSize < 28, block-average the source 2×2 / 4×4 /
+	 * 7×7 region into one output pixel before quantizing — preserves the
+	 * "average intensity" of each block.
 	 */
 	buildBits(pixels) {
-		const out = new Uint8Array(784);
-		for (let i = 0; i < 784; i++) out[i] = this.quantize(pixels[i]);
+		const out = new Uint8Array(this.pixels);
+		const f = this.downsampleFactor;
+		if (f === 1) {
+			for (let i = 0; i < this.pixels; i++) out[i] = this.quantize(pixels[i]);
+			return out;
+		}
+		const blockArea = f * f;
+		for (let r = 0; r < this.imageSize; r++) {
+			for (let c = 0; c < this.imageSize; c++) {
+				let sum = 0;
+				const srcRow0 = r * f;
+				const srcCol0 = c * f;
+				for (let dr = 0; dr < f; dr++) {
+					const srcRow = srcRow0 + dr;
+					for (let dc = 0; dc < f; dc++) {
+						sum += pixels[srcRow * 28 + srcCol0 + dc];
+					}
+				}
+				out[r * this.imageSize + c] = this.quantize(sum / blockArea);
+			}
+		}
 		return out;
 	}
 
@@ -86,7 +120,7 @@ export class MNISTPixelChannelsEncoder {
 	 */
 	encodeImage(bits) {
 		const inputs = new Map();
-		for (let p = 0; p < 784; p++) {
+		for (let p = 0; p < this.pixels; p++) {
 			// One-entry dim map per channel — each pixel has a single input dimension.
 			const dimMap = new Map();
 			dimMap.set(this.pixelDimIds[p], bits[p]);

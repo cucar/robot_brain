@@ -4,3 +4,4 @@ target
 .env
 .claude
 backups/
+apps/mnist/*.log

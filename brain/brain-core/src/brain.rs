@@ -92,6 +92,14 @@ pub struct FrameResult {
     pub timings: FrameTimings,
 }
 
+/// Memory-op timings inside brain.process_levels, summed across levels.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MemoryTimings {
+    pub get_level_neurons: f64,
+    pub write_back_level_neurons: f64,
+    pub activate_patterns: f64,
+}
+
 /// Per-section timings inside a single frame, in seconds.
 #[derive(Debug, Clone, Default)]
 pub struct FrameTimings {
@@ -104,6 +112,26 @@ pub struct FrameTimings {
     pub apply_results: f64,
     pub infer: f64,
     pub track_error: f64,
+    // Sub-timings inside process_levels: summed across all neurons and all
+    // levels for this frame. process_levels includes overhead beyond these
+    // four (memory I/O, level dispatch) so the four won't sum to it exactly.
+    pub neuron_learn_connections: f64,
+    pub neuron_recognize_patterns: f64,
+    pub neuron_correct_errors: f64,
+    pub neuron_generate_votes: f64,
+    // recognize_patterns sub-buckets: index lookup vs candidate scoring.
+    pub recognize_candidate_search: f64,
+    pub recognize_candidate_eval: f64,
+    pub recognize_candidates_evaluated: u64,
+    // Orchestration around the per-neuron dispatch, summed across levels.
+    pub orch_get_level_tasks: f64,
+    pub orch_dispatch_frame: f64,
+    pub orch_collect_activations: f64,
+    pub orch_collect_votes: f64,
+    // Memory ops in brain.process_levels, summed across levels.
+    pub mem_get_level_neurons: f64,
+    pub mem_write_back_level_neurons: f64,
+    pub mem_activate_patterns: f64,
 }
 
 /// A single vote cast by a voter neuron for an action neuron.
@@ -1160,8 +1188,22 @@ impl Brain {
 
             // process neurons level-by-level — Op-3 dispatch is the only per-level round-trip
             let t = Instant::now();
-            let (votes, neuron_specs, dispatch_results) = self.process_levels();
+            let (votes, neuron_specs, dispatch_results, neuron_t, orch_t, mem_t) = self.process_levels();
             timings.process_levels = t.elapsed().as_secs_f64();
+            timings.neuron_learn_connections  = neuron_t.learn_connections;
+            timings.neuron_recognize_patterns = neuron_t.recognize_patterns;
+            timings.neuron_correct_errors     = neuron_t.correct_errors;
+            timings.neuron_generate_votes     = neuron_t.generate_votes;
+            timings.recognize_candidate_search   = neuron_t.recognize_candidate_search;
+            timings.recognize_candidate_eval     = neuron_t.recognize_candidate_eval;
+            timings.recognize_candidates_evaluated = neuron_t.recognize_candidates_evaluated;
+            timings.orch_get_level_tasks      = orch_t.get_level_tasks;
+            timings.orch_dispatch_frame       = orch_t.dispatch_frame;
+            timings.orch_collect_activations  = orch_t.collect_activations;
+            timings.orch_collect_votes        = orch_t.collect_votes;
+            timings.mem_get_level_neurons     = mem_t.get_level_neurons;
+            timings.mem_write_back_level_neurons = mem_t.write_back_level_neurons;
+            timings.mem_activate_patterns     = mem_t.activate_patterns;
 
             if self.debug && !neuron_specs.is_empty() {
                 println!("  frame {}: {} new error patterns created", self.frame_number, neuron_specs.len());
@@ -1256,8 +1298,22 @@ impl Brain {
             // Re-run voting from existing active neurons (frozen ages)
             let mut timings = FrameTimings::default();
             let t = Instant::now();
-            let (votes, _neuron_specs, _dispatch_results) = self.process_levels();
+            let (votes, _neuron_specs, _dispatch_results, neuron_t, orch_t, mem_t) = self.process_levels();
             timings.process_levels = t.elapsed().as_secs_f64();
+            timings.neuron_learn_connections  = neuron_t.learn_connections;
+            timings.neuron_recognize_patterns = neuron_t.recognize_patterns;
+            timings.neuron_correct_errors     = neuron_t.correct_errors;
+            timings.neuron_generate_votes     = neuron_t.generate_votes;
+            timings.recognize_candidate_search   = neuron_t.recognize_candidate_search;
+            timings.recognize_candidate_eval     = neuron_t.recognize_candidate_eval;
+            timings.recognize_candidates_evaluated = neuron_t.recognize_candidates_evaluated;
+            timings.orch_get_level_tasks      = orch_t.get_level_tasks;
+            timings.orch_dispatch_frame       = orch_t.dispatch_frame;
+            timings.orch_collect_activations  = orch_t.collect_activations;
+            timings.orch_collect_votes        = orch_t.collect_votes;
+            timings.mem_get_level_neurons     = mem_t.get_level_neurons;
+            timings.mem_write_back_level_neurons = mem_t.write_back_level_neurons;
+            timings.mem_activate_patterns     = mem_t.activate_patterns;
             let t = Instant::now();
             let (inferences_map, vote_debug, _winners, action_vote_stats, action_votes) = self.infer_neurons(&votes);
             timings.infer = t.elapsed().as_secs_f64();
@@ -1423,7 +1479,7 @@ impl Brain {
     /// Process neurons level-by-level — each level in parallel (future).
     /// Only Op-3 (process frame dispatch) runs per level; neuron creation (Op-4)
     /// and contextRef updates (Op-5) are returned for the caller to flush once.
-    fn process_levels(&mut self) -> (Vec<FlatVote>, Vec<NeuronCreateSpec>, Vec<Vec<crate::column::ColumnProcessResult>>) {
+    fn process_levels(&mut self) -> (Vec<FlatVote>, Vec<NeuronCreateSpec>, Vec<Vec<crate::column::ColumnProcessResult>>, crate::neuron::NeuronOpTimings, crate::thalamus::OrchestrationTimings, MemoryTimings) {
         let learning = self.learning;
         // get the active sensory neurons at level 0
         let sensory_neurons = self.memory.get_level_ages(0);
@@ -1439,6 +1495,9 @@ impl Brain {
         let mut votes = Vec::new();
         let mut neuron_specs = Vec::new();
         let mut dispatch_results = Vec::new();
+        let mut neuron_timings = crate::neuron::NeuronOpTimings::default();
+        let mut orch_timings = crate::thalamus::OrchestrationTimings::default();
+        let mut mem_timings = MemoryTimings::default();
 
         // Warmup gate: until the context window has had a chance to fill up
         // (i.e. frame_number < context_length), skip pattern recognition for
@@ -1463,7 +1522,9 @@ impl Brain {
             if self.debug { println!("Processing level {} for pattern recognition", level); }
 
             // get level neurons (mutable borrow returned, will be written back)
+            let t = Instant::now();
             let mut level_neurons = self.memory.get_level_neurons(level);
+            mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
 
             // process level: aggregate view, recognize patterns, create error corrections, collect votes
             let result = self.thalamus.process_level(
@@ -1476,14 +1537,19 @@ impl Brain {
                 &mut new_error_pattern_ids,
                 learning,
             );
+            orch_timings.add(&result.orchestration);
 
             // write back mutated level neurons to memory
+            let t = Instant::now();
             self.memory.write_back_level_neurons(&level_neurons);
+            mem_timings.write_back_level_neurons += t.elapsed().as_secs_f64();
 
             // activate matched patterns and newly-created error patterns at level+1
+            let t = Instant::now();
             for activation in &result.activations {
                 self.memory.activate_pattern(activation.pattern_id, level + 1, activation.parent_id, activation.age);
             }
+            mem_timings.activate_patterns += t.elapsed().as_secs_f64();
 
             // if we produced any activations, increment the max active level as needed
             if !result.activations.is_empty() {
@@ -1496,6 +1562,10 @@ impl Brain {
             // accumulate this level's votes, neuron specs and context updates
             votes.extend(result.votes);
             neuron_specs.extend(result.neuron_specs);
+            // Sum per-neuron op timings across this level into the per-frame accumulator.
+            for col_res in &result.results {
+                neuron_timings.add(&col_res.timings);
+            }
             dispatch_results.push(result.results);
 
             // if we reached the maximum level and no more patterns are recognized, exit
@@ -1505,7 +1575,7 @@ impl Brain {
             level += 1;
         }
 
-        (votes, neuron_specs, dispatch_results)
+        (votes, neuron_specs, dispatch_results, neuron_timings, orch_timings, mem_timings)
     }
 
     // ── Inference (voting consensus) ────────────────────────────────────────

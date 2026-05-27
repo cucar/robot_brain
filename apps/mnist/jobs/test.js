@@ -25,6 +25,7 @@ export default class MNISTTestJob extends Job {
 		super();
 		this.config = {
 			buckets: 2,           // 2 = binary pixels (one of two sensory neurons fires per channel)
+			imageSize: 28,        // 28×28 source; 14 or 7 downsamples by 2×2 / 4×4 block averaging
 			maxImages: 1,         // start tiny — scale up once convergence is verified
 			maxTestImages: 20,
 			maxTrainTest: 20,     // also classify a subset of training images (memorization check)
@@ -32,6 +33,7 @@ export default class MNISTTestJob extends Job {
 			episodes: 1,
 			maxFrames: 6,         // each image presented this many times in a row
 			dynamicFrames: false, // when true: stop the frame loop the moment Δneurons hits 0
+			verbose: false,       // when true: print per-frame lines + per-image timing breakdown
 		};
 
 		this.encoder = null;
@@ -56,6 +58,8 @@ export default class MNISTTestJob extends Job {
 		// MNIST-specific flags
 		const buckets = num('--buckets');
 		if (buckets !== null) this.config.buckets = buckets;
+		const imageSize = num('--image-size');
+		if (imageSize !== null) this.config.imageSize = imageSize;
 		const maxImages = num('--max-images');
 		if (maxImages !== null) this.config.maxImages = maxImages;
 		const maxTestImages = num('--max-test-images');
@@ -68,6 +72,7 @@ export default class MNISTTestJob extends Job {
 		if (maxFrames !== null) this.config.maxFrames = maxFrames;
 		if (process.argv.includes('--skip-test')) this.config.skipTest = true;
 		if (process.argv.includes('--dynamic-frames')) this.config.dynamicFrames = true;
+		if (process.argv.includes('--verbose')) this.config.verbose = true;
 
 		// Brain defaults — tiny context, loose merge, no forgetting, lax error correction.
 		// The "??=" pattern lets `--context-length 5` on the command line override us.
@@ -83,7 +88,7 @@ export default class MNISTTestJob extends Job {
 	 * channel with the brain.
 	 */
 	async initialize() {
-		this.encoder = new MNISTPixelChannelsEncoder(this.config.buckets);
+		this.encoder = new MNISTPixelChannelsEncoder(this.config.buckets, this.config.imageSize);
 		this.encoder.registerChannels(this.brain);
 	}
 
@@ -134,7 +139,9 @@ export default class MNISTTestJob extends Job {
 	 * Print the resolved configuration so the run is self-documenting in logs.
 	 */
 	async showStartupInfo() {
-		console.log(`MNIST Digit Recognition — 784-Channel Per-Pixel, Serial Training`);
+		const px = this.config.imageSize * this.config.imageSize;
+		console.log(`MNIST Digit Recognition — ${px}-Channel Per-Pixel, Serial Training`);
+		console.log(`  Image size: ${this.config.imageSize}×${this.config.imageSize} (${px} pixels)`);
 		console.log(`  Buckets: ${this.config.buckets}`);
 		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Merge threshold: ${this.options.mergeThreshold}`);
@@ -197,17 +204,20 @@ export default class MNISTTestJob extends Job {
 				const imgTimings = this.newTimings();
 
 				for (let f = 0; f < this.config.maxFrames; f++) {
+					const frameStart = Date.now();
 					const fr = this.brain.processFrame(inputs, EMPTY_MAP, EMPTY_MAP);
 					this.addTimings(imgTimings, fr.timings);
 					const s = this.brain.getFrameSummary();
 					const delta = s.neuronCount - prevNeurons;
 					frameLog.push(`f${f + 1}+${delta}n/L${s.maxLevel}`);
+					// Per-frame line so we can spot which frame inside an image dominates.
+					if (this.config.verbose) console.log(`    ep${ep + 1} img${i + 1} f${f + 1}: +${delta}n tot=${s.neuronCount}n L${s.maxLevel}  ${Date.now() - frameStart}ms  ${this.formatTimings(fr.timings)}`);
 					// First frame where no new neurons appear = converged on this image.
 					if (delta === 0 && convFrame < 0) convFrame = f + 1;
 					prevNeurons = s.neuronCount;
 					if (this.isShuttingDown) { this.printPhase1Summary(postLearnCorrect, postLearnTotal, convergedAt, phaseStart, phaseTimings); return; }
 					// Dynamic mode: stop the moment we converge, don't waste frames.
-					if (this.config.dynamicFrames && delta === 0) break;
+					if (this.config.dynamicFrames && delta === 0 && f >= this.config.contextLength) break;
 				}
 				convergedAt.push(convFrame);
 				this.addTimings(phaseTimings, imgTimings);
@@ -232,7 +242,7 @@ export default class MNISTTestJob extends Job {
 				const convStr = convFrame > 0 ? `conv@${convFrame}` : 'no-conv';
 				console.log(`  ep${ep + 1} img ${i + 1}/${N} lbl=${label}  ${frameLog.join(' ')}  ${convStr}  pred=${predicted}${ok ? '✓' : '✗'}  tot=${totalS.neuronCount}n/L${totalS.maxLevel}  ${imgMs}ms`);
 				// Per-image timing breakdown — shows where the seconds went inside processFrame.
-				console.log(`    timings: ${this.formatTimings(imgTimings)}`);
+				if (this.config.verbose) console.log(`    timings: ${this.formatTimings(imgTimings)}`);
 			}
 		}
 
@@ -286,6 +296,13 @@ export default class MNISTTestJob extends Job {
 		return {
 			buildFrame: 0, createSensory: 0, cleanupDead: 0, ageContext: 0,
 			activate: 0, processLevels: 0, applyResults: 0, infer: 0, trackError: 0,
+			neuronLearnConnections: 0, neuronRecognizePatterns: 0,
+			neuronCorrectErrors: 0, neuronGenerateVotes: 0,
+			recognizeCandidateSearch: 0, recognizeCandidateEval: 0,
+			recognizeCandidatesEvaluated: 0,
+			orchGetLevelTasks: 0, orchDispatchFrame: 0,
+			orchCollectActivations: 0, orchCollectVotes: 0,
+			memGetLevelNeurons: 0, memWriteBackLevelNeurons: 0, memActivatePatterns: 0,
 		};
 	}
 
@@ -294,15 +311,29 @@ export default class MNISTTestJob extends Job {
 	 */
 	addTimings(acc, delta) {
 		if (!delta) return;
-		acc.buildFrame    += delta.buildFrame    ?? 0;
-		acc.createSensory += delta.createSensory ?? 0;
-		acc.cleanupDead   += delta.cleanupDead   ?? 0;
-		acc.ageContext    += delta.ageContext    ?? 0;
-		acc.activate      += delta.activate      ?? 0;
-		acc.processLevels += delta.processLevels ?? 0;
-		acc.applyResults  += delta.applyResults  ?? 0;
-		acc.infer         += delta.infer         ?? 0;
-		acc.trackError    += delta.trackError    ?? 0;
+		acc.buildFrame              += delta.buildFrame              ?? 0;
+		acc.createSensory           += delta.createSensory           ?? 0;
+		acc.cleanupDead             += delta.cleanupDead             ?? 0;
+		acc.ageContext              += delta.ageContext              ?? 0;
+		acc.activate                += delta.activate                ?? 0;
+		acc.processLevels           += delta.processLevels           ?? 0;
+		acc.applyResults            += delta.applyResults            ?? 0;
+		acc.infer                   += delta.infer                   ?? 0;
+		acc.trackError              += delta.trackError              ?? 0;
+		acc.neuronLearnConnections  += delta.neuronLearnConnections  ?? 0;
+		acc.neuronRecognizePatterns += delta.neuronRecognizePatterns ?? 0;
+		acc.neuronCorrectErrors     += delta.neuronCorrectErrors     ?? 0;
+		acc.neuronGenerateVotes     += delta.neuronGenerateVotes     ?? 0;
+		acc.recognizeCandidateSearch     += delta.recognizeCandidateSearch     ?? 0;
+		acc.recognizeCandidateEval       += delta.recognizeCandidateEval       ?? 0;
+		acc.recognizeCandidatesEvaluated += delta.recognizeCandidatesEvaluated ?? 0;
+		acc.orchGetLevelTasks       += delta.orchGetLevelTasks       ?? 0;
+		acc.orchDispatchFrame       += delta.orchDispatchFrame       ?? 0;
+		acc.orchCollectActivations  += delta.orchCollectActivations  ?? 0;
+		acc.orchCollectVotes        += delta.orchCollectVotes        ?? 0;
+		acc.memGetLevelNeurons      += delta.memGetLevelNeurons      ?? 0;
+		acc.memWriteBackLevelNeurons += delta.memWriteBackLevelNeurons ?? 0;
+		acc.memActivatePatterns     += delta.memActivatePatterns     ?? 0;
 	}
 
 	/**
@@ -313,7 +344,19 @@ export default class MNISTTestJob extends Job {
 		const ms = (s) => (s * 1000).toFixed(1);
 		const total = t.buildFrame + t.createSensory + t.cleanupDead + t.ageContext
 		            + t.activate + t.processLevels + t.applyResults + t.infer + t.trackError;
-		return `total=${ms(total)}ms  build=${ms(t.buildFrame)} sensory=${ms(t.createSensory)} cleanup=${ms(t.cleanupDead)} age=${ms(t.ageContext)} activate=${ms(t.activate)} levels=${ms(t.processLevels)} apply=${ms(t.applyResults)} infer=${ms(t.infer)} trackErr=${ms(t.trackError)}`;
+		const neuronCpu = t.neuronLearnConnections + t.neuronRecognizePatterns
+		                + t.neuronCorrectErrors + t.neuronGenerateVotes;
+		const orchCpu  = t.orchGetLevelTasks + t.orchDispatchFrame
+		               + t.orchCollectActivations + t.orchCollectVotes;
+		const memCpu   = t.memGetLevelNeurons + t.memWriteBackLevelNeurons + t.memActivatePatterns;
+		// Top: section wall-clock. neuronCpu/orchCpu/memCpu are CPU-time totals
+		// (will sum higher than processLevels wall-clock when parallel).
+		// recognize sub-breakdown shows index lookup vs eval; cand= shows raw count.
+		return `total=${ms(total)}ms  build=${ms(t.buildFrame)} sensory=${ms(t.createSensory)} cleanup=${ms(t.cleanupDead)} age=${ms(t.ageContext)} activate=${ms(t.activate)} levels=${ms(t.processLevels)} apply=${ms(t.applyResults)} infer=${ms(t.infer)} trackErr=${ms(t.trackError)}
+              neuronCpu=${ms(neuronCpu)}ms  learn=${ms(t.neuronLearnConnections)} recognize=${ms(t.neuronRecognizePatterns)} correct=${ms(t.neuronCorrectErrors)} vote=${ms(t.neuronGenerateVotes)}
+              recognize.search=${ms(t.recognizeCandidateSearch)} recognize.eval=${ms(t.recognizeCandidateEval)} cand=${t.recognizeCandidatesEvaluated}
+              orchCpu=${ms(orchCpu)}ms  tasks=${ms(t.orchGetLevelTasks)} dispatch=${ms(t.orchDispatchFrame)} collectAct=${ms(t.orchCollectActivations)} collectVote=${ms(t.orchCollectVotes)}
+              memCpu=${ms(memCpu)}ms  getLevel=${ms(t.memGetLevelNeurons)} writeBack=${ms(t.memWriteBackLevelNeurons)} activate=${ms(t.memActivatePatterns)}`;
 	}
 
 	/**
@@ -341,8 +384,10 @@ export default class MNISTTestJob extends Job {
 			// Same maxFrames as training so the brain reaches the same convergence
 			// state it was in when learn() wired the actions.
 			for (let f = 0; f < this.config.maxFrames; f++) {
+				const frameStart = Date.now();
 				const fr = this.brain.processFrame(inputs, EMPTY_MAP, EMPTY_MAP);
 				this.addTimings(imgTimings, fr.timings);
+				if (this.config.verbose) console.log(`    ${tag} img${i + 1} f${f + 1}: ${Date.now() - frameStart}ms  ${this.formatTimings(fr.timings)}`);
 				if (this.isShuttingDown) break;
 			}
 			if (this.isShuttingDown) break;
@@ -362,7 +407,7 @@ export default class MNISTTestJob extends Job {
 
 			const imgMs = Date.now() - imgStart;
 			console.log(`  ${tag} ${i + 1}/${bitsArr.length} lbl=${label} pred=${predicted}${ok ? '✓' : '✗'}  ${imgMs}ms  (running ${(correct / (i + 1) * 100).toFixed(1)}%)`);
-			console.log(`    timings: ${this.formatTimings(imgTimings)}`);
+			if (this.config.verbose) console.log(`    timings: ${this.formatTimings(imgTimings)}`);
 		}
 
 		const ms = Date.now() - t0;

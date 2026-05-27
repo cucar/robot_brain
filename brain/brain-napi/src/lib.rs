@@ -648,6 +648,20 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
     timings_obj.set_named_property("applyResults", env.create_double(t.apply_results)?)?;
     timings_obj.set_named_property("infer", env.create_double(t.infer)?)?;
     timings_obj.set_named_property("trackError", env.create_double(t.track_error)?)?;
+    timings_obj.set_named_property("neuronLearnConnections",  env.create_double(t.neuron_learn_connections)?)?;
+    timings_obj.set_named_property("neuronRecognizePatterns", env.create_double(t.neuron_recognize_patterns)?)?;
+    timings_obj.set_named_property("neuronCorrectErrors",     env.create_double(t.neuron_correct_errors)?)?;
+    timings_obj.set_named_property("neuronGenerateVotes",     env.create_double(t.neuron_generate_votes)?)?;
+    timings_obj.set_named_property("recognizeCandidateSearch",    env.create_double(t.recognize_candidate_search)?)?;
+    timings_obj.set_named_property("recognizeCandidateEval",      env.create_double(t.recognize_candidate_eval)?)?;
+    timings_obj.set_named_property("recognizeCandidatesEvaluated", env.create_uint32(t.recognize_candidates_evaluated as u32)?)?;
+    timings_obj.set_named_property("orchGetLevelTasks",     env.create_double(t.orch_get_level_tasks)?)?;
+    timings_obj.set_named_property("orchDispatchFrame",     env.create_double(t.orch_dispatch_frame)?)?;
+    timings_obj.set_named_property("orchCollectActivations", env.create_double(t.orch_collect_activations)?)?;
+    timings_obj.set_named_property("orchCollectVotes",      env.create_double(t.orch_collect_votes)?)?;
+    timings_obj.set_named_property("memGetLevelNeurons",    env.create_double(t.mem_get_level_neurons)?)?;
+    timings_obj.set_named_property("memWriteBackLevelNeurons", env.create_double(t.mem_write_back_level_neurons)?)?;
+    timings_obj.set_named_property("memActivatePatterns",   env.create_double(t.mem_activate_patterns)?)?;
     obj.set_named_property("timings", timings_obj)?;
 
     Ok(obj)
