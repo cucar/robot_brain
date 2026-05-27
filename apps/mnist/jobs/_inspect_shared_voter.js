@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
+import { MNISTEncoder } from '../encoders/mnist_encoder.js';
 import { loadImages, loadLabels } from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,7 +16,6 @@ const findFile = (b) => fs.existsSync(path.join(dataDir, b)) ? path.join(dataDir
 const trainImages = loadImages(findFile('train-images-idx3-ubyte'));
 const trainLabels = loadLabels(findFile('train-labels-idx1-ubyte'));
 const testImages = loadImages(findFile('t10k-images-idx3-ubyte'));
-const testLabels = loadLabels(findFile('t10k-labels-idx1-ubyte'));
 
 const PER_CLASS = 20;
 const trainByClass = Array.from({length: 10}, () => []);

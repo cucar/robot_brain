@@ -25,8 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
-import { loadImages, loadLabels } from '../loader.js';
+import { MNISTEncoder } from '../encoders/mnist_encoder.js';
+import { loadImages } from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
@@ -47,7 +47,6 @@ const TRIM = !process.argv.includes('--no-trim');
 
 const findFile = (b) => fs.existsSync(path.join(dataDir, b)) ? path.join(dataDir, b) : path.join(dataDir, `${b}.gz`);
 const images = loadImages(findFile('train-images-idx3-ubyte'));
-const labels = loadLabels(findFile('train-labels-idx1-ubyte'));
 
 const brain = new Brain({
 	contextLength: CONTEXT_LENGTH,
@@ -161,9 +160,8 @@ for (const e of erodedPatterns.slice(0, 10)) {
 let parentId = TARGET_PARENT;
 if (parentId < 0) {
 	// Find latest burst episode and pick a parent that fired in it AND has a long quiet gap.
-	let latestBurstEp = -1, latestBurstParents = [];
+	let latestBurstEp = -1;
 	for (let ep = EPISODES; ep >= 1; ep--) {
-		const snap = snapshots.get(ep);
 		const prev = snapshots.get(ep - 1);
 		if (!prev) break;
 		// parents whose # of children grew this ep
@@ -216,10 +214,6 @@ for (const { id: cid } of children) {
 		if (!snap || !snap.has(cid)) continue;
 		for (const k of snap.get(cid).keys()) allKeys.add(k);
 	}
-	const sortedKeys = [...allKeys].sort((a, b) => {
-		const [, ad] = a.split('@'); const [, bd] = b.split('@');
-		return parseInt(ad) - parseInt(bd) || a.localeCompare(b);
-	});
 
 	// Show summary: per episode the count of entries and changes vs prev
 	let totalAdded = 0, totalRemoved = 0;

@@ -621,6 +621,35 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
     }
     obj.set_named_property("actionVoteStats", stats_arr)?;
 
+    // actionVotes: Array<{ voterNeuronId, channelId, dimensionId, value, strength, reward }>
+    let mut votes_arr = env.create_array_with_length(result.action_votes.len())?;
+    for (i, v) in result.action_votes.iter().enumerate() {
+        let mut v_obj = env.create_object()?;
+        v_obj.set_named_property("voterNeuronId", env.create_uint32(v.voter_neuron_id as u32)?)?;
+        v_obj.set_named_property("channelId", env.create_uint32(v.channel_id as u32)?)?;
+        v_obj.set_named_property("dimensionId", env.create_uint32(v.dimension_id as u32)?)?;
+        v_obj.set_named_property("value", env.create_int32(v.value)?)?;
+        v_obj.set_named_property("strength", env.create_double(v.strength)?)?;
+        v_obj.set_named_property("reward", env.create_double(v.reward)?)?;
+        votes_arr.set_element(i as u32, v_obj)?;
+    }
+    obj.set_named_property("actionVotes", votes_arr)?;
+
+    // timings: { buildFrame, createSensory, cleanupDead, ageContext, activate,
+    //            processLevels, applyResults, infer, trackError } — seconds
+    let t = &result.timings;
+    let mut timings_obj = env.create_object()?;
+    timings_obj.set_named_property("buildFrame", env.create_double(t.build_frame)?)?;
+    timings_obj.set_named_property("createSensory", env.create_double(t.create_sensory)?)?;
+    timings_obj.set_named_property("cleanupDead", env.create_double(t.cleanup_dead)?)?;
+    timings_obj.set_named_property("ageContext", env.create_double(t.age_context)?)?;
+    timings_obj.set_named_property("activate", env.create_double(t.activate)?)?;
+    timings_obj.set_named_property("processLevels", env.create_double(t.process_levels)?)?;
+    timings_obj.set_named_property("applyResults", env.create_double(t.apply_results)?)?;
+    timings_obj.set_named_property("infer", env.create_double(t.infer)?)?;
+    timings_obj.set_named_property("trackError", env.create_double(t.track_error)?)?;
+    obj.set_named_property("timings", timings_obj)?;
+
     Ok(obj)
 }
 

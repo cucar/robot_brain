@@ -9,10 +9,10 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
-import { loadImages, loadLabels } from '../loader.js';
+import {fileURLToPath} from 'node:url';
+import {Brain} from 'robot-brain';
+import {MNISTEncoder} from '../encoders/mnist_encoder.js';
+import {loadImages} from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
@@ -81,8 +81,7 @@ for (const k of sortedKeys) {
 		if (v.strength < minStr) minStr = v.strength;
 		if (v.strength > maxStr) maxStr = v.strength;
 	}
-	const finalEp = EPISODES;
-	const presentAtEnd = snaps.get(finalEp).has(k);
+	const presentAtEnd = snaps.get(EPISODES).has(k);
 	if (!presentAtEnd) {
 		deleted.push({ k, firstEp, lastEp, firstStr, lastStr, minStr, maxStr });
 	} else if (lastStr < firstStr) {

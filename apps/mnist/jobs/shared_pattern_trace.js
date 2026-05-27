@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
+import { MNISTEncoder } from '../encoders/mnist_encoder.js';
 import { loadImages, loadLabels } from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

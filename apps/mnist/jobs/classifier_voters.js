@@ -24,7 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
+import { MNISTEncoder } from '../encoders/mnist_encoder.js';
 import { loadImages, loadLabels } from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -242,7 +242,7 @@ for (const d1 of DIGITS) {
 
 // For each voter, count how many distinct digits it fires for.
 const voterDigitCount = new Map(); // neuronId -> count of digits it fires for
-for (const [d, voters] of digitVoters) {
+for (const [_, voters] of digitVoters) {
 	for (const id of voters) {
 		voterDigitCount.set(id, (voterDigitCount.get(id) || 0) + 1);
 	}

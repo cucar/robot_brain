@@ -25,8 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
-import { loadImages, loadLabels } from '../loader.js';
+import { MNISTEncoder } from '../encoders/mnist_encoder.js';
+import { loadImages } from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
@@ -49,7 +49,6 @@ const TRIM = !process.argv.includes('--no-trim');
 
 const findFile = (b) => fs.existsSync(path.join(dataDir, b)) ? path.join(dataDir, b) : path.join(dataDir, `${b}.gz`);
 const images = loadImages(findFile('train-images-idx3-ubyte'));
-const labels = loadLabels(findFile('train-labels-idx1-ubyte'));
 
 const brain = new Brain({
 	contextLength: CONTEXT_LENGTH,
@@ -99,8 +98,6 @@ function runImage(bits, learning, snapshot) {
 // snapshots[ep] = [perImage0Frames, perImage1Frames, ...]
 // perImage*Frames is array of Sets, one per frame
 const snapshots = new Map();
-const prevTotal = [];
-let lastNeuronId = 0;
 
 console.log(`Frame Activation Diff — ${MAX_IMAGES} images, ${EPISODES} episodes, diffing ep${DIFF_FROM}..${DIFF_TO}`);
 console.log(`  ctx=${CONTEXT_LENGTH} merge=${MERGE_THRESHOLD} forget=${FORGET_RATE}`);

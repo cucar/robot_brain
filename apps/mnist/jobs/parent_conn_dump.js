@@ -9,8 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
-import { loadImages, loadLabels } from '../loader.js';
+import { MNISTEncoder } from '../encoders/mnist_encoder.js';
+import { loadImages } from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, '..', 'data');
@@ -25,7 +25,6 @@ const TGT_B = num('--target-b', 12);
 
 const findFile = (b) => fs.existsSync(path.join(dataDir, b)) ? path.join(dataDir, b) : path.join(dataDir, `${b}.gz`);
 const images = loadImages(findFile('train-images-idx3-ubyte'));
-const labels = loadLabels(findFile('train-labels-idx1-ubyte'));
 
 const brain = new Brain({ contextLength: 28, mergeThreshold: 0.99, patternForgetRate: 0 });
 const encoder = new MNISTEncoder(2, true);

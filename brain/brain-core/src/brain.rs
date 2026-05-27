@@ -83,6 +83,39 @@ pub struct FrameResult {
     /// at least one vote. Shows the number of individual neuron votes, total
     /// strength, and reward distribution (min/max/avg) across those votes.
     pub action_vote_stats: Vec<ActionVoteStats>,
+    /// Per-voter action votes — one entry per (voter, action neuron) pair.
+    /// Preserves voter identity so hosts can implement per-voter normalization
+    /// schemes that aggregated stats lose.
+    pub action_votes: Vec<ActionVote>,
+    /// Per-section wall-clock timings (seconds). Populated for profiling.
+    /// Zero when the section was skipped (e.g. cleanup runs only when learning).
+    pub timings: FrameTimings,
+}
+
+/// Per-section timings inside a single frame, in seconds.
+#[derive(Debug, Clone, Default)]
+pub struct FrameTimings {
+    pub build_frame: f64,
+    pub create_sensory: f64,
+    pub cleanup_dead: f64,
+    pub age_context: f64,
+    pub activate: f64,
+    pub process_levels: f64,
+    pub apply_results: f64,
+    pub infer: f64,
+    pub track_error: f64,
+}
+
+/// A single vote cast by a voter neuron for an action neuron.
+/// Generic across action dimensions — `value` is the action's bucket id.
+#[derive(Debug, Clone)]
+pub struct ActionVote {
+    pub voter_neuron_id: NeuronId,
+    pub channel_id: ChannelId,
+    pub dimension_id: DimensionId,
+    pub value: i32,
+    pub strength: f64,
+    pub reward: f64,
 }
 
 /// Per-action-value vote statistics aggregated from raw FlatVotes.
@@ -537,13 +570,15 @@ impl Brain {
         let votes = self.thalamus.collect_votes(&votable);
 
         // Run consensus and build inference output
-        let (inferences_map, vote_debug, _winners, action_vote_stats) = self.infer_neurons(&votes);
+        let (inferences_map, vote_debug, _winners, action_vote_stats, action_votes) = self.infer_neurons(&votes);
 
         FrameResult {
             inferences: inferences_map,
             elapsed: frame_start.elapsed().as_secs_f64(),
             vote_debug,
             action_vote_stats,
+            action_votes,
+            timings: FrameTimings::default(),
         }
     }
 
@@ -1082,56 +1117,79 @@ impl Brain {
         //    When disabled, the context is frozen — no new activations, no aging.
         if self.event_processing {
             self.frame_number += 1;
+            let mut timings = FrameTimings::default();
 
             // build the current frame from quantized events and forced/inferred actions
+            let t = Instant::now();
             let frame_neurons = self.get_frame_neurons(events, actions);
+            timings.build_frame = t.elapsed().as_secs_f64();
             if frame_neurons.is_empty() {
                 return FrameResult {
                     inferences: FxHashMap::default(),
                     elapsed: frame_start.elapsed().as_secs_f64(),
                     vote_debug: None,
                     action_vote_stats: Vec::new(),
+                    action_votes: Vec::new(),
+                    timings,
                 };
             }
 
             // Op-1: construct any new sensory neurons in their owning columns
+            let t = Instant::now();
             self.create_new_sensory_neurons(&frame_neurons);
+            timings.create_sensory = t.elapsed().as_secs_f64();
 
             // Op-2: forget connections and patterns to avoid curse of dimensionality
             // Skipped when learning is off (test/inference) — preserve trained state.
             if self.learning {
+                let t = Instant::now();
                 self.cleanup_dead_patterns();
+                timings.cleanup_dead = t.elapsed().as_secs_f64();
             }
 
             // slide the temporal window: age active neurons and push the new rewards frame
+            let t = Instant::now();
             self.age_context(rewards);
+            timings.age_context = t.elapsed().as_secs_f64();
 
             // activate new neurons in age=0, level=0 — inputs from the world
+            let t = Instant::now();
             let neuron_ids: Vec<NeuronId> = frame_neurons.iter().map(|p| p.id).collect();
             self.activate_neurons(&neuron_ids);
+            timings.activate = t.elapsed().as_secs_f64();
 
             // process neurons level-by-level — Op-3 dispatch is the only per-level round-trip
+            let t = Instant::now();
             let (votes, neuron_specs, dispatch_results) = self.process_levels();
+            timings.process_levels = t.elapsed().as_secs_f64();
 
             if self.debug && !neuron_specs.is_empty() {
                 println!("  frame {}: {} new error patterns created", self.frame_number, neuron_specs.len());
             }
 
             // Op-4 + Op-5: flush deferred neuron creation and contextRef updates in one batch
+            let t = Instant::now();
             self.thalamus.apply_level_results(&neuron_specs, &dispatch_results);
+            timings.apply_results = t.elapsed().as_secs_f64();
 
             // do inferences with age>0 neurons
-            let (inferences_map, vote_debug, _winners, action_vote_stats) = self.infer_neurons(&votes);
+            let t = Instant::now();
+            let (inferences_map, vote_debug, _winners, action_vote_stats, action_votes) = self.infer_neurons(&votes);
+            timings.infer = t.elapsed().as_secs_f64();
 
             // accumulate MAPE by comparing continuous event predictions to the actual input scalars
+            let t = Instant::now();
             let dim_inferences = self.build_dim_inferences(&inferences_map);
             self.diagnostics.track_continuous_error(&dim_inferences, events, &self.thalamus.quantizer);
+            timings.track_error = t.elapsed().as_secs_f64();
 
             FrameResult {
                 inferences: inferences_map,
                 elapsed: frame_start.elapsed().as_secs_f64(),
                 vote_debug,
                 action_vote_stats,
+                action_votes,
+                timings,
             }
         } else {
             // ── Frozen context: no event processing, no aging.
@@ -1196,14 +1254,21 @@ impl Brain {
             }
 
             // Re-run voting from existing active neurons (frozen ages)
+            let mut timings = FrameTimings::default();
+            let t = Instant::now();
             let (votes, _neuron_specs, _dispatch_results) = self.process_levels();
-            let (inferences_map, vote_debug, _winners, action_vote_stats) = self.infer_neurons(&votes);
+            timings.process_levels = t.elapsed().as_secs_f64();
+            let t = Instant::now();
+            let (inferences_map, vote_debug, _winners, action_vote_stats, action_votes) = self.infer_neurons(&votes);
+            timings.infer = t.elapsed().as_secs_f64();
 
             FrameResult {
                 inferences: inferences_map,
                 elapsed: frame_start.elapsed().as_secs_f64(),
                 vote_debug,
                 action_vote_stats,
+                action_votes,
+                timings,
             }
         }
     }
@@ -1448,11 +1513,11 @@ impl Brain {
     /// Infer predictions and outputs using voting architecture.
     /// Returns the per-channel scalar-space inferences, optional vote debug, and
     /// the raw winner list for memory persistence.
-    fn infer_neurons(&mut self, votes: &[FlatVote]) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Option<VoteDebug>, Vec<InferredNeuron>, Vec<ActionVoteStats>) {
+    fn infer_neurons(&mut self, votes: &[FlatVote]) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Option<VoteDebug>, Vec<InferredNeuron>, Vec<ActionVoteStats>, Vec<ActionVote>) {
         // if no inference votes, wait for more data
         if votes.is_empty() {
             if self.debug { println!("No inferences found. Waiting for more data in future frames."); }
-            return (FxHashMap::default(), None, Vec::new(), Vec::new());
+            return (FxHashMap::default(), None, Vec::new(), Vec::new(), Vec::new());
         }
 
         // Aggregate votes and determine winners
@@ -1501,8 +1566,38 @@ impl Brain {
 
         // Compute per-digit action vote stats from raw votes
         let action_vote_stats = self.compute_action_vote_stats(votes);
+        let action_votes = self.collect_action_votes(votes);
 
-        (inferences_map, vote_debug, inferences, action_vote_stats)
+        (inferences_map, vote_debug, inferences, action_vote_stats, action_votes)
+    }
+
+    /// Collect per-voter action votes — one entry per FlatVote targeting an
+    /// action neuron. Preserves voter identity so hosts can implement custom
+    /// consensus schemes (e.g. per-voter reward normalization).
+    fn collect_action_votes(&self, votes: &[FlatVote]) -> Vec<ActionVote> {
+        let mut out: Vec<ActionVote> = Vec::new();
+        for v in votes {
+            if self.thalamus.get_neuron_type(v.neuron_id) != Some(NeuronType::Action) {
+                continue;
+            }
+            let coord = match self.thalamus.get_neuron_coordinate(v.neuron_id) {
+                Some(c) => c.clone(),
+                None => continue,
+            };
+            let channel_id = match self.thalamus.get_neuron_channel_id(v.neuron_id) {
+                Some(c) => c,
+                None => continue,
+            };
+            out.push(ActionVote {
+                voter_neuron_id: v.voter_id,
+                channel_id,
+                dimension_id: coord.dim_id,
+                value: coord.bucket_id,
+                strength: v.strength,
+                reward: v.reward,
+            });
+        }
+        out
     }
 
     /// Compute per-action-value vote statistics from raw FlatVotes.

@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Brain } from 'robot-brain';
-import { MNISTEncoder } from '../encoder.js';
+import { MNISTEncoder } from '../encoders/mnist_encoder.js';
 import { loadImages, loadLabels } from '../loader.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,22 +101,6 @@ const childrenByParent = new Map();
 // pattern_id -> { episode_born, parent_id, level, context }
 const patternMeta = new Map();
 let lastNeuronId = 0;
-
-function snapshotNewPatterns(episode) {
-	const total = brain.getFrameSummary().neuronCount;
-	const newOnes = [];
-	for (let id = lastNeuronId + 1; id <= total; id++) {
-		const info = brain.inspectNeuron(id);
-		if (info.level === 0) continue; // skip sensory
-		patternMeta.set(id, { episodeBorn: episode, parentId: info.parentId, level: info.level, context: info.context });
-		const arr = childrenByParent.get(info.parentId) || [];
-		arr.push(id);
-		childrenByParent.set(info.parentId, arr);
-		newOnes.push({ id, ...info });
-	}
-	lastNeuronId = total;
-	return newOnes;
-}
 
 // ── Train + snapshot ────────────────────────────────────────────────────────
 
