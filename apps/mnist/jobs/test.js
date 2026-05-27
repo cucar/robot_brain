@@ -2,89 +2,68 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Job, runJob} from 'robot-brain';
-import {MNISTEncoder} from '../encoder.js';
+import {MNISTRowChannelsEncoder} from '../encoder.js';
 import {loadImages, loadLabels} from '../loader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * MNIST Test Job — single-channel binary pixel stream.
+ * MNIST Test Job — 28-channel column-scan training with parallel contexts.
  *
- * Each image is fed pixel-by-pixel through one channel. After the bit stream
- * plays through, brain.learn(label, +reward) wires the votable context
- * neurons to the correct digit-action neuron. At test time the same image
- * is replayed and brain.infer() returns the action winner — the predicted
- * digit.
- *
- * Defaults match the memorization recipe found via the text-test sweep:
- *   --context-length 28     row width + 1
- *   --merge-threshold 0.99
- *   --forget-rate 0
- *   --error-mode conservative (Brain default)
- *   trim leading/trailing all-black pixel runs per image (--no-trim to opt out)
+ * Architecture (the working recipe from implant_test):
+ *   - 28 input channels, one per row. Each frame presents one column's pixels
+ *     across all 28 channels. An image = 28 frames. context_length=30 covers
+ *     the whole image, so L1 patterns natively encode columns and L2+ patterns
+ *     encode whole-image column sequences.
+ *   - Parallel-context training: brain.initContexts(N) creates one context per
+ *     training image. We advance them column-by-column in lockstep with full
+ *     event learning + error correction. The shared thalamus accumulates
+ *     hierarchical patterns from all images. Refine_context and strengthen on
+ *     match are gated by the learning flag in brain-core so cold replay is
+ *     fully deterministic.
+ *   - Action wiring (Phase 2): after training, for each context i, call
+ *     brain.learn(label_i) so context i's end-of-image voters wire to action.
+ *   - Classification: single-context replay (slot 0) with learning off. Read
+ *     action consensus by SUM-OF-EVIDENCE (totalStrength × avgReward), not the
+ *     brain's per-voter mean — additive reward + sum consensus preserve the
+ *     frequency signal correctly.
  *
  * MNIST-specific flags:
  *   --buckets N            quantization level (default 2 = binary)
  *   --max-images N         cap training set (default: all 60K)
- *   --max-test-images N    cap test set (default: all 10K)
- *   --episodes N           training passes (default 10)
+ *   --max-test-images N    cap test set (default 20)
+ *   --max-train-test N     how many training images to also classify (default 20)
  *   --skip-test            skip held-out evaluation
- *   --shuffle              randomize image order each pass (default: in-order)
- *   --no-trim              keep the full 784-pixel stream (including borders)
- *   --test-train           test against training images instead of held-out set
- *   --correct-reward F     reward for correct digit prediction (default 1)
- *   --incorrect-reward F   reward for incorrect digit prediction (default -1)
+ *
+ * Brain flags inherited from base Job: --context-length, --merge-threshold,
+ * --forget-rate, --error-mode, --error-threshold, --level-decay.
  */
 export default class MNISTTestJob extends Job {
 
 	constructor() {
 		super();
-
 		this.config = {
 			buckets: 2,
-			maxImages: 0,            // 0 = use all 60K training images
-			maxTestImages: 0,        // 0 = use all 10K test images
-			maxEpisodes: 10,
+			maxImages: 200,
+			maxTestImages: 20,
+			maxTrainTest: 20,
 			skipTest: false,
-			shuffle: false,
-			trim: true,
-			correctReward: 1,
-			incorrectReward: -1,
-			testTrain: false
 		};
 
 		this.encoder = null;
-
-		// Raw MNIST data — loaded once in configureChannels(), reused across episodes.
 		this.trainImages = null;
 		this.trainLabels = null;
 		this.testImages = null;
 		this.testLabels = null;
-
-		// Pre-encoded bit streams so we don't requantize/trim every episode.
 		this.trainBits = null;
 		this.testBits = null;
-
-		this.episodeResults = [];
-		this.testResult = null;
 	}
 
-	/**
-	 * Parse MNIST-specific command-line flags. Brain-level flags
-	 * (--context-length, --forget-rate, --merge-threshold, --error-mode, etc.)
-	 * are parsed by parseBrainArgs() in the Job base class. Override the
-	 * brain defaults here to the memorization recipe when the user didn't
-	 * specify them on the command line.
-	 */
 	applyOptions() {
 		const num = (flag) => {
 			const i = process.argv.indexOf(flag);
 			return i !== -1 && process.argv[i + 1] !== undefined ? parseInt(process.argv[i + 1]) : null;
-		};
-		const flt = (flag) => {
-			const i = process.argv.indexOf(flag);
-			return i !== -1 && process.argv[i + 1] !== undefined ? parseFloat(process.argv[i + 1]) : null;
 		};
 
 		const buckets = num('--buckets');
@@ -96,29 +75,20 @@ export default class MNISTTestJob extends Job {
 		const maxTestImages = num('--max-test-images');
 		if (maxTestImages !== null) this.config.maxTestImages = maxTestImages;
 
-		const episodes = num('--episodes');
-		if (episodes !== null) this.config.maxEpisodes = episodes;
+		const maxTrainTest = num('--max-train-test');
+		if (maxTrainTest !== null) this.config.maxTrainTest = maxTrainTest;
 
 		if (process.argv.includes('--skip-test')) this.config.skipTest = true;
-		if (process.argv.includes('--shuffle')) this.config.shuffle = true;
-		if (process.argv.includes('--no-trim')) this.config.trim = false;
-		if (process.argv.includes('--test-train')) this.config.testTrain = true;
 
-		const correctReward = flt('--correct-reward');
-		if (correctReward !== null) this.config.correctReward = correctReward;
-
-		const incorrectReward = flt('--incorrect-reward');
-		if (incorrectReward !== null) this.config.incorrectReward = incorrectReward;
-
-		// use
 		if (this.options.contextLength == null) this.options.contextLength = 30;
+		if (this.options.mergeThreshold == null) this.options.mergeThreshold = 1.0;
 	}
 
 	/**
 	 * Register the single pixel channel with the brain.
 	 */
 	async initialize() {
-		this.encoder = new MNISTEncoder(this.config.buckets, this.config.trim);
+		this.encoder = new MNISTRowChannelsEncoder(this.config.buckets);
 		this.encoder.registerChannels(this.brain);
 	}
 
@@ -153,14 +123,6 @@ export default class MNISTTestJob extends Job {
 
 		this.trainBits = this.trainImages.map(px => this.encoder.buildBits(px));
 		this.testBits = this.testImages.map(px => this.encoder.buildBits(px));
-
-		// Per-label class weights: 1 / count(label). Used as the reward passed
-		// to brain.learn() so that the SUM of reward into each digit-action
-		// neuron across the training set is equal — preventing a digit with
-		// more training examples from structurally outvoting rarer digits at
-		// consensus on shared voters (e.g. the 4↔1 overlap failure).
-		this.labelCounts = new Array(10).fill(0);
-		for (const lbl of this.trainLabels) this.labelCounts[lbl]++;
 	}
 
 	/**
@@ -175,272 +137,131 @@ export default class MNISTTestJob extends Job {
 	}
 
 	async showStartupInfo() {
-		console.log(`MNIST Digit Recognition — Single-Channel Binary Stream`);
+		console.log(`MNIST Digit Recognition — 28-Channel Column Scan, Parallel Contexts`);
 		console.log(`  Buckets: ${this.config.buckets}`);
-		console.log(`  Context length: ${this.options.contextLength}  (row-width = 28)`);
+		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Merge threshold: ${this.options.mergeThreshold}`);
 		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
 		console.log(`  Error mode: ${this.options.errorCorrectionMode ?? 'conservative (default)'}`);
-		console.log(`  Trim borders: ${this.config.trim}`);
-		console.log(`  Episodes: ${this.config.maxEpisodes}`);
-		console.log(`  Shuffle: ${this.config.shuffle}`);
-		console.log(`  Reward: correct=${this.config.correctReward}, incorrect=${this.config.incorrectReward}`);
+		console.log(`  Training images cap: ${this.config.maxImages}`);
+		console.log(`  Classify (train subset): ${this.config.maxTrainTest}`);
+		console.log(`  Classify (held-out): ${this.config.skipTest ? 'skipped' : this.config.maxTestImages}`);
 		console.log('');
 	}
 
 	async executeJob() {
-		for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
-			const result = await this.runTrainingEpisode(ep);
-			this.episodeResults.push(result);
-			if (this.isShuttingDown) return;
+		const N = this.trainImages.length;
+		const FRAMES = 28; // 28 columns
 
-			// Run a test pass after each training episode (unless --skip-test)
-			// so the per-episode progression is visible, not just a single
-			// snapshot at the end.
-			if (!this.config.skipTest) {
-				const t = await this.runTest({ silent: true });
-				result.testLblAcc = t.accuracy;
-				result.testEvtAcc = t.evtAcc;
-				result.testCorrect = t.correct;
-				result.testTotal = t.total;
-				this.testResult = t;
-				console.log(`  → after ep ${ep}: test lblAcc=${(t.accuracy * 100).toFixed(2)}% (${t.correct}/${t.total}) evtAcc=${t.evtAcc !== null ? (t.evtAcc * 100).toFixed(2) + '%' : '—'}\n`);
-				if (this.isShuttingDown) return;
-			}
-		}
-	}
-
-	/**
-	 * One pass through the training set. Each image: reset, feed bits, label.
-	 *
-	 * @param {number} episode
-	 * @returns {Promise<{ episode, total, duration, trainAcc }>}
-	 */
-	async runTrainingEpisode(episode) {
-		const startTime = Date.now();
-		const indices = this.buildIndices(this.trainImages.length);
-
-		let correct = 0;
-		let evtSum = 0;
-		let evtCount = 0;
-
-		for (let i = 0; i < indices.length; i++) {
-			const idx = indices[i];
-			const label = this.trainLabels[idx];
-			const { prediction, eventAccuracy } = this.runTrainImage(this.trainBits[idx], label);
-			if (prediction === label) correct++;
-			if (eventAccuracy !== null) { evtSum += eventAccuracy; evtCount++; }
-
-			const summary = this.brain.getFrameSummary();
-			const mark = prediction === label ? '✓' : '✗';
-			const predStr = prediction === -1 ? '—' : String(prediction);
-			const evtStr = eventAccuracy !== null ? (eventAccuracy * 100).toFixed(1) + '%' : '—';
-			console.log(`  ep${episode} train ${String(i + 1).padStart(4)}/${indices.length} #${String(idx).padStart(5)} lbl=${label}→${predStr} ${mark}  evtAcc=${evtStr} neurons=${summary.neuronCount} L${summary.maxLevel}`);
-
-			await new Promise(resolve => setImmediate(resolve));
-			if (this.isShuttingDown) break;
-		}
-
-		const summary = this.brain.getFrameSummary();
-		const duration = Date.now() - startTime;
-		const ips = (indices.length / (duration / 1000)).toFixed(1);
-		const labelAcc = (correct / indices.length * 100).toFixed(2);
-		const evtAcc = evtCount > 0 ? (evtSum / evtCount * 100).toFixed(2) : '—';
-
-		console.log(`  Episode ${episode}: labelAcc(post-learn)=${labelAcc}% evtAcc(stream)=${evtAcc}% | neurons=${summary.neuronCount} L${summary.maxLevel} | ${ips} img/s ${duration}ms`);
-
-		return { episode, total: indices.length, correct, duration, labelAcc, evtAcc };
-	}
-
-	/**
-	 * Train one image: feed every pixel as an event-only frame, then call
-	 * brain.learn() with the digit label and reward so the votable context
-	 * neurons wire to the correct action neuron. The returned prediction
-	 * is the brain's pre-learning guess (from the verify-infer inside learn).
-	 *
-	 * @param {Uint8Array} bits — pre-encoded bit stream for this image
-	 * @param {number} label
-	 * @returns {number} predicted digit
-	 */
-	runTrainImage(bits, label) {
-		this.brain.resetContext();
-		this.brain.resetAccuracyStats();
-		this.encoder.resetActions();
-
+		// ── Phase 1: parallel-context training ──────────────────────────────
+		console.log(`Phase 1: parallel training of ${N} contexts (${FRAMES} frames each)...`);
+		this.brain.initContexts(N);
 		this.brain.setProcessingMode(true, false, true);
-		for (let i = 0; i < bits.length; i++) {
-			this.brain.processFrame(this.encoder.encodePixel(bits[i]), new Map(), new Map());
-			if (this.isShuttingDown) return { prediction: -1, eventAccuracy: null };
+		const EMPTY = new Map();
+		const t0 = Date.now();
+		for (let col = 0; col < FRAMES; col++) {
+			for (let i = 0; i < N; i++) {
+				this.brain.setActiveContext(i);
+				this.brain.processFrame(this.encoder.encodeColumn(this.trainBits[i], col), EMPTY, EMPTY);
+			}
+			if (this.isShuttingDown) return;
+		}
+		const trainMs = Date.now() - t0;
+		const summary = this.brain.getFrameSummary();
+		console.log(`  trained in ${trainMs}ms, ${summary.neuronCount} neurons, max L${summary.maxLevel}`);
+
+		// ── Phase 2: per-context action wiring ──────────────────────────────
+		console.log(`\nPhase 2: action wiring per context...`);
+		const t1 = Date.now();
+		let postLearnCorrect = 0;
+		for (let i = 0; i < N; i++) {
+			const label = this.trainLabels[i];
+			this.brain.setActiveContext(i);
+			this.encoder.resetActions();
+			const actions = this.encoder.encodeAction(label);
+			const rewards = this.encoder.buildRewards(label, 1.0, -1.0);
+			const learnResult = this.brain.learn(actions, rewards);
+			const predicted = this.encoder.predictBySumConsensus(learnResult.actionVoteStats);
+			if (predicted === label) postLearnCorrect++;
+			if (this.isShuttingDown) return;
+		}
+		const wireMs = Date.now() - t1;
+		console.log(`  wired ${N} contexts in ${wireMs}ms`);
+		console.log(`  Post-learn infer (sum consensus): ${(postLearnCorrect / N * 100).toFixed(2)}% (${postLearnCorrect}/${N})`);
+
+		// ── Phase 3: classify (single-context interface on slot 0) ──────────
+		this.brain.setProcessingMode(true, false, false);
+		this.brain.setActiveContext(0);
+
+		// Classify a subset of training images (verification of memorization)
+		const numTrainTest = Math.min(this.config.maxTrainTest, N);
+		if (numTrainTest > 0) {
+			console.log(`\nPhase 3a: classify ${numTrainTest} training images (cold replay)...`);
+			const r = this.classifySet(this.trainBits.slice(0, numTrainTest), this.trainLabels.slice(0, numTrainTest), 'train');
+			this.trainResult = r;
 		}
 
-		// Event accuracy = how well the brain predicted each next pixel of the
-		// bit stream as it played through. This is the meaningful "memorized
-		// the sequence?" signal — the post-learn label prediction below is a
-		// freshly-wired self-check and not a recall metric.
-		const evtSummary = this.brain.getFrameSummary();
-		const eventAccuracy = evtSummary.accuracyTotal > 0
-			? evtSummary.accuracyCorrect / evtSummary.accuracyTotal
-			: null;
-
-		// Class-balanced reward: each digit-action neuron should receive the
-		// same TOTAL reward summed across the training set. A digit seen N
-		// times in training gets reward = correctReward / N per call.
-		const weight = this.labelCounts[label] > 0
-			? this.config.correctReward / this.labelCounts[label]
-			: this.config.correctReward;
-		const actions = this.encoder.encodeAction(label);
-		const rewards = this.encoder.buildRewards(label, weight, this.config.incorrectReward);
-		const { inferences } = this.brain.learn(actions, rewards);
-		const { predicted } = this.encoder.applyInferences(inferences);
-
-		// Track for next-iteration buildRewards (won't see the same image, but
-		// keeps the encoder's lastAction state consistent).
-		this.encoder.setForcedAction(label);
-		return { prediction: predicted, eventAccuracy };
+		if (!this.config.skipTest) {
+			console.log(`\nPhase 3b: classify ${this.testImages.length} held-out test images...`);
+			const r = this.classifySet(this.testBits, this.testLabels, 'held');
+			this.testResult = r;
+		}
 	}
 
-	/**
-	 * Run held-out (or training-set) evaluation: feed bits without learning,
-	 * infer the digit, compare to label.
-	 *
-	 * @returns {Promise<{ accuracy, correct, total, perDigit, perDigitTotal, confusion }>}
-	 */
-	async runTest({ silent = false } = {}) {
-		if (!silent) console.log('');
-		const images = this.config.testTrain ? this.trainImages : this.testImages;
-		const bitsArr = this.config.testTrain ? this.trainBits : this.testBits;
-		const labels = this.config.testTrain ? this.trainLabels : this.testLabels;
-		if (!silent && this.config.testTrain) console.log('  (testing against training images)');
-		const indices = this.buildIndices(images.length);
-
+	classifySet(bitsArr, labels, tag) {
+		const FRAMES = 28;
+		const EMPTY = new Map();
 		let correct = 0;
-		let evtSum = 0;
-		let evtCount = 0;
 		const perDigit = new Array(10).fill(0);
 		const perDigitTotal = new Array(10).fill(0);
-		// confusion[actual][predicted] = count
 		const confusion = Array.from({ length: 10 }, () => new Array(10).fill(0));
+		const t0 = Date.now();
 
-		for (let i = 0; i < indices.length; i++) {
-			const idx = indices[i];
-			const label = labels[idx];
-			const result = this.runTestImage(bitsArr[idx], label);
-
-			if (result.predicted >= 0 && result.predicted < 10) {
-				confusion[label][result.predicted]++;
+		for (let i = 0; i < bitsArr.length; i++) {
+			this.brain.setActiveContext(0);
+			this.brain.resetContext();
+			for (let col = 0; col < FRAMES; col++) {
+				this.brain.processFrame(this.encoder.encodeColumn(bitsArr[i], col), EMPTY, EMPTY);
 			}
-			if (result.correct) {
-				correct++;
-				perDigit[label]++;
-			}
+			this.encoder.resetActions();
+			const infer = this.brain.infer();
+			const predicted = this.encoder.predictBySumConsensus(infer.actionVoteStats);
+			const label = labels[i];
+			const ok = predicted === label;
+			if (ok) { correct++; perDigit[label]++; }
 			perDigitTotal[label]++;
-			if (result.eventAccuracy !== null) { evtSum += result.eventAccuracy; evtCount++; }
-
-			if (!silent) {
-				const mark = result.correct ? '✓' : '✗';
-				const predStr = result.predicted === -1 ? '—' : String(result.predicted);
-				const running = (correct / (i + 1) * 100).toFixed(1);
-				const evtStr = result.eventAccuracy !== null ? (result.eventAccuracy * 100).toFixed(1) + '%' : '—';
-				console.log(`  test ${String(i + 1).padStart(4)}/${indices.length} #${String(idx).padStart(5)} lbl=${label}→${predStr} ${mark}  lblAcc=${running}% evtAcc=${evtStr} neurons=${result.neuronCount}`);
-			}
-
-			await new Promise(resolve => setImmediate(resolve));
-			if (this.isShuttingDown) break;
+			if (predicted >= 0 && predicted < 10) confusion[label][predicted]++;
+			if (this.isShuttingDown) return null;
 		}
 
-		const accuracy = correct / indices.length;
-		const evtAcc = evtCount > 0 ? evtSum / evtCount : null;
+		const ms = Date.now() - t0;
+		const accuracy = correct / bitsArr.length;
 		const perDigitStr = perDigit.map((c, d) =>
 			perDigitTotal[d] > 0 ? `${d}:${(c / perDigitTotal[d] * 100).toFixed(0)}%` : `${d}:—`
 		).join(' ');
-
-		if (!silent) console.log(`  Test: lblAcc=${(accuracy * 100).toFixed(2)}% (${correct}/${indices.length}) evtAcc=${evtAcc !== null ? (evtAcc * 100).toFixed(2) + '%' : '—'} | ${perDigitStr}`);
-
-		return { accuracy, evtAcc, correct, total: indices.length, perDigit, perDigitTotal, confusion };
-	}
-
-	/**
-	 * Test one image: feed bits with learning off, then infer.
-	 *
-	 * @param {Uint8Array} bits
-	 * @param {number} label
-	 * @returns {{ predicted, correct, neuronCount }}
-	 */
-	runTestImage(bits, label) {
-		this.brain.resetContext();
-		this.brain.resetAccuracyStats();
-		this.encoder.resetActions();
-
-		this.brain.setProcessingMode(true, false, false);
-		for (let i = 0; i < bits.length; i++) {
-			this.brain.processFrame(this.encoder.encodePixel(bits[i]), new Map(), new Map());
-			if (this.isShuttingDown) return { predicted: -1, correct: false, neuronCount: 0, eventAccuracy: null };
-		}
-
-		// Capture event accuracy from the bit stream replay before infer().
-		// Same metric as training-side evtAcc — directly comparable.
-		const evtSummary = this.brain.getFrameSummary();
-		const eventAccuracy = evtSummary.accuracyTotal > 0
-			? evtSummary.accuracyCorrect / evtSummary.accuracyTotal
-			: null;
-
-		const { inferences } = this.brain.infer();
-		const { predicted } = this.encoder.applyInferences(inferences);
-		const summary = this.brain.getFrameSummary();
-
-		return { predicted, correct: predicted === label, neuronCount: summary.neuronCount, eventAccuracy };
-	}
-
-	/**
-	 * Build a shuffled (or sequential) index array.
-	 */
-	buildIndices(count) {
-		const indices = new Array(count);
-		for (let i = 0; i < count; i++) indices[i] = i;
-		if (this.config.shuffle) {
-			for (let i = count - 1; i > 0; i--) {
-				const j = Math.floor(Math.random() * (i + 1));
-				const tmp = indices[i];
-				indices[i] = indices[j];
-				indices[j] = tmp;
-			}
-		}
-		return indices;
+		console.log(`  ${tag} labelAcc: ${(accuracy * 100).toFixed(2)}% (${correct}/${bitsArr.length}) in ${ms}ms`);
+		console.log(`    per-digit: ${perDigitStr}`);
+		return { accuracy, correct, total: bitsArr.length, perDigit, perDigitTotal, confusion };
 	}
 
 	async showResults() {
 		console.log('\nResults');
 		console.log('='.repeat(70));
-
-		for (const ep of this.episodeResults) {
-			const testLbl = ep.testLblAcc !== undefined ? (ep.testLblAcc * 100).toFixed(2) + '%' : '—';
-			const testEvt = ep.testEvtAcc !== null && ep.testEvtAcc !== undefined ? (ep.testEvtAcc * 100).toFixed(2) + '%' : '—';
-			const testCnt = ep.testCorrect !== undefined ? `${ep.testCorrect}/${ep.testTotal}` : '—';
-			console.log(`  Ep ${String(ep.episode).padStart(3)}: train labelAcc=${ep.labelAcc}% evtAcc=${ep.evtAcc}% | test lblAcc=${testLbl} (${testCnt}) evtAcc=${testEvt} | ${ep.duration}ms`);
+		if (this.trainResult) {
+			console.log(`  Training-set classify:  ${(this.trainResult.accuracy * 100).toFixed(2)}% (${this.trainResult.correct}/${this.trainResult.total})`);
 		}
-
 		if (this.testResult) {
-			const perDigitStr = this.testResult.perDigit.map((c, d) =>
-				this.testResult.perDigitTotal[d] > 0 ? `${d}:${(c / this.testResult.perDigitTotal[d] * 100).toFixed(0)}%` : `${d}:—`
-			).join(' ');
-			const evtStr = this.testResult.evtAcc !== null && this.testResult.evtAcc !== undefined
-				? (this.testResult.evtAcc * 100).toFixed(2) + '%' : '—';
-			console.log(`\n  Test: lblAcc=${(this.testResult.accuracy * 100).toFixed(2)}% (${this.testResult.correct}/${this.testResult.total})  evtAcc=${evtStr}`);
-			console.log(`    per-digit: ${perDigitStr}`);
-
-			console.log(`\n  Confusion matrix (rows = actual, cols = predicted):`);
+			console.log(`  Held-out classify:      ${(this.testResult.accuracy * 100).toFixed(2)}% (${this.testResult.correct}/${this.testResult.total})`);
+			console.log(`\n  Confusion (rows=actual, cols=predicted):`);
 			let header = '       ';
 			for (let p = 0; p < 10; p++) header += String(p).padStart(5);
 			console.log(header);
 			for (let a = 0; a < 10; a++) {
 				let row = `   ${a}   `;
-				for (let p = 0; p < 10; p++) {
-					row += String(this.testResult.confusion[a][p]).padStart(5);
-				}
+				for (let p = 0; p < 10; p++) row += String(this.testResult.confusion[a][p]).padStart(5);
 				console.log(row);
 			}
 		}
-
 		console.log('='.repeat(70));
 	}
 }

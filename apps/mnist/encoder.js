@@ -184,3 +184,142 @@ export class MNISTEncoder {
 		this.lastAction = -1;
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * MNIST 28-Channel Encoder — one channel per row.
+ *
+ * Each image becomes 28 frames. At frame t, each row-channel emits its
+ * pixel at column t. So the whole 28×28 image is presented in 28 frames
+ * (column-by-column scan, with all 28 rows fed in parallel each frame).
+ *
+ * With context_length=30 the whole image fits in the memory window, so
+ * L1 patterns naturally encode column transitions and L2+ patterns
+ * encode whole-image column-sequences.
+ *
+ * Action neuron lives on a separate "digit" channel to keep the row
+ * channels uniform. No trimming — every image is exactly 28 frames.
+ */
+export class MNISTRowChannelsEncoder {
+
+	constructor(buckets = 2) {
+		this.buckets = buckets;
+		this.rowChannelIds = [];     // 28 entries, channel id per row
+		this.rowDimIds = [];         // 28 entries, px_val dim id per row
+		this.digitChannelId = null;
+		this.digitDimId = null;
+		this.lastAction = -1;
+	}
+
+	registerChannels(brain) {
+		for (let r = 0; r < 28; r++) {
+			const { channelId, dimensionIds } = brain.registerChannelSpec({
+				name: `row${r}`,
+				emitsReward: false,
+				learnActionSequences: false,
+				dimensions: [
+					{ name: 'px_val', kind: 'input', resolution: this.buckets, mode: 'passthrough' }
+				]
+			});
+			this.rowChannelIds.push(channelId);
+			this.rowDimIds.push(dimensionIds['px_val']);
+		}
+		const { channelId, dimensionIds } = brain.registerChannelSpec({
+			name: 'digit',
+			emitsReward: true,
+			learnActionSequences: false,
+			dimensions: [
+				{
+					name: 'px_digit',
+					kind: 'action',
+					resolution: DIGITS,
+					mode: 'passthrough',
+					actions: DIGIT_ACTIONS,
+					defaultAction: 0
+				}
+			]
+		});
+		this.digitChannelId = channelId;
+		this.digitDimId = dimensionIds['px_digit'];
+	}
+
+	quantize(value) {
+		const bucket = Math.floor(value * this.buckets / 256);
+		return Math.min(bucket, this.buckets - 1);
+	}
+
+	/**
+	 * Build a 28×28 quantized image. Returns Uint8Array length 784, row-major.
+	 * No trimming — every image is exactly 28×28.
+	 */
+	buildBits(pixels) {
+		const out = new Uint8Array(784);
+		for (let i = 0; i < 784; i++) out[i] = this.quantize(pixels[i]);
+		return out;
+	}
+
+	/**
+	 * Build the events Map for column `col` (0..27) of an image's bit grid.
+	 * Each of the 28 row-channels gets its pixel at this column.
+	 */
+	encodeColumn(bits, col) {
+		const inputs = new Map();
+		for (let r = 0; r < 28; r++) {
+			const v = bits[r * 28 + col];
+			const dimMap = new Map();
+			dimMap.set(this.rowDimIds[r], v);
+			inputs.set(this.rowChannelIds[r], dimMap);
+		}
+		return inputs;
+	}
+
+	encodeAction(label) {
+		const actions = new Map();
+		const dimMap = new Map();
+		dimMap.set(this.digitDimId, label);
+		actions.set(this.digitChannelId, dimMap);
+		return actions;
+	}
+
+	buildRewards(label, correctReward = 1, incorrectReward = -1) {
+		const rewards = new Map();
+		if (this.lastAction >= 0) {
+			rewards.set(this.digitChannelId, this.lastAction === label ? correctReward : incorrectReward);
+		} else {
+			rewards.set(this.digitChannelId, correctReward);
+		}
+		return rewards;
+	}
+
+	applyInferences(inferences) {
+		const arr = inferences?.get(this.digitChannelId);
+		if (!arr) return { predicted: -1, score: 0, strength: 0 };
+		for (const inf of arr) {
+			if (inf.kind === 'action') {
+				const predicted = inf.winner?.value ?? -1;
+				this.lastAction = predicted;
+				return { predicted, score: inf.winner?.score ?? 0, strength: inf.winner?.strength ?? 0 };
+			}
+		}
+		return { predicted: -1, score: 0, strength: 0 };
+	}
+
+	/**
+	 * Sum-of-evidence consensus from raw actionVoteStats. Picks the digit
+	 * with the highest totalStrength × avgReward (= weighted_total).
+	 * Use this instead of brain's per-voter-mean consensus.
+	 */
+	predictBySumConsensus(actionVoteStats) {
+		let bestDigit = -1, bestScore = -Infinity;
+		for (const s of actionVoteStats || []) {
+			const score = s.totalStrength * s.avgReward;
+			if (score > bestScore) { bestScore = score; bestDigit = s.value; }
+		}
+		this.lastAction = bestDigit;
+		return bestDigit;
+	}
+
+	setForcedAction(label) { this.lastAction = label; }
+	resetActions() { this.lastAction = -1; }
+}
