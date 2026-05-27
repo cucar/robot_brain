@@ -385,64 +385,28 @@ impl Neuron {
         self.connections[idx].insert(to_neuron_id, ConnectionData { strength, reward });
     }
 
-    /// Supervised action learning. Updates every action connection at the
-    /// given distance using a SINGLE smoothing alpha = 1/N, where N is the
-    /// total action-connection strength on this voter at this distance
-    /// AFTER the current call's increment.
-    ///
-    /// Why unified alpha: we want the running reward on each X→action_D
-    /// connection to converge to the empirical proportion freq(D)/freq(any
-    /// action) for this voter. With a per-connection alpha (1/strength_D),
-    /// the smoothing was per-connection and the rewards did not converge to
-    /// the true proportions — voters wired to multiple digits would over-
-    /// represent the rarely-trained ones at consensus.
-    ///
-    /// Correct action: strength += 1 and reward smoothed toward `reward`
-    /// (typically +1). New connections start at reward=0 so the first
-    /// smoothing step yields exactly `alpha * reward = reward / N`.
-    /// Other action connections at this distance: reward smoothed toward 0
-    /// with the same alpha; strength unchanged.
-    ///
-    /// `action_alpha` (constructor option), if set, overrides the computed
-    /// 1/N — preserved as a manual knob.
+    /// Supervised action learning. Updates ONLY the X→correct_id connection at the given distance:
     pub fn learn_supervised_action(&mut self, distance: Distance, correct_id: NeuronId, _channel_id: ChannelId, reward: Reward) {
         let idx = distance as usize;
-
-        // Compute total action strength at this distance BEFORE the increment,
-        // then +1 for this call. This gives the count of action wirings on
-        // this voter at this distance, including the current one.
-        let mut total = 1.0;  // counts this call
-        if idx < self.connections.len() {
-            for (id, c) in &self.connections[idx] {
-                if self.action_ids.contains(id) { total += c.strength; }
-            }
-        }
-        let alpha = self.action_alpha.unwrap_or(1.0 / total);
-
-        // 1. Upsert the correct action with reward smoothed toward `reward`.
-        //    New connections start at reward=0 so alpha*reward + (1-alpha)*0
-        //    gives the proportional first value.
-        if self.has_connection(distance, correct_id) {
-            let conn = self.connections[idx].get_mut(&correct_id).unwrap();
-            conn.strength += 1.0;
-            conn.reward = alpha * reward + (1.0 - alpha) * conn.reward;
-        } else {
-            self.create_connection(distance, correct_id, 1.0, 0.0);
-            let conn = self.connections[idx].get_mut(&correct_id).unwrap();
-            conn.reward = alpha * reward;
+        if !self.has_connection(distance, correct_id) {
+            self.create_connection(distance, correct_id, 0.0, 0.0);
         }
 
-        // 2. Smooth OTHER action connections at this distance toward 0.
-        let other_ids: Vec<NeuronId> = self.connections[idx].keys()
-            .filter(|&&id| id != correct_id && self.action_ids.contains(&id))
-            .copied()
-            .collect();
-        for other_id in other_ids {
-            let conn = self.connections[idx].get_mut(&other_id).unwrap();
-            conn.reward = (1.0 - alpha) * conn.reward;
-        }
+        // strength += 1 and reward += `reward` (additive accumulation, not smoothed).
+        // Other action connections on this voter are untouched.
+        let conn = self.connections[idx].get_mut(&correct_id).unwrap();
+        conn.strength += 1.0;
+
+        // Additive accumulation preserves the frequency signal: a voter wired to action A twice and
+        // to action B once stores (A.strength=2, A.reward=2, B.strength=1, B.reward=1). At consensus
+        // the action score is sum(strength × reward) / sum(strength) across voters, so A contributes
+        // weight 2·2=4 and B contributes 1·1=1 — A wins 2-to-1, matching how event strengths
+        // naturally weight by frequency. The earlier smoothed form (alpha = 1/strength) collapsed
+        // reward to 1 regardless of frequency, hiding the signal.
+        conn.reward += reward;
     }
 
+    /// Creates or updates the connection at distance to a target neuron
     pub fn upsert_connection(&mut self, distance: Distance, to_neuron_id: NeuronId, channel_id: ChannelId, reward: Reward) {
         if self.has_connection(distance, to_neuron_id) { self.strengthen_connection(distance, to_neuron_id, reward); }
         else { self.create_connection(distance, to_neuron_id, 1.0, reward); }
@@ -808,7 +772,7 @@ impl Neuron {
         if learning && !new_error_pattern_ids.contains(&self.id) { self.learn_connections(age_states, actives); }
 
         // match patterns if we have context and eligible ages
-        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame);
+        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, learning);
 
         // install pre-created error-correction patterns as children and emit their contextRef adds
         let CorrectResult { correction_activations, context_ref_updates: correction_refs } = self.correct_errors(corrections, current_frame);
@@ -840,6 +804,7 @@ impl Neuron {
         level_context: Option<&Context>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         current_frame: FrameNumber,
+        learning: bool,
     ) -> RecognizeResult {
         let mut matches = Vec::new();
         let mut context_ref_updates = Vec::new();
@@ -877,21 +842,20 @@ impl Neuron {
                 None => continue, // try older age if there is a match
             };
 
-            // refine the context — returns cross-neuron contextRef side effects for later delivery
-            let removed_refs = self.refine_context(best.pattern_id, &best.common, &best.novel, &best.missing);
-            for entry in &best.novel {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Add, neuron_id: entry.neuron_id, distance: entry.distance, parent_id: 0 });
-            }
-            for r in &removed_refs {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Remove, neuron_id: r.neuron_id, distance: r.distance, parent_id: 0 });
-            }
+            // refine_context is intentionally disabled here — refining the matched pattern's
+            // stored context mid-training makes recognition non-reproducible (training-time
+            // recognition sees "in-progress" patterns; later replays see fully-refined ones,
+            // so trajectories diverge). With refinement off, every match uses the pattern
+            // exactly as it was created/installed.
+            let removed_refs: Vec<ContextRefEntry> = Vec::new();
 
             // activate the matched pattern if it was not elected to be activated already
             let activate = !activated_pattern_ids.contains(&best.pattern_id);
             activated_pattern_ids.insert(best.pattern_id);
 
-            // strengthen child activation automatically here
-            let death_frame = if activate { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
+            // strengthen child activation automatically here — also gated by learning so
+            // inference-only replays don't bump activation strength on every match.
+            let death_frame = if activate && learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
 
             // include the best match for the age in the results
             matches.push(PatternMatch {

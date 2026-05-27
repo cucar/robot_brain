@@ -30,7 +30,7 @@ use crate::quantizer::{QuantizeMode, Quantizer};
 use crate::region::Region;
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, NeuronId, NeuronType, Reward,
+    Level, LevelDecayMode, NeuronId, NeuronType, Reward,
 };
 
 // ── Supporting structs ──────────────────────────────────────────────────────
@@ -169,6 +169,7 @@ struct VoteErrorResult {
 pub struct Thalamus {
     debug: bool,
     pattern_forget_rate: f64,
+    level_decay_mode: LevelDecayMode,
     context_length: u32,
     regions: usize,
     columns: usize,
@@ -240,6 +241,7 @@ impl Thalamus {
     pub fn new(
         debug: bool,
         pattern_forget_rate: f64,
+        level_decay_mode: LevelDecayMode,
         merge_threshold: f64,
         context_length: u32,
         error_mode: ErrorMode,
@@ -270,6 +272,7 @@ impl Thalamus {
         Self {
             debug,
             pattern_forget_rate,
+            level_decay_mode,
             context_length,
             regions,
             columns,
@@ -299,12 +302,35 @@ impl Thalamus {
 
     // ── Static helpers ──────────────────────────────────────────────────────
 
+    /// All levels (including L0 sensory) get a non-zero rate so the patterns
+    /// they own as children can be decayed. Sensory neurons themselves never
+    /// appear as children in any routing table, so this rate only governs the
+    /// decay of their L1 children — not the sensory neurons' own activations.
+    ///
+    ///   Exponential: base_rate / context_length^(level-1)  — original behaviour.
+    ///   Linear:      base_rate / level                     — gentler, dies in proportional time.
+    ///   Static:      base_rate                             — all levels decay at the same rate.
+    /// Brain-wide base forget rate (level-1 equivalent).
+    pub fn get_base_forget_rate(&self) -> f64 {
+        self.pattern_forget_rate
+    }
+
+    /// Per-level decay mode in effect.
+    pub fn get_level_decay_mode(&self) -> LevelDecayMode {
+        self.level_decay_mode
+    }
+
     /// Effective forget rate for a neuron at a given level.
-    /// Level 0 (sensory) is exempt from forgetting; level N decays by context_length per level
-    /// relative to the level-1 base rate, matching the geometric drop in observation frequency.
-    pub fn effective_forget_rate(base_rate: f64, context_length: u32, level: Level) -> f64 {
-        if level == 0 { return 0.0; }
-        base_rate / (context_length as f64).powi((level - 1) as i32)
+    pub fn effective_forget_rate(base_rate: f64, context_length: u32, level: Level, mode: LevelDecayMode) -> f64 {
+        // Level 0 uses the same formula as L1 (i.e. base_rate under all modes,
+        // since L1 yields base_rate for all three). This ensures L1 patterns
+        // (children of L0 sensories) actually decay.
+        let effective_level = level.max(1);
+        match mode {
+            LevelDecayMode::Exponential => base_rate / (context_length as f64).powi((effective_level - 1) as i32),
+            LevelDecayMode::Linear => base_rate / effective_level as f64,
+            LevelDecayMode::Static => base_rate,
+        }
     }
 
     // ── Neuron coordinate lookup ────────────────────────────────────────────
@@ -403,7 +429,7 @@ impl Thalamus {
         // allocate id and build the spec for Column.create_neurons
         let id = self.next_neuron_id;
         self.next_neuron_id += 1;
-        let forget_rate = Self::effective_forget_rate(self.pattern_forget_rate, self.context_length, level);
+        let forget_rate = Self::effective_forget_rate(self.pattern_forget_rate, self.context_length, level, self.level_decay_mode);
 
         // register metadata centrally (Neuron construction deferred to create_neurons)
         self.neuron_levels.insert(id, level);
@@ -444,6 +470,70 @@ impl Thalamus {
     pub fn dump_neuron_connections(&self, neuron_id: NeuronId) -> Option<Vec<(Distance, NeuronId, f64, f64)>> {
         let r = self.route_neuron(neuron_id);
         self.region_list[r].dump_neuron_connections(neuron_id)
+    }
+
+    /// Implant API: set or strengthen a default outgoing connection on a
+    /// sensory neuron. Used to install the "this parent → that majority
+    /// next-bit" connections during implant. `count` is the observed strength
+    /// to install; if a connection already exists at this (parent → target,
+    /// distance=1), strength is incremented and reward is updated.
+    pub fn implant_default_connection(&mut self, parent_id: NeuronId, target_id: NeuronId, count: f64) {
+        let target_channel = self.get_neuron_channel_id(target_id).unwrap_or(0);
+        let r = self.route_neuron(parent_id);
+        self.region_list[r].install_implant_default_connection(parent_id, target_id, target_channel, count);
+    }
+
+    /// Implant API: directly create an L1 pattern under `parent_id` with the
+    /// given stored context and outgoing event prediction connection. The
+    /// pattern is fully integrated — it lives in its column, is registered as
+    /// the parent's child (so recognize_patterns at inference time will find
+    /// it), and its distance-1 connection predicts the supplied target.
+    ///
+    /// Returns the new pattern's id. The pattern is created as if it had been
+    /// activated at frame 0 (death frame is computed accordingly).
+    pub fn implant_pattern(
+        &mut self,
+        parent_id: NeuronId,
+        stored_context: &[(NeuronId, Distance)],
+        prediction_target: NeuronId,
+    ) -> NeuronId {
+        let parent_level = self.get_neuron_level(parent_id).unwrap_or(0);
+        let level = parent_level + 1;
+
+        let id = self.next_neuron_id;
+        self.next_neuron_id += 1;
+        self.neuron_levels.insert(id, level);
+        self.neuron_parents.insert(id, parent_id);
+        self.increment_level_count(level);
+
+        let forget_rate = Self::effective_forget_rate(self.pattern_forget_rate, self.context_length, level, self.level_decay_mode);
+
+        // Build the outgoing connection spec — predict prediction_target at distance 1.
+        let target_channel = self.get_neuron_channel_id(prediction_target).unwrap_or(0);
+        let connections = vec![ConnectionSpec {
+            distance: 1,
+            to_neuron_id: prediction_target,
+            strength: 1.0,
+            reward: 0.0,
+            channel_id: target_channel,
+        }];
+
+        // Create the Neuron in its owning column.
+        self.create_neurons(&[NeuronCreateSpec {
+            id,
+            forget_rate,
+            connections: Some(connections),
+        }]);
+
+        // Install under parent — add to routing_table with stored context.
+        // We bypass back-refs (context_refs on target neurons) for now;
+        // they're only needed for delete-cascade bookkeeping. Implant patterns
+        // with forget_rate=0 won't die; for non-zero rates this means delete
+        // cleanup could leave orphan refs (TODO: wire properly).
+        let r = self.route_neuron(parent_id);
+        self.region_list[r].install_implant_pattern(parent_id, id, stored_context);
+
+        id
     }
 
     /// Get the level for a neuron (0 = sensory, 1+ = pattern).
@@ -1166,36 +1256,70 @@ impl Thalamus {
             _ => return None,
         };
 
-        // Per-dimension error: a voter's "prediction" for each event dimension
-        // is its strongest-strength vote for that dimension. A dimension fails
-        // if that argmax neuron didn't actually fire. error_rate = failed_dims
-        // / total_dims. This is the right semantics — counting individual votes
-        // double-penalizes voters that have learned multiple buckets of the
-        // same dim across past contexts (e.g. binary channels where the voter
-        // has occasionally seen both 0 and 1 follow it), inflating apparent
-        // error rate even when the strongest prediction is correct.
-        let mut best_per_dim: FxHashMap<DimensionId, (NeuronId, f64)> = FxHashMap::default();
+        // Per-dimension error_rate driven by the voter's CONFIDENCE in its
+        // winning prediction — not by raw failure count.
+        //
+        // For each event dimension, group votes by target neuron and sum
+        // strengths. The argmax target is the voter's "prediction." Its
+        // confidence = argmax_strength / total_strength_in_dim.
+        //
+        // For each dim whose argmax didn't fire, the error contribution is
+        // the confidence the voter had in that wrong prediction. We average
+        // these across only the wrong dims to get a single error_rate which
+        // measures "when I was wrong, how confident was I?". This rate is
+        // then compared to the existing error_threshold via the normal fire
+        // logic (static: fixed; dynamic: mean/std of past samples).
+        //
+        // The intent: during early training the voter's strength distribution
+        // is spread thin (low confidence) — wrong predictions don't trigger
+        // pattern creation, giving connection learning time to accumulate
+        // distinguishing evidence. Once distributions concentrate (say 80% of
+        // strength on one target) and that prediction is wrong, we know it's
+        // a genuine confused commitment and a new pattern is warranted.
+        let mut strength_by_dim_target: FxHashMap<(DimensionId, NeuronId), f64> = FxHashMap::default();
         for vote in votes {
             if self.get_neuron_type(vote.neuron_id) != Some(NeuronType::Event) { continue; }
             let dim_id = match self.get_neuron_coordinate(vote.neuron_id) {
                 Some(c) => c.dim_id,
                 None => continue,
             };
-            let entry = best_per_dim.entry(dim_id).or_insert((vote.neuron_id, vote.strength));
-            if vote.strength > entry.1 { *entry = (vote.neuron_id, vote.strength); }
+            *strength_by_dim_target.entry((dim_id, vote.neuron_id)).or_insert(0.0) += vote.strength;
         }
-        if best_per_dim.is_empty() { return None; }
+        if strength_by_dim_target.is_empty() { return None; }
 
-        let total_dims = best_per_dim.len() as u32;
-        let mut failed_dims = 0u32;
-        for (_, (best_neuron, _)) in &best_per_dim {
-            if !actual_neuron_ids.contains(best_neuron) { failed_dims += 1; }
+        // Build per-dim summary: (argmax_target, argmax_strength, total_strength)
+        let mut per_dim: FxHashMap<DimensionId, (NeuronId, f64, f64)> = FxHashMap::default();
+        for ((dim_id, target_id), strength) in &strength_by_dim_target {
+            let entry = per_dim.entry(*dim_id).or_insert((*target_id, 0.0, 0.0));
+            entry.2 += strength;
+            if *strength > entry.1 {
+                entry.0 = *target_id;
+                entry.1 = *strength;
+            }
         }
-        let error_rate = failed_dims as f64 / total_dims as f64;
+
+        // Average confidence across the wrong dims. If all dims correct, error_rate = 0.
+        let mut confidence_sum = 0.0;
+        let mut wrong_dim_count = 0u32;
+        for (_, (argmax_target, argmax_strength, total_strength)) in &per_dim {
+            if actual_neuron_ids.contains(argmax_target) { continue; }
+            let confidence = if *total_strength > 0.0 { *argmax_strength / *total_strength } else { 0.0 };
+            confidence_sum += confidence;
+            wrong_dim_count += 1;
+        }
+        let error_rate = if wrong_dim_count > 0 {
+            confidence_sum / wrong_dim_count as f64
+        } else {
+            0.0
+        };
 
         // the threshold rode in with the vote when it was cast last frame
         let threshold = state.threshold.unwrap_or(0.5);
         let fire = error_rate > threshold;
+        if self.debug {
+            println!("  [eval_vote] age={} dims={} wrong={} error_rate={:.3} threshold={:.3} fire={}",
+                age, per_dim.len(), wrong_dim_count, error_rate, threshold, fire);
+        }
         Some(VoteErrorResult { fire, error_rate })
     }
 
@@ -1607,19 +1731,20 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 1, 1)
+        Thalamus::new(false, 0.1, LevelDecayMode::Exponential, 0.5, 4, ErrorMode::Static, 0.5, 1, 1, None)
     }
 
     #[test]
     fn test_effective_forget_rate() {
+        use LevelDecayMode::Exponential;
         // level 0: always 0
-        assert_eq!(Thalamus::effective_forget_rate(0.1, 4, 0), 0.0);
+        assert_eq!(Thalamus::effective_forget_rate(0.1, 4, 0, Exponential), 0.0);
         // level 1: base rate
-        assert!((Thalamus::effective_forget_rate(0.1, 4, 1) - 0.1).abs() < 1e-10);
+        assert!((Thalamus::effective_forget_rate(0.1, 4, 1, Exponential) - 0.1).abs() < 1e-10);
         // level 2: base / context_length
-        assert!((Thalamus::effective_forget_rate(0.1, 4, 2) - 0.025).abs() < 1e-10);
+        assert!((Thalamus::effective_forget_rate(0.1, 4, 2, Exponential) - 0.025).abs() < 1e-10);
         // level 3: base / context_length^2
-        assert!((Thalamus::effective_forget_rate(0.1, 4, 3) - 0.00625).abs() < 1e-10);
+        assert!((Thalamus::effective_forget_rate(0.1, 4, 3, Exponential) - 0.00625).abs() < 1e-10);
     }
 
     #[test]

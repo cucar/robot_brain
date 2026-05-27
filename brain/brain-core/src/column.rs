@@ -371,6 +371,43 @@ impl Column {
         self.neurons.get(&neuron_id).map(|n| n.dump_connections())
     }
 
+    /// Install a directly-implanted pattern under `parent_id` in this column.
+    /// Adds the pattern to the parent's routing_table and populates its stored
+    /// context entries. Used by the implant flow to bypass error-driven creation.
+    pub fn install_implant_pattern(&mut self, parent_id: NeuronId, pattern_id: NeuronId, stored_context: &[(NeuronId, Distance)]) {
+        let parent = match self.neurons.get_mut(&parent_id) {
+            Some(n) => n,
+            None => return,
+        };
+        parent.add_child(pattern_id, 1.0);
+        for &(target_neuron, distance) in stored_context {
+            parent.add_context(pattern_id, target_neuron, distance, 1.0);
+        }
+    }
+
+    /// Install or strengthen an implant default connection at distance 1 on a
+    /// sensory neuron, predicting `target_id`. If a connection already exists
+    /// at this (distance, target), strengthen it; else create.
+    pub fn install_implant_default_connection(&mut self, parent_id: NeuronId, target_id: NeuronId, target_channel: ChannelId, count: f64) {
+        let parent = match self.neurons.get_mut(&parent_id) {
+            Some(n) => n,
+            None => return,
+        };
+        if parent.has_connection(1, target_id) {
+            for _ in 0..(count as u64).max(1) {
+                parent.strengthen_connection(1, target_id, 0.0);
+            }
+        } else {
+            parent.create_connection(1, target_id, count.max(1.0), 0.0);
+            // For binary dims we want the parent's prediction at distance 1 to
+            // be unambiguous toward this target — strengthen multiple times if
+            // the observed count is high so the connection wins votes against
+            // any pre-existing default for a competing bucket.
+            // (No alt-action wiring for events.)
+            let _ = target_channel;
+        }
+    }
+
     /// Return (parent_id, distance, strength) context entries for a child
     /// pattern stored under the given parent neuron's routing table. Used
     /// by the inspection API to dump a pattern's stored context.

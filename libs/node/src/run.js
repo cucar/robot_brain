@@ -35,6 +35,7 @@ export function parseBrainArgs(argv = process.argv) {
 		reset: has('--reset'),
 		contextLength: num('--context-length', parseInt),
 		patternForgetRate: num('--forget-rate', parseFloat),
+		levelDecayMode: str('--level-decay'),
 		errorCorrectionMode: str('--error-mode'),
 		errorCorrectionThreshold: num('--error-threshold', parseFloat),
 		mergeThreshold: num('--merge-threshold', parseFloat),

@@ -110,12 +110,8 @@ export default class MNISTTestJob extends Job {
 		const incorrectReward = flt('--incorrect-reward');
 		if (incorrectReward !== null) this.config.incorrectReward = incorrectReward;
 
-		// Apply the memorization recipe as defaults — only when the user did
-		// not pass the corresponding flag. parseBrainArgs() leaves unspecified
-		// brain options as null, so this check is sufficient.
+		// use
 		if (this.options.contextLength == null) this.options.contextLength = 30;
-		// if (this.options.mergeThreshold == null) this.options.mergeThreshold = 0.5;
-		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
 	}
 
 	/**

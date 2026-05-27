@@ -320,6 +320,18 @@ impl Region {
         self.columns[c].dump_neuron_connections(neuron_id)
     }
 
+    /// Install a directly-implanted pattern under a parent neuron.
+    pub fn install_implant_pattern(&mut self, parent_id: NeuronId, pattern_id: NeuronId, stored_context: &[(NeuronId, Distance)]) {
+        let c = self.route_neuron(parent_id);
+        self.columns[c].install_implant_pattern(parent_id, pattern_id, stored_context);
+    }
+
+    /// Install or strengthen an implant default connection on a sensory neuron.
+    pub fn install_implant_default_connection(&mut self, parent_id: NeuronId, target_id: NeuronId, target_channel: ChannelId, count: f64) {
+        let c = self.route_neuron(parent_id);
+        self.columns[c].install_implant_default_connection(parent_id, target_id, target_channel, count);
+    }
+
     pub fn learn_action_connections(&mut self, tasks: &[(NeuronId, NeuronId, Distance, ChannelId, Reward)]) {
         let by_column = self.route_learn_tasks(tasks);
         self.columns.par_iter_mut()

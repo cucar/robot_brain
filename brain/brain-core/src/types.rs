@@ -125,3 +125,22 @@ pub enum ErrorMode {
     /// mean - 1 standard deviation (more corrections).
     Aggressive,
 }
+
+/// Per-level decay mode for pattern_forget_rate at levels > 1.
+///
+/// `Exponential` (default, original behaviour): divide by `context_length^(level-1)`.
+/// Matches the geometric drop in observation frequency at deeper levels but
+/// makes deep patterns effectively immortal (at L4+, the divisor is millions
+/// — they never die regardless of utility).
+///
+/// `Linear`: divide by `level`. Gentler decay — deep patterns die in
+/// proportional-to-level time. Useful for memorization workloads where
+/// noise patterns at deep levels accumulate forever under Exponential.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LevelDecayMode {
+    Exponential,
+    Linear,
+    /// All levels use the base rate unchanged — patterns at any depth decay
+    /// at the same speed. Most aggressive cleanup at deep levels.
+    Static,
+}

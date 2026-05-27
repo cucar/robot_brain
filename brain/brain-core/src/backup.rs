@@ -26,7 +26,7 @@ use crate::neuron::{
 use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry, Thalamus};
 use crate::types::{
     ChannelId, ContextEntry, Coordinate, DimensionId, Distance,
-    Level, NeuronId, NeuronType,
+    Level, LevelDecayMode, NeuronId, NeuronType,
 };
 
 /// Hard cap on retained backup folders. The 11th save evicts the oldest by
@@ -38,6 +38,9 @@ pub struct Backup {
     /// since the snapshot doesn't carry them.
     pattern_forget_rate: f64,
 
+    /// Decay mode per level (Exponential | Linear).
+    level_decay_mode: LevelDecayMode,
+
     /// Context length — needed alongside pattern_forget_rate for the per-level
     /// effective forget rate calculation.
     context_length: u32,
@@ -46,8 +49,8 @@ pub struct Backup {
 impl Backup {
     /// Create a new Backup instance with the brain-wide hyperparameters needed
     /// to compute per-level forget rates when loading neurons from disk.
-    pub fn new(pattern_forget_rate: f64, context_length: u32) -> Self {
-        Self { pattern_forget_rate, context_length }
+    pub fn new(pattern_forget_rate: f64, level_decay_mode: LevelDecayMode, context_length: u32) -> Self {
+        Self { pattern_forget_rate, level_decay_mode, context_length }
     }
 
     // ── Save ────────────────────────────────────────────────────────────────
@@ -140,7 +143,7 @@ impl Backup {
             let id: NeuronId = row[0].parse().map_err(|e| format!("Bad neuron id: {}", e))?;
             let level: Level = row[1].parse().map_err(|e| format!("Bad level: {}", e))?;
             let forget_rate = Thalamus::effective_forget_rate(
-                self.pattern_forget_rate, self.context_length, level,
+                self.pattern_forget_rate, self.context_length, level, self.level_decay_mode,
             );
             neurons.insert(id, SerializedNeuron {
                 id,

@@ -25,6 +25,7 @@ pub struct InferredNeuron {
     pub probability: f64,
 }
 
+#[derive(Clone)]
 pub struct Memory {
     /// Number of frames a base neuron stays active.
     context_length: u32,

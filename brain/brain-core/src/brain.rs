@@ -33,7 +33,7 @@ use crate::thalamus::{
 };
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, NeuronId, NeuronType, Reward,
+    Level, LevelDecayMode, NeuronId, NeuronType, Reward,
 };
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
@@ -132,6 +132,13 @@ pub struct FrameSummary {
     pub neuron_count: usize,
     pub max_level: Level,
     pub stats: DiagnosticStats,
+}
+
+/// Summary returned by finalize_implant.
+#[derive(Debug, Clone)]
+pub struct ImplantSummary {
+    pub positions_processed: usize,
+    pub patterns_created: usize,
 }
 
 /// Neuron inspection result — parent + level + stored context entries.
@@ -233,6 +240,52 @@ pub struct Brain {
 
     /// Temporal sliding window of active and inferred neurons.
     memory: Memory,
+
+    /// Implant-mode state — set by start_implant, used by implant_position,
+    /// cleared by finalize_implant. None when not in implant mode.
+    implant_state: Option<ImplantState>,
+
+    /// Parallel runtime contexts. Empty when single-context (default).
+    /// When `init_contexts(N)` is called, contexts holds N independent
+    /// `ContextState` slots. The currently-active slot has its
+    /// (memory, frame_number, rewards) swapped INTO Brain's fields;
+    /// inactive slots hold their state in `contexts[i]`. `current_context`
+    /// tells us which slot is currently swapped in.
+    contexts: Vec<ContextState>,
+    current_context: usize,
+}
+
+/// Snapshot of a single brain's runtime context — everything that must be
+/// per-context when `init_contexts(N)` is used. The thalamus (neurons,
+/// patterns, columns) is shared across all contexts.
+#[derive(Clone)]
+pub struct ContextState {
+    pub memory: Memory,
+    pub frame_number: FrameNumber,
+    pub rewards: Vec<FxHashMap<ChannelId, Reward>>,
+}
+
+/// Per-image bit history accumulated during implant. The bit value is
+/// the bucket id (0 or 1 for binary channels).
+///
+/// During implant the brain records observations only; the full algorithm
+/// runs at finalize_implant when all positions have been seen.
+#[derive(Debug)]
+pub struct ImplantState {
+    /// channel id for the single event dimension being implanted
+    pub channel_id: ChannelId,
+    /// dimension id within the channel
+    pub dim_id: DimensionId,
+    /// per-image bit history (each Vec is one image's bit stream so far)
+    pub histories: Vec<Vec<u8>>,
+    /// current position (number of bits implanted per image)
+    pub position: u64,
+    /// Recorded observations keyed by (parent_bit, packed_window_bits).
+    /// Value is the count of each next_bit (index 0 = next_bit 0, idx 1 = next_bit 1).
+    /// packed_window: bit at distance D-1 occupies bit position D-1 of the u64
+    /// (least-significant bit = distance 1, most-significant within the used
+    /// range = distance context_length-1). Limited to context_length ≤ 64.
+    pub observations: FxHashMap<(u8, u64), [u32; 2]>,
 }
 
 impl Brain {
@@ -253,6 +306,7 @@ impl Brain {
         error_correction_threshold: f64,
         merge_threshold: f64,
         pattern_forget_rate: f64,
+        level_decay_mode: LevelDecayMode,
         regions: usize,
         columns: usize,
         debug: bool,
@@ -268,10 +322,11 @@ impl Brain {
             rewards: Vec::new(),
             frame_number: 0,
             diagnostics: Diagnostics::new(),
-            backup_store: Backup::new(pattern_forget_rate, context_length),
+            backup_store: Backup::new(pattern_forget_rate, level_decay_mode, context_length),
             thalamus: Thalamus::new(
                 debug,
                 pattern_forget_rate,
+                level_decay_mode,
                 merge_threshold,
                 context_length,
                 error_correction_mode,
@@ -281,7 +336,59 @@ impl Brain {
                 action_alpha,
             ),
             memory: Memory::new(debug, context_length),
+            implant_state: None,
+            contexts: Vec::new(),
+            current_context: 0,
         }
+    }
+
+    // ── Parallel contexts ───────────────────────────────────────────────────
+
+    /// Initialize N parallel runtime contexts. Each context has its own
+    /// (memory, frame_number, rewards); the thalamus (neurons, patterns) is
+    /// shared. After init, the active context is slot 0 — pass `context_id`
+    /// to `process_frame` / `learn` / `infer` / `reset_context` to operate on
+    /// a specific slot.
+    pub fn init_contexts(&mut self, n: usize) {
+        // wipe current single-context state and start fresh
+        self.reset_context();
+        let template = ContextState {
+            memory: Memory::new(self.debug, self.context_length),
+            frame_number: 0,
+            rewards: Vec::new(),
+        };
+        // slot 0's state IS the brain's current (memory, frame, rewards);
+        // we leave it swapped in. Slots 1..N hold their state in contexts[].
+        self.contexts = (0..n).map(|_| template.clone()).collect();
+        self.current_context = 0;
+    }
+
+    /// Swap to the given context. Saves the currently-active state into its
+    /// slot and loads the target slot. No-op when already on that slot.
+    fn swap_to(&mut self, ctx_id: usize) {
+        if self.contexts.is_empty() { return; }   // single-context mode
+        if ctx_id == self.current_context { return; }
+        assert!(ctx_id < self.contexts.len(), "context_id {} out of range (init_contexts({}))", ctx_id, self.contexts.len());
+        // save current state into current slot
+        std::mem::swap(&mut self.memory, &mut self.contexts[self.current_context].memory);
+        std::mem::swap(&mut self.frame_number, &mut self.contexts[self.current_context].frame_number);
+        std::mem::swap(&mut self.rewards, &mut self.contexts[self.current_context].rewards);
+        // load target slot
+        std::mem::swap(&mut self.memory, &mut self.contexts[ctx_id].memory);
+        std::mem::swap(&mut self.frame_number, &mut self.contexts[ctx_id].frame_number);
+        std::mem::swap(&mut self.rewards, &mut self.contexts[ctx_id].rewards);
+        self.current_context = ctx_id;
+    }
+
+    /// Get number of initialized contexts (0 = single-context mode).
+    pub fn num_contexts(&self) -> usize {
+        self.contexts.len()
+    }
+
+    /// Switch the active context. Subsequent process_frame/learn/infer/
+    /// reset_context calls operate on this context.
+    pub fn set_active_context(&mut self, ctx_id: usize) {
+        self.swap_to(ctx_id);
     }
 
     // ── Channel registration ────────────────────────────────────────────────
@@ -700,6 +807,178 @@ impl Brain {
         Some(contexts_dir.join(folders.last().unwrap()))
     }
 
+    // ── Implant API ─────────────────────────────────────────────────────────
+    //
+    // Direct teaching mode. Instead of error-driven pattern creation, the
+    // caller feeds bit observations from multiple training images in parallel
+    // (one bit per image per position). At each position the brain looks
+    // across all images to determine the dominant and minority next-bit
+    // outcomes, sets default connections on sensory neurons for the dominant
+    // case, and creates L1 patterns with distinguishing context for the
+    // minority cases. The resulting structure perfectly predicts every
+    // observed transition in O(N × frames × context_length) work — vs the
+    // O(N × frames × episodes) of stream learning.
+
+    /// Begin implant mode. The caller must have already registered the
+    /// channel (single dimension, binary) via register_channel_spec.
+    /// `channel_id` and `dim_id` identify the event dimension being implanted.
+    pub fn start_implant(&mut self, channel_id: ChannelId, dim_id: DimensionId, num_images: u32) {
+        assert!(self.context_length <= 64, "implant currently requires context_length ≤ 64");
+        let histories: Vec<Vec<u8>> = (0..num_images).map(|_| Vec::new()).collect();
+        self.implant_state = Some(ImplantState {
+            channel_id,
+            dim_id,
+            histories,
+            position: 0,
+            observations: FxHashMap::default(),
+        });
+    }
+
+    /// Process one position across all images. `bits` must have one entry per
+    /// image (in the same order start_implant was given). Each value is a
+    /// bucket id (0 or 1 for binary channels).
+    pub fn implant_position(&mut self, bits: &[u8]) {
+        let state = match self.implant_state.as_mut() {
+            Some(s) => s,
+            None => panic!("implant_position called without start_implant"),
+        };
+        assert_eq!(bits.len(), state.histories.len(), "implant_position: bits length must match num_images");
+
+        // Push bits and increment position.
+        for (img_idx, &bit) in bits.iter().enumerate() {
+            state.histories[img_idx].push(bit);
+        }
+        state.position += 1;
+
+        // Only record once we have enough history for a full window AND the
+        // resulting pattern's parent frame would be past the inference-time
+        // warmup gate. Position P: parent at idx P-2, frame P-1. Need P-1 > context_length.
+        let position = state.position;
+        let ctx_len = self.context_length as u64;
+        if position <= ctx_len + 1 { return; }
+
+        let last_idx = (position - 1) as usize;
+        let parent_idx = last_idx - 1;
+        let history_start = parent_idx.saturating_sub((self.context_length - 1) as usize);
+
+        // For each image: pack the window into a u64 (bit at distance D occupies
+        // bit position D-1) and record an observation.
+        for img_idx in 0..state.histories.len() {
+            let h = &state.histories[img_idx];
+            if h.len() <= parent_idx { continue; }
+            let parent_bit = h[parent_idx];
+            let next_bit = h[last_idx];
+
+            // Pack window bits: window[k] = bit at distance k+1 from parent
+            // = h[parent_idx - 1 - k] = h[parent_idx-1], h[parent_idx-2], ...
+            let mut packed: u64 = 0;
+            for k in 0..(self.context_length as usize - 1) {
+                let src_idx = parent_idx as i64 - 1 - k as i64;
+                if src_idx < history_start as i64 || src_idx < 0 { break; }
+                let bit = h[src_idx as usize] as u64;
+                packed |= bit << k;
+            }
+
+            let entry = state.observations.entry((parent_bit, packed)).or_insert([0, 0]);
+            entry[(next_bit & 1) as usize] += 1;
+        }
+    }
+
+    /// Ensure a sensory neuron exists for (channel, dim, bucket), creating it
+    /// if needed. Returns the neuron id.
+    fn ensure_sensory_neuron(&mut self, channel_id: ChannelId, dim_id: DimensionId, bucket: u8) -> NeuronId {
+        let coord = Coordinate { dim_id, bucket_id: bucket as i32 };
+        let lookup = self.thalamus.get_neuron_id_for_point(&coord, channel_id, NeuronType::Event);
+        if lookup.is_new {
+            self.thalamus.create_neurons(&[NeuronCreateSpec {
+                id: lookup.id,
+                forget_rate: Thalamus::effective_forget_rate(
+                    self.thalamus.get_base_forget_rate(),
+                    self.context_length,
+                    0,
+                    self.thalamus.get_level_decay_mode(),
+                ),
+                connections: None,
+            }]);
+        }
+        lookup.id
+    }
+
+    /// End implant mode. Walks the recorded observations and builds the
+    /// brain structure: default connections (per parent → next_bit, weighted
+    /// by global count) plus patterns for each unique (parent, window) that
+    /// has a unique next_bit different from the global default.
+    pub fn finalize_implant(&mut self) -> ImplantSummary {
+        let state = self.implant_state.take().expect("finalize_implant called without start_implant");
+        let channel_id = state.channel_id;
+        let dim_id = state.dim_id;
+
+        // ── Step 1: compute global counts per (parent, next_bit) ──────────
+        // and aggregate into default connections on the sensory parent.
+        let mut global_counts: [[u64; 2]; 2] = [[0, 0], [0, 0]]; // [parent][next]
+        for ((parent_bit, _window), counts) in &state.observations {
+            global_counts[*parent_bit as usize][0] += counts[0] as u64;
+            global_counts[*parent_bit as usize][1] += counts[1] as u64;
+        }
+        // Install default connections on each sensory parent.
+        for parent_bit in [0u8, 1u8] {
+            let pid = self.ensure_sensory_neuron(channel_id, dim_id, parent_bit);
+            for next_bit in [0u8, 1u8] {
+                let c = global_counts[parent_bit as usize][next_bit as usize];
+                if c == 0 { continue; }
+                let tid = self.ensure_sensory_neuron(channel_id, dim_id, next_bit);
+                self.thalamus.implant_default_connection(pid, tid, c as f64);
+            }
+        }
+
+        // ── Step 2: per (parent, window), check whether the observed next_bit
+        // (a) is unambiguous (only one next_bit observed) AND (b) differs from
+        // the global default for that parent. If both, create a pattern that
+        // fires for this exact window and predicts the unambiguous next_bit.
+        //
+        // If the (parent, window) is ambiguous (both next_bit=0 AND =1 observed),
+        // it's an unresolvable case at this context length — neither default
+        // nor any single pattern can perfectly handle it. Skip; accept the error.
+
+        let mut patterns_created = 0usize;
+        let mut conflicts = 0usize;
+        let window_len = (self.context_length as usize).saturating_sub(1);
+
+        for ((parent_bit, packed_window), counts) in &state.observations {
+            let c0 = counts[0];
+            let c1 = counts[1];
+            if c0 > 0 && c1 > 0 { conflicts += 1; continue; }
+            let unambiguous_next = if c0 > 0 { 0u8 } else { 1u8 };
+
+            // Global default for this parent
+            let g0 = global_counts[*parent_bit as usize][0];
+            let g1 = global_counts[*parent_bit as usize][1];
+            let global_default = if g0 >= g1 { 0u8 } else { 1u8 };
+            if unambiguous_next == global_default { continue; }   // default already handles this — no pattern needed
+
+            // Need a pattern. Build its stored context from packed_window.
+            let pid = self.ensure_sensory_neuron(channel_id, dim_id, *parent_bit);
+            let target_id = self.ensure_sensory_neuron(channel_id, dim_id, unambiguous_next);
+            let mut stored_context: Vec<(NeuronId, Distance)> = Vec::with_capacity(window_len);
+            for k in 0..window_len {
+                let bit = ((*packed_window >> k) & 1) as u8;
+                let nid = self.ensure_sensory_neuron(channel_id, dim_id, bit);
+                stored_context.push((nid, (k + 1) as Distance));
+            }
+            self.thalamus.implant_pattern(pid, &stored_context, target_id);
+            patterns_created += 1;
+        }
+
+        if self.debug && conflicts > 0 {
+            println!("  implant: {} unresolvable (parent, window) tuples at context_length={}", conflicts, self.context_length);
+        }
+
+        ImplantSummary {
+            positions_processed: state.position as usize,
+            patterns_created,
+        }
+    }
+
     // ── Lookup helpers ─────────────────────────────────────────────────────────
 
 	/// returns dimension id for a given dimension name
@@ -728,6 +1007,12 @@ impl Brain {
     /// (distance, target_neuron_id, strength, reward) tuples.
     pub fn dump_neuron_connections(&self, neuron_id: NeuronId) -> Vec<(Distance, NeuronId, f64, f64)> {
         self.thalamus.dump_neuron_connections(neuron_id).unwrap_or_default()
+    }
+
+    /// Inspection: list the currently votable entries (neuron_id, age) — the
+    /// same set used by infer() / learn() to collect votes and wire actions.
+    pub fn get_votable_entries(&self) -> Vec<(NeuronId, Distance)> {
+        self.memory.get_votable_entries()
     }
 
     // ── Context inspection ───────────────────────────────────────────────────
@@ -1011,10 +1296,21 @@ impl Brain {
     }
 
     /// Create sensory neurons that are new this frame.
+    ///
+    /// Sensory neurons (level 0) use `effective_forget_rate(level=0)` for their pattern_forget_rate.
+    /// This rate governs the decay of their child patterns (L1 error-correction patterns) — NOT the sensory neuron's own activations.
+    /// Without a non-zero rate here, all L1 patterns are effectively immortal,
+    /// because `strengthen_child_activation` divides by the parent's rate to compute death frames.
     fn create_new_sensory_neurons(&mut self, frame_neurons: &[PointLookup]) {
+        let forget_rate = Thalamus::effective_forget_rate(
+            self.thalamus.get_base_forget_rate(),
+            self.context_length,
+            0,
+            self.thalamus.get_level_decay_mode(),
+        );
         let specs: Vec<NeuronCreateSpec> = frame_neurons.iter()
             .filter(|p| p.is_new)
-            .map(|p| NeuronCreateSpec { id: p.id, forget_rate: 0.0, connections: None })
+            .map(|p| NeuronCreateSpec { id: p.id, forget_rate, connections: None })
             .collect();
         if !specs.is_empty() {
             self.thalamus.create_neurons(&specs);
@@ -1560,6 +1856,7 @@ mod tests {
             0.5,                      // error_correction_threshold
             0.5,                      // merge_threshold
             0.01,                     // pattern_forget_rate
+            LevelDecayMode::Exponential, // level_decay_mode
             1,                        // regions
             1,                        // columns
             false,                    // debug

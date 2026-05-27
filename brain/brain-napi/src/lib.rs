@@ -18,7 +18,7 @@ use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 
 use brain_core::brain::{Brain as CoreBrain, FrameResult};
-use brain_core::types::{Coordinate, ErrorMode, NeuronType};
+use brain_core::types::{Coordinate, ErrorMode, LevelDecayMode, NeuronType};
 
 // ── Helper: JS Map iteration ────────────────────────────────────────────────
 
@@ -105,7 +105,7 @@ impl JsBrain {
     #[napi(constructor)]
     pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
         let (context_length, error_mode, error_threshold, merge_threshold,
-             pattern_forget_rate, regions, columns, debug, action_alpha) = match options {
+             pattern_forget_rate, level_decay_mode, regions, columns, debug, action_alpha) = match options {
             Some(ref opts) => {
                 let cl = get_opt_u32(opts, "contextLength")?.unwrap_or(10);
                 let mode_str = get_opt_string(opts, "errorCorrectionMode")?
@@ -114,6 +114,16 @@ impl JsBrain {
                 let et = get_opt_f64(opts, "errorCorrectionThreshold")?.unwrap_or(0.5);
                 let mt = get_opt_f64(opts, "mergeThreshold")?.unwrap_or(0.5);
                 let pfr = get_opt_f64(opts, "patternForgetRate")?.unwrap_or(0.01);
+                let ldm_str = get_opt_string(opts, "levelDecayMode")?
+                    .unwrap_or_else(|| "exponential".to_string());
+                let ldm = match ldm_str.as_str() {
+                    "exponential" => LevelDecayMode::Exponential,
+                    "linear" => LevelDecayMode::Linear,
+                    "static" => LevelDecayMode::Static,
+                    other => return Err(Error::from_reason(format!(
+                        "Invalid levelDecayMode '{}'. Expected 'exponential', 'linear', or 'static'", other
+                    ))),
+                };
                 let r = get_opt_u32(opts, "regions")?.unwrap_or(1) as usize;
                 let c = get_opt_u32(opts, "columns")?.unwrap_or(1) as usize;
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
@@ -124,15 +134,15 @@ impl JsBrain {
                 } else {
                     None
                 };
-                (cl, mode, et, mt, pfr, r, c, d, aa)
+                (cl, mode, et, mt, pfr, ldm, r, c, d, aa)
             }
-            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, false, None),
+            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, LevelDecayMode::Exponential, 1, 1, false, None),
         };
 
         Ok(Self {
             inner: RefCell::new(CoreBrain::new(
                 context_length, error_mode, error_threshold, merge_threshold,
-                pattern_forget_rate, regions, columns, debug, action_alpha,
+                pattern_forget_rate, level_decay_mode, regions, columns, debug, action_alpha,
             )),
         })
     }
@@ -295,10 +305,73 @@ impl JsBrain {
         Ok(arr)
     }
 
+    /// List currently votable entries: same (neuronId, age) pairs that
+    /// infer() and learn() use to collect votes / wire connections.
+    #[napi(js_name = "getVotableEntries")]
+    pub fn get_votable_entries(&self, env: Env) -> Result<JsObject> {
+        let brain = self.inner.borrow();
+        let entries = brain.get_votable_entries();
+        let mut arr = env.create_array_with_length(entries.len())?;
+        for (i, (nid, age)) in entries.iter().enumerate() {
+            let mut obj = env.create_object()?;
+            obj.set_named_property("neuronId", env.create_uint32(*nid as u32)?)?;
+            obj.set_named_property("age", env.create_uint32(*age as u32)?)?;
+            arr.set_element(i as u32, obj)?;
+        }
+        Ok(arr)
+    }
+
+    /// Implant: begin direct teaching mode for column-major training.
+    /// Caller must have already registered the event channel; pass the
+    /// channel id and dim id along with the number of training images.
+    #[napi(js_name = "startImplant")]
+    pub fn start_implant(&self, channel_id: u32, dim_id: u32, num_images: u32) -> Result<()> {
+        self.inner.borrow_mut().start_implant(channel_id, dim_id, num_images);
+        Ok(())
+    }
+
+    /// Implant: process one position across all images. `bits` is the
+    /// bucket id of each image's bit at this position, in the same order
+    /// `num_images` was given to startImplant. Brain handles per-image
+    /// state internally — caller just feeds bits position-by-position.
+    #[napi(js_name = "implantPosition")]
+    pub fn implant_position(&self, bits: Vec<u32>) -> Result<()> {
+        let b: Vec<u8> = bits.iter().map(|x| *x as u8).collect();
+        self.inner.borrow_mut().implant_position(&b);
+        Ok(())
+    }
+
+    /// Implant: end implant mode. Returns { positionsProcessed, patternsCreated }.
+    #[napi(js_name = "finalizeImplant")]
+    pub fn finalize_implant(&self, env: Env) -> Result<JsObject> {
+        let summary = self.inner.borrow_mut().finalize_implant();
+        let mut obj = env.create_object()?;
+        obj.set_named_property("positionsProcessed", env.create_uint32(summary.positions_processed as u32)?)?;
+        obj.set_named_property("patternsCreated", env.create_uint32(summary.patterns_created as u32)?)?;
+        Ok(obj)
+    }
+
     /// Reset brain memory state for a clean episode start.
     #[napi(js_name = "resetContext")]
     pub fn reset_context(&self) -> Result<()> {
         self.inner.borrow_mut().reset_context();
+        Ok(())
+    }
+
+    /// Initialize N parallel runtime contexts. Each context has its own
+    /// (memory, frame_number, rewards); the thalamus is shared. Pass the
+    /// target context id via setActiveContext before processFrame/learn/infer.
+    #[napi(js_name = "initContexts")]
+    pub fn init_contexts(&self, n: u32) -> Result<()> {
+        self.inner.borrow_mut().init_contexts(n as usize);
+        Ok(())
+    }
+
+    /// Switch the active context. Subsequent processFrame/learn/infer/
+    /// resetContext calls operate on this context.
+    #[napi(js_name = "setActiveContext")]
+    pub fn set_active_context(&self, ctx_id: u32) -> Result<()> {
+        self.inner.borrow_mut().set_active_context(ctx_id as usize);
         Ok(())
     }
 

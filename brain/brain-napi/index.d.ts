@@ -42,8 +42,59 @@ export declare class Brain {
   learn(actions: object, rewards: object): object
   /** Run inference on the current context without advancing the frame. */
   infer(): object
+  /**
+   * Get active neurons in context with their levels.
+   * Returns an array of { neuronId, level, suppressed } objects.
+   * suppressed=true means the neuron activated a higher-level pattern and
+   * should not be counted as an independent voter.
+   */
+  getActiveNeurons(): object
+  /**
+   * Inspect one neuron: returns { neuronId, level, parentId | null,
+   * context: [{ neuronId, distance, strength }, ...] }.
+   * Context entries come from the parent neuron's routing-table entry
+   * for this child pattern. Level-0 sensory neurons have parent_id=null
+   * and empty context.
+   */
+  inspectNeuron(neuronId: number): object
+  /**
+   * Dump a neuron's outgoing connections.
+   * Returns [{ distance, targetId, strength, reward }, ...].
+   */
+  dumpNeuronConnections(neuronId: number): object
+  /**
+   * List currently votable entries: same (neuronId, age) pairs that
+   * infer() and learn() use to collect votes / wire connections.
+   */
+  getVotableEntries(): object
+  /**
+   * Implant: begin direct teaching mode for column-major training.
+   * Caller must have already registered the event channel; pass the
+   * channel id and dim id along with the number of training images.
+   */
+  startImplant(channelId: number, dimId: number, numImages: number): void
+  /**
+   * Implant: process one position across all images. `bits` is the
+   * bucket id of each image's bit at this position, in the same order
+   * `num_images` was given to startImplant. Brain handles per-image
+   * state internally — caller just feeds bits position-by-position.
+   */
+  implantPosition(bits: Array<number>): void
+  /** Implant: end implant mode. Returns { positionsProcessed, patternsCreated }. */
+  finalizeImplant(): object
   /** Reset brain memory state for a clean episode start. */
   resetContext(): void
+  /**
+   * Initialize N parallel runtime contexts. Each context has its own
+   * (memory, frame_number, rewards); the thalamus is shared. Pass the
+   * target context id via setActiveContext before processFrame/learn/infer.
+   */
+  initContexts(n: number): void
+  /**
+   * Switch the active context. Subsequent processFrame/learn/infer/
+   * resetContext calls operate on this context.
+   */
+  setActiveContext(ctxId: number): void
   /** Hard reset: clears ALL learned data. */
   resetBrain(): void
   /** Reset accuracy and reward stats for a new episode. */
