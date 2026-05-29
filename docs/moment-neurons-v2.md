@@ -87,6 +87,10 @@ The thalamus orchestration is identical for d=0 and d>0:
 
 The current level-sweep processing (`for level in 0..max_level`) is replaced by a wavefront propagation model. This is required for two reasons: (a) d=0 connections should activate neurons within the same frame without waiting for the next level pass, and (b) neuron reuse (Phase 2) means a neuron at any "level" can be activated from any other, making fixed level ordering meaningless.
 
+The `level_index` in Memory is retained — context and co-activation are still scoped per level (a neuron's d=0 predictions are evaluated against the union of fired neurons at the same level during this frame's wavefront). What goes away is `neuron.level` as an intrinsic routing/dispatch property and the outer `for level in 0..max_level` loop. Levels remain a spatial organization of memory; they cease to be a temporal dispatch axis.
+
+**Prediction evaluation timing.** d=0 predictions are evaluated against the union of all neurons fired during this frame's wavefront, **after stabilization, before action voting**. The validation set is built within the frame — there is no need to wait for the next frame. This is the critical distinction from d>0: temporal predictions are validated when their target frame arrives; spatial predictions are validated at end-of-wavefront in the same frame.
+
 ```
 Frame arrives
     │
@@ -126,10 +130,6 @@ Next frame
 
 Each neuron can fire at most once per frame. This prevents infinite loops from circular activation chains. A `fired_this_frame: FxHashSet<NeuronId>` tracks which neurons have already fired. If an activation signal reaches a neuron that has already fired, it is ignored. This mirrors biological refractory periods and ensures wavefront termination.
 
-### 3.6 Processing Order and Determinism
-
-Within each wave, neurons are processed in neuron-ID order to ensure deterministic behavior. This is important for reproducibility and debugging. The wavefront is essentially breadth-first propagation with deterministic ordering within each frontier.
-
 ---
 
 ## 4. Co-Activation Prediction and Error
@@ -144,7 +144,7 @@ A neuron's d=0 connections constitute predictions: "when I fire, I expect these 
 
 ### 4.3 Error Detection
 
-When a neuron fires and its d=0 predictions don't match reality — expected co-activations are absent or unexpected neurons are present — the mismatch rate is computed. If it exceeds the error threshold (same threshold mechanism as temporal errors, including dynamic modes), an error is generated.
+When a neuron fires, its d=0 connections constitute a predicted co-activation set. After wavefront stabilization, the thalamus compares this predicted set against **reality = the union of all neurons that fired anywhere in this frame's wavefront at the same level**. Missing predictions (expected neurons that didn't fire) and novel observations (unexpected neurons that did fire) both contribute to the mismatch rate. The intersection of predicted and observed can be empty — predictions are not constrained to be a subset of reality. If the mismatch exceeds the error threshold (same threshold mechanism as temporal errors, including dynamic modes), an error is generated.
 
 ### 4.4 Error Correction
 
@@ -212,11 +212,17 @@ With d=0 in the wavefront, MNIST processing becomes:
 
 No repeated frames. No temporal context window. No episodes. One frame per image. The training loop is: show image → wavefront stabilizes → learn digit → next image.
 
-### 5.4 Generalization via Class Neurons
+### 5.4 Generalization via Reuse and Decay
 
-A correction neuron initially captures a specific co-activation event. Over time and repeated partial matches, connections to neurons that consistently co-activate retain strength while connections to incidental partners decay. The correction neuron gradually loses specificity and retains only the structural core — becoming a class neuron.
+Generalization emerges from two cooperating mechanisms:
 
-A class neuron for "vertical stroke" fires for any vertical stroke regardless of exact pixel position. A class neuron for "7" fires for any digit with the right compositional structure. This generalization emerges from connection decay — the same mechanism as temporal pattern context refinement, no additional infrastructure needed.
+1. **Reuse (primary driver).** When the same correction neuron is reused across many distinct error events (Phase 2), each reuse strengthens the connections shared across all those events and adds new connections specific to each event. The structurally-shared connections accumulate strength; the per-event-specific connections remain weak. Over many reuses, the neuron's strong connections converge on the structural core common to the equivalence class of triggering events.
+
+2. **Decay (secondary driver).** Standard connection decay erodes weak per-event connections faster than reinforced structural ones, sharpening the same effect.
+
+A class neuron for "vertical stroke" emerges when the same correction neuron is repeatedly reused for vertical-stroke-like co-activation errors across many digits — its core stays strong while incidental partners decay. A class neuron for "7" emerges from repeated reuse across "7" instances with varying pixel layouts.
+
+This is why Phase 2 (reuse) is essential, not just an optimization: a single correction neuron created from one event with no reuse only memorizes that event — decay alone has no statistical basis to identify which connections are incidental. Reuse provides the cross-instance signal that decay then sharpens.
 
 ---
 
@@ -226,16 +232,23 @@ A class neuron for "vertical stroke" fires for any vertical stroke regardless of
 
 Currently, when the thalamus detects an error, it always creates a brand new neuron. But the inference needed — the prediction, the grouping — may already exist somewhere in the network. A neuron created for a completely different context might already have connections that express exactly the required prediction.
 
-### 6.2 The Solution: Reverse Index Lookup
+### 6.2 The Solution: Reverse Inference Index Lookup
 
-Instead of always minting new neurons, the thalamus checks whether an existing neuron already performs the required inference. The mechanism:
+Reuse applies to **all distances**, not just d=0. Any error (temporal or spatial) is a candidate for reuse before minting.
 
-1. Error detected at neuron A, distance d.
-2. Thalamus computes the required inference: what connections does the correction neuron need?
-3. Thalamus looks up the reverse connection index (analogous to the existing context_index for routing tables, but for connections).
-4. Partial matching: find existing neurons whose connections best match the required inference. Same scoring logic as pattern recognition — exact match preferred, partial match with penalty acceptable.
-5. If a sufficiently matching neuron exists: wire a connection to it instead of creating a new one. The erroring neuron's routing table points to the existing neuron.
-6. If no match: create a new neuron as before.
+The reuse criterion is **inference-output match**, not context-match: does some existing neuron's connection set already produce the inference the correction would need? The candidate's own routing table and triggering context are irrelevant to the decision — only its output signature matters.
+
+Mechanism per error:
+
+1. Error detected at neuron A, distance d. Thalamus knows the **observed inference set** — the actual targets that should have been inferred (the correct co-activations for d=0; the correct sequence for d>0).
+2. Thalamus queries a new **reverse inference index**: for each observed target T, which existing neurons have a connection to T? (This is the inverse of "neuron N infers targets {T1, T2, …}".)
+3. Take the union/intersection of those candidate sets. For each candidate, score its inference signature against the observed set using the same common/missing/novel analysis as pattern recognition.
+4. If a candidate scores above the existing **merge threshold** (the same parameter that governs partial-context matching for pattern recognition): wire the erroring neuron's routing table to defer to that candidate.
+5. If no candidate qualifies: mint a new neuron as before.
+
+The symmetry is intentional. Pattern recognition asks "does this observed context partially match a stored context?" Reuse asks "does this required inference partially match an existing neuron's inference?" Both are partial-set-overlap questions; they share the same threshold. Setting that threshold to 1.0 disables reuse entirely (and also disables partial-context recognition); lowering it enables both.
+
+**Example.** Observed inference set = (A, B, C). Candidate neuron infers (B, C). Overlap 2/3 ≈ 0.67. If the merge threshold is below 0.67, reuse. The erroring neuron's routing entry now points to the candidate; when the same context recurs, the candidate fires and provides the (B, C) inference (missing A is accepted as the cost of reuse).
 
 ### 6.3 Intra-Level Connections
 
@@ -293,31 +306,27 @@ Camera frame arrives → d=0 connections group spatial features within the frame
 
 ### 8.1 Wavefront Stabilization Dynamics
 
-With d=0 connections, potentially dozens of neurons are co-active simultaneously, all predicting each other. The error landscape could be chaotic early on — errors everywhere, correction neurons minting explosively before connections have stabilized. The bootstrap dynamics need empirical validation: how many exposures are needed before d=0 connections form clean enough clusters to drive useful correction neuron creation?
+With d=0 connections, potentially dozens of neurons are co-active simultaneously, all predicting each other. The error landscape could be chaotic early on. The bootstrap dynamics need empirical validation: how many exposures are needed before d=0 connections form clean enough clusters to drive useful correction neuron creation? No separate connection-strength prediction gate is introduced — the error threshold itself is expected to absorb noise-level mismatches.
 
-### 8.2 Connection Strength Threshold for d=0
+### 8.2 Error Threshold for d=0
 
-When do d=0 connections become strong enough to constitute a prediction? This threshold determines sensitivity to noise and the number of exposures needed before the system can form spatial groupings. May need to be tuned independently from d>0 thresholds, or may work with the same parameters.
+The existing error threshold (static, conservative, neutral, aggressive modes with Welford online variance) may work directly for d=0 errors. Alternatively, d=0 errors might need different sensitivity. Empirical testing will determine this.
 
-### 8.3 Error Threshold for d=0
+### 8.3 Reverse Inference Index Design
 
-The existing error threshold (static, conservative, neutral, aggressive modes with Welford online variance) may work directly for d=0 errors. Alternatively, d=0 errors might need different sensitivity than d>0 errors. Empirical testing will determine this.
+The lookup shape is: `target_neuron → set of (source_neuron, distance)` — for each target, which neurons have a connection to it at which distance. Updated on connection creation, strengthening, deletion. Sharded by the column owning the source neuron so the lookup parallelizes across regions. Open: storage layout (flat hashmap vs nested), update batching cadence, eviction of decayed connections.
 
-### 8.4 Reverse Index Design for Neuron Reuse
+### 8.4 Partial Match Scoring for Neuron Reuse
 
-The existing `context_index` provides fast lookup for pattern candidates during recognition. A similar reverse index is needed for connections to enable the thalamus to find reusable neurons. Design questions: index by connection targets? By connection hash? By partial connection signature? The lookup must be fast enough to not bottleneck correction.
+Reuse uses the **same merge threshold** as partial-context matching. The two operations are symmetric — observed-vs-stored-context overlap and required-vs-existing-inference overlap are the same partial-set-match shape — so they share the parameter. No separate `reuseMergeThreshold`. Tuning the global merge threshold is empirical and affects both behaviors together, which is the intended coupling.
 
-### 8.5 Partial Match Scoring for Neuron Reuse
+### 8.5 Forget Rate for d=0 Connections
 
-When the thalamus finds a candidate neuron for reuse, how good must the match be? Exact match only? Or accept partial matches with some threshold? Too strict means few reuse opportunities. Too loose means incorrect reuse that introduces errors. The scoring mechanism should mirror the existing pattern matching score (common/missing/novel analysis).
+The current forget rate is level-dependent. Since `level_index` in Memory is retained as a spatial organization, level-based forget rates can still apply — d=0 connections inherit the forget rate of the level their source neuron lives in. Alternative anchors (depth in activation chain, uniform rate) remain on the table if level-based decay produces wrong gradients in practice.
 
-### 8.6 Forget Rate for d=0 Connections
+### 8.6 Action Binding Durability Through Generalization
 
-The current forget rate is level-dependent (exponentially slower for deeper patterns). Without fixed levels, forget rate needs a different anchor — perhaps depth in the activation chain (hops to nearest sensory neuron), or a uniform rate for all d=0 connections, or the same decay as the neuron's d>0 connections.
-
-### 8.7 Action Binding Durability Through Generalization
-
-When a correction neuron generalizes into a class neuron through connection decay, does the action binding transfer cleanly? Or can it get diluted as incidental connections decay? This needs validation, especially for MNIST where the action binding is the core deliverable.
+When a correction neuron generalizes via reuse + decay, does the action binding transfer cleanly? Or can it get diluted? Needs validation, especially for MNIST where the action binding is the core deliverable.
 
 ---
 
@@ -349,18 +358,19 @@ Implement spatial processing and neuron reuse before the trading cloud infrastru
 
 **Step 1.1: Wavefront Processing Model**
 
-Replace the level-sweep loop in `brain.process_levels()` with wavefront propagation:
-- Remove `level_index` from Memory as a dispatch mechanism (retain for diagnostics if needed).
+Replace the level-sweep loop in `brain.process_levels()` with wavefront propagation. `level_index` in Memory stays — it remains the spatial organization for co-activation scoping and forget rates. What changes is the dispatch loop and the removal of `neuron.level` as an intrinsic routing property.
+
 - Add `fired_this_frame: FxHashSet<NeuronId>` to track refractory state.
 - Add `pending_activation: Vec<NeuronId>` as the wavefront queue.
-- Process neurons from the queue in waves, each wave processing in neuron-ID order for determinism.
+- Process neurons from the queue in waves. Within-wave ordering is not required to be deterministic; parallel dispatch across regions/columns is preserved.
 - Terminate when a wave produces no new activations.
 - Neurons fire at most once per frame (refractory constraint).
+- Action voting runs once, post-stabilization, over the union of all fired neurons.
 
 Key code changes:
-- `brain.rs`: Replace `process_levels()` loop (lines 1520-1576) with wavefront loop.
-- `memory.rs`: Add wavefront queue management. Simplify or remove `level_index` for dispatch.
-- `thalamus.rs`: `process_level()` becomes `process_neurons()` — processes a batch of neurons regardless of level.
+- `brain.rs`: Replace `process_levels()` loop with wavefront loop.
+- `memory.rs`: Add wavefront queue management. Keep `level_index` for context scoping and forget rates.
+- `thalamus.rs`: `process_level()` becomes `process_neurons()` — processes a batch of neurons regardless of `neuron.level`.
 
 **Step 1.2: d=0 Connection Support**
 
@@ -418,6 +428,7 @@ With neuron reuse, a neuron at any depth can be activated from any other:
 
 **Goal:** Apply the unified architecture to the stock trading system.
 
+- Review all changes in the `mnist` branch and merge only the necessary changes to `main` — review and decide which scaffolding/experiments stay in the branch and which become permanent.
 - Enable d=0 connections on stock market data. Within each frame, co-occurring market signals across symbols are grouped via d=0 connections.
 - Temporal patterns (d>0) operate over the compressed spatial groupings.
 - Evaluate impact on directional prediction accuracy and per-episode ROI.
@@ -440,13 +451,15 @@ With neuron reuse, a neuron at any depth can be activated from any other:
 
 The architecture is correct. Unified d=0/d>0 processing through prediction error is mathematically sound and biologically grounded. The temporal-only system already validates the core mechanism on stock data.
 
+Wavefront termination is self-guaranteed: refractory bounds firings at one per existing neuron per frame, and newly minted correction neurons cannot themselves error in the same frame (their d=0 connections are either empty or exactly equal to the co-activation set they were built from, so their predictions can't mismatch). No safety-valve wave-count limit needed.
+
 ### 11.2 Moderate Confidence (60-70%)
 
-MNIST works within the two-week window. The bootstrap dynamics — how many exposures are needed before d=0 connections form useful clusters — are unknown. Wavefront stabilization on high-dimensional spatial data is untested.
+MNIST works within the timeline. The bootstrap dynamics — how many exposures are needed before d=0 connections form useful clusters — are unknown. Wavefront stabilization on high-dimensional spatial data is untested.
 
 ### 11.3 Key Risks
 
-- **Bootstrap explosion**: Early training may produce too many correction neurons before d=0 connections have stabilized. Mitigation: connection strength threshold before prediction kicks in.
-- **Wavefront non-termination**: Circular activation chains despite refractory period (shouldn't happen mathematically, but edge cases possible). Mitigation: hard wave-count limit as safety valve.
-- **Generalization failure**: d=0 correction neurons may over-memorize specific pixel configurations rather than generalizing to stroke-like features. Mitigation: connection decay tuning, sufficient training variety.
+- **Bootstrap noise**: Early training may produce many correction neurons before d=0 connections have stabilized. Mitigation: the error threshold absorbs noise-level mismatches; the reuse mechanism (Phase 2) prevents redundant minting even when errors are abundant.
+- **Generalization failure**: d=0 correction neurons may over-memorize specific pixel configurations rather than generalizing to stroke-like features. Mitigation: reuse provides the cross-instance signal; decay sharpens it. Tune merge threshold and decay rates if generalization is too slow or too aggressive.
+- **Reverse-inference-index cost**: Per-frame reuse lookup could dominate runtime if poorly indexed. Mitigation: batch one lookup per level per frame (piggyback on existing op-3/op-4 dispatch); shard by column for parallel evaluation across regions.
 - **Performance**: Wavefront model may be slower than level-sweep for temporal-only workloads (stocks). Mitigation: profile and optimize; wavefront with mostly d>0 connections should degrade to similar performance.
