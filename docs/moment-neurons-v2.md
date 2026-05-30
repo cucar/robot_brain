@@ -83,52 +83,98 @@ The thalamus orchestration is identical for d=0 and d>0:
 4. **Create correction neurons**: For errors, the thalamus creates a new neuron capturing the actual activation context — either the actual co-activation set (d=0) or the actual temporal sequence (d>0).
 5. **Update routing tables**: The erroring neuron's routing table is updated so next time it recognizes the correct context and activates the correction neuron directly.
 
-### 3.4 Wavefront Processing Model
+### 3.4 Two-Phase Processing Model
 
-The current level-sweep processing (`for level in 0..max_level`) is replaced by a wavefront propagation model. This is required for two reasons: (a) d=0 connections should activate neurons within the same frame without waiting for the next level pass, and (b) neuron reuse (Phase 2) means a neuron at any "level" can be activated from any other, making fixed level ordering meaningless.
+Each frame is processed in two **sequential phases**: spatial first, temporal second.
 
-The `level_index` in Memory is retained — context and co-activation are still scoped per level (a neuron's d=0 predictions are evaluated against the union of fired neurons at the same level during this frame's wavefront). What goes away is `neuron.level` as an intrinsic routing/dispatch property and the outer `for level in 0..max_level` loop. Levels remain a spatial organization of memory; they cease to be a temporal dispatch axis.
+The motivation is the feedforward sensory cascade. Object identification must precede motion tracking — you cannot have a d>0 prediction "ball moves left" until "ball" is a recognized entity in both frames. If temporal ran first, its d>0 predictions could only operate on raw sensory neurons (the only thing active at age=0 within the frame), which is the combinatorial-explosion bottleneck the design was meant to fix. By running spatial first, temporal sees the spatial hierarchy's apex as its input — objects and groupings, not raw pixels — and its d>0 predictions form between meaningful entities across frames.
 
-**Prediction evaluation timing.** d=0 predictions are evaluated against the union of all neurons fired during this frame's wavefront, **after stabilization, before action voting**. The validation set is built within the frame — there is no need to wait for the next frame. This is the critical distinction from d>0: temporal predictions are validated when their target frame arrives; spatial predictions are validated at end-of-wavefront in the same frame.
+Spatial and temporal are structurally symmetric: each has its own level hierarchy and its own per-frame processing loop. They differ only in distance — spatial uses d=0 (within-frame co-activation), temporal uses d>0 (across-frame sequence) — and in how their hierarchies are realized within a single frame:
+
+- **Spatial:** wavefront within the frame. Seeds from L=0 sensory; routing matches and fresh mints propagate hierarchy upward wave by wave.
+- **Temporal:** level-sweep within the frame (the existing `process_levels()` pipeline, renamed). Iterates `for level in 0..max_active_level`; at each level, d>0 pattern recognition uses the prior-frame context window.
 
 ```
 Frame arrives
     │
     ▼
-Activate sensory neurons (age=0)
+Activate sensory neurons (L=0)
     │
     ▼
-Wavefront Processing
+process_spatial  (new)
     │
-    ├─ Wave 0:
-    │    Sensory neurons fire
-    │    d=0 connections: activate co-activation neurons (spatial grouping)
-    │    d>0 connections: learn/predict temporal sequences
-    │    Errors at any distance → thalamus creates correction neurons
-    │    Correction neurons added to next wave
+    │   Input: L=0 sensory neurons.
     │
-    ├─ Wave 1:
-    │    Newly activated neurons (from d=0 or d>0 matches) fire
-    │    Their d=0 and d>0 connections processed
-    │    More corrections possible → next wave
+    │   Spatial wavefront:
+    │     ├─ Wave 0: L=0 sensory fires. Their d=0 connections
+    │     │           activate L=1 spatial corrections via routing.
+    │     ├─ Wave 1: L=1 corrections fire. Their d=0 connections
+    │     │           activate L=2 corrections via routing.
+    │     ├─ Wave N: continues until no new activations.
+    │     │           Refractory: each neuron fires at most once
+    │     │           per spatial phase.
+    │     ▼
+    │   At spatial stabilization:
+    │     • Evaluate d=0 predictions against the observed
+    │       co-activation set (= fired neurons in this spatial
+    │       phase, minus correction_wired_this_frame).
+    │     • For each error: reuse lookup, else mint correction
+    │       neuron at (erroring_neuron.activation_level + 1). Newly-wired
+    │       correction targets go into correction_wired_this_frame.
     │
-    ├─ Wave N:
-    │    Continues until no new activations
-    │    Refractory constraint: each neuron fires at most once per frame
+    │   Handoff: spatial output = highest-level activations per age
+    │            (= fired neurons in this spatial phase whose level
+    │            equals the max active level for their age, minus
+    │            correction_wired_this_frame).
     │
     ▼
-Stabilization: no new activations
+process_temporal  (existing level-sweep, unchanged for d>0)
+    │
+    │   Input: sensory + spatial handoff (folded into the active
+    │   set at each level).
+    │
+    │   For level 0..max_active_level:
+    │     • d>0 pattern recognition
+    │     • d>0 error detection and correction (mint or reuse)
     │
     ▼
-Action voting (all active neurons participate)
+Action voting
+    │   Over the union of all voting neurons (fired_this_frame
+    │   minus correction_wired_this_frame), across both phases.
     │
     ▼
 Next frame
 ```
 
-### 3.5 Refractory Period
+**Spatial inputs.** `process_spatial` seeds from L=0 sensory neurons activated this frame. The wavefront then propagates upward via existing d=0 routing matches: a fired neuron's routing table is consulted; matches activate the corresponding higher-level spatial correction; that correction fires in the next wave; its own routing is consulted; and so on. Each frame can deepen the spatial hierarchy by up to one fresh mint layer at the top (the correction-wired inhibition rule, §3.5, bounds same-frame deepening to one layer; cross-frame routing accumulation lets subsequent frames reach further).
 
-Each neuron can fire at most once per frame. This prevents infinite loops from circular activation chains. A `fired_this_frame: FxHashSet<NeuronId>` tracks which neurons have already fired. If an activation signal reaches a neuron that has already fired, it is ignored. This mirrors biological refractory periods and ensures wavefront termination.
+**Spatial→temporal handoff.** `process_temporal`'s active-set construction is enriched with the spatial output: of the neurons fired in `process_spatial` that are eligible to vote (not in `correction_wired_this_frame`), the subset whose level equals the max active level for their age. For the MNIST first frame — no spatial hierarchy yet — the handoff is just the L=0 sensory neurons (which spatial fired but didn't deepen). For mature operation, the handoff is whatever apex spatial groupings emerged from the wavefront. Lower-level neurons that contributed to higher-level spatial corrections are excluded from the handoff; their relationships are already encoded by the corrections that absorbed them.
+
+**Inference scope (the "co-activation reality" set).** What counts as the validation set for a d=0 prediction — same-level fired neurons, base-level fired neurons, or all fired neurons regardless of level — is determined by the **Phase 2 inference scope experiment** in the implementation plan. The experiment runs three variants (`base`, `same-level`, `all-levels`) on the stocks workload at d>0 and picks the winner; the same rule then applies uniformly to d=0. The body of this design uses "co-active neurons in this frame" as a placeholder; the concrete scope is whichever Phase 2 selects.
+
+**Why the temporal pipeline stays put.** The existing `process_levels()` (renamed `process_temporal`) is well-tuned for d>0 on stocks. With spatial-first, it receives a richer active set (sensory + spatial apex) but its internal mechanism — level-sweep with d>0 pattern recognition — is unchanged.
+
+### 3.5 Refractory and Correction-Wiring Inhibition
+
+Each neuron fires at most once per spatial phase. A `fired_this_frame: FxHashSet<NeuronId>` set tracks all neurons that have fired in either phase this frame, and is also consulted by `process_spatial`'s wavefront to enforce refractory within the spatial phase. If an activation signal reaches a neuron that has already fired, it is ignored. This bounds the spatial wavefront by total neuron count.
+
+Additionally, a `correction_wired_this_frame: FxHashSet<NeuronId>` set tracks every neuron whose activation this frame is the result of being selected as a correction target — whether it was minted fresh, or reused from an existing neuron. Neurons in this set:
+
+- **Learn from the current observed set.** They participate in connection strengthening so that the d=0 connections of a reused neuron gradually generalize toward the observed reality across reuse events (§5.4).
+- **Do not vote.** Their activation this frame is a wiring side-effect, not an inferential signal. Action voting excludes them.
+- **Are not error-checked.** Their d=0 predictions are not evaluated this frame. This prevents a reused neuron — whose pre-existing d=0 set may not match the current observed set — from generating a fresh error and cascading into more corrections within the same phase.
+
+The inhibition rule is unified: the trigger isn't novelty (newly minted), it's role this frame (correction-wired). Minted neurons were always a special case where their predictions trivially matched reality; reused neurons need explicit exclusion because their predictions do not trivially match.
+
+Both sets clear at frame end.
+
+### 3.6 Levels as Activation State, Not Neuron State
+
+Levels are a property of *activations in active memory*, not of neurons. A neuron has no intrinsic level field. When a neuron is activated this frame, it is registered in active memory at `activating_neuron.activation_level + 1` (sensory neurons start at activation level 0). The temporal level-sweep iterates active-memory levels: at iteration L, it processes whoever is activated at level L this frame. The spatial wavefront propagates by routing match independent of level.
+
+This design matters specifically because of reuse. A neuron R reused for an error at A (activation level 2) appears at activation level 3 this frame, regardless of where R was originally minted or where it was last activated. Next frame, the same R may be activated from a different routing source at a different level — appearing at a different activation level. R's identity is preserved; its "level" is per-frame contextual.
+
+Without this design, cross-level reuse would either be unsafe (the level-sweep might never reach R's intrinsic level, leaving R's d>0 work and votes silently dropped) or require restricting reuse candidates to matching levels (shrinking the reuse pool significantly). With per-activation levels, neither problem exists.
 
 ---
 
@@ -144,7 +190,7 @@ A neuron's d=0 connections constitute predictions: "when I fire, I expect these 
 
 ### 4.3 Error Detection
 
-When a neuron fires, its d=0 connections constitute a predicted co-activation set. After wavefront stabilization, the thalamus compares this predicted set against **reality = the union of all neurons that fired anywhere in this frame's wavefront at the same level**. Missing predictions (expected neurons that didn't fire) and novel observations (unexpected neurons that did fire) both contribute to the mismatch rate. The intersection of predicted and observed can be empty — predictions are not constrained to be a subset of reality. If the mismatch exceeds the error threshold (same threshold mechanism as temporal errors, including dynamic modes), an error is generated.
+When a neuron fires during `process_spatial`, its d=0 connections constitute a predicted co-activation set. After spatial wavefront stabilization, the thalamus compares this predicted set against **reality = the neurons fired in this spatial phase, minus `correction_wired_this_frame`** (scoped per the Phase 2 inference scope decision). Missing predictions (expected neurons that didn't fire) and novel observations (unexpected neurons that did fire) both contribute to the mismatch rate. The intersection of predicted and observed can be empty — predictions are not constrained to be a subset of reality. If the mismatch exceeds the error threshold (same threshold mechanism as temporal errors, including dynamic modes), an error is generated. Neurons in `correction_wired_this_frame` do not produce predictions for evaluation (§3.5).
 
 ### 4.4 Error Correction
 
@@ -175,13 +221,20 @@ This mirrors temporal processing exactly: the first observed sequence becomes th
 
 ### 5.1 How Hierarchy Emerges
 
-The wavefront naturally produces hierarchical groupings:
+Spatial hierarchy emerges along two axes — within a single spatial phase (via the spatial wavefront and existing routing) and across frames (via the routing tables accumulating new entries over time).
 
-- Wave 0: Pixel neurons fire. d=0 connections activate correction neurons for learned co-activation groups (stroke-like groupings).
-- Wave 1: Correction neurons from Wave 0 are now active. They have their own d=0 connections to other correction neurons. Errors at this level create higher-order correction neurons (digit-like compositions).
-- Wave 2+: Continues until stabilization.
+**Within a spatial phase (spatial wavefront).** When `process_spatial` runs in frame N:
 
-No explicit "levels" are assigned. The hierarchy is emergent from the wavefront propagation depth.
+- Wave 0: L=0 sensory fires. d=0 routing matches on each sensory neuron activate L=1 spatial corrections (those minted in prior frames).
+- Wave 1: L=1 corrections fire. d=0 routing matches on them activate L=2 spatial corrections.
+- Wave K: continues until no new routing matches.
+- At stabilization: d=0 predictions evaluated. For each error → mint correction at `erroring_neuron.activation_level + 1` (or reuse an existing neuron via the inference index — the reused neuron is registered at the same `erroring.activation_level + 1` this frame, regardless of where it was originally minted). Fresh mints/reuses go into `correction_wired_this_frame` and do not fire this frame.
+
+A single frame can therefore deepen the spatial hierarchy by at most one fresh layer at the top, plus however deep the existing routing structure already reaches. The notion of "level" is a per-frame *activation level* in active memory, not an intrinsic neuron property — a neuron activated this frame from a level-2 source appears at level 3; the same neuron activated next frame from a level-4 source appears at level 5. This is what makes cross-context reuse work without level mismatches.
+
+**Across frames (routing accumulation).** Frame N's fresh mints become routing-table entries in their source neurons. In frame N+1's spatial wavefront, those entries match and fire the corresponding correction neurons mid-wavefront — so the wavefront naturally reaches one level deeper than it did in frame N. Over many frames, the spatial hierarchy reaches arbitrary depth, even though any single frame only adds one fresh layer.
+
+**Spatial→temporal handoff.** The highest-level activations per age from this frame's spatial wavefront are folded into `process_temporal`'s active set. Temporal then does its own level-sweep over the enriched set, learning d>0 sequences over spatial groupings rather than over raw pixels.
 
 ### 5.2 Walkthrough: MNIST Digits "1" and "7"
 
@@ -202,27 +255,29 @@ Using a simplified 3x3 grid:
 
 ### 5.3 Single-Frame MNIST Processing
 
-With d=0 in the wavefront, MNIST processing becomes:
+With spatial-first, MNIST processing becomes:
 
-1. Show one frame. Pixel neurons fire.
-2. Wavefront propagates: d=0 connections trigger spatial groupings within the same frame.
-3. Higher-order groupings form in subsequent waves.
-4. Stabilization: all co-activation predictions resolved.
-5. Wire action via `learn()` with the digit label.
+1. Show one frame. L=0 pixel neurons activate.
+2. `process_spatial` runs. Spatial wavefront seeds from the L=0 pixels. On first exposure, no L=1 corrections exist yet — wavefront stops at Wave 0, mints L=1 correction(s) from d=0 errors. On subsequent exposures, routing matches activate previously-minted corrections, the wavefront deepens, and possibly one new layer mints at the top.
+3. `process_temporal` runs. The handoff (highest-level spatial activations per age) becomes part of temporal's active set. For single-frame MNIST there's no cross-frame context, so temporal does no useful work, but it runs uniformly for architectural consistency.
+4. Action voting runs across all voting neurons (sensory + spatial activations from routing matches), excluding `correction_wired_this_frame`.
+5. `learn()` wires the digit action to the active voting set.
 
-No repeated frames. No temporal context window. No episodes. One frame per image. The training loop is: show image → wavefront stabilizes → learn digit → next image.
+No repeated frames. No temporal context window. No episodes. One frame per image. The training loop is: show image → spatial + temporal phases run → learn digit → next image.
+
+Inference is symmetric: on a test image, the spatial wavefront activates pre-trained correction neurons via routing matches (not as fresh wirings — routing-match activations are *not* in `correction_wired_this_frame`), and those activated neurons vote for the digit action. Only fresh mint-or-reuse events from this frame's errors are inhibited from voting.
 
 ### 5.4 Generalization via Reuse and Decay
 
 Generalization emerges from two cooperating mechanisms:
 
-1. **Reuse (primary driver).** When the same correction neuron is reused across many distinct error events (Phase 2), each reuse strengthens the connections shared across all those events and adds new connections specific to each event. The structurally-shared connections accumulate strength; the per-event-specific connections remain weak. Over many reuses, the neuron's strong connections converge on the structural core common to the equivalence class of triggering events.
+1. **Reuse (primary driver).** When the same correction neuron is reused across many distinct error events (Phases 8-9), each reuse strengthens the connections shared across all those events and adds new connections specific to each event. The structurally-shared connections accumulate strength; the per-event-specific connections remain weak. Over many reuses, the neuron's strong connections converge on the structural core common to the equivalence class of triggering events.
 
 2. **Decay (secondary driver).** Standard connection decay erodes weak per-event connections faster than reinforced structural ones, sharpening the same effect.
 
 A class neuron for "vertical stroke" emerges when the same correction neuron is repeatedly reused for vertical-stroke-like co-activation errors across many digits — its core stays strong while incidental partners decay. A class neuron for "7" emerges from repeated reuse across "7" instances with varying pixel layouts.
 
-This is why Phase 2 (reuse) is essential, not just an optimization: a single correction neuron created from one event with no reuse only memorizes that event — decay alone has no statistical basis to identify which connections are incidental. Reuse provides the cross-instance signal that decay then sharpens.
+This is why reuse (Phases 8-9) is essential, not just an optimization: a single correction neuron created from one event with no reuse only memorizes that event — decay alone has no statistical basis to identify which connections are incidental. Reuse provides the cross-instance signal that decay then sharpens.
 
 ---
 
@@ -263,9 +318,9 @@ This mirrors biological reality: cortical connections are not neatly layered. Sk
 - **Robustness**: Shared representations are stronger — reinforced from multiple activation pathways.
 - **Convergence speed**: The system builds on existing structure rather than rebuilding from scratch in each context.
 
-### 6.5 Interaction with Wavefront Processing
+### 6.5 Interaction with Two-Phase Processing
 
-Neuron reuse requires the wavefront model (not the level-sweep model) because a reused neuron can sit at any depth in the hierarchy. The wavefront doesn't care — it processes whatever neurons are newly activated, regardless of where they sit. The refractory period prevents cycles.
+Reuse is the same operation at both d>0 (during `process_temporal` error correction) and d=0 (during `process_spatial` error correction). A reused neuron may sit at any level in the hierarchy — that's fine, because reuse wires the erroring neuron's routing table to point at the reused neuron, and the reused neuron then fires on subsequent frames when its routing context recurs. Within the frame where the reuse is wired, the reused neuron is added to `correction_wired_this_frame` (§3.5): it learns from the current observed set but does not vote and is not error-checked. This rule, not the wavefront model, is what bounds the system; the level-sweep for d>0 stays intact.
 
 ### 6.6 Content-Addressable Network
 
@@ -277,16 +332,15 @@ With neuron reuse, the network becomes content-addressable. The thalamus can ans
 
 ### 7.1 The Unified System
 
-When both spatial processing and neuron reuse are implemented, the system has a single unified processing model:
+When spatial processing and neuron reuse are both implemented, the per-frame pipeline is:
 
-1. Frame arrives. Sensory neurons fire.
-2. Wavefront propagates. Each neuron processes all its connections — d=0 (spatial) and d>0 (temporal).
-3. Matching neurons fire. Some fire because of d>0 matches (temporal sequences across frames). Some fire because of d=0 matches (spatial co-activation within this frame). Some are reused neurons activated from either domain.
-4. Errors at any distance trigger correction. The thalamus first checks for reusable existing neurons. If found, wires a connection. If not, creates a new neuron.
-5. Wavefront continues until no new activations.
-6. All active neurons vote for actions.
+1. Frame arrives. L=0 sensory neurons activate.
+2. `process_spatial` runs. Spatial wavefront seeds from L=0 sensory. d=0 routing matches activate higher-level spatial corrections wave by wave. At stabilization, d=0 errors trigger correction — reuse lookup first, mint as fallback. Correction-wired neurons go into `correction_wired_this_frame`.
+3. Handoff: highest-level activations per age from step 2 are folded into temporal's active set.
+4. `process_temporal` runs (existing level-sweep). d>0 connections drive pattern recognition over the enriched active set (sensory + spatial handoff). d>0 errors trigger correction — reuse lookup first, mint as fallback.
+5. Action voting over the union of voting neurons from both phases, excluding `correction_wired_this_frame`.
 
-There is no distinction between "temporal processing" and "spatial processing" at runtime. There is no distinction between "pattern neurons" and "moment neurons" at the implementation level. There is one type of neuron, one processing loop, one error mechanism.
+There is one neuron type, one error mechanism, one reuse mechanism, one routing infrastructure. The two phases are structurally symmetric — each has its own level hierarchy and its own per-frame processing — but they live at different distances (d=0 spatial, d>0 temporal) and run sequentially within a frame. Spatial precedes temporal because object identification must precede motion tracking: temporal's cross-frame predictions are over the entities spatial just identified, not over raw sensory inputs.
 
 ### 7.2 MNIST: Pure Spatial
 
@@ -322,7 +376,7 @@ Reuse uses the **same merge threshold** as partial-context matching. The two ope
 
 ### 8.5 Forget Rate for d=0 Connections
 
-The current forget rate is level-dependent. Since `level_index` in Memory is retained as a spatial organization, level-based forget rates can still apply — d=0 connections inherit the forget rate of the level their source neuron lives in. Alternative anchors (depth in activation chain, uniform rate) remain on the table if level-based decay produces wrong gradients in practice.
+Forget rate is a global static (set in Phase 1, replacing the prior level-dependent rate). Experimentation on the `mnist` branch found no meaningful accuracy difference between level-dependent and static decay, and static is simpler and more biologically defensible (no reason higher-level neurons should follow different decay rules). One global parameter, no per-neuron forget-rate field, no per-level forget-rate table. d=0 connections decay at the same rate as d>0.
 
 ### 8.6 Action Binding Durability Through Generalization
 
@@ -348,100 +402,25 @@ The unified d=0/d>0 wavefront model transforms Robot Brain from a temporal-seque
 
 ## 10. Implementation Plan
 
-### 10.1 Priority
+The detailed implementation plan lives in [moment-neurons-v2-impl.md](./moment-neurons-v2-impl.md) and is the source of truth for phasing, code touched, and acceptance criteria. This section is a one-line summary per phase.
 
-Implement spatial processing and neuron reuse before the trading cloud infrastructure. The MNIST experiment demonstrates these are structural prerequisites, not optimizations. Estimated timeline: 2-3 weeks.
+| # | Phase | Goal |
+|---|---|---|
+| 1 | Branch Reconciliation | Merge keepable parts of `mnist` branch into `dev` |
+| 2 | Inference Scope Experiment | Pick `base` / `same-level` / `all-levels` on stocks at d>0 |
+| 3 | Spatial-Phase Scaffolding | Add empty `process_spatial()` before temporal; rename `process_levels` → `process_temporal`; plumb `fired_this_frame` and `correction_wired_this_frame` |
+| 4 | d=0 Connection Learning | Per-neuron parallel d=0 strengthening during spatial frame |
+| 5 | Spatial Wavefront Orchestration | Thalamus drives wave-by-wave dispatch seeded from L=0 sensory |
+| 6 | d=0 Error Detection + Correction Minting | Evaluate predictions post-wavefront; mint corrections at level+1 |
+| 7 | MNIST Single-Frame Harness | Validate on MNIST: >50% accuracy with <1000 training images |
+| 8 | Reverse Inference Index | Build `target → distance → sources` lookup |
+| 9 | Reuse Lookup in Correction Path | Reuse existing neurons whose inference signature matches |
+| 10 | Reuse Validation | Neuron count drop + transfer test (0-4 → 5-9) |
+| 11 | Stocks Integration | Run stocks with full pipeline; compare to baseline |
+| 12 | Forget-Rate & Class-Neuron Generalization | Long-run training; tune decay if needed |
+| 13 | Persistence / Backup / Import-Export | Round-trip d=0 connections and dynamic-level corrections |
 
-### 10.2 Phase 1: Spatial Processing (d=0 Connections)
-
-**Goal:** Enable spatial co-activation processing within the existing architecture. Validate on MNIST.
-
-**Step 1.1: Wavefront Processing Model**
-
-Replace the level-sweep loop in `brain.process_levels()` with wavefront propagation. `level_index` in Memory stays — it remains the spatial organization for co-activation scoping and forget rates. What changes is the dispatch loop and the removal of `neuron.level` as an intrinsic routing property.
-
-- Add `fired_this_frame: FxHashSet<NeuronId>` to track refractory state.
-- Add `pending_activation: Vec<NeuronId>` as the wavefront queue.
-- Process neurons from the queue in waves. Within-wave ordering is not required to be deterministic; parallel dispatch across regions/columns is preserved.
-- Terminate when a wave produces no new activations.
-- Neurons fire at most once per frame (refractory constraint).
-- Action voting runs once, post-stabilization, over the union of all fired neurons.
-
-Key code changes:
-- `brain.rs`: Replace `process_levels()` loop with wavefront loop.
-- `memory.rs`: Add wavefront queue management. Keep `level_index` for context scoping and forget rates.
-- `thalamus.rs`: `process_level()` becomes `process_neurons()` — processes a batch of neurons regardless of `neuron.level`.
-
-**Step 1.2: d=0 Connection Support**
-
-Extend the connection infrastructure to handle distance zero:
-- `neuron.rs`: `connections: Vec<FxHashMap<NeuronId, ConnectionData>>` currently starts at distance 1 (distance 0 unused). Enable d=0 entries.
-- `neuron.rs`: `learn_connections()` currently skips age=0. Add d=0 co-activation learning: when a neuron is active at age 0, record d=0 connections to all other neurons active at age 0.
-- `neuron.rs`: `vote()` currently returns connections at `age + 1`. Add d=0 voting: return d=0 connections when the neuron is active.
-
-**Step 1.3: d=0 Error Detection and Correction**
-
-Extend the error detection to handle d=0 prediction failures:
-- `thalamus.rs`: In `process_level()` / the new `process_neurons()`, add d=0 error evaluation. When a neuron's d=0 predictions don't match reality, generate an error.
-- `thalamus.rs`: `allocate_pattern_neuron()` adapted to create correction neurons for d=0 errors with co-activation context entries at distance 0.
-- The correction neuron is wired into the erroring neuron's routing table with d=0 context.
-
-**Step 1.4: MNIST Validation**
-
-- Create MNIST test harness: single frame per image, wavefront processing, action wiring via `learn()`.
-- Training loop: show image → wavefront stabilizes → learn digit → next image.
-- Metrics: accuracy vs. number of training images, neuron count, wavefront depth, stabilization time.
-- Success criterion: >50% accuracy on unseen digits with <1000 training images (proving the mechanism works, not competing with CNNs).
-
-### 10.3 Phase 2: Neuron Reuse for Error Correction
-
-**Goal:** Reduce redundant neuron creation by reusing existing neurons whose connections already express the needed inference.
-
-**Step 2.1: Reverse Connection Index**
-
-Build a reverse index for connections, analogous to `context_index`:
-- `thalamus.rs` or `column.rs`: Add `connection_index: FxHashMap<NeuronId, FxHashMap<Distance, FxHashSet<NeuronId>>>` — maps (target_neuron, distance) → set of neurons that have a connection to that target at that distance.
-- Update on connection creation, strengthening, and deletion.
-
-**Step 2.2: Reuse Lookup During Error Correction**
-
-Modify the error correction path to check for reusable neurons:
-- `thalamus.rs`: Before `allocate_pattern_neuron()`, query the reverse connection index for neurons whose connections match the required correction context.
-- Score candidates using partial matching (same common/missing/novel analysis as pattern recognition).
-- If a candidate scores above the merge threshold: wire a connection to it instead of creating a new neuron.
-- If no candidate qualifies: create a new neuron as before.
-
-**Step 2.3: Cross-Level Activation**
-
-With neuron reuse, a neuron at any depth can be activated from any other:
-- Verify the wavefront model handles this correctly (it should — fire once per frame, process from queue).
-- Test for cycle handling: neuron A activates neuron B which (through its connections) would activate A again → refractory period blocks the cycle.
-- Validate determinism under cross-level activation.
-
-**Step 2.4: Validation**
-
-- Run MNIST with reuse enabled. Compare neuron count vs. Phase 1 (expect significant reduction).
-- Check for transfer learning effects: does training on digits 0-4 help with digits 5-9?
-- Run stock trading with reuse. Evaluate whether shared neurons across symbols improve generalization.
-
-### 10.4 Phase 3: Stock Trading Integration
-
-**Goal:** Apply the unified architecture to the stock trading system.
-
-- Review all changes in the `mnist` branch and merge only the necessary changes to `main` — review and decide which scaffolding/experiments stay in the branch and which become permanent.
-- Enable d=0 connections on stock market data. Within each frame, co-occurring market signals across symbols are grouped via d=0 connections.
-- Temporal patterns (d>0) operate over the compressed spatial groupings.
-- Evaluate impact on directional prediction accuracy and per-episode ROI.
-- Compare against the temporal-only baseline.
-
-### 10.5 Phase 4: Forgetting and Class Neuron Generalization
-
-**Goal:** Validate and tune the generalization path from specific correction neurons to abstract class neurons.
-
-- Monitor connection decay on d=0 correction neurons across training.
-- Verify that incidental connections decay while structural connections strengthen.
-- Validate that class neurons (generalized correction neurons) maintain action bindings correctly.
-- Tune decay rates if needed — d=0 connections may need different rates than d>0.
+Phases 1-2 are prerequisites that unblock everything downstream. Phases 3-7 deliver MNIST validation. Phases 8-10 add reuse and validate transfer. Phases 11-13 are post-MNIST.
 
 ---
 
@@ -449,9 +428,14 @@ With neuron reuse, a neuron at any depth can be activated from any other:
 
 ### 11.1 High Confidence (85-90%)
 
-The architecture is correct. Unified d=0/d>0 processing through prediction error is mathematically sound and biologically grounded. The temporal-only system already validates the core mechanism on stock data.
+The architecture is correct. Distance-parameterized prediction error (d=0 spatial, d>0 temporal) is mathematically sound and biologically grounded. The temporal-only system already validates the core mechanism on stock data.
 
-Wavefront termination is self-guaranteed: refractory bounds firings at one per existing neuron per frame, and newly minted correction neurons cannot themselves error in the same frame (their d=0 connections are either empty or exactly equal to the co-activation set they were built from, so their predictions can't mismatch). No safety-valve wave-count limit needed.
+**Termination is self-guaranteed for both phases:**
+
+- `process_temporal` is the existing level-sweep, bounded by `max_active_level` as it is today.
+- `process_spatial`'s wavefront is bounded by refractory (each neuron fires at most once per spatial phase) plus the `correction_wired_this_frame` inhibition rule (§3.5). The latter is the load-bearing piece: a neuron in `correction_wired_this_frame` does not produce d=0 predictions for evaluation this frame, so it cannot generate fresh errors. Both newly-minted and reused correction targets fall under this rule, so neither can trigger an error cascade within the spatial phase. Total spatial-phase work is bounded by the spatial hierarchy depth and the size of the input set, not by error-chain length.
+
+No safety-valve wave-count limit needed.
 
 ### 11.2 Moderate Confidence (60-70%)
 
@@ -459,7 +443,7 @@ MNIST works within the timeline. The bootstrap dynamics — how many exposures a
 
 ### 11.3 Key Risks
 
-- **Bootstrap noise**: Early training may produce many correction neurons before d=0 connections have stabilized. Mitigation: the error threshold absorbs noise-level mismatches; the reuse mechanism (Phase 2) prevents redundant minting even when errors are abundant.
+- **Bootstrap noise**: Early training may produce many correction neurons before d=0 connections have stabilized. Mitigation: the error threshold absorbs noise-level mismatches; the reuse mechanism (Phases 8-9) prevents redundant minting even when errors are abundant.
 - **Generalization failure**: d=0 correction neurons may over-memorize specific pixel configurations rather than generalizing to stroke-like features. Mitigation: reuse provides the cross-instance signal; decay sharpens it. Tune merge threshold and decay rates if generalization is too slow or too aggressive.
 - **Reverse-inference-index cost**: Per-frame reuse lookup could dominate runtime if poorly indexed. Mitigation: batch one lookup per level per frame (piggyback on existing op-3/op-4 dispatch); shard by column for parallel evaluation across regions.
 - **Performance**: Wavefront model may be slower than level-sweep for temporal-only workloads (stocks). Mitigation: profile and optimize; wavefront with mostly d>0 connections should degrade to similar performance.
