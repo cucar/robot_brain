@@ -2,9 +2,18 @@
 
 ---
 
-## MNIST: Vision + Continual Learning Benchmark
+## Architecture Workstreams (in order)
 
-### Why this matters
+Four sequential workstreams replace the original "MNIST processing" entry. The first two are prerequisites for everything else; the third introduces spatial processing; the fourth adds neuron reuse on top.
+
+1. **[mnist-merge.md](./mnist-merge.md)** — Reconcile the long-running `mnist` branch into `dev`. Lands the static forget-rate change alongside the merge.
+2. **[inference-level.md](./inference-level.md)** — Pick the inference scope rule (`base` / `same-level` / `all-levels`) via an experiment on the stocks pipeline. Decision propagates into spatial processing.
+3. **[spatial-processing.md](./spatial-processing.md)** — Add `process_spatial` ahead of `process_temporal`. Remove intrinsic neuron levels (level becomes per-frame activation state). d=0 connections, spatial wavefront, error-driven correction minting. Validates on MNIST single-frame and on stocks.
+4. **[neuron-reuse.md](./neuron-reuse.md)** — Reverse inference index, reuse lookup in the correction path, transfer-learning validation, full-pipeline stocks integration, class-neuron generalization tuning.
+
+Why this matters for MNIST and continual learning: once spatial processing and reuse are in place, the original MNIST claims (vanilla and Split-MNIST) become validation milestones inside the spatial-processing workstream (MNIST single-frame harness) and the neuron-reuse workstream (transfer test). The substrate-and-domain claims and the no-catastrophic-forgetting claims hold as before; the path to validating them is what got concrete.
+
+### Why MNIST still matters as the validation target
 
 MNIST is the most widely recognized benchmark in machine learning. We use it twice, in sequence, to make two distinct architectural claims:
 
