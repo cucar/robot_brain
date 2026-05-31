@@ -165,9 +165,6 @@ pub struct Neuron {
     /// exploration (neurons are tried in registration order, not hash-iteration order).
     channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
 
-    /// Flat union of all action neuron IDs across channels — used for O(1) is_action_neuron checks.
-    action_ids: FxHashSet<NeuronId>,
-
     /// Inferences: Vec<FxHashMap<toNeuronId, ConnectionData>> indexed by distance.
     /// Distance 0 is unused (connections start at distance 1).
     connections: Vec<FxHashMap<NeuronId, ConnectionData>>,
@@ -192,9 +189,7 @@ impl Neuron {
     /// Neuron id is allocated by the Thalamus (mirrors how channel and dimension
     /// ids are allocated) and passed in at construction. channel_action_ids are used
     /// for alternative-action lookup during learning (per-channel Vec iteration).
-    /// action_ids is the flat union of all action neuron ids across channels, used
-    /// for O(1) is_action_neuron checks during connection learning. Both are populated
-    /// by register_channel_spec() and shared across all neurons.
+    /// Populated by register_channel_spec() and shared across all neurons.
     ///
     /// error_mode picks the error-correction threshold function:
     ///   Static       — fixed threshold = error_threshold
@@ -210,7 +205,6 @@ impl Neuron {
         error_mode: ErrorMode,
         error_threshold: f64,
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
-        action_ids: FxHashSet<NeuronId>,
         context_length: u32,
     ) -> Self {
         Self {
@@ -221,7 +215,6 @@ impl Neuron {
             error_threshold,
             context_length,
             channel_action_ids,
-            action_ids,
             connections: Vec::new(),
             routing_table: FxHashMap::default(),
             context_index: FxHashMap::default(),
@@ -405,31 +398,6 @@ impl Neuron {
         // update reward with dynamic exponential smoothing - calculates exact expected value based on means
         let alpha = 1.0 / conn.strength;
         conn.reward = alpha * reward + (1.0 - alpha) * conn.reward;
-    }
-
-    /// Weaken a connection via negative reinforcement (prediction didn't occur).
-    /// Deletes the connection if strength drops to zero or below.
-    pub fn weaken_connection(&mut self, distance: Distance, to_neuron_id: NeuronId) {
-        let idx = distance as usize;
-        let distance_map = match self.connections.get_mut(idx) {
-            Some(dm) => dm,
-            None => return,
-        };
-        let conn = match distance_map.get_mut(&to_neuron_id) {
-            Some(c) => c,
-            None => return,
-        };
-        conn.strength -= 1.0;
-        if conn.strength <= 0.0 { self.delete_connection(distance, to_neuron_id); }
-    }
-
-    /// Delete connection at distance to target neuron.
-    pub fn delete_connection(&mut self, distance: Distance, to_neuron_id: NeuronId) {
-        let idx = distance as usize;
-        if let Some(distance_map) = self.connections.get_mut(idx) {
-            distance_map.remove(&to_neuron_id);
-            // Note: we don't shrink the Vec even if distance_map is empty — sparse slots are cheap
-        }
     }
 
     // ── Voting ───────────────────────────────────────────────────────────────
@@ -1038,10 +1006,18 @@ impl Neuron {
     // ── Connection learning ──────────────────────────────────────────────────
 
     /// Update connections based on the currently observed actives. For each active age > 0:
-    /// upsert a connection per active (create-or-strengthen + alt-action), then weaken
-    /// predictions at that distance that did not occur. Rewards are pre-resolved thalamus-side
-    /// (0 for events, observed value for actions). Skipped entirely for new error patterns
-    /// (they were just created this frame and have nothing yet to reinforce).
+    /// upsert a connection per active (create-or-strengthen + alt-action). Rewards are
+    /// pre-resolved thalamus-side (0 for events, observed value for actions). Skipped entirely
+    /// for new error patterns (they were just created this frame and have nothing yet to reinforce).
+    ///
+    /// Note: connections are no longer negatively reinforced. Previously, predictions at this
+    /// distance that didn't occur were weakened (with eventual deletion at strength=0). This
+    /// produced periodic discrete-death bursts during multi-episode training — a connection
+    /// drifts down by ~1/episode until it finally hits 0, then dies abruptly, shifting the
+    /// neuron's vote profile and triggering a cascade of error-pattern creation. For deterministic
+    /// memorization scenarios we want predictions that ever occurred to remain available;
+    /// non-occurrences should not erase them. Mirrors the action-connection behaviour, which
+    /// was already kept-only-strengthen.
     fn learn_connections(&mut self, age_states: &FxHashMap<Distance, AgeState>, actives: &[ActiveNeuron]) {
         let ages: Vec<Distance> = age_states.keys().copied().collect();
         for age in ages {
@@ -1050,42 +1026,10 @@ impl Neuron {
             if age == 0 { continue; }
 
             // learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
-            let mut neuron_ids = FxHashSet::default();
             for active in actives {
                 self.upsert_connection(age, active.id, active.channel_id, active.reward);
-                neuron_ids.insert(active.id);
-            }
-
-            // negatively reinforce connections at this distance whose predictions didn't occur
-            // events only. Action connections are never weakened: the brain executes exactly one
-            // action per channel per frame, so any non-chosen action wasn't a "wrong prediction",
-            // it just wasn't tried. Weakening it would collapse the brain onto whichever action
-            // it happened to try first and destroy the alt-action exploration mechanism.
-            let not_found = self.get_neurons_not_found(age, &neuron_ids);
-            for neuron_id in not_found {
-                if !self.is_action_neuron(neuron_id) { self.weaken_connection(age, neuron_id); }
             }
         }
-    }
-
-    /// Returns neuron IDs at a distance whose inferences did not occur.
-    fn get_neurons_not_found(&self, distance: Distance, active_neuron_ids: &FxHashSet<NeuronId>) -> Vec<NeuronId> {
-        let distance_map = match self.connections.get(distance as usize) {
-            Some(dm) => dm,
-            None => return Vec::new(),
-        };
-        let mut not_found = Vec::new();
-        for &to_neuron_id in distance_map.keys() {
-            if !active_neuron_ids.contains(&to_neuron_id) { not_found.push(to_neuron_id); }
-        }
-        not_found
-    }
-
-    /// Check if a neuron id is an action neuron in any channel. Uses the flat action_ids
-    /// set maintained by Thalamus alongside channel_action_ids — both are kept in lockstep
-    /// at registration time, so action detection stays aligned with alt-action lookup.
-    fn is_action_neuron(&self, neuron_id: NeuronId) -> bool {
-        self.action_ids.contains(&neuron_id)
     }
 
     /// Find an alternative action for a channel that hasn't been tried yet.
@@ -1159,14 +1103,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), FxHashSet::default(), 10)
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), 10)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
-        let action_set: FxHashSet<NeuronId> = action_ids.iter().copied().collect();
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, action_set, 10)
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, 10)
     }
 
     #[test]
@@ -1188,14 +1131,6 @@ mod tests {
         let conn = &n.connections[1][&10];
         assert_eq!(conn.strength, 2.0);
         assert!((conn.reward - 0.5).abs() < 1e-10);
-    }
-
-    #[test]
-    fn test_weaken_connection_deletes_at_zero() {
-        let mut n = make_neuron(1);
-        n.create_connection(1, 10, 1.0, 0.0);
-        n.weaken_connection(1, 10);
-        assert!(!n.has_connection(1, 10));
     }
 
     #[test]
@@ -1270,7 +1205,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), FxHashSet::default(), 10);
+        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), 10);
         // fewer than ERROR_MIN_SAMPLES → falls back to error_threshold
         n.record_error(0, 0.5);
         n.record_error(0, 0.5);

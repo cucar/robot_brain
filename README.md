@@ -97,20 +97,20 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $21130798.56
-   Average per Episode: $21130798.56
-   Average ROI: +140871.99%
-   Average Per-Frame ROI: +0.499949%
-   Average Sharpe Ratio: 3.82
-   Total Transaction Cost: $611967.41 (0.02% per trade)
-   Total Trades: 24401
-   Average Trades per Episode: 24401.0
+   Total Net Profit: $10155902.07
+   Average per Episode: $10155902.07
+   Average ROI: +67706.01%
+   Average Per-Frame ROI: +0.449372%
+   Average Sharpe Ratio: 3.56
+   Total Transaction Cost: $360491.48 (0.02% per trade)
+   Total Trades: 24751
+   Average Trades per Episode: 24751.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $21130798.56 | ROI: +140871.99%, +0.499949%/frame, Sharpe: 3.82 (24401 trades)
+   Episode 1: $10155902.07 | ROI: +67706.01%, +0.449372%/frame, Sharpe: 3.56 (24751 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.43%
+   Episode 1: 50.51%
 ```
 
 The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
@@ -155,18 +155,18 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $2423434.42 | ROI: +16156.23%, +0.350755%/frame, Sharpe: 1.06 (1699 trades)
-   Episode 2: $114184955.09 | ROI: +761233.03%, +0.616587%/frame, Sharpe: 2.01 (1646 trades)
-   Episode 3: $17548972.72 | ROI: +116993.15%, +0.487122%/frame, Sharpe: 1.55 (1741 trades)
-   Episode 4: $395892377.99 | ROI: +2639282.52%, +0.702656%/frame, Sharpe: 2.37 (1780 trades)
-   Episode 5: $154764626.96 | ROI: +1031764.18%, +0.637630%/frame, Sharpe: 2.07 (1858 trades)
+   Episode 1: $262142.43 | ROI: +1747.62%, +0.200785%/frame, Sharpe: 0.58 (998 trades)
+   Episode 2: $9785708.47 | ROI: +65238.06%, +0.446811%/frame, Sharpe: 1.44 (1416 trades)
+   Episode 3: $5795664617.84 | ROI: +38637764.12%, +0.888697%/frame, Sharpe: 2.98 (1860 trades)
+   Episode 4: $43180762954.83 | ROI: +287871753.03%, +1.028142%/frame, Sharpe: 3.49 (2008 trades)
+   Episode 5: $342276489027.36 | ROI: +2281843260.18%, +1.172089%/frame, Sharpe: 3.93 (1989 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.91%
-   Episode 2: 52.65%
-   Episode 3: 53.47%
-   Episode 4: 53.76%
-   Episode 5: 54.07%
+   Episode 1: 50.99%
+   Episode 2: 53.90%
+   Episode 3: 55.83%
+   Episode 4: 56.41%
+   Episode 5: 56.83%
 ```
 
 ## Demo 6: Stock Sequence Memorization
@@ -194,18 +194,18 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY -
    Average Trades per Episode: 1815.6
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $202320.38 | ROI: +1348.80%, +0.184029%/frame, Sharpe: 1.00 (1882 trades)
-   Episode 2: $171568208306.10 | ROI: +1143788055.37%, +1.124045%/frame, Sharpe: 7.09 (1901 trades)
-   Episode 3: $9026832596969880.00 | ROI: +60178883979799.20%, +1.882925%/frame, Sharpe: 12.40 (1818 trades)
-   Episode 4: $127376119081186848.00 | ROI: +849174127207912.38%, +2.068568%/frame, Sharpe: 13.98 (1743 trades)
-   Episode 5: $185857077801521504.00 | ROI: +1239047185343476.75%, +2.095094%/frame, Sharpe: 14.25 (1734 trades)
+   Episode 1: $37727.86 | ROI: +251.52%, +0.086495%/frame, Sharpe: 0.39 (1860 trades)
+   Episode 2: $39669396233.30 | ROI: +264462641.56%, +1.022249%/frame, Sharpe: 6.24 (1902 trades)
+   Episode 3: $4690628348495944.00 | ROI: +31270855656639.63%, +1.837065%/frame, Sharpe: 12.21 (1786 trades)
+   Episode 4: $192851686178227872.00 | ROI: +1285677907854852.50%, +2.097688%/frame, Sharpe: 14.31 (1739 trades)
+   Episode 5: $135919947284029472.00 | ROI: +906132981893529.88%, +2.073125%/frame, Sharpe: 13.82 (1722 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.78%
-   Episode 2: 78.49%
-   Episode 3: 96.60%
-   Episode 4: 99.22%
-   Episode 5: 99.56%
+   Episode 1: 50.87%
+   Episode 2: 81.63%
+   Episode 3: 98.58%
+   Episode 4: 99.64%
+   Episode 5: 99.70%
 ```
 
 The brain goes from 50% accuracy (random) to 91% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
@@ -223,14 +223,14 @@ node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-thres
 **Expected output:**
 ```
 📊 Accuracy by Episode:
-   Episode 1: 20.31% (32674 frames)
-   Episode 2: 99.94% (32674 frames)
-   Episode 3: 99.94% (32674 frames)
-   Episode 4: 99.94% (32674 frames)
-   Episode 5: 99.94% (32674 frames)
+   Episode 1: 27.81% (32674 frames)
+   Episode 2: 99.96% (32674 frames)
+   Episode 3: 99.96% (32674 frames)
+   Episode 4: 99.96% (32674 frames)
+   Episode 5: 99.96% (32674 frames)
 ```
 
-The brain goes from low accuracy to ~99.94% in two episodes and holds there — it has fully memorized the character sequence except for the first ~20 characters at the start of each episode. Those leading characters can't be predicted because the brain hasn't seen any context yet — it needs a `context-length` window of prior characters in memory before it can recognize patterns and cast votes. The "warmup" frames at the head of each episode are a structural property of context-based prediction, not a learning failure: every character past the warmup window is predicted correctly.
+The brain goes from low accuracy to ~99.96% in two episodes and holds there — it has fully memorized the character sequence except for the first ~20 characters at the start of each episode. Those leading characters can't be predicted because the brain hasn't seen any context yet — it needs a `context-length` window of prior characters in memory before it can recognize patterns and cast votes. The "warmup" frames at the head of each episode are a structural property of context-based prediction, not a learning failure: every character past the warmup window is predicted correctly.
 
 ### Downloading Fresh Stock Data
 

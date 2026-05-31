@@ -201,9 +201,6 @@ pub struct Thalamus {
     /// Per-channel action neuron ids — ordered Vec for deterministic exploration.
     channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
 
-    /// Flat union of all action neuron ids — O(1) is_action_neuron lookup.
-    action_ids: FxHashSet<NeuronId>,
-
     /// Per-channel default action neuron id.
     channel_default_actions: FxHashMap<ChannelId, NeuronId>,
 
@@ -249,14 +246,12 @@ impl Thalamus {
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
         let channel_actions = FxHashMap::default();
-        let action_ids = FxHashSet::default();
         let channel_default_actions = FxHashMap::default();
         let mut region_list = Vec::with_capacity(regions);
         for _ in 0..regions {
             region_list.push(Region::new(
                 columns,
                 &channel_actions,
-                &action_ids,
                 &channel_default_actions,
                 context_length,
                 merge_threshold,
@@ -280,7 +275,6 @@ impl Thalamus {
             channel_specs: FxHashMap::default(),
             dimension_specs: FxHashMap::default(),
             channel_actions,
-            action_ids,
             channel_default_actions: FxHashMap::default(),
             channel_name_to_id: FxHashMap::default(),
             channel_id_to_name: FxHashMap::default(),
@@ -613,8 +607,6 @@ impl Thalamus {
     }
 
     /// Pre-create action neurons for action dims so exploration can find them.
-    /// action_ids is the flat union — kept in lockstep with per-channel sets so
-    /// neurons can do O(1) is_action_neuron lookups.
     fn register_action_neurons(&mut self, channel_id: ChannelId, stored_spec: &ChannelSpec) {
         let mut action_neurons: Vec<NeuronId> = self.channel_actions.get(&channel_id).cloned().unwrap_or_default();
         let mut new_neuron_specs = Vec::new();
@@ -643,7 +635,6 @@ impl Thalamus {
                 if !action_neurons.contains(&lookup.id) {
                     action_neurons.push(lookup.id);
                 }
-                self.action_ids.insert(lookup.id);
                 if lookup.is_new {
                     new_neuron_specs.push(NeuronCreateSpec { id: lookup.id, forget_rate: 0.0, connections: None });
                 }
@@ -666,7 +657,7 @@ impl Thalamus {
 
         // sync action sets to all regions/columns so per-frame calls don't reach back to Thalamus
         for region in &mut self.region_list {
-            region.update_action_sets(&self.channel_actions, &self.action_ids, &self.channel_default_actions);
+            region.update_action_sets(&self.channel_actions, &self.channel_default_actions);
         }
 
         // create action neurons in columns

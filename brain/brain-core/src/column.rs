@@ -81,9 +81,6 @@ pub struct Column {
     /// they're cloned at construction.
     channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
 
-    /// Flat union of all action neuron ids — O(1) is_action_neuron lookup.
-    action_ids: FxHashSet<NeuronId>,
-
     /// Per-channel default action neuron id.
     channel_default_actions: FxHashMap<ChannelId, NeuronId>,
 
@@ -107,7 +104,6 @@ pub struct Column {
 impl Column {
     pub fn new(
         channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
-        action_ids: FxHashSet<NeuronId>,
         channel_default_actions: FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
         merge_threshold: f64,
@@ -116,7 +112,6 @@ impl Column {
     ) -> Self {
         Self {
             channel_actions,
-            action_ids,
             channel_default_actions,
             context_length,
             merge_threshold,
@@ -357,7 +352,6 @@ impl Column {
                 self.error_mode,
                 self.error_threshold,
                 self.channel_actions.clone(),
-                self.action_ids.clone(),
                 self.context_length,
             );
             // pre-wire default action connections at neutral reward across all voting distances
@@ -414,7 +408,6 @@ impl Column {
             self.error_mode,
             self.error_threshold,
             self.channel_actions.clone(),
-            self.action_ids.clone(),
             self.context_length,
         );
 
@@ -493,11 +486,9 @@ impl Column {
     pub fn update_action_sets(
         &mut self,
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
-        action_ids: &FxHashSet<NeuronId>,
         channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
     ) {
         self.channel_actions = channel_actions.clone();
-        self.action_ids = action_ids.clone();
         self.channel_default_actions = channel_default_actions.clone();
     }
 }
@@ -533,7 +524,6 @@ mod tests {
     fn make_column() -> Column {
         Column::new(
             FxHashMap::default(),
-            FxHashSet::default(),
             FxHashMap::default(),
             2,
             0.5,

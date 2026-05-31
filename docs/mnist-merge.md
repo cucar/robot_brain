@@ -34,10 +34,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 **Goal.** During MNIST scaling experiments, multi-pass training was *degrading* accuracy past a certain point — patterns kept being created and replaced, recognition kept shifting under its own feet. Root-causing produced five independent algorithmic fixes that ship as one bundle because they were debugged together and partly compensate for each other.
 
-1. **No negative reinforcement on misses.** `learn_connections` used to weaken every connection at the active distance whose target didn't fire, which produced periodic discrete-death bursts (a connection drifts down ~1/episode until it hits 0, then dies abruptly, shifting the voter's vote profile, triggering cascades of error-pattern creation). Removed; mirrors how action connections were already kept-only-strengthen.
-   - `neuron.rs::learn_connections` — `get_neurons_not_found` weakening removed.
-
-2. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
+1. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
    - `neuron.rs::recognize_patterns` — `refine_context` call site removed; novel/missing/removed contextRef updates stop flowing for matched patterns.
 
 ---

@@ -70,7 +70,6 @@ impl Region {
     pub fn new(
         c: usize,
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
-        action_ids: &FxHashSet<NeuronId>,
         channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
         merge_threshold: f64,
@@ -81,7 +80,6 @@ impl Region {
         for _ in 0..c {
             columns.push(Column::new(
                 channel_actions.clone(),
-                action_ids.clone(),
                 channel_default_actions.clone(),
                 context_length,
                 merge_threshold,
@@ -330,11 +328,10 @@ impl Region {
     pub fn update_action_sets(
         &mut self,
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
-        action_ids: &FxHashSet<NeuronId>,
         channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
     ) {
         self.columns.par_iter_mut().for_each(|col| {
-            col.update_action_sets(channel_actions, action_ids, channel_default_actions);
+            col.update_action_sets(channel_actions, channel_default_actions);
         });
     }
 }
@@ -347,7 +344,6 @@ mod tests {
         Region::new(
             2, // 2 columns
             &FxHashMap::default(),
-            &FxHashSet::default(),
             &FxHashMap::default(),
             2,
             0.5,
