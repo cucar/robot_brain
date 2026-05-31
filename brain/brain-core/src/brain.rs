@@ -967,10 +967,7 @@ impl Brain {
             if self.thalamus.get_neuron_type(v.neuron_id) == Some(NeuronType::Action) {
                 candidate.weighted_total += effective_strength * v.reward;
             }
-            // For events: accumulate into the per-dim probability normalizer. Now every voter
-            // contributes exactly 1.0 per (dim, distance), so dim_total_strength represents
-            // "weighted count of voters that weighed in on this dim" — and the per-candidate
-            // probability is that candidate's share of the voters' attention, not raw strength.
+            // For events: accumulate votes into the per-dim probability normalizer. every voter
             else {
                 *dim_total_strength.entry(coord.dim_id).or_insert(0.0) += effective_strength;
             }

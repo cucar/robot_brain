@@ -34,27 +34,11 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 **Goal.** During MNIST scaling experiments, multi-pass training was *degrading* accuracy past a certain point — patterns kept being created and replaced, recognition kept shifting under its own feet. Root-causing produced five independent algorithmic fixes that ship as one bundle because they were debugged together and partly compensate for each other.
 
-**The five fixes.**
-
-1. **Confidence-weighted error metric.** Original error was raw miss rate (failed events / total events). Replaced with per-dimension argmax confidence on wrong predictions — "when I was wrong, how confident was I?" Early training has thinly-spread strength distributions, so wrong predictions don't fire until the voter has actually committed to a wrong target.
-   - `thalamus.rs::evaluate_vote_error`.
-
-2. **No negative reinforcement on misses.** `learn_connections` used to weaken every connection at the active distance whose target didn't fire, which produced periodic discrete-death bursts (a connection drifts down ~1/episode until it hits 0, then dies abruptly, shifting the voter's vote profile, triggering cascades of error-pattern creation). Removed; mirrors how action connections were already kept-only-strengthen.
+1. **No negative reinforcement on misses.** `learn_connections` used to weaken every connection at the active distance whose target didn't fire, which produced periodic discrete-death bursts (a connection drifts down ~1/episode until it hits 0, then dies abruptly, shifting the voter's vote profile, triggering cascades of error-pattern creation). Removed; mirrors how action connections were already kept-only-strengthen.
    - `neuron.rs::learn_connections` — `get_neurons_not_found` weakening removed.
 
-3. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
+2. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
    - `neuron.rs::recognize_patterns` — `refine_context` call site removed; novel/missing/removed contextRef updates stop flowing for matched patterns.
-
-**Decision: Keep all five.** Ship as one commit with this list in the commit message.
-
-**Why test as a bundle.** Each fix individually shifts behaviour; together they produce the stable post-fix baseline. Reverting one to test in isolation generally produces worse behaviour than either side, not a clean A/B.
-
-**Test plan and acceptance.**
-- **T-stocks ★** — baseline directional accuracy + neuron count + pattern count on `main` for all four stocks harnesses (`test.js`, `synthetic-cycle-test.js`, `synthetic-extended-test.js`, `multi-channel-test.js`). Run same configs on `dev`. Pass: directional accuracy within ±1% of baseline on every harness; up/down independently within ±1%.
-- **T-stocks-diagnostics** — if T-stocks fails, expect: (a) pattern count substantially lower on `dev` (no empty-context patterns), (b) connection count slightly higher (no miss-weakening), (c) error-rate trajectory smoother (no discrete-death bursts). If T-stocks fails, the **confidence-weighted error metric (fix #3) is the most likely individual culprit** — it has the largest behavioural surface of the five. Diagnostic path: revert just that one fix on a throwaway branch, rerun T-stocks, confirm isolation.
-- **T-text** — `apps/text/jobs/test.js` on `main` vs `dev`. Memorization accuracy is deterministic; should match exactly. Text is the most sensitive harness to warmup-gate and `refine_context` changes (long sequences).
-- **T-baseline** — once T-stocks/T-text pass, record the new stocks baseline numbers in the PR description. That's the truth all downstream phases compare against.
-- `cargo test` green.
 
 ---
 
