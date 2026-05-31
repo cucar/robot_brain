@@ -50,7 +50,8 @@ impl Context {
         distance_map.insert(distance, strength);
     }
 
-    /// Find an entry by neuron ID and distance.
+    /// Find an entry by neuron ID and distance. Test-only.
+    #[cfg(test)]
     pub fn find(&self, neuron_id: NeuronId, distance: Distance) -> Option<ContextEntry> {
         self.entries.get(&neuron_id).and_then(|dm| dm.get(&distance)).map(|&strength| ContextEntry { neuron_id, distance, strength })
     }

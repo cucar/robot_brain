@@ -132,12 +132,11 @@ impl JsBrain {
 
     /// Register a channel spec. Accepts the same spec shape as JS Brain.
     ///
-    /// spec: { name, emitsReward?, learnActionSequences?, dimensions: [...] }
+    /// spec: { name, learnActionSequences?, dimensions: [...] }
     /// Returns: { channelId: number, dimensionIds: {name: id, ...} }
     #[napi(js_name = "registerChannelSpec")]
     pub fn register_channel_spec(&self, env: Env, spec: JsObject) -> Result<JsObject> {
         let name: String = spec.get_named_property::<JsString>("name")?.into_utf8()?.into_owned()?;
-        let emits_reward = get_opt_bool(&spec, "emitsReward")?.unwrap_or(false);
         let learn_action_sequences = get_opt_bool(&spec, "learnActionSequences")?.unwrap_or(false);
 
         // Parse dimensions array
@@ -173,7 +172,7 @@ impl JsBrain {
         }
 
         let reg = self.inner.borrow_mut().register_channel_spec(
-            &name, dimensions, emits_reward, learn_action_sequences,
+            &name, dimensions, learn_action_sequences,
         );
 
         // Build return object: { channelId, dimensionIds: { name: id, ... } }
@@ -543,26 +542,6 @@ fn get_opt_f64_array(obj: &JsObject, key: &str) -> Result<Option<Vec<f64>>> {
                 for i in 0..len {
                     let v: JsNumber = arr.get_element(i)?;
                     result.push(v.get_double()?);
-                }
-                Ok(Some(result))
-            }
-        }
-        Err(_) => Ok(None),
-    }
-}
-
-fn get_opt_u32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<u32>>> {
-    match obj.get_named_property::<JsUnknown>(key) {
-        Ok(val) => {
-            if val.get_type()? == napi::ValueType::Undefined || val.get_type()? == napi::ValueType::Null {
-                Ok(None)
-            } else {
-                let arr: JsObject = val.coerce_to_object()?;
-                let len = arr.get_array_length()?;
-                let mut result = Vec::with_capacity(len as usize);
-                for i in 0..len {
-                    let v: JsNumber = arr.get_element(i)?;
-                    result.push(v.get_uint32()?);
                 }
                 Ok(Some(result))
             }

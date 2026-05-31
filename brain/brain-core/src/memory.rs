@@ -117,7 +117,8 @@ impl Memory {
         ((self.frame_number - min_frame + 1) as u32).min(self.context_length)
     }
 
-    /// Get the current frame number.
+    /// Get the current frame number. Test-only.
+    #[cfg(test)]
     pub fn get_frame_number(&self) -> FrameNumber {
         self.frame_number
     }
@@ -238,7 +239,8 @@ impl Memory {
         &self.inferred_neurons
     }
 
-    /// Clear all inferred neurons.
+    /// Clear all inferred neurons. Test-only.
+    #[cfg(test)]
     pub fn clear_inferred_neurons(&mut self) {
         self.inferred_neurons.clear();
     }

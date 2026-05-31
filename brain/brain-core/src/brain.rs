@@ -238,10 +238,9 @@ impl Brain {
         &mut self,
         name: &str,
         dimensions: Vec<DimSpecInput>,
-        emits_reward: bool,
         learn_action_sequences: bool,
     ) -> ChannelRegistration {
-        self.thalamus.register_channel_spec(name, dimensions, emits_reward, learn_action_sequences)
+        self.thalamus.register_channel_spec(name, dimensions, learn_action_sequences)
     }
 
     // ── Context / reset ─────────────────────────────────────────────────────
@@ -1261,7 +1260,6 @@ mod tests {
                 warmup_samples: None,
             }],
             false,
-            false,
         );
         assert!(reg.dimension_ids.contains_key("price"));
 
@@ -1288,7 +1286,6 @@ mod tests {
                 default_action: None,
                 warmup_samples: None,
             }],
-            false,
             false,
         );
         let channel_id = reg.channel_id;

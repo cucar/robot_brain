@@ -46,10 +46,8 @@ pub struct BaseNeuron {
 /// Stored channel spec — immutable after registration.
 #[derive(Debug, Clone)]
 pub struct ChannelSpec {
-    pub id: ChannelId,
     pub name: String,
     pub dimensions: Vec<DimSpec>,
-    pub emits_reward: bool,
     pub learn_action_sequences: bool,
 }
 
@@ -120,7 +118,6 @@ pub struct Activation {
     pub parent_id: NeuronId,
     pub pattern_id: NeuronId,
     pub age: Distance,
-    pub death_frame: Option<FrameNumber>,
 }
 
 /// Results from processLevel — returned to the caller (Brain) for accumulation.
@@ -450,7 +447,7 @@ impl Thalamus {
             };
             channel_outputs.entry(channel_id)
                 .or_insert_with(Vec::new)
-                .push(InferredAction { coordinate, strength: inf.strength, reward: inf.reward });
+                .push(InferredAction { coordinate });
         }
         channel_outputs
     }
@@ -524,7 +521,6 @@ impl Thalamus {
         &mut self,
         name: &str,
         dimensions: Vec<DimSpecInput>,
-        emits_reward: bool,
         learn_action_sequences: bool,
     ) -> ChannelRegistration {
         if name.is_empty() { panic!("Thalamus: channel spec is missing required name"); }
@@ -565,10 +561,8 @@ impl Thalamus {
         }
 
         let stored_spec = ChannelSpec {
-            id: channel_id,
             name: name.to_string(),
             dimensions: stored_dims,
-            emits_reward,
             learn_action_sequences,
         };
 
@@ -671,7 +665,8 @@ impl Thalamus {
         self.channel_specs.keys().copied().collect()
     }
 
-    /// Get stored channel spec by ID.
+    /// Get stored channel spec by ID. Test-only.
+    #[cfg(test)]
     pub fn get_channel_spec(&self, channel_id: ChannelId) -> Option<&ChannelSpec> {
         self.channel_specs.get(&channel_id)
     }
@@ -953,7 +948,6 @@ impl Thalamus {
                     parent_id: result.parent_id,
                     pattern_id: m.pattern_id,
                     age: m.age,
-                    death_frame: m.death_frame,
                 });
             }
         }
@@ -967,7 +961,6 @@ impl Thalamus {
                 parent_id: result.parent_id,
                 pattern_id: ca.pattern_id,
                 age: ca.age,
-                death_frame: ca.death_frame,
             });
         }
     }
@@ -1430,12 +1423,10 @@ pub struct PatternNeuronSpec {
     pub connections: Vec<ConnectionSpec>,
 }
 
-/// An inferred action with its coordinate, strength, and reward.
+/// An inferred action coordinate.
 #[derive(Debug, Clone)]
 pub struct InferredAction {
     pub coordinate: Coordinate,
-    pub strength: f64,
-    pub reward: f64,
 }
 
 /// Input spec for registering a dimension (before allocation).
@@ -1526,7 +1517,6 @@ mod tests {
                 },
             ],
             false,
-            false,
         );
         assert_eq!(reg.channel_id, 1);
         assert!(reg.dimension_ids.contains_key("price"));
@@ -1553,7 +1543,6 @@ mod tests {
                     warmup_samples: None,
                 },
             ],
-            false,
             false,
         );
 
@@ -1628,7 +1617,6 @@ mod tests {
                 default_action: Some(1),
                 warmup_samples: None,
             }],
-            false,
             false, // learn_action_sequences = false
         );
 

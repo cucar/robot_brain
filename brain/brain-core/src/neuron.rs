@@ -46,11 +46,6 @@ pub struct Vote {
 pub struct PatternMatch {
     pub pattern_id: NeuronId,
     pub age: Distance,
-    pub score: f64,
-    pub common: Vec<ContextEntry>,
-    pub missing: Vec<ContextEntry>,
-    pub novel: Vec<ContextEntry>,
-    pub removed_refs: Vec<ContextRefEntry>,
     pub activate: bool,
     pub death_frame: Option<FrameNumber>,
 }
@@ -482,22 +477,6 @@ impl Neuron {
         }
     }
 
-    /// Remove a child pattern from this neuron's routing table.
-    /// Called by thalamus when deleting a child pattern neuron.
-    pub fn remove_child(&mut self, pattern_id: NeuronId) {
-
-        // clean up both context and context index for all context entries of this pattern
-        let entry = self.routing_table.get(&pattern_id)
-            .unwrap_or_else(|| panic!("remove_child: pattern {} not found in routing table of neuron {}", pattern_id, self.id));
-        let entries = entry.context.get_entries();
-        for ctx_entry in &entries {
-            self.remove_context(pattern_id, ctx_entry.neuron_id, ctx_entry.distance);
-        }
-
-        // remove the pattern from the routing table
-        self.routing_table.remove(&pattern_id);
-    }
-
     /// Check if a child pattern can be deleted (is a zombie).
     pub fn can_delete_child(&self, pattern_id: NeuronId, current_frame: FrameNumber) -> bool {
         // if the pattern has not been activated in some time, die!
@@ -770,11 +749,6 @@ impl Neuron {
             matches.push(PatternMatch {
                 pattern_id: best.pattern_id,
                 age: best.age,
-                score: best.score,
-                common: best.common,
-                missing: best.missing,
-                novel: best.novel,
-                removed_refs,
                 activate,
                 death_frame,
             });
@@ -1165,20 +1139,6 @@ mod tests {
         // context index should have entries
         assert!(n.context_index.contains_key(&10));
         assert!(n.context_index.contains_key(&11));
-    }
-
-    #[test]
-    fn test_remove_child_cleans_up() {
-        let mut n = make_neuron(1);
-        let context = vec![
-            ContextRefEntry { neuron_id: 10, distance: 1 },
-        ];
-        n.add_pattern(100, &context, 10);
-        n.remove_child(100);
-
-        // routing table and context index should be clean
-        assert!(!n.routing_table.contains_key(&100));
-        assert!(!n.context_index.contains_key(&10));
     }
 
     #[test]

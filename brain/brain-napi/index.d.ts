@@ -22,7 +22,7 @@ export declare class Brain {
   /**
    * Register a channel spec. Accepts the same spec shape as JS Brain.
    *
-   * spec: { name, emitsReward?, learnActionSequences?, dimensions: [...] }
+   * spec: { name, learnActionSequences?, dimensions: [...] }
    * Returns: { channelId: number, dimensionIds: {name: id, ...} }
    */
   registerChannelSpec(spec: object): object
