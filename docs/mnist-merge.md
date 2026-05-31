@@ -15,242 +15,302 @@ This is a prerequisite for everything downstream — inference-scope experimenta
 
 ---
 
-## Phase 1 — Branch Reconciliation (mnist → dev)
+## How to read this document
 
-### Process
+Changes on `mnist` group into **twelve coherent projects**. Each project is a single commit onto `dev`. Work them in order — top to bottom is the merge plan. Each project section contains:
 
-1. Land the categorized changes below on `dev` in three groups, each its own commit:
-   - **Group A — algorithmic core fixes** (warmup gate, refine_context disabled, negative-reinforcement removal, L1 decay, confidence-weighted error metric, idempotent `add_context`, activation_strength reset on restore).
-   - **Group B — apps + tooling** (new MNIST encoders, `dump_image.js`, refactored `apps/mnist/jobs/test.js`, inspection API, frame timings instrumentation).
-   - **Group C — static forget rate simplification** (collapse `LevelDecayMode` → single global rate; see below).
-2. Roll back the **Experimental v1** group on the merge branch (implant API, parallel contexts, processing toggles, supervised action learning, `action_alpha`, `process_frame(events, actions, …)` signature change). Don't land any of it on `dev`.
-3. Delete the **Throwaway** group on the merge branch (debug traces, `_digit5/` fixtures, sweep scripts).
-4. Open the merge into `dev` as a reviewable PR with the table below in the description.
-5. Tag the pre-merge tip of `mnist` as `mnist-v1-final` so v1 experiments stay reproducible.
-6. After merge, run the stocks pipeline on `dev` and record the new baseline.
+- **Goal** — what the project was trying to accomplish.
+- **Surface** — every file/symbol touched.
+- **Decision** — Keep / Collapse / Roll back / Delete.
+- **Test plan and acceptance** — what verifies it when the commit lands.
 
-### Static forget rate
+Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ delete · ★ stocks-affecting.
 
-The mnist branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.**
-
-Concretely:
-- Drop the `LevelDecayMode` enum and the `level_decay_mode` parameter from `Brain::new`, `Thalamus::new`, `Backup::new`.
-- `Thalamus::effective_forget_rate` collapses to `base_rate` for all levels (matches what `LevelDecayMode::Static` does today).
-- Remove `--level-decay` from `libs/node/src/run.js`.
-- Note: this still implements the **L1-decays-at-base-rate** fix from the branch — L1 children of L0 sensories now decay (they were effectively immortal before). That is the behaviour change that ships to `dev`; the multi-mode scaffolding above it does not.
+**Workflow.** Project 1 (documentation) lands on `dev` first. After that, work on `dev` and pull each subsequent project's changes across from `mnist` one commit at a time, testing as you go. After all twelve projects land, there is one **post-merge task** (delete the `mnist` branch).
 
 ---
 
-## Change Inventory
+## Project 1 — Documentation updates 🟢
 
-### Legend
+**Goal.** The branch authored the design documents that define every downstream workstream — `inference-level.md`, `spatial-processing.md`, `neuron-reuse.md` — plus updates to `hippocampus.md` (parallel fan-out replay, salience-modulated lookback) and `roadmap.md` (sequenced workstreams replacing the original MNIST entry). This document (`mnist-merge.md`) is part of the same set. Landing the docs first gives the rest of the merge a stable reference: every subsequent project can be discussed against the design baseline.
 
-- **PC** — Permanent / core (algorithmic fix or essential infra; ships to `dev`)
-- **PA** — Permanent / apps (MNIST tooling worth keeping for later validation)
-- **EV1** — Experimental v1 (moment-neuron v1 scaffolding; roll back, stays on `mnist`)
-- **TW** — Throwaway (debug traces, fixtures, sweep scripts; delete)
-- **★** — Affects stocks behaviour; post-merge baseline will shift
+**Surface.**
+- `docs/roadmap.md` — sequenced workstreams.
+- `docs/inference-level.md` — new.
+- `docs/spatial-processing.md` — new.
+- `docs/neuron-reuse.md` — new.
+- `docs/mnist-merge.md` — new (this document).
+- `docs/hippocampus.md` — additions for parallel fan-out replay (8b) and salience-modulated lookback (8c).
+- `.gitignore` — adds `apps/mnist/*.log`.
 
-### brain-core/src/brain.rs (+977 lines)
+**Decision: Keep all.** These docs are the design baseline for every subsequent phase.
 
-| Change | Cat | Notes |
-|---|---|---|
-| Warmup gate in `process_levels` (skip L1+ until `frame >= context_length`) | PC ★ | Mirrors thalamus gate. Prevents empty-context error patterns at sequence start. |
-| `refine_context` call removed from `recognize_patterns` | PC ★ | Mid-training context refinement made recognition non-reproducible. Keep disabled. |
-| `learn_connections` no longer negatively reinforces unfired events | PC ★ | Removed `get_neurons_not_found` weakening — was causing discrete-death bursts during multi-pass training. Mirrors action-side behaviour. |
-| L1 children of L0 now decay at base rate (via `effective_forget_rate`) | PC ★ | Was previously 0. Patterns can now expire. |
-| Confidence-weighted error metric (per-dim argmax confidence vs raw miss rate) | PC ★ | Pattern-creation gate now reflects "when I was wrong, how confident was I" — prevents over-firing in early training. |
-| Empty-context error patterns are skipped at allocation time | PC | Pulls context first, bails if empty. Stops sibling explosion. |
-| `FrameTimings`, `MemoryTimings`, `NeuronOpTimings`, `OrchestrationTimings` | PA | Per-section wall-clock for profiling. Add as opt-in (or always on, cost is negligible). |
-| `ActionVote`, `ActionVoteStats` on `FrameResult` | PA | Per-voter and aggregated vote stats — useful for analysis harnesses. |
-| `inspect_neuron`, `dump_neuron_connections`, `get_votable_entries`, `InspectedNeuron` | PC | Inspection API. Cheap and useful. |
-| `ImplantState`, `start_implant`, `implant_position`, `finalize_implant`, `ImplantSummary` | EV1 | Direct-teaching path superseded by spatial-processing design. Roll back. |
-| `ContextState`, `init_contexts`, `swap_to`, `set_active_context`, `contexts` field | EV1 | Parallel-context training infra for v1 image scan. Roll back. |
-| `event_processing` / `action_processing` / `learning` flags, `set_processing_mode` | EV1 | Frozen-context staged scan/predict flow. Roll back; revert to unconditional full pipeline. |
-| `learn()`, `infer()` (direct supervised/inference-only paths) | EV1 | v1 supervised path. Roll back. |
-| `action_alpha` ctor param + static alpha for action reward updates | EV1 | v1 supervised action learning. Roll back. |
-| `LevelDecayMode` enum + ctor param | EV1 | Collapse to single global static rate (see "Static forget rate" above). |
-| `process_frame(events, actions, rewards)` signature (was `(inputs, rewards)`) | EV1 ★ | Required by forced-action / implant flow. Revert to `(inputs, rewards)`. All apps (stocks, text, mnist) need their call sites adjusted. |
-
-### brain-core/src/neuron.rs (+197 lines)
-
-| Change | Cat | Notes |
-|---|---|---|
-| Warmup gate in `recognize_patterns` (skip until `current_frame >= context_length`) | PC ★ | See brain.rs note. |
-| `learn_connections` simplified — no more `weaken_connection` on misses | PC ★ | See brain.rs note. |
-| `add_context` idempotent (strengthen on duplicate instead of panic) | PC | Surfaced by `(parent, age)` dedupe re-installing the same entry. Safe correctness fix. |
-| `NeuronOpTimings` + per-op timing instrumentation in `process_frame` | PA | Aggregates up to `FrameTimings`. |
-| `dump_connections` | PC | Backs the inspection API. |
-| `context_length` field on `Neuron` (needed for warmup gate) | PC | Required by gate. |
-| `learn_supervised_action`, `action_alpha`, action-aware `strengthen_connection` (static vs dynamic alpha) | EV1 | Supervised action path. Roll back together. |
-| `learning: bool` plumbed into `process_frame` / `recognize_patterns` | EV1 | Gates pattern creation + child-activation strengthening. Roll back. |
-
-### brain-core/src/thalamus.rs (+363 lines)
-
-| Change | Cat | Notes |
-|---|---|---|
-| Warmup gate in `evaluate_vote_error` | PC ★ | Stops error-pattern firing before the context window has filled. |
-| Confidence-weighted error metric | PC ★ | See brain.rs note. |
-| Empty-context skip in `get_level_corrections` | PC | See brain.rs note. |
-| `OrchestrationTimings` (get_level_tasks / dispatch_frame / collect_activations / collect_votes) | PA | Profiling. |
-| `collect_level_votes` rename (was `collect_votes`) | PC | Internal — needed because new public `collect_votes` exists for action-learning path. If we roll back action-learning, the rename can revert too; either way is fine. |
-| `get_pattern_context_entries`, `dump_neuron_connections` | PC | Inspection API. |
-| Verbose debug logging in error-correction path | PA | Useful when `debug` is on. Keep. |
-| `LevelDecayMode` field + `effective_forget_rate(mode)` | EV1 | Collapse to single static rate. |
-| `collect_votes`, `learn_action_connections` (public) — vote-collection + supervised-action wiring | EV1 | Roll back with supervised action learning. |
-| `set_action_processing`, `set_learning` | EV1 | Processing toggles. Roll back. |
-| `implant_default_connection`, `implant_pattern` | EV1 | Implant API. Roll back. |
-| `process_level` / `get_level_tasks` / `get_level_corrections` carry `learning: bool` + `frame_number` | EV1 / PC | `frame_number` is needed for the warmup gate (PC). `learning` gate is EV1. Split when applying: keep the `frame_number` plumbing, drop the `learning` plumbing. |
-
-### brain-core/src/column.rs (+131 lines)
-
-| Change | Cat | Notes |
-|---|---|---|
-| `collect_votes`, `learn_action_connections` | EV1 | Roll back. |
-| `install_implant_pattern`, `install_implant_default_connection` | EV1 | Roll back. |
-| `dump_neuron_connections`, `get_child_context_entries` | PC | Inspection API. |
-| `set_action_processing`, `set_learning` + `action_processing` / `learning` fields | EV1 | Roll back. |
-| `action_alpha` ctor param + propagated to `Neuron::new` | EV1 | Roll back. |
-| `context_length` param to `Neuron::new` | PC | Required by warmup gate. |
-| Pre-wire default actions gated on `action_processing` | EV1 | Revert to unconditional pre-wire. |
-| `activation_strength` reset to 1.0 in restore (`if entry.activation_strength > 1.0`) | PC | Prevents stale cross-episode accumulation from keeping patterns artificially alive. |
-
-### brain-core/src/region.rs (+92 lines)
-
-| Change | Cat | Notes |
-|---|---|---|
-| `collect_votes`, `learn_action_connections`, `route_vote_entries`, `route_learn_tasks` | EV1 | Roll back. |
-| `install_implant_pattern`, `install_implant_default_connection` | EV1 | Roll back. |
-| `get_child_context_entries`, `dump_neuron_connections` | PC | Inspection API. |
-| `set_action_processing`, `set_learning` | EV1 | Roll back. |
-| `action_alpha` propagated through ctor | EV1 | Roll back. |
-
-### brain-core/src/memory.rs (+55 lines)
-
-| Change | Cat | Notes |
-|---|---|---|
-| `replace_active_neuron` | EV1 | Used by frozen-context drilling. Roll back. |
-| `get_votable_entries` | EV1 | Used by supervised action-learning path. Roll back (or keep if inspection finds use for it; currently nothing else calls it). |
-| `#[derive(Clone)]` on `Memory` | EV1 | Required by `ContextState`. Roll back with parallel contexts. |
-
-### brain-core/src/types.rs, backup.rs
-
-| Change | Cat | Notes |
-|---|---|---|
-| `LevelDecayMode` enum (types.rs) | EV1 | Delete. |
-| `level_decay_mode` plumbed through `Backup` | EV1 | Delete. |
-
-### brain-napi (lib.rs, index.d.ts)
-
-| Change | Cat | Notes |
-|---|---|---|
-| `processFrame(events, actions, rewards)` binding | EV1 ★ | Revert to `(inputs, rewards)`. |
-| `learn`, `infer` bindings | EV1 | Remove. |
-| `startImplant`, `implantPosition`, `finalizeImplant` | EV1 | Remove. |
-| `initContexts`, `setActiveContext` | EV1 | Remove. |
-| `setProcessingMode` | EV1 | Remove. |
-| `LevelDecayMode` parsing + ctor option | EV1 | Remove. |
-| `actionMode` / `actionAlpha` ctor options | EV1 | Remove. |
-| `inspectNeuron`, `dumpNeuronConnections`, `getVotableEntries`, `getActiveNeurons` | PC | Keep (matches core inspection API). |
-| `FrameResult` marshalling of `actionVoteStats`, `actionVotes`, `timings` | PA | Keep. |
-
-### apps/stocks, apps/text, libs/node
-
-| File | Change | Cat | Notes |
-|---|---|---|---|
-| `apps/stocks/jobs/*.js`, `apps/text/jobs/test.js` | `processFrame(inputs, new Map(), rewards)` adapter | EV1 ★ | Revert to `(inputs, rewards)` after the brain signature is reverted. No algorithm change in these files. |
-| `libs/node/src/run.js` | `--level-decay` CLI arg | EV1 | Remove. |
-
-### apps/mnist
-
-| Path | Cat | Notes |
-|---|---|---|
-| `encoders/digits.js`, `encoders/mnist_encoder.js`, `encoders/pixel_channels_encoder.js`, `encoders/row_channels_encoder.js` | PA | Modular encoders replacing old single `encoder.js`. Useful for post-spatial-processing MNIST validation. |
-| `dump_image.js` | PA | Converts MNIST images to text-pipeline format. Useful for cross-app validation. |
-| `jobs/test.js` (refactor, +/- ~600 lines) | PA | Rewritten around the new encoders. Keep. |
-| `encoder.js` (deleted) | PA | Replaced by `encoders/`. Deletion is correct. |
-| `jobs/implant_test.js` | EV1 | Exercises the implant API. Delete. |
-| `jobs/burst_trigger_trace.js`, `check_match_drift.js`, `classifier_voters.js`, `cold_replay_diff.js`, `connection_drift_trace.js`, `context_erosion_trace.js`, `convergence_trace.js`, `frame_activation_diff.js`, `inspect_pair.js`, `multi_digit_trace.js`, `parent_conn_dump.js`, `pattern_growth_trace.js`, `shared_pattern_trace.js`, `voter_analysis.js` | TW | Debug/trace jobs from v1 investigation. Delete. |
-| `jobs/_sweep.sh`, `_compare_aliased.js`, `_inspect_shared_voter.js`, `_digit5_crossclass.js`, `_digit5_overlap.js` | TW | Ad-hoc scripts. Delete. |
-| `jobs/_digit5/*.txt` (44 files), `jobs/_img*_bits.txt`, `_img*_visual.txt` | TW | Fixture dumps. Delete. |
-| `apps/text/data/binary_*.txt`, `mnist_*.txt`, `sweep_*.txt` | TW | One-liner fixture dumps for text-app debugging. Delete unless any are referenced by `apps/text/jobs/test.js` after revert (verify). |
-| `apps/mnist/performance.md` | PA | v1 performance notes — keep as a reference for what was measured, or delete if no future reader is expected. User call. |
+**Test plan and acceptance.**
+- Manual: links between documents resolve (`roadmap.md` → `mnist-merge.md` → `inference-level.md`, etc.).
+- No code; nothing to test programmatically.
 
 ---
 
-## Test Plans
+## Project 2 — Training-degrades-accuracy regression fixes 🟢 ★
 
-Group these by what's being verified — most "permanent core" changes are covered by one or two of the same tests.
+**Goal.** During MNIST scaling experiments, multi-pass training was *degrading* accuracy past a certain point — patterns kept being created and replaced, recognition kept shifting under its own feet. Root-causing produced five independent algorithmic fixes that ship as one bundle because they were debugged together and partly compensate for each other.
 
-### T1 — Stocks no-regression (covers all ★ changes)
+**The five fixes.**
 
-The five ★ algorithmic changes (warmup gate, refine_context disabled, no negative reinforcement, L1 decay, confidence error metric) all affect stocks. They are co-dependent — testing them individually is impractical because they were developed together and partially compensate for each other. Test as a bundle.
+1. **Warmup gate.** Pattern recognition and error-pattern creation both skip until `current_frame >= context_length`. Before the gate, early frames had mostly-empty context windows; new patterns were minted with mostly-empty stored contexts, then could never match anything in later frames, then were re-minted as fresh siblings every episode. Unbounded creation of useless siblings.
+   - `neuron.rs::recognize_patterns` — early return.
+   - `thalamus.rs::evaluate_vote_error` — early return.
+   - `thalamus.rs::process_level/get_level_tasks/get_level_corrections` — `frame_number` parameter added so the gate can see it.
+   - `neuron.rs`: `context_length` field on `Neuron` so `recognize_patterns` has it locally.
+   - Propagated through `Neuron::new` callers in `column.rs`.
 
-- **Setup:** baseline directional accuracy + connection-count + pattern-count snapshot on `main` for `apps/stocks/jobs/test.js`, `synthetic-cycle-test.js`, `synthetic-extended-test.js`, `multi-channel-test.js`.
-- **Run:** same configs on merged `dev`.
-- **Pass:** directional accuracy within ±1% of `main` baseline on every harness. Per-direction accuracy (up vs down) also within ±1%.
-- **Diagnostic:** if accuracy drops, inspect (a) pattern count at end of training — should be substantially lower since empty-context patterns are no longer created; (b) connection count — should be slightly higher since misses don't weaken; (c) error rate trajectory across training — should be smoother (no discrete-death bursts).
-- **Record:** new baseline numbers in the PR description so future regressions are detectable.
+2. **Empty-context skip.** Even after the warmup gate, an error pattern with an empty `context_entries` slice can still be requested. Skip allocation entirely in that case — it would never match anything.
+   - `thalamus.rs::get_level_corrections`.
 
-### T2 — Brain unit tests
+3. **Confidence-weighted error metric.** Original error was raw miss rate (failed events / total events). Replaced with per-dimension argmax confidence on wrong predictions — "when I was wrong, how confident was I?" Early training has thinly-spread strength distributions, so wrong predictions don't fire until the voter has actually committed to a wrong target.
+   - `thalamus.rs::evaluate_vote_error`.
 
-- Run `cargo test` in `brain/brain-core`.
-- Pass: all green. The two test fns that take `Neuron::new(...)` were updated on `mnist` to pass `None, 10` — after the action_alpha rollback they take just the original arg set; after the `context_length` field stays (it's PC), the test helper passes a literal `10`. Verify the test file compiles cleanly after the rollback edits.
+4. **No negative reinforcement on misses.** `learn_connections` used to weaken every connection at the active distance whose target didn't fire, which produced periodic discrete-death bursts (a connection drifts down ~1/episode until it hits 0, then dies abruptly, shifting the voter's vote profile, triggering cascades of error-pattern creation). Removed; mirrors how action connections were already kept-only-strengthen.
+   - `neuron.rs::learn_connections` — `get_neurons_not_found` weakening removed.
 
-### T3 — Text pipeline no-regression
+5. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
+   - `neuron.rs::recognize_patterns` — `refine_context` call site removed; novel/missing/removed contextRef updates stop flowing for matched patterns.
 
-- Run `apps/text/jobs/test.js` on `main` and on merged `dev`. Memorization accuracy should match (deterministic — text is the most sensitive harness to the warmup-gate and refine_context changes because sequences are long).
-- Pass: identical memorization accuracy. Identical neuron count within ±1%.
+**Decision: Keep all five.** Ship as one commit with this list in the commit message.
 
-### T4 — Static forget rate behaviour
+**Why test as a bundle.** Each fix individually shifts behaviour; together they produce the stable post-fix baseline. Reverting one to test in isolation generally produces worse behaviour than either side, not a clean A/B.
 
-- With the `LevelDecayMode` collapse: confirm `effective_forget_rate(base, ctx, level)` returns `base` for level=0 and level≥1. (Was: `0.0` for level=0, then `base / ctx^(level-1)`.)
-- On stocks, run a long synthetic-extended-test and inspect the final neuron-count distribution by level. With Exponential decay, deep-level neurons accumulated indefinitely. With static, deep levels should plateau.
-- Pass: deep-level neuron counts stop growing past a stable saturation point (qualitative — confirm in the distribution, no precise threshold).
-
-### T5 — Inspection API
-
-- Spin up a small brain via NAPI, train briefly on a stocks fixture, then call `inspectNeuron`, `dumpNeuronConnections`, `getVotableEntries` on a known active neuron.
-- Pass: returned values are well-formed (no panics, fields populated). This is a smoke test — the API is read-only and unlikely to break anything functionally.
-
-### T6 — Frame timings
-
-- Enable `debug` and run any one harness. Confirm `result.timings` is populated with non-zero values for `build_frame`, `activate`, `process_levels`, etc.
-- Pass: fields present and roughly sum to elapsed (within the documented sub-bucket overhead). This is also a smoke test.
-
-### T7 — MNIST encoder unit-level
-
-- Run the new `apps/mnist/encoders/*.js` against a single canonical MNIST digit image (one from the standard test set, not a `_digit5` fixture).
-- Pass: output bit vector matches the expected encoding for the chosen quantization. (No new spatial-processing logic depends on this yet — this is just confirming the encoders themselves work after the merge.)
-
-### T8 — Backup / restore
-
-- Train a small brain on stocks for ~100 frames, snapshot, restore, train another 100 frames.
-- Pass: post-restore behaviour identical to never-restored baseline. The `activation_strength` reset on restore is the change that needs verification — if a pattern's strength was >1 at snapshot time, it should resume from 1.0 not from the stored value.
-
-### T9 — Stocks baseline record (acceptance)
-
-After all of the above pass, run all four stocks harnesses with default config and **record the new baseline** in the PR description. This is the post-merge truth that subsequent phases compare against.
+**Test plan and acceptance.**
+- **T-stocks ★** — baseline directional accuracy + neuron count + pattern count on `main` for all four stocks harnesses (`test.js`, `synthetic-cycle-test.js`, `synthetic-extended-test.js`, `multi-channel-test.js`). Run same configs on `dev`. Pass: directional accuracy within ±1% of baseline on every harness; up/down independently within ±1%.
+- **T-stocks-diagnostics** — if T-stocks fails, expect: (a) pattern count substantially lower on `dev` (no empty-context patterns), (b) connection count slightly higher (no miss-weakening), (c) error-rate trajectory smoother (no discrete-death bursts). If T-stocks fails, the **confidence-weighted error metric (fix #3) is the most likely individual culprit** — it has the largest behavioural surface of the five. Diagnostic path: revert just that one fix on a throwaway branch, rerun T-stocks, confirm isolation.
+- **T-text** — `apps/text/jobs/test.js` on `main` vs `dev`. Memorization accuracy is deterministic; should match exactly. Text is the most sensitive harness to warmup-gate and `refine_context` changes (long sequences).
+- **T-baseline** — once T-stocks/T-text pass, record the new stocks baseline numbers in the PR description. That's the truth all downstream phases compare against.
+- `cargo test` green.
 
 ---
 
-## Acceptance
+## Project 3 — Small correctness fixes 🟢
 
-- **T1**: stocks directional accuracy ±1% of `main` (both directions independently).
-- **T2**: `cargo test` green.
-- **T3**: text memorization identical.
-- **T4**: deep-level neuron count plateaus under static decay.
-- **T5/T6**: inspection + timings smoke tests pass.
-- **T7**: MNIST encoders produce expected outputs.
-- **T8**: snapshot/restore cycle is behaviourally idempotent.
-- **T9**: new stocks baseline committed to PR description.
-- Classification table (this document) is the PR description.
+**Goal.** Two unrelated paper-cuts surfaced during MNIST debugging.
+
+**Fixes.**
+
+1. **Idempotent `add_context`.** The `(parent, age)` dedupe path in pattern creation could re-install the same context entry, triggering a `panic!`. `add_context` now strengthens on duplicate instead.
+   - `neuron.rs::add_context`.
+
+2. **`activation_strength` reset on restore.** Cross-episode strength accumulation could leave patterns with very high activation_strength values. When forget_rate is 0 those values made patterns immortal across snapshot/restore. On restore, clamp strength to 1.0 if it was above. Pattern stays alive (>0); siblings get equal footing.
+   - `column.rs::restore` (in the pattern-iteration loop).
+
+**Decision: Keep both.**
+
+**Test plan and acceptance.**
+- **T-restore** — train a small brain ~100 frames, snapshot, restore, train another 100 frames. Pass: post-restore behaviour matches never-restored baseline. The clamp is the change to verify.
+- **T-dedupe** — covered transitively by stocks/text runs (those exercise pattern creation). No separate test needed unless something explicitly regresses.
+- `cargo test` green.
+
+---
+
+## Project 4 — Profiling instrumentation 🟢
+
+**Goal.** Make MNIST training cost legible. Per-frame, per-section, per-neuron-op wall-clock measurements bubbled up through the call stack so a harness can read them off `FrameResult`.
+
+**Surface.**
+- `neuron.rs`: `NeuronOpTimings` (learn / recognize / correct / vote, plus recognize sub-buckets); plumbed through `process_frame`/`recognize_patterns`.
+- `column.rs`: timings forwarded on `ColumnProcessResult`.
+- `thalamus.rs`: `OrchestrationTimings` (get_level_tasks / dispatch_frame / collect_activations / collect_votes); forwarded on `ProcessLevelResult`.
+- `brain.rs`: `FrameTimings` and `MemoryTimings` aggregating everything; `timings` field on `FrameResult`.
+- `brain-napi`: marshalling of the timings struct into the JS result.
+- Verbose error-correction debug logging in `thalamus.rs` (gated on `debug`).
+
+**Decision: Keep all of it.** Cost is negligible (a few `Instant::now()` calls per neuron per frame); benefit is permanent. The verbose error-correction logging is `debug`-gated and stays off in normal runs.
+
+**Test plan and acceptance.**
+- **T-timings-smoke** — enable `debug`, run any one harness, confirm `result.timings` is populated with non-zero values across all sections and that they roughly sum to elapsed (within documented sub-bucket overhead). Smoke only.
+- `cargo test` green.
+
+---
+
+## Project 5 — Inspection API 🟢
+
+**Goal.** Read-only introspection for harness-side debugging: what does a neuron know, who does it connect to, what's in a pattern's stored context.
+
+**Surface.**
+- `neuron.rs`: `dump_connections`.
+- `column.rs`: `dump_neuron_connections`, `get_child_context_entries`.
+- `region.rs`: same two, routed.
+- `thalamus.rs`: `dump_neuron_connections`, `get_pattern_context_entries`.
+- `brain.rs`: `inspect_neuron` (the user-facing wrapper); `InspectedNeuron` result struct.
+- `brain-napi`: `inspectNeuron`, `dumpNeuronConnections`, `getActiveNeurons` bindings.
+- `brain.rs`: `ActionVote` / `ActionVoteStats` on `FrameResult` and the `compute_action_vote_stats` / `collect_action_votes` that populate them. Inspection-adjacent (per-voter and aggregated digit votes).
+
+**Decision: Keep.** Pure-read APIs, no risk to behaviour.
+
+**Excluded:** `Memory::get_votable_entries` was added for the supervised action path. Nothing else calls it. It goes with Project 10 (roll back).
+
+**Test plan and acceptance.**
+- **T-inspect-smoke** — train briefly via NAPI, call each inspection method on a known active neuron, confirm well-formed results (no panics, fields populated). Smoke only.
+- `cargo test` green.
+
+---
+
+## Project 6 — Static forget rate 🟡 ★
+
+**Goal.** The branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.** The branch also surfaced a latent bug — the original code zeroed L0's forget rate, which (since L0 owns L1 children's death timing) made L1 patterns immortal. The L0→base behaviour fix is the only piece of this project that actually ships.
+
+**Surface.**
+- `types.rs`: `LevelDecayMode` enum — delete.
+- `thalamus.rs`: `level_decay_mode` field, ctor param, `get_base_forget_rate`/`get_level_decay_mode` accessors — delete. `effective_forget_rate` collapses to `base_rate` for every level (matches what `LevelDecayMode::Static` did). **Keep `level.max(1)`-equivalent behaviour** — L0 now returns base, which is the L1-decay fix.
+- `brain.rs`, `backup.rs`, `column.rs`, `region.rs`: drop the mode parameter from ctors.
+- `brain-napi/src/lib.rs`, `index.d.ts`: drop `levelDecay` ctor option and enum parsing.
+- `libs/node/src/run.js`: drop `--level-decay` CLI arg.
+
+**Decision: Collapse to single static rate.** Document the L1-decay behaviour change explicitly in the commit message so future readers know L1 patterns decay where they didn't before.
+
+**Test plan and acceptance.**
+- **T-decay-1** — confirm `effective_forget_rate(base, ctx, level)` returns `base` for `level ∈ {0, 1, 2, 3, 4}`.
+- **T-decay-2** — long run of `synthetic-extended-test.js` on `dev` vs `main`. Inspect final neuron count by level. On `main` deep-level counts grow unboundedly; on `dev` they should plateau. Qualitative — no precise threshold.
+- **T-stocks (Project 2)** — re-run after this commit lands; the L1-decay change is also a ★ shift and folds into the post-Project-2 baseline.
+- `cargo test` green.
 - `LevelDecayMode` is gone from the codebase; no per-level decay scaling logic remains.
 
 ---
 
-## Notes
+## Project 7 — Image implant / direct teaching 🔴
 
-- All subsequent phases happen on `dev` or branches off `dev`. `mnist` becomes archival under tag `mnist-v1-final`.
-- If T1 fails, the most likely culprit is the confidence-weighted error metric — it's the change with the largest behavioural surface. Diagnostic path: temporarily revert just that one piece, rerun T1, isolate.
-- If MNIST validation is wanted *before* spatial processing lands (sanity check that the new encoders work end-to-end), use `apps/mnist/jobs/test.js` against the **current** brain — accuracy will be low (the brain isn't actually equipped for spatial yet), but pipeline-level "does the run finish without errors" is what matters at this point.
+**Goal.** Bypass error-driven learning entirely and directly install L1 patterns from observed bit histories. The flow: for each pixel position in an image, record `(parent_bit, packed_context_bits) → next_bit_distribution`; once all positions are seen, materialize the majority transitions as L1 patterns with pre-baked stored context and outgoing prediction connections. A teaching shortcut that skipped the slow part of error-driven discovery.
+
+**Surface.**
+- `brain.rs`: `ImplantState` struct (per-image bit histories + observation map); `implant_state` field; `start_implant`/`implant_position`/`finalize_implant` methods; `ImplantSummary` return type.
+- `thalamus.rs`: `implant_default_connection`, `implant_pattern` (build the L1 spec, allocate id, register parent/level, install via region).
+- `region.rs`, `column.rs`: `install_implant_pattern`, `install_implant_default_connection` plumbing.
+- `brain-napi`: `startImplant`/`implantPosition`/`finalizeImplant` bindings.
+- `apps/mnist/jobs/implant_test.js`: the harness for it.
+
+**Decision: Roll back entirely.** The spatial-processing design accomplishes the same outcome (durable spatial patterns) through the normal error-driven path with d=0 connections — there's no reason to ship a parallel shortcut.
+
+**Roll back checklist:** all symbols above; ensure no remaining references in `apps/`.
+
+**Test plan and acceptance.**
+- `cargo test` green.
+- `grep` confirms no remaining references to any of the above symbols.
+
+---
+
+## Project 8 — Parallel context training 🔴
+
+**Goal.** Train multiple images concurrently by giving each one its own runtime state (memory, frame counter, rewards) while the thalamus (neurons, patterns, connections) stays shared. `init_contexts(N)` allocates N slots; `set_active_context(i)` swaps the active slot's state into the brain's live fields. Was meant to amortize thalamus-side parallelism overhead across more concurrent training streams.
+
+**Surface.**
+- `brain.rs`: `ContextState` struct; `contexts: Vec<ContextState>` and `current_context: usize` fields; `init_contexts`, `swap_to`, `set_active_context`, `num_contexts` methods.
+- `memory.rs`: `#[derive(Clone)]` on `Memory` (required by `ContextState::clone`).
+- `brain-napi`: `initContexts`, `setActiveContext` bindings.
+
+**Decision: Roll back entirely.** Superseded by the spatial-processing design — each image becomes one frame across many parallel channels, not many serial frames in parallel contexts. No part of this is salvageable for spatial processing.
+
+**Roll back checklist:** all symbols above. `Memory: Clone` can also be dropped (nothing else needs it).
+
+**Test plan and acceptance.**
+- `cargo test` green.
+- `grep` confirms no remaining references to any of the above symbols.
+
+---
+
+## Project 9 — Frozen-context staged scan/predict 🔴 ★
+
+**Goal.** Two-phase training flow: phase 1 scans the image's pixels (events fire, no action, no consensus); phase 2 predicts the digit on the now-frozen context (no event changes, action consensus runs, reward applied). Required toggling the pipeline's three sub-stages independently — event processing, action processing, and learning — and changing `process_frame` to take separate `events` and `actions` maps so phase 2 could force the action without re-driving the events.
+
+**Surface.**
+- `brain.rs`: `event_processing` / `action_processing` / `learning` fields on `Brain`; `set_processing_mode` method; **`process_frame(events, actions, rewards)` signature** (was `(inputs, rewards)`); refactored `build_frame` to accept forced actions; frozen-event branch inside `process_frame`.
+- `column.rs`, `region.rs`: `action_processing` / `learning` fields; `set_action_processing` / `set_learning` methods; gating on default-action pre-wire (column).
+- `thalamus.rs`: `set_action_processing` / `set_learning`; `learning: bool` plumbed into `process_level` → `get_level_tasks` → `get_level_corrections`. **Note:** these calls also gained a `frame_number` parameter — that piece belongs to Project 2 (warmup) and was already landed; only the `learning` half is rolled back here.
+- `neuron.rs`: `learning: bool` parameter on `process_frame` / `recognize_patterns`; gates connection-learning and child-activation strengthening.
+- `memory.rs`: `replace_active_neuron` (swap the forced action at age 0 during phase 2).
+- `brain-napi`: `setProcessingMode` binding; `processFrame` signature change reverted.
+- **Call-site reverts** — `process_frame(events, actions, rewards) → (inputs, rewards)` touches every app harness:
+  - `apps/stocks/jobs/test.js`
+  - `apps/stocks/jobs/multi-channel-test.js`
+  - `apps/stocks/jobs/synthetic-cycle-test.js`
+  - `apps/stocks/jobs/synthetic-extended-test.js`
+  - `apps/text/jobs/test.js`
+  - `apps/mnist/jobs/test.js`
+  All `new Map()` adapter calls go away in this commit.
+
+**Decision: Roll back entirely.** Spatial processing collapses the two phases into one frame across channels, so the staged flow has no purpose.
+
+**Watch out:** keep the `frame_number` parameter on `get_level_tasks` / `get_level_corrections` — Project 2 (warmup gate) needs it. Don't strip the whole signature, just the `learning` half.
+
+**Test plan and acceptance.**
+- **T-stocks (Project 2)** — re-run; this commit reverts a ★ signature change that touched the harnesses, so re-confirm directional accuracy still matches the post-Project-2 baseline.
+- **T-text (Project 2)** — same.
+- `cargo test` green (the test helpers also pass `learning=true` today; verify they compile cleanly after revert).
+- `grep` confirms no remaining references to `set_processing_mode`, `event_processing`, `action_processing`, `learning` field, `replace_active_neuron`.
+
+---
+
+## Project 10 — Supervised action learning 🔴
+
+**Goal.** Replace the existing reward-shaped action path with direct supervised wiring: at each frame, collect every votable voter (every active non-suppressed neuron across levels), and additively accumulate `(voter → correct_action_id, distance, +reward)` connections. Frequency dominates: a voter wired to A twice and B once accumulates strength=2/reward=2 vs strength=1/reward=1, so A wins consensus by 4:1. Pairs with a static action-side learning rate (`action_alpha`) so the smoothing doesn't collapse frequency back to 1.
+
+**Surface.**
+- `brain.rs`: `learn()` (the public supervised entry); `infer()` (inference-only counterpart); `action_alpha` ctor param.
+- `neuron.rs`: `learn_supervised_action` (additive accumulation); `action_alpha` field; action-aware branching inside `strengthen_connection` (static vs dynamic alpha).
+- `column.rs`, `region.rs`: `action_alpha` propagated; `learn_action_connections` (route voter tasks per column); `collect_votes` (read-only vote sweep).
+- `thalamus.rs`: public `collect_votes` and `learn_action_connections` (route across regions). This forced the internal `collect_votes` to be renamed `collect_level_votes` — revert the rename too.
+- `memory.rs`: `get_votable_entries` (enumerate the voter pool).
+- `brain-napi`: `learn`/`infer` bindings; `actionMode`/`actionAlpha` ctor options.
+- `libs/node/src/run.js`: corresponding CLI flags.
+
+**Decision: Roll back entirely.** The reverse-inference index from the neuron-reuse phase is the right way to make action learning targeted; this supervised shortcut was a stand-in.
+
+**Test plan and acceptance.**
+- `cargo test` green.
+- After revert, verify `strengthen_connection`'s dynamic alpha branch is the only branch, and the action-side "never weakened" comment is restored.
+- `grep` confirms no remaining references to `learn_supervised_action`, `action_alpha`, public `collect_votes`/`learn_action_connections`, `get_votable_entries`, `learn()`/`infer()` on Brain.
+
+---
+
+## Project 11 — MNIST apps refactor 🟢
+
+**Goal.** The original `apps/mnist/encoder.js` was a single grayscale-byte encoder. The retinotopic-channels architecture in the roadmap needs per-pixel-position channels, plus row-aggregated variants for comparison, plus digit-label encoding. The branch split this into four focused encoders and rewrote `apps/mnist/jobs/test.js` around the new shape. `dump_image.js` was added to convert MNIST images into the text-pipeline format for cross-app validation.
+
+**Surface.**
+- `apps/mnist/encoders/digits.js` — digit label encoder.
+- `apps/mnist/encoders/mnist_encoder.js` — grayscale-bucket encoder (the direct replacement for the old single file).
+- `apps/mnist/encoders/pixel_channels_encoder.js` — one channel per pixel position.
+- `apps/mnist/encoders/row_channels_encoder.js` — one channel per row.
+- `apps/mnist/dump_image.js` — image → text-pipeline format.
+- `apps/mnist/jobs/test.js` — rewritten around the new encoders (~600 lines diff, but mostly rewrite-in-place).
+- `apps/mnist/encoder.js` — deleted (replaced by `encoders/`).
+
+**Decision: Keep all.** These are the validation surface for spatial-processing's MNIST single-frame harness later in the roadmap. The encoders are independent of any brain-side changes being rolled back.
+
+**Test plan and acceptance.**
+- **T-encoder** — run each encoder against one canonical MNIST test image, confirm the output bit vector matches the expected encoding for the chosen quantization. Doesn't exercise the brain; just confirms the encoders themselves still work after the merge.
+
+---
+
+## Project 12 — Debug/trace tooling and fixtures ⚫
+
+**Goal.** Investigation tooling produced during the MNIST scaling debug effort.
+
+**Surface.**
+- `apps/mnist/jobs/burst_trigger_trace.js`, `check_match_drift.js`, `classifier_voters.js`, `cold_replay_diff.js`, `connection_drift_trace.js`, `context_erosion_trace.js`, `convergence_trace.js`, `frame_activation_diff.js`, `inspect_pair.js`, `multi_digit_trace.js`, `parent_conn_dump.js`, `pattern_growth_trace.js`, `shared_pattern_trace.js`, `voter_analysis.js`.
+- `apps/mnist/jobs/_sweep.sh`, `_compare_aliased.js`, `_inspect_shared_voter.js`, `_digit5_crossclass.js`, `_digit5_overlap.js`.
+- `apps/mnist/jobs/_digit5/*.txt` (44 fixture files).
+- `apps/mnist/jobs/_img*_bits.txt`, `_img*_visual.txt`.
+- `apps/text/data/binary_*.txt`, `mnist_*.txt`, `sweep_*.txt` (one-line fixture dumps).
+- `apps/mnist/performance.md` (v1 perf notes).
+
+**Decision: Delete all.** Tooling that proves generally useful (e.g. `voter_analysis.js`-style harnesses) can be re-introduced on `dev` as a separate, intentional commit later.
+
+**Verify before deleting.** `grep` `apps/text/jobs/test.js` for any reference to the `apps/text/data/*.txt` fixtures — if it loads any of them, those specific files need to stay.
+
+**Test plan and acceptance.**
+- `cargo test` green.
+- All four stocks harnesses, text harness, and `apps/mnist/jobs/test.js` still run end-to-end (no broken references to deleted files).
+
+---
+
+## After all twelve projects land
+
+- **Delete the `mnist` branch.** Locally and on origin. The merge is complete; the branch has no further purpose.
