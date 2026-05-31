@@ -890,11 +890,69 @@ impl Brain {
     }
 
     /// Aggregate votes into candidate neurons and dimension strength totals.
+    ///
+    /// ── Per-voter split-by-strength normalization ──────────────────────────────────────
+    ///
+    /// Each FlatVote represents one outgoing CONNECTION from a voter neuron to a target neuron.
+    /// A single voter typically casts MULTIPLE votes per frame — one per connection.
+    /// vote() returns the full distance_map of that voter's connections at the voting distance.
+    /// If a voter has connections to several neurons in the SAME dimension (action or event), every one of those connections produces a separate Vote.
+    ///
+    /// The naive aggregation — add each Vote's raw strength to its target candidate — double-counts hedged voters.
+    /// A voter (action_A: str=3, action_B: str=1) in dim D would put 3 strength into action_A AND 1 strength into action_B, total 4 strength for D.
+    /// So, a confident voter wired (action_A: str=4) contributes the same 4 strength but to only one candidate.
+    /// The hedged voter ends up indistinguishable from "two independent voters each voting for a different action" — which it is not.
+    ///
+    /// Fix: scale each vote so a voter's total contribution to a single (dim, distance) is CONSERVED at 1 unit,
+    /// split across its targets proportional to its connection strengths.
+    /// In the example above the hedged voter contributes effective_strength=0.75 to action_A and 0.25 to action_B (sum = 1.0)
+    /// the confident voter contributes 1.0 to action_A.
+    /// "1 voter = 1 unit per (dim, distance)" regardless of how it's distributed.
+    ///
+    /// ── Why (voter, dim, distance) and not just (voter, dim) ───────────────────────────
+    ///
+    /// A single voter can be active at multiple ages simultaneously (the memory window holds it at several past frames).
+    /// Each age produces votes at a different distance — these are independent predictions at different horizons.
+    /// Keying by distance keeps those independent: each (voter, dim, distance) bucket gets its own 1-unit allocation.
+    ///
+    /// Events: With per-voter normalization, every voter contributes exactly 1.0 to dim_total per (dim, distance), so dim_total
+    /// faithfully counts "voters that weighed in on this dim" weighted by their per-target shares. Probabilities become voter shares.
+    ///
+    /// Actions: With per-voter normalization, actions get the same split-by-strength behavior events were already partially getting through dim_total.
+    /// The action winner is still highest reward, but strength magnitudes - used for tie-breaking and downstream consumers - are now properly distributed.
+    /// For actions, reward = weighted_total / strength. Both terms are scaled by the same 1/voter_dim_total factor, so the ratio is invariant.
+    /// A hedged voter still reports the same per-target reward; it just doesn't pretend to be multiple voters.
     fn aggregate_votes(&self, votes: &[FlatVote]) -> (FxHashMap<NeuronId, Candidate>, FxHashMap<DimensionId, f64>) {
         let mut candidates: FxHashMap<NeuronId, Candidate> = FxHashMap::default();
         let mut dim_total_strength: FxHashMap<DimensionId, f64> = FxHashMap::default();
 
+        // Pre-pass: for every vote, accumulate the voter's total strength under (voter_id, dim_id, distance).
+        // This becomes the denominator that scales each individual vote down to its share.
+        // Votes without a target coordinate (orphaned neurons that shouldn't exist in practice) contribute nothing here.
+        let mut voter_dim_total: FxHashMap<(NeuronId, DimensionId, Distance), f64> = FxHashMap::default();
         for v in votes {
+            if let Some(coord) = self.thalamus.get_neuron_coordinate(v.neuron_id) {
+                *voter_dim_total.entry((v.voter_id, coord.dim_id, v.distance)).or_insert(0.0) += v.strength;
+            }
+        }
+
+        // Main pass: aggregate effective (normalized) strengths into candidates and dim totals.
+        for v in votes {
+
+            // Skip votes without a target coordinate — they can't be aggregated into a dim
+            // and downstream determine_dimension_winners would skip them anyway.
+            let coord = match self.thalamus.get_neuron_coordinate(v.neuron_id) {
+                Some(c) => c,
+                None => continue,
+            };
+
+            // Look up this voter's total strength in the (dim, distance) bucket and compute this vote's share of it.
+            // effective_strength is in [0, 1]; per-voter shares sum to 1.0 within the (dim, distance) bucket by construction.
+            let total = voter_dim_total.get(&(v.voter_id, coord.dim_id, v.distance)).copied().unwrap_or(0.0);
+            if total <= 0.0 { continue; }
+            let effective_strength = v.strength / total;
+
+            // Fetch or insert the candidate for this target neuron.
             let candidate = candidates.entry(v.neuron_id).or_insert_with(|| Candidate {
                 strength: 0.0,
                 weighted_total: 0.0,
@@ -902,13 +960,19 @@ impl Brain {
                 probability: 0.0,
             });
 
-            candidate.strength += v.strength;
+            // Accumulate this voter's split share into the candidate's strength.
+            candidate.strength += effective_strength;
 
-            // for actions, calculate weighted total — for events, accumulate strength on the dimension
+            // For actions: accumulate strength-weighted reward sum, to calculate expected reward in determine_dimension_winners
             if self.thalamus.get_neuron_type(v.neuron_id) == Some(NeuronType::Action) {
-                candidate.weighted_total += v.strength * v.reward;
-            } else if let Some(coord) = self.thalamus.get_neuron_coordinate(v.neuron_id) {
-                *dim_total_strength.entry(coord.dim_id).or_insert(0.0) += v.strength;
+                candidate.weighted_total += effective_strength * v.reward;
+            }
+            // For events: accumulate into the per-dim probability normalizer. Now every voter
+            // contributes exactly 1.0 per (dim, distance), so dim_total_strength represents
+            // "weighted count of voters that weighed in on this dim" — and the per-candidate
+            // probability is that candidate's share of the voters' attention, not raw strength.
+            else {
+                *dim_total_strength.entry(coord.dim_id).or_insert(0.0) += effective_strength;
             }
         }
 
