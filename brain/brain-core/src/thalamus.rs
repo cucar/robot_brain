@@ -711,7 +711,7 @@ impl Thalamus {
 
         // aggregate per-neuron work, build the shared level context, allocate error pattern specs
         let (tasks, level_context, new_neuron_specs) =
-            self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, new_error_pattern_ids);
+            self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids);
 
         // Op-3: dispatch processFrame — the only cross-region round-trip in the level loop
         let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], &rewards[0], frame_number);
@@ -775,6 +775,7 @@ impl Thalamus {
         level_neurons: &FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>,
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
+        frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
     ) -> (Vec<LevelTask>, Context, Vec<NeuronCreateSpec>) {
         let mut tasks = Vec::new();
@@ -803,7 +804,7 @@ impl Thalamus {
 
             // get level error corrections + per-age feedback for the neuron's own stats
             let (corrections, error_feedback) = self.get_level_corrections(
-                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards,
+                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number,
             );
 
             // extract creation specs for Op-4
@@ -843,6 +844,7 @@ impl Thalamus {
         age_states: &FxHashMap<Distance, LevelAgeState>,
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
+        frame_number: FrameNumber,
     ) -> (Vec<CorrectionSpec>, Vec<ErrorFeedback>) {
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
@@ -854,27 +856,31 @@ impl Thalamus {
             // every age > 0 entry contributes to the shared level context
             if age > 0 { level_context.add_neuron(neuron_id, age, 1.0); }
 
+            // skip if context is empty. empty context patterns can never match anything in future frames.
+            // they would just keep regenerating useless siblings. we do this before vote error evaluation so that
+            // empty context frames don't pollute the neuron's error-stats window either — Welford would
+            // otherwise see misses the neuron had no chance to do better on, inflating future fire thresholds.
+            if state.context.as_ref().map_or(true, |c| c.is_empty()) { continue; }
+
             // evaluate the prior-frame vote at this age (if any) and record feedback
-            let result = match self.evaluate_vote_error(age, state, &sensory_neurons[0]) {
+            let result = match self.evaluate_vote_error(age, state, &sensory_neurons[0], frame_number) {
                 Some(r) => r,
                 None => continue,
             };
             error_feedback.push(ErrorFeedback { age, error_rate: result.error_rate });
 
-            // create an error correction pattern if the error crosses the dynamic threshold
-            if result.fire {
-                let spec = self.allocate_pattern_neuron(level + 1, neuron_id, age, sensory_neurons, rewards);
-                let context_entries: Vec<ContextRefEntry> = state.context.as_ref()
-                    .map(|ctx| ctx.iter().map(|c| ContextRefEntry { neuron_id: c.neuron_id, distance: c.distance }).collect())
-                    .unwrap_or_default();
-                corrections.push(CorrectionSpec {
-                    pattern_id: spec.id,
-                    forget_rate: spec.forget_rate,
-                    connections: spec.connections,
-                    age,
-                    context_entries,
-                });
-            }
+            // skip if the error doesn't cross the dynamic threshold
+            if !result.fire { continue; }
+
+            // allocate an error correction pattern to be created after level processing
+            let spec = self.allocate_pattern_neuron(level + 1, neuron_id, age, sensory_neurons, rewards);
+            corrections.push(CorrectionSpec {
+                pattern_id: spec.id,
+                forget_rate: spec.forget_rate,
+                connections: spec.connections,
+                age,
+                context_entries: state.context.clone().unwrap(),
+            });
         }
 
         (corrections, error_feedback)
@@ -1024,10 +1030,16 @@ impl Thalamus {
     /// Returns the observed error rate (so it can be sent back to the neuron as
     /// feedback) and whether it crosses the threshold the neuron supplied when it
     /// cast the vote. The neuron owns its error stats — thalamus only judges.
-    fn evaluate_vote_error(&self, age: Distance, state: &LevelAgeState, actual_neuron_ids: &FxHashSet<NeuronId>) -> Option<VoteErrorResult> {
+    fn evaluate_vote_error(&self, age: Distance, state: &LevelAgeState, actual_neuron_ids: &FxHashSet<NeuronId>, frame_number: FrameNumber) -> Option<VoteErrorResult> {
 
         // age=0 neurons cannot need correction because they are just voting now
         if age == 0 { return None; }
+
+        // Warmup: don't fire error corrections before the context window has had a chance to fill up.
+        // Without this, the first frames of a sequence (when level_context is mostly empty) generate empty context error patterns
+        // that can never match anything on subsequent passes, producing unbounded creation of useless siblings episode after episode.
+        // context_length frames is the natural horizon.
+        if (frame_number as u32) < self.context_length { return None; }
 
         // if there are no votes from previous frame, no error to evaluate
         let votes = match &state.votes {
@@ -1648,7 +1660,7 @@ mod tests {
     fn test_evaluate_vote_error_no_votes() {
         let t = make_thalamus_with_events();
         let state = LevelAgeState::default();
-        assert!(t.evaluate_vote_error(1, &state, &FxHashSet::default()).is_none());
+        assert!(t.evaluate_vote_error(1, &state, &FxHashSet::default(), 1000).is_none());
     }
 
     #[test]
@@ -1659,7 +1671,7 @@ mod tests {
             ..Default::default()
         };
         // age 0 always returns None
-        assert!(t.evaluate_vote_error(0, &state, &FxHashSet::default()).is_none());
+        assert!(t.evaluate_vote_error(0, &state, &FxHashSet::default(), 1000).is_none());
     }
 
     #[test]
@@ -1674,7 +1686,7 @@ mod tests {
             ..Default::default()
         };
         // neither neuron is in actuals → 100% error → fires (> 0.3)
-        let result = t.evaluate_vote_error(1, &state, &FxHashSet::default()).unwrap();
+        let result = t.evaluate_vote_error(1, &state, &FxHashSet::default(), 1000).unwrap();
         assert!(result.fire);
         assert!((result.error_rate - 1.0).abs() < 1e-10);
     }
@@ -1694,7 +1706,7 @@ mod tests {
             ..Default::default()
         };
         // both correct → 0% error → does not fire
-        let result = t.evaluate_vote_error(1, &state, &actuals).unwrap();
+        let result = t.evaluate_vote_error(1, &state, &actuals, 1000).unwrap();
         assert!(!result.fire);
         assert!((result.error_rate - 0.0).abs() < 1e-10);
     }

@@ -157,6 +157,10 @@ pub struct Neuron {
     error_mode: ErrorMode,
     error_threshold: f64,
 
+    /// Brain-wide context_length, replicated on each neuron so recognize_patterns can implement the warmup gate:
+    /// skip matching until the context window has had a chance to fill up at the start of a sequence
+    context_length: u32,
+
     /// Per-channel action neuron IDs — ordered Vec for deterministic alternative-action
     /// exploration (neurons are tried in registration order, not hash-iteration order).
     channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
@@ -207,6 +211,7 @@ impl Neuron {
         error_threshold: f64,
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         action_ids: FxHashSet<NeuronId>,
+        context_length: u32,
     ) -> Self {
         Self {
             id,
@@ -214,6 +219,7 @@ impl Neuron {
             merge_threshold,
             error_mode,
             error_threshold,
+            context_length,
             channel_action_ids,
             action_ids,
             connections: Vec::new(),
@@ -746,6 +752,14 @@ impl Neuron {
     ) -> RecognizeResult {
         let mut matches = Vec::new();
         let mut context_ref_updates = Vec::new();
+
+        // Warmup gate: skip pattern recognition until the context window has had a chance to fill up at the start of a sequence.
+        // Without this, patterns whose stored contexts include entries at distances > current_frame are unfairly penalized.
+        // Their unreachable entries count as "missing", letting smaller new patterns win matches by default, displacing established ones.
+        if (current_frame as u32) < self.context_length {
+            return RecognizeResult { matches, context_ref_updates };
+        }
+
         let ctx = match level_context {
             Some(c) if c.size() > 0 => c,
             _ => return RecognizeResult { matches, context_ref_updates },
@@ -1145,14 +1159,14 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), FxHashSet::default())
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), FxHashSet::default(), 10)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let action_set: FxHashSet<NeuronId> = action_ids.iter().copied().collect();
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, action_set)
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, action_set, 10)
     }
 
     #[test]
@@ -1256,7 +1270,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), FxHashSet::default());
+        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), FxHashSet::default(), 10);
         // fewer than ERROR_MIN_SAMPLES → falls back to error_threshold
         n.record_error(0, 0.5);
         n.record_error(0, 0.5);

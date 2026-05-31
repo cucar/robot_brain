@@ -17,7 +17,7 @@ This is a prerequisite for everything downstream — inference-scope experimenta
 
 ## How to read this document
 
-Changes on `mnist` group into **twelve coherent projects**. Each project is a single commit onto `dev`. Work them in order — top to bottom is the merge plan. Each project section contains:
+Changes on `mnist` group into **coherent projects**. Each project is a single commit onto `dev`. Work them in order — top to bottom is the merge plan. Each project section contains:
 
 - **Goal** — what the project was trying to accomplish.
 - **Surface** — every file/symbol touched.
@@ -26,54 +26,23 @@ Changes on `mnist` group into **twelve coherent projects**. Each project is a si
 
 Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ delete · ★ stocks-affecting.
 
-**Workflow.** Project 1 (documentation) lands on `dev` first. After that, work on `dev` and pull each subsequent project's changes across from `mnist` one commit at a time, testing as you go. After all twelve projects land, there is one **post-merge task** (delete the `mnist` branch).
+**Workflow.** work on `dev` and pull each subsequent project's changes across from `mnist` one commit at a time, testing as you go. After all projects land, there is one **post-merge task** (delete the `mnist` branch).
 
 ---
 
-## Project 1 — Documentation updates 🟢
-
-**Goal.** The branch authored the design documents that define every downstream workstream — `inference-level.md`, `spatial-processing.md`, `neuron-reuse.md` — plus updates to `hippocampus.md` (parallel fan-out replay, salience-modulated lookback) and `roadmap.md` (sequenced workstreams replacing the original MNIST entry). This document (`mnist-merge.md`) is part of the same set. Landing the docs first gives the rest of the merge a stable reference: every subsequent project can be discussed against the design baseline.
-
-**Surface.**
-- `docs/roadmap.md` — sequenced workstreams.
-- `docs/inference-level.md` — new.
-- `docs/spatial-processing.md` — new.
-- `docs/neuron-reuse.md` — new.
-- `docs/mnist-merge.md` — new (this document).
-- `docs/hippocampus.md` — additions for parallel fan-out replay (8b) and salience-modulated lookback (8c).
-- `.gitignore` — adds `apps/mnist/*.log`.
-
-**Decision: Keep all.** These docs are the design baseline for every subsequent phase.
-
-**Test plan and acceptance.**
-- Manual: links between documents resolve (`roadmap.md` → `mnist-merge.md` → `inference-level.md`, etc.).
-- No code; nothing to test programmatically.
-
----
-
-## Project 2 — Training-degrades-accuracy regression fixes 🟢 ★
+## Project 1 — Training-degrades-accuracy regression fixes 🟢 ★
 
 **Goal.** During MNIST scaling experiments, multi-pass training was *degrading* accuracy past a certain point — patterns kept being created and replaced, recognition kept shifting under its own feet. Root-causing produced five independent algorithmic fixes that ship as one bundle because they were debugged together and partly compensate for each other.
 
 **The five fixes.**
 
-1. **Warmup gate.** Pattern recognition and error-pattern creation both skip until `current_frame >= context_length`. Before the gate, early frames had mostly-empty context windows; new patterns were minted with mostly-empty stored contexts, then could never match anything in later frames, then were re-minted as fresh siblings every episode. Unbounded creation of useless siblings.
-   - `neuron.rs::recognize_patterns` — early return.
-   - `thalamus.rs::evaluate_vote_error` — early return.
-   - `thalamus.rs::process_level/get_level_tasks/get_level_corrections` — `frame_number` parameter added so the gate can see it.
-   - `neuron.rs`: `context_length` field on `Neuron` so `recognize_patterns` has it locally.
-   - Propagated through `Neuron::new` callers in `column.rs`.
-
-2. **Empty-context skip.** Even after the warmup gate, an error pattern with an empty `context_entries` slice can still be requested. Skip allocation entirely in that case — it would never match anything.
-   - `thalamus.rs::get_level_corrections`.
-
-3. **Confidence-weighted error metric.** Original error was raw miss rate (failed events / total events). Replaced with per-dimension argmax confidence on wrong predictions — "when I was wrong, how confident was I?" Early training has thinly-spread strength distributions, so wrong predictions don't fire until the voter has actually committed to a wrong target.
+1. **Confidence-weighted error metric.** Original error was raw miss rate (failed events / total events). Replaced with per-dimension argmax confidence on wrong predictions — "when I was wrong, how confident was I?" Early training has thinly-spread strength distributions, so wrong predictions don't fire until the voter has actually committed to a wrong target.
    - `thalamus.rs::evaluate_vote_error`.
 
-4. **No negative reinforcement on misses.** `learn_connections` used to weaken every connection at the active distance whose target didn't fire, which produced periodic discrete-death bursts (a connection drifts down ~1/episode until it hits 0, then dies abruptly, shifting the voter's vote profile, triggering cascades of error-pattern creation). Removed; mirrors how action connections were already kept-only-strengthen.
+2. **No negative reinforcement on misses.** `learn_connections` used to weaken every connection at the active distance whose target didn't fire, which produced periodic discrete-death bursts (a connection drifts down ~1/episode until it hits 0, then dies abruptly, shifting the voter's vote profile, triggering cascades of error-pattern creation). Removed; mirrors how action connections were already kept-only-strengthen.
    - `neuron.rs::learn_connections` — `get_neurons_not_found` weakening removed.
 
-5. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
+3. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
    - `neuron.rs::recognize_patterns` — `refine_context` call site removed; novel/missing/removed contextRef updates stop flowing for matched patterns.
 
 **Decision: Keep all five.** Ship as one commit with this list in the commit message.
@@ -89,7 +58,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 3 — Small correctness fixes 🟢
+## Project 2 — Small correctness fixes 🟢
 
 **Goal.** Two unrelated paper-cuts surfaced during MNIST debugging.
 
@@ -110,7 +79,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 4 — Profiling instrumentation 🟢
+## Project 3 — Profiling instrumentation 🟢
 
 **Goal.** Make MNIST training cost legible. Per-frame, per-section, per-neuron-op wall-clock measurements bubbled up through the call stack so a harness can read them off `FrameResult`.
 
@@ -130,7 +99,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 5 — Inspection API 🟢
+## Project 4 — Inspection API 🟢
 
 **Goal.** Read-only introspection for harness-side debugging: what does a neuron know, who does it connect to, what's in a pattern's stored context.
 
@@ -153,7 +122,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 6 — Static forget rate 🟡 ★
+## Project 5 — Static forget rate 🟡 ★
 
 **Goal.** The branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.** The branch also surfaced a latent bug — the original code zeroed L0's forget rate, which (since L0 owns L1 children's death timing) made L1 patterns immortal. The L0→base behaviour fix is the only piece of this project that actually ships.
 
@@ -175,7 +144,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 7 — Image implant / direct teaching 🔴
+## Project 6 — Image implant / direct teaching 🔴
 
 **Goal.** Bypass error-driven learning entirely and directly install L1 patterns from observed bit histories. The flow: for each pixel position in an image, record `(parent_bit, packed_context_bits) → next_bit_distribution`; once all positions are seen, materialize the majority transitions as L1 patterns with pre-baked stored context and outgoing prediction connections. A teaching shortcut that skipped the slow part of error-driven discovery.
 
@@ -196,7 +165,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 8 — Parallel context training 🔴
+## Project 7 — Parallel context training 🔴
 
 **Goal.** Train multiple images concurrently by giving each one its own runtime state (memory, frame counter, rewards) while the thalamus (neurons, patterns, connections) stays shared. `init_contexts(N)` allocates N slots; `set_active_context(i)` swaps the active slot's state into the brain's live fields. Was meant to amortize thalamus-side parallelism overhead across more concurrent training streams.
 
@@ -215,7 +184,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 9 — Frozen-context staged scan/predict 🔴 ★
+## Project 8 — Frozen-context staged scan/predict 🔴 ★
 
 **Goal.** Two-phase training flow: phase 1 scans the image's pixels (events fire, no action, no consensus); phase 2 predicts the digit on the now-frozen context (no event changes, action consensus runs, reward applied). Required toggling the pipeline's three sub-stages independently — event processing, action processing, and learning — and changing `process_frame` to take separate `events` and `actions` maps so phase 2 could force the action without re-driving the events.
 
@@ -247,7 +216,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 10 — Supervised action learning 🔴
+## Project 9 — Supervised action learning 🔴
 
 **Goal.** Replace the existing reward-shaped action path with direct supervised wiring: at each frame, collect every votable voter (every active non-suppressed neuron across levels), and additively accumulate `(voter → correct_action_id, distance, +reward)` connections. Frequency dominates: a voter wired to A twice and B once accumulates strength=2/reward=2 vs strength=1/reward=1, so A wins consensus by 4:1. Pairs with a static action-side learning rate (`action_alpha`) so the smoothing doesn't collapse frequency back to 1.
 
@@ -269,7 +238,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 11 — MNIST apps refactor 🟢
+## Project 10 — MNIST apps refactor 🟢
 
 **Goal.** The original `apps/mnist/encoder.js` was a single grayscale-byte encoder. The retinotopic-channels architecture in the roadmap needs per-pixel-position channels, plus row-aggregated variants for comparison, plus digit-label encoding. The branch split this into four focused encoders and rewrote `apps/mnist/jobs/test.js` around the new shape. `dump_image.js` was added to convert MNIST images into the text-pipeline format for cross-app validation.
 
@@ -289,7 +258,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 12 — Debug/trace tooling and fixtures ⚫
+## Project 11 — Debug/trace tooling and fixtures ⚫
 
 **Goal.** Investigation tooling produced during the MNIST scaling debug effort.
 
@@ -311,6 +280,6 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## After all twelve projects land
+## After all projects land
 
 - **Delete the `mnist` branch.** Locally and on origin. The merge is complete; the branch has no further purpose.

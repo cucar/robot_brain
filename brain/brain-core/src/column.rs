@@ -358,6 +358,7 @@ impl Column {
                 self.error_threshold,
                 self.channel_actions.clone(),
                 self.action_ids.clone(),
+                self.context_length,
             );
             // pre-wire default action connections at neutral reward across all voting distances
             for distance in 1..self.context_length {
@@ -414,6 +415,7 @@ impl Column {
             self.error_threshold,
             self.channel_actions.clone(),
             self.action_ids.clone(),
+            self.context_length,
         );
 
         // load directed connections (distance → target neuron id with strength and reward)
