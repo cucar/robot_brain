@@ -120,6 +120,8 @@ If a Robot Brain with a fully populated cortex loses its hippocampus, that is th
 6. **One voting machinery.** All firing nodes vote for actions through their action connections, weighted by connection strength. Moments and patterns vote identically; experiment-driven updates strengthen the same connections that statistical learning strengthens. There is no separate "decided action" override mechanism.
 7. **Selective minting.** Only frames with reward or prediction error above a z-score threshold trigger moment minting. Ordinary experience never becomes thinkable.
 8. **Two clocks.** The hippocampus runs at a faster clock than the cortex, executing many experiment frames per cortex frame.
+8b. **Parallel fan-out replay.** Replay is a pool of N concurrent trajectories from a shared starting state, not a single-track wavefront. After fan-out, the winning trajectory's actions are written back to the moments along it. This is the core replay mechanism, not an optimization.
+8c. **Salience-modulated lookback.** Before fan-out, the starting state is rewound backward along the temporal moment graph by a depth derived from triggering salience. Small surprises rewind shallowly; large surprises rewind deep. The brain trades short-term thinking for long-term re-evaluation at the scope the trigger warrants.
 9. **Same death ledger, different aging.** Forgetting is unified through one death ledger. Moments age on a slower timeline than patterns because they represent rarer, more salient information.
 10. **Bidirectional coupling via thalamus.** Cortex emits think-actions that reach the hippocampus. Hippocampus reads currently active cortical state and writes action-connection updates back to specific moment neurons. Updates are local to the neuron written, never global.
 11. **Multi-level moment hierarchy.** The union-creation rule applies recursively: level-1 moments bind patterns, level-2 moments bind level-1 moments, level-N moments bind level-(N-1) moments. Each level operates at an exponentially coarser timescale, mirroring the pattern hierarchy's exponential scaling. The same structural machinery (context fingerprint, action connections, temporal bins, decay, inhibition) applies at every moment level.
@@ -226,16 +228,18 @@ This means strategic vs reflexive action selection happens automatically: the ri
 The hippocampus owns no permanent store. It owns:
 
 - The salience module (windowed z-scoring of reward and prediction error).
-- The experiment buffer (single experiment in flight in Phase 1; parallel pool in a later phase).
-- A transient working set of currently-relevant moment ids while an experiment runs.
+- A **parallel experiment pool** — N concurrent trajectories explored simultaneously from a shared starting state, with a shared "what's been visited" structure to prevent redundant exploration. Parallel fan-out is the core replay mechanism, not an optimization.
+- A transient working set of currently-relevant moment ids while experiments run.
 - The death-ledger writer (the ledger itself is shared across cortex and hippocampus).
 
 Its operations:
 
 - **Mint moment** — given the currently active cortical state and a salience trigger, create a moment node in the appropriate column with connections to every active high-level pattern (with weight proportional to each parent's activation strength), action connections recording every action that fired during the encoded context window (with frame offsets), and edges to recently-active moments (the temporal moment graph).
-- **Replay** — wavefront walk through the moment graph, accumulating simulated time, reading rewards and action sequences along the trajectory.
+- **Rewind** — walk backward through the temporal moment graph from the trigger point to select a past moment as the starting state. Rewind depth is salience-modulated: small triggers rewind shallowly (local "what could I have done differently here?"); large triggers rewind deep (broader "what could I have done differently further upstream?"). This is how the brain trades short-term thinking for long-term re-evaluation.
+- **Fan out parallel trajectories** — from the chosen starting state, dispatch N concurrent experiments. Each substitutes a different alternative action (or runs as-original) and walks forward independently. Trajectories share a visited-moments structure to prevent redundant exploration.
+- **Replay (per trajectory)** — wavefront walk through the moment graph, accumulating simulated time, reading rewards and action sequences along the trajectory.
 - **Branch (for counterfactual)** — at any replay step, instead of sampling forward via edges, substitute an alternative action and walk to a sibling moment under shared parent patterns; continue from there.
-- **Reinforce action connections** — at experiment conclusion, strengthen action connections on moments along high-reward trajectories, in the temporal bin matching the summed Δt at which the lesson applies.
+- **Select winner and reinforce action connections** — when the fan-out converges or budget expires, compare trajectories by accumulated reward over the simulated horizon. Strengthen action connections on the moments along the winning trajectory, in the temporal bin matching the summed Δt at which each lesson applies. Losing trajectories leave no trace beyond their contribution to the visited structure.
 - **Decay and evict** — apply moment-timeline decay; emit eviction records to the death ledger.
 
 The cortex does not know about the moment/pattern distinction. It just sees nodes firing and contributing votes. The hippocampus is the only thing that knows which nodes are moments and what experiments are running.
@@ -321,7 +325,7 @@ This graph is the substrate replay walks. It is also what gives "this kind of si
 After cortex finishes its frame, any moment whose parents are firing with sufficient context overlap will already be active — this is normal cortical activation, not a special operation. The hippocampus reads the currently-firing moment set and, for each moment above an experiment-eligibility threshold:
 
 - Notes that the moment is firing (it is already voting via its action connections; nothing extra needed).
-- May initiate a small-budget replay experiment from the active moment set.
+- May initiate a small-budget parallel replay fan-out. The rewind depth before fan-out is derived from the triggering salience: low-magnitude triggers start from the currently-active moment set (no rewind); high-magnitude triggers rewind further back along the temporal moment graph before branching forward. This is the involuntary "what should I have done differently?" reflex — its scope automatically matches how bad (or good) the trigger was.
 
 This pass fires every cortex frame, even with zero think-actions. It is the always-on background channel — *"that reminds me…"*, mind-wandering, gut-feel forecasting.
 
@@ -345,7 +349,14 @@ think_action {
     Compress,                        // find common structure across cued moments
   },
   budget: integer,                  // hippocampus frames to spend
+  lookback: integer,                // moment-graph hops to rewind backward from the
+                                     //   cued starting state before fanning forward;
+                                     //   0 = branch from here; larger = re-evaluate
+                                     //   decisions further upstream.
   horizon: integer,                 // max simulated time (summed Δt) in frames
+  fanout: integer,                  // number of parallel trajectories to dispatch
+                                     //   from the rewound starting state (default
+                                     //   pool size; may be capped by capacity)
   temperature: float (0.0 - 1.0),   // breadth of sampling (low=peaked short-Δt;
                                      //   high=associative drift to long-Δt)
   control: enum {
@@ -386,6 +397,25 @@ such as "remember this" or "think about this" to shape replay behavior.
 
 An experiment starts with a *set* of currently-active moments — whatever was firing in the surfacing context (involuntary) or whatever the cue resolved to (voluntary). The replay does not assume a single starting moment.
 
+### Rewind — salience-modulated lookback
+
+Before fan-out, the starting state may be rewound `lookback` hops backward through the temporal moment graph. Lookback zero starts from the surfacing context; positive lookback walks the reverse edges to land on an earlier moment set along the recent trajectory.
+
+For involuntary experiments, lookback is derived from the triggering salience magnitude — bigger surprise rewinds further back. The mapping (proposed: `lookback = floor(α · |z|)` capped by the available trajectory length) is parametric and tuned empirically. The intuition: short-term thinking does not always guarantee long-term optimum results; a bad outcome may have its real branch point several moments upstream. Salience-modulated lookback lets the brain re-evaluate at the scope that the surprise warrants — local for small mistakes, deep for large ones.
+
+For voluntary think-actions, lookback is supplied explicitly.
+
+### Parallel fan-out
+
+From the (possibly rewound) starting state, the hippocampus dispatches `fanout` concurrent trajectories. Each trajectory independently:
+
+- Substitutes a candidate alternative action at its branch point (sampled from sibling moments under shared parent patterns — see "Counterfactual via parent-pattern siblings" below), or runs as-original for a baseline.
+- Walks forward as a wavefront, accumulating simulated time and reward, until a termination condition fires.
+
+Constraint on alternatives: only actions whose effects in this context are *known* can be substituted — meaning sibling moments must exist under shared parents carrying that action. Actions with no prior context-relevant history cannot be replayed because the moment graph holds no trajectory to walk. Cortex's probabilistic action votes are the fallback (less precise) when no sibling exists.
+
+Trajectories share a visited-moments structure so that exploration doesn't redundantly retrace the same forward walks. Each trajectory's per-step state (active wavefront, accumulated reward, accumulated Δt) is independent.
+
 ### Single replay frame (wavefront walk)
 
 1. **Active set.** Read the currently active moment set from the top of the experiment stack.
@@ -415,7 +445,11 @@ If no sibling moments exist for the desired alternative action, the experiment c
 
 ### Action reinforcement (writeback)
 
-When an experiment converges on a long-term-optimum trajectory, the hippocampus updates action connections on moments along the trajectory. For each moment M_b in the trajectory at simulated-time-offset Δt from the start:
+When the parallel fan-out completes (all trajectories terminated, or global budget exhausted), the hippocampus selects the winning trajectory — the one with the highest accumulated reward over its simulated horizon. The winner is what gets written back. Losing trajectories contribute nothing beyond their entries in the shared visited structure.
+
+If no trajectory beats the as-original baseline, no writeback occurs. The existing action connections already encode what the brain knew; thinking didn't improve on it.
+
+For each moment M_b in the winning trajectory at simulated-time-offset Δt from the start:
 
 1. Determine the long-term temporal bin matching Δt under the soft bin assignment kernel.
 2. Compute the simulated expected reward for the trajectory-optimum action from M_b.
@@ -515,8 +549,8 @@ Orchestrates the parallel clocks. Manages semaphores. Routes inputs and outputs.
 
 **Per hippocampus frame (faster, in parallel):**
 1. Service any pending mint request (cheap, runs immediately).
-2. If an experiment is on the stack, advance one frame.
-3. Otherwise pop the next request: voluntary think-actions take priority over involuntary forecasts. If the queue is full and a non-interrupt request arrives, drop it silently — this is the "deep in thought already, can't be bothered" state.
+2. If a parallel experiment pool is active, advance every trajectory in the pool by one frame. When all trajectories have terminated, select the winner and run writeback.
+3. Otherwise pop the next request: voluntary think-actions take priority over involuntary forecasts. Rewind by `lookback`, then dispatch `fanout` trajectories from the rewound starting state. If the queue is full and a non-interrupt request arrives, drop it silently — this is the "deep in thought already, can't be bothered" state.
 4. If idle, run consolidation: decay, eviction, death-ledger maintenance.
 
 ---
@@ -558,18 +592,26 @@ loop:
                                               //   routing tables, draws temporal
                                               //   edges, records initial actions
 
-    if hippocampus.experiment_stack.has_active():
-        hippocampus.advance_experiment_frame()
-        // any action-connection writeback during advance lands directly on
-        //   the target moment via thalamic addressing
+    if hippocampus.experiment_pool.has_active():
+        hippocampus.advance_all_trajectories()    // advance every trajectory in the
+                                                   //   parallel pool by one frame
+        if hippocampus.experiment_pool.all_terminated():
+            winner = hippocampus.select_winner()  // highest accumulated reward
+            if winner.beats_baseline():
+                hippocampus.reinforce_along(winner.trajectory)
+            hippocampus.experiment_pool.clear()
         continue
 
     if ta = ExperimentQueue.try_pop():
-        hippocampus.start_experiment(ta)
+        start = hippocampus.rewind(ta.cue_resolved_moments, ta.lookback)
+        hippocampus.experiment_pool.dispatch(start, ta.fanout, ta)
         continue
     if forecast = ForecastQueue.try_pop():
         if forecast.non_empty():
-            hippocampus.start_experiment(forecast_as_replay(forecast, small_budget))
+            lookback = salience.derive_lookback(forecast.trigger_z)
+            start = hippocampus.rewind(forecast.moments, lookback)
+            hippocampus.experiment_pool.dispatch(start, default_fanout,
+                                                forecast_as_replay(small_budget))
         continue
 
     // idle
@@ -619,12 +661,14 @@ loop:
 - Termination conditions: budget, horizon, convergence, salience drop.
 - `mode: Replay` end-to-end.
 
-### Phase 5 — Counterfactual experiments and action reinforcement
+### Phase 5 — Counterfactual experiments, parallel fan-out, salience-modulated lookback, and action reinforcement
 
 - Branch via parent-pattern sibling: walk up to a moment's parent patterns, find sibling moments under shared parents with the alternative action, replay forward from one.
-- Stack-based push/pop for branches.
-- Action update: at experiment conclusion, the trajectory-optimum action's simulated expected reward is compared against the moment's current strongest connection in the matching temporal bins. If higher, the connection updates to reflect the new expected reward. Action connections never weaken — every action explored retains its best-observed-or-simulated record.
-- Verify: replaying a bad outcome with alternatives discovers a better policy; subsequent encounters of the same context use the improved policy via the moment's reinforced action connections out-voting the old habit.
+- **Parallel fan-out pool**: dispatch N concurrent trajectories from the starting state, each substituting a different sibling-derived alternative action (plus one as-original baseline). Shared visited structure across trajectories prevents redundant exploration.
+- **Rewind by salience-modulated lookback** before fan-out: walk the reverse temporal-moment-graph edges by `lookback` hops to land on an earlier moment set. For involuntary forecasts, derive `lookback` from the triggering z-score magnitude; for voluntary think-actions, use the supplied parameter.
+- **Winner selection**: at pool termination (all trajectories ended, or global budget exhausted), pick the trajectory with the highest accumulated reward. Writeback only if it beats the as-original baseline.
+- Action update along the winning trajectory: the trajectory-optimum action's simulated expected reward is compared against the moment's current strongest connection in the matching temporal bins. If higher, the connection updates to reflect the new expected reward. Action connections never weaken — every action explored retains its best-observed-or-simulated record.
+- Verify: replaying a bad outcome with parallel alternatives discovers a better policy; subsequent encounters of the same context use the improved policy via the moment's reinforced action connections out-voting the old habit. Verify that increasing the triggering salience produces a deeper rewind and re-evaluates earlier branch points.
 
 ### Phase 6 — Involuntary forecast pass
 
@@ -646,9 +690,9 @@ loop:
 - Reinforce strong moments, prune weak ones.
 - Observe moments-becoming-classes in real data — verify that aged moments retain only their core parent links.
 
-### Phase 9 (deferred) — Parallel experiments
+### Phase 9 — Stack-based interrupt semantics for parallel pools
 
-Move from single-track-with-stack to a pool of N concurrent experiments sharing a "what's been visited" structure to prevent redundant exploration. Optimization, not correctness — Phase 1 is strictly single-track.
+Parallel fan-out itself lands in Phase 5 as the core replay mechanism. This phase adds the orchestration polish: how a higher-priority think-action arriving mid-pool pushes the current pool, runs its own pool to completion, then resumes the original. Stack of pools rather than stack of single experiments. Includes the "what was I thinking about?" query semantics over the stack.
 
 ### Phase 10 — Multi-level moment hierarchy (union of unions)
 
@@ -744,6 +788,9 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 11. **Replay across moment levels.** Does level-2 replay walk a separate level-2 temporal graph? Does it use the same hippocampal clock with coarser steps, or a separate clock? Simplest hypothesis: one clock, coarser edges with larger Δt values per step.
 12. **Number of moment levels.** Should emerge from data, not configuration. A level-N moment is only minted when enough level-(N-1) moments exist and co-activate with sufficient salience. Systems with short experience horizons will have fewer levels.
 13. **The actual instruction set the cortex uses to invoke the hippocampus.** Will emerge from implementation rather than be designed up front. The conceptual operations are listed above; their precise signatures and the cortex-side action neurons that trigger them are TBD.
+14. **Salience-to-lookback mapping.** Proposal: `lookback = floor(α · |z|)` capped by available trajectory length. Tune `α` empirically from the first salience-driven rewind experiments. Possible refinement: separate coefficients for reward-z vs prediction-error-z (a large reward miss may want a different rewind depth than a large surprise).
+15. **Default fan-out width.** How many concurrent trajectories does a pool dispatch? Probably small (4-8) for involuntary forecasts and larger (up to capacity) for voluntary think-actions where the user explicitly requested deep deliberation. Capped by hippocampal compute budget.
+16. **Trajectory diversity.** When `fanout` > number of available sibling-derived alternatives, how are the extra slots filled? Resampling siblings under different parent-pattern subsets? Falling back to cortex's probabilistic action votes? Empirical question.
 
 ---
 
