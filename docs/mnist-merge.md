@@ -4,7 +4,7 @@
 
 ## Why
 
-The `mnist` branch has accumulated substantial work alongside experimental v1 moment-neuron scaffolding. Before any new structural work lands on top of it, the keepable parts must be merged into `dev`. Merging late would compound conflicts with later phases.
+The `mnist` branch has accumulated substantial work alongside experimental v1 moment-neuron scaffolding. Before any new structural work lands on top of it, the keepable parts must be merged into `main`. Merging late would compound conflicts with later phases.
 
 This is a prerequisite for everything downstream — inference-scope experimentation, spatial processing, neuron reuse.
 
@@ -12,16 +12,18 @@ This is a prerequisite for everything downstream — inference-scope experimenta
 
 ## How to read this document
 
-Changes on `mnist` group into **coherent projects**. Each project is a single commit onto `dev`. Work them in order — top to bottom is the merge plan. Each project section contains:
+Changes on `mnist` group into **coherent projects**. Each project listed below is a single commit onto `main`. Work them in order — top to bottom is the merge plan. Each project section contains:
 
 - **Goal** — what the project was trying to accomplish.
 - **Surface** — every file/symbol touched.
-- **Decision** — Keep / Collapse / Roll back / Delete.
+- **Decision** — Keep / Collapse.
 - **Test plan and acceptance** — what verifies it when the commit lands.
 
-Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ delete · ★ stocks-affecting.
+Categorization shorthand: 🟢 keep · 🟡 collapse · ★ stocks-affecting.
 
-**Workflow.** work on `main` and pull each subsequent project's changes across from `mnist` one commit at a time, testing as you go. After all projects land, there is one **post-merge task** (delete the `mnist` branch).
+Projects on `mnist` that are not listed below are **not being pulled** — they stay on the `mnist` branch and disappear when it's deleted. No work needed.
+
+**Workflow.** work on `main` and pull each project's changes across from `mnist` one commit at a time, testing as you go. After all projects land, there is one **post-merge task** (delete the `mnist` branch).
 
 ---
 
@@ -40,7 +42,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 **Decision: Keep.** Pure-read APIs, no risk to behaviour.
 
-**Excluded:** `Memory::get_votable_entries` was added for the supervised action path. Nothing else calls it. It goes with Project 10 (roll back).
+**Note:** `Memory::get_votable_entries` was added on `mnist` for the supervised action path. It belongs to **Supervised learn / infer** below, not this commit.
 
 **Test plan and acceptance.**
 - **T-inspect-smoke** — train briefly via NAPI, call each inspection method on a known active neuron, confirm well-formed results (no panics, fields populated). Smoke only.
@@ -63,85 +65,43 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 **Test plan and acceptance.**
 - **T-decay-1** — confirm `effective_forget_rate(base, ctx, level)` returns `base` for `level ∈ {0, 1, 2, 3, 4}`.
-- **T-decay-2** — long run of `synthetic-extended-test.js` on `dev` vs `main`. Inspect final neuron count by level. On `main` deep-level counts grow unboundedly; on `dev` they should plateau. Qualitative — no precise threshold.
-- **T-stocks (Project 2)** — re-run after this commit lands; the L1-decay change is also a ★ shift and folds into the post-Project-2 baseline.
+- **T-decay-2** — long run of `synthetic-extended-test.js`. Inspect final neuron count by level. Pre-fix, deep-level counts grow unboundedly; post-fix they should plateau. Qualitative — no precise threshold.
+- **T-stocks** — re-run stocks harnesses; this is a ★ shift and the README baseline numbers will move.
 - `cargo test` green.
 - `LevelDecayMode` is gone from the codebase; no per-level decay scaling logic remains.
 
 ---
 
-## Image implant / direct teaching 🟢
+## Supervised learn / inference-only infer 🟢 ★
 
-**Goal.** Bypass error-driven learning entirely and directly install L1 patterns from observed bit histories. The flow: for each pixel position in an image, record `(parent_bit, packed_context_bits) → next_bit_distribution`; once all positions are seen, materialize the majority transitions as L1 patterns with pre-baked stored context and outgoing prediction connections. A teaching shortcut that skipped the slow part of error-driven discovery.
+**Goal.** Two entry points on Brain that the MNIST harness (and later the hippocampus path) needs:
 
-**Surface.**
-- `brain.rs`: `ImplantState` struct (per-image bit histories + observation map); `implant_state` field; `start_implant`/`implant_position`/`finalize_implant` methods; `ImplantSummary` return type.
-- `thalamus.rs`: `implant_default_connection`, `implant_pattern` (build the L1 spec, allocate id, register parent/level, install via region).
-- `region.rs`, `column.rs`: `install_implant_pattern`, `install_implant_default_connection` plumbing.
-- `brain-napi`: `startImplant`/`implantPosition`/`finalizeImplant` bindings.
-- `apps/mnist/jobs/implant_test.js`: the harness for it.
+- `learn(events, actions, rewards)` — supervised training step: process the frame with the correct action forced, learn connections, and additively wire active voter neurons to the correct action neuron.
+- `infer(events)` — inference-only step: run pattern recognition and read out predictions without modifying any learned state. This is the 10k-test path.
 
-**Decision: Roll back entirely.** The spatial-processing design accomplishes the same outcome (durable spatial patterns) through the normal error-driven path with d=0 connections — there's no reason to ship a parallel shortcut.
+At this phase the "voter pool" is just the active sensory neurons (no L1+ patterns exist without spatial processing). The same code wires correctly once spatial-processing patterns become voters.
 
-**Roll back checklist:** all symbols above; ensure no remaining references in `apps/`.
-
-**Test plan and acceptance.**
-- `cargo test` green.
-- `grep` confirms no remaining references to any of the above symbols.
-
----
-
-## Frozen-context staged scan/predict 🔴 ★
-
-**Goal.** Two-phase training flow: phase 1 scans the image's pixels (events fire, no action, no consensus); phase 2 predicts the digit on the now-frozen context (no event changes, action consensus runs, reward applied). Required toggling the pipeline's three sub-stages independently — event processing, action processing, and learning — and changing `process_frame` to take separate `events` and `actions` maps so phase 2 could force the action without re-driving the events.
-
-**Surface.**
-- `brain.rs`: `event_processing` / `action_processing` / `learning` fields on `Brain`; `set_processing_mode` method; **`process_frame(events, actions, rewards)` signature** (was `(inputs, rewards)`); refactored `build_frame` to accept forced actions; frozen-event branch inside `process_frame`.
-- `column.rs`, `region.rs`: `action_processing` / `learning` fields; `set_action_processing` / `set_learning` methods; gating on default-action pre-wire (column).
-- `thalamus.rs`: `set_action_processing` / `set_learning`; `learning: bool` plumbed into `process_level` → `get_level_tasks` → `get_level_corrections`. **Note:** these calls also gained a `frame_number` parameter — that piece belongs to Project 2 (warmup) and was already landed; only the `learning` half is rolled back here.
-- `neuron.rs`: `learning: bool` parameter on `process_frame` / `recognize_patterns`; gates connection-learning and child-activation strengthening.
-- `memory.rs`: `replace_active_neuron` (swap the forced action at age 0 during phase 2).
-- `brain-napi`: `setProcessingMode` binding; `processFrame` signature change reverted.
-- **Call-site reverts** — `process_frame(events, actions, rewards) → (inputs, rewards)` touches every app harness:
-  - `apps/stocks/jobs/test.js`
-  - `apps/stocks/jobs/multi-channel-test.js`
-  - `apps/stocks/jobs/synthetic-cycle-test.js`
-  - `apps/stocks/jobs/synthetic-extended-test.js`
-  - `apps/text/jobs/test.js`
-  - `apps/mnist/jobs/test.js`
-  All `new Map()` adapter calls go away in this commit.
-
-**Decision: Roll back entirely.** Spatial processing collapses the two phases into one frame across channels, so the staged flow has no purpose.
-
-**Watch out:** keep the `frame_number` parameter on `get_level_tasks` / `get_level_corrections` — Project 2 (warmup gate) needs it. Don't strip the whole signature, just the `learning` half.
-
-**Test plan and acceptance.**
-- **T-stocks (Project 2)** — re-run; this commit reverts a ★ signature change that touched the harnesses, so re-confirm directional accuracy still matches the post-Project-2 baseline.
-- **T-text (Project 2)** — same.
-- `cargo test` green (the test helpers also pass `learning=true` today; verify they compile cleanly after revert).
-- `grep` confirms no remaining references to `set_processing_mode`, `event_processing`, `action_processing`, `learning` field, `replace_active_neuron`.
-
----
-
-## Supervised action learning 🔴
-
-**Goal.** Replace the existing reward-shaped action path with direct supervised wiring: at each frame, collect every votable voter (every active non-suppressed neuron across levels), and additively accumulate `(voter → correct_action_id, distance, +reward)` connections. Frequency dominates: a voter wired to A twice and B once accumulates strength=2/reward=2 vs strength=1/reward=1, so A wins consensus by 4:1. Pairs with a static action-side learning rate (`action_alpha`) so the smoothing doesn't collapse frequency back to 1.
-
-**Surface.**
-- `brain.rs`: `learn()` (the public supervised entry); `infer()` (inference-only counterpart); `action_alpha` ctor param.
-- `neuron.rs`: `learn_supervised_action` (additive accumulation); `action_alpha` field; action-aware branching inside `strengthen_connection` (static vs dynamic alpha).
-- `column.rs`, `region.rs`: `action_alpha` propagated; `learn_action_connections` (route voter tasks per column); `collect_votes` (read-only vote sweep).
-- `thalamus.rs`: public `collect_votes` and `learn_action_connections` (route across regions). This forced the internal `collect_votes` to be renamed `collect_level_votes` — revert the rename too.
+**Surface (pulled from `mnist`).**
+- `brain.rs`: `learn()` and `infer()` public methods; `action_alpha` ctor param.
+- `neuron.rs`: `learn_supervised_action` (additive accumulation); `action_alpha` field; action-aware branching inside `strengthen_connection` (static alpha for action targets, dynamic alpha for events); `learning: bool` parameter on `process_frame` / `recognize_patterns` that gates connection-learning and child-activation strengthening.
+- `column.rs`, `region.rs`: `action_alpha` propagated; `learn_action_connections` (route voter tasks per column); `collect_votes` (read-only vote sweep); `learning: bool` plumbed through `process_frame` calls.
+- `thalamus.rs`: public `collect_votes` and `learn_action_connections` (route across regions); the internal `collect_votes` renamed to `collect_level_votes` to make room. `learning: bool` plumbed into `process_level` → `get_level_tasks` → `get_level_corrections`.
 - `memory.rs`: `get_votable_entries` (enumerate the voter pool).
-- `brain-napi`: `learn`/`infer` bindings; `actionMode`/`actionAlpha` ctor options.
-- `libs/node/src/run.js`: corresponding CLI flags.
+- `brain-napi`: `learn` / `infer` bindings; `actionAlpha` ctor option.
+- `libs/node/src/run.js`: `--action-alpha` CLI flag if a harness uses it.
 
-**Decision: Roll back entirely.** The reverse-inference index from the neuron-reuse phase is the right way to make action learning targeted; this supervised shortcut was a stand-in.
+**Decision: Keep.** This is the pre-spatial-processing path for MNIST and the 10k test set. The supervised action wiring is also what hippocampus will use later.
+
+**Do not pull.** The `mnist` branch also has phase-toggle machinery (`event_processing` / `action_processing` fields, `set_processing_mode`, the frozen-context branch in `process_frame`, `replace_active_neuron`) that was built around a staged scan/predict flow. None of it is needed once `learn()` / `infer()` exist — leave those symbols on the `mnist` branch.
+
+**Signature note.** `process_frame(events, actions, rewards)` — the events/actions split comes with this project; `learn()` needs the `actions` arg. App harnesses gain `new Map()` adapter calls for the actions argument.
+
+**Reward semantics.** The supervised path uses a static `action_alpha` and additive `(strength, reward)` accumulation, so frequency dominates ratio. This changes action-wiring math from the current dynamic-smoothed path — any harness running through `learn()` will produce different numbers than reward-shaped runs. Stocks/text harnesses that don't use `learn()` are unaffected. Note in commit message.
 
 **Test plan and acceptance.**
+- **T-mnist-learn-infer** — run the MNIST harness end-to-end: train via `learn()` on a small subset, evaluate on a held-out set via `infer()`, confirm `infer()` does not modify connection state (snapshot the brain before/after infer and diff).
+- **T-stocks** — re-run; ★ change to action wiring (only affects paths that use `learn()`; reward-driven stocks harnesses should be unaffected). Update README baseline if anything shifts.
 - `cargo test` green.
-- After revert, verify `strengthen_connection`'s dynamic alpha branch is the only branch, and the action-side "never weakened" comment is restored.
-- `grep` confirms no remaining references to `learn_supervised_action`, `action_alpha`, public `collect_votes`/`learn_action_connections`, `get_votable_entries`, `learn()`/`infer()` on Brain.
 
 ---
 
@@ -155,32 +115,11 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 - `apps/mnist/encoders/pixel_channels_encoder.js` — one channel per pixel position.
 - `apps/mnist/encoders/row_channels_encoder.js` — one channel per row.
 - `apps/mnist/dump_image.js` — image → text-pipeline format.
-- `apps/mnist/jobs/test.js` — rewritten around the new encoders (~600 lines diff, but mostly rewrite-in-place).
+- `apps/mnist/jobs/test.js` — rewritten around the new encoders (~600 lines diff, but mostly rewrite-in-place). Calls `learn()` / `infer()`, so **Supervised learn / infer** must land first.
 - `apps/mnist/encoder.js` — deleted (replaced by `encoders/`).
 
-**Decision: Keep all.** These are the validation surface for spatial-processing's MNIST single-frame harness later in the roadmap. The encoders are independent of any brain-side changes being rolled back.
+**Decision: Keep all.** These are the validation surface for spatial-processing's MNIST single-frame harness later in the roadmap.
 
 **Test plan and acceptance.**
 - **T-encoder** — run each encoder against one canonical MNIST test image, confirm the output bit vector matches the expected encoding for the chosen quantization. Doesn't exercise the brain; just confirms the encoders themselves still work after the merge.
-
----
-
-## Project 9 — Debug/trace tooling and fixtures ⚫
-
-**Goal.** Investigation tooling produced during the MNIST scaling debug effort.
-
-**Surface.**
-- `apps/mnist/jobs/burst_trigger_trace.js`, `check_match_drift.js`, `classifier_voters.js`, `cold_replay_diff.js`, `connection_drift_trace.js`, `context_erosion_trace.js`, `convergence_trace.js`, `frame_activation_diff.js`, `inspect_pair.js`, `multi_digit_trace.js`, `parent_conn_dump.js`, `pattern_growth_trace.js`, `shared_pattern_trace.js`, `voter_analysis.js`.
-- `apps/mnist/jobs/_sweep.sh`, `_compare_aliased.js`, `_inspect_shared_voter.js`, `_digit5_crossclass.js`, `_digit5_overlap.js`.
-- `apps/mnist/jobs/_digit5/*.txt` (44 fixture files).
-- `apps/mnist/jobs/_img*_bits.txt`, `_img*_visual.txt`.
-- `apps/text/data/binary_*.txt`, `mnist_*.txt`, `sweep_*.txt` (one-line fixture dumps).
-- `apps/mnist/performance.md` (v1 perf notes).
-
-**Decision: Delete all.** Tooling that proves generally useful (e.g. `voter_analysis.js`-style harnesses) can be re-introduced on `dev` as a separate, intentional commit later.
-
-**Verify before deleting.** `grep` `apps/text/jobs/test.js` for any reference to the `apps/text/data/*.txt` fixtures — if it loads any of them, those specific files need to stay.
-
-**Test plan and acceptance.**
-- `cargo test` green.
-- All four stocks harnesses, text harness, and `apps/mnist/jobs/test.js` still run end-to-end (no broken references to deleted files).
+- **T-mnist-end-to-end** — run `apps/mnist/jobs/test.js`: train via `learn()`, evaluate via `infer()`, sanity-check the digit accuracy is non-random.
