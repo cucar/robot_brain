@@ -57,16 +57,9 @@ pub struct PatternMatch {
 /// by thalamus during `collect_context_ref_updates`.
 #[derive(Debug, Clone)]
 pub struct ContextRefUpdate {
-    pub update_type: ContextRefUpdateType,
     pub neuron_id: NeuronId,
     pub distance: Distance,
     pub parent_id: NeuronId,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ContextRefUpdateType {
-    Add,
-    Remove,
 }
 
 /// A context reference entry (neuron_id + distance).
@@ -592,10 +585,12 @@ impl Neuron {
 
     /// Apply a batch of context-reference updates targeting this neuron.
     /// One call per target neuron per frame (callers aggregate by target).
+    /// All updates are Adds — Remove is no longer produced upstream now that
+    /// refine_context is disabled. Cascade-delete of context refs still flows
+    /// directly via Neuron::remove_context_ref from Column::remove_context_ref_op.
     pub fn apply_context_ref_updates(&mut self, updates: &[ContextRefUpdate]) {
         for update in updates {
-            if update.update_type == ContextRefUpdateType::Add { self.add_context_ref(update.parent_id, update.distance); }
-            else { self.remove_context_ref(update.parent_id, update.distance); }
+            self.add_context_ref(update.parent_id, update.distance);
         }
     }
 
@@ -698,7 +693,7 @@ impl Neuron {
         current_frame: FrameNumber,
     ) -> RecognizeResult {
         let mut matches = Vec::new();
-        let mut context_ref_updates = Vec::new();
+        let context_ref_updates = Vec::new();
 
         // Warmup gate: skip pattern recognition until the context window has had a chance to fill up at the start of a sequence.
         // Without this, patterns whose stored contexts include entries at distances > current_frame are unfairly penalized.
@@ -729,14 +724,12 @@ impl Neuron {
                 None => continue, // try older age if there is a match
             };
 
-            // refine the context — returns cross-neuron contextRef side effects for later delivery
-            let removed_refs = self.refine_context(best.pattern_id, &best.common, &best.novel, &best.missing);
-            for entry in &best.novel {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Add, neuron_id: entry.neuron_id, distance: entry.distance, parent_id: 0 });
-            }
-            for r in &removed_refs {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Remove, neuron_id: r.neuron_id, distance: r.distance, parent_id: 0 });
-            }
+            // refine_context is intentionally disabled. Refining the matched pattern's
+            // stored context mid-training made recognition non-reproducible: training-time
+            // recognition saw "in-progress" patterns, later replays saw fully-refined ones,
+            // so trajectories diverged. Every match now uses the pattern exactly as it
+            // was created/installed. PartialMatch's common/missing/novel slices that
+            // refine_context needed are gone with it.
 
             // activate the matched pattern if it was not elected to be activated already
             let activate = !activated_pattern_ids.contains(&best.pattern_id);
@@ -798,9 +791,6 @@ impl Neuron {
                 pattern_id,
                 age,
                 score: m.score,
-                common: m.common,
-                missing: m.missing,
-                novel: m.novel,
             });
         }
         best
@@ -851,42 +841,6 @@ impl Neuron {
         candidates
     }
 
-    // ── Context refinement ───────────────────────────────────────────────────
-
-    /// Refine the context of a pattern neuron based on the observed context.
-    /// Strengthens common, adds novel, weakens/deletes missing.
-    /// Returns list of context refs that should be removed (caller delivers to target neurons).
-    fn refine_context(&mut self, pattern_id: NeuronId, common: &[ContextEntry], novel: &[ContextEntry], missing: &[ContextEntry]) -> Vec<ContextRefEntry> {
-
-        // get the routing table entry for the pattern
-        let entry = self.routing_table.get_mut(&pattern_id).expect("pattern not found in routing table.");
-
-        // strengthen common context neurons
-        for item in common { entry.context.strengthen_neuron(item.neuron_id, item.distance); }
-
-        // add novel context neurons
-        // (must drop mutable borrow of routing_table before calling add_context which also borrows it)
-        let novel_entries: Vec<(NeuronId, Distance)> = novel.iter().map(|item| (item.neuron_id, item.distance)).collect();
-        for (neuron_id, distance) in novel_entries { self.add_context(pattern_id, neuron_id, distance, 1.0); }
-
-        // weaken missing — weaken_neuron auto-deletes at zero strength
-        // collect deletions first, then update context index in a separate pass (borrow checker)
-        let mut deleted_entries: Vec<(NeuronId, Distance)> = Vec::new();
-        let entry = self.routing_table.get_mut(&pattern_id).expect("pattern not found in routing table.");
-        for item in missing {
-            let was_deleted = entry.context.weaken_neuron(item.neuron_id, item.distance);
-            if was_deleted { deleted_entries.push((item.neuron_id, item.distance)); }
-        }
-
-        let mut removed_refs = Vec::new();
-        for (neuron_id, distance) in deleted_entries {
-            if self.remove_context_index(neuron_id, distance, pattern_id) {
-                removed_refs.push(ContextRefEntry { neuron_id, distance });
-            }
-        }
-        removed_refs
-    }
-
     // ── Error correction ─────────────────────────────────────────────────────
 
     /// Install pre-created error-correction pattern neurons as children at the given ages.
@@ -905,7 +859,7 @@ impl Neuron {
 
             // also update the context reference updates to be returned for the new patterns
             for entry in &correction.context_entries {
-                context_ref_updates.push(ContextRefUpdate { update_type: ContextRefUpdateType::Add, neuron_id: entry.neuron_id, distance: entry.distance, parent_id: 0 });
+                context_ref_updates.push(ContextRefUpdate { neuron_id: entry.neuron_id, distance: entry.distance, parent_id: 0 });
             }
         }
         CorrectResult { correction_activations, context_ref_updates }
@@ -1022,14 +976,11 @@ impl Neuron {
 // ── Serialization structs ────────────────────────────────────────────────────
 
 /// Intermediate struct used during find_best_pattern_match_at_age before
-/// the full PatternMatch (with removed_refs, activate, death_frame) is assembled.
+/// the full PatternMatch is assembled.
 struct PartialMatch {
     pattern_id: NeuronId,
     age: Distance,
     score: f64,
-    common: Vec<ContextEntry>,
-    missing: Vec<ContextEntry>,
-    novel: Vec<ContextEntry>,
 }
 
 #[derive(Debug, Clone)]

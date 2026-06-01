@@ -1,10 +1,5 @@
 # MNIST Branch Reconciliation
 
-**Date:** 2026-05-29
-**Author:** Cagdas Ucar
-**Status:** Pre-implementation
-**Next:** [inference-level.md](./inference-level.md)
-
 ---
 
 ## Why
@@ -30,16 +25,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 1 — Training-degrades-accuracy regression fixes 🟢 ★
-
-**Goal.** During MNIST scaling experiments, multi-pass training was *degrading* accuracy past a certain point — patterns kept being created and replaced, recognition kept shifting under its own feet. Root-causing produced five independent algorithmic fixes that ship as one bundle because they were debugged together and partly compensate for each other.
-
-1. **`refine_context` disabled.** Refining a matched pattern's stored context mid-training made recognition non-reproducible — training-time recognition saw "in-progress" patterns, later replays saw fully-refined ones, trajectories diverged. The call is removed; the underlying method is kept (still used elsewhere).
-   - `neuron.rs::recognize_patterns` — `refine_context` call site removed; novel/missing/removed contextRef updates stop flowing for matched patterns.
-
----
-
-## Project 2 — Small correctness fixes 🟢
+## Project 1 — Small correctness fixes 🟢
 
 **Goal.** Two unrelated paper-cuts surfaced during MNIST debugging.
 
@@ -60,7 +46,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 3 — Profiling instrumentation 🟢
+## Project 2 — Profiling instrumentation 🟢
 
 **Goal.** Make MNIST training cost legible. Per-frame, per-section, per-neuron-op wall-clock measurements bubbled up through the call stack so a harness can read them off `FrameResult`.
 
@@ -80,7 +66,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 4 — Inspection API 🟢
+## Project 3 — Inspection API 🟢
 
 **Goal.** Read-only introspection for harness-side debugging: what does a neuron know, who does it connect to, what's in a pattern's stored context.
 
@@ -103,7 +89,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 5 — Static forget rate 🟡 ★
+## Project 4 — Static forget rate 🟡 ★
 
 **Goal.** The branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.** The branch also surfaced a latent bug — the original code zeroed L0's forget rate, which (since L0 owns L1 children's death timing) made L1 patterns immortal. The L0→base behaviour fix is the only piece of this project that actually ships.
 
@@ -125,7 +111,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 6 — Image implant / direct teaching 🔴
+## Project 5 — Image implant / direct teaching 🔴
 
 **Goal.** Bypass error-driven learning entirely and directly install L1 patterns from observed bit histories. The flow: for each pixel position in an image, record `(parent_bit, packed_context_bits) → next_bit_distribution`; once all positions are seen, materialize the majority transitions as L1 patterns with pre-baked stored context and outgoing prediction connections. A teaching shortcut that skipped the slow part of error-driven discovery.
 
@@ -146,7 +132,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 7 — Parallel context training 🔴
+## Project 6 — Parallel context training 🔴
 
 **Goal.** Train multiple images concurrently by giving each one its own runtime state (memory, frame counter, rewards) while the thalamus (neurons, patterns, connections) stays shared. `init_contexts(N)` allocates N slots; `set_active_context(i)` swaps the active slot's state into the brain's live fields. Was meant to amortize thalamus-side parallelism overhead across more concurrent training streams.
 
@@ -165,7 +151,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 8 — Frozen-context staged scan/predict 🔴 ★
+## Project 7 — Frozen-context staged scan/predict 🔴 ★
 
 **Goal.** Two-phase training flow: phase 1 scans the image's pixels (events fire, no action, no consensus); phase 2 predicts the digit on the now-frozen context (no event changes, action consensus runs, reward applied). Required toggling the pipeline's three sub-stages independently — event processing, action processing, and learning — and changing `process_frame` to take separate `events` and `actions` maps so phase 2 could force the action without re-driving the events.
 
@@ -197,7 +183,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 9 — Supervised action learning 🔴
+## Project 8 — Supervised action learning 🔴
 
 **Goal.** Replace the existing reward-shaped action path with direct supervised wiring: at each frame, collect every votable voter (every active non-suppressed neuron across levels), and additively accumulate `(voter → correct_action_id, distance, +reward)` connections. Frequency dominates: a voter wired to A twice and B once accumulates strength=2/reward=2 vs strength=1/reward=1, so A wins consensus by 4:1. Pairs with a static action-side learning rate (`action_alpha`) so the smoothing doesn't collapse frequency back to 1.
 
@@ -219,7 +205,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 10 — MNIST apps refactor 🟢
+## Project 9 — MNIST apps refactor 🟢
 
 **Goal.** The original `apps/mnist/encoder.js` was a single grayscale-byte encoder. The retinotopic-channels architecture in the roadmap needs per-pixel-position channels, plus row-aggregated variants for comparison, plus digit-label encoding. The branch split this into four focused encoders and rewrote `apps/mnist/jobs/test.js` around the new shape. `dump_image.js` was added to convert MNIST images into the text-pipeline format for cross-app validation.
 
@@ -239,7 +225,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 11 — Debug/trace tooling and fixtures ⚫
+## Project 10 — Debug/trace tooling and fixtures ⚫
 
 **Goal.** Investigation tooling produced during the MNIST scaling debug effort.
 
@@ -258,9 +244,3 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 **Test plan and acceptance.**
 - `cargo test` green.
 - All four stocks harnesses, text harness, and `apps/mnist/jobs/test.js` still run end-to-end (no broken references to deleted files).
-
----
-
-## After all projects land
-
-- **Delete the `mnist` branch.** Locally and on origin. The merge is complete; the branch has no further purpose.

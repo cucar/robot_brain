@@ -56,33 +56,6 @@ impl Context {
         self.entries.get(&neuron_id).and_then(|dm| dm.get(&distance)).map(|&strength| ContextEntry { neuron_id, distance, strength })
     }
 
-    /// Increment the strength of an existing entry by 1.
-    /// Panics if the entry does not exist.
-    pub fn strengthen_neuron(&mut self, neuron_id: NeuronId, distance: Distance) {
-        let distance_map = self.entries.get_mut(&neuron_id).expect("Context entry not found for strengthening");
-        let strength = distance_map.get_mut(&distance).expect("Context entry not found for strengthening");
-        *strength += 1.0;
-    }
-
-    /// Decrement the strength of an existing entry by 1.
-    /// Auto-deletes the entry when strength reaches zero or below.
-    /// Returns true if the entry was deleted, false if only weakened.
-    pub fn weaken_neuron(&mut self, neuron_id: NeuronId, distance: Distance) -> bool {
-        let distance_map = self.entries.get_mut(&neuron_id).expect("Context entry not found for weakening");
-        let strength = distance_map.get(&distance).expect("Context entry not found for weakening");
-        let new_strength = strength - 1.0;
-        if new_strength <= 0.0 {
-            distance_map.remove(&distance);
-            if distance_map.is_empty() {
-                self.entries.remove(&neuron_id);
-            }
-            true
-        } else {
-            distance_map.insert(distance, new_strength);
-            false
-        }
-    }
-
     /// Remove an entry explicitly.
     pub fn remove(&mut self, neuron_id: NeuronId, distance: Distance) {
         let distance_map = self.entries.get_mut(&neuron_id).expect("Context entry not found for deletion");
@@ -230,33 +203,6 @@ mod tests {
         let mut ctx = Context::new();
         ctx.add_neuron(1, 2, 1.0);
         ctx.add_neuron(1, 2, 1.0);
-    }
-
-    #[test]
-    fn test_strengthen() {
-        let mut ctx = Context::new();
-        ctx.add_neuron(1, 2, 1.0);
-        ctx.strengthen_neuron(1, 2);
-        assert_eq!(ctx.find(1, 2).unwrap().strength, 2.0);
-    }
-
-    #[test]
-    fn test_weaken_reduces_strength() {
-        let mut ctx = Context::new();
-        ctx.add_neuron(1, 2, 3.0);
-        let deleted = ctx.weaken_neuron(1, 2);
-        assert!(!deleted);
-        assert_eq!(ctx.find(1, 2).unwrap().strength, 2.0);
-    }
-
-    #[test]
-    fn test_weaken_deletes_at_zero() {
-        let mut ctx = Context::new();
-        ctx.add_neuron(1, 2, 1.0);
-        let deleted = ctx.weaken_neuron(1, 2);
-        assert!(deleted);
-        assert_eq!(ctx.size(), 0);
-        assert!(!ctx.has_key(1, 2));
     }
 
     #[test]
