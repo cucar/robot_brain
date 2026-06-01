@@ -27,28 +27,6 @@ Projects on `mnist` that are not listed below are **not being pulled** — they 
 
 ---
 
-## Static forget rate 🟡 ★
-
-**Goal.** The branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.** The branch also surfaced a latent bug — the original code zeroed L0's forget rate, which (since L0 owns L1 children's death timing) made L1 patterns immortal. The L0→base behaviour fix is the only piece of this project that actually ships.
-
-**Surface.**
-- `types.rs`: `LevelDecayMode` enum — delete.
-- `thalamus.rs`: `level_decay_mode` field, ctor param, `get_base_forget_rate`/`get_level_decay_mode` accessors — delete. `effective_forget_rate` collapses to `base_rate` for every level (matches what `LevelDecayMode::Static` did). **Keep `level.max(1)`-equivalent behaviour** — L0 now returns base, which is the L1-decay fix.
-- `brain.rs`, `backup.rs`, `column.rs`, `region.rs`: drop the mode parameter from ctors.
-- `brain-napi/src/lib.rs`, `index.d.ts`: drop `levelDecay` ctor option and enum parsing.
-- `libs/node/src/run.js`: drop `--level-decay` CLI arg.
-
-**Decision: Collapse to single static rate.** Document the L1-decay behaviour change explicitly in the commit message so future readers know L1 patterns decay where they didn't before.
-
-**Test plan and acceptance.**
-- **T-decay-1** — confirm `effective_forget_rate(base, ctx, level)` returns `base` for `level ∈ {0, 1, 2, 3, 4}`.
-- **T-decay-2** — long run of `synthetic-extended-test.js`. Inspect final neuron count by level. Pre-fix, deep-level counts grow unboundedly; post-fix they should plateau. Qualitative — no precise threshold.
-- **T-stocks** — re-run stocks harnesses; this is a ★ shift and the README baseline numbers will move.
-- `cargo test` green.
-- `LevelDecayMode` is gone from the codebase; no per-level decay scaling logic remains.
-
----
-
 ## Supervised learn / inference-only infer 🟢 ★
 
 **Goal.** Two entry points on Brain that the MNIST harness (and later the hippocampus path) needs:

@@ -155,14 +155,14 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $181297.65 | ROI: +1208.65%, +0.177019%/frame, Sharpe: 0.52 (1185 trades)
+   Episode 1: $190727.88 | ROI: +1271.52%, +0.180252%/frame, Sharpe: 0.53 (1186 trades)
    Episode 2: $5377045.03 | ROI: +35846.97%, +0.405540%/frame, Sharpe: 1.29 (1216 trades)
    Episode 3: $233710806.76 | ROI: +1558072.05%, +0.666160%/frame, Sharpe: 2.11 (1396 trades)
-   Episode 4: $4199789910.13 | ROI: +27998599.40%, +0.866352%/frame, Sharpe: 2.79 (1672 trades)
-   Episode 5: $64755192961.94 | ROI: +431701286.41%, +1.056302%/frame, Sharpe: 3.46 (1805 trades)
+   Episode 4: $4505659149.94 | ROI: +30037727.67%, +0.871228%/frame, Sharpe: 2.81 (1674 trades)
+   Episode 5: $64183173731.74 | ROI: +427887824.88%, +1.055685%/frame, Sharpe: 3.46 (1804 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 51.07%
+   Episode 1: 51.10%
    Episode 2: 52.99%
    Episode 3: 56.31%
    Episode 4: 57.15%
@@ -176,7 +176,7 @@ The brain memorizes a repeating stock price sequence across 5 episodes, reaching
 Run the stock test with customized hyperparameters for sequence memorization:
 
 ```bash
-node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY --context-length 3 --forget-rate 0.001 --error-mode static --error-threshold 0.3
+node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY --context-length 3 --forget-rate 0.0005 --error-mode static --error-threshold 0.3
 ```
 
 **Expected output:**
@@ -185,27 +185,27 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY -
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $1220731308163491328.00
-   Average per Episode: $244146261632698272.00
-   Average ROI: +1627641744217988.50%
-   Average Per-Frame ROI: +1.596940%
-   Average Sharpe Ratio: 11.02
-   Total Trades: 8796
-   Average Trades per Episode: 1759.2
+   Total Net Profit: $1888559487498760192.00
+   Average per Episode: $377711897499752064.00
+   Average ROI: +2518079316665013.50%
+   Average Per-Frame ROI: +1.616917%
+   Average Sharpe Ratio: 11.33
+   Total Trades: 8831
+   Average Trades per Episode: 1766.2
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $65555.57 | ROI: +437.04%, +0.115672%/frame, Sharpe: 0.54 (1693 trades)
-   Episode 2: $20306746243103.45 | ROI: +135378308287.36%, +1.456598%/frame, Sharpe: 9.91 (1822 trades)
-   Episode 3: $135856376660391200.00 | ROI: +905709177735941.38%, +2.073092%/frame, Sharpe: 14.21 (1758 trades)
-   Episode 4: $468398088145470976.00 | ROI: +3122653920969806.00%, +2.160019%/frame, Sharpe: 15.11 (1769 trades)
-   Episode 5: $616456536611320576.00 | ROI: +4109710244075470.50%, +2.179320%/frame, Sharpe: 15.34 (1754 trades)
+   Episode 1: $44236.05 | ROI: +294.91%, +0.094507%/frame, Sharpe: 0.42 (1702 trades)
+   Episode 2: $24806588005874.30 | ROI: +165377253372.50%, +1.470565%/frame, Sharpe: 10.09 (1849 trades)
+   Episode 3: $278868271088285152.00 | ROI: +1859121807255234.50%, +2.123590%/frame, Sharpe: 14.80 (1765 trades)
+   Episode 4: $762538157675950976.00 | ROI: +5083587717839673.00%, +2.194266%/frame, Sharpe: 15.62 (1759 trades)
+   Episode 5: $847128252146474112.00 | ROI: +5647521680976494.00%, +2.201660%/frame, Sharpe: 15.70 (1756 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 51.80%
-   Episode 2: 94.55%
-   Episode 3: 99.82%
-   Episode 4: 99.84%
-   Episode 5: 99.84%
+   Episode 1: 51.84%
+   Episode 2: 96.99%
+   Episode 3: 99.95%
+   Episode 4: 99.95%
+   Episode 5: 99.95%
 ```
 
 The brain goes from 50% accuracy (random) to 99% in 5 episodes on 3 stocks × 1400 frames of real market data. The low forget rate (0.001) allows patterns to survive the full sequence, and the short context (3 frames) reduces noise from coincidental connections.

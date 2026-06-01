@@ -254,7 +254,7 @@ impl Brain {
     /// * `error_correction_mode` — 'static' | 'conservative' | 'neutral' | 'aggressive'
     /// * `error_correction_threshold` — fixed threshold when mode='static'; warmup fallback
     /// * `merge_threshold` — percentage of matched entries needed for context merge
-    /// * `pattern_forget_rate` — level-1 forget rate; deeper levels decay by contextLength per level
+    /// * `pattern_forget_rate` — forget rate applied uniformly to every pattern neuron, all levels
     /// * `regions` — R — number of regions (1 for single-process)
     /// * `columns` — C — number of columns per region (1 for single-thread)
     /// * `debug` — enable verbose logging
@@ -276,7 +276,7 @@ impl Brain {
             rewards: Vec::new(),
             frame_number: 0,
             diagnostics: Diagnostics::new(),
-            backup: Backup::new(pattern_forget_rate, context_length),
+            backup: Backup::new(pattern_forget_rate),
             thalamus: Thalamus::new(
                 debug,
                 pattern_forget_rate,

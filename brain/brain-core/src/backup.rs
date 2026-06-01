@@ -23,7 +23,7 @@ use crate::neuron::{
     SerializedChild, SerializedConnection, SerializedContextRef,
     SerializedErrorStats, SerializedNeuron,
 };
-use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry, Thalamus};
+use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry};
 use crate::types::{
     ChannelId, ContextEntry, Coordinate, DimensionId, Distance,
     Level, NeuronId, NeuronType,
@@ -34,20 +34,16 @@ use crate::types::{
 const MAX_BACKUPS: usize = 10;
 
 pub struct Backup {
-    /// Brain-wide base forget rate — needed to recompute per-level rates on load
-    /// since the snapshot doesn't carry them.
+    /// Brain-wide forget rate — applied uniformly to every pattern neuron on
+    /// load since the snapshot doesn't carry per-neuron rates.
     pattern_forget_rate: f64,
-
-    /// Context length — needed alongside pattern_forget_rate for the per-level
-    /// effective forget rate calculation.
-    context_length: u32,
 }
 
 impl Backup {
-    /// Create a new Backup instance with the brain-wide hyperparameters needed
-    /// to compute per-level forget rates when loading neurons from disk.
-    pub fn new(pattern_forget_rate: f64, context_length: u32) -> Self {
-        Self { pattern_forget_rate, context_length }
+    /// Create a new Backup instance carrying the brain-wide forget rate that
+    /// will be assigned to every pattern neuron when loading from disk.
+    pub fn new(pattern_forget_rate: f64) -> Self {
+        Self { pattern_forget_rate }
     }
 
     // ── Save ────────────────────────────────────────────────────────────────
@@ -139,12 +135,9 @@ impl Backup {
             if row.len() < 2 { continue; }
             let id: NeuronId = row[0].parse().map_err(|e| format!("Bad neuron id: {}", e))?;
             let level: Level = row[1].parse().map_err(|e| format!("Bad level: {}", e))?;
-            let forget_rate = Thalamus::effective_forget_rate(
-                self.pattern_forget_rate, self.context_length, level,
-            );
             neurons.insert(id, SerializedNeuron {
                 id,
-                pattern_forget_rate: forget_rate,
+                pattern_forget_rate: self.pattern_forget_rate,
                 connections: Vec::new(),
                 children: Vec::new(),
                 context_refs: Vec::new(),
@@ -689,7 +682,7 @@ mod tests {
         fs::remove_dir_all(&dir).ok(); // clean from previous runs
         fs::create_dir_all(&dir).unwrap();
 
-        let backup = Backup::new(0.01, 10);
+        let backup = Backup::new(0.01);
 
         // Build a minimal snapshot
         let snapshot = Snapshot {

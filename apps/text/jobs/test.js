@@ -183,9 +183,9 @@ export default class TextTestJob extends Job {
 		}
 		if (!anyFrames) return false;
 
-		// Text doesn't reward (no environment feedback), so rewards stays empty. We only
-		// need `frame` from the return — no actions to dispatch since there's no trader.
-		const { frame } = this.brain.processFrame(inputs, rewards);
+		// Text doesn't reward (no environment feedback), so rewards stays empty. Pass
+		// the full result down to the renderer — it pulls inferences/votes/frame as needed.
+		const frameResult = this.brain.processFrame(inputs, rewards);
 
 		// Host-side rendering: emits the per-frame summary line / vote debug / start-of-frame
 		// info per the flags the host owns. Text channel has no app-layer tail to append.

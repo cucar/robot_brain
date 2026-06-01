@@ -309,16 +309,6 @@ impl Thalamus {
         }
     }
 
-    // ── Static helpers ──────────────────────────────────────────────────────
-
-    /// Effective forget rate for a neuron at a given level.
-    /// Level 0 (sensory) is exempt from forgetting; level N decays by context_length per level
-    /// relative to the level-1 base rate, matching the geometric drop in observation frequency.
-    pub fn effective_forget_rate(base_rate: f64, context_length: u32, level: Level) -> f64 {
-        if level == 0 { return 0.0; }
-        base_rate / (context_length as f64).powi((level - 1) as i32)
-    }
-
     // ── Neuron coordinate lookup ────────────────────────────────────────────
 
     /// Get or create a sensory neuron ID from a frame point. coordinate form: {dim_id, bucket_id}
@@ -415,14 +405,13 @@ impl Thalamus {
         // allocate id and build the spec for Column.create_neurons
         let id = self.next_neuron_id;
         self.next_neuron_id += 1;
-        let forget_rate = Self::effective_forget_rate(self.pattern_forget_rate, self.context_length, level);
 
         // register metadata centrally (Neuron construction deferred to create_neurons)
         self.neuron_levels.insert(id, level);
         self.neuron_parents.insert(id, parent_id);
         self.increment_level_count(level);
 
-        PatternNeuronSpec { id, forget_rate, connections }
+        PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
 
     // ── Neuron metadata getters ─────────────────────────────────────────────
@@ -1508,18 +1497,6 @@ mod tests {
 
     fn make_thalamus() -> Thalamus {
         Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 1, 1)
-    }
-
-    #[test]
-    fn test_effective_forget_rate() {
-        // level 0: always 0
-        assert_eq!(Thalamus::effective_forget_rate(0.1, 4, 0), 0.0);
-        // level 1: base rate
-        assert!((Thalamus::effective_forget_rate(0.1, 4, 1) - 0.1).abs() < 1e-10);
-        // level 2: base / context_length
-        assert!((Thalamus::effective_forget_rate(0.1, 4, 2) - 0.025).abs() < 1e-10);
-        // level 3: base / context_length^2
-        assert!((Thalamus::effective_forget_rate(0.1, 4, 3) - 0.00625).abs() < 1e-10);
     }
 
     #[test]
