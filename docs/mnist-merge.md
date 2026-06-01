@@ -21,32 +21,11 @@ Changes on `mnist` group into **coherent projects**. Each project is a single co
 
 Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ delete · ★ stocks-affecting.
 
-**Workflow.** work on `dev` and pull each subsequent project's changes across from `mnist` one commit at a time, testing as you go. After all projects land, there is one **post-merge task** (delete the `mnist` branch).
+**Workflow.** work on `main` and pull each subsequent project's changes across from `mnist` one commit at a time, testing as you go. After all projects land, there is one **post-merge task** (delete the `mnist` branch).
 
 ---
 
-## Project 1 — Small correctness fixes 🟢
-
-**Goal.** Two unrelated paper-cuts surfaced during MNIST debugging.
-
-**Fixes.**
-
-1. **Idempotent `add_context`.** The `(parent, age)` dedupe path in pattern creation could re-install the same context entry, triggering a `panic!`. `add_context` now strengthens on duplicate instead.
-   - `neuron.rs::add_context`.
-
-2. **`activation_strength` reset on restore.** Cross-episode strength accumulation could leave patterns with very high activation_strength values. When forget_rate is 0 those values made patterns immortal across snapshot/restore. On restore, clamp strength to 1.0 if it was above. Pattern stays alive (>0); siblings get equal footing.
-   - `column.rs::restore` (in the pattern-iteration loop).
-
-**Decision: Keep both.**
-
-**Test plan and acceptance.**
-- **T-restore** — train a small brain ~100 frames, snapshot, restore, train another 100 frames. Pass: post-restore behaviour matches never-restored baseline. The clamp is the change to verify.
-- **T-dedupe** — covered transitively by stocks/text runs (those exercise pattern creation). No separate test needed unless something explicitly regresses.
-- `cargo test` green.
-
----
-
-## Project 2 — Profiling instrumentation 🟢
+## Project 1 — Profiling instrumentation 🟢
 
 **Goal.** Make MNIST training cost legible. Per-frame, per-section, per-neuron-op wall-clock measurements bubbled up through the call stack so a harness can read them off `FrameResult`.
 
@@ -66,7 +45,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 3 — Inspection API 🟢
+## Project 2 — Inspection API 🟢
 
 **Goal.** Read-only introspection for harness-side debugging: what does a neuron know, who does it connect to, what's in a pattern's stored context.
 
@@ -89,7 +68,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 4 — Static forget rate 🟡 ★
+## Project 3 — Static forget rate 🟡 ★
 
 **Goal.** The branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.** The branch also surfaced a latent bug — the original code zeroed L0's forget rate, which (since L0 owns L1 children's death timing) made L1 patterns immortal. The L0→base behaviour fix is the only piece of this project that actually ships.
 
@@ -111,7 +90,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 5 — Image implant / direct teaching 🔴
+## Project 4 — Image implant / direct teaching 🔴
 
 **Goal.** Bypass error-driven learning entirely and directly install L1 patterns from observed bit histories. The flow: for each pixel position in an image, record `(parent_bit, packed_context_bits) → next_bit_distribution`; once all positions are seen, materialize the majority transitions as L1 patterns with pre-baked stored context and outgoing prediction connections. A teaching shortcut that skipped the slow part of error-driven discovery.
 
@@ -132,7 +111,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 6 — Parallel context training 🔴
+## Project 5 — Parallel context training 🔴
 
 **Goal.** Train multiple images concurrently by giving each one its own runtime state (memory, frame counter, rewards) while the thalamus (neurons, patterns, connections) stays shared. `init_contexts(N)` allocates N slots; `set_active_context(i)` swaps the active slot's state into the brain's live fields. Was meant to amortize thalamus-side parallelism overhead across more concurrent training streams.
 
@@ -151,7 +130,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 7 — Frozen-context staged scan/predict 🔴 ★
+## Project 6 — Frozen-context staged scan/predict 🔴 ★
 
 **Goal.** Two-phase training flow: phase 1 scans the image's pixels (events fire, no action, no consensus); phase 2 predicts the digit on the now-frozen context (no event changes, action consensus runs, reward applied). Required toggling the pipeline's three sub-stages independently — event processing, action processing, and learning — and changing `process_frame` to take separate `events` and `actions` maps so phase 2 could force the action without re-driving the events.
 
@@ -183,7 +162,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 8 — Supervised action learning 🔴
+## Project 7 — Supervised action learning 🔴
 
 **Goal.** Replace the existing reward-shaped action path with direct supervised wiring: at each frame, collect every votable voter (every active non-suppressed neuron across levels), and additively accumulate `(voter → correct_action_id, distance, +reward)` connections. Frequency dominates: a voter wired to A twice and B once accumulates strength=2/reward=2 vs strength=1/reward=1, so A wins consensus by 4:1. Pairs with a static action-side learning rate (`action_alpha`) so the smoothing doesn't collapse frequency back to 1.
 
@@ -205,7 +184,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 9 — MNIST apps refactor 🟢
+## Project 8 — MNIST apps refactor 🟢
 
 **Goal.** The original `apps/mnist/encoder.js` was a single grayscale-byte encoder. The retinotopic-channels architecture in the roadmap needs per-pixel-position channels, plus row-aggregated variants for comparison, plus digit-label encoding. The branch split this into four focused encoders and rewrote `apps/mnist/jobs/test.js` around the new shape. `dump_image.js` was added to convert MNIST images into the text-pipeline format for cross-app validation.
 
@@ -225,7 +204,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 10 — Debug/trace tooling and fixtures ⚫
+## Project 9 — Debug/trace tooling and fixtures ⚫
 
 **Goal.** Investigation tooling produced during the MNIST scaling debug effort.
 

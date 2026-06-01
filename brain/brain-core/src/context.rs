@@ -56,6 +56,14 @@ impl Context {
         self.entries.get(&neuron_id).and_then(|dm| dm.get(&distance)).map(|&strength| ContextEntry { neuron_id, distance, strength })
     }
 
+    /// Increment the strength of an existing entry by 1. Panics if the
+    /// entry does not exist — callers must check `has_key` first.
+    pub fn strengthen_neuron(&mut self, neuron_id: NeuronId, distance: Distance) {
+        let distance_map = self.entries.get_mut(&neuron_id).expect("Context entry not found for strengthening");
+        let strength = distance_map.get_mut(&distance).expect("Context entry not found for strengthening");
+        *strength += 1.0;
+    }
+
     /// Remove an entry explicitly.
     pub fn remove(&mut self, neuron_id: NeuronId, distance: Distance) {
         let distance_map = self.entries.get_mut(&neuron_id).expect("Context entry not found for deletion");

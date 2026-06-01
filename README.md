@@ -208,7 +208,7 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY -
    Episode 5: 99.84%
 ```
 
-The brain goes from 50% accuracy (random) to 91% in 5 episodes on 3 stocks × 2505 frames of real market data. With more episodes it continues climbing toward 99%+. The low forget rate (0.001) allows patterns to survive the full 2505-frame sequence, and the short context (3 frames) reduces noise from coincidental connections.
+The brain goes from 50% accuracy (random) to 99% in 5 episodes on 3 stocks × 1400 frames of real market data. The low forget rate (0.001) allows patterns to survive the full sequence, and the short context (3 frames) reduces noise from coincidental connections.
 
 ## Demo 7: Text Sequence Learning
 

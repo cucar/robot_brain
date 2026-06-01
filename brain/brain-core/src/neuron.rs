@@ -484,7 +484,14 @@ impl Neuron {
         // add the neuron to the pattern context at the given distance
         let entry = self.routing_table.get_mut(&pattern_id)
             .unwrap_or_else(|| panic!("add_context: pattern not found in routing table: {}", pattern_id));
-        entry.context.add_neuron(neuron_id, distance, strength);
+
+        // when the (parent, age) dedupe reuses an existing pattern, the same context entry may be re-installed.
+        // treat duplicates as a strengthen operation rather than a panic.
+        if entry.context.has_key(neuron_id, distance) {
+            entry.context.strengthen_neuron(neuron_id, distance);
+        } else {
+            entry.context.add_neuron(neuron_id, distance, strength);
+        }
 
         // add the neuron to the context index so that we can search efficiently
         self.add_context_index(neuron_id, distance, pattern_id);
