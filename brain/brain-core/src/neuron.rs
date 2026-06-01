@@ -642,6 +642,21 @@ impl Neuron {
         &self.routing_table
     }
 
+    /// Inspection: flatten this neuron's outgoing connections into
+    /// (distance, target_neuron_id, strength, reward) tuples. Distance is
+    /// the slot index in the connections Vec. Used by the diagnostic API
+    /// to dump connection state for tipping-point analysis.
+    pub fn get_connections(&self) -> Vec<(Distance, NeuronId, f64, f64)> {
+        let mut out = Vec::new();
+        for (idx, dist_map) in self.connections.iter().enumerate() {
+            let dist = idx as Distance;
+            for (&target_id, conn) in dist_map {
+                out.push((dist, target_id, conn.strength, conn.reward));
+            }
+        }
+        out
+    }
+
     /// Mutable access to the routing table (for Column restore — sets last_activation_frame).
     pub fn get_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, RoutingEntry> {
         &mut self.routing_table

@@ -192,7 +192,7 @@ impl JsBrain {
     ///
     /// inputs: Map<channelId, Map<dimId, scalar>>
     /// rewards: Map<channelId, reward>
-    /// Returns: { inferences: Map<channelId, [...]>, frame: { elapsed, voteDebug } }
+    /// Returns: { inferences: Map<channelId, [...]>, votes: Array<...>, frame: { elapsed, timings } }
     #[napi(js_name = "processFrame")]
     pub fn process_frame(&self, env: Env, inputs: JsObject, rewards: JsObject) -> Result<JsObject> {
         // Marshal inputs: Map<number, Map<number, number>> → FxHashMap
@@ -204,6 +204,80 @@ impl JsBrain {
 
         // Marshal result back to JS
         build_frame_result(&env, &frame_result)
+    }
+
+    /// Get active neurons in context with their levels.
+    /// Returns an array of { neuronId, level, suppressed } objects.
+    /// suppressed=true means the neuron activated a higher-level pattern and
+    /// should not be counted as an independent voter.
+    #[napi(js_name = "getActiveNeurons")]
+    pub fn get_active_neurons(&self, env: Env) -> Result<JsObject> {
+        let brain = self.inner.borrow();
+        let snapshot = brain.get_context_snapshot();
+        let mut arr = env.create_array_with_length(snapshot.len())?;
+        for (i, (neuron_id, _frame, level, state)) in snapshot.iter().enumerate() {
+            let mut obj = env.create_object()?;
+            obj.set_named_property("neuronId", env.create_uint32(*neuron_id as u32)?)?;
+            obj.set_named_property("level", env.create_uint32(*level as u32)?)?;
+            obj.set_named_property("suppressed", env.get_boolean(state.activated_pattern_id.is_some())?)?;
+            arr.set_element(i as u32, obj)?;
+        }
+        Ok(arr)
+    }
+
+    /// Inspect one neuron: returns { neuronId, level, parentId | null,
+    /// context: [{ neuronId, distance, strength }, ...] }.
+    /// Context entries come from the parent neuron's routing-table entry
+    /// for this child pattern. Level-0 sensory neurons have parent_id=null
+    /// and empty context.
+    #[napi(js_name = "inspectNeuron")]
+    pub fn inspect_neuron(&self, env: Env, neuron_id: u32) -> Result<JsObject> {
+        let brain = self.inner.borrow();
+        let info = brain.inspect_neuron(neuron_id as u64);
+        let mut obj = env.create_object()?;
+        obj.set_named_property("neuronId", env.create_uint32(info.neuron_id as u32)?)?;
+        obj.set_named_property("level", env.create_uint32(info.level as u32)?)?;
+        match info.parent_id {
+            Some(p) => obj.set_named_property("parentId", env.create_uint32(p as u32)?)?,
+            None => obj.set_named_property("parentId", env.get_null()?)?,
+        }
+        let mut ctx_arr = env.create_array_with_length(info.context.len())?;
+        for (i, (nid, dist, strength)) in info.context.iter().enumerate() {
+            let mut e = env.create_object()?;
+            e.set_named_property("neuronId", env.create_uint32(*nid as u32)?)?;
+            e.set_named_property("distance", env.create_uint32(*dist as u32)?)?;
+            e.set_named_property("strength", env.create_double(*strength)?)?;
+            ctx_arr.set_element(i as u32, e)?;
+        }
+        obj.set_named_property("context", ctx_arr)?;
+        Ok(obj)
+    }
+
+    /// Dump a neuron's outgoing connections.
+    /// Returns [{ distance, targetId, strength, reward }, ...].
+    #[napi(js_name = "getNeuronConnections")]
+    pub fn get_neuron_connections(&self, env: Env, neuron_id: u32) -> Result<JsObject> {
+        let brain = self.inner.borrow();
+        let conns = brain.get_neuron_connections(neuron_id as u64);
+        let mut arr = env.create_array_with_length(conns.len())?;
+        for (i, (dist, target, strength, reward)) in conns.iter().enumerate() {
+            let mut obj = env.create_object()?;
+            obj.set_named_property("distance", env.create_uint32(*dist as u32)?)?;
+            obj.set_named_property("targetId", env.create_uint32(*target as u32)?)?;
+            obj.set_named_property("strength", env.create_double(*strength)?)?;
+            obj.set_named_property("reward", env.create_double(*reward)?)?;
+            arr.set_element(i as u32, obj)?;
+        }
+        Ok(arr)
+    }
+
+    /// Toggle per-vote resolution on processFrame's `votes` payload. Off by
+    /// default — per-vote resolution allocates strings and walks parent
+    /// chains, so training runs that don't consume votes pay nothing.
+    #[napi(js_name = "setEmitVotes")]
+    pub fn set_emit_votes(&self, enabled: bool) -> Result<()> {
+        self.inner.borrow_mut().set_emit_votes(enabled);
+        Ok(())
     }
 
     /// Reset brain memory state for a clean episode start.
@@ -377,7 +451,7 @@ impl JsBrain {
 // ── Helper: build processFrame result ───────────────────────────────────────
 
 /// Convert FrameResult into the JS return shape:
-/// { inferences: Map<channelId, [...]>, frame: { elapsed, voteDebug } }
+/// { inferences: Map<channelId, [...]>, votes: Array<...>, frame: { elapsed, timings } }
 fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
     let mut obj = env.create_object()?;
 
@@ -394,8 +468,9 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
             };
             inf_obj.set_named_property("kind", env.create_string(kind_str)?)?;
 
-            // winner: { value, strength, score }
+            // winner: { neuronId, value, strength, score }
             let mut winner_obj = env.create_object()?;
+            winner_obj.set_named_property("neuronId", env.create_uint32(dim.winner.neuron_id as u32)?)?;
             match dim.winner.value {
                 Some(v) => winner_obj.set_named_property("value", env.create_double(v)?)?,
                 None => winner_obj.set_named_property("value", env.get_null()?)?,
@@ -417,22 +492,33 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
     let inferences_map = create_js_map(env, inference_entries)?;
     obj.set_named_property("inferences", inferences_map)?;
 
-    // frame: { elapsed, voteDebug }
+    // votes: Array<{voterId, voterLabel, targetId, targetType, channelId, dimId, value, distance, strength, reward}>
+    let mut votes_arr = env.create_array_with_length(result.votes.len())?;
+    for (i, v) in result.votes.iter().enumerate() {
+        let mut v_obj = env.create_object()?;
+        v_obj.set_named_property("voterId", env.create_uint32(v.voter_id as u32)?)?;
+        v_obj.set_named_property("voterLabel", env.create_string(&v.voter_label)?)?;
+        v_obj.set_named_property("voterLevel", env.create_uint32(v.voter_level as u32)?)?;
+        v_obj.set_named_property("targetId", env.create_uint32(v.target_id as u32)?)?;
+        let kind_str = match v.target_type {
+            NeuronType::Event => "event",
+            NeuronType::Action => "action",
+        };
+        v_obj.set_named_property("targetType", env.create_string(kind_str)?)?;
+        v_obj.set_named_property("channelId", env.create_uint32(v.channel_id as u32)?)?;
+        v_obj.set_named_property("dimId", env.create_uint32(v.dim_id as u32)?)?;
+        v_obj.set_named_property("value", env.create_int32(v.value)?)?;
+        v_obj.set_named_property("distance", env.create_uint32(v.distance as u32)?)?;
+        v_obj.set_named_property("strength", env.create_double(v.strength)?)?;
+        v_obj.set_named_property("reward", env.create_double(v.reward)?)?;
+        votes_arr.set_element(i as u32, v_obj)?;
+    }
+    obj.set_named_property("votes", votes_arr)?;
+
+    // frame: { elapsed, timings }
     let mut frame_obj = env.create_object()?;
     // elapsed in milliseconds (Rust stores seconds)
     frame_obj.set_named_property("elapsed", env.create_double(result.elapsed * 1000.0)?)?;
-
-    match &result.vote_debug {
-        Some(_debug) => {
-            // voteDebug is expensive to marshal and only used for --debug rendering.
-            // For now, pass null — the debug renderer will get a null check.
-            // Full marshalling can be added when needed.
-            frame_obj.set_named_property("voteDebug", env.get_null()?)?;
-        }
-        None => {
-            frame_obj.set_named_property("voteDebug", env.get_null()?)?;
-        }
-    }
 
     // timings: per-section wall-clock (seconds). Nested under `frame` alongside elapsed.
     let t = &result.timings;

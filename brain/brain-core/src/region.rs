@@ -277,6 +277,21 @@ impl Region {
         DeleteResult { outbound_ops, deleted_ids, newly_deletable_ids }
     }
 
+    // ── Inspection ─────────────────────────────────────────────────────────
+
+    /// Look up the stored context entries for a child pattern on a given parent.
+    /// Returns None if the parent doesn't live in this region or has no such child.
+    pub fn get_child_context_entries(&self, parent_id: NeuronId, child_id: NeuronId) -> Option<Vec<(NeuronId, Distance, f64)>> {
+        let c = self.route_neuron(parent_id);
+        self.columns[c].get_child_context_entries(parent_id, child_id)
+    }
+
+    /// Dump a neuron's outgoing connections (distance, target, strength, reward).
+    pub fn get_neuron_connections(&self, neuron_id: NeuronId) -> Option<Vec<(Distance, NeuronId, f64, f64)>> {
+        let c = self.route_neuron(neuron_id);
+        self.columns[c].get_neuron_connections(neuron_id)
+    }
+
     // ── Snapshot / restore ─────────────────────────────────────────────────
 
     /// Collect serialized {id, neuron} entries from all columns for snapshotting.

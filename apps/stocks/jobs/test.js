@@ -346,7 +346,7 @@ export default class StockTestJob extends Job {
 		}
 		if (!anyFrames) return false;
 
-		let frame;
+		let frameResult;
 		if (randomBaseline) {
 			// Skip the brain entirely. 50% chance to be fully out; otherwise pick one
 			// trader uniformly to OWN. No reward collection, no processFrame, no encode —
@@ -368,10 +368,9 @@ export default class StockTestJob extends Job {
 			// Brain returns inferences keyed by channelId plus per-frame diagnostic data
 			// (timing, optional vote debug). Destructure so we can pass `frame` straight
 			// to the renderer — no separate getter call into the brain.
-			const result = this.brain.processFrame(inputs, rewards);
-			frame = result.frame;
+			frameResult = this.brain.processFrame(inputs, rewards);
 			for (const trader of this.traders)
-				trader.apply(result.inferences.get(trader.channelId) ?? []);
+				trader.apply(frameResult.inferences.get(trader.channelId) ?? []);
 		}
 
 		// Coordinated portfolio execution: ranks OWN actions, sizes positions, and runs
@@ -380,7 +379,7 @@ export default class StockTestJob extends Job {
 
 		// Host-side rendering happens here (after portfolio execution so the tail
 		// reflects the positions the trader just took).
-		this.renderFrame(frame);
+		this.renderFrame(frameResult);
 
 		// Step-debug pause between frames (no-op unless --wait is set).
 		await this.waitForUser('Press Enter to continue to next frame');

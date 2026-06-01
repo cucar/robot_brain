@@ -157,9 +157,9 @@ export default class SyntheticCycleTest extends Job {
 
 		// Brain returns inferences keyed by channelId plus per-frame diagnostic data;
 		// `frame` flows straight to the renderer.
-		const { inferences, frame } = this.brain.processFrame(inputs, rewards);
+		const frameResult = this.brain.processFrame(inputs, rewards);
 		for (const trader of this.traders)
-			trader.apply(inferences.get(trader.channelId) ?? []);
+			trader.apply(frameResult.inferences.get(trader.channelId) ?? []);
 
 		// Coordinated portfolio execution: ranks OWN actions, sizes positions, runs
 		// sells-then-buys so cash is freed before it's spent.
@@ -167,7 +167,7 @@ export default class SyntheticCycleTest extends Job {
 
 		// Host-side rendering happens here (after portfolio execution so the tail
 		// reflects the positions the traders just took).
-		this.renderFrame(frame);
+		this.renderFrame(frameResult);
 
 		// Step-debug pause between frames (no-op unless --wait is set).
 		await this.waitForUser('Press Enter to continue to next frame');

@@ -189,7 +189,7 @@ export default class TextTestJob extends Job {
 
 		// Host-side rendering: emits the per-frame summary line / vote debug / start-of-frame
 		// info per the flags the host owns. Text channel has no app-layer tail to append.
-		this.renderFrame(frame);
+		this.renderFrame(frameResult);
 
 		// Step-debug pause between frames (no-op unless --wait is set).
 		await this.waitForUser('Press Enter to continue to next frame');

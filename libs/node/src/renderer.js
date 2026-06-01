@@ -84,32 +84,38 @@ export function formatStartFrame(info) {
 }
 
 /**
- * Render the --debug vote dump for a single frame. Takes the structured
- * voteDebugData the brain prepared (raw votes resolved to channelId/type/coordinate
- * metadata) and walks it per-channel, per-kind, producing a multi-line string.
+ * Render the per-frame vote dump. Takes the raw vote list emitted by the brain
+ * (always populated, regardless of debug flag) plus the consensus inferences
+ * (which name the winning neuron per dim), and walks per-channel/per-kind to
+ * produce a multi-line dump.
  *
  * The `formatters` map is keyed by channelId and supplies label/coord
  * formatters per channel (encoders for the spec path, Channel instances for
  * the legacy path). When a channel has no formatter, an inline default is used
- * so the dump still surfaces — never silently dropped.
+ * so the dump still surfaces — never silently dropped. `dimensionIdToName`
+ * resolves numeric dimIds to human-readable names; missing entries fall back
+ * to `dim<N>`.
  *
- * @param {object|null} voteDebugData - { votes, winners } from brain
+ * @param {Array<object>} votes - vote list from FrameResult
+ * @param {Map<number, Array<object>>} inferences - consensus per channel, per dim
  * @param {Map<number, {name, formatActionLabel?, formatCoordinates?}>} formatters
+ * @param {object} dimensionIdToName - { [dimId]: name }
  * @returns {string|null}
  */
-export function formatVoteDebug(voteDebugData, formatters) {
-	if (!voteDebugData || voteDebugData.votes.length === 0) return null;
-	const { votes, winners } = voteDebugData;
+export function formatVotes(votes, inferences, formatters, dimensionIdToName) {
+	if (!votes || votes.length === 0) return null;
 
-	// Pre-build a Set of winner neuron ids so the per-vote loops can mark winners
-	// in O(1) instead of scanning the winners array for every row.
-	const winnerIds = new Set(winners.map(w => w.neuronId));
+	// Pre-build a Set of winner neuron ids from inferences so the per-vote loops
+	// can mark winners in O(1). Each dim's winner neuron id is on its WinnerOutput.
+	const winnerIds = new Set();
+	for (const dims of inferences.values())
+		for (const dim of dims) winnerIds.add(dim.winner.neuronId);
 
 	// Partition votes by channel once — event vs. action split happens inside each.
 	const votesByChannel = new Map();
 	for (const vote of votes) {
-		if (!votesByChannel.has(vote.targetChannelId)) votesByChannel.set(vote.targetChannelId, []);
-		votesByChannel.get(vote.targetChannelId).push(vote);
+		if (!votesByChannel.has(vote.channelId)) votesByChannel.set(vote.channelId, []);
+		votesByChannel.get(vote.channelId).push(vote);
 	}
 
 	const out = [`Collected ${votes.length} votes`];
@@ -120,10 +126,10 @@ export function formatVoteDebug(voteDebugData, formatters) {
 
 		// Each channel gets up to two sections (events + actions). Either may be
 		// absent (event-only channels like text), so skip nulls instead of pushing them.
-		const eventOut = formatEventVotes(channelVotes, winnerIds, channel);
+		const eventOut = formatEventVotes(channelVotes, winnerIds, channel, dimensionIdToName);
 		if (eventOut) out.push(eventOut);
 
-		const actionOut = formatActionVotes(channelVotes, winnerIds, channel);
+		const actionOut = formatActionVotes(channelVotes, winnerIds, channel, dimensionIdToName);
 		if (actionOut) out.push(actionOut);
 	}
 	return out.join('\n');
@@ -135,13 +141,13 @@ export function formatVoteDebug(voteDebugData, formatters) {
  * compete amongst themselves. Inside each candidate, voters are shown sorted by
  * strength — mirroring how consensus resolution ranks them.
  */
-function formatEventVotes(allVotes, winnerIds, channel) {
+function formatEventVotes(allVotes, winnerIds, channel, dimensionIdToName) {
 	const eventVotes = allVotes.filter(v => v.targetType === 'event');
 	if (eventVotes.length === 0) return null;
 
 	// Two indexes off the same vote list: by-neuron for the per-candidate voter
 	// breakdown, by-dimension for the outer "candidates competing in dim X" grouping.
-	const votesByNeuron = groupVotesByNeuron(eventVotes);
+	const votesByNeuron = groupVotesByNeuron(eventVotes, dimensionIdToName);
 
 	const aggregatedByNeuron = new Map();
 	for (const [neuronId, data] of votesByNeuron)
@@ -175,13 +181,13 @@ function formatEventVotes(allVotes, winnerIds, channel) {
  * readable name the channel gives each action bucket), and the winning label is
  * the one whose neuron group contains a winner id.
  */
-function formatActionVotes(allVotes, winnerIds, channel) {
+function formatActionVotes(allVotes, winnerIds, channel, dimensionIdToName) {
 	const actionVotes = allVotes.filter(v => v.targetType === 'action');
 	if (actionVotes.length === 0) return null;
 
 	// Group by human label (e.g. "OWN"/"OUT") — different neuron ids can map to the
 	// same action bucket, and we want them aggregated under one heading per label.
-	const actionGroups = groupActionsByLabel(actionVotes, channel);
+	const actionGroups = groupActionsByLabel(actionVotes, channel, dimensionIdToName);
 	const aggregatedByAction = new Map();
 	const totalsByAction = new Map();
 
@@ -212,15 +218,26 @@ function formatActionVotes(allVotes, winnerIds, channel) {
 /* ---------- vote grouping / aggregation helpers (pure data transforms) ---------- */
 
 /**
+ * Resolve a vote's target into a coordinate-like { dimension, value } using
+ * the dimensionIdToName map. Falls back to "dim<N>" when a name is missing.
+ */
+function voteCoordinate(vote, dimensionIdToName) {
+	return {
+		dimension: dimensionIdToName?.[vote.dimId] ?? `dim${vote.dimId}`,
+		value: vote.value,
+	};
+}
+
+/**
  * Index votes by target neuron id, accumulating each candidate's total strength
  * and stashing a pre-built coords string + dimension name for downstream grouping.
  * Returned Map's iteration order = insertion order = order votes first appeared.
  */
-function groupVotesByNeuron(votes) {
+function groupVotesByNeuron(votes, dimensionIdToName) {
 	const votesByNeuron = new Map();
 	for (const v of votes) {
 		if (!votesByNeuron.has(v.targetId)) {
-			const coord = v.targetCoordinate;
+			const coord = voteCoordinate(v, dimensionIdToName);
 			votesByNeuron.set(v.targetId, {
 				neuronId: v.targetId,
 				coordsStr: `${coord.dimension}=${coord.value}`,
@@ -254,12 +271,13 @@ function groupByDimension(votesByNeuron) {
  * supply readable names ("OWN"/"OUT"); without one we fall back to JSON of the
  * raw coordinate so the dump still partitions correctly even if it's ugly.
  */
-function groupActionsByLabel(actionVotes, channel) {
+function groupActionsByLabel(actionVotes, channel, dimensionIdToName) {
 	const actionGroups = new Map();
 	for (const v of actionVotes) {
+		const coord = voteCoordinate(v, dimensionIdToName);
 		const label = channel.formatActionLabel
-			? channel.formatActionLabel(v.targetCoordinate)
-			: JSON.stringify(v.targetCoordinate);
+			? channel.formatActionLabel(coord)
+			: JSON.stringify(coord);
 		if (!actionGroups.has(label)) actionGroups.set(label, []);
 		actionGroups.get(label).push(v);
 	}

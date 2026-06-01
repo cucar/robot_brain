@@ -452,6 +452,24 @@ impl Thalamus {
         self.base_neurons.get(&neuron_id).map(|b| &b.coordinate)
     }
 
+    // ── Inspection ──────────────────────────────────────────────────────────
+
+    /// Inspection helper: get the stored context entries for a child pattern
+    /// (looked up via its parent's routing table). Returns Vec of
+    /// (context_neuron_id, distance, strength) tuples, or None if the
+    /// pattern_id has no recorded parent or the parent doesn't own it.
+    pub fn get_pattern_context_entries(&self, pattern_id: NeuronId) -> Option<Vec<(NeuronId, Distance, f64)>> {
+        let parent_id = self.get_neuron_parent(pattern_id)?;
+        let r = self.route_neuron(parent_id);
+        self.region_list[r].get_child_context_entries(parent_id, pattern_id)
+    }
+
+    /// Inspection: dump a neuron's outgoing connections (distance, target, strength, reward).
+    pub fn get_neuron_connections(&self, neuron_id: NeuronId) -> Option<Vec<(Distance, NeuronId, f64, f64)>> {
+        let r = self.route_neuron(neuron_id);
+        self.region_list[r].get_neuron_connections(neuron_id)
+    }
+
     // ── Inference results ───────────────────────────────────────────────────
 
     /// Get inferred actions grouped by channel from the given inferences.

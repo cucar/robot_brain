@@ -7,7 +7,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { stdin, stdout } from 'node:process';
 import Brain from 'brain';
-import { formatFrameSummary, formatStartFrame, formatVoteDebug } from './renderer.js';
+import { formatFrameSummary, formatStartFrame, formatVotes } from './renderer.js';
 
 export class Job {
 
@@ -68,6 +68,11 @@ export class Job {
 
 			// Create brain instance
 			this.brain = new Brain(this.options);
+
+			// Debug rendering consumes per-vote detail; flip the brain's emit-votes
+			// flag so processFrame populates result.votes. Without this the renderer
+			// gets nothing and the dump is empty.
+			if (this.debug) this.brain.setEmitVotes(true);
 
 			// Backup options: --save-brain <label> writes a snapshot on shutdown,
 			// --load-brain <label> restores a labeled backup before the first frame.
@@ -221,10 +226,11 @@ export class Job {
 	 * the vote debug dump (if --debug), and the one-line summary (unless --no-summary).
 	 * Any of the three is a no-op when its flag is off.
 	 *
-	 * @param {{ elapsed: number, voteDebug: object|null }} frame - per-frame byproducts
-	 *   returned alongside inferences from brain.processFrame
+	 * @param {{ inferences: Map, votes: Array, frame: { elapsed: number, timings: object } }} result
+	 *   the full FrameResult returned by brain.processFrame
 	 */
-	renderFrame(frame) {
+	renderFrame(result) {
+		const frame = result?.frame;
 		if (this.diagnostic) {
 			const info = this.brain.getStartFrameInfo();
 			const out = formatStartFrame(info);
@@ -232,7 +238,20 @@ export class Job {
 		}
 
 		if (this.debug) {
-			const out = formatVoteDebug(frame?.voteDebug, this.getChannelFormatters());
+			// The dim-name map is static after channel registration, but only
+			// exposed via getStartFrameInfo (which is null on empty frames).
+			// Cache the first non-null lookup so vote rendering still works
+			// on frames where the snapshot would be unavailable.
+			if (!this._dimNameCache) {
+				const info = this.brain.getStartFrameInfo();
+				if (info) this._dimNameCache = info.dimensionIdToName;
+			}
+			const out = formatVotes(
+				result?.votes,
+				result?.inferences ?? new Map(),
+				this.getChannelFormatters(),
+				this._dimNameCache ?? {},
+			);
 			if (out) console.log(out);
 		}
 

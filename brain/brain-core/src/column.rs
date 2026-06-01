@@ -332,6 +332,27 @@ impl Column {
         neuron.remove_context_ref(parent_id, distance);
     }
 
+    /// Inspection: dump a neuron's outgoing connections as
+    /// (distance, target_id, strength, reward) tuples.
+    pub fn get_neuron_connections(&self, neuron_id: NeuronId) -> Option<Vec<(Distance, NeuronId, f64, f64)>> {
+        self.neurons.get(&neuron_id).map(|n| n.get_connections())
+    }
+
+    /// Return (parent_id, distance, strength) context entries for a child
+    /// pattern stored under the given parent neuron's routing table. Used
+    /// by the inspection API to dump a pattern's stored context.
+    pub fn get_child_context_entries(&self, parent_id: NeuronId, child_id: NeuronId) -> Option<Vec<(NeuronId, Distance, f64)>> {
+        let parent = self.neurons.get(&parent_id)?;
+        let entry = parent.get_routing_table().get(&child_id)?;
+        let mut out = Vec::new();
+        for (nid, dist_map) in entry.context.entries() {
+            for (dist, strength) in dist_map {
+                out.push((*nid, *dist, *strength));
+            }
+        }
+        Some(out)
+    }
+
     /// Op-5 (deferred): Apply contextRef updates to owned neurons. Each entry carries the
     /// target neuron_id and a batch of updates for it.
     pub fn update_context_refs(&mut self, update_batch: &[(NeuronId, Vec<ContextRefUpdate>)]) {

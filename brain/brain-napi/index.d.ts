@@ -31,9 +31,35 @@ export declare class Brain {
    *
    * inputs: Map<channelId, Map<dimId, scalar>>
    * rewards: Map<channelId, reward>
-   * Returns: { inferences: Map<channelId, [...]>, frame: { elapsed, voteDebug } }
+   * Returns: { inferences: Map<channelId, [...]>, votes: Array<...>, frame: { elapsed, timings } }
    */
   processFrame(inputs: object, rewards: object): object
+  /**
+   * Get active neurons in context with their levels.
+   * Returns an array of { neuronId, level, suppressed } objects.
+   * suppressed=true means the neuron activated a higher-level pattern and
+   * should not be counted as an independent voter.
+   */
+  getActiveNeurons(): object
+  /**
+   * Inspect one neuron: returns { neuronId, level, parentId | null,
+   * context: [{ neuronId, distance, strength }, ...] }.
+   * Context entries come from the parent neuron's routing-table entry
+   * for this child pattern. Level-0 sensory neurons have parent_id=null
+   * and empty context.
+   */
+  inspectNeuron(neuronId: number): object
+  /**
+   * Dump a neuron's outgoing connections.
+   * Returns [{ distance, targetId, strength, reward }, ...].
+   */
+  getNeuronConnections(neuronId: number): object
+  /**
+   * Toggle per-vote resolution on processFrame's `votes` payload. Off by
+   * default — per-vote resolution allocates strings and walks parent
+   * chains, so training runs that don't consume votes pay nothing.
+   */
+  setEmitVotes(enabled: boolean): void
   /** Reset brain memory state for a clean episode start. */
   resetContext(): void
   /** Hard reset: clears ALL learned data. */

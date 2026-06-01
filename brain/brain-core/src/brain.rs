@@ -65,6 +65,7 @@ pub struct DimInferenceOutput {
 /// The winning candidate on a dimension.
 #[derive(Debug, Clone)]
 pub struct WinnerOutput {
+    pub neuron_id: NeuronId,
     pub value: Option<f64>,
     pub strength: f64,
     pub score: f64,
@@ -73,14 +74,46 @@ pub struct WinnerOutput {
 /// Return value from processFrame — inferences plus per-frame diagnostic byproducts.
 #[derive(Debug)]
 pub struct FrameResult {
-    /// Per-channel, per-dimension scalar-space inferences.
+    /// Per-channel, per-dimension scalar-space inferences (the consensus).
     pub inferences: FxHashMap<ChannelId, Vec<DimInferenceOutput>>,
+    /// Every vote cast this frame, with enough resolved metadata that callers
+    /// can run their own consensus or analysis without further round-trips.
+    /// Inferences are the summary; votes are the detail.
+    pub votes: Vec<FrameVote>,
     /// Wall-clock elapsed time for this frame (seconds).
     pub elapsed: f64,
-    /// Optional vote debug dump — only populated when debug is set.
-    pub vote_debug: Option<VoteDebug>,
     /// Per-section wall-clock timings (seconds). Populated for profiling.
     pub timings: FrameTimings,
+}
+
+/// One vote cast by a voter neuron toward a target (event or action) neuron.
+/// `voter_label` is the voter's root-sensory coordinate ("digit=5", "pixel_0=255")
+/// for human-readable debug output; pattern-neuron voters resolve to whichever
+/// sensory neuron sits at the root of their parent chain.
+#[derive(Debug, Clone)]
+pub struct FrameVote {
+    pub voter_id: NeuronId,
+    pub voter_label: String,
+    pub voter_level: Level,
+    pub target_id: NeuronId,
+    pub target_type: NeuronType,
+    pub channel_id: ChannelId,
+    pub dim_id: DimensionId,
+    pub value: i32,
+    pub distance: Distance,
+    pub strength: f64,
+    pub reward: f64,
+}
+
+/// Neuron inspection result — parent + level + stored context entries.
+#[derive(Debug, Clone)]
+pub struct InspectedNeuron {
+    pub neuron_id: NeuronId,
+    pub level: Level,
+    pub parent_id: Option<NeuronId>,
+    /// (context_neuron_id, distance, strength) tuples from the parent's
+    /// routing-table entry for this child pattern.
+    pub context: Vec<(NeuronId, Distance, f64)>,
 }
 
 /// Memory-op timings inside brain.process_levels, summed across levels.
@@ -122,28 +155,6 @@ pub struct FrameTimings {
     pub mem_get_level_neurons: f64,
     pub mem_write_back_level_neurons: f64,
     pub mem_activate_patterns: f64,
-}
-
-/// Resolved vote snapshot for host-side debug rendering.
-#[derive(Debug, Clone)]
-pub struct VoteDebug {
-    pub votes: Vec<ResolvedVote>,
-    pub winners: Vec<InferredNeuron>,
-}
-
-/// A single resolved vote with human-readable metadata.
-#[derive(Debug, Clone)]
-pub struct ResolvedVote {
-    pub target_id: NeuronId,
-    pub target_type: Option<NeuronType>,
-    pub target_channel_id: Option<ChannelId>,
-    pub target_coordinate: Option<(String, i32)>,
-    pub voter_id: NeuronId,
-    pub voter_level: Option<Level>,
-    pub voter_label: String,
-    pub strength: f64,
-    pub reward: f64,
-    pub distance: Distance,
 }
 
 /// Episode-level summary for host-side rendering.
@@ -205,6 +216,12 @@ pub struct Brain {
     /// Debug flag — when set, enables verbose logging and vote debug output.
     debug: bool,
 
+    /// When true, infer_neurons resolves every cast vote into a FrameVote on
+    /// FrameResult.votes. Off by default since resolution allocates per-vote
+    /// (voter_label String, target metadata lookups) — only opt in when a
+    /// harness actually consumes the per-vote detail.
+    emit_votes: bool,
+
     /// Current frame data from all channels (rebuilt each frame).
     frame: Vec<FramePoint>,
 
@@ -254,6 +271,7 @@ impl Brain {
         Self {
             context_length,
             debug,
+            emit_votes: false,
             frame: Vec::new(),
             rewards: Vec::new(),
             frame_number: 0,
@@ -287,6 +305,13 @@ impl Brain {
     }
 
     // ── Context / reset ─────────────────────────────────────────────────────
+
+    /// Toggle per-vote resolution on FrameResult.votes. Default off (training
+    /// hot path stays free of per-vote string allocation and metadata lookups).
+    /// Inference/debug harnesses that consume votes flip this on.
+    pub fn set_emit_votes(&mut self, enabled: bool) {
+        self.emit_votes = enabled;
+    }
 
     /// Reset brain memory state for a clean episode start.
     /// Materializes all lazy decay, resets frame counter and death ledger so
@@ -596,6 +621,31 @@ impl Brain {
         self.thalamus.get_neuron_id_by_coordinate(coordinate)
     }
 
+    // ── Inspection ──────────────────────────────────────────────────────────
+
+    /// Inspection: { parent_id, level, context_entries } for a pattern neuron.
+    /// Returns parent_id and level for any neuron; context_entries is empty
+    /// for level-0 sensory neurons (no parent → no stored context).
+    pub fn inspect_neuron(&self, neuron_id: NeuronId) -> InspectedNeuron {
+        let level = self.thalamus.get_neuron_level(neuron_id).unwrap_or(0);
+        let parent = self.thalamus.get_neuron_parent(neuron_id);
+        let context = parent
+            .and_then(|_| self.thalamus.get_pattern_context_entries(neuron_id))
+            .unwrap_or_default();
+        InspectedNeuron { neuron_id, level, parent_id: parent, context }
+    }
+
+    /// Inspection: dump a neuron's outgoing connections. Returns
+    /// (distance, target_neuron_id, strength, reward) tuples.
+    pub fn get_neuron_connections(&self, neuron_id: NeuronId) -> Vec<(Distance, NeuronId, f64, f64)> {
+        self.thalamus.get_neuron_connections(neuron_id).unwrap_or_default()
+    }
+
+    /// Export a snapshot of all active neurons in context with their levels.
+    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
+        self.memory.get_context_snapshot()
+    }
+
     // ── Diagnostics ─────────────────────────────────────────────────────────
 
     /// Episode summary with all diagnostic information.
@@ -658,8 +708,8 @@ impl Brain {
         if frame_neurons.is_empty() {
             return FrameResult {
                 inferences: FxHashMap::default(),
+                votes: Vec::new(),
                 elapsed: frame_start.elapsed().as_secs_f64(),
-                vote_debug: None,
                 timings,
             };
         }
@@ -711,7 +761,7 @@ impl Brain {
 
         // do inferences with age>0 neurons
         let t = Instant::now();
-        let (inferences_map, vote_debug, _winners) = self.infer_neurons(&votes);
+        let (inferences_map, resolved_votes, _winners) = self.infer_neurons(&votes);
         timings.infer = t.elapsed().as_secs_f64();
 
         // accumulate MAPE by comparing continuous event predictions to the actual input scalars
@@ -722,8 +772,8 @@ impl Brain {
 
         FrameResult {
             inferences: inferences_map,
+            votes: resolved_votes,
             elapsed: frame_start.elapsed().as_secs_f64(),
-            vote_debug,
             timings,
         }
     }
@@ -917,41 +967,41 @@ impl Brain {
     // ── Inference (voting consensus) ────────────────────────────────────────
 
     /// Infer predictions and outputs using voting architecture.
-    /// Returns the per-channel scalar-space inferences, optional vote debug, and
-    /// the raw winner list for memory persistence.
-    fn infer_neurons(&mut self, votes: &[FlatVote]) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Option<VoteDebug>, Vec<InferredNeuron>) {
+    /// Returns the per-channel scalar-space inferences, the resolved per-vote
+    /// list (always populated; same path that produces inferences just retains
+    /// the raw data), and the raw winner list for memory persistence.
+    fn infer_neurons(&mut self, votes: &[FlatVote]) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Vec<FrameVote>, Vec<InferredNeuron>) {
         // if no inference votes, wait for more data
         if votes.is_empty() {
             if self.debug { println!("No inferences found. Waiting for more data in future frames."); }
-            return (FxHashMap::default(), None, Vec::new());
+            return (FxHashMap::default(), Vec::new(), Vec::new());
         }
 
         // Aggregate votes and determine winners
         let (inferences, candidates, dim_best) = self.determine_consensus(votes);
 
-        // Build the resolved vote dump only when debug is on
-        let vote_debug = if self.debug {
-            let resolved_votes: Vec<ResolvedVote> = votes.iter().map(|v| {
-                ResolvedVote {
-                    target_id: v.neuron_id,
-                    target_type: self.thalamus.get_neuron_type(v.neuron_id),
-                    target_channel_id: self.thalamus.get_neuron_channel_id(v.neuron_id),
-                    target_coordinate: self.thalamus.get_neuron_coordinate(v.neuron_id)
-                        .and_then(|c| self.thalamus.coordinate_id_to_name(c)),
+        // Resolve each vote with the metadata callers need to render/analyze without further round-trips.
+        // Targets without resolvable coordinates (shouldn't happen for event/action targets) are dropped.
+        // Gated on emit_votes because per-vote resolution allocates strings, slowing the performance down.
+        let resolved_votes: Vec<FrameVote> = if !self.emit_votes { Vec::new() } else {
+            votes.iter().filter_map(|v| {
+                let target_type = self.thalamus.get_neuron_type(v.neuron_id)?;
+                let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)?;
+                let channel_id = self.thalamus.get_neuron_channel_id(v.neuron_id)?;
+                Some(FrameVote {
                     voter_id: v.voter_id,
-                    voter_level: self.thalamus.get_neuron_level(v.voter_id),
                     voter_label: self.format_neuron_label(v.voter_id),
+                    voter_level: self.thalamus.get_neuron_level(v.voter_id).unwrap_or(0),
+                    target_id: v.neuron_id,
+                    target_type,
+                    channel_id,
+                    dim_id: coord.dim_id,
+                    value: coord.bucket_id,
+                    distance: v.distance,
                     strength: v.strength,
                     reward: v.reward,
-                    distance: v.distance,
-                }
-            }).collect();
-            Some(VoteDebug {
-                votes: resolved_votes,
-                winners: inferences.clone(),
-            })
-        } else {
-            None
+                })
+            }).collect()
         };
 
         // Save inferences to memory (clears old inferences first)
@@ -960,7 +1010,7 @@ impl Brain {
         // Build the scalar-space output
         let inferences_map = self.build_inferences_by_channel(&candidates, &dim_best);
 
-        (inferences_map, vote_debug, inferences)
+        (inferences_map, resolved_votes, inferences)
     }
 
     /// Aggregate votes and determine winners per dimension.
@@ -1232,6 +1282,7 @@ impl Brain {
                 dim_id: entry.dim_id,
                 kind: entry.kind.clone(),
                 winner: WinnerOutput {
+                    neuron_id: best.neuron_id,
                     value: winner_value,
                     strength: best.strength,
                     score: best.score,
@@ -1357,7 +1408,7 @@ mod tests {
         // process an empty frame — should return empty inferences
         let result = brain.process_frame(&FxHashMap::default(), &FxHashMap::default());
         assert!(result.inferences.is_empty());
-        assert!(result.vote_debug.is_none());
+        assert!(result.votes.is_empty());
     }
 
     #[test]
