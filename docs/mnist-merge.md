@@ -27,29 +27,6 @@ Projects on `mnist` that are not listed below are **not being pulled** — they 
 
 ---
 
-## Inspection API 🟢
-
-**Goal.** Read-only introspection for harness-side debugging: what does a neuron know, who does it connect to, what's in a pattern's stored context.
-
-**Surface.**
-- `neuron.rs`: `dump_connections`.
-- `column.rs`: `dump_neuron_connections`, `get_child_context_entries`.
-- `region.rs`: same two, routed.
-- `thalamus.rs`: `dump_neuron_connections`, `get_pattern_context_entries`.
-- `brain.rs`: `inspect_neuron` (the user-facing wrapper); `InspectedNeuron` result struct.
-- `brain-napi`: `inspectNeuron`, `dumpNeuronConnections`, `getActiveNeurons` bindings.
-- `brain.rs`: `ActionVote` / `ActionVoteStats` on `FrameResult` and the `compute_action_vote_stats` / `collect_action_votes` that populate them. Inspection-adjacent (per-voter and aggregated digit votes).
-
-**Decision: Keep.** Pure-read APIs, no risk to behaviour.
-
-**Note:** `Memory::get_votable_entries` was added on `mnist` for the supervised action path. It belongs to **Supervised learn / infer** below, not this commit.
-
-**Test plan and acceptance.**
-- **T-inspect-smoke** — train briefly via NAPI, call each inspection method on a known active neuron, confirm well-formed results (no panics, fields populated). Smoke only.
-- `cargo test` green.
-
----
-
 ## Static forget rate 🟡 ★
 
 **Goal.** The branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.** The branch also surfaced a latent bug — the original code zeroed L0's forget rate, which (since L0 owns L1 children's death timing) made L1 patterns immortal. The L0→base behaviour fix is the only piece of this project that actually ships.
