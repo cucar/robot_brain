@@ -237,7 +237,7 @@ pub struct Brain {
     diagnostics: Diagnostics,
 
     /// File-based snapshot save/load.
-    backup_store: Backup,
+    backup: Backup,
 
     /// Relay station for neuron/channel/dimension mappings. Owns the Region tree.
     thalamus: Thalamus,
@@ -276,7 +276,7 @@ impl Brain {
             rewards: Vec::new(),
             frame_number: 0,
             diagnostics: Diagnostics::new(),
-            backup_store: Backup::new(pattern_forget_rate, context_length),
+            backup: Backup::new(pattern_forget_rate, context_length),
             thalamus: Thalamus::new(
                 debug,
                 pattern_forget_rate,
@@ -355,12 +355,12 @@ impl Brain {
         self.thalamus.materialize_and_reset_neurons(self.frame_number);
         self.frame_number = 0;
         let snapshot = self.thalamus.get_snapshot();
-        self.backup_store.save(job_dir, label, &snapshot)
+        self.backup.save(job_dir, label, &snapshot)
     }
 
     /// Load a backup by label from `<job_dir>/backups/<label>/`.
     pub fn load(&mut self, job_dir: &std::path::Path, label: &str) -> Result<(), String> {
-        let snapshot = self.backup_store.load(job_dir, label)?;
+        let snapshot = self.backup.load(job_dir, label)?;
         self.thalamus.restore_snapshot(&snapshot);
         Ok(())
     }
