@@ -25,27 +25,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 1 — Profiling instrumentation 🟢
-
-**Goal.** Make MNIST training cost legible. Per-frame, per-section, per-neuron-op wall-clock measurements bubbled up through the call stack so a harness can read them off `FrameResult`.
-
-**Surface.**
-- `neuron.rs`: `NeuronOpTimings` (learn / recognize / correct / vote, plus recognize sub-buckets); plumbed through `process_frame`/`recognize_patterns`.
-- `column.rs`: timings forwarded on `ColumnProcessResult`.
-- `thalamus.rs`: `OrchestrationTimings` (get_level_tasks / dispatch_frame / collect_activations / collect_votes); forwarded on `ProcessLevelResult`.
-- `brain.rs`: `FrameTimings` and `MemoryTimings` aggregating everything; `timings` field on `FrameResult`.
-- `brain-napi`: marshalling of the timings struct into the JS result.
-- Verbose error-correction debug logging in `thalamus.rs` (gated on `debug`).
-
-**Decision: Keep all of it.** Cost is negligible (a few `Instant::now()` calls per neuron per frame); benefit is permanent. The verbose error-correction logging is `debug`-gated and stays off in normal runs.
-
-**Test plan and acceptance.**
-- **T-timings-smoke** — enable `debug`, run any one harness, confirm `result.timings` is populated with non-zero values across all sections and that they roughly sum to elapsed (within documented sub-bucket overhead). Smoke only.
-- `cargo test` green.
-
----
-
-## Project 2 — Inspection API 🟢
+## Inspection API 🟢
 
 **Goal.** Read-only introspection for harness-side debugging: what does a neuron know, who does it connect to, what's in a pattern's stored context.
 
@@ -68,7 +48,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 3 — Static forget rate 🟡 ★
+## Static forget rate 🟡 ★
 
 **Goal.** The branch introduced a `LevelDecayMode` enum (Exponential | Linear | Static) to experiment with per-level decay schedules. The new spatial-processing + neuron-reuse design makes per-level decay obsolete: with intrinsic levels going away and the same neuron being reused across contexts, there is no longer a "deeper means longer-lived" distinction to honour. **A single global forget rate applies to every pattern, regardless of level.** The branch also surfaced a latent bug — the original code zeroed L0's forget rate, which (since L0 owns L1 children's death timing) made L1 patterns immortal. The L0→base behaviour fix is the only piece of this project that actually ships.
 
@@ -90,7 +70,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 4 — Image implant / direct teaching 🔴
+## Image implant / direct teaching 🟢
 
 **Goal.** Bypass error-driven learning entirely and directly install L1 patterns from observed bit histories. The flow: for each pixel position in an image, record `(parent_bit, packed_context_bits) → next_bit_distribution`; once all positions are seen, materialize the majority transitions as L1 patterns with pre-baked stored context and outgoing prediction connections. A teaching shortcut that skipped the slow part of error-driven discovery.
 
@@ -111,26 +91,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 5 — Parallel context training 🔴
-
-**Goal.** Train multiple images concurrently by giving each one its own runtime state (memory, frame counter, rewards) while the thalamus (neurons, patterns, connections) stays shared. `init_contexts(N)` allocates N slots; `set_active_context(i)` swaps the active slot's state into the brain's live fields. Was meant to amortize thalamus-side parallelism overhead across more concurrent training streams.
-
-**Surface.**
-- `brain.rs`: `ContextState` struct; `contexts: Vec<ContextState>` and `current_context: usize` fields; `init_contexts`, `swap_to`, `set_active_context`, `num_contexts` methods.
-- `memory.rs`: `#[derive(Clone)]` on `Memory` (required by `ContextState::clone`).
-- `brain-napi`: `initContexts`, `setActiveContext` bindings.
-
-**Decision: Roll back entirely.** Superseded by the spatial-processing design — each image becomes one frame across many parallel channels, not many serial frames in parallel contexts. No part of this is salvageable for spatial processing.
-
-**Roll back checklist:** all symbols above. `Memory: Clone` can also be dropped (nothing else needs it).
-
-**Test plan and acceptance.**
-- `cargo test` green.
-- `grep` confirms no remaining references to any of the above symbols.
-
----
-
-## Project 6 — Frozen-context staged scan/predict 🔴 ★
+## Frozen-context staged scan/predict 🔴 ★
 
 **Goal.** Two-phase training flow: phase 1 scans the image's pixels (events fire, no action, no consensus); phase 2 predicts the digit on the now-frozen context (no event changes, action consensus runs, reward applied). Required toggling the pipeline's three sub-stages independently — event processing, action processing, and learning — and changing `process_frame` to take separate `events` and `actions` maps so phase 2 could force the action without re-driving the events.
 
@@ -162,7 +123,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 7 — Supervised action learning 🔴
+## Supervised action learning 🔴
 
 **Goal.** Replace the existing reward-shaped action path with direct supervised wiring: at each frame, collect every votable voter (every active non-suppressed neuron across levels), and additively accumulate `(voter → correct_action_id, distance, +reward)` connections. Frequency dominates: a voter wired to A twice and B once accumulates strength=2/reward=2 vs strength=1/reward=1, so A wins consensus by 4:1. Pairs with a static action-side learning rate (`action_alpha`) so the smoothing doesn't collapse frequency back to 1.
 
@@ -184,7 +145,7 @@ Categorization shorthand: 🟢 keep · 🟡 collapse · 🔴 roll back · ⚫ de
 
 ---
 
-## Project 8 — MNIST apps refactor 🟢
+## MNIST apps refactor 🟢
 
 **Goal.** The original `apps/mnist/encoder.js` was a single grayscale-byte encoder. The retinotopic-channels architecture in the roadmap needs per-pixel-position channels, plus row-aggregated variants for comparison, plus digit-label encoding. The branch split this into four focused encoders and rewrote `apps/mnist/jobs/test.js` around the new shape. `dump_image.js` was added to convert MNIST images into the text-pipeline format for cross-app validation.
 

@@ -122,6 +122,37 @@ pub struct ProcessFrameResult {
     pub correction_activations: Vec<CorrectionActivation>,
     pub context_ref_updates: Vec<ContextRefUpdate>,
     pub votes: Vec<AgeVotes>,
+    pub timings: NeuronOpTimings,
+}
+
+/**
+ * Per-neuron wall-clock for the 4 main ops inside process_frame, plus
+ * recognize sub-buckets. Aggregated up through column → brain into the
+ * frame timings. `recognize_candidates_evaluated` counts how many child
+ * patterns were scored (post-index) so we can see search-space size per
+ * frame.
+ */
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NeuronOpTimings {
+    pub learn_connections: f64,
+    pub recognize_patterns: f64,
+    pub correct_errors: f64,
+    pub generate_votes: f64,
+    pub recognize_candidate_search: f64,
+    pub recognize_candidate_eval: f64,
+    pub recognize_candidates_evaluated: u64,
+}
+
+impl NeuronOpTimings {
+    pub fn add(&mut self, other: &NeuronOpTimings) {
+        self.learn_connections  += other.learn_connections;
+        self.recognize_patterns += other.recognize_patterns;
+        self.correct_errors     += other.correct_errors;
+        self.generate_votes     += other.generate_votes;
+        self.recognize_candidate_search   += other.recognize_candidate_search;
+        self.recognize_candidate_eval     += other.recognize_candidate_eval;
+        self.recognize_candidates_evaluated += other.recognize_candidates_evaluated;
+    }
 }
 
 /// Results from recognize_patterns.
@@ -660,24 +691,35 @@ impl Neuron {
         // fold prior-frame error feedback into per-age stats first so the threshold attached
         // to this frame's votes (computed in generate_votes) reflects the latest sample
         for fb in error_feedback { self.record_error(fb.age, fb.error_rate); }
+        let mut timings = NeuronOpTimings::default();
 
         // learn connections across all active ages (age=0 skipped internally)
         // but, if this neuron was just created, it was already created with the current connections - no need to learn again
-        if !new_error_pattern_ids.contains(&self.id) { self.learn_connections(age_states, actives); }
+        if !new_error_pattern_ids.contains(&self.id) {
+            let t = std::time::Instant::now();
+            self.learn_connections(age_states, actives);
+            timings.learn_connections = t.elapsed().as_secs_f64();
+        }
 
         // match patterns if we have context and eligible ages
-        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame);
+        let t = std::time::Instant::now();
+        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, &mut timings);
+        timings.recognize_patterns = t.elapsed().as_secs_f64();
 
         // install pre-created error-correction patterns as children and emit their contextRef adds
+        let t = std::time::Instant::now();
         let CorrectResult { correction_activations, context_ref_updates: correction_refs } = self.correct_errors(corrections, current_frame);
+        timings.correct_errors = t.elapsed().as_secs_f64();
 
         // cast votes for each eligible age, suppressing any ages that activated a pattern
+        let t = std::time::Instant::now();
         let votes = self.generate_votes(age_states, memory_depth, level_context, &matches, &correction_activations);
+        timings.generate_votes = t.elapsed().as_secs_f64();
 
         // return frame processing results
         let mut context_ref_updates = match_refs;
         context_ref_updates.extend(correction_refs);
-        ProcessFrameResult { matches, correction_activations, context_ref_updates, votes }
+        ProcessFrameResult { matches, correction_activations, context_ref_updates, votes, timings }
     }
 
     // ── Pattern recognition ──────────────────────────────────────────────────
@@ -698,6 +740,7 @@ impl Neuron {
         level_context: Option<&Context>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         current_frame: FrameNumber,
+        timings: &mut NeuronOpTimings,
     ) -> RecognizeResult {
         let mut matches = Vec::new();
         let context_ref_updates = Vec::new();
@@ -726,7 +769,7 @@ impl Neuron {
             // active ages are processed in ascending order (most recent first). The first age that
             // produces a match at that age is refined and preserved. More recent ages tend to have
             // the richest available context, so they are processed first.
-            let best = match self.find_best_pattern_match_at_age(ctx, age, new_error_pattern_ids, current_frame) {
+            let best = match self.find_best_pattern_match_at_age(ctx, age, new_error_pattern_ids, current_frame, timings) {
                 Some(b) => b,
                 None => continue, // try older age if there is a match
             };
@@ -757,14 +800,18 @@ impl Neuron {
     }
 
     /// Find the best matching pattern for a specific active age.
-    fn find_best_pattern_match_at_age(&self, observed: &Context, age: Distance, exclude_ids: &FxHashSet<NeuronId>, current_frame: FrameNumber) -> Option<PartialMatch> {
+    fn find_best_pattern_match_at_age(&self, observed: &Context, age: Distance, exclude_ids: &FxHashSet<NeuronId>, current_frame: FrameNumber, timings: &mut NeuronOpTimings) -> Option<PartialMatch> {
         let mut best: Option<PartialMatch> = None;
 
         // Use the inverted index to narrow the search to child patterns that share at least one
         // exact neuron/distance entry with the observed context at this active age.
+        let t = std::time::Instant::now();
         let candidate_ids = self.get_pattern_candidates_at_age(observed, age);
+        timings.recognize_candidate_search += t.elapsed().as_secs_f64();
         if candidate_ids.is_empty() { return None; }
 
+        let eval_start = std::time::Instant::now();
+        let candidate_count = candidate_ids.len();
         // go through the candidate patterns and find the best match
         for pattern_id in candidate_ids {
 
@@ -800,6 +847,8 @@ impl Neuron {
                 score: m.score,
             });
         }
+        timings.recognize_candidate_eval += eval_start.elapsed().as_secs_f64();
+        timings.recognize_candidates_evaluated += candidate_count as u64;
         best
     }
 

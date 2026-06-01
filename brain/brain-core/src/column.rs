@@ -26,6 +26,7 @@ pub struct ColumnProcessResult {
     pub correction_activations: Vec<CorrectionActivation>,
     pub context_ref_updates: Vec<ContextRefUpdate>,
     pub votes: Vec<AgeVotes>,
+    pub timings: crate::neuron::NeuronOpTimings,
 }
 
 /// Result of a delete cascade pulse inside a column.
@@ -146,6 +147,7 @@ impl Column {
                 correction_activations: result.correction_activations,
                 context_ref_updates: result.context_ref_updates,
                 votes: result.votes,
+                timings: result.timings,
             });
         }
         results
