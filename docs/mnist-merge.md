@@ -48,36 +48,41 @@ Projects on `mnist` that are not listed below are **not being pulled** — they 
 
 ---
 
-## Supervised learn / inference-only infer 🟢 ★
+## Supervised learn() + non-learning mode 🟢 ★
 
-**Goal.** Two entry points on Brain that the MNIST harness (and later the hippocampus path) needs:
+**Goal.** What the MNIST harness (and later the hippocampus path) needs from Brain to run a supervised train-then-evaluate loop on top of the existing single-frame pipeline:
 
-- `learn(events, actions, rewards)` — supervised training step: process the frame with the correct action forced, learn connections, and additively wire active voter neurons to the correct action neuron.
-- `infer(events)` — inference-only step: run pattern recognition and read out predictions without modifying any learned state. This is the 10k-test path.
+- **`learn(correctAction, reward)`** — direct wiring step. Reads the currently-active voter neurons out of brain state (populated by the most recent `process_frame` call) and accumulates `reward` onto each active-voter → correct-action connection, creating the connection on first encounter. Does **not** run a frame, does not activate anything, does not create or decay neurons. Pure wiring on top of whatever `process_frame` last left active.
+- **Brain-level non-learning mode** — a toggle on Brain (`set_learning(false)`) that makes subsequent `process_frame` calls non-mutating. Pattern activation and voting still run (so the harness reads predictions out of `FrameResult.inferences` exactly as it does during training), but the call skips op-1 (sensory-neuron creation), op-2 (decay/reap), event→event connection strengthening, child-activation strengthening, and error tracking. The 10k-test path is just `set_learning(false)` followed by ordinary `process_frame` calls.
 
-At this phase the "voter pool" is just the active sensory neurons (no L1+ patterns exist without spatial processing). The same code wires correctly once spatial-processing patterns become voters.
+At this phase the voter pool is just the active sensory neurons (no L1+ patterns exist without spatial processing). The same `learn()` code wires correctly once spatial-processing patterns become voters.
 
-**Surface (pulled from `mnist`).**
-- `brain.rs`: `learn()` and `infer()` public methods; `action_alpha` ctor param.
-- `neuron.rs`: `learn_supervised_action` (additive accumulation); `action_alpha` field; action-aware branching inside `strengthen_connection` (static alpha for action targets, dynamic alpha for events); `learning: bool` parameter on `process_frame` / `recognize_patterns` that gates connection-learning and child-activation strengthening.
-- `column.rs`, `region.rs`: `action_alpha` propagated; `learn_action_connections` (route voter tasks per column); `collect_votes` (read-only vote sweep); `learning: bool` plumbed through `process_frame` calls.
-- `thalamus.rs`: public `collect_votes` and `learn_action_connections` (route across regions); the internal `collect_votes` renamed to `collect_level_votes` to make room. `learning: bool` plumbed into `process_level` → `get_level_tasks` → `get_level_corrections`.
-- `memory.rs`: `get_votable_entries` (enumerate the voter pool).
-- `brain-napi`: `learn` / `infer` bindings; `actionAlpha` ctor option.
-- `libs/node/src/run.js`: `--action-alpha` CLI flag if a harness uses it.
+### Reward semantics — cumulative, not smoothed
 
-**Decision: Keep.** This is the pre-spatial-processing path for MNIST and the 10k test set. The supervised action wiring is also what hippocampus will use later.
+`learn()` uses **additive reward accumulation** on the active-voter → correct-action connections. Each call adds `reward` to the connection strength; there is no dynamic alpha, no smoothing, no decay inside this path. Over many training images the strength of a (pixel-value-N, digit-D) connection ends up proportional to the number of digit-D training images in which pixel-value-N fired — which is exactly the per-class Bernoulli count the Naive Bayes framing depends on. This is the mechanism by which the wired distribution converges to the empirical conditional, not a separate learning rule layered on top.
 
-**Do not pull.** The `mnist` branch also has phase-toggle machinery (`event_processing` / `action_processing` fields, `set_processing_mode`, the frozen-context branch in `process_frame`, `replace_active_neuron`) that was built around a staged scan/predict flow. None of it is needed once `learn()` / `infer()` exist — leave those symbols on the `mnist` branch.
+Note that this is different from the current reward-driven (dynamic-smoothed) action-wiring path used by stocks/text. Stocks/text harnesses do not call `learn()` and are unaffected. Call this out in the commit message.
 
-**Signature note.** `process_frame(events, actions, rewards)` — the events/actions split comes with this project; `learn()` needs the `actions` arg. App harnesses gain `new Map()` adapter calls for the actions argument.
+### What stays as-is
 
-**Reward semantics.** The supervised path uses a static `action_alpha` and additive `(strength, reward)` accumulation, so frequency dominates ratio. This changes action-wiring math from the current dynamic-smoothed path — any harness running through `learn()` will produce different numbers than reward-shaped runs. Stocks/text harnesses that don't use `learn()` are unaffected. Note in commit message.
+- **`process_frame` signature.** Unchanged. Do not pull the `mnist` branch's `(events, actions, rewards)` split — that was scaffolding for a forced-action implant flow that we decided against; `learn()` replaces it.
+- **Vote infrastructure.** Main's existing `FrameVote` / `FrameResult.votes` / vote-collection machinery stays. Do not pull the `mnist` branch's `ActionVote` / `ActionVoteStats` / `VoteDebug` restructuring — that's a separate API direction that doesn't need to land for this project, and the existing vote types already carry everything the MNIST harness needs to read predictions.
 
-**Test plan and acceptance.**
-- **T-mnist-learn-infer** — run the MNIST harness end-to-end: train via `learn()` on a small subset, evaluate on a held-out set via `infer()`, confirm `infer()` does not modify connection state (snapshot the brain before/after infer and diff).
-- **T-stocks** — re-run; ★ change to action wiring (only affects paths that use `learn()`; reward-driven stocks harnesses should be unaffected). Update README baseline if anything shifts.
-- `cargo test` green.
+### Surface
+
+- `brain.rs`: `learn(correctAction, reward)` public method; `set_learning(bool)` toggle and a `learning: bool` field on Brain. Non-learning mode is consulted inside `process_frame` to skip op-1, op-2, error tracking, and any other mutating side-effects.
+- `neuron.rs`: a supervised-action-wiring helper (additive `(strength += reward)` accumulation on the voter→action connection, allocating the connection on first call). The existing dynamic-smoothed `strengthen_connection` path is **not** branched for action targets — `learn()` reaches the action-connection store directly.
+- `column.rs`, `region.rs`, `thalamus.rs`: enough plumbing to (a) enumerate the currently-active voters across regions for `learn()`, and (b) propagate the `learning` flag into the per-level dispatch so connection-learning, child-activation strengthening, and other mutating steps are skipped when the flag is false.
+- `memory.rs`: a helper to enumerate the active voter pool if not already exposed (the mnist branch called this `get_votable_entries` — name it whatever fits current main).
+- `brain-napi`: `learn` and `setLearning` bindings.
+
+The mnist branch also carries phase-toggle machinery (`event_processing` / `action_processing` fields, `set_processing_mode`, the frozen-context branch in `process_frame`, `replace_active_neuron`, `action_alpha` ctor param, `--action-alpha` CLI flag, the `ActionVote` vote restructuring) that does not come across. All of it was built around a staged scan/predict / forced-action flow that `learn()` + non-learning-mode supersedes — leave those symbols on the `mnist` branch.
+
+### Test plan and acceptance
+
+- **T-mnist-learn-eval** — run the MNIST harness end-to-end: train via `process_frame` + `learn()` on a small subset, switch to non-learning mode, evaluate on a held-out set via `process_frame`, confirm non-learning-mode `process_frame` does not modify connection state (snapshot the brain before/after eval and diff).
+- **T-stocks** — re-run; ★ note that the `learn()` path is new and only used by harnesses that opt into it. Reward-driven stocks/text harnesses go through `process_frame` as before and should be unaffected. Update README baseline if anything shifts.
+- **Rust unit tests** — exercise `learn()` (active-voter enumeration, additive accumulation, connection creation on first encounter) and non-learning-mode `process_frame` (no neuron count change, no connection strength change, votes/inferences still populated). `cargo test` green.
 
 ---
 
@@ -99,9 +104,9 @@ Each pixel-column doesn't "know" it's part of a grid — it only knows what valu
 
 ### Single-frame episode structure
 
-The earlier plan presented each image *twice* — a two-frame repetition trick to fake temporal co-occurrence so a sequence-learning architecture could ingest spatial data. That is no longer needed: a whole image is **one frame**, every pixel channel fires its quantized value simultaneously, the brain emits a digit prediction via the shared action neurons, and reward is delivered (positive for correct digit, negative for incorrect).
+The earlier plan presented each image *twice* — a two-frame repetition trick to fake temporal co-occurrence so a sequence-learning architecture could ingest spatial data. That is no longer needed: a whole image is **one frame**, every pixel channel fires its quantized value simultaneously, and the harness reads the brain's digit prediction (during eval) or supplies the correct digit via `learn()` (during training). There is no closed-loop reward delivery through `process_frame` — supervision happens entirely through `learn(correctDigit, reward)`, which accumulates a positive reward onto the active-voter → correct-digit connections. Incorrect predictions during training are not punished; they simply don't get the wiring update that a `learn()` call would have made.
 
-In this sensory-only iteration there is no inter-channel connection formation — that's what step 3 (spatial processing) unlocks. The only connections being learned in this app are **sensory → action**: each pixel-value sensory neuron strengthens its weighted vote toward the correct digit action whenever it co-fires with a positive-reward label. Because the wiring is additive under a static `action_alpha` (see the **Supervised learn / infer** project), the strength a given pixel-value→digit connection accumulates is just a count — effectively the *fraction of that digit's training images in which that pixel-value fired*, which is exactly the per-class frequency framing the intro uses to characterize this as Naive Bayes. Independent per-pixel evidence summed across channels into a shared digit decision.
+In this sensory-only iteration there is no inter-channel connection formation — that's what step 3 (spatial processing) unlocks. The only connections being learned in this app are **sensory → action**: each pixel-value sensory neuron strengthens its weighted vote toward the correct digit action whenever it co-fires with a positive-reward label. Because the wiring is additive cumulative-reward accumulation (see the **Supervised learn() + non-learning mode** project), the strength a given pixel-value→digit connection accumulates is just a count — effectively the *fraction of that digit's training images in which that pixel-value fired*, which is exactly the per-class frequency framing the intro uses to characterize this as Naive Bayes. Independent per-pixel evidence summed across channels into a shared digit decision.
 
 ### Phased sensory quantization — binary first
 
@@ -126,9 +131,9 @@ This mirrors the stock experiment, where multiple stock channels vote on a share
 ### Training and evaluation
 
 1. Generate episodes from the 60,000 MNIST training images — each image becomes one single-frame episode across all pixel channels.
-2. Train via `learn()` (forces the correct digit and additively wires every active sensory neuron to that action). Multiple passes (10–100×) with a low forget rate to stabilize per-pixel digit votes.
-3. **Training accuracy**: percentage of training episodes where the brain's post-frame action matches the label.
-4. **Test accuracy**: present the 10,000 held-out test images via `infer()` (no state change). Accuracy measured on first exposure to each test image, randomized order.
+2. Train: for each image, call `process_frame(image)` (activates the corresponding pixel-value sensory neurons), then call `learn(correctDigit, reward)` to additively wire every currently-active sensory neuron to the correct digit's action neuron. Multiple passes (10–100×) over the training set with forget rate 0 (see hyperparameters).
+3. **Training accuracy**: percentage of training episodes where the brain's post-`process_frame` prediction matches the label, measured *before* the `learn()` call updates the wiring.
+4. **Test accuracy**: switch to non-learning mode, then present the 10,000 held-out test images via `process_frame` (no state change). Accuracy measured on first exposure to each test image, randomized order.
 
 ### Compute requirements
 
@@ -142,13 +147,10 @@ Compute scales with quantization level and resolution:
 
 ### Recommended hyperparameters (starting point)
 
-Based on stock and text experiments:
-
 * Context length: 1 (single frame per episode)
-* Forget rate: 0.001–0.01 (low, to retain per-pixel digit statistics)
-* Error threshold: 0.3
-* Merge threshold: 0.9
-* `action_alpha`: static, additive (set by the **Supervised learn / infer** project)
+* Forget rate: **0**. Initial runs do no forgetting at all — at 28×28 binary the entire sensory population is 1,568 known-in-advance neurons, so capacity is not a concern and we want the per-pixel-per-digit counts to accumulate cleanly.
+* Action wiring: additive cumulative-reward accumulation via `learn()` (set by the **Supervised learn() + non-learning mode** project) — no static alpha, no smoothing.
+* Error threshold and merge threshold are pattern-formation knobs that only come into play with spatial processing (step 3). Leave them at defaults for this app — they have no effect at this phase.
 
 ### Surface
 
@@ -156,7 +158,7 @@ Based on stock and text experiments:
 - `apps/mnist/encoders/row_channels_encoder.js` — 28 row-channels presented column-by-column over 28 frames. A temporal-shape comparison variant; not the NB setup, kept for the column-scan experiment.
 - `apps/mnist/encoders/digits.js` — shared digit label / action constants used by every encoder.
 - `apps/mnist/encoder.js` — deleted. The old single-channel pixel-stream encoder; superseded by the per-pixel-channel encoder, which is the right shape for sensory-only voting.
-- `apps/mnist/jobs/test.js` — rewritten around the new encoders (~600 lines diff, mostly rewrite-in-place). Calls `learn()` / `infer()`, so **Supervised learn / infer** must land first.
+- `apps/mnist/jobs/test.js` — rewritten around the new encoders (~600 lines diff, mostly rewrite-in-place). Calls `learn()` and uses non-learning mode for evaluation, so **Supervised learn() + non-learning mode** must land first.
 - `apps/mnist/dump_image.js` — image → text-pipeline format, for cross-app inspection of individual digits.
 
 **Decision: Keep all.** `pixel_channels_encoder` is the sensory-only NB app itself; the others are the surrounding scaffolding (label encoder, comparison variant, inspection tool) that the same harness needs.
@@ -164,4 +166,4 @@ Based on stock and text experiments:
 ### Test plan and acceptance
 
 - **T-encoder** — run `pixel_channels_encoder` against one canonical MNIST test image at 7×7 binary, confirm the output bit vector matches the expected encoding. Doesn't exercise the brain; just confirms the encoder is producing the right frame shape for NB voting.
-- **T-mnist-nb-baseline** — run `apps/mnist/jobs/test.js` at 7×7 binary: train via `learn()`, evaluate via `infer()`, confirm test accuracy lands in the predicted **~45–60%** band with a small train/test gap. This is the Naive-Bayes plumbing check described in the intro, not an architectural validation. Log the per-digit confusion matrix alongside the aggregate number — the 3/8/9 collapses are the evidence that motivates the spatial-processing workstream.
+- **T-mnist-nb-baseline** — run `apps/mnist/jobs/test.js` at 7×7 binary: train via `process_frame` + `learn()`, evaluate via `process_frame` in non-learning mode, confirm test accuracy lands in the predicted **~45–60%** band with a small train/test gap. This is the Naive-Bayes plumbing check described in the intro, not an architectural validation. Log the per-digit confusion matrix alongside the aggregate number — the 3/8/9 collapses are the evidence that motivates the spatial-processing workstream.
