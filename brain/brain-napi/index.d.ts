@@ -60,6 +60,27 @@ export declare class Brain {
    * chains, so training runs that don't consume votes pay nothing.
    */
   setEmitVotes(enabled: boolean): void
+  /**
+   * Master learning toggle.
+   * When false, subsequent `processFrame` calls skip op-2 (decay/reap) and error-correction pattern neuron creation.
+   * They also skip event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
+   * Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
+   * Pattern activation and voting still run, so inferences remain populated.
+   * Used by supervised harnesses (MNIST) for the held-out evaluation pass.
+   */
+  setLearning(learning: boolean): void
+  /**
+   * Supervised wiring step that sits on top of the last `processFrame` call.
+   * `actions: Map<channelId, Map<dimId, scalar>>` names the correct action neuron per channel.
+   * `rewards: Map<channelId, number>` carries the per-channel reward magnitude.
+   * `distance` is the connection-table slot at which the voter→action edge is written and read back.
+   * Single-frame supervised harnesses (MNIST) pass `distance=1` to match the existing temporal voting slot.
+   * Wires every currently-active age-0 voter to the named action neuron(s).
+   * The wire uses additive (strength+=1, reward+=reward) semantics.
+   * Then runs a post-wire inference sweep at the matching age (distance - 1) and returns the resulting FrameResult.
+   * distance must be >= 1.
+   */
+  learn(actions: object, rewards: object, distance: number): object
   /** Reset brain memory state for a clean episode start. */
   resetContext(): void
   /** Hard reset: clears ALL learned data. */

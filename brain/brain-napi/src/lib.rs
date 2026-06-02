@@ -280,6 +280,35 @@ impl JsBrain {
         Ok(())
     }
 
+    /// Master learning toggle.
+    /// When false, subsequent `processFrame` calls skip op-2 (decay/reap) and error-correction pattern neuron creation.
+    /// They also skip event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
+    /// Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
+    /// Pattern activation and voting still run, so inferences remain populated.
+    /// Used by supervised harnesses (MNIST) for the held-out evaluation pass.
+    #[napi(js_name = "setLearning")]
+    pub fn set_learning(&self, learning: bool) -> Result<()> {
+        self.inner.borrow_mut().set_learning(learning);
+        Ok(())
+    }
+
+    /// Supervised wiring step that sits on top of the last `processFrame` call.
+    /// `actions: Map<channelId, Map<dimId, scalar>>` names the correct action neuron per channel.
+    /// `rewards: Map<channelId, reward>` carries the per-channel reward magnitude.
+    /// `distance` is the connection-table slot at which to wire and read back.
+    /// Wires every currently-active age-0 voter to the named action neuron(s) at the given distance.
+    /// The wire uses additive (strength+=1, reward+=reward) semantics.
+    /// Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
+    /// The harness can then observe the prediction the brain would make for this same input after the supervision lands.
+    /// Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
+    #[napi(js_name = "learn")]
+    pub fn learn(&self, env: Env, actions: JsObject, rewards: JsObject, distance: u32) -> Result<JsObject> {
+        let rust_actions = read_nested_map(&env, &actions)?;
+        let rust_rewards = read_number_map(&env, &rewards)?;
+        let frame_result = self.inner.borrow_mut().learn(&rust_actions, &rust_rewards, distance);
+        build_frame_result(&env, &frame_result)
+    }
+
     /// Reset brain memory state for a clean episode start.
     #[napi(js_name = "resetContext")]
     pub fn reset_context(&self) -> Result<()> {

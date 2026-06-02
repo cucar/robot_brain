@@ -53,10 +53,10 @@ use crate::column::{
 use crate::context::Context;
 use crate::neuron::{
     ActiveNeuron, AgeState, Correction, ContextRefUpdate, ErrorFeedback,
-    SerializedNeuron,
+    SerializedNeuron, Vote,
 };
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId,
+    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
 };
 
 pub struct Region {
@@ -125,6 +125,7 @@ impl Region {
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         new_active_neurons: &[ActiveNeuron],
         frame_number: FrameNumber,
+        learning: bool,
     ) -> Vec<ColumnProcessResult> {
         // Phase 1: Route — clone each task into its owning column's work list.
         // Must happen before par_iter so each column gets an owned Vec it can
@@ -140,7 +141,7 @@ impl Region {
                 if col_tasks.is_empty() { return Vec::new(); }
                 col.process_level(
                     &col_tasks, memory_depth, level_context, new_error_pattern_ids,
-                    new_active_neurons, frame_number,
+                    new_active_neurons, frame_number, learning,
                 )
             })
             .collect();
@@ -221,6 +222,44 @@ impl Region {
             by_column[col].push(spec.clone());
         }
         by_column
+    }
+
+    // ── Brain.learn(): supervised action wiring + read-only vote sweep ────
+
+    /// Route voter→action wirings to owning columns by voter_id and dispatch in parallel.
+    /// Each tuple is (voter_id, action_id, reward).
+    /// The column applies additive learn_action_connection on the voter neuron at the supplied distance.
+    pub fn learn_action_connections(&mut self, wirings: &[(NeuronId, NeuronId, Reward)], distance: Distance) {
+        let mut by_column: Vec<Vec<(NeuronId, NeuronId, Reward)>> = (0..self.c).map(|_| Vec::new()).collect();
+        for &w in wirings {
+            let col = self.route_neuron(w.0);
+            by_column[col].push(w);
+        }
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_wirings)| {
+                if !col_wirings.is_empty() {
+                    col.learn_action_connections(&col_wirings, distance);
+                }
+            });
+    }
+
+    /// Route (voter_id, age) pairs to owning columns by voter_id and run a read-only vote sweep in parallel.
+    /// Returns per-(voter, age) vote lists in column-index order.
+    pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Distance, Vec<Vote>)> {
+        let mut by_column: Vec<Vec<(NeuronId, Distance)>> = (0..self.c).map(|_| Vec::new()).collect();
+        for &pair in voter_ages {
+            let col = self.route_neuron(pair.0);
+            by_column[col].push(pair);
+        }
+        let nested: Vec<Vec<(NeuronId, Distance, Vec<Vote>)>> = self.columns.par_iter()
+            .zip(by_column.into_par_iter())
+            .map(|(col, col_pairs)| {
+                if col_pairs.is_empty() { return Vec::new(); }
+                col.collect_votes_for_voter_ages(&col_pairs)
+            })
+            .collect();
+        nested.into_iter().flatten().collect()
     }
 
     // ── Op-2: Delete cascade ───────────────────────────────────────────────

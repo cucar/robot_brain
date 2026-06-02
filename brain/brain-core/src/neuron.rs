@@ -390,14 +390,28 @@ impl Neuron {
         self.connections[idx].insert(to_neuron_id, ConnectionData { strength, reward });
     }
 
-    /// Upsert a connection at distance to the target neuron: create if missing, else
-    /// strengthen (smoothing the reward). If the resulting reward is negative, wire an
-    /// alternative action with neutral reward so it can be tried next time.
-    pub fn upsert_connection(&mut self, distance: Distance, to_neuron_id: NeuronId, channel_id: ChannelId, reward: Reward) {
-        if self.has_connection(distance, to_neuron_id) { self.strengthen_connection(distance, to_neuron_id, reward); }
-        else { self.create_connection(distance, to_neuron_id, 1.0, reward); }
+    /// Strengthen the connection if it already exists, otherwise create it with strength=1.0.
+    /// Reward is folded in via strengthen_connection's exponential smoothing on update.
+    /// On create, reward is stored as-is.
+    /// This is the core (create-or-strengthen + smoothed reward) shared by temporal `upsert_connection` and supervised `Brain.learn`.
+    /// Supervised callers use this directly because they don't need the alt-action lookup `upsert_connection` adds on top.
+    pub fn strengthen_or_create_connection(&mut self, distance: Distance, to_neuron_id: NeuronId, reward: Reward) {
+        if self.has_connection(distance, to_neuron_id) {
+            self.strengthen_connection(distance, to_neuron_id, reward);
+        } else {
+            self.create_connection(distance, to_neuron_id, 1.0, reward);
+        }
+    }
 
-        // for actions with negative (smoothed) rewards, save an alternative with neutral reward - we'll try it next time
+    /// Upsert a connection at distance to the target neuron: create if missing, else strengthen (smoothing the reward).
+    /// If the resulting reward is negative, wire an alternative action with neutral reward so it can be tried next time.
+    /// Used by temporal learning in process_frame, where reward exploration matters.
+    pub fn upsert_connection(&mut self, distance: Distance, to_neuron_id: NeuronId, channel_id: ChannelId, reward: Reward) {
+
+        // strengthen or create the connection first
+        self.strengthen_or_create_connection(distance, to_neuron_id, reward);
+
+        // For actions with negative (smoothed) rewards, save an alternative with neutral reward — we'll try it next time.
         let conn_reward = self.connections[distance as usize].get(&to_neuron_id).unwrap().reward;
         if conn_reward < 0.0 {
             if let Some(alt) = self.find_alternative_action(distance, channel_id, to_neuron_id) {
@@ -701,16 +715,21 @@ impl Neuron {
         current_frame: FrameNumber,
         corrections: &[Correction],
         error_feedback: &[ErrorFeedback],
+        learning: bool,
     ) -> ProcessFrameResult {
 
-        // fold prior-frame error feedback into per-age stats first so the threshold attached
-        // to this frame's votes (computed in generate_votes) reflects the latest sample
-        for fb in error_feedback { self.record_error(fb.age, fb.error_rate); }
+        // Fold prior-frame error feedback into per-age accuracy stats first.
+        // That way the threshold attached to this frame's votes (computed in generate_votes) reflects the latest sample.
+        // Non-learning mode skips this because accuracy stats are connection-substrate state.
+        if learning {
+            for fb in error_feedback { self.record_error(fb.age, fb.error_rate); }
+        }
         let mut timings = NeuronOpTimings::default();
 
-        // learn connections across all active ages (age=0 skipped internally)
-        // but, if this neuron was just created, it was already created with the current connections - no need to learn again
-        if !new_error_pattern_ids.contains(&self.id) {
+        // Learn connections across all active ages (age=0 skipped internally).
+        // Skipped entirely in non-learning mode (the supervised eval path).
+        // Also skipped for new error patterns, which were already created with current connections this frame.
+        if learning && !new_error_pattern_ids.contains(&self.id) {
             let t = std::time::Instant::now();
             self.learn_connections(age_states, actives);
             timings.learn_connections = t.elapsed().as_secs_f64();
@@ -718,7 +737,7 @@ impl Neuron {
 
         // match patterns if we have context and eligible ages
         let t = std::time::Instant::now();
-        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, &mut timings);
+        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, learning, &mut timings);
         timings.recognize_patterns = t.elapsed().as_secs_f64();
 
         // install pre-created error-correction patterns as children and emit their contextRef adds
@@ -755,6 +774,7 @@ impl Neuron {
         level_context: Option<&Context>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         current_frame: FrameNumber,
+        learning: bool,
         timings: &mut NeuronOpTimings,
     ) -> RecognizeResult {
         let mut matches = Vec::new();
@@ -800,8 +820,9 @@ impl Neuron {
             let activate = !activated_pattern_ids.contains(&best.pattern_id);
             activated_pattern_ids.insert(best.pattern_id);
 
-            // strengthen child activation automatically here
-            let death_frame = if activate { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
+            // Strengthen child activation automatically here, but only in learning mode.
+            // Non-learning eval still activates the pattern but does not extend its life.
+            let death_frame = if activate && learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
 
             // include the best match for the age in the results
             matches.push(PatternMatch {

@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::context::Context;
 use crate::neuron::{
     ActiveNeuron, AgeState, AgeVotes, Correction, ContextRefUpdate,
-    CorrectionActivation, ErrorFeedback, Neuron, PatternMatch,
+    CorrectionActivation, ErrorFeedback, Neuron, PatternMatch, Vote,
 };
 use crate::types::{
     ChannelId, Distance, ErrorMode, FrameNumber,
@@ -132,6 +132,7 @@ impl Column {
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         new_active_neurons: &[ActiveNeuron],
         frame_number: FrameNumber,
+        learning: bool,
     ) -> Vec<ColumnProcessResult> {
         let mut results = Vec::with_capacity(tasks.len());
         for (neuron_id, age_states, corrections, error_feedback) in tasks {
@@ -139,7 +140,7 @@ impl Column {
                 .unwrap_or_else(|| panic!("Column.process_level: neuron {} not found", neuron_id));
             let result = neuron.process_frame(
                 age_states, memory_depth, level_context, new_error_pattern_ids,
-                new_active_neurons, frame_number, corrections, error_feedback,
+                new_active_neurons, frame_number, corrections, error_feedback, learning,
             );
             results.push(ColumnProcessResult {
                 parent_id: *neuron_id,
@@ -502,6 +503,37 @@ impl Column {
     /// Clear all neurons. Used during reset before restore.
     pub fn clear(&mut self) {
         self.neurons.clear();
+    }
+
+    /// Brain.learn(): apply a batch of supervised voter→action wirings against owned voter neurons.
+    /// Each entry wires (voter_id) → (action_id) at the given distance.
+    /// The wire uses additive (strength += 1, reward += reward_arg) semantics.
+    /// The distance is caller-supplied so the same primitive can serve different supervised paths.
+    pub fn learn_action_connections(&mut self, wirings: &[(NeuronId, NeuronId, Reward)], distance: Distance) {
+        for &(voter_id, action_id, reward) in wirings {
+            if let Some(neuron) = self.neurons.get_mut(&voter_id) {
+                neuron.strengthen_or_create_connection(distance, action_id, reward);
+            }
+        }
+    }
+
+    /// Read-only vote sweep over (voter_id, age) pairs owned by this column.
+    /// Each pair represents one active non-suppressed voter at a specific age.
+    /// Mirrors how `Neuron::generate_votes` walks ages inside process_frame.
+    /// Calls `neuron.vote(age)` for each pair and tags the resulting Votes with their natural distance = age + 1.
+    /// Used by Brain.learn() to collect the post-wire inference vote pool without re-running process_frame.
+    /// Returns (voter_id, age, votes) triples; empty vote lists are filtered out.
+    pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Distance, Vec<Vote>)> {
+        let mut out = Vec::new();
+        for &(voter_id, age) in voter_ages {
+            if let Some(neuron) = self.neurons.get(&voter_id) {
+                let votes = neuron.vote(age);
+                if !votes.is_empty() {
+                    out.push((voter_id, age, votes));
+                }
+            }
+        }
+        out
     }
 
     /// Update shared action sets when a new channel is registered. Called by Thalamus

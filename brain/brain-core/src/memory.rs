@@ -129,6 +129,40 @@ impl Memory {
         self.age_index.get(&frame).cloned().unwrap_or_default()
     }
 
+    /// Get the union of every active voter neuron id across all ages in the sliding window.
+    /// A voter is an active neuron whose `activated_pattern_id` is None at that age.
+    /// Neurons that activated a higher-level pattern are inhibited and do NOT vote.
+    /// A neuron with mixed states (suppressed at some ages, voter at others) counts as a voter.
+    /// Wiring is per-neuron, not per-age.
+    /// Same neuron active at multiple activation frames is returned once (HashSet dedupes).
+    pub fn get_active_voter_ids(&self) -> FxHashSet<NeuronId> {
+        let mut ids = FxHashSet::default();
+        for (&neuron_id, states) in &self.neuron_states {
+            if states.values().any(|state| state.activated_pattern_id.is_none()) {
+                ids.insert(neuron_id);
+            }
+        }
+        ids
+    }
+
+    /// Get (voter_id, age) pairs for every non-suppressed active state in the sliding window.
+    /// Same neuron active at multiple ages emits one pair per non-suppressed age.
+    /// Mirrors how `Neuron::generate_votes` walks ages inside process_frame.
+    /// Inhibited states (those whose `activated_pattern_id` is set) are skipped.
+    /// Used by Brain.learn() to drive the post-wire vote sweep.
+    /// Every active voter at every valid age contributes a vote.
+    pub fn get_active_voter_ages(&self) -> Vec<(NeuronId, Distance)> {
+        let mut pairs = Vec::new();
+        for (&neuron_id, states) in &self.neuron_states {
+            for (&frame, state) in states {
+                if state.activated_pattern_id.is_some() { continue; }
+                let age = (self.frame_number - frame) as Distance;
+                pairs.push((neuron_id, age));
+            }
+        }
+        pairs
+    }
+
     /// Get the per-age Sets of neuron IDs for a level (index = age), in age-ascending order.
     /// Returns an empty vec if the level has no active neurons.
     /// Built fresh on each call by walking ages 0..depth-1 against the frame-keyed level index.

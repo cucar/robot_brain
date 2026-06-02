@@ -723,19 +723,22 @@ impl Thalamus {
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
+        learning: bool,
     ) -> ProcessLevelResult {
 
         let mut orchestration = OrchestrationTimings::default();
 
-        // aggregate per-neuron work, build the shared level context, allocate error pattern specs
+        // Aggregate per-neuron work, build the shared level context, allocate error pattern specs.
+        // Non-learning mode still builds the level context so pattern activation can run.
+        // It skips error-correction allocation and per-age error feedback recording.
         let t = std::time::Instant::now();
         let (tasks, level_context, new_neuron_specs) =
-            self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids);
+            self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids, learning);
         orchestration.get_level_tasks = t.elapsed().as_secs_f64();
 
         // Op-3: dispatch processFrame — the only cross-region round-trip in the level loop
         let t = std::time::Instant::now();
-        let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], &rewards[0], frame_number);
+        let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], &rewards[0], frame_number, learning);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
         // extract activations inline — needed to feed the next level
@@ -803,6 +806,7 @@ impl Thalamus {
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
+        learning: bool,
     ) -> (Vec<LevelTask>, Context, Vec<NeuronCreateSpec>) {
         let mut tasks = Vec::new();
         let mut level_context = Context::new();
@@ -828,9 +832,9 @@ impl Thalamus {
                 continue;
             }
 
-            // get level error corrections + per-age feedback for the neuron's own stats
+            // Populate level_context and (in learning mode) collect error corrections + per-age accuracy feedback.
             let (corrections, error_feedback) = self.get_level_corrections(
-                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number,
+                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number, learning,
             );
 
             // extract creation specs for Op-4
@@ -862,6 +866,8 @@ impl Thalamus {
 
     /// For a single active neuron: add its age>0 entries to the shared levelContext and create
     /// error-correction pattern neurons for ages whose previous votes mismatched reality.
+    /// Non-learning mode still populates level_context (so pattern recognition at the next level has its context).
+    /// It skips everything else — no accuracy-stats feedback, no error pattern allocation.
     fn get_level_corrections(
         &mut self,
         neuron_id: NeuronId,
@@ -871,6 +877,7 @@ impl Thalamus {
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
+        learning: bool,
     ) -> (Vec<CorrectionSpec>, Vec<ErrorFeedback>) {
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
@@ -881,6 +888,9 @@ impl Thalamus {
 
             // every age > 0 entry contributes to the shared level context
             if age > 0 { level_context.add_neuron(neuron_id, age, 1.0); }
+
+            // Non-learning mode is done after level_context population — no accuracy stats, no error pattern allocation.
+            if !learning { continue; }
 
             // skip if context is empty. empty context patterns can never match anything in future frames.
             // they would just keep regenerating useless siblings. we do this before vote error evaluation so that
@@ -924,6 +934,7 @@ impl Thalamus {
         age0: &FxHashSet<NeuronId>,
         current_rewards: &FxHashMap<ChannelId, Reward>,
         frame_number: FrameNumber,
+        learning: bool,
     ) -> Vec<ColumnProcessResult> {
 
         // decorate age=0 sensory neurons with channel id + pre-resolved reward
@@ -955,7 +966,7 @@ impl Thalamus {
 
             let region_results = self.region_list[r].process_level(
                 &region_tasks, memory_depth, level_context_opt, new_error_pattern_ids,
-                &new_active_neurons, frame_number,
+                &new_active_neurons, frame_number, learning,
             );
             results.extend(region_results);
         }
@@ -1103,6 +1114,56 @@ impl Thalamus {
             Some(spec) => !spec.learn_action_sequences,
             None => false,
         }
+    }
+
+    // ── Brain.learn(): supervised wiring + read-only vote sweep ────────────
+
+    /// Brain.learn() entry point.
+    /// Routes a batch of supervised voter→action wirings to the owning region/column by voter_id.
+    /// Each tuple is (voter_id, action_id, reward).
+    /// Columns apply additive (strength += 1, reward += reward) onto the voter's distance-`distance` connection slot.
+    pub fn learn_action_connections(&mut self, wirings: &[(NeuronId, NeuronId, Reward)], distance: Distance) {
+        if wirings.is_empty() { return; }
+        let mut by_region: Vec<Vec<(NeuronId, NeuronId, Reward)>> = (0..self.regions).map(|_| Vec::new()).collect();
+        for &w in wirings {
+            let r = self.route_neuron(w.0);
+            by_region[r].push(w);
+        }
+        for (r, region_wirings) in by_region.iter().enumerate() {
+            if !region_wirings.is_empty() {
+                self.region_list[r].learn_action_connections(region_wirings, distance);
+            }
+        }
+    }
+
+    /// Read-only vote sweep over (voter_id, age) pairs from currently-active non-suppressed voters.
+    /// Routes each pair to its owning region by voter_id, calls `neuron.vote(age)` per pair, and flattens to FlatVotes.
+    /// Mirrors what `Neuron::generate_votes` does inside process_frame.
+    /// Every active voter at every valid age contributes its connections[age+1] entries.
+    /// Used by Brain.learn() to produce the post-wire inference pass without touching any state.
+    pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<FlatVote> {
+        if voter_ages.is_empty() { return Vec::new(); }
+        let mut by_region: Vec<Vec<(NeuronId, Distance)>> = (0..self.regions).map(|_| Vec::new()).collect();
+        for &pair in voter_ages {
+            let r = self.route_neuron(pair.0);
+            by_region[r].push(pair);
+        }
+        let mut flat = Vec::new();
+        for (r, region_pairs) in by_region.iter().enumerate() {
+            if region_pairs.is_empty() { continue; }
+            for (voter_id, _age, votes) in self.region_list[r].collect_votes_for_voter_ages(region_pairs) {
+                for vote in votes {
+                    flat.push(FlatVote {
+                        voter_id,
+                        neuron_id: vote.neuron_id,
+                        strength: vote.strength,
+                        reward: vote.reward,
+                        distance: vote.distance,
+                    });
+                }
+            }
+        }
+        flat
     }
 
     // ── Neuron creation / dispatch ──────────────────────────────────────────

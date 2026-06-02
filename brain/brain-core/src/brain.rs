@@ -222,6 +222,15 @@ pub struct Brain {
     /// harness actually consumes the per-vote detail.
     emit_votes: bool,
 
+    /// When true (default), process_frame mutates connections and learns error correction patterns.
+    /// When false, process_frame skips forget/decay and error-correction pattern neuron creation.
+    /// It also skips event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
+    /// Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
+    /// Pattern activation and voting still run.
+    /// The harness still reads predictions out of FrameResult.inferences exactly as during training.
+    /// The supervised evaluation path is `set_learning(false)` followed by ordinary `process_frame` calls.
+    learning: bool,
+
     /// Current frame data from all channels (rebuilt each frame).
     frame: Vec<FramePoint>,
 
@@ -272,6 +281,7 @@ impl Brain {
             context_length,
             debug,
             emit_votes: false,
+            learning: true,
             frame: Vec::new(),
             rewards: Vec::new(),
             frame_number: 0,
@@ -311,6 +321,20 @@ impl Brain {
     /// Inference/debug harnesses that consume votes flip this on.
     pub fn set_emit_votes(&mut self, enabled: bool) {
         self.emit_votes = enabled;
+    }
+
+    /// Toggle the master learning flag.
+    /// See `Brain.learning` for the list of mutating operations that get skipped when learning is off.
+    /// Voting and inference still run, so `process_frame` continues to populate FrameResult.inferences identically.
+    /// Only the learning side effects are suppressed.
+    pub fn set_learning(&mut self, learning: bool) {
+        self.learning = learning;
+    }
+
+    /// Inspect the current learning flag (test-only).
+    #[cfg(test)]
+    pub fn is_learning(&self) -> bool {
+        self.learning
     }
 
     /// Reset brain memory state for a clean episode start.
@@ -714,14 +738,21 @@ impl Brain {
             };
         }
 
-        // Op-1: construct any new sensory neurons in their owning columns
+        // Op-1: construct any new sensory neurons in their owning columns.
+        // Runs in both learning and non-learning modes — without sensory neurons we cannot process the frame at all.
+        // Non-learning mode suppresses learning side effects elsewhere in the pipeline.
+        // Those side effects are error pattern creation, connection strengthening, and accuracy-stats tracking.
+        // Sensory substrate construction is not a learning side effect.
         let t = Instant::now();
         self.create_new_sensory_neurons(&frame_neurons);
         timings.create_sensory = t.elapsed().as_secs_f64();
 
-        // Op-2: forget connections and patterns to avoid curse of dimensionality
+        // Op-2: forget connections and patterns to avoid curse of dimensionality.
+        // Skipped in non-learning mode so learned neurons do not decay or get forgotten.
         let t = Instant::now();
-        self.cleanup_dead_patterns();
+        if self.learning {
+            self.cleanup_dead_patterns();
+        }
         timings.cleanup_dead = t.elapsed().as_secs_f64();
 
         // slide the temporal window: age active neurons and push the new rewards frame
@@ -925,6 +956,7 @@ impl Brain {
                 &self.rewards,
                 self.frame_number,
                 &mut new_error_pattern_ids,
+                self.learning,
             );
             orch_timings.add(&result.orchestration);
 
@@ -1309,6 +1341,124 @@ impl Brain {
             result.insert(channel_id, entries);
         }
         result
+    }
+
+    // ── Supervised learning entry point ─────────────────────────────────────
+
+    /// Supervised wiring step that sits on top of the last process_frame call.
+    /// `actions` names the correct action neuron(s) per channel as `ChannelId → DimensionId → scalar`.
+    /// `rewards` carries the per-channel reward magnitude.
+    /// `distance` is the connection-table slot at which the voter→action edge gets written and the read-back is taken.
+    /// Wiring covers every currently active voter regardless of age — not just age-0 voters.
+    /// In single-frame setups (MNIST) all voters happen to be at age 0.
+    /// In temporal setups voters at multiple ages all contribute.
+    /// This does NOT run process_frame, activate any new neurons, decay anything, or touch accuracy stats.
+    /// It is pure wiring plus a read-back.
+    /// Wiring goes through `Neuron::strengthen_or_create_connection`.
+    /// That is the same create-or-strengthen + smoothed-reward core that temporal `upsert_connection` uses.
+    /// Supervised wiring skips the alt-action-on-negative-reward exploration `upsert_connection` layers on top.
+    /// That is why `learn()` doesn't need `channel_id` plumbed through.
+    pub fn learn(
+        &mut self,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+        rewards: &FxHashMap<ChannelId, Reward>,
+        distance: Distance,
+    ) -> FrameResult {
+        let frame_start = Instant::now();
+        let mut timings = FrameTimings::default();
+
+        // Resolve the supplied action scalars to action neuron ids paired with their per-channel reward.
+        let action_targets = self.resolve_action_targets(actions, rewards);
+
+        // Enumerate every currently-active voter across all ages in the sliding window.
+        let voter_ids = self.get_active_voter_ids();
+
+        // Wire every (voter → correct-action) edge at the supplied distance with additive accumulation.
+        self.learn_action_connections(&voter_ids, &action_targets, distance);
+
+        // Run a read-only vote sweep + consensus pass over all active voters at all their valid ages.
+        // The caller can then observe the prediction the brain would make for this input post-supervision.
+        let (inferences, votes) = self.read_back_inference(&mut timings);
+
+        FrameResult {
+            inferences,
+            votes,
+            elapsed: frame_start.elapsed().as_secs_f64(),
+            timings,
+        }
+    }
+
+    /// Resolve action coordinates supplied to learn() to action neuron ids paired with their per-channel reward.
+    /// Quantizes each scalar to a bucket id via the channel-dim's quantizer.
+    /// Then looks up the action neuron in the coordinate map.
+    /// Panics if any supplied coordinate doesn't resolve to a registered action neuron.
+    /// Also panics if no targets were supplied at all.
+    /// Both are caller bugs, not runtime conditions to absorb.
+    fn resolve_action_targets(
+        &mut self,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
+        rewards: &FxHashMap<ChannelId, Reward>,
+    ) -> Vec<(NeuronId, Reward)> {
+        let mut action_targets: Vec<(NeuronId, Reward)> = Vec::new();
+        for (&channel_id, dim_map) in actions {
+            let reward = rewards.get(&channel_id).copied().unwrap_or(0.0);
+            for (&dim_id, &scalar) in dim_map {
+                let bucket_id = self.thalamus.quantizer.quantize(dim_id, scalar);
+                let coord = Coordinate { dim_id, bucket_id };
+                let action_id = self.thalamus.get_neuron_id_by_coordinate(&coord).unwrap_or_else(|| {
+                    panic!("Brain.learn: no action neuron registered at channel={}, dim={}, bucket={}", channel_id, dim_id, bucket_id)
+                });
+                action_targets.push((action_id, reward));
+            }
+        }
+        assert!(!action_targets.is_empty(), "Brain.learn: no action targets supplied — caller must name at least one correct action");
+        action_targets
+    }
+
+    /// Enumerate every currently-active voter across all ages in the sliding window.
+    /// Inhibited neurons (those that activated a higher-level pattern) are excluded.
+    /// They don't vote and shouldn't be wired by learn().
+    /// A voter active at multiple ages is returned once — wiring is per-(voter, target, distance), not per-age.
+    /// Panics if no voters are active — learn() requires a non-empty process_frame to have just run.
+    fn get_active_voter_ids(&self) -> Vec<NeuronId> {
+        let voter_ids: Vec<NeuronId> = self.memory.get_active_voter_ids().into_iter().collect();
+        assert!(!voter_ids.is_empty(), "Brain.learn: no active voters — process_frame must be called (with a non-empty frame) before learn()");
+        voter_ids
+    }
+
+    /// Build the (voter, action, reward) wiring batch and dispatch it through Thalamus.
+    /// Every active voter wires to every supplied action neuron at the given distance.
+    /// Wiring is additive (strength += 1, reward += reward_arg); the connection is allocated on first encounter.
+    fn learn_action_connections(
+        &mut self,
+        voter_ids: &[NeuronId],
+        action_targets: &[(NeuronId, Reward)],
+        distance: Distance,
+    ) {
+        let mut wirings: Vec<(NeuronId, NeuronId, Reward)> = Vec::with_capacity(voter_ids.len() * action_targets.len());
+        for &voter_id in voter_ids {
+            for &(action_id, reward) in action_targets {
+                wirings.push((voter_id, action_id, reward));
+            }
+        }
+        self.thalamus.learn_action_connections(&wirings, distance);
+    }
+
+    /// Run the same vote sweep + consensus pass process_frame would do for the current brain state.
+    /// Walks every active non-suppressed (voter, age) pair and calls `neuron.vote(age)` per pair.
+    /// Feeds the resulting FlatVotes through the existing infer_neurons consensus path.
+    /// This mirrors the voting half of process_frame without any of its mutating side effects.
+    /// Returns the per-channel inference map and the per-vote detail list for the harness to inspect.
+    fn read_back_inference(
+        &mut self,
+        timings: &mut FrameTimings,
+    ) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Vec<FrameVote>) {
+        let t = Instant::now();
+        let voter_ages = self.memory.get_active_voter_ages();
+        let votes = self.thalamus.collect_votes_for_voter_ages(&voter_ages);
+        let (inferences_map, resolved_votes, _winners) = self.infer_neurons(&votes);
+        timings.infer = t.elapsed().as_secs_f64();
+        (inferences_map, resolved_votes)
     }
 
     // ── Cleanup ─────────────────────────────────────────────────────────────
