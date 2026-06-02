@@ -31,24 +31,7 @@ The initial sensory-only run at **7×7 binary** behaves as the Naive Bayes chara
 
 ---
 
-## How to read this document
-
-Changes on `mnist` group into **coherent projects**. Each project listed below is a single commit onto `main`. Work them in order — top to bottom is the merge plan. Each project section contains:
-
-- **Goal** — what the project was trying to accomplish.
-- **Surface** — every file/symbol touched.
-- **Decision** — Keep / Collapse.
-- **Test plan and acceptance** — what verifies it when the commit lands.
-
-Categorization shorthand: 🟢 keep · 🟡 collapse · ★ stocks-affecting.
-
-Projects on `mnist` that are not listed below are **not being pulled** — they stay on the `mnist` branch and disappear when it's deleted. No work needed.
-
-**Workflow.** work on `main` and pull each project's changes across from `mnist` one commit at a time, testing as you go. After all projects land, there is one **post-merge task** (delete the `mnist` branch).
-
----
-
-## Naive MNIST app 🟢
+## Naive MNIST app
 
 **Goal.** Stand up the **sensory-only (Naive Bayes) MNIST app** described at the top of this document. The original `apps/mnist/encoder.js` was a single-channel pixel-stream encoder that fed pixels temporally one frame at a time — a sequence-learning shape that doesn't match how the NB voting setup needs to see an image. The refactor replaces it with a per-pixel-position (retinotopic) encoder, so a whole image becomes **one frame** in which every pixel channel fires concurrently and votes are aggregated across channels into the shared digit action — the exact voting structure the intro characterizes as Naive Bayes. The branch also adds two siblings — a row-channel variant and the digit label encoder — and rewrites `apps/mnist/jobs/test.js` around the new shape. `dump_image.js` was added to convert MNIST images into the text-pipeline format for cross-app inspection.
 
