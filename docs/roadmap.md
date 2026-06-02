@@ -1,141 +1,98 @@
 # Short-Term Roadmap
 
+Each section below is one step. They execute in order — steps 1–4 land the architecture, steps 5–6 are the MNIST validation milestones, steps 7–10 are follow-on work.
+
 ---
 
-## Architecture Workstreams (in order)
+## 1. Naive MNIST
 
-Four sequential workstreams replace the original "MNIST processing" entry. The first two are prerequisites for everything else; the third introduces spatial processing; the fourth adds neuron reuse on top.
+See **[mnist-merge.md](./mnist-merge.md)**.
 
-1. **[mnist-merge.md](./mnist-merge.md)** — Reconcile the long-running `mnist` branch into `dev`. Lands the static forget-rate change alongside the merge.
-2. **[inference-level.md](./inference-level.md)** — Pick the inference scope rule (`base` / `same-level` / `all-levels`) via an experiment on the stocks pipeline. Decision propagates into spatial processing.
-3. **[spatial-processing.md](./spatial-processing.md)** — Add `process_spatial` ahead of `process_temporal`. Remove intrinsic neuron levels (level becomes per-frame activation state). d=0 connections, spatial wavefront, error-driven correction minting. Validates on MNIST single-frame and on stocks.
-4. **[neuron-reuse.md](./neuron-reuse.md)** — Reverse inference index, reuse lookup in the correction path, transfer-learning validation, full-pipeline stocks integration, class-neuron generalization tuning.
+Reconcile the long-running `mnist` branch into `dev`. This brings in the **sensory-only (Naive Bayes) MNIST app** — the degenerate, pre-spatial-processing iteration. See that doc for why it is structurally Naive Bayes and why its accuracy is capped accordingly.
 
-Why this matters for MNIST and continual learning: once spatial processing and reuse are in place, the original MNIST claims (vanilla and Split-MNIST) become validation milestones inside the spatial-processing workstream (MNIST single-frame harness) and the neuron-reuse workstream (transfer test). The substrate-and-domain claims and the no-catastrophic-forgetting claims hold as before; the path to validating them is what got concrete.
+---
 
-### Why MNIST still matters as the validation target
+## 2. Inference Level Experiment
+
+See **[inference-level.md](./inference-level.md)**.
+
+Pick the inference scope rule (`base` / `same-level` / `all-levels`) via an experiment on the stocks pipeline. Decision propagates into spatial processing.
+
+---
+
+## 3. Spatial Processing
+
+See **[spatial-processing.md](./spatial-processing.md)**.
+
+Add `process_spatial` ahead of `process_temporal`. Remove intrinsic neuron levels (level becomes per-frame activation state). d=0 connections, spatial wavefront, error-driven correction minting. Validates on MNIST single-frame and on stocks. **This is the workstream that begins relaxing the Naive Bayes independence assumption** by manufacturing conjunctive features.
+
+---
+
+## 4. Neuron Re-use
+
+See **[neuron-reuse.md](./neuron-reuse.md)**.
+
+Reverse inference index, reuse lookup in the correction path, transfer-learning validation, full-pipeline stocks integration, class-neuron generalization tuning. Allocates capacity onto the error manifold (residual-fitting).
+
+---
+
+## 5. Vanilla MNIST
+
+Vanilla 10-way digit classification with the completed architecture. Runs only after steps 1–4 land. Confirms the architecture handles vision at all before tackling continual learning.
+
+### What's already in place from step 1
+
+The channel layout, encoder, episode shape, training/eval harness, and hyperparameter starting points were stood up in step 1 as the sensory-only Naive Bayes app — see the **Naive MNIST app** section in [mnist-merge.md](./mnist-merge.md) for retinotopic channels, single-frame episode structure, phased quantization (binary → 4/8 → 16), shared action neurons, and compute notes. This step does **not** change any of that. What changes is the brain underneath: spatial processing (step 3) now manufactures inter-channel connections at d=0, and neuron reuse (step 4) reallocates capacity onto the error manifold. Same encoder, same harness, same channels — the architecture is no longer degenerate.
+
+### The baseline to beat: Naive Bayes
+
+The sensory-only app merged in step 1 *is* Naive Bayes — independent per-pixel voting, no joint structure (see mnist-merge.md). That sets the explicit bar for the full architecture:
+
+* **Naive Bayes (independent pixels): ~83–84% test on full 28×28.** This is the floor and the "did we just reimplement NB?" check. The full architecture must clear this *using a different mechanism* (no backprop, no labels, demand-driven, gain from conjunctive features and reuse) for the result to mean anything.
+* **Logistic regression / linear classifier: ~92%.** The next rung — pixel-based but jointly weighted. Beating NB but not this means a little co-occurrence is being captured but nothing strongly spatial.
+* **k-NN: ~97%.** Pure template matching; shows how much signal is in the pixels when configuration is respected.
+* **Simple MLP / small CNN: 98–99%+.** The gradient-trained ceiling — not the target for a label-free, no-backprop voting system, but the reference for where the signal tops out.
+
+The interesting result for Robot Brain is not beating a CNN; it is **matching or beating a jointly-trained linear model (~92%) without joint training, labels, or backprop** — with the climb from the NB floor coming mechanism by mechanism as the independence assumption dissolves. Each architectural addition (spatial processing, then reuse) should push accuracy up this ladder while preserving the no-backprop / no-label properties. Don't over-anchor on NB's exact number; let an NB run on *identical* preprocessing be the apples-to-apples reference.
+
+### Why MNIST as the validation target
 
 MNIST is the most widely recognized benchmark in machine learning. We use it twice, in sequence, to make two distinct architectural claims:
 
-1. **Vanilla MNIST** — demonstrates that one prediction-only architecture handles stocks, text, and vision with zero modifications. Validates the "one substrate, multiple domains" claim.
-2. **Split-MNIST (class-incremental)** — demonstrates continual learning without replay buffers, task IDs, regularizers, or any of the workarounds gradient-based models require. This is the headline result for external positioning.
+1. **Vanilla MNIST** (this step) — demonstrates that one prediction-only architecture handles stocks, text, and vision with zero modifications. Validates the "one substrate, multiple domains" claim.
+2. **Split-MNIST (class-incremental)** (next step) — demonstrates continual learning without replay buffers, task IDs, regularizers, or any of the workarounds gradient-based models require. The headline result for external positioning.
 
 The deeper claim Split-MNIST validates: **Robot Brain is constitutionally immune to catastrophic forgetting.** Neurons aren't overwritten by gradient updates; they're added and decayed independently. Transformers and MLPs trained sequentially on disjoint class subsets collapse to ~20% accuracy on old tasks (Hsu et al. 2018; van de Ven & Tolias 2019). This architecture should retain old-task accuracy by construction — patterns formed for digits 0/1 are not modified when the system later sees digits 2/3, because their context fingerprints don't match.
 
-### Phase 1 — Vanilla MNIST (validate vision works at all)
+### What spatial processing adds at this step
 
-Before tackling continual learning, confirm the architecture handles 10-way digit classification at all.
+With `process_spatial` in place, connection formation is no longer just sensory → action. Within the single image-frame, every pixel channel observes what its neighbors are concurrently firing at d=0, and inter-channel connections form on the fly. The system learns:
 
-#### Approach — retinotopic parallel channels with action-based classification
+* **Local spatial correlations**: pixel (14,14) being dark while pixel (14,15) is also dark is a learned association, not a geometric prior.
+* **Global digit signatures**: the constellation of pixel activations that characterize each digit class.
+* **Discriminative features**: through reward, the system reinforces connections whose activation patterns reliably predict specific digits.
 
-Rather than scanning pixels sequentially (which imposes an arbitrary temporal order on spatial data), the architecture treats every pixel position as its own parallel channel — analogous to a retinotopic map where each spatial position has a dedicated cortical column.
+The brain discovers that certain combinations of pixel values across specific spatial positions predict specific digits — without ever being told that pixels are arranged in a grid, or that adjacent pixels tend to co-vary. This is the conjunctive-feature mechanism the NB ladder is built to detect.
 
-**Architecture:**
+### Phase 1 success criteria
 
-* **784 channels** (one per pixel position in the 28×28 grid), running in parallel
-* Sensory neurons per channel depend on quantization level (see phased quantization below)
-* **10 shared action neurons** for digit classification (digits 0–9), aggregating votes from all channels
+* **The bar is Naive Bayes (~83–84% at 28×28), not chance.** The sensory-only merge app from step 1 already reaches the NB ceiling by construction. Phase 1 runs the *completed* architecture (post spatial-processing and reuse), so its job is to clear the NB floor using the conjunctive-feature mechanism — anything at or below NB means the spatial/reuse machinery is not yet contributing joint structure and should be debugged before adding precision.
+* **Phase A (binary), gate**: must clear NB at matched preprocessing (28×28 binary NB run from step 1 is the apples-to-apples reference). Failing to clear NB at binary is the architectural debug signal — adding bucket precision will not fix it.
+* **Phases B/C, target**: climb the ladder. **Matching or beating the linear-classifier rung (~92%)** at the optimal bucket count is the headline Phase 1 result — that's the "joint structure without joint training" claim. Pushing into the k-NN range (~97%) is stretch.
+* Training accuracy converges to >95% with sufficient repetition at the optimal quantization level.
+* No architectural changes vs stock/text channels — same brain code, same connection mechanism, just more channels.
+* Inter-channel connections demonstrably encode spatial structure (inspectable: which pixel positions form strong connections should roughly correspond to spatial proximity and shared digit-class membership).
+* The quantization-vs-accuracy curve is documented as an empirical result characterizing the architecture's sensory resolution tradeoff — paired with the NB-only curve from step 1 to isolate the architectural contribution from the resolution contribution.
 
-This is analogous to how the visual cortex maps spatial positions to cortical columns. Each pixel-column doesn't "know" it's part of a grid — it only knows what value it sees and, through learned connections, what its neighbors' values are.
+This is not an attempt to beat CNNs. It is a demonstration that a single prediction-only architecture, designed for temporal sequences, can learn visual recognition through spatial co-occurrence across parallel channels — without any vision-specific components. The benchmark exists to make the architectural claim legible to the ML community using a universally understood task.
 
-#### Phased sensory quantization — binary first
+---
 
-Robot Brain learns through co-activation frequency and combinatorial reuse, not gradient averaging. Sensory precision directly trades off against pattern stability: with 256 grayscale buckets, two handwritten "3"s that differ by a few brightness levels at a few pixels become completely different activation sets, fragmenting the representation. With binary, those same two "3"s likely collapse into the identical activation pattern, and one training example reinforces the next.
+## 6. Split MNIST
 
-This mirrors biological vision: retinal ganglion cells don't transmit raw luminance — they transmit contrast, edges, on/off transitions. The brain aggressively compresses before pattern formation. If Robot Brain needs the same compression to work well, that's convergent design, not a limitation.
+Class-incremental continual learning. The **headline experiment for external positioning**. Runs only after Phase 1 confirms vanilla MNIST works.
 
-The connection density argument is decisive. With binary, each pixel has 2 possible neurons, so a connection between two pixels has 4 possible state combinations — all of which recur constantly, building strong statistics fast. With 256 buckets, the same two pixels have 65,536 combinations, most seen rarely or once. The system would need astronomically more training data to build stable connections.
-
-**Phase A — Binary (2 buckets)**
-
-Threshold MNIST to black/white only. This gives:
-
-* **1,568 total sensory neurons** (784 × 2) — orders of magnitude more tractable than 200K
-* Maximum overlap between examples of the same digit class
-* Minimal entropy, fastest connection stabilization
-* Smallest possible connection space — the architectural proof of concept
-
-If binary fails, the issue is architectural. If binary succeeds, the core mechanism is validated.
-
-**Phase B — 4 or 8 buckets**
-
-Quantize to coarse levels (e.g., black / dark gray / light gray / white). This adds stroke thickness information, anti-aliasing structure, and soft edge detail without exploding the representation space. ~3,136 sensory neurons at 4 buckets, ~6,272 at 8.
-
-**Phase C — 16 buckets**
-
-Likely enough precision for anything useful in MNIST. ~12,544 sensory neurons. 256 buckets are unlikely to provide additional benefit for this architecture and may actively hurt generalization through fragmentation.
-
-**The quantization curve itself is a publishable result.** It characterizes something fundamental about how non-gradient architectures interact with sensory resolution — the optimal quantization level reveals the architecture's natural operating point for balancing discriminative power against pattern stability.
-
-#### Two-frame episode structure
-
-A static image cannot drive connection-based learning in a single frame, because Robot Brain learns by observing temporal co-occurrences across frames. The solution:
-
-* **Frame 1**: all 784 channels fire their respective grayscale values simultaneously. This populates the sensory state across the entire "retina."
-* **Frame 2**: the identical image is presented again. Now each channel can observe what fired in the *previous* frame across all other channels, enabling inter-channel connection formation.
-* After frame 2, the brain outputs a digit prediction via the shared action neurons.
-* Reward is delivered: positive for correct digit, negative for incorrect.
-
-The repetition is the minimal structure needed for Robot Brain's connection mechanism to operate on spatial data. Each pixel-column learns: "when I saw value X, and my neighbors saw values Y, Z, W in the previous frame, the correct digit was D."
-
-#### What gets learned
-
-The sensory neurons form connections to neurons in other channels based on co-activation across frames. In practice, connection creation is demand-driven (only when co-activation occurs), so the actual connection count is a fraction of the theoretical maximum. With binary quantization, the connection space is highly tractable — 1,568 neurons with ~2.5M possible connections, most of which will be frequently reinforced. The system learns:
-
-* **Local spatial correlations**: pixel (14,14) being dark while pixel (14,15) is also dark is a learned association, not a geometric prior
-* **Global digit signatures**: the full constellation of pixel activations that characterize each digit class
-* **Discriminative features**: through reward, the system reinforces connections whose activation patterns reliably predict specific digits
-
-The brain discovers that certain combinations of pixel values across specific spatial positions predict specific digits — without ever being told that pixels are arranged in a grid, or that adjacent pixels tend to co-vary.
-
-#### Output mechanism — shared action neurons
-
-A single set of 10 action neurons (digits 0–9) aggregates votes from all 784 channels. This is critical: individual pixel positions carry vastly different amounts of information about digit identity. A corner pixel that's always black has no discriminative power. The shared voting pool lets the system naturally weight contributions — channels with strong, reward-reinforced action connections dominate the vote; uninformative channels contribute noise that washes out.
-
-This mirrors the stock experiment architecture where multiple channels (stocks) vote on a shared action space (up/down), and the consensus mechanism extracts signal from the aggregate.
-
-#### Training and evaluation
-
-1. Generate episodes from the 60,000 MNIST training images — each image becomes one 2-frame episode across 784 parallel channels
-2. Run multiple training passes (episodes repeated 10–100 times) with low forget rate to build stable inter-channel representations
-3. **Training accuracy**: percentage of training-set episodes where the brain's post-frame-2 action matches the correct digit
-4. **Test accuracy (generalization)**: present the 10,000 held-out test images as new 2-frame episodes the brain has never seen. Brain continues learning during test (no freeze mode) — accuracy measured on **first exposure** to each test image, randomized order.
-
-#### Compute requirements
-
-Compute scales directly with quantization level:
-
-* **Binary (Phase A)**: 1,568 sensory neurons, ~2.5M possible connections. 60,000 images × 100 passes × 2 frames = 12M episodes. With the small neuron count and high connection reuse, this should be highly tractable — fast enough to iterate on hyperparameters rapidly.
-* **Phase B/C**: scales linearly with bucket count. 4 buckets ≈ 2× binary compute; 16 buckets ≈ 8× binary compute. Still far more tractable than the original 256-bucket design.
-* Connection processing is the bottleneck: each channel checks connections to other channels' previous-frame activations. With binary, connection density saturates quickly (only 4 combinations per pixel pair), so per-frame cost stabilizes early.
-* Requires Rust + Rayon threading. Start with Phase A on a small subset (1,000 images) to calibrate timing.
-* **For comparison**: conventional CNNs train on MNIST in 2–5 minutes on GPU. The compute gap is expected and irrelevant to the architectural claim.
-
-#### Recommended hyperparameters (starting point)
-
-Based on stock and text experiments:
-
-* Context length: 2 (only two frames per episode — context is spatial, not temporal)
-* Forget rate: 0.001–0.01 (low, to retain learned digit patterns across episodes)
-* Error threshold: 0.3 (same as text memorization experiments)
-* Merge threshold: 0.9
-
-#### Phase 1 success criteria
-
-* **Phase A (binary)**: test accuracy meaningfully above chance (>50% as a soft floor; 70%+ would validate the mechanism). This is the gate — if binary fails, debug the architecture before adding precision.
-* **Phases B/C**: test accuracy improves over binary as quantization adds discriminative detail, peaking at some optimal bucket count. 80%+ at the optimal level would be excellent.
-* Training accuracy converges to >90% with sufficient repetition at the optimal quantization level
-* No architectural changes vs stock/text channels — same brain code, same connection mechanism, just more channels
-* Inter-channel connections demonstrably encode spatial structure (inspectable: which pixel positions form strong connections should roughly correspond to spatial proximity and shared digit-class membership)
-* The quantization-vs-accuracy curve is documented as an empirical result characterizing the architecture's sensory resolution tradeoff
-
-This is not an attempt to beat CNNs. It is a demonstration that a single prediction-only architecture, designed for temporal sequences, can learn visual recognition through spatial co-occurrence across parallel channels — without any vision-specific components. The retinotopic channel layout is the most biologically plausible framing: it mirrors cortical organization rather than imposing an arbitrary scan order. The benchmark exists to make the architectural claim legible to the ML community using a universally understood task.
-
-### Phase 2 — Split-MNIST (class-incremental continual learning)
-
-This is the **headline experiment for external positioning**. Run only after Phase 1 confirms vanilla MNIST works.
-
-#### Protocol
+### Protocol
 
 Standard class-incremental Split-MNIST as defined in the continual learning literature (van de Ven & Tolias 2019; Hsu et al. 2018):
 
@@ -149,7 +106,7 @@ Standard class-incremental Split-MNIST as defined in the continual learning lite
 * **Strict sequential training**: train Task 1 to convergence, freeze the experiment (no more Task 1 episodes), train Task 2 to convergence, etc. The brain only ever sees one task's data at a time.
 * **Action space remains 10 digits throughout** — the brain must learn to never output a digit it hasn't seen yet, and to retain old digits as new ones are added.
 
-#### Why this should work architecturally
+### Why this should work architecturally
 
 The reasoning that motivates running this experiment:
 
@@ -161,7 +118,7 @@ The reasoning that motivates running this experiment:
 
 The risk shifts accordingly: it's not "forget rate too aggressive" but "Task 1 trained too briefly to consolidate to durable levels." This is a training-schedule question, not a decay-parameter question.
 
-#### Evaluation
+### Evaluation
 
 After each task is trained, measure accuracy on the held-out test sets of **all tasks seen so far**. Report:
 
@@ -169,7 +126,7 @@ After each task is trained, measure accuracy on the held-out test sets of **all 
 2. **Average accuracy after Task 5**: mean of the bottom row. This is the headline number.
 3. **Forgetting metric**: for each task, max accuracy ever achieved minus final accuracy. Lower is better.
 
-#### Baselines (cited, not re-run)
+### Baselines (cited, not re-run)
 
 Reference numbers from the continual learning literature for class-incremental Split-MNIST without replay or task IDs:
 
@@ -180,13 +137,13 @@ Reference numbers from the continual learning literature for class-incremental S
 
 We cite these numbers rather than re-running. Reproduction is a separate effort if external review demands it.
 
-#### Phase 2 success criteria
+### Phase 2 success criteria
 
 * **Headline**: average accuracy after Task 5 substantially above the ~20% catastrophic-forgetting floor, achieved with **no replay buffer, no task IDs, no regularizers** — purely from architectural retention.
 * **Stretch**: retention competitive with replay-based methods (60%+) without using replay.
 * **Diagnostic**: per-task accuracy degradation profile. If Task 1 accuracy is preserved through Task 5, the architectural claim holds; if it decays, forget-rate tuning is needed.
 
-#### Hyperparameter notes for Phase 2
+### Hyperparameter notes for Phase 2
 
 The critical knob is **per-task training duration**, not forget rate. Each task must train long enough for digit patterns to consolidate up the hierarchy to levels with decay timescales exceeding the remaining experiment duration. Under-training a task leaves its representations at low levels that decay during subsequent tasks; over-training is harmless beyond saturation.
 
@@ -195,11 +152,11 @@ Recommended starting point:
 * Forget rate stays at the Phase 1 value (0.001–0.01). The level-stratified decay schedule does the work.
 * If retention is weak, the first diagnostic is to inspect the level distribution of digit-0 patterns after Task 1 training. If they're concentrated at low levels, train Task 1 longer. If they're at high levels and still being lost, then forget rate is the issue.
 
-#### What this is NOT
+### What this is NOT
 
 Not an attempt to beat continual learning SOTA methods that use replay. The claim is structural: we get retention from the architecture, not from buffering or regularizing. A 60% result with no replay is a stronger paper than a 90% result with replay, because the former is a different category of system.
 
-#### Dependencies
+### Dependencies
 
 * Phase 1 (vanilla MNIST) complete and working
 * Same Rust core, same channel code — no architectural changes
@@ -208,13 +165,13 @@ Not an attempt to beat continual learning SOTA methods that use replay. The clai
 
 ---
 
-## Stock Metrics - Calculate up/down accuracy separately
+## 7. Calculate up/down accuracy separately
 
 - Report directional accuracy (up vs down) independently to identify prediction bias
 
 ---
 
-## Neuron Limits
+## 8. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add configurable cap on neuron count per region/column
@@ -229,7 +186,7 @@ Not an attempt to beat continual learning SOTA methods that use replay. The clai
 
 ---
 
-## Exponential Temporal Binning Test
+## 9. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme described in [experiment-temporal-binning.md](./experiment-temporal-binning.md).
 
@@ -249,7 +206,7 @@ Higher-level patterns currently store context at exact frame distances — meani
 
 ---
 
-## Documentation & Publish
+## 10. Documentation & Publish
 
 ### Update all documentation
 - Sync docs with current architecture post-Rust migration

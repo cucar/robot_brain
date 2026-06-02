@@ -1,4 +1,4 @@
-# Inference Scope Experiment
+# Inference Level Experiment
 
 **Date:** 2026-05-29
 **Author:** Cagdas Ucar
