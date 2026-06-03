@@ -9,6 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const EMPTY_REWARDS = new Map();
+const PROGRESS_EVERY = 100;
 
 /**
  * Sensory-only MNIST app — the Naive Bayes baseline described in docs/mnist-merge.md.
@@ -32,7 +33,7 @@ export default class MNISTTestJob extends Job {
 			// perClass = 0 means "use the smallest class count available" (5421 with full MNIST); pass --per-class N to cap explicitly for faster iteration.
 			perClass: 0,
 			maxTestImages: 0,
-			maxEpisodes: 10,
+			maxEpisodes: 1,
 			skipTest: false,
 			// split: split-MNIST mode — emit the balanced training set in digit order and train one episode per digit class.
 			// Each episode sees only its own digit's samples; the final held-out test then reveals catastrophic forgetting.
@@ -258,9 +259,13 @@ export default class MNISTTestJob extends Job {
 			// Supervised wire: bind every active sensory neuron to the label's action neuron at the same-frame voting slot.
 			this.brain.learn(this.encoder.encodeAction(label), positiveReward, 1);
 
+			// Heartbeat every PROGRESS_EVERY images so long runs don't look frozen.
+			this.reportProgress('train', i + 1, indices.length, tally, startTime);
+
 			// Honor an in-flight shutdown without leaving the brain in a half-written state.
 			if (this.isShuttingDown) break;
 		}
+		this.clearProgress();
 
 		// Roll the tally up into a result, attach metadata (which task/episode, wall-clock), log a one-liner, and return.
 		const duration = Date.now() - startTime;
@@ -326,6 +331,27 @@ export default class MNISTTestJob extends Job {
 	}
 
 	/**
+	 * Heartbeat line so long passes don't look frozen. Reprints on the same terminal line via \r every PROGRESS_EVERY images.
+	 * Skipped between heartbeats and on the very last image (the final-result line takes over).
+	 */
+	reportProgress(phase, done, total, tally, startTime) {
+		if (done === total) return;
+		if (done % PROGRESS_EVERY !== 0) return;
+		const elapsed = (Date.now() - startTime) / 1000;
+		const ips = (done / elapsed).toFixed(0);
+		const pct = (done / total * 100).toFixed(1);
+		const acc = (tally.correct / done * 100).toFixed(1);
+		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s   `);
+	}
+
+	/**
+	 * Wipe the in-place progress line before the final result prints, so the result is not concatenated to the heartbeat.
+	 */
+	clearProgress() {
+		process.stdout.write('\r' + ' '.repeat(80) + '\r');
+	}
+
+	/**
 	 * Print the one-line per-pass training log, picking the joint vs split label form.
 	 */
 	logTrainingPass({ digit, episode, accuracy, correct, total, duration, perDigit, perDigitTotal }) {
@@ -355,8 +381,10 @@ export default class MNISTTestJob extends Job {
 			this.recordPrediction(tally, label, predicted);
 			// decodeDigit() returns -1 when no action inference is present — keep those out of the confusion matrix.
 			if (predicted >= 0 && predicted < 10) confusion[label][predicted]++;
+			this.reportProgress('test', i + 1, this.testBits.length, tally, startTime);
 			if (this.isShuttingDown) break;
 		}
+		this.clearProgress();
 
 		const duration = Date.now() - startTime;
 		const summary = this.summarizeTally(tally);

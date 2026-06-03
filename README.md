@@ -232,6 +232,64 @@ node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-thres
 
 The brain goes from low accuracy to ~99.96% in two episodes and holds there — it has fully memorized the character sequence except for the first ~20 characters at the start of each episode. Those leading characters can't be predicted because the brain hasn't seen any context yet — it needs a `context-length` window of prior characters in memory before it can recognize patterns and cast votes. The "warmup" frames at the head of each episode are a structural property of context-based prediction, not a learning failure: every character past the warmup window is predicted correctly.
 
+## Demo 8: MNIST Digit Classification (Naive Bayes Baseline)
+
+A sensory-only MNIST classifier built on the brain's count-based voting. One channel per pixel position (retinotopic, 784 channels at 28×28), all firing concurrently in a single frame per image. Supervision lands on a separate `digit` action channel via `brain.learn()`. With `patternForgetRate=0` and a constant reward of 1, the brain's per-voter consensus reduces to a Naive Bayes posterior — every `learn()` call increments per-pixel-per-digit counts, and inference picks the argmax.
+
+Download the MNIST data first (one-time, ~11 MB into `apps/mnist/data/`):
+
+```bash
+node apps/mnist/jobs/download.js
+```
+
+This fetches the four standard IDX files (60k training, 10k test, gzipped) from Google's MNIST mirror. The job skips files that already exist, so it's safe to re-run.
+
+Then run the test on full MNIST at 28×28 with 256-bucket pixel quantization:
+
+```bash
+node apps/mnist/jobs/test.js --image-size 28 --buckets 256 --columns 20
+```
+
+**Expected output:**
+```
+MNIST — sensory-only (Naive Bayes) baseline
+  Image size: 28×28 (784 channels)
+  Buckets: 256 (Phase C)
+  Context length: 1
+  Forget rate: 0
+  Episodes: 1
+  Training: balanced, auto per class
+  Test images: all
+
+  Balanced training set built: 5421 per class × 10 = 54210 total
+  Episode 1/1: train=48.14% (26095/54210) | 214 img/s 252907ms | 0:87% 1:100% 2:37% 3:52% 4:32% 5:3% 6:61% 7:75% 8:9% 9:26%
+
+  Test: 77.85% (7785/10000) 40905ms | 0:95% 1:99% 2:73% 3:79% 4:74% 5:46% 6:86% 7:86% 8:60% 9:74%
+
+Results
+======================================================================
+  Episode 1: train=48.14% (252907ms)
+  Test:     77.85% (7785/10000)
+
+  Confusion (rows = actual, cols = predicted):
+           0    1    2    3    4    5    6    7    8    9
+   0     927    1    1    6    1    4   27    2   11    0
+   1       0 1128    2    2    0    0    2    0    1    0
+   2      64   72  758   27   17    0   54   20   20    0
+   3      31   61   27  798    0    5   11   36   22   19
+   4      40   52    7    1  722    0   29    8    8  115
+   5     110   90    9  160   17  411   28   28    9   30
+   6      68   36   14    0    6   10  824    0    0    0
+   7      11   71   11    3    7    0    0  886    3   36
+   8      65  100   14   92   10   30   18   25  582   38
+   9      38   34    8    9   47    0    0  121    3  749
+======================================================================
+
+⏱️  Total Execution Time: 4m 54s
+```
+
+77.85% test accuracy from a single training pass with no spatial processing — this is the architecture's Naive Bayes floor. The confusion matrix's 3/5/8 collapses are exactly what motivates the spatial-processing workstream: digits whose pixel-level marginals overlap heavily can't be separated without spatial features. Class-balanced training is load-bearing here: the brain's per-voter normalization bakes the class prior into every voter's contribution, so an unbalanced training set leaks the natural ~24% 1-vs-5 tilt into the consensus and drops test accuracy to ~38%.
+
 ### Downloading Fresh Stock Data
 
 To download new data or different timeframes, you need a free [Alpaca](https://alpaca.markets) account:
