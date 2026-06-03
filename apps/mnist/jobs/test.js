@@ -1,419 +1,430 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
-import {Job, runJob} from 'robot-brain';
-import {MNISTEncoder} from '../encoder.js';
-import {loadImages, loadLabels} from '../loader.js';
+import { fileURLToPath } from 'node:url';
+import { Job, runJob } from 'robot-brain';
+import { MNISTPixelChannelsEncoder } from '../encoder.js';
+import { loadImages, loadLabels } from '../loader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const EMPTY_REWARDS = new Map();
+
 /**
- * MNIST Test Job — trains and evaluates Robot Brain on MNIST digit recognition.
+ * Sensory-only MNIST app — the Naive Bayes baseline described in docs/mnist-merge.md.
  *
- * Architecture:
- * 784 parallel channels (one per pixel in the 28×28 grid), each with a quantized input dimension and a 10-way digit action dimension.
- * Images are presented as multi-frame episodes:
- * frame 1 populates the "retina"
- * subsequent frames enable cross-channel connection formation via temporal co-activation
- * final frame delivers the reward signal for the last informed prediction.
- *
- * Each image is a self-contained episode. resetContext() between images clears active neurons while preserving all learned connections.
- * The brain discovers spatial structure through co-activation statistics across channels, not through any geometric prior.
- *
- * MNIST-specific flags:
- *   --frames N             image presentations per episode (default 2, +1 reward frame)
- *   --buckets N            quantization level: 2=binary, 4, 8, 16 (default 2)
- *   --max-images N         cap training set for fast iteration (default: all 60K)
- *   --max-test-images N    cap test set (default: all 10K)
- *   --episodes N           training passes over the dataset (default 10)
- *   --skip-test            skip the test evaluation after training
- *   --no-shuffle           present images in original order
- *   --correct-reward F     reward for correct digit prediction (default 1)
- *   --incorrect-reward F   reward for incorrect prediction (default -1)
+ * One channel per pixel position (retinotopic), all firing concurrently in a single frame per image.
+ * Training: processFrame(image) populates sensory activations, then learn(actions, rewards, 1) wires every
+ *   active sensory neuron to the labeled digit's action neuron at the same-frame voting slot.
+ * Test: setLearning(false), processFrame(image), read the digit action winner from inferences.
  */
 export default class MNISTTestJob extends Job {
 
 	constructor() {
 		super();
-
 		this.config = {
-			framesPerImage: 2,       // image presentations per episode (+ 1 implicit reward frame)
-			buckets: 2,              // quantization level — Phase A = 2 (binary)
-			maxImages: 0,            // 0 = use all 60K training images
-			maxTestImages: 0,        // 0 = use all 10K test images
-			maxEpisodes: 10,         // training passes over the full dataset
-			skipTest: false,         // skip the post-training test evaluation
-			shuffle: true,           // randomize image order each pass
-			correctReward: 1,        // reward delivered for correct digit prediction
-			incorrectReward: -1      // reward delivered for incorrect digit prediction
+			imageSize: 7, // by default, we do 7×7 binary run - small and fast
+			buckets: 2,
+			// Training is class-balanced by default: the same number of examples is used per digit.
+			// The brain's per-voter normalization (K_{V,d} / Σ_d K_{V,d}) bakes the class prior into every voter's contribution.
+			// Unbalanced training (natural MNIST has ~24% more 1s than 5s) leaks that prior tilt into every background voter and dominates the consensus.
+			// Balanced training makes the prior uniform so the leak evaluates to 0.1 per class per voter — neutral — and lifts test accuracy from ~38% to ~76% at 28×28 binary.
+			// perClass = 0 means "use the smallest class count available" (5421 with full MNIST); pass --per-class N to cap explicitly for faster iteration.
+			perClass: 0,
+			maxTestImages: 0,
+			maxEpisodes: 10,
+			skipTest: false,
+			// split: split-MNIST mode — emit the balanced training set in digit order and train one episode per digit class.
+			// Each episode sees only its own digit's samples; the final held-out test then reveals catastrophic forgetting.
+			split: false,
 		};
-
 		this.encoder = null;
-
-		// Raw MNIST data — loaded once in configureChannels(), reused across episodes.
 		this.trainImages = null;
 		this.trainLabels = null;
+		this.trainBits = null;
 		this.testImages = null;
 		this.testLabels = null;
-
-		// Per-episode training accuracy for the final summary.
+		this.testBits = null;
 		this.episodeResults = [];
-
-		// Post-training test result — populated by runTestPass() if not skipped.
 		this.testResult = null;
 	}
 
 	/**
-	 * Parse MNIST-specific command-line flags. Brain-level flags (--context-length,
-	 * --forget-rate, --regions, --columns, etc.) are handled by parseBrainArgs()
-	 * in the Job base class and passed to the Brain constructor.
+	 * Parse MNIST-specific flags and stamp NB-appropriate brain defaults.
+	 * Context length 1 (single-frame episodes) and forget rate 0 (per-pixel-per-digit counts accumulate cleanly).
 	 */
 	applyOptions() {
 		const num = (flag) => {
 			const i = process.argv.indexOf(flag);
 			return i !== -1 && process.argv[i + 1] !== undefined ? parseInt(process.argv[i + 1]) : null;
 		};
-		const flt = (flag) => {
-			const i = process.argv.indexOf(flag);
-			return i !== -1 && process.argv[i + 1] !== undefined ? parseFloat(process.argv[i + 1]) : null;
-		};
 
-		const frames = num('--frames');
-		if (frames !== null) this.config.framesPerImage = frames;
-
+		const imageSize = num('--image-size');
+		if (imageSize !== null) this.config.imageSize = imageSize;
 		const buckets = num('--buckets');
 		if (buckets !== null) this.config.buckets = buckets;
-
-		const maxImages = num('--max-images');
-		if (maxImages !== null) this.config.maxImages = maxImages;
-
+		const perClass = num('--per-class');
+		if (perClass !== null) this.config.perClass = perClass;
 		const maxTestImages = num('--max-test-images');
 		if (maxTestImages !== null) this.config.maxTestImages = maxTestImages;
-
 		const episodes = num('--episodes');
 		if (episodes !== null) this.config.maxEpisodes = episodes;
-
 		if (process.argv.includes('--skip-test')) this.config.skipTest = true;
-		if (process.argv.includes('--no-shuffle')) this.config.shuffle = false;
+		if (process.argv.includes('--split')) this.config.split = true;
 
-		const correctReward = flt('--correct-reward');
-		if (correctReward !== null) this.config.correctReward = correctReward;
-
-		const incorrectReward = flt('--incorrect-reward');
-		if (incorrectReward !== null) this.config.incorrectReward = incorrectReward;
+		if (this.options.contextLength == null) this.options.contextLength = 1;
+		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
 	}
 
 	/**
-	 * Register 784 pixel channels with the brain. Each pixel position becomes
-	 * an independent channel with an input dim (quantized brightness) and an
-	 * action dim (digit 0–9). Channel registration allocates all base neurons
-	 * upfront — at binary quantization this is 9,408 neurons.
+	 * Construct the pixel-channels encoder and register one channel per pixel position with the brain.
 	 */
 	async initialize() {
-		this.encoder = new MNISTEncoder(this.config.buckets);
+		this.encoder = new MNISTPixelChannelsEncoder(this.config.buckets, this.config.imageSize);
 		this.encoder.registerChannels(this.brain);
 	}
 
 	/**
-	 * Load MNIST data from the IDX files in apps/mnist/data/. Accepts both plain and .gz variants — the loader auto-detects gzip compression.
-	 * Optionally truncates the datasets per --max-images / --max-test-images for faster iteration during development.
+	 * Load MNIST train/test IDX files, build the class-balanced training subset, and pre-quantize every image into bits.
+	 * Pre-quantization moves all encoding cost out of the training loop so per-frame work is just channel activation.
 	 */
 	async configureChannels() {
-		const dataDir = path.join(__dirname, '..', 'data');
 
+		// get the test and training files
+		const dataDir = path.join(__dirname, '..', 'data');
 		const trainImgPath = this.findDataFile(dataDir, 'train-images-idx3-ubyte');
 		const trainLblPath = this.findDataFile(dataDir, 'train-labels-idx1-ubyte');
 		const testImgPath = this.findDataFile(dataDir, 't10k-images-idx3-ubyte');
 		const testLblPath = this.findDataFile(dataDir, 't10k-labels-idx1-ubyte');
 
-		this.trainImages = loadImages(trainImgPath);
-		this.trainLabels = loadLabels(trainLblPath);
+		// load the test and training images
+		const trainImages = loadImages(trainImgPath);
+		const trainLabels = loadLabels(trainLblPath);
 		this.testImages = loadImages(testImgPath);
 		this.testLabels = loadLabels(testLblPath);
 
-		if (this.config.maxImages > 0) {
-			this.trainImages = this.trainImages.slice(0, this.config.maxImages);
-			this.trainLabels = this.trainLabels.slice(0, this.config.maxImages);
-		}
+		// Class-balanced selection: walk the training set once in order, keep an image for each digit until that digit's per-class quota is filled.
+		const { images: balancedImages, labels: balancedLabels } = this.selectClassBalanced(trainImages, trainLabels);
+		this.trainImages = balancedImages;
+		this.trainLabels = balancedLabels;
+
+		// limit number of test images if requested
 		if (this.config.maxTestImages > 0) {
 			this.testImages = this.testImages.slice(0, this.config.maxTestImages);
 			this.testLabels = this.testLabels.slice(0, this.config.maxTestImages);
 		}
+
+		// Pre-quantize so the training loop pays no encoding cost per frame if there are multiple episodes
+		this.trainBits = this.trainImages.map(px => this.encoder.buildBits(px));
+		this.testBits = this.testImages.map(px => this.encoder.buildBits(px));
 	}
 
 	/**
-	 * Locate a data file, trying both uncompressed and .gz variants.
-	 * Throws with a clear "run download.js first" message if neither exists.
-	 *
-	 * @param {string} dataDir — directory to search in
-	 * @param {string} baseName — filename without extension (e.g. 'train-images-idx3-ubyte')
-	 * @returns {string} resolved path to the file
+	 * Class-balanced selection: walk the training set once in order, keep an image for each digit until that digit's per-class quota is filled.
+	 * perClass=0 means "use whatever the smallest class has available", which makes the balanced quota the natural floor without forcing the operator to know it.
+	 * Returns {images, labels, cap} — picked indices are sorted ascending so the training order matches natural-MNIST order within the balanced subset, keeping the run deterministic and reproducible.
+	 */
+	selectClassBalanced(images, labels) {
+
+		// Count how many examples each digit has, so we know the natural floor when perClass is left at 0.
+		const counts = new Array(10).fill(0);
+		for (const label of labels) counts[label]++;
+
+		// Resolve the per-class quota: explicit override if set, otherwise the smallest class's count.
+		const cap = this.config.perClass > 0 ? this.config.perClass : Math.min(...counts);
+
+		// Walk the dataset once in order, taking the first `cap` examples of each digit.
+		const indices = [];
+		const picked = new Array(10).fill(0);
+		for (let i = 0; i < images.length && indices.length < cap * 10; i++) {
+			const digit = labels[i];
+			if (picked[digit] < cap) { indices.push(i); picked[digit]++; }
+		}
+
+		// Order the indices. Split mode groups by digit (all 0s, then all 1s, …) for split-MNIST tests;
+		// otherwise restore natural-MNIST ordering within the balanced subset for determinism and reproducibility.
+		if (this.config.split) indices.sort((a, b) => labels[a] - labels[b] || a - b);
+		else indices.sort((a, b) => a - b);
+
+		// return the picked images and labels
+		console.log(`  Balanced training set built: ${cap} per class × 10 = ${indices.length} total`);
+		return { images: indices.map(i => images[i]), labels: indices.map(i => labels[i]), cap };
+	}
+
+	/**
+	 * Locate a data file, trying the plain IDX path first and falling back to its .gz variant.
 	 */
 	findDataFile(dataDir, baseName) {
 		const plain = path.join(dataDir, baseName);
 		if (fs.existsSync(plain)) return plain;
 		const gz = path.join(dataDir, `${baseName}.gz`);
 		if (fs.existsSync(gz)) return gz;
-		throw new Error(`MNIST data not found: ${plain} (run download.js first)`);
+		throw new Error(`MNIST data not found: ${plain} (run jobs/download.js first)`);
 	}
 
 	/**
-	 * Print startup configuration so the operator can verify settings before
-	 * a potentially long training run. Includes the quantization phase label
-	 * (A/B/C) and the total frames per image including the reward frame.
+	 * Print the resolved configuration before training begins so the run is self-documenting in the log.
 	 */
 	async showStartupInfo() {
 		const phaseLabel = this.config.buckets === 2 ? 'A — binary'
 			: this.config.buckets <= 4 ? 'B' : 'C';
-
-		console.log(`MNIST Digit Recognition`);
+		console.log('MNIST — sensory-only (Naive Bayes) baseline');
+		console.log(`  Image size: ${this.config.imageSize}×${this.config.imageSize} (${this.config.imageSize * this.config.imageSize} channels)`);
 		console.log(`  Buckets: ${this.config.buckets} (Phase ${phaseLabel})`);
-		console.log(`  Frames per image: ${this.config.framesPerImage} (+1 reward frame = ${this.config.framesPerImage + 1} total)`);
-		console.log(`  Episodes: ${this.config.maxEpisodes}`);
-		console.log(`  Shuffle: ${this.config.shuffle}`);
-		console.log(`  Reward: correct=${this.config.correctReward}, incorrect=${this.config.incorrectReward}`);
+		console.log(`  Context length: ${this.options.contextLength}`);
+		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
+		console.log(`  Episodes: ${this.config.maxEpisodes}${this.config.split ? ' per digit task (split-MNIST)' : ''}`);
+		console.log(`  Training: balanced, ${this.config.perClass > 0 ? this.config.perClass : 'auto'} per class`);
+		console.log(`  Test images: ${this.config.skipTest ? 'skipped' : (this.config.maxTestImages || 'all')}`);
 		console.log('');
 	}
 
 	/**
-	 * Train for maxEpisodes passes over the training set, then run a single
-	 * test evaluation on the held-out set. Training accuracy is reported per
-	 * episode so the operator sees improvement during the run; the test pass
-	 * runs once at the end to measure generalization.
+	 * Train, then evaluate once on the held-out set in non-learning mode.
 	 */
 	async executeJob() {
-		// Training: one pass through the training set per episode.
-		for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
-			const result = await this.runTrainingPass(ep);
-			this.episodeResults.push(result);
 
+		// run the training first
+		if (this.config.split) this.runSplitTraining();
+		else this.runJointTraining();
+
+		// now, run the tests evaluation
+		if (!this.config.skipTest) this.runEvaluation();
+	}
+
+	/**
+	 * Joint mode: train for maxEpisodes passes over the full balanced set.
+	 */
+	runJointTraining() {
+		for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
+			const result = this.runTraining(ep);
+			this.episodeResults.push(result);
 			if (this.isShuttingDown) return;
 		}
-
-		// Test: single evaluation on the held-out set after all training.
-		if (!this.config.skipTest) this.testResult = await this.runTestPass();
 	}
 
 	/**
-	 * One pass through the training set. Each image is a self-contained
-	 * episode: reset context, present the image for N frames, deliver the
-	 * reward, record whether the aggregate prediction was correct, move on.
-	 *
-	 * Prints a progress line every 1000 images with running accuracy, and
-	 * a final summary line with overall accuracy, per-digit breakdown, and
-	 * throughput (images/second).
-	 *
-	 * @param {number} episode — 1-based episode number (for display)
-	 * @returns {{ episode, accuracy, correct, total, duration, perDigit, perDigitTotal }}
+	 * Split mode: for each digit 0..9, train maxEpisodes passes over just that digit's samples before advancing.
+	 * The brain keeps its learned state across tasks — the final held-out test reveals catastrophic forgetting (or its absence).
 	 */
-	async runTrainingPass(episode) {
-		const startTime = Date.now();
-		const numImages = this.trainImages.length;
-		const indices = this.buildIndices(numImages);
-
-		let correct = 0;
-		const perDigit = new Array(10).fill(0);
-		const perDigitTotal = new Array(10).fill(0);
-
-		for (let i = 0; i < indices.length; i++) {
-			const idx = indices[i];
-			const result = this.runImage(this.trainImages[idx], this.trainLabels[idx], idx);
-			if (result.correct) {
-				correct++;
-				perDigit[this.trainLabels[idx]]++;
+	runSplitTraining() {
+		for (let digit = 0; digit < 10; digit++) {
+			for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
+				const result = this.runTraining(ep, digit);
+				this.episodeResults.push(result);
+				if (this.isShuttingDown) return;
 			}
-			perDigitTotal[this.trainLabels[idx]]++;
-
-			// show progress every 1000 images
-			// if ((i + 1) % 1000 === 0)
-			console.log(`\r  Episode ${episode}/${this.config.maxEpisodes} — ${i + 1}/${indices.length} images, accuracy: ${(correct / (i + 1) * 100).toFixed(1)}%`);
-
-			if (this.isShuttingDown) break;
 		}
-
-		const duration = Date.now() - startTime;
-		const accuracy = correct / indices.length;
-		const ips = (indices.length / (duration / 1000)).toFixed(0);
-
-		// Clear the progress line before printing the final summary.
-		if (process.stdout.isTTY) { process.stdout.write('\r'); process.stdout.clearLine(0); }
-		else process.stdout.write('\n');
-
-		// Per-digit accuracy breakdown: "0:85% 1:92% 2:71% ..."
-		const perDigitStr = perDigit.map((c, d) =>
-			perDigitTotal[d] > 0 ? `${d}:${(c / perDigitTotal[d] * 100).toFixed(0)}%` : `${d}:—`
-		).join(' ');
-
-		console.log(`  Episode ${episode}: train=${(accuracy * 100).toFixed(2)}% (${correct}/${indices.length}) | ${ips} img/s ${duration}ms | ${perDigitStr}`);
-
-		return { episode, accuracy, correct, total: indices.length, duration, perDigit, perDigitTotal };
 	}
 
 	/**
-	 * Evaluate on the held-out test set after all training is complete. Uses
-	 * the same frame structure as training — the brain continues learning
-	 * during test (no freeze mode), but accuracy is measured on each image's
-	 * FIRST prediction (before reward delivery), matching the roadmap's
-	 * "first exposure" criterion.
-	 *
-	 * Images are shuffled so evaluation order doesn't systematically advantage
-	 * later images that benefit from earlier test-set learning.
-	 *
-	 * @returns {{ accuracy, correct, total, perDigit, perDigitTotal }}
+	 * Switch the brain into read-only inference and run the held-out test pass.
+	 * Pattern activation + voting still run so inferences populate, but no decay, no error-correction neurons, no event-event strengthening.
 	 */
-	async runTestPass() {
+	runEvaluation() {
+		this.brain.setLearning(false);
 		console.log('');
-		const numImages = this.testImages.length;
-		const indices = this.buildIndices(numImages);
-
-		let correct = 0;
-		const perDigit = new Array(10).fill(0);
-		const perDigitTotal = new Array(10).fill(0);
-
-		for (let i = 0; i < indices.length; i++) {
-			const idx = indices[i];
-			const result = this.runImage(this.testImages[idx], this.testLabels[idx], idx);
-			if (result.correct) {
-				correct++;
-				perDigit[this.testLabels[idx]]++;
-			}
-			perDigitTotal[this.testLabels[idx]]++;
-
-			if (this.isShuttingDown) break;
-		}
-
-		const accuracy = correct / indices.length;
-
-		// Per-digit accuracy breakdown for test results.
-		const perDigitStr = perDigit.map((c, d) =>
-			perDigitTotal[d] > 0 ? `${d}:${(c / perDigitTotal[d] * 100).toFixed(0)}%` : `${d}:—`
-		).join(' ');
-
-		console.log(`  Test: ${(accuracy * 100).toFixed(2)}% (${correct}/${indices.length}) | ${perDigitStr}`);
-
-		return { accuracy, correct, total: indices.length, perDigit, perDigitTotal };
+		this.testResult = this.runTest();
 	}
 
 	/**
-	 * Present one image to the brain as a multi-frame episode. This is the
-	 * core method that implements the two-frame (or N-frame) episode structure
-	 * described in the roadmap.
-	 *
-	 * Frame structure (framesPerImage=2 example):
-	 *   f=1: present pixels, no reward, no prior context
-	 *        → brain populates the retina and creates connections between co-active channels
-	 *   f=2: present pixels, reward for f=1's prediction
-	 *        → cross-channel context now available; first informed prediction
-	 *   f=3: present pixels, reward for f=2's prediction
-	 *        → brain learns from the reward; prediction captured for accuracy
-	 *
-	 * The inputs map is built once and reused across all frames — the image is
-	 * identical each time; only the brain's internal context changes.
-	 *
-	 * @param {Uint8Array} pixels — 784 raw pixel values for one image
-	 * @param {number} label — correct digit (0–9)
-	 * @param {number} imageIndex — image id
-	 * @returns {{ predicted: number, correct: boolean, confidence: number }}
+	 * One pass through the training set. For each image:
+	 *   resetContext → processFrame → record prediction (= training accuracy, pre-update) → learn(actions, rewards, 1).
+	 * The training-accuracy number is the brain's prediction *before* the supervised wire lands.
+	 * `digit` is optional: pass it in split mode to restrict the pass to that digit's slice; omit (or null) to walk the full balanced set.
 	 */
-	runImage(pixels, label, imageIndex) {
-		this.brain.resetContext();
-		this.encoder.resetActions();
+	runTraining(episode, digit = null) {
 
-		const verbose = this.diagnostic;
-		if (verbose) console.log(`  Image #${imageIndex} label=${label}`);
+		// Track wall-clock so we can report img/s for this pass.
+		const startTime = Date.now();
 
-		// Build inputs once — reused across all frames of this image.
-		const inputs = this.encoder.encodeImage(pixels);
-		let prediction = null;
+		// Choose which training samples this pass walks: a single digit's slice in split mode, or the whole set otherwise.
+		const indices = this.buildTrainIndices(digit);
 
-		// framesPerImage image presentations + 1 reward delivery frame.
-		const totalFrames = this.config.framesPerImage + 1;
-		for (let f = 1; f <= totalFrames; f++) {
+		// Reused-per-image reward vector — built once outside the loop because every call uses the same +1 reward.
+		const positiveReward = this.buildPositiveReward();
 
-			// first frame has no prior action to reward. subsequent frames reward the previous frame's per-channel digit predictions.
-			const rewards = f === 1
-				? new Map()
-				: this.encoder.buildRewards(label, this.config.correctReward, this.config.incorrectReward);
+		// Accumulators for the per-pass training accuracy line: overall correct, per-digit correct, per-digit totals.
+		const tally = this.newTally();
 
-			const { inferences } = this.brain.processFrame(inputs, rewards);
-			const result = this.encoder.applyInferences(inferences);
+		for (let i = 0; i < indices.length; i++) {
+			const idx = indices[i];
+			const label = this.trainLabels[idx];
 
-			if (verbose) {
-				const mark = result.predicted === label ? '✓' : '✗';
-				const tag = f > this.config.framesPerImage ? ' (reward)' : '';
+			// Predict *before* learning so the recorded accuracy reflects what the brain knew going in.
+			const predicted = this.predictImage(this.trainBits[idx]);
+			this.recordPrediction(tally, label, predicted);
 
-				// Per-digit breakdown: votes (how many channels picked it) and
-				// score (total strength behind those votes).
-				const breakdown = Array.from(result.scores).map((s, d) =>
-					result.voteCounts[d] > 0 ? `${d}:${result.voteCounts[d]}ch/${s.toFixed(1)}` : null
-				).filter(Boolean).join('  ');
+			// Supervised wire: bind every active sensory neuron to the label's action neuron at the same-frame voting slot.
+			this.brain.learn(this.encoder.encodeAction(label), positiveReward, 1);
 
-				console.log(`    f${f}: consensus=${result.predicted} ${mark}${tag}  [${breakdown}]`);
-			}
-
-			// Capture the prediction from the final frame (after reward delivery).
-			// The reward for the informed prediction (frame framesPerImage) lands
-			// on this frame, so the brain's inference here reflects what it learned.
-			if (f === totalFrames) prediction = result;
+			// Honor an in-flight shutdown without leaving the brain in a half-written state.
+			if (this.isShuttingDown) break;
 		}
 
+		// Roll the tally up into a result, attach metadata (which task/episode, wall-clock), log a one-liner, and return.
+		const duration = Date.now() - startTime;
+		const result = { digit, episode, ...this.summarizeTally(tally), duration };
+		this.logTrainingPass(result);
+		return result;
+	}
+
+	/**
+	 * Reward is +1 on every learn() call, and this is load-bearing for getting count-based voting out of the brain.
+	 * The brain stores connection.reward as a running mean (alpha=1/strength), so reward stays at exactly 1.0 forever.
+	 * That collapses every candidate's per-candidate reward score to 1.0, tying the brain's reward-based winner across all digits.
+	 * The tie-break then falls through to argmax(candidate.strength), which is the per-voter posterior sum Σ_V K_{V,d}/total_V we want.
+	 * A non-constant reward would re-enable the reward path and break this — a hard contract with the brain consensus, not a free parameter.
+	 */
+	buildPositiveReward() {
+		return this.encoder.buildRewards(1);
+	}
+
+	/**
+	 * Run one image through the brain and decode the predicted digit.
+	 * Shared by training (pre-update prediction) and held-out test.
+	 */
+	predictImage(bits) {
+		this.brain.resetContext();
+		const inputs = this.encoder.encodeImage(bits);
+		this.brain.processFrame(inputs, EMPTY_REWARDS);
+		const inferResult = this.brain.infer();
+		return this.encoder.decodeDigit(inferResult.inferences);
+	}
+
+	/**
+	 * Fresh per-pass tally: aggregate correct, per-digit correct, per-digit totals.
+	 */
+	newTally() {
 		return {
-			predicted: prediction.predicted,
-			correct: prediction.predicted === label,
-			confidence: prediction.confidence
+			correct: 0,
+			perDigit: new Array(10).fill(0),
+			perDigitTotal: new Array(10).fill(0),
 		};
 	}
 
 	/**
-	 * Build a shuffled (or sequential) index array for iterating through a
-	 * dataset. Fisher-Yates shuffle ensures uniform random permutation.
-	 *
-	 * @param {number} count — number of items (images) to index
-	 * @returns {number[]} — indices 0..count-1, optionally shuffled
+	 * Update the tally with one (label, predicted) outcome.
 	 */
-	buildIndices(count) {
-		const indices = new Array(count);
-		for (let i = 0; i < count; i++) indices[i] = i;
-		if (this.config.shuffle) {
-			// Fisher-Yates shuffle — O(n), uniform distribution.
-			for (let i = count - 1; i > 0; i--) {
-				const j = Math.floor(Math.random() * (i + 1));
-				const tmp = indices[i];
-				indices[i] = indices[j];
-				indices[j] = tmp;
-			}
-		}
-		return indices;
+	recordPrediction(tally, label, predicted) {
+		if (predicted === label) { tally.correct++; tally.perDigit[label]++; }
+		tally.perDigitTotal[label]++;
 	}
 
 	/**
-	 * Print a final summary table after all training and testing is complete.
-	 * Shows per-episode training accuracy, the overall accuracy trend, and
-	 * the final test result if one was run.
+	 * Collapse a tally into the result shape used by reports — accuracy, totals, and the per-digit arrays.
+	 */
+	summarizeTally(tally) {
+		const total = tally.perDigitTotal.reduce((a, b) => a + b, 0);
+		return {
+			accuracy: total > 0 ? tally.correct / total : 0,
+			correct: tally.correct,
+			total,
+			perDigit: tally.perDigit,
+			perDigitTotal: tally.perDigitTotal,
+		};
+	}
+
+	/**
+	 * Print the one-line per-pass training log, picking the joint vs split label form.
+	 */
+	logTrainingPass({ digit, episode, accuracy, correct, total, duration, perDigit, perDigitTotal }) {
+		const ips = (total / (duration / 1000)).toFixed(0);
+		const perDigitStr = this.formatPerDigit(perDigit, perDigitTotal);
+		const epLabel = this.config.split
+			? `Task digit ${digit} — episode ${episode}/${this.config.maxEpisodes}`
+			: `Episode ${episode}/${this.config.maxEpisodes}`;
+		console.log(`  ${epLabel}: train=${(accuracy * 100).toFixed(2)}% (${correct}/${total}) | ${ips} img/s ${duration}ms | ${perDigitStr}`);
+	}
+
+	/**
+	 * Held-out evaluation. setLearning(false) is already in effect.
+	 * For each image: resetContext → processFrame → infer → read prediction. No learn() call.
+	 * processFrame's vote generator suppresses age depth-1 (the only available age at context_length=1),
+	 * so we read the prediction off brain.infer() which runs the same vote sweep without that guard.
+	 * Accumulates aggregate accuracy, per-digit accuracy, and the 10×10 confusion matrix called out in the spec.
+	 */
+	runTest() {
+		const startTime = Date.now();
+		const tally = this.newTally();
+		const confusion = Array.from({ length: 10 }, () => new Array(10).fill(0));
+
+		for (let i = 0; i < this.testBits.length; i++) {
+			const label = this.testLabels[i];
+			const predicted = this.predictImage(this.testBits[i]);
+			this.recordPrediction(tally, label, predicted);
+			// decodeDigit() returns -1 when no action inference is present — keep those out of the confusion matrix.
+			if (predicted >= 0 && predicted < 10) confusion[label][predicted]++;
+			if (this.isShuttingDown) break;
+		}
+
+		const duration = Date.now() - startTime;
+		const summary = this.summarizeTally(tally);
+		const perDigitStr = this.formatPerDigit(summary.perDigit, summary.perDigitTotal);
+		console.log(`  Test: ${(summary.accuracy * 100).toFixed(2)}% (${summary.correct}/${summary.total}) ${duration}ms | ${perDigitStr}`);
+
+		return { ...summary, confusion };
+	}
+
+	/**
+	 * Format the per-digit accuracy line, e.g. "0:85% 1:92% 2:71% ..."
+	 */
+	formatPerDigit(perDigit, perDigitTotal) {
+		return perDigit.map((c, d) =>
+			perDigitTotal[d] > 0 ? `${d}:${(c / perDigitTotal[d] * 100).toFixed(0)}%` : `${d}:—`
+		).join(' ');
+	}
+
+	/**
+	 * Pick the training indices for a pass.
+	 * Joint mode (digit=null): sequential walk over the full balanced training set.
+	 * Split mode (digit=0..9): only the slice for that digit. The balanced set is sorted by digit
+	 * with exactly `cap = N/10` samples per class, so digit d's slice is [d*cap, (d+1)*cap).
+	 */
+	buildTrainIndices(digit) {
+		const N = this.trainBits.length;
+		if (digit == null) return Array.from({ length: N }, (_, i) => i);
+		const cap = N / 10;
+		const start = digit * cap;
+		return Array.from({ length: cap }, (_, i) => start + i);
+	}
+
+	/**
+	 * Final summary: per-episode training accuracy, training trend, test accuracy, and the confusion matrix.
+	 * The confusion matrix is the load-bearing artifact for the NB-band check — the 3/8/9 collapses are what motivate the spatial-processing workstream.
 	 */
 	async showResults() {
 		console.log('\nResults');
 		console.log('='.repeat(70));
 
-		// Per-episode training accuracy.
 		for (const ep of this.episodeResults) {
-			console.log(`  Episode ${ep.episode}: train=${(ep.accuracy * 100).toFixed(2)}% (${ep.duration}ms)`);
+			const label = ep.digit != null
+				? `Task digit ${ep.digit} ep ${ep.episode}`
+				: `Episode ${ep.episode}`;
+			console.log(`  ${label}: train=${(ep.accuracy * 100).toFixed(2)}% (${ep.duration}ms)`);
 		}
 
-		// Training accuracy trend from first to last episode.
-		if (this.episodeResults.length >= 2) {
+		// Joint-mode-only: first vs last training accuracy is a meaningful learning curve.
+		// In split mode, each entry measures pre-update accuracy on a different digit, so the delta is apples-to-oranges and would mislead — skip it.
+		if (!this.config.split && this.episodeResults.length >= 2) {
 			const first = this.episodeResults[0];
 			const last = this.episodeResults[this.episodeResults.length - 1];
 			const delta = ((last.accuracy - first.accuracy) * 100).toFixed(2);
-			console.log(`\n  Training: ${(first.accuracy * 100).toFixed(2)}% -> ${(last.accuracy * 100).toFixed(2)}% (${delta >= 0 ? '+' : ''}${delta}pp)`);
+			console.log(`\n  Training: ${(first.accuracy * 100).toFixed(2)}% → ${(last.accuracy * 100).toFixed(2)}% (${delta >= 0 ? '+' : ''}${delta}pp)`);
 		}
 
-		// Test accuracy (single evaluation after training).
 		if (this.testResult) {
-			console.log(`  Test: ${(this.testResult.accuracy * 100).toFixed(2)}%`);
+			console.log(`  Test:     ${(this.testResult.accuracy * 100).toFixed(2)}% (${this.testResult.correct}/${this.testResult.total})`);
+			console.log('\n  Confusion (rows = actual, cols = predicted):');
+			let header = '       ';
+			for (let p = 0; p < 10; p++) header += String(p).padStart(5);
+			console.log(header);
+			for (let a = 0; a < 10; a++) {
+				let row = `   ${a}   `;
+				for (let p = 0; p < 10; p++) row += String(this.testResult.confusion[a][p]).padStart(5);
+				console.log(row);
+			}
 		}
-
 		console.log('='.repeat(70));
 	}
 }
