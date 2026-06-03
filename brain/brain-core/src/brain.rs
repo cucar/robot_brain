@@ -1378,7 +1378,7 @@ impl Brain {
 
         // Run a read-only vote sweep + consensus pass over all active voters at all their valid ages.
         // The caller can then observe the prediction the brain would make for this input post-supervision.
-        let (inferences, votes) = self.read_back_inference(&mut timings);
+        let (inferences, votes) = self.compute_inferences(&mut timings);
 
         FrameResult {
             inferences,
@@ -1444,12 +1444,29 @@ impl Brain {
         self.thalamus.learn_action_connections(&wirings, distance);
     }
 
-    /// Run the same vote sweep + consensus pass process_frame would do for the current brain state.
-    /// Walks every active non-suppressed (voter, age) pair and calls `neuron.vote(age)` per pair.
-    /// Feeds the resulting FlatVotes through the existing infer_neurons consensus path.
-    /// This mirrors the voting half of process_frame without any of its mutating side effects.
+    /// Read-only inference sweep over the current memory window, exposed for harnesses that need
+    /// the brain's prediction without doing supervised wiring or running another full process_frame.
+    /// Used by supervised held-out evaluation paths where process_frame's depth-guarded vote
+    /// generation would suppress the only available age (single-frame episodes at depth=1).
+    /// Returns a FrameResult shaped like process_frame's, but with no side effects on memory or learning.
+    pub fn infer(&mut self) -> FrameResult {
+        let frame_start = Instant::now();
+        let mut timings = FrameTimings::default();
+        let (inferences, votes) = self.compute_inferences(&mut timings);
+        FrameResult {
+            inferences,
+            votes,
+            elapsed: frame_start.elapsed().as_secs_f64(),
+            timings,
+        }
+    }
+
+    /// Shared helper that walks every active non-suppressed (voter, age) pair, calls `neuron.vote(age)`
+    /// on each, and feeds the resulting FlatVotes through the existing infer_neurons consensus path.
+    /// Mirrors the voting half of process_frame without any of its mutating side effects.
+    /// Used by both `learn` (as the post-wire read-back) and `infer` (as a standalone inference).
     /// Returns the per-channel inference map and the per-vote detail list for the harness to inspect.
-    fn read_back_inference(
+    fn compute_inferences(
         &mut self,
         timings: &mut FrameTimings,
     ) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Vec<FrameVote>) {
