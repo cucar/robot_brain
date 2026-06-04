@@ -71,16 +71,14 @@ export declare class Brain {
   setLearning(learning: boolean): void
   /**
    * Supervised wiring step that sits on top of the last `processFrame` call.
-   * `actions: Map<channelId, Map<dimId, scalar>>` names the correct action neuron per channel.
-   * `rewards: Map<channelId, number>` carries the per-channel reward magnitude.
-   * `distance` is the connection-table slot at which the voter→action edge is written and read back.
-   * Single-frame supervised harnesses (MNIST) pass `distance=1` to match the existing temporal voting slot.
-   * Wires every currently-active age-0 voter to the named action neuron(s).
-   * The wire uses additive (strength+=1, reward+=reward) semantics.
-   * Then runs a post-wire inference sweep at the matching age (distance - 1) and returns the resulting FrameResult.
-   * distance must be >= 1.
+   * `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
+   * Each `value` is quantized to its action neuron; reward is folded into that connection via smoothed accumulation
+   * (strength += 1, reward = running mean). Callers typically supply every action value on the dim — correct value
+   * with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
+   * `distance` is the connection-table slot at which to wire and read back; pass `distance=1` for single-frame supervised harnesses.
+   * Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
    */
-  learn(actions: object, rewards: object, distance: number): object
+  learn(actions: object, distance: number): object
   /** Reset brain memory state for a clean episode start. */
   resetContext(): void
   /** Hard reset: clears ALL learned data. */

@@ -1360,20 +1360,19 @@ impl Brain {
     /// That is why `learn()` doesn't need `channel_id` plumbed through.
     pub fn learn(
         &mut self,
-        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
-        rewards: &FxHashMap<ChannelId, Reward>,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, Vec<(f64, Reward)>>>,
         distance: Distance,
     ) -> FrameResult {
         let frame_start = Instant::now();
         let mut timings = FrameTimings::default();
 
-        // Resolve the supplied action scalars to action neuron ids paired with their per-channel reward.
-        let action_targets = self.resolve_action_targets(actions, rewards);
+        // Resolve the supplied (value, reward) pairs to action neuron ids paired with their per-target reward.
+        let action_targets = self.resolve_action_targets(actions);
 
         // Enumerate every currently-active voter across all ages in the sliding window.
         let voter_ids = self.get_active_voter_ids();
 
-        // Wire every (voter → correct-action) edge at the supplied distance with additive accumulation.
+        // Wire every (voter → action) edge at the supplied distance with smoothed-reward accumulation.
         self.learn_action_connections(&voter_ids, &action_targets, distance);
 
         // Run a read-only vote sweep + consensus pass over all active voters at all their valid ages.
@@ -1388,30 +1387,30 @@ impl Brain {
         }
     }
 
-    /// Resolve action coordinates supplied to learn() to action neuron ids paired with their per-channel reward.
-    /// Quantizes each scalar to a bucket id via the channel-dim's quantizer.
-    /// Then looks up the action neuron in the coordinate map.
-    /// Panics if any supplied coordinate doesn't resolve to a registered action neuron.
-    /// Also panics if no targets were supplied at all.
-    /// Both are caller bugs, not runtime conditions to absorb.
+    /// Resolve (value, reward) pairs supplied to learn() into (action_neuron_id, reward) targets.
+    /// Each `value` is quantized to a bucket id via the channel-dim's quantizer, then looked up as an action neuron.
+    /// Lets the caller specify multiple action targets per dim, each with its own reward — e.g. for supervised digit
+    /// classification, every digit is named on every call: correct digit with reward=1, every other digit with reward=0,
+    /// so the smoothed-reward update on each connection converges to the per-voter posterior `K(V,d) / N_V = P(d|V)`.
+    /// Panics if any value doesn't resolve to a registered action neuron, or if no targets were supplied at all.
     fn resolve_action_targets(
         &mut self,
-        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, f64>>,
-        rewards: &FxHashMap<ChannelId, Reward>,
+        actions: &FxHashMap<ChannelId, FxHashMap<DimensionId, Vec<(f64, Reward)>>>,
     ) -> Vec<(NeuronId, Reward)> {
         let mut action_targets: Vec<(NeuronId, Reward)> = Vec::new();
         for (&channel_id, dim_map) in actions {
-            let reward = rewards.get(&channel_id).copied().unwrap_or(0.0);
-            for (&dim_id, &scalar) in dim_map {
-                let bucket_id = self.thalamus.quantizer.quantize(dim_id, scalar);
-                let coord = Coordinate { dim_id, bucket_id };
-                let action_id = self.thalamus.get_neuron_id_by_coordinate(&coord).unwrap_or_else(|| {
-                    panic!("Brain.learn: no action neuron registered at channel={}, dim={}, bucket={}", channel_id, dim_id, bucket_id)
-                });
-                action_targets.push((action_id, reward));
+            for (&dim_id, pairs) in dim_map {
+                for &(value, reward) in pairs {
+                    let bucket_id = self.thalamus.quantizer.quantize(dim_id, value);
+                    let coord = Coordinate { dim_id, bucket_id };
+                    let action_id = self.thalamus.get_neuron_id_by_coordinate(&coord).unwrap_or_else(|| {
+                        panic!("Brain.learn: no action neuron registered at channel={}, dim={}, bucket={}", channel_id, dim_id, bucket_id)
+                    });
+                    action_targets.push((action_id, reward));
+                }
             }
         }
-        assert!(!action_targets.is_empty(), "Brain.learn: no action targets supplied — caller must name at least one correct action");
+        assert!(!action_targets.is_empty(), "Brain.learn: no action targets supplied — caller must name at least one action value");
         action_targets
     }
 

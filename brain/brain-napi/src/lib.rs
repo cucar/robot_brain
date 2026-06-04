@@ -68,6 +68,52 @@ fn read_nested_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, FxHas
     Ok(result)
 }
 
+/// Read a JS Map<number, number> as a Vec<(f64, f64)>, preserving f64 precision on the key side.
+/// Used for the (value, reward) inner maps in the `learn()` actions payload — value is the action scalar
+/// (continuous in stocks, integer in MNIST) so we can't truncate it to int64 like read_number_map does.
+fn read_value_reward_pairs(_env: &Env, map_obj: &JsObject) -> Result<Vec<(f64, f64)>> {
+    let size: u32 = map_obj.get_named_property::<JsNumber>("size")?.get_uint32()?;
+    if size == 0 { return Ok(Vec::new()); }
+
+    let entries_fn: JsFunction = map_obj.get_named_property("entries")?;
+    let iterator: JsObject = entries_fn.call_without_args(Some(map_obj))?.coerce_to_object()?;
+
+    let mut result = Vec::with_capacity(size as usize);
+    loop {
+        let next_fn: JsFunction = iterator.get_named_property("next")?;
+        let entry: JsObject = next_fn.call_without_args(Some(&iterator))?.coerce_to_object()?;
+        let done: bool = entry.get_named_property::<napi::JsBoolean>("done")?.get_value()?;
+        if done { break; }
+        let value: JsObject = entry.get_named_property::<JsObject>("value")?;
+        let key: JsNumber = value.get_element(0)?;
+        let val: JsNumber = value.get_element(1)?;
+        result.push((key.get_double()?, val.get_double()?));
+    }
+    Ok(result)
+}
+
+/// Read a JS Map<channelId, Map<dimId, Map<value, reward>>> — the `learn()` actions payload shape.
+/// Outer two layers are integer-keyed (channelId, dimId); the innermost is value-keyed (action scalar) with reward as the value.
+fn read_actions_map(
+    env: &Env,
+    map_obj: &JsObject,
+) -> Result<FxHashMap<u32, FxHashMap<u32, Vec<(f64, f64)>>>> {
+    let entries = read_js_map(env, map_obj)?;
+    let mut result = FxHashMap::default();
+    for (key, val) in entries {
+        let inner_obj: JsObject = val.coerce_to_object()?;
+        let inner_entries = read_js_map(env, &inner_obj)?;
+        let mut inner = FxHashMap::default();
+        for (dim_key, dim_val) in inner_entries {
+            let dim_obj: JsObject = dim_val.coerce_to_object()?;
+            let pairs = read_value_reward_pairs(env, &dim_obj)?;
+            inner.insert(dim_key as u32, pairs);
+        }
+        result.insert(key as u32, inner);
+    }
+    Ok(result)
+}
+
 /// Create a JS Map from entries and set it on a parent object.
 fn create_js_map(env: &Env, entries: Vec<(u32, JsUnknown)>) -> Result<JsObject> {
     let global = env.get_global()?;
@@ -293,19 +339,18 @@ impl JsBrain {
     }
 
     /// Supervised wiring step that sits on top of the last `processFrame` call.
-    /// `actions: Map<channelId, Map<dimId, scalar>>` names the correct action neuron per channel.
-    /// `rewards: Map<channelId, reward>` carries the per-channel reward magnitude.
+    /// `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
+    /// Each `value` is quantized to the corresponding action neuron; reward is applied to that connection
+    /// via smoothed accumulation (strength += 1, reward = running mean). Callers typically supply every action value
+    /// on the dim — correct value with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
     /// `distance` is the connection-table slot at which to wire and read back.
-    /// Wires every currently-active age-0 voter to the named action neuron(s) at the given distance.
-    /// The wire uses additive (strength+=1, reward+=reward) semantics.
+    /// Wires every currently-active age-0 voter to every supplied action target at the given distance.
     /// Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
-    /// The harness can then observe the prediction the brain would make for this same input after the supervision lands.
     /// Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
     #[napi(js_name = "learn")]
-    pub fn learn(&self, env: Env, actions: JsObject, rewards: JsObject, distance: u32) -> Result<JsObject> {
-        let rust_actions = read_nested_map(&env, &actions)?;
-        let rust_rewards = read_number_map(&env, &rewards)?;
-        let frame_result = self.inner.borrow_mut().learn(&rust_actions, &rust_rewards, distance);
+    pub fn learn(&self, env: Env, actions: JsObject, distance: u32) -> Result<JsObject> {
+        let rust_actions = read_actions_map(&env, &actions)?;
+        let frame_result = self.inner.borrow_mut().learn(&rust_actions, distance);
         build_frame_result(&env, &frame_result)
     }
 

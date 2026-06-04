@@ -15,8 +15,9 @@ const PROGRESS_EVERY = 100;
  * Sensory-only MNIST app — the Naive Bayes baseline described in docs/mnist-merge.md.
  *
  * One channel per pixel position (retinotopic), all firing concurrently in a single frame per image.
- * Training: processFrame(image) populates sensory activations, then learn(actions, rewards, 1) wires every
- *   active sensory neuron to the labeled digit's action neuron at the same-frame voting slot.
+ * Training: processFrame(image) populates sensory activations, then learn(actions, 1) wires every active
+ *   sensory neuron to every digit action neuron with reward=1 on the correct digit and reward=0 on the rest.
+ *   The smoothed-reward update on each connection converges to conn.reward(V,d) = P(d|V) — the per-voter posterior.
  * Test: setLearning(false), processFrame(image), read the digit action winner from inferences.
  */
 export default class MNISTTestJob extends Job {
@@ -38,6 +39,8 @@ export default class MNISTTestJob extends Job {
 			// split: split-MNIST mode — emit the balanced training set in digit order and train one episode per digit class.
 			// Each episode sees only its own digit's samples; the final held-out test then reveals catastrophic forgetting.
 			split: false,
+			// noBalance: skip class-balanced selection and train on the full natural MNIST set (unbalanced).
+			noBalance: false,
 		};
 		this.encoder = null;
 		this.trainImages = null;
@@ -72,6 +75,7 @@ export default class MNISTTestJob extends Job {
 		if (episodes !== null) this.config.maxEpisodes = episodes;
 		if (process.argv.includes('--skip-test')) this.config.skipTest = true;
 		if (process.argv.includes('--split')) this.config.split = true;
+		if (process.argv.includes('--no-balance')) this.config.noBalance = true;
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
@@ -104,10 +108,18 @@ export default class MNISTTestJob extends Job {
 		this.testImages = loadImages(testImgPath);
 		this.testLabels = loadLabels(testLblPath);
 
+		// full data processing: not recommended but can be used for testing
+		if (this.config.noBalance) {
+			this.trainImages = trainImages;
+			this.trainLabels = trainLabels;
+			console.log(`  Unbalanced training set: ${this.trainImages.length} total (natural MNIST distribution)`);
+		}
 		// Class-balanced selection: walk the training set once in order, keep an image for each digit until that digit's per-class quota is filled.
-		const { images: balancedImages, labels: balancedLabels } = this.selectClassBalanced(trainImages, trainLabels);
-		this.trainImages = balancedImages;
-		this.trainLabels = balancedLabels;
+		else {
+			const { images: balancedImages, labels: balancedLabels } = this.selectClassBalanced(trainImages, trainLabels);
+			this.trainImages = balancedImages;
+			this.trainLabels = balancedLabels;
+		}
 
 		// limit number of test images if requested
 		if (this.config.maxTestImages > 0) {
@@ -242,9 +254,6 @@ export default class MNISTTestJob extends Job {
 		// Choose which training samples this pass walks: a single digit's slice in split mode, or the whole set otherwise.
 		const indices = this.buildTrainIndices(digit);
 
-		// Reused-per-image reward vector — built once outside the loop because every call uses the same +1 reward.
-		const positiveReward = this.buildPositiveReward();
-
 		// Accumulators for the per-pass training accuracy line: overall correct, per-digit correct, per-digit totals.
 		const tally = this.newTally();
 
@@ -256,8 +265,10 @@ export default class MNISTTestJob extends Job {
 			const predicted = this.predictImage(this.trainBits[idx]);
 			this.recordPrediction(tally, label, predicted);
 
-			// Supervised wire: bind every active sensory neuron to the label's action neuron at the same-frame voting slot.
-			this.brain.learn(this.encoder.encodeAction(label), positiveReward, 1);
+			// Supervised wire: every active sensory neuron is bound to every digit's action neuron at the same-frame voting slot,
+			// with reward=1 on the correct digit and reward=0 on every other digit. The brain's smoothed-reward update
+			// makes conn.reward(V,d) converge to P(d|V) = K(V,d)/N_V — the per-voter posterior — directly in the reward field.
+			this.brain.learn(this.encoder.encodeAction(label), 1);
 
 			// Heartbeat every PROGRESS_EVERY images so long runs don't look frozen.
 			this.reportProgress('train', i + 1, indices.length, tally, startTime);
@@ -272,17 +283,6 @@ export default class MNISTTestJob extends Job {
 		const result = { digit, episode, ...this.summarizeTally(tally), duration };
 		this.logTrainingPass(result);
 		return result;
-	}
-
-	/**
-	 * Reward is +1 on every learn() call, and this is load-bearing for getting count-based voting out of the brain.
-	 * The brain stores connection.reward as a running mean (alpha=1/strength), so reward stays at exactly 1.0 forever.
-	 * That collapses every candidate's per-candidate reward score to 1.0, tying the brain's reward-based winner across all digits.
-	 * The tie-break then falls through to argmax(candidate.strength), which is the per-voter posterior sum Σ_V K_{V,d}/total_V we want.
-	 * A non-constant reward would re-enable the reward path and break this — a hard contract with the brain consensus, not a free parameter.
-	 */
-	buildPositiveReward() {
-		return this.encoder.buildRewards(1);
 	}
 
 	/**

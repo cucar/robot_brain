@@ -4,23 +4,7 @@ Each section below is one step. They execute in order — steps 1–4 land the a
 
 ---
 
-## 1. Naive MNIST
-
-See **[mnist-merge.md](./mnist-merge.md)**.
-
-Reconcile the long-running `mnist` branch into `dev`. This brings in the **sensory-only (Naive Bayes) MNIST app** — the degenerate, pre-spatial-processing iteration. See that doc for why it is structurally Naive Bayes and why its accuracy is capped accordingly.
-
----
-
-## 2. Inference Level Experiment
-
-See **[inference-level.md](./inference-level.md)**.
-
-Pick the inference scope rule (`base` / `same-level` / `all-levels`) via an experiment on the stocks pipeline. Decision propagates into spatial processing.
-
----
-
-## 3. Spatial Processing
+## Spatial Processing
 
 See **[spatial-processing.md](./spatial-processing.md)**.
 
@@ -28,21 +12,13 @@ Add `process_spatial` ahead of `process_temporal`. Remove intrinsic neuron level
 
 ---
 
-## 4. Neuron Re-use
-
-See **[neuron-reuse.md](./neuron-reuse.md)**.
-
-Reverse inference index, reuse lookup in the correction path, transfer-learning validation, full-pipeline stocks integration, class-neuron generalization tuning. Allocates capacity onto the error manifold (residual-fitting).
-
----
-
-## 5. Vanilla MNIST
+## Vanilla MNIST
 
 Vanilla 10-way digit classification with the completed architecture. Runs only after steps 1–4 land. Confirms the architecture handles vision at all before tackling continual learning.
 
 ### What's already in place from step 1
 
-The channel layout, encoder, episode shape, training/eval harness, and hyperparameter starting points were stood up in step 1 as the sensory-only Naive Bayes app — see the **Naive MNIST app** section in [mnist-merge.md](./mnist-merge.md) for retinotopic channels, single-frame episode structure, phased quantization (binary → 4/8 → 16), shared action neurons, and compute notes. This step does **not** change any of that. What changes is the brain underneath: spatial processing (step 3) now manufactures inter-channel connections at d=0, and neuron reuse (step 4) reallocates capacity onto the error manifold. Same encoder, same harness, same channels — the architecture is no longer degenerate.
+The channel layout, encoder, episode shape, training/eval harness, and hyperparameter starting points were stood up in step 1 as the sensory-only Naive Bayes app. This step does **not** change any of that. What changes is the brain underneath: spatial processing (step 3) now manufactures inter-channel connections at d=0, and neuron reuse (step 4) reallocates capacity onto the error manifold. Same encoder, same harness, same channels — the architecture is no longer degenerate.
 
 ### The baseline to beat: Naive Bayes
 
@@ -74,7 +50,7 @@ With `process_spatial` in place, connection formation is no longer just sensory 
 
 The brain discovers that certain combinations of pixel values across specific spatial positions predict specific digits — without ever being told that pixels are arranged in a grid, or that adjacent pixels tend to co-vary. This is the conjunctive-feature mechanism the NB ladder is built to detect.
 
-### Phase 1 success criteria
+### Success criteria
 
 * **The bar is Naive Bayes (~83–84% at 28×28), not chance.** The sensory-only merge app from step 1 already reaches the NB ceiling by construction. Phase 1 runs the *completed* architecture (post spatial-processing and reuse), so its job is to clear the NB floor using the conjunctive-feature mechanism — anything at or below NB means the spatial/reuse machinery is not yet contributing joint structure and should be debugged before adding precision.
 * **Phase A (binary), gate**: must clear NB at matched preprocessing (28×28 binary NB run from step 1 is the apples-to-apples reference). Failing to clear NB at binary is the architectural debug signal — adding bucket precision will not fix it.
@@ -88,7 +64,7 @@ This is not an attempt to beat CNNs. It is a demonstration that a single predict
 
 ---
 
-## 6. Split MNIST
+## Split MNIST
 
 Class-incremental continual learning. The **headline experiment for external positioning**. Runs only after Phase 1 confirms vanilla MNIST works.
 
@@ -137,13 +113,13 @@ Reference numbers from the continual learning literature for class-incremental S
 
 We cite these numbers rather than re-running. Reproduction is a separate effort if external review demands it.
 
-### Phase 2 success criteria
+### Success criteria
 
 * **Headline**: average accuracy after Task 5 substantially above the ~20% catastrophic-forgetting floor, achieved with **no replay buffer, no task IDs, no regularizers** — purely from architectural retention.
 * **Stretch**: retention competitive with replay-based methods (60%+) without using replay.
 * **Diagnostic**: per-task accuracy degradation profile. If Task 1 accuracy is preserved through Task 5, the architectural claim holds; if it decays, forget-rate tuning is needed.
 
-### Hyperparameter notes for Phase 2
+### Hyperparameter notes
 
 The critical knob is **per-task training duration**, not forget rate. Each task must train long enough for digit patterns to consolidate up the hierarchy to levels with decay timescales exceeding the remaining experiment duration. Under-training a task leaves its representations at low levels that decay during subsequent tasks; over-training is harmless beyond saturation.
 
@@ -158,20 +134,36 @@ Not an attempt to beat continual learning SOTA methods that use replay. The clai
 
 ### Dependencies
 
-* Phase 1 (vanilla MNIST) complete and working
+* Vanilla MNIST complete and working
 * Same Rust core, same channel code — no architectural changes
 * Sequential task scheduler (trivial — just feed task data in order)
 * Per-task evaluation harness (trivial)
 
 ---
 
-## 7. Calculate up/down accuracy separately
+## Neuron Re-use
+
+See **[neuron-reuse.md](./neuron-reuse.md)**.
+
+Reverse inference index, reuse lookup in the correction path, transfer-learning validation, full-pipeline stocks integration, class-neuron generalization tuning. Allocates capacity onto the error manifold (residual-fitting).
+
+---
+
+## Inference Level Experiment
+
+See **[inference-level.md](./inference-level.md)**.
+
+Pick the inference scope rule (`base` / `same-level` / `all-levels`) via an experiment on the stocks pipeline. Decision propagates into spatial processing.
+
+---
+
+## Calculate up/down accuracy separately
 
 - Report directional accuracy (up vs down) independently to identify prediction bias
 
 ---
 
-## 8. Neuron Limits
+## Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add configurable cap on neuron count per region/column
@@ -186,7 +178,7 @@ Not an attempt to beat continual learning SOTA methods that use replay. The clai
 
 ---
 
-## 9. Exponential Temporal Binning Test
+## Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme described in [experiment-temporal-binning.md](./experiment-temporal-binning.md).
 
@@ -206,7 +198,7 @@ Higher-level patterns currently store context at exact frame distances — meani
 
 ---
 
-## 10. Documentation & Publish
+## Documentation & Publish
 
 ### Update all documentation
 - Sync docs with current architecture post-Rust migration

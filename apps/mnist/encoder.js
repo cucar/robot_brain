@@ -116,25 +116,21 @@ export class MNISTPixelChannelsEncoder {
 	}
 
 	/**
-	 * Build the actions Map naming the correct digit for brain.learn().
-	 * Shape: channelId → (dimId → digit).
+	 * Build the actions Map for brain.learn() — every digit is named, correct gets reward=1, others get reward=0.
+	 * Wiring all ten digits per image lets the brain's smoothed-reward update converge `conn.reward(V,d)` to
+	 * the per-voter posterior P(d|V) = K(V,d)/N_V (the running mean of 1s when label=d and 0s when label≠d).
+	 * Shape: channelId → (dimId → Map(digitValue → reward)).
 	 */
-	encodeAction(label) {
+	encodeAction(correctLabel) {
 		const actions = new Map();
 		const dimMap = new Map();
-		dimMap.set(this.digitDimId, label);
+		const valueRewardMap = new Map();
+		for (let d = 0; d < DIGITS; d++) {
+			valueRewardMap.set(d, d === correctLabel ? 1 : 0);
+		}
+		dimMap.set(this.digitDimId, valueRewardMap);
 		actions.set(this.digitChannelId, dimMap);
 		return actions;
-	}
-
-	/**
-	 * Build the per-channel rewards Map for brain.learn().
-	 * One entry, on the digit channel, carrying the reward magnitude.
-	 */
-	buildRewards(reward) {
-		const rewards = new Map();
-		rewards.set(this.digitChannelId, reward);
-		return rewards;
 	}
 
 	/**
