@@ -1,10 +1,5 @@
 # Neuron Reuse for Error Correction
 
-**Date:** 2026-05-29
-**Author:** Cagdas Ucar
-**Status:** Pre-implementation
-**Prerequisites:** [mnist-merge.md](./mnist-merge.md), [inference-level.md](./inference-level.md), [spatial-processing.md](./spatial-processing.md)
-
 ---
 
 ## 1. Motivation
@@ -98,25 +93,43 @@ Observed inference set = (A, B, C). Candidate neuron infers (B, C). Overlap 2/3 
 
 ## 3. Interaction with Spatial Processing
 
-### 3.1 Activation-Level Resolution
+### 3.1 Levels as Activation State, Not Neuron State
 
-Reuse depends on the activation-level architecture from [spatial-processing.md](./spatial-processing.md#35-levels-as-activation-state-not-neuron-state). Neurons have no intrinsic level. When a reused neuron R is activated for an error at A (activation level 2), R appears at activation level 3 this frame, regardless of R's original mint level or where it was last activated.
+Reuse requires removing intrinsic level from neurons. Mint-only spatial processing can leave `neuron.level` as an intrinsic field — a freshly-minted correction's level is fixed at mint time and never changes, so there is nothing to reconcile. Reuse breaks that assumption: a single neuron R may be reused from different routing sources at different levels in different frames.
 
-This is what makes cross-context reuse safe. Without per-activation levels, a reused neuron's d>0 work could be dropped silently if its intrinsic level was never reached by the temporal level-sweep, or reuse would have to be restricted to same-level candidates (shrinking the reuse pool significantly).
+Levels become a property of *activations in active memory*, not of neurons. A neuron has no intrinsic level field. When a neuron is activated this frame, it is registered in active memory at `activating_neuron.activation_level + 1` (sensory neurons start at activation level 0). The temporal level-sweep iterates active-memory levels: at iteration L, it processes whoever is activated at level L this frame. The spatial level-sweep propagates by routing match independent of stored level.
 
-### 3.2 Correction-Wired Inhibition
+A neuron R reused for an error at A (activation level 2) appears at activation level 3 this frame, regardless of where R was originally minted or where it was last activated. Next frame, the same R may be activated from a different routing source at a different level — appearing at a different activation level. R's identity is preserved; its "level" is per-frame contextual.
 
-Reused neurons go into `correction_wired_this_frame` exactly like fresh mints. They:
+Without this design, cross-level reuse would either be unsafe (the level-sweep might never reach R's intrinsic level, leaving R's d>0 work and votes silently dropped) or require restricting reuse candidates to matching levels (shrinking the reuse pool significantly). With per-activation levels, neither problem exists.
 
-- Learn from the current observed set (their d=0 connections strengthen toward the observed reality — this is how they gradually generalize across reuse events).
-- Do not vote this frame (their activation is a wiring side-effect, not an inferential signal).
-- Are not error-checked this frame (prevents a reused neuron whose pre-existing d=0 set doesn't match the current observed set from generating a fresh error and cascading).
+#### Code touched (lands as part of Phase 1 here)
 
-This is the load-bearing termination rule. Without it, cross-frame reuse would risk runaway error cascades within a single spatial phase.
+- `brain/brain-core/src/neuron.rs` — **remove `neuron.level` field.** Drop from struct, drop from serialization, drop from all per-neuron API surface.
+- `brain/brain-core/src/memory.rs` — `level_index` becomes per-frame active-memory state, not persistent metadata. Reconstructed each frame from activations. `get_level_neurons(level)` returns "neurons activated at this level this frame" rather than "neurons whose intrinsic level == L."
+- `brain/brain-core/src/thalamus.rs` — `process_level`'s `level` arg now means "current iteration level," consumed when reading active memory.
+- `brain/brain-core/src/column.rs`, `region.rs` — sweep for any code that references `neuron.level` and replace with activation-level lookup or remove if vestigial.
+- `brain/brain-core/src/backup.rs` — drop `neuron.level` from serialized form. Bump format version; old backups error clearly.
+
+### 3.2 Refractory and Correction-Wired Inhibition
+
+Reuse introduces two per-frame tracking sets that don't exist in mint-only spatial:
+
+**`fired_this_frame: FxHashSet<NeuronId>`** — every neuron that has fired in either phase this frame. Enforces refractory: each neuron fires at most once per frame. Mint-only spatial doesn't need this because a freshly minted neuron is unique and there are no routing cycles into it; reuse can wire an existing neuron from many sources in the same frame, so refractory becomes load-bearing for termination.
+
+**`correction_wired_this_frame: FxHashSet<NeuronId>`** — every neuron whose activation this frame is the result of being selected as a correction target, whether minted fresh or reused. Neurons in this set:
+
+- **Learn from the current observed set.** Their d=0 connections strengthen toward the observed reality — this is how a reused neuron gradually generalizes across reuse events.
+- **Do not vote this frame.** Their activation is a wiring side-effect, not an inferential signal. Action voting excludes them.
+- **Are not error-checked this frame.** Prevents a reused neuron whose pre-existing d=0 set doesn't match the current observed set from generating a fresh error and cascading into more corrections within the same phase.
+
+This inhibition is the load-bearing termination rule. Without it, cross-frame reuse would risk runaway error cascades within a single spatial phase.
+
+Both sets clear at frame end.
 
 ### 3.3 Reuse Across Both Phases
 
-Reuse applies in both `process_spatial` (d=0 errors) and `process_temporal` (d>0 errors). Same mechanism, different phase. The reverse inference index is shared between phases.
+Reuse applies in both `process_spatial` (d=0 errors) and `process_temporal` (d>0 errors). Same mechanism, different phase. The reverse inference index and the two tracking sets are shared between phases.
 
 ---
 
@@ -136,22 +149,30 @@ Reuse applies in both `process_spatial` (d=0 errors) and `process_temporal` (d>0
 
 | Phase | Goal | Validation gate |
 |---|---|---|
-| 1 | Reverse inference index | Unit test: target → set of source-neurons lookup |
+| 1 | Intrinsic-level removal + reverse inference index | Stocks regression bit-exact; target → source-neurons lookup works |
 | 2 | Reuse lookup in correction path | MNIST: neuron count drops vs spatial-mint-only baseline |
 | 3 | Reuse validation | Transfer test: training on digits 0-4 helps with 5-9 |
 | 4 | Stocks integration with full pipeline (spatial + reuse) | Directional accuracy lifts off the 57-59% plateau |
 | 5 | Forget-rate / class-neuron generalization | Class neurons survive 10k+ frames with action binding intact |
 
-Phases 1-2 can land in parallel with or after [spatial-processing](./spatial-processing.md) Phase 5. Phase 3 onward depends on spatial being in place.
+All phases here depend on [spatial-processing](./spatial-processing.md) being complete first.
 
 ---
 
-### Phase 1 — Reverse Inference Index
+### Phase 1 — Preconditions: Level Removal, Tracking Sets, Reverse Index
 
-**Goal:** Build the data structure that answers "which neurons have a connection to target T at distance d?"
+**Goal:** Three preconditions for reuse, landed together:
+
+1. Remove `neuron.level` as an intrinsic field. See §3.1 for the activation-level architecture and the code touched.
+2. Add the `fired_this_frame` and `correction_wired_this_frame` per-frame tracking sets (§3.2). Plumb them through both phases so neurons populate `fired_this_frame` on activation and the existing fresh-mint path populates `correction_wired_this_frame`. Route action voting through `fired_this_frame \ correction_wired_this_frame` instead of per-level accumulation. With no reuse logic yet, behavior is identical to mint-only spatial.
+3. Build the reverse inference index that answers "which neurons have a connection to target T at distance d?"
+
+Stocks regression must stay bit-exact: none of these changes affect per-frame computation until the reuse lookup of Phase 2 is wired in.
 
 #### Code touched
 
+- `brain/brain-core/src/brain.rs` — add `fired_this_frame: FxHashSet<NeuronId>` and `correction_wired_this_frame: FxHashSet<NeuronId>` as per-frame state. Reset at frame start. Both `process_spatial` and `process_temporal` populate `fired_this_frame` as neurons activate. Action voting reads `fired_this_frame \ correction_wired_this_frame`.
+- `brain/brain-core/src/thalamus.rs` — the existing correction path (fresh mints in both phases) adds newly-minted targets to `correction_wired_this_frame`.
 - `brain/brain-core/src/column.rs` or `thalamus.rs` — add `inference_index: FxHashMap<NeuronId, FxHashMap<Distance, FxHashSet<NeuronId>>>`. Maps `target → distance → set of sources`. Sharded by the column owning the **source** neuron, so each column owns the index for its resident neurons.
 - `brain/brain-core/src/neuron.rs` — on connection create/strengthen/decay/delete, emit an `IndexUpdate` event. Column applies the update to its local index.
 - `brain/brain-core/src/region.rs` — expose a `query_inference_sources(targets: &[NeuronId], distance: Distance) -> FxHashMap<NeuronId, FxHashSet<NeuronId>>` op that fans out across columns and merges per-target source sets.
@@ -167,7 +188,7 @@ Phases 1-2 can land in parallel with or after [spatial-processing](./spatial-pro
 - **Update batching at orchestration boundaries.** Don't update index per-connection-strengthen during a parallel dispatch. Each neuron emits index-update events as part of its per-neuron result; the thalamus applies them at the **orchestration boundary** that immediately follows the dispatch (between the parallel wave and the next orchestration step). This means the reuse lookup in Phase 2 sees the index reflecting this frame's deltas — no stale-index lag, no "defer to next frame" workaround. The pattern mirrors temporal: parallel-per-neuron work inside the dispatch, cross-neuron consolidation (allocate, route, index-update) sequentially between dispatches.
 - Memory cost: index roughly doubles the connection-graph memory footprint. Acceptable for now; revisit if it becomes a bottleneck.
 - Storage layout: flat `(target,distance) → sources` vs nested. Decide based on benchmark.
-- Persistence: not serialized; rebuilt on load. See [spatial-processing](./spatial-processing.md) Phase 7.
+- Persistence: not serialized; rebuilt on load. Add a `rebuild_inference_index()` method called once at load time, alongside the existing connection-restore path.
 
 ---
 
@@ -207,7 +228,7 @@ for (distance, errs) in by_distance:
 
 - Unit test: two neurons erring against the same observed set at the same distance in one frame produce exactly **one** minted correction neuron, both wired to it (batched mint, lookup miss).
 - Unit test: train two errors in *different* frames with overlapping observed sets — the second frame reuses the first's correction neuron via lookup when overlap ≥ merge threshold (cross-frame reuse).
-- MNIST: rerun the spatial-processing [Phase 5](./spatial-processing.md#phase-5--mnist-single-frame-harness) harness with reuse enabled. Total neuron count should be significantly lower (target: ≥30% reduction). Accuracy should be ≥ Phase 5 baseline.
+- MNIST: rerun the [spatial-processing MNIST harness](./spatial-processing.md#phase-3--mnist-single-frame-harness) with reuse enabled. Total neuron count should be significantly lower (target: ≥30% reduction). Accuracy should be ≥ the mint-only baseline.
 - Profile: per-distance reuse lookup adds < 20% to per-frame runtime.
 
 #### Notes / gotchas
@@ -218,7 +239,7 @@ for (distance, errs) in by_distance:
 - Reuse reads the existing global merge threshold from brain options — no new parameter. Setting that threshold to 1.0 disables reuse (and also disables partial-context pattern recognition); the two behaviors are intentionally coupled.
 - Edge case: erroring neuron N's reuse candidate is N itself. Filter self-matches.
 - Edge case: reuse candidate is a neuron minted earlier *in the same phase, same frame*. Allow it. The reused neuron goes into `correction_wired_this_frame` as usual; the index update at the orchestration boundary keeps the reverse index consistent.
-- Termination: reused neurons go into `correction_wired_this_frame` (per [spatial-processing](./spatial-processing.md#34-refractory-and-correction-wiring-inhibition)), so they cannot generate fresh errors this phase. This is the termination guarantee — refractory + correction-wired-inhibition bounds the phase regardless of reuse activity.
+- Termination: reused neurons go into `correction_wired_this_frame` (per §3.2), so they cannot generate fresh errors this phase. This is the termination guarantee — refractory + correction-wired-inhibition bounds the phase regardless of reuse activity.
 
 ---
 
@@ -236,12 +257,12 @@ for (distance, errs) in by_distance:
 
 ### Phase 4 — Stocks Integration with Full Pipeline
 
-**Goal:** Run the full pipeline (spatial + temporal + reuse) on stocks. This is distinct from the spatial-only stocks integration in [spatial-processing](./spatial-processing.md#phase-6--stocks-integration-spatial-only) — that established a spatial baseline; this measures the additional impact of reuse.
+**Goal:** Run the full pipeline (spatial + temporal + reuse) on stocks. This is distinct from the [spatial-only stocks integration](./spatial-processing.md#phase-4--stocks-integration) — that established a spatial baseline; this measures the additional impact of reuse.
 
 #### Steps
 
 - Run stocks with `process_spatial` enabled and reuse on. d=0 connections form across co-occurring top-level patterns within each frame. Spatial corrections from one frame feed into the temporal phase in subsequent frames, building spatio-temporal abstractions.
-- Compare per-episode ROI and directional accuracy against the [spatial-only baseline](./spatial-processing.md#phase-6--stocks-integration-spatial-only) and the [inference-level winner](./inference-level.md) baseline.
+- Compare per-episode ROI and directional accuracy against the spatial-only baseline.
 - Tune the global merge threshold and d=0 error threshold if needed.
 
 #### Acceptance
@@ -271,7 +292,7 @@ for (distance, errs) in by_distance:
 
 ### 6.1 High Confidence
 
-Reuse is correct in principle. The reverse-inference-index lookup is a straightforward extension of existing index machinery. The `correction_wired_this_frame` inhibition rule (see [spatial-processing](./spatial-processing.md#34-refractory-and-correction-wiring-inhibition)) makes reuse safe under within-frame error cascades.
+Reuse is correct in principle. The reverse-inference-index lookup is a straightforward extension of existing index machinery. The `correction_wired_this_frame` inhibition rule (§3.2) makes reuse safe under within-frame error cascades.
 
 ### 6.2 Key Risks
 
