@@ -268,8 +268,6 @@ Inference is symmetric: on a test image, the spatial sweep activates pre-trained
 
 #### Notes / gotchas
 
-- A neuron can appear in both indexes simultaneously at different levels — that's the point of the two-dimension model. Don't write defensive code that assumes one level per activation.
-- Subsumption tracking is per-frame state, cleared at frame end. Cheapest representation: a `FxHashSet<NeuronId>` populated incrementally as spatial routing matches fire, then differenced against the spatial fired set at apex time.
 - Voting (action voting and the existing higher-pattern-inhibition rule) reads the combined fired set across both phases, as today. The two-index split is about iteration, not about voting.
 
 ---

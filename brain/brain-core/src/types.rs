@@ -113,6 +113,15 @@ impl WelfordState {
     }
 }
 
+/// Processing phase — distinguishes spatial (d=0 co-activation) from temporal (d>0 sequence) work.
+/// Both phases use the same per-neuron prediction/error/correction mechanism; they differ only in
+/// which connection-distance slot they read and which level index in Memory they iterate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Phase {
+    Spatial,
+    Temporal,
+}
+
 /// Error correction mode — determines how error thresholds are calculated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorMode {

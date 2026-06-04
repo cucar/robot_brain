@@ -33,7 +33,7 @@ use crate::thalamus::{
 };
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, NeuronId, NeuronType, Reward,
+    Level, NeuronId, NeuronType, Phase, Reward,
 };
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
@@ -418,22 +418,24 @@ impl Brain {
         fs::create_dir_all(&folder)
             .map_err(|e| format!("Failed to create context folder: {}", e))?;
 
-        // active_neurons.csv: neuron_id, activation_offset, level, activated_pattern_id, threshold
+        // active_neurons.csv: neuron_id, activation_offset, level, activated_pattern_id, threshold, phase
         // activation_offset = activation_frame - frame_number (always ≤ 0)
+        // phase column added for spatial/temporal split — older snapshots default to "T" on load.
         let activations = self.memory.get_context_snapshot();
+        let phase_str = |p: Phase| match p { Phase::Spatial => "S", Phase::Temporal => "T" };
         let rows: Vec<Vec<String>> = activations.iter()
-            .map(|(id, frame, level, state)| {
+            .map(|(id, frame, level, phase, state)| {
                 let offset = frame - self.frame_number;
                 let pattern_id_str = state.activated_pattern_id.map_or(String::new(), |p| p.to_string());
                 let threshold_str = state.threshold.map_or(String::new(), |t| t.to_string());
-                vec![id.to_string(), offset.to_string(), level.to_string(), pattern_id_str, threshold_str]
+                vec![id.to_string(), offset.to_string(), level.to_string(), pattern_id_str, threshold_str, phase_str(*phase).to_string()]
             })
             .collect();
         write_csv(&folder.join("active_neurons.csv"), &rows)?;
 
         // votes.csv: neuron_id, activation_offset, voted_neuron_id, strength, reward, distance
         let mut vote_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
+        for (id, frame, _level, _phase, state) in &activations {
             let offset = frame - self.frame_number;
             if let Some(ref votes) = state.votes {
                 for vote in votes {
@@ -449,7 +451,7 @@ impl Brain {
 
         // context_refs.csv: neuron_id, activation_offset, ref_neuron_id, ref_distance
         let mut ref_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
+        for (id, frame, _level, _phase, state) in &activations {
             let offset = frame - self.frame_number;
             if let Some(ref ctx) = state.context {
                 for entry in ctx {
@@ -510,9 +512,10 @@ impl Brain {
 
         println!("📂 Loading context: {}", folder.display());
 
-        // active_neurons.csv: neuron_id, activation_offset, level [, activated_pattern_id, threshold]
+        // active_neurons.csv: neuron_id, activation_offset, level [, activated_pattern_id, threshold, phase]
+        // Pre-spatial snapshots have no phase column — those entries default to Phase::Temporal.
         let neuron_rows = read_csv(&folder.join("active_neurons.csv"))?;
-        let mut activations: Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> = Vec::with_capacity(neuron_rows.len());
+        let mut activations: Vec<(NeuronId, FrameNumber, Level, Phase, LevelAgeState)> = Vec::with_capacity(neuron_rows.len());
         for row in &neuron_rows {
             if row.len() < 3 { continue; }
             let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad neuron_id: {}", e))?;
@@ -520,7 +523,11 @@ impl Brain {
             let level: Level = row[2].parse().map_err(|e| format!("Bad level: {}", e))?;
             let activated_pattern_id = row.get(3).and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
             let threshold = row.get(4).and_then(|s| if s.is_empty() { None } else { s.parse().ok() });
-            activations.push((neuron_id, activation_frame, level, LevelAgeState {
+            let phase = match row.get(5).map(|s| s.as_str()) {
+                Some("S") => Phase::Spatial,
+                _ => Phase::Temporal,
+            };
+            activations.push((neuron_id, activation_frame, level, phase, LevelAgeState {
                 activated_pattern_id,
                 threshold,
                 votes: None,
@@ -542,8 +549,8 @@ impl Brain {
                     reward: row[4].parse().map_err(|e| format!("Bad vote reward: {}", e))?,
                     distance: row[5].parse().map_err(|e| format!("Bad vote distance: {}", e))?,
                 };
-                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _)| *id == neuron_id && *frame == offset) {
-                    entry.3.votes.get_or_insert_with(Vec::new).push(vote);
+                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _, _)| *id == neuron_id && *frame == offset) {
+                    entry.4.votes.get_or_insert_with(Vec::new).push(vote);
                 }
             }
         }
@@ -560,8 +567,8 @@ impl Brain {
                     neuron_id: row[2].parse().map_err(|e| format!("Bad ref_neuron_id: {}", e))?,
                     distance: row[3].parse().map_err(|e| format!("Bad ref_distance: {}", e))?,
                 };
-                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _)| *id == neuron_id && *frame == offset) {
-                    entry.3.context.get_or_insert_with(Vec::new).push(ctx_entry);
+                if let Some(entry) = activations.iter_mut().find(|(id, frame, _, _, _)| *id == neuron_id && *frame == offset) {
+                    entry.4.context.get_or_insert_with(Vec::new).push(ctx_entry);
                 }
             }
         }
@@ -665,8 +672,8 @@ impl Brain {
         self.thalamus.get_neuron_connections(neuron_id).unwrap_or_default()
     }
 
-    /// Export a snapshot of all active neurons in context with their levels.
-    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
+    /// Export a snapshot of all active neurons in context with their levels and phase.
+    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, Phase, LevelAgeState)> {
         self.memory.get_context_snapshot()
     }
 
@@ -894,11 +901,13 @@ impl Brain {
 
     // ── Neuron activation ───────────────────────────────────────────────────
 
-    /// Activate neurons by ID at age 0.
+    /// Activate sensory neurons by ID at age 0 in the temporal phase index.
+    /// 1a: sensory still flows directly into temporal[0], preserving today's behavior.
+    /// 1b will route sensory through spatial[0] and use the apex handoff instead.
     fn activate_neurons(&mut self, neuron_ids: &[NeuronId]) {
         for &neuron_id in neuron_ids {
             let level = self.thalamus.get_neuron_level(neuron_id).unwrap_or(0);
-            self.memory.activate_neuron(neuron_id, level);
+            self.memory.activate_neuron(neuron_id, level, Phase::Temporal);
         }
 
         // Track event accuracy, action rewards, and misprediction log
@@ -920,10 +929,10 @@ impl Brain {
     /// and contextRef updates (Op-5) are returned for the caller to flush once.
     fn process_levels(&mut self) -> (Vec<FlatVote>, Vec<NeuronCreateSpec>, Vec<Vec<crate::column::ColumnProcessResult>>, crate::neuron::NeuronOpTimings, crate::thalamus::OrchestrationTimings, MemoryTimings) {
         // get the active sensory neurons at level 0
-        let sensory_neurons = self.memory.get_level_ages(0);
+        let sensory_neurons = self.memory.get_level_ages(0, Phase::Temporal);
 
         // get the maximum active level from memory index
-        let mut max_active_level = self.memory.get_max_active_level();
+        let mut max_active_level = self.memory.get_max_active_level(Phase::Temporal);
 
         // track newly-created error pattern ids so they are excluded from the level
         // pass at their own level (prevents double connection-learning and context leak)
@@ -944,7 +953,7 @@ impl Brain {
 
             // get level neurons (mutable borrow returned, will be written back)
             let t = Instant::now();
-            let mut level_neurons = self.memory.get_level_neurons(level);
+            let mut level_neurons = self.memory.get_level_neurons(level, Phase::Temporal);
             mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
 
             // process level: aggregate view, recognize patterns, create error corrections, collect votes
@@ -968,7 +977,7 @@ impl Brain {
             // activate matched patterns and newly-created error patterns at level+1
             let t = Instant::now();
             for activation in &result.activations {
-                self.memory.activate_pattern(activation.pattern_id, level + 1, activation.parent_id, activation.age);
+                self.memory.activate_pattern(activation.pattern_id, level + 1, activation.parent_id, activation.age, Phase::Temporal);
             }
             mem_timings.activate_patterns += t.elapsed().as_secs_f64();
 

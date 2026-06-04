@@ -10,7 +10,7 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::thalamus::LevelAgeState;
-use crate::types::{ChannelId, Coordinate, Distance, FrameNumber, Level, NeuronId};
+use crate::types::{ChannelId, Coordinate, Distance, FrameNumber, Level, NeuronId, Phase};
 
 /// A single inferred neuron — winner from the voting consensus.
 /// Carries the fields that buildFrame needs on the next frame:
@@ -44,8 +44,12 @@ pub struct Memory {
     /// frame → set of neuron ids activated at that frame.
     age_index: FxHashMap<FrameNumber, FxHashSet<NeuronId>>,
 
-    /// Index for fast level queries — level → frame → set of neuron ids.
-    level_index: FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>>,
+    /// Index for fast level queries — one map per phase. level → frame → set of neuron ids.
+    /// Spatial and temporal hierarchies are independent depth indexes over the same neurons.
+    /// A single neuron can appear in both at different levels — e.g. a spatial correction at
+    /// spatial_level=3 that's apex for the frame also sits at temporal_level=0.
+    spatial_level_index: FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>>,
+    temporal_level_index: FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>>,
 
     /// Current frame winning inferences.
     inferred_neurons: Vec<InferredNeuron>,
@@ -61,7 +65,8 @@ impl Memory {
             frame_number: 0,
             neuron_states: FxHashMap::default(),
             age_index: FxHashMap::default(),
-            level_index: FxHashMap::default(),
+            spatial_level_index: FxHashMap::default(),
+            temporal_level_index: FxHashMap::default(),
             inferred_neurons: Vec::new(),
             debug,
         }
@@ -71,9 +76,26 @@ impl Memory {
     pub fn reset(&mut self) {
         self.frame_number = 0;
         self.age_index.clear();
-        self.level_index.clear();
+        self.spatial_level_index.clear();
+        self.temporal_level_index.clear();
         self.neuron_states.clear();
         self.inferred_neurons.clear();
+    }
+
+    /// Internal helper — get the (mut) level index for a phase.
+    fn level_index_mut(&mut self, phase: Phase) -> &mut FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>> {
+        match phase {
+            Phase::Spatial => &mut self.spatial_level_index,
+            Phase::Temporal => &mut self.temporal_level_index,
+        }
+    }
+
+    /// Internal helper — get the level index for a phase.
+    fn level_index(&self, phase: Phase) -> &FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>> {
+        match phase {
+            Phase::Spatial => &self.spatial_level_index,
+            Phase::Temporal => &self.temporal_level_index,
+        }
     }
 
     /// Advance the sliding window to the given frame. Memory acts as a slave clock —
@@ -101,7 +123,10 @@ impl Memory {
                 if states.is_empty() { self.neuron_states.remove(&neuron_id); } // deactivate neuron if all ages are inactive
             }
         }
-        for level_frames in self.level_index.values_mut() {
+        for level_frames in self.spatial_level_index.values_mut() {
+            level_frames.remove(&evicted_frame);
+        }
+        for level_frames in self.temporal_level_index.values_mut() {
             level_frames.remove(&evicted_frame);
         }
 
@@ -166,8 +191,8 @@ impl Memory {
     /// Get the per-age Sets of neuron IDs for a level (index = age), in age-ascending order.
     /// Returns an empty vec if the level has no active neurons.
     /// Built fresh on each call by walking ages 0..depth-1 against the frame-keyed level index.
-    pub fn get_level_ages(&self, level: Level) -> Vec<FxHashSet<NeuronId>> {
-        let level_frames = match self.level_index.get(&level) {
+    pub fn get_level_ages(&self, level: Level, phase: Phase) -> Vec<FxHashSet<NeuronId>> {
+        let level_frames = match self.level_index(phase).get(&level) {
             Some(lf) => lf,
             None => return Vec::new(),
         };
@@ -182,9 +207,9 @@ impl Memory {
     /// Returns the active neurons at a given level with their age-states.
     /// Shape: FxHashMap<neuron_id, FxHashMap<age, LevelAgeState>>.
     /// thalamus.process_level depends on this.
-    pub fn get_level_neurons(&mut self, level: Level) -> FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>> {
+    pub fn get_level_neurons(&mut self, level: Level, phase: Phase) -> FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>> {
         let mut neurons: FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>> = FxHashMap::default();
-        let level_frames = match self.level_index.get(&level) {
+        let level_frames = match self.level_index(phase).get(&level) {
             Some(lf) => lf,
             None => return neurons,
         };
@@ -228,36 +253,40 @@ impl Memory {
         }
     }
 
-    /// Activate a neuron at age 0.
-    pub fn activate_neuron(&mut self, neuron_id: NeuronId, level: Level) {
-        self.activate_neuron_at_age(neuron_id, 0, level);
+    /// Activate a neuron at age 0 in the given phase's level index.
+    pub fn activate_neuron(&mut self, neuron_id: NeuronId, level: Level, phase: Phase) {
+        self.activate_neuron_at_age(neuron_id, 0, level, phase);
     }
 
-    /// Activate a neuron at a specific age.
+    /// Activate a neuron at a specific age in the given phase's level index.
     /// Internally stored keyed by activation frame = frame_number - age
     /// so the entry naturally moves to age+1 next frame without any rewrite.
-    pub fn activate_neuron_at_age(&mut self, neuron_id: NeuronId, age: Distance, level: Level) {
+    /// neuron_states are shared across phases — only the level index is per-phase.
+    /// If the same neuron is activated in both phases at the same age, the state entry
+    /// is created once and shared; the level index records the neuron under both phases.
+    pub fn activate_neuron_at_age(&mut self, neuron_id: NeuronId, age: Distance, level: Level, phase: Phase) {
         let frame = self.frame_number - age as i64;
 
         // add the neuron to the age index
         self.age_index.entry(frame).or_insert_with(FxHashSet::default).insert(neuron_id);
 
-        // add the neuron to the level index
-        self.level_index.entry(level)
+        // add the neuron to the phase's level index
+        self.level_index_mut(phase).entry(level)
             .or_insert_with(FxHashMap::default)
             .entry(frame)
             .or_insert_with(FxHashSet::default)
             .insert(neuron_id);
 
-        // add the active neuron to the neuron states with a new state
+        // add the active neuron to the neuron states with a new state (if not already present)
         self.neuron_states.entry(neuron_id)
             .or_insert_with(FxHashMap::default)
-            .insert(frame, LevelAgeState::default());
+            .entry(frame)
+            .or_insert_with(LevelAgeState::default);
     }
 
     /// Activate a pattern neuron and link it to its parent.
-    pub fn activate_pattern(&mut self, pattern_id: NeuronId, pattern_level: Level, parent_id: NeuronId, age: Distance) {
-        self.activate_neuron_at_age(pattern_id, age, pattern_level);
+    pub fn activate_pattern(&mut self, pattern_id: NeuronId, pattern_level: Level, parent_id: NeuronId, age: Distance, phase: Phase) {
+        self.activate_neuron_at_age(pattern_id, age, pattern_level, phase);
 
         // set the parent's activated_pattern_id at this age
         let frame = self.frame_number - age as i64;
@@ -294,44 +323,49 @@ impl Memory {
         }
     }
 
-    /// Get the maximum active level from the level index.
-    pub fn get_max_active_level(&self) -> usize {
-        self.level_index.len()
+    /// Get the maximum active level from the given phase's level index.
+    pub fn get_max_active_level(&self, phase: Phase) -> usize {
+        self.level_index(phase).len()
     }
 
     // ── Context snapshot ────────────────────────────────────────────────────
 
     /// Export active neuron activations with their full per-age state.
-    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
+    /// Each entry records (neuron_id, frame, level, phase, state) — a single neuron active in
+    /// both phases produces two entries at potentially different levels.
+    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, Phase, LevelAgeState)> {
         let mut entries = Vec::new();
         for (&frame, neuron_ids) in &self.age_index {
             for &neuron_id in neuron_ids {
-                let level = self.level_index.iter()
-                    .find_map(|(&lvl, frames)| {
-                        frames.get(&frame).and_then(|ids| {
-                            if ids.contains(&neuron_id) { Some(lvl) } else { None }
-                        })
-                    })
-                    .unwrap_or(0);
                 let state = self.neuron_states.get(&neuron_id)
                     .and_then(|states| states.get(&frame))
                     .cloned()
                     .unwrap_or_default();
-                entries.push((neuron_id, frame, level, state));
+                for &phase in &[Phase::Spatial, Phase::Temporal] {
+                    let level_opt = self.level_index(phase).iter()
+                        .find_map(|(&lvl, frames)| {
+                            frames.get(&frame).and_then(|ids| {
+                                if ids.contains(&neuron_id) { Some(lvl) } else { None }
+                            })
+                        });
+                    if let Some(level) = level_opt {
+                        entries.push((neuron_id, frame, level, phase, state.clone()));
+                    }
+                }
             }
         }
         entries
     }
 
     /// Restore active neurons from a saved context snapshot (with full state).
-    pub fn restore_context_snapshot(&mut self, frame_number: FrameNumber, entries: &[(NeuronId, FrameNumber, Level, LevelAgeState)]) {
+    pub fn restore_context_snapshot(&mut self, frame_number: FrameNumber, entries: &[(NeuronId, FrameNumber, Level, Phase, LevelAgeState)]) {
         self.reset();
         self.frame_number = frame_number;
-        for (neuron_id, activation_frame, level, state) in entries {
+        for (neuron_id, activation_frame, level, phase, state) in entries {
             self.age_index.entry(*activation_frame)
                 .or_insert_with(FxHashSet::default)
                 .insert(*neuron_id);
-            self.level_index.entry(*level)
+            self.level_index_mut(*phase).entry(*level)
                 .or_insert_with(FxHashMap::default)
                 .entry(*activation_frame)
                 .or_insert_with(FxHashSet::default)
@@ -369,8 +403,8 @@ mod tests {
     fn test_activate_and_age() {
         let mut m = Memory::new(false, 4);
         m.age(1);
-        m.activate_neuron(10, 0);
-        m.activate_neuron(20, 0);
+        m.activate_neuron(10, 0, Phase::Temporal);
+        m.activate_neuron(20, 0, Phase::Temporal);
 
         // at age 0, both neurons should be present
         let ids = m.get_neuron_ids_at_age(0);
@@ -393,7 +427,7 @@ mod tests {
 
         // activate neuron 10 at frame 1
         m.age(1);
-        m.activate_neuron(10, 0);
+        m.activate_neuron(10, 0, Phase::Temporal);
 
         // advance through context_length frames
         m.age(2);
@@ -414,14 +448,14 @@ mod tests {
 
         // frame 1: activate neuron 10 at level 0
         m.age(1);
-        m.activate_neuron(10, 0);
+        m.activate_neuron(10, 0, Phase::Temporal);
 
         // frame 2: activate neuron 20 at level 0
         m.age(2);
-        m.activate_neuron(20, 0);
+        m.activate_neuron(20, 0, Phase::Temporal);
 
         // get level 0 neurons
-        let level_neurons = m.get_level_neurons(0);
+        let level_neurons = m.get_level_neurons(0, Phase::Temporal);
         assert!(level_neurons.contains_key(&10));
         assert!(level_neurons.contains_key(&20));
 
@@ -434,11 +468,11 @@ mod tests {
     fn test_get_level_ages() {
         let mut m = Memory::new(false, 4);
         m.age(1);
-        m.activate_neuron(10, 0);
+        m.activate_neuron(10, 0, Phase::Temporal);
         m.age(2);
-        m.activate_neuron(20, 0);
+        m.activate_neuron(20, 0, Phase::Temporal);
 
-        let ages = m.get_level_ages(0);
+        let ages = m.get_level_ages(0, Phase::Temporal);
         assert_eq!(ages.len(), 2); // depth = 2
         assert!(ages[0].contains(&20)); // age 0 = current frame
         assert!(ages[1].contains(&10)); // age 1 = previous frame
@@ -448,19 +482,19 @@ mod tests {
     fn test_activate_pattern() {
         let mut m = Memory::new(false, 4);
         m.age(1);
-        m.activate_neuron(10, 0); // parent at age 0
+        m.activate_neuron(10, 0, Phase::Temporal); // parent at age 0
 
         m.age(2);
         // parent is now at age 1, activate pattern as child
-        m.activate_pattern(100, 1, 10, 1);
+        m.activate_pattern(100, 1, 10, 1, Phase::Temporal);
 
         // pattern should be active at level 1, age 1
-        let level1 = m.get_level_neurons(1);
+        let level1 = m.get_level_neurons(1, Phase::Temporal);
         assert!(level1.contains_key(&100));
         assert!(level1.get(&100).unwrap().contains_key(&1));
 
         // parent's state at age 1 should have activated_pattern_id
-        let level0 = m.get_level_neurons(0);
+        let level0 = m.get_level_neurons(0, Phase::Temporal);
         let parent_state = level0.get(&10).unwrap().get(&1).unwrap();
         assert_eq!(parent_state.activated_pattern_id, Some(100));
     }
@@ -482,7 +516,7 @@ mod tests {
     fn test_reset() {
         let mut m = Memory::new(false, 4);
         m.age(1);
-        m.activate_neuron(10, 0);
+        m.activate_neuron(10, 0, Phase::Temporal);
         m.save_inferred_neurons(vec![InferredNeuron { neuron_id: 1, coordinate: Coordinate { dim_id: 0, bucket_id: 1 }, channel_id: 0, strength: 1.0, reward: 0.0, probability: 0.0 }]);
 
         m.reset();
@@ -496,20 +530,20 @@ mod tests {
     fn test_depth_grows_to_context_length() {
         let mut m = Memory::new(false, 3);
         assert_eq!(m.depth(), 0);
-        m.age(1); m.activate_neuron(1, 0); assert_eq!(m.depth(), 1);
-        m.age(2); m.activate_neuron(2, 0); assert_eq!(m.depth(), 2);
-        m.age(3); m.activate_neuron(3, 0); assert_eq!(m.depth(), 3);
-        m.age(4); m.activate_neuron(4, 0); assert_eq!(m.depth(), 3); // pinned at context_length
-        m.age(5); m.activate_neuron(5, 0); assert_eq!(m.depth(), 3);
+        m.age(1); m.activate_neuron(1, 0, Phase::Temporal); assert_eq!(m.depth(), 1);
+        m.age(2); m.activate_neuron(2, 0, Phase::Temporal); assert_eq!(m.depth(), 2);
+        m.age(3); m.activate_neuron(3, 0, Phase::Temporal); assert_eq!(m.depth(), 3);
+        m.age(4); m.activate_neuron(4, 0, Phase::Temporal); assert_eq!(m.depth(), 3); // pinned at context_length
+        m.age(5); m.activate_neuron(5, 0, Phase::Temporal); assert_eq!(m.depth(), 3);
     }
 
     #[test]
     fn test_context_restore_with_negative_frames() {
         let mut m = Memory::new(false, 10);
         m.restore_context_snapshot(0, &[
-            (10, -1, 0, LevelAgeState::default()),
-            (20, -3, 0, LevelAgeState::default()),
-            (30, -5, 0, LevelAgeState::default()),
+            (10, -1, 0, Phase::Temporal, LevelAgeState::default()),
+            (20, -3, 0, Phase::Temporal, LevelAgeState::default()),
+            (30, -5, 0, Phase::Temporal, LevelAgeState::default()),
         ]);
         assert_eq!(m.depth(), 6); // span: 0 - (-5) + 1 = 6
         assert_eq!(m.get_frame_number(), 0);
@@ -532,18 +566,18 @@ mod tests {
     fn test_assert_not_active() {
         let mut m = Memory::new(false, 4);
         m.age(1);
-        m.activate_neuron(42, 0);
+        m.activate_neuron(42, 0, Phase::Temporal);
         m.assert_not_active(&[42]);
     }
 
     #[test]
     fn test_max_active_level() {
         let mut m = Memory::new(false, 4);
-        assert_eq!(m.get_max_active_level(), 0);
+        assert_eq!(m.get_max_active_level(Phase::Temporal), 0);
         m.age(1);
-        m.activate_neuron(10, 0);
-        assert_eq!(m.get_max_active_level(), 1); // level 0 exists
-        m.activate_neuron(20, 2);
-        assert_eq!(m.get_max_active_level(), 2); // levels 0 and 2
+        m.activate_neuron(10, 0, Phase::Temporal);
+        assert_eq!(m.get_max_active_level(Phase::Temporal), 1); // level 0 exists
+        m.activate_neuron(20, 2, Phase::Temporal);
+        assert_eq!(m.get_max_active_level(Phase::Temporal), 2); // levels 0 and 2
     }
 }
