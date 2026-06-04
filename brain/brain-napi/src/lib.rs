@@ -386,6 +386,19 @@ impl JsBrain {
         Ok(())
     }
 
+    /// Cumulative count of spatial corrections minted since brain start (or last hard reset).
+    #[napi(js_name = "getSpatialCorrectionCount")]
+    pub fn get_spatial_correction_count(&self) -> Result<u32> {
+        Ok(self.inner.borrow().get_spatial_correction_count() as u32)
+    }
+
+    /// Number of correction neurons currently sitting above the base spatial level.
+    #[napi(js_name = "countActiveSpatialCorrections")]
+    pub fn count_active_spatial_corrections(&self) -> Result<u32> {
+        Ok(self.inner.borrow().count_active_spatial_corrections() as u32)
+    }
+
+
     /// Look up a dimension ID by its registered name.
     #[napi(js_name = "getDimensionIdByName")]
     pub fn get_dimension_id_by_name(&self, env: Env, name: String) -> Result<JsUnknown> {
@@ -613,7 +626,9 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
     timings_obj.set_named_property("cleanupDead", env.create_double(t.cleanup_dead)?)?;
     timings_obj.set_named_property("ageContext", env.create_double(t.age_context)?)?;
     timings_obj.set_named_property("activate", env.create_double(t.activate)?)?;
-    timings_obj.set_named_property("processLevels", env.create_double(t.process_levels)?)?;
+    timings_obj.set_named_property("processSpatial", env.create_double(t.process_spatial)?)?;
+    timings_obj.set_named_property("apexHandoff", env.create_double(t.apex_handoff)?)?;
+    timings_obj.set_named_property("processTemporal", env.create_double(t.process_temporal)?)?;
     timings_obj.set_named_property("applyResults", env.create_double(t.apply_results)?)?;
     timings_obj.set_named_property("infer", env.create_double(t.infer)?)?;
     timings_obj.set_named_property("trackError", env.create_double(t.track_error)?)?;

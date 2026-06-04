@@ -55,8 +55,9 @@ use crate::neuron::{
     ActiveNeuron, AgeState, Correction, ContextRefUpdate, ErrorFeedback,
     SerializedNeuron, Vote,
 };
+use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
+    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Phase, Reward,
 };
 
 pub struct Region {
@@ -126,6 +127,7 @@ impl Region {
         new_active_neurons: &[ActiveNeuron],
         frame_number: FrameNumber,
         learning: bool,
+        phase: Phase,
     ) -> Vec<ColumnProcessResult> {
         // Phase 1: Route — clone each task into its owning column's work list.
         // Must happen before par_iter so each column gets an owned Vec it can
@@ -141,7 +143,7 @@ impl Region {
                 if col_tasks.is_empty() { return Vec::new(); }
                 col.process_level(
                     &col_tasks, memory_depth, level_context, new_error_pattern_ids,
-                    new_active_neurons, frame_number, learning,
+                    new_active_neurons, frame_number, learning, phase,
                 )
             })
             .collect();
@@ -162,6 +164,38 @@ impl Region {
                 task_indices.iter().map(|&i| tasks[i].clone()).collect()
             })
             .collect()
+    }
+
+    // ── Spatial correction install (1c) ────────────────────────────────────
+
+    /// Distribute spatial install ops to owning columns by parent_id, dispatch in parallel,
+    /// and merge per-column results (deaths + context-ref updates).
+    pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>, frame_number: FrameNumber) -> SpatialInstallResult {
+        let mut by_column: Vec<Vec<SpatialInstallOp>> = (0..self.c).map(|_| Vec::new()).collect();
+        for op in ops {
+            let c = self.route_neuron(op.parent_id);
+            by_column[c].push(op);
+        }
+
+        let per_column: Vec<SpatialInstallResult> = self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .map(|(col, col_ops)| {
+                if col_ops.is_empty() {
+                    return SpatialInstallResult { deaths: Vec::new(), context_ref_updates: FxHashMap::default() };
+                }
+                col.install_spatial_corrections(col_ops, frame_number)
+            })
+            .collect();
+
+        let mut deaths = Vec::new();
+        let mut context_ref_updates: FxHashMap<NeuronId, Vec<ContextRefUpdate>> = FxHashMap::default();
+        for res in per_column {
+            deaths.extend(res.deaths);
+            for (target_id, updates) in res.context_ref_updates {
+                context_ref_updates.entry(target_id).or_insert_with(Vec::new).extend(updates);
+            }
+        }
+        SpatialInstallResult { deaths, context_ref_updates }
     }
 
     // ── Op-5: Context ref updates ──────────────────────────────────────────

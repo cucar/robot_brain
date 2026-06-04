@@ -12,9 +12,10 @@ use crate::neuron::{
     ActiveNeuron, AgeState, AgeVotes, Correction, ContextRefUpdate,
     CorrectionActivation, ErrorFeedback, Neuron, PatternMatch, Vote,
 };
+use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
     ChannelId, Distance, ErrorMode, FrameNumber,
-    NeuronId, Reward, Strength,
+    NeuronId, Phase, Reward, Strength,
 };
 
 /// Result of processLevel — one per task (neuron). Tagged with parent_id so the
@@ -133,6 +134,7 @@ impl Column {
         new_active_neurons: &[ActiveNeuron],
         frame_number: FrameNumber,
         learning: bool,
+        phase: Phase,
     ) -> Vec<ColumnProcessResult> {
         let mut results = Vec::with_capacity(tasks.len());
         for (neuron_id, age_states, corrections, error_feedback) in tasks {
@@ -140,7 +142,7 @@ impl Column {
                 .unwrap_or_else(|| panic!("Column.process_level: neuron {} not found", neuron_id));
             let result = neuron.process_frame(
                 age_states, memory_depth, level_context, new_error_pattern_ids,
-                new_active_neurons, frame_number, corrections, error_feedback, learning,
+                new_active_neurons, frame_number, corrections, error_feedback, learning, phase,
             );
             results.push(ColumnProcessResult {
                 parent_id: *neuron_id,
@@ -362,6 +364,42 @@ impl Column {
                 neuron.apply_context_ref_updates(updates);
             }
         }
+    }
+
+    /// Spatial correction install (1c) — for each op, add the new pattern as a child on the
+    /// parent neuron with the d=0 context entries, register the resulting death frame, and emit
+    /// ContextRefUpdates for each context-entry target so they know this parent now references them.
+    /// Corrections are NOT activated this frame; the routing-table entry will fire on next frame's
+    /// spatial sweep via the recognize_patterns path.
+    pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>, frame_number: FrameNumber) -> SpatialInstallResult {
+        let mut deaths = Vec::new();
+        let mut context_ref_updates: FxHashMap<NeuronId, Vec<ContextRefUpdate>> = FxHashMap::default();
+
+        for op in ops {
+            // Locate the parent. If it's not in this column, the routing was wrong upstream — skip.
+            let parent = match self.neurons.get_mut(&op.parent_id) {
+                Some(n) => n,
+                None => continue,
+            };
+
+            // Add the child pattern to the parent's routing table with its d=0 context.
+            let death_frame = parent.add_pattern(op.pattern_id, &op.context_entries, frame_number);
+            if let Some(df) = death_frame { deaths.push((op.pattern_id, df)); }
+
+            // For each context entry target, queue a ContextRefUpdate so the target's context_refs
+            // map gains an entry pointing back to the parent at that distance.
+            for entry in &op.context_entries {
+                context_ref_updates.entry(entry.neuron_id)
+                    .or_insert_with(Vec::new)
+                    .push(ContextRefUpdate {
+                        neuron_id: entry.neuron_id,
+                        distance: entry.distance,
+                        parent_id: op.parent_id,
+                    });
+            }
+        }
+
+        SpatialInstallResult { deaths, context_ref_updates }
     }
 
     /// Op-1/Op-4: Construct new Neuron instances from specs and store them locally.

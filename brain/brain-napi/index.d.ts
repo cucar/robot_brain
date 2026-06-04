@@ -72,19 +72,33 @@ export declare class Brain {
   /**
    * Supervised wiring step that sits on top of the last `processFrame` call.
    * `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
-   * Each `value` is quantized to its action neuron; reward is folded into that connection via smoothed accumulation
-   * (strength += 1, reward = running mean). Callers typically supply every action value on the dim — correct value
-   * with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
-   * `distance` is the connection-table slot at which to wire and read back; pass `distance=1` for single-frame supervised harnesses.
+   * Each `value` is quantized to the corresponding action neuron; reward is applied to that connection
+   * via smoothed accumulation (strength += 1, reward = running mean). Callers typically supply every action value
+   * on the dim — correct value with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
+   * `distance` is the connection-table slot at which to wire and read back.
+   * Wires every currently-active age-0 voter to every supplied action target at the given distance.
    * Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
+   * Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
    */
   learn(actions: object, distance: number): object
+  /**
+   * Read-only inference over the current memory window.
+   * Runs the same vote-sweep + consensus path `learn()` uses internally but writes no wirings and
+   * has no other side effects, so callers can read the brain's prediction at depths where
+   * `processFrame`'s vote generator would otherwise suppress the only available age.
+   * Used by the supervised held-out evaluation path in the MNIST app.
+   */
+  infer(): object
   /** Reset brain memory state for a clean episode start. */
   resetContext(): void
   /** Hard reset: clears ALL learned data. */
   resetBrain(): void
   /** Reset accuracy and reward stats for a new episode. */
   resetAccuracyStats(): void
+  /** Cumulative count of spatial corrections minted since brain start (or last hard reset). */
+  getSpatialCorrectionCount(): number
+  /** Number of correction neurons currently sitting above the base spatial level. */
+  countActiveSpatialCorrections(): number
   /** Look up a dimension ID by its registered name. */
   getDimensionIdByName(name: string): unknown
   /** Look up a neuron ID by its (dimId, bucketId) coordinate. */

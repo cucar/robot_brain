@@ -109,6 +109,15 @@ impl Memory {
         // sync to the brain's frame number
         self.frame_number = frame_number;
 
+        // Spatial is fundamentally same-frame: connections[0] predict co-activations within a single
+        // frame's spatial phase. Carrying spatial activations across frames would cause learn_connections
+        // to strengthen d=0 edges between this frame's actives and last frame's neurons — spurious
+        // cross-frame co-activation. Clear the spatial index here at frame advance; activate_neurons
+        // (called next) repopulates spatial[0] with this frame's sensory.
+        // The age_index, neuron_states, and temporal_level_index entries stay — those carry the temporal
+        // history the temporal sweep needs.
+        self.spatial_level_index.clear();
+
         // evict the frame that just fell off the back of the window
         let evicted_frame = self.frame_number - self.context_length as i64;
         let evicted_neuron_ids = match self.age_index.remove(&evicted_frame) {

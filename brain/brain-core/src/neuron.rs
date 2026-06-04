@@ -435,11 +435,16 @@ impl Neuron {
 
     // ── Voting ───────────────────────────────────────────────────────────────
 
-    /// Returns votes from this neuron at a specific age.
+    /// Returns votes from this neuron at a specific age (temporal voting).
+    /// Reads connections[age + 1] — predicting one frame past the neuron's activation age.
     pub fn vote(&self, age: Distance) -> Vec<Vote> {
+        self.vote_at_distance(age + 1)
+    }
 
-        // use connections of distance one more than the age to get the inferences for the next frame
-        let distance = age + 1;
+    /// Returns votes from this neuron at a fixed distance.
+    /// Spatial voting passes distance=0 to read co-activation predictions for the current frame;
+    /// temporal voting goes through `vote(age)` which adds 1 to age.
+    pub fn vote_at_distance(&self, distance: Distance) -> Vec<Vote> {
 
         // get connections at the distance - if there are none, no votes
         let distance_map = match self.connections.get(distance as usize) {
@@ -716,6 +721,7 @@ impl Neuron {
         corrections: &[Correction],
         error_feedback: &[ErrorFeedback],
         learning: bool,
+        phase: Phase,
     ) -> ProcessFrameResult {
 
         // Fold prior-frame error feedback into per-age accuracy stats first.
@@ -726,18 +732,22 @@ impl Neuron {
         }
         let mut timings = NeuronOpTimings::default();
 
-        // Learn connections across all active ages (age=0 skipped internally).
-        // Skipped entirely in non-learning mode (the supervised eval path).
-        // Also skipped for new error patterns, which were already created with current connections this frame.
-        if learning && !new_error_pattern_ids.contains(&self.id) {
+        let should_learn = learning && !new_error_pattern_ids.contains(&self.id);
+
+        // Temporal learns connections[age>0] which the vote step (connections[age+1]) doesn't read,
+        // so the temporal flow runs learn first. Spatial learns connections[0] which IS what the vote
+        // step reads, so spatial must run learn AFTER generate_votes — otherwise the just-strengthened
+        // edges to this frame's novel co-actives get echoed straight back in the vote, and the spatial
+        // error pass never sees a mismatch (see spatial-processing.md §4.5).
+        if phase == Phase::Temporal && should_learn {
             let t = std::time::Instant::now();
-            self.learn_connections(age_states, actives);
+            self.learn_connections(age_states, actives, phase);
             timings.learn_connections = t.elapsed().as_secs_f64();
         }
 
         // match patterns if we have context and eligible ages
         let t = std::time::Instant::now();
-        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, learning, &mut timings);
+        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, learning, &mut timings, phase);
         timings.recognize_patterns = t.elapsed().as_secs_f64();
 
         // install pre-created error-correction patterns as children and emit their contextRef adds
@@ -745,10 +755,18 @@ impl Neuron {
         let CorrectResult { correction_activations, context_ref_updates: correction_refs } = self.correct_errors(corrections, current_frame);
         timings.correct_errors = t.elapsed().as_secs_f64();
 
-        // cast votes for each eligible age, suppressing any ages that activated a pattern
+        // cast votes for each eligible age, suppressing any ages that activated a pattern.
+        // For spatial this reads connections[0] BEFORE the d=0 learn step below modifies it.
         let t = std::time::Instant::now();
-        let votes = self.generate_votes(age_states, memory_depth, level_context, &matches, &correction_activations);
+        let votes = self.generate_votes(age_states, memory_depth, level_context, &matches, &correction_activations, phase);
         timings.generate_votes = t.elapsed().as_secs_f64();
+
+        // Spatial learn runs last so the vote above sees the prior-frame connections[0].
+        if phase == Phase::Spatial && should_learn {
+            let t = std::time::Instant::now();
+            self.learn_connections(age_states, actives, phase);
+            timings.learn_connections = t.elapsed().as_secs_f64();
+        }
 
         // return frame processing results
         let mut context_ref_updates = match_refs;
@@ -776,14 +794,15 @@ impl Neuron {
         current_frame: FrameNumber,
         learning: bool,
         timings: &mut NeuronOpTimings,
+        phase: Phase,
     ) -> RecognizeResult {
         let mut matches = Vec::new();
         let context_ref_updates = Vec::new();
 
-        // Warmup gate: skip pattern recognition until the context window has had a chance to fill up at the start of a sequence.
+        // Warmup gate (temporal only): skip pattern recognition until the context window has had a chance to fill up.
         // Without this, patterns whose stored contexts include entries at distances > current_frame are unfairly penalized.
-        // Their unreachable entries count as "missing", letting smaller new patterns win matches by default, displacing established ones.
-        if (current_frame as u32) < self.context_length {
+        // Spatial matching doesn't depend on past frames — co-activation context is fully observable on frame 1 — so no warmup needed.
+        if phase == Phase::Temporal && (current_frame as u32) < self.context_length {
             return RecognizeResult { matches, context_ref_updates };
         }
 
@@ -799,12 +818,15 @@ impl Neuron {
 
         for age in ages {
             let state = &age_states[&age];
-            if state.activated_pattern_id.is_some() || age == memory_depth - 1 { continue; }
+            // Temporal skips the oldest age (no future context to match). Spatial matches at age=0
+            // against the current frame's co-activation set; the "oldest age" guard does not apply.
+            if state.activated_pattern_id.is_some() { continue; }
+            if phase == Phase::Temporal && age == memory_depth - 1 { continue; }
 
             // active ages are processed in ascending order (most recent first). The first age that
             // produces a match at that age is refined and preserved. More recent ages tend to have
             // the richest available context, so they are processed first.
-            let best = match self.find_best_pattern_match_at_age(ctx, age, new_error_pattern_ids, current_frame, timings) {
+            let best = match self.find_best_pattern_match_at_age(ctx, age, new_error_pattern_ids, current_frame, timings, phase) {
                 Some(b) => b,
                 None => continue, // try older age if there is a match
             };
@@ -836,13 +858,13 @@ impl Neuron {
     }
 
     /// Find the best matching pattern for a specific active age.
-    fn find_best_pattern_match_at_age(&self, observed: &Context, age: Distance, exclude_ids: &FxHashSet<NeuronId>, current_frame: FrameNumber, timings: &mut NeuronOpTimings) -> Option<PartialMatch> {
+    fn find_best_pattern_match_at_age(&self, observed: &Context, age: Distance, exclude_ids: &FxHashSet<NeuronId>, current_frame: FrameNumber, timings: &mut NeuronOpTimings, phase: Phase) -> Option<PartialMatch> {
         let mut best: Option<PartialMatch> = None;
 
         // Use the inverted index to narrow the search to child patterns that share at least one
         // exact neuron/distance entry with the observed context at this active age.
         let t = std::time::Instant::now();
-        let candidate_ids = self.get_pattern_candidates_at_age(observed, age);
+        let candidate_ids = self.get_pattern_candidates_at_age(observed, age, phase);
         timings.recognize_candidate_search += t.elapsed().as_secs_f64();
         if candidate_ids.is_empty() { return None; }
 
@@ -899,8 +921,14 @@ impl Neuron {
     ///
     /// Missing index entries are expected here: they just mean the observed neuron/distance pair is
     /// not referenced by any child pattern and therefore contributes no candidates.
-    fn get_pattern_candidates_at_age(&self, observed: &Context, age: Distance) -> FxHashSet<NeuronId> {
+    fn get_pattern_candidates_at_age(&self, observed: &Context, age: Distance, phase: Phase) -> FxHashSet<NeuronId> {
         let mut candidates = FxHashSet::default();
+
+        // Temporal context entries are at strictly positive relative distances — context neurons must be
+        // older than the parent neuron itself. Spatial context entries sit at distance 0 — co-activation
+        // with the parent on the same frame.
+        let min_distance: i64 = match phase { Phase::Temporal => 1, Phase::Spatial => 0 };
+
         for (&neuron_id, distance_map) in observed.entries() {
 
             // First narrow by exact context neuron ID. If this neuron does not appear in the index,
@@ -913,10 +941,10 @@ impl Neuron {
             for &absolute_distance in distance_map.keys() {
 
                 // Convert the observed absolute age into the pattern-relative distance used by the
-                // routing table and inverted index. Distances < 1 are not valid pattern context entries
-                // because context neurons must be older than the parent neuron itself.
+                // routing table and inverted index. The minimum admissible distance depends on phase
+                // (temporal: ≥1; spatial: ≥0).
                 let pattern_distance = absolute_distance as i64 - age as i64;
-                if pattern_distance < 1 { continue; }
+                if pattern_distance < min_distance { continue; }
                 let pattern_distance = pattern_distance as Distance;
 
                 // Then narrow by exact relative distance. Missing entries here are also expected and
@@ -972,6 +1000,7 @@ impl Neuron {
         level_context: Option<&Context>,
         matches: &[PatternMatch],
         correction_activations: &[CorrectionActivation],
+        phase: Phase,
     ) -> Vec<AgeVotes> {
 
         // determine the suppressed ages based on recognized patterns and error creations
@@ -988,11 +1017,21 @@ impl Neuron {
         let ages: Vec<Distance> = age_states.keys().copied().collect();
         for age in ages {
             let state = &age_states[&age];
-            if state.activated_pattern_id.is_some() || age >= memory_depth - 1 { continue; }
+            if state.activated_pattern_id.is_some() { continue; }
+            // Temporal skips the oldest age (no future frame to vote toward). Spatial votes at d=0
+            // for the current frame, so the oldest-age guard doesn't apply.
+            if phase == Phase::Temporal && age >= memory_depth - 1 { continue; }
             if suppressed_ages.contains(&age) { continue; }
+
+            // Temporal votes predict the next frame via connections[age+1]; spatial votes predict
+            // the same frame's co-activations via connections[0].
+            let cast_votes = match phase {
+                Phase::Temporal => self.vote(age),
+                Phase::Spatial => self.vote_at_distance(0),
+            };
             votes.push(AgeVotes {
                 age,
-                votes: self.vote(age),
+                votes: cast_votes,
                 context: context_by_age.get(age as usize).cloned().unwrap_or_default(),
                 threshold: self.get_error_threshold(age),
             });
@@ -1038,16 +1077,29 @@ impl Neuron {
     /// memorization scenarios we want predictions that ever occurred to remain available;
     /// non-occurrences should not erase them. Mirrors the action-connection behaviour, which
     /// was already kept-only-strengthen.
-    fn learn_connections(&mut self, age_states: &FxHashMap<Distance, AgeState>, actives: &[ActiveNeuron]) {
-        let ages: Vec<Distance> = age_states.keys().copied().collect();
-        for age in ages {
+    fn learn_connections(&mut self, age_states: &FxHashMap<Distance, AgeState>, actives: &[ActiveNeuron], phase: Phase) {
+        match phase {
 
-            // skip age 0 - connection learning only applies to context neurons (age > 0)
-            if age == 0 { continue; }
+            // Temporal: strengthen connections[age] for every active age>0. A neuron active at age=k
+            // learns a k-distance prediction toward each current actives (which are at age=0 in `actives`).
+            Phase::Temporal => {
+                let ages: Vec<Distance> = age_states.keys().copied().collect();
+                for age in ages {
+                    if age == 0 { continue; }
+                    for active in actives {
+                        self.upsert_connection(age, active.id, active.channel_id, active.reward);
+                    }
+                }
+            }
 
-            // learn events and actions - age=distance (if neuron is active at age=4, we are learning 4 steps into the future at age=0)
-            for active in actives {
-                self.upsert_connection(age, active.id, active.channel_id, active.reward);
+            // Spatial: strengthen connections[0] toward every co-active neuron in the spatial fired set.
+            // This neuron only fires in spatial at age=0; the upsert builds the d=0 co-activation graph.
+            // Self-connections are skipped — a neuron isn't its own co-activation partner.
+            Phase::Spatial => {
+                for active in actives {
+                    if active.id == self.id { continue; }
+                    self.upsert_connection(0, active.id, active.channel_id, active.reward);
+                }
             }
         }
     }
