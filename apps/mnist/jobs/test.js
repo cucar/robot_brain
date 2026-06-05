@@ -77,6 +77,23 @@ export default class MNISTTestJob extends Job {
 		if (process.argv.includes('--split')) this.config.split = true;
 		if (process.argv.includes('--no-balance')) this.config.noBalance = true;
 
+		const str = (flag) => {
+			const i = process.argv.indexOf(flag);
+			return i !== -1 && process.argv[i + 1] !== undefined ? process.argv[i + 1] : null;
+		};
+		const flt = (flag) => {
+			const v = str(flag);
+			return v === null ? null : parseFloat(v);
+		};
+		const mode = str('--err-mode');
+		if (mode !== null) this.options.errorCorrectionMode = mode;
+		const errTh = flt('--err-th');
+		if (errTh !== null) this.options.errorCorrectionThreshold = errTh;
+		const mergeTh = flt('--merge-th');
+		if (mergeTh !== null) this.options.mergeThreshold = mergeTh;
+		const columns = num('--columns');
+		if (columns !== null) this.options.columns = columns;
+
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
 	}

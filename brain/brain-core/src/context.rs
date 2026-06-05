@@ -116,35 +116,24 @@ impl Context {
     ///        scoring (e.g. brand-new neurons that shouldn't count as unexplained novel entries)
     pub fn match_observed(&self, observed: &Context, offset: Distance, merge_threshold: f64, exclude_ids: Option<&FxHashSet<NeuronId>>) -> Option<MatchResult> {
 
-        // Single pass: categorize into common/missing while computing score and counts
+        // Pass 1: walk the known context, classifying each entry into common/missing relative to observed.
         let mut common = Vec::new();
         let mut missing = Vec::new();
         let mut total_count: usize = 0;
         let mut score: f64 = 0.0;
 
-        // process all neurons in the known context (keyed by neuron ID)
         for (&neuron_id, distance_map) in &self.entries {
-
-            // get the observed distances for the neuron in the observed context
             let observed_distances = observed.entries.get(&neuron_id);
-
-            // process all distances for the neuron in the known context
             for (&distance, &strength) in distance_map {
-
-                // if the entry strength is zero or less, it will be deleted
                 if strength <= 0.0 { continue; }
                 total_count += 1;
 
-                // convert pattern-relative distance to absolute distance for comparison
                 let absolute_distance = distance + offset;
-
-                // if the observed context has the neuron at the absolute distance, it is a common entry - otherwise missing
                 let entry = ContextEntry { neuron_id, distance, strength };
                 let is_common = observed_distances.map_or(false, |od| od.contains_key(&absolute_distance));
                 if is_common { common.push(entry); }
                 else { missing.push(entry); }
 
-                // add the match score for the entry (using absolute distance against observed)
                 score += Self::get_match_score(strength, absolute_distance, observed_distances);
             }
         }
@@ -152,24 +141,19 @@ impl Context {
         // if there are no known context entries, there cannot be a match
         if total_count == 0 { return None; }
 
-        // check match threshold to decide if there is a match or not
-        if (common.len() as f64 / total_count as f64) < merge_threshold { return None; }
-
-        // match found - find the novel entries (in observed but not in this known context) using lookups
+        // Pass 2: walk the observed context, finding entries with no counterpart in the known context.
+        // Done BEFORE the threshold gate so the gate can be symmetric — a pattern shouldn't fire on a
+        // frame that contains many entries the pattern doesn't account for, no matter how much of the
+        // pattern's own context is covered. The gate of common/total counts only pattern-side coverage,
+        // which lets a small pattern over-fire on any frame containing a fraction of its entries.
+        // Spatial entries sit at pattern_distance=0; temporal at >=1; we accept >=0 to cover both.
         let mut novel = Vec::new();
         for (&neuron_id, distance_map) in &observed.entries {
-
-            // skip ids the caller asked to mask out (e.g. brand-new neurons created this frame)
             if exclude_ids.map_or(false, |exc| exc.contains(&neuron_id)) { continue; }
-
             let known_distances = self.entries.get(&neuron_id);
             for (&absolute_distance, &strength) in distance_map {
-
-                // convert absolute distance back to pattern-relative
                 let pattern_distance = absolute_distance as i64 - offset as i64;
-
-                // context neurons must be older than the parent (distance >= 1 in pattern-relative terms)
-                if pattern_distance < 1 { continue; }
+                if pattern_distance < 0 { continue; }
                 let pattern_distance = pattern_distance as Distance;
 
                 let is_known = known_distances.map_or(false, |kd| kd.get(&pattern_distance).map_or(false, |&s| s > 0.0));
@@ -179,6 +163,15 @@ impl Context {
                 }
             }
         }
+
+        // Symmetric (Jaccard) match: common / (common + missing + novel) >= merge_threshold.
+        // Treats the pattern AND the observed frame on equal footing — a pattern only fires when its
+        // context entries dominate the union with what's observed. Asymmetric coverage (small pattern
+        // matching a huge observed frame on a partial subset) is what drives runaway minting because
+        // such a pattern fires on every overlapping frame and its predictions miss the rest.
+        let union_size = (common.len() + missing.len() + novel.len()) as f64;
+        if union_size == 0.0 { return None; }
+        if (common.len() as f64 / union_size) < merge_threshold { return None; }
 
         // Round to 14 decimal places to avoid floating-point precision issues
         score = (score * 1e14).round() / 1e14;
