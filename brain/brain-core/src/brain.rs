@@ -268,6 +268,22 @@ pub struct Brain {
 
     /// Temporal sliding window of active and inferred neurons.
     memory: Memory,
+
+    /// Spatial error-rate samples collected by the most recent `mint_spatial_corrections` call.
+    /// One entry per fired neuron that had predictions. Diagnostic-only — used by tools that want
+    /// to characterize the natural error-rate distribution (mean, percentiles, etc.) for tuning
+    /// the static fallback threshold or understanding what dynamic modes would adapt toward.
+    last_frame_spatial_errors: Vec<(NeuronId, f64)>,
+
+    /// Spatial apex from the most recent `compute_apex_and_handoff` — the set of neurons that fired
+    /// in the spatial sweep this frame and were NOT subsumed by any higher-level spatial pattern.
+    /// This is the correct voter set for supervised wiring (brain.learn): subsumed parents are
+    /// silenced and the higher-level pattern represents them. Distinct from
+    /// `get_active_voter_ids` (which is keyed on `state.activated_pattern_id` — a temporal-inhibition
+    /// field that, for multi-age contexts, can include neurons currently subsumed in spatial just
+    /// because they had an unsuppressed state on an earlier frame).
+    /// Cleared on `reset_context` / `reset_brain`.
+    last_frame_apex: FxHashSet<NeuronId>,
 }
 
 impl Brain {
@@ -313,6 +329,8 @@ impl Brain {
                 columns,
             ),
             memory: Memory::new(debug, context_length),
+            last_frame_apex: FxHashSet::default(),
+            last_frame_spatial_errors: Vec::new(),
         }
     }
 
@@ -327,6 +345,11 @@ impl Brain {
         learn_action_sequences: bool,
     ) -> ChannelRegistration {
         self.thalamus.register_channel_spec(name, dimensions, learn_action_sequences)
+    }
+
+    /// Declare the neighbor channel set for a registered channel. See `Thalamus::set_channel_neighbors`.
+    pub fn set_channel_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        self.thalamus.set_channel_neighbors(name, neighbor_names);
     }
 
     // ── Context / reset ─────────────────────────────────────────────────────
@@ -368,6 +391,9 @@ impl Brain {
         // Clear memory and rewards history
         self.memory.reset();
         self.rewards.clear();
+
+        // Drop the apex carry-over — a fresh episode means a fresh frame, no prior apex.
+        self.last_frame_apex.clear();
     }
 
     /// Hard reset: clears ALL learned data (used mainly for tests).
@@ -697,6 +723,53 @@ impl Brain {
         self.thalamus.count_active_spatial_corrections()
     }
 
+    /// Diagnostic: per-level count of correction neurons. Index = (spatial_level - 1), so
+    /// returned[0] = count at level 1, returned[1] = count at level 2, etc. Length = highest level reached.
+    pub fn spatial_level_counts(&self) -> Vec<u32> {
+        self.thalamus.spatial_level_counts()
+    }
+
+    /// Diagnostic: size of the most recent frame's apex set (the supervised wiring voter set).
+    pub fn last_apex_size(&self) -> usize {
+        self.last_frame_apex.len()
+    }
+
+    /// Diagnostic: size of `get_active_voter_ids` — what `learn()` USED to use (temporal voter set).
+    /// Comparing this to `last_apex_size()` reveals whether the two mechanisms diverge.
+    pub fn active_voter_ids_size(&self) -> usize {
+        self.memory.get_active_voter_ids().len()
+    }
+
+    /// Diagnostic: number of subsumed parents in the most recent spatial sweep — i.e. the count
+    /// of spatial-fired neurons that were silenced by a higher-level spatial pattern. For MNIST
+    /// single-frame contexts: equal to (spatial_fired_size − last_apex_size).
+    pub fn last_apex_subsumed_count(&self) -> usize {
+        // We don't store spatial_fired or subsumed sets — but we expose this for a measurement
+        // helper: `active_voter_ids_size - last_apex_size` is the count of neurons the temporal
+        // wiring path would have included that the apex wiring path excludes.
+        let voters = self.active_voter_ids_size();
+        let apex = self.last_apex_size();
+        voters.saturating_sub(apex)
+    }
+
+    /// Diagnostic: the spatial error rates from the most recent `process_frame`'s mint pass.
+    /// One entry per fired neuron that had predictions. Used to characterize the natural error-rate
+    /// distribution for tuning the static fallback threshold or understanding what dynamic modes
+    /// would adapt toward.
+    pub fn last_frame_spatial_error_rates(&self) -> &[(NeuronId, f64)] {
+        &self.last_frame_spatial_errors
+    }
+
+    /// Diagnostic: number of neurons in apex but NOT in the temporal voter set, plus vice versa.
+    /// If both sets are equal, returns (0, 0). If they diverge, the tuple reveals which side has
+    /// extras. Used to confirm the apex wiring and the temporal-voter wiring produce the same set.
+    pub fn apex_vs_voter_set_diff(&self) -> (usize, usize) {
+        let voters: FxHashSet<NeuronId> = self.memory.get_active_voter_ids();
+        let apex_only = self.last_frame_apex.difference(&voters).count();
+        let voters_only = voters.difference(&self.last_frame_apex).count();
+        (apex_only, voters_only)
+    }
+
     /// Export a snapshot of all active neurons in context with their levels and phase.
     pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, Phase, LevelAgeState)> {
         self.memory.get_context_snapshot()
@@ -805,9 +878,14 @@ impl Brain {
 
         // Spatial error pass: mint corrections for neurons whose d=0 predictions mismatched
         // the spatial fired set; install them in the parent's routing table for next frame.
-        let (spatial_correction_specs, spatial_install_ops) =
-            self.thalamus.mint_spatial_corrections(&spatial.dispatch_results, &spatial.fired_set, &self.rewards);
+        // Also collect per-parent error-rate samples for spatial Welford stats so dynamic error modes adapt.
+        let (spatial_correction_specs, spatial_install_ops, spatial_error_feedback) =
+            self.thalamus.mint_spatial_corrections(&spatial.dispatch_results, &spatial.fired_set, &spatial.subsumed_set, &self.rewards);
         self.thalamus.install_spatial_corrections(spatial_install_ops, self.frame_number);
+        if self.learning {
+            self.thalamus.record_spatial_errors(&spatial_error_feedback);
+        }
+        self.last_frame_spatial_errors = spatial_error_feedback;
 
         // Apex handoff: lift non-subsumed spatial neurons into temporal_level_index[0].
         // Sensory neurons are already there via activate_neurons; the handoff is additive for
@@ -1078,16 +1156,18 @@ impl Brain {
     fn process_temporal(&mut self) -> SweepResult { self.process_sweep(Phase::Temporal) }
 
     /// Apex handoff: any spatial-fired neuron that did NOT subsume into a higher-level
-    /// spatial pattern this frame is inserted into `temporal_level_index[0]`. The temporal
-    /// sweep then starts from this set instead of raw sensory.
+    /// spatial pattern this frame is inserted into `temporal_level_index[0]` and recorded in
+    /// `last_frame_apex` for subsequent `brain.learn` calls.
+    /// The apex set is the supervised-wiring voter set — subsumed parents are silenced by the
+    /// higher-level pattern that absorbed them, so they shouldn't receive action wires either.
     /// On a fresh brain with no spatial routing, subsumed is empty and apex == fired == sensory,
-    /// so temporal sees exactly today's inputs.
+    /// so temporal sees exactly today's inputs and `brain.learn` wires the full sensory set.
     fn compute_apex_and_handoff(&mut self, spatial_fired: &FxHashSet<NeuronId>, spatial_subsumed: &FxHashSet<NeuronId>) {
+        self.last_frame_apex.clear();
         for &neuron_id in spatial_fired {
             if spatial_subsumed.contains(&neuron_id) { continue; }
-            // Temporal level 0 — apex neurons feed temporal as equal starting points regardless of
-            // their spatial_level. (1c will introduce spatial_level on minted corrections.)
             self.memory.activate_neuron(neuron_id, 0, Phase::Temporal);
+            self.last_frame_apex.insert(neuron_id);
         }
     }
 
@@ -1464,8 +1544,17 @@ impl Brain {
         // Resolve the supplied (value, reward) pairs to action neuron ids paired with their per-target reward.
         let action_targets = self.resolve_action_targets(actions);
 
-        // Enumerate every currently-active voter across all ages in the sliding window.
-        let voter_ids = self.get_active_voter_ids();
+        // Wire the spatial apex (computed during the most recent compute_apex_and_handoff) to the
+        // action targets. Subsumed parents are excluded because the higher-level pattern they
+        // activated represents them — wiring the parent would dilute the pattern's signal.
+        // Falls back to the temporal voter set on the rare path where process_frame wasn't called
+        // before learn (e.g. supervised wiring on a freshly-loaded brain).
+        let voter_ids: Vec<NeuronId> = if self.last_frame_apex.is_empty() {
+            self.get_active_voter_ids()
+        } else {
+            self.last_frame_apex.iter().copied().collect()
+        };
+        assert!(!voter_ids.is_empty(), "Brain.learn: no active voters — process_frame must be called (with a non-empty frame) before learn()");
 
         // Wire every (voter → action) edge at the supplied distance with smoothed-reward accumulation.
         self.learn_action_connections(&voter_ids, &action_targets, distance);

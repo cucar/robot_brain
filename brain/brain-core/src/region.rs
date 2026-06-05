@@ -120,11 +120,10 @@ impl Region {
     /// in column-index order (stable regardless of thread scheduling).
     pub fn process_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)],
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
         memory_depth: u32,
         level_context: Option<&Context>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        new_active_neurons: &[ActiveNeuron],
         frame_number: FrameNumber,
         learning: bool,
         phase: Phase,
@@ -135,15 +134,15 @@ impl Region {
         let column_tasks = self.build_column_tasks(tasks);
 
         // Phase 2: Dispatch — each column processes its tasks in parallel.
-        // Shared refs (level_context, new_error_pattern_ids, new_active_neurons)
-        // are read-only and implement Sync, so no synchronization needed.
+        // Shared refs (level_context, new_error_pattern_ids) are read-only and implement Sync,
+        // so no synchronization needed. Per-task actives travel inside each task's tuple.
         let nested: Vec<Vec<ColumnProcessResult>> = self.columns.par_iter_mut()
             .zip(column_tasks.into_par_iter())
             .map(|(col, col_tasks)| {
                 if col_tasks.is_empty() { return Vec::new(); }
                 col.process_level(
                     &col_tasks, memory_depth, level_context, new_error_pattern_ids,
-                    new_active_neurons, frame_number, learning, phase,
+                    frame_number, learning, phase,
                 )
             })
             .collect();
@@ -156,14 +155,33 @@ impl Region {
     /// by column, each entry holding the cloned tasks for that column.
     fn build_column_tasks(
         &self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)],
-    ) -> Vec<Vec<(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)>> {
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
+    ) -> Vec<Vec<(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)>> {
         let per_column_indices = self.partition_by_column(tasks, |t| t.0);
         per_column_indices.iter()
             .map(|task_indices| {
                 task_indices.iter().map(|&i| tasks[i].clone()).collect()
             })
             .collect()
+    }
+
+    // ── Spatial error-stats recording ──────────────────────────────────────
+
+    /// Fan out spatial-error samples to owning columns. Each column updates its neurons'
+    /// `error_stats[0]` Welford buckets via `Neuron::record_error`.
+    pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
+        let mut by_column: Vec<Vec<(NeuronId, f64)>> = (0..self.c).map(|_| Vec::new()).collect();
+        for &(id, rate) in feedback {
+            let col = self.route_neuron(id);
+            by_column[col].push((id, rate));
+        }
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_fb)| {
+                if !col_fb.is_empty() {
+                    col.record_spatial_errors(&col_fb);
+                }
+            });
     }
 
     // ── Spatial correction install (1c) ────────────────────────────────────

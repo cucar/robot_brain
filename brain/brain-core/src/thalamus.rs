@@ -242,6 +242,20 @@ pub struct Thalamus {
     /// Channel id → name.
     channel_id_to_name: FxHashMap<ChannelId, String>,
 
+    /// Per-channel neighbor set — restricts connection learning AND pattern minting AND vote-error
+    /// evaluation to only the channels in the listed neighbor set (plus the channel itself,
+    /// implicitly). Applies to BOTH phases: spatial (d=0 co-activation) and temporal (d>0 sequence).
+    /// The neighbor relationship is a property of the channel graph at the SENSORY level only.
+    /// L1+ pattern neurons have NO channel — they emerge from cross-channel correlations and
+    /// don't belong to any single channel. When a pattern is the "parent" of a filter lookup,
+    /// `get_neuron_channel_id` returns None and `is_neighbor_channel` falls through to all-pairs
+    /// (no restriction). Patterns naturally learn / predict / mint across everything they actually
+    /// co-fire with — which is bounded by their parent's neighbor graph anyway, since the parent's
+    /// channel selected the neighborhood that birthed them.
+    /// Channels NOT in this map have the default all-pairs neighborhood — preserving original
+    /// pre-neighbor behavior for stocks, text, etc.
+    channel_neighbors: FxHashMap<ChannelId, FxHashSet<ChannelId>>,
+
     /// Dimension name → id.
     dimension_name_to_id: FxHashMap<String, DimensionId>,
 
@@ -312,6 +326,7 @@ impl Thalamus {
             channel_default_actions: FxHashMap::default(),
             channel_name_to_id: FxHashMap::default(),
             channel_id_to_name: FxHashMap::default(),
+            channel_neighbors: FxHashMap::default(),
             dimension_name_to_id: FxHashMap::default(),
             dimension_id_to_name: FxHashMap::default(),
             quantizer: Quantizer::new(),
@@ -404,11 +419,16 @@ impl Thalamus {
         // Temporal corrections pre-wire d=1..age connections toward each per-age active set.
         // Spatial corrections are allocated at age=0 with empty connections; learn_connections
         // will fill connections[0] on future frames as the correction co-fires with others.
+        // Connections are filtered to the parent's neighbor channels — the new pattern only
+        // pre-wires toward channels in the parent's neighbor graph, matching how learn_connections
+        // restricts future strengthening.
+        let parent_channel = self.get_neuron_channel_id(parent_id).unwrap_or(0);
         let mut connections = Vec::new();
         for a in 0..age.min(sensory_neurons.len() as u32) {
             let a_idx = a as usize;
             for &sensory_neuron_id in &sensory_neurons[a_idx] {
                 let channel_id = self.get_neuron_channel_id(sensory_neuron_id).unwrap_or(0);
+                if !self.is_neighbor_channel(parent_channel, channel_id) { continue; }
                 let reward = rewards[a_idx].get(&channel_id).copied().unwrap_or(0.0);
                 connections.push(ConnectionSpec {
                     distance: age - a,
@@ -428,6 +448,9 @@ impl Thalamus {
         // Temporal corrections occupy temporal level=parent.level+1; their spatial_level defaults to 0.
         // Spatial corrections occupy spatial_level=parent.spatial_level+1; their temporal level stays 0
         // (they enter temporal via the apex handoff at temporal_level_index[0]).
+        // Pattern neurons have NO channel — they emerge from cross-channel correlations. Callers
+        // that need a channel id will receive None from `get_neuron_channel_id`, which their
+        // neighbor lookups should treat as no-restriction.
         self.neuron_parents.insert(id, parent_id);
         match phase {
             Phase::Temporal => {
@@ -446,9 +469,41 @@ impl Thalamus {
 
     // ── Neuron metadata getters ─────────────────────────────────────────────
 
-    /// Get the channel id for a neuron.
+    /// Get the channel id for a neuron. Sensory neurons return their registration channel.
+    /// L1+ pattern neurons return None — they emerge from cross-channel correlations and have no
+    /// channel of their own. Callers that use channel ids for neighbor lookups should treat None
+    /// as "no neighbor restriction" (`is_neighbor_channel` already returns true when the parent's
+    /// channel has no neighbor list registered).
     pub fn get_neuron_channel_id(&self, neuron_id: NeuronId) -> Option<ChannelId> {
         self.base_neurons.get(&neuron_id).map(|b| b.channel_id)
+    }
+
+    /// Declare the neighbor channels for a registered channel. Names not in the registry are
+    /// silently ignored — encoders typically register every relevant channel first, then make a
+    /// second pass to declare neighbor relationships (forward references are otherwise impossible
+    /// during single-pass registration).
+    /// Calling this with an empty list shrinks the channel's neighborhood to {itself}, which
+    /// effectively disables co-activation learning across other channels for that channel.
+    /// Channels with NO call to this method retain the default all-pairs neighborhood.
+    pub fn set_channel_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        let channel_id = self.channel_name_to_id.get(name).copied()
+            .unwrap_or_else(|| panic!("set_channel_neighbors: channel '{}' not registered", name));
+        let mut neighbor_ids: FxHashSet<ChannelId> = neighbor_names.iter()
+            .filter_map(|n| self.channel_name_to_id.get(n).copied())
+            .collect();
+        // A channel is always its own neighbor — intra-channel co-activation (multiple buckets
+        // of the same dimension) is meaningful where it can happen.
+        neighbor_ids.insert(channel_id);
+        self.channel_neighbors.insert(channel_id, neighbor_ids);
+    }
+
+    /// Test whether `target_channel` is in `parent_channel`'s neighbor set.
+    /// Returns true if `parent_channel` has no neighbor list registered (default all-pairs).
+    pub fn is_neighbor_channel(&self, parent_channel: ChannelId, target_channel: ChannelId) -> bool {
+        match self.channel_neighbors.get(&parent_channel) {
+            None => true,
+            Some(set) => set.contains(&target_channel),
+        }
     }
 
     /// Get the type for a neuron (Event or Action).
@@ -481,6 +536,20 @@ impl Thalamus {
     /// deleted via cascade doesn't show up.
     pub fn count_active_spatial_corrections(&self) -> usize {
         self.neuron_spatial_levels.values().filter(|&&lvl| lvl > 0).count()
+    }
+
+    /// Per-level count of correction neurons in the spatial hierarchy. Returns Vec where
+    /// index = spatial level, value = count of alive neurons at that level. Level 0 is sensory
+    /// (not corrections) and is omitted; the returned vec starts at level 1.
+    pub fn spatial_level_counts(&self) -> Vec<u32> {
+        let mut counts: Vec<u32> = Vec::new();
+        for &lvl in self.neuron_spatial_levels.values() {
+            if lvl == 0 { continue; }
+            let idx = (lvl - 1) as usize;
+            if idx >= counts.len() { counts.resize(idx + 1, 0); }
+            counts[idx] += 1;
+        }
+        counts
     }
 
     /// Get the coordinate for a base (sensory/action) neuron.
@@ -860,10 +929,16 @@ impl Thalamus {
         &mut self,
         spatial_dispatch_results: &[Vec<ColumnProcessResult>],
         spatial_fired: &FxHashSet<NeuronId>,
+        spatial_subsumed: &FxHashSet<NeuronId>,
         rewards: &[FxHashMap<ChannelId, Reward>],
-    ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>) {
+    ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>, Vec<(NeuronId, f64)>) {
         let mut new_specs = Vec::new();
         let mut install_ops = Vec::new();
+        // Per-parent error feedback for `record_spatial_errors` — collected for every fired neuron
+        // that had any predictions, regardless of whether the error crosses the mint threshold.
+        // This is what lets dynamic error modes (conservative/neutral/aggressive) adapt — without
+        // these samples, get_error_threshold(0) stays in static-fallback mode forever.
+        let mut error_feedback: Vec<(NeuronId, f64)> = Vec::new();
 
         // Partition spatial_fired by spatial level. L0 keeps only event neurons (action neurons
         // aren't part of the co-activation neighborhood). L1+ are correction pattern neurons —
@@ -888,28 +963,54 @@ impl Thalamus {
         for results in spatial_dispatch_results {
             for res in results {
                 let parent_id = res.parent_id;
+
+                // Subsumption gate: if this parent was already explained by a higher-level
+                // pattern that fired this frame, its role is represented — don't record an
+                // error sample and don't mint a sibling correction. This is the natural
+                // ceiling on hierarchy growth: subsumed parents stop being error sources.
+                if spatial_subsumed.contains(&parent_id) { continue; }
+
                 let parent_level = self.get_neuron_spatial_level(parent_id);
+                let parent_channel = self.get_neuron_channel_id(parent_id).unwrap_or(0);
 
                 // Observed L0 events the parent's connections[0] should have predicted, minus the
-                // parent itself (a neuron isn't its own co-activation partner — relevant only when
-                // parent is L0).
+                // parent itself AND minus any L0 events from channels outside the parent's neighbor
+                // graph. Channels with no registered neighbor list default to "all channels are
+                // neighbors" — preserving original full-frame behavior.
                 let observed_l0_minus_self: FxHashSet<NeuronId> = l0_event_set.iter()
                     .copied()
                     .filter(|&id| id != parent_id)
+                    .filter(|&id| {
+                        let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
+                        self.is_neighbor_channel(parent_channel, target_channel)
+                    })
                     .collect();
 
                 // Parent's neighborhood at its own spatial level — used as the context_entries of
-                // any correction we mint for this parent. Excludes the parent itself.
+                // any correction we mint for this parent. Excludes the parent itself and any
+                // same-level fired neurons from non-neighbor channels.
                 let neighborhood: Vec<NeuronId> = by_level.get(&parent_level)
-                    .map(|v| v.iter().copied().filter(|&id| id != parent_id).collect())
+                    .map(|v| v.iter().copied()
+                        .filter(|&id| id != parent_id)
+                        .filter(|&id| {
+                            let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
+                            self.is_neighbor_channel(parent_channel, target_channel)
+                        })
+                        .collect())
                     .unwrap_or_default();
 
                 for age_votes in &res.votes {
                     if age_votes.age != 0 { continue; }
 
-                    // Predicted L0 events from the parent's connections[0].
+                    // Predicted L0 events from the parent's connections[0]. Filtered to neighbor
+                    // channels — predictions toward non-neighbor channels shouldn't count toward
+                    // either side of the error (the observed set is similarly filtered).
                     let predicted_events: FxHashSet<NeuronId> = age_votes.votes.iter()
                         .filter(|v| self.get_neuron_type(v.neuron_id) == Some(NeuronType::Event))
+                        .filter(|v| {
+                            let target_channel = self.get_neuron_channel_id(v.neuron_id).unwrap_or(0);
+                            self.is_neighbor_channel(parent_channel, target_channel)
+                        })
                         .map(|v| v.neuron_id)
                         .collect();
 
@@ -921,6 +1022,11 @@ impl Thalamus {
                     let union_size = predicted_events.union(&observed_l0_minus_self).count();
                     if union_size == 0 { continue; }
                     let error_rate = (missing + novel) as f64 / union_size as f64;
+
+                    // Always record the error rate — even when below threshold — so the parent's
+                    // Welford stats at age=0 build up samples and dynamic modes can adapt.
+                    error_feedback.push((parent_id, error_rate));
+
                     if error_rate <= age_votes.threshold { continue; }
 
                     // Empty neighborhood means no signal to wire the correction's context against —
@@ -959,7 +1065,27 @@ impl Thalamus {
             }
         }
 
-        (new_specs, install_ops)
+        (new_specs, install_ops, error_feedback)
+    }
+
+    /// Dispatch spatial error-feedback samples to the owning columns, where each neuron records
+    /// the rate into its `error_stats[0]` Welford bucket. Once the bucket has ≥3 samples, dynamic
+    /// error modes (conservative/neutral/aggressive) start replacing the static fallback with the
+    /// per-neuron adaptive threshold.
+    pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
+        if feedback.is_empty() { return; }
+
+        let mut by_region: Vec<Vec<(NeuronId, f64)>> = (0..self.regions).map(|_| Vec::new()).collect();
+        for &(id, rate) in feedback {
+            let r = self.route_neuron(id);
+            by_region[r].push((id, rate));
+        }
+
+        for (r, region_fb) in by_region.iter().enumerate() {
+            if !region_fb.is_empty() {
+                self.region_list[r].record_spatial_errors(region_fb);
+            }
+        }
     }
 
     /// Install minted spatial corrections into their parents' routing tables. Each install adds
@@ -1095,6 +1221,11 @@ impl Thalamus {
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
 
+        // Resolve the parent's channel once — used for neighbor filtering of actuals, context
+        // entries, and (inside allocate_pattern_neuron) the pre-wired connections of any minted
+        // pattern. Channels without a registered neighbor list fall through to all-pairs.
+        let parent_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
+
         let ages: Vec<Distance> = age_states.keys().copied().collect();
         for age in ages {
             let state = &age_states[&age];
@@ -1119,8 +1250,19 @@ impl Thalamus {
             // otherwise see misses the neuron had no chance to do better on, inflating future fire thresholds.
             if state.context.as_ref().map_or(true, |c| c.is_empty()) { continue; }
 
+            // Build the actuals set for vote-error evaluation, filtered to the parent's neighbor
+            // channels. Votes that hit a target outside the neighbor graph shouldn't have been cast
+            // (connections are also neighbor-filtered at learn/allocate time) — but filter defensively.
+            let actuals_filtered: FxHashSet<NeuronId> = sensory_neurons[0].iter()
+                .copied()
+                .filter(|&id| {
+                    let target_ch = self.get_neuron_channel_id(id).unwrap_or(0);
+                    self.is_neighbor_channel(parent_channel, target_ch)
+                })
+                .collect();
+
             // evaluate the prior-frame vote at this age (if any) and record feedback
-            let result = match self.evaluate_vote_error(age, state, &sensory_neurons[0], frame_number) {
+            let result = match self.evaluate_vote_error(age, state, &actuals_filtered, frame_number) {
                 Some(r) => r,
                 None => continue,
             };
@@ -1131,12 +1273,23 @@ impl Thalamus {
 
             // allocate an error correction pattern to be created after level processing
             let spec = self.allocate_pattern_neuron(level + 1, neuron_id, age, sensory_neurons, rewards, Phase::Temporal);
+
+            // Filter the correction's context_entries to neighbor channels — the new pattern only
+            // matches against and references neighbor-channel neurons in its routing context.
+            let context_entries_filtered: Vec<ContextRefEntry> = state.context.clone().unwrap()
+                .into_iter()
+                .filter(|e| {
+                    let target_ch = self.get_neuron_channel_id(e.neuron_id).unwrap_or(0);
+                    self.is_neighbor_channel(parent_channel, target_ch)
+                })
+                .collect();
+
             corrections.push(CorrectionSpec {
                 pattern_id: spec.id,
                 forget_rate: spec.forget_rate,
                 connections: spec.connections,
                 age,
-                context_entries: state.context.clone().unwrap(),
+                context_entries: context_entries_filtered,
             });
         }
 
@@ -1160,7 +1313,7 @@ impl Thalamus {
     ) -> Vec<ColumnProcessResult> {
 
         // decorate age=0 sensory neurons with channel id + pre-resolved reward
-        let mut new_active_neurons = Vec::with_capacity(age0.len());
+        let mut full_actives = Vec::with_capacity(age0.len());
         for &neuron_id in age0 {
             let channel_id = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
             let reward = if self.get_neuron_type(neuron_id) == Some(NeuronType::Action) {
@@ -1168,8 +1321,24 @@ impl Thalamus {
             } else {
                 0.0
             };
-            new_active_neurons.push(ActiveNeuron { id: neuron_id, channel_id, reward });
+            full_actives.push(ActiveNeuron { id: neuron_id, channel_id, reward });
         }
+
+        // Build per-task actives up front so we don't have to keep an immutable self borrow alive
+        // through the region.process_level mutable-borrow loop.
+        // Both phases filter actives by the parent's neighbor channels — the neighbor relationship
+        // is a property of the channel graph, not of any specific phase. d=0 (Spatial) learning
+        // and d>0 (Temporal) learning both restrict their connection targets to neighbor channels.
+        // Channels with no registered neighbor list fall through to all-pairs by
+        // `is_neighbor_channel`, preserving original behavior for stocks / text / anything that
+        // doesn't declare neighbors.
+        let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
+            let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
+            full_actives.iter()
+                .filter(|a| self.is_neighbor_channel(parent_channel, a.channel_id))
+                .cloned()
+                .collect()
+        }).collect();
 
         // bucket tasks by region
         let task_indices_by_region = self.bucket_by_region_indices(tasks, |t| t.neuron_id);
@@ -1180,15 +1349,16 @@ impl Thalamus {
         for (r, task_indices) in task_indices_by_region.iter().enumerate() {
             if task_indices.is_empty() { continue; }
 
-            // build the tuples that Region.process_level expects
+            // build the tuples that Region.process_level expects — each task carries its own
+            // pre-filtered actives.
             let region_tasks: Vec<_> = task_indices.iter().map(|&i| {
                 let task = &tasks[i];
-                (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone())
+                (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone(), task_actives[i].clone())
             }).collect();
 
             let region_results = self.region_list[r].process_level(
                 &region_tasks, memory_depth, level_context_opt, new_error_pattern_ids,
-                &new_active_neurons, frame_number, learning, phase,
+                frame_number, learning, phase,
             );
             results.extend(region_results);
         }

@@ -127,22 +127,21 @@ impl Column {
     /// results parent_id-tagged in task order.
     pub fn process_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)],
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
         memory_depth: u32,
         level_context: Option<&Context>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        new_active_neurons: &[ActiveNeuron],
         frame_number: FrameNumber,
         learning: bool,
         phase: Phase,
     ) -> Vec<ColumnProcessResult> {
         let mut results = Vec::with_capacity(tasks.len());
-        for (neuron_id, age_states, corrections, error_feedback) in tasks {
+        for (neuron_id, age_states, corrections, error_feedback, actives) in tasks {
             let neuron = self.neurons.get_mut(neuron_id)
                 .unwrap_or_else(|| panic!("Column.process_level: neuron {} not found", neuron_id));
             let result = neuron.process_frame(
                 age_states, memory_depth, level_context, new_error_pattern_ids,
-                new_active_neurons, frame_number, corrections, error_feedback, learning, phase,
+                actives, frame_number, corrections, error_feedback, learning, phase,
             );
             results.push(ColumnProcessResult {
                 parent_id: *neuron_id,
@@ -367,6 +366,18 @@ impl Column {
     }
 
     /// Spatial correction install (1c) — for each op, add the new pattern as a child on the
+    /// Record spatial-error samples on owned neurons. Each (neuron_id, error_rate) pair updates
+    /// the neuron's `error_stats[0]` Welford bucket. Used so dynamic error modes for spatial
+    /// (conservative/neutral/aggressive) can adapt thresholds — without these samples the modes
+    /// silently fall back to the static threshold for spatial age=0.
+    pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
+        for &(id, rate) in feedback {
+            if let Some(neuron) = self.neurons.get_mut(&id) {
+                neuron.record_error(0, rate);
+            }
+        }
+    }
+
     /// parent neuron with the d=0 context entries, register the resulting death frame, and emit
     /// ContextRefUpdates for each context-entry target so they know this parent now references them.
     /// Corrections are NOT activated this frame; the routing-table entry will fire on next frame's

@@ -99,6 +99,35 @@ export declare class Brain {
   getSpatialCorrectionCount(): number
   /** Number of correction neurons currently sitting above the base spatial level. */
   countActiveSpatialCorrections(): number
+  /**
+   * Per-level count of correction neurons. Returns array where index 0 is level 1, etc.
+   * Length tells you the maximum spatial level reached.
+   */
+  spatialLevelCounts(): Array<number>
+  /** Diagnostic: size of the most recent frame's apex set. */
+  lastApexSize(): number
+  /** Diagnostic: size of get_active_voter_ids (temporal voter set the OLD learn path used). */
+  activeVoterIdsSize(): number
+  /**
+   * Diagnostic: the spatial error rates from the most recent processFrame's mint pass.
+   * Returns an array of {neuronId, errorRate} objects. Used for tuning thresholds by
+   * characterizing the natural distribution of spatial error rates.
+   */
+  lastFrameSpatialErrorRates(): object
+  /**
+   * Diagnostic: (apex_only_count, voters_only_count) — set difference between the apex set and
+   * the temporal voter set. (0, 0) means identical sets.
+   */
+  apexVsVoterSetDiff(): object
+  /**
+   * Declare the neighbor channel set for a registered channel. Pass the channel's name and an
+   * array of neighbor channel names. Names not in the registry are silently ignored.
+   * An empty list shrinks the channel's neighborhood to {itself} (no cross-channel co-learning).
+   * Channels with no call retain the default all-pairs neighborhood, so existing apps that
+   * don't declare neighbors keep their current behavior.
+   * Call AFTER registering all channels — neighbor names are resolved at this call.
+   */
+  setChannelNeighbors(name: string, neighborNames: Array<string>): void
   /** Look up a dimension ID by its registered name. */
   getDimensionIdByName(name: string): unknown
   /** Look up a neuron ID by its (dimId, bucketId) coordinate. */
