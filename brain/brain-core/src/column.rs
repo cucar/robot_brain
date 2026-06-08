@@ -7,7 +7,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::context::Context;
+use crate::context::TemporalContext;
 use crate::neuron::{
     ActiveNeuron, AgeState, AgeVotes, Correction, ContextRefUpdate,
     CorrectionActivation, ErrorFeedback, Neuron, PatternMatch, Vote,
@@ -86,11 +86,11 @@ pub struct Column {
     /// Per-channel default action neuron id.
     channel_default_actions: FxHashMap<ChannelId, NeuronId>,
 
-    /// Context length — determines the range of distances (1..context_length-1)
+    /// TemporalContext length — determines the range of distances (1..context_length-1)
     /// at which default action connections are pre-wired on new neurons.
     context_length: u32,
 
-    /// Context merge threshold.
+    /// TemporalContext merge threshold.
     merge_threshold: f64,
 
     /// Error correction mode.
@@ -129,7 +129,7 @@ impl Column {
         &mut self,
         tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
         memory_depth: u32,
-        level_context: Option<&Context>,
+        level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
         learning: bool,

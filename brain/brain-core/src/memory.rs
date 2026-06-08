@@ -1,11 +1,16 @@
 /// Memory — manages the temporal sliding window of active and inferred neurons.
 ///
-/// Internally everything is keyed by **activation frame number**, not by age.
-/// Age is a derived quantity (`frame_number - activation_frame`) computed on read.
-/// This means `age()` doesn't have to migrate any per-neuron state Maps each frame —
-/// it just bumps the frame counter and evicts whatever frame fell off the back of
-/// the window. Public API (depth, get_level_neurons, get_level_ages, …) still speaks
-/// in ages, so callers (brain, thalamus) are unchanged.
+/// **Temporal state** is keyed by activation frame number; age is a derived quantity
+/// (`frame_number - activation_frame`) computed on read. `advance_temporal_window()` doesn't
+/// have to migrate any per-neuron state Maps each frame — it just evicts whatever frame fell
+/// off the back of the window. Public API for temporal (depth, get_level_neurons,
+/// get_base_level, get_active_voter_ages, …) still speaks in ages.
+///
+/// **Spatial state** is age-free. Spatial is a same-frame computation: connections[0] predict
+/// co-activations within the current frame, and the spatial index is wiped at the top of
+/// every frame via `reset_spatial`. There is no spatial "history" to look back at, so spatial
+/// activations don't touch `age_index`, `neuron_states`, or any frame-keyed storage. They
+/// land directly in `spatial_level_index`, which is just `Level → set of neuron ids`.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -44,11 +49,17 @@ pub struct Memory {
     /// frame → set of neuron ids activated at that frame.
     age_index: FxHashMap<FrameNumber, FxHashSet<NeuronId>>,
 
-    /// Index for fast level queries — one map per phase. level → frame → set of neuron ids.
-    /// Spatial and temporal hierarchies are independent depth indexes over the same neurons.
-    /// A single neuron can appear in both at different levels — e.g. a spatial correction at
-    /// spatial_level=3 that's apex for the frame also sits at temporal_level=0.
-    spatial_level_index: FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>>,
+    /// Spatial level index — `level → set of neuron ids`. Age-free.
+    /// Wiped at the top of every frame by `reset_spatial`. Spatial activations land here and
+    /// nowhere else — no age_index, no neuron_states. The spatial sweep reads this back via
+    /// `get_level_neurons(level, Phase::Spatial)` which fabricates a default per-neuron state
+    /// at age=0 on demand (spatial never persists per-neuron state).
+    spatial_level_index: FxHashMap<Level, FxHashSet<NeuronId>>,
+
+    /// Temporal level index — `level → frame → set of neuron ids`.
+    /// Frame keying lets the temporal sweep recover age (`age = frame_number - frame`) without
+    /// migrating per-neuron Maps each frame. Eviction in `advance_temporal_window` is a single
+    /// delete-by-frame.
     temporal_level_index: FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>>,
 
     /// Current frame winning inferences.
@@ -82,41 +93,31 @@ impl Memory {
         self.inferred_neurons.clear();
     }
 
-    /// Internal helper — get the (mut) level index for a phase.
-    fn level_index_mut(&mut self, phase: Phase) -> &mut FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>> {
-        match phase {
-            Phase::Spatial => &mut self.spatial_level_index,
-            Phase::Temporal => &mut self.temporal_level_index,
-        }
-    }
 
-    /// Internal helper — get the level index for a phase.
-    fn level_index(&self, phase: Phase) -> &FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>> {
-        match phase {
-            Phase::Spatial => &self.spatial_level_index,
-            Phase::Temporal => &self.temporal_level_index,
-        }
-    }
-
-    /// Advance the sliding window to the given frame. Memory acts as a slave clock —
-    /// the brain owns the frame counter and passes it in so the two never drift.
-    /// With frame-keyed storage this is just a counter sync plus eviction of whatever
-    /// activation frame fell off the back — no per-neuron Map rebuild, regardless of
-    /// how many neurons are active.
-    pub fn age(&mut self, frame_number: FrameNumber) {
-        if self.debug { println!("Aging neurons..."); }
-
-        // sync to the brain's frame number
+    /// Sync memory's frame counter to the brain's. Memory acts as a slave clock — the brain owns
+    /// the frame counter and passes it in so the two never drift. Called once at the top of every
+    /// frame, before anything else reads `self.frame_number`.
+    pub fn sync_frame(&mut self, frame_number: FrameNumber) {
         self.frame_number = frame_number;
+    }
 
-        // Spatial is fundamentally same-frame: connections[0] predict co-activations within a single
-        // frame's spatial phase. Carrying spatial activations across frames would cause learn_connections
-        // to strengthen d=0 edges between this frame's actives and last frame's neurons — spurious
-        // cross-frame co-activation. Clear the spatial index here at frame advance; activate_neurons
-        // (called next) repopulates spatial[0] with this frame's sensory.
-        // The age_index, neuron_states, and temporal_level_index entries stay — those carry the temporal
-        // history the temporal sweep needs.
+    /// Reset spatial state for a new frame. Spatial is fundamentally same-frame: connections[0]
+    /// predict co-activations within a single frame's spatial phase. Carrying spatial activations
+    /// across frames would cause learn_connections to strengthen d=0 edges between this frame's
+    /// actives and last frame's neurons — spurious cross-frame co-activation. Clear the spatial
+    /// index here at the top of process_spatial; activate_sensory_events_spatial (called next)
+    /// repopulates spatial[0] with this frame's sensory. age_index, neuron_states, and
+    /// temporal_level_index entries are untouched — those carry the temporal history.
+    pub fn reset_spatial(&mut self) {
         self.spatial_level_index.clear();
+    }
+
+    /// Advance the temporal sliding window by one frame: evict whatever activation frame just fell
+    /// off the back. With frame-keyed storage this is just a single eviction pass — no per-neuron
+    /// Map rebuild, regardless of how many neurons are active. Must be called after `sync_frame`
+    /// so the eviction target is computed from the current frame number.
+    pub fn advance_temporal_window(&mut self) {
+        if self.debug { println!("Aging neurons..."); }
 
         // evict the frame that just fell off the back of the window
         let evicted_frame = self.frame_number - self.context_length as i64;
@@ -132,9 +133,7 @@ impl Memory {
                 if states.is_empty() { self.neuron_states.remove(&neuron_id); } // deactivate neuron if all ages are inactive
             }
         }
-        for level_frames in self.spatial_level_index.values_mut() {
-            level_frames.remove(&evicted_frame);
-        }
+        // spatial_level_index is wiped each frame by reset_spatial — no per-frame eviction needed.
         for level_frames in self.temporal_level_index.values_mut() {
             level_frames.remove(&evicted_frame);
         }
@@ -143,6 +142,28 @@ impl Memory {
             println!("Deactivated {} aged-out neurons", evicted_neuron_ids.len());
         }
     }
+
+    /// Test convenience: do all three steps of a frame tick in one call (sync, reset spatial,
+    /// advance temporal window). Production code calls the three methods individually at the
+    /// appropriate points in `process_frame` / `process_spatial` / `process_temporal`.
+    #[cfg(test)]
+    pub fn age(&mut self, frame_number: FrameNumber) {
+        self.sync_frame(frame_number);
+        self.reset_spatial();
+        self.advance_temporal_window();
+    }
+
+    /// Test convenience: route to the right phase-specific activation method.
+    /// Production code calls `activate_spatial_neuron` or `activate_temporal_neuron` directly
+    /// at the call site that knows the phase intent.
+    #[cfg(test)]
+    pub fn activate_neuron(&mut self, neuron_id: NeuronId, level: Level, phase: Phase) {
+        match phase {
+            Phase::Spatial => self.activate_spatial_neuron(neuron_id, level),
+            Phase::Temporal => self.activate_temporal_neuron(neuron_id, level),
+        }
+    }
+
 
     /// Number of age slots currently in the sliding window.
     pub fn depth(&self) -> u32 {
@@ -197,55 +218,84 @@ impl Memory {
         pairs
     }
 
-    /// Get the per-age Sets of neuron IDs for a level (index = age), in age-ascending order.
-    /// Returns an empty vec if the level has no active neurons.
-    /// Built fresh on each call by walking ages 0..depth-1 against the frame-keyed level index.
-    pub fn get_level_ages(&self, level: Level, phase: Phase) -> Vec<FxHashSet<NeuronId>> {
-        let level_frames = match self.level_index(phase).get(&level) {
-            Some(lf) => lf,
-            None => return Vec::new(),
-        };
-        let mut result = Vec::with_capacity(self.depth() as usize);
-        for age in 0..self.depth() {
-            let frame = self.frame_number - age as i64;
-            result.push(level_frames.get(&frame).cloned().unwrap_or_default());
+    /// Active neuron sets at the base level (level 0 — the sensory substrate).
+    /// Spatial returns a single-element vec (just this frame's active sensory set).
+    /// Temporal returns one entry per recency slot inside the sliding window — index 0 is the
+    /// current frame, index 1 is the previous frame, and so on out to `depth() - 1`.
+    /// Downstream code on the spatial side only ever reads index `[0]`; the recency dimension is
+    /// there for temporal pattern allocation, which wires connections back across past frames.
+    pub fn get_base_level(&self, phase: Phase) -> Vec<FxHashSet<NeuronId>> {
+        match phase {
+            Phase::Spatial => {
+                let set = self.spatial_level_index.get(&0).cloned().unwrap_or_default();
+                vec![set]
+            }
+            Phase::Temporal => {
+                let level_frames = match self.temporal_level_index.get(&0) {
+                    Some(lf) => lf,
+                    None => return Vec::new(),
+                };
+                let mut result = Vec::with_capacity(self.depth() as usize);
+                for age in 0..self.depth() {
+                    let frame = self.frame_number - age as i64;
+                    result.push(level_frames.get(&frame).cloned().unwrap_or_default());
+                }
+                result
+            }
         }
-        result
     }
 
-    /// Returns the active neurons at a given level with their age-states.
+    /// Active neurons at a given level with their age-states.
     /// Shape: FxHashMap<neuron_id, FxHashMap<age, LevelAgeState>>.
-    /// thalamus.process_level depends on this.
+    /// Spatial returns one entry per neuron at age 0, with a default (fresh) state — spatial
+    /// doesn't persist per-neuron state because nothing ever reads it across the level loop.
+    /// Temporal walks frame-keyed neuron_states and assembles the per-age map.
     pub fn get_level_neurons(&mut self, level: Level, phase: Phase) -> FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>> {
         let mut neurons: FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>> = FxHashMap::default();
-        let level_frames = match self.level_index(phase).get(&level) {
-            Some(lf) => lf,
-            None => return neurons,
-        };
 
-        // walk ages ascending so iteration order matches
-        for age in 0..self.depth() {
-            let frame = self.frame_number - age as i64;
-            let neuron_ids = match level_frames.get(&frame) {
-                Some(ids) => ids,
-                None => continue,
-            };
-            for &neuron_id in neuron_ids {
-                let state = self.neuron_states.get(&neuron_id)
-                    .and_then(|states| states.get(&frame))
-                    .cloned()
-                    .unwrap_or_default();
-                neurons.entry(neuron_id)
-                    .or_insert_with(FxHashMap::default)
-                    .insert(age, state);
+        match phase {
+            Phase::Spatial => {
+                let ids = match self.spatial_level_index.get(&level) {
+                    Some(ids) => ids,
+                    None => return neurons,
+                };
+                for &neuron_id in ids {
+                    let mut age_map = FxHashMap::default();
+                    age_map.insert(0, LevelAgeState::default());
+                    neurons.insert(neuron_id, age_map);
+                }
+            }
+            Phase::Temporal => {
+                let level_frames = match self.temporal_level_index.get(&level) {
+                    Some(lf) => lf,
+                    None => return neurons,
+                };
+                // walk ages ascending so iteration order matches
+                for age in 0..self.depth() {
+                    let frame = self.frame_number - age as i64;
+                    let neuron_ids = match level_frames.get(&frame) {
+                        Some(ids) => ids,
+                        None => continue,
+                    };
+                    for &neuron_id in neuron_ids {
+                        let state = self.neuron_states.get(&neuron_id)
+                            .and_then(|states| states.get(&frame))
+                            .cloned()
+                            .unwrap_or_default();
+                        neurons.entry(neuron_id)
+                            .or_insert_with(FxHashMap::default)
+                            .insert(age, state);
+                    }
+                }
             }
         }
         neurons
     }
 
-    /// Write back modified level age states after process_level. The level loop
-    /// mutates votes/context/threshold on the states, and we need to persist those
-    /// changes back into frame-keyed storage for next-frame evaluation.
+    /// Write back modified per-neuron states after process_level — temporal only.
+    /// The temporal level loop mutates votes/context/threshold on the states; those changes
+    /// have to persist into frame-keyed neuron_states for next-frame evaluation.
+    /// Spatial calls SHOULD NOT invoke this — spatial state is ephemeral by design.
     pub fn write_back_level_neurons(&mut self, level_neurons: &FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>) {
         for (&neuron_id, age_states) in level_neurons {
             for (&age, state) in age_states {
@@ -262,46 +312,63 @@ impl Memory {
         }
     }
 
-    /// Activate a neuron at age 0 in the given phase's level index.
-    pub fn activate_neuron(&mut self, neuron_id: NeuronId, level: Level, phase: Phase) {
-        self.activate_neuron_at_age(neuron_id, 0, level, phase);
+    /// Activate a sensory neuron in the spatial level index. Age-free, state-free — writes only
+    /// to spatial_level_index. Nothing else needs to know that this neuron fired in spatial:
+    /// the sweep reads spatial_level_index back, and the apex handoff promotes survivors into
+    /// temporal via the separate temporal activation path.
+    pub fn activate_spatial_neuron(&mut self, neuron_id: NeuronId, level: Level) {
+        self.spatial_level_index.entry(level)
+            .or_insert_with(FxHashSet::default)
+            .insert(neuron_id);
     }
 
-    /// Activate a neuron at a specific age in the given phase's level index.
-    /// Internally stored keyed by activation frame = frame_number - age
-    /// so the entry naturally moves to age+1 next frame without any rewrite.
-    /// neuron_states are shared across phases — only the level index is per-phase.
-    /// If the same neuron is activated in both phases at the same age, the state entry
-    /// is created once and shared; the level index records the neuron under both phases.
-    pub fn activate_neuron_at_age(&mut self, neuron_id: NeuronId, age: Distance, level: Level, phase: Phase) {
+    /// Activate a neuron at age 0 in the temporal level index.
+    /// Used by the apex handoff (sensory events + spatial corrections that survived subsumption)
+    /// and by carry-forward action injection. Writes age_index + neuron_states + temporal_level_index
+    /// because temporal needs all three for its sliding window machinery.
+    pub fn activate_temporal_neuron(&mut self, neuron_id: NeuronId, level: Level) {
+        self.activate_temporal_neuron_at_age(neuron_id, 0, level);
+    }
+
+    /// Activate a neuron at a specific age in the temporal level index. Internally stored keyed
+    /// by activation frame = frame_number - age so the entry naturally moves to age+1 next frame
+    /// without any rewrite.
+    pub fn activate_temporal_neuron_at_age(&mut self, neuron_id: NeuronId, age: Distance, level: Level) {
         let frame = self.frame_number - age as i64;
 
-        // add the neuron to the age index
         self.age_index.entry(frame).or_insert_with(FxHashSet::default).insert(neuron_id);
-
-        // add the neuron to the phase's level index
-        self.level_index_mut(phase).entry(level)
+        self.temporal_level_index.entry(level)
             .or_insert_with(FxHashMap::default)
             .entry(frame)
             .or_insert_with(FxHashSet::default)
             .insert(neuron_id);
-
-        // add the active neuron to the neuron states with a new state (if not already present)
         self.neuron_states.entry(neuron_id)
             .or_insert_with(FxHashMap::default)
             .entry(frame)
             .or_insert_with(LevelAgeState::default);
     }
 
-    /// Activate a pattern neuron and link it to its parent.
+    /// Activate a pattern neuron at level+1 and link it to its parent.
+    /// Spatial: just adds the pattern id to spatial_level_index at the new level. No parent state
+    /// update — subsumption is tracked by the caller via a local set inside process_sweep, not by
+    /// reading activated_pattern_id back from neuron_states.
+    /// Temporal: full activation (age_index + neuron_states + temporal_level_index) plus setting
+    /// the parent's activated_pattern_id so vote generation knows to suppress the parent.
     pub fn activate_pattern(&mut self, pattern_id: NeuronId, pattern_level: Level, parent_id: NeuronId, age: Distance, phase: Phase) {
-        self.activate_neuron_at_age(pattern_id, age, pattern_level, phase);
-
-        // set the parent's activated_pattern_id at this age
-        let frame = self.frame_number - age as i64;
-        if let Some(states) = self.neuron_states.get_mut(&parent_id) {
-            if let Some(state) = states.get_mut(&frame) {
-                state.activated_pattern_id = Some(pattern_id);
+        match phase {
+            Phase::Spatial => {
+                self.activate_spatial_neuron(pattern_id, pattern_level);
+                let _ = parent_id;
+                let _ = age;
+            }
+            Phase::Temporal => {
+                self.activate_temporal_neuron_at_age(pattern_id, age, pattern_level);
+                let frame = self.frame_number - age as i64;
+                if let Some(states) = self.neuron_states.get_mut(&parent_id) {
+                    if let Some(state) = states.get_mut(&frame) {
+                        state.activated_pattern_id = Some(pattern_id);
+                    }
+                }
             }
         }
     }
@@ -334,15 +401,19 @@ impl Memory {
 
     /// Get the maximum active level from the given phase's level index.
     pub fn get_max_active_level(&self, phase: Phase) -> usize {
-        self.level_index(phase).len()
+        match phase {
+            Phase::Spatial => self.spatial_level_index.len(),
+            Phase::Temporal => self.temporal_level_index.len(),
+        }
     }
 
     // ── Context snapshot ────────────────────────────────────────────────────
 
     /// Export active neuron activations with their full per-age state.
-    /// Each entry records (neuron_id, frame, level, phase, state) — a single neuron active in
-    /// both phases produces two entries at potentially different levels.
-    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, Phase, LevelAgeState)> {
+    /// Temporal-only — spatial state is wiped at the top of every frame and never persists, so
+    /// there's nothing meaningful to snapshot. Each entry records (neuron_id, frame, level, state)
+    /// for a temporal activation that's still inside the sliding window.
+    pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
         let mut entries = Vec::new();
         for (&frame, neuron_ids) in &self.age_index {
             for &neuron_id in neuron_ids {
@@ -350,31 +421,31 @@ impl Memory {
                     .and_then(|states| states.get(&frame))
                     .cloned()
                     .unwrap_or_default();
-                for &phase in &[Phase::Spatial, Phase::Temporal] {
-                    let level_opt = self.level_index(phase).iter()
-                        .find_map(|(&lvl, frames)| {
-                            frames.get(&frame).and_then(|ids| {
-                                if ids.contains(&neuron_id) { Some(lvl) } else { None }
-                            })
-                        });
-                    if let Some(level) = level_opt {
-                        entries.push((neuron_id, frame, level, phase, state.clone()));
-                    }
+                let level_opt = self.temporal_level_index.iter()
+                    .find_map(|(&lvl, frames)| {
+                        frames.get(&frame).and_then(|ids| {
+                            if ids.contains(&neuron_id) { Some(lvl) } else { None }
+                        })
+                    });
+                if let Some(level) = level_opt {
+                    entries.push((neuron_id, frame, level, state.clone()));
                 }
             }
         }
         entries
     }
 
-    /// Restore active neurons from a saved context snapshot (with full state).
-    pub fn restore_context_snapshot(&mut self, frame_number: FrameNumber, entries: &[(NeuronId, FrameNumber, Level, Phase, LevelAgeState)]) {
+    /// Restore temporal active neurons from a saved context snapshot (with full state).
+    /// Spatial state is not part of the snapshot — it gets repopulated by the next
+    /// `process_spatial` call from scratch.
+    pub fn restore_context_snapshot(&mut self, frame_number: FrameNumber, entries: &[(NeuronId, FrameNumber, Level, LevelAgeState)]) {
         self.reset();
         self.frame_number = frame_number;
-        for (neuron_id, activation_frame, level, phase, state) in entries {
+        for (neuron_id, activation_frame, level, state) in entries {
             self.age_index.entry(*activation_frame)
                 .or_insert_with(FxHashSet::default)
                 .insert(*neuron_id);
-            self.level_index_mut(*phase).entry(*level)
+            self.temporal_level_index.entry(*level)
                 .or_insert_with(FxHashMap::default)
                 .entry(*activation_frame)
                 .or_insert_with(FxHashSet::default)
@@ -474,17 +545,17 @@ mod tests {
     }
 
     #[test]
-    fn test_get_level_ages() {
+    fn test_get_base_level() {
         let mut m = Memory::new(false, 4);
         m.age(1);
         m.activate_neuron(10, 0, Phase::Temporal);
         m.age(2);
         m.activate_neuron(20, 0, Phase::Temporal);
 
-        let ages = m.get_level_ages(0, Phase::Temporal);
-        assert_eq!(ages.len(), 2); // depth = 2
-        assert!(ages[0].contains(&20)); // age 0 = current frame
-        assert!(ages[1].contains(&10)); // age 1 = previous frame
+        let sets = m.get_base_level(Phase::Temporal);
+        assert_eq!(sets.len(), 2); // depth = 2
+        assert!(sets[0].contains(&20)); // current frame
+        assert!(sets[1].contains(&10)); // previous frame
     }
 
     #[test]
@@ -550,9 +621,9 @@ mod tests {
     fn test_context_restore_with_negative_frames() {
         let mut m = Memory::new(false, 10);
         m.restore_context_snapshot(0, &[
-            (10, -1, 0, Phase::Temporal, LevelAgeState::default()),
-            (20, -3, 0, Phase::Temporal, LevelAgeState::default()),
-            (30, -5, 0, Phase::Temporal, LevelAgeState::default()),
+            (10, -1, 0, LevelAgeState::default()),
+            (20, -3, 0, LevelAgeState::default()),
+            (30, -5, 0, LevelAgeState::default()),
         ]);
         assert_eq!(m.depth(), 6); // span: 0 - (-5) + 1 = 6
         assert_eq!(m.get_frame_number(), 0);

@@ -50,7 +50,7 @@ use crate::column::{
     Column, ColumnProcessResult, DeathFrameEntry, DeleteOp, DeleteResult,
     NeuronCreateSpec, SnapshotEntry,
 };
-use crate::context::Context;
+use crate::context::TemporalContext;
 use crate::neuron::{
     ActiveNeuron, AgeState, Correction, ContextRefUpdate, ErrorFeedback,
     SerializedNeuron, Vote,
@@ -122,7 +122,7 @@ impl Region {
         &mut self,
         tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
         memory_depth: u32,
-        level_context: Option<&Context>,
+        level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
         learning: bool,
@@ -216,7 +216,7 @@ impl Region {
         SpatialInstallResult { deaths, context_ref_updates }
     }
 
-    // ── Op-5: Context ref updates ──────────────────────────────────────────
+    // ── Op-5: TemporalContext ref updates ──────────────────────────────────────────
 
     /// Apply contextRef updates against owned Neurons. Updates are routed by
     /// neuron_id (the target neuron whose contextRefs change).

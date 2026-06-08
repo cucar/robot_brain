@@ -19,7 +19,7 @@ use crate::column::{
     ColumnProcessResult, ConnectionSpec, DeleteOp,
     NeuronCreateSpec,
 };
-use crate::context::Context;
+use crate::context::TemporalContext;
 use crate::diagnostics::{InferenceResultItem, InferenceType};
 use crate::neuron::{
     ActiveNeuron, AgeState, ContextRefEntry, ContextRefUpdate,
@@ -95,7 +95,7 @@ pub struct LevelAgeState {
     pub activated_pattern_id: Option<NeuronId>,
     /// Votes cast at this age (populated by collectVotes, consumed by evaluateVoteError next frame).
     pub votes: Option<Vec<Vote>>,
-    /// Context snapshot at vote time (for misprediction diagnostics).
+    /// TemporalContext snapshot at vote time (for misprediction diagnostics).
     pub context: Option<Vec<ContextRefEntry>>,
     /// Error threshold at vote time (for next-frame error correction decision).
     pub threshold: Option<f64>,
@@ -577,27 +577,6 @@ impl Thalamus {
 
     // ── Inference results ───────────────────────────────────────────────────
 
-    /// Get inferred actions grouped by channel from the given inferences.
-    /// Returns a map of channel_id → list of {coordinate, strength, reward}.
-    pub fn get_inferred_actions(&self, inferences: &[InferredNeuron]) -> FxHashMap<ChannelId, Vec<InferredAction>> {
-        let mut channel_outputs: FxHashMap<ChannelId, Vec<InferredAction>> = FxHashMap::default();
-        for inf in inferences {
-            if self.get_neuron_type(inf.neuron_id) != Some(NeuronType::Action) { continue; }
-            let channel_id = match self.get_neuron_channel_id(inf.neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
-            let coordinate = match self.get_neuron_coordinate(inf.neuron_id) {
-                Some(c) => c.clone(),
-                None => continue,
-            };
-            channel_outputs.entry(channel_id)
-                .or_insert_with(Vec::new)
-                .push(InferredAction { coordinate });
-        }
-        channel_outputs
-    }
-
     /// Per-frame inference performance bundle for diagnostics. Each item carries
     /// everything track_inference_performance needs (correctness flag, first-actual
     /// coord, pre-resolved reward) so the diagnostics call stays single-arg.
@@ -853,9 +832,14 @@ impl Thalamus {
             self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids, learning, phase);
         orchestration.get_level_tasks = t.elapsed().as_secs_f64();
 
-        // Op-3: dispatch processFrame — the only cross-region round-trip in the level loop
+        // Op-3: dispatch processFrame — the only cross-region round-trip in the level loop.
+        // current_rewards is Option to keep spatial reward-free: spatial passes an empty rewards
+        // slice (rewards.first() == None), so dispatch_frame skips reward lookup and treats every
+        // active as reward=0.0. Temporal passes a non-empty slice and gets normal action-reward
+        // resolution.
         let t = std::time::Instant::now();
-        let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], &rewards[0], frame_number, learning, phase);
+        let current_rewards = rewards.first();
+        let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], current_rewards, frame_number, learning, phase);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
         // extract activations inline — needed to feed the next level
@@ -930,7 +914,6 @@ impl Thalamus {
         spatial_dispatch_results: &[Vec<ColumnProcessResult>],
         spatial_fired: &FxHashSet<NeuronId>,
         spatial_subsumed: &FxHashSet<NeuronId>,
-        rewards: &[FxHashMap<ChannelId, Reward>],
     ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>, Vec<(NeuronId, f64)>) {
         let mut new_specs = Vec::new();
         let mut install_ops = Vec::new();
@@ -1035,16 +1018,20 @@ impl Thalamus {
                     if neighborhood.is_empty() { continue; }
 
                     // Allocate the correction at one level deeper in the parent's spatial hierarchy.
+                    // Spatial corrections are allocated at age=0 — allocate_pattern_neuron's reward
+                    // loop runs `for a in 0..age`, so age=0 skips it entirely. Passing &[] for rewards
+                    // is safe and keeps the spatial pipeline free of reward state, which is a
+                    // temporal-only concern.
                     let spec = self.allocate_pattern_neuron(
                         parent_level + 1,
                         parent_id,
                         0,
                         &empty,
-                        rewards,
+                        &[],
                         Phase::Spatial,
                     );
 
-                    // Context entries: the parent's level-k neighborhood at distance=0.
+                    // TemporalContext entries: the parent's level-k neighborhood at distance=0.
                     let context_entries: Vec<ContextRefEntry> = neighborhood.iter()
                         .copied()
                         .map(|id| ContextRefEntry { neuron_id: id, distance: 0 })
@@ -1139,9 +1126,9 @@ impl Thalamus {
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
         learning: bool,
         phase: Phase,
-    ) -> (Vec<LevelTask>, Context, Vec<NeuronCreateSpec>) {
+    ) -> (Vec<LevelTask>, TemporalContext, Vec<NeuronCreateSpec>) {
         let mut tasks = Vec::new();
-        let mut level_context = Context::new();
+        let mut level_context = TemporalContext::new();
         let mut new_neuron_specs = Vec::new();
 
         // collect neuron ids first to avoid borrow issues (level_neurons is immutable here,
@@ -1155,15 +1142,21 @@ impl Thalamus {
             // skip action neurons for learning or contexts if the channel learns without them
             if self.skip_action_neuron(*neuron_id) { continue; }
 
-            // new error patterns only contribute to levelContext — they have no children,
+            // New error patterns only contribute to levelContext — they have no children,
             // history, or votes in their birth frame, so they skip dispatch and corrections.
-            // Temporal context entries must be at age>0 (older than the parent's vote);
-            // spatial context entries sit at age=0 (co-active on the current frame).
             if new_error_pattern_ids.contains(neuron_id) {
-                for (&age, _) in age_states {
-                    match phase {
-                        Phase::Temporal => { if age > 0 { level_context.add_neuron(*neuron_id, age, 1.0); } }
-                        Phase::Spatial => { if age == 0 { level_context.add_neuron(*neuron_id, age, 1.0); } }
+                match phase {
+                    Phase::Spatial => {
+                        // Spatial: error pattern co-active on the current frame. No age dimension.
+                        // Stored at distance=0 because TemporalContext is the shared downstream
+                        // representation — the value is a placeholder, not a real distance.
+                        level_context.add_neuron(*neuron_id, 0, 1.0);
+                    }
+                    Phase::Temporal => {
+                        // Temporal: every age>0 entry is a past predictor of the parent.
+                        for (&age, _) in age_states {
+                            if age > 0 { level_context.add_neuron(*neuron_id, age, 1.0); }
+                        }
                     }
                 }
                 continue;
@@ -1210,7 +1203,7 @@ impl Thalamus {
         &mut self,
         neuron_id: NeuronId,
         level: Level,
-        level_context: &mut Context,
+        level_context: &mut TemporalContext,
         age_states: &FxHashMap<Distance, LevelAgeState>,
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
@@ -1218,6 +1211,16 @@ impl Thalamus {
         learning: bool,
         phase: Phase,
     ) -> (Vec<CorrectionSpec>, Vec<ErrorFeedback>) {
+        // Spatial branch: contribute one co-active entry to the level context and bail.
+        // No age dimension, no per-age vote-error evaluation, no correction minting here.
+        // (Spatial correction minting happens in process_spatial via a dedicated pass after the sweep.)
+        // Stored at distance=0 because TemporalContext is the shared downstream representation —
+        // the value is a placeholder, not a real recency.
+        if phase == Phase::Spatial {
+            level_context.add_neuron(neuron_id, 0, 1.0);
+            return (Vec::new(), Vec::new());
+        }
+
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
 
@@ -1231,15 +1234,7 @@ impl Thalamus {
             let state = &age_states[&age];
 
             // Temporal context entries are at strictly positive ages — older neurons predicting the parent.
-            // Spatial context entries sit at age=0 — co-active on the current frame.
-            match phase {
-                Phase::Temporal => { if age > 0 { level_context.add_neuron(neuron_id, age, 1.0); } }
-                Phase::Spatial => { if age == 0 { level_context.add_neuron(neuron_id, age, 1.0); } }
-            }
-
-            // 1b: spatial does not yet mint corrections or evaluate cross-frame votes.
-            // Correction minting in process_spatial will land in 1c via a dedicated pass.
-            if phase == Phase::Spatial { continue; }
+            if age > 0 { level_context.add_neuron(neuron_id, age, 1.0); }
 
             // Non-learning mode is done after level_context population — no accuracy stats, no error pattern allocation.
             if !learning { continue; }
@@ -1303,23 +1298,25 @@ impl Thalamus {
         &mut self,
         tasks: &[LevelTask],
         memory_depth: u32,
-        level_context: &Context,
+        level_context: &TemporalContext,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         age0: &FxHashSet<NeuronId>,
-        current_rewards: &FxHashMap<ChannelId, Reward>,
+        current_rewards: Option<&FxHashMap<ChannelId, Reward>>,
         frame_number: FrameNumber,
         learning: bool,
         phase: Phase,
     ) -> Vec<ColumnProcessResult> {
 
-        // decorate age=0 sensory neurons with channel id + pre-resolved reward
+        // Decorate age=0 sensory neurons with channel id + pre-resolved reward.
+        // Reward resolution is meaningful only for the temporal phase, and only for action neurons
+        // (events carry no reward semantics). In the spatial phase, current_rewards is None and
+        // every active gets reward=0.0 — spatial co-activation has no reward semantics.
         let mut full_actives = Vec::with_capacity(age0.len());
         for &neuron_id in age0 {
             let channel_id = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
-            let reward = if self.get_neuron_type(neuron_id) == Some(NeuronType::Action) {
-                current_rewards.get(&channel_id).copied().unwrap_or(0.0)
-            } else {
-                0.0
+            let reward = match (current_rewards, self.get_neuron_type(neuron_id)) {
+                (Some(rewards), Some(NeuronType::Action)) => rewards.get(&channel_id).copied().unwrap_or(0.0),
+                _ => 0.0,
             };
             full_actives.push(ActiveNeuron { id: neuron_id, channel_id, reward });
         }
@@ -1935,11 +1932,6 @@ pub struct PatternNeuronSpec {
 }
 
 /// An inferred action coordinate.
-#[derive(Debug, Clone)]
-pub struct InferredAction {
-    pub coordinate: Coordinate,
-}
-
 /// Input spec for registering a dimension (before allocation).
 #[derive(Debug, Clone)]
 pub struct DimSpecInput {

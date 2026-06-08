@@ -261,7 +261,7 @@ impl JsBrain {
         let brain = self.inner.borrow();
         let snapshot = brain.get_context_snapshot();
         let mut arr = env.create_array_with_length(snapshot.len())?;
-        for (i, (neuron_id, _frame, level, _phase, state)) in snapshot.iter().enumerate() {
+        for (i, (neuron_id, _frame, level, state)) in snapshot.iter().enumerate() {
             let mut obj = env.create_object()?;
             obj.set_named_property("neuronId", env.create_uint32(*neuron_id as u32)?)?;
             obj.set_named_property("level", env.create_uint32(*level as u32)?)?;
@@ -680,6 +680,7 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
     // timings: per-section wall-clock (seconds). Nested under `frame` alongside elapsed.
     let t = &result.timings;
     let mut timings_obj = env.create_object()?;
+    timings_obj.set_named_property("total", env.create_double(t.total)?)?;
     timings_obj.set_named_property("buildFrame", env.create_double(t.build_frame)?)?;
     timings_obj.set_named_property("createSensory", env.create_double(t.create_sensory)?)?;
     timings_obj.set_named_property("cleanupDead", env.create_double(t.cleanup_dead)?)?;

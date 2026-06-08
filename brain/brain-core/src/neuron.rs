@@ -17,7 +17,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::context::Context;
+use crate::context::TemporalContext;
 use crate::types::*;
 
 /// Minimum samples per (neuron, age) before dynamic modes switch off the warmup
@@ -27,7 +27,7 @@ const ERROR_MIN_SAMPLES: u64 = 3;
 /// Entry in the routing table for a child pattern.
 #[derive(Debug, Clone)]
 pub struct RoutingEntry {
-    pub context: Context,
+    pub context: TemporalContext,
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
 }
@@ -195,7 +195,7 @@ pub struct Neuron {
     /// Speeds up pattern candidate lookup during recognition.
     context_index: FxHashMap<NeuronId, FxHashMap<Distance, FxHashSet<NeuronId>>>,
 
-    /// Context references: FxHashMap<parentId, FxHashSet<distance>>.
+    /// TemporalContext references: FxHashMap<parentId, FxHashSet<distance>>.
     /// Tracks which parent neurons reference this neuron in their children's contexts.
     context_refs: FxHashMap<NeuronId, FxHashSet<Distance>>,
 
@@ -329,7 +329,7 @@ impl Neuron {
     }
 
     /// Serialize the routing table (child patterns). Each child carries its activation
-    /// strength, last activation frame, and flattened context entries from Context.get_entries().
+    /// strength, last activation frame, and flattened context entries from TemporalContext.get_entries().
     fn serialize_children(&self) -> Vec<SerializedChild> {
         let mut result = Vec::new();
         for (&pattern_id, entry) in &self.routing_table {
@@ -513,7 +513,7 @@ impl Neuron {
     pub fn add_child(&mut self, pattern_id: NeuronId, initial_strength: f64) {
         if !self.routing_table.contains_key(&pattern_id) {
             self.routing_table.insert(pattern_id, RoutingEntry {
-                context: Context::new(),
+                context: TemporalContext::new(),
                 activation_strength: initial_strength,
                 last_activation_frame: 0,
             });
@@ -526,7 +526,7 @@ impl Neuron {
         self.get_child_effective_activation_strength(pattern_id, current_frame) <= 0.0
     }
 
-    // ── Context management ───────────────────────────────────────────────────
+    // ── TemporalContext management ───────────────────────────────────────────────────
 
     /// Adds an entry to the pattern context by neuron ID.
     pub fn add_context(&mut self, pattern_id: NeuronId, neuron_id: NeuronId, distance: Distance, strength: Strength) {
@@ -621,7 +621,7 @@ impl Neuron {
         affected_patterns
     }
 
-    // ── Context references ───────────────────────────────────────────────────
+    // ── TemporalContext references ───────────────────────────────────────────────────
 
     /// Add a context reference from another neuron to this neuron.
     /// Called when this neuron is added to another neuron's context.
@@ -714,7 +714,7 @@ impl Neuron {
         &mut self,
         age_states: &FxHashMap<Distance, AgeState>,
         memory_depth: u32,
-        level_context: Option<&Context>,
+        level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         actives: &[ActiveNeuron],
         current_frame: FrameNumber,
@@ -789,7 +789,7 @@ impl Neuron {
         &mut self,
         age_states: &FxHashMap<Distance, AgeState>,
         memory_depth: u32,
-        level_context: Option<&Context>,
+        level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         current_frame: FrameNumber,
         learning: bool,
@@ -858,7 +858,7 @@ impl Neuron {
     }
 
     /// Find the best matching pattern for a specific active age.
-    fn find_best_pattern_match_at_age(&self, observed: &Context, age: Distance, exclude_ids: &FxHashSet<NeuronId>, current_frame: FrameNumber, timings: &mut NeuronOpTimings, phase: Phase) -> Option<PartialMatch> {
+    fn find_best_pattern_match_at_age(&self, observed: &TemporalContext, age: Distance, exclude_ids: &FxHashSet<NeuronId>, current_frame: FrameNumber, timings: &mut NeuronOpTimings, phase: Phase) -> Option<PartialMatch> {
         let mut best: Option<PartialMatch> = None;
 
         // Use the inverted index to narrow the search to child patterns that share at least one
@@ -921,7 +921,7 @@ impl Neuron {
     ///
     /// Missing index entries are expected here: they just mean the observed neuron/distance pair is
     /// not referenced by any child pattern and therefore contributes no candidates.
-    fn get_pattern_candidates_at_age(&self, observed: &Context, age: Distance, phase: Phase) -> FxHashSet<NeuronId> {
+    fn get_pattern_candidates_at_age(&self, observed: &TemporalContext, age: Distance, phase: Phase) -> FxHashSet<NeuronId> {
         let mut candidates = FxHashSet::default();
 
         // Temporal context entries are at strictly positive relative distances — context neurons must be
@@ -997,7 +997,7 @@ impl Neuron {
         &self,
         age_states: &FxHashMap<Distance, AgeState>,
         memory_depth: u32,
-        level_context: Option<&Context>,
+        level_context: Option<&TemporalContext>,
         matches: &[PatternMatch],
         correction_activations: &[CorrectionActivation],
         phase: Phase,
@@ -1044,7 +1044,7 @@ impl Neuron {
     /// Indexed by voting age so generate_votes picks up each per-age context with a single
     /// lookup — no per-age scan, no `ctx_age > age` branch. Pure reshape kept inside the
     /// neuron to save per-frame MPI traffic.
-    fn derive_context_by_age(&self, level_context: Option<&Context>) -> Vec<Vec<ContextRefEntry>> {
+    fn derive_context_by_age(&self, level_context: Option<&TemporalContext>) -> Vec<Vec<ContextRefEntry>> {
         let mut context_by_age: Vec<Vec<ContextRefEntry>> = Vec::new();
         let ctx = match level_context {
             Some(c) => c,
