@@ -52,12 +52,12 @@ use crate::column::{
 };
 use crate::context::TemporalContext;
 use crate::neuron::{
-    ActiveNeuron, AgeState, Correction, ContextRefUpdate, ErrorFeedback,
+    ActiveNeuron, AgeState, Correction, TemporalContextRefUpdate, ErrorFeedback,
     SerializedNeuron, Vote,
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Phase, Reward,
+    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
 };
 
 pub struct Region {
@@ -116,21 +116,18 @@ impl Region {
 
     // ── Op-3: Process level (hot path) ─────────────────────────────────────
 
-    /// Route tasks to owning columns, fan out in parallel, concatenate results
+    /// SPATIAL sweep: route tasks to owning columns, fan out in parallel, concatenate results
     /// in column-index order (stable regardless of thread scheduling).
-    pub fn process_level(
+    pub fn process_spatial_level(
         &mut self,
         tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
-        memory_depth: u32,
-        level_context: Option<&TemporalContext>,
+        level_context: Option<&crate::context::SpatialContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
         learning: bool,
-        phase: Phase,
     ) -> Vec<ColumnProcessResult> {
         // Phase 1: Route — clone each task into its owning column's work list.
-        // Must happen before par_iter so each column gets an owned Vec it can
-        // consume independently.
+        // Must happen before par_iter so each column gets an owned Vec it can consume independently.
         let column_tasks = self.build_column_tasks(tasks);
 
         // Phase 2: Dispatch — each column processes its tasks in parallel.
@@ -140,9 +137,42 @@ impl Region {
             .zip(column_tasks.into_par_iter())
             .map(|(col, col_tasks)| {
                 if col_tasks.is_empty() { return Vec::new(); }
-                col.process_level(
+                col.process_spatial_level(
+                    &col_tasks, level_context, new_error_pattern_ids,
+                    frame_number, learning,
+                )
+            })
+            .collect();
+
+        // Phase 3: Collect — flatten in column-index order (Rayon preserves it).
+        nested.into_iter().flatten().collect()
+    }
+
+    /// TEMPORAL sweep: route tasks to owning columns, fan out in parallel, concatenate results
+    /// in column-index order (stable regardless of thread scheduling).
+    pub fn process_temporal_level(
+        &mut self,
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
+        memory_depth: u32,
+        level_context: Option<&TemporalContext>,
+        new_error_pattern_ids: &FxHashSet<NeuronId>,
+        frame_number: FrameNumber,
+        learning: bool,
+    ) -> Vec<ColumnProcessResult> {
+        // Phase 1: Route — clone each task into its owning column's work list.
+        // Must happen before par_iter so each column gets an owned Vec it can consume independently.
+        let column_tasks = self.build_column_tasks(tasks);
+
+        // Phase 2: Dispatch — each column processes its tasks in parallel.
+        // Shared refs (level_context, new_error_pattern_ids) are read-only and implement Sync,
+        // so no synchronization needed. Per-task actives travel inside each task's tuple.
+        let nested: Vec<Vec<ColumnProcessResult>> = self.columns.par_iter_mut()
+            .zip(column_tasks.into_par_iter())
+            .map(|(col, col_tasks)| {
+                if col_tasks.is_empty() { return Vec::new(); }
+                col.process_temporal_level(
                     &col_tasks, memory_depth, level_context, new_error_pattern_ids,
-                    frame_number, learning, phase,
+                    frame_number, learning,
                 )
             })
             .collect();
@@ -199,32 +229,27 @@ impl Region {
             .zip(by_column.into_par_iter())
             .map(|(col, col_ops)| {
                 if col_ops.is_empty() {
-                    return SpatialInstallResult { deaths: Vec::new(), context_ref_updates: FxHashMap::default() };
+                    return SpatialInstallResult { deaths: Vec::new(), context_ref_updates: Vec::new() };
                 }
                 col.install_spatial_corrections(col_ops, frame_number)
             })
             .collect();
 
         let mut deaths = Vec::new();
-        let mut context_ref_updates: FxHashMap<NeuronId, Vec<ContextRefUpdate>> = FxHashMap::default();
+        let mut context_ref_updates: Vec<crate::neuron::SpatialContextRefUpdate> = Vec::new();
         for res in per_column {
             deaths.extend(res.deaths);
-            for (target_id, updates) in res.context_ref_updates {
-                context_ref_updates.entry(target_id).or_insert_with(Vec::new).extend(updates);
-            }
+            context_ref_updates.extend(res.context_ref_updates);
         }
         SpatialInstallResult { deaths, context_ref_updates }
     }
 
-    // ── Op-5: TemporalContext ref updates ──────────────────────────────────────────
+    // ── Op-5: temporal context-ref updates ─────────────────────────────────────
 
-    /// Apply contextRef updates against owned Neurons. Updates are routed by
-    /// neuron_id (the target neuron whose contextRefs change).
-    pub fn update_context_refs(&mut self, updates: &[(NeuronId, Vec<ContextRefUpdate>)]) {
-        // Phase 1: Route updates to owning columns.
+    /// Apply TEMPORAL contextRef updates against owned Neurons. Updates are routed by
+    /// neuron_id (the target neuron whose temporal_context_refs change).
+    pub fn update_context_refs(&mut self, updates: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
         let by_column = self.route_context_ref_updates(updates);
-
-        // Phase 2: Dispatch — each column applies its updates in parallel.
         self.columns.par_iter_mut()
             .zip(by_column.into_par_iter())
             .for_each(|(col, col_updates)| {
@@ -234,12 +259,29 @@ impl Region {
             });
     }
 
+    /// Apply SPATIAL context-ref updates against owned Neurons.
+    pub fn update_spatial_context_refs(&mut self, updates: &[(NeuronId, Vec<crate::neuron::SpatialContextRefUpdate>)]) {
+        let mut by_column: Vec<Vec<(NeuronId, Vec<crate::neuron::SpatialContextRefUpdate>)>> =
+            (0..self.c).map(|_| Vec::new()).collect();
+        for (neuron_id, upd) in updates {
+            let col = self.route_neuron(*neuron_id);
+            by_column[col].push((*neuron_id, upd.clone()));
+        }
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_updates)| {
+                if !col_updates.is_empty() {
+                    col.update_spatial_context_refs(&col_updates);
+                }
+            });
+    }
+
     /// Partition context ref updates into per-column work lists by target neuron_id.
     fn route_context_ref_updates(
         &self,
-        updates: &[(NeuronId, Vec<ContextRefUpdate>)],
-    ) -> Vec<Vec<(NeuronId, Vec<ContextRefUpdate>)>> {
-        let mut by_column: Vec<Vec<(NeuronId, Vec<ContextRefUpdate>)>> =
+        updates: &[(NeuronId, Vec<TemporalContextRefUpdate>)],
+    ) -> Vec<Vec<(NeuronId, Vec<TemporalContextRefUpdate>)>> {
+        let mut by_column: Vec<Vec<(NeuronId, Vec<TemporalContextRefUpdate>)>> =
             (0..self.c).map(|_| Vec::new()).collect();
         for (neuron_id, upd) in updates {
             let col = self.route_neuron(*neuron_id);

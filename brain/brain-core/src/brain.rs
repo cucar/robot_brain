@@ -33,7 +33,7 @@ use crate::thalamus::{
 };
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, NeuronId, NeuronType, Phase, Reward,
+    Level, NeuronId, NeuronType, Reward,
 };
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
@@ -1030,9 +1030,13 @@ impl Brain {
     /// just filter them all out as is_new=false.
     fn create_new_sensory_neurons(&mut self, frame_neurons: &FrameNeurons, timings: &mut FrameTimings) {
         let t = Instant::now();
+        // Sensory neurons get the brain-wide pattern_forget_rate so their hosted spatial- and
+        // temporal-correction children decay at the same rate as children of pattern neurons.
+        // Sensory neurons themselves never die (no parent), so this rate only affects child decay.
+        let forget_rate = self.thalamus.pattern_forget_rate();
         let specs: Vec<NeuronCreateSpec> = frame_neurons.events.iter()
             .filter(|p| p.is_new)
-            .map(|p| NeuronCreateSpec { id: p.id, forget_rate: 0.0, connections: None })
+            .map(|p| NeuronCreateSpec { id: p.id, forget_rate, connections: None })
             .collect();
         if !specs.is_empty() {
             self.thalamus.create_neurons(&specs);
@@ -1098,29 +1102,31 @@ impl Brain {
 
     // ── Level processing ────────────────────────────────────────────────────
 
-    /// Run a level-by-level sweep over `phase`'s level index. Shared engine for
-    /// `process_spatial` and `process_temporal` — they differ only in which connection
-    /// slot drives matching/voting and which level index is iterated.
+    /// Run the spatial level-by-level sweep over `spatial_level_index`.
+    /// Walks levels bottom-up: at each level, runs the d=0 co-activation pass over every active
+    /// neuron, activates any matched higher-level pattern at level+1, and stops when no new
+    /// activations push the max-level higher.
     ///
-    /// Returns accumulated votes, deferred neuron creation specs, raw dispatch results,
-    /// plus the fired set and the subsumed set, which the apex handoff consumes to
-    /// bridge spatial → temporal. Per-section timings are written directly into
-    /// `timings` (using `+=` so spatial and temporal sweeps accumulate together).
-    fn process_levels(&mut self, phase: Phase, timings: &mut FrameTimings) -> SweepResult {
+    /// Returns accumulated votes, deferred neuron creation specs, raw dispatch results, plus the
+    /// fired set and the subsumed set that the apex handoff consumes to bridge spatial → temporal.
+    /// Per-section timings are written into `timings` (with `+=` so the temporal sweep's flush
+    /// folds into the same buckets).
+    fn process_spatial_levels(&mut self, timings: &mut FrameTimings) -> SweepResult {
 
-        // The "sensory" axis the thalamus uses for vote-error evaluation and connection learning.
-        // Both phases read it at age=0 of their own index — for temporal that's the current frame's
-        // sensory inputs; for spatial it's the (so far) co-active set the sweep started from.
-        let sensory_neurons = self.memory.get_base_level(phase);
+        // The sensory axis the thalamus uses for vote-error evaluation and connection learning.
+        // For spatial this is the co-active set at level 0 of the spatial index — a single set,
+        // no recency dimension.
+        let sensory_neurons = self.memory.get_spatial_base_level();
 
-        // get the maximum active level from memory index
-        let mut max_active_level = self.memory.get_max_active_level(phase);
+        // Maximum currently-active spatial level. Walked bottom-up; can grow as patterns at
+        // higher levels fire and get activated.
+        let mut max_active_level = self.memory.get_spatial_max_active_level();
 
-        // track newly-created error pattern ids so they are excluded from the level
-        // pass at their own level (prevents double connection-learning and context leak)
+        // Track newly-created error pattern ids so they are excluded from the level pass at
+        // their own level (prevents double connection-learning and context leak).
         let mut new_error_pattern_ids: FxHashSet<NeuronId> = FxHashSet::default();
 
-        // accumulate votes, new neuron specs and context updates across levels
+        // Accumulate votes, new neuron specs, and dispatch results across levels.
         let mut votes = Vec::new();
         let mut neuron_specs = Vec::new();
         let mut dispatch_results = Vec::new();
@@ -1128,89 +1134,181 @@ impl Brain {
         let mut orch_timings = crate::thalamus::OrchestrationTimings::default();
         let mut mem_timings = MemoryTimings::default();
 
-        // Spatial apex tracking: any neuron whose child pattern fires at this level+1 is "subsumed";
-        // the apex set is fired \ subsumed and feeds temporal_level_index[0] after the sweep.
-        // Temporal does not consume these but populates them harmlessly.
+        // Spatial apex tracking: any neuron whose child pattern fires at level+1 is "subsumed".
+        // The apex set is `fired \ subsumed` and feeds `temporal_level_index[0]` via the handoff.
         let mut fired_set: FxHashSet<NeuronId> = FxHashSet::default();
         let mut subsumed_set: FxHashSet<NeuronId> = FxHashSet::default();
 
-        // process neurons level-by-level
+        // Process neurons level-by-level — Op-3 dispatch is the only per-level round-trip.
         let mut level: Level = 0;
         loop {
-            if self.debug { println!("Processing {:?} level {}", phase, level); }
+            if self.debug { println!("Processing Spatial level {}", level); }
 
-            // get level neurons (mutable borrow returned, will be written back)
+            // Get the level's active neuron ids. Spatial neurons carry no per-neuron state, so
+            // this is just a flat set.
             let t = Instant::now();
-            let mut level_neurons = self.memory.get_level_neurons(level, phase);
+            let level_neuron_ids = self.memory.get_spatial_level_neurons(level);
             mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
 
-            // Snapshot what fired at this level. Used by the spatial sweep to compute the apex set; harmless for temporal.
-            for &nid in level_neurons.keys() { fired_set.insert(nid); }
+            // Snapshot what fired at this level. Used by the apex handoff after the sweep.
+            for &nid in &level_neuron_ids { fired_set.insert(nid); }
 
-            // process level: aggregate view, recognize patterns, create error corrections, collect votes.
-            // Spatial gets an empty rewards slice — co-activation has no reward semantics, and
-            // process_temporal hasn't pushed this frame's rewards yet. Temporal gets the full
-            // history (push_rewards already ran at the top of process_temporal).
-            let rewards_slice: &[FxHashMap<ChannelId, Reward>] = match phase {
-                Phase::Spatial => &[],
-                Phase::Temporal => &self.rewards,
-            };
-            let result = self.thalamus.process_level(
+            // Process the level: aggregate view, match spatial patterns, generate d=0 votes.
+            let result = self.thalamus.process_spatial_level(
                 level,
-                &mut level_neurons,
-                self.memory.depth(),
+                &level_neuron_ids,
                 &sensory_neurons,
-                rewards_slice,
                 self.frame_number,
                 &mut new_error_pattern_ids,
                 self.learning,
-                phase,
             );
             orch_timings.add(&result.orchestration);
 
-            // Write back mutated level neurons to memory — temporal only.
-            // Spatial state is ephemeral by design (nothing reads it across the level loop, and
-            // the index gets wiped at the top of every frame), so persisting the mutations is
-            // pure overhead on the spatial path.
-            if phase == Phase::Temporal {
-                let t = Instant::now();
-                self.memory.write_back_level_neurons(&level_neurons);
-                mem_timings.write_back_level_neurons += t.elapsed().as_secs_f64();
-            }
+            // Spatial state is ephemeral — nothing to write back, by design.
 
-            // activate matched patterns and newly-created error patterns at level+1
-            // Each activation marks its parent_id as subsumed — that parent's role this frame is
-            // already represented by the higher-level pattern it activated.
+            // Activate matched patterns at level+1. Each activation marks its parent_id as
+            // subsumed — that parent's role this frame is already represented by the
+            // higher-level pattern it activated.
             let t = Instant::now();
             for activation in &result.activations {
-                self.memory.activate_pattern(activation.pattern_id, level + 1, activation.parent_id, activation.age, phase);
+                self.memory.activate_spatial_pattern(activation.pattern_id, level + 1);
                 subsumed_set.insert(activation.parent_id);
             }
             mem_timings.activate_patterns += t.elapsed().as_secs_f64();
 
-            // if we produced any activations, increment the max active level as needed
+            // If we produced any activations, push the max active level up.
             if !result.activations.is_empty() {
                 let new_level = (level + 1) as usize;
-                if new_level > max_active_level {
-                    max_active_level = new_level;
-                }
+                if new_level > max_active_level { max_active_level = new_level; }
             }
 
-            // accumulate this level's votes, neuron specs and context updates
+            // Accumulate this level's votes, neuron specs, and dispatch results.
             votes.extend(result.votes);
             neuron_specs.extend(result.neuron_specs);
-            for col_res in &result.results {
-                neuron_timings.add(&col_res.timings);
-            }
+            for col_res in &result.results { neuron_timings.add(&col_res.timings); }
             dispatch_results.push(result.results);
 
-            // if we reached the maximum level and no more patterns are recognized, exit
+            // If we reached the top of the active hierarchy, exit.
             if level as usize >= max_active_level { break; }
             level += 1;
         }
 
-        // Flush this sweep's sub-bucket accumulators into the frame-level timings.
-        // `+=` lets spatial and temporal sweeps fold into the same fields without overwriting.
+        Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
+        SweepResult { votes, neuron_specs, dispatch_results, fired_set, subsumed_set }
+    }
+
+    /// Run the temporal level-by-level sweep over `temporal_level_index`.
+    /// Walks levels bottom-up: at each level, runs the d>0 sequence pass over every (active
+    /// neuron, age) pair, activates any matched higher-level pattern at level+1, and stops
+    /// when no new activations push the max-level higher.
+    ///
+    /// Returns accumulated votes, deferred neuron creation specs, raw dispatch results, plus the
+    /// fired and subsumed sets (populated harmlessly — the apex handoff doesn't consume them on
+    /// the temporal side). Per-section timings are written into `timings` (with `+=` so the
+    /// spatial sweep's flush folds into the same buckets).
+    fn process_temporal_levels(&mut self, timings: &mut FrameTimings) -> SweepResult {
+
+        // The sensory axis the thalamus uses for vote-error evaluation and connection learning.
+        // For temporal this is the level-0 active set per recency slot — index 0 is the current
+        // frame, index 1 is the previous frame, etc.
+        let sensory_neurons = self.memory.get_temporal_base_level();
+
+        // Maximum currently-active temporal level. Walked bottom-up; can grow as patterns at
+        // higher levels fire and get activated.
+        let mut max_active_level = self.memory.get_temporal_max_active_level();
+
+        // Track newly-created error pattern ids so they are excluded from the level pass at
+        // their own level (prevents double connection-learning and context leak).
+        let mut new_error_pattern_ids: FxHashSet<NeuronId> = FxHashSet::default();
+
+        // Accumulate votes, new neuron specs, and dispatch results across levels.
+        let mut votes = Vec::new();
+        let mut neuron_specs = Vec::new();
+        let mut dispatch_results = Vec::new();
+        let mut neuron_timings = crate::neuron::NeuronOpTimings::default();
+        let mut orch_timings = crate::thalamus::OrchestrationTimings::default();
+        let mut mem_timings = MemoryTimings::default();
+
+        // Fired / subsumed are populated harmlessly on the temporal side — the apex handoff
+        // only consumes them from the spatial sweep — but the SweepResult shape carries them
+        // so the spatial and temporal paths share return types.
+        let mut fired_set: FxHashSet<NeuronId> = FxHashSet::default();
+        let mut subsumed_set: FxHashSet<NeuronId> = FxHashSet::default();
+
+        // Process neurons level-by-level — Op-3 dispatch is the only per-level round-trip.
+        let mut level: Level = 0;
+        loop {
+            if self.debug { println!("Processing Temporal level {}", level); }
+
+            // Get the level's active neurons with their per-age states. Mutated downstream by
+            // the level dispatch (votes/context/threshold written into LevelAgeState) and
+            // written back into memory below.
+            let t = Instant::now();
+            let mut level_neurons = self.memory.get_temporal_level_neurons(level);
+            mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
+
+            // Snapshot what fired at this level. Harmless for temporal (apex doesn't consume).
+            for &nid in level_neurons.keys() { fired_set.insert(nid); }
+
+            // Process the level: aggregate view, recognize temporal patterns, mint error
+            // corrections, collect d>0 votes.
+            let result = self.thalamus.process_temporal_level(
+                level,
+                &mut level_neurons,
+                self.memory.depth(),
+                &sensory_neurons,
+                &self.rewards,
+                self.frame_number,
+                &mut new_error_pattern_ids,
+                self.learning,
+            );
+            orch_timings.add(&result.orchestration);
+
+            // Write the mutated per-neuron state back into memory for next-frame evaluation.
+            // Temporal persists per-neuron state across frames (unlike spatial).
+            let t = Instant::now();
+            self.memory.write_back_level_neurons(&level_neurons);
+            mem_timings.write_back_level_neurons += t.elapsed().as_secs_f64();
+
+            // Activate matched patterns at level+1. Each activation marks its parent_id as
+            // subsumed — that parent's role this frame is already represented by the
+            // higher-level pattern it activated, so vote generation suppresses it.
+            let t = Instant::now();
+            for activation in &result.activations {
+                self.memory.activate_temporal_pattern(activation.pattern_id, level + 1, activation.parent_id, activation.age);
+                subsumed_set.insert(activation.parent_id);
+            }
+            mem_timings.activate_patterns += t.elapsed().as_secs_f64();
+
+            // If we produced any activations, push the max active level up.
+            if !result.activations.is_empty() {
+                let new_level = (level + 1) as usize;
+                if new_level > max_active_level { max_active_level = new_level; }
+            }
+
+            // Accumulate this level's votes, neuron specs, and dispatch results.
+            votes.extend(result.votes);
+            neuron_specs.extend(result.neuron_specs);
+            for col_res in &result.results { neuron_timings.add(&col_res.timings); }
+            dispatch_results.push(result.results);
+
+            // If we reached the top of the active hierarchy, exit.
+            if level as usize >= max_active_level { break; }
+            level += 1;
+        }
+
+        Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
+        SweepResult { votes, neuron_specs, dispatch_results, fired_set, subsumed_set }
+    }
+
+    /// Roll one sweep's sub-bucket accumulators into the frame-level timings. Uses += so spatial
+    /// and temporal sweeps fold into the same fields without overwriting each other.
+    fn flush_sweep_timings(
+        timings: &mut FrameTimings,
+        neuron_timings: &crate::neuron::NeuronOpTimings,
+        orch_timings: &crate::thalamus::OrchestrationTimings,
+        mem_timings: &MemoryTimings,
+    ) {
         timings.neuron_learn_connections           += neuron_timings.learn_connections;
         timings.neuron_recognize_patterns          += neuron_timings.recognize_patterns;
         timings.neuron_correct_errors              += neuron_timings.correct_errors;
@@ -1225,8 +1323,6 @@ impl Brain {
         timings.mem_get_level_neurons              += mem_timings.get_level_neurons;
         timings.mem_write_back_level_neurons       += mem_timings.write_back_level_neurons;
         timings.mem_activate_patterns              += mem_timings.activate_patterns;
-
-        SweepResult { votes, neuron_specs, dispatch_results, fired_set, subsumed_set }
     }
 
     /// Full spatial phase: activate this frame's sensory events in the spatial index, run the d=0
@@ -1251,7 +1347,7 @@ impl Brain {
         // Run the d=0 co-activation sweep over spatial_level_index.
         // Walks every active spatial level, matches the active set against each parent's routing table, casts same-frame predictions, and propagates matched patterns up to level+1.
         // Returns the fired_set (everything that activated anywhere) and subsumed_set (anything whose parent pattern fired at level+1) — the two sets the apex handoff needs.
-        let mut spatial = self.process_levels(Phase::Spatial, timings);
+        let mut spatial = self.process_spatial_levels(timings);
 
         // Mint corrections for parents whose d=0 predictions mismatched the actual fired set.
         // Each correction is a new pattern that gets installed in its parent's routing table for next frame's matching pass.
@@ -1308,7 +1404,7 @@ impl Brain {
         // Run the d>0 sequence sweep over temporal_level_index.
         // temporal_level_index[0] now holds spatial's apex set plus the carry-forward actions just activated above.
         // The sweep walks up through temporal patterns that match the recent activation history, casting next-frame votes that infer_neurons will aggregate into a consensus.
-        let result = self.process_levels(Phase::Temporal, timings);
+        let result = self.process_temporal_levels(timings);
 
         timings.process_temporal = t.elapsed().as_secs_f64();
         result

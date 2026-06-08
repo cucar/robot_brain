@@ -19,10 +19,10 @@ use crate::column::{
     ColumnProcessResult, ConnectionSpec, DeleteOp,
     NeuronCreateSpec,
 };
-use crate::context::TemporalContext;
+use crate::context::{SpatialContext, TemporalContext};
 use crate::diagnostics::{InferenceResultItem, InferenceType};
 use crate::neuron::{
-    ActiveNeuron, AgeState, ContextRefEntry, ContextRefUpdate,
+    ActiveNeuron, AgeState, ContextRefEntry, TemporalContextRefUpdate, SpatialContextRefUpdate,
     Correction, ErrorFeedback,
     SerializedNeuron, Vote,
 };
@@ -30,7 +30,7 @@ use crate::quantizer::{QuantizeMode, Quantizer};
 use crate::region::Region;
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, NeuronId, NeuronType, Phase, Reward,
+    Level, NeuronId, NeuronType, Reward,
 };
 
 // ── Supporting structs ──────────────────────────────────────────────────────
@@ -398,30 +398,23 @@ impl Thalamus {
         id
     }
 
-    /// Allocate a pattern neuron id and build its creation spec. Resolves connection
-    /// data (channel, reward) using Thalamus-local lookups so the spec is self-contained
-    /// and can cross the MPI boundary. Does NOT construct the Neuron — that happens in
-    /// Column.create_neurons via create_neurons.
-    /// Does NOT touch the parent's routing table (that happens inside parent.process_frame
-    /// via add_pattern) and does NOT register death (death frame is known only after
-    /// parent.add_pattern runs).
-    pub fn allocate_pattern_neuron(
+    /// Allocate a TEMPORAL pattern neuron. Pre-wires d=1..age connections toward each per-age
+    /// active set, filtered to the parent's neighbor channels — the new pattern only pre-wires
+    /// toward channels in the parent's neighbor graph, matching how learn_temporal_connections
+    /// restricts future strengthening. The pattern occupies temporal level=parent.level+1; its
+    /// spatial_level defaults to 0.
+    /// Does NOT touch the parent's routing table (that happens inside parent.process_temporal_frame
+    /// via add_temporal_pattern) and does NOT register death (death frame is known only after
+    /// parent.add_temporal_pattern runs).
+    pub fn allocate_temporal_pattern_neuron(
         &mut self,
         level: Level,
         parent_id: NeuronId,
         age: Distance,
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
-        phase: Phase,
     ) -> PatternNeuronSpec {
-
-        // resolve connection spec using thalamus-local lookups (channel, reward).
-        // Temporal corrections pre-wire d=1..age connections toward each per-age active set.
-        // Spatial corrections are allocated at age=0 with empty connections; learn_connections
-        // will fill connections[0] on future frames as the correction co-fires with others.
-        // Connections are filtered to the parent's neighbor channels — the new pattern only
-        // pre-wires toward channels in the parent's neighbor graph, matching how learn_connections
-        // restricts future strengthening.
+        // resolve connection spec using thalamus-local lookups (channel, reward)
         let parent_channel = self.get_neuron_channel_id(parent_id).unwrap_or(0);
         let mut connections = Vec::new();
         for a in 0..age.min(sensory_neurons.len() as u32) {
@@ -445,26 +438,51 @@ impl Thalamus {
         self.next_neuron_id += 1;
 
         // register metadata centrally (Neuron construction deferred to create_neurons).
-        // Temporal corrections occupy temporal level=parent.level+1; their spatial_level defaults to 0.
-        // Spatial corrections occupy spatial_level=parent.spatial_level+1; their temporal level stays 0
-        // (they enter temporal via the apex handoff at temporal_level_index[0]).
         // Pattern neurons have NO channel — they emerge from cross-channel correlations. Callers
         // that need a channel id will receive None from `get_neuron_channel_id`, which their
         // neighbor lookups should treat as no-restriction.
         self.neuron_parents.insert(id, parent_id);
-        match phase {
-            Phase::Temporal => {
-                self.neuron_levels.insert(id, level);
-                self.increment_level_count(level);
-            }
-            Phase::Spatial => {
-                self.neuron_levels.insert(id, 0);
-                self.neuron_spatial_levels.insert(id, level);
-                self.increment_level_count(0);
-            }
-        }
+        self.neuron_levels.insert(id, level);
+        self.increment_level_count(level);
 
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
+    }
+
+    /// The brain-wide pattern forget rate. Sensory neuron creation reads this so sensory neurons
+    /// can decay their CHILDREN at the same rate pattern neurons do — sensory neurons themselves
+    /// never die (no parent → never reaped), but their `pattern_forget_rate` field drives the
+    /// decay of their hosted spatial-correction and temporal-correction children. Setting it to 0
+    /// on sensories was a bug — it made every child pattern hosted on a sensory immortal.
+    pub fn pattern_forget_rate(&self) -> f64 {
+        self.pattern_forget_rate
+    }
+
+    /// Allocate a SPATIAL pattern neuron. No pre-wired connections — spatial corrections are
+    /// allocated with empty connections; learn_spatial_connections will fill them on future
+    /// frames as the correction co-fires with others. The pattern occupies
+    /// spatial_level=parent.spatial_level+1; its temporal level stays 0 (it enters temporal via
+    /// the apex handoff at temporal_level_index[0]).
+    /// Does NOT touch the parent's routing table (that happens inside column.install_spatial_corrections
+    /// via add_spatial_pattern) and does NOT register death (death frame is known only after
+    /// parent.add_spatial_pattern runs).
+    pub fn allocate_spatial_pattern_neuron(
+        &mut self,
+        level: Level,
+        parent_id: NeuronId,
+    ) -> PatternNeuronSpec {
+        // allocate id and build the spec for Column.create_neurons
+        let id = self.next_neuron_id;
+        self.next_neuron_id += 1;
+
+        // register metadata centrally (Neuron construction deferred to create_neurons).
+        // Spatial pattern neurons sit at temporal level 0 — they enter the temporal sweep via the
+        // apex handoff, NOT as a pattern at temporal level+1.
+        self.neuron_parents.insert(id, parent_id);
+        self.neuron_levels.insert(id, 0);
+        self.neuron_spatial_levels.insert(id, level);
+        self.increment_level_count(0);
+
+        PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections: Vec::new() }
     }
 
     // ── Neuron metadata getters ─────────────────────────────────────────────
@@ -755,7 +773,11 @@ impl Thalamus {
                     action_neurons.push(lookup.id);
                 }
                 if lookup.is_new {
-                    new_neuron_specs.push(NeuronCreateSpec { id: lookup.id, forget_rate: 0.0, connections: None });
+                    // Action neurons get the brain-wide pattern_forget_rate for the same reason as
+                    // sensory event neurons: they themselves never die, but their hosted children
+                    // (any pattern corrections that end up parented by an action) need their decay
+                    // formula to use a non-zero rate. Zero would make every child pattern immortal.
+                    new_neuron_specs.push(NeuronCreateSpec { id: lookup.id, forget_rate: self.pattern_forget_rate, connections: None });
                 }
             }
 
@@ -809,7 +831,74 @@ impl Thalamus {
     /// creation specs, raw dispatch results) alongside activations and votes.
     /// The caller accumulates deferred work across levels and flushes it once
     /// after the loop via apply_level_results.
-    pub fn process_level(
+    /// Spatial sweep dispatch for one level. Builds the spatial level_context, runs the d=0
+    /// co-activation work on every active neuron, collects activations + votes.
+    /// The caller accumulates deferred work across levels and flushes it once after the loop
+    /// via apply_level_results.
+    pub fn process_spatial_level(
+        &mut self,
+        level: Level,
+        level_neuron_ids: &FxHashSet<NeuronId>,
+        sensory_neurons: &FxHashSet<NeuronId>,
+        frame_number: FrameNumber,
+        new_error_pattern_ids: &mut FxHashSet<NeuronId>,
+        learning: bool,
+    ) -> ProcessLevelResult {
+        let mut orchestration = OrchestrationTimings::default();
+
+        // Aggregate per-neuron work and build the shared spatial level context.
+        // Non-learning mode still builds the level context so pattern activation can run.
+        let t = std::time::Instant::now();
+        let (tasks, level_context) = self.get_spatial_level_tasks(level_neuron_ids, new_error_pattern_ids);
+        orchestration.get_level_tasks = t.elapsed().as_secs_f64();
+
+        // Op-3: dispatch processSpatialFrame — the only cross-region round-trip in the level loop.
+        let t = std::time::Instant::now();
+        let results = self.dispatch_spatial_frame(&tasks, &level_context, new_error_pattern_ids, sensory_neurons, frame_number, learning);
+        orchestration.dispatch_frame = t.elapsed().as_secs_f64();
+
+        // extract activations inline — needed to feed the next level
+        let t = std::time::Instant::now();
+        let mut activations = Vec::new();
+        for result in &results {
+            self.collect_activations(result, &mut activations);
+        }
+        orchestration.collect_activations = t.elapsed().as_secs_f64();
+
+        // Spatial doesn't persist per-neuron state, so there's no "stale state" to clear and
+        // no need to write back per-age votes — the spatial sweep doesn't reread them next frame.
+        // We still collect votes for downstream consumers (e.g. mint_spatial_corrections reads
+        // them through the dispatch results, not through level_neurons).
+        let mut votes = Vec::new();
+        for result in &results {
+            for vote_bucket in &result.votes {
+                for v in &vote_bucket.votes {
+                    votes.push(FlatVote {
+                        voter_id: result.parent_id,
+                        neuron_id: v.neuron_id,
+                        distance: v.distance,
+                        strength: v.strength,
+                        reward: v.reward,
+                    });
+                }
+            }
+        }
+
+        if self.debug && !activations.is_empty() {
+            let detail: Vec<String> = activations.iter()
+                .map(|a| format!("parent={}, age={}, pattern={}", a.parent_id, a.age, a.pattern_id))
+                .collect();
+            println!("Spatial level {}: {} activations {}", level, activations.len(), detail.join("; "));
+        }
+
+        ProcessLevelResult { activations, votes, neuron_specs: Vec::new(), results, orchestration }
+    }
+
+    /// Temporal sweep dispatch for one level. Builds the temporal level_context (mints temporal
+    /// corrections for prior-frame vote misses), runs d>0 work per (neuron, age), collects votes.
+    /// The caller accumulates deferred work across levels and flushes it once after the loop
+    /// via apply_level_results.
+    pub fn process_temporal_level(
         &mut self,
         level: Level,
         level_neurons: &mut FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>,
@@ -819,9 +908,7 @@ impl Thalamus {
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
         learning: bool,
-        phase: Phase,
     ) -> ProcessLevelResult {
-
         let mut orchestration = OrchestrationTimings::default();
 
         // Aggregate per-neuron work, build the shared level context, allocate error pattern specs.
@@ -829,17 +916,13 @@ impl Thalamus {
         // It skips error-correction allocation and per-age error feedback recording.
         let t = std::time::Instant::now();
         let (tasks, level_context, new_neuron_specs) =
-            self.get_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids, learning, phase);
+            self.get_temporal_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids, learning);
         orchestration.get_level_tasks = t.elapsed().as_secs_f64();
 
-        // Op-3: dispatch processFrame — the only cross-region round-trip in the level loop.
-        // current_rewards is Option to keep spatial reward-free: spatial passes an empty rewards
-        // slice (rewards.first() == None), so dispatch_frame skips reward lookup and treats every
-        // active as reward=0.0. Temporal passes a non-empty slice and gets normal action-reward
-        // resolution.
+        // Op-3: dispatch processTemporalFrame — the only cross-region round-trip in the level loop.
         let t = std::time::Instant::now();
         let current_rewards = rewards.first();
-        let results = self.dispatch_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], current_rewards, frame_number, learning, phase);
+        let results = self.dispatch_temporal_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], current_rewards, frame_number, learning);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
         // extract activations inline — needed to feed the next level
@@ -883,7 +966,7 @@ impl Thalamus {
         }
 
         // Op-5: batch contextRef updates across levels, then dispatch once
-        let mut context_ref_updates: FxHashMap<NeuronId, Vec<ContextRefUpdate>> = FxHashMap::default();
+        let mut context_ref_updates: FxHashMap<NeuronId, Vec<TemporalContextRefUpdate>> = FxHashMap::default();
         for results in dispatch_results {
             for result in results {
                 Self::collect_context_ref_updates(result, &mut context_ref_updates);
@@ -891,7 +974,7 @@ impl Thalamus {
         }
 
         if !context_ref_updates.is_empty() {
-            let update_batch: Vec<(NeuronId, Vec<ContextRefUpdate>)> = context_ref_updates.into_iter().collect();
+            let update_batch: Vec<(NeuronId, Vec<TemporalContextRefUpdate>)> = context_ref_updates.into_iter().collect();
             self.dispatch_context_ref_updates(&update_batch);
         }
     }
@@ -938,10 +1021,6 @@ impl Thalamus {
         let l0_event_set: FxHashSet<NeuronId> = by_level.get(&0)
             .map(|v| v.iter().copied().collect())
             .unwrap_or_default();
-
-        // allocate_pattern_neuron at age=0 doesn't consume sensory_neurons (its inner loop is skipped),
-        // so an empty slice is fine here.
-        let empty: Vec<FxHashSet<NeuronId>> = Vec::new();
 
         for results in spatial_dispatch_results {
             for res in results {
@@ -1018,24 +1097,10 @@ impl Thalamus {
                     if neighborhood.is_empty() { continue; }
 
                     // Allocate the correction at one level deeper in the parent's spatial hierarchy.
-                    // Spatial corrections are allocated at age=0 — allocate_pattern_neuron's reward
-                    // loop runs `for a in 0..age`, so age=0 skips it entirely. Passing &[] for rewards
-                    // is safe and keeps the spatial pipeline free of reward state, which is a
-                    // temporal-only concern.
-                    let spec = self.allocate_pattern_neuron(
-                        parent_level + 1,
-                        parent_id,
-                        0,
-                        &empty,
-                        &[],
-                        Phase::Spatial,
-                    );
+                    let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id);
 
-                    // TemporalContext entries: the parent's level-k neighborhood at distance=0.
-                    let context_entries: Vec<ContextRefEntry> = neighborhood.iter()
-                        .copied()
-                        .map(|id| ContextRefEntry { neuron_id: id, distance: 0 })
-                        .collect();
+                    // Spatial context: the parent's level-k neighborhood (no distance dimension).
+                    let context_neuron_ids: Vec<NeuronId> = neighborhood.iter().copied().collect();
 
                     new_specs.push(NeuronCreateSpec {
                         id: spec.id,
@@ -1045,7 +1110,7 @@ impl Thalamus {
                     install_ops.push(SpatialInstallOp {
                         parent_id,
                         pattern_id: spec.id,
-                        context_entries,
+                        context_neuron_ids,
                     });
                     self.spatial_corrections_minted += 1;
                 }
@@ -1091,32 +1156,90 @@ impl Thalamus {
             by_region[r].push(op);
         }
 
-        // Dispatch and collect deaths + context refs.
+        // Dispatch and collect deaths + spatial context refs as flat lists.
         let mut all_deaths: Vec<(NeuronId, FrameNumber)> = Vec::new();
-        let mut all_context_refs: FxHashMap<NeuronId, Vec<ContextRefUpdate>> = FxHashMap::default();
+        let mut all_context_refs: Vec<SpatialContextRefUpdate> = Vec::new();
         for (r, region_ops) in by_region.into_iter().enumerate() {
             if region_ops.is_empty() { continue; }
             let result = self.region_list[r].install_spatial_corrections(region_ops, frame_number);
             all_deaths.extend(result.deaths);
-            for (target_id, updates) in result.context_ref_updates {
-                all_context_refs.entry(target_id).or_insert_with(Vec::new).extend(updates);
-            }
+            all_context_refs.extend(result.context_ref_updates);
         }
 
         for (id, df) in all_deaths {
             self.register_death(id, df);
         }
 
+        // Bucket the flat list by target neuron_id at the dispatch boundary, then route.
+        // Parallel to how `apply_level_results` buckets temporal updates before dispatching.
         if !all_context_refs.is_empty() {
-            let update_batch: Vec<(NeuronId, Vec<ContextRefUpdate>)> = all_context_refs.into_iter().collect();
-            self.dispatch_context_ref_updates(&update_batch);
+            let mut by_target: FxHashMap<NeuronId, Vec<SpatialContextRefUpdate>> = FxHashMap::default();
+            for upd in all_context_refs {
+                by_target.entry(upd.neuron_id).or_insert_with(Vec::new).push(upd);
+            }
+            let update_batch: Vec<(NeuronId, Vec<SpatialContextRefUpdate>)> = by_target.into_iter().collect();
+            self.dispatch_spatial_context_ref_updates(&update_batch);
         }
     }
 
-    /// Walk the active neurons at this level, contribute to the shared level context,
+    /// Spatial counterpart of `dispatch_context_ref_updates` — routes SpatialContextRefUpdates
+    /// to the columns that own each target neuron, then dispatches in parallel.
+    fn dispatch_spatial_context_ref_updates(&mut self, update_batch: &[(NeuronId, Vec<SpatialContextRefUpdate>)]) {
+        let mut by_region: Vec<Vec<(NeuronId, Vec<SpatialContextRefUpdate>)>> = (0..self.regions).map(|_| Vec::new()).collect();
+        for (target_id, updates) in update_batch {
+            let r = self.route_neuron(*target_id);
+            by_region[r].push((*target_id, updates.clone()));
+        }
+        for (r, region_updates) in by_region.into_iter().enumerate() {
+            if region_updates.is_empty() { continue; }
+            self.region_list[r].update_spatial_context_refs(&region_updates);
+        }
+    }
+
+    /// SPATIAL: walk the active neurons at this level and build the shared SpatialContext.
+    /// Spatial corrections are minted in a separate pass (`mint_spatial_corrections`) after the
+    /// sweep, NOT here — so no corrections, no per-age error feedback, no new_neuron_specs.
+    /// Action neurons are NOT skipped — spatial co-activation includes everything that fired.
+    fn get_spatial_level_tasks(
+        &mut self,
+        level_neuron_ids: &FxHashSet<NeuronId>,
+        new_error_pattern_ids: &FxHashSet<NeuronId>,
+    ) -> (Vec<LevelTask>, SpatialContext) {
+        let _ = level_neuron_ids; // silence unused warning when no neurons fired
+        let mut tasks = Vec::new();
+        let mut level_context = SpatialContext::new();
+
+        for &neuron_id in level_neuron_ids {
+
+            // New error patterns only contribute to level_context — they have no children, history,
+            // or votes in their birth frame, so they skip dispatch.
+            if new_error_pattern_ids.contains(&neuron_id) {
+                level_context.add_neuron(neuron_id, 1.0);
+                continue;
+            }
+
+            // All other active neurons contribute to level_context AND get a dispatch task.
+            level_context.add_neuron(neuron_id, 1.0);
+
+            // Spatial age_states is always {0 → default}. Kept in the LevelTask shape so column
+            // dispatch can stay one type; only the AgeState at age=0 is read inside the neuron.
+            let mut age_states = FxHashMap::default();
+            age_states.insert(0, AgeState { activated_pattern_id: None });
+            tasks.push(LevelTask {
+                neuron_id,
+                age_states,
+                corrections: Vec::new(),
+                error_feedback: Vec::new(),
+            });
+        }
+
+        (tasks, level_context)
+    }
+
+    /// TEMPORAL: walk the active neurons at this level, contribute to the shared TemporalContext,
     /// pre-create error-correction pattern neurons for any (neuron, age) whose previous votes
     /// mismatched reality, and emit a task per neuron.
-    fn get_level_tasks(
+    fn get_temporal_level_tasks(
         &mut self,
         level: Level,
         level_neurons: &FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>,
@@ -1125,14 +1248,13 @@ impl Thalamus {
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
         learning: bool,
-        phase: Phase,
     ) -> (Vec<LevelTask>, TemporalContext, Vec<NeuronCreateSpec>) {
         let mut tasks = Vec::new();
         let mut level_context = TemporalContext::new();
         let mut new_neuron_specs = Vec::new();
 
         // collect neuron ids first to avoid borrow issues (level_neurons is immutable here,
-        // but self is borrowed mutably for allocate_pattern_neuron)
+        // but self is borrowed mutably for allocate_temporal_pattern_neuron)
         let neuron_entries: Vec<(NeuronId, FxHashMap<Distance, LevelAgeState>)> = level_neurons
             .iter()
             .map(|(&nid, ages)| (nid, ages.clone()))
@@ -1142,30 +1264,18 @@ impl Thalamus {
             // skip action neurons for learning or contexts if the channel learns without them
             if self.skip_action_neuron(*neuron_id) { continue; }
 
-            // New error patterns only contribute to levelContext — they have no children,
-            // history, or votes in their birth frame, so they skip dispatch and corrections.
+            // New error patterns only contribute to level_context — they have no children, history,
+            // or votes in their birth frame, so they skip dispatch and corrections.
             if new_error_pattern_ids.contains(neuron_id) {
-                match phase {
-                    Phase::Spatial => {
-                        // Spatial: error pattern co-active on the current frame. No age dimension.
-                        // Stored at distance=0 because TemporalContext is the shared downstream
-                        // representation — the value is a placeholder, not a real distance.
-                        level_context.add_neuron(*neuron_id, 0, 1.0);
-                    }
-                    Phase::Temporal => {
-                        // Temporal: every age>0 entry is a past predictor of the parent.
-                        for (&age, _) in age_states {
-                            if age > 0 { level_context.add_neuron(*neuron_id, age, 1.0); }
-                        }
-                    }
+                for (&age, _) in age_states {
+                    if age > 0 { level_context.add_neuron(*neuron_id, age, 1.0); }
                 }
                 continue;
             }
 
             // Populate level_context and (in learning mode) collect error corrections + per-age accuracy feedback.
-            // 1b: spatial does not yet mint corrections — get_level_corrections returns empty for Spatial.
-            let (corrections, error_feedback) = self.get_level_corrections(
-                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number, learning, phase,
+            let (corrections, error_feedback) = self.get_temporal_level_corrections(
+                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number, learning,
             );
 
             // extract creation specs for Op-4
@@ -1183,7 +1293,6 @@ impl Thalamus {
                 .map(|(&age, state)| (age, AgeState { activated_pattern_id: state.activated_pattern_id }))
                 .collect();
 
-            // emit the task to be dispatched to the neuron
             tasks.push(LevelTask {
                 neuron_id: *neuron_id,
                 age_states: neuron_age_states,
@@ -1195,11 +1304,11 @@ impl Thalamus {
         (tasks, level_context, new_neuron_specs)
     }
 
-    /// For a single active neuron: add its age>0 entries to the shared levelContext and create
-    /// error-correction pattern neurons for ages whose previous votes mismatched reality.
-    /// Non-learning mode still populates level_context (so pattern recognition at the next level has its context).
-    /// It skips everything else — no accuracy-stats feedback, no error pattern allocation.
-    fn get_level_corrections(
+    /// For a single active temporal neuron: add its age>0 entries to the shared level_context and
+    /// create error-correction pattern neurons for ages whose previous votes mismatched reality.
+    /// Non-learning mode still populates level_context (so pattern recognition at the next level
+    /// has its context). It skips everything else.
+    fn get_temporal_level_corrections(
         &mut self,
         neuron_id: NeuronId,
         level: Level,
@@ -1209,24 +1318,13 @@ impl Thalamus {
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
         learning: bool,
-        phase: Phase,
     ) -> (Vec<CorrectionSpec>, Vec<ErrorFeedback>) {
-        // Spatial branch: contribute one co-active entry to the level context and bail.
-        // No age dimension, no per-age vote-error evaluation, no correction minting here.
-        // (Spatial correction minting happens in process_spatial via a dedicated pass after the sweep.)
-        // Stored at distance=0 because TemporalContext is the shared downstream representation —
-        // the value is a placeholder, not a real recency.
-        if phase == Phase::Spatial {
-            level_context.add_neuron(neuron_id, 0, 1.0);
-            return (Vec::new(), Vec::new());
-        }
-
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
 
         // Resolve the parent's channel once — used for neighbor filtering of actuals, context
-        // entries, and (inside allocate_pattern_neuron) the pre-wired connections of any minted
-        // pattern. Channels without a registered neighbor list fall through to all-pairs.
+        // entries, and (inside allocate_temporal_pattern_neuron) the pre-wired connections of any
+        // minted pattern. Channels without a registered neighbor list fall through to all-pairs.
         let parent_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
 
         let ages: Vec<Distance> = age_states.keys().copied().collect();
@@ -1267,7 +1365,7 @@ impl Thalamus {
             if !result.fire { continue; }
 
             // allocate an error correction pattern to be created after level processing
-            let spec = self.allocate_pattern_neuron(level + 1, neuron_id, age, sensory_neurons, rewards, Phase::Temporal);
+            let spec = self.allocate_temporal_pattern_neuron(level + 1, neuron_id, age, sensory_neurons, rewards);
 
             // Filter the correction's context_entries to neighbor channels — the new pattern only
             // matches against and references neighbor-channel neurons in its routing context.
@@ -1291,10 +1389,53 @@ impl Thalamus {
         (corrections, error_feedback)
     }
 
-    /// Op-3 dispatch. Bucket tasks by region and dispatch to
-    /// region.process_level; each region buckets per column.
-    /// Concatenation order is region-index then column-index, stable across runs.
-    fn dispatch_frame(
+    /// Spatial Op-3 dispatch — no rewards, no per-task channel-reward resolution.
+    fn dispatch_spatial_frame(
+        &mut self,
+        tasks: &[LevelTask],
+        level_context: &SpatialContext,
+        new_error_pattern_ids: &FxHashSet<NeuronId>,
+        age0: &FxHashSet<NeuronId>,
+        frame_number: FrameNumber,
+        learning: bool,
+    ) -> Vec<ColumnProcessResult> {
+        // Decorate age=0 sensory neurons. Spatial co-activation has no reward semantics, so every
+        // active gets reward=0.0 regardless of neuron type.
+        let mut full_actives = Vec::with_capacity(age0.len());
+        for &neuron_id in age0 {
+            let channel_id = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
+            full_actives.push(ActiveNeuron { id: neuron_id, channel_id, reward: 0.0 });
+        }
+
+        // Per-task actives filtered by parent's neighbor channels.
+        let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
+            let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
+            full_actives.iter()
+                .filter(|a| self.is_neighbor_channel(parent_channel, a.channel_id))
+                .cloned()
+                .collect()
+        }).collect();
+
+        let task_indices_by_region = self.bucket_by_region_indices(tasks, |t| t.neuron_id);
+        let level_context_opt = if level_context.size() > 0 { Some(level_context) } else { None };
+        let mut results = Vec::new();
+        for (r, task_indices) in task_indices_by_region.iter().enumerate() {
+            if task_indices.is_empty() { continue; }
+            let region_tasks: Vec<_> = task_indices.iter().map(|&i| {
+                let task = &tasks[i];
+                (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone(), task_actives[i].clone())
+            }).collect();
+            let region_results = self.region_list[r].process_spatial_level(
+                &region_tasks, level_context_opt, new_error_pattern_ids,
+                frame_number, learning,
+            );
+            results.extend(region_results);
+        }
+        results
+    }
+
+    /// Temporal Op-3 dispatch — resolves per-action rewards from the current frame's rewards map.
+    fn dispatch_temporal_frame(
         &mut self,
         tasks: &[LevelTask],
         memory_depth: u32,
@@ -1304,13 +1445,9 @@ impl Thalamus {
         current_rewards: Option<&FxHashMap<ChannelId, Reward>>,
         frame_number: FrameNumber,
         learning: bool,
-        phase: Phase,
     ) -> Vec<ColumnProcessResult> {
-
         // Decorate age=0 sensory neurons with channel id + pre-resolved reward.
-        // Reward resolution is meaningful only for the temporal phase, and only for action neurons
-        // (events carry no reward semantics). In the spatial phase, current_rewards is None and
-        // every active gets reward=0.0 — spatial co-activation has no reward semantics.
+        // Reward resolution is meaningful only for action neurons.
         let mut full_actives = Vec::with_capacity(age0.len());
         for &neuron_id in age0 {
             let channel_id = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
@@ -1321,14 +1458,7 @@ impl Thalamus {
             full_actives.push(ActiveNeuron { id: neuron_id, channel_id, reward });
         }
 
-        // Build per-task actives up front so we don't have to keep an immutable self borrow alive
-        // through the region.process_level mutable-borrow loop.
-        // Both phases filter actives by the parent's neighbor channels — the neighbor relationship
-        // is a property of the channel graph, not of any specific phase. d=0 (Spatial) learning
-        // and d>0 (Temporal) learning both restrict their connection targets to neighbor channels.
-        // Channels with no registered neighbor list fall through to all-pairs by
-        // `is_neighbor_channel`, preserving original behavior for stocks / text / anything that
-        // doesn't declare neighbors.
+        // Per-task actives filtered by parent's neighbor channels.
         let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
             let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
             full_actives.iter()
@@ -1337,25 +1467,18 @@ impl Thalamus {
                 .collect()
         }).collect();
 
-        // bucket tasks by region
         let task_indices_by_region = self.bucket_by_region_indices(tasks, |t| t.neuron_id);
-
-        // dispatch to each region, concatenate in region-index order
         let level_context_opt = if level_context.size() > 0 { Some(level_context) } else { None };
         let mut results = Vec::new();
         for (r, task_indices) in task_indices_by_region.iter().enumerate() {
             if task_indices.is_empty() { continue; }
-
-            // build the tuples that Region.process_level expects — each task carries its own
-            // pre-filtered actives.
             let region_tasks: Vec<_> = task_indices.iter().map(|&i| {
                 let task = &tasks[i];
                 (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone(), task_actives[i].clone())
             }).collect();
-
-            let region_results = self.region_list[r].process_level(
+            let region_results = self.region_list[r].process_temporal_level(
                 &region_tasks, memory_depth, level_context_opt, new_error_pattern_ids,
-                frame_number, learning, phase,
+                frame_number, learning,
             );
             results.extend(region_results);
         }
@@ -1440,7 +1563,7 @@ impl Thalamus {
 
     /// Batch contextRef updates by target neuron for Op-5 dispatch.
     /// Fills in `parent_id` from the result (neuron-level code emits it as 0).
-    fn collect_context_ref_updates(result: &ColumnProcessResult, per_target: &mut FxHashMap<NeuronId, Vec<ContextRefUpdate>>) {
+    fn collect_context_ref_updates(result: &ColumnProcessResult, per_target: &mut FxHashMap<NeuronId, Vec<TemporalContextRefUpdate>>) {
         for update in &result.context_ref_updates {
             let mut u = update.clone();
             u.parent_id = result.parent_id;
@@ -1576,8 +1699,8 @@ impl Thalamus {
     }
 
     /// Op-5 (deferred): Route contextRef updates to owning regions/columns.
-    fn dispatch_context_ref_updates(&mut self, update_batch: &[(NeuronId, Vec<ContextRefUpdate>)]) {
-        let mut by_region: Vec<Vec<(NeuronId, Vec<ContextRefUpdate>)>> = (0..self.regions).map(|_| Vec::new()).collect();
+    fn dispatch_context_ref_updates(&mut self, update_batch: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
+        let mut by_region: Vec<Vec<(NeuronId, Vec<TemporalContextRefUpdate>)>> = (0..self.regions).map(|_| Vec::new()).collect();
         for (neuron_id, updates) in update_batch {
             let r = self.route_neuron(*neuron_id);
             by_region[r].push((*neuron_id, updates.clone()));
@@ -1914,14 +2037,16 @@ struct CorrectionSpec {
 pub struct SpatialInstallOp {
     pub parent_id: NeuronId,
     pub pattern_id: NeuronId,
-    pub context_entries: Vec<ContextRefEntry>,
+    pub context_neuron_ids: Vec<NeuronId>,
 }
 
 /// Result of region.install_spatial_corrections — death frames for the death ledger plus
-/// the context-ref updates the install produced (grouped by target neuron id).
+/// the spatial context-ref updates the install produced. Updates are emitted as a flat Vec
+/// (each update carries its own target neuron_id) and bucketed at the thalamus boundary,
+/// mirroring the temporal dispatch chain.
 pub struct SpatialInstallResult {
     pub deaths: Vec<(NeuronId, FrameNumber)>,
-    pub context_ref_updates: FxHashMap<NeuronId, Vec<ContextRefUpdate>>,
+    pub context_ref_updates: Vec<SpatialContextRefUpdate>,
 }
 
 /// Result of allocate_pattern_neuron.

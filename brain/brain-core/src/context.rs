@@ -59,7 +59,8 @@ impl SpatialContext {
         *strength += 1.0;
     }
 
-    /// Remove an entry explicitly.
+    /// Remove an entry explicitly. Used by the spatial death cascade to scrub a dying context
+    /// neuron from a child pattern's stored context.
     pub fn remove(&mut self, neuron_id: NeuronId) {
         self.entries.remove(&neuron_id);
     }
