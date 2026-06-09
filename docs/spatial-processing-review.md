@@ -1,0 +1,236 @@
+# Spatial Processing — Review Findings and Required Changes
+
+Review of the `spatial` branch at commit `1e1b460` ("spatial processing - continuing progress"),
+checked against the design in [spatial-processing.md](spatial-processing.md) and against the
+intended algorithm semantics. All 88 brain-core tests pass at this commit; the issues below are
+behavioral, not compile/test failures.
+
+Two kinds of findings are listed: **bugs** (code does something wrong relative to any reasonable
+reading) and **translation gaps** (code is internally consistent but does not implement the
+intended algorithm — these are the reason the spatial hierarchy doesn't behave as designed on
+MNIST).
+
+---
+
+## 1. Bugs
+
+### 1.1 Spatial pattern matching can never succeed when neighborhoods are declared — HIGH
+
+**Where:**
+- Observed context built unfiltered: `get_spatial_level_tasks` ([thalamus.rs:1203-1237](../brain/brain-core/src/thalamus.rs)) puts **every** neuron active at the level into one shared `SpatialContext`.
+- That global context is handed to every neuron's `recognize_spatial_patterns` ([neuron.rs:1040-1101](../brain/brain-core/src/neuron.rs)) and scored by `SpatialContext::match_observed` ([context.rs:85-125](../brain/brain-core/src/context.rs)).
+- Stored pattern contexts, by contrast, are **neighbor-filtered** at mint time ([thalamus.rs:1051-1062](../brain/brain-core/src/thalamus.rs)) — the parent's neighborhood only.
+
+**Why it's fatal:** `match_observed` counts every observed neuron absent from the known context
+as *novel* and gates on Jaccard `common / (common + missing + novel) ≥ merge_threshold`. On 7×7
+binary MNIST with radius-1 neighborhoods, every pixel channel fires one bucket per frame, so the
+observed set is ~49 entries while a stored context is ≤ 8. The ratio tops out around 8/49 ≈ 0.16 —
+below every threshold the jobs probe (0.5 / 0.7 / 0.9 in `threshold-grid.js`). Routing matches
+essentially never fire.
+
+**Knock-on effects:**
+- The spatial hierarchy never activates: no subsumption, apex = all sensory pixels, temporal
+  never sees groupings.
+- **Unbounded duplicate minting.** Dedup relies entirely on a minted correction matching next
+  time (match → vote suppression → no error votes → no re-mint; see the `predicted_events`
+  gate at [thalamus.rs:1080](../brain/brain-core/src/thalamus.rs)). Since matching can't pass,
+  the same parent re-errors and re-mints an identical correction on every exposure.
+
+**Fix:** filter the observed context per parent to the parent's neighbor channels before
+matching — same treatment the dispatch already applies to `task_actives`
+([thalamus.rs:1410-1417](../brain/brain-core/src/thalamus.rs)) and the mint pass applies to
+error evaluation ([thalamus.rs:1042-1077](../brain/brain-core/src/thalamus.rs)). Either build a
+per-task filtered context, or make the novel pass in `SpatialContext::match_observed` ignore
+non-neighbor entries.
+
+Note this only bites when neighborhoods are declared; all-pairs domains (stocks, text) have
+symmetric stored/observed sets and are unaffected.
+
+### 1.2 Snapshot restore silently destroys spatial structure — HIGH
+
+Serialization was updated for spatial but restore was not, so a save/load round-trip corrupts
+silently instead of failing loudly:
+
+- **Spatial levels are dropped.** `SnapshotNeuronEntry` carries only the temporal `level`
+  ([thalamus.rs:174-179](../brain/brain-core/src/thalamus.rs)); `get_snapshot`
+  ([thalamus.rs:1851-1871](../brain/brain-core/src/thalamus.rs)) never reads
+  `neuron_spatial_levels`, and `restore_snapshot` clears the map via `reset()`
+  ([thalamus.rs:1938](../brain/brain-core/src/thalamus.rs)) and never repopulates it. Every
+  neuron comes back at `spatial_level = 0`.
+- **Spatial routing tables land on the temporal side.** `serialize_children` and
+  `serialize_context_refs` flatten spatial and temporal entries into one undiscriminated list
+  ([neuron.rs:404-443](../brain/brain-core/src/neuron.rs); spatial contexts marked
+  `distance: 0`). `load_neuron` ([column.rs:600-645](../brain/brain-core/src/column.rs)) restores
+  through `add_child` / `add_context` / `add_context_ref` — the back-compat shims that route
+  **unconditionally to the temporal structures**
+  ([neuron.rs:944-954](../brain/brain-core/src/neuron.rs)). After restore, every spatial routing
+  entry and context ref sits in the temporal tables with d=0 contexts: spatial hierarchy gone,
+  temporal tables polluted.
+- Connections and Welford error stats *do* round-trip correctly (`create_connection` routes
+  d=0 to `spatial_connections`; `age == 0` stats route to the spatial bucket,
+  [column.rs:634-642](../brain/brain-core/src/column.rs)) — which deepens the false sense of
+  safety.
+
+**Fix:** add a spatial/temporal discriminator to `SerializedChild` and `SerializedContextRef`
+(or split them into separate fields), restore each to the proper side; add `spatial_level` to
+`SnapshotNeuronEntry`, populate in `get_snapshot`, restore into `neuron_spatial_levels`.
+Then implement the Phase 4 acceptance test from the design doc (train → snapshot → restore →
+identical next frame), which would have caught all of this.
+
+### 1.3 Temporal novel-detection guard accidentally relaxed — MEDIUM
+
+`TemporalContext::match_observed`'s novel pass changed from `pattern_distance < 1` to `< 0`
+([context.rs:270](../brain/brain-core/src/context.rs)), and the explanatory comment ("context
+neurons must be older than the parent") was deleted. History: relaxed in `c2f06bf` when spatial
+still shared the temporal matcher (the design doc anticipated relaxing the d<1 guard for
+spatial); the split in `5c96075` gave spatial its own `SpatialContext::match_observed` but never
+restored the temporal guard.
+
+**Effect:** for parents matched at ages ≥ 1, same-frame co-active neurons not present anywhere
+in the known context now count as novel mismatches (`has_partial_match` only rescues neurons
+known at *some* distance), depressing the Jaccard ratio and failing temporal matches that passed
+before the branch.
+
+**Fix:** restore the guard to `< 1`.
+
+---
+
+## 2. Translation gaps — code does not implement the intended algorithm
+
+### 2.1 No per-position competition in spatial prediction / error evaluation
+
+**Intended:** each neuron predicts its 8 neighbor *positions*; for each position the bucket
+predictions (e.g. black vs white) **compete and one wins**. The predicted co-activation set is
+the modal local configuration — exactly one bucket per neighbor channel — and the error is "how
+many positions deviated from what I expected."
+
+**Implemented:** `generate_spatial_votes` casts **every** `connections[0]` entry as a vote
+([neuron.rs:1106-1133](../brain/brain-core/src/neuron.rs)), and `mint_spatial_corrections`
+compares that raw union symmetrically against the observed set
+([thalamus.rs:1064-1097](../brain/brain-core/src/thalamus.rs)). No competition step exists
+anywhere between voting and error scoring. (The temporal `evaluate_vote_error` has the same
+no-competition shape, [thalamus.rs:1580-1614](../brain/brain-core/src/thalamus.rs) — the spatial
+pass inherited it. The per-dimension competition that *does* exist in the codebase —
+`determine_dimension_winners` in the consensus pipeline — is only applied to inference output,
+never to error evaluation.)
+
+**Why it degenerates:** the predicted set is a union over lifetime history. For binary pixels
+with radius-1 neighborhoods, once a pixel has seen varied digits it is connected to **both**
+buckets of all 8 neighbors: predicted = 16, observed = 8, missing = 8, novel = 0 → error rate =
+**exactly 0.5**, which sits precisely on the default 0.5 threshold and stops minting forever
+(`error_rate <= threshold` → skip). With b buckets the saturated rate is (b−1)/b — e.g. 0.9 for
+10 buckets — *permanently above* any sane threshold, so minting never stops. Either silent or
+incontinent; the error signal measures novelty-vs-everything-ever-seen, not deviation from the
+likely configuration. This is the structural reason threshold tuning (the `threshold-grid` job)
+can't find a good operating point.
+
+**Fix:** in the spatial vote/error path, group the d=0 votes by the target neuron's channel
+(+ dimension), take the strongest per group as the winner, and compare winners against the
+observed bucket per channel. Predicted set becomes exactly one neuron per neighbor position;
+error becomes a Hamming distance from the modal patch; minting quenches naturally once local
+statistics stabilize.
+
+### 2.2 Pattern neurons have no spatial topology — hierarchy jumps to whole-image fingerprints
+
+**Intended:** an L1 correction continues to error-correct **the parent's neighborhood**.
+Receptive fields grow gradually: L2 groups L1 patch-detectors that are spatial neighbors, etc.
+
+**Implemented:** minted pattern neurons get no channel. `get_neuron_channel_id` returns `None`,
+the `unwrap_or(0)` sentinel kicks in, and `is_neighbor_channel` falls through to **all-pairs**.
+The comment at [thalamus.rs:245-256](../brain/brain-core/src/thalamus.rs) rationalizes this by
+claiming pattern neurons "only ever co-fire with [neurons] bounded by their parent's neighbor
+graph anyway" — that claim is false: one L1 can fire per pixel position, so the L1 fired set
+spans the whole image. Consequences:
+
+- An L1's d=0 connection learning and error evaluation run against the **entire frame**
+  (`full_actives` filtered by a neighbor set that is all-pairs).
+- When an L1 errors, the L2 it mints has as context **every L1 that fired that frame** — a
+  whole-image fingerprint. The hierarchy goes patches → memorized images in one hop, instead of
+  edges → strokes → parts.
+- Because the full frame is never fully predictable, L1s error perpetually → one fresh L2 per
+  novel image, forever (neuron growth scales with the training set).
+
+**Fix:** minted corrections inherit the parent's channel (or an explicit neighborhood set).
+`allocate_spatial_pattern_neuron` already receives `parent_id`
+([thalamus.rs:1100](../brain/brain-core/src/thalamus.rs)), so inheritance is small. Effect: L1's
+learning/error stays filtered to the parent's 3×3, and an L2 minted from L1-at-position-A gets
+as context only L1s whose parents are A's neighbors — receptive fields grow one radius hop per
+level.
+
+---
+
+## 3. Expected dynamics after the fixes (notes from design discussion)
+
+- **Apex wiring lag.** `learn()` wires `last_frame_apex`; corrections minted this frame only
+  fire on the next exposure, so wiring chases the apex with a one-exposure lag, and each new
+  hierarchy level temporarily disinherits the previous wiring. This is acceptable *provided*
+  minting quenches — which fix 2.1 enables (modal predictions stop erroring once local stats
+  stabilize). Expect per-episode train accuracy to climb and then stabilize; multi-episode
+  training is required, not a bug.
+- **Subsumption granularity** (design doc §8 item 3). With 1.1 + 2.1 + 2.2 fixed, every pixel
+  whose neighborhood deviates from modal mints and later fires its own correction, so it is
+  subsumed through its own parent slot — per-parent subsumption gives near-complete coverage
+  without changing the rule. Residual to watch empirically: a pixel whose own neighborhood
+  stayed modal (never erred, owns no correction) but which sits inside a neighbor's fired
+  correction context stays apex alongside that correction — mild double-counting at pattern
+  boundaries.
+- **Accuracy expectations.** Post-fix, ~100% train accuracy on small sets is the expected
+  outcome (first-learned patterns in default wiring + corrections for conflicting patterns, per
+  design doc §4.6). Test accuracy remains bounded by exact-template Jaccard matching across
+  instance variation.
+
+---
+
+## 4. Minor issues
+
+- **`unwrap_or(0)` channel sentinel** ([thalamus.rs:1036, 1406, 1412](../brain/brain-core/src/thalamus.rs)
+  and elsewhere): works only because channel ids start at 1 ([thalamus.rs:333](../brain/brain-core/src/thalamus.rs)).
+  If a real channel id 0 ever exists, pattern neurons silently inherit its neighbor set.
+  Propagate the `Option` instead. (Partially superseded by fix 2.2, which gives patterns a real
+  channel.)
+- **Committed platform binaries**: the branch updates `brain-napi.node` and adds a new ~1.5 MB
+  `brain-napi.win32-x64-msvc.node`. Consider gitignoring `*.node` rather than growing them in
+  history.
+- **[brain-as-policy-engine.md](brain-as-policy-engine.md)** describes a consensus-removal
+  refactor (`process_frame(events, actions)`, votes-only output) that is *not* implemented on
+  this branch — fine as a forward-looking design doc, noted so nobody expects the API to exist.
+
+---
+
+## 5. Verified non-issues
+
+Checked during review; listed to save future reviewers the time:
+
+- The apex `fired_set` **does** include patterns activated mid-sweep — they are written into
+  `spatial_level_index[level+1]` and picked up at the top of the next level iteration
+  ([brain.rs:1156-1160](../brain/brain-core/src/brain.rs)); the sweep never breaks before
+  processing a newly grown level.
+- d=0 connection learning **is** neighbor-filtered per task ([thalamus.rs:1410-1417](../brain/brain-core/src/thalamus.rs)).
+- Spatial state is ephemeral per frame (`reset_spatial`), `reset_context` clears
+  `last_frame_apex`, and the learning flag is respected in all new paths (spatial error
+  recording skipped in eval mode).
+- Spatial order of operations is correct: votes are generated **before** d=0 connection
+  learning, so votes reflect prior-frame state.
+- Correction minting installs routing entries for *next* frame (matches design §4.4 "next
+  time"); spatial corrections get `spatial_level = parent + 1`, temporal level 0.
+- Encoder neighborhood math (radius loops, edge clipping, channel naming) is correct; the new
+  MNIST jobs keep train/test cleanly separated.
+
+---
+
+## 6. Suggested fix order
+
+1. **1.1** — observed-context neighbor filtering in spatial matching (gates everything else;
+   nothing recognizes anything without it).
+2. **2.1** — per-position winner competition in spatial prediction/error (makes the error signal
+   meaningful and lets minting quench).
+3. **2.2** — channel inheritance for minted patterns (restores locality above L0; gradual
+   receptive-field growth).
+4. **1.3** — restore the temporal `< 1` guard (one line).
+5. **1.2** — snapshot round-trip (required before any run that relies on persistence; includes
+   the Phase 4 round-trip test).
+
+After 1-4, rerun the existing jobs (`7x7-levels`, `threshold-grid`, `convergence-debug`) —
+expected observable changes: routing matches fire, hierarchy depth grows past 1, mint counts
+plateau instead of growing linearly with frames, and per-episode train accuracy converges
+upward.
