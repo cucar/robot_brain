@@ -231,7 +231,12 @@ impl FrameTimings {
 pub struct FrameSummary {
     pub frame_number: FrameNumber,
     pub neuron_count: usize,
-    pub max_level: Level,
+    /// Maximum active temporal level — depth of the temporal pattern hierarchy.
+    /// 0 = sensory only, 1+ = temporal patterns exist at that level.
+    pub max_temporal_level: Level,
+    /// Maximum active spatial level — depth of the spatial pattern hierarchy.
+    /// 0 = sensory only, 1+ = spatial-correction patterns exist at that level.
+    pub max_spatial_level: Level,
     pub stats: DiagnosticStats,
 }
 
@@ -852,7 +857,8 @@ impl Brain {
         FrameSummary {
             frame_number: self.frame_number,
             neuron_count: self.thalamus.get_neuron_count(),
-            max_level: self.thalamus.get_max_level(),
+            max_temporal_level: self.thalamus.get_max_temporal_level(),
+            max_spatial_level: self.thalamus.get_max_spatial_level(),
             stats: self.diagnostics.get_stats(),
         }
     }
@@ -1655,23 +1661,29 @@ impl Brain {
 
         // Pre-pass: for every vote, accumulate the voter's total strength under (voter_id, dim_id, distance).
         // This becomes the denominator that scales each individual vote down to its share.
-        // Votes without a target coordinate (orphaned neurons that shouldn't exist in practice) contribute nothing here.
+        // Every vote MUST target a neuron with a coordinate — sensory events and actions have
+        // coordinates by construction. A vote toward a target without a coordinate means we
+        // learned a connection to a pattern neuron upstream, which is a real architectural break
+        // (the per-dim consensus has nothing to do with pattern targets).
         let mut voter_dim_total: FxHashMap<(NeuronId, DimensionId, Distance), f64> = FxHashMap::default();
         for v in votes {
-            if let Some(coord) = self.thalamus.get_neuron_coordinate(v.neuron_id) {
-                *voter_dim_total.entry((v.voter_id, coord.dim_id, v.distance)).or_insert(0.0) += v.strength;
-            }
+            let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)
+                .unwrap_or_else(|| panic!(
+                    "aggregate_votes: vote target {} has no coordinate (voter={}, distance={}). \
+                     This means a connection was learned toward a pattern neuron — only sensory \
+                     events/actions belong as vote targets.",
+                    v.neuron_id, v.voter_id, v.distance
+                ));
+            *voter_dim_total.entry((v.voter_id, coord.dim_id, v.distance)).or_insert(0.0) += v.strength;
         }
 
         // Main pass: aggregate effective (normalized) strengths into candidates and dim totals.
         for v in votes {
-
-            // Skip votes without a target coordinate — they can't be aggregated into a dim
-            // and downstream determine_dimension_winners would skip them anyway.
-            let coord = match self.thalamus.get_neuron_coordinate(v.neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
+            let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)
+                .unwrap_or_else(|| panic!(
+                    "aggregate_votes: vote target {} has no coordinate in main pass",
+                    v.neuron_id
+                ));
 
             // Look up this voter's total strength in the (dim, distance) bucket and compute this vote's share of it.
             // effective_strength is in [0, 1]; per-voter shares sum to 1.0 within the (dim, distance) bucket by construction.
@@ -1713,15 +1725,12 @@ impl Brain {
         let mut dim_best: FxHashMap<DimensionId, DimBestEntry> = FxHashMap::default();
 
         for (&neuron_id, candidate) in candidates.iter_mut() {
-            let coordinate = match self.thalamus.get_neuron_coordinate(neuron_id) {
-                Some(c) => c,
-                None => continue,
-            };
-
-            let neuron_type = match self.thalamus.get_neuron_type(neuron_id) {
-                Some(t) => t,
-                None => continue,
-            };
+            // After fixing aggregate_votes, every candidate must have a coordinate and a type —
+            // candidates are only inserted from votes that survived the coordinate check.
+            let coordinate = self.thalamus.get_neuron_coordinate(neuron_id)
+                .unwrap_or_else(|| panic!("determine_dimension_winners: candidate {} has no coordinate", neuron_id));
+            let neuron_type = self.thalamus.get_neuron_type(neuron_id)
+                .unwrap_or_else(|| panic!("determine_dimension_winners: candidate {} has no neuron type", neuron_id));
 
             // for actions, reward = weighted_total / strength
             // for events, probability = strength / dimension total strength

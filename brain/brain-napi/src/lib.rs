@@ -520,7 +520,8 @@ impl JsBrain {
         let mut obj = env.create_object()?;
         obj.set_named_property("frameNumber", env.create_int64(summary.frame_number as i64)?)?;
         obj.set_named_property("neuronCount", env.create_uint32(summary.neuron_count as u32)?)?;
-        obj.set_named_property("maxLevel", env.create_uint32(summary.max_level)?)?;
+        obj.set_named_property("maxTemporalLevel", env.create_uint32(summary.max_temporal_level)?)?;
+        obj.set_named_property("maxSpatialLevel", env.create_uint32(summary.max_spatial_level)?)?;
 
         // Spread diagnostic stats with camelCase names matching JS
         set_diagnostic_stats(&env, &mut obj, &summary.stats)?;

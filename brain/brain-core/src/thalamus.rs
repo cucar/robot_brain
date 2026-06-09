@@ -1981,12 +1981,19 @@ impl Thalamus {
         self.neuron_levels.len()
     }
 
-    /// Get the maximum level of any neuron currently in the registry.
-    pub fn get_max_level(&self) -> Level {
+    /// Maximum live TEMPORAL level — depth of the temporal pattern hierarchy.
+    /// 0 = sensory only; 1+ = temporal correction patterns exist at that level.
+    pub fn get_max_temporal_level(&self) -> Level {
         for i in (0..self.level_counts.len()).rev() {
             if self.level_counts[i] > 0 { return i as Level; }
         }
         0
+    }
+
+    /// Maximum live SPATIAL level — depth of the spatial pattern hierarchy.
+    /// 0 = sensory only; 1+ = spatial correction patterns exist at that level.
+    pub fn get_max_spatial_level(&self) -> Level {
+        self.neuron_spatial_levels.values().copied().max().unwrap_or(0)
     }
 
     /// Get the dimension_id → name mapping (for diagnostic display).
@@ -2212,7 +2219,7 @@ mod tests {
         let coord2 = Coordinate { dim_id: 1, bucket_id: 2 };
         t.get_neuron_id_for_point(&coord1, 1, NeuronType::Event);
         t.get_neuron_id_for_point(&coord2, 1, NeuronType::Event);
-        assert_eq!(t.get_max_level(), 0);
+        assert_eq!(t.get_max_temporal_level(), 0);
         assert_eq!(t.get_neuron_count(), 2);
     }
 

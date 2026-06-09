@@ -44,7 +44,7 @@ for (let ep = 1; ep <= EPISODES; ep++) {
 	const counts = brain.spatialLevelCounts();
 	const depth = counts.length;
 	const total = counts.reduce((a, b) => a + b, 0);
-	console.log(`Episode ${ep}: maxLevel=${depth}, total=${total}, by level: [${counts.join(', ')}]`);
+	console.log(`Episode ${ep}: maxSpatialLevel=${depth}, total=${total}, by level: [${counts.join(', ')}]`);
 }
 
 console.log('');
