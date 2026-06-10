@@ -79,7 +79,7 @@ The motivation for running spatial first is the feedforward sensory cascade. Obj
 **Two level dimensions in active memory.** This is the principal new architectural piece. Each activation carries *two* levels, not one:
 
 - `spatial_level` — depth in the spatial hierarchy. Sensory = 0; +1 per d=0 routing hop during `process_spatial`.
-- `temporal_level` — depth in the temporal hierarchy. Apex spatial activations (sensory and spatial corrections that weren't subsumed by a higher spatial activation this frame) are inserted at `temporal_level = 0` regardless of their spatial level; +1 per d>0 routing hop during `process_temporal`.
+- `temporal_level` — depth in the temporal hierarchy. Apex spatial activations (sensory and spatial corrections that weren't subsumed by a higher spatial activation this frame) are inserted at `temporal_level = 0` regardless of their spatial level; +1 per d>0 routing hop during `process_temporal`. Because every spatial correction inherits its parent's coordinate (§4.4), all of these are coordinate-bearing tokens — so temporal level 0 is a uniform (channel, dimension, value) vocabulary whether a token is a raw sensory neuron or a context-refined correction, and the per-dimension temporal consensus needs no special case for spatial patterns.
 
 A single neuron can hold both — e.g., a spatial correction at `spatial_level = 7` that's apex will *also* sit at `temporal_level = 0`. The two indexes mean different things and don't conflict.
 
@@ -165,7 +165,7 @@ This is the same error detection logic temporal uses for d>0 — the only change
 
 ### 4.4 Error Correction
 
-The thalamus mints a correction neuron capturing the actual co-activation context. The new neuron's `spatial_level` is `erroring_neuron.spatial_level + 1` (its temporal_level is not set yet — that happens at the next frame's apex handoff if the correction fires and isn't itself subsumed). The erroring neuron's routing table is updated so that the same context routes directly to the new correction next time. This is the same correction logic temporal uses for d>0; only the connection distance and the level dimension differ.
+The thalamus mints a correction neuron capturing the actual co-activation context. The new neuron's `spatial_level` is `erroring_neuron.spatial_level + 1` (its temporal_level is not set yet — that happens at the next frame's apex handoff if the correction fires and isn't itself subsumed). **The correction inherits the erroring (parent) neuron's full (channel, dimension, coordinate).** A correction is a refinement of its parent — "pixel A, but in this specific neighborhood configuration" — so what it asserts about the world is still A's value; the refined identity lives in the neuron id and routing context, not in the coordinate. Inheriting the coordinate does two things: it gives every level above L0 the parent's neighbor graph (so the correction's own d=0 learning and error evaluation stay filtered to the parent's neighborhood, and an L2 minted from an L1 anchored at position A takes as context only L1s anchored at A's neighbors — receptive fields grow one radius hop per level), and it keeps every apex token coordinate-bearing, so temporal level 0 stays a uniform interface (see §3.3, §5.1). The inherited coordinate is **not** registered in `neurons_by_value` — that map requires coordinate uniqueness, and value→neuron resolution must always land on the L0 sensory/action neuron; refined tokens are reached only via routing matches. The erroring neuron's routing table is updated so that the same context routes directly to the new correction next time. This is the same correction logic temporal uses for d>0; only the connection distance and the level dimension differ.
 
 ### 4.5 Bootstrap Dynamics
 
@@ -328,6 +328,7 @@ Inference is symmetric: on a test image, the spatial sweep activates pre-trained
   - `connections[0]` distance=0 entries must round-trip. Verify the existing format iterates the full `connections` vec rather than skipping slot 0.
   - The existing `neuron.level` field becomes the temporal intrinsic level. Add `neuron.spatial_level` alongside it. For pre-spatial-era neurons loaded from older snapshots, default `spatial_level` to 0 (they sit at the base of the spatial hierarchy because no spatial grouping built them).
   - The per-frame `spatial_level_index` / `temporal_level_index` are not persisted — same rule as today's `level_index`.
+  - The inherited (channel, dimension, coordinate) of a correction (§4.4) needs no new snapshot field — it is derivable on restore by walking `neuron_parents` to the L0 ancestor (parent ids are already persisted). Deeper levels chain: an L2 inherits from its L1 parent, which anchors at the original L0 coordinate.
 - DB import/export apps under `apps/` — sweep for code that assumes connections start at distance 1, and for code that reads/writes the single `neuron.level` field.
 
 #### Acceptance
