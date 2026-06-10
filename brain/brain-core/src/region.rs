@@ -120,27 +120,23 @@ impl Region {
     /// in column-index order (stable regardless of thread scheduling).
     pub fn process_spatial_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
-        level_context: Option<&crate::context::SpatialContext>,
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
         learning: bool,
     ) -> Vec<ColumnProcessResult> {
         // Phase 1: Route — clone each task into its owning column's work list.
         // Must happen before par_iter so each column gets an owned Vec it can consume independently.
-        let column_tasks = self.build_column_tasks(tasks);
+        let column_tasks = self.build_column_tasks(tasks, |t| t.0);
 
         // Phase 2: Dispatch — each column processes its tasks in parallel.
-        // Shared refs (level_context, new_error_pattern_ids) are read-only and implement Sync,
-        // so no synchronization needed. Per-task actives travel inside each task's tuple.
+        // new_error_pattern_ids is read-only and implements Sync, so no synchronization needed
+        // Per-task actives and the per-task neighbor-filtered observed context travel inside each task's tuple - no shared level context for spatial
         let nested: Vec<Vec<ColumnProcessResult>> = self.columns.par_iter_mut()
             .zip(column_tasks.into_par_iter())
             .map(|(col, col_tasks)| {
                 if col_tasks.is_empty() { return Vec::new(); }
-                col.process_spatial_level(
-                    &col_tasks, level_context, new_error_pattern_ids,
-                    frame_number, learning,
-                )
+                col.process_spatial_level(&col_tasks, new_error_pattern_ids, frame_number, learning)
             })
             .collect();
 
@@ -161,7 +157,7 @@ impl Region {
     ) -> Vec<ColumnProcessResult> {
         // Phase 1: Route — clone each task into its owning column's work list.
         // Must happen before par_iter so each column gets an owned Vec it can consume independently.
-        let column_tasks = self.build_column_tasks(tasks);
+        let column_tasks = self.build_column_tasks(tasks, |t| t.0);
 
         // Phase 2: Dispatch — each column processes its tasks in parallel.
         // Shared refs (level_context, new_error_pattern_ids) are read-only and implement Sync,
@@ -183,11 +179,12 @@ impl Region {
 
     /// Route tasks to their owning columns by neuron_id. Returns a Vec indexed
     /// by column, each entry holding the cloned tasks for that column.
-    fn build_column_tasks(
+    fn build_column_tasks<T: Clone>(
         &self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
-    ) -> Vec<Vec<(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)>> {
-        let per_column_indices = self.partition_by_column(tasks, |t| t.0);
+        tasks: &[T],
+        key: impl Fn(&T) -> NeuronId,
+    ) -> Vec<Vec<T>> {
+        let per_column_indices = self.partition_by_column(tasks, key);
         per_column_indices.iter()
             .map(|task_indices| {
                 task_indices.iter().map(|&i| tasks[i].clone()).collect()

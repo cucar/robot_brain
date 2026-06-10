@@ -482,6 +482,30 @@ impl Thalamus {
         self.neuron_spatial_levels.insert(id, level);
         self.increment_level_count(0);
 
+        // Inherit the parent's full coordinate — channel, dimension, bucket and type.
+        // A correction is a refinement of the parent observable, not a new one: it asserts the same
+        // value under a specific neighborhood, so the coordinate is a true invariant rather than an
+        // invented one. This keeps temporal level 0 a uniform coordinate-bearing interface (the apex
+        // handoff injects these patterns there, where the per-dimension consensus and neighbor
+        // filtering treat them like any L0 token), and is what stops aggregate_votes from panicking
+        // on coordinate-less apex vote targets. The parent is always registered in base_neurons —
+        // an L0 sensory directly, or, for deeper levels, an already-inherited pattern — so this
+        // chains down to the original L0 coordinate.
+        //
+        // NOT registered in neurons_by_value: that map requires coordinate uniqueness, and
+        // value→neuron resolution (action targets, event lookup) must always land on the L0
+        // sensory/action neuron. The inherited coordinate is metadata for consensus grouping,
+        // neighbor filtering, and vote dequantization only — refined tokens are reached solely via
+        // routing matches. Persistence needs no new field: on restore the coordinate is derivable
+        // by walking neuron_parents to the L0 ancestor.
+        let inherited = self.base_neurons.get(&parent_id)
+            .unwrap_or_else(|| panic!(
+                "allocate_spatial_pattern_neuron: parent {} has no base-neuron coordinate to inherit",
+                parent_id
+            ))
+            .clone();
+        self.base_neurons.insert(id, inherited);
+
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections: Vec::new() }
     }
 
@@ -1064,17 +1088,35 @@ impl Thalamus {
                 for age_votes in &res.votes {
                     if age_votes.age != 0 { continue; }
 
-                    // Predicted L0 events from the parent's connections[0]. Filtered to neighbor
-                    // channels — predictions toward non-neighbor channels shouldn't count toward
-                    // either side of the error (the observed set is similarly filtered).
-                    let predicted_events: FxHashSet<NeuronId> = age_votes.votes.iter()
-                        .filter(|v| self.get_neuron_type(v.neuron_id) == Some(NeuronType::Event))
-                        .filter(|v| {
-                            let target_channel = self.get_neuron_channel_id(v.neuron_id).unwrap_or(0);
-                            self.is_neighbor_channel(parent_channel, target_channel)
-                        })
-                        .map(|v| v.neuron_id)
-                        .collect();
+                    // Predicted L0 events from the parent's connections[0], after per-position
+                    // competition (fix 2.1). Each neighbor position — a (channel, dimension) —
+                    // predicts at most ONE bucket: the buckets of a position compete and the
+                    // strongest-voted wins. The predicted set is therefore the modal local
+                    // configuration (one neuron per neighbor position), so the error below is a
+                    // Hamming distance from the modal patch rather than novelty-vs-everything-ever-
+                    // seen. Without this, the parent's lifetime union of connections includes every
+                    // bucket of every neighbor, saturating the error rate at (b-1)/b and either
+                    // never minting or never quenching. Predictions toward non-neighbor channels are
+                    // excluded — the observed set is filtered the same way.
+                    let mut position_winners: FxHashMap<(ChannelId, DimensionId), (NeuronId, f64)> = FxHashMap::default();
+                    for v in &age_votes.votes {
+                        if self.get_neuron_type(v.neuron_id) != Some(NeuronType::Event) { continue; }
+                        let target_channel = self.get_neuron_channel_id(v.neuron_id).unwrap_or(0);
+                        if !self.is_neighbor_channel(parent_channel, target_channel) { continue; }
+                        let dim_id = match self.get_neuron_coordinate(v.neuron_id) {
+                            Some(c) => c.dim_id,
+                            None => continue,
+                        };
+                        let key = (target_channel, dim_id);
+                        match position_winners.get(&key) {
+                            // Strongest bucket wins; tie-break on smaller neuron id for determinism.
+                            Some(&(win_id, win_strength))
+                                if win_strength > v.strength
+                                    || (win_strength == v.strength && win_id <= v.neuron_id) => {}
+                            _ => { position_winners.insert(key, (v.neuron_id, v.strength)); }
+                        }
+                    }
+                    let predicted_events: FxHashSet<NeuronId> = position_winners.values().map(|&(id, _)| id).collect();
 
                     // No predictions means no error to evaluate (bootstrap: parent has no d=0 connections yet).
                     if predicted_events.is_empty() { continue; }
@@ -1416,17 +1458,35 @@ impl Thalamus {
                 .collect()
         }).collect();
 
+        // Per-task observed context — the shared level context filtered to the parent's neighbor
+        // channels and minus the parent itself (fix 1.1). Without this, every neuron matched against
+        // the unfiltered whole-level co-activation set, which counted every non-neighbor active as
+        // novel and drove the Jaccard score below any sane threshold, so spatial matching never fired.
+        // Mirrors the neighbor-filtering already applied to `task_actives` and to the mint pass's
+        // `observed_l0_minus_self` / `neighborhood`.
+        let task_contexts: Vec<SpatialContext> = tasks.iter().map(|t| {
+            let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
+            let mut ctx = SpatialContext::new();
+            for (&neuron_id, &strength) in level_context.entries() {
+                if neuron_id == t.neuron_id { continue; }
+                let target_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
+                if self.is_neighbor_channel(parent_channel, target_channel) {
+                    ctx.add_neuron(neuron_id, strength);
+                }
+            }
+            ctx
+        }).collect();
+
         let task_indices_by_region = self.bucket_by_region_indices(tasks, |t| t.neuron_id);
-        let level_context_opt = if level_context.size() > 0 { Some(level_context) } else { None };
         let mut results = Vec::new();
         for (r, task_indices) in task_indices_by_region.iter().enumerate() {
             if task_indices.is_empty() { continue; }
             let region_tasks: Vec<_> = task_indices.iter().map(|&i| {
                 let task = &tasks[i];
-                (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone(), task_actives[i].clone())
+                (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone(), task_actives[i].clone(), task_contexts[i].clone())
             }).collect();
             let region_results = self.region_list[r].process_spatial_level(
-                &region_tasks, level_context_opt, new_error_pattern_ids,
+                &region_tasks, new_error_pattern_ids,
                 frame_number, learning,
             );
             results.extend(region_results);
@@ -1853,7 +1913,14 @@ impl Thalamus {
         for region in &self.region_list {
             for entry in region.get_snapshot() {
                 let level = self.neuron_levels.get(&entry.id).copied().unwrap_or(0);
-                let base_neuron = if level == 0 { self.base_neurons.get(&entry.id).cloned() } else { None };
+                // Only TRUE sensory neurons carry serializable base data. Spatial pattern neurons
+                // also sit at temporal level 0 and, since fix 2.2, hold an inherited coordinate in
+                // base_neurons — but that coordinate must NOT be snapshotted (restore would insert
+                // it into neurons_by_value and clobber the L0 sensory mapping). It is derivable on
+                // restore by walking neuron_parents to the L0 ancestor (fix 1.2). Distinguish by
+                // spatial level: sensories are spatial_level 0, patterns are spatial_level >= 1.
+                let is_sensory = level == 0 && self.get_neuron_spatial_level(entry.id) == 0;
+                let base_neuron = if is_sensory { self.base_neurons.get(&entry.id).cloned() } else { None };
                 let parent_id = self.neuron_parents.get(&entry.id).copied();
                 neurons.push(SnapshotNeuronEntry {
                     neuron: entry.neuron,

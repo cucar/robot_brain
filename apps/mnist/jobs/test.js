@@ -280,9 +280,41 @@ export default class MNISTTestJob extends Job {
 
 		// Roll the tally up into a result, attach metadata (which task/episode, wall-clock), log a one-liner, and return.
 		const duration = Date.now() - startTime;
-		const result = { digit, episode, ...this.summarizeTally(tally), duration };
+		const result = { digit, episode, ...this.summarizeTally(tally), duration, spatial: this.captureSpatialDiagnostics() };
 		this.logTrainingPass(result);
 		return result;
+	}
+
+	/**
+	 * Snapshot the spatial-hierarchy diagnostics after a training pass.
+	 *   maxSpatialLevel   — depth of the spatial hierarchy (0 = sensory only, 1+ = correction levels exist).
+	 *   levelCounts       — live correction neurons per spatial level (index 0 = level 1, …).
+	 *   activeCorrections — total live correction neurons above the sensory base.
+	 *   cumulativeMinted  — corrections minted since brain start (monotonic; plateaus once local statistics stabilize).
+	 *   neuronCount       — total neurons (sensory + actions + all pattern neurons).
+	 * These are the signals fixes 1.1/2.1/2.2 are meant to move: depth growing past 1, and minting
+	 * plateauing instead of growing linearly with frames.
+	 */
+	captureSpatialDiagnostics() {
+		const summary = this.brain.getFrameSummary();
+		return {
+			neuronCount: summary.neuronCount,
+			maxSpatialLevel: summary.maxSpatialLevel,
+			levelCounts: this.brain.spatialLevelCounts(),
+			activeCorrections: this.brain.countActiveSpatialCorrections(),
+			cumulativeMinted: this.brain.getSpatialCorrectionCount(),
+		};
+	}
+
+	/**
+	 * Format a spatial-diagnostics snapshot into a one-line summary.
+	 */
+	formatSpatial(s) {
+		if (!s) return '';
+		const levels = s.levelCounts.length
+			? s.levelCounts.map((c, i) => `L${i + 1}:${c}`).join(' ')
+			: '(no corrections)';
+		return `depth=${s.maxSpatialLevel} | ${levels} | ${s.activeCorrections} active, ${s.cumulativeMinted} minted cum | ${s.neuronCount} neurons`;
 	}
 
 	/**
@@ -354,13 +386,14 @@ export default class MNISTTestJob extends Job {
 	/**
 	 * Print the one-line per-pass training log, picking the joint vs split label form.
 	 */
-	logTrainingPass({ digit, episode, accuracy, correct, total, duration, perDigit, perDigitTotal }) {
+	logTrainingPass({ digit, episode, accuracy, correct, total, duration, perDigit, perDigitTotal, spatial }) {
 		const ips = (total / (duration / 1000)).toFixed(0);
 		const perDigitStr = this.formatPerDigit(perDigit, perDigitTotal);
 		const epLabel = this.config.split
 			? `Task digit ${digit} — episode ${episode}/${this.config.maxEpisodes}`
 			: `Episode ${episode}/${this.config.maxEpisodes}`;
 		console.log(`  ${epLabel}: train=${(accuracy * 100).toFixed(2)}% (${correct}/${total}) | ${ips} img/s ${duration}ms | ${perDigitStr}`);
+		console.log(`    ↳ spatial: ${this.formatSpatial(spatial)}`);
 	}
 
 	/**
@@ -430,6 +463,18 @@ export default class MNISTTestJob extends Job {
 				? `Task digit ${ep.digit} ep ${ep.episode}`
 				: `Episode ${ep.episode}`;
 			console.log(`  ${label}: train=${(ep.accuracy * 100).toFixed(2)}% (${ep.duration}ms)`);
+		}
+
+		// Spatial-hierarchy recap: depth and neuron growth across episodes. The load-bearing check
+		// for the spatial-processing fixes — depth should climb past 1 and `minted cum` should
+		// plateau across episodes rather than grow linearly with the number of frames seen.
+		if (this.episodeResults.some(ep => ep.spatial)) {
+			console.log('\n  Spatial hierarchy (after each episode):');
+			for (const ep of this.episodeResults) {
+				if (!ep.spatial) continue;
+				const label = ep.digit != null ? `Task ${ep.digit} ep ${ep.episode}` : `Episode ${ep.episode}`;
+				console.log(`    ${label}: ${this.formatSpatial(ep.spatial)}`);
+			}
 		}
 
 		// Joint-mode-only: first vs last training accuracy is a meaningful learning curve.

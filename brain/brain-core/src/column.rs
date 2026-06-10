@@ -136,18 +136,19 @@ impl Column {
     /// and returns results parent_id-tagged in task order.
     pub fn process_spatial_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
-        level_context: Option<&crate::context::SpatialContext>,
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
         learning: bool,
     ) -> Vec<ColumnProcessResult> {
+
+        // Each task carries its own neighbor-filtered observed context
         let mut results = Vec::with_capacity(tasks.len());
-        for (neuron_id, age_states, corrections, error_feedback, actives) in tasks {
+        for (neuron_id, age_states, corrections, error_feedback, actives, observed_context) in tasks {
             let neuron = self.neurons.get_mut(neuron_id)
                 .unwrap_or_else(|| panic!("Column.process_spatial_level: neuron {} not found", neuron_id));
             let result = neuron.process_spatial_frame(
-                age_states, level_context, new_error_pattern_ids,
+                age_states, Some(observed_context), new_error_pattern_ids,
                 actives, frame_number, corrections, error_feedback, learning,
             );
             results.push(ColumnProcessResult {
