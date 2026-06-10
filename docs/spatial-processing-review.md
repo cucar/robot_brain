@@ -157,6 +157,9 @@ learning/error stays filtered to the parent's 3×3, and an L2 minted from L1-at-
 as context only L1s whose parents are A's neighbors — receptive fields grow one radius hop per
 level.
 
+This fix is subsumed by the broader design decision in **section 7**: minted patterns inherit
+the parent's full (channel, dimension, coordinate), not just the channel.
+
 ---
 
 ## 3. Expected dynamics after the fixes (notes from design discussion)
@@ -234,3 +237,91 @@ After 1-4, rerun the existing jobs (`7x7-levels`, `threshold-grid`, `convergence
 expected observable changes: routing matches fire, hierarchy depth grows past 1, mint counts
 plateau instead of growing linearly with frames, and per-episode train accuracy converges
 upward.
+
+---
+
+## 7. Design addendum — coordinate inheritance for spatial patterns
+
+Decision from design discussion: **when a spatial neuron gets a new child (correction), the
+child inherits the parent's full (channel, dimension, coordinate)**. This extends fix 2.2
+(channel-only inheritance) and is the mechanism by which apex spatial patterns participate in
+temporal processing without disturbing its channel-based consensus.
+
+### 7.1 Rationale
+
+- **A correction is a refinement, not a new observable.** C1 means "pixel A, but in this
+  specific neighborhood configuration." The thing asserted about the world is still A's value;
+  the refined identity lives in the neuron id and routing context, not in the coordinate. The
+  coordinate genuinely does not change — inheriting it preserves a true invariant rather than
+  inventing a convenient one.
+- **It restores the temporal level-0 invariant.** The temporal machinery was built on the
+  assumption that everything at `temporal_level_index[0]` is a coordinate-bearing token
+  (channel / dimension / value). The apex handoff broke that by inserting coordinate-less
+  pattern neurons. With inheritance, temporal level 0 is a uniform interface language again —
+  some tokens raw, some context-refined — and the per-dimension consensus needs no changes.
+- **Subsumption + inheritance compose.** When C1 fires, parent A is subsumed out of the apex,
+  so the consensus sees exactly **one** vote-bearing token per recognized coordinate — no
+  double-counting of parent and child on the same channel-dim.
+- **Topology above L0 falls out** (fix 2.2 subsumed): inheriting the channel gives every level
+  the parent's neighbor graph, and receptive fields still grow by composition — an L2 whose
+  context is L1s anchored at A's neighbors effectively covers 5×5 even though its own neighbor
+  set is A's 3×3.
+- **Prerequisite for the policy-engine migration**
+  ([brain-as-policy-engine.md](brain-as-policy-engine.md)): `FrameVote.value` is the
+  dequantized bucket value, which is undefined for coordinate-less apex patterns. Inheritance
+  makes the votes API uniform across raw and refined voters.
+
+### 7.2 Rejected alternative: neighborhood averaging
+
+Averaging the neighborhood's coordinates was considered and rejected. The centroid is not a
+registered channel; averaging bucket values across different channels is meaningless outside
+vision (averaging AAPL's bucket with MSFT's is noise); and it destroys the refinement
+invariant that everything above relies on. The parent anchor is also the biologically apt
+choice — the receptive field center.
+
+### 7.3 Implementation notes
+
+- Inherit (channel, dimension, coordinate) at mint time in `allocate_spatial_pattern_neuron`
+  (it already receives `parent_id`).
+- **Do not register inherited coordinates in `neurons_by_value`** — that map requires
+  coordinate uniqueness, and value→neuron resolution (action targets, event lookup) must
+  always land on the L0 sensory/action neuron. Refined tokens are only ever reached via
+  routing matches. The inherited coordinate is metadata for consensus grouping, neighbor
+  filtering, and vote dequantization.
+- Persistence: inherited coordinates need no new snapshot field — they are derivable on
+  restore by walking `neuron_parents` to the L0 ancestor (parent ids are already persisted).
+  Deeper levels chain: L2 inherits from its L1 parent, which anchors at the original L0
+  coordinate.
+
+### 7.4 Identity matching in temporal processing — id-level, by design
+
+An interaction to be aware of: the apex vocabulary shifts during early training. Temporal
+patterns initially wire toward raw pixels; once spatial corrections start firing and subsuming
+their parents, the apex contains C1 instead of A, and temporal predictions of A score as
+misses under id-based error evaluation (`evaluate_vote_error` checks id membership in
+actuals).
+
+A coordinate-level fallback for error evaluation ("did some token with this coordinate fire?")
+was considered and **rejected**. The refined token is not interchangeable with its anchor —
+seeing a dog is not the same thing as seeing a brown pixel; the dog merely *uses the
+coordinates* of that pixel for consensus bookkeeping. Treating them as equivalent in error
+evaluation would erase exactly the distinction the spatial hierarchy exists to create.
+
+The accepted model instead relies on **apex stabilization**: once C1 exists and its context
+recurs, the apex token for that configuration is C1, consistently — the system does not revert
+to A. The transition period produces some temporal patterns wired to soon-obsolete tokens;
+those stop activating and are reclaimed by the existing forgetting mechanism
+(activation-strength decay / death ledger). This is accepted cost, not a problem to engineer
+around. Note the explicit assumption this rests on: **without apex stabilization the design
+does not work** — which is one more reason fixes 1.1 and 2.1 (which make recognition fire and
+minting quench) are prerequisites, and one more diagnostic to watch (apex composition churn
+over episodes should fall to ~zero on a fixed training set).
+
+### 7.5 Accepted consequence: consensus output is a lossy projection
+
+With inheritance, the per-dimension inference output reports a refined token under its
+anchor coordinate — temporal may predict "stroke fragment anchored at A" and the consensus
+reports "px_A = on." Nothing is lost internally (routing and contexts use full neuron ids),
+and the richer identity is recoverable from the votes payload — which is exactly the
+policy-engine direction. The consensus layer speaks the observable vocabulary; the hierarchy
+speaks the structural one.
