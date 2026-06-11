@@ -27,6 +27,10 @@ export default class MNISTTestJob extends Job {
 		this.config = {
 			imageSize: 7, // by default, we do 7×7 binary run - small and fast
 			buckets: 2,
+			// radius: spatial neighborhood radius declared per pixel — 1 = 3×3 (8 neighbors),
+			// 2 = 5×5 (24), 3 = 7×7 (48). Larger = bigger L1 receptive field (more structural context)
+			// but more specific patterns, more brittle matching, and far more sample-hungry.
+			radius: 1,
 			// Training is class-balanced by default: the same number of examples is used per digit.
 			// The brain's per-voter normalization (K_{V,d} / Σ_d K_{V,d}) bakes the class prior into every voter's contribution.
 			// Unbalanced training (natural MNIST has ~24% more 1s than 5s) leaks that prior tilt into every background voter and dominates the consensus.
@@ -41,6 +45,29 @@ export default class MNISTTestJob extends Job {
 			split: false,
 			// noBalance: skip class-balanced selection and train on the full natural MNIST set (unbalanced).
 			noBalance: false,
+			// decode: how to turn the brain's votes into a digit prediction at inference time.
+			//   'consensus' — the brain's built-in winner (strength-weighted ARITHMETIC mean of per-voter
+			//     posteriors P(d|voter), argmax over digits).
+			//   'nb' — Naive-Bayes-style PRODUCT of per-voter posteriors: argmax_d Σ_voter log(P(d|voter)+eps).
+			//     Sharper than the mean: a voter that confidently rules a digit out (P≈0 → log≈−large) heavily
+			//     penalizes it, instead of being diluted by averaging. Experiment toggle (no Rust change).
+			decode: 'consensus',
+			// nbEps: Laplace-style floor added before the log so P(d|voter)=0 doesn't send a digit to −Infinity.
+			nbEps: 1e-6,
+			// errorCorrectRounds: N>0 → after normal training, run N discriminative passes over the
+			// training set that reinforce (smoothed-reward learn()) only on mispredictions, with minting
+			// off. Pushes training accuracy toward ~100%; test effect is the experiment.
+			errorCorrectRounds: 0,
+			// debugMiss: N>0 → during the held-out test (NB decode), analyze misclassified images: print
+			// the first N with their per-digit NB log-scores, and aggregate over ALL misses the true
+			// digit's rank, the winner−true margin, and voter counts (miss vs hit). Diagnoses whether
+			// misses are near-ties (true digit rank 2, small margin) or confident errors (rank 3+).
+			debugMiss: 0,
+			// evalTrain: after training, run a clean frozen (no-learning) pass over the TRAINING set and
+			// report its accuracy. Differs from the per-episode "train=" number, which is prequential
+			// (each image scored by the model as it stood before that image's learn()). The frozen pass
+			// scores every training image with the FINAL model — revealing apex-churn / wiring-lag loss.
+			evalTrain: false,
 		};
 		this.encoder = null;
 		this.trainImages = null;
@@ -67,6 +94,8 @@ export default class MNISTTestJob extends Job {
 		if (imageSize !== null) this.config.imageSize = imageSize;
 		const buckets = num('--buckets');
 		if (buckets !== null) this.config.buckets = buckets;
+		const radius = num('--radius');
+		if (radius !== null) this.config.radius = radius;
 		const perClass = num('--per-class');
 		if (perClass !== null) this.config.perClass = perClass;
 		const maxTestImages = num('--max-test-images');
@@ -76,6 +105,16 @@ export default class MNISTTestJob extends Job {
 		if (process.argv.includes('--skip-test')) this.config.skipTest = true;
 		if (process.argv.includes('--split')) this.config.split = true;
 		if (process.argv.includes('--no-balance')) this.config.noBalance = true;
+		if (process.argv.includes('--eval-train')) this.config.evalTrain = true;
+		const missIdx = process.argv.indexOf('--debug-miss');
+		if (missIdx !== -1 && process.argv[missIdx + 1] !== undefined) this.config.debugMiss = parseInt(process.argv[missIdx + 1]);
+		const ecIdx = process.argv.indexOf('--error-correct-rounds');
+		if (ecIdx !== -1 && process.argv[ecIdx + 1] !== undefined) this.config.errorCorrectRounds = parseInt(process.argv[ecIdx + 1]);
+
+		const decodeIdx = process.argv.indexOf('--decode');
+		if (decodeIdx !== -1 && process.argv[decodeIdx + 1] !== undefined) this.config.decode = process.argv[decodeIdx + 1];
+		const epsIdx = process.argv.indexOf('--nb-eps');
+		if (epsIdx !== -1 && process.argv[epsIdx + 1] !== undefined) this.config.nbEps = parseFloat(process.argv[epsIdx + 1]);
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
@@ -85,8 +124,10 @@ export default class MNISTTestJob extends Job {
 	 * Construct the pixel-channels encoder and register one channel per pixel position with the brain.
 	 */
 	async initialize() {
-		this.encoder = new MNISTPixelChannelsEncoder(this.config.buckets, this.config.imageSize);
+		this.encoder = new MNISTPixelChannelsEncoder(this.config.buckets, this.config.imageSize, this.config.radius);
 		this.encoder.registerChannels(this.brain);
+		// NB decode reaggregates the raw per-voter action votes, so they must be emitted (off by default).
+		if (this.config.decode === 'nb') this.brain.setEmitVotes(true);
 	}
 
 	/**
@@ -201,8 +242,43 @@ export default class MNISTTestJob extends Job {
 		if (this.config.split) this.runSplitTraining();
 		else this.runJointTraining();
 
+		// optional discriminative second phase: reinforce on training mispredictions only
+		if (this.config.errorCorrectRounds > 0) this.runErrorCorrection();
+
 		// now, run the tests evaluation
 		if (!this.config.skipTest) this.runEvaluation();
+	}
+
+	/**
+	 * Discriminative (error-driven) second phase. With minting OFF (setLearning(false), so NO new
+	 * patterns are created — only rewards are adjusted), walk the training set; for each image, predict
+	 * with the configured decode, and on a MISPREDICTION reinforce the correct digit via the smoothed-
+	 * reward learn() wire (correct digit reward=1, all others 0). Repeated over rounds, this pushes the
+	 * firing voters' posteriors to fix the training decision — Naive-Bayes → perceptron/logistic. Prints
+	 * per-round training accuracy so the climb toward ~100% is visible. Expect train to approach 100%;
+	 * test is the open question (overfitting risk vs. independence-violation recalibration).
+	 */
+	runErrorCorrection() {
+		const N = this.trainBits.length;
+		console.log('');
+		this.brain.setLearning(false); // adjust rewards only — do not mint new patterns this phase
+		for (let round = 1; round <= this.config.errorCorrectRounds; round++) {
+			const start = Date.now();
+			let correct = 0, corrected = 0;
+			for (let i = 0; i < N; i++) {
+				const label = this.trainLabels[i];
+				if (this.predictImage(this.trainBits[i]) === label) {
+					correct++;
+				} else {
+					this.brain.learn(this.encoder.encodeAction(label), 1);
+					corrected++;
+				}
+				this.reportProgress('err-correct', i + 1, N, { correct }, start);
+				if (this.isShuttingDown) { this.clearProgress(); return; }
+			}
+			this.clearProgress();
+			console.log(`  Error-correct round ${round}/${this.config.errorCorrectRounds}: train=${(correct / N * 100).toFixed(2)}% (${correct}/${N}) | reinforced ${corrected} | ${Date.now() - start}ms`);
+		}
 	}
 
 	/**
@@ -237,7 +313,33 @@ export default class MNISTTestJob extends Job {
 	runEvaluation() {
 		this.brain.setLearning(false);
 		console.log('');
+		// Frozen pass over the training set, if requested — scores every training image with the
+		// FINAL model (vs the prequential per-episode number). The gap measures apex-churn / wiring-lag.
+		if (this.config.evalTrain) this.trainEvalResult = this.runTrainEval();
 		this.testResult = this.runTest();
+	}
+
+	/**
+	 * Clean frozen evaluation of the TRAINING set (setLearning(false) already in effect): predict every
+	 * training image with the final model, no learning. Reported separately from the prequential
+	 * per-episode "train=" number; a lower value here exposes how much the moving apex / one-exposure
+	 * wiring lag cost relative to what the online number suggested.
+	 */
+	runTrainEval() {
+		const startTime = Date.now();
+		const tally = this.newTally();
+		for (let i = 0; i < this.trainBits.length; i++) {
+			const predicted = this.predictImage(this.trainBits[i]);
+			this.recordPrediction(tally, this.trainLabels[i], predicted);
+			this.reportProgress('train-eval', i + 1, this.trainBits.length, tally, startTime);
+			if (this.isShuttingDown) break;
+		}
+		this.clearProgress();
+		const duration = Date.now() - startTime;
+		const summary = this.summarizeTally(tally);
+		const perDigitStr = this.formatPerDigit(summary.perDigit, summary.perDigitTotal);
+		console.log(`  Train (frozen, final model): ${(summary.accuracy * 100).toFixed(2)}% (${summary.correct}/${summary.total}) ${duration}ms | ${perDigitStr}`);
+		return summary;
 	}
 
 	/**
@@ -326,7 +428,46 @@ export default class MNISTTestJob extends Job {
 		const inputs = this.encoder.encodeImage(bits);
 		this.brain.processFrame(inputs, EMPTY_REWARDS);
 		const inferResult = this.brain.infer();
+		if (this.config.decode === 'nb') {
+			if (this.config.debugMiss) this._lastVotes = inferResult.votes;
+			return this.decodeDigitNB(inferResult.votes);
+		}
 		return this.encoder.decodeDigit(inferResult.inferences);
+	}
+
+	/**
+	 * Naive-Bayes decode: combine the per-voter digit posteriors MULTIPLICATIVELY instead of by the
+	 * brain's strength-weighted arithmetic mean. Each active voter contributed one action vote per
+	 * digit with reward = P(digit|voter); under a uniform digit prior, argmax_d Π_voter P(d|voter) =
+	 * argmax_d Σ_voter log P(d|voter). The eps floor keeps a single P=0 from sending a digit to −∞.
+	 * Returns the winning digit, or -1 if there were no action votes.
+	 */
+	decodeDigitNB(votes) {
+		const { logScore } = this.scoreDigitsNB(votes);
+		if (logScore.size === 0) return -1;
+		let best = -1, bestScore = -Infinity;
+		for (const [digit, score] of logScore) {
+			if (score > bestScore) { bestScore = score; best = digit; }
+		}
+		return best;
+	}
+
+	/**
+	 * Core of the NB decode: returns the per-digit log-score map (Σ_voter log(P(d|voter)+eps)) and the
+	 * distinct voter count, so both the decode and the miss-analysis can share one pass over the votes.
+	 */
+	scoreDigitsNB(votes) {
+		const logScore = new Map();
+		const voters = new Set();
+		if (!votes || votes.length === 0) return { logScore, voterCount: 0 };
+		const eps = this.config.nbEps;
+		const digitChannel = this.encoder.digitChannelId;
+		for (const v of votes) {
+			if (v.targetType !== 'action' || v.channelId !== digitChannel) continue;
+			logScore.set(v.value, (logScore.get(v.value) || 0) + Math.log(v.reward + eps));
+			voters.add(v.voterId);
+		}
+		return { logScore, voterCount: voters.size };
 	}
 
 	/**
@@ -407,6 +548,9 @@ export default class MNISTTestJob extends Job {
 		const startTime = Date.now();
 		const tally = this.newTally();
 		const confusion = Array.from({ length: 10 }, () => new Array(10).fill(0));
+		const miss = this.config.debugMiss && this.config.decode === 'nb'
+			? { count: 0, printed: 0, rank: new Array(11).fill(0), marginSum: 0, voterMissSum: 0, voterHitSum: 0, hits: 0 }
+			: null;
 
 		for (let i = 0; i < this.testBits.length; i++) {
 			const label = this.testLabels[i];
@@ -414,6 +558,7 @@ export default class MNISTTestJob extends Job {
 			this.recordPrediction(tally, label, predicted);
 			// decodeDigit() returns -1 when no action inference is present — keep those out of the confusion matrix.
 			if (predicted >= 0 && predicted < 10) confusion[label][predicted]++;
+			if (miss) this.analyzeMiss(miss, label, predicted, this.testBits[i]);
 			this.reportProgress('test', i + 1, this.testBits.length, tally, startTime);
 			if (this.isShuttingDown) break;
 		}
@@ -423,8 +568,70 @@ export default class MNISTTestJob extends Job {
 		const summary = this.summarizeTally(tally);
 		const perDigitStr = this.formatPerDigit(summary.perDigit, summary.perDigitTotal);
 		console.log(`  Test: ${(summary.accuracy * 100).toFixed(2)}% (${summary.correct}/${summary.total}) ${duration}ms | ${perDigitStr}`);
+		if (miss) this.reportMissAnalysis(miss);
 
 		return { ...summary, confusion };
+	}
+
+	/**
+	 * Per-image miss bookkeeping for --debug-miss. Reads the votes stashed by predictImage, scores the
+	 * digits, and records (for misses) the true digit's rank and the winner−true log-score margin, plus
+	 * voter counts for both hits and misses. Prints the first `debugMiss` misses in detail.
+	 */
+	analyzeMiss(miss, label, predicted, bits) {
+		const { logScore, voterCount } = this.scoreDigitsNB(this._lastVotes);
+		if (predicted === label) { miss.voterHitSum += voterCount; miss.hits++; return; }
+		const ranked = [...logScore.entries()].sort((a, b) => b[1] - a[1]);
+		const trueRankIdx = ranked.findIndex(([d]) => d === label); // 0-based; -1 if true digit got no votes
+		const trueScore = logScore.has(label) ? logScore.get(label) : -Infinity;
+		const margin = (ranked.length ? ranked[0][1] : 0) - trueScore;
+		miss.count++;
+		miss.rank[trueRankIdx < 0 ? 10 : Math.min(trueRankIdx, 10)]++;
+		if (Number.isFinite(margin)) miss.marginSum += margin;
+		miss.voterMissSum += voterCount;
+		if (miss.printed < this.config.debugMiss) {
+			miss.printed++;
+			const top3 = ranked.slice(0, 3).map(([d, s]) => `${d}:${s.toFixed(1)}`).join(' ');
+			const trueStr = Number.isFinite(trueScore) ? trueScore.toFixed(1) : 'absent';
+			console.log(`  MISS true=${label} pred=${predicted} | true rank=${trueRankIdx < 0 ? 'none' : trueRankIdx + 1} margin=${Number.isFinite(margin) ? margin.toFixed(2) : '∞'} voters=${voterCount} | top3 ${top3} | true(${label})=${trueStr}`);
+			console.log(this.renderBits(bits));
+		}
+	}
+
+	/**
+	 * Render a quantized image as ASCII (one line per row) so a miss can be eyeballed — is it a
+	 * genuinely ambiguous shape, or a clean digit the model fumbled? Binary uses '#'/'·'; grayscale
+	 * uses a brightness ramp.
+	 */
+	renderBits(bits) {
+		const sz = this.config.imageSize;
+		const ramp = ' ·:-=+*#%@';
+		const maxBucket = Math.max(1, this.config.buckets - 1);
+		const lines = [];
+		for (let y = 0; y < sz; y++) {
+			let row = '      ';
+			for (let x = 0; x < sz; x++) {
+				const v = bits[y * sz + x];
+				row += this.config.buckets === 2
+					? (v ? '#' : '·')
+					: ramp[Math.min(ramp.length - 1, Math.round((v / maxBucket) * (ramp.length - 1)))];
+			}
+			lines.push(row);
+		}
+		return lines.join('\n');
+	}
+
+	/**
+	 * Aggregate miss summary: rank distribution (rank 2 = near-tie / true digit was runner-up), average
+	 * winner−true margin, and average voters per image for misses vs hits (recognition-collapse proxy).
+	 */
+	reportMissAnalysis(miss) {
+		if (miss.count === 0) { console.log('  MISS ANALYSIS: no misses'); return; }
+		const rankStr = miss.rank.map((c, i) => c ? `${i === 10 ? 'r≥11/none' : 'r' + (i + 1)}:${c}` : '').filter(Boolean).join(' ');
+		const nearTie = miss.rank[1]; // true digit was the runner-up (0-based index 1)
+		console.log(`  MISS ANALYSIS (${miss.count} misses):`);
+		console.log(`    true-digit rank: ${rankStr}  → near-ties (rank 2): ${nearTie} (${(100 * nearTie / miss.count).toFixed(0)}%)`);
+		console.log(`    avg margin (winner−true, log): ${(miss.marginSum / miss.count).toFixed(2)} | avg voters/img: miss ${(miss.voterMissSum / miss.count).toFixed(0)} vs hit ${miss.hits ? (miss.voterHitSum / miss.hits).toFixed(0) : '-'}`);
 	}
 
 	/**

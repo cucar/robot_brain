@@ -11,10 +11,25 @@ The brain currently does two unrelated things in one place:
 
 - **Stocks.** "Both buy and sell" is a real prediction with semantic meaning ("I'm uncertain"). Forcing a winner destroys the information the trading layer would actually use.
 - **Text generation.** Sampling by probability requires the *distribution*, not the argmax. Top-k, top-p, temperature — all live in the app.
-- **MNIST.** The argmax over digit actions is right, but it's a one-liner that doesn't need brain-side machinery.
+- **MNIST.** Argmax over digit actions is the right *shape*, but it's a one-liner that doesn't need brain-side machinery — and, as the empirical note below shows, the brain's *particular* argmax (a weighted mean) is not even the best rule: a Naive-Bayes product over the same votes beats it by ~5pp.
 - **Weather ("will it rain?")**. The honest answer is a probability — and it doesn't need to sum to 1 across alternatives, because the alternatives aren't mutually exclusive ("rain *and* hail" is allowed).
 
 The brain should produce **action votes with strengths and rewards**. Apps decide what to do with them.
+
+## Empirical validation: the app-side rule already beats the brain's consensus (MNIST)
+
+This is not hypothetical. On MNIST, an app-side aggregation of the kind this refactor moves out *already outperforms* the brain's built-in consensus — which is the strongest possible argument that "pick winners" is misplaced application logic.
+
+The brain's consensus picks the digit with the highest **strength-weighted arithmetic mean** of the per-voter posteriors `P(d|voter)` (`aggregate_votes` → `determine_dimension_winners`: an action's score is `weighted_total / strength`, then argmax). Reaggregating the *same* votes in the MNIST job with a **Naive-Bayes product** rule instead — `argmax_d Σ_voter log(P(d|voter) + ε)` — gives a consistent **+5pp test accuracy**, with no retraining and no brain change:
+
+| config (binary, 1000-image test) | brain consensus | NB product | lift |
+| --- | --- | --- | --- |
+| 14×14, 300/class | 84.3% | 89.5% | +5.2pp |
+| 28×28, 500/class | 83.8% | 89.3% | +5.5pp |
+
+Why the product wins: the mean is a soft ensemble — a digit can win on a mediocre average even when several voters strongly contradict it — whereas the product respects each voter's **veto** (`P(d|v) ≈ 0 → log ≈ −large`), which is the correct combination rule for an argmax over mutually-exclusive classes with roughly-independent evidence. The brain's consensus is built for expected-reward action *selection*, not classification, so it systematically under-reads the evidence the hierarchy already learned.
+
+The point for this refactor: even for MNIST — the one app where "argmax" is the right shape — the brain's *particular* argmax is not the best rule. The decision policy genuinely belongs in the app. This is implemented today behind `--decode nb` in `apps/mnist/jobs/test.js`, which reads the votes the brain already exposes via `setEmitVotes(true)` and computes the log-sum in ~10 lines of JS — a working preview of the votes-only consumption this design makes the default.
 
 ## The new API
 
@@ -130,10 +145,10 @@ brain.learn(encoder.encodeAllLabels(label), 1);
 // for eval:
 brain.setLearning(false);
 const result = brain.processFrame(image, EMPTY_ACTIONS);
-const predicted = pickArgmaxByReward(result.votes, ACTION_CHANNEL_ID);
+const predicted = pickNaiveBayes(result.votes, ACTION_CHANNEL_ID);  // log-sum of posteriors; +5pp over the brain's weighted-mean argmax
 ```
 
-`pickArgmaxByReward` is ~5 lines of JS in the MNIST job (or shared util in `apps/mnist`). The brain doesn't pick.
+`pickNaiveBayes` is ~10 lines of JS in the MNIST job: for each candidate digit, sum `log(vote.reward + ε)` over its action votes and take the argmax. The simpler `pickArgmaxByReward` (replicating the old brain consensus — `weighted_total / strength` per digit, argmax) is a valid fallback, but the NB rule is the recommended default per the empirical note above. Either way, the brain doesn't pick.
 
 ### Stocks
 
