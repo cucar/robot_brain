@@ -51,9 +51,9 @@ export default class MNISTTestJob extends Job {
 			//   'nb' — Naive-Bayes-style PRODUCT of per-voter posteriors: argmax_d Σ_voter log(P(d|voter)+eps).
 			//     Sharper than the mean: a voter that confidently rules a digit out (P≈0 → log≈−large) heavily
 			//     penalizes it, instead of being diluted by averaging. Experiment toggle (no Rust change).
-			decode: 'consensus',
+			decode: 'nb',
 			// nbEps: Laplace-style floor added before the log so P(d|voter)=0 doesn't send a digit to −Infinity.
-			nbEps: 1e-6,
+			nbEps: 1e-3,
 			// errorCorrectRounds: N>0 → after normal training, run N discriminative passes over the
 			// training set that reinforce (smoothed-reward learn()) only on mispredictions, with minting
 			// off. Pushes training accuracy toward ~100%; test effect is the experiment.
