@@ -38,18 +38,19 @@ It's best to use static error mode. Threshold seems best around 0.3 or 0.4.
 | 28² | 500          | 5 | static 0.4              | 1000  | 90.9%   | 83.8%                     |
 | 28² | full (~5.4K) | 3 | static 0.4              | 2000  | 87.0%   | 85.35%                    |
 
-| Res | per-class    | episodes | mode/err/merge          | test# | train→  | test                      |
-| --- |--------------| --- |-------------------------|-------|---------|---------------------------|
-| 14² | 100          | 3 | static 0.3 / merge 0.5  | 200   | 96.87%  | 93% (runaway depth: 36)   |
-| 14² | 100          | 3 | static 0.3 / merge 0.7  | 200   | 99.30%  | 93.50% (stable depth: 2)  |
-| 14² | 100          | 3 | static 0.2 / merge 0.8  | 200   | 99.90%  | 95.00% (stable depth: 1)  |
-| 14² | 100          | 3 | static 0.1 / merge 0.8  | 200   | 99.90%  | 95.00% (stable depth: 1)  |
-| 14² | 100          | 3 | static 0.1 / merge 0.9  | 200   | 99.90%  | 95.00% (stable depth: 1)  |
-| 14² | 100          | 3 | static 0.2 / merge 0.75 | 200   | 99.30%  | 91.00% (stable depth: 3)  |
-| 14² | 100          | 3 | static 0.1 / merge 0.7  | 200   | 100%    | 91.50% (stable depth: 4)  |
-| 14² | 100          | 3 | static 0.2 / merge 0.7  | 200   | 99.30%  | 91.00% (stable depth: 3)  |
-| 14² | 100          | 3 | static 0.2 / merge 0.6  | 200   | 99.80%  | 91.00% (stable depth: 5)  |
-| 28² | 200          | 3 | static 0.1 /merge 0.9   | 200   | 99.75%  | 95.50%                    |
+| Res | per-class    | episodes | mode/err/merge          | test# | train→ | test                     |
+| --- |--------------| --- |-------------------------|-------|--------|--------------------------|
+| 14² | 100          | 3 | static 0.3 / merge 0.5  | 200   | 96.87% | 93% (runaway depth: 36)  |
+| 14² | 100          | 3 | static 0.3 / merge 0.7  | 200   | 99.30% | 93.50% (stable depth: 2) |
+| 14² | 100          | 3 | static 0.2 / merge 0.8  | 200   | 99.90% | 95.00% (stable depth: 1) |
+| 14² | 100          | 3 | static 0.1 / merge 0.8  | 200   | 99.90% | 95.00% (stable depth: 1) |
+| 14² | 100          | 3 | static 0.1 / merge 0.9  | 200   | 99.90% | 95.00% (stable depth: 1) |
+| 14² | 100          | 3 | static 0.1 / merge 0.9  | 2000  | 99.23% | 90.25% (stable depth: 1) |
+| 14² | 100          | 3 | static 0.2 / merge 0.75 | 200   | 99.30% | 91.00% (stable depth: 3) |
+| 14² | 100          | 3 | static 0.1 / merge 0.7  | 200   | 100%   | 91.50% (stable depth: 4) |
+| 14² | 100          | 3 | static 0.2 / merge 0.7  | 200   | 99.30% | 91.00% (stable depth: 3) |
+| 14² | 100          | 3 | static 0.2 / merge 0.6  | 200   | 99.80% | 91.00% (stable depth: 5) |
+| 28² | 200          | 3 | static 0.1 /merge 0.9   | 200   | 99.75% | 95.50%                   |
 
 ## 3. Split-MNIST (sequential training, catastrophic-forgetting probe)
 
