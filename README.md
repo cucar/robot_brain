@@ -97,17 +97,17 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $89370977.32
-   Average per Episode: $89370977.32
-   Average ROI: +595806.52%
-   Average Per-Frame ROI: +0.599636%
-   Average Sharpe Ratio: 4.70
-   Total Transaction Cost: $1639809.56 (0.02% per trade)
-   Total Trades: 21196
-   Average Trades per Episode: 21196.0
+   Total Net Profit: $90731949.39
+   Average per Episode: $90731949.39
+   Average ROI: +604879.66%
+   Average Per-Frame ROI: +0.600681%
+   Average Sharpe Ratio: 4.73
+   Total Transaction Cost: $1763721.38 (0.02% per trade)
+   Total Trades: 21232
+   Average Trades per Episode: 21232.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $89370977.32 | ROI: +595806.52%, +0.599636%/frame, Sharpe: 4.70 (21196 trades)
+   Episode 1: $90731949.39 | ROI: +604879.66%, +0.600681%/frame, Sharpe: 4.73 (21232 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 50.54%
@@ -217,7 +217,7 @@ The brain learns to predict character sequences. Feed it a string, and it memori
 Run the text test with customized hyperparameters for text learning (the defaults are tuned for stock data):
 
 ```bash
-node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.001 --no-summary
+node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.00003 --no-summary
 ```
 
 **Expected output:**

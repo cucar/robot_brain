@@ -463,9 +463,9 @@ impl Thalamus {
     }
 
     /// The forget rate to stamp on base sensory/action neurons. Base neurons never die (no parent →
-    /// never reaped), but this rate drives the decay of their hosted spatial- and temporal-correction
-    /// children, so it must be the brain-wide `pattern_forget_rate` — otherwise (rate 0.0) every child
-    /// pattern hosted on a base neuron would be immortal, which was a bug.
+    /// never reaped), but this rate drives the decay of their hosted correction children, so it must
+    /// be the brain-wide `pattern_forget_rate` — otherwise (rate 0.0) every child pattern hosted on a
+    /// base neuron would be immortal, which was a bug.
     pub fn base_neuron_forget_rate(&self) -> f64 {
         self.pattern_forget_rate
     }
@@ -845,10 +845,8 @@ impl Thalamus {
                     action_neurons.push(lookup.id);
                 }
                 if lookup.is_new {
-                    // Action neurons get the same base-neuron forget rate as sensory event neurons:
-                    // they themselves never die, but their hosted children (any pattern corrections
-                    // that end up parented by an action) need a non-zero decay rate. Zero would make
-                    // every child pattern immortal.
+                    // Action neurons never die themselves, but their hosted correction children must
+                    // decay — stamp the base-neuron forget rate, not 0.0 (which leaves them immortal).
                     new_neuron_specs.push(NeuronCreateSpec { id: lookup.id, forget_rate: self.base_neuron_forget_rate(), connections: None });
                 }
             }

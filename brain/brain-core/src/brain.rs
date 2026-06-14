@@ -1069,9 +1069,8 @@ impl Brain {
     /// just filter them all out as is_new=false.
     fn create_new_sensory_neurons(&mut self, frame_neurons: &FrameNeurons, timings: &mut FrameTimings) {
         let t = Instant::now();
-        // Sensory neurons get the base-neuron forget rate so their hosted spatial- and temporal-
-        // correction children decay like children of pattern neurons (rate 0 would leave those
-        // children immortal, which was a bug). Sensory neurons themselves never die (no parent).
+        // Sensory neurons never die themselves, but their hosted correction children must decay —
+        // stamp the base-neuron forget rate, not 0.0 (which leaves those children immortal: a bug).
         let forget_rate = self.thalamus.base_neuron_forget_rate();
         let specs: Vec<NeuronCreateSpec> = frame_neurons.events.iter()
             .filter(|p| p.is_new)
