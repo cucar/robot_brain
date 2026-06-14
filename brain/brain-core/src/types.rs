@@ -122,6 +122,32 @@ pub enum Phase {
     Temporal,
 }
 
+/// Consensus mode — determines how the per-voter action posteriors are combined into a winner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsensusMode {
+    /// Strength-weighted arithmetic mean of the per-voter posteriors, argmax over the dimension.
+    /// A soft ensemble: a candidate can win on a good average even when several voters contradict it.
+    Democratic,
+    /// Naive-Bayes product of the per-voter posteriors: argmax over Σ_voter log(P|voter + nb_eps).
+    /// Each voter's near-zero posterior acts as a veto, the correct rule for argmax over
+    /// mutually-exclusive classes with roughly-independent evidence.
+    Nb,
+}
+
+/// Temporal context match metric — how the match score's threshold denominator is formed.
+/// Both share the same numerator (`common`, the known entries found in the observed frame) and
+/// only affect the threshold gate, not the relevance score.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchMode {
+    /// Containment: `common / (common + missing)` — fraction of the KNOWN pattern's own entries that
+    /// were observed (asymmetric, known-side only). Novel observed entries don't affect the gate.
+    /// This is the pre-spatial behavior.
+    Containment,
+    /// Jaccard: `common / (common + missing + novel)` — intersection over union, so novel observed
+    /// entries also penalize the match. Stops a small pattern over-firing on a large observed frame.
+    Jaccard,
+}
+
 /// Error correction mode — determines how error thresholds are calculated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorMode {

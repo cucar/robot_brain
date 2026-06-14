@@ -16,13 +16,17 @@ export class MNISTPixelChannelsEncoder {
 	 * @param {number} imageSize - output image side length.
 	 *   Source images are always 28×28; smaller sizes are produced by block-average downsampling.
 	 *   28 must be divisible by imageSize.
+	 * @param {number} neighborhoodRadius - radius of each pixel's spatial neighborhood declared
+	 *   to the brain via setSpatialNeighbors. 1 = 3×3 window (up to 8 neighbors), 2 = 5×5 (up to 24),
+	 *   etc. Edge effects shrink the count for pixels near the image border.
 	 */
-	constructor(buckets = 2, imageSize = 28) {
+	constructor(buckets = 2, imageSize = 28, neighborhoodRadius = 1) {
 		if (28 % imageSize !== 0) throw new Error(`imageSize must divide 28 evenly, got ${imageSize}`);
 		this.buckets = buckets;
 		this.imageSize = imageSize;
 		this.pixels = imageSize * imageSize;
 		this.downsampleFactor = 28 / imageSize;
+		this.neighborhoodRadius = neighborhoodRadius;
 		// Parallel arrays so encodeImage() can do an O(1) channel/dim lookup per pixel.
 		this.pixelChannelIds = [];
 		this.pixelDimIds = [];
@@ -62,6 +66,43 @@ export class MNISTPixelChannelsEncoder {
 		});
 		this.digitChannelId = channelId;
 		this.digitDimId = dimensionIds['px_digit'];
+
+		// Declare each pixel's 3×3 spatial neighborhood. Pixel (x, y) connects only to its 8
+		// immediate neighbors (and itself, implicitly). This narrows d=0 co-activation learning
+		// to local image structure — patterns minted by the brain capture stroke fragments and
+		// local intensity configurations rather than full-image fingerprints. Without this call,
+		// the brain falls back to all-pairs which is correct for non-spatial inputs (stocks,
+		// text) but devolves into image-memorization on vision data.
+		// The 'digit' action channel gets no neighbor declaration — it stays at all-pairs but it's
+		// not a sensory event channel anyway (actions don't participate in co-activation learning).
+		this.registerPixelNeighborhoods(brain);
+	}
+
+	/**
+	 * Declare a (2r+1)×(2r+1) neighborhood for each pixel channel — where r is `neighborhoodRadius`.
+	 * Converts each linear pixel index to (x, y) and lists in-bounds neighbors as channel names.
+	 * Edge/corner pixels naturally get fewer neighbors.
+	 */
+	registerPixelNeighborhoods(brain) {
+		const r = this.neighborhoodRadius;
+		for (let p = 0; p < this.pixels; p++) {
+			const x = p % this.imageSize;
+			const y = Math.floor(p / this.imageSize);
+			const neighbors = [];
+			for (let dy = -r; dy <= r; dy++) {
+				for (let dx = -r; dx <= r; dx++) {
+					if (dx === 0 && dy === 0) continue;
+					const nx = x + dx;
+					const ny = y + dy;
+					if (nx < 0 || nx >= this.imageSize) continue;
+					if (ny < 0 || ny >= this.imageSize) continue;
+					neighbors.push(`px_${ny * this.imageSize + nx}`);
+				}
+			}
+			// MNIST neighborhoods are spatial (pixel co-activation), so declare them on the spatial
+			// side only; the temporal side stays all-pairs (irrelevant at context length 1).
+			brain.setSpatialNeighbors(`px_${p}`, neighbors);
+		}
 	}
 
 	/**

@@ -22,7 +22,7 @@
  * @returns {string}
  */
 export function formatFrameSummary(summary, elapsed, tail = '') {
-	const { frameNumber, neuronCount, maxLevel } = summary;
+	const { frameNumber, neuronCount, maxTemporalLevel, maxSpatialLevel } = summary;
 
 	// "N/A" rather than 0 when the counter is empty — zero is a real measurement
 	// (a perfectly wrong predictor scores 0%) and shouldn't be confused with "no data".
@@ -42,7 +42,7 @@ export function formatFrameSummary(summary, elapsed, tail = '') {
 	// numbers stay grouped on the left and the timing stays anchored on the right.
 	const suffix = tail ? ` | ${tail}` : '';
 
-	return `Frame ${frameNumber} | Neurons: ${neuronCount} (L${maxLevel}) | Accuracy: ${accuracy} | Reward: ${reward} | MAPE: ${mape}${suffix} | Time: ${elapsed.toFixed(2)}ms`;
+	return `Frame ${frameNumber} | Neurons: ${neuronCount} (T${maxTemporalLevel} S${maxSpatialLevel}) | Accuracy: ${accuracy} | Reward: ${reward} | MAPE: ${mape}${suffix} | Time: ${elapsed.toFixed(2)}ms`;
 }
 
 /**

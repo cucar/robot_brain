@@ -7,13 +7,14 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::context::Context;
+use crate::context::TemporalContext;
 use crate::neuron::{
-    ActiveNeuron, AgeState, AgeVotes, Correction, ContextRefUpdate,
+    ActiveNeuron, AgeState, AgeVotes, Correction, TemporalContextRefUpdate, SpatialContextRefUpdate,
     CorrectionActivation, ErrorFeedback, Neuron, PatternMatch, Vote,
 };
+use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber,
+    ChannelId, Distance, ErrorMode, FrameNumber, MatchMode,
     NeuronId, Reward, Strength,
 };
 
@@ -24,7 +25,7 @@ pub struct ColumnProcessResult {
     pub parent_id: NeuronId,
     pub matches: Vec<PatternMatch>,
     pub correction_activations: Vec<CorrectionActivation>,
-    pub context_ref_updates: Vec<ContextRefUpdate>,
+    pub context_ref_updates: Vec<TemporalContextRefUpdate>,
     pub votes: Vec<AgeVotes>,
     pub timings: crate::neuron::NeuronOpTimings,
 }
@@ -38,16 +39,23 @@ pub struct DeleteResult {
 
 /// Operations that travel between columns during delete cascades.
 /// Each variant carries the data needed to execute without reaching back to Thalamus.
+/// Phase-specific variants exist where the work differs in shape (distance vs no-distance).
 #[derive(Debug, Clone)]
 pub enum DeleteOp {
     /// Destroy a dying neuron and emit cleanup ops for its connections.
+    /// Generic — destroy walks both spatial and temporal state on the dying neuron.
     DeleteNeuron { target_id: NeuronId, parent_id: NeuronId },
     /// Remove a dead child pattern from its parent's routing table.
+    /// Generic — parent.remove_routing_entry tries both spatial and temporal tables.
     RemovePattern { target_id: NeuronId, pattern_id: NeuronId },
-    /// Scrub a dead neuron from a parent's children's context entries.
-    PurgeContextNeuron { target_id: NeuronId, dying_neuron_id: NeuronId, distances: Vec<Distance> },
-    /// Drop a stale contextRef on a context neuron.
-    RemoveContextRef { target_id: NeuronId, parent_id: NeuronId, distance: Distance },
+    /// Scrub a dead neuron from a parent's TEMPORAL children's context entries.
+    PurgeTemporalContextNeuron { target_id: NeuronId, dying_neuron_id: NeuronId, distances: Vec<Distance> },
+    /// Scrub a dead neuron from a parent's SPATIAL children's context entries.
+    PurgeSpatialContextNeuron { target_id: NeuronId, dying_neuron_id: NeuronId },
+    /// Drop a stale TEMPORAL contextRef on a context neuron.
+    RemoveTemporalContextRef { target_id: NeuronId, parent_id: NeuronId, distance: Distance },
+    /// Drop a stale SPATIAL contextRef on a context neuron.
+    RemoveSpatialContextRef { target_id: NeuronId, parent_id: NeuronId },
 }
 
 impl DeleteOp {
@@ -56,8 +64,10 @@ impl DeleteOp {
         match self {
             DeleteOp::DeleteNeuron { target_id, .. } => *target_id,
             DeleteOp::RemovePattern { target_id, .. } => *target_id,
-            DeleteOp::PurgeContextNeuron { target_id, .. } => *target_id,
-            DeleteOp::RemoveContextRef { target_id, .. } => *target_id,
+            DeleteOp::PurgeTemporalContextNeuron { target_id, .. } => *target_id,
+            DeleteOp::PurgeSpatialContextNeuron { target_id, .. } => *target_id,
+            DeleteOp::RemoveTemporalContextRef { target_id, .. } => *target_id,
+            DeleteOp::RemoveSpatialContextRef { target_id, .. } => *target_id,
         }
     }
 }
@@ -85,12 +95,15 @@ pub struct Column {
     /// Per-channel default action neuron id.
     channel_default_actions: FxHashMap<ChannelId, NeuronId>,
 
-    /// Context length — determines the range of distances (1..context_length-1)
+    /// TemporalContext length — determines the range of distances (1..context_length-1)
     /// at which default action connections are pre-wired on new neurons.
     context_length: u32,
 
-    /// Context merge threshold.
+    /// TemporalContext merge threshold.
     merge_threshold: f64,
+
+    /// TemporalContext match metric (containment vs jaccard).
+    match_mode: MatchMode,
 
     /// Error correction mode.
     error_mode: ErrorMode,
@@ -108,6 +121,7 @@ impl Column {
         channel_default_actions: FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
         merge_threshold: f64,
+        match_mode: MatchMode,
         error_mode: ErrorMode,
         error_threshold: f64,
     ) -> Self {
@@ -116,31 +130,62 @@ impl Column {
             channel_default_actions,
             context_length,
             merge_threshold,
+            match_mode,
             error_mode,
             error_threshold,
             neurons: FxHashMap::default(),
         }
     }
 
-    /// Op-3 down-trip body. Calls neuron.process_frame on every task and returns
-    /// results parent_id-tagged in task order.
-    pub fn process_level(
+    /// Op-3 down-trip body for the SPATIAL sweep. Calls neuron.process_spatial_frame on every task
+    /// and returns results parent_id-tagged in task order.
+    pub fn process_spatial_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>)],
-        memory_depth: u32,
-        level_context: Option<&Context>,
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        new_active_neurons: &[ActiveNeuron],
+        frame_number: FrameNumber,
+        learning: bool,
+    ) -> Vec<ColumnProcessResult> {
+
+        // Each task carries its own neighbor-filtered observed context
+        let mut results = Vec::with_capacity(tasks.len());
+        for (neuron_id, age_states, corrections, error_feedback, actives, observed_context) in tasks {
+            let neuron = self.neurons.get_mut(neuron_id)
+                .unwrap_or_else(|| panic!("Column.process_spatial_level: neuron {} not found", neuron_id));
+            let result = neuron.process_spatial_frame(
+                age_states, Some(observed_context), new_error_pattern_ids,
+                actives, frame_number, corrections, error_feedback, learning,
+            );
+            results.push(ColumnProcessResult {
+                parent_id: *neuron_id,
+                matches: result.matches,
+                correction_activations: result.correction_activations,
+                context_ref_updates: result.context_ref_updates,
+                votes: result.votes,
+                timings: result.timings,
+            });
+        }
+        results
+    }
+
+    /// Op-3 down-trip body for the TEMPORAL sweep. Calls neuron.process_temporal_frame on every
+    /// task and returns results parent_id-tagged in task order.
+    pub fn process_temporal_level(
+        &mut self,
+        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
+        memory_depth: u32,
+        level_context: Option<&TemporalContext>,
+        new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
         learning: bool,
     ) -> Vec<ColumnProcessResult> {
         let mut results = Vec::with_capacity(tasks.len());
-        for (neuron_id, age_states, corrections, error_feedback) in tasks {
+        for (neuron_id, age_states, corrections, error_feedback, actives) in tasks {
             let neuron = self.neurons.get_mut(neuron_id)
-                .unwrap_or_else(|| panic!("Column.process_level: neuron {} not found", neuron_id));
-            let result = neuron.process_frame(
+                .unwrap_or_else(|| panic!("Column.process_temporal_level: neuron {} not found", neuron_id));
+            let result = neuron.process_temporal_frame(
                 age_states, memory_depth, level_context, new_error_pattern_ids,
-                new_active_neurons, frame_number, corrections, error_feedback, learning,
+                actives, frame_number, corrections, error_feedback, learning,
             );
             results.push(ColumnProcessResult {
                 parent_id: *neuron_id,
@@ -175,20 +220,30 @@ impl Column {
                     // neuron already destroyed by an earlier op in this cascade if None
                 }
 
-                // remove a dead child pattern from its parent's routing table
+                // remove a dead child pattern from its parent's routing table (spatial or temporal)
                 DeleteOp::RemovePattern { target_id, pattern_id } => {
                     let ops = self.remove_pattern(*target_id, *pattern_id);
                     outbound_ops.extend(ops);
                 }
 
-                // scrub a dead neuron from a parent's children's context entries
-                DeleteOp::PurgeContextNeuron { target_id, dying_neuron_id, distances } => {
-                    self.purge_context_neuron(*target_id, *dying_neuron_id, distances, current_frame, &mut newly_deletable_ids);
+                // scrub a dead neuron from a parent's temporal children's context entries
+                DeleteOp::PurgeTemporalContextNeuron { target_id, dying_neuron_id, distances } => {
+                    self.purge_temporal_context_neuron(*target_id, *dying_neuron_id, distances, current_frame, &mut newly_deletable_ids);
                 }
 
-                // drop a stale contextRef on a context neuron
-                DeleteOp::RemoveContextRef { target_id, parent_id, distance } => {
-                    self.remove_context_ref_op(*target_id, *parent_id, *distance);
+                // scrub a dead neuron from a parent's spatial children's context entries
+                DeleteOp::PurgeSpatialContextNeuron { target_id, dying_neuron_id } => {
+                    self.purge_spatial_context_neuron(*target_id, *dying_neuron_id, current_frame, &mut newly_deletable_ids);
+                }
+
+                // drop a stale temporal contextRef on a context neuron
+                DeleteOp::RemoveTemporalContextRef { target_id, parent_id, distance } => {
+                    self.remove_temporal_context_ref_op(*target_id, *parent_id, *distance);
+                }
+
+                // drop a stale spatial contextRef on a context neuron
+                DeleteOp::RemoveSpatialContextRef { target_id, parent_id } => {
+                    self.remove_spatial_context_ref_op(*target_id, *parent_id);
                 }
             }
         }
@@ -202,34 +257,33 @@ impl Column {
 
         let mut outbound_ops = Vec::new();
 
-        // tell each parent that referenced this neuron in its children's contexts to scrub it
+        // tell each TEMPORAL parent that referenced this neuron in its children's contexts to scrub it
         for (referencing_parent_id, distances) in neuron.get_context_refs() {
-            outbound_ops.push(DeleteOp::PurgeContextNeuron {
+            outbound_ops.push(DeleteOp::PurgeTemporalContextNeuron {
                 target_id: *referencing_parent_id,
                 dying_neuron_id: neuron.id,
                 distances: distances.iter().copied().collect(),
             });
         }
 
-        // orphan each child: clean up context refs, then queue child for deletion.
-        // We need to collect routing table data before we can iterate, because
-        // remove_context_index borrows self mutably — but neuron is already moved out.
-        let routing_entries: Vec<(NeuronId, Vec<crate::types::ContextEntry>)> = neuron.get_routing_table()
+        // tell each SPATIAL parent that referenced this neuron in its children's contexts to scrub it
+        for &referencing_parent_id in neuron.get_spatial_context_refs() {
+            outbound_ops.push(DeleteOp::PurgeSpatialContextNeuron {
+                target_id: referencing_parent_id,
+                dying_neuron_id: neuron.id,
+            });
+        }
+
+        // Orphan each TEMPORAL child: emit RemoveTemporalContextRef ops for each context entry,
+        // then queue the child for deletion. We collect routing-table entries upfront because
+        // neuron is moved out of self.neurons (we can't borrow it back mutably from the map).
+        let temporal_children: Vec<(NeuronId, Vec<crate::types::ContextEntry>)> = neuron.get_routing_table()
             .iter()
             .map(|(&child_id, entry)| (child_id, entry.context.get_entries()))
             .collect();
-
-        // Note: neuron is moved out of self.neurons, so we can freely access its fields.
-        // But we can't call methods that need &mut self on a moved value's inner state
-        // through the neuron reference. We'll work with the collected data instead.
-        // The context_index cleanup ops are generated from the collected entries.
-        for (child_pattern_id, entries) in &routing_entries {
+        for (child_pattern_id, entries) in &temporal_children {
             for entry in entries {
-                // Check if removing this context entry orphans the context neuron
-                // (i.e. no other child references it at this distance).
-                // Since the neuron is being destroyed, all its context_index entries
-                // become orphaned, so we emit RemoveContextRef for all of them.
-                outbound_ops.push(DeleteOp::RemoveContextRef {
+                outbound_ops.push(DeleteOp::RemoveTemporalContextRef {
                     target_id: entry.neuron_id,
                     parent_id: neuron.id,
                     distance: entry.distance,
@@ -241,7 +295,26 @@ impl Column {
             });
         }
 
-        // tell parent to remove this pattern from its routing table
+        // Orphan each SPATIAL child: emit RemoveSpatialContextRef ops for each ctx neuron,
+        // then queue the child for deletion. Spatial context has no distance dimension.
+        let spatial_children: Vec<(NeuronId, Vec<NeuronId>)> = neuron.get_spatial_routing_table()
+            .iter()
+            .map(|(&child_id, entry)| (child_id, entry.context.entries().keys().copied().collect()))
+            .collect();
+        for (child_pattern_id, ctx_neuron_ids) in &spatial_children {
+            for &ctx_neuron_id in ctx_neuron_ids {
+                outbound_ops.push(DeleteOp::RemoveSpatialContextRef {
+                    target_id: ctx_neuron_id,
+                    parent_id: neuron.id,
+                });
+            }
+            outbound_ops.push(DeleteOp::DeleteNeuron {
+                target_id: *child_pattern_id,
+                parent_id: neuron.id,
+            });
+        }
+
+        // tell parent to remove this pattern from its routing table (tries both spatial and temporal)
         outbound_ops.push(DeleteOp::RemovePattern {
             target_id: parent_id,
             pattern_id: neuron.id,
@@ -254,42 +327,59 @@ impl Column {
     }
 
     /// Remove a dead child pattern from a parent's routing table and context entries.
-    /// Returns RemoveContextRef ops for orphaned context references.
+    /// Checks both spatial and temporal routing tables; emits orphan ops with the right shape
+    /// based on which table held the pattern.
     fn remove_pattern(&mut self, target_id: NeuronId, pattern_id: NeuronId) -> Vec<DeleteOp> {
         let parent = match self.neurons.get_mut(&target_id) {
             Some(n) => n,
             None => return Vec::new(), // parent already destroyed in this cascade
         };
 
-        // get context entries before removing the pattern
+        let mut outbound_ops = Vec::new();
+
+        // Try the SPATIAL side first.
+        if let Some(entry) = parent.get_spatial_routing_table().get(&pattern_id) {
+            let ctx_neuron_ids: Vec<NeuronId> = entry.context.entries().keys().copied().collect();
+            for ctx_neuron_id in ctx_neuron_ids {
+                if !parent.has_spatial_context_key(pattern_id, ctx_neuron_id) { continue; }
+                let is_orphaned = parent.remove_spatial_context(pattern_id, ctx_neuron_id);
+                if is_orphaned {
+                    outbound_ops.push(DeleteOp::RemoveSpatialContextRef {
+                        target_id: ctx_neuron_id,
+                        parent_id: target_id,
+                    });
+                }
+            }
+            parent.remove_routing_entry(pattern_id);
+            return outbound_ops;
+        }
+
+        // Otherwise the TEMPORAL side (or nothing — already removed).
         let entries = match parent.get_routing_table().get(&pattern_id) {
             Some(entry) => entry.context.get_entries(),
-            None => return Vec::new(), // pattern already removed by parent's own DeleteNeuron cleanup
+            None => return outbound_ops, // pattern already removed by parent's own DeleteNeuron cleanup
         };
-
-        let mut outbound_ops = Vec::new();
         for entry in &entries {
-            // same-pulse PurgeContextNeuron may have already removed this entry
+            // same-pulse PurgeTemporalContextNeuron may have already removed this entry
             if !parent.has_context_key(pattern_id, entry.neuron_id, entry.distance) {
                 continue;
             }
             let is_orphaned = parent.remove_context(pattern_id, entry.neuron_id, entry.distance);
             if is_orphaned {
-                outbound_ops.push(DeleteOp::RemoveContextRef {
+                outbound_ops.push(DeleteOp::RemoveTemporalContextRef {
                     target_id: entry.neuron_id,
                     parent_id: target_id,
                     distance: entry.distance,
                 });
             }
         }
-
         parent.remove_routing_entry(pattern_id);
         outbound_ops
     }
 
-    /// Scrub a dead neuron from a parent's children's context entries.
+    /// Scrub a dead neuron from a parent's TEMPORAL children's context entries.
     /// Affected children whose activation strength decayed to zero become cascade candidates.
-    fn purge_context_neuron(
+    fn purge_temporal_context_neuron(
         &mut self,
         target_id: NeuronId,
         dying_neuron_id: NeuronId,
@@ -317,20 +407,52 @@ impl Column {
         }
     }
 
-    /// Drop a single contextRef entry on a context neuron.
-    fn remove_context_ref_op(&mut self, target_id: NeuronId, parent_id: NeuronId, distance: Distance) {
+    /// Scrub a dead neuron from a parent's SPATIAL children's context entries.
+    /// Affected children whose activation strength decayed to zero become cascade candidates.
+    fn purge_spatial_context_neuron(
+        &mut self,
+        target_id: NeuronId,
+        dying_neuron_id: NeuronId,
+        current_frame: FrameNumber,
+        newly_deletable_ids: &mut Vec<NeuronId>,
+    ) {
+        let parent = match self.neurons.get_mut(&target_id) {
+            Some(n) => n,
+            None => return,
+        };
+        // same-pulse RemovePattern may have already cleaned this entry
+        if !parent.has_spatial_context_index_entry(dying_neuron_id) { return; }
+        let affected_patterns = parent.remove_spatial_context_neuron(dying_neuron_id);
+        for pattern_id in affected_patterns {
+            if parent.can_delete_child(pattern_id, current_frame) {
+                newly_deletable_ids.push(pattern_id);
+            }
+        }
+    }
+
+    /// Drop a single TEMPORAL contextRef entry on a context neuron.
+    fn remove_temporal_context_ref_op(&mut self, target_id: NeuronId, parent_id: NeuronId, distance: Distance) {
         let neuron = match self.neurons.get_mut(&target_id) {
             Some(n) => n,
             None => return,
         };
-
         // same-pulse op may have already removed this ref
         let has_ref = neuron.get_context_refs()
             .get(&parent_id)
             .map_or(false, |distances| distances.contains(&distance));
         if !has_ref { return; }
-
         neuron.remove_context_ref(parent_id, distance);
+    }
+
+    /// Drop a SPATIAL contextRef entry on a context neuron.
+    fn remove_spatial_context_ref_op(&mut self, target_id: NeuronId, parent_id: NeuronId) {
+        let neuron = match self.neurons.get_mut(&target_id) {
+            Some(n) => n,
+            None => return,
+        };
+        // same-pulse op may have already removed this ref
+        if !neuron.get_spatial_context_refs().contains(&parent_id) { return; }
+        neuron.remove_spatial_context_ref(parent_id);
     }
 
     /// Inspection: dump a neuron's outgoing connections as
@@ -356,10 +478,67 @@ impl Column {
 
     /// Op-5 (deferred): Apply contextRef updates to owned neurons. Each entry carries the
     /// target neuron_id and a batch of updates for it.
-    pub fn update_context_refs(&mut self, update_batch: &[(NeuronId, Vec<ContextRefUpdate>)]) {
+    pub fn update_context_refs(&mut self, update_batch: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
         for (neuron_id, updates) in update_batch {
             if let Some(neuron) = self.neurons.get_mut(neuron_id) {
                 neuron.apply_context_ref_updates(updates);
+            }
+        }
+    }
+
+    /// Spatial correction install (1c) — for each op, add the new pattern as a child on the
+    /// Record spatial-error samples on owned neurons. Each (neuron_id, error_rate) pair updates
+    /// the neuron's spatial Welford bucket. Used so dynamic error modes for spatial
+    /// (conservative/neutral/aggressive) can adapt thresholds — without these samples the modes
+    /// silently fall back to the static threshold for spatial.
+    pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
+        for &(id, rate) in feedback {
+            if let Some(neuron) = self.neurons.get_mut(&id) {
+                neuron.record_spatial_error(rate);
+            }
+        }
+    }
+
+    /// parent neuron with the d=0 context entries, register the resulting death frame, and emit
+    /// ContextRefUpdates for each context-entry target so they know this parent now references them.
+    /// Corrections are NOT activated this frame; the routing-table entry will fire on next frame's
+    /// spatial sweep via the recognize_patterns path.
+    pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>, frame_number: FrameNumber) -> SpatialInstallResult {
+        let mut deaths = Vec::new();
+        let mut context_ref_updates: Vec<SpatialContextRefUpdate> = Vec::new();
+
+        for op in ops {
+            // Locate the parent. If it's not in this column, the routing was wrong upstream — skip.
+            let parent = match self.neurons.get_mut(&op.parent_id) {
+                Some(n) => n,
+                None => continue,
+            };
+
+            // Add the child pattern to the parent's spatial routing table.
+            let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids, frame_number);
+            if let Some(df) = death_frame { deaths.push((op.pattern_id, df)); }
+
+            // For each context-neuron target, emit a SpatialContextRefUpdate so the target's
+            // spatial_context_refs gains an entry pointing back to the parent.
+            // Bucketing by target happens later in thalamus (parallel to the temporal path),
+            // which is why each update carries its own neuron_id.
+            for &ctx_neuron_id in &op.context_neuron_ids {
+                context_ref_updates.push(SpatialContextRefUpdate {
+                    neuron_id: ctx_neuron_id,
+                    parent_id: op.parent_id,
+                });
+            }
+        }
+
+        SpatialInstallResult { deaths, context_ref_updates }
+    }
+
+    /// Spatial counterpart of update_context_refs — dispatches SpatialContextRefUpdates to the
+    /// target neurons owned by this column.
+    pub fn update_spatial_context_refs(&mut self, update_batch: &[(NeuronId, Vec<SpatialContextRefUpdate>)]) {
+        for (target_id, updates) in update_batch {
+            if let Some(neuron) = self.neurons.get_mut(target_id) {
+                neuron.apply_spatial_context_ref_updates(updates);
             }
         }
     }
@@ -373,6 +552,7 @@ impl Column {
                 spec.id,
                 spec.forget_rate,
                 self.merge_threshold,
+                self.match_mode,
                 self.error_mode,
                 self.error_threshold,
                 self.channel_actions.clone(),
@@ -429,6 +609,7 @@ impl Column {
             data.id,
             data.pattern_forget_rate,
             self.merge_threshold,
+            self.match_mode,
             self.error_mode,
             self.error_threshold,
             self.channel_actions.clone(),
@@ -458,9 +639,14 @@ impl Column {
             }
         }
 
-        // load per-(neuron, age) Welford error stats
+        // load per-(neuron, age) Welford error stats.
+        // Spatial serializes as age=0; temporal serializes at its real age (>= 1).
         for stat in &data.error_stats {
-            neuron.load_error_stats(stat.age, stat.n, stat.mean, stat.m2);
+            if stat.age == 0 {
+                neuron.load_spatial_error_stats(stat.n, stat.mean, stat.m2);
+            } else {
+                neuron.load_error_stats(stat.age, stat.n, stat.mean, stat.m2);
+            }
         }
 
         self.neurons.insert(neuron.id, neuron);
@@ -582,6 +768,7 @@ mod tests {
             FxHashMap::default(),
             2,
             0.5,
+            MatchMode::Jaccard,
             ErrorMode::Static,
             0.5,
         )

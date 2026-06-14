@@ -39,7 +39,10 @@ export function parseBrainArgs(argv = process.argv) {
 		errorCorrectionThreshold: num('--error-threshold', parseFloat),
 		mergeThreshold: num('--merge-threshold', parseFloat),
 		regions: num('--regions', parseInt),
-		columns: num('--columns', parseInt)
+		columns: num('--columns', parseInt),
+		consensus: str('--consensus'),
+		nbEps: num('--nb-eps', parseFloat),
+		matchMode: str('--match-mode')
 	};
 }
 

@@ -18,7 +18,7 @@ use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 
 use brain_core::brain::{Brain as CoreBrain, FrameResult};
-use brain_core::types::{Coordinate, ErrorMode, NeuronType};
+use brain_core::types::{ConsensusMode, Coordinate, ErrorMode, MatchMode, NeuronType};
 
 // ── Helper: JS Map iteration ────────────────────────────────────────────────
 
@@ -147,11 +147,14 @@ impl JsBrain {
     ///   patternForgetRate: number (default 0.01)
     ///   regions: number (default 1)
     ///   columns: number (default 1)
+    ///   consensus: string 'democratic' | 'nb' (default 'democratic')
+    ///   nbEps: number (default 1e-3) — Laplace floor for the 'nb' consensus log
+    ///   matchMode: string 'containment' | 'jaccard' (default 'jaccard') — temporal match denominator
     ///   debug: boolean (default false)
     #[napi(constructor)]
     pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
-        let (context_length, error_mode, error_threshold, merge_threshold,
-             pattern_forget_rate, regions, columns, debug) = match options {
+        let (context_length, error_mode, error_threshold, merge_threshold, match_mode,
+             pattern_forget_rate, regions, columns, consensus_mode, nb_eps, debug) = match options {
             Some(ref opts) => {
                 let cl = get_opt_u32(opts, "contextLength")?.unwrap_or(10);
                 let mode_str = get_opt_string(opts, "errorCorrectionMode")?
@@ -159,19 +162,26 @@ impl JsBrain {
                 let mode = parse_error_mode(&mode_str)?;
                 let et = get_opt_f64(opts, "errorCorrectionThreshold")?.unwrap_or(0.5);
                 let mt = get_opt_f64(opts, "mergeThreshold")?.unwrap_or(0.5);
+                let match_str = get_opt_string(opts, "matchMode")?
+                    .unwrap_or_else(|| "jaccard".to_string());
+                let match_mode = parse_match_mode(&match_str)?;
                 let pfr = get_opt_f64(opts, "patternForgetRate")?.unwrap_or(0.01);
                 let r = get_opt_u32(opts, "regions")?.unwrap_or(1) as usize;
                 let c = get_opt_u32(opts, "columns")?.unwrap_or(1) as usize;
+                let consensus_str = get_opt_string(opts, "consensus")?
+                    .unwrap_or_else(|| "democratic".to_string());
+                let consensus = parse_consensus_mode(&consensus_str)?;
+                let eps = get_opt_f64(opts, "nbEps")?.unwrap_or(1e-3);
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
-                (cl, mode, et, mt, pfr, r, c, d)
+                (cl, mode, et, mt, match_mode, pfr, r, c, consensus, eps, d)
             }
-            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, false),
+            None => (10, ErrorMode::Conservative, 0.5, 0.5, MatchMode::Jaccard, 0.01, 1, 1, ConsensusMode::Democratic, 1e-3, false),
         };
 
         Ok(Self {
             inner: RefCell::new(CoreBrain::new(
-                context_length, error_mode, error_threshold, merge_threshold,
-                pattern_forget_rate, regions, columns, debug,
+                context_length, error_mode, error_threshold, merge_threshold, match_mode,
+                pattern_forget_rate, regions, columns, consensus_mode, nb_eps, debug,
             )),
         })
     }
@@ -261,7 +271,7 @@ impl JsBrain {
         let brain = self.inner.borrow();
         let snapshot = brain.get_context_snapshot();
         let mut arr = env.create_array_with_length(snapshot.len())?;
-        for (i, (neuron_id, _frame, level, _phase, state)) in snapshot.iter().enumerate() {
+        for (i, (neuron_id, _frame, level, state)) in snapshot.iter().enumerate() {
             let mut obj = env.create_object()?;
             obj.set_named_property("neuronId", env.create_uint32(*neuron_id as u32)?)?;
             obj.set_named_property("level", env.create_uint32(*level as u32)?)?;
@@ -354,17 +364,6 @@ impl JsBrain {
         build_frame_result(&env, &frame_result)
     }
 
-    /// Read-only inference over the current memory window.
-    /// Runs the same vote-sweep + consensus path `learn()` uses internally but writes no wirings and
-    /// has no other side effects, so callers can read the brain's prediction at depths where
-    /// `processFrame`'s vote generator would otherwise suppress the only available age.
-    /// Used by the supervised held-out evaluation path in the MNIST app.
-    #[napi(js_name = "infer")]
-    pub fn infer(&self, env: Env) -> Result<JsObject> {
-        let frame_result = self.inner.borrow_mut().infer();
-        build_frame_result(&env, &frame_result)
-    }
-
     /// Reset brain memory state for a clean episode start.
     #[napi(js_name = "resetContext")]
     pub fn reset_context(&self) -> Result<()> {
@@ -383,6 +382,95 @@ impl JsBrain {
     #[napi(js_name = "resetAccuracyStats")]
     pub fn reset_accuracy_stats(&self) -> Result<()> {
         self.inner.borrow_mut().reset_accuracy_stats();
+        Ok(())
+    }
+
+    /// Cumulative count of spatial corrections minted since brain start (or last hard reset).
+    #[napi(js_name = "getSpatialCorrectionCount")]
+    pub fn get_spatial_correction_count(&self) -> Result<u32> {
+        Ok(self.inner.borrow().get_spatial_correction_count() as u32)
+    }
+
+    /// Number of correction neurons currently sitting above the base spatial level.
+    #[napi(js_name = "countActiveSpatialCorrections")]
+    pub fn count_active_spatial_corrections(&self) -> Result<u32> {
+        Ok(self.inner.borrow().count_active_spatial_corrections() as u32)
+    }
+
+    /// Per-level count of correction neurons. Returns array where index 0 is level 1, etc.
+    /// Length tells you the maximum spatial level reached.
+    #[napi(js_name = "spatialLevelCounts")]
+    pub fn spatial_level_counts(&self) -> Result<Vec<u32>> {
+        Ok(self.inner.borrow().spatial_level_counts())
+    }
+
+    /// Diagnostic: size of the most recent frame's apex set.
+    #[napi(js_name = "lastApexSize")]
+    pub fn last_apex_size(&self) -> Result<u32> {
+        Ok(self.inner.borrow().last_apex_size() as u32)
+    }
+
+    /// Diagnostic: size of get_active_voter_ids (temporal voter set the OLD learn path used).
+    #[napi(js_name = "activeVoterIdsSize")]
+    pub fn active_voter_ids_size(&self) -> Result<u32> {
+        Ok(self.inner.borrow().active_voter_ids_size() as u32)
+    }
+
+    /// Diagnostic: the spatial error rates from the most recent processFrame's mint pass.
+    /// Returns an array of {neuronId, errorRate} objects. Used for tuning thresholds by
+    /// characterizing the natural distribution of spatial error rates.
+    #[napi(js_name = "lastFrameSpatialErrorRates")]
+    pub fn last_frame_spatial_error_rates(&self, env: Env) -> Result<JsObject> {
+        let inner = self.inner.borrow();
+        let rates = inner.last_frame_spatial_error_rates();
+        let mut arr = env.create_array_with_length(rates.len())?;
+        for (i, (nid, rate)) in rates.iter().enumerate() {
+            let mut obj = env.create_object()?;
+            obj.set_named_property("neuronId", env.create_uint32(*nid as u32)?)?;
+            obj.set_named_property("errorRate", env.create_double(*rate)?)?;
+            arr.set_element(i as u32, obj)?;
+        }
+        Ok(arr)
+    }
+
+    /// Diagnostic: (apex_only_count, voters_only_count) — set difference between the apex set and
+    /// the temporal voter set. (0, 0) means identical sets.
+    #[napi(js_name = "apexVsVoterSetDiff")]
+    pub fn apex_vs_voter_set_diff(&self, env: Env) -> Result<JsObject> {
+        let (a, v) = self.inner.borrow().apex_vs_voter_set_diff();
+        let mut obj = env.create_object()?;
+        obj.set_named_property("apexOnly", env.create_uint32(a as u32)?)?;
+        obj.set_named_property("votersOnly", env.create_uint32(v as u32)?)?;
+        Ok(obj)
+    }
+
+
+    /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
+    /// This is the set a channel may co-fire with in the same frame to form a spatial pattern.
+    /// Names not in the registry are silently ignored; an empty list shrinks the spatial
+    /// neighborhood to {itself}; channels with no call retain the default all-pairs spatial
+    /// neighborhood. Call AFTER registering all channels — neighbor names are resolved at this call.
+    #[napi(js_name = "setSpatialNeighbors")]
+    pub fn set_spatial_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
+        self.inner.borrow_mut().set_spatial_neighbors(&name, &neighbor_names);
+        Ok(())
+    }
+
+    /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
+    /// This is the set whose past a channel may sequence against to predict the future.
+    /// Same name-resolution and all-pairs-default semantics as `setSpatialNeighbors`.
+    #[napi(js_name = "setTemporalNeighbors")]
+    pub fn set_temporal_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
+        self.inner.borrow_mut().set_temporal_neighbors(&name, &neighbor_names);
+        Ok(())
+    }
+
+    /// Declare the same neighbor set for BOTH phases — convenience for channels whose spatial and
+    /// temporal neighbors coincide (e.g. retinotopic pixels). Equivalent to calling
+    /// `setSpatialNeighbors` and `setTemporalNeighbors` with the same list.
+    #[napi(js_name = "setChannelNeighbors")]
+    pub fn set_channel_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
+        self.inner.borrow_mut().set_channel_neighbors(&name, &neighbor_names);
         Ok(())
     }
 
@@ -448,7 +536,8 @@ impl JsBrain {
         let mut obj = env.create_object()?;
         obj.set_named_property("frameNumber", env.create_int64(summary.frame_number as i64)?)?;
         obj.set_named_property("neuronCount", env.create_uint32(summary.neuron_count as u32)?)?;
-        obj.set_named_property("maxLevel", env.create_uint32(summary.max_level)?)?;
+        obj.set_named_property("maxTemporalLevel", env.create_uint32(summary.max_temporal_level)?)?;
+        obj.set_named_property("maxSpatialLevel", env.create_uint32(summary.max_spatial_level)?)?;
 
         // Spread diagnostic stats with camelCase names matching JS
         set_diagnostic_stats(&env, &mut obj, &summary.stats)?;
@@ -608,12 +697,15 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
     // timings: per-section wall-clock (seconds). Nested under `frame` alongside elapsed.
     let t = &result.timings;
     let mut timings_obj = env.create_object()?;
+    timings_obj.set_named_property("total", env.create_double(t.total)?)?;
     timings_obj.set_named_property("buildFrame", env.create_double(t.build_frame)?)?;
     timings_obj.set_named_property("createSensory", env.create_double(t.create_sensory)?)?;
     timings_obj.set_named_property("cleanupDead", env.create_double(t.cleanup_dead)?)?;
     timings_obj.set_named_property("ageContext", env.create_double(t.age_context)?)?;
     timings_obj.set_named_property("activate", env.create_double(t.activate)?)?;
-    timings_obj.set_named_property("processLevels", env.create_double(t.process_levels)?)?;
+    timings_obj.set_named_property("processSpatial", env.create_double(t.process_spatial)?)?;
+    timings_obj.set_named_property("apexHandoff", env.create_double(t.apex_handoff)?)?;
+    timings_obj.set_named_property("processTemporal", env.create_double(t.process_temporal)?)?;
     timings_obj.set_named_property("applyResults", env.create_double(t.apply_results)?)?;
     timings_obj.set_named_property("infer", env.create_double(t.infer)?)?;
     timings_obj.set_named_property("trackError", env.create_double(t.track_error)?)?;
@@ -791,6 +883,26 @@ fn parse_error_mode(s: &str) -> Result<ErrorMode> {
         "aggressive" => Ok(ErrorMode::Aggressive),
         _ => Err(Error::from_reason(format!(
             "Invalid errorCorrectionMode '{}'. Expected one of: static, conservative, neutral, aggressive", s
+        ))),
+    }
+}
+
+fn parse_consensus_mode(s: &str) -> Result<ConsensusMode> {
+    match s {
+        "democratic" => Ok(ConsensusMode::Democratic),
+        "nb" => Ok(ConsensusMode::Nb),
+        _ => Err(Error::from_reason(format!(
+            "Invalid consensus '{}'. Expected one of: democratic, nb", s
+        ))),
+    }
+}
+
+fn parse_match_mode(s: &str) -> Result<MatchMode> {
+    match s {
+        "containment" => Ok(MatchMode::Containment),
+        "jaccard" => Ok(MatchMode::Jaccard),
+        _ => Err(Error::from_reason(format!(
+            "Invalid matchMode '{}'. Expected one of: containment, jaccard", s
         ))),
     }
 }

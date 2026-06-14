@@ -47,6 +47,25 @@ Long-term plan, listed in implementation order.
 - This creates connections from action X to event Y — the foundation of action sequences
 - Actions are rewarded based on the sequences they produce
 
+### Migration: event-only text app → action-based
+- **Current state:** the text app (`apps/text`) is event-only — a single `text_char` *input* dim,
+  passthrough resolution 256, no actions, no rewards, no `learn()`. It predicts the next character
+  via the brain's *event* consensus (probability = strength-weighted voter share over the char dim).
+- **Target state:** add a `text_char_out` *action* dim alongside the `text_char_in` event dim, and
+  train with `learn()` (mirrors MNIST/stocks supervised wiring) so each voter→char connection carries
+  a smoothed posterior.
+- **The two inferences become distinct and both useful:**
+  - **Event inference** = "what am I *expected* to say at this moment" — the predicted next character
+    from the stream (passive expectation).
+  - **Action inference** = "what do I *want* to say at this moment" — the character the brain chooses
+    to emit (active intent). Executed actions feed back as events per the feedback loop above.
+- **Consensus:** the action side wants **democratic** consensus (strength-weighted mean expected
+  reward, argmax) — the natural fit for picking a single best character. **NB does not apply** until
+  this reframing lands (it needs per-voter posteriors that only the action/reward path produces), and
+  even then it is a poor fit for correlated temporal voters except on near-deterministic text.
+- **Until the reframing lands, the text app is unaffected by the `--consensus` brain option** — that
+  flag only switches the action path, and event-only text has no action votes.
+
 ### Math as text
 - Same text channel handles arithmetic
 - Learning the concept of "2": same things side by side, different frames, build associations
