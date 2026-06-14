@@ -875,9 +875,12 @@ impl Brain {
 
     /// Create sensory neurons that are new this frame.
     fn create_new_sensory_neurons(&mut self, frame_neurons: &[PointLookup]) {
+        // Sensory neurons never die themselves, but their hosted correction children must decay —
+        // stamp the base-neuron forget rate, not 0.0 (which leaves those children immortal: a bug).
+        let forget_rate = self.thalamus.base_neuron_forget_rate();
         let specs: Vec<NeuronCreateSpec> = frame_neurons.iter()
             .filter(|p| p.is_new)
-            .map(|p| NeuronCreateSpec { id: p.id, forget_rate: 0.0, connections: None })
+            .map(|p| NeuronCreateSpec { id: p.id, forget_rate, connections: None })
             .collect();
         if !specs.is_empty() {
             self.thalamus.create_neurons(&specs);
