@@ -32,7 +32,7 @@ use crate::thalamus::{
     PointLookup, Thalamus,
 };
 use crate::types::{
-    ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
+    ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
     Level, NeuronId, NeuronType, Reward,
 };
 
@@ -271,6 +271,10 @@ struct Candidate {
     weighted_total: f64,
     reward: f64,
     probability: f64,
+    /// Naive-Bayes log-score accumulator for action candidates: Σ_vote log(reward + nb_eps).
+    /// Filled only when consensus mode is Nb; one term per incoming vote (per connection),
+    /// matching the per-voter product rule. Ignored under Democratic consensus.
+    nb_log_score: f64,
 }
 
 /// Per-dimension winner tracking during consensus determination.
@@ -299,6 +303,15 @@ pub struct Brain {
 
     /// Debug flag — when set, enables verbose logging and vote debug output.
     debug: bool,
+
+    /// How per-voter action posteriors are combined into a dimension winner.
+    /// Democratic (default) is the strength-weighted mean; Nb is the Naive-Bayes log-product.
+    /// Only affects action scoring — event winners are always probability (voter share).
+    consensus_mode: ConsensusMode,
+
+    /// Laplace-style floor added inside the Nb log so a single zero posterior doesn't send a
+    /// candidate to negative infinity. Unused under Democratic consensus.
+    nb_eps: f64,
 
     /// When true, infer_neurons resolves every cast vote into a FrameVote on
     /// FrameResult.votes. Off by default since resolution allocates per-vote
@@ -366,6 +379,8 @@ impl Brain {
     /// * `pattern_forget_rate` — forget rate applied uniformly to every pattern neuron, all levels
     /// * `regions` — R — number of regions (1 for single-process)
     /// * `columns` — C — number of columns per region (1 for single-thread)
+    /// * `consensus_mode` — how action votes combine into a winner ('democratic' | 'nb')
+    /// * `nb_eps` — Laplace floor inside the Nb log (ignored under Democratic consensus)
     /// * `debug` — enable verbose logging
     pub fn new(
         context_length: u32,
@@ -375,11 +390,15 @@ impl Brain {
         pattern_forget_rate: f64,
         regions: usize,
         columns: usize,
+        consensus_mode: ConsensusMode,
+        nb_eps: f64,
         debug: bool,
     ) -> Self {
         Self {
             context_length,
             debug,
+            consensus_mode,
+            nb_eps,
             emit_votes: false,
             learning: true,
             frame: Vec::new(),
@@ -1697,6 +1716,7 @@ impl Brain {
                 weighted_total: 0.0,
                 reward: 0.0,
                 probability: 0.0,
+                nb_log_score: 0.0,
             });
 
             // Accumulate this voter's split share into the candidate's strength.
@@ -1705,6 +1725,11 @@ impl Brain {
             // For actions: accumulate strength-weighted reward sum, to calculate expected reward in determine_dimension_winners
             if self.thalamus.get_neuron_type(v.neuron_id) == Some(NeuronType::Action) {
                 candidate.weighted_total += effective_strength * v.reward;
+                // Naive-Bayes path: also accumulate the unweighted log-product of posteriors.
+                // One term per vote (per connection) — a near-zero posterior vetoes the candidate.
+                if self.consensus_mode == ConsensusMode::Nb {
+                    candidate.nb_log_score += (v.reward + self.nb_eps).ln();
+                }
             }
             // For events: accumulate votes into the per-dim probability normalizer. every voter
             else {
@@ -1738,7 +1763,13 @@ impl Brain {
             let score = if neuron_type == NeuronType::Action {
                 let reward = if candidate.strength > 0.0 { candidate.weighted_total / candidate.strength } else { 0.0 };
                 candidate.reward = reward;
-                reward
+                // The winner is selected on the consensus score: the expected reward (Democratic) or
+                // the Naive-Bayes log-product (Nb). reward stays on the candidate either way so the
+                // scalar-space continuous prediction is unchanged by the selection rule.
+                match self.consensus_mode {
+                    ConsensusMode::Democratic => reward,
+                    ConsensusMode::Nb => candidate.nb_log_score,
+                }
             } else {
                 let total = dim_total_strength.get(&coordinate.dim_id).copied().unwrap_or(0.0);
                 let probability = if total > 0.0 { candidate.strength / total } else { 0.0 };
@@ -2102,6 +2133,8 @@ mod tests {
             0.01,                     // pattern_forget_rate
             1,                        // regions
             1,                        // columns
+            ConsensusMode::Democratic, // consensus_mode
+            1e-3,                     // nb_eps
             false,                    // debug
         )
     }

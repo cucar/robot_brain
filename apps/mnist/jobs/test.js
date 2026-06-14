@@ -45,14 +45,17 @@ export default class MNISTTestJob extends Job {
 			split: false,
 			// noBalance: skip class-balanced selection and train on the full natural MNIST set (unbalanced).
 			noBalance: false,
-			// decode: how to turn the brain's votes into a digit prediction at inference time.
-			//   'consensus' — the brain's built-in winner (strength-weighted ARITHMETIC mean of per-voter
-			//     posteriors P(d|voter), argmax over digits).
+			// consensus: how the brain combines per-voter action posteriors into a digit winner. Passed
+			// through to the brain (Rust) as a brain option — the decode now happens brain-side so votes
+			// no longer cross the NAPI boundary each frame.
+			//   'democratic' — strength-weighted ARITHMETIC mean of per-voter posteriors P(d|voter),
+			//     argmax over digits (the brain's original consensus).
 			//   'nb' — Naive-Bayes-style PRODUCT of per-voter posteriors: argmax_d Σ_voter log(P(d|voter)+eps).
 			//     Sharper than the mean: a voter that confidently rules a digit out (P≈0 → log≈−large) heavily
-			//     penalizes it, instead of being diluted by averaging. Experiment toggle (no Rust change).
-			decode: 'nb',
+			//     penalizes it, instead of being diluted by averaging. MNIST default.
+			consensus: 'nb',
 			// nbEps: Laplace-style floor added before the log so P(d|voter)=0 doesn't send a digit to −Infinity.
+			// Passed through to the brain; only consulted under 'nb' consensus.
 			nbEps: 1e-3,
 			// errorCorrectRounds: N>0 → after normal training, run N discriminative passes over the
 			// training set that reinforce (smoothed-reward learn()) only on mispredictions, with minting
@@ -111,13 +114,17 @@ export default class MNISTTestJob extends Job {
 		const ecIdx = process.argv.indexOf('--error-correct-rounds');
 		if (ecIdx !== -1 && process.argv[ecIdx + 1] !== undefined) this.config.errorCorrectRounds = parseInt(process.argv[ecIdx + 1]);
 
-		const decodeIdx = process.argv.indexOf('--decode');
-		if (decodeIdx !== -1 && process.argv[decodeIdx + 1] !== undefined) this.config.decode = process.argv[decodeIdx + 1];
+		const consensusIdx = process.argv.indexOf('--consensus');
+		if (consensusIdx !== -1 && process.argv[consensusIdx + 1] !== undefined) this.config.consensus = process.argv[consensusIdx + 1];
 		const epsIdx = process.argv.indexOf('--nb-eps');
 		if (epsIdx !== -1 && process.argv[epsIdx + 1] !== undefined) this.config.nbEps = parseFloat(process.argv[epsIdx + 1]);
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
+		// The decode now lives in the brain — hand it the consensus rule and Laplace floor so the
+		// winner read out of `inferences` is already the chosen rule's pick (no votes marshalled).
+		this.options.consensus = this.config.consensus;
+		this.options.nbEps = this.config.nbEps;
 	}
 
 	/**
@@ -126,8 +133,8 @@ export default class MNISTTestJob extends Job {
 	async initialize() {
 		this.encoder = new MNISTPixelChannelsEncoder(this.config.buckets, this.config.imageSize, this.config.radius);
 		this.encoder.registerChannels(this.brain);
-		// NB decode reaggregates the raw per-voter action votes, so they must be emitted (off by default).
-		if (this.config.decode === 'nb') this.brain.setEmitVotes(true);
+		// debug-miss option per-digit rank/margin analysis reaggregates the raw votes, so emit them
+		if (this.config.debugMiss > 0) this.brain.setEmitVotes(true);
 	}
 
 	/**
@@ -227,6 +234,7 @@ export default class MNISTTestJob extends Job {
 		console.log(`  Buckets: ${this.config.buckets} (Phase ${phaseLabel})`);
 		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
+		console.log(`  Consensus: ${this.config.consensus}${this.config.consensus === 'nb' ? ` (nb-eps ${this.config.nbEps})` : ''}`);
 		console.log(`  Episodes: ${this.config.maxEpisodes}${this.config.split ? ' per digit task (split-MNIST)' : ''}`);
 		console.log(`  Training: balanced, ${this.config.perClass > 0 ? this.config.perClass : 'auto'} per class`);
 		console.log(`  Test images: ${this.config.skipTest ? 'skipped' : (this.config.maxTestImages || 'all')}`);
@@ -422,38 +430,22 @@ export default class MNISTTestJob extends Job {
 	/**
 	 * Run one image through the brain and decode the predicted digit.
 	 * Shared by training (pre-update prediction) and held-out test.
+	 * The brain applies the configured consensus rule ('democratic' | 'nb') internally, so the
+	 * winning digit comes straight off `inferences` — no per-vote marshalling on the hot path.
 	 */
 	predictImage(bits) {
 		this.brain.resetContext();
 		const inputs = this.encoder.encodeImage(bits);
 		const inferResult = this.brain.processFrame(inputs, EMPTY_REWARDS);
-		if (this.config.decode === 'nb') {
-			if (this.config.debugMiss) this._lastVotes = inferResult.votes;
-			return this.decodeDigitNB(inferResult.votes);
-		}
+		// --debug-miss reaggregates votes app-side for its rank/margin breakdown; stash them when on.
+		if (this.config.debugMiss > 0) this._lastVotes = inferResult.votes;
 		return this.encoder.decodeDigit(inferResult.inferences);
 	}
 
 	/**
-	 * Naive-Bayes decode: combine the per-voter digit posteriors MULTIPLICATIVELY instead of by the
-	 * brain's strength-weighted arithmetic mean. Each active voter contributed one action vote per
-	 * digit with reward = P(digit|voter); under a uniform digit prior, argmax_d Π_voter P(d|voter) =
-	 * argmax_d Σ_voter log P(d|voter). The eps floor keeps a single P=0 from sending a digit to −∞.
-	 * Returns the winning digit, or -1 if there were no action votes.
-	 */
-	decodeDigitNB(votes) {
-		const { logScore } = this.scoreDigitsNB(votes);
-		if (logScore.size === 0) return -1;
-		let best = -1, bestScore = -Infinity;
-		for (const [digit, score] of logScore) {
-			if (score > bestScore) { bestScore = score; best = digit; }
-		}
-		return best;
-	}
-
-	/**
-	 * Core of the NB decode: returns the per-digit log-score map (Σ_voter log(P(d|voter)+eps)) and the
-	 * distinct voter count, so both the decode and the miss-analysis can share one pass over the votes.
+	 * Per-digit NB log-score map (Σ_voter log(P(d|voter)+eps)) and the distinct voter count, computed
+	 * app-side from emitted votes. Used only by the --debug-miss rank/margin analysis; the live decode
+	 * now happens brain-side under the 'nb' consensus. Mirrors the brain's NB rule so the ranks line up.
 	 */
 	scoreDigitsNB(votes) {
 		const logScore = new Map();
@@ -547,7 +539,7 @@ export default class MNISTTestJob extends Job {
 		const startTime = Date.now();
 		const tally = this.newTally();
 		const confusion = Array.from({ length: 10 }, () => new Array(10).fill(0));
-		const miss = this.config.debugMiss && this.config.decode === 'nb'
+		const miss = this.config.debugMiss && this.config.consensus === 'nb'
 			? { count: 0, printed: 0, rank: new Array(11).fill(0), marginSum: 0, voterMissSum: 0, voterHitSum: 0, hits: 0 }
 			: null;
 

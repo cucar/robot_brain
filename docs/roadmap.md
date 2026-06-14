@@ -23,25 +23,6 @@ is one workstream; sub-bullets are the concrete steps inside it.
 App-side and small core cleanups that should land before (or alongside) the merge. Independent of
 each other unless noted.
 
-### 1.1 Drop the redundant second inference per image
-
-`processFrame` already computes a full inference at [brain.rs:950](../brain/brain-core/src/brain.rs)
-and returns it in `FrameResult`. `predictImage` discards that and immediately calls `brain.infer()`
-([test.js:429-430](../apps/mnist/jobs/test.js)), which re-runs `collect_votes_for_voter_ages` +
-`infer_neurons` ([brain.rs:2041](../brain/brain-core/src/brain.rs)). The reason
-([test.js:543](../apps/mnist/jobs/test.js)) is that `processFrame` suppresses depth-1 votes at
-`contextLength=1`, so its own inference comes out empty and useless here.
-
-- **Fix:** add a flag so `processFrame` does **not** suppress the only available age when
-  `contextLength=1`, and read its `FrameResult` directly — dropping the second `collect_votes` +
-  `infer_neurons` pass. The suppressed sweep is cheap, so the saving is the *second* full vote
-  collection, not the first. Keep the guard for `contextLength > 1` (it's load-bearing for genuine
-  sequence prediction).
-- **Then get rid of the `infer()` call** in `predictImage` entirely.
-- **Verify first:** confirm `processFrame`'s `temporal.votes` enumerate the same voters as
-  `infer()`'s independent collection at `contextLength=1`; if there's a gap, close it before deleting
-  the call.
-
 ### 1.2 Move the NB readout into the brain (or the consensus into the app)
 
 The per-voter Naive-Bayes log-sum readout currently lives app-side (`--decode nb`,

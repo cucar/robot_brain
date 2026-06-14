@@ -122,6 +122,18 @@ pub enum Phase {
     Temporal,
 }
 
+/// Consensus mode — determines how the per-voter action posteriors are combined into a winner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsensusMode {
+    /// Strength-weighted arithmetic mean of the per-voter posteriors, argmax over the dimension.
+    /// A soft ensemble: a candidate can win on a good average even when several voters contradict it.
+    Democratic,
+    /// Naive-Bayes product of the per-voter posteriors: argmax over Σ_voter log(P|voter + nb_eps).
+    /// Each voter's near-zero posterior acts as a veto, the correct rule for argmax over
+    /// mutually-exclusive classes with roughly-independent evidence.
+    Nb,
+}
+
 /// Error correction mode — determines how error thresholds are calculated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorMode {

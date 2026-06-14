@@ -1,9 +1,10 @@
 # MNIST Spatial-Processing Experiments — Session Log
 
 All runs use `apps/mnist/jobs/test.js`. **Constant across every run:** `columns=20`,
-`forget-rate=0`, `context-length=1` (the job defaults). "Decode" = consensus (the brain's
-built-in per-dimension argmax) unless **NB** (the Naive-Bayes log-sum readout added this session:
-`--decode nb [--nb-eps E]`). "merge" = `mergeThreshold`, default 0.5 unless shown. "mode/err" =
+`forget-rate=0`, `context-length=1` (the job defaults). "Decode" = the brain's consensus rule,
+selected with `--consensus democratic|nb` (`--nb-eps E` for the NB Laplace floor). MNIST defaults
+to **NB** (the Naive-Bayes log-product); both rules now run brain-side, so the readout is no longer
+app-side and votes don't cross the NAPI boundary. "merge" = `mergeThreshold`, default 0.5 unless shown. "mode/err" =
 `--error-mode` / `--error-threshold`. Train numbers are the prequential per-episode figure unless
 marked *frozen* (clean post-training pass, `--eval-train`).
 
@@ -281,9 +282,10 @@ Obsolete and completed probes have been pruned; the result tables above are kept
 
 The roadmap removes/refactors several of this session's experimental flags. Planned end state:
 
-- `--decode nb [--nb-eps E]` — **being removed.** The NB log-sum either becomes the brain's default
-  consensus (in Rust) or moves to a votes-only app rule; either way the option goes away and the
-  default is NB. See roadmap *NB decode → brain*.
+- `--decode nb [--nb-eps E]` → **moved into the brain** as `--consensus democratic|nb [--nb-eps E]`.
+  The NB log-product is now a brain-side consensus rule (Rust), selected per brain rather than
+  reaggregated app-side from emitted votes. MNIST still defaults to NB. Pending the cross-domain
+  tests, the option may yet collapse to a plain default — see roadmap *NB decode → brain*.
 - `--error-correct-rounds N` — **being removed.** Discriminative second phase pushed train→99% with
   no test gain (ceiling is representational, not readout) — dropped.
 - `--eval-train` — **being replaced.** Wire-only training becomes the default (no per-image

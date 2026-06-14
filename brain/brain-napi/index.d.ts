@@ -16,6 +16,8 @@ export declare class Brain {
    *   patternForgetRate: number (default 0.01)
    *   regions: number (default 1)
    *   columns: number (default 1)
+   *   consensus: string 'democratic' | 'nb' (default 'democratic')
+   *   nbEps: number (default 1e-3) — Laplace floor for the 'nb' consensus log
    *   debug: boolean (default false)
    */
   constructor(options?: object | undefined | null)
