@@ -57,6 +57,14 @@ export default class MultiChannelTest extends Job {
 			this.encoders.push(encoder);
 			this.traders.push(trader);
 		}
+
+		// Temporal-only: disable spatial (d=0 co-activation) so behavior matches the pre-spatial
+		// `main` branch — both cross-symbol grouping and intra-symbol (price/volume) co-activation.
+		// Declared after all channels are registered so the names resolve. Temporal neighbors stay
+		// at the default all-pairs (every symbol sequences against every other), as on main.
+		for (const symbol of this.config.symbols) {
+			this.brain.setSpatialNeighbors(symbol, []);
+		}
 	}
 
 	/**

@@ -18,7 +18,6 @@ export declare class Brain {
    *   columns: number (default 1)
    *   consensus: string 'democratic' | 'nb' (default 'democratic')
    *   nbEps: number (default 1e-3) — Laplace floor for the 'nb' consensus log
-   *   matchMode: string 'containment' | 'jaccard' (default 'jaccard') — temporal match denominator
    *   debug: boolean (default false)
    */
   constructor(options?: object | undefined | null)

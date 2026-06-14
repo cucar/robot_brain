@@ -33,7 +33,7 @@ use crate::thalamus::{
 };
 use crate::types::{
     ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, MatchMode, NeuronId, NeuronType, Reward,
+    Level, NeuronId, NeuronType, Reward,
 };
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
@@ -387,7 +387,6 @@ impl Brain {
         error_correction_mode: ErrorMode,
         error_correction_threshold: f64,
         merge_threshold: f64,
-        match_mode: MatchMode,
         pattern_forget_rate: f64,
         regions: usize,
         columns: usize,
@@ -411,7 +410,6 @@ impl Brain {
                 debug,
                 pattern_forget_rate,
                 merge_threshold,
-                match_mode,
                 context_length,
                 error_correction_mode,
                 error_correction_threshold,
@@ -2143,7 +2141,6 @@ mod tests {
             ErrorMode::Conservative,  // error_correction_mode
             0.5,                      // error_correction_threshold
             0.5,                      // merge_threshold
-            MatchMode::Jaccard,       // match_mode
             0.01,                     // pattern_forget_rate
             1,                        // regions
             1,                        // columns

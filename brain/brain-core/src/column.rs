@@ -14,7 +14,7 @@ use crate::neuron::{
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber, MatchMode,
+    ChannelId, Distance, ErrorMode, FrameNumber,
     NeuronId, Reward, Strength,
 };
 
@@ -102,9 +102,6 @@ pub struct Column {
     /// TemporalContext merge threshold.
     merge_threshold: f64,
 
-    /// TemporalContext match metric (containment vs jaccard).
-    match_mode: MatchMode,
-
     /// Error correction mode.
     error_mode: ErrorMode,
 
@@ -121,7 +118,6 @@ impl Column {
         channel_default_actions: FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
         merge_threshold: f64,
-        match_mode: MatchMode,
         error_mode: ErrorMode,
         error_threshold: f64,
     ) -> Self {
@@ -130,7 +126,6 @@ impl Column {
             channel_default_actions,
             context_length,
             merge_threshold,
-            match_mode,
             error_mode,
             error_threshold,
             neurons: FxHashMap::default(),
@@ -552,7 +547,6 @@ impl Column {
                 spec.id,
                 spec.forget_rate,
                 self.merge_threshold,
-                self.match_mode,
                 self.error_mode,
                 self.error_threshold,
                 self.channel_actions.clone(),
@@ -609,7 +603,6 @@ impl Column {
             data.id,
             data.pattern_forget_rate,
             self.merge_threshold,
-            self.match_mode,
             self.error_mode,
             self.error_threshold,
             self.channel_actions.clone(),
@@ -768,7 +761,6 @@ mod tests {
             FxHashMap::default(),
             2,
             0.5,
-            MatchMode::Jaccard,
             ErrorMode::Static,
             0.5,
         )

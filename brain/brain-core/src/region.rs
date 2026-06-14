@@ -57,7 +57,7 @@ use crate::neuron::{
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber, MatchMode, NeuronId, Reward,
+    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
 };
 
 pub struct Region {
@@ -74,7 +74,6 @@ impl Region {
         channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
         merge_threshold: f64,
-        match_mode: MatchMode,
         error_mode: ErrorMode,
         error_threshold: f64,
     ) -> Self {
@@ -85,7 +84,6 @@ impl Region {
                 channel_default_actions.clone(),
                 context_length,
                 merge_threshold,
-                match_mode,
                 error_mode,
                 error_threshold,
             ));
@@ -494,7 +492,6 @@ mod tests {
             &FxHashMap::default(),
             2,
             0.5,
-            MatchMode::Jaccard,
             ErrorMode::Static,
             0.5,
         )

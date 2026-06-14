@@ -11,13 +11,15 @@
 /// 1. **Observed context** — built fresh each frame from the active set at that level.
 /// 2. **Known context** — stored in neuron routing tables; what a pattern needs to see to match.
 ///
-/// `match_observed` is a Jaccard-style score: `common / (common + missing + novel) >= threshold`.
-/// Treats the pattern and the observed frame on equal footing — small patterns don't get to
-/// over-fire on huge observed frames by matching a fraction of their own entries.
+/// The two `match_observed` thresholds differ by design:
+/// * `SpatialContext` uses a Jaccard ratio `common / (common + missing + novel)` so a small pattern
+///   can't over-fire on a large observed patch by matching a fraction of its own entries.
+/// * `TemporalContext` uses a containment ratio `common / (common + missing)` — a pattern keys on
+///   its expected antecedents, so a naturally-rich timeline (novel entries) does not penalize it.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::types::{ContextEntry, Distance, MatchMode, MatchResult, NeuronId, Strength};
+use crate::types::{ContextEntry, Distance, MatchResult, NeuronId, Strength};
 
 // ── Spatial ──────────────────────────────────────────────────────────────────
 
@@ -113,7 +115,12 @@ impl SpatialContext {
             }
         }
 
-        // Symmetric (Jaccard) match: common / (common + missing + novel) >= merge_threshold.
+        // Spatial uses the Jaccard UNION as the denominator: common / (common + missing + novel).
+        // A spatial pattern must describe the WHOLE local patch it claims, so novel observed entries
+        // (co-actives the pattern does not contain) count against it — otherwise a small pattern would
+        // over-fire by matching a fraction of a large observed co-activation. Counting the union keeps
+        // pattern and frame on equal footing. This is experimentally verified: switching spatial to
+        // the temporal-style containment denominator (common / (common + missing)) made MNIST worse.
         let union_size = (common.len() + missing.len() + novel.len()) as f64;
         if union_size == 0.0 { return None; }
         if (common.len() as f64 / union_size) < merge_threshold { return None; }
@@ -231,10 +238,14 @@ impl TemporalContext {
     /// * `observed` — the observed context to match against
     /// * `offset` — the parent's active age (shifts pattern distances to absolute)
     /// * `merge_threshold` — minimum required percentage for merge (0.0–1.0)
-    /// * `match_mode` — how the threshold denominator is formed (containment vs jaccard)
     /// * `exclude_ids` — optional set of observed neuron ids to mask out of scoring
     ///        (e.g. brand-new neurons that shouldn't count as unexplained novel entries)
-    pub fn match_observed(&self, observed: &TemporalContext, offset: Distance, merge_threshold: f64, match_mode: MatchMode, exclude_ids: Option<&FxHashSet<NeuronId>>) -> Option<MatchResult> {
+    ///
+    /// The threshold is a containment ratio: `common / (common + missing)` — the fraction of the
+    /// KNOWN pattern's own entries that were observed. Novel observed entries do not affect whether
+    /// the pattern matches, only its score; a rich timeline does not penalize a pattern that keys on
+    /// specific antecedents.
+    pub fn match_observed(&self, observed: &TemporalContext, offset: Distance, merge_threshold: f64, exclude_ids: Option<&FxHashSet<NeuronId>>) -> Option<MatchResult> {
 
         // Pass 1: walk the known context, classifying each entry into common/missing relative to observed.
         let mut common = Vec::new();
@@ -261,6 +272,16 @@ impl TemporalContext {
         // if there are no known context entries, there cannot be a match
         if total_count == 0 { return None; }
 
+        // Temporal uses CONTAINMENT as the denominator: common / total_count, where total_count =
+        // common + missing (the known pattern's own entries). Deliberately NOT the Jaccard union — a
+        // temporal pattern keys on its expected antecedents within a naturally rich timeline, so other
+        // co-active context (novel observed entries) should not count against whether it matches; the
+        // history is expected to carry more than any single pattern's antecedents. Checked before the
+        // novel pass because novel entries affect only the score below, not the match decision. This
+        // is experimentally verified: the Jaccard union here hurt first-time accuracy on the stock
+        // demos (it sped up cross-episode learning, but we value first-time accuracy more).
+        if (common.len() as f64 / total_count as f64) < merge_threshold { return None; }
+
         // Pass 2: walk the observed context, finding entries with no counterpart in the known context.
         let mut novel = Vec::new();
         for (&neuron_id, distance_map) in &observed.entries {
@@ -280,16 +301,6 @@ impl TemporalContext {
                 }
             }
         }
-
-        // Threshold gate. Containment divides by the known-pattern size (common + missing =
-        // total_count); Jaccard divides by the union (also counting novel observed entries). Both
-        // apply the same novel score penalty above — only the gate denominator differs.
-        let denom = match match_mode {
-            MatchMode::Containment => total_count as f64,
-            MatchMode::Jaccard => (common.len() + missing.len() + novel.len()) as f64,
-        };
-        if denom == 0.0 { return None; }
-        if (common.len() as f64 / denom) < merge_threshold { return None; }
 
         // Round to 14 decimal places to avoid floating-point precision issues
         score = (score * 1e14).round() / 1e14;
@@ -355,7 +366,7 @@ mod tests {
         observed.add_neuron(1, 1, 1.0);
         observed.add_neuron(2, 2, 1.0);
 
-        let result = known.match_observed(&observed, 0, 0.5, MatchMode::Jaccard, None).unwrap();
+        let result = known.match_observed(&observed, 0, 0.5, None).unwrap();
         assert_eq!(result.common.len(), 2);
         assert_eq!(result.missing.len(), 0);
         assert_eq!(result.novel.len(), 0);
@@ -371,7 +382,7 @@ mod tests {
         let mut observed = TemporalContext::new();
         observed.add_neuron(1, 1, 1.0);
 
-        let result = known.match_observed(&observed, 0, 0.9, MatchMode::Jaccard, None);
+        let result = known.match_observed(&observed, 0, 0.9, None);
         assert!(result.is_none());
     }
 
@@ -383,7 +394,7 @@ mod tests {
         let mut observed = TemporalContext::new();
         observed.add_neuron(1, 4, 1.0);
 
-        let result = known.match_observed(&observed, 3, 0.5, MatchMode::Jaccard, None).unwrap();
+        let result = known.match_observed(&observed, 3, 0.5, None).unwrap();
         assert_eq!(result.common.len(), 1);
     }
 
@@ -396,7 +407,7 @@ mod tests {
         observed.add_neuron(1, 1, 1.0);
         observed.add_neuron(99, 3, 1.0);
 
-        let result = known.match_observed(&observed, 0, 0.5, MatchMode::Jaccard, None).unwrap();
+        let result = known.match_observed(&observed, 0, 0.5, None).unwrap();
         assert_eq!(result.common.len(), 1);
         assert_eq!(result.novel.len(), 1);
         assert_eq!(result.novel[0].neuron_id, 99);
@@ -415,7 +426,7 @@ mod tests {
         let mut exclude = FxHashSet::default();
         exclude.insert(99);
 
-        let result = known.match_observed(&observed, 0, 0.5, MatchMode::Jaccard, Some(&exclude)).unwrap();
+        let result = known.match_observed(&observed, 0, 0.5, Some(&exclude)).unwrap();
         assert_eq!(result.novel.len(), 0);
     }
 

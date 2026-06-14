@@ -41,8 +41,7 @@ export function parseBrainArgs(argv = process.argv) {
 		regions: num('--regions', parseInt),
 		columns: num('--columns', parseInt),
 		consensus: str('--consensus'),
-		nbEps: num('--nb-eps', parseFloat),
-		matchMode: str('--match-mode')
+		nbEps: num('--nb-eps', parseFloat)
 	};
 }
 

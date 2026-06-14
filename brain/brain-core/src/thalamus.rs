@@ -30,7 +30,7 @@ use crate::quantizer::{QuantizeMode, Quantizer};
 use crate::region::Region;
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, MatchMode, NeuronId, NeuronType, Reward,
+    Level, NeuronId, NeuronType, Reward,
 };
 
 // ── Supporting structs ──────────────────────────────────────────────────────
@@ -295,7 +295,6 @@ impl Thalamus {
         debug: bool,
         pattern_forget_rate: f64,
         merge_threshold: f64,
-        match_mode: MatchMode,
         context_length: u32,
         error_mode: ErrorMode,
         error_threshold: f64,
@@ -313,7 +312,6 @@ impl Thalamus {
                 &channel_default_actions,
                 context_length,
                 merge_threshold,
-                match_mode,
                 error_mode,
                 error_threshold,
             ));
@@ -2204,7 +2202,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 0.5, MatchMode::Jaccard, 4, ErrorMode::Static, 0.5, 1, 1)
+        Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 1, 1)
     }
 
     #[test]
@@ -2228,7 +2226,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 0.5, MatchMode::Jaccard, 4, ErrorMode::Static, 0.5, 3, 1);
+        let t = Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 3, 1);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);
