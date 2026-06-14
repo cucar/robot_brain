@@ -2016,27 +2016,10 @@ impl Brain {
         self.thalamus.learn_action_connections(&wirings, distance);
     }
 
-    /// Read-only inference sweep over the current memory window, exposed for harnesses that need
-    /// the brain's prediction without doing supervised wiring or running another full process_frame.
-    /// Used by supervised held-out evaluation paths where process_frame's depth-guarded vote
-    /// generation would suppress the only available age (single-frame episodes at depth=1).
-    /// Returns a FrameResult shaped like process_frame's, but with no side effects on memory or learning.
-    pub fn infer(&mut self) -> FrameResult {
-        let mut timings = FrameTimings::default();
-        let (inferences, votes) = self.compute_inferences(&mut timings);
-        timings.finalize();
-        FrameResult {
-            inferences,
-            votes,
-            elapsed: timings.total,
-            timings,
-        }
-    }
-
     /// Shared helper that walks every active non-suppressed (voter, age) pair, calls `neuron.vote(age)`
     /// on each, and feeds the resulting FlatVotes through the existing infer_neurons consensus path.
     /// Mirrors the voting half of process_frame without any of its mutating side effects.
-    /// Used by both `learn` (as the post-wire read-back) and `infer` (as a standalone inference).
+    /// Used by `learn` as the post-wire read-back of the brain's prediction after the new wirings land.
     /// Returns the per-channel inference map and the per-vote detail list for the harness to inspect.
     fn compute_inferences(
         &mut self,

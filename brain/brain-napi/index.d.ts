@@ -81,14 +81,6 @@ export declare class Brain {
    * Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
    */
   learn(actions: object, distance: number): object
-  /**
-   * Read-only inference over the current memory window.
-   * Runs the same vote-sweep + consensus path `learn()` uses internally but writes no wirings and
-   * has no other side effects, so callers can read the brain's prediction at depths where
-   * `processFrame`'s vote generator would otherwise suppress the only available age.
-   * Used by the supervised held-out evaluation path in the MNIST app.
-   */
-  infer(): object
   /** Reset brain memory state for a clean episode start. */
   resetContext(): void
   /** Hard reset: clears ALL learned data. */

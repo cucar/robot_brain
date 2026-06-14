@@ -41,8 +41,7 @@ for (let ep = 1; ep <= EPISODES; ep++) {
 	let correct = 0;
 	for (let i = 0; i < trainBits.length; i++) {
 		brain.resetContext();
-		brain.processFrame(encoder.encodeImage(trainBits[i]), EMPTY_REWARDS);
-		const r = brain.infer();
+		const r = brain.processFrame(encoder.encodeImage(trainBits[i]), EMPTY_REWARDS);
 		const pred = encoder.decodeDigit(r.inferences);
 		if (pred === trainL[i]) correct++;
 		brain.learn(encoder.encodeAction(trainL[i]), 1);
@@ -58,8 +57,7 @@ let correct = 0;
 const finalPreds = [];
 for (let i = 0; i < trainBits.length; i++) {
 	brain.resetContext();
-	brain.processFrame(encoder.encodeImage(trainBits[i]), EMPTY_REWARDS);
-	const r = brain.infer();
+	const r = brain.processFrame(encoder.encodeImage(trainBits[i]), EMPTY_REWARDS);
 	const pred = encoder.decodeDigit(r.inferences);
 	finalPreds.push(pred);
 	if (pred === trainL[i]) correct++;

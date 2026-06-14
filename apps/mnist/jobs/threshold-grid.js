@@ -48,8 +48,7 @@ async function runConfig(mode, errTh, mergeTh) {
 		let correct = 0;
 		for (let i = 0; i < trainBits.length; i++) {
 			brain.resetContext();
-			brain.processFrame(encoder.encodeImage(trainBits[i]), EMPTY_REWARDS);
-			const inf = brain.infer();
+			const inf = brain.processFrame(encoder.encodeImage(trainBits[i]), EMPTY_REWARDS);
 			const pred = encoder.decodeDigit(inf.inferences);
 			if (pred === trainL[i]) correct++;
 			brain.learn(encoder.encodeAction(trainL[i]), 1);
@@ -60,8 +59,7 @@ async function runConfig(mode, errTh, mergeTh) {
 	let testCorrect = 0;
 	for (let i = 0; i < testBits.length; i++) {
 		brain.resetContext();
-		brain.processFrame(encoder.encodeImage(testBits[i]), EMPTY_REWARDS);
-		const inf = brain.infer();
+		const inf = brain.processFrame(encoder.encodeImage(testBits[i]), EMPTY_REWARDS);
 		const pred = encoder.decodeDigit(inf.inferences);
 		if (pred === testL[i]) testCorrect++;
 	}

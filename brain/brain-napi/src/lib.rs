@@ -354,17 +354,6 @@ impl JsBrain {
         build_frame_result(&env, &frame_result)
     }
 
-    /// Read-only inference over the current memory window.
-    /// Runs the same vote-sweep + consensus path `learn()` uses internally but writes no wirings and
-    /// has no other side effects, so callers can read the brain's prediction at depths where
-    /// `processFrame`'s vote generator would otherwise suppress the only available age.
-    /// Used by the supervised held-out evaluation path in the MNIST app.
-    #[napi(js_name = "infer")]
-    pub fn infer(&self, env: Env) -> Result<JsObject> {
-        let frame_result = self.inner.borrow_mut().infer();
-        build_frame_result(&env, &frame_result)
-    }
-
     /// Reset brain memory state for a clean episode start.
     #[napi(js_name = "resetContext")]
     pub fn reset_context(&self) -> Result<()> {

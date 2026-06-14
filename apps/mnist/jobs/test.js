@@ -426,8 +426,7 @@ export default class MNISTTestJob extends Job {
 	predictImage(bits) {
 		this.brain.resetContext();
 		const inputs = this.encoder.encodeImage(bits);
-		this.brain.processFrame(inputs, EMPTY_REWARDS);
-		const inferResult = this.brain.infer();
+		const inferResult = this.brain.processFrame(inputs, EMPTY_REWARDS);
 		if (this.config.decode === 'nb') {
 			if (this.config.debugMiss) this._lastVotes = inferResult.votes;
 			return this.decodeDigitNB(inferResult.votes);
@@ -539,9 +538,9 @@ export default class MNISTTestJob extends Job {
 
 	/**
 	 * Held-out evaluation. setLearning(false) is already in effect.
-	 * For each image: resetContext → processFrame → infer → read prediction. No learn() call.
-	 * processFrame's vote generator suppresses age depth-1 (the only available age at context_length=1),
-	 * so we read the prediction off brain.infer() which runs the same vote sweep without that guard.
+	 * For each image: resetContext → processFrame → read prediction off its FrameResult. No learn() call.
+	 * At context_length=1 the vote generator now keeps the single available age, so processFrame's own
+	 * votes/inferences carry the prediction directly — no second inference sweep needed.
 	 * Accumulates aggregate accuracy, per-digit accuracy, and the 10×10 confusion matrix called out in the spec.
 	 */
 	runTest() {

@@ -1407,10 +1407,8 @@ impl Neuron {
 
     // ── Vote generation ──────────────────────────────────────────────────────
 
-    /// Cast votes for each eligible age, suppressing any age that activated a pattern this
-    /// frame via either a recognition match (activate=true) or an error-correction install.
-    /// Eligible ages: non-activated and younger than the oldest sliding-window slot. Runs for
-    /// new error patterns too so their state.context gets populated for next-frame corrections.
+    /// Cast one temporal vote per non-suppressed age; get_suppressed_ages owns the full inhibition rule.
+    /// Runs for new error patterns too so their state.context gets populated for next-frame corrections.
     /// The per-age context is reshaped from level_context locally — context_by_age is a pure reshape
     /// (no extra info), so it's derived here instead of being shipped over the wire.
     fn generate_temporal_votes(
@@ -1422,24 +1420,16 @@ impl Neuron {
         correction_activations: &[CorrectionActivation],
     ) -> Vec<AgeVotes> {
 
-        // determine the suppressed ages based on recognized patterns and error creations
-        let mut suppressed_ages = FxHashSet::default();
-        for m in matches { if m.activate { suppressed_ages.insert(m.age); } }
-        for c in correction_activations { suppressed_ages.insert(c.age); }
+        // Resolve every inhibited age once, then keep only the ages this neuron will actually vote on.
+        let suppressed_ages = self.get_suppressed_ages(age_states, memory_depth, matches, correction_activations);
+        let voting_ages: Vec<Distance> = age_states.keys().copied().filter(|age| !suppressed_ages.contains(age)).collect();
 
-        // pre-bucket level_context by voting age so the loop below picks each per-age
-        // context up with a single indexed lookup
-        let context_by_age = self.derive_context_by_age(level_context);
+        // pre-bucket level_context into those voting ages so each cast picks its per-age context up with one lookup
+        let context_by_age = self.derive_context_by_age(level_context, &voting_ages);
 
-        // cast votes for each eligible, non-suppressed age
-        let mut votes = Vec::new();
-        let ages: Vec<Distance> = age_states.keys().copied().collect();
-        for age in ages {
-            let state = &age_states[&age];
-            if state.activated_pattern_id.is_some() { continue; }
-            // Skip the oldest age — there's no future frame to vote toward.
-            if age >= memory_depth - 1 { continue; }
-            if suppressed_ages.contains(&age) { continue; }
+        // cast one vote per voting age
+        let mut votes = Vec::with_capacity(voting_ages.len());
+        for age in voting_ages {
 
             // Temporal votes predict the next frame via temporal_connections[age+1].
             let cast_votes = self.vote(age);
@@ -1453,20 +1443,59 @@ impl Neuron {
         votes
     }
 
-    /// Reshape level_context into per-voting-age buckets. For each entry at context-age
-    /// `ctx_age`, emits it into every voting_age < ctx_age with distance = ctx_age - voting_age.
-    /// Indexed by voting age so generate_votes picks up each per-age context with a single
-    /// lookup — no per-age scan, no `ctx_age > age` branch. Pure reshape kept inside the
-    /// neuron to save per-frame MPI traffic.
-    fn derive_context_by_age(&self, level_context: Option<&TemporalContext>) -> Vec<Vec<ContextRefEntry>> {
+    /// Collect every age whose vote is inhibited this frame, so generate_temporal_votes can skip them in one test.
+    /// An age is suppressed when any of the following holds:
+    /// - a recognized pattern activated at that age this frame — the firing parent represents it, so the subsumed
+    ///   neuron must not also vote (only the activation candidate inhibits, not non-activating refinement matches),
+    /// - an error-correction pattern was installed at that age this frame — the correction now owns that prediction,
+    /// - the neuron was already marked subsumed at that age on a prior frame (activated_pattern_id is set),
+    /// - it is the oldest slot in the window, with no future frame to vote toward.
+    /// The oldest-slot rule applies only for context_length > 1; at context_length == 1 the single age 0 is the
+    /// prediction-bearing age for single-frame episodes and must vote, otherwise process_frame emits no votes at all.
+    fn get_suppressed_ages(
+        &self,
+        age_states: &FxHashMap<Distance, AgeState>,
+        memory_depth: u32,
+        matches: &[PatternMatch],
+        correction_activations: &[CorrectionActivation],
+    ) -> FxHashSet<Distance> {
+        let mut suppressed_ages = FxHashSet::default();
+
+        // if the neuron decided to activate a child pattern in this frame, its vote is suppressed in this frame
+        for m in matches { if m.activate { suppressed_ages.insert(m.age); } }
+
+        // if the neuron had a bad inference last frame from an age, and it needs to be corrected, suppress the vote for that age
+        for c in correction_activations { suppressed_ages.insert(c.age); }
+
+        // loop over the ages and check
+        for (&age, state) in age_states {
+
+            // if the neuron activated a child pattern in an age in a previous frame, that age stays suppressed
+            if state.activated_pattern_id.is_some() { suppressed_ages.insert(age); continue; }
+
+            // oldest age has no connections for next frame to vote, except age 0 at context_length 1, used for MNIST tests.
+            if self.context_length > 1 && age >= memory_depth - 1 { suppressed_ages.insert(age); }
+        }
+
+        suppressed_ages
+    }
+
+    /// Reshape level_context into per-voting-age buckets, building only the supplied voting ages.
+    /// For each entry at context-age `ctx_age`, emits it into every voting age < ctx_age with distance = ctx_age - age.
+    /// Indexed by voting age so generate_temporal_votes picks up each per-age context with a single lookup —
+    /// no per-age scan, no `ctx_age > age` branch. Suppressed ages get no bucket since their vote is never cast.
+    /// Pure reshape kept inside the neuron to save per-frame MPI traffic.
+    fn derive_context_by_age(&self, level_context: Option<&TemporalContext>, voting_ages: &[Distance]) -> Vec<Vec<ContextRefEntry>> {
         let mut context_by_age: Vec<Vec<ContextRefEntry>> = Vec::new();
         let ctx = match level_context {
             Some(c) => c,
             None => return context_by_age,
         };
+        let voting: FxHashSet<Distance> = voting_ages.iter().copied().collect();
         for (&neuron_id, distance_map) in ctx.entries() {
             for &ctx_age in distance_map.keys() {
                 for a in 0..ctx_age {
+                    if !voting.contains(&a) { continue; }
                     let idx = a as usize;
                     if idx >= context_by_age.len() { context_by_age.resize_with(idx + 1, Vec::new); }
                     context_by_age[idx].push(ContextRefEntry { neuron_id, distance: ctx_age - a });
