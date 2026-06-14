@@ -18,7 +18,7 @@ use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 
 use brain_core::brain::{Brain as CoreBrain, FrameResult};
-use brain_core::types::{ConsensusMode, Coordinate, ErrorMode, NeuronType};
+use brain_core::types::{ConsensusMode, Coordinate, ErrorMode, MatchMode, NeuronType};
 
 // ── Helper: JS Map iteration ────────────────────────────────────────────────
 
@@ -149,10 +149,11 @@ impl JsBrain {
     ///   columns: number (default 1)
     ///   consensus: string 'democratic' | 'nb' (default 'democratic')
     ///   nbEps: number (default 1e-3) — Laplace floor for the 'nb' consensus log
+    ///   matchMode: string 'containment' | 'jaccard' (default 'jaccard') — temporal match denominator
     ///   debug: boolean (default false)
     #[napi(constructor)]
     pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
-        let (context_length, error_mode, error_threshold, merge_threshold,
+        let (context_length, error_mode, error_threshold, merge_threshold, match_mode,
              pattern_forget_rate, regions, columns, consensus_mode, nb_eps, debug) = match options {
             Some(ref opts) => {
                 let cl = get_opt_u32(opts, "contextLength")?.unwrap_or(10);
@@ -161,6 +162,9 @@ impl JsBrain {
                 let mode = parse_error_mode(&mode_str)?;
                 let et = get_opt_f64(opts, "errorCorrectionThreshold")?.unwrap_or(0.5);
                 let mt = get_opt_f64(opts, "mergeThreshold")?.unwrap_or(0.5);
+                let match_str = get_opt_string(opts, "matchMode")?
+                    .unwrap_or_else(|| "jaccard".to_string());
+                let match_mode = parse_match_mode(&match_str)?;
                 let pfr = get_opt_f64(opts, "patternForgetRate")?.unwrap_or(0.01);
                 let r = get_opt_u32(opts, "regions")?.unwrap_or(1) as usize;
                 let c = get_opt_u32(opts, "columns")?.unwrap_or(1) as usize;
@@ -169,14 +173,14 @@ impl JsBrain {
                 let consensus = parse_consensus_mode(&consensus_str)?;
                 let eps = get_opt_f64(opts, "nbEps")?.unwrap_or(1e-3);
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
-                (cl, mode, et, mt, pfr, r, c, consensus, eps, d)
+                (cl, mode, et, mt, match_mode, pfr, r, c, consensus, eps, d)
             }
-            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, ConsensusMode::Democratic, 1e-3, false),
+            None => (10, ErrorMode::Conservative, 0.5, 0.5, MatchMode::Jaccard, 0.01, 1, 1, ConsensusMode::Democratic, 1e-3, false),
         };
 
         Ok(Self {
             inner: RefCell::new(CoreBrain::new(
-                context_length, error_mode, error_threshold, merge_threshold,
+                context_length, error_mode, error_threshold, merge_threshold, match_mode,
                 pattern_forget_rate, regions, columns, consensus_mode, nb_eps, debug,
             )),
         })
@@ -441,12 +445,29 @@ impl JsBrain {
     }
 
 
-    /// Declare the neighbor channel set for a registered channel. Pass the channel's name and an
-    /// array of neighbor channel names. Names not in the registry are silently ignored.
-    /// An empty list shrinks the channel's neighborhood to {itself} (no cross-channel co-learning).
-    /// Channels with no call retain the default all-pairs neighborhood, so existing apps that
-    /// don't declare neighbors keep their current behavior.
-    /// Call AFTER registering all channels — neighbor names are resolved at this call.
+    /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
+    /// This is the set a channel may co-fire with in the same frame to form a spatial pattern.
+    /// Names not in the registry are silently ignored; an empty list shrinks the spatial
+    /// neighborhood to {itself}; channels with no call retain the default all-pairs spatial
+    /// neighborhood. Call AFTER registering all channels — neighbor names are resolved at this call.
+    #[napi(js_name = "setSpatialNeighbors")]
+    pub fn set_spatial_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
+        self.inner.borrow_mut().set_spatial_neighbors(&name, &neighbor_names);
+        Ok(())
+    }
+
+    /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
+    /// This is the set whose past a channel may sequence against to predict the future.
+    /// Same name-resolution and all-pairs-default semantics as `setSpatialNeighbors`.
+    #[napi(js_name = "setTemporalNeighbors")]
+    pub fn set_temporal_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
+        self.inner.borrow_mut().set_temporal_neighbors(&name, &neighbor_names);
+        Ok(())
+    }
+
+    /// Declare the same neighbor set for BOTH phases — convenience for channels whose spatial and
+    /// temporal neighbors coincide (e.g. retinotopic pixels). Equivalent to calling
+    /// `setSpatialNeighbors` and `setTemporalNeighbors` with the same list.
     #[napi(js_name = "setChannelNeighbors")]
     pub fn set_channel_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
         self.inner.borrow_mut().set_channel_neighbors(&name, &neighbor_names);
@@ -872,6 +893,16 @@ fn parse_consensus_mode(s: &str) -> Result<ConsensusMode> {
         "nb" => Ok(ConsensusMode::Nb),
         _ => Err(Error::from_reason(format!(
             "Invalid consensus '{}'. Expected one of: democratic, nb", s
+        ))),
+    }
+}
+
+fn parse_match_mode(s: &str) -> Result<MatchMode> {
+    match s {
+        "containment" => Ok(MatchMode::Containment),
+        "jaccard" => Ok(MatchMode::Jaccard),
+        _ => Err(Error::from_reason(format!(
+            "Invalid matchMode '{}'. Expected one of: containment, jaccard", s
         ))),
     }
 }

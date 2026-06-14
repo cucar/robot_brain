@@ -192,6 +192,9 @@ pub struct Neuron {
 
     pattern_forget_rate: f64,
     merge_threshold: f64,
+    /// Temporal context match metric — containment (known-side coverage) vs jaccard (intersection
+    /// over union). Selects the threshold denominator in `TemporalContext::match_observed`.
+    match_mode: MatchMode,
     error_mode: ErrorMode,
     error_threshold: f64,
 
@@ -260,6 +263,7 @@ impl Neuron {
         id: NeuronId,
         pattern_forget_rate: f64,
         merge_threshold: f64,
+        match_mode: MatchMode,
         error_mode: ErrorMode,
         error_threshold: f64,
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
@@ -269,6 +273,7 @@ impl Neuron {
             id,
             pattern_forget_rate,
             merge_threshold,
+            match_mode,
             error_mode,
             error_threshold,
             context_length,
@@ -1304,7 +1309,7 @@ impl Neuron {
             // context.match_observed() handles the full scoring and threshold check;
             // the index only decides which child patterns are worth evaluating.
             // exclude_ids masks out brand-new neurons so they don't count as "novel" misses.
-            let m = match entry.context.match_observed(observed, age, self.merge_threshold, Some(exclude_ids)) {
+            let m = match entry.context.match_observed(observed, age, self.merge_threshold, self.match_mode, Some(exclude_ids)) {
                 Some(m) => m,
                 None => continue, // nothing to do if there is no match
             };
@@ -1601,13 +1606,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), 10)
+        Neuron::new(id, 0.01, 0.9, MatchMode::Jaccard, ErrorMode::Static, 0.3, FxHashMap::default(), 10)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, 10)
+        Neuron::new(id, 0.01, 0.9, MatchMode::Jaccard, ErrorMode::Static, 0.3, channel_actions, 10)
     }
 
     #[test]
@@ -1689,7 +1694,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), 10);
+        let mut n = Neuron::new(1, 0.01, 0.9, MatchMode::Jaccard, ErrorMode::Neutral, 0.3, FxHashMap::default(), 10);
         // fewer than ERROR_MIN_SAMPLES → falls back to error_threshold
         n.record_error(0, 0.5);
         n.record_error(0, 0.5);

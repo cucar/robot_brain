@@ -17,7 +17,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::types::{ContextEntry, Distance, MatchResult, NeuronId, Strength};
+use crate::types::{ContextEntry, Distance, MatchMode, MatchResult, NeuronId, Strength};
 
 // ── Spatial ──────────────────────────────────────────────────────────────────
 
@@ -231,9 +231,10 @@ impl TemporalContext {
     /// * `observed` — the observed context to match against
     /// * `offset` — the parent's active age (shifts pattern distances to absolute)
     /// * `merge_threshold` — minimum required percentage for merge (0.0–1.0)
+    /// * `match_mode` — how the threshold denominator is formed (containment vs jaccard)
     /// * `exclude_ids` — optional set of observed neuron ids to mask out of scoring
     ///        (e.g. brand-new neurons that shouldn't count as unexplained novel entries)
-    pub fn match_observed(&self, observed: &TemporalContext, offset: Distance, merge_threshold: f64, exclude_ids: Option<&FxHashSet<NeuronId>>) -> Option<MatchResult> {
+    pub fn match_observed(&self, observed: &TemporalContext, offset: Distance, merge_threshold: f64, match_mode: MatchMode, exclude_ids: Option<&FxHashSet<NeuronId>>) -> Option<MatchResult> {
 
         // Pass 1: walk the known context, classifying each entry into common/missing relative to observed.
         let mut common = Vec::new();
@@ -267,7 +268,9 @@ impl TemporalContext {
             let known_distances = self.entries.get(&neuron_id);
             for (&absolute_distance, &strength) in distance_map {
                 let pattern_distance = absolute_distance as i64 - offset as i64;
-                if pattern_distance < 0 { continue; }
+                // Temporal context neurons must be strictly older than the parent (pattern-relative distance >= 1).
+                // Same-frame distance 0 observed entry is a spatial co-activation, not a temporal predecessor
+                if pattern_distance < 1 { continue; }
                 let pattern_distance = pattern_distance as Distance;
 
                 let is_known = known_distances.map_or(false, |kd| kd.get(&pattern_distance).map_or(false, |&s| s > 0.0));
@@ -278,10 +281,15 @@ impl TemporalContext {
             }
         }
 
-        // Symmetric (Jaccard) match: common / (common + missing + novel) >= merge_threshold.
-        let union_size = (common.len() + missing.len() + novel.len()) as f64;
-        if union_size == 0.0 { return None; }
-        if (common.len() as f64 / union_size) < merge_threshold { return None; }
+        // Threshold gate. Containment divides by the known-pattern size (common + missing =
+        // total_count); Jaccard divides by the union (also counting novel observed entries). Both
+        // apply the same novel score penalty above — only the gate denominator differs.
+        let denom = match match_mode {
+            MatchMode::Containment => total_count as f64,
+            MatchMode::Jaccard => (common.len() + missing.len() + novel.len()) as f64,
+        };
+        if denom == 0.0 { return None; }
+        if (common.len() as f64 / denom) < merge_threshold { return None; }
 
         // Round to 14 decimal places to avoid floating-point precision issues
         score = (score * 1e14).round() / 1e14;
@@ -347,7 +355,7 @@ mod tests {
         observed.add_neuron(1, 1, 1.0);
         observed.add_neuron(2, 2, 1.0);
 
-        let result = known.match_observed(&observed, 0, 0.5, None).unwrap();
+        let result = known.match_observed(&observed, 0, 0.5, MatchMode::Jaccard, None).unwrap();
         assert_eq!(result.common.len(), 2);
         assert_eq!(result.missing.len(), 0);
         assert_eq!(result.novel.len(), 0);
@@ -363,7 +371,7 @@ mod tests {
         let mut observed = TemporalContext::new();
         observed.add_neuron(1, 1, 1.0);
 
-        let result = known.match_observed(&observed, 0, 0.9, None);
+        let result = known.match_observed(&observed, 0, 0.9, MatchMode::Jaccard, None);
         assert!(result.is_none());
     }
 
@@ -375,7 +383,7 @@ mod tests {
         let mut observed = TemporalContext::new();
         observed.add_neuron(1, 4, 1.0);
 
-        let result = known.match_observed(&observed, 3, 0.5, None).unwrap();
+        let result = known.match_observed(&observed, 3, 0.5, MatchMode::Jaccard, None).unwrap();
         assert_eq!(result.common.len(), 1);
     }
 
@@ -388,7 +396,7 @@ mod tests {
         observed.add_neuron(1, 1, 1.0);
         observed.add_neuron(99, 3, 1.0);
 
-        let result = known.match_observed(&observed, 0, 0.5, None).unwrap();
+        let result = known.match_observed(&observed, 0, 0.5, MatchMode::Jaccard, None).unwrap();
         assert_eq!(result.common.len(), 1);
         assert_eq!(result.novel.len(), 1);
         assert_eq!(result.novel[0].neuron_id, 99);
@@ -407,7 +415,7 @@ mod tests {
         let mut exclude = FxHashSet::default();
         exclude.insert(99);
 
-        let result = known.match_observed(&observed, 0, 0.5, Some(&exclude)).unwrap();
+        let result = known.match_observed(&observed, 0, 0.5, MatchMode::Jaccard, Some(&exclude)).unwrap();
         assert_eq!(result.novel.len(), 0);
     }
 

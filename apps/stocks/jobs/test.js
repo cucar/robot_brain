@@ -134,6 +134,22 @@ export default class StockTestJob extends Job {
 			this.encoders.push(encoder);
 			this.traders.push(trader);
 		}
+
+		// Temporal-only run: disable spatial (d=0 co-activation) so behavior matches the pre-spatial
+		// `main` branch. An empty spatial neighbor list turns spatial OFF for the channel entirely —
+		// no cross-symbol grouping and no intra-symbol (price/volume) grouping — so the spatial sweep
+		// mints nothing. Temporal neighbors are left at the default all-pairs (every symbol can
+		// sequence against every other), which is the original stock behavior.
+		for (const symbol of this.config.symbols) {
+			this.brain.setSpatialNeighbors(symbol, []);
+		}
+
+		// To ENABLE spatial processing for stocks (as the spatial branch does by default), comment out
+		// the loop above and declare spatial neighbors instead — either all-pairs (every symbol a
+		// spatial neighbor of every other, the current default behavior) or only genuinely correlated
+		// symbols so d=0 co-activation forms across related names rather than the whole market:
+		//   for (const symbol of this.config.symbols) this.brain.setSpatialNeighbors(symbol, this.config.symbols);
+		//   this.brain.setSpatialNeighbors('AAPL', ['AAPL', 'MSFT', 'GOOG']);  // correlated cluster (list self to keep price/volume co-activation)
 	}
 
 	/**

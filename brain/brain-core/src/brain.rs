@@ -33,7 +33,7 @@ use crate::thalamus::{
 };
 use crate::types::{
     ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, NeuronId, NeuronType, Reward,
+    Level, MatchMode, NeuronId, NeuronType, Reward,
 };
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
@@ -387,6 +387,7 @@ impl Brain {
         error_correction_mode: ErrorMode,
         error_correction_threshold: f64,
         merge_threshold: f64,
+        match_mode: MatchMode,
         pattern_forget_rate: f64,
         regions: usize,
         columns: usize,
@@ -410,6 +411,7 @@ impl Brain {
                 debug,
                 pattern_forget_rate,
                 merge_threshold,
+                match_mode,
                 context_length,
                 error_correction_mode,
                 error_correction_threshold,
@@ -435,7 +437,19 @@ impl Brain {
         self.thalamus.register_channel_spec(name, dimensions, learn_action_sequences)
     }
 
-    /// Declare the neighbor channel set for a registered channel. See `Thalamus::set_channel_neighbors`.
+    /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
+    /// See `Thalamus::set_spatial_neighbors`.
+    pub fn set_spatial_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        self.thalamus.set_spatial_neighbors(name, neighbor_names);
+    }
+
+    /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
+    /// See `Thalamus::set_temporal_neighbors`.
+    pub fn set_temporal_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        self.thalamus.set_temporal_neighbors(name, neighbor_names);
+    }
+
+    /// Declare the same neighbor set for BOTH phases. See `Thalamus::set_channel_neighbors`.
     pub fn set_channel_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
         self.thalamus.set_channel_neighbors(name, neighbor_names);
     }
@@ -1055,10 +1069,10 @@ impl Brain {
     /// just filter them all out as is_new=false.
     fn create_new_sensory_neurons(&mut self, frame_neurons: &FrameNeurons, timings: &mut FrameTimings) {
         let t = Instant::now();
-        // Sensory neurons get the brain-wide pattern_forget_rate so their hosted spatial- and
-        // temporal-correction children decay at the same rate as children of pattern neurons.
-        // Sensory neurons themselves never die (no parent), so this rate only affects child decay.
-        let forget_rate = self.thalamus.pattern_forget_rate();
+        // Sensory neurons get the base-neuron forget rate so their hosted spatial- and temporal-
+        // correction children decay like children of pattern neurons (rate 0 would leave those
+        // children immortal, which was a bug). Sensory neurons themselves never die (no parent).
+        let forget_rate = self.thalamus.base_neuron_forget_rate();
         let specs: Vec<NeuronCreateSpec> = frame_neurons.events.iter()
             .filter(|p| p.is_new)
             .map(|p| NeuronCreateSpec { id: p.id, forget_rate, connections: None })
@@ -2130,6 +2144,7 @@ mod tests {
             ErrorMode::Conservative,  // error_correction_mode
             0.5,                      // error_correction_threshold
             0.5,                      // merge_threshold
+            MatchMode::Jaccard,       // match_mode
             0.01,                     // pattern_forget_rate
             1,                        // regions
             1,                        // columns

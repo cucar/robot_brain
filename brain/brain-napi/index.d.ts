@@ -18,6 +18,7 @@ export declare class Brain {
    *   columns: number (default 1)
    *   consensus: string 'democratic' | 'nb' (default 'democratic')
    *   nbEps: number (default 1e-3) — Laplace floor for the 'nb' consensus log
+   *   matchMode: string 'containment' | 'jaccard' (default 'jaccard') — temporal match denominator
    *   debug: boolean (default false)
    */
   constructor(options?: object | undefined | null)
@@ -114,12 +115,23 @@ export declare class Brain {
    */
   apexVsVoterSetDiff(): object
   /**
-   * Declare the neighbor channel set for a registered channel. Pass the channel's name and an
-   * array of neighbor channel names. Names not in the registry are silently ignored.
-   * An empty list shrinks the channel's neighborhood to {itself} (no cross-channel co-learning).
-   * Channels with no call retain the default all-pairs neighborhood, so existing apps that
-   * don't declare neighbors keep their current behavior.
-   * Call AFTER registering all channels — neighbor names are resolved at this call.
+   * Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
+   * This is the set a channel may co-fire with in the same frame to form a spatial pattern.
+   * Names not in the registry are silently ignored; an empty list shrinks the spatial
+   * neighborhood to {itself}; channels with no call retain the default all-pairs spatial
+   * neighborhood. Call AFTER registering all channels — neighbor names are resolved at this call.
+   */
+  setSpatialNeighbors(name: string, neighborNames: Array<string>): void
+  /**
+   * Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
+   * This is the set whose past a channel may sequence against to predict the future.
+   * Same name-resolution and all-pairs-default semantics as `setSpatialNeighbors`.
+   */
+  setTemporalNeighbors(name: string, neighborNames: Array<string>): void
+  /**
+   * Declare the same neighbor set for BOTH phases — convenience for channels whose spatial and
+   * temporal neighbors coincide (e.g. retinotopic pixels). Equivalent to calling
+   * `setSpatialNeighbors` and `setTemporalNeighbors` with the same list.
    */
   setChannelNeighbors(name: string, neighborNames: Array<string>): void
   /** Look up a dimension ID by its registered name. */

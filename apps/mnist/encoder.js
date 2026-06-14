@@ -17,7 +17,7 @@ export class MNISTPixelChannelsEncoder {
 	 *   Source images are always 28×28; smaller sizes are produced by block-average downsampling.
 	 *   28 must be divisible by imageSize.
 	 * @param {number} neighborhoodRadius - radius of each pixel's spatial neighborhood declared
-	 *   to the brain via setChannelNeighbors. 1 = 3×3 window (up to 8 neighbors), 2 = 5×5 (up to 24),
+	 *   to the brain via setSpatialNeighbors. 1 = 3×3 window (up to 8 neighbors), 2 = 5×5 (up to 24),
 	 *   etc. Edge effects shrink the count for pixels near the image border.
 	 */
 	constructor(buckets = 2, imageSize = 28, neighborhoodRadius = 1) {
@@ -99,7 +99,9 @@ export class MNISTPixelChannelsEncoder {
 					neighbors.push(`px_${ny * this.imageSize + nx}`);
 				}
 			}
-			brain.setChannelNeighbors(`px_${p}`, neighbors);
+			// MNIST neighborhoods are spatial (pixel co-activation), so declare them on the spatial
+			// side only; the temporal side stays all-pairs (irrelevant at context length 1).
+			brain.setSpatialNeighbors(`px_${p}`, neighbors);
 		}
 	}
 

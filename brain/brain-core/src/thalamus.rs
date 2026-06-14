@@ -30,7 +30,7 @@ use crate::quantizer::{QuantizeMode, Quantizer};
 use crate::region::Region;
 use crate::types::{
     ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
-    Level, NeuronId, NeuronType, Reward,
+    Level, MatchMode, NeuronId, NeuronType, Reward,
 };
 
 // ── Supporting structs ──────────────────────────────────────────────────────
@@ -242,19 +242,30 @@ pub struct Thalamus {
     /// Channel id → name.
     channel_id_to_name: FxHashMap<ChannelId, String>,
 
-    /// Per-channel neighbor set — restricts connection learning AND pattern minting AND vote-error
-    /// evaluation to only the channels in the listed neighbor set (plus the channel itself,
-    /// implicitly). Applies to BOTH phases: spatial (d=0 co-activation) and temporal (d>0 sequence).
-    /// The neighbor relationship is a property of the channel graph at the SENSORY level only.
-    /// L1+ pattern neurons have NO channel — they emerge from cross-channel correlations and
-    /// don't belong to any single channel. When a pattern is the "parent" of a filter lookup,
-    /// `get_neuron_channel_id` returns None and `is_neighbor_channel` falls through to all-pairs
-    /// (no restriction). Patterns naturally learn / predict / mint across everything they actually
-    /// co-fire with — which is bounded by their parent's neighbor graph anyway, since the parent's
-    /// channel selected the neighborhood that birthed them.
-    /// Channels NOT in this map have the default all-pairs neighborhood — preserving original
-    /// pre-neighbor behavior for stocks, text, etc.
-    channel_neighbors: FxHashMap<ChannelId, FxHashSet<ChannelId>>,
+    /// Per-channel SPATIAL neighbor set — restricts d=0 co-activation grouping (spatial pattern
+    /// minting and the spatial neighborhood/context built in `mint_spatial_corrections`) to the
+    /// listed channels plus the channel itself.
+    /// This is the set of channels a channel may co-fire WITH in the same frame to form a spatial
+    /// pattern — e.g. a pixel's adjacent pixels, or a set of genuinely correlated symbols.
+    /// Separate from the temporal set so a channel can group spatially with its near neighbors while
+    /// still sequencing temporally against a different (or unrestricted) channel set.
+    spatial_channel_neighbors: FxHashMap<ChannelId, FxHashSet<ChannelId>>,
+
+    /// Per-channel TEMPORAL neighbor set — restricts d>0 sequence learning (temporal connection
+    /// pre-wiring, temporal pattern minting, vote-error evaluation, and the per-task temporal
+    /// context) to the listed channels plus the channel itself.
+    /// This is the set of channels whose past a channel may sequence against to predict the future.
+    /// Separate from the spatial set per the split above.
+    ///
+    /// Shared semantics for both maps: the neighbor relationship is a property of the channel graph
+    /// at the SENSORY level only.
+    /// L1+ pattern neurons have NO channel — they emerge from cross-channel correlations and don't
+    /// belong to any single channel.
+    /// When a pattern is the "parent" of a filter lookup, `get_neuron_channel_id` returns None and
+    /// the predicate falls through to all-pairs (no restriction).
+    /// Channels NOT in a map have the default all-pairs neighborhood for that phase — preserving
+    /// original pre-neighbor behavior for stocks, text, etc.
+    temporal_channel_neighbors: FxHashMap<ChannelId, FxHashSet<ChannelId>>,
 
     /// Dimension name → id.
     dimension_name_to_id: FxHashMap<String, DimensionId>,
@@ -284,6 +295,7 @@ impl Thalamus {
         debug: bool,
         pattern_forget_rate: f64,
         merge_threshold: f64,
+        match_mode: MatchMode,
         context_length: u32,
         error_mode: ErrorMode,
         error_threshold: f64,
@@ -301,6 +313,7 @@ impl Thalamus {
                 &channel_default_actions,
                 context_length,
                 merge_threshold,
+                match_mode,
                 error_mode,
                 error_threshold,
             ));
@@ -326,7 +339,8 @@ impl Thalamus {
             channel_default_actions: FxHashMap::default(),
             channel_name_to_id: FxHashMap::default(),
             channel_id_to_name: FxHashMap::default(),
-            channel_neighbors: FxHashMap::default(),
+            spatial_channel_neighbors: FxHashMap::default(),
+            temporal_channel_neighbors: FxHashMap::default(),
             dimension_name_to_id: FxHashMap::default(),
             dimension_id_to_name: FxHashMap::default(),
             quantizer: Quantizer::new(),
@@ -421,7 +435,7 @@ impl Thalamus {
             let a_idx = a as usize;
             for &sensory_neuron_id in &sensory_neurons[a_idx] {
                 let channel_id = self.get_neuron_channel_id(sensory_neuron_id).unwrap_or(0);
-                if !self.is_neighbor_channel(parent_channel, channel_id) { continue; }
+                if !self.is_temporal_neighbor_channel(parent_channel, channel_id) { continue; }
                 let reward = rewards[a_idx].get(&channel_id).copied().unwrap_or(0.0);
                 connections.push(ConnectionSpec {
                     distance: age - a,
@@ -448,12 +462,11 @@ impl Thalamus {
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
 
-    /// The brain-wide pattern forget rate. Sensory neuron creation reads this so sensory neurons
-    /// can decay their CHILDREN at the same rate pattern neurons do — sensory neurons themselves
-    /// never die (no parent → never reaped), but their `pattern_forget_rate` field drives the
-    /// decay of their hosted spatial-correction and temporal-correction children. Setting it to 0
-    /// on sensories was a bug — it made every child pattern hosted on a sensory immortal.
-    pub fn pattern_forget_rate(&self) -> f64 {
+    /// The forget rate to stamp on base sensory/action neurons. Base neurons never die (no parent →
+    /// never reaped), but this rate drives the decay of their hosted spatial- and temporal-correction
+    /// children, so it must be the brain-wide `pattern_forget_rate` — otherwise (rate 0.0) every child
+    /// pattern hosted on a base neuron would be immortal, which was a bug.
+    pub fn base_neuron_forget_rate(&self) -> f64 {
         self.pattern_forget_rate
     }
 
@@ -514,35 +527,70 @@ impl Thalamus {
     /// Get the channel id for a neuron. Sensory neurons return their registration channel.
     /// L1+ pattern neurons return None — they emerge from cross-channel correlations and have no
     /// channel of their own. Callers that use channel ids for neighbor lookups should treat None
-    /// as "no neighbor restriction" (`is_neighbor_channel` already returns true when the parent's
-    /// channel has no neighbor list registered).
+    /// as "no neighbor restriction" (`is_spatial_neighbor_channel` / `is_temporal_neighbor_channel`
+    /// already return true when the parent's channel has no neighbor list registered for that phase).
     pub fn get_neuron_channel_id(&self, neuron_id: NeuronId) -> Option<ChannelId> {
         self.base_neurons.get(&neuron_id).map(|b| b.channel_id)
     }
 
-    /// Declare the neighbor channels for a registered channel. Names not in the registry are
-    /// silently ignored — encoders typically register every relevant channel first, then make a
-    /// second pass to declare neighbor relationships (forward references are otherwise impossible
-    /// during single-pass registration).
-    /// Calling this with an empty list shrinks the channel's neighborhood to {itself}, which
-    /// effectively disables co-activation learning across other channels for that channel.
-    /// Channels with NO call to this method retain the default all-pairs neighborhood.
-    pub fn set_channel_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+    /// Resolve a channel name plus a list of neighbor names into a channel id and a neighbor id set.
+    /// Names not in the registry are silently ignored — encoders typically register every relevant
+    /// channel first, then make a second pass to declare neighbor relationships (forward references
+    /// are otherwise impossible during single-pass registration).
+    /// Does NOT insert the channel into its own set — each setter below decides for itself.
+    fn resolve_neighbor_ids(&self, name: &str, neighbor_names: &[String]) -> (ChannelId, FxHashSet<ChannelId>) {
         let channel_id = self.channel_name_to_id.get(name).copied()
-            .unwrap_or_else(|| panic!("set_channel_neighbors: channel '{}' not registered", name));
-        let mut neighbor_ids: FxHashSet<ChannelId> = neighbor_names.iter()
+            .unwrap_or_else(|| panic!("set neighbors: channel '{}' not registered", name));
+        let neighbor_ids: FxHashSet<ChannelId> = neighbor_names.iter()
             .filter_map(|n| self.channel_name_to_id.get(n).copied())
             .collect();
-        // A channel is always its own neighbor — intra-channel co-activation (multiple buckets
-        // of the same dimension) is meaningful where it can happen.
-        neighbor_ids.insert(channel_id);
-        self.channel_neighbors.insert(channel_id, neighbor_ids);
+        (channel_id, neighbor_ids)
     }
 
-    /// Test whether `target_channel` is in `parent_channel`'s neighbor set.
-    /// Returns true if `parent_channel` has no neighbor list registered (default all-pairs).
-    pub fn is_neighbor_channel(&self, parent_channel: ChannelId, target_channel: ChannelId) -> bool {
-        match self.channel_neighbors.get(&parent_channel) {
+    /// Declare the SPATIAL (d=0 co-activation) neighbor channels for a registered channel.
+    /// The list is used VERBATIM — the channel is NOT implicitly added to its own set. An empty list
+    /// therefore disables spatial co-activation entirely: no cross-channel grouping AND no
+    /// intra-channel grouping between multiple dims of the same channel. That is how a temporal-only
+    /// workload turns spatial processing off. To keep intra-channel co-activation, list the channel
+    /// itself. Channels with NO call retain the default all-pairs spatial neighborhood.
+    pub fn set_spatial_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        let (channel_id, neighbor_ids) = self.resolve_neighbor_ids(name, neighbor_names);
+        self.spatial_channel_neighbors.insert(channel_id, neighbor_ids);
+    }
+
+    /// Declare the TEMPORAL (d>0 sequence) neighbor channels for a registered channel.
+    /// The channel is always added to its own set — a channel always sequences against its own past.
+    /// Calling this with an empty list shrinks the temporal neighborhood to {itself}.
+    /// Channels with NO call retain the default all-pairs temporal neighborhood.
+    pub fn set_temporal_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        let (channel_id, mut neighbor_ids) = self.resolve_neighbor_ids(name, neighbor_names);
+        neighbor_ids.insert(channel_id);
+        self.temporal_channel_neighbors.insert(channel_id, neighbor_ids);
+    }
+
+    /// Declare the same neighbor set for BOTH phases — convenience for channels whose spatial and
+    /// temporal neighbors coincide (e.g. retinotopic pixels). The channel is added to its own set in
+    /// both maps (matching the original combined-neighbor behavior).
+    pub fn set_channel_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        let (channel_id, mut neighbor_ids) = self.resolve_neighbor_ids(name, neighbor_names);
+        neighbor_ids.insert(channel_id);
+        self.spatial_channel_neighbors.insert(channel_id, neighbor_ids.clone());
+        self.temporal_channel_neighbors.insert(channel_id, neighbor_ids);
+    }
+
+    /// Test whether `target_channel` is in `parent_channel`'s SPATIAL neighbor set.
+    /// Returns true if `parent_channel` has no spatial neighbor list registered (default all-pairs).
+    pub fn is_spatial_neighbor_channel(&self, parent_channel: ChannelId, target_channel: ChannelId) -> bool {
+        match self.spatial_channel_neighbors.get(&parent_channel) {
+            None => true,
+            Some(set) => set.contains(&target_channel),
+        }
+    }
+
+    /// Test whether `target_channel` is in `parent_channel`'s TEMPORAL neighbor set.
+    /// Returns true if `parent_channel` has no temporal neighbor list registered (default all-pairs).
+    pub fn is_temporal_neighbor_channel(&self, parent_channel: ChannelId, target_channel: ChannelId) -> bool {
+        match self.temporal_channel_neighbors.get(&parent_channel) {
             None => true,
             Some(set) => set.contains(&target_channel),
         }
@@ -797,11 +845,11 @@ impl Thalamus {
                     action_neurons.push(lookup.id);
                 }
                 if lookup.is_new {
-                    // Action neurons get the brain-wide pattern_forget_rate for the same reason as
-                    // sensory event neurons: they themselves never die, but their hosted children
-                    // (any pattern corrections that end up parented by an action) need their decay
-                    // formula to use a non-zero rate. Zero would make every child pattern immortal.
-                    new_neuron_specs.push(NeuronCreateSpec { id: lookup.id, forget_rate: self.pattern_forget_rate, connections: None });
+                    // Action neurons get the same base-neuron forget rate as sensory event neurons:
+                    // they themselves never die, but their hosted children (any pattern corrections
+                    // that end up parented by an action) need a non-zero decay rate. Zero would make
+                    // every child pattern immortal.
+                    new_neuron_specs.push(NeuronCreateSpec { id: lookup.id, forget_rate: self.base_neuron_forget_rate(), connections: None });
                 }
             }
 
@@ -1068,7 +1116,7 @@ impl Thalamus {
                     .filter(|&id| id != parent_id)
                     .filter(|&id| {
                         let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
-                        self.is_neighbor_channel(parent_channel, target_channel)
+                        self.is_spatial_neighbor_channel(parent_channel, target_channel)
                     })
                     .collect();
 
@@ -1080,7 +1128,7 @@ impl Thalamus {
                         .filter(|&id| id != parent_id)
                         .filter(|&id| {
                             let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
-                            self.is_neighbor_channel(parent_channel, target_channel)
+                            self.is_spatial_neighbor_channel(parent_channel, target_channel)
                         })
                         .collect())
                     .unwrap_or_default();
@@ -1102,7 +1150,7 @@ impl Thalamus {
                     for v in &age_votes.votes {
                         if self.get_neuron_type(v.neuron_id) != Some(NeuronType::Event) { continue; }
                         let target_channel = self.get_neuron_channel_id(v.neuron_id).unwrap_or(0);
-                        if !self.is_neighbor_channel(parent_channel, target_channel) { continue; }
+                        if !self.is_spatial_neighbor_channel(parent_channel, target_channel) { continue; }
                         let dim_id = match self.get_neuron_coordinate(v.neuron_id) {
                             Some(c) => c.dim_id,
                             None => continue,
@@ -1392,7 +1440,7 @@ impl Thalamus {
                 .copied()
                 .filter(|&id| {
                     let target_ch = self.get_neuron_channel_id(id).unwrap_or(0);
-                    self.is_neighbor_channel(parent_channel, target_ch)
+                    self.is_temporal_neighbor_channel(parent_channel, target_ch)
                 })
                 .collect();
 
@@ -1415,7 +1463,7 @@ impl Thalamus {
                 .into_iter()
                 .filter(|e| {
                     let target_ch = self.get_neuron_channel_id(e.neuron_id).unwrap_or(0);
-                    self.is_neighbor_channel(parent_channel, target_ch)
+                    self.is_temporal_neighbor_channel(parent_channel, target_ch)
                 })
                 .collect();
 
@@ -1453,7 +1501,7 @@ impl Thalamus {
         let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
             let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
             full_actives.iter()
-                .filter(|a| self.is_neighbor_channel(parent_channel, a.channel_id))
+                .filter(|a| self.is_spatial_neighbor_channel(parent_channel, a.channel_id))
                 .cloned()
                 .collect()
         }).collect();
@@ -1470,7 +1518,7 @@ impl Thalamus {
             for (&neuron_id, &strength) in level_context.entries() {
                 if neuron_id == t.neuron_id { continue; }
                 let target_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
-                if self.is_neighbor_channel(parent_channel, target_channel) {
+                if self.is_spatial_neighbor_channel(parent_channel, target_channel) {
                     ctx.add_neuron(neuron_id, strength);
                 }
             }
@@ -1522,7 +1570,7 @@ impl Thalamus {
         let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
             let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
             full_actives.iter()
-                .filter(|a| self.is_neighbor_channel(parent_channel, a.channel_id))
+                .filter(|a| self.is_temporal_neighbor_channel(parent_channel, a.channel_id))
                 .cloned()
                 .collect()
         }).collect();
@@ -2158,7 +2206,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 1, 1)
+        Thalamus::new(false, 0.1, 0.5, MatchMode::Jaccard, 4, ErrorMode::Static, 0.5, 1, 1)
     }
 
     #[test]
@@ -2182,7 +2230,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 3, 1);
+        let t = Thalamus::new(false, 0.1, 0.5, MatchMode::Jaccard, 4, ErrorMode::Static, 0.5, 3, 1);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);
