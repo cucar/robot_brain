@@ -12,9 +12,44 @@ MNIST).
 
 ---
 
+## Status (updated)
+
+The dependency chain **1.1 → 2.1 → 2.2 has landed** and is verified in the current `spatial` branch
+— these are what produced the 95.73% full-MNIST result logged in
+[mnist-spatial-experiments.md](mnist-spatial-experiments.md). Confirmed in code:
+
+- **1.1 — observed-context neighbor filtering: DONE.** `dispatch_spatial_frame` builds a per-task
+  observed `SpatialContext` filtered to the parent's neighbor channels
+  ([thalamus.rs:1461](../brain/brain-core/src/thalamus.rs)).
+- **2.1 — per-position winner competition: DONE.** `mint_spatial_corrections` reduces the d=0 votes
+  to one winner per `(channel, dim)` via the `position_winners` map before scoring error
+  ([thalamus.rs:1101](../brain/brain-core/src/thalamus.rs)).
+- **2.2 — coordinate inheritance for minted patterns: DONE.** `allocate_spatial_pattern_neuron`
+  inherits the parent's full coordinate and deliberately does **not** register it in
+  `neurons_by_value` ([thalamus.rs:468](../brain/brain-core/src/thalamus.rs)).
+
+**Still open and scheduled** (see [roadmap.md](roadmap.md)):
+
+- **1.2 — snapshot restore** — scheduled under the roadmap's *Backups / imports / exports (Phase 4)*
+  item.
+- **1.3 — temporal `< 1` guard** — scheduled as a standalone near-term fix.
+- **Minor — committed `*.node` binaries** — scheduled under the roadmap's *Do not commit platform
+  binaries* item.
+- **Minor — [brain-as-policy-engine.md](brain-as-policy-engine.md)** — superseded by a decision: the
+  roadmap's *NB decode → brain (or consensus → app)* item will either implement the policy-engine
+  direction (deleting that doc) or fold its `--decode`/`--nb-eps` removal into a defaults-only
+  consensus (updating that doc). Resolved by the MNIST/stocks/text test outcome.
+
+A **new open question** surfaced from 2.2: *should temporal corrections inherit channels the same way
+spatial corrections now do?* Tracked as its own roadmap experiment.
+
+The original findings are retained below for the record; the headings carry their current status.
+
+---
+
 ## 1. Bugs
 
-### 1.1 Spatial pattern matching can never succeed when neighborhoods are declared — HIGH
+### 1.1 Spatial pattern matching can never succeed when neighborhoods are declared — HIGH — ✅ DONE
 
 **Where:**
 - Observed context built unfiltered: `get_spatial_level_tasks` ([thalamus.rs:1203-1237](../brain/brain-core/src/thalamus.rs)) puts **every** neuron active at the level into one shared `SpatialContext`.
@@ -46,7 +81,7 @@ non-neighbor entries.
 Note this only bites when neighborhoods are declared; all-pairs domains (stocks, text) have
 symmetric stored/observed sets and are unaffected.
 
-### 1.2 Snapshot restore silently destroys spatial structure — HIGH
+### 1.2 Snapshot restore silently destroys spatial structure — HIGH — ⏳ OPEN (roadmap: Phase 4 backups)
 
 Serialization was updated for spatial but restore was not, so a save/load round-trip corrupts
 silently instead of failing loudly:
@@ -77,7 +112,7 @@ silently instead of failing loudly:
 Then implement the Phase 4 acceptance test from the design doc (train → snapshot → restore →
 identical next frame), which would have caught all of this.
 
-### 1.3 Temporal novel-detection guard accidentally relaxed — MEDIUM
+### 1.3 Temporal novel-detection guard accidentally relaxed — MEDIUM — ⏳ OPEN (roadmap: near-term fix)
 
 `TemporalContext::match_observed`'s novel pass changed from `pattern_distance < 1` to `< 0`
 ([context.rs:270](../brain/brain-core/src/context.rs)), and the explanatory comment ("context
@@ -97,7 +132,7 @@ before the branch.
 
 ## 2. Translation gaps — code does not implement the intended algorithm
 
-### 2.1 No per-position competition in spatial prediction / error evaluation
+### 2.1 No per-position competition in spatial prediction / error evaluation — ✅ DONE
 
 **Intended:** each neuron predicts its 8 neighbor *positions*; for each position the bucket
 predictions (e.g. black vs white) **compete and one wins**. The predicted co-activation set is
@@ -130,7 +165,7 @@ observed bucket per channel. Predicted set becomes exactly one neuron per neighb
 error becomes a Hamming distance from the modal patch; minting quenches naturally once local
 statistics stabilize.
 
-### 2.2 Pattern neurons have no spatial topology — hierarchy jumps to whole-image fingerprints
+### 2.2 Pattern neurons have no spatial topology — hierarchy jumps to whole-image fingerprints — ✅ DONE
 
 **Intended:** an L1 correction continues to error-correct **the parent's neighborhood**.
 Receptive fields grow gradually: L2 groups L1 patch-detectors that are spatial neighbors, etc.
@@ -262,12 +297,14 @@ speaks the structural one.
   If a real channel id 0 ever exists, pattern neurons silently inherit its neighbor set.
   Propagate the `Option` instead. (Partially superseded by fix 2.2, which gives patterns a real
   inherited channel as part of the full coordinate.)
-- **Committed platform binaries**: the branch updates `brain-napi.node` and adds a new ~1.5 MB
-  `brain-napi.win32-x64-msvc.node`. Consider gitignoring `*.node` rather than growing them in
-  history.
-- **[brain-as-policy-engine.md](brain-as-policy-engine.md)** describes a consensus-removal
-  refactor (`process_frame(events, actions)`, votes-only output) that is *not* implemented on
-  this branch — fine as a forward-looking design doc, noted so nobody expects the API to exist.
+- **Committed platform binaries** — ⏳ OPEN (roadmap: *Do not commit platform binaries*): the branch
+  updates `brain-napi.node` and adds a new ~1.5 MB `brain-napi.win32-x64-msvc.node`. Gitignore
+  `*.node` rather than growing them in history.
+- **[brain-as-policy-engine.md](brain-as-policy-engine.md)** — ⏳ DECISION PENDING (roadmap: *NB decode
+  → brain (or consensus → app)*): describes a consensus-removal refactor (`process_frame(events,
+  actions)`, votes-only output) that is *not* implemented on this branch. The roadmap resolves its
+  fate — either implement the votes-only direction (and delete the doc), or move the NB rule into the
+  brain as the default consensus and strip the `--decode`/`--nb-eps` options (and update the doc).
 
 ---
 
@@ -294,28 +331,34 @@ Checked during review; listed to save future reviewers the time:
 
 ## 6. Fix order
 
-Three fixes form a dependency chain and must land in this order; the other two are independent
-and can land at any time.
+The three-fix dependency chain has **landed** in the order below; the two independents remain and
+are scheduled on the [roadmap](roadmap.md).
 
-**Dependency chain — do in order, each relies on the previous:**
+**Dependency chain — ✅ all done, in this order:**
 
-1. **1.1 — observed-context neighbor filtering.** Until this lands, spatial matching never
+1. **1.1 — observed-context neighbor filtering. ✅** Until this lands, spatial matching never
    succeeds, so nothing downstream can be observed to work. Everything else is gated on it.
-2. **2.1 — per-position winner competition.** Turns the error signal into a Hamming distance from
+2. **2.1 — per-position winner competition. ✅** Turns the error signal into a Hamming distance from
    the modal patch (instead of novelty-vs-everything-seen), so minting quenches once local
    statistics stabilize. This is what produces the apex stabilization that 2.2 depends on.
-3. **2.2 — coordinate inheritance for minted patterns.** Restores locality above L0 and keeps
+3. **2.2 — coordinate inheritance for minted patterns. ✅** Restores locality above L0 and keeps
    temporal level 0 a uniform coordinate-bearing interface. Only meaningful once 1.1 and 2.1 have
    recognition firing and minting quenching.
 
-**Independent — land whenever:**
+The chain produced the observable changes predicted here (routing matches fire, hierarchy depth
+grows past 1, minting quenches, train accuracy converges) and the 95.73% full-MNIST capstone.
+
+**Independent — ⏳ still open, scheduled on the roadmap:**
 
 - **1.3 — restore the temporal `< 1` guard.** One line; fixes a temporal-matching regression
-  unrelated to the spatial chain.
+  unrelated to the spatial chain. Roadmap: near-term fix.
 - **1.2 — snapshot round-trip.** Required before any run that relies on persistence; includes the
-  Phase 4 round-trip test. No dependency on the algorithm fixes.
+  Phase 4 round-trip test. No dependency on the algorithm fixes. Roadmap: *Backups / imports /
+  exports (Phase 4)*.
 
-After the chain (1.1 → 2.1 → 2.2) plus 1.3, rerun the existing jobs (`7x7-levels`,
-`threshold-grid`, `convergence-debug`) — expected observable changes: routing matches fire,
-hierarchy depth grows past 1, mint counts plateau instead of growing linearly with frames, and
-per-episode train accuracy converges upward.
+**Follow-on questions opened by the landed chain** (roadmap experiments, not bugs):
+
+- **Temporal channel inheritance** — 2.2 gave *spatial* corrections their parent's coordinate;
+  should *temporal* corrections inherit channels the same way? Tracked as its own roadmap item.
+- **Context refinement** — re-introduce the consolidation step removed in `8a17f4d`, behind a flag,
+  for both temporal and spatial. Roadmap item, synergistic with merge tuning.

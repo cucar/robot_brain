@@ -238,12 +238,15 @@ Inference is symmetric: on a test image, the spatial sweep activates pre-trained
 
 ### Overview
 
-| Phase | Goal | Validation gate |
-|---|---|---|
-| 1 | `process_spatial` as a copy of `process_temporal`, restricted to d=0; `process_temporal` filtered to d>0; spatial runs first per frame | Stocks regression: behavior diverges only via d=0 work |
-| 2 | MNIST validation run (existing harness) | Accuracy and confusion matrix improve over the sensory-only baseline |
-| 3 | Stocks integration | Directional accuracy ≥ current baseline |
-| 4 | Persistence / backup / import-export updates | Snapshot/restore round-trips d=0 connections |
+| Phase | Goal | Validation gate | Status |
+|---|---|---|---|
+| 1 | `process_spatial` as a copy of `process_temporal`, restricted to d=0; `process_temporal` filtered to d>0; spatial runs first per frame | Stocks regression: behavior diverges only via d=0 work | ✅ done |
+| 2 | MNIST validation run (existing harness) | Accuracy and confusion matrix improve over the sensory-only baseline | ✅ done — 95.73% full MNIST (see [mnist-spatial-experiments.md](mnist-spatial-experiments.md)) |
+| 3 | Stocks integration | Directional accuracy ≥ current baseline | ⏳ pending (roadmap *Stock tests*) — now includes splitting neighborhoods into spatial vs temporal, a no-spatial-neighborhood parity check against `main`, and a related-stocks grouping run |
+| 4 | Persistence / backup / import-export updates | Snapshot/restore round-trips d=0 connections | ⏳ pending (roadmap *Backups / imports / exports*) — blocked on review fix [1.2](spatial-processing-review.md) |
+
+The Phase 1–2 work landed via the review dependency chain (1.1 → 2.1 → 2.2); see
+[spatial-processing-review.md](spatial-processing-review.md) for what each fix changed.
 
 ---
 
@@ -361,6 +364,9 @@ MNIST works within the timeline. The bootstrap dynamics — how many exposures a
 
 ## 8. Open Items
 
-1. **Bootstrap dynamics on MNIST**: how many exposures before d=0 stabilizes into useful clusters? Empirical only.
-2. **Spatial sweep depth on stocks**: how deep does the spatial hierarchy go in practice when temporal patterns feed it? Measure in Phase 3.
+1. **Bootstrap dynamics on MNIST**: how many exposures before d=0 stabilizes into useful clusters? Empirical only. (Largely characterized by the experiment log — minting now quenches post-2.1.)
+2. **Spatial sweep depth on stocks**: how deep does the spatial hierarchy go in practice when temporal patterns feed it? Measure in Phase 3 (roadmap *Stock tests*).
 3. **Apex subsumption granularity**: a neuron N is "subsumed" if its d=0 routing fires *any* higher-level spatial neuron this frame. Is that the right rule? Alternatives: (a) subsumed only if *all* of N's strong d=0 partners co-activated into the same higher neuron; (b) subsumed only if the higher neuron is itself apex (transitive). Phase 1 ships rule (current) — revisit if MNIST shows the apex set is too small (over-subsumption: the high-level neuron eats everything below it) or too big (under-subsumption: lower-level fragments still feed temporal alongside the higher abstraction).
+4. **Temporal channel inheritance**: fix 2.2 gave *spatial* corrections their parent's full (channel, dimension, coordinate). Should *temporal* corrections inherit channels the same way? Open experiment on the roadmap — symmetry argues yes, but temporal corrections group across channels by design, so it may not apply cleanly.
+5. **Context refinement (re-introduction)**: the consolidation step — on a matched pattern, strengthen common context entries, add novel, weaken/delete missing — was removed in commit `8a17f4d` to prevent pattern-identity drift (non-deterministic replay). The roadmap re-introduces it behind a flag for **both** temporal and spatial, guarded so refinement happens only during training and is frozen for eval. This is the missing abstraction/generalization step that would consolidate one-off corrections into general detectors and let the hierarchy climb past depth 2. Synergistic with lower merge thresholds.
+6. **NB readout placement (policy-engine decision)**: the per-voter Naive-Bayes log-sum currently lives app-side (`--decode nb` in the MNIST job) and beats the brain's arithmetic-mean consensus by ~5pp. The roadmap resolves whether to (a) move the NB rule into the brain as the default consensus (stripping `--decode`/`--nb-eps`), or (b) remove brain-side consensus entirely and emit votes-only per [brain-as-policy-engine.md](brain-as-policy-engine.md). Either way the marshalling cost of emitting every vote across the NAPI boundary each frame is eliminated. Decided by MNIST/stocks/text test outcomes.

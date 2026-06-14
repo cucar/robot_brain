@@ -219,76 +219,78 @@ MLP baseline under the identical protocol (TODO #1) to show the ~20% contrast.**
 
 ## Next steps / TODO
 
-1. **MLP class-incremental baseline** — a vanilla MLP trained under the *identical* split protocol
-   (digits sequentially, test on all 10), expected to collapse to ~20%. Turns "we don't forget"
-   into "we don't forget *where standard nets catastrophically do*." ~30-line Python script, separate
-   from the brain. **This is the punch line for the continual-learning claim.**
-2. **Full-data split-MNIST at the new optimum** (28×28, radius 2, NB, full train, full 10K test,
-   3 ep/digit) — per-class 500 gave 90.04% (gap 4.57pp); the full-data version is the headline split
-   number to match the 95.73% joint. **[QUEUED — auto-launches after the 28² r2 merge/bucket sweep.]**
-3. **Second dataset — Fashion-MNIST** on the same stack (same pipeline, harder, shows generality;
+This list is scoped to the roadmap's **Optimize MNIST** item (see [roadmap.md](roadmap.md)).
+Obsolete and completed probes have been pruned; the result tables above are kept as the data log.
+
+**Active (queued under Optimize MNIST):**
+
+1. **Radius 3 at 28×28.** Radius 2 was the 14×14 optimum and held at 28×28 per-class-300; radius 3
+   overfit at 14×14 but the larger-resolution receptive-field budget may behave differently at full
+   res. Run radius 3 at 28×28 / merge 0.7 / NB and compare to the radius-2 capstone (95.73%).
+2. **Error / merge threshold re-tune at 28×28 (radius x).** 0.4 / 0.7 were tuned at lower res /
+   radius. Sweep the paired corners **err 0.1 / merge 0.9, err 0.2 / merge 0.8, err 0.3 / merge 0.7**
+   at 28×28 and re-pick. Find the peak on a moderate set first (threshold tuning is roughly
+   data-independent), then confirm at full data.
+   - Anchor run: `node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 3 --error-mode static --error-threshold 0.1 --merge-threshold 0.9`
+3. **Is class-balanced training still required?** The balancing requirement was justified for the
+   *consensus* readout (an unbalanced prior "leaks tilt into every background voter"). With the
+   recent changes (NB log-sum readout, the landed spatial chain), it may be obsolete. Test: re-run
+   the optimum stack with `--no-balance` (NB + radius 2) on the natural MNIST distribution and
+   compare to the balanced result. If accuracy holds, drop balancing (simpler pipeline, more usable
+   data).
+4. **Literature-standard Split-MNIST.** Re-run continual learning on the *standard* **5 tasks × 2
+   classes** (0/1, 2/3, …) protocol — not the current 10 tasks × 1 class — citing van de Ven &
+   Tolias / Hsu, so our ~90–91% lines up apples-to-apples against the cited floor. Pair it with an
+   **MLP class-incremental baseline**: a vanilla MLP under the identical split protocol (digits
+   sequentially, test on all 10), expected to collapse to ~20%. ~30-line Python script, separate
+   from the brain. This turns "we don't forget" into "we don't forget *where standard nets
+   catastrophically do*" — the punch line for the continual-learning claim.
+5. **Re-introduce context refinement** (removed in commit `8a17f4d` to prevent pattern-identity
+   drift). On a matched pattern, **strengthen** common context entries, **add** novel,
+   **weaken/delete** missing — so a pattern *consolidates* toward the common core of the configs it
+   matches instead of staying frozen at mint-time identity. This is the missing
+   abstraction/generalization step that would turn one-off corrections into general detectors that
+   recur and climb past depth 2. Add behind a flag for both temporal and spatial; guard it (refine
+   during training, freeze for eval) for reproducibility. Scheduled as its own roadmap item; test
+   MNIST + stocks. Synergistic with the lower-merge corners in #2.
+
+**Beyond MNIST optimization (paper / generality, tracked here for continuity):**
+
+6. **Second dataset — Fashion-MNIST** on the same stack (same pipeline, harder, shows generality;
    MNIST-only is thin for a paper).
-4. **Prior-art differentiation writeup** — HTM/Numenta, ART/Grossberg, predictive coding, growing
+7. **Prior-art differentiation writeup** — HTM/Numenta, ART/Grossberg, predictive coding, growing
    neural gas. The existential related-work section.
-5. **Radius sweep at 28×28** — radius 2 was tuned at 14×14; the optimum may differ at full res.
-6. **Error-threshold re-tune at 28×28 / radius 2** — 0.4 was tuned at 14×14/radius-1, and it may be
-   wrong here. The error gates minting on how far a neighbor patch deviates from the modal patch;
-   radius 2 has 24 neighbors vs 8, so the deviation-rate distribution is different and the optimal
-   threshold likely shifts. Sweep error-threshold (e.g. 0.3 / 0.4 / 0.5 / 0.6) at 28×28 radius 2 NB
-   and re-pick. (Do this on a moderate data set first to find the peak — error-threshold tuning,
-   like merge, is roughly data-independent — then confirm at full data.)
-7. **Package the ablations** (radius / NB-vs-consensus / merge / threshold / resolution sweeps) for
-   the paper — these are mostly already run.
-8. **Is class-balanced training now obsolete?** The balancing requirement was justified for the
-   *consensus* readout (an unbalanced prior "leaks tilt into every background voter and dominates
-   the consensus" — see the encoder/job comments). The new NB log-sum readout aggregates per-voter
-   posteriors differently (product, not weighted mean), so balancing may no longer be needed — or
-   the imbalance bias may surface in a different way. Test: re-run the optimum stack with
-   `--no-balance` (NB + radius 2) on the natural MNIST distribution and compare to the balanced
-   result. If accuracy holds, balancing can be dropped (simpler pipeline, more training data usable).
-9. ~~**Merge sweep at 28×28 radius 2**~~ — **DONE.** Per-class 300, test 2000: 0.65→91.65,
-   **0.70→91.85 (peak)**, 0.75→91.40, 0.80→90.10. Confirms the same plateau as 14×14 radius 2;
-   0.70 is correct at full resolution. (Bonus: per-class-300 at 28² r2 = ~91.8% > 14² r2's 90.8%,
-   more evidence resolution helps with radius 2.)
-10. **4 buckets (grayscale) at the new optimum — FULL DATA ONLY.** Grayscale overfit at
-    14×14/radius-1 (more distinct patches → memorization). MUST be tested with full data, not a
-    limited set: more buckets = exponentially more distinct patches, so it needs *more* samples, not
-    fewer — testing on limited data just reproduces the overfit and tells us nothing. Run at 28×28 /
-    radius 2 / merge 0.7 / NB / **full train + full test**, compare to the 95.73% binary. **[DONE.]**
-    RESULT: **train 99.77% → test 95.66%** vs binary's 96.76% / **95.73%**. So 4-bucket test is a
-    **statistical TIE with binary** (95.66 vs 95.73, within noise on 10K) but with a **4.1pp
-    train/test gap** vs binary's 1.0pp. Minted **1.74M neurons** (L1:1.6M L2:134K, **depth 2**, vs
-    binary's 139K) — a giant FLAT one-off-memorization layer (`4^24` configs/patch → almost every
-    patch unique → no recurrence → no L2/L3 stacking). NEITHER prediction held: user expected
-    *higher* than binary, Claude expected *lower* — reality was a wash. INTERPRETATION: the extra
-    intensity info compensates for the much-worse generalization, so 4-bucket *matches* binary but at
-    12.5× the neurons, ~3× slower, 7 GB RAM — i.e. **binary is strictly better at merge 0.7.** BUT the
-    99.77% train + 4.1pp gap means there's "trapped" discriminative signal that isn't generalizing —
-    which is exactly what #11 (lower merge → patterns fire on approximate matches) and #12 (context
-    refinement → consolidate one-offs into general detectors) would unlock. So the result *strengthens*
-    the case for #11/#12: 4-bucket could plausibly BEAT binary once its memorized signal generalizes.
-11. **4 buckets at LOWER merge (0.6, then 0.5/0.4 if promising).** Merge 0.7 makes 4-bucket patterns
-    so specific they never recur. Lower merge = tolerance: patterns fire on *approximate* matches, so
-    the over-specific patches recur (shrinking the 1.6M explosion) and fire on test variants
-    (generalizing). This is 4-bucket-SPECIFIC — binary wanted *high* merge (it already generalizes),
-    but the bigger patch space needs tolerance. **[ON HOLD — do NOT auto-launch; run when user
-    returns. User agrees lower merge + context refinement (#12) are the levers to get past depth 2.]**
-12. **Re-introduce context refinement** (removed in commit `8a17f4d` "remove context refinement to
-    prevent pattern identity drift"). On a matched pattern, refine its stored context: **strengthen**
-    common entries, **add** novel, **weaken/delete** missing — so a pattern *consolidates* toward the
-    common core of the configs it matches instead of staying frozen at its mint-time identity. This is
-    the missing *abstraction/generalization* step: it would turn the 1.6M one-off patterns into far
-    fewer, general detectors that recur and climb the hierarchy. **Synergistic with #11** (lower merge
-    lets patterns fire on approximate matches; refinement then consolidates them). CAVEAT: it was
-    removed for **reproducibility** — mid-training refinement makes recognition non-deterministic
-    (training sees half-refined patterns, replays see refined ones). Guard it: refine only during
-    training and freeze for eval, or do consolidation in a separate pass. **[QUEUED — after #11.]**
+8. **Package the ablations** (radius / NB-vs-consensus / merge / threshold / resolution sweeps) for
+   the paper — mostly already run.
 
-## New job flags added this session
+**Done / superseded (kept for the record):**
 
-- `--decode nb [--nb-eps E]` — Naive-Bayes log-sum readout over the action votes (vs the brain's consensus).
-- `--radius N` — spatial neighborhood radius passed to the encoder (1 = 3×3, 2 = 5×5, 3 = 7×7). **Radius 2 is the optimum.**
-- `--merge-threshold M` — already plumbed via `run.js`; controls match tolerance (higher = tighter).
-- `--eval-train` — clean frozen pass over the training set with the final model.
-- `--debug-miss N` — analyze misclassified test images (per-digit NB scores, true-digit rank, margin, voter counts; renders the image as ASCII).
-- `--error-correct-rounds N` — discriminative second phase: reinforce only on training mispredictions (minting off).
+- ✅ **Merge sweep at 28×28 radius 2** — per-class 300, test 2000: 0.65→91.65, **0.70→91.85 (peak)**,
+  0.75→91.40, 0.80→90.10. Same plateau as 14×14 radius 2; 0.70 correct at full res.
+- ✅ **4 buckets (grayscale) at the optimum, full data** — train 99.77% → test 95.66% vs binary's
+  96.76% / 95.73%: a statistical **tie** with binary but a 4.1pp train/test gap (vs 1.0pp) and
+  **1.74M neurons** (L1:1.6M L2:134K, depth 2) vs binary's 139K — a flat one-off-memorization layer
+  (`4^24` configs/patch → almost every patch unique). **Binary is strictly better at merge 0.7.** The
+  trapped-but-non-generalizing signal (99.77% train) is exactly what context refinement (#5) and
+  lower merge (#2 corners) would unlock — so the result strengthens the case for those.
+- ⏸️ **4 buckets at lower merge** — superseded: pursue the lower-merge corners as part of the unified
+  err/merge re-tune (#2) and context refinement (#5) rather than as a 4-bucket-specific probe; binary
+  remains the operating point unless refinement closes the generalization gap.
+
+## Job-flag changes (planned — see roadmap *Near-term engineering*)
+
+The roadmap removes/refactors several of this session's experimental flags. Planned end state:
+
+- `--decode nb [--nb-eps E]` — **being removed.** The NB log-sum either becomes the brain's default
+  consensus (in Rust) or moves to a votes-only app rule; either way the option goes away and the
+  default is NB. See roadmap *NB decode → brain*.
+- `--error-correct-rounds N` — **being removed.** Discriminative second phase pushed train→99% with
+  no test gain (ceiling is representational, not readout) — dropped.
+- `--eval-train` — **being replaced.** Wire-only training becomes the default (no per-image
+  infer/decode/tally), the frozen `runTrainEval()` always runs at the end, and an opt-in
+  `--eval-train-per-episode` (off by default) runs a frozen pass after each episode.
+- `--radius N` — kept. Spatial neighborhood radius (1 = 3×3, 2 = 5×5, 3 = 7×7). **Radius 2 is the
+  optimum.**
+- `--merge-threshold M` — kept; controls match tolerance (higher = tighter).
+- `--debug-miss N` — kept; analyzes misclassified test images (per-digit NB scores, true-digit rank,
+  margin, voter counts; renders the image as ASCII).
