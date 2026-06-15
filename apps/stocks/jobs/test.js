@@ -24,15 +24,15 @@ export default class StockTestJob extends Job {
 			symbols: [
 				// 100 stocks - expected to be good
 				'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
-				// 'AWR', /* 'SAND', */ 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
-				// 'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
-				// 'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
-				// 'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
-				// 'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', /* 'SILV', */
-				// 'RIO', 'NOC', 'V', 'ENB', 'BTU', 'AEM', 'AMZN', 'KLAC', 'CLF', 'O',
-				// 'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
-				// 'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
-				// 'HL', 'CCJ', 'COP', 'USAR', 'XOM', 'AMD', 'LAC', 'MSFT', 'MUX', 'SPY'
+				'AWR', /* 'SAND', */ 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
+				'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
+				'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
+				'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
+				'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', /* 'SILV', */
+				'RIO', 'NOC', 'V', 'ENB', 'BTU', 'AEM', 'AMZN', 'KLAC', 'CLF', 'O',
+				'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
+				'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
+				'HL', 'CCJ', 'COP', 'USAR', 'XOM', 'AMD', 'LAC', 'MSFT', 'MUX', 'SPY'
 
 				// loser batch 1 - it's very bad, but alive
 				// 'PTON', 'RIVN', 'BABA', 'MRNA', 'PARA', 'SNAP', 'PYPL', 'INTC', 'KSS', 'PLUG'
