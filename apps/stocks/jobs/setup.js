@@ -6,12 +6,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
- * Stock Data Setup Script - Processes raw JSON bars downloaded from Alpaca into CSV
- * training files (price,volume per row, chronological order, no header).
+ * Stock Data Setup Script - Processes raw JSON bars downloaded from a provider (download-alpaca.js
+ * or download-yahoo.js) into CSV training files (price,volume per row, chronological order, no header).
  *
- * Requires download.js to have populated apps/stocks/data/{timeframe}/{symbol}.json first.
+ * Requires a download job to have populated apps/stocks/data/{timeframe}/{symbol}.json first.
  * This is a plain script: no brain, no Job class — just file processing with its own
- * argument parsing, mirroring download.js.
+ * argument parsing, mirroring the download jobs.
  *
  * Run with: node apps/stocks/jobs/setup.js --timeframe=3H
  */
@@ -20,11 +20,11 @@ const config = {
 	symbols: [
 		// 100 stocks - expected to be good
 		'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
-		'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
+		'AWR', /* 'SAND', */ 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
 		'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
 		'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
 		'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
-		'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', 'SILV',
+		'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', /* 'SILV', */
 		'RIO', 'NOC', 'V', 'ENB', 'BTU', 'AEM', 'AMZN', 'KLAC', 'CLF', 'O',
 		'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
 		'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
@@ -36,16 +36,16 @@ const config = {
 		// loser batch 2 - catastrophic losses - going to zero - de-listings
 		// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 	],
-	startDate: '2019-05-13',
+	startDate: '2005-01-01',
 	endDate: '2026-05-13'
 };
 
 /**
- * Parse command line arguments. Flags mirror download.js so the two scripts can be
+ * Parse command line arguments. Flags mirror the download jobs so the scripts can be
  * chained with the same invocation shape.
  */
 function parseArgs() {
-	let timeframe = '3H';
+	let timeframe = '1D';
 	const timeframeIndex = process.argv.indexOf('--timeframe');
 	if (timeframeIndex !== -1 && process.argv[timeframeIndex + 1]) timeframe = process.argv[timeframeIndex + 1];
 
@@ -164,7 +164,8 @@ async function main() {
 		const jsonPath = path.join(dataDir, `${symbol}.json`);
 		if (!fs.existsSync(jsonPath)) {
 			console.error(`❌ Error: ${symbol}.json not found in ${dataDir}`);
-			console.error(`Please run: node apps/stocks/jobs/download.js --timeframe=${timeframe}`);
+			console.error(`Please run a download job first, e.g.: node apps/stocks/jobs/download-alpaca.js --timeframe=${timeframe}`);
+			console.error(`   (or node apps/stocks/jobs/download-yahoo.js --timeframe=${timeframe} for longer daily history)`);
 			process.exit(1);
 		}
 	}

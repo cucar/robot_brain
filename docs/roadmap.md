@@ -98,8 +98,6 @@ detailed step list live in [mnist-spatial-experiments.md](mnist-spatial-experime
 - **Error / merge threshold re-tune at 28×28 (radius x)** — sweep the paired corners
   **0.1 / 0.9, 0.2 / 0.8, 0.3 / 0.7** and re-pick.
   - Anchor: `node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 3 --error-mode static --error-threshold 0.1 --merge-threshold 0.9`
-- **Is class-balanced training still required?** It was justified for the consensus readout; with NB
-  and the landed spatial chain it may be obsolete. Test `--no-balance` and compare.
 - **Literature-standard Split-MNIST** — the continual-learning headline. Details below.
 
 ### Context: the Naive-Bayes ladder

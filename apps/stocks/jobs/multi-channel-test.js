@@ -86,7 +86,7 @@ export default class MultiChannelTest extends Job {
 			const jsonPath = path.join(dataDir, `${symbol}.json`);
 			if (!fs.existsSync(jsonPath)) {
 				console.error(`❌ JSON file not found: ${jsonPath}`);
-				console.error(`Please run: node apps/stocks/jobs/download.js --timeframe ${this.config.timeframe}`);
+				console.error(`Please run: node apps/stocks/jobs/download-alpaca.js --timeframe ${this.config.timeframe}`);
 				process.exit(1);
 			}
 

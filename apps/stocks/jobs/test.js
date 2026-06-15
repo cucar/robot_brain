@@ -24,15 +24,15 @@ export default class StockTestJob extends Job {
 			symbols: [
 				// 100 stocks - expected to be good
 				'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
-				'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
-				'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
-				'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
-				'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
-				'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', /* 'SILV', */
-				'RIO', 'NOC', 'V', 'ENB', 'BTU', 'AEM', 'AMZN', 'KLAC', 'CLF', 'O',
-				'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
-				'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
-				'HL', 'CCJ', 'COP', 'USAR', 'XOM', 'AMD', 'LAC', 'MSFT', 'MUX', 'SPY'
+				// 'AWR', /* 'SAND', */ 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
+				// 'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
+				// 'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
+				// 'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
+				// 'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', /* 'SILV', */
+				// 'RIO', 'NOC', 'V', 'ENB', 'BTU', 'AEM', 'AMZN', 'KLAC', 'CLF', 'O',
+				// 'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
+				// 'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
+				// 'HL', 'CCJ', 'COP', 'USAR', 'XOM', 'AMD', 'LAC', 'MSFT', 'MUX', 'SPY'
 
 				// loser batch 1 - it's very bad, but alive
 				// 'PTON', 'RIVN', 'BABA', 'MRNA', 'PARA', 'SNAP', 'PYPL', 'INTC', 'KSS', 'PLUG'
@@ -49,7 +49,8 @@ export default class StockTestJob extends Job {
 			transactionCost: 0,                  // Simulated transaction cost per trade, as a percentage (e.g. 0.01 = 0.01%) - use --transaction-cost
 			initialCapital: 15000,               // Starting portfolio cash - use --initial-capital
 			maxPositions: 1,                     // Maximum simultaneous positions - use --max-positions
-			maxPrice: 5000                       // Maximum stock price for allocation - use --max-price
+			maxPrice: 5000,                      // Maximum stock price for allocation - use --max-price
+			spatial: false                       // Enable spatial (d=0 co-activation) processing across all symbols - use --spatial
 		};
 
 		this.encoders = [];
@@ -95,6 +96,8 @@ export default class StockTestJob extends Job {
 
 		if (process.argv.includes('--random-baseline')) this.config.randomBaseline = true;
 
+		if (process.argv.includes('--spatial')) this.config.spatial = true;
+
 		const maxFramesIndex = process.argv.indexOf('--max-frames');
 		if (maxFramesIndex !== -1 && process.argv[maxFramesIndex + 1]) this.config.maxFrames = parseInt(process.argv[maxFramesIndex + 1]);
 
@@ -135,21 +138,14 @@ export default class StockTestJob extends Job {
 			this.traders.push(trader);
 		}
 
-		// Temporal-only run: disable spatial (d=0 co-activation) so behavior matches the pre-spatial
-		// `main` branch. An empty spatial neighbor list turns spatial OFF for the channel entirely —
-		// no cross-symbol grouping and no intra-symbol (price/volume) grouping — so the spatial sweep
-		// mints nothing. Temporal neighbors are left at the default all-pairs (every symbol can
+		// By default, spatial processing (d=0 co-activation) is OFF: an empty spatial neighbor list shrinks
+		// each channel's spatial neighborhood to {itself}, so the spatial sweep mints nothing — matching the
+		// pre-spatial `main` behavior. Temporal neighbors are left at the default all-pairs (every symbol can
 		// sequence against every other), which is the original stock behavior.
-		for (const symbol of this.config.symbols) {
-			this.brain.setSpatialNeighbors(symbol, []);
-		}
-
-		// To ENABLE spatial processing for stocks (as the spatial branch does by default), comment out
-		// the loop above and declare spatial neighbors instead — either all-pairs (every symbol a
-		// spatial neighbor of every other, the current default behavior) or only genuinely correlated
-		// symbols so d=0 co-activation forms across related names rather than the whole market:
-		//   for (const symbol of this.config.symbols) this.brain.setSpatialNeighbors(symbol, this.config.symbols);
-		//   this.brain.setSpatialNeighbors('AAPL', ['AAPL', 'MSFT', 'GOOG']);  // correlated cluster (list self to keep price/volume co-activation)
+		// With --spatial, we skip this loop entirely, leaving every channel at its default all-pairs spatial
+		// neighborhood — so all symbols are spatial neighbors and d=0 co-activation forms across the whole market.
+		if (!this.config.spatial)
+			for (const symbol of this.config.symbols) this.brain.setSpatialNeighbors(symbol, []);
 	}
 
 	/**
@@ -202,6 +198,7 @@ export default class StockTestJob extends Job {
 		console.log(`📋 Offset Rows: ${this.config.offsetRows}`);
 		if (this.config.randomBaseline) console.log(`🎲 Random baseline mode (brain disabled)`);
 		if (this.config.transactionCost > 0) console.log(`💸 Transaction cost: ${this.config.transactionCost}% per trade`);
+		console.log(`🧠 Spatial processing: ${this.config.spatial ? 'ON (all symbols are spatial neighbors)' : 'OFF (temporal only)'}`);
 		console.log('');
 	}
 

@@ -247,7 +247,7 @@ This fetches the four standard IDX files (60k training, 10k test, gzipped) from 
 Then run the MNIST test:
 
 ```bash
-node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 500 --max-test-images 1000 --episodes 3 --error-mode static --error-threshold 0.2 --merge-threshold 0.6
+node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 1 --error-mode static --error-threshold 0.1 --merge-threshold 0.9
 ```
 
 **Expected output:**
@@ -257,53 +257,44 @@ MNIST — sensory-only (Naive Bayes) baseline
   Buckets: 2 (Phase A — binary)
   Context length: 1
   Forget rate: 0
-  Consensus: nb (nb-eps 0.001)
-  Episodes: 3
-  Training: balanced, 500 per class
-  Test images: 1000
+  Consensus: nb
+  Episodes: 1
+  Training: balanced,
+  Test images: all
 
-  Balanced training set built: 500 per class × 10 = 5000 total
-  Episode 1/3: train=87.00% (4350/5000) | 107 img/s 46847ms | 0:93% 1:98% 2:87% 3:86% 4:89% 5:79% 6:93% 7:90% 8:76% 9:79%
-    ↳ spatial: depth=6 | L1:2297 L2:56891 L3:32443 L4:1865 L5:24 L6:2 | 93522 active, 93522 minted cum | 93872 neurons
-  Episode 2/3: train=96.88% (4844/5000) | 111 img/s 45229ms | 0:97% 1:99% 2:96% 3:96% 4:97% 5:97% 6:98% 7:98% 8:96% 9:95%
-    ↳ spatial: depth=7 | L1:2301 L2:61319 L3:47476 L4:3756 L5:78 L6:8 L7:1 | 114939 active, 114939 minted cum | 115289 neurons
-  Episode 3/3: train=99.62% (4981/5000) | 91 img/s 54662ms | 0:100% 1:100% 2:99% 3:99% 4:100% 5:100% 6:100% 7:100% 8:100% 9:99%
-    ↳ spatial: depth=8 | L1:2301 L2:61399 L3:48748 L4:4705 L5:186 L6:20 L7:5 L8:2 | 117366 active, 117366 minted cum | 117716 neurons
+  Balanced training set built: 5421 per class × 10 = 54210 total
+  Episode 1/1: train=92.85% (50332/54210) | 130 img/s 418150ms | 0:96% 1:98% 2:93% 3:93% 4:92% 5:86% 6:96% 7:94% 8:89% 9:91%
+    ↳ spatial: depth=1 | L1:31834 | 31834 active, 31834 minted cum | 32202 neurons
 
-  Test: 92.00% (920/1000) 7037ms | 0:95% 1:98% 2:90% 3:91% 4:93% 5:94% 6:95% 7:87% 8:84% 9:91%
+  Test: 94.88% (9488/10000) 51638ms | 0:98% 1:98% 2:94% 3:95% 4:95% 5:94% 6:96% 7:92% 8:93% 9:93%
 
 Results
 ======================================================================
-  Episode 1: train=87.00% (46847ms)
-  Episode 2: train=96.88% (45229ms)
-  Episode 3: train=99.62% (54662ms)
+  Episode 1: train=92.85% (418150ms)
 
   Spatial hierarchy (after each episode):
-    Episode 1: depth=6 | L1:2297 L2:56891 L3:32443 L4:1865 L5:24 L6:2 | 93522 active, 93522 minted cum | 93872 neurons
-    Episode 2: depth=7 | L1:2301 L2:61319 L3:47476 L4:3756 L5:78 L6:8 L7:1 | 114939 active, 114939 minted cum | 115289 neurons
-    Episode 3: depth=8 | L1:2301 L2:61399 L3:48748 L4:4705 L5:186 L6:20 L7:5 L8:2 | 117366 active, 117366 minted cum | 117716 neurons
-
-  Training: 87.00% → 99.62% (+12.62pp)
-  Test:     92.00% (920/1000)
+    Episode 1: depth=1 | L1:31834 | 31834 active, 31834 minted cum | 32202 neurons
+  Test:     94.88% (9488/10000)
 
   Confusion (rows = actual, cols = predicted):
            0    1    2    3    4    5    6    7    8    9
-   0      81    0    0    0    0    0    2    0    2    0
-   1       0  124    0    0    0    0    1    0    1    0
-   2       1    0  104    2    0    0    0    3    5    1
-   3       0    0    0   97    0    4    0    2    2    2
-   4       0    0    0    0  102    0    2    1    0    5
-   5       1    0    0    2    0   82    1    0    0    1
-   6       2    0    0    0    0    2   83    0    0    0
-   7       0    2    3    1    1    0    0   86    0    6
-   8       3    0    2    3    2    1    0    2   75    1
-   9       0    1    0    2    3    0    0    1    1   86
+   0     960    0    0    1    0    5    6    1    7    0
+   1       0 1116    3    3    0    0    5    0    8    0
+   2      10    1  971    7    7    1    2    8   24    1
+   3       1    0   11  955    0   15    0   12   11    5
+   4       0    2    2    0  935    0   10    0    3   30
+   5       5    3    0   20    1  840    8    2    8    5
+   6       7    4    1    0    4   16  919    0    7    0
+   7       1   17   17    2    5    0    0  944    7   35
+   8      11    0    3   16    5    8    5    6  910   10
+   9      10    7    2    7   18    6    0   10   11  938
 ======================================================================
 
-⏱️  Total Execution Time: 2m 33s
+⏱️  Total Execution Time: 7m 50s
 ```
 
-77.85% test accuracy from a single training pass with no spatial processing — this is the architecture's Naive Bayes floor. The confusion matrix's 3/5/8 collapses are exactly what motivates the spatial-processing workstream: digits whose pixel-level marginals overlap heavily can't be separated without spatial features. Class-balanced training is load-bearing here: the brain's per-voter normalization bakes the class prior into every voter's contribution, so an unbalanced training set leaks the natural ~24% 1-vs-5 tilt into the consensus and drops test accuracy to ~38%.
+94.88% test accuracy from a single training pass. The confusion matrix errors are digits whose pixel-level marginals overlap heavily. 
+Class-balanced training is helps here - when trained on full data, the result is 94.56%.
 
 ### Downloading Fresh Stock Data
 
@@ -316,9 +307,9 @@ To download new data or different timeframes, you need a free [Alpaca](https://a
    ALPACA_KEY_ID=your_key_here
    ALPACA_SECRET_KEY=your_secret_here
    ```
-4. Download data:
+4. Download data (Alpaca, or `download-yahoo.js` for longer daily history):
    ```bash
-   node apps/stocks/jobs/download.js --timeframe 3H
+   node apps/stocks/jobs/download-alpaca.js --timeframe 3H
    ```
 5. Process downloaded data into training files:
    ```bash

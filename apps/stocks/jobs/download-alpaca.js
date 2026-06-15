@@ -11,8 +11,10 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 /**
- * Stock Download Script - Downloads historical stock data from Alpaca and saves as JSON
- * Run with: node stock-download.js --timeframe 1Min
+ * Stock Download Script (Alpaca) - Downloads historical stock data from Alpaca and saves as JSON.
+ * The JSON bar shape ({ Timestamp, OpenPrice, Volume, ... }) is consumed by setup.js to build the
+ * per-symbol CSV training files. For longer daily history from a free provider, see download-yahoo.js.
+ * Run with: node apps/stocks/jobs/download-alpaca.js --timeframe 1Min
  */
 
 // Configuration - edit these values as needed
