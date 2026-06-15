@@ -36,6 +36,9 @@ use crate::types::{
     Level, NeuronId, NeuronType, Reward,
 };
 
+/// Laplace-style floor added inside the Nb consensus log so a single zero posterior doesn't send a candidate to negative infinity.
+const NB_EPS: f64 = 1e-3;
+
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
 // These types live in crate-private modules but are part of Brain's public API.
 pub use crate::diagnostics::DiagnosticStats;
@@ -271,7 +274,7 @@ struct Candidate {
     weighted_total: f64,
     reward: f64,
     probability: f64,
-    /// Naive-Bayes log-score accumulator for action candidates: Σ_vote log(reward + nb_eps).
+    /// Naive-Bayes log-score accumulator for action candidates: Σ_vote log(reward + NB_EPS).
     /// Filled only when consensus mode is Nb; one term per incoming vote (per connection),
     /// matching the per-voter product rule. Ignored under Democratic consensus.
     nb_log_score: f64,
@@ -308,10 +311,6 @@ pub struct Brain {
     /// Democratic (default) is the strength-weighted mean; Nb is the Naive-Bayes log-product.
     /// Only affects action scoring — event winners are always probability (voter share).
     consensus_mode: ConsensusMode,
-
-    /// Laplace-style floor added inside the Nb log so a single zero posterior doesn't send a
-    /// candidate to negative infinity. Unused under Democratic consensus.
-    nb_eps: f64,
 
     /// When true, infer_neurons resolves every cast vote into a FrameVote on
     /// FrameResult.votes. Off by default since resolution allocates per-vote
@@ -380,7 +379,6 @@ impl Brain {
     /// * `regions` — R — number of regions (1 for single-process)
     /// * `columns` — C — number of columns per region (1 for single-thread)
     /// * `consensus_mode` — how action votes combine into a winner ('democratic' | 'nb')
-    /// * `nb_eps` — Laplace floor inside the Nb log (ignored under Democratic consensus)
     /// * `debug` — enable verbose logging
     pub fn new(
         context_length: u32,
@@ -391,14 +389,12 @@ impl Brain {
         regions: usize,
         columns: usize,
         consensus_mode: ConsensusMode,
-        nb_eps: f64,
         debug: bool,
     ) -> Self {
         Self {
             context_length,
             debug,
             consensus_mode,
-            nb_eps,
             emit_votes: false,
             learning: true,
             frame: Vec::new(),
@@ -1739,7 +1735,7 @@ impl Brain {
                 // Naive-Bayes path: also accumulate the unweighted log-product of posteriors.
                 // One term per vote (per connection) — a near-zero posterior vetoes the candidate.
                 if self.consensus_mode == ConsensusMode::Nb {
-                    candidate.nb_log_score += (v.reward + self.nb_eps).ln();
+                    candidate.nb_log_score += (v.reward + NB_EPS).ln();
                 }
             }
             // For events: accumulate votes into the per-dim probability normalizer. every voter
@@ -2145,7 +2141,6 @@ mod tests {
             1,                        // regions
             1,                        // columns
             ConsensusMode::Democratic, // consensus_mode
-            1e-3,                     // nb_eps
             false,                    // debug
         )
     }

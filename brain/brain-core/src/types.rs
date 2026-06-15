@@ -128,7 +128,7 @@ pub enum ConsensusMode {
     /// Strength-weighted arithmetic mean of the per-voter posteriors, argmax over the dimension.
     /// A soft ensemble: a candidate can win on a good average even when several voters contradict it.
     Democratic,
-    /// Naive-Bayes product of the per-voter posteriors: argmax over Σ_voter log(P|voter + nb_eps).
+    /// Naive-Bayes product of the per-voter posteriors: argmax over Σ_voter log(P|voter + NB_EPS).
     /// Each voter's near-zero posterior acts as a veto, the correct rule for argmax over
     /// mutually-exclusive classes with roughly-independent evidence.
     Nb,

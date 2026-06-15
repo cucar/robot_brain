@@ -40,8 +40,7 @@ export function parseBrainArgs(argv = process.argv) {
 		mergeThreshold: num('--merge-threshold', parseFloat),
 		regions: num('--regions', parseInt),
 		columns: num('--columns', parseInt),
-		consensus: str('--consensus'),
-		nbEps: num('--nb-eps', parseFloat)
+		consensus: str('--consensus')
 	};
 }
 

@@ -23,31 +23,13 @@ is one workstream; sub-bullets are the concrete steps inside it.
 App-side and small core cleanups that should land before (or alongside) the merge. Independent of
 each other unless noted.
 
-### 1.2 Move the NB readout into the brain (or the consensus into the app)
-
-The per-voter Naive-Bayes log-sum readout currently lives app-side (`--decode nb`,
-[test.js:459](../apps/mnist/jobs/test.js)) and beats the brain's arithmetic-mean consensus by ~5pp.
-To get it, the job sets `setEmitVotes(true)`, which **marshals every vote across the NAPI boundary
-each frame** — a large per-image cost. This is a performance enhancement and may be the better design
-in general.
-
-- Move the NB decode and `nb-eps` logic into the brain (Rust), so the boundary carries a digit-score
-  vector instead of every vote.
-- Test MNIST performance, stock performance, text performance.
-- **If it works:** remove the `--decode` and `--nb-eps` options (NB becomes the default), and
-  **delete [brain-as-policy-engine.md](brain-as-policy-engine.md)** (the brain keeps a consensus, just
-  a better one).
-- **Otherwise:** keep the votes-only direction — update
-  [brain-as-policy-engine.md](brain-as-policy-engine.md) to remove `--decode`/`--nb-eps` (defaults
-  only) and fold the votes-only consumption into this plan.
-
-### 1.3 Remove `--error-correct-rounds`
+### 1.1 Remove `--error-correct-rounds`
 
 The discriminative second phase pushed train→99% with **no test gain** (the ceiling is
 representational, not readout/training — see experiment §9). Drop the option and the
 `runErrorCorrection` path.
 
-### 1.4 Eval-train refactor
+### 1.2 Eval-train refactor
 
 - **Wire-only training by default:** `runTraining` calls `resetContext` + `processFrame` only — drop
   the per-image `infer()` / decode / tally. Faster, and it kills the prequential per-episode number.
@@ -56,19 +38,12 @@ representational, not readout/training — see experiment §9). Drop the option 
   default).
 - Clean up `showResults` / `logTrainingPass` that depended on the prequential per-episode accuracy.
 
-### 1.5 Restore the temporal `< 1` guard (review fix 1.3)
-
-One line: `TemporalContext::match_observed`'s novel pass regressed from `< 1` to `< 0`
-([context.rs:270](../brain/brain-core/src/context.rs)); restore it. Fixes a temporal-matching
-regression unrelated to the spatial chain. See
-[spatial-processing-review.md §1.3](spatial-processing-review.md).
-
-### 1.6 Fix the Ctrl+C bug
+### 1.3 Fix the Ctrl+C bug
 
 Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
 fix so long jobs can be cancelled without leaving the brain half-written.
 
-### 1.7 Stop committing platform binaries
+### 1.4 Stop committing platform binaries
 
 The branch updates `brain-napi.node` and adds a ~1.5 MB `brain-napi.win32-x64-msvc.node`. Add `*.node`
 to `.gitignore` rather than growing binaries in history. See
@@ -97,11 +72,6 @@ Make every persistence path round-trip d=0 connections and the spatial structure
 
 Validate the spatial phase on the stocks workload and keep non-spatial domains bit-identical.
 
-- **Split neighborhoods into spatial neighborhoods and temporal neighborhoods** — distinguish the
-  d=0 co-activation neighbor set from the d>0 sequence neighbor set rather than sharing one
-  declaration.
-- **Test stocks with no spatial neighborhoods and confirm it is identical to `main`** — the spatial
-  branch must not change behavior on all-pairs domains. Fix any divergence.
 - **Test stocks with spatial processing** — low-level pattern building, high error threshold, only
   group highly related stocks (so d=0 co-activation forms across genuinely correlated symbols, not
   the whole market).

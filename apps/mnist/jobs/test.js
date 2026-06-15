@@ -54,9 +54,6 @@ export default class MNISTTestJob extends Job {
 			//     Sharper than the mean: a voter that confidently rules a digit out (P≈0 → log≈−large) heavily
 			//     penalizes it, instead of being diluted by averaging. MNIST default.
 			consensus: 'nb',
-			// nbEps: Laplace-style floor added before the log so P(d|voter)=0 doesn't send a digit to −Infinity.
-			// Passed through to the brain; only consulted under 'nb' consensus.
-			nbEps: 1e-3,
 			// errorCorrectRounds: N>0 → after normal training, run N discriminative passes over the
 			// training set that reinforce (smoothed-reward learn()) only on mispredictions, with minting
 			// off. Pushes training accuracy toward ~100%; test effect is the experiment.
@@ -116,15 +113,13 @@ export default class MNISTTestJob extends Job {
 
 		const consensusIdx = process.argv.indexOf('--consensus');
 		if (consensusIdx !== -1 && process.argv[consensusIdx + 1] !== undefined) this.config.consensus = process.argv[consensusIdx + 1];
-		const epsIdx = process.argv.indexOf('--nb-eps');
-		if (epsIdx !== -1 && process.argv[epsIdx + 1] !== undefined) this.config.nbEps = parseFloat(process.argv[epsIdx + 1]);
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
-		// The decode now lives in the brain — hand it the consensus rule and Laplace floor so the
-		// winner read out of `inferences` is already the chosen rule's pick (no votes marshalled).
+		// The decode now lives in the brain — hand it the consensus rule so the winner read out of
+		// `inferences` is already the chosen rule's pick (no votes marshalled). The NB Laplace floor
+		// is a baked brain constant, no longer a knob.
 		this.options.consensus = this.config.consensus;
-		this.options.nbEps = this.config.nbEps;
 	}
 
 	/**
@@ -234,9 +229,9 @@ export default class MNISTTestJob extends Job {
 		console.log(`  Buckets: ${this.config.buckets} (Phase ${phaseLabel})`);
 		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
-		console.log(`  Consensus: ${this.config.consensus}${this.config.consensus === 'nb' ? ` (nb-eps ${this.config.nbEps})` : ''}`);
+		console.log(`  Consensus: ${this.config.consensus}`);
 		console.log(`  Episodes: ${this.config.maxEpisodes}${this.config.split ? ' per digit task (split-MNIST)' : ''}`);
-		console.log(`  Training: balanced, ${this.config.perClass > 0 ? this.config.perClass : 'auto'} per class`);
+		console.log(`  Training: ${this.config.noBalance ? 'full' : 'balanced'}, ${this.config.perClass > 0 ? `${this.config.perClass} per class` : ''}`);
 		console.log(`  Test images: ${this.config.skipTest ? 'skipped' : (this.config.maxTestImages || 'all')}`);
 		console.log('');
 	}
@@ -451,7 +446,8 @@ export default class MNISTTestJob extends Job {
 		const logScore = new Map();
 		const voters = new Set();
 		if (!votes || votes.length === 0) return { logScore, voterCount: 0 };
-		const eps = this.config.nbEps;
+		// Mirrors the brain's baked NB_EPS constant so the app-side ranks line up with the brain decode.
+		const eps = 1e-3;
 		const digitChannel = this.encoder.digitChannelId;
 		for (const v of votes) {
 			if (v.targetType !== 'action' || v.channelId !== digitChannel) continue;

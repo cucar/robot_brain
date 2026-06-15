@@ -148,12 +148,11 @@ impl JsBrain {
     ///   regions: number (default 1)
     ///   columns: number (default 1)
     ///   consensus: string 'democratic' | 'nb' (default 'democratic')
-    ///   nbEps: number (default 1e-3) — Laplace floor for the 'nb' consensus log
     ///   debug: boolean (default false)
     #[napi(constructor)]
     pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
         let (context_length, error_mode, error_threshold, merge_threshold,
-             pattern_forget_rate, regions, columns, consensus_mode, nb_eps, debug) = match options {
+             pattern_forget_rate, regions, columns, consensus_mode, debug) = match options {
             Some(ref opts) => {
                 let cl = get_opt_u32(opts, "contextLength")?.unwrap_or(10);
                 let mode_str = get_opt_string(opts, "errorCorrectionMode")?
@@ -167,17 +166,16 @@ impl JsBrain {
                 let consensus_str = get_opt_string(opts, "consensus")?
                     .unwrap_or_else(|| "democratic".to_string());
                 let consensus = parse_consensus_mode(&consensus_str)?;
-                let eps = get_opt_f64(opts, "nbEps")?.unwrap_or(1e-3);
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
-                (cl, mode, et, mt, pfr, r, c, consensus, eps, d)
+                (cl, mode, et, mt, pfr, r, c, consensus, d)
             }
-            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, ConsensusMode::Democratic, 1e-3, false),
+            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
         Ok(Self {
             inner: RefCell::new(CoreBrain::new(
                 context_length, error_mode, error_threshold, merge_threshold,
-                pattern_forget_rate, regions, columns, consensus_mode, nb_eps, debug,
+                pattern_forget_rate, regions, columns, consensus_mode, debug,
             )),
         })
     }

@@ -32,13 +32,8 @@ The dependency chain **1.1 → 2.1 → 2.2 has landed** and is verified in the c
 
 - **1.2 — snapshot restore** — scheduled under the roadmap's *Backups / imports / exports (Phase 4)*
   item.
-- **1.3 — temporal `< 1` guard** — scheduled as a standalone near-term fix.
 - **Minor — committed `*.node` binaries** — scheduled under the roadmap's *Do not commit platform
   binaries* item.
-- **Minor — [brain-as-policy-engine.md](brain-as-policy-engine.md)** — superseded by a decision: the
-  roadmap's *NB decode → brain (or consensus → app)* item will either implement the policy-engine
-  direction (deleting that doc) or fold its `--decode`/`--nb-eps` removal into a defaults-only
-  consensus (updating that doc). Resolved by the MNIST/stocks/text test outcome.
 
 A **new open question** surfaced from 2.2: *should temporal corrections inherit channels the same way
 spatial corrections now do?* Tracked as its own roadmap experiment.
@@ -217,10 +212,9 @@ disturbing its channel-based consensus.
 - **Topology above L0 falls out:** inheriting the channel gives every level the parent's
   neighbor graph, and receptive fields still grow by composition — an L2 whose context is L1s
   anchored at A's neighbors effectively covers 5×5 even though its own neighbor set is A's 3×3.
-- **Prerequisite for the policy-engine migration**
-  ([brain-as-policy-engine.md](brain-as-policy-engine.md)): `FrameVote.value` is the
-  dequantized bucket value, which is undefined for coordinate-less apex patterns. Inheritance
-  makes the votes API uniform across raw and refined voters.
+- **Keeps the votes API uniform:** `FrameVote.value` is the dequantized bucket value, which is
+  undefined for coordinate-less apex patterns. Inheritance makes the votes payload uniform across
+  raw and refined voters.
 
 #### 2.2.2 Implementation notes
 
@@ -262,9 +256,8 @@ over episodes should fall to ~zero on a fixed training set).
 With inheritance, the per-dimension inference output reports a refined token under its
 anchor coordinate — temporal may predict "stroke fragment anchored at A" and the consensus
 reports "px_A = on." Nothing is lost internally (routing and contexts use full neuron ids),
-and the richer identity is recoverable from the votes payload — which is exactly the
-policy-engine direction. The consensus layer speaks the observable vocabulary; the hierarchy
-speaks the structural one.
+and the richer identity is recoverable from the votes payload. The consensus layer speaks the
+observable vocabulary; the hierarchy speaks the structural one.
 
 ---
 
@@ -300,11 +293,6 @@ speaks the structural one.
 - **Committed platform binaries** — ⏳ OPEN (roadmap: *Do not commit platform binaries*): the branch
   updates `brain-napi.node` and adds a new ~1.5 MB `brain-napi.win32-x64-msvc.node`. Gitignore
   `*.node` rather than growing them in history.
-- **[brain-as-policy-engine.md](brain-as-policy-engine.md)** — ⏳ DECISION PENDING (roadmap: *NB decode
-  → brain (or consensus → app)*): describes a consensus-removal refactor (`process_frame(events,
-  actions)`, votes-only output) that is *not* implemented on this branch. The roadmap resolves its
-  fate — either implement the votes-only direction (and delete the doc), or move the NB rule into the
-  brain as the default consensus and strip the `--decode`/`--nb-eps` options (and update the doc).
 
 ---
 
