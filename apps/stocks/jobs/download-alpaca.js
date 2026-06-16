@@ -23,11 +23,11 @@ const config = {
 	symbols: [
 		// 100 stocks - expected to be good
 		'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
-		'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
+		'AWR', /* 'SAND', */ 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
 		'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
 		'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
 		'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
-		'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', 'SILV',
+		'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', /* 'SILV', */
 		'RIO', 'NOC', 'V', 'ENB', 'BTU', 'AEM', 'AMZN', 'KLAC', 'CLF', 'O',
 		'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
 		'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
@@ -39,7 +39,7 @@ const config = {
 		// loser batch 2 - catastrophic losses - going to zero - de-listings
 		// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 	],
-	startDate: '2019-05-13',
+	startDate: '2021-05-13',
 	endDate: '2026-05-13'
 };
 

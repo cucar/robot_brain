@@ -108,19 +108,23 @@ async function fetchYahooBars(symbol, interval, startEpoch, endEpoch) {
 		const low = quote.low[i];
 		const volume = quote.volume[i];
 
-		// Skip bars Yahoo couldn't fill — any null in the OHLCV row makes the bar unusable.
-		if (open == null || close == null || volume == null) continue;
+		// A bar needs a tradeable open price; without it there's nothing to record, so skip it.
+		// A missing volume is treated as no-trade (0) rather than a reason to drop the whole day —
+		// dropping a day would knock this symbol out of date-alignment with the others. setup.js keeps
+		// the date on the shared grid and the encoder skips volume-0 rows, so no spurious signal results.
+		if (open == null) continue;
+		const vol = volume == null ? 0 : volume;
 
-		// Scale raw prices to split/dividend-adjusted space. When adjclose is missing, the factor is 1.
-		const factor = adjclose && adjclose[i] != null && close !== 0 ? adjclose[i] / close : 1;
+		// Scale raw prices to split/dividend-adjusted space. When adjclose or close is missing, factor is 1.
+		const factor = adjclose && adjclose[i] != null && close != null && close !== 0 ? adjclose[i] / close : 1;
 
 		bars.push({
 			Timestamp: new Date(timestamps[i] * 1000).toISOString(),
 			OpenPrice: open * factor,
 			HighPrice: high != null ? high * factor : open * factor,
 			LowPrice: low != null ? low * factor : open * factor,
-			ClosePrice: close * factor,
-			Volume: volume
+			ClosePrice: close != null ? close * factor : open * factor,
+			Volume: vol
 		});
 	}
 	return bars;

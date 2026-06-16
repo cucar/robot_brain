@@ -36,7 +36,7 @@ const config = {
 		// loser batch 2 - catastrophic losses - going to zero - de-listings
 		// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 	],
-	startDate: '2005-01-01',
+	startDate: '2021-05-13',
 	endDate: '2026-05-13'
 };
 
@@ -120,25 +120,18 @@ function extractValidIntervals(symbol, barMap, validIntervals) {
 }
 
 /**
- * Process and save one symbol's data. Daily bars are filtered by date range and used
- * as-is (no gap filling — market holidays are genuine absences, not missing data).
- * Intraday bars are aligned to the shared valid-interval grid so every symbol's CSV
- * has identical row count and timestamp ordering.
+ * Process and save one symbol's data. Every symbol — daily and intraday alike — is aligned to the
+ * shared valid-interval grid so all CSVs have identical row count and the same calendar date at each
+ * row index. Missing bars are filled (leading = first known price, middle/trailing = last known,
+ * volume 0); the encoder skips volume-0 rows, so fills never produce a spurious signal.
+ *
+ * This alignment is mandatory: the test job reads row[i] from every symbol in lockstep, so a symbol
+ * with gaps or a later start date (IPOs, halts, a provider dropping a day) would otherwise shift out
+ * of alignment and the brain would see different symbols' bars from different calendar dates at the
+ * same frame.
  */
-function processAndSaveSymbolData(symbol, barMap, dataDir, timeframe, startDate, endDate, validIntervals = null, progress = '') {
-	let filledData;
-	if (timeframe === '1D') {
-		const timestamps = Array.from(barMap.keys()).sort();
-		const filteredTimestamps = timestamps.filter(timestamp => {
-			const date = timestamp.substring(0, 10);
-			return date >= startDate && date <= endDate;
-		});
-		filledData = filteredTimestamps.map(timestamp => ({
-			open: barMap.get(timestamp).open,
-			volume: barMap.get(timestamp).volume
-		}));
-	}
-	else filledData = extractValidIntervals(symbol, barMap, validIntervals);
+function processAndSaveSymbolData(symbol, barMap, dataDir, validIntervals, progress = '') {
+	const filledData = extractValidIntervals(symbol, barMap, validIntervals);
 
 	// CSV format: price,volume per row. No header, no timestamp — the test job reads
 	// rows in order and treats them as chronological frames.
@@ -172,28 +165,32 @@ async function main() {
 
 	console.log('');
 
-	// For intraday timeframes, we need the union of all timestamps to align bars.
-	// Pass 1: collect timestamps from each file without keeping bar data in memory.
-	let validIntervals = null;
-	if (timeframe !== '1D') {
-		console.log('📊 Building interval grid...');
-		const intervals = new Set();
-		for (let i = 0; i < symbols.length; i++) {
-			const symbol = symbols[i];
-			process.stdout.write(`   [${i + 1}/${symbols.length}] Scanning ${symbol}...\r`);
-			const jsonPath = path.join(dataDir, `${symbol}.json`);
-			const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-			for (const bar of bars) {
-				const timestamp = bar.Timestamp.substring(0, 16);
-				if (extendedHours || isRegularHours(new Date(timestamp + ':00Z')))
-					intervals.add(timestamp);
+	// Every symbol must share one calendar grid so the lockstep frame loop reads the same date from
+	// each symbol at row[i]. Daily keys on the date (YYYY-MM-DD) within [startDate, endDate]; intraday
+	// keys on the minute (YYYY-MM-DDThh:mm) restricted to trading hours. Pass 1 builds the union grid —
+	// every date/minute where at least one symbol has a bar — without keeping bar data in memory.
+	const keyLen = timeframe === '1D' ? 10 : 16;
+	console.log('📊 Building interval grid...');
+	const intervals = new Set();
+	for (let i = 0; i < symbols.length; i++) {
+		const symbol = symbols[i];
+		process.stdout.write(`   [${i + 1}/${symbols.length}] Scanning ${symbol}...\r`);
+		const jsonPath = path.join(dataDir, `${symbol}.json`);
+		const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+		for (const bar of bars) {
+			const key = bar.Timestamp.substring(0, keyLen);
+			if (timeframe === '1D') {
+				if (key >= startDate && key <= endDate) intervals.add(key);
+			}
+			else if (extendedHours || isRegularHours(new Date(key + ':00Z'))) {
+				intervals.add(key);
 			}
 		}
-		validIntervals = intervals;
-		const hoursLabel = extendedHours ? 'extended hours' : 'regular hours';
-		console.log(`   Found ${intervals.size} valid intervals (${hoursLabel}) where at least one stock has data`);
-		console.log('');
 	}
+	const validIntervals = intervals;
+	const gridLabel = timeframe === '1D' ? 'trading days' : `${extendedHours ? 'extended' : 'regular'}-hours intervals`;
+	console.log(`   Found ${intervals.size} ${gridLabel} where at least one stock has data`);
+	console.log('');
 
 	// Pass 2: load, process, and write each symbol one at a time.
 	console.log('📊 Processing data into training files...');
@@ -203,13 +200,11 @@ async function main() {
 		const bars = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
 
 		const barMap = new Map();
-		for (const bar of bars) {
-			const timestamp = bar.Timestamp.substring(0, 16);
-			barMap.set(timestamp, { open: bar.OpenPrice, volume: bar.Volume });
-		}
+		for (const bar of bars)
+			barMap.set(bar.Timestamp.substring(0, keyLen), { open: bar.OpenPrice, volume: bar.Volume });
 
 		const progress = `[${i + 1}/${symbols.length}]`;
-		processAndSaveSymbolData(symbol, barMap, dataDir, timeframe, startDate, endDate, validIntervals, progress);
+		processAndSaveSymbolData(symbol, barMap, dataDir, validIntervals, progress);
 	}
 	console.log('');
 
