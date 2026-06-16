@@ -85,7 +85,6 @@ The brain learns when to own vs. not own each stock based on upcoming price move
 The brain learns to trade stocks from historical price and volume data. Each stock is a separate channel — the brain discovers cross-stock patterns and makes buy/sell/hold decisions optimized by reward feedback.
 
 **The included timeframe data is ready to use** — no API key needed for this demo.
-**Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
 node apps/stocks/jobs/test.js --context-length 3 --columns 20 --transaction-cost 0.02 --max-positions 10
@@ -97,23 +96,25 @@ Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $90731949.39
-   Average per Episode: $90731949.39
-   Average ROI: +604879.66%
-   Average Per-Frame ROI: +0.600681%
-   Average Sharpe Ratio: 4.73
-   Total Transaction Cost: $1763721.38 (0.02% per trade)
-   Total Trades: 21232
-   Average Trades per Episode: 21232.0
+   Total Net Profit: $1916559.50
+   Average per Episode: $1916559.50
+   Average ROI: +12777.06%
+   Average Per-Frame ROI: +0.090457%
+   Average Sharpe Ratio: 0.53
+   Total Transaction Cost: $158030.95 (0.02% per trade)
+   Total Trades: 71580
+   Average Trades per Episode: 71580.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $90731949.39 | ROI: +604879.66%, +0.600681%/frame, Sharpe: 4.73 (21232 trades)
+   Episode 1: $1916559.50 | ROI: +12777.06%, +0.090457%/frame, Sharpe: 0.53 (71580 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.54%
+   Episode 1: 51.24%
 ```
 
-The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
+The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), 
+but the **reward-weighted action selection** turns that into profitable trading by learning which contexts 
+produce better outcomes.
 
 ### Brain P&L over time
 
@@ -121,7 +122,7 @@ The brain achieves ~50% base-level prediction accuracy on price movements (which
 
 Drawdowns happen, but the brain keeps making new highs — the trajectory shape a learning system should produce.
 
-## Demo 4: Random Baseline Comparison
+### Random Baseline Comparison
 
 A natural worry about Demo 3 is that the result might come from a favorable data window rather than learned trading. To rule that out, the same job can be run with `--random-baseline`, which replaces the brain's action inference with a coin flip: 50% chance to be fully out, 50% chance to own one stock chosen uniformly at random. Everything else — the same data, same portfolio sizing, same execution path — is unchanged.
 
@@ -143,7 +144,7 @@ Random P&L varies wildly between seeds — one run drifts up to roughly +$32K an
 
 This is the simplest sanity check that the brain is doing real work: same harness, same data, only the decision source changes — and the results are not in the same league.
 
-## Demo 5: Action Learning in Low Accuracy
+## Demo 4: Action Learning in Low Accuracy
 
 The brain learns the best actions to perform in each situation over repeated episodes, even when base prediction accuracy is low.
 
@@ -155,21 +156,21 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $190727.88 | ROI: +1271.52%, +0.180252%/frame, Sharpe: 0.53 (1186 trades)
-   Episode 2: $5377045.03 | ROI: +35846.97%, +0.405540%/frame, Sharpe: 1.29 (1216 trades)
-   Episode 3: $233710806.76 | ROI: +1558072.05%, +0.666160%/frame, Sharpe: 2.11 (1396 trades)
-   Episode 4: $4505659149.94 | ROI: +30037727.67%, +0.871228%/frame, Sharpe: 2.81 (1674 trades)
-   Episode 5: $64183173731.74 | ROI: +427887824.88%, +1.055685%/frame, Sharpe: 3.46 (1804 trades)
+   Episode 1: $1572298.72 | ROI: +10481.99%, +0.086800%/frame, Sharpe: 0.52 (34016 trades)
+   Episode 2: $4808085.66 | ROI: +32053.90%, +0.107505%/frame, Sharpe: 0.68 (35495 trades)
+   Episode 3: $795688834.51 | ROI: +5304592.23%, +0.202679%/frame, Sharpe: 1.42 (36855 trades)
+   Episode 4: $3523305600.37 | ROI: +23488704.00%, +0.230432%/frame, Sharpe: 1.65 (37662 trades)
+   Episode 5: $16922477016.30 | ROI: +112816513.44%, +0.259710%/frame, Sharpe: 1.90 (37957 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 51.10%
-   Episode 2: 52.99%
-   Episode 3: 56.31%
-   Episode 4: 57.15%
-   Episode 5: 57.62%
+   Episode 1: 52.08%
+   Episode 2: 48.32%
+   Episode 3: 48.86%
+   Episode 4: 48.93%
+   Episode 5: 49.02%
 ```
 
-## Demo 6: Stock Sequence Memorization
+## Demo 5: Stock Sequence Memorization
 
 The brain memorizes a repeating stock price sequence across 5 episodes, reaching 95%+ prediction accuracy. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
 
@@ -185,32 +186,33 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY -
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $1888559487498760192.00
-   Average per Episode: $377711897499752064.00
-   Average ROI: +2518079316665013.50%
-   Average Per-Frame ROI: +1.616917%
-   Average Sharpe Ratio: 11.33
-   Total Trades: 8831
-   Average Trades per Episode: 1766.2
+   Total Net Profit: $458001313843017664.00
+   Average per Episode: $91600262768603536.00
+   Average ROI: +610668418457356.88%
+   Average Per-Frame ROI: +0.428368%
+   Average Sharpe Ratio: 3.67
+   Total Trades: 67256
+   Average Trades per Episode: 13451.2
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $44236.05 | ROI: +294.91%, +0.094507%/frame, Sharpe: 0.42 (1702 trades)
-   Episode 2: $24806588005874.30 | ROI: +165377253372.50%, +1.470565%/frame, Sharpe: 10.09 (1849 trades)
-   Episode 3: $278868271088285152.00 | ROI: +1859121807255234.50%, +2.123590%/frame, Sharpe: 14.80 (1765 trades)
-   Episode 4: $762538157675950976.00 | ROI: +5083587717839673.00%, +2.194266%/frame, Sharpe: 15.62 (1759 trades)
-   Episode 5: $847128252146474112.00 | ROI: +5647521680976494.00%, +2.201660%/frame, Sharpe: 15.70 (1756 trades)
+   Episode 1: $469216.32 | ROI: +3128.11%, +0.064686%/frame, Sharpe: 0.34 (11175 trades)
+   Episode 2: $117771629520472.50 | ROI: +785144196803.15%, +0.424946%/frame, Sharpe: 3.62 (14163 trades)
+   Episode 3: $20027645404237436.00 | ROI: +133517636028249.58%, +0.520989%/frame, Sharpe: 4.57 (14179 trades)
+   Episode 4: $192846853255107872.00 | ROI: +1285645688367386.00%, +0.563369%/frame, Sharpe: 4.88 (13941 trades)
+   Episode 5: $245009043553682656.00 | ROI: +1633393623691217.75%, +0.567850%/frame, Sharpe: 4.92 (13798 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 51.84%
-   Episode 2: 96.99%
-   Episode 3: 99.95%
-   Episode 4: 99.95%
-   Episode 5: 99.95%
+   Episode 1: 52.47%
+   Episode 2: 55.46%
+   Episode 3: 58.72%
+   Episode 4: 59.81%
+   Episode 5: 60.33%
 ```
 
-The brain goes from 50% accuracy (random) to 99% in 5 episodes on 3 stocks × 1400 frames of real market data. The low forget rate (0.001) allows patterns to survive the full sequence, and the short context (3 frames) reduces noise from coincidental connections.
+The brain goes from 50% accuracy (random) to 60% in 5 episodes on 3 stocks × 5300 frames of real market data. 
+The low forget rate allows patterns to survive the full sequence. Short context (3 frames) needed because of computation limitations.
 
-## Demo 7: Text Sequence Learning
+## Demo 6: Text Sequence Learning
 
 The brain learns to predict character sequences. Feed it a string, and it memorizes the pattern — reaching ~99.94% prediction accuracy within two episodes and staying flat there.
 
@@ -232,7 +234,7 @@ node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-thres
 
 The brain goes from low accuracy to ~99.96% in two episodes and holds there — it has fully memorized the character sequence except for the first ~20 characters at the start of each episode. Those leading characters can't be predicted because the brain hasn't seen any context yet — it needs a `context-length` window of prior characters in memory before it can recognize patterns and cast votes. The "warmup" frames at the head of each episode are a structural property of context-based prediction, not a learning failure: every character past the warmup window is predicted correctly.
 
-## Demo 8: MNIST Digit Classification (Naive Bayes Baseline)
+## Demo 7: MNIST Digit Classification (Naive Bayes Baseline)
 
 A sensory-only MNIST classifier built on the brain's count-based voting. One channel per pixel position (retinotopic, 784 channels at 28×28), all firing concurrently in a single frame per image. Supervision lands on a separate `digit` action channel via `brain.learn()`. With `patternForgetRate=0` and a constant reward of 1, the brain's per-voter consensus reduces to a Naive Bayes posterior — every `learn()` call increments per-pixel-per-digit counts, and inference picks the argmax.
 
