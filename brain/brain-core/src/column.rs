@@ -99,14 +99,23 @@ pub struct Column {
     /// at which default action connections are pre-wired on new neurons.
     context_length: u32,
 
-    /// TemporalContext merge threshold.
-    merge_threshold: f64,
+    /// TemporalContext (d>0) merge threshold.
+    temporal_merge_threshold: f64,
 
-    /// Error correction mode.
-    error_mode: ErrorMode,
+    /// Temporal error correction mode.
+    temporal_error_mode: ErrorMode,
 
-    /// Static error threshold (used when error_mode == Static).
-    error_threshold: f64,
+    /// Temporal static error threshold (used when temporal_error_mode == Static).
+    temporal_error_threshold: f64,
+
+    /// SpatialContext (d=0) merge threshold.
+    spatial_merge_threshold: f64,
+
+    /// Spatial error correction mode.
+    spatial_error_mode: ErrorMode,
+
+    /// Spatial static error threshold (used when spatial_error_mode == Static).
+    spatial_error_threshold: f64,
 
     /// The sole storage for owned Neurons. Keyed by neuron id.
     neurons: FxHashMap<NeuronId, Neuron>,
@@ -117,17 +126,23 @@ impl Column {
         channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
         channel_default_actions: FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
-        merge_threshold: f64,
-        error_mode: ErrorMode,
-        error_threshold: f64,
+        temporal_merge_threshold: f64,
+        temporal_error_mode: ErrorMode,
+        temporal_error_threshold: f64,
+        spatial_merge_threshold: f64,
+        spatial_error_mode: ErrorMode,
+        spatial_error_threshold: f64,
     ) -> Self {
         Self {
             channel_actions,
             channel_default_actions,
             context_length,
-            merge_threshold,
-            error_mode,
-            error_threshold,
+            temporal_merge_threshold,
+            temporal_error_mode,
+            temporal_error_threshold,
+            spatial_merge_threshold,
+            spatial_error_mode,
+            spatial_error_threshold,
             neurons: FxHashMap::default(),
         }
     }
@@ -546,9 +561,12 @@ impl Column {
             let mut neuron = Neuron::new(
                 spec.id,
                 spec.forget_rate,
-                self.merge_threshold,
-                self.error_mode,
-                self.error_threshold,
+                self.temporal_merge_threshold,
+                self.temporal_error_mode,
+                self.temporal_error_threshold,
+                self.spatial_merge_threshold,
+                self.spatial_error_mode,
+                self.spatial_error_threshold,
                 self.channel_actions.clone(),
                 self.context_length,
             );
@@ -602,9 +620,12 @@ impl Column {
         let mut neuron = Neuron::new(
             data.id,
             data.pattern_forget_rate,
-            self.merge_threshold,
-            self.error_mode,
-            self.error_threshold,
+            self.temporal_merge_threshold,
+            self.temporal_error_mode,
+            self.temporal_error_threshold,
+            self.spatial_merge_threshold,
+            self.spatial_error_mode,
+            self.spatial_error_threshold,
             self.channel_actions.clone(),
             self.context_length,
         );
@@ -760,6 +781,9 @@ mod tests {
             FxHashMap::default(),
             FxHashMap::default(),
             2,
+            0.5,
+            ErrorMode::Static,
+            0.5,
             0.5,
             ErrorMode::Static,
             0.5,

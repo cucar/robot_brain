@@ -294,10 +294,13 @@ impl Thalamus {
     pub fn new(
         debug: bool,
         pattern_forget_rate: f64,
-        merge_threshold: f64,
         context_length: u32,
-        error_mode: ErrorMode,
-        error_threshold: f64,
+        temporal_merge_threshold: f64,
+        temporal_error_mode: ErrorMode,
+        temporal_error_threshold: f64,
+        spatial_merge_threshold: f64,
+        spatial_error_mode: ErrorMode,
+        spatial_error_threshold: f64,
         regions: usize,
         columns: usize,
     ) -> Self {
@@ -311,9 +314,12 @@ impl Thalamus {
                 &channel_actions,
                 &channel_default_actions,
                 context_length,
-                merge_threshold,
-                error_mode,
-                error_threshold,
+                temporal_merge_threshold,
+                temporal_error_mode,
+                temporal_error_threshold,
+                spatial_merge_threshold,
+                spatial_error_mode,
+                spatial_error_threshold,
             ));
         }
 
@@ -1071,7 +1077,7 @@ impl Thalamus {
         // Per-parent error feedback for `record_spatial_errors` — collected for every fired neuron
         // that had any predictions, regardless of whether the error crosses the mint threshold.
         // This is what lets dynamic error modes (conservative/neutral/aggressive) adapt — without
-        // these samples, get_error_threshold(0) stays in static-fallback mode forever.
+        // these samples, get_spatial_error_threshold() stays in static-fallback mode forever.
         let mut error_feedback: Vec<(NeuronId, f64)> = Vec::new();
 
         // Partition spatial_fired by spatial level. L0 keeps only event neurons (action neurons
@@ -2202,7 +2208,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 1, 1)
+        Thalamus::new(false, 0.1, 4, 0.5, ErrorMode::Static, 0.5, 0.5, ErrorMode::Static, 0.5, 1, 1)
     }
 
     #[test]
@@ -2226,7 +2232,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 0.5, 4, ErrorMode::Static, 0.5, 3, 1);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, ErrorMode::Static, 0.5, 0.5, ErrorMode::Static, 0.5, 3, 1);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);

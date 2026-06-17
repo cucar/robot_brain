@@ -141,9 +141,12 @@ impl JsBrain {
     ///
     /// Options shape (all optional, with defaults matching JS Brain):
     ///   contextLength: number (default 10)
-    ///   errorCorrectionMode: string (default 'conservative')
-    ///   errorCorrectionThreshold: number (default 0.5)
-    ///   mergeThreshold: number (default 0.5)
+    ///   --- error / merge knobs (each resolves: per-phase flag ?? shared alias ?? default) ---
+    ///   errorCorrectionMode: string (default 'conservative')  — ALIAS, sets both phases
+    ///   errorCorrectionThreshold: number (default 0.5)        — ALIAS, sets both phases
+    ///   mergeThreshold: number (default 0.5)                  — ALIAS, sets both phases
+    ///   temporalErrorCorrectionMode / temporalErrorCorrectionThreshold / temporalMergeThreshold — temporal (d>0) overrides
+    ///   spatialErrorCorrectionMode / spatialErrorCorrectionThreshold / spatialMergeThreshold     — spatial (d=0) overrides
     ///   patternForgetRate: number (default 0.01)
     ///   regions: number (default 1)
     ///   columns: number (default 1)
@@ -151,15 +154,44 @@ impl JsBrain {
     ///   debug: boolean (default false)
     #[napi(constructor)]
     pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
-        let (context_length, error_mode, error_threshold, merge_threshold,
+        let (context_length, temporal_error_mode, temporal_error_threshold, temporal_merge_threshold,
+             spatial_error_mode, spatial_error_threshold, spatial_merge_threshold,
              pattern_forget_rate, regions, columns, consensus_mode, debug) = match options {
             Some(ref opts) => {
                 let cl = get_opt_u32(opts, "contextLength")?.unwrap_or(10);
-                let mode_str = get_opt_string(opts, "errorCorrectionMode")?
+
+                // The three error/merge knobs each resolve per phase as:
+                //   per-phase flag  ??  shared alias  ??  hard default
+                // The shared `errorCorrectionMode` / `errorCorrectionThreshold` / `mergeThreshold`
+                // options are aliases that set BOTH phases at once; a `temporal*` or `spatial*` flag,
+                // when present, overrides only its own phase. With no flags at all this reproduces
+                // the historical single-knob behavior (and the 95.73% MNIST run) bit-for-bit.
+
+                // ── error mode ──
+                let shared_mode = get_opt_string(opts, "errorCorrectionMode")?;
+                let temporal_mode_str = get_opt_string(opts, "temporalErrorCorrectionMode")?
+                    .or_else(|| shared_mode.clone())
                     .unwrap_or_else(|| "conservative".to_string());
-                let mode = parse_error_mode(&mode_str)?;
-                let et = get_opt_f64(opts, "errorCorrectionThreshold")?.unwrap_or(0.5);
-                let mt = get_opt_f64(opts, "mergeThreshold")?.unwrap_or(0.5);
+                let temporal_mode = parse_error_mode(&temporal_mode_str)?;
+                let spatial_mode_str = get_opt_string(opts, "spatialErrorCorrectionMode")?
+                    .or(shared_mode)
+                    .unwrap_or_else(|| "conservative".to_string());
+                let spatial_mode = parse_error_mode(&spatial_mode_str)?;
+
+                // ── error threshold ──
+                let shared_et = get_opt_f64(opts, "errorCorrectionThreshold")?;
+                let temporal_et = get_opt_f64(opts, "temporalErrorCorrectionThreshold")?
+                    .or(shared_et).unwrap_or(0.5);
+                let spatial_et = get_opt_f64(opts, "spatialErrorCorrectionThreshold")?
+                    .or(shared_et).unwrap_or(0.5);
+
+                // ── merge threshold ──
+                let shared_mt = get_opt_f64(opts, "mergeThreshold")?;
+                let temporal_mt = get_opt_f64(opts, "temporalMergeThreshold")?
+                    .or(shared_mt).unwrap_or(0.5);
+                let spatial_mt = get_opt_f64(opts, "spatialMergeThreshold")?
+                    .or(shared_mt).unwrap_or(0.5);
+
                 let pfr = get_opt_f64(opts, "patternForgetRate")?.unwrap_or(0.01);
                 let r = get_opt_u32(opts, "regions")?.unwrap_or(1) as usize;
                 let c = get_opt_u32(opts, "columns")?.unwrap_or(1) as usize;
@@ -167,14 +199,15 @@ impl JsBrain {
                     .unwrap_or_else(|| "democratic".to_string());
                 let consensus = parse_consensus_mode(&consensus_str)?;
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
-                (cl, mode, et, mt, pfr, r, c, consensus, d)
+                (cl, temporal_mode, temporal_et, temporal_mt, spatial_mode, spatial_et, spatial_mt, pfr, r, c, consensus, d)
             }
-            None => (10, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, ConsensusMode::Democratic, false),
+            None => (10, ErrorMode::Conservative, 0.5, 0.5, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
         Ok(Self {
             inner: RefCell::new(CoreBrain::new(
-                context_length, error_mode, error_threshold, merge_threshold,
+                context_length, temporal_error_mode, temporal_error_threshold, temporal_merge_threshold,
+                spatial_error_mode, spatial_error_threshold, spatial_merge_threshold,
                 pattern_forget_rate, regions, columns, consensus_mode, debug,
             )),
         })

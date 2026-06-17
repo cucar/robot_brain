@@ -21,7 +21,7 @@ use crate::context::{SpatialContext, TemporalContext};
 use crate::types::*;
 
 /// Minimum samples per (neuron, age) before dynamic modes switch off the warmup
-/// fallback. Not a tunable knob — kept here to avoid a magic number in get_error_threshold.
+/// fallback. Not a tunable knob — kept here to avoid a magic number in the error-threshold getters.
 const ERROR_MIN_SAMPLES: u64 = 3;
 
 /// Entry in the spatial routing table for a child spatial-correction pattern.
@@ -191,9 +191,18 @@ pub struct Neuron {
     pub id: NeuronId,
 
     pattern_forget_rate: f64,
-    merge_threshold: f64,
-    error_mode: ErrorMode,
-    error_threshold: f64,
+
+    /// Temporal (d>0) merge threshold, error mode, and static/warmup error threshold.
+    temporal_merge_threshold: f64,
+    temporal_error_mode: ErrorMode,
+    temporal_error_threshold: f64,
+
+    /// Spatial (d=0) counterparts of the three temporal knobs above.
+    /// Split so the spatial sweep can run a different error/merge regime than temporal —
+    /// e.g. a high spatial error threshold that only groups genuinely co-active inputs.
+    spatial_merge_threshold: f64,
+    spatial_error_mode: ErrorMode,
+    spatial_error_threshold: f64,
 
     /// Brain-wide context_length, replicated on each neuron so recognize_patterns can implement the warmup gate:
     /// skip matching until the context window has had a chance to fill up at the start of a sequence
@@ -249,28 +258,34 @@ impl Neuron {
     /// for alternative-action lookup during learning (per-channel Vec iteration).
     /// Populated by register_channel_spec() and shared across all neurons.
     ///
-    /// error_mode picks the error-correction threshold function:
-    ///   Static       — fixed threshold = error_threshold
+    /// The error mode (temporal_error_mode / spatial_error_mode) picks the threshold function:
+    ///   Static       — fixed threshold = the matching *_error_threshold
     ///   Conservative — mean + σ of past per-age error rates  (learn outliers)
     ///   Neutral      — mean
     ///   Aggressive   — mean − σ (learn aggressively)
-    /// For dynamic modes, error_threshold also serves as the warmup fallback until
+    /// For dynamic modes, the matching *_error_threshold also serves as the warmup fallback until
     /// ERROR_MIN_SAMPLES observations have been recorded at that age.
     pub fn new(
         id: NeuronId,
         pattern_forget_rate: f64,
-        merge_threshold: f64,
-        error_mode: ErrorMode,
-        error_threshold: f64,
+        temporal_merge_threshold: f64,
+        temporal_error_mode: ErrorMode,
+        temporal_error_threshold: f64,
+        spatial_merge_threshold: f64,
+        spatial_error_mode: ErrorMode,
+        spatial_error_threshold: f64,
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         context_length: u32,
     ) -> Self {
         Self {
             id,
             pattern_forget_rate,
-            merge_threshold,
-            error_mode,
-            error_threshold,
+            temporal_merge_threshold,
+            temporal_error_mode,
+            temporal_error_threshold,
+            spatial_merge_threshold,
+            spatial_error_mode,
+            spatial_error_threshold,
             context_length,
             channel_action_ids,
             spatial_connections: FxHashMap::default(),
@@ -288,33 +303,35 @@ impl Neuron {
 
     // ── Error threshold ──────────────────────────────────────────────────────
 
-    /// Temporal error-correction threshold for a given age, dispatched by self.error_mode.
-    /// For dynamic modes, falls back to self.error_threshold during warmup
+    /// Temporal error-correction threshold for a given age, dispatched by self.temporal_error_mode.
+    /// For dynamic modes, falls back to self.temporal_error_threshold during warmup
     /// (fewer than ERROR_MIN_SAMPLES observations at this age).
-    pub fn get_error_threshold(&self, age: Distance) -> f64 {
-        if self.error_mode == ErrorMode::Static { return self.error_threshold; }
+    pub fn get_temporal_error_threshold(&self, age: Distance) -> f64 {
+        if self.temporal_error_mode == ErrorMode::Static { return self.temporal_error_threshold; }
         let stats = match self.temporal_error_stats.get(age as usize) {
             Some(Some(s)) => s,
-            _ => return self.error_threshold,
+            _ => return self.temporal_error_threshold,
         };
-        self.apply_error_mode(stats)
+        self.apply_error_mode(stats, self.temporal_error_mode, self.temporal_error_threshold)
     }
 
-    /// Spatial error-correction threshold — uses a single bucket (no age dimension).
+    /// Spatial error-correction threshold — uses a single bucket (no age dimension)
+    /// and the spatial error mode / fallback, independent of the temporal regime.
     pub fn get_spatial_error_threshold(&self) -> f64 {
-        if self.error_mode == ErrorMode::Static { return self.error_threshold; }
+        if self.spatial_error_mode == ErrorMode::Static { return self.spatial_error_threshold; }
         let stats = match &self.spatial_error_stats {
             Some(s) => s,
-            None => return self.error_threshold,
+            None => return self.spatial_error_threshold,
         };
-        self.apply_error_mode(stats)
+        self.apply_error_mode(stats, self.spatial_error_mode, self.spatial_error_threshold)
     }
 
-    /// Shared mode-to-threshold mapping, given a populated Welford bucket.
-    fn apply_error_mode(&self, stats: &WelfordState) -> f64 {
-        if stats.n < ERROR_MIN_SAMPLES { return self.error_threshold; }
+    /// Shared mode-to-threshold mapping, given a populated Welford bucket, the mode to
+    /// apply, and the warmup fallback to use when the bucket has too few samples.
+    fn apply_error_mode(&self, stats: &WelfordState, mode: ErrorMode, fallback: f64) -> f64 {
+        if stats.n < ERROR_MIN_SAMPLES { return fallback; }
         let sigma = stats.std_dev();
-        match self.error_mode {
+        match mode {
             ErrorMode::Conservative => stats.mean + sigma,
             ErrorMode::Neutral => stats.mean,
             ErrorMode::Aggressive => stats.mean - sigma,
@@ -1071,7 +1088,7 @@ impl Neuron {
             if self.get_child_effective_activation_strength(pattern_id, current_frame) <= 0.0 { continue; }
             let entry = self.spatial_routing_table.get(&pattern_id)
                 .unwrap_or_else(|| panic!("recognize_spatial_patterns: pattern {} indexed but missing from spatial_routing_table", pattern_id));
-            let m = match entry.context.match_observed(observed, self.merge_threshold) {
+            let m = match entry.context.match_observed(observed, self.spatial_merge_threshold) {
                 Some(m) => m,
                 None => continue,
             };
@@ -1304,7 +1321,7 @@ impl Neuron {
             // context.match_observed() handles the full scoring and threshold check;
             // the index only decides which child patterns are worth evaluating.
             // exclude_ids masks out brand-new neurons so they don't count as "novel" misses.
-            let m = match entry.context.match_observed(observed, age, self.merge_threshold, Some(exclude_ids)) {
+            let m = match entry.context.match_observed(observed, age, self.temporal_merge_threshold, Some(exclude_ids)) {
                 Some(m) => m,
                 None => continue, // nothing to do if there is no match
             };
@@ -1437,7 +1454,7 @@ impl Neuron {
                 age,
                 votes: cast_votes,
                 context: context_by_age.get(age as usize).cloned().unwrap_or_default(),
-                threshold: self.get_error_threshold(age),
+                threshold: self.get_temporal_error_threshold(age),
             });
         }
         votes
@@ -1601,13 +1618,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), 10)
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, 0.9, ErrorMode::Static, 0.3, FxHashMap::default(), 10)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, channel_actions, 10)
+        Neuron::new(id, 0.01, 0.9, ErrorMode::Static, 0.3, 0.9, ErrorMode::Static, 0.3, channel_actions, 10)
     }
 
     #[test]
@@ -1683,21 +1700,21 @@ mod tests {
     #[test]
     fn test_error_threshold_static() {
         let n = make_neuron(1);
-        assert_eq!(n.get_error_threshold(0), 0.3);
-        assert_eq!(n.get_error_threshold(5), 0.3);
+        assert_eq!(n.get_temporal_error_threshold(0), 0.3);
+        assert_eq!(n.get_temporal_error_threshold(5), 0.3);
     }
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), 10);
+        let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), 10);
         // fewer than ERROR_MIN_SAMPLES → falls back to error_threshold
         n.record_error(0, 0.5);
         n.record_error(0, 0.5);
-        assert_eq!(n.get_error_threshold(0), 0.3); // still warmup
+        assert_eq!(n.get_temporal_error_threshold(0), 0.3); // still warmup
 
         // after 3 samples → uses mean
         n.record_error(0, 0.5);
-        assert!((n.get_error_threshold(0) - 0.5).abs() < 1e-10);
+        assert!((n.get_temporal_error_threshold(0) - 0.5).abs() < 1e-10);
     }
 
     #[test]

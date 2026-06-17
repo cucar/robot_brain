@@ -372,9 +372,12 @@ impl Brain {
     ///
     /// # Arguments
     /// * `context_length` — number of frames a base neuron stays active (default 10)
-    /// * `error_correction_mode` — 'static' | 'conservative' | 'neutral' | 'aggressive'
-    /// * `error_correction_threshold` — fixed threshold when mode='static'; warmup fallback
-    /// * `merge_threshold` — percentage of matched entries needed for context merge
+    /// * `temporal_error_correction_mode` — TEMPORAL (d>0) mode: 'static' | 'conservative' | 'neutral' | 'aggressive'
+    /// * `temporal_error_correction_threshold` — TEMPORAL fixed threshold when mode='static'; warmup fallback
+    /// * `temporal_merge_threshold` — TEMPORAL percentage of matched entries needed for context merge
+    /// * `spatial_error_correction_mode` — SPATIAL (d=0) error mode, independent of temporal
+    /// * `spatial_error_correction_threshold` — SPATIAL fixed/warmup error threshold
+    /// * `spatial_merge_threshold` — SPATIAL percentage of matched entries needed for context merge
     /// * `pattern_forget_rate` — forget rate applied uniformly to every pattern neuron, all levels
     /// * `regions` — R — number of regions (1 for single-process)
     /// * `columns` — C — number of columns per region (1 for single-thread)
@@ -382,9 +385,12 @@ impl Brain {
     /// * `debug` — enable verbose logging
     pub fn new(
         context_length: u32,
-        error_correction_mode: ErrorMode,
-        error_correction_threshold: f64,
-        merge_threshold: f64,
+        temporal_error_correction_mode: ErrorMode,
+        temporal_error_correction_threshold: f64,
+        temporal_merge_threshold: f64,
+        spatial_error_correction_mode: ErrorMode,
+        spatial_error_correction_threshold: f64,
+        spatial_merge_threshold: f64,
         pattern_forget_rate: f64,
         regions: usize,
         columns: usize,
@@ -405,10 +411,13 @@ impl Brain {
             thalamus: Thalamus::new(
                 debug,
                 pattern_forget_rate,
-                merge_threshold,
                 context_length,
-                error_correction_mode,
-                error_correction_threshold,
+                temporal_merge_threshold,
+                temporal_error_correction_mode,
+                temporal_error_correction_threshold,
+                spatial_merge_threshold,
+                spatial_error_correction_mode,
+                spatial_error_correction_threshold,
                 regions,
                 columns,
             ),
@@ -2134,9 +2143,12 @@ mod tests {
     fn make_brain() -> Brain {
         Brain::new(
             10,                       // context_length
-            ErrorMode::Conservative,  // error_correction_mode
-            0.5,                      // error_correction_threshold
-            0.5,                      // merge_threshold
+            ErrorMode::Conservative,  // temporal_error_correction_mode
+            0.5,                      // temporal_error_correction_threshold
+            0.5,                      // temporal_merge_threshold
+            ErrorMode::Conservative,  // spatial_error_correction_mode
+            0.5,                      // spatial_error_correction_threshold
+            0.5,                      // spatial_merge_threshold
             0.01,                     // pattern_forget_rate
             1,                        // regions
             1,                        // columns

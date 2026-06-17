@@ -73,9 +73,12 @@ impl Region {
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
-        merge_threshold: f64,
-        error_mode: ErrorMode,
-        error_threshold: f64,
+        temporal_merge_threshold: f64,
+        temporal_error_mode: ErrorMode,
+        temporal_error_threshold: f64,
+        spatial_merge_threshold: f64,
+        spatial_error_mode: ErrorMode,
+        spatial_error_threshold: f64,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -83,9 +86,12 @@ impl Region {
                 channel_actions.clone(),
                 channel_default_actions.clone(),
                 context_length,
-                merge_threshold,
-                error_mode,
-                error_threshold,
+                temporal_merge_threshold,
+                temporal_error_mode,
+                temporal_error_threshold,
+                spatial_merge_threshold,
+                spatial_error_mode,
+                spatial_error_threshold,
             ));
         }
         Self { c, columns }
@@ -491,6 +497,9 @@ mod tests {
             &FxHashMap::default(),
             &FxHashMap::default(),
             2,
+            0.5,
+            ErrorMode::Static,
+            0.5,
             0.5,
             ErrorMode::Static,
             0.5,
