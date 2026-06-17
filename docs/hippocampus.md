@@ -18,6 +18,19 @@ There is one neuron kind that lives in cortical columns: a node with a context f
 
 Storage is always cortical. The hippocampus is the operator that mints moments and runs experiments — it owns no permanent store of its own.
 
+### Why two organs: the hippocampus trains the cortex
+
+The deeper reason for the split, beyond "two creation rules," is that a slow intersection-learner cannot safely absorb a rare single-shot event. One occurrence is too few samples to abstract from — forced to learn it on the spot, the cortex would either overfit the incidental detail or interfere with existing structure (catastrophic interference). The hippocampus exists to capture that instant losslessly in one shot and re-present it (replay) until the cortex has effectively seen it enough times to abstract it safely. In one line: **the hippocampus trains the cortex.** This is the complementary-learning-systems rationale, re-derived from the architecture's own mechanics rather than imported.
+
+"Train" bundles two distinct jobs, with different reward signals and different failure modes; keep them separate:
+
+- **It trains the cortex's representations.** Minting moments that the cortex abstracts into patterns and classes (the moments-age-into-classes mechanism). Consolidating *what is*. This is CLS proper.
+- **It trains the cortex's policy.** Counterfactual and imagined replay discover better action→outcome links and write them onto moments, which the cortex inherits through normal abstraction. Improving *what to do*. This is Dyna-style model-based reinforcement, not CLS.
+
+"Trainer" is only the offline half. The hippocampus is also a live participant: its moments vote in the current frame (the involuntary forecast, the gut-feel) before any consolidation has happened. **Teacher and scout** — it generates curriculum for slow consolidation *and* runs live forecasts that bias the current action. Collapsing it to "the cortex's trainer" loses the real-time prospection that is the other half of its value.
+
+Division of credit (relevant to continual learning): by design, the cortex is natively continual — intersection-based pattern formation does not catastrophically interfere the way gradient descent does, so it holds old classes without replay. The hippocampal "training" is an additive single-shot episodic mechanism layered on top, not the thing carrying class-incremental performance. The cortex solves continual learning structurally; the hippocampus adds brain-like fast episodic learning.
+
 ## Core Principles
 
 The hippocampus is not a database. Memories are not retrieved through global similarity search. 
@@ -179,6 +192,14 @@ The consequence for action selection: each moment level's action connections ope
 
 When a higher-level moment ages and loses weak parent links, it may stop firing in contexts where it used to fire. When it stops, inhibition lifts, and the lower-level moments below it resume voting with their shorter-horizon actions. The system gracefully falls back down the hierarchy as abstractions sharpen and narrow.
 
+### Inhibition from moments to their parent patterns
+
+A moment is minted by union over the active high-level patterns; those patterns are its parents and point to it. The same inhibition rule that runs pattern→pattern and moment→moment therefore also runs moment→pattern: when a moment fires, the parent patterns that triggered it do not independently vote. This is the case the hierarchy implies but the section above had not named, and it is the structural form of System 2 overriding System 1. The moment's long-horizon action votes (its exponential long-term bins) replace the parents' short-horizon reflexes (their linear bins) — a deliberately-reasoned conclusion suppresses the scattered habit, earned structurally rather than bolted on as a weight.
+
+This preserves the one-voting-rule principle exactly. Inhibition gates *who* votes, not *how much* a vote counts. When a moment and a pattern both fire un-inhibited, they vote identically; there is no moment-supremacy multiplier. The override is entirely a consequence of which nodes are allowed to participate, not of any asymmetry in vote strength — which is why no separate "decided action" mechanism is needed.
+
+Inhibition is categorical, not graded. A moment fires only when its parents are co-active with sufficient context overlap, so selectivity already lives at the firing threshold: by the time a moment fires, the question of whether a parent really belongs to this context has been answered. Grading inhibition by link strength would re-apply that same selectivity a second time. A parent that is incidental to the moment is, by definition, usually not active when the moment fires — so there is nothing to inhibit; and in the rare frame where it is co-active, it is part of the current scene and muting it is correct. Fire-or-not carries the nuance; inhibition is binary downstream of it.
+
 ### Inhibition as the horizon selector
 
 No planning module is needed to choose between tactical and strategic action. The hierarchy does it:
@@ -291,6 +312,8 @@ The moment now exists as a multi-parent node in the cortical graph. Future corti
 
 A freshly-minted moment has no replay history and no use-driven reinforcement on its links. It does not contribute to action voting until it has been activated K times (parameter, default K=3). Before that threshold, its action connections are silent — it accumulates evidence but does not project. This parallels the cold-start gating already used for newly-formed pattern neurons.
 
+The same maturity gate governs inhibition, not just voting — it is one gate, not two. An immature moment neither votes nor inhibits: during its cold-start window its parent patterns keep voting normally, and voting and inhibition switch on together once the moment has earned its K activations. This closes what would otherwise be a dead zone (a fresh moment muting its parents while being too young to vote itself, emitting no action for the frame). It needs no moment-specific confidence knob because it is exactly how cortical neurons already behave: maturity gates participation as a whole, and inhibition is downstream of participation.
+
 ### Moments age into classes (mechanism)
 
 After minting, per-link decay reduces parent-link strengths over time. When the moment reactivates because some of its parents fire with matching context, those matched links get strengthened by use-driven reinforcement. Unmatched links continue to decay. Over time:
@@ -328,6 +351,8 @@ After cortex finishes its frame, any moment whose parents are firing with suffic
 - May initiate a small-budget parallel replay fan-out. The rewind depth before fan-out is derived from the triggering salience: low-magnitude triggers start from the currently-active moment set (no rewind); high-magnitude triggers rewind further back along the temporal moment graph before branching forward. This is the involuntary "what should I have done differently?" reflex — its scope automatically matches how bad (or good) the trigger was.
 
 This pass fires every cortex frame, even with zero think-actions. It is the always-on background channel — *"that reminds me…"*, mind-wandering, gut-feel forecasting.
+
+The forecast itself is predictive, not yet counterfactual; its purpose is to surface good or bad scenarios worth evaluating. The moment it flags a salient outcome it spawns the rewind-and-fan-out that is thinking proper. In that sense forecasting exists in service of counterfactual evaluation: pure forward prediction is recall, and thinking proper begins when a predicted outcome is worth asking "what should I do instead?" about.
 
 When a voluntary think-action arrives mid-forecast, the forecast is pushed onto the experiment stack and the think-action runs. The forecast resumes after.
 
@@ -442,6 +467,20 @@ For voluntary think-actions, all four conditions apply, with budget and horizon 
 When the experiment asks "what if a different action had been taken at this moment in the trajectory?", it walks from the moment in question up to its parent patterns, then down to *other* moments under those same parents where a different action was taken. Replay forward from one of those sibling moments. Same parent patterns means similar context; different action means actual counterfactual.
 
 If no sibling moments exist for the desired alternative action, the experiment can fall back to sampling actions from the cortex's probabilistic action votes for the moment's context — "what would cortex have done absent habit?" — but this is less precise than sibling substitution.
+
+### Imagined scenarios — construction beyond sibling recombination
+
+The sibling mechanism above recombines only *known* action→outcome links: it requires a sibling moment under shared parents that already carries the alternative. It cannot evaluate a situation that never occurred, or an action with no context-relevant history. That makes the counterfactual machinery a recombiner of past experience — narrower than the scenario-construction capacity the architecture claims biologically, where hippocampal damage abolishes imagining novel scenes, not just recalling old ones. This subsection closes that gap.
+
+The general operation is union-mint with a supplied active set. The hippocampus can construct a **hypothetical moment** by union over patterns and lower moments that need never have co-fired from sensation. This is the same union-creation used at salience triggers, except the active set comes from a cue (a think-action) rather than from the current frame. "If this co-occurs with that, and then this other thing happens…" is literally a constructed union — a situation assembled from familiar parts that were never assembled together by the world.
+
+Forward simulation runs as ordinary replay. The constructed moment is propagated forward through the temporal moment graph — already the system's learned long-horizon transition model — exactly as a normal replay wavefront. Forward prediction over a never-observed starting state is possible because the transition structure is over patterns and moments, not over specific episodes: a novel combination of familiar parts inherits the forward dynamics of those parts. The same termination conditions, reward accumulation, and winner selection apply.
+
+Writeback targets the hypothetical moment. When the forward simulation concludes that action X is good in the constructed situation Y, the policy is written onto Y itself — "I will do X if I find myself in Y," for a Y that may never have happened before. When reality later produces situation Y, the real high-level patterns pattern-complete to that moment (it is just a cortical node, matched by context like any other), and it contributes its stored action through the normal voting machinery.
+
+The cold-start gate is the load-bearing safeguard here. A constructed moment is freshly minted and therefore immature: by cold-start gating it neither votes nor inhibits until it has been activated K times by *real* recurrence. So a purely imagined conclusion cannot drive behavior on its own — the world has to actually present the situation enough times to mature the node before its policy projects. **Imagination proposes; recurrence licenses.** This bounds the replay pathologies directly: the system can rehearse arbitrary hypotheticals cheaply, but only hypotheticals that reality subsequently confirms acquire voting power.
+
+This is strictly a generalization of the sibling mechanism. Sibling recombination is the special case where the constructed situation already exists as a real sibling under shared parents; imagined construction is the same operation when it does not.
 
 ### Action reinforcement (writeback)
 
@@ -682,6 +721,8 @@ loop:
 - Interrupt / Integrate / Remember semantics.
 - Reward signals for think-actions (PE reduction, downstream action improvement, opportunity cost).
 - Train cortex to fire think-actions when expected value exceeds external action value.
+- **Imagined-scenario construction**: a cue-driven think-action mints a hypothetical moment by union over a supplied set of patterns/moments that need not have co-fired, forward-simulates it through the temporal moment graph, and writes the trajectory-optimum policy onto the hypothetical moment. The hypothetical moment is subject to ordinary cold-start gating — it neither votes nor inhibits until matured by real recurrence.
+- Verify: a hypothetical situation assembled from never-co-fired parts simulates forward sensibly; its discovered policy stays silent until the situation actually arises K times, then projects through normal voting.
 
 ### Phase 8 — Sleep / idle consolidation
 
@@ -745,6 +786,7 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 - Full mint → temporal edge → wavefront replay → action reinforcement flow.
 - Counterfactual via parent-pattern sibling produces a better-than-original alternative; the moment's action connections reflect the new policy.
 - Subsequent encounter of the same context uses the improved policy via the moment's reinforced votes out-weighing the old habit.
+- Imagined-scenario construction: a hypothetical moment built by union over never-co-fired parts forward-simulates sensibly, its discovered policy is gated silent until real recurrence matures it, then fires through normal voting.
 - Involuntary forecast fires every frame with no cortex prompting.
 - Voluntary think-action interrupts in-flight forecast and resumes after.
 - Non-interrupt think-action arriving with full queue is silently dropped (deep-in-thought state).
@@ -791,6 +833,7 @@ Deferred until single-level moments (Phases 1-8) are validated, because the mech
 14. **Salience-to-lookback mapping.** Proposal: `lookback = floor(α · |z|)` capped by available trajectory length. Tune `α` empirically from the first salience-driven rewind experiments. Possible refinement: separate coefficients for reward-z vs prediction-error-z (a large reward miss may want a different rewind depth than a large surprise).
 15. **Default fan-out width.** How many concurrent trajectories does a pool dispatch? Probably small (4-8) for involuntary forecasts and larger (up to capacity) for voluntary think-actions where the user explicitly requested deep deliberation. Capped by hippocampal compute budget.
 16. **Trajectory diversity.** When `fanout` > number of available sibling-derived alternatives, how are the extra slots filled? Resampling siblings under different parent-pattern subsets? Falling back to cortex's probabilistic action votes? Empirical question.
+17. **Hypothetical-union assembly.** For imagined-scenario construction, what determines which patterns/moments a cue binds into the hypothetical moment — the literal cue set only, or the cue plus its strongly-associated parents via pattern-completion? Over-completion risks reconstructing a familiar real situation instead of the intended novel one; under-completion risks a hypothetical too sparse to forward-simulate. And when the constructed union has no outgoing temporal edges (nothing exactly like it was ever minted), forward simulation must fall back to the edges of its constituent parts — confirm this composes sensibly rather than producing incoherent wavefronts. Tune from the first imagined-construction experiments in Phase 7.
 
 ---
 
@@ -830,6 +873,7 @@ All cognition emerges from:
 - **Long-term memory** as cortical neurons minted by deliberate experimentation — not as a separate store, not as a context window.
 - **Episodic-to-semantic consolidation** as a structural consequence of per-link decay on multi-parent nodes, not as a separate process.
 - **Two thinking modes** — involuntary background forecasting + voluntary think-actions — both running on the same machinery.
+- **Imagination as union-mint with a supplied cue** — the hippocampus constructs hypothetical situations from never-co-fired parts, forward-simulates them through the learned transition model, and caches a conditional policy onto the hypothetical that real recurrence later licenses. Scenario construction is a mechanism here, not just a cited capacity; imagination proposes, recurrence licenses.
 - **System 2 enriches System 1** — moments enter the cortical substrate and become raw material for further pattern formation. Expertise development is structural, not behavioral.
 - **One activation rule, one voting rule** — patterns and moments share the same machinery once they exist; the hippocampus's distinct role is purely in *creating* moments and *running experiments* to update their action connections.
 - **Strategic vs reflexive action selection emerges from the data**, not from a planning module — actions carry their own intrinsic horizon, moments hold action evidence in matching bins, and the votes aggregate naturally at whatever horizon the current context engages.

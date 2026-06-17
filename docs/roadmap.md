@@ -1,209 +1,257 @@
 # Short-Term Roadmap
 
-Each section below is one step. They execute in order — steps 1–4 land the architecture, steps 5–6 are the MNIST validation milestones, steps 7–10 are follow-on work.
+This is the **canonical ordered backlog**. Top-to-bottom is execution order. Each numbered section
+is one workstream; sub-bullets are the concrete steps inside it.
+
+## Status snapshot
+
+- **Spatial processing is landed and validated.** The review dependency chain (fixes 1.1 → 2.1 →
+  2.2 in [spatial-processing-review.md](spatial-processing-review.md)) is in the `spatial` branch and
+  produced **95.73% on full MNIST** (28×28 binary, radius 2, merge 0.7, NB readout) — see
+  [mnist-spatial-experiments.md](mnist-spatial-experiments.md). The design is in
+  [spatial-processing.md](spatial-processing.md).
+- **What remains** before merge-to-main: near-term engineering cleanups, the two open review fixes
+  (1.2 snapshot restore, 1.3 temporal guard), stocks integration, and a code review. Everything after
+  the merge is optimization and research.
+- **Research stance:** runaway spatial depth is **not** clamped by design — no `MAX_LEVEL` caps. We
+  prefer to see depth stall and study it over constraining potential algorithmic breakthroughs.
 
 ---
 
-## Spatial Processing
+## 1. Near-term engineering
 
-See **[spatial-processing.md](./spatial-processing.md)**.
+App-side and small core cleanups that should land before (or alongside) the merge. Independent of
+each other unless noted.
 
-Add `process_spatial` ahead of `process_temporal`. Remove intrinsic neuron levels (level becomes per-frame activation state). d=0 connections, spatial wavefront, error-driven correction minting. Validates on MNIST single-frame and on stocks. **This is the workstream that begins relaxing the Naive Bayes independence assumption** by manufacturing conjunctive features.
+### 1.1 Remove `--error-correct-rounds`
 
----
+The discriminative second phase pushed train→99% with **no test gain** (the ceiling is
+representational, not readout/training — see experiment §9). Drop the option and the
+`runErrorCorrection` path.
 
-## Vanilla MNIST
+### 1.2 Eval-train refactor
 
-Vanilla 10-way digit classification with the completed architecture. Runs only after steps 1–4 land. Confirms the architecture handles vision at all before tackling continual learning.
+- **Wire-only training by default:** `runTraining` calls `resetContext` + `processFrame` only — drop
+  the per-image `infer()` / decode / tally. Faster, and it kills the prequential per-episode number.
+- **Always run the frozen `runTrainEval()` at the end** (delete the `evalTrain` flag/config).
+- **Add opt-in `--eval-train-per-episode`** that runs a frozen pass after each episode (off by
+  default).
+- Clean up `showResults` / `logTrainingPass` that depended on the prequential per-episode accuracy.
 
-### What's already in place from step 1
+### 1.3 Fix the Ctrl+C bug
 
-The channel layout, encoder, episode shape, training/eval harness, and hyperparameter starting points were stood up in step 1 as the sensory-only Naive Bayes app. This step does **not** change any of that. What changes is the brain underneath: spatial processing (step 3) now manufactures inter-channel connections at d=0, and neuron reuse (step 4) reallocates capacity onto the error manifold. Same encoder, same harness, same channels — the architecture is no longer degenerate.
+Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
+fix so long jobs can be cancelled without leaving the brain half-written.
 
-### The baseline to beat: Naive Bayes
+### 1.4 Stop committing platform binaries
 
-The sensory-only app merged in step 1 *is* Naive Bayes — independent per-pixel voting, no joint structure (see mnist-merge.md). That sets the explicit bar for the full architecture:
-
-* **Naive Bayes (independent pixels): ~83–84% test on full 28×28.** This is the floor and the "did we just reimplement NB?" check. The full architecture must clear this *using a different mechanism* (no backprop, no labels, demand-driven, gain from conjunctive features and reuse) for the result to mean anything.
-* **Logistic regression / linear classifier: ~92%.** The next rung — pixel-based but jointly weighted. Beating NB but not this means a little co-occurrence is being captured but nothing strongly spatial.
-* **k-NN: ~97%.** Pure template matching; shows how much signal is in the pixels when configuration is respected.
-* **Simple MLP / small CNN: 98–99%+.** The gradient-trained ceiling — not the target for a label-free, no-backprop voting system, but the reference for where the signal tops out.
-
-The interesting result for Robot Brain is not beating a CNN; it is **matching or beating a jointly-trained linear model (~92%) without joint training, labels, or backprop** — with the climb from the NB floor coming mechanism by mechanism as the independence assumption dissolves. Each architectural addition (spatial processing, then reuse) should push accuracy up this ladder while preserving the no-backprop / no-label properties. Don't over-anchor on NB's exact number; let an NB run on *identical* preprocessing be the apples-to-apples reference.
-
-### Why MNIST as the validation target
-
-MNIST is the most widely recognized benchmark in machine learning. We use it twice, in sequence, to make two distinct architectural claims:
-
-1. **Vanilla MNIST** (this step) — demonstrates that one prediction-only architecture handles stocks, text, and vision with zero modifications. Validates the "one substrate, multiple domains" claim.
-2. **Split-MNIST (class-incremental)** (next step) — demonstrates continual learning without replay buffers, task IDs, regularizers, or any of the workarounds gradient-based models require. The headline result for external positioning.
-
-The deeper claim Split-MNIST validates: **Robot Brain is constitutionally immune to catastrophic forgetting.** Neurons aren't overwritten by gradient updates; they're added and decayed independently. Transformers and MLPs trained sequentially on disjoint class subsets collapse to ~20% accuracy on old tasks (Hsu et al. 2018; van de Ven & Tolias 2019). This architecture should retain old-task accuracy by construction — patterns formed for digits 0/1 are not modified when the system later sees digits 2/3, because their context fingerprints don't match.
-
-### What spatial processing adds at this step
-
-With `process_spatial` in place, connection formation is no longer just sensory → action. Within the single image-frame, every pixel channel observes what its neighbors are concurrently firing at d=0, and inter-channel connections form on the fly. The system learns:
-
-* **Local spatial correlations**: pixel (14,14) being dark while pixel (14,15) is also dark is a learned association, not a geometric prior.
-* **Global digit signatures**: the constellation of pixel activations that characterize each digit class.
-* **Discriminative features**: through reward, the system reinforces connections whose activation patterns reliably predict specific digits.
-
-The brain discovers that certain combinations of pixel values across specific spatial positions predict specific digits — without ever being told that pixels are arranged in a grid, or that adjacent pixels tend to co-vary. This is the conjunctive-feature mechanism the NB ladder is built to detect.
-
-### Success criteria
-
-* **The bar is Naive Bayes (~83–84% at 28×28), not chance.** The sensory-only merge app from step 1 already reaches the NB ceiling by construction. Phase 1 runs the *completed* architecture (post spatial-processing and reuse), so its job is to clear the NB floor using the conjunctive-feature mechanism — anything at or below NB means the spatial/reuse machinery is not yet contributing joint structure and should be debugged before adding precision.
-* **Phase A (binary), gate**: must clear NB at matched preprocessing (28×28 binary NB run from step 1 is the apples-to-apples reference). Failing to clear NB at binary is the architectural debug signal — adding bucket precision will not fix it.
-* **Phases B/C, target**: climb the ladder. **Matching or beating the linear-classifier rung (~92%)** at the optimal bucket count is the headline Phase 1 result — that's the "joint structure without joint training" claim. Pushing into the k-NN range (~97%) is stretch.
-* Training accuracy converges to >95% with sufficient repetition at the optimal quantization level.
-* No architectural changes vs stock/text channels — same brain code, same connection mechanism, just more channels.
-* Inter-channel connections demonstrably encode spatial structure (inspectable: which pixel positions form strong connections should roughly correspond to spatial proximity and shared digit-class membership).
-* The quantization-vs-accuracy curve is documented as an empirical result characterizing the architecture's sensory resolution tradeoff — paired with the NB-only curve from step 1 to isolate the architectural contribution from the resolution contribution.
-
-This is not an attempt to beat CNNs. It is a demonstration that a single prediction-only architecture, designed for temporal sequences, can learn visual recognition through spatial co-occurrence across parallel channels — without any vision-specific components. The benchmark exists to make the architectural claim legible to the ML community using a universally understood task.
+The branch updates `brain-napi.node` and adds a ~1.5 MB `brain-napi.win32-x64-msvc.node`. Add `*.node`
+to `.gitignore` rather than growing binaries in history. See
+[spatial-processing-review.md §4](spatial-processing-review.md).
 
 ---
 
-## Split MNIST
+## 2. Backups / imports / exports (Phase 4)
 
-Class-incremental continual learning. The **headline experiment for external positioning**. Runs only after Phase 1 confirms vanilla MNIST works.
+Make every persistence path round-trip d=0 connections and the spatial structure.
 
-### Protocol
-
-Standard class-incremental Split-MNIST as defined in the continual learning literature (van de Ven & Tolias 2019; Hsu et al. 2018):
-
-* **5 sequential tasks**, each containing 2 digit classes:
-    - Task 1: digits 0, 1
-    - Task 2: digits 2, 3
-    - Task 3: digits 4, 5
-    - Task 4: digits 6, 7
-    - Task 5: digits 8, 9
-* **No task IDs at training or test time** — the brain is never told which task it's on. This is the hardest variant; domain-incremental and task-incremental are easier and excluded from the headline.
-* **Strict sequential training**: train Task 1 to convergence, freeze the experiment (no more Task 1 episodes), train Task 2 to convergence, etc. The brain only ever sees one task's data at a time.
-* **Action space remains 10 digits throughout** — the brain must learn to never output a digit it hasn't seen yet, and to retain old digits as new ones are added.
-
-### Why this should work architecturally
-
-The reasoning that motivates running this experiment:
-
-* Sensory neurons for digit-0 patterns and digit-2 patterns have **disjoint context fingerprints** — the spatial co-activation patterns across 784 channels are different, so they activate different inter-channel connections.
-* When training Task 2, no Task 1 patterns fire (their spatial contexts don't match), so their action connections aren't modified.
-* **Higher-level patterns live exponentially longer than lower-level ones.** The decay schedule is stratified by level: base sensory neurons decay fastest, level-1 patterns slower, level-2 patterns slower still, and so on. Whatever digit-0 patterns the brain consolidated up the hierarchy during Task 1 training have decay timescales that comfortably exceed the duration of Tasks 2–5.
-* This means the relevant retention question is not "does the forget rate eat Task 1 patterns" but "did Task 1 train long enough to push patterns up to durable levels." If yes, retention is essentially free.
-* Action connections on those high-level patterns are similarly persistent — they were established when the patterns were the strong predictors of the digit-0 reward, and nothing in Tasks 2–5 fires those patterns to modify them.
-
-The risk shifts accordingly: it's not "forget rate too aggressive" but "Task 1 trained too briefly to consolidate to durable levels." This is a training-schedule question, not a decay-parameter question.
-
-### Evaluation
-
-After each task is trained, measure accuracy on the held-out test sets of **all tasks seen so far**. Report:
-
-1. **Final retention matrix** (5×5): accuracy on Task i after training through Task j, for all i ≤ j. The diagonal is "just-trained" accuracy; the bottom row is "after all training" retention.
-2. **Average accuracy after Task 5**: mean of the bottom row. This is the headline number.
-3. **Forgetting metric**: for each task, max accuracy ever achieved minus final accuracy. Lower is better.
-
-### Baselines (cited, not re-run)
-
-Reference numbers from the continual learning literature for class-incremental Split-MNIST without replay or task IDs:
-
-* **Naive sequential MLP/transformer fine-tuning**: ~20% average accuracy after Task 5 (van de Ven & Tolias 2019; Hsu et al. 2018). This is the catastrophic-forgetting floor.
-* **EWC (Elastic Weight Consolidation)**: ~20–25%. Regularization-based methods barely help in class-incremental setting.
-* **Replay-based methods (iCaRL, GEM)**: 70–90%, but these require storing old data and are explicitly outside the "no replay" claim.
-* **Joint training upper bound**: ~98% (all tasks trained together — not a continual learning method).
-
-We cite these numbers rather than re-running. Reproduction is a separate effort if external review demands it.
-
-### Success criteria
-
-* **Headline**: average accuracy after Task 5 substantially above the ~20% catastrophic-forgetting floor, achieved with **no replay buffer, no task IDs, no regularizers** — purely from architectural retention.
-* **Stretch**: retention competitive with replay-based methods (60%+) without using replay.
-* **Diagnostic**: per-task accuracy degradation profile. If Task 1 accuracy is preserved through Task 5, the architectural claim holds; if it decays, forget-rate tuning is needed.
-
-### Hyperparameter notes
-
-The critical knob is **per-task training duration**, not forget rate. Each task must train long enough for digit patterns to consolidate up the hierarchy to levels with decay timescales exceeding the remaining experiment duration. Under-training a task leaves its representations at low levels that decay during subsequent tasks; over-training is harmless beyond saturation.
-
-Recommended starting point:
-* Match the per-task episode count to whatever achieved >95% within-task accuracy in Phase 1 (vanilla MNIST). If Phase 1 converged in 30 episodes, use 30+ episodes per task in Phase 2.
-* Forget rate stays at the Phase 1 value (0.001–0.01). The level-stratified decay schedule does the work.
-* If retention is weak, the first diagnostic is to inspect the level distribution of digit-0 patterns after Task 1 training. If they're concentrated at low levels, train Task 1 longer. If they're at high levels and still being lost, then forget rate is the issue.
-
-### What this is NOT
-
-Not an attempt to beat continual learning SOTA methods that use replay. The claim is structural: we get retention from the architecture, not from buffering or regularizing. A 60% result with no replay is a stronger paper than a 90% result with replay, because the former is a different category of system.
-
-### Dependencies
-
-* Vanilla MNIST complete and working
-* Same Rust core, same channel code — no architectural changes
-* Sequential task scheduler (trivial — just feed task data in order)
-* Per-task evaluation harness (trivial)
+- **Fix review 1.2 — snapshot restore silently destroys spatial structure.** Serialization was
+  updated for spatial but restore was not: spatial levels are dropped (every neuron comes back at
+  `spatial_level = 0`) and spatial routing entries land on the temporal side. Add a spatial/temporal
+  discriminator to `SerializedChild` / `SerializedContextRef`, restore each to the proper side, and
+  add `spatial_level` to `SnapshotNeuronEntry`. Full detail in
+  [spatial-processing-review.md §1.2](spatial-processing-review.md) and the Phase 4 acceptance test in
+  [spatial-processing.md §6](spatial-processing.md).
+- **Test imports / exports / backups** — implement the design's round-trip acceptance test (train →
+  snapshot → restore → identical next frame), plus the DB import/export round-trip and the
+  pre-spatial backward-compat load.
 
 ---
 
-## Neuron Re-use
+## 3. Stock tests (Phase 3)
 
-See **[neuron-reuse.md](./neuron-reuse.md)**.
+Validate the spatial phase on the stocks workload and keep non-spatial domains bit-identical.
 
-Reverse inference index, reuse lookup in the correction path, transfer-learning validation, full-pipeline stocks integration, class-neuron generalization tuning. Allocates capacity onto the error manifold (residual-fitting).
+- **Test stocks with spatial processing** — low-level pattern building, high error threshold, only
+  group highly related stocks (so d=0 co-activation forms across genuinely correlated symbols, not
+  the whole market).
+- **Update documentation for the demos.**
+
+See [spatial-processing.md §6 Phase 3](spatial-processing.md) for acceptance criteria.
 
 ---
 
-## Inference Level Experiment
+## 4. Merge spatial branch to main
+
+- **Review all the code** on the `spatial` branch.
+- Merge once the near-term cleanups, the two review fixes, and stocks parity are in.
+
+---
+
+## 5. Optimize MNIST
+
+Push past the 95.73% capstone and produce the publishable ablations. Full experiment log and the
+detailed step list live in [mnist-spatial-experiments.md](mnist-spatial-experiments.md).
+
+- **Update the experiments document** — prune obsolete tests (done).
+- **Radius 3 at 28×28** — the radius-2 optimum was tuned at lower res; check radius 3 at full res.
+- **Error / merge threshold re-tune at 28×28 (radius x)** — sweep the paired corners
+  **0.1 / 0.9, 0.2 / 0.8, 0.3 / 0.7** and re-pick.
+  - Anchor: `node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 3 --error-mode static --error-threshold 0.1 --merge-threshold 0.9`
+- **Literature-standard Split-MNIST** — the continual-learning headline. Details below.
+
+### Context: the Naive-Bayes ladder
+
+The sensory-only app is Naive Bayes by construction; the architecture must clear it *with a different
+mechanism* (no backprop, no labels, demand-driven conjunctive features) for the result to mean
+anything. Reference rungs on identical preprocessing:
+
+- **Naive Bayes (independent pixels): ~83–84%** — the floor and the "did we just reimplement NB?"
+  check.
+- **Logistic regression / linear classifier: ~92%** — pixel-based but jointly weighted.
+- **k-NN: ~97%** — pure template matching.
+- **Simple MLP / small CNN: 98–99%+** — the gradient-trained ceiling, not the target.
+
+The interesting result is **matching or beating the jointly-trained linear model (~92%) without joint
+training, labels, or backprop**. The 95.73% capstone clears that rung and approaches k-NN — the climb
+came mechanism by mechanism (spatial hierarchy +13pp over pixel-NB, NB readout +5pp over consensus,
+radius 2 the unlock).
+
+### Literature-standard Split-MNIST (class-incremental continual learning)
+
+The **headline experiment for external positioning** — class-incremental, the hardest CL regime,
+where naive backprop nets collapse to ~20%.
+
+- **Use the standard 5 tasks × 2 classes** (0/1, 2/3, 4/5, 6/7, 8/9), citing van de Ven & Tolias 2019
+  and Hsu et al. 2018 — **not** the current 10 tasks × 1 class. This makes our ~90–91% line up
+  apples-to-apples against the cited floor.
+- **No task IDs at train or test time.** Strict sequential training, one task's data at a time. Action
+  space stays 10 digits throughout.
+- **MLP class-incremental baseline:** a vanilla MLP trained under the *identical* split protocol
+  (digits sequentially, test on all 10), expected to collapse to ~20%. ~30-line Python script,
+  separate from the brain. This turns "we don't forget" into "we don't forget *where standard nets
+  catastrophically do*" — the punch line.
+- **Re-run our stack on the standard 5×2** at the new optimum (28×28, radius 2, merge 0.7, NB, full
+  train, full 10K test) for the headline split number to sit beside the 95.73% joint.
+
+**Why it should hold architecturally:** patterns formed for digits 0/1 have disjoint context
+fingerprints from 2/3, so they don't fire — and aren't modified — during later tasks. Higher-level
+patterns decay slower than lower ones, so consolidated digit patterns outlive subsequent tasks. The
+empirical finding so far is *graceful, recency-biased degradation* (the earliest class's shared voters
+get overwritten), not zero forgetting — still far above the ~20% backprop floor. Additive/local
+learning gives stability; the hierarchy gives accuracy.
+
+**Evaluation:** final 5×5 retention matrix, average accuracy after Task 5 (headline), and a forgetting
+metric (max-ever minus final per task). Cite the literature baselines (~20% naive, ~20–25% EWC,
+70–90% replay, ~98% joint upper bound) rather than re-running them.
+
+---
+
+## 6. Temporal channel inheritance experiment
+
+Fix 2.2 gave *spatial* corrections their parent's full (channel, dimension, coordinate). Open
+question: **should temporal corrections inherit channels the same way?** Symmetry argues yes, but
+temporal corrections group across channels by design, so it may not apply cleanly. Test on MNIST and
+stocks. Tracked in [spatial-processing.md §8](spatial-processing.md).
+
+---
+
+## 7. Inference Level Experiment
 
 See **[inference-level.md](./inference-level.md)**.
 
-Pick the inference scope rule (`base` / `same-level` / `all-levels`) via an experiment on the stocks pipeline. Decision propagates into spatial processing.
+Pick the inference scope rule by experiment on the stocks pipeline, comparing:
+
+- **All levels**
+- **Same level**
+- **Lower level**
+
+The decision propagates into spatial processing.
 
 ---
 
-## Calculate up/down accuracy separately
+## 8. Neuron Re-use
 
-- Report directional accuracy (up vs down) independently to identify prediction bias
+See **[neuron-reuse.md](./neuron-reuse.md)**.
+
+Allocates capacity onto the error manifold (residual-fitting). **Scope is reduced for now:** do
+**just the first part** — *not* the reverse inference index and merge. Then:
+
+- Test MNIST.
+- Test stocks.
 
 ---
 
-## Neuron Limits
+## 9. Re-introduce context refinement
+
+Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
+common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
+the common core of the configs it matches instead of staying frozen at mint-time identity. This is the
+missing abstraction/generalization step that would turn one-off corrections into general detectors and
+let the hierarchy climb past depth 2.
+
+- Add an **option** and put it back into temporal processing.
+- Add the same logic to **spatial** processing behind the same flag.
+- Guard for reproducibility: refine only during training, freeze for eval (or consolidate in a
+  separate pass).
+- Test MNIST performance.
+- Test stock performance.
+
+If the headline numbers land here:
+
+- **LinkedIn post.**
+- **Email investors.**
+
+---
+
+## 10. Calculate up/down accuracy separately
+
+Report directional accuracy (up vs down) independently to identify prediction bias.
+
+---
+
+## 11. Neuron Limits
 
 ### Max neuron count hyperparameter
-- Add configurable cap on neuron count per region/column
+- Add a configurable cap on neuron count per region/column.
 
 ### Capacity enforcement
-- When capacity is reached, stop learning new patterns
-- Once forgetting frees space, resume learning automatically
+- When capacity is reached, stop learning new patterns.
+- Once forgetting frees space, resume learning automatically.
 
 ### Overflow warning
-- Emit warning when capacity is hit so the operator knows the brain is saturated
-- Test that learning resumes correctly after decay opens capacity
+- Emit a warning when capacity is hit so the operator knows the brain is saturated.
+- Test that learning resumes correctly after decay opens capacity.
+
+> Note: this is an opt-in *capacity* cap on neuron count, distinct from spatial-depth `MAX_LEVEL`
+> caps — which we deliberately do **not** add (see Status snapshot).
 
 ---
 
-## Exponential Temporal Binning Test
+## 12. Exponential Temporal Binning Test
 
-Implement the cortical temporal binning scheme described in [experiment-temporal-binning.md](./experiment-temporal-binning.md).
+Implement the cortical temporal binning scheme in
+[experiment-temporal-binning.md](./experiment-temporal-binning.md).
 
-### Summary
-Higher-level patterns currently store context at exact frame distances — meaningless precision at their timescale. Exponential bins give every level the same number of bins but scale bin width with level, letting higher-level patterns represent long-range temporal relationships without explosion in context entries.
+Higher-level patterns currently store context at exact frame distances — meaningless precision at
+their timescale. Exponential bins give every level the same number of bins but scale bin width with
+level, letting higher-level patterns represent long-range temporal relationships without context
+explosion.
 
-### Key changes
-- Context struct stores bin index instead of exact distance
-- Bin conversion: `distanceToBin(distance, level, contextLength, numBins)`
-- Pattern matching uses bin-space comparison
-- Voting carries bin index instead of exact distance
-
-### Validation
-- Level-1 patterns behave nearly identically to current (regression)
-- Higher-level patterns form with fewer, coarser context entries
-- Prediction accuracy on existing benchmarks does not regress
+- Context struct stores bin index instead of exact distance.
+- Bin conversion: `distanceToBin(distance, level, contextLength, numBins)`.
+- Pattern matching and voting use bin-space comparison.
+- **Validation:** level-1 patterns behave nearly identically to current (regression); higher-level
+  patterns form with fewer, coarser context entries; accuracy on existing benchmarks does not
+  regress.
 
 ---
 
-## Documentation & Publish
+## 13. Documentation & Publish
 
-### Update all documentation
-- Sync docs with current architecture post-Rust migration
-- Update README demos and examples
-
-### npm package
-- Prepare package for publication
-- Publish to npm registry
+- **Update all documentation** — sync docs with the current architecture post-Rust migration; update
+  README demos and examples.
+- **Fashion-MNIST** on the same stack — generality evidence for the paper.
+- **Prior-art differentiation writeup** — HTM/Numenta, ART/Grossberg, predictive coding, growing
+  neural gas.
+- **npm package** — prepare and publish to the registry.

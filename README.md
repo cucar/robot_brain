@@ -75,7 +75,7 @@ node apps/stocks/jobs/multi-channel-test.js --error-mode static --error-threshol
 
 **Expected output:**
 ```
-🎯 Overall Optimal Rate: 700/720 = 97.2%
+🎯 Overall Optimal Rate: 696/720 = 96.7%
 ```
 
 The brain learns when to own vs. not own each stock based on upcoming price movements, achieving 96%+ optimal trade decisions across all three channels. This demonstrates how multiple input streams converge to improve inference — one of the architecture's core strengths.
@@ -85,35 +85,47 @@ The brain learns when to own vs. not own each stock based on upcoming price move
 The brain learns to trade stocks from historical price and volume data. Each stock is a separate channel — the brain discovers cross-stock patterns and makes buy/sell/hold decisions optimized by reward feedback.
 
 **The included timeframe data is ready to use** — no API key needed for this demo.
-**Using high error correction threshold to be able to quickly stabilize the patterns and get higher returns.
 
 ```bash
-node apps/stocks/jobs/test.js --context-length 3 --columns 20 --transaction-cost 0.02 --max-positions 10
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL,AWR,GM,EQIX,RTX,KGC,ALB,AAPL,CVX,HD,WPM,BEP,AREC,JNJ,SLB,PLD,EXK,NVDA,CAT,WFC,RGLD,WEAT,OXY,CEG,LOW,PAAS,MP,LMT,GS,COST,AG,TECK,MRK,INTC,BIP,PSA,DVN,AVAV,PEP,CDE,TSM --context-length 3 --max-positions 3 --merge-threshold 0.9 --error-mode static --error-threshold 0.4 --transaction-cost 0.02 --columns 20
 ```
 
 **Expected output:**
 ```
-Final Training Results (1 episodes):
+🎯 Final Training Results (1 episodes):
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $90731949.39
-   Average per Episode: $90731949.39
-   Average ROI: +604879.66%
-   Average Per-Frame ROI: +0.600681%
-   Average Sharpe Ratio: 4.73
-   Total Transaction Cost: $1763721.38 (0.02% per trade)
-   Total Trades: 21232
-   Average Trades per Episode: 21232.0
+   Total Net Profit: $12366594.68
+   Average per Episode: $12366594.68
+   Average ROI: +82443.96%
+   Average Per-Frame ROI: +0.125072%
+   Average Sharpe Ratio: 0.55
+   Total Transaction Cost: $413799.50 (0.02% per trade)
+   Total Trades: 21462
+   Average Trades per Episode: 21462.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $90731949.39 | ROI: +604879.66%, +0.600681%/frame, Sharpe: 4.73 (21232 trades)
+   Episode 1: $12366594.68 | ROI: +82443.96%, +0.125072%/frame, Sharpe: 0.55 (21462 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 50.54%
+   Episode 1: 51.49%
 ```
 
-The brain achieves ~50% base-level prediction accuracy on price movements (which is expected — markets are noisy), but the **reward-weighted action selection** turns that into profitable trading by learning which contexts produce better outcomes.
+The brain achieves ~51% base-level prediction accuracy on price movements (which is expected — markets are noisy), 
+but the **reward-weighted action selection** turns that thin edge into profitable trading by learning which contexts 
+produce better outcomes.
+
+> **Reading this number honestly.** The +82,443% headline is a *total* return over ~21 years of daily data
+> (~5,370 frames) — it compounds to **roughly +37%/year**, strong but far less dramatic than the raw percentage
+> looks. It is also measured on a *curated* 50-symbol universe of names that survived and performed well over the
+> period (a survivorship bias), with low simulated friction and hyperparameters tuned in-sample.
+>
+> A more rigorous measurement uses a neutral, sector-diversified universe and a proper train/test split — train on
+> the first ~80% of history, then evaluate on the **held-out final ~4.3 years** the brain never trained on.
+> Out-of-sample performance peaks at **two training passes**, returning **~+20%/year at a real Sharpe of ~0.76**;
+> additional passes push in-sample return higher while held-out return decays (textbook overfitting). The execution
+> path has no look-ahead — the brain decides and trades at each day's close and is scored by the next day's move.
 
 ### Brain P&L over time
 
@@ -121,7 +133,7 @@ The brain achieves ~50% base-level prediction accuracy on price movements (which
 
 Drawdowns happen, but the brain keeps making new highs — the trajectory shape a learning system should produce.
 
-## Demo 4: Random Baseline Comparison
+### Random Baseline Comparison
 
 A natural worry about Demo 3 is that the result might come from a favorable data window rather than learned trading. To rule that out, the same job can be run with `--random-baseline`, which replaces the brain's action inference with a coin flip: 50% chance to be fully out, 50% chance to own one stock chosen uniformly at random. Everything else — the same data, same portfolio sizing, same execution path — is unchanged.
 
@@ -143,7 +155,7 @@ Random P&L varies wildly between seeds — one run drifts up to roughly +$32K an
 
 This is the simplest sanity check that the brain is doing real work: same harness, same data, only the decision source changes — and the results are not in the same league.
 
-## Demo 5: Action Learning in Low Accuracy
+## Demo 4: Action Learning in Low Accuracy
 
 The brain learns the best actions to perform in each situation over repeated episodes, even when base prediction accuracy is low.
 
@@ -155,21 +167,21 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $190727.88 | ROI: +1271.52%, +0.180252%/frame, Sharpe: 0.53 (1186 trades)
-   Episode 2: $5377045.03 | ROI: +35846.97%, +0.405540%/frame, Sharpe: 1.29 (1216 trades)
-   Episode 3: $233710806.76 | ROI: +1558072.05%, +0.666160%/frame, Sharpe: 2.11 (1396 trades)
-   Episode 4: $4505659149.94 | ROI: +30037727.67%, +0.871228%/frame, Sharpe: 2.81 (1674 trades)
-   Episode 5: $64183173731.74 | ROI: +427887824.88%, +1.055685%/frame, Sharpe: 3.46 (1804 trades)
+   Episode 1: $372020.01 | ROI: +2480.13%, +0.060514%/frame, Sharpe: 0.16 (5578 trades)
+   Episode 2: $413637168.28 | ROI: +2757581.12%, +0.190480%/frame, Sharpe: 0.68 (6191 trades)
+   Episode 3: $148332666179.02 | ROI: +988884441.19%, +0.300225%/frame, Sharpe: 0.99 (6040 trades)
+   Episode 4: $292385992115.17 | ROI: +1949239947.43%, +0.312894%/frame, Sharpe: 1.00 (6046 trades)
+   Episode 5: $20390314142562.32 | ROI: +135935427617.08%, +0.392174%/frame, Sharpe: 1.30 (6257 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 51.10%
-   Episode 2: 52.99%
-   Episode 3: 56.31%
-   Episode 4: 57.15%
-   Episode 5: 57.62%
+   Episode 1: 52.08%
+   Episode 2: 48.32%
+   Episode 3: 48.86%
+   Episode 4: 48.93%
+   Episode 5: 49.02%
 ```
 
-## Demo 6: Stock Sequence Memorization
+## Demo 5: Stock Sequence Memorization
 
 The brain memorizes a repeating stock price sequence across 5 episodes, reaching 95%+ prediction accuracy. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
 
@@ -185,32 +197,33 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY -
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $1888559487498760192.00
-   Average per Episode: $377711897499752064.00
-   Average ROI: +2518079316665013.50%
-   Average Per-Frame ROI: +1.616917%
-   Average Sharpe Ratio: 11.33
-   Total Trades: 8831
-   Average Trades per Episode: 1766.2
+   Total Net Profit: $1.5513007606400312e+24
+   Average per Episode: $3.1026015212800625e+23
+   Average ROI: +2.0684010141867086e+21%
+   Average Per-Frame ROI: +0.629456%
+   Average Sharpe Ratio: 3.79
+   Total Trades: 31372
+   Average Trades per Episode: 6274.4
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $44236.05 | ROI: +294.91%, +0.094507%/frame, Sharpe: 0.42 (1702 trades)
-   Episode 2: $24806588005874.30 | ROI: +165377253372.50%, +1.470565%/frame, Sharpe: 10.09 (1849 trades)
-   Episode 3: $278868271088285152.00 | ROI: +1859121807255234.50%, +2.123590%/frame, Sharpe: 14.80 (1765 trades)
-   Episode 4: $762538157675950976.00 | ROI: +5083587717839673.00%, +2.194266%/frame, Sharpe: 15.62 (1759 trades)
-   Episode 5: $847128252146474112.00 | ROI: +5647521680976494.00%, +2.201660%/frame, Sharpe: 15.70 (1756 trades)
+   Episode 1: $1065294.34 | ROI: +7101.96%, +0.079632%/frame, Sharpe: 0.37 (5850 trades)
+   Episode 2: $615519461507821056.00 | ROI: +4103463076718807.00%, +0.585093%/frame, Sharpe: 3.67 (6461 trades)
+   Episode 3: $2.876735760514998e+22 | ROI: +191782384034333196288.00%, +0.786582%/frame, Sharpe: 4.76 (6433 trades)
+   Episode 4: $6.996816768276702e+23 | ROI: +4.664544512184468e+21%, +0.846464%/frame, Sharpe: 5.08 (6342 trades)
+   Episode 5: $8.228511106877497e+23 | ROI: +5.485674071251665e+21%, +0.849508%/frame, Sharpe: 5.06 (6286 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 51.84%
-   Episode 2: 96.99%
-   Episode 3: 99.95%
-   Episode 4: 99.95%
-   Episode 5: 99.95%
+   Episode 1: 52.47%
+   Episode 2: 55.46%
+   Episode 3: 58.72%
+   Episode 4: 59.81%
+   Episode 5: 60.33%
 ```
 
-The brain goes from 50% accuracy (random) to 99% in 5 episodes on 3 stocks × 1400 frames of real market data. The low forget rate (0.001) allows patterns to survive the full sequence, and the short context (3 frames) reduces noise from coincidental connections.
+The brain goes from 50% accuracy (random) to 60% in 5 episodes on 3 stocks × 5300 frames of real market data. 
+The low forget rate allows patterns to survive the full sequence. Short context (3 frames) needed because of computation limitations.
 
-## Demo 7: Text Sequence Learning
+## Demo 6: Text Sequence Learning
 
 The brain learns to predict character sequences. Feed it a string, and it memorizes the pattern — reaching ~99.94% prediction accuracy within two episodes and staying flat there.
 
@@ -232,7 +245,7 @@ node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-thres
 
 The brain goes from low accuracy to ~99.96% in two episodes and holds there — it has fully memorized the character sequence except for the first ~20 characters at the start of each episode. Those leading characters can't be predicted because the brain hasn't seen any context yet — it needs a `context-length` window of prior characters in memory before it can recognize patterns and cast votes. The "warmup" frames at the head of each episode are a structural property of context-based prediction, not a learning failure: every character past the warmup window is predicted correctly.
 
-## Demo 8: MNIST Digit Classification (Naive Bayes Baseline)
+## Demo 7: MNIST Digit Classification (Naive Bayes Baseline)
 
 A sensory-only MNIST classifier built on the brain's count-based voting. One channel per pixel position (retinotopic, 784 channels at 28×28), all firing concurrently in a single frame per image. Supervision lands on a separate `digit` action channel via `brain.learn()`. With `patternForgetRate=0` and a constant reward of 1, the brain's per-voter consensus reduces to a Naive Bayes posterior — every `learn()` call increments per-pixel-per-digit counts, and inference picks the argmax.
 
@@ -244,51 +257,57 @@ node apps/mnist/jobs/download.js
 
 This fetches the four standard IDX files (60k training, 10k test, gzipped) from Google's MNIST mirror. The job skips files that already exist, so it's safe to re-run.
 
-Then run the test on full MNIST at 28×28 with 256-bucket pixel quantization:
+Then run the MNIST test:
 
 ```bash
-node apps/mnist/jobs/test.js --image-size 28 --buckets 256 --columns 20
+node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 1 --error-mode static --error-threshold 0.1 --merge-threshold 0.9
 ```
 
 **Expected output:**
 ```
 MNIST — sensory-only (Naive Bayes) baseline
-  Image size: 28×28 (784 channels)
-  Buckets: 256 (Phase C)
+  Image size: 14×14 (196 channels)
+  Buckets: 2 (Phase A — binary)
   Context length: 1
   Forget rate: 0
+  Consensus: nb
   Episodes: 1
-  Training: balanced, auto per class
+  Training: balanced,
   Test images: all
 
   Balanced training set built: 5421 per class × 10 = 54210 total
-  Episode 1/1: train=48.14% (26095/54210) | 214 img/s 252907ms | 0:87% 1:100% 2:37% 3:52% 4:32% 5:3% 6:61% 7:75% 8:9% 9:26%
+  Episode 1/1: train=92.85% (50332/54210) | 130 img/s 418150ms | 0:96% 1:98% 2:93% 3:93% 4:92% 5:86% 6:96% 7:94% 8:89% 9:91%
+    ↳ spatial: depth=1 | L1:31834 | 31834 active, 31834 minted cum | 32202 neurons
 
-  Test: 77.85% (7785/10000) 40905ms | 0:95% 1:99% 2:73% 3:79% 4:74% 5:46% 6:86% 7:86% 8:60% 9:74%
+  Test: 94.88% (9488/10000) 51638ms | 0:98% 1:98% 2:94% 3:95% 4:95% 5:94% 6:96% 7:92% 8:93% 9:93%
 
 Results
 ======================================================================
-  Episode 1: train=48.14% (252907ms)
-  Test:     77.85% (7785/10000)
+  Episode 1: train=92.85% (418150ms)
+
+  Spatial hierarchy (after each episode):
+    Episode 1: depth=1 | L1:31834 | 31834 active, 31834 minted cum | 32202 neurons
+  Test:     94.88% (9488/10000)
 
   Confusion (rows = actual, cols = predicted):
            0    1    2    3    4    5    6    7    8    9
-   0     927    1    1    6    1    4   27    2   11    0
-   1       0 1128    2    2    0    0    2    0    1    0
-   2      64   72  758   27   17    0   54   20   20    0
-   3      31   61   27  798    0    5   11   36   22   19
-   4      40   52    7    1  722    0   29    8    8  115
-   5     110   90    9  160   17  411   28   28    9   30
-   6      68   36   14    0    6   10  824    0    0    0
-   7      11   71   11    3    7    0    0  886    3   36
-   8      65  100   14   92   10   30   18   25  582   38
-   9      38   34    8    9   47    0    0  121    3  749
+   0     960    0    0    1    0    5    6    1    7    0
+   1       0 1116    3    3    0    0    5    0    8    0
+   2      10    1  971    7    7    1    2    8   24    1
+   3       1    0   11  955    0   15    0   12   11    5
+   4       0    2    2    0  935    0   10    0    3   30
+   5       5    3    0   20    1  840    8    2    8    5
+   6       7    4    1    0    4   16  919    0    7    0
+   7       1   17   17    2    5    0    0  944    7   35
+   8      11    0    3   16    5    8    5    6  910   10
+   9      10    7    2    7   18    6    0   10   11  938
 ======================================================================
 
-⏱️  Total Execution Time: 4m 54s
+⏱️  Total Execution Time: 7m 50s
 ```
 
-77.85% test accuracy from a single training pass with no spatial processing — this is the architecture's Naive Bayes floor. The confusion matrix's 3/5/8 collapses are exactly what motivates the spatial-processing workstream: digits whose pixel-level marginals overlap heavily can't be separated without spatial features. Class-balanced training is load-bearing here: the brain's per-voter normalization bakes the class prior into every voter's contribution, so an unbalanced training set leaks the natural ~24% 1-vs-5 tilt into the consensus and drops test accuracy to ~38%.
+94.88% test accuracy from a single training pass. The confusion matrix errors are digits whose pixel-level marginals overlap heavily. 
+Class-balanced training is helps here - when trained on full data, the result is 94.56%.
 
 ### Downloading Fresh Stock Data
 
@@ -301,9 +320,9 @@ To download new data or different timeframes, you need a free [Alpaca](https://a
    ALPACA_KEY_ID=your_key_here
    ALPACA_SECRET_KEY=your_secret_here
    ```
-4. Download data:
+4. Download data (Alpaca, or `download-yahoo.js` for longer daily history):
    ```bash
-   node apps/stocks/jobs/download.js --timeframe 3H
+   node apps/stocks/jobs/download-alpaca.js --timeframe 3H
    ```
 5. Process downloaded data into training files:
    ```bash
@@ -544,7 +563,7 @@ app. It is not part of the brain core; the brain has no DB dependency.
 ### Backup → MySQL → Backup Round-Trip
 
 Take a backup, push it through MySQL, pull it back out, and verify the rehydrated
-brain reproduces the same result. Uses the [Demo 6](#demo-6-stock-sequence-memorization)
+brain reproduces the same result. Uses the Demo 6 stock sequence memorization
 config (KGC,GLD,SPY) — a single episode here ends around `$22,675,481.59`.
 
 ```bash
