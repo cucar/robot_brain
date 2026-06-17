@@ -23,13 +23,26 @@ is one workstream; sub-bullets are the concrete steps inside it.
 App-side and small core cleanups that should land before (or alongside) the merge. Independent of
 each other unless noted.
 
-### 1.1 Remove `--error-correct-rounds`
+### 1.1 Stock tests (Phase 3)
+
+Validate the spatial phase on the stocks workload and keep non-spatial domains bit-identical.
+
+- **Test stocks with spatial processing** — low-level pattern building, high error threshold, only
+  group highly related stocks (so d=0 co-activation forms across genuinely correlated symbols, not
+  the whole market).
+- **Update documentation for the demos.**
+
+See [spatial-processing.md §6 Phase 3](spatial-processing.md) for acceptance criteria.
+
+---
+
+### 1.2 Remove `--error-correct-rounds`
 
 The discriminative second phase pushed train→99% with **no test gain** (the ceiling is
 representational, not readout/training — see experiment §9). Drop the option and the
 `runErrorCorrection` path.
 
-### 1.2 Eval-train refactor
+### 1.3 Eval-train refactor
 
 - **Wire-only training by default:** `runTraining` calls `resetContext` + `processFrame` only — drop
   the per-image `infer()` / decode / tally. Faster, and it kills the prequential per-episode number.
@@ -38,12 +51,12 @@ representational, not readout/training — see experiment §9). Drop the option 
   default).
 - Clean up `showResults` / `logTrainingPass` that depended on the prequential per-episode accuracy.
 
-### 1.3 Fix the Ctrl+C bug
+### 1.4 Fix the Ctrl+C bug
 
 Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
 fix so long jobs can be cancelled without leaving the brain half-written.
 
-### 1.4 Stop committing platform binaries
+### 1.5 Stop committing platform binaries
 
 The branch updates `brain-napi.node` and adds a ~1.5 MB `brain-napi.win32-x64-msvc.node`. Add `*.node`
 to `.gitignore` rather than growing binaries in history. See
@@ -68,27 +81,14 @@ Make every persistence path round-trip d=0 connections and the spatial structure
 
 ---
 
-## 3. Stock tests (Phase 3)
-
-Validate the spatial phase on the stocks workload and keep non-spatial domains bit-identical.
-
-- **Test stocks with spatial processing** — low-level pattern building, high error threshold, only
-  group highly related stocks (so d=0 co-activation forms across genuinely correlated symbols, not
-  the whole market).
-- **Update documentation for the demos.**
-
-See [spatial-processing.md §6 Phase 3](spatial-processing.md) for acceptance criteria.
-
----
-
-## 4. Merge spatial branch to main
+## 3. Merge spatial branch to main
 
 - **Review all the code** on the `spatial` branch.
 - Merge once the near-term cleanups, the two review fixes, and stocks parity are in.
 
 ---
 
-## 5. Optimize MNIST
+## 4. Optimize MNIST
 
 Push past the 95.73% capstone and produce the publishable ablations. Full experiment log and the
 detailed step list live in [mnist-spatial-experiments.md](mnist-spatial-experiments.md).
@@ -147,7 +147,7 @@ metric (max-ever minus final per task). Cite the literature baselines (~20% naiv
 
 ---
 
-## 6. Temporal channel inheritance experiment
+## 5. Temporal channel inheritance experiment
 
 Fix 2.2 gave *spatial* corrections their parent's full (channel, dimension, coordinate). Open
 question: **should temporal corrections inherit channels the same way?** Symmetry argues yes, but
@@ -156,7 +156,7 @@ stocks. Tracked in [spatial-processing.md §8](spatial-processing.md).
 
 ---
 
-## 7. Inference Level Experiment
+## 6. Inference Level Experiment
 
 See **[inference-level.md](./inference-level.md)**.
 
@@ -170,7 +170,7 @@ The decision propagates into spatial processing.
 
 ---
 
-## 8. Neuron Re-use
+## 7. Neuron Re-use
 
 See **[neuron-reuse.md](./neuron-reuse.md)**.
 
@@ -182,7 +182,7 @@ Allocates capacity onto the error manifold (residual-fitting). **Scope is reduce
 
 ---
 
-## 9. Re-introduce context refinement
+## 8. Re-introduce context refinement
 
 Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
 common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
@@ -204,13 +204,13 @@ If the headline numbers land here:
 
 ---
 
-## 10. Calculate up/down accuracy separately
+## 9. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 11. Neuron Limits
+## 10. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -228,7 +228,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 12. Exponential Temporal Binning Test
+## 11. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).
@@ -247,7 +247,7 @@ explosion.
 
 ---
 
-## 13. Documentation & Publish
+## 12. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update
   README demos and examples.
