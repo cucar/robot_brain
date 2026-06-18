@@ -14,6 +14,7 @@ export class StockTrader {
 	static cash = StockTrader.initialCapital;
 	static maxPositions = 1;
 	static maxPrice = 5000;
+	static minPrice = 0;
 	static transactionCost = 0;
 	static totalTransactionCostPaid = 0;
 
@@ -315,7 +316,7 @@ export class StockTrader {
 			);
 			ownActions = ownActions.filter(a => {
 				const p = a.trader.getCurrentPrice();
-				return p > 0 && p < this.maxPrice; // exclude $0 stocks - they are de-listed
+				return p > 0 && p >= this.minPrice && p < this.maxPrice; // exclude $0 (de-listed) and sub-minPrice (penny) stocks
 			});
 			ownActions = ownActions.slice(0, this.maxPositions);
 		}

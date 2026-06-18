@@ -50,6 +50,7 @@ export default class StockTestJob extends Job {
 			initialCapital: 15000,               // Starting portfolio cash - use --initial-capital
 			maxPositions: 1,                     // Maximum simultaneous positions - use --max-positions
 			maxPrice: 5000,                      // Maximum stock price for allocation - use --max-price
+			minPrice: 0,                         // Minimum stock price for allocation (filters penny stocks) - use --min-price
 			spatial: false                       // Enable spatial (d=0 co-activation) processing across all symbols - use --spatial
 		};
 
@@ -88,6 +89,9 @@ export default class StockTestJob extends Job {
 		const maxPriceIndex = process.argv.indexOf('--max-price');
 		if (maxPriceIndex !== -1 && process.argv[maxPriceIndex + 1]) this.config.maxPrice = parseFloat(process.argv[maxPriceIndex + 1]);
 
+		const minPriceIndex = process.argv.indexOf('--min-price');
+		if (minPriceIndex !== -1 && process.argv[minPriceIndex + 1]) this.config.minPrice = parseFloat(process.argv[minPriceIndex + 1]);
+
 		const initialCapitalIndex = process.argv.indexOf('--initial-capital');
 		if (initialCapitalIndex !== -1 && process.argv[initialCapitalIndex + 1]) this.config.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
 
@@ -119,6 +123,7 @@ export default class StockTestJob extends Job {
 		StockTrader.cash = this.config.initialCapital;
 		StockTrader.maxPositions = this.config.maxPositions;
 		StockTrader.maxPrice = this.config.maxPrice;
+		StockTrader.minPrice = this.config.minPrice;
 		StockTrader.transactionCost = this.config.transactionCost;
 		StockEncoder.transactionCost = this.config.transactionCost;
 
