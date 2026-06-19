@@ -54,10 +54,6 @@ export default class MNISTTestJob extends Job {
 			//     Sharper than the mean: a voter that confidently rules a digit out (P≈0 → log≈−large) heavily
 			//     penalizes it, instead of being diluted by averaging. MNIST default.
 			consensus: 'nb',
-			// errorCorrectRounds: N>0 → after normal training, run N discriminative passes over the
-			// training set that reinforce (smoothed-reward learn()) only on mispredictions, with minting
-			// off. Pushes training accuracy toward ~100%; test effect is the experiment.
-			errorCorrectRounds: 0,
 			// debugMiss: N>0 → during the held-out test (NB decode), analyze misclassified images: print
 			// the first N with their per-digit NB log-scores, and aggregate over ALL misses the true
 			// digit's rank, the winner−true margin, and voter counts (miss vs hit). Diagnoses whether
@@ -108,8 +104,6 @@ export default class MNISTTestJob extends Job {
 		if (process.argv.includes('--eval-train')) this.config.evalTrain = true;
 		const missIdx = process.argv.indexOf('--debug-miss');
 		if (missIdx !== -1 && process.argv[missIdx + 1] !== undefined) this.config.debugMiss = parseInt(process.argv[missIdx + 1]);
-		const ecIdx = process.argv.indexOf('--error-correct-rounds');
-		if (ecIdx !== -1 && process.argv[ecIdx + 1] !== undefined) this.config.errorCorrectRounds = parseInt(process.argv[ecIdx + 1]);
 
 		const consensusIdx = process.argv.indexOf('--consensus');
 		if (consensusIdx !== -1 && process.argv[consensusIdx + 1] !== undefined) this.config.consensus = process.argv[consensusIdx + 1];
@@ -245,43 +239,8 @@ export default class MNISTTestJob extends Job {
 		if (this.config.split) this.runSplitTraining();
 		else this.runJointTraining();
 
-		// optional discriminative second phase: reinforce on training mispredictions only
-		if (this.config.errorCorrectRounds > 0) this.runErrorCorrection();
-
 		// now, run the tests evaluation
 		if (!this.config.skipTest) this.runEvaluation();
-	}
-
-	/**
-	 * Discriminative (error-driven) second phase. With minting OFF (setLearning(false), so NO new
-	 * patterns are created — only rewards are adjusted), walk the training set; for each image, predict
-	 * with the configured decode, and on a MISPREDICTION reinforce the correct digit via the smoothed-
-	 * reward learn() wire (correct digit reward=1, all others 0). Repeated over rounds, this pushes the
-	 * firing voters' posteriors to fix the training decision — Naive-Bayes → perceptron/logistic. Prints
-	 * per-round training accuracy so the climb toward ~100% is visible. Expect train to approach 100%;
-	 * test is the open question (overfitting risk vs. independence-violation recalibration).
-	 */
-	runErrorCorrection() {
-		const N = this.trainBits.length;
-		console.log('');
-		this.brain.setLearning(false); // adjust rewards only — do not mint new patterns this phase
-		for (let round = 1; round <= this.config.errorCorrectRounds; round++) {
-			const start = Date.now();
-			let correct = 0, corrected = 0;
-			for (let i = 0; i < N; i++) {
-				const label = this.trainLabels[i];
-				if (this.predictImage(this.trainBits[i]) === label) {
-					correct++;
-				} else {
-					this.brain.learn(this.encoder.encodeAction(label), 1);
-					corrected++;
-				}
-				this.reportProgress('err-correct', i + 1, N, { correct }, start);
-				if (this.isShuttingDown) { this.clearProgress(); return; }
-			}
-			this.clearProgress();
-			console.log(`  Error-correct round ${round}/${this.config.errorCorrectRounds}: train=${(correct / N * 100).toFixed(2)}% (${correct}/${N}) | reinforced ${corrected} | ${Date.now() - start}ms`);
-		}
 	}
 
 	/**
@@ -332,7 +291,7 @@ export default class MNISTTestJob extends Job {
 		const startTime = Date.now();
 		const tally = this.newTally();
 		for (let i = 0; i < this.trainBits.length; i++) {
-			const predicted = this.predictImage(this.trainBits[i]);
+			const predicted = this.trainImage(this.trainBits[i]);
 			this.recordPrediction(tally, this.trainLabels[i], predicted);
 			this.reportProgress('train-eval', i + 1, this.trainBits.length, tally, startTime);
 			if (this.isShuttingDown) break;
@@ -356,18 +315,17 @@ export default class MNISTTestJob extends Job {
 		// Track wall-clock so we can report img/s for this pass.
 		const startTime = Date.now();
 
-		// Choose which training samples this pass walks: a single digit's slice in split mode, or the whole set otherwise.
-		const indices = this.buildTrainIndices(digit);
-
 		// Accumulators for the per-pass training accuracy line: overall correct, per-digit correct, per-digit totals.
 		const tally = this.newTally();
 
+		// choose training samples (single digit's slice in split mode or the whole set) and process them
+		const indices = this.buildTrainIndices(digit);
 		for (let i = 0; i < indices.length; i++) {
 			const idx = indices[i];
 			const label = this.trainLabels[idx];
 
-			// Predict *before* learning so the recorded accuracy reflects what the brain knew going in.
-			const predicted = this.predictImage(this.trainBits[idx]);
+			// train on the image and record the predicted digit for it (automatic inference)
+			const predicted = this.trainImage(this.trainBits[idx]);
 			this.recordPrediction(tally, label, predicted);
 
 			// Supervised wire: every active sensory neuron is bound to every digit's action neuron at the same-frame voting slot,
@@ -375,7 +333,7 @@ export default class MNISTTestJob extends Job {
 			// makes conn.reward(V,d) converge to P(d|V) = K(V,d)/N_V — the per-voter posterior — directly in the reward field.
 			this.brain.learn(this.encoder.encodeAction(label), 1);
 
-			// Heartbeat every PROGRESS_EVERY images so long runs don't look frozen.
+			// Heartbeat every so often so that long runs don't look frozen.
 			this.reportProgress('train', i + 1, indices.length, tally, startTime);
 
 			// Honor an in-flight shutdown without leaving the brain in a half-written state.
@@ -428,7 +386,7 @@ export default class MNISTTestJob extends Job {
 	 * The brain applies the configured consensus rule ('democratic' | 'nb') internally, so the
 	 * winning digit comes straight off `inferences` — no per-vote marshalling on the hot path.
 	 */
-	predictImage(bits) {
+	trainImage(bits) {
 		this.brain.resetContext();
 		const inputs = this.encoder.encodeImage(bits);
 		const inferResult = this.brain.processFrame(inputs, EMPTY_REWARDS);

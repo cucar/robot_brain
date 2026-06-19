@@ -3,62 +3,77 @@
 This is the **canonical ordered backlog**. Top-to-bottom is execution order. Each numbered section
 is one workstream; sub-bullets are the concrete steps inside it.
 
-## Status snapshot
-
-- **Spatial processing is landed and validated.** The review dependency chain (fixes 1.1 → 2.1 →
-  2.2 in [spatial-processing-review.md](spatial-processing-review.md)) is in the `spatial` branch and
-  produced **95.73% on full MNIST** (28×28 binary, radius 2, merge 0.7, NB readout) — see
-  [mnist-spatial-experiments.md](mnist-spatial-experiments.md). The design is in
-  [spatial-processing.md](spatial-processing.md).
-- **What remains** before merge-to-main: near-term engineering cleanups, the two open review fixes
-  (1.2 snapshot restore, 1.3 temporal guard), stocks integration, and a code review. Everything after
-  the merge is optimization and research.
-- **Research stance:** runaway spatial depth is **not** clamped by design — no `MAX_LEVEL` caps. We
-  prefer to see depth stall and study it over constraining potential algorithmic breakthroughs.
-
 ---
 
-## 1. Near-term engineering
+## 1. Near-term engineering in MNIST test.js
 
 App-side and small core cleanups that should land before (or alongside) the merge. Independent of
 each other unless noted.
 
-### 1.1 Remove `--error-correct-rounds`
+### 1.1 Eval-train refactor
 
-The discriminative second phase pushed train→99% with **no test gain** (the ceiling is
-representational, not readout/training — see experiment §9). Drop the option and the
-`runErrorCorrection` path.
-
-### 1.2 Eval-train refactor
-
-- **Wire-only training by default:** `runTraining` calls `resetContext` + `processFrame` only — drop
-  the per-image `infer()` / decode / tally. Faster, and it kills the prequential per-episode number.
 - **Always run the frozen `runTrainEval()` at the end** (delete the `evalTrain` flag/config).
-- **Add opt-in `--eval-train-per-episode`** that runs a frozen pass after each episode (off by
-  default).
-- Clean up `showResults` / `logTrainingPass` that depended on the prequential per-episode accuracy.
+- **Add opt-in `--eval-train-per-episode`** that runs a frozen pass after each episode (off by default).
+
+### 1.2. Persistence / Backup / Import-Export Updates
+
+**Goal:** Make sure every persistence path round-trips d=0 connections and the new spatial_level field.
+
+Make every persistence path round-trip d=0 connections and the spatial structure.
+
+Serialization was updated for spatial but restore was not, so a save/load round-trip corrupts silently:
+
+- Spatial levels are dropped (every neuron comes back at `spatial_level = 0`) and spatial routing entries land on the temporal side. Add a spatial/temporal
+  discriminator to `SerializedChild` / `SerializedContextRef`, restore each to the proper side, and add `spatial_level` to `SnapshotNeuronEntry`. 
+- **Spatial levels are dropped.** `SnapshotNeuronEntry` carries only the temporal `level`
+  ([thalamus.rs:174-179](../brain/brain-core/src/thalamus.rs)); `get_snapshot`
+  ([thalamus.rs:1851-1871](../brain/brain-core/src/thalamus.rs)) never reads
+  `neuron_spatial_levels`, and `restore_snapshot` clears the map via `reset()`
+  ([thalamus.rs:1938](../brain/brain-core/src/thalamus.rs)) and never repopulates it. Every
+  neuron comes back at `spatial_level = 0`.
+- **Spatial routing tables land on the temporal side.** `serialize_children` and
+  `serialize_context_refs` flatten spatial and temporal entries into one undiscriminated list
+  ([neuron.rs:404-443](../brain/brain-core/src/neuron.rs); spatial contexts marked
+  `distance: 0`). `load_neuron` ([column.rs:600-645](../brain/brain-core/src/column.rs)) restores
+  through `add_child` / `add_context` / `add_context_ref` — the back-compat shims that route
+  **unconditionally to the temporal structures**
+  ([neuron.rs:944-954](../brain/brain-core/src/neuron.rs)). After restore, every spatial routing
+  entry and context ref sits in the temporal tables with d=0 contexts: spatial hierarchy gone,
+  temporal tables polluted.
+- Connections and Welford error stats *do* round-trip correctly (`create_connection` routes
+  d=0 to `spatial_connections`; `age == 0` stats route to the spatial bucket,
+  [column.rs:634-642](../brain/brain-core/src/column.rs)) — which deepens the false sense of
+  safety.
+
+**Fix:** add a spatial/temporal discriminator to `SerializedChild` and `SerializedContextRef`
+(or split them into separate fields), restore each to the proper side; add `spatial_level` to
+`SnapshotNeuronEntry`, populate in `get_snapshot`, restore into `neuron_spatial_levels`.
+Then implement the Phase 4 acceptance test from the design doc (train → snapshot → restore →
+identical next frame), which would have caught all of this.
+
+#### Code touched
+
+- `brain/brain-core/src/backup.rs` — extend `SerializedConnection` / `SerializedNeuron`:
+    - `connections[0]` distance=0 entries must round-trip. Verify the existing format iterates the full `connections` vec rather than skipping slot 0.
+    - The existing `neuron.level` field becomes the temporal intrinsic level. Add `neuron.spatial_level` alongside it. For pre-spatial-era neurons loaded from older snapshots, default `spatial_level` to 0 (they sit at the base of the spatial hierarchy because no spatial grouping built them).
+    - The per-frame `spatial_level_index` / `temporal_level_index` are not persisted — same rule as today's `level_index`.
+    - The inherited (channel, dimension, coordinate) of a correction (§4.4) needs no new snapshot field — it is derivable on restore by walking `neuron_parents` to the L0 ancestor (parent ids are already persisted). Deeper levels chain: an L2 inherits from its L1 parent, which anchors at the original L0 coordinate.
+- DB import/export apps under `apps/` — sweep for code that assumes connections start at distance 1, and for code that reads/writes the single `neuron.level` field.
+
+#### Acceptance
+
+- Round-trip test: train a brain on a few MNIST images (enough to mint d=0 corrections across multiple spatial levels), snapshot, restore, verify (a) all d=0 connections present with correct strengths, (b) all correction neurons present and routable with their spatial_level intact, (c) one more frame of training on the restored brain produces identical results as on the original.
+- DB import/export apps: run a round-trip on a stocks brain with d=0 connections; verify byte-identical export after `import → export`.
+- Backward-compat test: load a pre-spatial stocks snapshot, verify all neurons get `spatial_level = 0`, run one frame, confirm output matches what the pre-spatial code would have produced (modulo the new d=0 work, which will start forming immediately).
+
+- **Test imports / exports / backups** — implement the design's round-trip acceptance test (train →
+  snapshot → restore → identical next frame), plus the DB import/export round-trip and the
+  pre-spatial backward-compat load.
 
 ### 1.3 Fix the Ctrl+C bug
 
 Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
 fix so long jobs can be cancelled without leaving the brain half-written.
-
----
-
-## 2. Backups / imports / exports (Phase 4)
-
-Make every persistence path round-trip d=0 connections and the spatial structure.
-
-- **Fix review 1.2 — snapshot restore silently destroys spatial structure.** Serialization was
-  updated for spatial but restore was not: spatial levels are dropped (every neuron comes back at
-  `spatial_level = 0`) and spatial routing entries land on the temporal side. Add a spatial/temporal
-  discriminator to `SerializedChild` / `SerializedContextRef`, restore each to the proper side, and
-  add `spatial_level` to `SnapshotNeuronEntry`. Full detail in
-  [spatial-processing-review.md §1.2](spatial-processing-review.md) and the Phase 4 acceptance test in
-  [spatial-processing.md §6](spatial-processing.md).
-- **Test imports / exports / backups** — implement the design's round-trip acceptance test (train →
-  snapshot → restore → identical next frame), plus the DB import/export round-trip and the
-  pre-spatial backward-compat load.
 
 ---
 
