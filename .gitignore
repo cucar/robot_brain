@@ -5,3 +5,4 @@ target
 .claude
 backups/
 apps/mnist/*.log
+*.node

@@ -23,26 +23,13 @@ is one workstream; sub-bullets are the concrete steps inside it.
 App-side and small core cleanups that should land before (or alongside) the merge. Independent of
 each other unless noted.
 
-### 1.1 Stock tests (Phase 3)
-
-Validate the spatial phase on the stocks workload and keep non-spatial domains bit-identical.
-
-- **Test stocks with spatial processing** — low-level pattern building, high error threshold, only
-  group highly related stocks (so d=0 co-activation forms across genuinely correlated symbols, not
-  the whole market).
-- **Update documentation for the demos.**
-
-See [spatial-processing.md §6 Phase 3](spatial-processing.md) for acceptance criteria.
-
----
-
-### 1.2 Remove `--error-correct-rounds`
+### 1.1 Remove `--error-correct-rounds`
 
 The discriminative second phase pushed train→99% with **no test gain** (the ceiling is
 representational, not readout/training — see experiment §9). Drop the option and the
 `runErrorCorrection` path.
 
-### 1.3 Eval-train refactor
+### 1.2 Eval-train refactor
 
 - **Wire-only training by default:** `runTraining` calls `resetContext` + `processFrame` only — drop
   the per-image `infer()` / decode / tally. Faster, and it kills the prequential per-episode number.
@@ -51,16 +38,10 @@ representational, not readout/training — see experiment §9). Drop the option 
   default).
 - Clean up `showResults` / `logTrainingPass` that depended on the prequential per-episode accuracy.
 
-### 1.4 Fix the Ctrl+C bug
+### 1.3 Fix the Ctrl+C bug
 
 Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
 fix so long jobs can be cancelled without leaving the brain half-written.
-
-### 1.5 Stop committing platform binaries
-
-The branch updates `brain-napi.node` and adds a ~1.5 MB `brain-napi.win32-x64-msvc.node`. Add `*.node`
-to `.gitignore` rather than growing binaries in history. See
-[spatial-processing-review.md §4](spatial-processing-review.md).
 
 ---
 
