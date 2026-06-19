@@ -74,7 +74,7 @@ Each of these has *partial* analogs in prior work. None of the prior lineages co
 
 **What it is.** A structure-and-sequence-learning system using neural vocabulary: dendritic segments as pattern detectors that put a cell into a *predictive* state, sparse distributed representations, sequence memory.
 
-**Relationship to Robot Brain.** Shares the most *philosophy* — pattern detection over summation, prediction over classification, biological framing. Critically, even HTM implements its dendritic segments as a **thresholded coincidence count** (~15–20 active synapses). So if Robot Brain uses pure timing-coincidence with no magnitude integration, it is making a *stronger* claim than HTM. Diverges: HTM's columnar structure and SDR dimensions are largely fixed; it does not mint hierarchical depth on demand or unify spatial/temporal via distance-zero. **Cautionary precedent:** HTM has spent a decade mis-shelved as "a kind of neural net" because it borrowed biological words; the lesson is to name the paradigm divergence *before* others benchmark you on the wrong axis.
+**Relationship to Robot Brain.** Shares the most *philosophy* — pattern detection over summation, prediction over classification, biological framing. HTM's **temporal memory** algorithm is the single closest published mechanism to "x→y→z routing into a predictive state": it learns sequences online and grows dendritic segments/synapses on demand, so the distinction is not "static vs. dynamic" and should not be argued there. The real divergence is the primitive and the depth. Critically, even HTM implements its dendritic segments as a **thresholded coincidence count** (~15–20 active synapses). So if Robot Brain uses pure timing-coincidence with no magnitude integration, it is making a *stronger* claim than HTM. And HTM's columnar structure, SDR dimensions, and conceptual level are largely fixed: it grows synapses *within* a layer but does not mint hierarchical depth on demand or unify spatial/temporal via distance-zero. **Cautionary precedent:** HTM has spent a decade mis-shelved as "a kind of neural net" because it borrowed biological words; the lesson is to name the paradigm divergence *before* others benchmark you on the wrong axis.
 
 ### E. Symbolic pattern-matching: Rete & discrimination trees
 
@@ -91,6 +91,40 @@ This is the lineage that turned out to be the closest *computational* relative �
 A Rete node fires when its specific pattern (including cross-time joins) is satisfied and **routes** activation to specific successors — it does not integrate a weighted magnitude. That is the Robot Brain unit, almost exactly. The "delegation — promote the higher unit, withdraw my own vote" is a beta-node join firing and retracting the lower partial matches it subsumes.
 - *Dynamic hierarchy?* No — the network is compiled from **human-authored rules**; depth = conditions written, never discovered from data. **Exception: Soar's chunking** dynamically creates new productions from impasses — the closest symbolic precedent for demand-driven hierarchy. Cite it as precedent *and* as something you exceed: Soar chunks problem-solving traces; Robot Brain chunks perceptual/temporal sequences learned online.
 - *Multi-channel?* No analog to neighbor channels. *Spatial?* No — purely symbolic; order matters, topology does not.
+
+### F. Adaptive Resonance Theory (ART / Grossberg)
+
+**What it is.** A family of online category-learning networks (ART1/2, Fuzzy ART, ARTMAP) built explicitly to solve the **stability–plasticity dilemma** — learning new categories incrementally without overwriting old ones, and *without* a replay buffer. An input is compared against existing category templates; if the best match clears a **vigilance** threshold the template adapts toward the input ("resonance"), and if nothing matches well enough the network **recruits a new category node on demand**. Decades-old, and the canonical reference point for "incremental learning without catastrophic forgetting."
+
+**What is shared with Robot Brain.** This is the most important shared claim in the document and the one most likely to be raised first by anyone who knows the continual-learning literature: **on-demand allocation of a new discrete unit when no existing unit explains the input**, yielding online class-incremental learning without replay. Vigilance-driven node recruitment is a genuine prior instance of "mint structure on demand," with a 35-year pedigree. Robot Brain's headline regime is not novel *as a regime* — ART got there first.
+
+**Where it diverges — the carve-out.**
+1. **Flat, not hierarchical.** ART recruits categories at a **single conceptual level**; it does not form demand-driven *depth* (categories-of-categories discovered because the data required them). ARTMAP stacks two modules by hand; it does not grow levels.
+2. **No temporal sequence primitive.** ART matches a static input vector against prototypes. There is no "x→y→z with inter-event timings" — ordered temporal pattern detection is not the unit of computation. (Later variants bolt on working-memory front-ends; the core primitive remains static prototype match.)
+3. **Prototype matching, not timing-coded routing.** The primitive is vector similarity to a stored template gated by vigilance — a magnitude comparison, closer to clustering than to delay-coded path selection.
+4. **No spatial unification, no multi-channel.** No native spatial mechanism, no neighbor-channel concept; no distance-zero unification of spatial and temporal.
+
+So ART pre-empts the *"online, incremental, allocates units, no replay"* framing but not the *combination* — temporal-sequence routing + demand-driven depth + spatial unification + no magnitude integration. Lead the distinction with depth, temporality, and the timing-coded primitive, **not** with the incremental-learning regime, which ART already owns.
+
+### G. Predictive coding & active inference
+
+**What it is.** **Predictive coding** (Rao & Ballard 1999; Friston) casts perception as hierarchical prediction: each level predicts the level below, only the *prediction error* propagates up, and the system minimizes that error by adjusting representations and a generative model. **Active inference** (Friston et al.) extends the same free-energy-minimization principle to *action* — behavior is the part of error-minimization that changes the world rather than the model, and policies are selected to minimize expected free energy. There is also an active deep-learning revival framing predictive coding as a biologically plausible alternative to backpropagation.
+
+**What is shared with Robot Brain.** The governing philosophy: **prediction over classification**, hierarchical levels, prediction error as the salient learning signal (Robot Brain mints on prediction error), and — for active inference — a *single* principle spanning perception, action, and planning, which rhymes with Robot Brain's unified substrate for event inference, action inference, and prospection.
+
+**Where it diverges — the carve-out.** This is a clean, fast distinction:
+1. **Gradient over a fixed generative model.** Both predictive coding and active inference minimize a continuous objective (prediction error / free energy) by **adjusting real-valued parameters of a generative model whose structure is designed**. Robot Brain has no gradient and no continuous objective; it mints, reuses, and prunes discrete identity-bearing units.
+2. **Distributed weights, not discrete content-addressed units.** Representation is weight-borne and distributed; nothing is content-hash addressed or individually prunable.
+3. **Fixed depth.** The hierarchy of generative levels is architected, not discovered from data.
+4. **No native spatial-as-distance-zero, no structural minting.** Spatial structure, where present, is imported (convolutional generative models); there is no unit-creation-on-demand and no unified spatial/temporal primitive.
+
+Position predictive coding/active inference as **the philosophical cousin** — same prediction-first, error-driven, biologically-motivated stance — that nonetheless stays firmly on the *weights-and-gradient* side of the line Robot Brain crosses. It is the answer to "isn't this just predictive coding with extra steps?": no — shared goal, opposite mechanism (structure minting vs. error-gradient on a fixed model).
+
+### H. Self-organizing structure growth (non-spiking): Growing Neural Gas
+
+**What it is.** **Growing Neural Gas** (Fritzke 1995) and its relatives (Neural Gas, SOM, GWR) incrementally build a graph of nodes and edges to fit the topology of an input distribution: nodes are **inserted on demand** where accumulated error is high, edges are added by competitive Hebbian learning, and stale nodes/edges are removed. No gradient, no fixed node count.
+
+**Relationship to Robot Brain.** Useful precedent because it makes the same move outside both the spiking and symbolic lineages: **runtime node/edge minting and pruning with no weight tensor and no gradient** — evidence that "structure, not weights, is the unit of learning" is a recognized class, not a Robot Brain peculiarity. It is the non-spiking analog of the structure-growing-SNN wave (§2.A). Diverges on: it grows to **preserve input-space topology** (a single-level vector-quantization map), with no temporal sequence detection, no demand-driven *hierarchical depth*, no routing (nearest-node assignment, not path selection by matched order), and no spatial/temporal unification. Cite it to show structural learning has non-gradient precedent; distinguish on hierarchy, temporality, and routing.
 
 ---
 
@@ -110,16 +144,17 @@ Because the plateau-potential work is the tightest biological fit, its scope mus
 
 ## 4. Cross-cutting comparison
 
-| Dimension | Deep SNN (standard) | Structure-growing SNN (CogniSNN/MorphSNN/DEEP R) | Polychronization | HTM | Rete / discrimination tree | **Robot Brain** |
-|---|---|---|---|---|---|---|
-| Runtime structure creation | No | Yes (rewire/expand) | No (groups emerge on fixed substrate) | Limited | Tree grows on insert; Soar chunks | **Yes (mint/reuse/prune)** |
-| Hierarchy depth | Fixed by architect | Fixed conceptual level | Fixed | Largely fixed | Author-specified (Soar: dynamic) | **Demand-driven** |
-| Learning mechanism | Surrogate gradient / STDP | Gradient/eProp + rewiring | STDP + delays | Hebbian-ish thresholded | Rule compilation | **Structural minting (no gradient)** |
-| Core primitive | Integrate + threshold | Integrate + threshold | Coincidence via delays | Thresholded coincidence count | Match + route | **Match + route (timing-coded)** |
-| Multi-channel | Via designed layers | Via graph | No | Columns | No | **Neighbor channels** |
-| Spatial processing | Imported convolution | Imported convolution | No | Spatial pooler (designed) | No | **Native (distance-zero)** |
-| Online class-incremental, no replay | No | Not demonstrated | No | Partial | N/A | **Yes (headline result)** |
-| Representation | Distributed weights | Distributed weights | Distributed | SDR | Discrete symbolic | **Discrete, content-addressed** |
+| Dimension | Deep SNN (standard) | Structure-growing SNN (CogniSNN/MorphSNN/DEEP R) | Polychronization | HTM | Rete / discrimination tree | ART (Grossberg) | Predictive coding / active inference | Growing Neural Gas | **Robot Brain** |
+|---|---|---|---|---|---|---|---|---|---|
+| Runtime structure creation | No | Yes (rewire/expand) | No (groups emerge on fixed substrate) | Limited (grows synapses) | Tree grows on insert; Soar chunks | Yes (recruits category nodes) | No | Yes (insert/remove nodes) | **Yes (mint/reuse/prune)** |
+| Hierarchy depth | Fixed by architect | Fixed conceptual level | Fixed | Largely fixed | Author-specified (Soar: dynamic) | Flat (single level) | Fixed by architect | Flat (single level) | **Demand-driven** |
+| Learning mechanism | Surrogate gradient / STDP | Gradient/eProp + rewiring | STDP + delays | Hebbian-ish thresholded | Rule compilation | Vigilance match + template adapt | Gradient on free energy | Competitive Hebbian (no gradient) | **Structural minting (no gradient)** |
+| Core primitive | Integrate + threshold | Integrate + threshold | Coincidence via delays | Thresholded coincidence count | Match + route | Prototype match (vigilance) | Predict + minimize error | Nearest-node assignment | **Match + route (timing-coded)** |
+| Multi-channel | Via designed layers | Via graph | No | Columns | No | No | No | No | **Neighbor channels** |
+| Spatial processing | Imported convolution | Imported convolution | No | Spatial pooler (designed) | No | No | Imported (conv generative model) | Topology-preserving (no order) | **Native (distance-zero)** |
+| Temporal sequence primitive | Activity over fixed graph | Activity over graph | Timing relationships | Yes (temporal memory) | Order = path | No (static vector) | Via dynamics, designed | No | **Yes (ordered, timed)** |
+| Online class-incremental, no replay | No | Not demonstrated | No | Partial | N/A | Yes (by design) | No | Partial | **Yes (headline result)** |
+| Representation | Distributed weights | Distributed weights | Distributed | SDR | Discrete symbolic | Prototype templates | Distributed weights | Node/edge graph | **Discrete, content-addressed** |
 
 ---
 
@@ -129,7 +164,7 @@ No single prior lineage holds the combination. The defensible positioning is **n
 
 > An **online structure-learning architecture with spike-timed, sequence-coded representations** — computationally descended from symbolic pattern-matching (Rete / discrimination-tree lineage), made biologically plausible by the dendritic-sequence-detection and polychronization literatures, and distinguished from SNNs precisely by **minting structure instead of training weights**, forming **hierarchy depth on demand**, and unifying **spatial processing as the distance-zero case** of sequence detection.
 
-This sits in the gap between symbolic production systems (which don't learn online or degrade gracefully) and SNNs (which use timing but still threshold-integrate over a fixed graph). The eval that follows from this framing is forgetting curves and capacity-over-time — where the class-incremental-without-replay result differentiates — not accuracy-per-energy, where a trained SNN wins and the comparison is meaningless.
+This sits in the gap between symbolic production systems (which don't learn online or degrade gracefully), SNNs (which use timing but still threshold-integrate over a fixed graph), and the online-allocation learners — ART and Growing Neural Gas — that mint units on demand but stay **flat, atemporal, and routing-free** (single-level prototype/topology fitting, no ordered-timing primitive, no demand-driven depth). The class-incremental-without-replay regime is therefore *shared with ART*, not owned by Robot Brain — so it is the wrong axis to lead the novelty claim on, just as accuracy-per-energy is the wrong axis against SNNs. What differentiates is the *combination*: ordered-timing routing + demand-driven hierarchical depth + spatial-as-distance-zero, all without gradient. The eval that follows is forgetting curves and capacity-over-time on **deep, temporally-structured** tasks where flat prototype learners and fixed-depth SNNs both fail — not accuracy-per-energy, and not flat class-incremental benchmarks that ART already handles.
 
 ---
 
@@ -139,6 +174,8 @@ This sits in the gap between symbolic production systems (which don't learn onli
 2. **The no-summation / pure-timing claim.** Stronger than even HTM. The standard objection is noise robustness — integration is how biology tolerates unreliable synapses and jitter. The answer must be graceful degradation under partial/jittered sequences; lean on Somashekar/Bhalla/Naud (2025) and the metaplasticity result as evidence the biological version *can* be made noise-tolerant. This is the load-bearing empirical question.
 3. **Single-neuron multi-output routing.** Biology does not route distinct sequences to distinct axonal outputs in one cell. Frame as a learned approximation of a plateau-detector microcircuit (see §3), not as biological fact.
 4. **Soar chunking as prior art for demand-driven hierarchy.** Acknowledge it; distinguish on domain (perceptual/temporal sequences learned online vs. problem-solving impasse traces) and on the spatial/temporal unification it lacks.
+5. **ART / Grossberg as prior art for the headline regime (peer to the CogniSNN risk).** ART has done *online, incremental, allocate-a-unit-on-demand, no-replay* learning for decades. Do **not** lead with the continual-learning regime as the novelty — ART owns it. Name ART before a reviewer does, and distinguish on demand-driven *depth* (ART is flat), the temporal-sequence primitive (ART matches static vectors), the timing-coded routing primitive (ART does prototype/vigilance matching), and spatial unification. The defensible claim is the *combination*, not the regime.
+6. **"Isn't this just predictive coding / active inference?"** Shared philosophy (prediction-first, error-driven, hierarchical, one principle across perception and action) invites collapsing Robot Brain into the free-energy lineage. The answer is mechanism, not goal: predictive coding minimizes a continuous objective by gradient over a fixed-structure generative model with distributed weights; Robot Brain mints discrete content-addressed units with no gradient and grows depth from data. Same target, opposite machinery.
 
 ---
 
