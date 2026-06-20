@@ -19,7 +19,7 @@ import getMySQLConnection from './database.js';
 const TABLES = [
 	{ file: 'channels.csv',     table: 'channels',     columns: '(id, name)' },
 	{ file: 'dimensions.csv',   table: 'dimensions',   columns: '(id, name)' },
-	{ file: 'neurons.csv',      table: 'neurons',      columns: '(id, level)' },
+	{ file: 'neurons.csv',      table: 'neurons',      columns: '(id, temporal_level, spatial_level)' },
 	{ file: 'base_neurons.csv', table: 'base_neurons', columns: '(neuron_id, channel_id, type, dimension_id, val)' },
 	{ file: 'connections.csv',  table: 'connections',  columns: '(from_neuron_id, to_neuron_id, distance, strength, reward)' },
 	{ file: 'patterns.csv',     table: 'patterns',     columns: '(pattern_neuron_id, parent_neuron_id, strength)' },

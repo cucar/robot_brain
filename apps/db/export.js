@@ -24,7 +24,7 @@ import getMySQLConnection from './database.js';
 const TABLES = [
 	{ file: 'channels.csv',     query: 'SELECT id, name FROM channels ORDER BY id' },
 	{ file: 'dimensions.csv',   query: 'SELECT id, name FROM dimensions ORDER BY id' },
-	{ file: 'neurons.csv',      query: 'SELECT id, level FROM neurons ORDER BY id' },
+	{ file: 'neurons.csv',      query: 'SELECT id, temporal_level, spatial_level FROM neurons ORDER BY id' },
 	{ file: 'base_neurons.csv', query: 'SELECT neuron_id, channel_id, type, dimension_id, val FROM base_neurons ORDER BY neuron_id' },
 	{ file: 'connections.csv',  query: 'SELECT from_neuron_id, to_neuron_id, distance, strength, reward FROM connections' },
 	{ file: 'patterns.csv',     query: 'SELECT pattern_neuron_id, parent_neuron_id, strength FROM patterns' },

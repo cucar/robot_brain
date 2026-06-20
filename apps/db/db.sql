@@ -29,12 +29,18 @@ CREATE TABLE IF NOT EXISTS dimensions (
 );
 
 -- neurons table is the core representation of concepts - auto increment
--- level is an intrinsic property: base neurons are level 0, pattern neurons are level 1+
+-- A neuron occupies independent positions in two hierarchies:
+--   temporal_level: 0 = base/sensory, 1+ = temporal pattern (sequence-based)
+--   spatial_level:  0 = base/sensory, 1+ = spatial correction (d=0 co-activation based)
+-- Spatial corrections sit at temporal_level 0 but spatial_level 1+, so both are needed to
+-- reconstruct them on load — dropping spatial_level collapses the spatial hierarchy.
 -- DROP TABLE IF EXISTS neurons;
 CREATE TABLE IF NOT EXISTS neurons (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    level TINYINT UNSIGNED NOT NULL DEFAULT 0,
-    INDEX idx_level (level)
+    temporal_level TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    spatial_level TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    INDEX idx_temporal_level (temporal_level),
+    INDEX idx_spatial_level (spatial_level)
 );
 
 -- base neuron attributes (level=0 neurons)
@@ -49,7 +55,8 @@ CREATE TABLE base_neurons (
     INDEX idx_dim_val (dimension_id, val)
 );
 
--- connections between base-level neurons (level=0 to level=0)
+-- directed connections between neurons. distance 0 = spatial (d=0 co-activation) links,
+-- distance >= 1 = temporal (sequence) links; both spatial corrections and base neurons can be endpoints.
 -- DROP TABLE IF EXISTS connections;
 CREATE TABLE IF NOT EXISTS connections (
     from_neuron_id BIGINT UNSIGNED,
