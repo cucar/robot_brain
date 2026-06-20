@@ -180,7 +180,7 @@ Retention matrix  T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
 The full 28×28 / radius-2 / full-data result:
 
 ```
-Retention matrix          T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
+Retention matrix  T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
   after T0        99.9%     0.0%     0.0%     0.0%     0.0%
   after T1        99.0%    98.6%     0.0%     0.0%     0.0%
   after T2        98.9%    97.5%    99.0%     0.0%     0.0%
