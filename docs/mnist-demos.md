@@ -177,13 +177,29 @@ Retention matrix  T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
   Average forgetting: 6.52pp   (naive backprop floor ≈ ~20% avg acc)
 ```
 
+The full 28×28 / radius-2 / full-data result:
+
+```
+Retention matrix          T0(01)   T1(23)   T2(45)   T3(67)   T4(89)
+  after T0        99.9%     0.0%     0.0%     0.0%     0.0%
+  after T1        99.0%    98.6%     0.0%     0.0%     0.0%
+  after T2        98.9%    97.5%    99.0%     0.0%     0.0%
+  after T3        98.4%    96.5%    98.5%    96.7%     0.0%
+  after T4        98.1%    95.0%    97.2%    95.5%    95.0%
+
+  Average accuracy after Task 4 (headline): 96.15%
+  Forgetting per task (max-ever − final): T0:1.8pp T1:3.7pp T2:1.8pp T3:1.2pp T4:0.0pp
+  Average forgetting: 1.69pp  (naive backprop floor ≈ ~20% avg acc / heavy forgetting)
+```
+
 The behavior is textbook well-behaved class-incremental learning:
 
 - **Upper triangle is 0%** — the model never predicts a class it has not yet been trained on (10-way
   action space, but no wiring to unseen digits). No task-ID cheating.
-- **Graceful, recency-biased degradation** — task 0 drifts from 99.8% down as later tasks arrive, rather
-  than collapsing. Average forgetting is single-digit percentage points.
-- **Far above the ~20% floor** where naive backprop lands in this regime.
+- **Negligible forgetting** — 1.69pp average across tasks; task 0 drifts from 99.9% to 98.1% after
+  four more tasks arrive, rather than collapsing.
+- **96.15% average** — far above the ~20% floor where naive backprop lands in this regime, and
+  competitive with replay-based methods that store and replay old examples.
 
 **Literature baselines:** naive backprop ~20%, EWC / regularization methods
 ~20–25%, replay-based methods 70–90% (but they store and replay old examples), joint-training upper
@@ -194,9 +210,6 @@ bound ~98%. Citations: van de Ven & Tolias 2019; Hsu et al. 2018.
 stability; the hierarchy gives accuracy. (The honest caveat for a paper: additive/instance-based learners
 sidestep catastrophic forgetting partly by construction, so the result should be baselined against k-NN
 and replay methods — not only against the naive-MLP collapse.)
-
-> The full 28×28 / radius-2 / full-data Split-MNIST headline number is produced by the command above and
-> slots in here.
 
 ---
 
