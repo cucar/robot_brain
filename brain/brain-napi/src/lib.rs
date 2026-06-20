@@ -431,47 +431,6 @@ impl JsBrain {
         Ok(self.inner.borrow().spatial_level_counts())
     }
 
-    /// Diagnostic: size of the most recent frame's apex set.
-    #[napi(js_name = "lastApexSize")]
-    pub fn last_apex_size(&self) -> Result<u32> {
-        Ok(self.inner.borrow().last_apex_size() as u32)
-    }
-
-    /// Diagnostic: size of get_active_voter_ids (temporal voter set the OLD learn path used).
-    #[napi(js_name = "activeVoterIdsSize")]
-    pub fn active_voter_ids_size(&self) -> Result<u32> {
-        Ok(self.inner.borrow().active_voter_ids_size() as u32)
-    }
-
-    /// Diagnostic: the spatial error rates from the most recent processFrame's mint pass.
-    /// Returns an array of {neuronId, errorRate} objects. Used for tuning thresholds by
-    /// characterizing the natural distribution of spatial error rates.
-    #[napi(js_name = "lastFrameSpatialErrorRates")]
-    pub fn last_frame_spatial_error_rates(&self, env: Env) -> Result<JsObject> {
-        let inner = self.inner.borrow();
-        let rates = inner.last_frame_spatial_error_rates();
-        let mut arr = env.create_array_with_length(rates.len())?;
-        for (i, (nid, rate)) in rates.iter().enumerate() {
-            let mut obj = env.create_object()?;
-            obj.set_named_property("neuronId", env.create_uint32(*nid as u32)?)?;
-            obj.set_named_property("errorRate", env.create_double(*rate)?)?;
-            arr.set_element(i as u32, obj)?;
-        }
-        Ok(arr)
-    }
-
-    /// Diagnostic: (apex_only_count, voters_only_count) — set difference between the apex set and
-    /// the temporal voter set. (0, 0) means identical sets.
-    #[napi(js_name = "apexVsVoterSetDiff")]
-    pub fn apex_vs_voter_set_diff(&self, env: Env) -> Result<JsObject> {
-        let (a, v) = self.inner.borrow().apex_vs_voter_set_diff();
-        let mut obj = env.create_object()?;
-        obj.set_named_property("apexOnly", env.create_uint32(a as u32)?)?;
-        obj.set_named_property("votersOnly", env.create_uint32(v as u32)?)?;
-        Ok(obj)
-    }
-
-
     /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
     /// This is the set a channel may co-fire with in the same frame to form a spatial pattern.
     /// Names not in the registry are silently ignored; an empty list shrinks the spatial

@@ -100,21 +100,6 @@ export declare class Brain {
    * Length tells you the maximum spatial level reached.
    */
   spatialLevelCounts(): Array<number>
-  /** Diagnostic: size of the most recent frame's apex set. */
-  lastApexSize(): number
-  /** Diagnostic: size of get_active_voter_ids (temporal voter set the OLD learn path used). */
-  activeVoterIdsSize(): number
-  /**
-   * Diagnostic: the spatial error rates from the most recent processFrame's mint pass.
-   * Returns an array of {neuronId, errorRate} objects. Used for tuning thresholds by
-   * characterizing the natural distribution of spatial error rates.
-   */
-  lastFrameSpatialErrorRates(): object
-  /**
-   * Diagnostic: (apex_only_count, voters_only_count) — set difference between the apex set and
-   * the temporal voter set. (0, 0) means identical sets.
-   */
-  apexVsVoterSetDiff(): object
   /**
    * Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
    * This is the set a channel may co-fire with in the same frame to form a spatial pattern.
