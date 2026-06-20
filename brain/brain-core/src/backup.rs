@@ -217,8 +217,8 @@ impl Backup {
 
                 let parent = neurons.get_mut(&parent_id)
                     .ok_or_else(|| format!("Pattern parent not found: {}", parent_id))?;
-                // A spatial pattern neuron (spatial_level >= 1) restores as a spatial child of its
-                // parent; a temporal pattern (spatial_level 0, temporal level >= 1) as a temporal child.
+                // A spatial pattern neuron (spatial_level >= 1) restores as a spatial child of its parent;
+                // a temporal pattern (spatial_level 0, temporal level >= 1) as a temporal child.
                 let spatial = spatial_levels.get(&pattern_id).copied().unwrap_or(0) != 0;
                 let child_idx = parent.children.len();
                 parent.children.push(SerializedChild {

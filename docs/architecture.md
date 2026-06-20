@@ -2,7 +2,9 @@
 
 ## Overview
 
-This document describes the architecture of an artificial intelligence system that learns cause and effect through prediction and error correction. The brain is fundamentally a **prediction machine** - every neuron and pattern exists to predict what comes next.
+This document describes the architecture of an artificial intelligence system that learns cause and effect through prediction and error correction. The brain is fundamentally a **prediction machine** - every neuron and pattern exists to predict what fires alongside it (in space) and what comes next (in time).
+
+Processing is **spatio-temporal**. Each frame runs two sweeps over the active neurons: a **spatial** sweep over inputs that co-fire in the same frame (connection distance 0 — e.g. neighboring pixels, co-moving stocks), and a **temporal** sweep over sequences across frames (distance ≥ 1). Each sweep builds its own hierarchy of correction patterns; the non-subsumed apex of the spatial sweep is handed off into the temporal sweep, so spatial features become tokens the temporal layer sequences over.
 
 ## Core Principles
 
@@ -23,8 +25,8 @@ Events predict events. Events predict actions. Patterns of events predict patter
 ### 5. Distributed Cognition via Voting
 There's no central controller. Every active neuron and pattern contributes its vote. Intelligence emerges from consensus, weighted by level and temporal proximity.
 
-### 6. Time is Structural
-Temporal distance is built into connections. The frame-by-frame processing and distance-based decay make time a first-class citizen, not an afterthought.
+### 6. Space and Time are Structural
+Distance is built into every connection. **Distance 0 is spatial** — neurons that co-activate within the same frame (e.g. neighboring pixels). **Distance ≥ 1 is temporal** — neurons that follow one another across frames. Each frame the brain runs a spatial sweep (d=0 co-activation) and a temporal sweep (d>0 sequences), each maintaining its own hierarchy of correction patterns, with the spatial apex handed off into the temporal sweep. Space and time are first-class citizens, not afterthoughts.
 
 ---
 
@@ -268,7 +270,7 @@ flowchart TD
     B --> C["3. cleanup_dead_patterns()<br/>Reap neurons scheduled to die"]
     C --> D["4. age_context()<br/>Slide the temporal window"]
     D --> E["5. activate_neurons()<br/>Push new neurons into age 0"]
-    E --> F["6. process_levels()<br/>For each level: recognize patterns,<br/>learn connections, create error corrections,<br/>collect votes"]
+    E --> F["6. process_levels()<br/>Spatial sweep (d=0): recognize co-active patterns,<br/>build spatial hierarchy, hand apex to temporal;<br/>Temporal sweep (d≥1): recognize sequences,<br/>learn connections, create corrections, collect votes"]
     F --> G["7. apply_level_results()<br/>Flush deferred neuron creation<br/>and context ref updates"]
     G --> H["8. infer_neurons()<br/>Voting consensus →<br/>scalar-space inference output"]
     H --> A
@@ -326,32 +328,45 @@ for (neuronId of frameNeuronIds) {
 diagnostics.trackInferencePerformance(...)
 ```
 
-### 6. process_levels()
-**Purpose**: Level-by-level dispatch — this is the main learning step
+### 6. process_levels() — the spatio-temporal sweep
+**Purpose**: The main learning step. The frame is processed in **two sweeps**, each walking its own
+hierarchy level by level, dispatched to Region → Column (parallel via Rayon). They share the same
+per-level machinery and differ only in the connection distance they operate on.
 
-For each level, dispatches work to Region → Column (parallel via Rayon). Each column, for each of its active neurons at this level:
+**Spatial sweep (distance 0 — co-activation).** Over the inputs that fired this frame, finds which
+neurons co-activate *together*, matches spatial patterns, and mints spatial corrections when the
+co-activation prediction errs. The non-subsumed survivors form the **apex set**, which is handed off
+into the temporal sweep — so a recognized spatial feature enters the temporal layer as one token rather
+than its raw constituents.
 
-- **Recognizes patterns**: matches child patterns against observed context
-- **Learns connections**: strengthens co-occurrence links to new sensory neurons
-- **Creates error corrections**: when prediction error exceeds threshold, creates a new pattern
+**Temporal sweep (distance ≥ 1 — sequence).** Over the apex set (plus carried-forward actions), walks
+levels bottom-up. Each active neuron at a level:
+
+- **Recognizes patterns**: matches child patterns against the observed context
+- **Learns connections**: strengthens co-occurrence links across frames
+- **Creates error corrections**: when prediction error exceeds threshold, mints a new temporal pattern
 - **Collects votes**: each neuron votes on what it predicts next
 
 ```javascript
+// --- Spatial sweep: distance-0 co-activation ---
+spatial = process_spatial(frameEvents)        // match spatial patterns, mint d=0 corrections
+apex    = spatial.fired \ spatial.subsumed    // non-subsumed survivors
+memory.handoffToTemporal(apex)                // spatial features become temporal tokens
+
+// --- Temporal sweep: distance ≥ 1 sequences ---
 level = 0
 while (level <= maxActiveLevel) {
-  levelNeurons = memory.getLevelNeurons(level)
-
-  // Dispatched to columns in parallel — each column processes its owned neurons
-  result = thalamus.processLevel(level, levelNeurons, sensoryNeurons, rewards, ...)
-
-  // Activate matched patterns and new error patterns at level+1
+  levelNeurons = memory.getTemporalLevelNeurons(level)
+  result = thalamus.processTemporalLevel(level, levelNeurons, sensoryNeurons, rewards, ...)
   for (activation of result.activations) {
     memory.activatePattern(activation.patternId, level + 1, activation.parentId, activation.age)
   }
-
   level++
 }
 ```
+
+Each sweep maintains an independent hierarchy: a neuron has a `spatial_level` and a `temporal_level`,
+which advance independently as corrections are minted on each axis.
 
 ### 7. apply_level_results()
 **Purpose**: Flush deferred neuron creation and context reference updates in one batch

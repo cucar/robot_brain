@@ -5,12 +5,7 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ---
 
-## 1. Near-term engineering in MNIST test.js
-
-App-side and small core cleanups that should land before (or alongside) the merge. Independent of
-each other unless noted.
-
-### 1.1 Fix the Ctrl+C bug
+### 1. Fix the Ctrl+C bug in MNIST test.js
 
 Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
 fix so long jobs can be cancelled without leaving the brain half-written.
@@ -24,66 +19,33 @@ fix so long jobs can be cancelled without leaving the brain half-written.
 
 ---
 
-## 3. Optimize MNIST
+## 3. Split-MNIST MLP baseline
 
-Push past the 95.73% capstone and produce the publishable ablations. Full experiment log and the
-detailed step list live in [mnist-spatial-experiments.md](mnist-spatial-experiments.md).
-
-- **Update the experiments document** — update tests with current results.
-- **Radius 3 at 28×28** — the radius-2 optimum was tuned at lower res; check radius 3 at full res.
-- **Error / merge threshold re-tune at 28×28 (radius 2/3)** — sweep the paired corners
-  **0.1 / 0.9, 0.2 / 0.8, 0.3 / 0.7** and re-pick.
-  - Anchor: `node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 3 --error-mode static --error-threshold 0.1 --merge-threshold 0.9`
-- **Literature-standard Split-MNIST** — the continual-learning headline. Details below.
-
-### Context: the Naive-Bayes ladder
-
-The sensory-only app is Naive Bayes by construction; the architecture must clear it *with a different
-mechanism* (no backprop, no labels, demand-driven conjunctive features) for the result to mean
-anything. Reference rungs on identical preprocessing:
-
-- **Naive Bayes (independent pixels): ~83–84%** — the floor and the "did we just reimplement NB?"
-  check.
-- **Logistic regression / linear classifier: ~92%** — pixel-based but jointly weighted.
-- **k-NN: ~97%** — pure template matching.
-- **Simple MLP / small CNN: 98–99%+** — the gradient-trained ceiling, not the target.
-
-The interesting result is **matching or beating the jointly-trained linear model (~92%) without joint
-training, labels, or backprop**. The 95.73% capstone clears that rung and approaches k-NN — the climb
-came mechanism by mechanism (spatial hierarchy +13pp over pixel-NB, NB readout +5pp over consensus,
-radius 2 the unlock).
-
-### Literature-standard Split-MNIST (class-incremental continual learning)
-
-The **headline experiment for external positioning** — class-incremental, the hardest CL regime,
-where naive backprop nets collapse to ~20%.
-
-- **Use the standard 5 tasks × 2 classes** (0/1, 2/3, 4/5, 6/7, 8/9), citing van de Ven & Tolias 2019
-  and Hsu et al. 2018 — **not** the current 10 tasks × 1 class. This makes our ~90–91% line up
-  apples-to-apples against the cited floor.
-- **No task IDs at train or test time.** Strict sequential training, one task's data at a time. Action
-  space stays 10 digits throughout.
-- **MLP class-incremental baseline:** a vanilla MLP trained under the *identical* split protocol
-  (digits sequentially, test on all 10), expected to collapse to ~20%. ~30-line Python script,
-  separate from the brain. This turns "we don't forget" into "we don't forget *where standard nets
-  catastrophically do*" — the punch line.
-- **Re-run our stack on the standard 5×2** at the new optimum (28×28, radius 2, merge 0.7, NB, full
-  train, full 10K test) for the headline split number to sit beside the 95.73% joint.
-
-**Why it should hold architecturally:** patterns formed for digits 0/1 have disjoint context
-fingerprints from 2/3, so they don't fire — and aren't modified — during later tasks. Higher-level
-patterns decay slower than lower ones, so consolidated digit patterns outlive subsequent tasks. The
-empirical finding so far is *graceful, recency-biased degradation* (the earliest class's shared voters
-get overwritten), not zero forgetting — still far above the ~20% backprop floor. Additive/local
-learning gives stability; the hierarchy gives accuracy.
-
-**Evaluation:** final 5×5 retention matrix, average accuracy after Task 5 (headline), and a forgetting
-metric (max-ever minus final per task). Cite the literature baselines (~20% naive, ~20–25% EWC,
-70–90% replay, ~98% joint upper bound) rather than re-running them.
+A vanilla MLP trained under the *identical* class-incremental protocol — the 5 tasks x 2 classes,
+strictly sequential, tested on all 10 classes, no task IDs — expected to collapse to ~20%. A ~30-line
+Python script, separate from the brain. This is the contrast figure for the Split-MNIST result in
+[mnist-demos.md](mnist-demos.md): it turns "we don't forget" into "we don't forget *where standard
+nets catastrophically do*." Pair it with the cited literature baselines (in mnist-demos.md), not the
+naive-MLP collapse alone.
 
 ---
 
-## 4. Temporal channel inheritance experiment
+## 4. Optimize MNIST
+
+Push past the 96.44% joint result. Current best results and runnable demos live in
+[mnist-demos.md](mnist-demos.md). Three tests remain:
+
+- **Radius 3 at 28×28** (error 0.1 / merge 0.9) — if it beats radius 2, re-run the two tests below at
+  radius 3 instead of radius 2.
+- **Error 0.2 / merge 0.8.**
+- **Error 0.3 / merge 0.7.**
+
+Each is one train + frozen-eval pair (the train -> evaluate workflow in mnist-demos.md); episodes
+plateau after one pass, so a single episode suffices.
+
+---
+
+## 5. Temporal channel inheritance experiment
 
 Fix 2.2 gave *spatial* corrections their parent's full (channel, dimension, coordinate). Open
 question: **should temporal corrections inherit channels the same way?** Symmetry argues yes, but
@@ -92,7 +54,7 @@ stocks. Tracked in [spatial-processing.md §8](spatial-processing.md).
 
 ---
 
-## 5. Inference Level Experiment
+## 6. Inference Level Experiment
 
 See **[inference-level.md](./inference-level.md)**.
 
@@ -106,7 +68,7 @@ The decision propagates into spatial processing.
 
 ---
 
-## 6. Neuron Re-use
+## 7. Neuron Re-use
 
 See **[neuron-reuse.md](./neuron-reuse.md)**.
 
@@ -118,7 +80,7 @@ Allocates capacity onto the error manifold (residual-fitting). **Scope is reduce
 
 ---
 
-## 7. Re-introduce context refinement
+## 8. Re-introduce context refinement
 
 Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
 common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
@@ -140,13 +102,13 @@ If the headline numbers land here:
 
 ---
 
-## 8. Calculate up/down accuracy separately
+## 9. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 9. Neuron Limits
+## 10. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -164,7 +126,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 10. Exponential Temporal Binning Test
+## 11. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).
@@ -183,7 +145,7 @@ explosion.
 
 ---
 
-## 11. Documentation & Publish
+## 12. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update
   README demos and examples.
