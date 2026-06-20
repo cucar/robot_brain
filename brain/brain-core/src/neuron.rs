@@ -423,6 +423,7 @@ impl Neuron {
         for (&pattern_id, entry) in &self.spatial_routing_table {
             result.push(SerializedChild {
                 pattern_id,
+                spatial: true,
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
@@ -431,6 +432,7 @@ impl Neuron {
         for (&pattern_id, entry) in &self.temporal_routing_table {
             result.push(SerializedChild {
                 pattern_id,
+                spatial: false,
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
@@ -447,12 +449,14 @@ impl Neuron {
         for &parent_id in &self.spatial_context_refs {
             result.push(SerializedContextRef {
                 parent_id,
+                spatial: true,
                 distances: vec![0],
             });
         }
         for (&parent_id, distances) in &self.temporal_context_refs {
             result.push(SerializedContextRef {
                 parent_id,
+                spatial: false,
                 distances: distances.iter().copied().collect(),
             });
         }
@@ -927,6 +931,11 @@ impl Neuron {
     /// Mutable access to the temporal routing table (for Column restore — sets last_activation_frame).
     pub fn get_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, TemporalRoutingEntry> {
         &mut self.temporal_routing_table
+    }
+
+    /// Mutable access to the spatial routing table (for Column restore — sets last_activation_frame).
+    pub fn get_spatial_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, SpatialRoutingEntry> {
+        &mut self.spatial_routing_table
     }
 
 
@@ -1594,6 +1603,10 @@ pub struct SerializedConnection {
 #[derive(Debug, Clone)]
 pub struct SerializedChild {
     pub pattern_id: NeuronId,
+    /// true = spatial routing entry (d=0 co-activation), false = temporal routing entry (d>0 sequence).
+    /// Restore needs this discriminator because an empty-context spatial child is otherwise
+    /// indistinguishable from a temporal one, and the back-compat shims route unconditionally to temporal.
+    pub spatial: bool,
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
     pub context: Vec<ContextEntry>,
@@ -1602,6 +1615,8 @@ pub struct SerializedChild {
 #[derive(Debug, Clone)]
 pub struct SerializedContextRef {
     pub parent_id: NeuronId,
+    /// true = spatial context ref (distances is the placeholder [0]), false = temporal.
+    pub spatial: bool,
     pub distances: Vec<Distance>,
 }
 

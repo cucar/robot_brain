@@ -40,13 +40,13 @@ export declare class Brain {
   processFrame(inputs: object, rewards: object): object
   /**
    * Get active neurons in context with their levels.
-   * Returns an array of { neuronId, level, suppressed } objects.
+   * Returns an array of { neuronId, temporalLevel, suppressed } objects.
    * suppressed=true means the neuron activated a higher-level pattern and
    * should not be counted as an independent voter.
    */
   getActiveNeurons(): object
   /**
-   * Inspect one neuron: returns { neuronId, level, parentId | null,
+   * Inspect one neuron: returns { neuronId, temporalLevel, parentId | null,
    * context: [{ neuronId, distance, strength }, ...] }.
    * Context entries come from the parent neuron's routing-table entry
    * for this child pattern. Level-0 sensory neurons have parent_id=null

@@ -320,57 +320,63 @@ node apps/mnist/jobs/download.js
 
 This fetches the four standard IDX files (60k training, 10k test, gzipped) from Google's MNIST mirror. The job skips files that already exist, so it's safe to re-run.
 
-Then run the MNIST test:
+Training and evaluation are separate runs. First **train** and save the brain; the saved backup carries
+its own hyperparameters, so evaluation just loads it and turns learning off — no need to repeat the
+training flags. Evaluation is a true frozen pass: `--disable-learning` stops all weight updates and
+correction minting, and each test image is classified independently (no test-set adaptation, no leakage).
+
+**1. Train** (one episode over the class-balanced set), saving the brain under a label:
 
 ```bash
-node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 1 --error-mode static --error-threshold 0.1 --merge-threshold 0.9
+node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 \
+  --episodes 1 --error-mode static --error-threshold 0.1 --merge-threshold 0.9 --save-brain mnist28
 ```
 
-**Expected output:**
+**2. Evaluate on the held-out test set** (load the brain, freeze it):
+
+```bash
+node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 \
+  --max-test-images 0 --load-brain mnist28 --disable-learning --test-data
 ```
+
+Drop `--test-data` to evaluate on the training set instead. (At 28×28 radius 2 the training pass is
+heavy — roughly an hour and a half on a laptop, ~2.1M correction neurons. For a fast ~5-minute smoke
+test, use `--image-size 14` and drop `--radius` to fall back to the default radius 1, which lands
+around 94.9% held-out.)
+
+**Expected output of the evaluation run:**
+```
+🧩 Restored brain config from backup 'mnist28': errorCorrectionMode=static, errorCorrectionThreshold=0.1, mergeThreshold=0.9
 MNIST — sensory-only (Naive Bayes) baseline
-  Image size: 14×14 (196 channels)
+  Image size: 28×28 (784 channels)
   Buckets: 2 (Phase A — binary)
-  Context length: 1
-  Forget rate: 0
   Consensus: nb
-  Episodes: 1
-  Training: balanced,
-  Test images: all
+  Dataset: test (held-out)
+  Learning: OFF (frozen — evaluation)
 
-  Balanced training set built: 5421 per class × 10 = 54210 total
-  Episode 1/1: train=92.85% (50332/54210) | 130 img/s 418150ms | 0:96% 1:98% 2:93% 3:93% 4:92% 5:86% 6:96% 7:94% 8:89% 9:91%
-    ↳ spatial: depth=1 | L1:31834 | 31834 active, 31834 minted cum | 32202 neurons
-
-  Test: 94.88% (9488/10000) 51638ms | 0:98% 1:98% 2:94% 3:95% 4:95% 5:94% 6:96% 7:92% 8:93% 9:93%
+  Episode 1/1: eval(test)=96.26% (9626/10000) | 0:96% 1:99% 2:93% 3:94% 4:95% 5:86% 6:96% 7:95% 8:87% 9:91%
 
 Results
 ======================================================================
-  Episode 1: train=92.85% (418150ms)
-
-  Spatial hierarchy (after each episode):
-    Episode 1: depth=1 | L1:31834 | 31834 active, 31834 minted cum | 32202 neurons
-  Test:     94.88% (9488/10000)
-
+  Final pass: 96.26% (9626/10000)
   Confusion (rows = actual, cols = predicted):
            0    1    2    3    4    5    6    7    8    9
-   0     960    0    0    1    0    5    6    1    7    0
-   1       0 1116    3    3    0    0    5    0    8    0
-   2      10    1  971    7    7    1    2    8   24    1
-   3       1    0   11  955    0   15    0   12   11    5
-   4       0    2    2    0  935    0   10    0    3   30
-   5       5    3    0   20    1  840    8    2    8    5
-   6       7    4    1    0    4   16  919    0    7    0
-   7       1   17   17    2    5    0    0  944    7   35
-   8      11    0    3   16    5    8    5    6  910   10
-   9      10    7    2    7   18    6    0   10   11  938
+   0     963    0    1    1    0    3    7    1    4    0
+   1       0 1122    3    3    0    0    5    0    2    0
+   2       8    0  983    4    6    0    2    8   20    1
+   3       1    0    9  966    0    8    1   12    9    4
+   4       0    1    3    0  963    0    5    0    3    7
+   5       3    2    2    8    0  865    9    0    1    2
+   6       7    4    0    0    4   12  928    0    3    0
+   7       1   11   15    1    6    2    0  970    2   20
+   8      10    0    7   14    4    3    1    5  921    9
+   9      12    8    2   10   11    4    0   10    7  945
 ======================================================================
-
-⏱️  Total Execution Time: 7m 50s
 ```
 
-94.88% test accuracy from a single training pass. The confusion matrix errors are digits whose pixel-level marginals overlap heavily. 
-Class-balanced training is helps here - when trained on full data, the result is 94.56%.
+**96.26% on the held-out test set** from a single training pass — a frozen, leakage-free evaluation
+(no learning, no minting, each image classified on its own). The spatial hierarchy reaches depth 3 at
+radius 2. Remaining confusion is between digits whose pixel marginals overlap (4/9, 7/9, 3/5).
 
 ### Downloading Fresh Stock Data
 

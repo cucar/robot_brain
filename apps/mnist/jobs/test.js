@@ -15,10 +15,20 @@ const PROGRESS_EVERY = 100;
  * Sensory-only MNIST app — the Naive Bayes baseline described in docs/mnist-merge.md.
  *
  * One channel per pixel position (retinotopic), all firing concurrently in a single frame per image.
- * Training: processFrame(image) populates sensory activations, then learn(actions, 1) wires every active
- *   sensory neuron to every digit action neuron with reward=1 on the correct digit and reward=0 on the rest.
- *   The smoothed-reward update on each connection converges to conn.reward(V,d) = P(d|V) — the per-voter posterior.
- * Test: setLearning(false), processFrame(image), read the digit action winner from inferences.
+ * Each invocation runs one or more passes over a single dataset; learning and dataset are independent flags,
+ * so the same job is used for training and for evaluation (the stocks-test interface):
+ *   - default: train on the balanced training set (learning on), then `--save-brain <label>` persists it.
+ *   - `--load-brain <label>`: resume from a saved brain — train another episode and save again, which is
+ *     equivalent to having trained those episodes in one run.
+ *   - `--disable-learning`: freeze the brain (setLearning(false)) — no wiring, no decay, no minting. Used for evaluation.
+ *   - `--test-data`: run the pass over the held-out test set instead of the training set.
+ * Training evaluation = load the trained brain, `--disable-learning`, re-run over the training data.
+ * Testing evaluation  = load the trained brain, `--disable-learning --test-data`.
+ *
+ * Per image: resetContext → processFrame populates sensory activations → decode the winning digit. When
+ * learning is on, learn(actions, 1) then wires every active sensory neuron to every digit action neuron with
+ * reward=1 on the correct digit and reward=0 on the rest; the smoothed-reward update converges each
+ * connection's reward to P(d|V) — the per-voter posterior.
  */
 export default class MNISTTestJob extends Job {
 
@@ -39,7 +49,11 @@ export default class MNISTTestJob extends Job {
 			perClass: 0,
 			maxTestImages: 0,
 			maxEpisodes: 1,
-			skipTest: false,
+			// disableLearning: freeze the brain for this run (setLearning(false)) — no wiring, decay, or minting.
+			// This is how evaluation is done: load a trained brain, disable learning, and run a pass.
+			disableLearning: false,
+			// testData: run the pass over the held-out test set instead of the balanced training set.
+			testData: false,
 			// split: split-MNIST mode — emit the balanced training set in digit order and train one episode per digit class.
 			// Each episode sees only its own digit's samples; the final held-out test then reveals catastrophic forgetting.
 			split: false,
@@ -59,11 +73,6 @@ export default class MNISTTestJob extends Job {
 			// digit's rank, the winner−true margin, and voter counts (miss vs hit). Diagnoses whether
 			// misses are near-ties (true digit rank 2, small margin) or confident errors (rank 3+).
 			debugMiss: 0,
-			// evalTrain: after training, run a clean frozen (no-learning) pass over the TRAINING set and
-			// report its accuracy. Differs from the per-episode "train=" number, which is prequential
-			// (each image scored by the model as it stood before that image's learn()). The frozen pass
-			// scores every training image with the FINAL model — revealing apex-churn / wiring-lag loss.
-			evalTrain: false,
 		};
 		this.encoder = null;
 		this.trainImages = null;
@@ -73,7 +82,6 @@ export default class MNISTTestJob extends Job {
 		this.testLabels = null;
 		this.testBits = null;
 		this.episodeResults = [];
-		this.testResult = null;
 	}
 
 	/**
@@ -98,10 +106,10 @@ export default class MNISTTestJob extends Job {
 		if (maxTestImages !== null) this.config.maxTestImages = maxTestImages;
 		const episodes = num('--episodes');
 		if (episodes !== null) this.config.maxEpisodes = episodes;
-		if (process.argv.includes('--skip-test')) this.config.skipTest = true;
+		if (process.argv.includes('--disable-learning')) this.config.disableLearning = true;
+		if (process.argv.includes('--test-data')) this.config.testData = true;
 		if (process.argv.includes('--split')) this.config.split = true;
 		if (process.argv.includes('--no-balance')) this.config.noBalance = true;
-		if (process.argv.includes('--eval-train')) this.config.evalTrain = true;
 		const missIdx = process.argv.indexOf('--debug-miss');
 		if (missIdx !== -1 && process.argv[missIdx + 1] !== undefined) this.config.debugMiss = parseInt(process.argv[missIdx + 1]);
 
@@ -216,136 +224,123 @@ export default class MNISTTestJob extends Job {
 	 * Print the resolved configuration before training begins so the run is self-documenting in the log.
 	 */
 	async showStartupInfo() {
-		const phaseLabel = this.config.buckets === 2 ? 'A — binary'
-			: this.config.buckets <= 4 ? 'B' : 'C';
 		console.log('MNIST — sensory-only (Naive Bayes) baseline');
 		console.log(`  Image size: ${this.config.imageSize}×${this.config.imageSize} (${this.config.imageSize * this.config.imageSize} channels)`);
-		console.log(`  Buckets: ${this.config.buckets} (Phase ${phaseLabel})`);
+		console.log(`  Buckets: ${this.config.buckets}`);
 		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
 		console.log(`  Consensus: ${this.config.consensus}`);
-		console.log(`  Episodes: ${this.config.maxEpisodes}${this.config.split ? ' per digit task (split-MNIST)' : ''}`);
-		console.log(`  Training: ${this.config.noBalance ? 'full' : 'balanced'}, ${this.config.perClass > 0 ? `${this.config.perClass} per class` : ''}`);
-		console.log(`  Test images: ${this.config.skipTest ? 'skipped' : (this.config.maxTestImages || 'all')}`);
+		console.log(`  Dataset: ${this.config.testData ? 'test (held-out)' : 'training (balanced)'}`);
+		console.log(`  Learning: ${this.config.disableLearning ? 'OFF (frozen — evaluation)' : 'ON'}`);
+		console.log(`  Episodes: ${this.config.maxEpisodes}${this.config.split && !this.config.testData ? ' per digit task (split-MNIST)' : ''}`);
+		console.log(`  Training selection: ${this.config.noBalance ? 'full' : 'balanced'}${this.config.perClass > 0 ? `, ${this.config.perClass} per class` : ''}`);
 		console.log('');
 	}
 
 	/**
-	 * Train, then evaluate once on the held-out set in non-learning mode.
+	 * Run the configured passes over the active dataset. Learning and dataset are independent flags:
+	 * the default trains on the balanced set; --disable-learning freezes the brain for evaluation;
+	 * --test-data swaps in the held-out set. There is no implicit second evaluation pass — evaluation
+	 * is a separate invocation with the trained brain loaded and learning disabled.
 	 */
 	async executeJob() {
 
-		// run the training first
-		if (this.config.split) this.runSplitTraining();
-		else this.runJointTraining();
+		// Freeze the brain up front when evaluating — no wiring, decay, or minting for the whole run.
+		if (this.config.disableLearning) this.brain.setLearning(false);
+		const learning = !this.config.disableLearning;
 
-		// now, run the tests evaluation
-		if (!this.config.skipTest) this.runEvaluation();
+		// Split ordering only applies to the training set (it slices the balanced set per digit).
+		if (this.config.split && !this.config.testData) this.runSplitPasses(learning);
+		else this.runJointPasses(learning);
 	}
 
 	/**
-	 * Joint mode: train for maxEpisodes passes over the full balanced set.
+	 * Joint mode: maxEpisodes passes over the whole active dataset.
 	 */
-	runJointTraining() {
+	runJointPasses(learning) {
 		for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
-			const result = this.runTraining(ep);
-			this.episodeResults.push(result);
+			this.episodeResults.push(this.runPass(ep, null, learning));
 			if (this.isShuttingDown) return;
 		}
 	}
 
 	/**
-	 * Split mode: for each digit 0..9, train maxEpisodes passes over just that digit's samples before advancing.
-	 * The brain keeps its learned state across tasks — the final held-out test reveals catastrophic forgetting (or its absence).
+	 * Split mode (training set only): for each digit 0..9, run maxEpisodes passes over just that digit's
+	 * samples before advancing. The brain keeps its learned state across tasks — a later held-out eval
+	 * (separate invocation) reveals catastrophic forgetting (or its absence).
 	 */
-	runSplitTraining() {
+	runSplitPasses(learning) {
 		for (let digit = 0; digit < 10; digit++) {
 			for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
-				const result = this.runTraining(ep, digit);
-				this.episodeResults.push(result);
+				this.episodeResults.push(this.runPass(ep, digit, learning));
 				if (this.isShuttingDown) return;
 			}
 		}
 	}
 
 	/**
-	 * Switch the brain into read-only inference and run the held-out test pass.
-	 * Pattern activation + voting still run so inferences populate, but no decay, no error-correction neurons, no event-event strengthening.
+	 * One pass over the active dataset. For each image:
+	 *   resetContext → processFrame → decode prediction → (if learning) learn(actions, 1).
+	 * When learning is on the recorded accuracy is prequential — the brain's guess *before* this image's
+	 * supervised wire lands. When learning is off it is a clean frozen evaluation with the fixed model.
+	 * `digit` restricts a split-mode training pass to one digit's slice; null walks the whole dataset.
 	 */
-	runEvaluation() {
-		this.brain.setLearning(false);
-		console.log('');
-		// Frozen pass over the training set, if requested — scores every training image with the
-		// FINAL model (vs the prequential per-episode number). The gap measures apex-churn / wiring-lag.
-		if (this.config.evalTrain) this.trainEvalResult = this.runTrainEval();
-		this.testResult = this.runTest();
-	}
-
-	/**
-	 * Clean frozen evaluation of the TRAINING set (setLearning(false) already in effect): predict every
-	 * training image with the final model, no learning. Reported separately from the prequential
-	 * per-episode "train=" number; a lower value here exposes how much the moving apex / one-exposure
-	 * wiring lag cost relative to what the online number suggested.
-	 */
-	runTrainEval() {
-		const startTime = Date.now();
-		const tally = this.newTally();
-		for (let i = 0; i < this.trainBits.length; i++) {
-			const predicted = this.trainImage(this.trainBits[i]);
-			this.recordPrediction(tally, this.trainLabels[i], predicted);
-			this.reportProgress('train-eval', i + 1, this.trainBits.length, tally, startTime);
-			if (this.isShuttingDown) break;
-		}
-		this.clearProgress();
-		const duration = Date.now() - startTime;
-		const summary = this.summarizeTally(tally);
-		const perDigitStr = this.formatPerDigit(summary.perDigit, summary.perDigitTotal);
-		console.log(`  Train (frozen, final model): ${(summary.accuracy * 100).toFixed(2)}% (${summary.correct}/${summary.total}) ${duration}ms | ${perDigitStr}`);
-		return summary;
-	}
-
-	/**
-	 * One pass through the training set. For each image:
-	 *   resetContext → processFrame → record prediction (= training accuracy, pre-update) → learn(actions, rewards, 1).
-	 * The training-accuracy number is the brain's prediction *before* the supervised wire lands.
-	 * `digit` is optional: pass it in split mode to restrict the pass to that digit's slice; omit (or null) to walk the full balanced set.
-	 */
-	runTraining(episode, digit = null) {
+	runPass(episode, digit, learning) {
 
 		// Track wall-clock so we can report img/s for this pass.
 		const startTime = Date.now();
 
-		// Accumulators for the per-pass training accuracy line: overall correct, per-digit correct, per-digit totals.
+		// Accumulators: overall/per-digit tally and the 10×10 confusion matrix.
 		const tally = this.newTally();
+		const confusion = Array.from({ length: 10 }, () => new Array(10).fill(0));
+		const miss = this.config.debugMiss && this.config.consensus === 'nb'
+			? { count: 0, printed: 0, rank: new Array(11).fill(0), marginSum: 0, voterMissSum: 0, voterHitSum: 0, hits: 0 }
+			: null;
 
-		// choose training samples (single digit's slice in split mode or the whole set) and process them
-		const indices = this.buildTrainIndices(digit);
+		const { bits, labels } = this.activeDataset();
+		const indices = this.buildPassIndices(digit);
+		const phase = learning ? 'train' : 'eval';
+
 		for (let i = 0; i < indices.length; i++) {
 			const idx = indices[i];
-			const label = this.trainLabels[idx];
+			const label = labels[idx];
 
-			// train on the image and record the predicted digit for it (automatic inference)
-			const predicted = this.trainImage(this.trainBits[idx]);
+			// Classify the image (automatic inference), then record the predicted digit.
+			const predicted = this.classifyImage(bits[idx]);
 			this.recordPrediction(tally, label, predicted);
 
-			// Supervised wire: every active sensory neuron is bound to every digit's action neuron at the same-frame voting slot,
-			// with reward=1 on the correct digit and reward=0 on every other digit. The brain's smoothed-reward update
-			// makes conn.reward(V,d) converge to P(d|V) = K(V,d)/N_V — the per-voter posterior — directly in the reward field.
-			this.brain.learn(this.encoder.encodeAction(label), 1);
+			// decodeDigit() returns -1 when no action inference is present — keep those out of the confusion matrix.
+			if (predicted >= 0 && predicted < 10) confusion[label][predicted]++;
+			if (miss) this.analyzeMiss(miss, label, predicted, bits[idx]);
+
+			// Supervised wire (training only): every active sensory neuron is bound to every digit's action
+			// neuron at the same-frame voting slot, reward=1 on the correct digit and 0 on the rest. The
+			// smoothed-reward update makes conn.reward(V,d) converge to P(d|V) = K(V,d)/N_V — the per-voter posterior.
+			if (learning) this.brain.learn(this.encoder.encodeAction(label), 1);
 
 			// Heartbeat every so often so that long runs don't look frozen.
-			this.reportProgress('train', i + 1, indices.length, tally, startTime);
+			this.reportProgress(phase, i + 1, indices.length, tally, startTime);
 
 			// Honor an in-flight shutdown without leaving the brain in a half-written state.
 			if (this.isShuttingDown) break;
 		}
 		this.clearProgress();
 
-		// Roll the tally up into a result, attach metadata (which task/episode, wall-clock), log a one-liner, and return.
+		// Roll the tally up into a result, attach metadata, log a one-liner, and return.
 		const duration = Date.now() - startTime;
-		const result = { digit, episode, ...this.summarizeTally(tally), duration, spatial: this.captureSpatialDiagnostics() };
-		this.logTrainingPass(result);
+		const result = { digit, episode, learning, ...this.summarizeTally(tally), confusion, duration, spatial: this.captureSpatialDiagnostics() };
+		this.logPass(result);
+		if (miss) this.reportMissAnalysis(miss);
 		return result;
+	}
+
+	/**
+	 * Bits + labels for the active dataset: the held-out test set under --test-data, else the balanced training set.
+	 */
+	activeDataset() {
+		return this.config.testData
+			? { bits: this.testBits, labels: this.testLabels }
+			: { bits: this.trainBits, labels: this.trainLabels };
 	}
 
 	/**
@@ -382,11 +377,11 @@ export default class MNISTTestJob extends Job {
 
 	/**
 	 * Run one image through the brain and decode the predicted digit.
-	 * Shared by training (pre-update prediction) and held-out test.
+	 * Shared by every pass — training (pre-update prediction) and frozen evaluation.
 	 * The brain applies the configured consensus rule ('democratic' | 'nb') internally, so the
 	 * winning digit comes straight off `inferences` — no per-vote marshalling on the hot path.
 	 */
-	trainImage(bits) {
+	classifyImage(bits) {
 		this.brain.resetContext();
 		const inputs = this.encoder.encodeImage(bits);
 		const inferResult = this.brain.processFrame(inputs, EMPTY_REWARDS);
@@ -472,54 +467,20 @@ export default class MNISTTestJob extends Job {
 	/**
 	 * Print the one-line per-pass training log, picking the joint vs split label form.
 	 */
-	logTrainingPass({ digit, episode, accuracy, correct, total, duration, perDigit, perDigitTotal, spatial }) {
+	logPass({ digit, episode, learning, accuracy, correct, total, duration, perDigit, perDigitTotal, spatial }) {
 		const ips = (total / (duration / 1000)).toFixed(0);
 		const perDigitStr = this.formatPerDigit(perDigit, perDigitTotal);
-		const epLabel = this.config.split
+		const epLabel = this.config.split && !this.config.testData
 			? `Task digit ${digit} — episode ${episode}/${this.config.maxEpisodes}`
 			: `Episode ${episode}/${this.config.maxEpisodes}`;
-		console.log(`  ${epLabel}: train=${(accuracy * 100).toFixed(2)}% (${correct}/${total}) | ${ips} img/s ${duration}ms | ${perDigitStr}`);
+		// Prequential 'train=' under learning; frozen 'eval(train|test)=' otherwise.
+		const tag = learning ? (this.config.testData ? 'test' : 'train') : `eval(${this.config.testData ? 'test' : 'train'})`;
+		console.log(`  ${epLabel}: ${tag}=${(accuracy * 100).toFixed(2)}% (${correct}/${total}) | ${ips} img/s ${duration}ms | ${perDigitStr}`);
 		console.log(`    ↳ spatial: ${this.formatSpatial(spatial)}`);
 	}
 
 	/**
-	 * Held-out evaluation. setLearning(false) is already in effect.
-	 * For each image: resetContext → processFrame → read prediction off its FrameResult. No learn() call.
-	 * At context_length=1 the vote generator now keeps the single available age, so processFrame's own
-	 * votes/inferences carry the prediction directly — no second inference sweep needed.
-	 * Accumulates aggregate accuracy, per-digit accuracy, and the 10×10 confusion matrix called out in the spec.
-	 */
-	runTest() {
-		const startTime = Date.now();
-		const tally = this.newTally();
-		const confusion = Array.from({ length: 10 }, () => new Array(10).fill(0));
-		const miss = this.config.debugMiss && this.config.consensus === 'nb'
-			? { count: 0, printed: 0, rank: new Array(11).fill(0), marginSum: 0, voterMissSum: 0, voterHitSum: 0, hits: 0 }
-			: null;
-
-		for (let i = 0; i < this.testBits.length; i++) {
-			const label = this.testLabels[i];
-			const predicted = this.predictImage(this.testBits[i]);
-			this.recordPrediction(tally, label, predicted);
-			// decodeDigit() returns -1 when no action inference is present — keep those out of the confusion matrix.
-			if (predicted >= 0 && predicted < 10) confusion[label][predicted]++;
-			if (miss) this.analyzeMiss(miss, label, predicted, this.testBits[i]);
-			this.reportProgress('test', i + 1, this.testBits.length, tally, startTime);
-			if (this.isShuttingDown) break;
-		}
-		this.clearProgress();
-
-		const duration = Date.now() - startTime;
-		const summary = this.summarizeTally(tally);
-		const perDigitStr = this.formatPerDigit(summary.perDigit, summary.perDigitTotal);
-		console.log(`  Test: ${(summary.accuracy * 100).toFixed(2)}% (${summary.correct}/${summary.total}) ${duration}ms | ${perDigitStr}`);
-		if (miss) this.reportMissAnalysis(miss);
-
-		return { ...summary, confusion };
-	}
-
-	/**
-	 * Per-image miss bookkeeping for --debug-miss. Reads the votes stashed by predictImage, scores the
+	 * Per-image miss bookkeeping for --debug-miss. Reads the votes stashed by classifyImage, scores the
 	 * digits, and records (for misses) the true digit's rank and the winner−true log-score margin, plus
 	 * voter counts for both hits and misses. Prints the first `debugMiss` misses in detail.
 	 */
@@ -589,13 +550,14 @@ export default class MNISTTestJob extends Job {
 	}
 
 	/**
-	 * Pick the training indices for a pass.
-	 * Joint mode (digit=null): sequential walk over the full balanced training set.
-	 * Split mode (digit=0..9): only the slice for that digit. The balanced set is sorted by digit
-	 * with exactly `cap = N/10` samples per class, so digit d's slice is [d*cap, (d+1)*cap).
+	 * Pick the image indices for a pass over the active dataset.
+	 * Joint mode (digit=null): sequential walk over the whole dataset.
+	 * Split mode (digit=0..9): only the slice for that digit. The balanced training set is sorted by
+	 * digit with exactly `cap = N/10` samples per class, so digit d's slice is [d*cap, (d+1)*cap).
 	 */
-	buildTrainIndices(digit) {
-		const N = this.trainBits.length;
+	buildPassIndices(digit) {
+		const { bits } = this.activeDataset();
+		const N = bits.length;
 		if (digit == null) return Array.from({ length: N }, (_, i) => i);
 		const cap = N / 10;
 		const start = digit * cap;
@@ -603,25 +565,29 @@ export default class MNISTTestJob extends Job {
 	}
 
 	/**
-	 * Final summary: per-episode training accuracy, training trend, test accuracy, and the confusion matrix.
-	 * The confusion matrix is the load-bearing artifact for the NB-band check — the 3/8/9 collapses are what motivate the spatial-processing workstream.
+	 * Final summary: per-pass accuracy, the joint-mode learning curve, and the final pass's confusion matrix.
+	 * The confusion matrix is the load-bearing artifact for the NB-band check — the 3/8/9 collapses are what
+	 * motivate the spatial-processing workstream. For an evaluation run (--disable-learning [--test-data]) the
+	 * single pass's accuracy + confusion are the held-out result.
 	 */
 	async showResults() {
 		console.log('\nResults');
 		console.log('='.repeat(70));
 
+		const tag = this.config.testData ? 'test' : 'train';
 		for (const ep of this.episodeResults) {
 			const label = ep.digit != null
 				? `Task digit ${ep.digit} ep ${ep.episode}`
 				: `Episode ${ep.episode}`;
-			console.log(`  ${label}: train=${(ep.accuracy * 100).toFixed(2)}% (${ep.duration}ms)`);
+			const verb = ep.learning ? tag : `eval(${tag})`;
+			console.log(`  ${label}: ${verb}=${(ep.accuracy * 100).toFixed(2)}% (${ep.correct}/${ep.total}, ${ep.duration}ms)`);
 		}
 
-		// Spatial-hierarchy recap: depth and neuron growth across episodes. The load-bearing check
+		// Spatial-hierarchy recap: depth and neuron growth across passes. The load-bearing check
 		// for the spatial-processing fixes — depth should climb past 1 and `minted cum` should
 		// plateau across episodes rather than grow linearly with the number of frames seen.
 		if (this.episodeResults.some(ep => ep.spatial)) {
-			console.log('\n  Spatial hierarchy (after each episode):');
+			console.log('\n  Spatial hierarchy (after each pass):');
 			for (const ep of this.episodeResults) {
 				if (!ep.spatial) continue;
 				const label = ep.digit != null ? `Task ${ep.digit} ep ${ep.episode}` : `Episode ${ep.episode}`;
@@ -629,24 +595,26 @@ export default class MNISTTestJob extends Job {
 			}
 		}
 
-		// Joint-mode-only: first vs last training accuracy is a meaningful learning curve.
-		// In split mode, each entry measures pre-update accuracy on a different digit, so the delta is apples-to-oranges and would mislead — skip it.
-		if (!this.config.split && this.episodeResults.length >= 2) {
+		// Joint-mode-only: first vs last accuracy is a meaningful learning curve.
+		// In split mode each entry measures accuracy on a different digit, so the delta is apples-to-oranges — skip it.
+		if (!(this.config.split && !this.config.testData) && this.episodeResults.length >= 2) {
 			const first = this.episodeResults[0];
 			const last = this.episodeResults[this.episodeResults.length - 1];
 			const delta = ((last.accuracy - first.accuracy) * 100).toFixed(2);
-			console.log(`\n  Training: ${(first.accuracy * 100).toFixed(2)}% → ${(last.accuracy * 100).toFixed(2)}% (${delta >= 0 ? '+' : ''}${delta}pp)`);
+			console.log(`\n  Accuracy: ${(first.accuracy * 100).toFixed(2)}% → ${(last.accuracy * 100).toFixed(2)}% (${delta >= 0 ? '+' : ''}${delta}pp)`);
 		}
 
-		if (this.testResult) {
-			console.log(`  Test:     ${(this.testResult.accuracy * 100).toFixed(2)}% (${this.testResult.correct}/${this.testResult.total})`);
-			console.log('\n  Confusion (rows = actual, cols = predicted):');
+		// Confusion matrix of the final pass — the headline artifact for an evaluation run.
+		const last = this.episodeResults[this.episodeResults.length - 1];
+		if (last && last.confusion) {
+			console.log(`\n  Final pass: ${(last.accuracy * 100).toFixed(2)}% (${last.correct}/${last.total})`);
+			console.log('  Confusion (rows = actual, cols = predicted):');
 			let header = '       ';
 			for (let p = 0; p < 10; p++) header += String(p).padStart(5);
 			console.log(header);
 			for (let a = 0; a < 10; a++) {
 				let row = `   ${a}   `;
-				for (let p = 0; p < 10; p++) row += String(this.testResult.confusion[a][p]).padStart(5);
+				for (let p = 0; p < 10; p++) row += String(last.confusion[a][p]).padStart(5);
 				console.log(row);
 			}
 		}

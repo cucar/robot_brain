@@ -173,7 +173,11 @@ pub struct Snapshot {
 #[derive(Debug, Clone)]
 pub struct SnapshotNeuronEntry {
     pub neuron: SerializedNeuron,
-    pub level: Level,
+    /// Temporal-hierarchy depth: 0 = sensory, 1+ = temporal pattern.
+    pub temporal_level: Level,
+    /// Spatial-hierarchy depth: 0 = sensory/base, 1+ = spatial correction pattern.
+    /// Carried separately from `temporal_level` (all spatial patterns sit at temporal level 0).
+    pub spatial_level: Level,
     pub base_neuron: Option<BaseNeuron>,
     pub parent_id: Option<NeuronId>,
 }
@@ -206,10 +210,10 @@ pub struct Thalamus {
     /// Neuron temporal level: neuron id → level (0 = sensory, 1+ = temporal pattern).
     /// Spatial corrections start at temporal level 0 (they enter temporal via the apex handoff
     /// at temporal_level_index[0]) regardless of their place in the spatial hierarchy.
-    neuron_levels: FxHashMap<NeuronId, Level>,
+    neuron_temporal_levels: FxHashMap<NeuronId, Level>,
 
     /// Neuron spatial level: neuron id → level in the spatial hierarchy (0 = sensory/base, 1+ = spatial correction).
-    /// Stored separately from `neuron_levels` because a neuron occupies independent positions
+    /// Stored separately from `neuron_temporal_levels` because a neuron occupies independent positions
     /// in the spatial and temporal hierarchies (see spatial-processing.md §3.3).
     /// Absent entries default to 0 — pre-spatial-era persisted neurons inherit this on load.
     neuron_spatial_levels: FxHashMap<NeuronId, Level>,
@@ -284,7 +288,7 @@ pub struct Thalamus {
 
     /// Level counts — index = level, value = count of neurons at that level.
     /// Used for efficient max-level diagnostics lookup.
-    level_counts: Vec<i64>,
+    temporal_level_counts: Vec<i64>,
 
     /// Region instances, indexed by region index.
     region_list: Vec<Region>,
@@ -332,7 +336,7 @@ impl Thalamus {
             neurons_by_value: FxHashMap::default(),
             base_neurons: FxHashMap::default(),
             neuron_parents: FxHashMap::default(),
-            neuron_levels: FxHashMap::default(),
+            neuron_temporal_levels: FxHashMap::default(),
             neuron_spatial_levels: FxHashMap::default(),
             spatial_corrections_minted: 0,
             death_ledger: FxHashMap::default(),
@@ -351,7 +355,7 @@ impl Thalamus {
             next_channel_id: 1,
             next_dimension_id: 1,
             next_neuron_id: 1,
-            level_counts: Vec::new(),
+            temporal_level_counts: Vec::new(),
             region_list,
         }
     }
@@ -409,10 +413,10 @@ impl Thalamus {
     fn allocate_sensory_neuron(&mut self, coordinate: &Coordinate, channel_id: ChannelId, neuron_type: NeuronType) -> NeuronId {
         let id = self.next_neuron_id;
         self.next_neuron_id += 1;
-        self.neuron_levels.insert(id, 0);
+        self.neuron_temporal_levels.insert(id, 0);
         self.neurons_by_value.insert(coordinate.clone(), id);
         self.base_neurons.insert(id, BaseNeuron { channel_id, neuron_type, coordinate: coordinate.clone() });
-        self.increment_level_count(0);
+        self.increment_temporal_level_count(0);
         id
     }
 
@@ -460,8 +464,8 @@ impl Thalamus {
         // that need a channel id will receive None from `get_neuron_channel_id`, which their
         // neighbor lookups should treat as no-restriction.
         self.neuron_parents.insert(id, parent_id);
-        self.neuron_levels.insert(id, level);
-        self.increment_level_count(level);
+        self.neuron_temporal_levels.insert(id, level);
+        self.increment_temporal_level_count(level);
 
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
@@ -495,9 +499,9 @@ impl Thalamus {
         // Spatial pattern neurons sit at temporal level 0 — they enter the temporal sweep via the
         // apex handoff, NOT as a pattern at temporal level+1.
         self.neuron_parents.insert(id, parent_id);
-        self.neuron_levels.insert(id, 0);
+        self.neuron_temporal_levels.insert(id, 0);
         self.neuron_spatial_levels.insert(id, level);
-        self.increment_level_count(0);
+        self.increment_temporal_level_count(0);
 
         // Inherit the parent's full coordinate — channel, dimension, bucket and type.
         // A correction is a refinement of the parent observable, not a new one: it asserts the same
@@ -611,8 +615,8 @@ impl Thalamus {
     }
 
     /// Get the temporal level for a neuron (0 = sensory, 1+ = temporal pattern).
-    pub fn get_neuron_level(&self, neuron_id: NeuronId) -> Option<Level> {
-        self.neuron_levels.get(&neuron_id).copied()
+    pub fn get_neuron_temporal_level(&self, neuron_id: NeuronId) -> Option<Level> {
+        self.neuron_temporal_levels.get(&neuron_id).copied()
     }
 
     /// Get the spatial level for a neuron (0 = sensory/base or never spatially registered, 1+ = spatial correction).
@@ -1726,7 +1730,7 @@ impl Thalamus {
     /// Check if a neuron should be skipped (action neuron in a channel whose spec does
     /// not include action-sequence learning).
     fn skip_action_neuron(&self, neuron_id: NeuronId) -> bool {
-        if self.neuron_levels.get(&neuron_id) != Some(&0) { return false; }
+        if self.neuron_temporal_levels.get(&neuron_id) != Some(&0) { return false; }
         if self.get_neuron_type(neuron_id) != Some(NeuronType::Action) { return false; }
         let channel_id = match self.get_neuron_channel_id(neuron_id) {
             Some(c) => c,
@@ -1861,7 +1865,7 @@ impl Thalamus {
         // reap the dead neuron ids and return them
         let mut dead = Vec::new();
         for neuron_id in &neuron_ids {
-            if self.neuron_levels.contains_key(neuron_id) { dead.push(*neuron_id); }
+            if self.neuron_temporal_levels.contains_key(neuron_id) { dead.push(*neuron_id); }
             self.neuron_death_frame.remove(neuron_id);
         }
         dead
@@ -1945,11 +1949,11 @@ impl Thalamus {
     /// Remove a destroyed neuron from Thalamus-owned metadata maps.
     fn cleanup_deleted_neuron_metadata(&mut self, id: NeuronId) {
         self.unregister_death(id);
-        let level = self.neuron_levels.remove(&id);
+        let level = self.neuron_temporal_levels.remove(&id);
         self.neuron_spatial_levels.remove(&id);
         self.neuron_parents.remove(&id);
         if let Some(level) = level {
-            self.decrement_level_count(level);
+            self.decrement_temporal_level_count(level);
         }
     }
 
@@ -1962,19 +1966,21 @@ impl Thalamus {
         let mut neurons = Vec::new();
         for region in &self.region_list {
             for entry in region.get_snapshot() {
-                let level = self.neuron_levels.get(&entry.id).copied().unwrap_or(0);
+                let temporal_level = self.neuron_temporal_levels.get(&entry.id).copied().unwrap_or(0);
                 // Only TRUE sensory neurons carry serializable base data. Spatial pattern neurons
                 // also sit at temporal level 0 and, since fix 2.2, hold an inherited coordinate in
                 // base_neurons — but that coordinate must NOT be snapshotted (restore would insert
                 // it into neurons_by_value and clobber the L0 sensory mapping). It is derivable on
                 // restore by walking neuron_parents to the L0 ancestor (fix 1.2). Distinguish by
                 // spatial level: sensories are spatial_level 0, patterns are spatial_level >= 1.
-                let is_sensory = level == 0 && self.get_neuron_spatial_level(entry.id) == 0;
+                let spatial_level = self.get_neuron_spatial_level(entry.id);
+                let is_sensory = temporal_level == 0 && spatial_level == 0;
                 let base_neuron = if is_sensory { self.base_neurons.get(&entry.id).cloned() } else { None };
                 let parent_id = self.neuron_parents.get(&entry.id).copied();
                 neurons.push(SnapshotNeuronEntry {
                     neuron: entry.neuron,
-                    level,
+                    temporal_level,
+                    spatial_level,
                     base_neuron,
                     parent_id,
                 });
@@ -2017,12 +2023,18 @@ impl Thalamus {
         for entry in &snapshot.neurons {
             let neuron_id = entry.neuron.id;
             if neuron_id >= self.next_neuron_id { self.next_neuron_id = neuron_id + 1; }
-            self.neuron_levels.insert(neuron_id, entry.level);
+            self.neuron_temporal_levels.insert(neuron_id, entry.temporal_level);
+            // Repopulate the spatial level so spatial pattern neurons keep their hierarchy depth.
+            // reset() cleared neuron_spatial_levels; without this every neuron would read back as
+            // spatial_level 0 (indistinguishable from a sensory) and the hierarchy would collapse.
+            if entry.spatial_level != 0 {
+                self.neuron_spatial_levels.insert(neuron_id, entry.spatial_level);
+            }
             if let Some(parent_id) = entry.parent_id {
                 self.neuron_parents.insert(neuron_id, parent_id);
             }
-            self.increment_level_count(entry.level);
-            if entry.level == 0 {
+            self.increment_temporal_level_count(entry.temporal_level);
+            if entry.temporal_level == 0 {
                 if let Some(ref base) = entry.base_neuron {
                     self.neurons_by_value.insert(base.coordinate.clone(), neuron_id);
                     self.base_neurons.insert(neuron_id, base.clone());
@@ -2031,6 +2043,29 @@ impl Thalamus {
             let r = self.route_neuron(neuron_id);
             let c = self.region_list[r].route_neuron(neuron_id);
             buckets[r][c].push(entry.neuron.clone());
+        }
+
+        // Rebuild inherited coordinates for spatial pattern neurons. Snapshots intentionally drop the
+        // inherited (channel, dimension, bucket) coordinate of a spatial correction — snapshotting it
+        // would clobber the L0 sensory mapping in neurons_by_value on restore. Instead it is rederived
+        // here by chaining each correction to its parent's base coordinate, mirroring
+        // allocate_spatial_pattern_neuron. Process in ascending spatial_level so an L2 inherits from its
+        // already-rebuilt L1 parent, which in turn anchored at the original L0 sensory.
+        let mut spatial_patterns: Vec<(NeuronId, Level)> = snapshot.neurons.iter()
+            .filter(|e| e.spatial_level != 0)
+            .map(|e| (e.neuron.id, e.spatial_level))
+            .collect();
+        spatial_patterns.sort_by_key(|&(_, level)| level);
+        for (neuron_id, _) in spatial_patterns {
+            let parent_id = match self.neuron_parents.get(&neuron_id) {
+                Some(&p) => p,
+                None => continue,
+            };
+            if let Some(inherited) = self.base_neurons.get(&parent_id).cloned() {
+                // NOT inserted into neurons_by_value — refined tokens are reached only via routing
+                // matches, and that map must keep resolving the coordinate to its L0 sensory.
+                self.base_neurons.insert(neuron_id, inherited);
+            }
         }
 
         // distribute neurons to their owning columns
@@ -2051,14 +2086,14 @@ impl Thalamus {
     /// Reset all neurons and neuron ID counter.
     pub fn reset(&mut self) {
         for region in &mut self.region_list { region.clear(); }
-        self.neuron_levels.clear();
+        self.neuron_temporal_levels.clear();
         self.neuron_spatial_levels.clear();
         self.neurons_by_value.clear();
         self.base_neurons.clear();
         self.neuron_parents.clear();
         self.death_ledger.clear();
         self.neuron_death_frame.clear();
-        self.level_counts.clear();
+        self.temporal_level_counts.clear();
         self.next_neuron_id = 1;
     }
 
@@ -2081,28 +2116,28 @@ impl Thalamus {
     // ── Level count diagnostics ─────────────────────────────────────────────
 
     /// Increment the neuron count at a given level.
-    fn increment_level_count(&mut self, level: Level) {
-        while self.level_counts.len() <= level as usize { self.level_counts.push(0); }
-        self.level_counts[level as usize] += 1;
+    fn increment_temporal_level_count(&mut self, level: Level) {
+        while self.temporal_level_counts.len() <= level as usize { self.temporal_level_counts.push(0); }
+        self.temporal_level_counts[level as usize] += 1;
     }
 
     /// Decrement the neuron count at a given level.
-    fn decrement_level_count(&mut self, level: Level) {
-        if (level as usize) < self.level_counts.len() {
-            self.level_counts[level as usize] -= 1;
+    fn decrement_temporal_level_count(&mut self, level: Level) {
+        if (level as usize) < self.temporal_level_counts.len() {
+            self.temporal_level_counts[level as usize] -= 1;
         }
     }
 
     /// Get total number of neurons.
     pub fn get_neuron_count(&self) -> usize {
-        self.neuron_levels.len()
+        self.neuron_temporal_levels.len()
     }
 
     /// Maximum live TEMPORAL level — depth of the temporal pattern hierarchy.
     /// 0 = sensory only; 1+ = temporal correction patterns exist at that level.
     pub fn get_max_temporal_level(&self) -> Level {
-        for i in (0..self.level_counts.len()).rev() {
-            if self.level_counts[i] > 0 { return i as Level; }
+        for i in (0..self.temporal_level_counts.len()).rev() {
+            if self.temporal_level_counts[i] > 0 { return i as Level; }
         }
         0
     }
@@ -2227,7 +2262,7 @@ mod tests {
         // metadata registered
         assert_eq!(t.get_neuron_channel_id(1), Some(1));
         assert_eq!(t.get_neuron_type(1), Some(NeuronType::Event));
-        assert_eq!(t.get_neuron_level(1), Some(0));
+        assert_eq!(t.get_neuron_temporal_level(1), Some(0));
     }
 
     #[test]
@@ -2306,12 +2341,12 @@ mod tests {
         assert_eq!(t.neuron_death_frame.get(&42), Some(&200));
         assert!(!t.death_ledger.contains_key(&100)); // old frame cleaned up
 
-        // reap — neuron 42 not in neuron_levels so won't be returned
+        // reap — neuron 42 not in neuron_temporal_levels so won't be returned
         let dead = t.reap_dead_neurons(200);
         assert!(dead.is_empty());
 
         // register with level to simulate actual neuron
-        t.neuron_levels.insert(42, 1);
+        t.neuron_temporal_levels.insert(42, 1);
         t.register_death(42, 300);
         let dead = t.reap_dead_neurons(300);
         assert_eq!(dead, vec![42]);

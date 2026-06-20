@@ -324,7 +324,7 @@ function aggregateVotesBySource(votes) {
 		// multi-distance pattern stays readable in the dump.
 		const key = `${v.voterId}:${v.distance}`;
 		if (!bySource.has(key))
-			bySource.set(key, { voterId: v.voterId, strength: 0, weightedRewardSum: 0, coords: v.voterLabel, level: v.voterLevel, distance: v.distance });
+			bySource.set(key, { voterId: v.voterId, strength: 0, weightedRewardSum: 0, coords: v.voterLabel, level: v.voterTemporalLevel, distance: v.distance });
 		const agg = bySource.get(key);
 		agg.strength += v.strength;
 		agg.weightedRewardSum += v.strength * v.reward;

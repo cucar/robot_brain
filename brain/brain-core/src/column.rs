@@ -635,21 +635,37 @@ impl Column {
             neuron.create_connection(conn.distance, conn.to_neuron_id, conn.strength, conn.reward);
         }
 
-        // load child patterns into the routing table with their activation strengths and context entries
+        // load child patterns into the routing table with their activation strengths and context entries.
+        // The serialized `spatial` discriminator decides which side each child restores to — spatial
+        // children carry d=0 context entries, temporal children carry their real distances.
         for child in &data.children {
-            neuron.add_child(child.pattern_id, child.activation_strength);
-            if let Some(entry) = neuron.get_routing_table_mut().get_mut(&child.pattern_id) {
-                entry.last_activation_frame = child.last_activation_frame;
-            }
-            for ctx in &child.context {
-                neuron.add_context(child.pattern_id, ctx.neuron_id, ctx.distance, ctx.strength);
+            if child.spatial {
+                neuron.add_spatial_child(child.pattern_id, child.activation_strength);
+                if let Some(entry) = neuron.get_spatial_routing_table_mut().get_mut(&child.pattern_id) {
+                    entry.last_activation_frame = child.last_activation_frame;
+                }
+                for ctx in &child.context {
+                    neuron.add_spatial_context(child.pattern_id, ctx.neuron_id, ctx.strength);
+                }
+            } else {
+                neuron.add_temporal_child(child.pattern_id, child.activation_strength);
+                if let Some(entry) = neuron.get_routing_table_mut().get_mut(&child.pattern_id) {
+                    entry.last_activation_frame = child.last_activation_frame;
+                }
+                for ctx in &child.context {
+                    neuron.add_temporal_context(child.pattern_id, ctx.neuron_id, ctx.distance, ctx.strength);
+                }
             }
         }
 
-        // load bidirectional context references
+        // load bidirectional context references, each back to its proper side.
         for ctx_ref in &data.context_refs {
-            for &distance in &ctx_ref.distances {
-                neuron.add_context_ref(ctx_ref.parent_id, distance);
+            if ctx_ref.spatial {
+                neuron.add_spatial_context_ref(ctx_ref.parent_id);
+            } else {
+                for &distance in &ctx_ref.distances {
+                    neuron.add_temporal_context_ref(ctx_ref.parent_id, distance);
+                }
             }
         }
 

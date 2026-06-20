@@ -117,7 +117,7 @@ pub struct FrameResult {
 pub struct FrameVote {
     pub voter_id: NeuronId,
     pub voter_label: String,
-    pub voter_level: Level,
+    pub voter_temporal_level: Level,
     pub target_id: NeuronId,
     pub target_type: NeuronType,
     pub channel_id: ChannelId,
@@ -132,7 +132,7 @@ pub struct FrameVote {
 #[derive(Debug, Clone)]
 pub struct InspectedNeuron {
     pub neuron_id: NeuronId,
-    pub level: Level,
+    pub temporal_level: Level,
     pub parent_id: Option<NeuronId>,
     /// (context_neuron_id, distance, strength) tuples from the parent's
     /// routing-table entry for this child pattern.
@@ -801,12 +801,12 @@ impl Brain {
     /// Returns parent_id and level for any neuron; context_entries is empty
     /// for level-0 sensory neurons (no parent → no stored context).
     pub fn inspect_neuron(&self, neuron_id: NeuronId) -> InspectedNeuron {
-        let level = self.thalamus.get_neuron_level(neuron_id).unwrap_or(0);
+        let temporal_level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
         let parent = self.thalamus.get_neuron_parent(neuron_id);
         let context = parent
             .and_then(|_| self.thalamus.get_pattern_context_entries(neuron_id))
             .unwrap_or_default();
-        InspectedNeuron { neuron_id, level, parent_id: parent, context }
+        InspectedNeuron { neuron_id, temporal_level, parent_id: parent, context }
     }
 
     /// Inspection: dump a neuron's outgoing connections. Returns
@@ -1393,12 +1393,21 @@ impl Brain {
         // Mint corrections for parents whose d=0 predictions mismatched the actual fired set.
         // Each correction is a new pattern that gets installed in its parent's routing table for next frame's matching pass.
         // Also collects per-parent error-rate samples so dynamic error modes (conservative/neutral/aggressive) have data to adapt their thresholds.
-        let correction_specs = self.process_spatial_corrections(&spatial);
+        // Skipped in eval mode: minting and installing corrections mutates the spatial substrate, so a
+        // setLearning(false) pass must not do it — otherwise the "frozen" eval keeps growing the hierarchy
+        // (corrections install into routing tables that survive resetContext, so an image minted on can vote
+        // on a later one) and the result becomes order-dependent and irreproducible.
+        if self.learning {
+            let correction_specs = self.process_spatial_corrections(&spatial);
 
-        // Fold the freshly-minted correction specs into spatial's spec batch.
-        // The end-of-frame flush in apply_merged_results materializes them alongside temporal's specs in one cross-region pass.
-        // Their install ContextRefUpdates were already dispatched inline by process_spatial_corrections — only the neuron-creation half is deferred.
-        spatial.neuron_specs.extend(correction_specs);
+            // Fold the freshly-minted correction specs into spatial's spec batch.
+            // The end-of-frame flush in apply_merged_results materializes them alongside temporal's specs in one cross-region pass.
+            // Their install ContextRefUpdates were already dispatched inline by process_spatial_corrections — only the neuron-creation half is deferred.
+            spatial.neuron_specs.extend(correction_specs);
+        } else {
+            // No corrections this frame; drop any stale feedback from a prior learning run.
+            self.last_frame_spatial_errors.clear();
+        }
 
         // Lift the apex set (fired \ subsumed) into temporal_level_index[0].
         // This is the ONLY path sensory events and spatial corrections take into temporal.
@@ -1618,7 +1627,7 @@ impl Brain {
                 Some(FrameVote {
                     voter_id: v.voter_id,
                     voter_label: self.format_neuron_label(v.voter_id),
-                    voter_level: self.thalamus.get_neuron_level(v.voter_id).unwrap_or(0),
+                    voter_temporal_level: self.thalamus.get_neuron_temporal_level(v.voter_id).unwrap_or(0),
                     target_id: v.neuron_id,
                     target_type,
                     channel_id,
@@ -2114,7 +2123,7 @@ impl Brain {
     /// For pattern neurons, resolves up the parent chain to find root sensory coordinates.
     fn format_neuron_label(&self, neuron_id: NeuronId) -> String {
         // Pattern neurons: resolve parent chain to root sensory neuron
-        let level = self.thalamus.get_neuron_level(neuron_id).unwrap_or(0);
+        let level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
         if level > 0 {
             if let Some(parent_id) = self.thalamus.get_neuron_parent(neuron_id) {
                 return self.format_neuron_label(parent_id);

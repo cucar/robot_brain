@@ -290,7 +290,7 @@ impl JsBrain {
     }
 
     /// Get active neurons in context with their levels.
-    /// Returns an array of { neuronId, level, suppressed } objects.
+    /// Returns an array of { neuronId, temporalLevel, suppressed } objects.
     /// suppressed=true means the neuron activated a higher-level pattern and
     /// should not be counted as an independent voter.
     #[napi(js_name = "getActiveNeurons")]
@@ -298,17 +298,17 @@ impl JsBrain {
         let brain = self.inner.borrow();
         let snapshot = brain.get_context_snapshot();
         let mut arr = env.create_array_with_length(snapshot.len())?;
-        for (i, (neuron_id, _frame, level, state)) in snapshot.iter().enumerate() {
+        for (i, (neuron_id, _frame, temporal_level, state)) in snapshot.iter().enumerate() {
             let mut obj = env.create_object()?;
             obj.set_named_property("neuronId", env.create_uint32(*neuron_id as u32)?)?;
-            obj.set_named_property("level", env.create_uint32(*level as u32)?)?;
+            obj.set_named_property("temporalLevel", env.create_uint32(*temporal_level as u32)?)?;
             obj.set_named_property("suppressed", env.get_boolean(state.activated_pattern_id.is_some())?)?;
             arr.set_element(i as u32, obj)?;
         }
         Ok(arr)
     }
 
-    /// Inspect one neuron: returns { neuronId, level, parentId | null,
+    /// Inspect one neuron: returns { neuronId, temporalLevel, parentId | null,
     /// context: [{ neuronId, distance, strength }, ...] }.
     /// Context entries come from the parent neuron's routing-table entry
     /// for this child pattern. Level-0 sensory neurons have parent_id=null
@@ -319,7 +319,7 @@ impl JsBrain {
         let info = brain.inspect_neuron(neuron_id as u64);
         let mut obj = env.create_object()?;
         obj.set_named_property("neuronId", env.create_uint32(info.neuron_id as u32)?)?;
-        obj.set_named_property("level", env.create_uint32(info.level as u32)?)?;
+        obj.set_named_property("temporalLevel", env.create_uint32(info.temporal_level as u32)?)?;
         match info.parent_id {
             Some(p) => obj.set_named_property("parentId", env.create_uint32(p as u32)?)?,
             None => obj.set_named_property("parentId", env.get_null()?)?,
@@ -699,7 +699,7 @@ fn build_frame_result(env: &Env, result: &FrameResult) -> Result<JsObject> {
         let mut v_obj = env.create_object()?;
         v_obj.set_named_property("voterId", env.create_uint32(v.voter_id as u32)?)?;
         v_obj.set_named_property("voterLabel", env.create_string(&v.voter_label)?)?;
-        v_obj.set_named_property("voterLevel", env.create_uint32(v.voter_level as u32)?)?;
+        v_obj.set_named_property("voterTemporalLevel", env.create_uint32(v.voter_temporal_level as u32)?)?;
         v_obj.set_named_property("targetId", env.create_uint32(v.target_id as u32)?)?;
         let kind_str = match v.target_type {
             NeuronType::Event => "event",

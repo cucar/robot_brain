@@ -1,6 +1,7 @@
 /**
  * Base Job Class - Common functionality for all episodes
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { createInterface } from 'node:readline';
@@ -65,6 +66,12 @@ export class Job {
 			this.diagnostic = !!this.options?.diagnostic;
 			this.debug = !!this.options?.debug;
 			this.wait = !!this.options?.wait;
+
+			// When loading a brain, fill in its construction options (matching thresholds, context
+			// length, consensus, …) from the config saved alongside it — UNLESS the caller passed them
+			// explicitly. Pattern matching depends on these; without restoring them the brain is built
+			// with DEFAULT thresholds and inference diverges from how it was trained.
+			if (this.options?.loadBrain) this.mergePersistedBrainConfig(this.options.loadBrain);
 
 			// Create brain instance
 			this.brain = new Brain(this.options);
@@ -182,7 +189,73 @@ export class Job {
 		// Context must be saved BEFORE brain — brain.save() materializes decay
 		// and resets frame_number to 0, which would destroy the context state.
 		if (this.brain && this.saveContext) this.brain.saveContext(this.getJobDir(), this.saveContext);
-		if (this.brain && this.saveBrain) this.brain.save(this.getJobDir(), this.saveBrain);
+		if (this.brain && this.saveBrain) {
+			this.brain.save(this.getJobDir(), this.saveBrain);
+			// Persist the brain's construction options next to the CSV backup so a later
+			// --load-brain reproduces training behavior without re-specifying every flag.
+			this.writeBrainConfig(this.saveBrain);
+		}
+	}
+
+	/**
+	 * Brain construction options that must round-trip with a saved brain. Matching thresholds, context
+	 * length, consensus, and topology all shape inference, so loading a brain to evaluate it MUST rebuild
+	 * the brain with the same values — otherwise it falls back to defaults and pattern matching diverges
+	 * from training (e.g. a merge threshold of 0.5 instead of the trained 0.9 collapses whole classes).
+	 */
+	static BRAIN_CONFIG_KEYS = [
+		'contextLength', 'patternForgetRate',
+		'errorCorrectionMode', 'errorCorrectionThreshold', 'mergeThreshold',
+		'temporalErrorCorrectionMode', 'temporalErrorCorrectionThreshold', 'temporalMergeThreshold',
+		'spatialErrorCorrectionMode', 'spatialErrorCorrectionThreshold', 'spatialMergeThreshold',
+		'regions', 'columns', 'consensus',
+	];
+
+	/**
+	 * Resolve the on-disk folder for a backup label. Named labels map directly to
+	 * <jobDir>/backups/<label>; the special "latest" label writes a timestamped subfolder, so pick the
+	 * newest one. Returns null if it can't be resolved.
+	 */
+	resolveBackupFolder(label) {
+		const backupsDir = path.join(this.getJobDir(), 'backups');
+		if (label !== 'latest') return path.join(backupsDir, label);
+		if (!fs.existsSync(backupsDir)) return null;
+		const stamps = fs.readdirSync(backupsDir)
+			.filter(n => /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/.test(n))
+			.sort();
+		return stamps.length ? path.join(backupsDir, stamps[stamps.length - 1]) : null;
+	}
+
+	/**
+	 * Write the brain construction options (the whitelist above that were actually set) to
+	 * brain-config.json inside the backup folder.
+	 */
+	writeBrainConfig(label) {
+		const folder = this.resolveBackupFolder(label);
+		if (!folder || !fs.existsSync(folder)) return;
+		const cfg = {};
+		for (const k of Job.BRAIN_CONFIG_KEYS) if (this.options?.[k] != null) cfg[k] = this.options[k];
+		fs.writeFileSync(path.join(folder, 'brain-config.json'), JSON.stringify(cfg, null, 2));
+	}
+
+	/**
+	 * Merge a saved brain's construction options into this.options, filling only the keys the caller did
+	 * NOT pass explicitly (an explicit CLI flag still wins). No-op for pre-config backups, so older
+	 * backups keep loading — they just need their flags supplied manually as before.
+	 */
+	mergePersistedBrainConfig(label) {
+		const folder = this.resolveBackupFolder(label);
+		if (!folder) return;
+		const file = path.join(folder, 'brain-config.json');
+		if (!fs.existsSync(file)) return;
+		let cfg;
+		try { cfg = JSON.parse(fs.readFileSync(file, 'utf-8')); }
+		catch { return; }
+		const applied = [];
+		for (const k of Job.BRAIN_CONFIG_KEYS) {
+			if (cfg[k] != null && this.options[k] == null) { this.options[k] = cfg[k]; applied.push(`${k}=${cfg[k]}`); }
+		}
+		if (applied.length) console.log(`🧩 Restored brain config from backup '${label}': ${applied.join(', ')}`);
 	}
 
 	/* ---------- Hooks ---------- */

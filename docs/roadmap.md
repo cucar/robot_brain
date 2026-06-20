@@ -10,88 +10,28 @@ is one workstream; sub-bullets are the concrete steps inside it.
 App-side and small core cleanups that should land before (or alongside) the merge. Independent of
 each other unless noted.
 
-### 1.1 Eval-train refactor
-
-- **Always run the frozen `runTrainEval()` at the end** (delete the `evalTrain` flag/config).
-- **Add opt-in `--eval-train-per-episode`** that runs a frozen pass after each episode (off by default).
-
-### 1.2. Persistence / Backup / Import-Export Updates
-
-**Goal:** Make sure every persistence path round-trips d=0 connections and the new spatial_level field.
-
-Make every persistence path round-trip d=0 connections and the spatial structure.
-
-Serialization was updated for spatial but restore was not, so a save/load round-trip corrupts silently:
-
-- Spatial levels are dropped (every neuron comes back at `spatial_level = 0`) and spatial routing entries land on the temporal side. Add a spatial/temporal
-  discriminator to `SerializedChild` / `SerializedContextRef`, restore each to the proper side, and add `spatial_level` to `SnapshotNeuronEntry`. 
-- **Spatial levels are dropped.** `SnapshotNeuronEntry` carries only the temporal `level`
-  ([thalamus.rs:174-179](../brain/brain-core/src/thalamus.rs)); `get_snapshot`
-  ([thalamus.rs:1851-1871](../brain/brain-core/src/thalamus.rs)) never reads
-  `neuron_spatial_levels`, and `restore_snapshot` clears the map via `reset()`
-  ([thalamus.rs:1938](../brain/brain-core/src/thalamus.rs)) and never repopulates it. Every
-  neuron comes back at `spatial_level = 0`.
-- **Spatial routing tables land on the temporal side.** `serialize_children` and
-  `serialize_context_refs` flatten spatial and temporal entries into one undiscriminated list
-  ([neuron.rs:404-443](../brain/brain-core/src/neuron.rs); spatial contexts marked
-  `distance: 0`). `load_neuron` ([column.rs:600-645](../brain/brain-core/src/column.rs)) restores
-  through `add_child` / `add_context` / `add_context_ref` — the back-compat shims that route
-  **unconditionally to the temporal structures**
-  ([neuron.rs:944-954](../brain/brain-core/src/neuron.rs)). After restore, every spatial routing
-  entry and context ref sits in the temporal tables with d=0 contexts: spatial hierarchy gone,
-  temporal tables polluted.
-- Connections and Welford error stats *do* round-trip correctly (`create_connection` routes
-  d=0 to `spatial_connections`; `age == 0` stats route to the spatial bucket,
-  [column.rs:634-642](../brain/brain-core/src/column.rs)) — which deepens the false sense of
-  safety.
-
-**Fix:** add a spatial/temporal discriminator to `SerializedChild` and `SerializedContextRef`
-(or split them into separate fields), restore each to the proper side; add `spatial_level` to
-`SnapshotNeuronEntry`, populate in `get_snapshot`, restore into `neuron_spatial_levels`.
-Then implement the Phase 4 acceptance test from the design doc (train → snapshot → restore →
-identical next frame), which would have caught all of this.
-
-#### Code touched
-
-- `brain/brain-core/src/backup.rs` — extend `SerializedConnection` / `SerializedNeuron`:
-    - `connections[0]` distance=0 entries must round-trip. Verify the existing format iterates the full `connections` vec rather than skipping slot 0.
-    - The existing `neuron.level` field becomes the temporal intrinsic level. Add `neuron.spatial_level` alongside it. For pre-spatial-era neurons loaded from older snapshots, default `spatial_level` to 0 (they sit at the base of the spatial hierarchy because no spatial grouping built them).
-    - The per-frame `spatial_level_index` / `temporal_level_index` are not persisted — same rule as today's `level_index`.
-    - The inherited (channel, dimension, coordinate) of a correction (§4.4) needs no new snapshot field — it is derivable on restore by walking `neuron_parents` to the L0 ancestor (parent ids are already persisted). Deeper levels chain: an L2 inherits from its L1 parent, which anchors at the original L0 coordinate.
-- DB import/export apps under `apps/` — sweep for code that assumes connections start at distance 1, and for code that reads/writes the single `neuron.level` field.
-
-#### Acceptance
-
-- Round-trip test: train a brain on a few MNIST images (enough to mint d=0 corrections across multiple spatial levels), snapshot, restore, verify (a) all d=0 connections present with correct strengths, (b) all correction neurons present and routable with their spatial_level intact, (c) one more frame of training on the restored brain produces identical results as on the original.
-- DB import/export apps: run a round-trip on a stocks brain with d=0 connections; verify byte-identical export after `import → export`.
-- Backward-compat test: load a pre-spatial stocks snapshot, verify all neurons get `spatial_level = 0`, run one frame, confirm output matches what the pre-spatial code would have produced (modulo the new d=0 work, which will start forming immediately).
-
-- **Test imports / exports / backups** — implement the design's round-trip acceptance test (train →
-  snapshot → restore → identical next frame), plus the DB import/export round-trip and the
-  pre-spatial backward-compat load.
-
-### 1.3 Fix the Ctrl+C bug
+### 1.1 Fix the Ctrl+C bug
 
 Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
 fix so long jobs can be cancelled without leaving the brain half-written.
 
 ---
 
-## 3. Merge spatial branch to main
+## 2. Merge spatial branch to main
 
 - **Review all the code** on the `spatial` branch.
 - Merge once the near-term cleanups, the two review fixes, and stocks parity are in.
 
 ---
 
-## 4. Optimize MNIST
+## 3. Optimize MNIST
 
 Push past the 95.73% capstone and produce the publishable ablations. Full experiment log and the
 detailed step list live in [mnist-spatial-experiments.md](mnist-spatial-experiments.md).
 
-- **Update the experiments document** — prune obsolete tests (done).
+- **Update the experiments document** — update tests with current results.
 - **Radius 3 at 28×28** — the radius-2 optimum was tuned at lower res; check radius 3 at full res.
-- **Error / merge threshold re-tune at 28×28 (radius x)** — sweep the paired corners
+- **Error / merge threshold re-tune at 28×28 (radius 2/3)** — sweep the paired corners
   **0.1 / 0.9, 0.2 / 0.8, 0.3 / 0.7** and re-pick.
   - Anchor: `node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --episodes 3 --error-mode static --error-threshold 0.1 --merge-threshold 0.9`
 - **Literature-standard Split-MNIST** — the continual-learning headline. Details below.
@@ -143,7 +83,7 @@ metric (max-ever minus final per task). Cite the literature baselines (~20% naiv
 
 ---
 
-## 5. Temporal channel inheritance experiment
+## 4. Temporal channel inheritance experiment
 
 Fix 2.2 gave *spatial* corrections their parent's full (channel, dimension, coordinate). Open
 question: **should temporal corrections inherit channels the same way?** Symmetry argues yes, but
@@ -152,7 +92,7 @@ stocks. Tracked in [spatial-processing.md §8](spatial-processing.md).
 
 ---
 
-## 6. Inference Level Experiment
+## 5. Inference Level Experiment
 
 See **[inference-level.md](./inference-level.md)**.
 
@@ -166,7 +106,7 @@ The decision propagates into spatial processing.
 
 ---
 
-## 7. Neuron Re-use
+## 6. Neuron Re-use
 
 See **[neuron-reuse.md](./neuron-reuse.md)**.
 
@@ -178,7 +118,7 @@ Allocates capacity onto the error manifold (residual-fitting). **Scope is reduce
 
 ---
 
-## 8. Re-introduce context refinement
+## 7. Re-introduce context refinement
 
 Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
 common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
@@ -200,13 +140,13 @@ If the headline numbers land here:
 
 ---
 
-## 9. Calculate up/down accuracy separately
+## 8. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 10. Neuron Limits
+## 9. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -224,7 +164,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 11. Exponential Temporal Binning Test
+## 10. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).
@@ -243,7 +183,7 @@ explosion.
 
 ---
 
-## 12. Documentation & Publish
+## 11. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update
   README demos and examples.
