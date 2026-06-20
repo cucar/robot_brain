@@ -255,16 +255,26 @@ export default class MNISTTestJob extends Job {
 
 		// Split-MNIST is a sequential class-incremental training protocol — only meaningful with
 		// learning on over the training set. It runs its own loop and reporting and returns early.
-		if (this.config.split && !this.config.testData && learning) this.runSplitMnist();
-		else this.runJointPasses(learning);
+		if (this.config.split && !this.config.testData && learning) await this.runSplitMnist();
+		else await this.runJointPasses(learning);
+	}
+
+	/**
+	 * Yield to the event loop so a queued SIGINT handler can run and set isShuttingDown.
+	 * The pass loops are otherwise fully synchronous NAPI calls, so without an occasional yield
+	 * Ctrl+C is never serviced until the whole pass finishes — the isShuttingDown checks would be
+	 * dead during a run. Yield on the heartbeat cadence so the cost is negligible per image.
+	 */
+	async yieldForSignals(done) {
+		if (done % PROGRESS_EVERY === 0) await new Promise(resolve => setImmediate(resolve));
 	}
 
 	/**
 	 * Joint mode: maxEpisodes passes over the whole active dataset.
 	 */
-	runJointPasses(learning) {
+	async runJointPasses(learning) {
 		for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
-			this.episodeResults.push(this.runPass(ep, null, learning));
+			this.episodeResults.push(await this.runPass(ep, null, learning));
 			if (this.isShuttingDown) return;
 		}
 	}
@@ -272,7 +282,7 @@ export default class MNISTTestJob extends Job {
 	/**
 	 * Run literature-standard class-incremental Split-MNIST (van de Ven & Tolias 2019; Hsu et al. 2018).
 	 */
-	runSplitMnist() {
+	async runSplitMnist() {
 
 		// Five sequential tasks of two classes each: T0={0,1} T1={2,3} T2={4,5} T3={6,7} T4={8,9}.
 		// The balanced training set is sorted by digit (selectClassBalanced with split=true), so digit d's
@@ -288,13 +298,13 @@ export default class MNISTTestJob extends Job {
 			const lo = 2 * task * cap;
 			const hi = (2 * task + 2) * cap;
 			const indices = Array.from({ length: hi - lo }, (_, k) => lo + k);
-			this.trainTaskPass(task, indices);
+			await this.trainTaskPass(task, indices);
 			if (this.isShuttingDown) return;
 
 			// Freeze and evaluate the FULL 10-class test set, binned by task.
 			// This row of the retention matrix exposes catastrophic forgetting (or its absence) across all tasks.
 			this.brain.setLearning(false);
-			const row = this.evalTestByTask();
+			const row = await this.evalTestByTask();
 			this.splitMatrix.push(row);
 			const rowStr = row.map((a, j) => `T${j}:${(a * 100).toFixed(1)}%`).join(' ');
 			console.log(`    ↳ after task ${task}: ${rowStr}`);
@@ -305,7 +315,7 @@ export default class MNISTTestJob extends Job {
 	/**
 	 * Train a single Split-MNIST task: one pass over its two digits' samples, learning on.
 	 */
-	trainTaskPass(task, indices) {
+	async trainTaskPass(task, indices) {
 		const startTime = Date.now();
 		const labels = this.trainLabels;
 		let correct = 0;
@@ -320,6 +330,7 @@ export default class MNISTTestJob extends Job {
 			this.brain.learn(this.encoder.encodeAction(label), 1);
 
 			this.reportProgress(`task${task}`, i + 1, indices.length, { correct }, startTime);
+			await this.yieldForSignals(i + 1);
 			if (this.isShuttingDown) break;
 		}
 		this.clearProgress();
@@ -332,7 +343,7 @@ export default class MNISTTestJob extends Job {
 	 * Frozen evaluation over the FULL 10-class test set, returning per-task accuracy [5]. A test image's
 	 * task is floor(label/2). setLearning(false) must already be in effect.
 	 */
-	evalTestByTask() {
+	async evalTestByTask() {
 		const correct = new Array(5).fill(0);
 		const total = new Array(5).fill(0);
 		for (let i = 0; i < this.testBits.length; i++) {
@@ -341,6 +352,7 @@ export default class MNISTTestJob extends Job {
 			const predicted = this.classifyImage(this.testBits[i]);
 			total[task]++;
 			if (predicted === label) correct[task]++;
+			await this.yieldForSignals(i + 1);
 			if (this.isShuttingDown) break;
 		}
 		return correct.map((c, t) => (total[t] > 0 ? c / total[t] : 0));
@@ -353,7 +365,7 @@ export default class MNISTTestJob extends Job {
 	 * supervised wire lands. When learning is off it is a clean frozen evaluation with the fixed model.
 	 * `digit` restricts a split-mode training pass to one digit's slice; null walks the whole dataset.
 	 */
-	runPass(episode, digit, learning) {
+	async runPass(episode, digit, learning) {
 
 		// Track wall-clock so we can report img/s for this pass.
 		const startTime = Date.now();
@@ -389,7 +401,9 @@ export default class MNISTTestJob extends Job {
 			// Heartbeat every so often so that long runs don't look frozen.
 			this.reportProgress(phase, i + 1, indices.length, tally, startTime);
 
-			// Honor an in-flight shutdown without leaving the brain in a half-written state.
+			// Yield to the event loop on the heartbeat cadence so a pending Ctrl+C can be serviced,
+			// then honor an in-flight shutdown without leaving the brain in a half-written state.
+			await this.yieldForSignals(i + 1);
 			if (this.isShuttingDown) break;
 		}
 		this.clearProgress();
