@@ -374,7 +374,7 @@ impl Column {
             if !parent.has_context_key(pattern_id, entry.neuron_id, entry.distance) {
                 continue;
             }
-            let is_orphaned = parent.remove_context(pattern_id, entry.neuron_id, entry.distance);
+            let is_orphaned = parent.remove_temporal_context(pattern_id, entry.neuron_id, entry.distance);
             if is_orphaned {
                 outbound_ops.push(DeleteOp::RemoveTemporalContextRef {
                     target_id: entry.neuron_id,
@@ -409,7 +409,7 @@ impl Column {
             .collect();
         if remaining_distances.is_empty() { return; }
 
-        let affected_patterns = parent.remove_context_neuron(dying_neuron_id, &remaining_distances);
+        let affected_patterns = parent.remove_temporal_context_neuron(dying_neuron_id, &remaining_distances);
         for pattern_id in affected_patterns {
             if parent.can_delete_child(pattern_id, current_frame) {
                 newly_deletable_ids.push(pattern_id);
@@ -451,7 +451,7 @@ impl Column {
             .get(&parent_id)
             .map_or(false, |distances| distances.contains(&distance));
         if !has_ref { return; }
-        neuron.remove_context_ref(parent_id, distance);
+        neuron.remove_temporal_context_ref(parent_id, distance);
     }
 
     /// Drop a SPATIAL contextRef entry on a context neuron.

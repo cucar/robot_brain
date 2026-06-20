@@ -959,38 +959,6 @@ impl Neuron {
     }
 
 
-    // ── Back-compat shims (routes to temporal-side methods) ─────────────────────
-    // These exist while column.rs and tests are still phase-agnostic. After downstream
-    // migration to phase-specific call sites, these shims get deleted.
-
-    pub fn add_pattern(&mut self, pattern_id: NeuronId, context: &[ContextRefEntry], current_frame: FrameNumber) -> Option<FrameNumber> {
-        self.add_temporal_pattern(pattern_id, context, current_frame)
-    }
-
-    pub fn add_child(&mut self, pattern_id: NeuronId, initial_strength: f64) {
-        self.add_temporal_child(pattern_id, initial_strength)
-    }
-
-    pub fn add_context(&mut self, pattern_id: NeuronId, neuron_id: NeuronId, distance: Distance, strength: Strength) {
-        self.add_temporal_context(pattern_id, neuron_id, distance, strength)
-    }
-
-    pub fn add_context_ref(&mut self, referencing_neuron_id: NeuronId, distance: Distance) {
-        self.add_temporal_context_ref(referencing_neuron_id, distance)
-    }
-
-    pub fn remove_context(&mut self, pattern_id: NeuronId, neuron_id: NeuronId, distance: Distance) -> bool {
-        self.remove_temporal_context(pattern_id, neuron_id, distance)
-    }
-
-    pub fn remove_context_neuron(&mut self, neuron_id: NeuronId, distances: &FxHashSet<Distance>) -> FxHashSet<NeuronId> {
-        self.remove_temporal_context_neuron(neuron_id, distances)
-    }
-
-    pub fn remove_context_ref(&mut self, referencing_neuron_id: NeuronId, distance: Distance) {
-        self.remove_temporal_context_ref(referencing_neuron_id, distance)
-    }
-
     /// Pattern forget rate (for Column death-frame calculation).
     pub fn get_pattern_forget_rate(&self) -> f64 {
         self.pattern_forget_rate
@@ -1418,7 +1386,7 @@ impl Neuron {
         for correction in corrections {
 
             // add the pattern to the routing table
-            let death_frame = self.add_pattern(correction.pattern_id, &correction.context_entries, current_frame);
+            let death_frame = self.add_temporal_pattern(correction.pattern_id, &correction.context_entries, current_frame);
 
             // add the pattern to the activations to be returned with its death frame
             correction_activations.push(CorrectionActivation { pattern_id: correction.pattern_id, age: correction.age, death_frame });
@@ -1686,7 +1654,7 @@ mod tests {
             ContextRefEntry { neuron_id: 10, distance: 1 },
             ContextRefEntry { neuron_id: 11, distance: 2 },
         ];
-        let death_frame = n.add_pattern(100, &context, 10);
+        let death_frame = n.add_temporal_pattern(100, &context, 10);
         assert!(death_frame.is_some());
 
         // pattern should be in routing table with 2 context entries
@@ -1701,7 +1669,7 @@ mod tests {
     fn test_lazy_decay() {
         let mut n = make_neuron(1);
         n.pattern_forget_rate = 0.1;
-        n.add_child(100, 0.0);
+        n.add_temporal_child(100, 0.0);
         n.strengthen_child_activation(100, 0); // strength=1, last_frame=0
 
         // at frame 5: effective = 1 - 5*0.1 = 0.5
@@ -1735,17 +1703,17 @@ mod tests {
     #[test]
     fn test_context_refs() {
         let mut n = make_neuron(1);
-        n.add_context_ref(50, 2);
-        n.add_context_ref(50, 3);
-        n.add_context_ref(60, 1);
+        n.add_temporal_context_ref(50, 2);
+        n.add_temporal_context_ref(50, 3);
+        n.add_temporal_context_ref(60, 1);
 
         assert_eq!(n.temporal_context_refs.len(), 2);
         assert_eq!(n.temporal_context_refs[&50].len(), 2);
 
-        n.remove_context_ref(50, 2);
+        n.remove_temporal_context_ref(50, 2);
         assert_eq!(n.temporal_context_refs[&50].len(), 1);
 
-        n.remove_context_ref(50, 3);
+        n.remove_temporal_context_ref(50, 3);
         assert!(!n.temporal_context_refs.contains_key(&50)); // auto-cleaned
     }
 
@@ -1766,9 +1734,9 @@ mod tests {
         let mut n = make_neuron(1);
         n.create_connection(1, 10, 2.0, 0.5);
         n.create_connection(2, 11, 1.0, 0.0);
-        n.add_child(100, 0.0);
-        n.add_context(100, 20, 1, 1.0);
-        n.add_context_ref(50, 2);
+        n.add_temporal_child(100, 0.0);
+        n.add_temporal_context(100, 20, 1, 1.0);
+        n.add_temporal_context_ref(50, 2);
         // Spatial error stat lives in its own single bucket; the test originally used age=0 which
         // was the spatial slot under the unified-storage model.
         n.record_spatial_error(0.4);
