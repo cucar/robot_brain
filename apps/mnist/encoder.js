@@ -166,9 +166,8 @@ export class MNISTPixelChannelsEncoder {
 		const actions = new Map();
 		const dimMap = new Map();
 		const valueRewardMap = new Map();
-		for (let d = 0; d < DIGITS; d++) {
+		for (let d = 0; d < DIGITS; d++)
 			valueRewardMap.set(d, d === correctLabel ? 1 : 0);
-		}
 		dimMap.set(this.digitDimId, valueRewardMap);
 		actions.set(this.digitChannelId, dimMap);
 		return actions;

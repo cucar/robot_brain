@@ -54,8 +54,9 @@ export default class MNISTTestJob extends Job {
 			disableLearning: false,
 			// testData: run the pass over the held-out test set instead of the balanced training set.
 			testData: false,
-			// split: split-MNIST mode — emit the balanced training set in digit order and train one episode per digit class.
-			// Each episode sees only its own digit's samples; the final held-out test then reveals catastrophic forgetting.
+			// split: literature-standard class-incremental Split-MNIST — 5 sequential tasks of 2 classes each
+			// ({0,1}{2,3}{4,5}{6,7}{8,9}), no task IDs, action space stays all 10 digits. After each task the
+			// brain is frozen and tested on all 10 classes to build a retention matrix exposing forgetting.
 			split: false,
 			// noBalance: skip class-balanced selection and train on the full natural MNIST set (unbalanced).
 			noBalance: false,
@@ -232,7 +233,10 @@ export default class MNISTTestJob extends Job {
 		console.log(`  Consensus: ${this.config.consensus}`);
 		console.log(`  Dataset: ${this.config.testData ? 'test (held-out)' : 'training (balanced)'}`);
 		console.log(`  Learning: ${this.config.disableLearning ? 'OFF (frozen — evaluation)' : 'ON'}`);
-		console.log(`  Episodes: ${this.config.maxEpisodes}${this.config.split && !this.config.testData ? ' per digit task (split-MNIST)' : ''}`);
+		if (this.config.split && !this.config.testData && !this.config.disableLearning)
+			console.log(`  Mode: Split-MNIST (class-incremental, 5 tasks × 2 classes, sequential, no task IDs)`);
+		else
+			console.log(`  Episodes: ${this.config.maxEpisodes}`);
 		console.log(`  Training selection: ${this.config.noBalance ? 'full' : 'balanced'}${this.config.perClass > 0 ? `, ${this.config.perClass} per class` : ''}`);
 		console.log('');
 	}
@@ -249,8 +253,9 @@ export default class MNISTTestJob extends Job {
 		if (this.config.disableLearning) this.brain.setLearning(false);
 		const learning = !this.config.disableLearning;
 
-		// Split ordering only applies to the training set (it slices the balanced set per digit).
-		if (this.config.split && !this.config.testData) this.runSplitPasses(learning);
+		// Split-MNIST is a sequential class-incremental training protocol — only meaningful with
+		// learning on over the training set. It runs its own loop and reporting and returns early.
+		if (this.config.split && !this.config.testData && learning) this.runSplitMnist();
 		else this.runJointPasses(learning);
 	}
 
@@ -265,17 +270,80 @@ export default class MNISTTestJob extends Job {
 	}
 
 	/**
-	 * Split mode (training set only): for each digit 0..9, run maxEpisodes passes over just that digit's
-	 * samples before advancing. The brain keeps its learned state across tasks — a later held-out eval
-	 * (separate invocation) reveals catastrophic forgetting (or its absence).
+	 * Run literature-standard class-incremental Split-MNIST (van de Ven & Tolias 2019; Hsu et al. 2018).
 	 */
-	runSplitPasses(learning) {
-		for (let digit = 0; digit < 10; digit++) {
-			for (let ep = 1; ep <= this.config.maxEpisodes; ep++) {
-				this.episodeResults.push(this.runPass(ep, digit, learning));
-				if (this.isShuttingDown) return;
-			}
+	runSplitMnist() {
+
+		// Five sequential tasks of two classes each: T0={0,1} T1={2,3} T2={4,5} T3={6,7} T4={8,9}.
+		// The balanced training set is sorted by digit (selectClassBalanced with split=true), so digit d's
+		// samples occupy [d*cap, (d+1)*cap) and task t spans both of its digits at [2t*cap, (2t+2)*cap).
+		const cap = this.trainBits.length / 10;
+		this.splitMatrix = [];
+		for (let task = 0; task < 5; task++) {
+
+			// Strict sequential training: each task's data is seen once and never revisited.
+			// There are no task IDs, and the action space stays all ten digits throughout — the digit action
+			// channel is registered up front, so every learn() wires all ten (reward 1 on the true digit, 0 on the rest).
+			this.brain.setLearning(true);
+			const lo = 2 * task * cap;
+			const hi = (2 * task + 2) * cap;
+			const indices = Array.from({ length: hi - lo }, (_, k) => lo + k);
+			this.trainTaskPass(task, indices);
+			if (this.isShuttingDown) return;
+
+			// Freeze and evaluate the FULL 10-class test set, binned by task.
+			// This row of the retention matrix exposes catastrophic forgetting (or its absence) across all tasks.
+			this.brain.setLearning(false);
+			const row = this.evalTestByTask();
+			this.splitMatrix.push(row);
+			const rowStr = row.map((a, j) => `T${j}:${(a * 100).toFixed(1)}%`).join(' ');
+			console.log(`    ↳ after task ${task}: ${rowStr}`);
+			if (this.isShuttingDown) return;
 		}
+	}
+
+	/**
+	 * Train a single Split-MNIST task: one pass over its two digits' samples, learning on.
+	 */
+	trainTaskPass(task, indices) {
+		const startTime = Date.now();
+		const labels = this.trainLabels;
+		let correct = 0;
+		for (let i = 0; i < indices.length; i++) {
+			const idx = indices[i];
+			const label = labels[idx];
+
+			// The recorded accuracy is prequential — the guess before this image's supervised wire lands.
+			// Order within the task is deterministic; with forget rate 0 the additive NB counts are order-independent anyway.
+			const predicted = this.classifyImage(this.trainBits[idx]);
+			if (predicted === label) correct++;
+			this.brain.learn(this.encoder.encodeAction(label), 1);
+
+			this.reportProgress(`task${task}`, i + 1, indices.length, { correct }, startTime);
+			if (this.isShuttingDown) break;
+		}
+		this.clearProgress();
+		const duration = Date.now() - startTime;
+		console.log(`  Task ${task} {${2 * task},${2 * task + 1}}: trained ${indices.length} imgs, prequential ${(100 * correct / indices.length).toFixed(2)}% (${duration}ms)`);
+		console.log(`    ↳ spatial: ${this.formatSpatial(this.captureSpatialDiagnostics())}`);
+	}
+
+	/**
+	 * Frozen evaluation over the FULL 10-class test set, returning per-task accuracy [5]. A test image's
+	 * task is floor(label/2). setLearning(false) must already be in effect.
+	 */
+	evalTestByTask() {
+		const correct = new Array(5).fill(0);
+		const total = new Array(5).fill(0);
+		for (let i = 0; i < this.testBits.length; i++) {
+			const label = this.testLabels[i];
+			const task = Math.floor(label / 2);
+			const predicted = this.classifyImage(this.testBits[i]);
+			total[task]++;
+			if (predicted === label) correct[task]++;
+			if (this.isShuttingDown) break;
+		}
+		return correct.map((c, t) => (total[t] > 0 ? c / total[t] : 0));
 	}
 
 	/**
@@ -565,12 +633,55 @@ export default class MNISTTestJob extends Job {
 	}
 
 	/**
+	 * Split-MNIST report: the 5×5 retention matrix (rows = after training task i, cols = test accuracy on
+	 * task j's two classes), the headline average accuracy after Task 5, and per-task forgetting
+	 * (max-ever accuracy minus final). These are the standard class-incremental continual-learning
+	 * metrics; the literature floor for naive backprop here is ~20%.
+	 */
+	showSplitResults() {
+		const M = this.splitMatrix;
+		console.log('\nSplit-MNIST (class-incremental — 5 tasks × 2 classes, no task IDs)');
+		console.log('='.repeat(70));
+		console.log('  Retention matrix — rows: after training task i; cols: frozen test acc on task j');
+
+		let header = '              ';
+		for (let j = 0; j < 5; j++) header += `T${j}(${2 * j}${2 * j + 1})`.padStart(9);
+		console.log(header);
+		for (let i = 0; i < M.length; i++) {
+			let row = `  after T${i}    `;
+			for (let j = 0; j < 5; j++) row += `${(M[i][j] * 100).toFixed(1)}%`.padStart(9);
+			console.log(row);
+		}
+
+		// Headline: average accuracy over all classes after the final task (mean of the last row,
+		// equal-sized tasks → the overall 10-class test accuracy).
+		const last = M[M.length - 1];
+		const avg = last.reduce((a, b) => a + b, 0) / last.length;
+		console.log(`\n  Average accuracy after Task ${M.length - 1} (headline): ${(avg * 100).toFixed(2)}%`);
+
+		// Forgetting: for each task, the drop from its best-ever accuracy (once trained) to its final accuracy.
+		const forgets = [];
+		for (let j = 0; j < 5; j++) {
+			let best = 0;
+			for (let i = j; i < M.length; i++) best = Math.max(best, M[i][j]);
+			forgets.push(best - last[j]);
+		}
+		const avgForget = forgets.reduce((a, b) => a + b, 0) / forgets.length;
+		console.log(`  Forgetting per task (max-ever − final): ${forgets.map((f, j) => `T${j}:${(f * 100).toFixed(1)}pp`).join(' ')}`);
+		console.log(`  Average forgetting: ${(avgForget * 100).toFixed(2)}pp  (naive backprop floor ≈ ~20% avg acc / heavy forgetting)`);
+		console.log('='.repeat(70));
+	}
+
+	/**
 	 * Final summary: per-pass accuracy, the joint-mode learning curve, and the final pass's confusion matrix.
 	 * The confusion matrix is the load-bearing artifact for the NB-band check — the 3/8/9 collapses are what
 	 * motivate the spatial-processing workstream. For an evaluation run (--disable-learning [--test-data]) the
 	 * single pass's accuracy + confusion are the held-out result.
 	 */
 	async showResults() {
+		// Split-MNIST has its own retention-matrix report.
+		if (this.splitMatrix) { this.showSplitResults(); return; }
+
 		console.log('\nResults');
 		console.log('='.repeat(70));
 
