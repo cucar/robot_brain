@@ -36,7 +36,8 @@ use crate::types::{
     Level, NeuronId, NeuronType, Reward,
 };
 
-/// Laplace-style floor added inside the Nb consensus log so a single zero posterior doesn't send a candidate to negative infinity.
+/// Laplace-style floor added inside the Nb consensus log so a zero posterior (reward == 0) doesn't send a
+/// candidate to negative infinity. Out-of-range rewards (< 0 or > 1) are rejected upstream, not floored.
 const NB_EPS: f64 = 1e-3;
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
@@ -274,7 +275,7 @@ struct Candidate {
     weighted_total: f64,
     reward: f64,
     probability: f64,
-    /// Naive-Bayes log-score accumulator for action candidates: Σ_vote log(reward + NB_EPS).
+    /// Naive-Bayes log-score accumulator for action candidates: Σ_vote log(reward + NB_EPS), reward in [0, 1].
     /// Filled only when consensus mode is Nb; one term per incoming vote (per connection),
     /// matching the per-voter product rule. Ignored under Democratic consensus.
     nb_log_score: f64,
@@ -1672,7 +1673,20 @@ impl Brain {
                 candidate.weighted_total += effective_strength * v.reward;
                 // Naive-Bayes path: also accumulate the unweighted log-product of posteriors.
                 // One term per vote (per connection) — a near-zero posterior vetoes the candidate.
+                // The NB term is a posterior P(action | voter) and must lie in [0, 1]. reward is an EMA of
+                // the environment's raw reward signal, so this holds only when that signal is itself a
+                // posterior (e.g. MNIST 0/1). A signed or unbounded reward (e.g. stocks P&L) would feed ln a
+                // value <= 0 or > 1, producing NaN/-inf that silently corrupts selection — so fail loud here
+                // rather than let an invalid consensus mode for the domain go unnoticed.
                 if self.consensus_mode == ConsensusMode::Nb {
+                    if !(0.0..=1.0).contains(&v.reward) {
+                        panic!(
+                            "Nb consensus requires reward in [0, 1] (a posterior), but the vote from voter {} \
+                             to action {} has reward {}. This reward signal is not a posterior — use \
+                             Democratic consensus, or normalize rewards to [0, 1].",
+                            v.voter_id, v.neuron_id, v.reward
+                        );
+                    }
                     candidate.nb_log_score += (v.reward + NB_EPS).ln();
                 }
             }
