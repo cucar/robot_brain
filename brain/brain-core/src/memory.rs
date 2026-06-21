@@ -251,6 +251,8 @@ impl Memory {
             Some(lf) => lf,
             None => return neurons,
         };
+
+        // walk ages ascending so iteration order matches
         for age in 0..self.depth() {
             let frame = self.frame_number - age as i64;
             let neuron_ids = match level_frames.get(&frame) {
@@ -314,12 +316,17 @@ impl Memory {
     pub fn activate_temporal_neuron_at_age(&mut self, neuron_id: NeuronId, age: Distance, level: Level) {
         let frame = self.frame_number - age as i64;
 
+        // add the neuron to the age index
         self.age_index.entry(frame).or_insert_with(FxHashSet::default).insert(neuron_id);
+
+        // add the neuron to the temporal level index
         self.temporal_level_index.entry(level)
             .or_insert_with(FxHashMap::default)
             .entry(frame)
             .or_insert_with(FxHashSet::default)
             .insert(neuron_id);
+
+        // add the active neuron to the neuron states with a new state (if not already present)
         self.neuron_states.entry(neuron_id)
             .or_insert_with(FxHashMap::default)
             .entry(frame)
@@ -338,6 +345,8 @@ impl Memory {
     /// activated_pattern_id so vote generation knows to suppress the parent.
     pub fn activate_temporal_pattern(&mut self, pattern_id: NeuronId, pattern_level: Level, parent_id: NeuronId, age: Distance) {
         self.activate_temporal_neuron_at_age(pattern_id, age, pattern_level);
+
+        // set the parent's activated_pattern_id at this age
         let frame = self.frame_number - age as i64;
         if let Some(states) = self.neuron_states.get_mut(&parent_id) {
             if let Some(state) = states.get_mut(&frame) {

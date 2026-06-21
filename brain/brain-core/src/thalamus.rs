@@ -1053,7 +1053,7 @@ impl Thalamus {
 
         if !context_ref_updates.is_empty() {
             let update_batch: Vec<(NeuronId, Vec<TemporalContextRefUpdate>)> = context_ref_updates.into_iter().collect();
-            self.dispatch_context_ref_updates(&update_batch);
+            self.dispatch_temporal_context_ref_updates(&update_batch);
         }
     }
 
@@ -1278,7 +1278,7 @@ impl Thalamus {
         }
     }
 
-    /// Spatial counterpart of `dispatch_context_ref_updates` — routes SpatialContextRefUpdates
+    /// Spatial counterpart of `dispatch_temporal_context_ref_updates` — routes SpatialContextRefUpdates
     /// to the columns that own each target neuron, then dispatches in parallel.
     fn dispatch_spatial_context_ref_updates(&mut self, update_batch: &[(NeuronId, Vec<SpatialContextRefUpdate>)]) {
         let mut by_region: Vec<Vec<(NeuronId, Vec<SpatialContextRefUpdate>)>> = (0..self.regions).map(|_| Vec::new()).collect();
@@ -1813,7 +1813,7 @@ impl Thalamus {
     }
 
     /// Op-5 (deferred): Route contextRef updates to owning regions/columns.
-    fn dispatch_context_ref_updates(&mut self, update_batch: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
+    fn dispatch_temporal_context_ref_updates(&mut self, update_batch: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
         let mut by_region: Vec<Vec<(NeuronId, Vec<TemporalContextRefUpdate>)>> = (0..self.regions).map(|_| Vec::new()).collect();
         for (neuron_id, updates) in update_batch {
             let r = self.route_neuron(*neuron_id);
@@ -1821,7 +1821,7 @@ impl Thalamus {
         }
         for (r, region_updates) in by_region.iter().enumerate() {
             if !region_updates.is_empty() {
-                self.region_list[r].update_context_refs(region_updates);
+                self.region_list[r].update_temporal_context_refs(region_updates);
             }
         }
     }

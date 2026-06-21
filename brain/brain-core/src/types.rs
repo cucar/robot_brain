@@ -75,6 +75,15 @@ pub struct ContextEntry {
     pub strength: Strength,
 }
 
+/// Death frame entry for a child pattern: the frame at which it decays to zero strength
+/// and becomes eligible for reaping. Produced by neurons and rebuilt into the death ledger
+/// on restore, so it crosses the neuron → column → region boundary.
+#[derive(Debug, Clone)]
+pub struct DeathFrameEntry {
+    pub pattern_id: NeuronId,
+    pub death_frame: FrameNumber,
+}
+
 /// Welford online statistics for incremental mean/variance calculation.
 /// Used for dynamic error thresholds per (neuron, age).
 #[derive(Debug, Clone)]

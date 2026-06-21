@@ -85,8 +85,8 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 
 The complete frame-by-frame run log (all 5,373 days) is saved in [demo3.log](demo3.log).
 
-The brain achieves only ~43% base-level prediction accuracy on price movements — below a coin flip — yet the
-**reward-weighted action selection** still turns a profit by learning which contexts produce better outcomes. With
+The brain achieves only ~43% base-level prediction accuracy because it's predicting price movement groups.
+The **reward-weighted action selection** still turns a profit by learning which contexts produce better outcomes. With
 spatial co-activation enabled (`--spatial`), the brain trades direction accuracy for far more aggressive,
 concentrated position sizing: it is wrong about direction more often than not, but sizes the contexts that pay off.
 
@@ -201,7 +201,7 @@ changes — and one bleeds capital while the other compounds.
 ## Action Learning in Low Accuracy
 
 The brain learns the best actions to perform in each situation over repeated episodes, even when base prediction
-accuracy is low.
+accuracy is low. Note that the spatial processing here has an outsized impact.
 
 ```bash
 node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL --context-length 3 --columns 20 --no-summary --episodes 5 --spatial
@@ -211,17 +211,17 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 ```
 💰 Net Profit & ROI by Episode:
    Episode 1: $6763932.45 | ROI: +45092.88%, +0.113847%/frame, Sharpe: 0.40 (8592 trades)
-   Episode 2: $119125247028800.97 | ROI: +794168313525.34%, +0.425159%/frame, Sharpe: 1.66 (8591 trades)
-   Episode 3: $1.2343509826638645e+25 | ROI: +8.22900655109243e+22%, +0.900351%/frame, Sharpe: 3.07 (8084 trades)
-   Episode 4: $1.135473988104428e+28 | ROI: +7.569826587362853e+25%, +1.028586%/frame, Sharpe: 3.44 (7820 trades)
-   Episode 5: $5.143569772643019e+29 | ROI: +3.4290465150953454e+27%, +1.100313%/frame, Sharpe: 3.68 (7728 trades)
+   Episode 2: $101950134390202.44 | ROI: +679667562601.35%, +0.422249%/frame, Sharpe: 1.59 (8468 trades)
+   Episode 3: $7531436298675083264.00 | ROI: +50209575324500560.00%, +0.631987%/frame, Sharpe: 2.18 (7992 trades)
+   Episode 4: $324186108297917431808.00 | ROI: +2161240721986116352.00%, +0.702475%/frame, Sharpe: 2.39 (7765 trades)
+   Episode 5: $8.174897622187293e+21 | ROI: +54499317481248620544.00%, +0.762984%/frame, Sharpe: 2.60 (7731 trades)
 
 📊 Base Level Accuracy by Episode:
    Episode 1: 10.51%
-   Episode 2: 5.66%
-   Episode 3: 7.31%
-   Episode 4: 8.01%
-   Episode 5: 8.65%
+   Episode 2: 6.11%
+   Episode 3: 6.20%
+   Episode 4: 6.33%
+   Episode 5: 6.59%
 ```
 
 The astronomical ROI is compounding over many episodes of in-sample data — a stress test of action learning, not a
@@ -241,6 +241,13 @@ node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY -
 
 **Expected output:**
 ```
+💰 Net Profit & ROI by Episode:
+   Episode 1: $1065294.34 | ROI: +7101.96%, +0.079632%/frame, Sharpe: 0.37 (5850 trades)
+   Episode 2: $615519461507821056.00 | ROI: +4103463076718807.00%, +0.585093%/frame, Sharpe: 3.67 (6461 trades)
+   Episode 3: $2.876735760514998e+22 | ROI: +191782384034333196288.00%, +0.786582%/frame, Sharpe: 4.76 (6433 trades)
+   Episode 4: $6.996816768276702e+23 | ROI: +4.664544512184468e+21%, +0.846464%/frame, Sharpe: 5.08 (6342 trades)
+   Episode 5: $8.228511106877497e+23 | ROI: +5.485674071251665e+21%, +0.849508%/frame, Sharpe: 5.06 (6286 trades)
+
 📊 Base Level Accuracy by Episode:
    Episode 1: 52.47%
    Episode 2: 55.46%

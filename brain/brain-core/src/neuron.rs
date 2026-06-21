@@ -344,7 +344,7 @@ impl Neuron {
     /// Record an observed temporal error rate for a given age (Welford online update).
     /// Called after the threshold comparison so the current sample does not
     /// influence its own decision.
-    pub fn record_error(&mut self, age: Distance, error_rate: f64) {
+    pub fn record_temporal_error(&mut self, age: Distance, error_rate: f64) {
         let idx = age as usize;
         if idx >= self.temporal_error_stats.len() { self.temporal_error_stats.resize(idx + 1, None); }
         let stats = self.temporal_error_stats[idx].get_or_insert_with(WelfordState::new);
@@ -360,7 +360,7 @@ impl Neuron {
     /// Restoration entry point: install a fully-formed Welford bucket for a given
     /// temporal age. Used by Column.restore_neurons to rehydrate per-(neuron, age) error stats
     /// from serialized neuron. Does not validate the stats — the caller owns correctness.
-    pub fn load_error_stats(&mut self, age: Distance, n: u64, mean: f64, m2: f64) {
+    pub fn load_temporal_error_stats(&mut self, age: Distance, n: u64, mean: f64, m2: f64) {
         let idx = age as usize;
         if idx >= self.temporal_error_stats.len() { self.temporal_error_stats.resize(idx + 1, None); }
         self.temporal_error_stats[idx] = Some(WelfordState { n, mean, m2 });
@@ -629,6 +629,74 @@ impl Neuron {
         }
     }
 
+    /// Fold pending lazy decay into every child's stored strength and rebase its activation clock to 0,
+    /// across both the temporal and spatial routing tables.
+    /// Returns each child's recomputed death frame so the caller can rebuild the death ledger on restore.
+    /// Uses this neuron's own pattern_forget_rate — the same rate that drives its lazy-decay math.
+    pub fn materialize_and_reset_children(&mut self, current_frame: FrameNumber) -> Vec<DeathFrameEntry> {
+        let mut entries = Vec::new();
+
+        // Collect ids up front: materialize_child_strength borrows self mutably, so we can't hold
+        // an iterator over the routing table while calling it.
+        let temporal_ids: Vec<NeuronId> = self.temporal_routing_table.keys().copied().collect();
+        for pattern_id in temporal_ids {
+
+            // Fold any pending lazy decay into the stored strength so the snapshot is exact.
+            self.materialize_child_strength(pattern_id, current_frame);
+            if let Some(entry) = self.temporal_routing_table.get_mut(&pattern_id) {
+
+                // Rebase the activation clock to 0 — the restored brain starts counting frames fresh.
+                entry.last_activation_frame = 0;
+
+                // Recompute the death frame from the now-materialized strength rather than persisting it.
+                let death_frame = (entry.activation_strength / self.pattern_forget_rate).ceil() as FrameNumber;
+                entries.push(DeathFrameEntry { pattern_id, death_frame });
+            }
+        }
+
+        // Spatial children carry death frames too, so materialize and reset them identically.
+        let spatial_ids: Vec<NeuronId> = self.spatial_routing_table.keys().copied().collect();
+        for pattern_id in spatial_ids {
+
+            // Fold any pending lazy decay into the stored strength so the snapshot is exact.
+            self.materialize_child_strength(pattern_id, current_frame);
+            if let Some(entry) = self.spatial_routing_table.get_mut(&pattern_id) {
+
+                // Rebase the activation clock to 0 — the restored brain starts counting frames fresh.
+                entry.last_activation_frame = 0;
+
+                // Recompute the death frame from the now-materialized strength rather than persisting it.
+                let death_frame = (entry.activation_strength / self.pattern_forget_rate).ceil() as FrameNumber;
+                entries.push(DeathFrameEntry { pattern_id, death_frame });
+            }
+        }
+
+        entries
+    }
+
+    /// Compute each child's death frame from its current activation strength, without mutating any state.
+    /// Walks both the temporal and spatial routing tables, mirroring materialize_and_reset_children.
+    /// Used on restore to rebuild the death ledger when strengths are already materialized.
+    /// Uses this neuron's own pattern_forget_rate — the same rate that drives its lazy-decay math.
+    pub fn compute_death_frames(&self) -> Vec<DeathFrameEntry> {
+        let mut entries = Vec::new();
+
+        // Temporal children: a pattern survives until its activation strength has decayed away.
+        // death_frame is how many frames that takes at the forget rate, rounded up.
+        for (&pattern_id, entry) in &self.temporal_routing_table {
+            let death_frame = (entry.activation_strength / self.pattern_forget_rate).ceil() as FrameNumber;
+            entries.push(DeathFrameEntry { pattern_id, death_frame });
+        }
+
+        // Spatial children use the same strength/forget-rate decay model, so compute them identically.
+        for (&pattern_id, entry) in &self.spatial_routing_table {
+            let death_frame = (entry.activation_strength / self.pattern_forget_rate).ceil() as FrameNumber;
+            entries.push(DeathFrameEntry { pattern_id, death_frame });
+        }
+
+        entries
+    }
+
     /// Increments activation strength for a child pattern - materializes all owner-scoped lazy decay first.
     /// Returns death frame for pattern neurons.
     pub fn strengthen_child_activation(&mut self, pattern_id: NeuronId, current_frame: FrameNumber) -> Option<FrameNumber> {
@@ -875,7 +943,7 @@ impl Neuron {
 
 
     /// Apply a batch of TEMPORAL context-reference updates targeting this neuron.
-    pub fn apply_context_ref_updates(&mut self, updates: &[TemporalContextRefUpdate]) {
+    pub fn apply_temporal_context_ref_updates(&mut self, updates: &[TemporalContextRefUpdate]) {
         for update in updates {
             self.add_temporal_context_ref(update.parent_id, update.distance);
         }
@@ -889,7 +957,7 @@ impl Neuron {
     }
 
     /// Get temporal context refs (for delete cascade).
-    pub fn get_context_refs(&self) -> &FxHashMap<NeuronId, FxHashSet<Distance>> {
+    pub fn get_temporal_context_refs(&self) -> &FxHashMap<NeuronId, FxHashSet<Distance>> {
         &self.temporal_context_refs
     }
 
@@ -900,7 +968,7 @@ impl Neuron {
     }
 
     /// Read-only access to the temporal routing table (for Column snapshot/death-frame/delete ops).
-    pub fn get_routing_table(&self) -> &FxHashMap<NeuronId, TemporalRoutingEntry> {
+    pub fn get_temporal_routing_table(&self) -> &FxHashMap<NeuronId, TemporalRoutingEntry> {
         &self.temporal_routing_table
     }
 
@@ -929,7 +997,7 @@ impl Neuron {
     }
 
     /// Mutable access to the temporal routing table (for Column restore — sets last_activation_frame).
-    pub fn get_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, TemporalRoutingEntry> {
+    pub fn get_temporal_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, TemporalRoutingEntry> {
         &mut self.temporal_routing_table
     }
 
@@ -946,23 +1014,18 @@ impl Neuron {
     }
 
     /// Check if a temporal context key exists for a child pattern (for Column delete cascade).
-    pub fn has_context_key(&self, pattern_id: NeuronId, neuron_id: NeuronId, distance: Distance) -> bool {
+    pub fn has_temporal_context_key(&self, pattern_id: NeuronId, neuron_id: NeuronId, distance: Distance) -> bool {
         self.temporal_routing_table.get(&pattern_id)
             .map_or(false, |e| e.context.has_key(neuron_id, distance))
     }
 
 
     /// Check if a (neuron, distance) exists in the temporal context index (for Column purge).
-    pub fn has_context_index_entry(&self, neuron_id: NeuronId, distance: Distance) -> bool {
+    pub fn has_temporal_context_index_entry(&self, neuron_id: NeuronId, distance: Distance) -> bool {
         self.temporal_context_index.get(&neuron_id)
             .map_or(false, |dist_map| dist_map.contains_key(&distance))
     }
 
-
-    /// Pattern forget rate (for Column death-frame calculation).
-    pub fn get_pattern_forget_rate(&self) -> f64 {
-        self.pattern_forget_rate
-    }
 
     // ── Frame processing ─────────────────────────────────────────────────────
 
@@ -1157,7 +1220,7 @@ impl Neuron {
         // That way the threshold attached to this frame's votes (computed in generate_votes) reflects the latest sample.
         // Non-learning mode skips this because accuracy stats are connection-substrate state.
         if learning {
-            for fb in error_feedback { self.record_error(fb.age, fb.error_rate); }
+            for fb in error_feedback { self.record_temporal_error(fb.age, fb.error_rate); }
         }
         let mut timings = NeuronOpTimings::default();
 
@@ -1691,12 +1754,12 @@ mod tests {
     fn test_error_threshold_dynamic_warmup() {
         let mut n = Neuron::new(1, 0.01, 0.9, ErrorMode::Neutral, 0.3, 0.9, ErrorMode::Neutral, 0.3, FxHashMap::default(), 10);
         // fewer than ERROR_MIN_SAMPLES → falls back to error_threshold
-        n.record_error(0, 0.5);
-        n.record_error(0, 0.5);
+        n.record_temporal_error(0, 0.5);
+        n.record_temporal_error(0, 0.5);
         assert_eq!(n.get_temporal_error_threshold(0), 0.3); // still warmup
 
         // after 3 samples → uses mean
-        n.record_error(0, 0.5);
+        n.record_temporal_error(0, 0.5);
         assert!((n.get_temporal_error_threshold(0) - 0.5).abs() < 1e-10);
     }
 

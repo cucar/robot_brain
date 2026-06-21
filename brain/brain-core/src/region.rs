@@ -47,7 +47,7 @@ use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::column::{
-    Column, ColumnProcessResult, DeathFrameEntry, DeleteOp, DeleteResult,
+    Column, ColumnProcessResult, DeleteOp, DeleteResult,
     NeuronCreateSpec, SnapshotEntry,
 };
 use crate::context::TemporalContext;
@@ -57,7 +57,7 @@ use crate::neuron::{
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
+    ChannelId, DeathFrameEntry, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
 };
 
 pub struct Region {
@@ -201,7 +201,7 @@ impl Region {
     // ── Spatial error-stats recording ──────────────────────────────────────
 
     /// Fan out spatial-error samples to owning columns. Each column updates its neurons'
-    /// `error_stats[0]` Welford buckets via `Neuron::record_error`.
+    /// `error_stats[0]` Welford buckets via `Neuron::record_temporal_error`.
     pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
         let mut by_column: Vec<Vec<(NeuronId, f64)>> = (0..self.c).map(|_| Vec::new()).collect();
         for &(id, rate) in feedback {
@@ -251,13 +251,13 @@ impl Region {
 
     /// Apply TEMPORAL contextRef updates against owned Neurons. Updates are routed by
     /// neuron_id (the target neuron whose temporal_context_refs change).
-    pub fn update_context_refs(&mut self, updates: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
+    pub fn update_temporal_context_refs(&mut self, updates: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
         let by_column = self.route_context_ref_updates(updates);
         self.columns.par_iter_mut()
             .zip(by_column.into_par_iter())
             .for_each(|(col, col_updates)| {
                 if !col_updates.is_empty() {
-                    col.update_context_refs(&col_updates);
+                    col.update_temporal_context_refs(&col_updates);
                 }
             });
     }

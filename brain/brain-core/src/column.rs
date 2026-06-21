@@ -14,7 +14,7 @@ use crate::neuron::{
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, Distance, ErrorMode, FrameNumber,
+    ChannelId, DeathFrameEntry, Distance, ErrorMode, FrameNumber,
     NeuronId, Reward, Strength,
 };
 
@@ -70,13 +70,6 @@ impl DeleteOp {
             DeleteOp::RemoveSpatialContextRef { target_id, .. } => *target_id,
         }
     }
-}
-
-/// Death frame entry for a child pattern.
-#[derive(Debug, Clone)]
-pub struct DeathFrameEntry {
-    pub pattern_id: NeuronId,
-    pub death_frame: FrameNumber,
 }
 
 /// Serialized neuron snapshot entry.
@@ -268,7 +261,7 @@ impl Column {
         let mut outbound_ops = Vec::new();
 
         // tell each TEMPORAL parent that referenced this neuron in its children's contexts to scrub it
-        for (referencing_parent_id, distances) in neuron.get_context_refs() {
+        for (referencing_parent_id, distances) in neuron.get_temporal_context_refs() {
             outbound_ops.push(DeleteOp::PurgeTemporalContextNeuron {
                 target_id: *referencing_parent_id,
                 dying_neuron_id: neuron.id,
@@ -287,7 +280,7 @@ impl Column {
         // Orphan each TEMPORAL child: emit RemoveTemporalContextRef ops for each context entry,
         // then queue the child for deletion. We collect routing-table entries upfront because
         // neuron is moved out of self.neurons (we can't borrow it back mutably from the map).
-        let temporal_children: Vec<(NeuronId, Vec<crate::types::ContextEntry>)> = neuron.get_routing_table()
+        let temporal_children: Vec<(NeuronId, Vec<crate::types::ContextEntry>)> = neuron.get_temporal_routing_table()
             .iter()
             .map(|(&child_id, entry)| (child_id, entry.context.get_entries()))
             .collect();
@@ -365,13 +358,13 @@ impl Column {
         }
 
         // Otherwise the TEMPORAL side (or nothing — already removed).
-        let entries = match parent.get_routing_table().get(&pattern_id) {
+        let entries = match parent.get_temporal_routing_table().get(&pattern_id) {
             Some(entry) => entry.context.get_entries(),
             None => return outbound_ops, // pattern already removed by parent's own DeleteNeuron cleanup
         };
         for entry in &entries {
             // same-pulse PurgeTemporalContextNeuron may have already removed this entry
-            if !parent.has_context_key(pattern_id, entry.neuron_id, entry.distance) {
+            if !parent.has_temporal_context_key(pattern_id, entry.neuron_id, entry.distance) {
                 continue;
             }
             let is_orphaned = parent.remove_temporal_context(pattern_id, entry.neuron_id, entry.distance);
@@ -404,7 +397,7 @@ impl Column {
 
         // same-pulse RemovePattern may have already cleaned some distances
         let remaining_distances: FxHashSet<Distance> = distances.iter()
-            .filter(|&&d| parent.has_context_index_entry(dying_neuron_id, d))
+            .filter(|&&d| parent.has_temporal_context_index_entry(dying_neuron_id, d))
             .copied()
             .collect();
         if remaining_distances.is_empty() { return; }
@@ -447,7 +440,7 @@ impl Column {
             None => return,
         };
         // same-pulse op may have already removed this ref
-        let has_ref = neuron.get_context_refs()
+        let has_ref = neuron.get_temporal_context_refs()
             .get(&parent_id)
             .map_or(false, |distances| distances.contains(&distance));
         if !has_ref { return; }
@@ -476,7 +469,7 @@ impl Column {
     /// by the inspection API to dump a pattern's stored context.
     pub fn get_child_context_entries(&self, parent_id: NeuronId, child_id: NeuronId) -> Option<Vec<(NeuronId, Distance, f64)>> {
         let parent = self.neurons.get(&parent_id)?;
-        let entry = parent.get_routing_table().get(&child_id)?;
+        let entry = parent.get_temporal_routing_table().get(&child_id)?;
         let mut out = Vec::new();
         for (nid, dist_map) in entry.context.entries() {
             for (dist, strength) in dist_map {
@@ -488,10 +481,10 @@ impl Column {
 
     /// Op-5 (deferred): Apply contextRef updates to owned neurons. Each entry carries the
     /// target neuron_id and a batch of updates for it.
-    pub fn update_context_refs(&mut self, update_batch: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
+    pub fn update_temporal_context_refs(&mut self, update_batch: &[(NeuronId, Vec<TemporalContextRefUpdate>)]) {
         for (neuron_id, updates) in update_batch {
             if let Some(neuron) = self.neurons.get_mut(neuron_id) {
-                neuron.apply_context_ref_updates(updates);
+                neuron.apply_temporal_context_ref_updates(updates);
             }
         }
     }
@@ -543,7 +536,7 @@ impl Column {
         SpatialInstallResult { deaths, context_ref_updates }
     }
 
-    /// Spatial counterpart of update_context_refs — dispatches SpatialContextRefUpdates to the
+    /// Spatial counterpart of update_temporal_context_refs — dispatches SpatialContextRefUpdates to the
     /// target neurons owned by this column.
     pub fn update_spatial_context_refs(&mut self, update_batch: &[(NeuronId, Vec<SpatialContextRefUpdate>)]) {
         for (target_id, updates) in update_batch {
@@ -649,7 +642,7 @@ impl Column {
                 }
             } else {
                 neuron.add_temporal_child(child.pattern_id, child.activation_strength);
-                if let Some(entry) = neuron.get_routing_table_mut().get_mut(&child.pattern_id) {
+                if let Some(entry) = neuron.get_temporal_routing_table_mut().get_mut(&child.pattern_id) {
                     entry.last_activation_frame = child.last_activation_frame;
                 }
                 for ctx in &child.context {
@@ -675,43 +668,31 @@ impl Column {
             if stat.age == 0 {
                 neuron.load_spatial_error_stats(stat.n, stat.mean, stat.m2);
             } else {
-                neuron.load_error_stats(stat.age, stat.n, stat.mean, stat.m2);
+                neuron.load_temporal_error_stats(stat.age, stat.n, stat.mean, stat.m2);
             }
         }
 
         self.neurons.insert(neuron.id, neuron);
     }
 
-    /// Walk routing tables and compute death frames from current activation
-    /// strengths. Used on restore to rebuild the death ledger without mutating
-    /// any neuron state.
+    /// Walk routing tables and compute death frames from current activation strengths.
+    /// Each neuron computes death frames for its own temporal and spatial tables in a single call.
+    /// Used on restore to rebuild the death ledger without mutating any neuron state.
     pub fn collect_death_frames(&self) -> Vec<DeathFrameEntry> {
         let mut entries = Vec::new();
         for neuron in self.neurons.values() {
-            for (&pattern_id, entry) in neuron.get_routing_table() {
-                let death_frame = (entry.activation_strength / neuron.get_pattern_forget_rate()).ceil() as FrameNumber;
-                entries.push(DeathFrameEntry { pattern_id, death_frame });
-            }
+            entries.extend(neuron.compute_death_frames());
         }
         entries
     }
 
-    /// Materialize lazy decay into actual activation strengths and reset
-    /// last_activation_frame to 0 for all children. Returns {pattern_id, death_frame}
-    /// entries so Thalamus can rebuild the death ledger.
+    /// Materialize lazy decay into actual activation strengths and reset last_activation_frame to 0 for all children.
+    /// Each neuron materializes and resets its own temporal and spatial routing tables in a single call.
+    /// Returns {pattern_id, death_frame} entries so Thalamus can rebuild the death ledger.
     pub fn materialize_and_reset_neurons(&mut self, current_frame: FrameNumber) -> Vec<DeathFrameEntry> {
         let mut death_entries = Vec::new();
         for neuron in self.neurons.values_mut() {
-            // collect pattern ids first to avoid borrow issues
-            let pattern_ids: Vec<NeuronId> = neuron.get_routing_table().keys().copied().collect();
-            for pattern_id in pattern_ids {
-                neuron.materialize_child_strength(pattern_id, current_frame);
-                if let Some(entry) = neuron.get_routing_table_mut().get_mut(&pattern_id) {
-                    entry.last_activation_frame = 0;
-                    let death_frame = (entry.activation_strength / neuron.get_pattern_forget_rate()).ceil() as FrameNumber;
-                    death_entries.push(DeathFrameEntry { pattern_id, death_frame });
-                }
-            }
+            death_entries.extend(neuron.materialize_and_reset_children(current_frame));
         }
         death_entries
     }
