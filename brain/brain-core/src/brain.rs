@@ -1922,18 +1922,8 @@ impl Brain {
         // Resolve the supplied (value, reward) pairs to action neuron ids paired with their per-target reward.
         let action_targets = self.resolve_action_targets(actions);
 
-        // Wire the apex — the temporal level-0 neurons populated by compute_apex_and_handoff — to
-        // the action targets. Subsumed parents are excluded because the higher-level pattern that
-        // absorbed them represents them; wiring the parent would dilute the pattern's signal.
-        // Falls back to the full temporal voter set on the rare path where process_frame was not
-        // called before learn (e.g. supervised wiring on a freshly-loaded brain).
-        let apex: FxHashMap<NeuronId, _> = self.memory.get_temporal_level_neurons(0);
-        let voter_ids: Vec<NeuronId> = if apex.is_empty() {
-            self.get_active_voter_ids()
-        } else {
-            apex.into_keys().collect()
-        };
-        assert!(!voter_ids.is_empty(), "Brain.learn: no active voters — process_frame must be called (with a non-empty frame) before learn()");
+        // Wire the temporal apex (active, non-subsumed voter across all temporal levels) to the action targets.
+        let voter_ids = self.get_active_voter_ids();
 
         // Wire every (voter → action) edge at the supplied distance with smoothed-reward accumulation.
         self.learn_action_connections(&voter_ids, &action_targets, distance);
@@ -1983,6 +1973,9 @@ impl Brain {
     /// They don't vote and shouldn't be wired by learn().
     /// A voter active at multiple ages is returned once — wiring is per-(voter, target, distance), not per-age.
     /// Panics if no voters are active — learn() requires a non-empty process_frame to have just run.
+    /// The temporal apex: every active, non-subsumed voter across all temporal levels in the window.
+    /// This is the frontier learn() wires to actions — see the call site for why it's level-agnostic.
+    /// Asserts non-empty, which only holds after process_frame ran on a non-empty frame.
     fn get_active_voter_ids(&self) -> Vec<NeuronId> {
         let voter_ids: Vec<NeuronId> = self.memory.get_active_voter_ids().into_iter().collect();
         assert!(!voter_ids.is_empty(), "Brain.learn: no active voters — process_frame must be called (with a non-empty frame) before learn()");
