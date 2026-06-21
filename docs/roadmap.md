@@ -66,6 +66,15 @@ Pick the inference scope rule by experiment on the stocks pipeline, comparing:
 
 The decision propagates into spatial processing.
 
+**Action pattern composition** (Part 2 of the doc) hangs off this experiment. Once the scope rule is
+settled — composition assumes levels meaningfully predict levels, so it is **gated on a non-`base`
+winner** — design the outcome-gated action hierarchy: action-pattern/action-moment neurons, mint by
+event-level outcome + reward advantage (never frequency), event-context indexing for the high-event ->
+high-action link, and commitment arbitration. Reverse-replay credit is a later accelerator, not a
+precondition. The test harness is the long pole: no current domain exercises it — plan to convert the
+**text channel to action-based output (a chatbot)** so emitting tokens becomes a composable action
+sequence. Open questions and full dependencies are listed in the doc.
+
 ---
 
 ## 7. Neuron Re-use
