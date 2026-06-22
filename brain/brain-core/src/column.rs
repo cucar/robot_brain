@@ -489,7 +489,6 @@ impl Column {
         }
     }
 
-    /// Spatial correction install (1c) — for each op, add the new pattern as a child on the
     /// Record spatial-error samples on owned neurons. Each (neuron_id, error_rate) pair updates
     /// the neuron's spatial Welford bucket. Used so dynamic error modes for spatial
     /// (conservative/neutral/aggressive) can adapt thresholds — without these samples the modes
@@ -502,6 +501,7 @@ impl Column {
         }
     }
 
+    /// Spatial correction install — for each op, add the new pattern as a child on the
     /// parent neuron with the d=0 context entries, register the resulting death frame, and emit
     /// ContextRefUpdates for each context-entry target so they know this parent now references them.
     /// Corrections are NOT activated this frame; the routing-table entry will fire on next frame's
