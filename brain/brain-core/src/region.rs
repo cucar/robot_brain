@@ -201,7 +201,7 @@ impl Region {
     // ── Spatial error-stats recording ──────────────────────────────────────
 
     /// Fan out spatial-error samples to owning columns. Each column updates its neurons'
-    /// `error_stats[0]` Welford buckets via `Neuron::record_temporal_error`.
+    /// spatial Welford bucket via `Neuron::record_spatial_error`.
     pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
         let mut by_column: Vec<Vec<(NeuronId, f64)>> = (0..self.c).map(|_| Vec::new()).collect();
         for &(id, rate) in feedback {
