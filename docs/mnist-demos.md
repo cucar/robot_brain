@@ -205,6 +205,40 @@ The behavior is textbook well-behaved class-incremental learning:
 ~20–25%, replay-based methods 70–90% (but they store and replay old examples), joint-training upper
 bound ~98%. Citations: van de Ven & Tolias 2019; Hsu et al. 2018.
 
+### Vanilla-MLP baseline — the contrast figure
+
+A plain 2-layer MLP run through the *identical* protocol makes the result concrete: standard SGD with no
+continual-learning machinery collapses, where the brain holds. It is a self-contained NumPy script (no
+torch, separate from the brain) reading the same gzipped IDX files:
+
+```bash
+python apps/mnist/jobs/split_mnist_mlp.py
+```
+
+```
+Joint training (all 10 classes at once, same MLP): 94.52%   <- the ceiling
+
+Retention matrix  T0(0,1)   T1(2,3)   T2(4,5)   T3(6,7)   T4(8,9)
+  after T0         99.9%     0.0%     0.0%     0.0%     0.0%
+  after T1          0.0%    98.0%     0.0%     0.0%     0.0%
+  after T2          0.0%     0.0%    99.2%     0.0%     0.0%
+  after T3          0.0%     0.0%     0.0%    99.5%     0.0%
+  after T4          0.0%     0.0%     0.0%     0.2%    97.7%
+
+  Average accuracy after Task 4 (headline): 19.58%
+
+The collapse: 94.5% (joint) -> 19.4% (sequential), a 75pp drop to the ~20% chance floor.
+```
+
+The script trains the **same MLP twice** so the collapse has a ceiling to fall from: jointly on all 10
+classes shuffled together (**94.5%** — the upper bound), then class-incrementally two classes at a time.
+The diagonal tells the story — each task hits ~98–99% the moment it is trained (see the live value on its
+own diagonal), then drops to **0%** as the next task overwrites those weights. Only the most recent two
+classes survive, so the average sits at the ~20% chance floor. Place this next to the brain's matrix
+(96.15% average, 1.69pp forgetting): same protocol, same data, same 10-way output, *both architectures
+capable of ~95% jointly* — the only difference is the learning rule. That turns "we don't forget" into
+"we don't forget *where standard nets catastrophically do*."
+
 **Why it holds architecturally:** patterns formed for digits 0/1 have disjoint context fingerprints from
 2/3, so they don't fire — and aren't modified — during later tasks. The additive/local learning gives
 stability; the hierarchy gives accuracy. (The honest caveat for a paper: additive/instance-based learners

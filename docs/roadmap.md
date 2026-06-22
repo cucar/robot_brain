@@ -5,18 +5,7 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ---
 
-## 1. Split-MNIST MLP baseline
-
-A vanilla MLP trained under the *identical* class-incremental protocol — the 5 tasks x 2 classes,
-strictly sequential, tested on all 10 classes, no task IDs — expected to collapse to ~20%. A ~30-line
-Python script, separate from the brain. This is the contrast figure for the Split-MNIST result in
-[mnist-demos.md](mnist-demos.md): it turns "we don't forget" into "we don't forget *where standard
-nets catastrophically do*." Pair it with the cited literature baselines (in mnist-demos.md), not the
-naive-MLP collapse alone.
-
----
-
-## 2. Optimize MNIST
+## 1. Optimize MNIST
 
 Push past the 96.44% joint result. Current best results and runnable demos live in
 [mnist-demos.md](mnist-demos.md). Three tests remain:
@@ -31,7 +20,7 @@ plateau after one pass, so a single episode suffices.
 
 ---
 
-## 3. Temporal channel inheritance experiment
+## 2. Temporal channel inheritance experiment
 
 We gave *spatial* corrections their parent's full (channel, dimension, coordinate). Open
 question: **should temporal corrections inherit channels the same way?** Symmetry argues yes, but
@@ -40,7 +29,7 @@ stocks. Tracked in [spatial-processing.md §8](spatial-processing.md).
 
 ---
 
-## 4. Inference Level Experiment
+## 3. Inference Level Experiment
 
 See **[inference-level.md](./inference-level.md)**.
 
@@ -54,7 +43,7 @@ The decision propagates into spatial processing, and gates the action-compositio
 
 ---
 
-## 5. Neuron Re-use
+## 4. Neuron Re-use
 
 See **[neuron-reuse.md](./neuron-reuse.md)**.
 
@@ -66,7 +55,7 @@ Allocates capacity onto the error manifold (residual-fitting). **Scope is reduce
 
 ---
 
-## 6. Re-introduce context refinement
+## 5. Re-introduce context refinement
 
 Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
 common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
@@ -88,7 +77,7 @@ If the headline numbers land here:
 
 ---
 
-## 7. Documentation & Publish
+## 6. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update README demos and examples.
 - **npm package** — prepare and publish to the registry.
@@ -96,7 +85,7 @@ If the headline numbers land here:
 
 ---
 
-## 8. Action composition
+## 7. Action composition
 
 See **[action-composition.md](./action-composition.md)**. **Gated on §5** — composition assumes levels
 meaningfully predict levels, so it waits on a non-`base` winner from the inference-scope experiment.
@@ -113,7 +102,7 @@ sequence. Open questions and full dependencies are in the doc.
 
 ---
 
-## 9. Global rewards
+## 8. Global rewards
 
 See **[global-rewards.md](./global-rewards.md)**. **Independent** of §5 and §8 — the reward distribution
 policy holds with or without action composition, and can be decided separately. It meets composition at
@@ -126,13 +115,13 @@ decay so distant frames keep nonzero credit under long-latency reward. Watch the
 
 ---
 
-## 10. Calculate up/down accuracy separately
+## 9. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 11. Neuron Limits
+## 10. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -150,7 +139,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 12. Exponential Temporal Binning Test
+## 11. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).
