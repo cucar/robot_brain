@@ -41,6 +41,8 @@ Each frame, the brain:
 
 ## Quick Start
 
+**Prerequisites:** [Node.js](https://nodejs.org/) (with [pnpm](https://pnpm.io/)) and the [Rust toolchain](https://rustup.rs/) (the brain core is compiled from Rust into a native Node.js addon).
+
 ```bash
 # Clone the repository
 git clone https://github.com/cucar/robot_brain.git
@@ -48,6 +50,24 @@ cd robot_brain
 
 # Install dependencies (pnpm workspace — links robot-brain into each app)
 pnpm install
+```
+
+### Build the native addon
+
+The demos load a compiled native addon (`brain/brain-napi/brain-napi.node`) built from the Rust core. Build it once before running any demo (and again after changing Rust code). The build script compiles `brain-napi` in release mode and copies the platform artifact into place.
+
+**Linux / macOS:**
+
+```bash
+cd brain
+./build.sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+cd brain
+./build.ps1
 ```
 
 ## Demos
