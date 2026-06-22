@@ -465,7 +465,16 @@ impl Neuron {
 
     /// Serialize per-age Welford error stats. The spatial bucket surfaces as age=0; temporal
     /// entries surface as their age index.
+    /// Age 0 is reused for the spatial bucket because temporal age 0 never carries stats: error
+    /// feedback only comes from evaluate_vote_error, which returns None for age 0 (an age-0 neuron is
+    /// just voting now, nothing to correct). So temporal_error_stats[0] is always None and skipping it
+    /// drops nothing — the debug_assert guards that invariant against future changes to the feedback path.
     fn serialize_error_stats(&self) -> Vec<SerializedErrorStats> {
+        debug_assert!(
+            self.temporal_error_stats.first().map_or(true, |s| s.is_none()),
+            "temporal_error_stats[0] is unexpectedly populated — serialize aliases age 0 onto the spatial \
+             bucket on the assumption it is always empty (see evaluate_vote_error's age-0 guard)"
+        );
         let mut result = Vec::new();
         if let Some(s) = &self.spatial_error_stats {
             result.push(SerializedErrorStats { age: 0, n: s.n, mean: s.mean, m2: s.m2 });
