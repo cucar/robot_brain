@@ -20,16 +20,7 @@ plateau after one pass, so a single episode suffices.
 
 ---
 
-## 2. Temporal channel inheritance experiment
-
-We gave *spatial* corrections their parent's full (channel, dimension, coordinate). Open
-question: **should temporal corrections inherit channels the same way?** Symmetry argues yes, but
-temporal corrections group across channels by design, so it may not apply cleanly. Test on MNIST and
-stocks. Tracked in [spatial-processing.md §8](spatial-processing.md).
-
----
-
-## 3. Inference Level Experiment
+## 2. Inference Level Experiment
 
 See **[inference-level.md](./inference-level.md)**.
 
@@ -43,7 +34,7 @@ The decision propagates into spatial processing, and gates the action-compositio
 
 ---
 
-## 4. Neuron Re-use
+## 3. Neuron Re-use
 
 See **[neuron-reuse.md](./neuron-reuse.md)**.
 
@@ -55,7 +46,7 @@ Allocates capacity onto the error manifold (residual-fitting). **Scope is reduce
 
 ---
 
-## 5. Re-introduce context refinement
+## 4. Re-introduce context refinement
 
 Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
 common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
@@ -77,7 +68,7 @@ If the headline numbers land here:
 
 ---
 
-## 6. Documentation & Publish
+## 5. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update README demos and examples.
 - **npm package** — prepare and publish to the registry.
@@ -85,7 +76,7 @@ If the headline numbers land here:
 
 ---
 
-## 7. Action composition
+## 6. Action composition
 
 See **[action-composition.md](./action-composition.md)**. **Gated on §5** — composition assumes levels
 meaningfully predict levels, so it waits on a non-`base` winner from the inference-scope experiment.
@@ -102,7 +93,7 @@ sequence. Open questions and full dependencies are in the doc.
 
 ---
 
-## 8. Global rewards
+## 7. Global rewards
 
 See **[global-rewards.md](./global-rewards.md)**. **Independent** of §5 and §8 — the reward distribution
 policy holds with or without action composition, and can be decided separately. It meets composition at
@@ -115,13 +106,13 @@ decay so distant frames keep nonzero credit under long-latency reward. Watch the
 
 ---
 
-## 9. Calculate up/down accuracy separately
+## 8. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 10. Neuron Limits
+## 9. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -139,7 +130,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 11. Exponential Temporal Binning Test
+## 10. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).

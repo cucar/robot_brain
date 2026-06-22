@@ -436,6 +436,7 @@ impl Thalamus {
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
     ) -> PatternNeuronSpec {
+
         // resolve connection spec using thalamus-local lookups (channel, reward)
         let parent_channel = self.get_neuron_channel_id(parent_id).unwrap_or(0);
         let mut connections = Vec::new();
@@ -460,12 +461,28 @@ impl Thalamus {
         self.next_neuron_id += 1;
 
         // register metadata centrally (Neuron construction deferred to create_neurons).
-        // Pattern neurons have NO channel — they emerge from cross-channel correlations. Callers
-        // that need a channel id will receive None from `get_neuron_channel_id`, which their
-        // neighbor lookups should treat as no-restriction.
         self.neuron_parents.insert(id, parent_id);
         self.neuron_temporal_levels.insert(id, level);
         self.increment_temporal_level_count(level);
+
+        // Inherit the parent's full coordinate exactly like spatial corrections.
+        // A temporal correction is a refinement of the parent inferences under observed context.
+        // It asserts the same value, so the coordinate is a true invariant rather than an invented one.
+        // Giving deeper temporal patterns a concrete channel lets neighbor filtering apply at higher levels.
+        // Without this they fall back to all-pairs (no neighbor restriction), grouping across every channel.
+        // NOT registered in neurons_by_value. That requires coordinate uniqueness.
+        // Value → neuron resolution must always land on the base sensory/action neuron.
+        // The inherited coordinate is metadata for neighbor filtering and consensus grouping only.
+        // Refined tokens are reached solely via routing matches.
+        // The parent is always registered in base_neurons, so this chains down to the original L0 coordinate.
+        // On restore the coordinate is rederived by walking neuron_parents to the L0 ancestor (see restore_snapshot).
+        let inherited = self.base_neurons.get(&parent_id)
+            .unwrap_or_else(|| panic!(
+                "allocate_temporal_pattern_neuron: parent {} has no base-neuron coordinate to inherit",
+                parent_id
+            ))
+            .clone();
+        self.base_neurons.insert(id, inherited);
 
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
@@ -2064,6 +2081,28 @@ impl Thalamus {
             if let Some(inherited) = self.base_neurons.get(&parent_id).cloned() {
                 // NOT inserted into neurons_by_value — refined tokens are reached only via routing
                 // matches, and that map must keep resolving the coordinate to its L0 sensory.
+                self.base_neurons.insert(neuron_id, inherited);
+            }
+        }
+
+        // Rebuild inherited coordinates for temporal pattern neurons, mirroring the spatial rebuild
+        // above and allocate_temporal_pattern_neuron. Snapshots drop the inherited coordinate for the
+        // same reason (it would clobber the L0 sensory mapping in neurons_by_value on restore), so it
+        // is rederived here by chaining each correction to its parent's base coordinate. Process in
+        // ascending temporal_level so an L2 inherits from its already-rebuilt L1 parent, which in turn
+        // anchored at the original L0 sensory. Temporal patterns are spatial_level 0 with
+        // temporal_level >= 1 — the complement of the spatial-pattern filter above.
+        let mut temporal_patterns: Vec<(NeuronId, Level)> = snapshot.neurons.iter()
+            .filter(|e| e.spatial_level == 0 && e.temporal_level != 0)
+            .map(|e| (e.neuron.id, e.temporal_level))
+            .collect();
+        temporal_patterns.sort_by_key(|&(_, level)| level);
+        for (neuron_id, _) in temporal_patterns {
+            let parent_id = match self.neuron_parents.get(&neuron_id) {
+                Some(&p) => p,
+                None => continue,
+            };
+            if let Some(inherited) = self.base_neurons.get(&parent_id).cloned() {
                 self.base_neurons.insert(neuron_id, inherited);
             }
         }
