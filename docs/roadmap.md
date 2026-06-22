@@ -5,21 +5,14 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ---
 
-### 1. Fix the Ctrl+C bug in MNIST test.js
-
-Shutdown handling is not working — `isShuttingDown` does not cleanly interrupt runs. Diagnose and
-fix so long jobs can be cancelled without leaving the brain half-written.
-
----
-
-## 2. Merge spatial branch to main
+## 1. Merge spatial branch to main
 
 - **Review all the code** on the `spatial` branch.
 - Merge once the near-term cleanups, the two review fixes, and stocks parity are in.
 
 ---
 
-## 3. Split-MNIST MLP baseline
+## 2. Split-MNIST MLP baseline
 
 A vanilla MLP trained under the *identical* class-incremental protocol — the 5 tasks x 2 classes,
 strictly sequential, tested on all 10 classes, no task IDs — expected to collapse to ~20%. A ~30-line
@@ -30,7 +23,7 @@ naive-MLP collapse alone.
 
 ---
 
-## 4. Optimize MNIST
+## 3. Optimize MNIST
 
 Push past the 96.44% joint result. Current best results and runnable demos live in
 [mnist-demos.md](mnist-demos.md). Three tests remain:
@@ -45,7 +38,7 @@ plateau after one pass, so a single episode suffices.
 
 ---
 
-## 5. Temporal channel inheritance experiment
+## 4. Temporal channel inheritance experiment
 
 Fix 2.2 gave *spatial* corrections their parent's full (channel, dimension, coordinate). Open
 question: **should temporal corrections inherit channels the same way?** Symmetry argues yes, but
@@ -54,7 +47,7 @@ stocks. Tracked in [spatial-processing.md §8](spatial-processing.md).
 
 ---
 
-## 6. Inference Level Experiment
+## 5. Inference Level Experiment
 
 See **[inference-level.md](./inference-level.md)**.
 
@@ -64,20 +57,11 @@ Pick the inference scope rule by experiment on the stocks pipeline, comparing:
 - **Same level**
 - **Lower level**
 
-The decision propagates into spatial processing.
-
-**Action pattern composition** (Part 2 of the doc) hangs off this experiment. Once the scope rule is
-settled — composition assumes levels meaningfully predict levels, so it is **gated on a non-`base`
-winner** — design the outcome-gated action hierarchy: action-pattern/action-moment neurons, mint by
-event-level outcome + reward advantage (never frequency), event-context indexing for the high-event ->
-high-action link, and commitment arbitration. Reverse-replay credit is a later accelerator, not a
-precondition. The test harness is the long pole: no current domain exercises it — plan to convert the
-**text channel to action-based output (a chatbot)** so emitting tokens becomes a composable action
-sequence. Open questions and full dependencies are listed in the doc.
+The decision propagates into spatial processing, and gates the action-composition work in §8.
 
 ---
 
-## 7. Neuron Re-use
+## 6. Neuron Re-use
 
 See **[neuron-reuse.md](./neuron-reuse.md)**.
 
@@ -89,7 +73,7 @@ Allocates capacity onto the error manifold (residual-fitting). **Scope is reduce
 
 ---
 
-## 8. Re-introduce context refinement
+## 7. Re-introduce context refinement
 
 Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
 common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
@@ -111,13 +95,51 @@ If the headline numbers land here:
 
 ---
 
-## 9. Calculate up/down accuracy separately
+## 8. Documentation & Publish
+
+- **Update all documentation** — sync docs with the current architecture post-Rust migration; update README demos and examples.
+- **npm package** — prepare and publish to the registry.
+- Refactor repo to have the apps be able to use npm or local packages.
+
+---
+
+## 9. Action composition
+
+See **[action-composition.md](./action-composition.md)**. **Gated on §5** — composition assumes levels
+meaningfully predict levels, so it waits on a non-`base` winner from the inference-scope experiment.
+
+Grow the action hierarchy by the same machinery as events, run backward in time (`d<0`): after an
+action fires it binds to its antecedents and mints an action pattern when backward inference error
+crosses the existing Welford threshold (**mint by structure, survive by value** — the advantage test
+lives in the Death Ledger, not the mint gate). Plus action-moment neurons, commitment / call-stack
+arbitration, and a later reverse-replay credit accelerator.
+
+The test harness is the long pole: no current domain exercises action composition — plan to convert the
+**text channel to action-based output (a chatbot)** so emitting tokens becomes a composable action
+sequence. Open questions and full dependencies are in the doc.
+
+---
+
+## 10. Global rewards
+
+See **[global-rewards.md](./global-rewards.md)**. **Independent** of §5 and §8 — the reward distribution
+policy holds with or without action composition, and can be decided separately. It meets composition at
+exactly one point: reward credits the **apex active action**, not base neurons.
+
+Move from the current **last-frame** policy to **per-span global rewards**: distribute reward back
+across the apex actions active throughout the context span, weighted by **linear** (not exponential)
+decay so distant frames keep nonzero credit under long-latency reward. Watch the length-bias assumption
+(see doc) — span-normalized application may be needed if pattern spans vary widely.
+
+---
+
+## 11. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 10. Neuron Limits
+## 12. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -135,7 +157,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 11. Exponential Temporal Binning Test
+## 13. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).
@@ -151,14 +173,3 @@ explosion.
 - **Validation:** level-1 patterns behave nearly identically to current (regression); higher-level
   patterns form with fewer, coarser context entries; accuracy on existing benchmarks does not
   regress.
-
----
-
-## 12. Documentation & Publish
-
-- **Update all documentation** — sync docs with the current architecture post-Rust migration; update
-  README demos and examples.
-- **Fashion-MNIST** on the same stack — generality evidence for the paper.
-- **Prior-art differentiation writeup** — HTM/Numenta, ART/Grossberg, predictive coding, growing
-  neural gas.
-- **npm package** — prepare and publish to the registry.
