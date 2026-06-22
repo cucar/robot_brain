@@ -381,12 +381,15 @@ impl Memory {
         }
     }
 
-    /// Maximum active spatial level.
+    /// Count of active spatial levels — equals the highest active level + 1. Levels are built
+    /// bottom-up and are always contiguous from 0 (a level can't be active without the one below it),
+    /// so there are never gaps. Used as the initial upper bound for the bottom-up spatial sweep.
     pub fn get_spatial_max_active_level(&self) -> usize {
         self.spatial_level_index.len()
     }
 
-    /// Maximum active temporal level.
+    /// Count of active temporal levels — equals the highest active level + 1. Same contiguity
+    /// invariant as the spatial side. Used as the initial upper bound for the bottom-up temporal sweep.
     pub fn get_temporal_max_active_level(&self) -> usize {
         self.temporal_level_index.len()
     }
