@@ -10,12 +10,16 @@ export declare class Brain {
    *
    * Options shape (all optional, with defaults matching JS Brain):
    *   contextLength: number (default 10)
-   *   errorCorrectionMode: string (default 'conservative')
-   *   errorCorrectionThreshold: number (default 0.5)
-   *   mergeThreshold: number (default 0.5)
+   *   --- error / merge knobs (each resolves: per-phase flag ?? shared alias ?? default) ---
+   *   errorCorrectionMode: string (default 'conservative')  — ALIAS, sets both phases
+   *   errorCorrectionThreshold: number (default 0.5)        — ALIAS, sets both phases
+   *   mergeThreshold: number (default 0.5)                  — ALIAS, sets both phases
+   *   temporalErrorCorrectionMode / temporalErrorCorrectionThreshold / temporalMergeThreshold — temporal (d>0) overrides
+   *   spatialErrorCorrectionMode / spatialErrorCorrectionThreshold / spatialMergeThreshold     — spatial (d=0) overrides
    *   patternForgetRate: number (default 0.01)
    *   regions: number (default 1)
    *   columns: number (default 1)
+   *   consensus: string 'democratic' | 'nb' (default 'democratic')
    *   debug: boolean (default false)
    */
   constructor(options?: object | undefined | null)
@@ -36,13 +40,13 @@ export declare class Brain {
   processFrame(inputs: object, rewards: object): object
   /**
    * Get active neurons in context with their levels.
-   * Returns an array of { neuronId, level, suppressed } objects.
+   * Returns an array of { neuronId, temporalLevel, suppressed } objects.
    * suppressed=true means the neuron activated a higher-level pattern and
    * should not be counted as an independent voter.
    */
   getActiveNeurons(): object
   /**
-   * Inspect one neuron: returns { neuronId, level, parentId | null,
+   * Inspect one neuron: returns { neuronId, temporalLevel, parentId | null,
    * context: [{ neuronId, distance, strength }, ...] }.
    * Context entries come from the parent neuron's routing-table entry
    * for this child pattern. Level-0 sensory neurons have parent_id=null
@@ -72,11 +76,13 @@ export declare class Brain {
   /**
    * Supervised wiring step that sits on top of the last `processFrame` call.
    * `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
-   * Each `value` is quantized to its action neuron; reward is folded into that connection via smoothed accumulation
-   * (strength += 1, reward = running mean). Callers typically supply every action value on the dim — correct value
-   * with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
-   * `distance` is the connection-table slot at which to wire and read back; pass `distance=1` for single-frame supervised harnesses.
+   * Each `value` is quantized to the corresponding action neuron; reward is applied to that connection
+   * via smoothed accumulation (strength += 1, reward = running mean). Callers typically supply every action value
+   * on the dim — correct value with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
+   * `distance` is the connection-table slot at which to wire and read back.
+   * Wires every currently-active age-0 voter to every supplied action target at the given distance.
    * Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
+   * Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
    */
   learn(actions: object, distance: number): object
   /** Reset brain memory state for a clean episode start. */
@@ -85,6 +91,35 @@ export declare class Brain {
   resetBrain(): void
   /** Reset accuracy and reward stats for a new episode. */
   resetAccuracyStats(): void
+  /** Cumulative count of spatial corrections minted since brain start (or last hard reset). */
+  getSpatialCorrectionCount(): number
+  /** Number of correction neurons currently sitting above the base spatial level. */
+  countActiveSpatialCorrections(): number
+  /**
+   * Per-level count of correction neurons. Returns array where index 0 is level 1, etc.
+   * Length tells you the maximum spatial level reached.
+   */
+  spatialLevelCounts(): Array<number>
+  /**
+   * Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
+   * This is the set a channel may co-fire with in the same frame to form a spatial pattern.
+   * Names not in the registry are silently ignored; an empty list shrinks the spatial
+   * neighborhood to {itself}; channels with no call retain the default all-pairs spatial
+   * neighborhood. Call AFTER registering all channels — neighbor names are resolved at this call.
+   */
+  setSpatialNeighbors(name: string, neighborNames: Array<string>): void
+  /**
+   * Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
+   * This is the set whose past a channel may sequence against to predict the future.
+   * Same name-resolution and all-pairs-default semantics as `setSpatialNeighbors`.
+   */
+  setTemporalNeighbors(name: string, neighborNames: Array<string>): void
+  /**
+   * Declare the same neighbor set for BOTH phases — convenience for channels whose spatial and
+   * temporal neighbors coincide (e.g. retinotopic pixels). Equivalent to calling
+   * `setSpatialNeighbors` and `setTemporalNeighbors` with the same list.
+   */
+  setChannelNeighbors(name: string, neighborNames: Array<string>): void
   /** Look up a dimension ID by its registered name. */
   getDimensionIdByName(name: string): unknown
   /** Look up a neuron ID by its (dimId, bucketId) coordinate. */

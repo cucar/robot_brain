@@ -75,6 +75,15 @@ pub struct ContextEntry {
     pub strength: Strength,
 }
 
+/// Death frame entry for a child pattern: the frame at which it decays to zero strength
+/// and becomes eligible for reaping. Produced by neurons and rebuilt into the death ledger
+/// on restore, so it crosses the neuron → column → region boundary.
+#[derive(Debug, Clone)]
+pub struct DeathFrameEntry {
+    pub pattern_id: NeuronId,
+    pub death_frame: FrameNumber,
+}
+
 /// Welford online statistics for incremental mean/variance calculation.
 /// Used for dynamic error thresholds per (neuron, age).
 #[derive(Debug, Clone)]
@@ -121,6 +130,19 @@ pub enum Phase {
     Spatial,
     Temporal,
 }
+
+/// Consensus mode — determines how the per-voter action posteriors are combined into a winner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsensusMode {
+    /// Strength-weighted arithmetic mean of the per-voter posteriors, argmax over the dimension.
+    /// A soft ensemble: a candidate can win on a good average even when several voters contradict it.
+    Democratic,
+    /// Naive-Bayes product of the per-voter posteriors: argmax over Σ_voter log(P|voter + NB_EPS).
+    /// Each voter's near-zero posterior acts as a veto, the correct rule for argmax over
+    /// mutually-exclusive classes with roughly-independent evidence.
+    Nb,
+}
+
 
 /// Error correction mode — determines how error thresholds are calculated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

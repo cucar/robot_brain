@@ -22,7 +22,7 @@
  * @returns {string}
  */
 export function formatFrameSummary(summary, elapsed, tail = '') {
-	const { frameNumber, neuronCount, maxLevel } = summary;
+	const { frameNumber, neuronCount, maxTemporalLevel, maxSpatialLevel } = summary;
 
 	// "N/A" rather than 0 when the counter is empty — zero is a real measurement
 	// (a perfectly wrong predictor scores 0%) and shouldn't be confused with "no data".
@@ -42,7 +42,7 @@ export function formatFrameSummary(summary, elapsed, tail = '') {
 	// numbers stay grouped on the left and the timing stays anchored on the right.
 	const suffix = tail ? ` | ${tail}` : '';
 
-	return `Frame ${frameNumber} | Neurons: ${neuronCount} (L${maxLevel}) | Accuracy: ${accuracy} | Reward: ${reward} | MAPE: ${mape}${suffix} | Time: ${elapsed.toFixed(2)}ms`;
+	return `Frame ${frameNumber} | Neurons: ${neuronCount} (T${maxTemporalLevel} S${maxSpatialLevel}) | Accuracy: ${accuracy} | Reward: ${reward} | MAPE: ${mape}${suffix} | Time: ${elapsed.toFixed(2)}ms`;
 }
 
 /**
@@ -324,7 +324,7 @@ function aggregateVotesBySource(votes) {
 		// multi-distance pattern stays readable in the dump.
 		const key = `${v.voterId}:${v.distance}`;
 		if (!bySource.has(key))
-			bySource.set(key, { voterId: v.voterId, strength: 0, weightedRewardSum: 0, coords: v.voterLabel, level: v.voterLevel, distance: v.distance });
+			bySource.set(key, { voterId: v.voterId, strength: 0, weightedRewardSum: 0, coords: v.voterLabel, level: v.voterTemporalLevel, distance: v.distance });
 		const agg = bySource.get(key);
 		agg.strength += v.strength;
 		agg.weightedRewardSum += v.strength * v.reward;

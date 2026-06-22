@@ -10,10 +10,18 @@
  * Output layout matches the Backup class (no header rows, comma-separated):
  *   channels.csv, dimensions.csv, neurons.csv, base_neurons.csv,
  *   connections.csv, patterns.csv, contexts.csv
+ *
+ * Each table is streamed row-by-row from MySQL straight to its CSV file: the
+ * query result is consumed off the wire one row at a time (mysql2 `.stream()`)
+ * and piped through a Transform into a file write stream. The full result set is
+ * never materialized client-side, so multi-GB tables (connections, contexts)
+ * export in bounded memory instead of OOMing on the buffered `conn.query()`.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import getMySQLConnection from './database.js';
 
 // Table order is irrelevant for file output (no FKs in flat CSVs), but kept
@@ -24,7 +32,7 @@ import getMySQLConnection from './database.js';
 const TABLES = [
 	{ file: 'channels.csv',     query: 'SELECT id, name FROM channels ORDER BY id' },
 	{ file: 'dimensions.csv',   query: 'SELECT id, name FROM dimensions ORDER BY id' },
-	{ file: 'neurons.csv',      query: 'SELECT id, level FROM neurons ORDER BY id' },
+	{ file: 'neurons.csv',      query: 'SELECT id, temporal_level, spatial_level FROM neurons ORDER BY id' },
 	{ file: 'base_neurons.csv', query: 'SELECT neuron_id, channel_id, type, dimension_id, val FROM base_neurons ORDER BY neuron_id' },
 	{ file: 'connections.csv',  query: 'SELECT from_neuron_id, to_neuron_id, distance, strength, reward FROM connections' },
 	{ file: 'patterns.csv',     query: 'SELECT pattern_neuron_id, parent_neuron_id, strength FROM patterns' },
@@ -74,20 +82,38 @@ async function main() {
 	console.log(`📤 Exporting brain to: ${folder}`);
 
 	for (const { file, query } of TABLES) {
-		// `fields` carries the column metadata in result order — we use the names
-		// to index into each row object so the CSV column order matches the SELECT.
-		const [rows, fields] = await conn.query(query);
-		const colNames = fields.map(f => f.name);
-
-		// One CSV line per row. Each cell is escaped before joining so commas in
-		// values can't break the column count.
-		const lines = rows.map(row => colNames.map(c => escapeField(row[c])).join(','));
-
-		// Trailing newline only when there's content — empty tables produce a
-		// zero-byte file, which `LOAD DATA INFILE` and `wc -l` both handle cleanly.
 		const filepath = path.join(folder, file);
-		fs.writeFileSync(filepath, lines.length ? lines.join('\n') + '\n' : '');
-		console.log(`   ${file}: ${rows.length} rows`);
+
+		// Stream rows off the wire one at a time via the underlying core connection
+		// (`conn.connection`) — the promise wrapper's `conn.query()` buffers the
+		// whole result set, which is what OOMs on the large tables. A plain
+		// unordered SELECT streams from the storage engine, so neither the server
+		// nor the client holds the full table.
+		const queryStream = conn.connection.query(query).stream();
+
+		// `fields` fires before the first row and carries the column metadata in
+		// result order. Fall back to the row's own key order (mysql2 builds row
+		// objects in column order) if it hasn't arrived for the first chunk.
+		let colNames = null;
+		queryStream.on('fields', fields => { colNames = fields.map(f => f.name); });
+
+		// One CSV line per row, each cell escaped so commas/quotes/newlines in
+		// values can't break the column count. Object-in, string-out transform.
+		let rowCount = 0;
+		const toCsv = new Transform({
+			writableObjectMode: true,
+			transform(row, _enc, cb) {
+				const cols = colNames ?? Object.keys(row);
+				rowCount++;
+				cb(null, cols.map(c => escapeField(row[c])).join(',') + '\n');
+			}
+		});
+
+		// pipeline wires up backpressure and error propagation end to end. Empty
+		// tables emit no rows, leaving a zero-byte file — which `LOAD DATA INFILE`
+		// and `wc -l` both handle cleanly.
+		await pipeline(queryStream, toCsv, fs.createWriteStream(filepath));
+		console.log(`   ${file}: ${rowCount} rows`);
 	}
 
 	// Explicit close — the mysql2 connection holds the event loop open otherwise.

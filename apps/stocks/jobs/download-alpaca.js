@@ -11,8 +11,10 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 /**
- * Stock Download Script - Downloads historical stock data from Alpaca and saves as JSON
- * Run with: node stock-download.js --timeframe 1Min
+ * Stock Download Script (Alpaca) - Downloads historical stock data from Alpaca and saves as JSON.
+ * The JSON bar shape ({ Timestamp, OpenPrice, Volume, ... }) is consumed by setup.js to build the
+ * per-symbol CSV training files. For longer daily history from a free provider, see download-yahoo.js.
+ * Run with: node apps/stocks/jobs/download-alpaca.js --timeframe 1Min
  */
 
 // Configuration - edit these values as needed
@@ -21,11 +23,11 @@ const config = {
 	symbols: [
 		// 100 stocks - expected to be good
 		'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
-		'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
+		'AWR', /* 'SAND', */ 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
 		'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
 		'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
 		'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
-		'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', 'SILV',
+		'TSM', 'FCX', 'PM', 'NUE', 'LEU', 'AMT', 'WMT', 'MRVL', 'F', /* 'SILV', */
 		'RIO', 'NOC', 'V', 'ENB', 'BTU', 'AEM', 'AMZN', 'KLAC', 'CLF', 'O',
 		'NEM', 'GD', 'BAC', 'NEE', 'SQM', 'ABBV', 'AMAT', 'KMI', 'PG', 'UEC',
 		'GOLD', 'BHP', 'CRML', 'LLY', 'AVGO', 'FNV', 'JPM', 'DE', 'TM', 'WM',
@@ -37,7 +39,7 @@ const config = {
 		// loser batch 2 - catastrophic losses - going to zero - de-listings
 		// 'HOOD', 'COIN', 'RKT', 'TDOC', 'NKLA', 'LCID', 'ZM', 'DOCU', 'AFRM', 'UPST'
 	],
-	startDate: '2019-05-13',
+	startDate: '2021-05-13',
 	endDate: '2026-05-13'
 };
 

@@ -24,7 +24,7 @@ export default class StockTestJob extends Job {
 			symbols: [
 				// 100 stocks - expected to be good
 				'SO', 'VALE', 'STLD', 'GOOGL', 'MU', 'PLTR', 'UUUU', 'PFE', 'CRM', 'HAL',
-				'AWR', 'SAND', 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
+				'AWR', /* 'SAND', */ 'GM', 'EQIX', 'RTX', 'KGC', 'ALB', 'AAPL', 'CVX', 'HD',
 				'WPM', 'BEP', 'AREC', 'JNJ', 'SLB', 'PLD', 'EXK', 'NVDA', 'CAT', 'WFC',
 				'RGLD', 'WEAT', 'OXY', 'CEG', 'LOW', 'PAAS', 'MP', 'LMT', 'GS', 'COST',
 				'AG', 'TECK', 'MRK', 'INTC', 'BIP', 'PSA', 'DVN', 'AVAV', 'PEP', 'CDE',
@@ -49,7 +49,9 @@ export default class StockTestJob extends Job {
 			transactionCost: 0,                  // Simulated transaction cost per trade, as a percentage (e.g. 0.01 = 0.01%) - use --transaction-cost
 			initialCapital: 15000,               // Starting portfolio cash - use --initial-capital
 			maxPositions: 1,                     // Maximum simultaneous positions - use --max-positions
-			maxPrice: 5000                       // Maximum stock price for allocation - use --max-price
+			maxPrice: 5000,                      // Maximum stock price for allocation - use --max-price
+			minPrice: 0,                         // Minimum stock price for allocation (filters penny stocks) - use --min-price
+			spatial: false                       // Enable spatial (d=0 co-activation) processing across all symbols - use --spatial
 		};
 
 		this.encoders = [];
@@ -87,6 +89,9 @@ export default class StockTestJob extends Job {
 		const maxPriceIndex = process.argv.indexOf('--max-price');
 		if (maxPriceIndex !== -1 && process.argv[maxPriceIndex + 1]) this.config.maxPrice = parseFloat(process.argv[maxPriceIndex + 1]);
 
+		const minPriceIndex = process.argv.indexOf('--min-price');
+		if (minPriceIndex !== -1 && process.argv[minPriceIndex + 1]) this.config.minPrice = parseFloat(process.argv[minPriceIndex + 1]);
+
 		const initialCapitalIndex = process.argv.indexOf('--initial-capital');
 		if (initialCapitalIndex !== -1 && process.argv[initialCapitalIndex + 1]) this.config.initialCapital = parseFloat(process.argv[initialCapitalIndex + 1]);
 
@@ -94,6 +99,8 @@ export default class StockTestJob extends Job {
 		if (transactionCostIndex !== -1 && process.argv[transactionCostIndex + 1]) this.config.transactionCost = parseFloat(process.argv[transactionCostIndex + 1]);
 
 		if (process.argv.includes('--random-baseline')) this.config.randomBaseline = true;
+
+		if (process.argv.includes('--spatial')) this.config.spatial = true;
 
 		const maxFramesIndex = process.argv.indexOf('--max-frames');
 		if (maxFramesIndex !== -1 && process.argv[maxFramesIndex + 1]) this.config.maxFrames = parseInt(process.argv[maxFramesIndex + 1]);
@@ -116,6 +123,7 @@ export default class StockTestJob extends Job {
 		StockTrader.cash = this.config.initialCapital;
 		StockTrader.maxPositions = this.config.maxPositions;
 		StockTrader.maxPrice = this.config.maxPrice;
+		StockTrader.minPrice = this.config.minPrice;
 		StockTrader.transactionCost = this.config.transactionCost;
 		StockEncoder.transactionCost = this.config.transactionCost;
 
@@ -134,6 +142,15 @@ export default class StockTestJob extends Job {
 			this.encoders.push(encoder);
 			this.traders.push(trader);
 		}
+
+		// By default, spatial processing (d=0 co-activation) is OFF: an empty spatial neighbor list shrinks
+		// each channel's spatial neighborhood to {itself}, so the spatial sweep mints nothing — matching the
+		// pre-spatial `main` behavior. Temporal neighbors are left at the default all-pairs (every symbol can
+		// sequence against every other), which is the original stock behavior.
+		// With --spatial, we skip this loop entirely, leaving every channel at its default all-pairs spatial
+		// neighborhood — so all symbols are spatial neighbors and d=0 co-activation forms across the whole market.
+		if (!this.config.spatial)
+			for (const symbol of this.config.symbols) this.brain.setSpatialNeighbors(symbol, []);
 	}
 
 	/**
@@ -186,6 +203,7 @@ export default class StockTestJob extends Job {
 		console.log(`📋 Offset Rows: ${this.config.offsetRows}`);
 		if (this.config.randomBaseline) console.log(`🎲 Random baseline mode (brain disabled)`);
 		if (this.config.transactionCost > 0) console.log(`💸 Transaction cost: ${this.config.transactionCost}% per trade`);
+		console.log(`🧠 Spatial processing: ${this.config.spatial ? 'ON (all symbols are spatial neighbors)' : 'OFF (temporal only)'}`);
 		console.log('');
 	}
 

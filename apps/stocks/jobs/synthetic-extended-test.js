@@ -72,6 +72,11 @@ export default class SyntheticExtendedTest extends Job {
 		trader.bindChannelId(channelId);
 		this.encoders.push(encoder);
 		this.traders.push(trader);
+
+		// Temporal-only: disable spatial (d=0 co-activation) so behavior matches the pre-spatial
+		// `main` branch. Empty spatial neighbors turn it off entirely — including intra-channel
+		// (price/volume) co-activation, which the default all-pairs would otherwise enable.
+		this.brain.setSpatialNeighbors(this.config.symbol, []);
 	}
 
 	/**

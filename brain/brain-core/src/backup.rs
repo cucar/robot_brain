@@ -7,7 +7,7 @@
 /// Layout: `<job_dir>/backups/<YYYY-MM-DD_HH-mm-ss>/`
 ///   - `channels.csv`           id,name
 ///   - `dimensions.csv`         id,name
-///   - `neurons.csv`            id,level
+///   - `neurons.csv`            id,temporal_level,spatial_level
 ///   - `base_neurons.csv`       neuron_id,channel_id,type,dimension_id,val
 ///   - `connections.csv`        from_neuron_id,to_neuron_id,distance,strength,reward
 ///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength
@@ -15,6 +15,8 @@
 ///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2
 
 use std::fs;
+use std::fs::File;
+use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use rustc_hash::FxHashMap;
@@ -128,13 +130,20 @@ impl Backup {
             dimension_name_to_id.insert(row[1].clone(), id);
         }
 
-        // Neurons: build neuron shells keyed by id
+        // Neurons: build neuron shells keyed by id. The optional 3rd column carries spatial_level;
+        // pre-spatial snapshots omit it, so it defaults to 0 (sensory / base of the spatial hierarchy).
         let mut neurons: FxHashMap<NeuronId, SerializedNeuron> = FxHashMap::default();
-        let mut levels: FxHashMap<NeuronId, Level> = FxHashMap::default();
+        let mut temporal_levels: FxHashMap<NeuronId, Level> = FxHashMap::default();
+        let mut spatial_levels: FxHashMap<NeuronId, Level> = FxHashMap::default();
         for row in read_csv(&folder.join("neurons.csv"))? {
             if row.len() < 2 { continue; }
             let id: NeuronId = row[0].parse().map_err(|e| format!("Bad neuron id: {}", e))?;
-            let level: Level = row[1].parse().map_err(|e| format!("Bad level: {}", e))?;
+            let temporal_level: Level = row[1].parse().map_err(|e| format!("Bad temporal level: {}", e))?;
+            let spatial_level: Level = if row.len() >= 3 {
+                row[2].parse().map_err(|e| format!("Bad spatial level: {}", e))?
+            } else {
+                0
+            };
             neurons.insert(id, SerializedNeuron {
                 id,
                 pattern_forget_rate: self.pattern_forget_rate,
@@ -143,7 +152,8 @@ impl Backup {
                 context_refs: Vec::new(),
                 error_stats: Vec::new(),
             });
-            levels.insert(id, level);
+            temporal_levels.insert(id, temporal_level);
+            spatial_levels.insert(id, spatial_level);
         }
 
         // Base neurons: level-0 sensory metadata
@@ -207,9 +217,13 @@ impl Backup {
 
                 let parent = neurons.get_mut(&parent_id)
                     .ok_or_else(|| format!("Pattern parent not found: {}", parent_id))?;
+                // A spatial pattern neuron (spatial_level >= 1) restores as a spatial child of its parent;
+                // a temporal pattern (spatial_level 0, temporal level >= 1) as a temporal child.
+                let spatial = spatial_levels.get(&pattern_id).copied().unwrap_or(0) != 0;
                 let child_idx = parent.children.len();
                 parent.children.push(SerializedChild {
                     pattern_id,
+                    spatial,
                     activation_strength: strength,
                     last_activation_frame: 0,
                     context: Vec::new(),
@@ -248,11 +262,14 @@ impl Backup {
                     strength,
                 });
 
-                // Build contextRef on the context neuron
+                // Build contextRef on the context neuron. Spatial contexts carry age 0; temporal
+                // carry their real age (>= 1). Key the ref by (parent, spatial) so a neuron that is
+                // both a spatial and a temporal context of the same parent keeps two distinct refs.
+                let spatial = context_age == 0;
                 let ctx_neuron = neurons.get_mut(&context_id)
                     .ok_or_else(|| format!("contexts context neuron not found: {}", context_id))?;
                 let existing_ref = ctx_neuron.context_refs.iter_mut()
-                    .find(|r| r.parent_id == *parent_id);
+                    .find(|r| r.parent_id == *parent_id && r.spatial == spatial);
                 match existing_ref {
                     Some(ref_entry) => {
                         if !ref_entry.distances.contains(&context_age) {
@@ -262,6 +279,7 @@ impl Backup {
                     None => {
                         ctx_neuron.context_refs.push(SerializedContextRef {
                             parent_id: *parent_id,
+                            spatial,
                             distances: vec![context_age],
                         });
                     }
@@ -289,12 +307,20 @@ impl Backup {
         // Assemble the snapshot shape Thalamus expects
         let mut neuron_entries = Vec::with_capacity(neurons.len());
         for (neuron_id, neuron) in neurons {
-            let level = levels.get(&neuron_id).copied().unwrap_or(0);
-            let base_neuron = if level == 0 { base_neurons.get(&neuron_id).cloned() } else { None };
+            let temporal_level = temporal_levels.get(&neuron_id).copied().unwrap_or(0);
+            let spatial_level = spatial_levels.get(&neuron_id).copied().unwrap_or(0);
+            // Only temporal_level 0 AND spatial_level 0 carry a stored base coordinate; spatial
+            // patterns also sit at temporal_level 0 but their coordinate is rederived in Thalamus::restore_snapshot.
+            let base_neuron = if temporal_level == 0 && spatial_level == 0 {
+                base_neurons.get(&neuron_id).cloned()
+            } else {
+                None
+            };
             let parent_id = neuron_parents.get(&neuron_id).copied();
             neuron_entries.push(SnapshotNeuronEntry {
                 neuron,
-                level,
+                temporal_level,
+                spatial_level,
                 base_neuron,
                 parent_id,
             });
@@ -329,20 +355,24 @@ impl Backup {
         write_csv(&folder.join("dimensions.csv"), &rows)
     }
 
-    /// Write the neuron id+level table. Sorted by id.
+    /// Write the neuron id+temporal_level+spatial_level table. Sorted by id.
     fn write_neurons(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut rows: Vec<Vec<String>> = snapshot.neurons.iter()
-            .map(|entry| vec![entry.neuron.id.to_string(), entry.level.to_string()])
+            .map(|entry| vec![
+                entry.neuron.id.to_string(),
+                entry.temporal_level.to_string(),
+                entry.spatial_level.to_string(),
+            ])
             .collect();
         rows.sort_by_key(|r| r[0].parse::<u64>().unwrap_or(0));
         write_csv(&folder.join("neurons.csv"), &rows)
     }
 
-    /// Write the level-0 sensory metadata table.
+    /// Write the temporal_level-0 sensory metadata table.
     fn write_base_neurons(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut rows: Vec<Vec<String>> = Vec::new();
         for entry in &snapshot.neurons {
-            if entry.level != 0 { continue; }
+            if entry.temporal_level != 0 { continue; }
             if let Some(base) = &entry.base_neuron {
                 let type_str = match base.neuron_type {
                     NeuronType::Event => "event",
@@ -361,21 +391,22 @@ impl Backup {
         write_csv(&folder.join("base_neurons.csv"), &rows)
     }
 
-    /// Write the directed-connection table.
+    /// Write the directed-connection table. Streamed row-by-row — this is the largest table
+    /// (hundreds of MB on a big brain), so it must not be materialized in memory first.
     fn write_connections(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
-        let mut rows: Vec<Vec<String>> = Vec::new();
+        let mut w = open_csv(&folder.join("connections.csv"))?;
         for entry in &snapshot.neurons {
             for conn in &entry.neuron.connections {
-                rows.push(vec![
+                write_row(&mut w, &[
                     entry.neuron.id.to_string(),
                     conn.to_neuron_id.to_string(),
                     conn.distance.to_string(),
                     conn.strength.to_string(),
                     conn.reward.to_string(),
-                ]);
+                ])?;
             }
         }
-        write_csv(&folder.join("connections.csv"), &rows)
+        w.flush().map_err(|e| format!("Failed to flush connections.csv: {}", e))
     }
 
     /// Write the pattern→parent table with activation strengths.
@@ -385,9 +416,11 @@ impl Backup {
             .map(|e| (e.neuron.id, &e.neuron))
             .collect();
 
-        let mut rows: Vec<Vec<String>> = Vec::new();
+        let mut w = open_csv(&folder.join("patterns.csv"))?;
         for entry in &snapshot.neurons {
-            if entry.level == 0 { continue; }
+            // Every pattern neuron has a parent; true sensory/action neurons do not. Filter on parent
+            // presence rather than temporal level, because spatial pattern neurons also sit at level 0
+            // (their depth lives in spatial_level) and must still be recorded with their parent here.
             let parent_id = match entry.parent_id {
                 Some(p) => p,
                 None => continue,
@@ -398,31 +431,32 @@ impl Backup {
                     strength = child.activation_strength;
                 }
             }
-            rows.push(vec![
+            write_row(&mut w, &[
                 entry.neuron.id.to_string(),
                 parent_id.to_string(),
                 strength.to_string(),
-            ]);
+            ])?;
         }
-        write_csv(&folder.join("patterns.csv"), &rows)
+        w.flush().map_err(|e| format!("Failed to flush patterns.csv: {}", e))
     }
 
-    /// Write the pattern context-entry table.
+    /// Write the pattern context-entry table. Streamed row-by-row — on a deep brain this is the
+    /// single largest table (can exceed the connection table), so it must not be buffered whole.
     fn write_contexts(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
-        let mut rows: Vec<Vec<String>> = Vec::new();
+        let mut w = open_csv(&folder.join("contexts.csv"))?;
         for entry in &snapshot.neurons {
             for child in &entry.neuron.children {
                 for ctx in &child.context {
-                    rows.push(vec![
+                    write_row(&mut w, &[
                         child.pattern_id.to_string(),
                         ctx.neuron_id.to_string(),
                         ctx.distance.to_string(),
                         ctx.strength.to_string(),
-                    ]);
+                    ])?;
                 }
             }
         }
-        write_csv(&folder.join("contexts.csv"), &rows)
+        w.flush().map_err(|e| format!("Failed to flush contexts.csv: {}", e))
     }
 
     /// Write the per-(neuron, age) Welford error-stats table. Sorted by (neuron_id, age).
@@ -539,20 +573,35 @@ pub(crate) fn format_timestamp() -> String {
     format!("{:04}-{:02}-{:02}_{:02}-{:02}-{:02}", y, m, d, hours, minutes, seconds)
 }
 
-/// Write `rows` (vec of vec of strings) to `filepath` as CSV. Each cell is
-/// escaped via `escape_field`, fields joined by commas, lines by '\n'.
-/// Empty input produces a zero-byte file.
+/// Open a buffered streaming writer for a CSV file. Used by the large tables (connections, contexts,
+/// patterns) so they can emit rows incrementally instead of materializing the whole file in memory —
+/// a multi-GB brain otherwise OOMs on the single contiguous allocation.
+pub(crate) fn open_csv(filepath: &Path) -> Result<BufWriter<File>, String> {
+    let file = File::create(filepath)
+        .map_err(|e| format!("Failed to create {}: {}", filepath.display(), e))?;
+    Ok(BufWriter::new(file))
+}
+
+/// Stream one CSV row (each cell escaped, comma-separated, newline-terminated) to a writer.
+pub(crate) fn write_row<W: Write>(w: &mut W, fields: &[String]) -> Result<(), String> {
+    for (i, field) in fields.iter().enumerate() {
+        if i > 0 {
+            w.write_all(b",").map_err(|e| format!("CSV write failed: {}", e))?;
+        }
+        w.write_all(escape_field(field).as_bytes()).map_err(|e| format!("CSV write failed: {}", e))?;
+    }
+    w.write_all(b"\n").map_err(|e| format!("CSV write failed: {}", e))
+}
+
+/// Write `rows` to `filepath` as CSV, streaming row-by-row through a buffered writer. Each cell is
+/// escaped via `escape_field`, fields joined by commas, lines by '\n'. Empty input produces a
+/// zero-byte file. Never builds the whole file as one string, so it scales to multi-GB tables.
 pub(crate) fn write_csv(filepath: &Path, rows: &[Vec<String>]) -> Result<(), String> {
-    let lines: Vec<String> = rows.iter()
-        .map(|row| row.iter().map(|f| escape_field(f)).collect::<Vec<_>>().join(","))
-        .collect();
-    let content = if lines.is_empty() {
-        String::new()
-    } else {
-        lines.join("\n") + "\n"
-    };
-    fs::write(filepath, content)
-        .map_err(|e| format!("Failed to write {}: {}", filepath.display(), e))
+    let mut w = open_csv(filepath)?;
+    for row in rows {
+        write_row(&mut w, row)?;
+    }
+    w.flush().map_err(|e| format!("Failed to flush {}: {}", filepath.display(), e))
 }
 
 /// Escape a single CSV cell. Wraps in double-quotes (and doubles up any embedded
@@ -701,7 +750,8 @@ mod tests {
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
                     },
-                    level: 0,
+                    temporal_level: 0,
+                    spatial_level: 0,
                     base_neuron: Some(BaseNeuron {
                         channel_id: 1,
                         neuron_type: NeuronType::Event,
@@ -718,7 +768,8 @@ mod tests {
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
                     },
-                    level: 0,
+                    temporal_level: 0,
+                    spatial_level: 0,
                     base_neuron: Some(BaseNeuron {
                         channel_id: 1,
                         neuron_type: NeuronType::Event,

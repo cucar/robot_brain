@@ -1,5 +1,9 @@
 # Inference Level Experiment
 
+This document is the **inference-scope experiment**: which neurons a level-L neuron predicts over (`base` / `same-level` / `level-below` / `all-levels`), picked empirically on the stocks pipeline.
+
+It **gates** the action-composition and reward-distribution designs in [action-composition.md](./action-composition.md): the action tower grounds `level-below` in the same units as the event tower with the arrow reversed, so the scope rule that wins here is the default there too. If `base` wins outright — predicting raw sensory beats predicting your own substrate — "levels infer levels" is undercut and the composition design needs rethinking before it is built.
+
 ---
 
 ## Why
@@ -92,9 +96,10 @@ Declared **before** any run to prevent post-hoc rationalization:
 
 ## Scope of the decision
 
-This is a **d>0 temporal** experiment on stocks deciding a default that [spatial-processing.md](./spatial-processing.md) will apply to **d=0 spatial** scoping. Temporal sequence prediction and spatial co-activation are different regimes; the rule that wins here may not win there. Accordingly:
+This is a **d>0 temporal** experiment on stocks deciding a default that [spatial-processing.md](./spatial-processing.md) will apply to **d=0 spatial** scoping. The three inference regimes — `d=0` spatial, `d>0` event, `d<0` action — share one machinery, so the winning scope rule is the default for all three; but they are different regimes empirically, and the rule that wins here may not win elsewhere. Accordingly:
 
-- The winner propagates into spatial processing as the **default**, to be **re-validated on MNIST** before being treated as settled for d=0.
+- The winner propagates into spatial processing as the **default**, to be **re-validated on MNIST** before being treated as settled for `d=0`.
+- The winner is likewise the default for `d<0` action grounding (see [action-composition.md](./action-composition.md)), to be **re-validated once the action harness exists**. This gating is structural, not analogical: the action tower grounds level-below in the same units, with the arrow reversed.
 - Conceptually the rule also informs [neuron-reuse.md](./neuron-reuse.md), but the reuse pool is unaffected by scope; only the prediction-set construction is.
 
 ---
