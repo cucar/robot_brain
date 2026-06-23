@@ -81,6 +81,30 @@ commit (see comment at [neuron.rs:1581-1587](../brain/brain-core/src/neuron.rs))
   Leave a clearly-marked hook stub at the (currently nonexistent) delete site so this isn't forgotten.
   Tracked also in [neuron-reuse.md §5.2](./neuron-reuse.md) (dead-edge pollution risk).
 
+### DECIDE-THIS — strength-blind candidacy
+
+A membership-only index records *that* `source → target` exists, not how strong. Because connections start
+at strength 1 and never decay, a neuron that connected to T from a **single incidental co-occurrence** is as
+much a reuse candidate for T as one **strongly** bound to T. Worse, Phase D's default score is pure
+membership overlap (`|candidate.connections ∩ observed| / |observed|`), so a neuron with many *weak,
+incidental* edges to the observed targets can clear the merge threshold and be reused, even though those
+edges are noise — the threshold never sees strength. This directly feeds the over-aggressive-reuse risk
+([neuron-reuse.md §5.2](./neuron-reuse.md)), and there is **no decay to clean up bad reuses** today.
+
+**Decide (before Phase D consumes the index):**
+
+1. **Membership-only** (cheapest): index every edge; rely on the merge threshold + future decay. Risk:
+   incidental edges drive bad reuse, and nothing currently prunes them.
+2. **Strength-gated membership**: a `source → target` edge enters the index only once its strength clears a
+   floor — so incidental single-co-occurrence edges aren't candidates until they've recurred. Adds a
+   strength check to the create/strengthen hook (membership can now appear on *strengthen*, not only create).
+3. **Strength-weighted scoring**: keep membership-only in the index, but have Phase D's score weight each
+   matched target by the candidate's connection strength to it, so weak edges contribute less. Keeps the
+   index simple; moves the cost to the lookup.
+
+This is a real knob, not a footnote — it interacts with merge-threshold tuning and is the main thing that
+makes reuse precise vs promiscuous. Recommend (2) or (3) over (1) given there is no decay backstop.
+
 ### Update batching at orchestration boundaries
 
 Do not mutate the index per-connection-create during a parallel dispatch. Each neuron emits

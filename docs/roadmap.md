@@ -16,15 +16,19 @@ Build order — each phase behind its own gate (theory §6):
    derive spatial level from activation. Bit-exact refactor + backup format bump.
 2. **[Phase B — Index](./neuron-reuse-index.md)**: reverse inference index (target → distance → sources)
    over both connection stores. Built, unit-tested, not yet consumed.
-3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint — group errors by (distance, neighborhood),
-   mint one, wire all co-failers. First behavior change.
-4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of batched mint + the
-   `fired_this_frame` / `correction_wired_this_frame` tracking sets.
+3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint (cluster co-failers, mint one, wire all)
+   **plus all the multi-parent machinery it forces** — batched mint is the first multi-parent producer, so
+   refractory, shared activation, refcounted reaping, and multi-parent serialization land here. Heaviest
+   phase.
+4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of C + the one D-only set
+   `correction_wired_this_frame` + cross-frame accrual. Light, since C built the machinery.
 5. **[Validation](./neuron-reuse-validation.md)**: MNIST transfer, stocks full-pipeline, forget-rate
    long-run.
 
-Two semantics to settle before C/D: mint-frame vs reuse-frame inhibition window (Phase C DECIDE-THIS #1),
-refractory vs cross-level injection (Phase D DECIDE-THIS #2).
+Decisions to settle before building: **DECIDE-THIS #0** — how to cluster co-failers + what anchor the shared
+correction gets (Phase C; the central spatial-architecture call); **#1** — mint-frame vs reuse-frame
+inhibition window (Phase C); **#2** — refractory vs cross-level injection (Phase D); **strength-candidacy**
+for the reuse index (Phase B).
 
 ---
 

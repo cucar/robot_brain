@@ -1,19 +1,24 @@
-# Neuron Reuse — Phase D: Reuse Lookup + Tracking Sets
+# Neuron Reuse — Phase D: Reuse Lookup
 
-**The feature.** Theory in [neuron-reuse.md §2.2, §2.4, §3.2](./neuron-reuse.md). This phase adds the
-cross-frame **reuse lookup** on top of the batched-mint path from [Phase C](./neuron-reuse-frame.md),
-consuming the reverse index from [Phase B](./neuron-reuse-index.md), and introduces the two per-frame
-tracking sets that make reuse safe. After this phase, reuse is always on (no enable flag).
+**The feature — and a comparatively light phase**, because [Phase C](./neuron-reuse-frame.md) already built
+the multi-parent machinery (batched mint is the first multi-parent producer). Theory in
+[neuron-reuse.md §2.2, §2.4, §3.2](./neuron-reuse.md). This phase adds the cross-frame **reuse lookup** on
+top of Phase C's batched-mint path, consuming the reverse index from [Phase B](./neuron-reuse-index.md), and
+adds the **one** new tracking set reuse-of-existing-neurons needs (`correction_wired_this_frame`). After this
+phase, reuse is always on (no enable flag).
+
+What's **already done** (Phase C): `fired_this_frame` / refractory, shared activation, refcounted reaping,
+multi-parent serialization, the `parent_id` audit. Phase D does not redo them.
 
 ---
 
 ## Goal
 
-Per (distance, neighborhood) group with errors this frame: query the reverse index **once** against the
-group's observed reality for an existing neuron whose inference signature partially matches. If the best
-candidate scores ≥ the merge threshold for this distance, wire all co-failers in the group to it; otherwise
-fall through to the Phase-C batched mint. Plus: add `fired_this_frame` and `correction_wired_this_frame`,
-and route the correction-wired voting/error-check exclusion through the latter.
+Per cluster with errors this frame ([Phase C](./neuron-reuse-frame.md) clusters them): query the reverse
+index **once** against the cluster's observed reality for an existing neuron whose inference signature
+partially matches. If the best candidate scores ≥ the merge threshold for this distance, wire all co-failers
+in the cluster to it; otherwise fall through to the Phase-C batched mint. Plus: add
+`correction_wired_this_frame` and subtract it from the voter set (layered on the existing suppression).
 
 ---
 
@@ -56,14 +61,22 @@ New method, e.g. `find_reusable(observed_targets, distance) -> Option<NeuronId>`
 
 ### Tracking sets
 
-Two new per-frame sets on the brain, cleared at frame end:
+`fired_this_frame` (refractory) and the whole multi-parent machinery **already landed in Phase C** — batched
+mint is the first multi-parent producer, so refactory, shared activation, refcounted reaping, and
+multi-parent serialization are built there ([neuron-reuse-frame.md, "Multi-parent"](./neuron-reuse-frame.md)).
+Phase D adds exactly **one** new per-frame set, cleared at frame end:
 
-- **`fired_this_frame: FxHashSet<NeuronId>`** — populated as neurons activate in both phases. Enforces
-  refractory: a neuron fires at most once per frame. Load-bearing for termination once an existing neuron
-  can be wired from many sources in one frame.
-- **`correction_wired_this_frame: FxHashSet<NeuronId>`** — every neuron selected as a correction target
-  this frame (minted **or** reused). Members: learn the observed set, **do not vote**, **are not
-  error-checked**.
+- **`correction_wired_this_frame: FxHashSet<NeuronId>`** — every neuron selected as a correction target this
+  frame that is a **reused pre-existing** neuron. Members: learn the observed set, **do not vote**, **are
+  not error-checked**.
+
+Why D-only: a freshly *minted* correction already gets the existing fresh-mint exemption (skips
+learn/vote/error-check — [spatial-processing.md §3.3 step 2](./spatial-processing.md)), so Phase C needs no
+new set for it. A **reused** neuron is not fresh — it has a full pre-existing connection set and history — so
+the exemption doesn't apply, and without an explicit tag it would vote (its activation is a wiring
+side-effect) and be error-checked against the current observed set (which its old connections may not match →
+spurious cascade). `correction_wired_this_frame` is therefore just **the fresh-mint exemption extended to
+reused neurons** — same inhibition, wider membership.
 
 ### Voting: layer the exclusion, don't replace suppression
 
@@ -84,6 +97,24 @@ Concretely: in `get_active_voter_ages` / the voter collection at
 [memory.rs:197-206](../brain/brain-core/src/memory.rs), exclude any neuron in
 `correction_wired_this_frame`. Do not otherwise change which ages vote.
 
+### Multi-parent: already built in Phase C
+
+The single-host → multi-parent change ([neuron-reuse.md §3.4](./neuron-reuse.md)) — per-parent routing
+entries on a shared neuron, thalamus activation of a shared neuron (one firing, all parents subsumed),
+refcounted reaping, multi-parent serialization, and the full `parent_id` reader audit — **lands in Phase C**,
+because batched mint is the first thing that wires many parents to one neuron. See
+[neuron-reuse-frame.md, "Multi-parent"](./neuron-reuse-frame.md) for the mechanics and the audit table.
+
+Phase D does **not** re-do any of it. The lookup simply wires a parent to a neuron that already existed
+*before this frame* (cross-frame), using the same per-parent-entry / refcount machinery C built. The one
+D-specific wrinkle: the coordinate/label resolution canonical-parent (the representative anchor) was chosen
+within a within-frame cluster in C; under cross-frame reuse the new parent may sit at a different anchor than
+R's original representative. This is the **co-located-reuse invariant** — reuse only fires within a matched
+receptive field, so a cross-frame reusing parent *should* share R's neighborhood — but it is the same
+approximate (not exact) invariant flagged for C's clustering. Verify it holds across frames too; if a
+cross-frame reuser is at a materially different anchor, either reject the reuse or accept the same anchor
+smear C accepts.
+
 ---
 
 ## DECIDE-THIS #2 — Refractory vs cross-level injection
@@ -102,26 +133,37 @@ the correction target for a group whose erroring neuron sits at a higher level.
 3. **Can R even be injected** at `erroring_neuron_level + 1` if the spatial sweep is already past that level
    (the sweep is monotonically increasing — [brain.rs:933](../brain/brain-core/src/brain.rs))?
 
+**What Phase A settles, and what it leaves open.** Phase A makes active memory able to hold R at multiple
+levels in one frame ([neuron-reuse-levels.md](./neuron-reuse-levels.md)), so the *representation* objection
+is gone — R being at level 3 (own routing match) and level 6 (correction target) simultaneously is now
+expressible. The remaining question is **sweep sequencing**, not storage: if R is selected as a correction
+target for level 6 *after* the monotonically-increasing sweep ([brain.rs:933](../brain/brain-core/src/brain.rs))
+has already passed level 6, R's level-6 work cannot run *this* frame even though memory can record the
+membership.
+
 **Recommended resolution (decide before coding the wiring):**
 
-- **Refractory governs *activation*, correction-wiring governs *routing*.** R is not re-activated. The
-  correction wire is a routing-table edit on the erroring neurons (next time this context occurs, route to
-  R) plus adding R to `correction_wired_this_frame` for *this frame's* learning. R's existing activation
-  (from its own routing match) stands; it learns the observed set via correction-wiring but does not get a
-  second activation.
-- **R does not get re-leveled this frame.** Its apex/temporal participation, if any, is at the level it
-  already fired at. The "appears at `source_level + 1` this frame" language in an earlier draft is dropped:
-  the level relationship is realized **next** frame, when the erroring neuron's now-edited routing fires R
-  at `source_activation_level + 1`. This sidesteps the monotonic-sweep injection problem entirely (Q3:
-  there is no backward injection because there is no same-frame injection).
-- **If R has *not* fired this frame** (the common case — R is a candidate found purely via the index, not
-  itself routed-to this frame), then R *is* activated as a correction target this frame, like a fresh mint:
-  added to `fired_this_frame` and `correction_wired_this_frame`, learns, no vote, no error-check. This is
-  the symmetric case to DECIDE-THIS #1's mint-frame activation.
+- **Refractory governs *fresh routing activation*; correction-wiring is a separate role.** R's existing
+  routing-match activation (level 3) stands. The correction wire adds R to `correction_wired_this_frame` for
+  this frame's learning and edits the erroring neurons' routing tables (next time this context occurs, route
+  to R).
+- **Record R's correction-target membership at `source_activation_level + 1` in memory** (now possible), but
+  **do not retro-run the sweep** for a level already passed. R's full participation at the new level is
+  realized **next** frame, when the edited routing fires R at `source_activation_level + 1` from the start
+  of that frame's sweep. So memory may show R at two levels this frame, while only the not-yet-passed level
+  gets same-frame sweep processing. This keeps the monotonic sweep intact without discarding the multiplicity
+  Phase A paid for.
+- **If R has *not* fired this frame** (the common case — R found purely via the index, not itself routed-to
+  this frame), R *is* activated as a correction target this frame like a fresh mint: added to
+  `fired_this_frame` and `correction_wired_this_frame`, learns, no vote, no error-check. Symmetric to
+  DECIDE-THIS #1's mint-frame activation.
 
-So the rule is: **reuse wires routing for next frame and tags R for this frame's learning; it never forces a
-second activation or a backward level injection.** Confirm this is consistent with how `wire_correction`
-ends up touching active memory, and write the resolved rule into [neuron-reuse.md §3.2](./neuron-reuse.md).
+So the rule is: **reuse edits routing and tags R for this frame's learning; it records R's correction-target
+level in (multi-level) memory but never retro-runs a sweep level already passed.** A neuron found purely via
+the index (not yet fired this frame) does activate as a correction target; a neuron that already fired keeps
+its activation and gains the new level as a recorded membership, with full participation at that level
+realized next frame. Confirm this is consistent with how `wire_correction` touches active memory, and write
+the resolved rule into [neuron-reuse.md §3.2](./neuron-reuse.md).
 
 ---
 
@@ -135,6 +177,11 @@ ends up touching active memory, and write the resolved rule into [neuron-reuse.m
   mint). Drop overlap below threshold → frame 2 mints fresh (boundary check).
 - **Unit — self-match filtered**: an erroring neuron whose own connections match the observed set is not
   selected as its own reuse target.
+- **Unit — cross-frame multi-parent accrual**: reuse R (minted in an earlier frame) from parent P2 this
+  frame; confirm R gains P2's routing entry alongside its existing parents', with independent per-entry
+  strength, and R's connection set accumulates P2's contribution. (The multi-parent *lifecycle* — reaping,
+  serialization, shared activation — is gated in [Phase C](./neuron-reuse-frame.md); this gate only checks
+  that the *lookup* accrues a new parent correctly.)
 - **Unit — same-frame, same-phase candidate**: a correction minted earlier this frame/phase is a legal
   reuse target for a later group at the same distance (its index update applied at the orchestration
   boundary makes it visible). Confirm this composes; see gotcha below.
