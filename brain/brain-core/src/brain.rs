@@ -1449,11 +1449,9 @@ impl Brain {
         self.thalamus.install_spatial_corrections(install_ops, self.frame_number);
 
         // Record per-parent error-rate samples for the spatial Welford stats.
-        // Skipped in eval mode so the running stats don't drift from non-learning runs.
-        // These samples are what let dynamic error-correction modes (conservative/neutral/aggressive) adapt the threshold over time — without them, get_error_threshold falls back to a static value forever.
-        if self.learning {
-            self.thalamus.record_spatial_errors(&feedback);
-        }
+        // These samples are what let dynamic error-correction modes adapt the threshold over time.
+        // Without them, get_error_threshold falls back to a static value forever.
+        self.thalamus.record_spatial_errors(&feedback);
 
         // Return the spec batch.
         // process_spatial folds these into spatial.neuron_specs so they get materialized in the same flush as temporal specs.
