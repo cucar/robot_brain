@@ -101,6 +101,24 @@ Long-term plan, listed in implementation order.
 - This extends to true isolation where needed — separate pattern spaces for separate data streams
 - Merge/transfer between isolated memories as a deliberate operation
 
+### Temporal neighborhoods as the isolation primitive
+- `set_temporal_neighbors` (thalamus) already restricts which channels a channel forms temporal
+  (d>0 sequence) patterns with — a channel always sequences against its own past, and channels with
+  no call retain the default all-pairs neighborhood
+- Setting a channel's (or a channel group's) temporal neighbor set to just itself / the group means
+  it never sequences against other streams — exactly the "separate pattern spaces, no interference"
+  isolation this section is asking for, without a new mechanism
+- Parallel data streams (e.g. many conversations scanned at once) each get their own temporal
+  neighborhood; cross-stream temporal patterns can't form, so conflicting patterns don't interfere
+- Sensory neurons remain shared substrate — isolation is at the temporal-sequencing level, not the
+  storage level, so a deliberate merge/transfer is just widening neighbor sets (or learning across
+  streams that share one)
+- Spatial neighborhoods (`set_spatial_neighbors`) are the orthogonal knob for within-frame
+  co-activation, so spatial grouping and temporal isolation can be tuned independently per stream
+- Open question: do streams need fully disjoint neighborhoods, or do partially-overlapping
+  neighborhoods (shared "common knowledge" channels + private per-stream channels) give better
+  transfer than hard isolation?
+
 ---
 
 ## Vision Channel
