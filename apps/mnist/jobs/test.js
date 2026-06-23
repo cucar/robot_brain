@@ -117,6 +117,12 @@ export default class MNISTTestJob extends Job {
 		const consensusIdx = process.argv.indexOf('--consensus');
 		if (consensusIdx !== -1 && process.argv[consensusIdx + 1] !== undefined) this.config.consensus = process.argv[consensusIdx + 1];
 
+		// --forget-rate: brain-wide patternForgetRate. MNIST defaults to 0 (additive NB counts never decay).
+		// A positive rate makes spatial-correction patterns decay and die when not re-activated, so the
+		// network sheds rarely-seen corrections. Must be parsed before the null-default below so it sticks.
+		const forgetIdx = process.argv.indexOf('--forget-rate');
+		if (forgetIdx !== -1 && process.argv[forgetIdx + 1] !== undefined) this.options.patternForgetRate = parseFloat(process.argv[forgetIdx + 1]);
+
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
 		// The decode now lives in the brain — hand it the consensus rule so the winner read out of
