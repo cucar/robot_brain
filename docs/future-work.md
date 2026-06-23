@@ -237,25 +237,7 @@ Expose the Rust core to Python for broader adoption.
 - When the parent gets a channel right, do NOT delegate — parent keeps inferring correctly
 - This is more efficient but significantly more complicated
 - Open question: does selective delegation improve accuracy or just efficiency?
-
----
-
-## Global & Multi-Frame Rewards
-
-### Problem
-
-The current reward system applies rewards per-frame and per-channel. This limits the brain to learning from immediate feedback. Many real-world outcomes are delayed or span multiple frames — a stock trade is good or bad based on what happens over the next N frames, not immediately.
-
-### Goals
-- Refactor reward system to support multi-frame reward attribution
-- Global rewards that apply across all channels (not just the channel that produced the action)
-- Reward propagation backward through time to the patterns/actions that led to the outcome
-- Clean separation between immediate per-frame rewards and delayed outcome-based rewards
-
-### Why this is foundational
-Everything downstream (imitation rewards, hippocampal experimentation) benefits from a richer reward signal. The current per-frame system is sufficient for stocks and MNIST but becomes a bottleneck for more complex behaviors.
-
-Reference: https://claude.ai/share/f9732e46-a95c-44d2-8dee-b7217392834c
+- NOTE: if the neuron re-use works, this would be a conflicting optimization, and should not be done. 
 
 ---
 

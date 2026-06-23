@@ -108,6 +108,14 @@ across the apex actions active throughout the context span, weighted by **linear
 decay so distant frames keep nonzero credit under long-latency reward. Watch the length-bias assumption
 (see doc) — span-normalized application may be needed if pattern spans vary widely.
 
+Rewards are **global** in the sense that they apply across all channels, not just the channel that
+produced the action, with a clean separation between immediate per-frame rewards and delayed
+outcome-based rewards. This is foundational: everything downstream (imitation rewards, hippocampal
+experimentation) benefits from the richer reward signal. The current per-frame system is sufficient for
+stocks and MNIST but becomes a bottleneck for more complex behaviors.
+
+Reference: https://claude.ai/share/f9732e46-a95c-44d2-8dee-b7217392834c
+
 ---
 
 ## 6. Calculate up/down accuracy separately
