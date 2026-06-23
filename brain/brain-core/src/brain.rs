@@ -1443,9 +1443,8 @@ impl Brain {
             &spatial.subsumed_set,
         );
 
-        // Install the corrections into their parents' routing tables right now.
-        // These are ContextRefUpdates that have to land before the next frame so the parent can recognize the correction's context.
-        // Done inline — not batched with the end-of-frame neuron-creation flush — because the install only mutates existing routing tables and doesn't depend on the correction neurons being constructed yet.
+        // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
+        // This is a single dispatch per frame, not one per level.
         self.thalamus.install_spatial_corrections(install_ops, self.frame_number);
 
         // Record per-parent error-rate samples for the spatial Welford stats.
