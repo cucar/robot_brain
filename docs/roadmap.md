@@ -7,13 +7,24 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ## 1. Neuron Re-use
 
-See **[neuron-reuse.md](./neuron-reuse.md)**.
+Theory in **[neuron-reuse.md](./neuron-reuse.md)**. Allocates capacity onto the error manifold
+(residual-fitting).
 
-Allocates capacity onto the error manifold (residual-fitting). **Scope is reduced for now:** do
-**just the first part** — *not* the reverse inference index and merge. Then:
+Build order — each phase behind its own gate (theory §6):
 
-- Test MNIST.
-- Test stocks.
+1. **[Phase A — Levels](./neuron-reuse-levels.md)**: drop the persistent `neuron_spatial_levels` map;
+   derive spatial level from activation. Bit-exact refactor + backup format bump.
+2. **[Phase B — Index](./neuron-reuse-index.md)**: reverse inference index (target → distance → sources)
+   over both connection stores. Built, unit-tested, not yet consumed.
+3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint — group errors by (distance, neighborhood),
+   mint one, wire all co-failers. First behavior change.
+4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of batched mint + the
+   `fired_this_frame` / `correction_wired_this_frame` tracking sets.
+5. **[Validation](./neuron-reuse-validation.md)**: MNIST transfer, stocks full-pipeline, forget-rate
+   long-run.
+
+Two semantics to settle before C/D: mint-frame vs reuse-frame inhibition window (Phase C DECIDE-THIS #1),
+refractory vs cross-level injection (Phase D DECIDE-THIS #2).
 
 ---
 
