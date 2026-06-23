@@ -5,36 +5,7 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ---
 
-## 1. Optimize MNIST
-
-Push past the 96.44% joint result. Current best results and runnable demos live in
-[mnist-demos.md](mnist-demos.md). Three tests remain:
-
-- **Radius 3 at 28×28** (error 0.1 / merge 0.9) — if it beats radius 2, re-run the two tests below at
-  radius 3 instead of radius 2.
-- **Error 0.2 / merge 0.8.**
-- **Error 0.3 / merge 0.7.**
-
-Each is one train + frozen-eval pair (the train -> evaluate workflow in mnist-demos.md); episodes
-plateau after one pass, so a single episode suffices.
-
----
-
-## 2. Inference Level Experiment
-
-See **[inference-level.md](./inference-level.md)**.
-
-Pick the inference scope rule by experiment on the stocks pipeline, comparing:
-
-- **All levels**
-- **Same level**
-- **Lower level**
-
-The decision propagates into spatial processing, and gates the action-composition work in §8.
-
----
-
-## 3. Neuron Re-use
+## 1. Neuron Re-use
 
 See **[neuron-reuse.md](./neuron-reuse.md)**.
 
@@ -46,7 +17,7 @@ Allocates capacity onto the error manifold (residual-fitting). **Scope is reduce
 
 ---
 
-## 4. Re-introduce context refinement
+## 2. Re-introduce context refinement
 
 Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
 common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
@@ -61,14 +32,29 @@ let the hierarchy climb past depth 2.
 - Test MNIST performance.
 - Test stock performance.
 
-If the headline numbers land here:
+**Refine targets (connections) too, symmetric to sources (context).** The refinement above
+consolidates a pattern's **context (sources)** — what activates it. A pattern has a second side: its
+**target connections** — what it predicts and votes for (event connections, action connections). Today
+those are refined only by strengthen-on-correct + mint-on-error (see
+[error-driven-learning.md](./error-driven-learning.md) "Pattern Evolution"), not by the same
+consolidate-toward-the-common-core logic. Apply the symmetric operation to the target side: on a matched
+pattern, **strengthen** common targets, **add** novel targets observed, **weaken/delete** targets that
+consistently fail to appear — so the pattern's *output* generalizes toward the common core, not just its
+identity. Both ends refine under the same flag.
 
-- **LinkedIn post.**
-- **Email investors.**
+- Apply target refinement to **event** (prediction) connections — clean, structural, symmetric to
+  context refinement.
+- **Caveat for action connections:** action/reward connections are reward-smoothed and never-weakened
+  by design (the forward *value* channel). Structural weaken/delete on them would fight the reward
+  signal. So either restrict structural target refinement to event connections, or guard action
+  connections so refinement never overrides reward-carried value. Flagged as the open design question
+  for this extension.
+- Test MNIST and stocks with target refinement on, both independently and combined with context
+  refinement, to separate their contributions.
 
 ---
 
-## 5. Documentation & Publish
+## 3. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update README demos and examples.
 - **npm package** — prepare and publish to the registry.
@@ -76,16 +62,23 @@ If the headline numbers land here:
 
 ---
 
-## 6. Action composition
+## 4. Action composition
 
-See **[action-composition.md](./action-composition.md)**. **Gated on §5** — composition assumes levels
-meaningfully predict levels, so it waits on a non-`base` winner from the inference-scope experiment.
+See **[action-composition.md](./action-composition.md)**.
+
+**Inference-scope gate resolved.** The inference-scope experiment that previously gated this has been
+concluded and removed (see [inference-level.md](./inference-level.md)): `base` is the ground-truth-anchored
+default for *events*, and the compositional ambition relocates to the action side. Composition here does
+**not** depend on events predicting events — it rests on **action→action** backward composition plus
+**apex event ↔ apex action** coupling, anchored by reward and execution rather than by an event-side
+cascade. The `base`-for-events conclusion therefore leaves this intact; the gate is removed, not failed.
 
 Grow the action hierarchy by the same machinery as events, run backward in time (`d<0`): after an
 action fires it binds to its antecedents and mints an action pattern when backward inference error
 crosses the existing Welford threshold (**mint by structure, survive by value** — the advantage test
-lives in the Death Ledger, not the mint gate). Plus action-moment neurons, commitment / call-stack
-arbitration, and a later reverse-replay credit accelerator.
+lives in the Death Ledger, not the mint gate). Plus action-moment neurons (the `d=0` action-spatial
+pass), the per-frame offset pipeline, commitment / call-stack arbitration, and a later reverse-replay
+credit accelerator.
 
 The test harness is the long pole: no current domain exercises action composition — plan to convert the
 **text channel to action-based output (a chatbot)** so emitting tokens becomes a composable action
@@ -93,11 +86,11 @@ sequence. Open questions and full dependencies are in the doc.
 
 ---
 
-## 7. Global rewards
+## 5. Global rewards
 
-See **[global-rewards.md](./global-rewards.md)**. **Independent** of §5 and §8 — the reward distribution
-policy holds with or without action composition, and can be decided separately. It meets composition at
-exactly one point: reward credits the **apex active action**, not base neurons.
+See **[global-rewards.md](./global-rewards.md)**. **Independent** of action composition (§4) — the reward
+distribution policy holds with or without action composition, and can be decided separately. It meets
+composition at exactly one point: reward credits the **apex active action**, not base neurons.
 
 Move from the current **last-frame** policy to **per-span global rewards**: distribute reward back
 across the apex actions active throughout the context span, weighted by **linear** (not exponential)
@@ -106,13 +99,13 @@ decay so distant frames keep nonzero credit under long-latency reward. Watch the
 
 ---
 
-## 8. Calculate up/down accuracy separately
+## 6. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 9. Neuron Limits
+## 7. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -130,7 +123,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 10. Exponential Temporal Binning Test
+## 8. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).

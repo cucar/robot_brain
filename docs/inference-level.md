@@ -1,114 +1,140 @@
-# Inference Level Experiment
+# Inference Level Experiment — Concluded (Abandoned)
 
-This document is the **inference-scope experiment**: which neurons a level-L neuron predicts over (`base` / `same-level` / `level-below` / `all-levels`), picked empirically on the stocks pipeline.
+> **Status: concluded 2026-06-22. The experiment is abandoned and removed from the roadmap.**
+> "Inference levels are bust." The conceptual analysis below resolves the question without running the
+> four-variant sweep: `base` is the ground-truth-anchored default for the **event** tower, and the
+> compositional ambition ("levels infer levels") relocates to the **action** side, where it has an
+> anchor the event cascade lacks. The original experiment spec is preserved at the end for the record.
 
-It **gates** the action-composition and reward-distribution designs in [action-composition.md](./action-composition.md): the action tower grounds `level-below` in the same units as the event tower with the arrow reversed, so the scope rule that wins here is the default there too. If `base` wins outright — predicting raw sensory beats predicting your own substrate — "levels infer levels" is undercut and the composition design needs rethinking before it is built.
-
----
-
-## Why
-
-Today, every neuron's connections target only L=0 sensory neurons. This is because `thalamus.dispatch_frame` builds `new_active_neurons` from `age0` (the L=0 sensory set). Neurons at any level form their connections to sensory neurons only.
-
-This may not be optimal. Before locking in any downstream architecture that depends on the inference-scope rule (spatial processing, neuron reuse), we want to pick the rule empirically on a known-good workload (stocks).
-
-The winning rule becomes the **default** for all downstream work, subject to re-validation on MNIST (see [Scope of the decision](#scope-of-the-decision)).
+This document originally proposed an empirical sweep over which neurons a level-L neuron predicts over
+(`base` / `same-level` / `level-below` / `all-levels`), to be picked on the stocks pipeline and to gate
+[action-composition.md](./action-composition.md). We concluded it conceptually instead. What follows is
+the reasoning.
 
 ---
 
-## Four Variants
+## The reframe: it is one axis, not two
+
+The experiment was framed as "which neurons does a level-L neuron predict over" plus an unstated second
+question, "how do the levels' predictions aggregate into one answer." Those are **not** two free axes.
+
+Minting is **error-driven correction**: a new pattern is born precisely because some neuron's inference
+was wrong, and it captures the pattern that should have been predicted. So **whatever a neuron predicts
+over is, by construction, the same substrate its corrections are minted in** — prediction-target, error,
+mint-target, and correction-target are one substrate. They cannot be chosen independently.
+
+So the real question is not "what does a neuron predict over." It is:
+
+> **What does a correction correct — i.e., in what substrate is the error measured?**
+
+The mint mechanism is identical in every variant; only that substrate moves.
+
+---
+
+## The variants under that single question
+
+A level-2 neuron is born from a level-1 neuron's error, so *where* the error is measured decides
+everything.
+
+- **`base`** — every level's error is measured against **sensory**. A level-2 correction is minted
+  because a prediction *of sensory* was wrong, and it predicts *sensory* better. Every level, top to
+  bottom, is anchored to **ground truth**. This is the whole reason `base` is self-consistent and easy:
+  one substrate, and it is reality. Nothing composes, but nothing drifts.
+
+- **`level-below` (the cascade)** — for it to stay self-consistent under "mint = correct the inference,"
+  a level-2 neuron's error must be measured at **level-1** ("did the level-1 token I predicted actually
+  fire?"), not at sensory. So level-1 is corrected against level-0 (reality), level-2 against
+  **level-1's prediction**, level-3 against level-2's. **Only the bottom rung touches ground truth.**
+  This composes (predictive coding), but higher levels chase lower-level predictions, so error
+  **compounds** up the tower: a level-2 neuron is trained to predict a target that was itself a guess.
+
+- **`same-level`** — a level-2 neuron predicts/corrects level-2 peers, but it was *born from a level-1
+  error*. Its birth substrate and its prediction substrate do not even match. Coherent only if grounding
+  to reality happens entirely separately at readout — the cascade with an extra disconnect — plus the
+  bootstrapping starvation (early on, few level-L neurons to predict over).
+
+- **`all-levels`** — error measured against everything active, sensory included. Most anchored, but a
+  future moment is counted as sensory *and* as the level-1 token that grounds to the same sensory *and*
+  as the level-2 token — double-counting. Coherent only with apex/subsumption dedup (highest non-subsumed
+  neuron per region, constituents removed — the collapse the spatial path already computes).
+
+---
+
+## The actual trade-off
+
+It was never cost vs. accuracy. It is **what anchors each level's correction**:
+
+| Variant | What anchors each level | Consequence |
+|---|---|---|
+| **base** | ground truth at every level | no drift, no composition — parallel experts shouting at sensory |
+| **level-below** | only the bottom rung sees reality; higher levels correct against lower **predictions** | composition, but **compounding-error risk** |
+| **all-levels** | everything incl. ground truth, but **redundantly** | anchored but double-counts evidence |
+| **same-level** | birth/prediction substrate mismatch | composition with an extra disconnect + starvation |
+
+The moment levels predict levels, higher levels **stop being anchored to reality** and start being
+anchored to the level below. That is the price of composition. `base` avoids it by anchoring everyone to
+sensory — which is exactly *why* `base` cannot compose.
+
+---
+
+## Why the experiment as specified could not have answered this fairly
+
+The original spec measured error/readout for every variant against the same target. If that target is
+sensory — `base`'s home court — then `same-level` and `level-below` are crippled by construction (their
+natural error substrate is a higher level, not sensory), `base` "wins" by measurement artifact, and that
+spurious win would then propagate to kill action composition. To give the non-base variants a fair shot
+you would have to build a per-level error substrate **and** an apex-grounded readout — substantial new
+machinery — just to discover what the analysis above already shows: for the **event** tower, the
+compounding-error problem has no anchor, so `base` stands.
+
+---
+
+## Conclusion / Decision
+
+**`base` is the default for the event tower.** Events are evaluated against the next sensory frame; that
+is the only place `d>0` ground truth lives, so anchoring every level to sensory is correct and the
+cascade's compounding error buys nothing the event tower can cash. "Levels infer levels" does **not** pay
+for events.
+
+**The compositional ambition relocates to the action side**, where it has an anchor the event cascade
+lacks. Action composition (see [action-composition.md](./action-composition.md)) does not rely on events
+predicting events. It rests on:
+
+- **action→action backward composition** — chunks form from backward inference over *actions only*; and
+- **apex event ↔ apex action coupling** — the existing forward value vote.
+
+Both are anchored to reality the way `base` events are: emitted primitives are **real** (execution
+grounds the action hierarchy at the bottom, the way sensory grounds events), and the **reward filter**
+prunes the backward graph toward causality. So the `base`-for-events conclusion **leaves action
+composition intact** — it removes the gate rather than failing it. The old worry ("if `base` wins, levels
+infer levels is undercut") dissolves once composition is action→action plus apex coupling rather than
+events predicting events.
+
+**Net:** the four-variant sweep is abandoned; `base` is the event-tower default; composition is an
+action-side mechanism; action-composition is no longer gated on this experiment.
+
+---
+
+## Original experiment design (preserved, not run)
+
+*Kept for the record. None of the runs below were executed.*
+
+### Four variants
 
 | Rule | `new_active_neurons` passed to a level-L neuron processing age=d | Hypothesis |
 |---|---|---|
 | `base` (today) | All L=0 neurons active at age=d | Cheapest; current behavior |
-| `same-level` | L-resident neurons active at age=d | Each level predicts within its own abstraction; **bootstrapping risk** (see below) |
-| `level-below` | (L−1)-resident neurons active at age=d (L=1 sees L=0) | Classic cortical hierarchy rule; compositional abstraction at modest cost |
-| `all-levels` | All neurons active at age=d, any level | Maximum reuse potential; risk of correlated double-counting |
+| `same-level` | L-resident neurons active at age=d | Each level predicts within its own abstraction; bootstrapping risk |
+| `level-below` | (L−1)-resident neurons active at age=d | Classic cortical hierarchy rule |
+| `all-levels` | All neurons active at age=d, any level | Maximum reuse; risk of correlated double-counting |
 
-### Variant-specific risks
+### Phase 1 plan (not run)
 
-- **`same-level` bootstrapping:** early in training, higher levels are sparsely populated, so a new level-L neuron has an almost-empty prediction substrate. The variant may lose by construction rather than by merit. If it underperforms, note in the decision whether starvation (low connection counts at L≥1) explains it before ruling the idea out.
-- **`all-levels` double-counting:** a high-level neuron and its constituent low-level neurons are correlated evidence. Including both in the prediction set may distort voting/consensus precision even as raw coverage improves.
-- **`level-below`** is the prior favorite: it builds genuine cross-level composition without the redundancy of `all-levels` or the starvation of `same-level`.
+Gate `new_active_neurons` by scope rule in `thalamus.rs::dispatch_frame`, add
+`inference_scope: InferenceScope` to `BrainOptions` (default `Base`), expose on the JS brain options, and
+measure directional accuracy / ROI / neuron+connection counts / runtime / memory on the stocks pipeline
+across `base` / `same-level` / `level-below` / `all-levels`, with a per-frame p99 runtime budget of 3×
+`base` and a 1pp noise threshold. The pre-registered tie-break order was p99 runtime → connection count →
+memory, defaulting to `base`.
 
----
-
-## What this experiment actually compares
-
-Changing the scope rule changes the **learning substrate**, not just inference: connections formed under each rule produce different neuron populations over the course of training. We are therefore comparing whole training trajectories (rule + the hierarchy it grows), not a swapped-in inference rule on a fixed brain. The decision applies to the rule-as-trained, and any post-hoc analysis should keep this in mind.
-
----
-
-## Phase 1 — Inference Scope Experiment (d>0 only, stocks)
-
-**No spatial work, no architecture refactor.** Just gate `new_active_neurons` by scope rule and measure on the existing stocks pipeline.
-
-### Code touched
-
-- `brain/brain-core/src/brain.rs` — add `inference_scope: InferenceScope` to `BrainOptions`, defaulting to `Base` (zero behavior change).
-- `brain/brain-core/src/types.rs` — add `enum InferenceScope { Base, SameLevel, LevelBelow, AllLevels }`.
-- `brain/brain-core/src/thalamus.rs::dispatch_frame` — branch on `inference_scope` when constructing `new_active_neurons`:
-  - `Base`: existing logic (active at age=0 sensory).
-  - `SameLevel`: filter the active set to neurons whose `level == current_processing_level`.
-  - `LevelBelow`: filter the active set to neurons whose `level == current_processing_level - 1` (for L=1 this is identical to `Base` restricted to actives; levels L≥2 differ).
-  - `AllLevels`: include every neuron active at the relevant age, regardless of level.
-- `brain/brain-napi/src/lib.rs` — expose `inferenceScope` on the JS-facing brain options.
-
-### Runs
-
-1. `base` — control. Confirm reproduces current stocks baseline.
-2. `same-level` — Variant A.
-3. `level-below` — Variant B.
-4. `all-levels` — Variant C.
-
-Same data and same hyperparameters across all variants. **Seeds:** 3 seeds per variant if a run is cheap enough to allow it; otherwise 1 seed per variant with the noise threshold below applied strictly.
-
-### Metrics
-
-- Directional accuracy. **(primary)**
-- Per-episode ROI.
-- Total neuron count at end of run.
-- Total connection count at end of run (broken out per level — needed to diagnose `same-level` starvation).
-- Per-frame runtime (mean, p99).
-- Memory footprint at end of run.
-
-### Decision rule (pre-registered)
-
-Declared **before** any run to prevent post-hoc rationalization:
-
-1. **Primary metric: directional accuracy**, subject to a runtime budget — per-frame p99 must stay within **3×** of `base`. A variant that exceeds the budget can only win if its accuracy gain is large enough that we'd commit to optimizing it (note this explicitly in the decision).
-2. **Noise threshold:** accuracy deltas under **1 percentage point** (single-seed) or within the cross-seed spread (multi-seed) are treated as a tie.
-3. **Tie-break order:** per-frame p99 runtime → connection count → memory footprint. Ties at every level default to `base` (cheapest, already validated).
-
-### Acceptance
-
-- All runs complete without crashing on the stocks workload.
-- A written decision lands at the end of this doc naming the winner under the pre-registered rule above.
-- Loser variants remain runnable via config — we don't delete them; they may be revisited if MNIST or another workload prefers a different rule.
-
-### Notes / gotchas
-
-- `SameLevel` and `LevelBelow` filtering need a per-level active set; the existing code already partitions by level via `memory.get_level_neurons(level)`. Use that.
-- `AllLevels` may inflate per-frame runtime substantially on stocks — that's a data point, not a failure. Measure first, optimize later if it wins.
-- If `base` wins outright, we still proceed with `base` semantics. The experiment is informative either way.
-
----
-
-## Scope of the decision
-
-This is a **d>0 temporal** experiment on stocks deciding a default that [spatial-processing.md](./spatial-processing.md) will apply to **d=0 spatial** scoping. The three inference regimes — `d=0` spatial, `d>0` event, `d<0` action — share one machinery, so the winning scope rule is the default for all three; but they are different regimes empirically, and the rule that wins here may not win elsewhere. Accordingly:
-
-- The winner propagates into spatial processing as the **default**, to be **re-validated on MNIST** before being treated as settled for `d=0`.
-- The winner is likewise the default for `d<0` action grounding (see [action-composition.md](./action-composition.md)), to be **re-validated once the action harness exists**. This gating is structural, not analogical: the action tower grounds level-below in the same units, with the arrow reversed.
-- Conceptually the rule also informs [neuron-reuse.md](./neuron-reuse.md), but the reuse pool is unaffected by scope; only the prediction-set construction is.
-
----
-
-## Decision
-
-*(To be filled in after Phase 1 runs.)*
-
-**Winner:**
-**Result under pre-registered rule:** (accuracy deltas, runtime vs. budget, tie-breaks applied if any)
-**Per-level connection counts:** (required if `same-level` underperformed — starvation or merit?)
-**Notes:**
+This plan is superseded by the conclusion above.

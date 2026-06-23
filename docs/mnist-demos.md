@@ -132,6 +132,65 @@ number only marginally — the per-pixel counts saturate after one pass:
 The training accuracy keeps climbing toward 100% (the model memorizing the training set harder), but the
 test number plateaus at **96.44%** — extra episodes do not generalize. Best joint result: **96.44%**.
 
+### Error-threshold / merge sweep (28×28, radius 2)
+
+Loosening the error threshold mints fewer corrections, trading a little accuracy for a much leaner model.
+The first four rows are each one **frozen, single-episode** train→eval pair at 28×28 radius 2 (recorded
+2026-06-22):
+
+| Config (`--error-threshold` / `--merge-threshold`) | Held-out test | Neurons | Depth |
+| --- | --- | --- | --- |
+| 0.1 / 0.9 (headline) | 96.26% (ep1) | 2.16M | 3 |
+| **0.2 / 0.8** | **96.15%** | **1.25M** | 3 |
+| 0.3 / 0.7 | 95.68% | 0.61M | 3 |
+| 0.4 / 0.6 | 94.63% | 0.32M | 3 |
+| 0.4 / 0.7 † | 95.73% | 132K | 3 |
+
+† **Prior capstone — kept for the record, not a clean sweep point.** This was the previous best, but it
+was **3 training episodes** under the **older in-process evaluation that still allowed correction minting
+during the test pass** — not the frozen single-episode protocol of the rows above. Its 95.73% is therefore
+optimistic relative to the frozen numbers (test-time minting leaks), and its much smaller 132K neuron
+count predates this session's spatial-processing changes, so neither figure compares apples-to-apples. The
+frozen runs supersede it: **96.44% joint** best, plus a clean Split-MNIST retention matrix.
+
+**`0.2 / 0.8` is the efficiency sweet spot** — within ~0.1pp of the headline (inside the ~1pp noise band)
+at **42% fewer neurons**. Past that the accuracy cost accelerates as the threshold loosens: the per-step
+drop goes −0.11pp (→0.2) → −0.47pp (→0.3) → −1.05pp (→0.4), so **the knee is around 0.3**. `0.3 / 0.7`
+gives up −0.58pp for a **72%** smaller model; `0.4 / 0.6` reaches **85% fewer neurons** (0.32M) but falls
+to 94.63%, below the ~92% logistic-regression line being less of a concern than the accelerating loss.
+`0.1 / 0.9` remains the absolute-accuracy config. Neuron count roughly halves at each step
+(2.16M → 1.25M → 0.61M → 0.32M); per-digit confusion across all four stays the usual 7/9, 2/8, 3/5
+pixel-marginal overlaps.
+
+### Configs that don't work
+
+- **Radius 3 at 28×28 — abandoned (2026-06-22).** Two attempts at the radius-3 gate (error 0.1 / merge
+  0.9). The model exhibits runaway growth: throughput fell from ~16 img/s to under 1 img/s (~0.85 img/s
+  measured) by the halfway point and kept decelerating, projecting a >12 hr single training pass, while
+  prequential accuracy was not pulling away from the radius-2 trajectory by anything close to enough to
+  justify the ~10× cost. This is the runaway-depth behavior at high resolution. If revisited, gate it
+  cheaply first with a 14×14 or `--per-class 500` smoke test before committing to full 28×28.
+
+### Forget rate is not an accuracy lever here
+
+`patternForgetRate` (CLI: `--forget-rate`) decays the activation strength of **pattern neurons** — in
+MNIST, the **spatial corrections** — and reaps them when strength hits 0. It does **not** touch the
+Naive-Bayes counts, which live in reward-smoothed action connections on the base sensory neurons. So
+turning it up only erodes the spatial hierarchy that lifts accuracy above pixel-only NB. Measured at
+14×14 (`--per-class 200`):
+
+| `--forget-rate` | Surviving neurons | Minted (cum) | Train acc |
+| --- | --- | --- | --- |
+| 0 | 15,788 | 15,440 | 81.95% |
+| 0.05 | 1,790 | 79,906 | 68.85% |
+
+Rare corrections decay and die, then re-mint when their pixel pattern recurs (mint → die → re-mint
+**thrash** — 79,906 mints to end with 1,442 survivors), so accuracy drops and the model does not even
+compact usefully. **Keep `--forget-rate` at 0 for all joint runs.** Its real use is the
+continual-learning / capacity experiments — where controlled forgetting is the *subject*, and where it
+pairs with neuron-reuse (re-bind to the surviving neuron instead of re-minting) rather than running
+alone.
+
 ### Inference cost (honest note)
 
 The architecture is *not* fast at inference, and cost grows with model size (not training-set size like
@@ -245,11 +304,3 @@ stability; the hierarchy gives accuracy. (The honest caveat for a paper: additiv
 sidestep catastrophic forgetting partly by construction, so the result should be baselined against k-NN
 and replay methods — not only against the naive-MLP collapse.)
 
----
-
-## Prior capstone (superseded this session)
-
-The previous best was **95.73%** (28×28, radius 2, merge 0.7, 3 episodes), recorded in the now-removed
-experiments log. It was measured under the old in-process evaluation that still allowed correction
-minting during the test pass. The runs above supersede it under a stricter, fully frozen evaluation:
-**96.44% joint**, plus a clean Split-MNIST retention matrix.
