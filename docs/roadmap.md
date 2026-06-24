@@ -5,30 +5,40 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ---
 
-## 1. Neuron Re-use
+## 1. Neuron Re-use (Wave-Front)
 
 Theory in **[neuron-reuse.md](./neuron-reuse.md)**. Allocates capacity onto the error manifold
-(residual-fitting).
+(residual-fitting). The processing **structure is kept** — spatial processing → apex handoff → temporal
+processing — but each stage becomes a **settling wave**, stored levels are removed, only **base
+sensory/action neurons carry coordinates**, and all corrections are coordinate-less with **footprints** (the
+set of base neurons a correction covers) as the neighborhood primitive at every level. On that foundation,
+**reuse applies at all distances** (d=0 and d>0) — the spatial/temporal asymmetry is gone, and the old
+clustering/anchor problem dissolves (a shared correction takes the union footprint, no anchor).
 
 Build order — each phase behind its own gate (theory §6):
 
-1. **[Phase A — Levels](./neuron-reuse-levels.md)**: drop the persistent `neuron_spatial_levels` map;
-   derive spatial level from activation. Bit-exact refactor + backup format bump.
-2. **[Phase B — Index](./neuron-reuse-index.md)**: reverse inference index (target → distance → sources)
-   over both connection stores. Built, unit-tested, not yet consumed.
-3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint (cluster co-failers, mint one, wire all)
-   **plus all the multi-parent machinery it forces** — batched mint is the first multi-parent producer, so
-   refractory, shared activation, refcounted reaping, and multi-parent serialization land here. Heaviest
-   phase.
-4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of C + the one D-only set
-   `correction_wired_this_frame` + cross-frame accrual. Light, since C built the machinery.
-5. **[Validation](./neuron-reuse-validation.md)**: MNIST transfer, stocks full-pipeline, forget-rate
-   long-run.
+1. **[Phase A — Wave-front](./neuron-reuse-wavefront.md)**: the foundation. Turn `process_spatial` and
+   `process_temporal` into settling waves (structure unchanged); remove stored levels entirely;
+   coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory.
+   Rearchitecture — **not bit-exact** (characterized regression).
+2. **[Phase B — Index](./neuron-reuse-index.md)**: reverse inference index over **all** connections (d=0 and
+   d>0). Built, unit-tested, not yet consumed. Settles strength-candidacy.
+3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint at all distances (group by (distance,
+   observed-set), mint one coordinate-less correction with union footprint) **+ all the multi-parent machinery**
+   (refractory, shared activation, refcounted reaping, multi-parent serialization). Heaviest reuse phase.
+4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of C + `correction_wired_this_frame` +
+   cross-frame accrual, all distances. Light.
+5. **[Validation](./neuron-reuse-validation.md)**: MNIST spatial reuse + transfer, stocks full-pipeline +
+   transfer, forget-rate long-run.
 
-Decisions to settle before building: **DECIDE-THIS #0** — how to cluster co-failers + what anchor the shared
-correction gets (Phase C; the central spatial-architecture call); **#1** — mint-frame vs reuse-frame
-inhibition window (Phase C); **#2** — refractory vs cross-level injection (Phase D); **strength-candidacy**
-for the reuse index (Phase B).
+Decisions to settle before building: **wave-front shape** (within-age settle vs single-pass, fixpoint +
+determinism — Phase A); **#1** mint-frame vs reuse-frame inhibition window (Phase C); **#2** refractory vs
+cross-depth injection (Phase D); **strength-candidacy** for the reuse index (Phase B). The old DECIDE-THIS #0
+(clustering/anchor) is **gone** — footprints + coordinate-less corrections eliminated it.
+
+Knock-on: the wave-front removes channel-neighbor filtering (replaced by footprints), which removes the
+cross-stream **isolation** knob parallel-stream learning relied on — that now needs a different primitive
+(see [future-work.md](./future-work.md)).
 
 ---
 

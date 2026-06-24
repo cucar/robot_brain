@@ -1,9 +1,16 @@
-# Neuron Reuse for Error Correction
+# Neuron Reuse on a Wave-Front Architecture
 
-This document is the **theory** of neuron reuse — motivation, mechanism, and how it interacts with
-spatial processing. It mirrors [spatial-processing.md](./spatial-processing.md): it describes *what*
-reuse is and *why* it works, not the build order. The implementation is split across four phase docs
-plus a validation doc; see [§6 Implementation](#6-implementation) for the index.
+This document is the **theory** of the unified processing model and neuron reuse built on it. It mirrors
+[spatial-processing.md](./spatial-processing.md): it describes *what* the model is and *why* it works, not the
+build order. Implementation is split across phase docs plus a validation doc; see
+[§6 Implementation](#6-implementation).
+
+> **The milestone.** The processing **structure** is unchanged — spatial processing → apex handoff →
+> temporal processing — but each stage becomes a **settling wave**, stored levels are gone, only base
+> sensory/action neurons carry coordinates, and all corrections are coordinate-less with **footprints** for
+> locality. On that foundation, **neuron reuse applies at every distance** (d=0 and d>0 alike) — the
+> spatial/temporal asymmetry is gone. Phase A ([neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md)) builds
+> the foundation; the rest is reuse on top.
 
 ---
 
@@ -11,190 +18,207 @@ plus a validation doc; see [§6 Implementation](#6-implementation) for the index
 
 ### 1.1 The Problem
 
-Currently, when the thalamus detects an error, it always creates a brand new neuron. But the inference needed — the prediction, the grouping — may already exist somewhere in the network. A neuron created for a completely different context might already have connections that express exactly the required prediction.
+When the thalamus detects a prediction error at any distance, it always creates a brand new neuron. But the
+inference needed may already exist somewhere in the network — a neuron created for a different context may
+already produce exactly the required prediction. Without reuse, structure grows indefinitely: every error
+mints a fresh neuron regardless of overlap.
 
-Without reuse, the network grows indefinitely: every error event mints a fresh neuron, regardless of structural overlap with existing neurons.
+Separately, the pre-wave-front architecture carried a **spatial/temporal asymmetry**: spatial corrections were
+coordinate-anchored (for receptive-field growth), which made sharing them ambiguous (whose coordinate does a
+shared correction take?), so reuse could only be done cleanly for temporal. The wave-front + footprint
+foundation removes that asymmetry, so reuse becomes uniform.
 
-### 1.2 The Solution: Reverse Inference Index Lookup + Batched Mint
+### 1.2 The Solution: One Wave-Front + Reuse at Every Distance
 
-Reuse applies to **all distances**, not just d=0. Any error (temporal or spatial) is a candidate for reuse before minting.
+Two pieces:
 
-The reuse criterion is **inference-output match**, not context-match: does some existing neuron's connection set already produce the inference the correction would need? The candidate's own routing table and triggering context are irrelevant to the decision — only its output signature matters.
+1. **Foundation (Phase A).** Collapse spatial and temporal into one wave-front. Drop coordinates from all
+   corrections; carry locality as a **footprint** (the set of base sensory neurons a correction covers).
+   Neighborhood at any level = footprint overlap. Details: [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md).
+2. **Reuse (Phases B–D).** The reuse criterion is **inference-output match**: does an existing neuron's
+   connection set already produce the inference a correction would need? Per (distance, footprint-region) per
+   frame, query a reverse index for a match; on a hit, wire all co-failing neurons to the existing neuron; on
+   a miss, mint **one** coordinate-less correction (footprint = union) and wire all co-failers to it.
 
-Correction operates **per (distance, neighborhood) per frame**, not per error. The frame's observed reality at a given distance *within a given receptive field* is singular (§2.1), so a single lookup resolves the correction target for every neuron that erred against that same local reality. On a lookup miss, a single correction neuron is minted for that reality and all co-failing neurons in that group are wired to it (the batched mint). Lookup handles cross-frame reuse — the source of generalization — while the batched mint dedups within-frame redundancy on a miss.
+Because corrections are coordinate-less, a shared correction takes the **union footprint** of its parents —
+no anchor to be ambiguous about. That is what makes reuse clean at d=0, not just d>0.
 
 ### 1.3 Why Reuse Is Essential, Not an Optimization
 
 Reuse is what makes generalization possible.
 
-A single correction neuron created from one event with no reuse only memorizes that event. Decay alone has no statistical basis to identify which connections are incidental.
-
-When the same correction neuron is reused across many distinct error events, each reuse strengthens the connections shared across all those events and adds new connections specific to each event. The structurally-shared connections accumulate strength; the per-event-specific connections remain weak. Over many reuses, the neuron's strong connections converge on the structural core common to the equivalence class of triggering events.
-
-Decay then sharpens this: incidental per-event connections erode while reinforced structural ones persist.
-
-Reuse provides the cross-instance signal; decay sharpens it. Both are required.
-
----
-
-## 2. Mechanism
-
-### 2.1 One Observed Reality Per (Distance, Neighborhood)
-
-The frame's reality is singular *within a receptive field*. At a given distance d, inside a given neuron's neighborhood, in a given frame, there is exactly **one** observed inference set — the actual co-activations (d=0) or the actual realized next state (d>0), filtered to that neighborhood. This is what happened there; it does not vary across the neurons that erred against it.
-
-> **Correction to the earlier single-level model.** An earlier draft asserted "one observed reality per *distance*." That is too strong. Spatial error evaluation is **neighbor-filtered** — a neuron's observed co-activation set is its local neighborhood's fired set, not the whole frame ([thalamus.rs:1137-1144](../brain/brain-core/src/thalamus.rs), the "observed set (L0 events, neighbor-filtered)"). Two neurons in disjoint neighborhoods erring at the same distance are correcting toward *different* local realities and must not be merged. The grouping key is therefore **(distance, observed-set / neighborhood)**, and there may be more than one correction minted per distance per frame — one per distinct local reality. Everything below that says "per distance" should be read as "per (distance, neighborhood) group."
-
-Multiple neurons may err against the same local reality, but they all erred by predicting *different wrong things* about the *same* observed set. Two sets must not be conflated:
-
-- The **predicted** set — per-neuron, varies. This is *why* each neuron erred differently.
-- The **observed** set — shared across all neurons erring against the same local reality. This is the single reality being corrected toward.
-
-Correction always targets the observed set. Because the observed set is one thing per (distance, neighborhood) per frame, there is exactly one reality to correct toward per group — and therefore at most one correction neuron to mint per group. This singularity drives both the lookup (§2.2) and the batched mint (§2.3).
-
-### 2.2 Per-Group Lookup
-
-For each (distance, neighborhood) group in which any error occurred this frame:
-
-1. The thalamus knows the **observed inference set** for that group — the one local reality from §2.1.
-2. Query the **reverse inference index**: for each observed target T, which existing neurons have a connection to T at this distance? (This is the inverse of "neuron N infers targets {T1, T2, …}.")
-3. Take the union of those candidate sets. For each candidate, score its inference signature against the observed set using the same common/missing/novel analysis as pattern recognition.
-4. If a candidate scores above the **merge threshold for this distance** (`spatial_merge_threshold` at d=0, the temporal merge threshold at d>0 — see §2.5): wire **all** neurons erring in this group to defer to that candidate.
-5. If no candidate qualifies: fall through to the batched mint (§2.3).
-
-Note this is **one lookup per group per frame**, not one per error. Since the observed reality is shared within the group, a single query resolves the correction target for every neuron that erred against it — eliminating the per-error lookup fan-out.
-
-### 2.3 Batched Mint (Fallback)
-
-When the lookup misses — no existing neuron expresses the observed reality well enough — mint **one** correction neuron for that group's observed reality and wire **all** co-failing neurons in the group to it. Do not mint per erroring neuron.
-
-This collapses the within-frame redundancy the lookup cannot catch: several neurons failing simultaneously against an identical not-yet-existing reality would otherwise each mint their own duplicate. The grouping key is the (distance, observed-set) pair (§2.1); within a group the observed reality is unambiguous and singular.
-
-> This is a change from today's mint path. Currently spatial mints **one correction per erroring parent** ([thalamus.rs:1205-1229](../brain/brain-core/src/thalamus.rs)) and temporal mints **one per (neuron, age)** ([thalamus.rs:1471-1497](../brain/brain-core/src/thalamus.rs)). Batched mint replaces both with one-per-group. See [neuron-reuse-frame.md](./neuron-reuse-frame.md).
-
-Per group, per frame, the correction path is therefore:
-
-1. One lookup against the group's observed reality.
-2. On hit: wire all co-failers to the existing neuron.
-3. On miss: one batched mint, wire all co-failers to it.
-
-### 2.4 Why Lookup Is Still Required
-
-The batched mint is a *within-frame* collapse only. It does nothing across frames. The same reality recurring in a later frame is, to the mint path, a fresh frame with its own batched mint that knows nothing about the earlier one — so without lookup, every recurrence of a reality mints another duplicate.
-
-Batching alone yields neuron count proportional to (distinct realities × recurrences). Lookup is what drives it down to (distinct realities).
-
-More importantly, the cross-frame collapse *is* the generalization mechanism (§1.3): a neuron reused across many distinct error events accumulates the structural core while incidental connections decay. A neuron minted once and never reused across frames only memorizes that frame. Batching cannot produce this statistical signal because it never links one frame to another — and the transfer-learning effect (train on digits 0–4, reuse on 5–9; see [neuron-reuse-validation.md](./neuron-reuse-validation.md)) is inherently cross-frame and therefore invisible to batching.
-
-Lookup and batched mint compose cleanly: lookup first (existing neuron wins, cross-frame generalization), batched mint as the fallback beneath it (within-frame dedup on a true miss). This composition is exactly why the build order is **batched mint first, then the index, then the lookup on top** — see §6.
-
-### 2.5 Symmetry with Pattern Recognition
-
-The symmetry is intentional. Pattern recognition asks "does this observed context partially match a stored context?" Reuse asks "does this required inference partially match an existing neuron's inference?" Both are partial-set-overlap questions; they share the same threshold.
-
-Reuse reads the **same merge threshold pattern recognition uses at that distance** — and that threshold is now split per phase. Spatial reuse (d=0) reads `spatial_merge_threshold`; temporal reuse (d>0) reads the temporal merge threshold ([neuron.rs:200-205, 240](../brain/brain-core/src/neuron.rs)). There is no separate `reuseMergeThreshold` parameter on either side — the coupling to pattern recognition is intentional. Setting a phase's merge threshold to 1.0 disables reuse *and* partial-context recognition for that phase together.
-
-### 2.6 Worked Example
-
-Observed inference set in some neighborhood = (A, B, C). Candidate neuron infers (B, C). Overlap 2/3 ≈ 0.67. If the merge threshold for this distance is below 0.67, reuse. Every neuron that erred against this local reality this frame has its routing entry pointed to the candidate; when the same context recurs, the candidate fires and provides the (B, C) inference (missing A is accepted as the cost of reuse). Had no candidate qualified, a single new neuron would have been minted for (A, B, C) and all of this group's co-failers wired to it.
+A single correction created from one event with no reuse only memorizes that event. When the same correction
+is reused across many distinct error events, the connections shared across all those events accumulate
+strength while per-event-specific connections stay weak. Over many reuses, the strong connections converge on
+the structural core common to the equivalence class of triggering events. Decay then sharpens this: incidental
+connections erode, reinforced structural ones persist. Reuse provides the cross-instance signal; decay
+sharpens it. Both are required, at every distance.
 
 ---
 
-## 3. Interaction with Spatial Processing
+## 2. The Wave-Front Foundation
 
-### 3.1 Levels as Activation State, Not Neuron State
+### 2.1 One Operation, Two Waves
 
-Reuse requires that a neuron's level be a property of its **activation**, not a property stored on the neuron — because a single neuron R can be active at **different levels in the same frame** as well as across frames. Once the lookup can wire one existing neuron as the correction target for sources at different depths, two parents — one at level 2, one at level 5 — can both route to R within a single frame's sweep. R is then genuinely active at level 3 *and* level 6 at once. A per-neuron level field cannot represent that; only the activation can. Rebuilding the level record per frame does **not** sidestep this — the conflict is *within* one frame, not across frames.
+The same operation runs at every distance — **learn relationships at distance d**:
 
-This holds for **both** hierarchies, so **both** intrinsic level collections in the thalamus must be deleted: `neuron_spatial_levels` and `neuron_temporal_levels` ([thalamus.rs:219](../brain/brain-core/src/thalamus.rs)). After this phase, no neuron carries an intrinsic level at all.
+- **d = 0** — relationships within the current frame. This is `process_spatial`.
+- **d = k** — relationships between the current frame and k frames back. This is `process_temporal`.
 
-Active memory **stays**, but its representation must be extended to **hold one neuron at multiple levels simultaneously**. The spatial index is already `level → {neuron}` ([memory.rs:57](../brain/brain-core/src/memory.rs)), so a neuron can appear under several levels there. The temporal side, however, stores a single `LevelAgeState` per `(neuron, frame)` ([memory.rs:45](../brain/brain-core/src/memory.rs)) — one level per neuron per frame — and cannot represent R at two temporal levels in one frame. Making memory multi-level-capable (both phases) is the substantive work of this phase; deleting the two thalamus maps is the rest.
+The **structure is unchanged**: `process_spatial` → apex handoff → `process_temporal`, each a separate
+function. They stay separate because their control flow differs: spatial **settles within the frame** (a
+multi-round wave to a fixpoint, deepening the within-frame hierarchy), while temporal **passes over the
+materialized sliding window** (last frame's apex is already at age 1; its hierarchy deepens *across* frames,
+not within one). That is the only irreducible spatial/temporal difference — space is the distance with no time
+to traverse, time is the distance that takes frames to traverse. Everything else — footprints, coordinate-less
+corrections, reuse — is shared. There is no `process_ages` collapse and no age-to-age chaining (§2.3).
 
-Under the activation model: a neuron activated this frame is registered at `activating_source.activation_level + 1` (sensory neurons start at activation level 0). The same R reached from two sources at different depths lands at two activation levels, both recorded. R's identity is preserved; its level is per-activation, and there may be more than one per frame.
+### 2.2 Footprints — Locality Without Coordinates
 
-Without this, cross-level reuse would be unsafe (the sweep might never reach R's intrinsic level, dropping R's work and votes) or would require restricting reuse candidates to matching levels (shrinking the pool). With per-activation levels, neither problem exists.
+Only base sensory/action neurons have coordinates. A correction has a **footprint** = the set of base sensory
+neurons it covers (base: itself; correction: union of constituents). Two neurons are **neighbors** iff their
+footprints touch in the base neighbor graph. This replaces coordinate-inheritance *and* channel-neighbor
+filtering, at every distance. Locality is graded: low-level corrections are local, high-level ones span more
+as footprints grow, so cross-region/cross-channel structure emerges through grouping rather than a raw
+cross-product. Mechanics: [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md).
 
-This phase stays **bit-exact** — but not because "each correction has one parent" is an invariant. That single-parent property is exactly what reuse abolishes (§3.4). It stays bit-exact because **the multi-parent / multi-level producers are dormant until Phase C**: Phase A only builds the capability and turns nothing on. Until batched mint (C) wires many parents to one neuron, every correction is still minted and routed-to by one parent, so every neuron still activates at one level and activation level equals the old intrinsic level for every neuron, every frame. The mechanics are [neuron-reuse-levels.md](./neuron-reuse-levels.md) (Phase A).
+This is safe because **a correction is never a prediction output** — `aggregate_votes` already forbids a
+pattern neuron from being a vote target ([brain.rs:1626-1638](../brain/brain-core/src/brain.rs)), so only
+base neurons are ever dequantized. A correction's coordinate was only ever used for neighbor-filtering, which
+footprints subsume.
 
-### 3.2 Refractory and Correction-Wired Inhibition
+### 2.3 The Apex Fans Out; Ages Do Not Chain
 
-Reuse needs two per-frame tracking sets that don't exist today. They land in **different phases**, because they are forced by different producers.
+The spatial apex feeds temporal — and within temporal it feeds **every** distance in parallel (d=1, d=2, …),
+not a chain where d=1 feeds d=2. The depth chain (output→input) lives inside each wave and across frames, not
+along the age axis.
 
-**`fired_this_frame: FxHashSet<NeuronId>`** — every neuron that has fired in either phase this frame. Enforces refractory: each neuron fires at most once per frame. Today's mint-only path doesn't need this (a freshly minted neuron is unique, no routing cycles into it), but **batched mint** (Phase C) wires an existing-this-frame neuron from many parents, any of which can activate it next frame — so refractory becomes load-bearing as soon as batched mint exists. **Lands in Phase C** with the multi-parent machinery (§3.4).
-
-**`correction_wired_this_frame: FxHashSet<NeuronId>`** — every neuron selected as a correction target this frame that is a **reused pre-existing** neuron. A freshly *minted* correction already carries the existing fresh-mint exemption (newly-minted error patterns skip learn/vote/error-check — [spatial-processing.md §3.3 step 2](./spatial-processing.md)), so Phase C needs no new set for it. A **reused** neuron is not fresh — it has a full prior connection set — so the exemption doesn't apply and it needs an explicit tag. Members of this set:
-
-- **Learn from the current observed set.** Their connections strengthen toward the observed reality — this is how a reused neuron gradually generalizes across reuse events.
-- **Do not vote this frame.** Their activation is a wiring side-effect, not an inferential signal. This exclusion is **layered on top of** the existing voting suppression (the `activated_pattern_id` per-age suppression at [memory.rs:197-206](../brain/brain-core/src/memory.rs)), not a replacement. When `correction_wired_this_frame` is empty — i.e., on the no-reuse path — voting is bit-identical to today.
-- **Are not error-checked this frame.** Prevents a reused neuron whose pre-existing connections don't match the current observed set from generating a fresh error and cascading into more corrections within the same phase.
-
-So `correction_wired_this_frame` is just **the fresh-mint exemption extended to reused neurons** — same inhibition, wider membership. **Lands in Phase D**, where reuse first produces non-fresh correction targets. This is the load-bearing termination rule for cross-frame reuse; without it, reuse would risk runaway error cascades within a single phase.
-
-Both sets clear at frame end.
-
-### 3.3 Reuse Across Both Phases
-
-Reuse applies in both `process_spatial` (d=0 errors) and `process_temporal` (d>0 errors). Same mechanism, different phase, different merge threshold (§2.5). The reverse inference index and the two tracking sets are shared between phases.
-
-### 3.4 From Single-Host Ownership to Multi-Parent References
-
-Reuse abolishes the assumption that **a correction has exactly one parent**. That assumption is not incidental — today it is load-bearing for the correction's entire lifecycle. A correction is *owned* by one host parent: its **strength** lives in that host's routing-table entry, and its **death_frame** is `strength / forget_rate` computed against that one entry ([neuron.rs:64, 689-703, 709-714](../brain/brain-core/src/neuron.rs)). Reaping a correction means its single host's entry decayed to zero. (The forget rate itself is **brain-wide and uniform** — one value applied to every pattern neuron at every level, [brain.rs:366](../brain/brain-core/src/brain.rs), [thalamus.rs:492](../brain/brain-core/src/thalamus.rs) — not a per-host knob.)
-
-The whole point of reuse is to point **many** parents at one neuron R. The clean shape:
-
-- **The routing entry stays per-parent.** Each referencing parent keeps its own `(context → R)` entry with its own strength and its own `last_activation_frame`, so its own lazy-decay clock. Because the forget rate is global, all these entries decay at the *same* rate — they differ only in how strongly and how recently each parent reinforced its route to R. A parent's confidence in routing to R is local to that parent — exactly as today, just no longer unique.
-- **The neuron's connections are shared and global.** R's d=0 / d>0 connections — its *inference* — are one set, accumulating strength across every reuse event. This shared accumulation *is* the generalization mechanism (§1.3).
-- **Lifecycle becomes reference-counted.** R must survive while **any** parent's routing entry references it, and be reaped only when the last reference dies — not when one host's entry decays out. This replaces single-host death with alive-if-referenced. The `parent_id` "owner" field ([neuron.rs:64](../brain/brain-core/src/neuron.rs)) correspondingly becomes one-of-many; "ownership" dissolves into "the set of referencing parents."
-
-This multi-parent change is born in **Phase C (batched mint)**, not the lookup — wiring k co-failers to one minted correction makes that correction multi-parent the moment it exists, in one frame, with no lookup involved. The lookup (Phase D) only extends the same change *across frames* (a second parent onto a neuron that existed before this frame). Two consequences follow, both landing in Phase C. **Activation**: multiple parents may match-and-activate the shared neuron in the *same* frame, so the thalamus must collapse those to one activation (refractory) while crediting every activating parent (all subsumed). **Lifecycle and bookkeeping**: per-parent routing strength, refcounted reaping, multi-parent serialization, and the full `parent_id` reader audit. The mechanics and audit table are in [neuron-reuse-frame.md](./neuron-reuse-frame.md) (Phase C). Refractory (§3.2) is the activation-side consequence; this subsection is the lifecycle-side consequence; they are the same underlying change, born in C.
+Cross-distance recurrence happens frame-to-frame: this frame's apex becomes next frame's age-1 context. Within
+a single frame, the older ages are **materialized memory** of past outputs, not a pipeline to re-run.
+Intra-frame age-chaining (feeding age d's output into age d+1's input in the same frame) would telescope the
+time axis into the depth axis — double-counting the window and breaking the persistence that lets an activated
+pattern vote every frame it is alive. So temporal relates the apex to each past age independently; there is no
+`process_ages` cascade.
 
 ---
 
-## 4. Benefits
+## 3. Reuse Mechanism (all distances)
 
-- **Neuron count reduction**: No redundant neurons computing the same inference. The network stays compact.
-- **Transfer learning, at matched receptive fields**: If two different contexts reuse the same neuron, they are inherently linked. Knowledge transfers structurally rather than through an explicit transfer mechanism. Note the scope limit: because spatial corrections inherit the parent's coordinate ([spatial-processing.md §4.4](./spatial-processing.md)), reuse fires for shared structure at the **same receptive-field location** — it is co-located transfer, not translation-invariant transfer. For centered domains (MNIST) this is the common case; the validation doc frames its transfer test accordingly.
-- **Robustness**: Shared representations are stronger — reinforced from multiple activation pathways.
-- **Convergence speed**: The system builds on existing structure rather than rebuilding from scratch in each context.
-- **Content-addressable network**: The thalamus can answer "is there a neuron that does X?" efficiently via the reverse inference index. Structurally similar to the existing `spatial_context_index` / `temporal_context_index`, but indexing **connections** (target → sources) rather than **context** (ctx → patterns) — a genuinely new index, see [neuron-reuse-index.md](./neuron-reuse-index.md).
+### 3.1 One Observed Reality Per (Distance, Footprint-Region)
+
+At a given distance d, within a footprint-region, the realized reality is **singular** — one actual
+co-activation (d=0) or realized future (d>0) in that region this frame. Multiple neurons may err there, but
+all erred by predicting different wrong things about the *same* observed set. Correction targets the observed
+set. So there is at most one correction per (distance, observed-set) group, and the grouping key is the
+observed set itself (well-defined: the set of observed neuron ids). Co-failers with the same observed set are
+looking at the same base region, so their footprints overlap — grouping them and taking the **union footprint**
+is unambiguous. There is **no anchor policy and no clustering problem** (footprints dissolved both).
+
+### 3.2 Per-Group Lookup
+
+For each (distance, observed-set) group with errors:
+
+1. The thalamus knows the observed inference set for that group.
+2. Query the **reverse inference index**: for each observed target T, which existing neurons have a connection
+   to T at this distance?
+3. Score each candidate's inference signature against the observed set (common/missing/novel, same as pattern
+   recognition).
+4. If the best scores ≥ the **merge threshold for this distance**, wire all co-failers in the group to it.
+5. Else, mint (§3.3).
+
+### 3.3 Batched Mint (Fallback)
+
+On a miss, mint **one** coordinate-less correction for the group's observed reality, footprint = union of the
+co-failers' footprints, and wire **all** co-failers to it. Within-frame dedup; no per-neuron duplicates.
+
+### 3.4 Why Lookup Is Still Required
+
+Batched mint is within-frame only. The same reality recurring next frame, to the mint path, is a fresh group
+that mints another duplicate. Lookup is the cross-frame collapse — and *is* the generalization mechanism
+(§1.3): a neuron reused across frames accumulates the structural core. Lookup first (cross-frame generalize),
+batched mint as the fallback beneath it (within-frame dedup).
+
+### 3.5 Merge Threshold
+
+Reuse reads the **same merge threshold pattern recognition uses at that distance** (spatial threshold at d=0,
+temporal at d>0). No separate `reuseMergeThreshold`. Setting a distance's threshold to 1.0 disables reuse and
+partial recognition together.
 
 ---
 
-## 5. Risk Assessment
+## 4. Lifecycle, Activation, Inhibition
 
-### 5.1 High Confidence
+### 4.1 Multi-Parent References
 
-Reuse is correct in principle. The reverse-inference-index lookup is a straightforward extension of existing index machinery. The `correction_wired_this_frame` inhibition rule (§3.2) makes reuse safe under within-frame error cascades.
+Reuse and batched mint both wire **many** parents to one correction, which breaks the single-host ownership
+model (today a correction's strength lives in its one host's routing entry and it dies when that entry decays
+— [neuron.rs:64, 689-703, 709-714](../brain/brain-core/src/neuron.rs); the forget rate is brain-wide uniform —
+[brain.rs:366](../brain/brain-core/src/brain.rs)). The clean shape: per-parent routing entries on a shared,
+coordinate-less neuron; **reference-counted reaping** (alive while any parent references it); thalamus
+**collapses multiple same-frame activations to one** (refractory) while crediting every activating parent
+(all subsumed); `patterns.csv` serializes **many** `(parent, strength)` rows per pattern. Because corrections
+are coordinate-less, there is **no anchor to reconcile** across parents — only lifecycle and activation
+bookkeeping. Born with batched mint; mechanics in [neuron-reuse-frame.md](./neuron-reuse-frame.md).
 
-### 5.2 Key Risks
+### 4.2 Refractory and Correction-Wired Inhibition
 
-- **Reverse-index cost**: per-frame reuse lookup could dominate runtime if poorly indexed. Mitigation: one lookup per (distance, neighborhood) group per phase; shard by column for parallel evaluation across regions; apply index updates at orchestration boundaries so lookups always see fresh data.
-- **Dead-edge pollution**: with no connection-delete path today (connections persist; decay was removed), a membership-only reverse index never sees removals. Currently harmless (every indexed edge is live, strength ≥ 1). If decay/delete is reintroduced, the index must drop edges on delete. Tracked in [neuron-reuse-index.md](./neuron-reuse-index.md).
-- **Over-aggressive reuse**: too-low merge threshold causes inappropriate reuse, polluting reused neurons with mismatched contexts. Mitigation: the per-phase merge threshold means tuning is coupled to pattern recognition; default position is "tune cautiously and rely on decay to clean up bad reuses."
-- **Action binding dilution**: heavily-reused correction neurons may have action votes diluted across many contexts. Mitigation: the long-run validation monitors this; normalization can be added if observed.
+Two per-frame tracking sets, cleared at frame end:
 
-### 5.3 Two Decisions to Settle Before Building Phase C/D
+- **`fired_this_frame`** — refractory (each neuron fires at most once per frame). Load-bearing once a shared
+  neuron can be activated from many parents. Lands with batched mint.
+- **`correction_wired_this_frame`** — every correction target this frame that is a **reused pre-existing**
+  neuron. A fresh mint already has the fresh-mint exemption ([spatial-processing.md §3.3 step 2](./spatial-processing.md));
+  a reused neuron is not fresh, so it needs an explicit tag: learn the observed set, **don't vote** (layered
+  on the existing `activated_pattern_id` suppression, so empty ⇒ bit-identical voting), **don't error-check**
+  (its old connections must not spawn a fresh error cascade). Lands with the lookup.
 
-Two semantic questions are not yet resolved and are called out as **DECIDE-THIS** blocks in the phase docs where they bite. They are surfaced here so they aren't lost:
+---
 
-1. **Mint-frame vs reuse-frame inhibition window** — when exactly does the "learn-but-don't-vote-don't-error-check" window apply: the frame a correction is minted/reused, or the first frame it re-fires via routing? See [neuron-reuse-frame.md](./neuron-reuse-frame.md) DECIDE-THIS #1.
-2. **Refractory vs cross-level injection** — when a reused neuron has already fired this frame via its own routing match *and* is then selected as a correction target at a higher level, which wins, and at what level does it land for apex/temporal handoff? See [neuron-reuse-final.md](./neuron-reuse-final.md) DECIDE-THIS #2.
+## 5. Benefits & Risks
+
+### 5.1 Benefits
+
+- **Symmetry** — one operation, one neighborhood primitive, one reuse mechanism across all distances.
+- **Compact structure at every level** — no redundant neurons computing the same inference, spatial or
+  temporal.
+- **Transfer / generalization** — a shared correction links the contexts that produce the same observed
+  reality; structure transfers rather than being re-minted. (Cross-position transfer — the *same shape at a
+  different place* — is **not** provided; a correction fires only over its own footprint. That ceiling is the
+  retinotopic/absolute-connection model, common to both spatial and temporal.)
+- **Content-addressable** — "is there a neuron that produces X?" answered via the reverse inference index.
+
+### 5.2 Risks
+
+- **Wave-front rearchitecture** (Phase A) is large and not bit-exact — characterized regression, not byte
+  identity.
+- **Footprint cost** at the apex (large footprints); bounded by bitsets, watch memory for huge base (vision).
+- **Reverse-index cost** — one lookup per group, sharded by column, updates at orchestration boundaries.
+- **Over-aggressive reuse** — too-low merge threshold; tune cautiously, lean on decay. See strength-candidacy
+  ([neuron-reuse-index.md](./neuron-reuse-index.md)).
+- **Action-binding dilution** — heavily-reused neurons; monitored long-run.
+
+### 5.3 Decisions to settle before building
+
+1. **Wave-front shape** — within-age settle vs single-pass for d>0; fixpoint + determinism
+   ([neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md) OQ1–2).
+2. **Mint-frame vs reuse-frame inhibition window** ([neuron-reuse-frame.md](./neuron-reuse-frame.md) DECIDE-THIS #1).
+3. **Refractory vs cross-depth injection** for a reused neuron ([neuron-reuse-final.md](./neuron-reuse-final.md) DECIDE-THIS #2).
+4. **Strength-candidacy** for the reuse index ([neuron-reuse-index.md](./neuron-reuse-index.md)).
 
 ---
 
 ## 6. Implementation
 
-The build order is **levels → index → batched mint → lookup**, then validation. Each engineering phase
-lands behind its own gate so a regression has a single suspect. Batched mint precedes the index
-deliberately: it is the correction-path reshape the lookup sits on top of, and it delivers a measurable
-within-frame neuron-count win on its own (§2.4).
+Build order: wave-front foundation → index → batched mint → lookup, then validation. Reuse applies at all
+distances throughout.
 
 | Phase | Doc | Goal | Gate |
 |---|---|---|---|
-| **A** | [neuron-reuse-levels.md](./neuron-reuse-levels.md) | Delete both intrinsic level maps (`neuron_spatial_levels`, `neuron_temporal_levels`); make active memory multi-level-capable; derive level from activation. Isolated bit-exact refactor + backup format bump. | Stocks regression **bit-exact**; backups round-trip; diagnostics unchanged. |
-| **B** | [neuron-reuse-index.md](./neuron-reuse-index.md) | Build the reverse **inference** index (target → distance → sources) over both connection stores. Built and unit-tested, **not yet consumed**. Settles strength-candidacy. | Unit: target→sources lookup correct across both stores; index size ∝ connection count; still bit-exact. |
-| **C** | [neuron-reuse-frame.md](./neuron-reuse-frame.md) | **Heaviest phase.** Batched mint (cluster co-failers, mint one, wire all) **+ all the multi-parent machinery** it forces: install-one-child-many-parents, `fired_this_frame`/refractory, shared activation + all-parents-subsumed, refcounted reaping, multi-parent serialization, `parent_id` audit. Settles DECIDE-THIS #0 (clustering + anchor) and #1 (inhibition window). | MNIST neuron count drops from within-frame dedup; accuracy ≥ mint-only baseline; multi-parent lifecycle unit gates. |
-| **D** | [neuron-reuse-final.md](./neuron-reuse-final.md) | **Light.** Reuse **lookup** on top of C (consumes B's index) + the one D-only set `correction_wired_this_frame` + cross-frame accrual. Multi-parent machinery already built in C. Settles DECIDE-THIS #2 (cross-level injection). | Unit: cross-frame reuse via lookup; MNIST neuron count drops further (target ≥30% vs A-baseline); reuse lookup < 20% per-frame overhead. |
-| **Validation** | [neuron-reuse-validation.md](./neuron-reuse-validation.md) | Cross-domain experiments runnable only after D: MNIST transfer (0–4 → 5–9), stocks full-pipeline integration, forget-rate / class-neuron long-run. | Per-experiment gates in the doc. |
+| **A** | [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md) | **Foundation.** Turn `process_spatial` and `process_temporal` into settling waves (structure kept); remove stored levels; coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory. | Characterized regression (MNIST + stocks comparable); footprint/fixpoint units. **Not bit-exact.** |
+| **B** | [neuron-reuse-index.md](./neuron-reuse-index.md) | Reverse **inference** index (target → distance → sources) over **all** connections (d=0 and d>0). Built, unit-tested, not yet consumed. Settles strength-candidacy. | Unit: target→sources correct across distances; size ∝ connection count. |
+| **C** | [neuron-reuse-frame.md](./neuron-reuse-frame.md) | **Batched mint** at all distances (group by (distance, observed-set), mint one coordinate-less correction with union footprint, wire all) **+ multi-parent machinery** (refractory, shared activation, refcounted reaping, multi-parent serialization). Settles DECIDE-THIS #1. | Within-group dedup drops neuron count; multi-parent lifecycle units. |
+| **D** | [neuron-reuse-final.md](./neuron-reuse-final.md) | Reuse **lookup** on top of C (consumes B) + `correction_wired_this_frame` + cross-frame accrual, all distances. Settles DECIDE-THIS #2. | Unit: cross-frame reuse via lookup; neuron count drops further; lookup < 20% per-frame overhead. |
+| **Validation** | [neuron-reuse-validation.md](./neuron-reuse-validation.md) | MNIST (spatial reuse, within-frame + cross-image), stocks (full pipeline + transfer), long-run forget-rate. | Per-experiment gates in the doc. |
 
-All phases depend on [spatial-processing](./spatial-processing.md) being complete (it is).
+All phases depend on [spatial-processing](./spatial-processing.md) being complete (it is) — Phase A then
+rebuilds its level model into the wave-front.

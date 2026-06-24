@@ -1,91 +1,88 @@
 # Neuron Reuse — Validation
 
-**Cross-domain experiments that can only run after [Phase D](./neuron-reuse-final.md).** These are *not*
-engineering phases — they ship no new mechanism. They are the measurement/tuning track that confirms reuse
-does what the theory ([neuron-reuse.md](./neuron-reuse.md)) claims. Per-phase unit and acceptance gates live
-in the phase docs; this doc holds only the experiments that need the full pipeline standing.
+**Experiments that can only run after [Phase D](./neuron-reuse-final.md).** They ship no new mechanism — they
+confirm reuse does what the theory ([neuron-reuse.md](./neuron-reuse.md)) claims. Per-phase unit/acceptance
+gates live in the phase docs; this doc holds the cross-domain experiments.
 
-Each phase doc's gate proves *correctness*. This doc proves *value*.
+Reuse now applies at **all distances**, so both MNIST (spatial, d=0) and stocks (spatio-temporal) exercise it.
+Each phase gate proves *correctness*; this doc proves *value*.
+
+> First, a foundation check: [Phase A](./neuron-reuse-wavefront.md) is a rearchitecture (not bit-exact), so
+> the **characterized regression** on MNIST + stocks is a prerequisite for everything here — confirm the
+> wave-front learns comparably to the leveled baseline before measuring reuse on top.
 
 ---
 
-## V1 — MNIST reuse validation + transfer effect
+## V1 — MNIST spatial reuse
 
-The headline claim: reused neurons cross task boundaries, so structure learned for early digits is reused
-by later digits, yielding faster convergence and/or better generalization.
+The d=0 payoff: reuse collapses redundant spatial corrections within and across images.
 
-**Setup**: the MNIST single-frame harness ([spatial-processing.md §5.3](./spatial-processing.md)), reuse on.
+**Setup**: the MNIST single-frame harness ([spatial-processing.md §5.3](./spatial-processing.md)), wave-front
++ reuse on.
 
 **Measure**:
+- **Neuron count** vs the Phase-A (no-reuse) baseline: within-frame batched mint dedups co-failers; cross-image
+  lookup dedups recurring spatial structure.
+- **Accuracy** ≥ baseline.
+- **Transfer**: train digits **0–4**, then **5–9**; compare 5–9 accuracy vs training 5–9 from scratch.
+  Sub-strokes shared across digits get reused → faster convergence / sub-linear neuron growth on 5–9.
 
-- **Neuron count**: total minted vs the Phase-A (mint-only / pre-reuse) baseline on the same data.
-- **Accuracy**: ≥ the mint-only baseline.
-- **Transfer**: train on digits **0–4**, then **5–9**, and compare 5–9 accuracy against training 5–9 **from
-  scratch**. Also report neuron-count growth on the 5–9 block — expect it **sub-linear** vs from-scratch,
-  because corrections minted for 0–4 sub-strokes get reused by 5–9.
+**Scope caveat — co-located.** A correction fires only over its own footprint (specific base neurons), so
+reuse captures a shared sub-stroke **at the same place**, not the same shape translated. MNIST is centered, so
+co-located sub-strokes (e.g. a shared top bar) reuse; a stroke shifted in position does not. Frame the transfer
+result as co-located, not translation-invariant. (Translation invariance needs relative connections — out of
+scope, [neuron-reuse.md §5.1](./neuron-reuse.md).)
 
-**Scope caveat — transfer is co-located.** Spatial corrections inherit the parent coordinate
-([spatial-processing.md §4.4](./spatial-processing.md)), so reuse fires for shared structure at the **same
-receptive-field location**, not under translation. MNIST digits are centered, so co-located sub-strokes
-(e.g. a shared top bar) *do* reuse; a stroke that appears at a different position in a different digit will
-not. Frame the transfer result as co-located transfer — do not expect translation-invariant generalization
-and do not read its absence as reuse failing.
-
-**Gates**:
-
-- Transfer effect detectable: 0–4 → 5–9 beats 5–9-from-scratch on 5–9 accuracy (or convergence speed) by a
-  margin outside run-to-run noise.
-- Neuron-count growth on 5–9 is sub-linear vs from-scratch.
-- Reuse counts per neuron are observable and non-trivial (some neurons reused across the digit boundary).
+**Gates**: transfer effect detectable (0–4→5–9 beats from-scratch beyond noise); 5–9 neuron growth sub-linear;
+reuse counts across the digit boundary non-trivial.
 
 ---
 
-## V2 — Stocks full-pipeline integration
+## V2 — Stocks full pipeline + transfer
 
-Distinct from the spatial-only stocks integration ([spatial-processing.md §4](./spatial-processing.md), and
-the spatial sweep winner recorded in project memory). That established a spatial baseline; this measures the
-**additional** impact of reuse on top of the full spatial + temporal pipeline.
+Distinct from the spatial-only stocks baseline. Measures reuse on the full spatio-temporal wave-front.
 
-**Setup**: stocks with `process_spatial` on and reuse on. d=0 connections form across co-occurring top-level
-patterns within each frame; spatial corrections feed the temporal phase in subsequent frames, building
-spatio-temporal abstractions.
+**Setup**: stocks, wave-front + reuse on, d=0 and d>0.
 
-**Measure**: per-episode ROI and directional accuracy vs the spatial-only baseline; total neuron count vs
-spatial-only-on-stocks.
+**Measure**: per-episode ROI and directional accuracy vs the Phase-A baseline; total neuron count.
 
-**Tune**: the per-distance merge thresholds (`spatial_merge_threshold` and the temporal one) and the d=0
-error threshold, if needed. Reuse is coupled to partial-context recognition through these thresholds
-([neuron-reuse.md §2.5](./neuron-reuse.md)), so tune cautiously.
+**Tune**: the per-distance merge thresholds and error thresholds; the strength-candidacy choice
+([Phase B](./neuron-reuse-index.md)).
 
-**Gates**:
+**Transfer** (the [future-work transfer-learning experiment](./future-work.md)): learn on stock set A, measure
+set B before/after — reuse should let B converge faster if A and B share spatio-temporal structure.
 
-- Directional accuracy improves over both prior baselines — target: lift off the historical 57–59% plateau.
-- Neuron count significantly lower than spatial-only-on-stocks (reuse working as intended).
+**Gates**: directional accuracy improves over prior baselines (target: lift off the 57–59% plateau); neuron
+count significantly lower than no-reuse; transfer effect present.
+
+> Note the footprint-graded locality from Phase A: cross-channel (cross-stock) relationships now form only
+> through grouping (as footprints grow), not as a raw cross-product. Watch whether that helps or limits
+> cross-stock structure; it interacts with the reuse measurement.
 
 ---
 
 ## V3 — Forget-rate / class-neuron generalization (long-run)
 
-Validate and tune the generalization path from specific correction neurons to abstract class neurons over
-long training (**10k+ frames**).
+Validate the path from specific corrections to abstract class neurons over long training (**10k+ frames**).
 
 **Monitor**:
+- Connection-strength distribution per correction — structural core strengthens, incidental edges stay
+  weak / decay (the reuse-then-decay sharpening of [§1.3](./neuron-reuse.md)).
+- **Reuse counts per neuron rising** — the signature of a correction becoming a class neuron.
+- **Action bindings on heavily-reused neurons staying correct** — the dilution risk.
 
-- Distribution of d=0 connection strengths over time per correction neuron — expect the structural core to
-  strengthen and incidental edges to stay weak / decay (the reuse-then-decay sharpening of
-  [neuron-reuse.md §1.3](./neuron-reuse.md)).
-- Whether **reuse counts per neuron rise** over time — the signature of a correction becoming a class
-  neuron.
-- Whether **action bindings on heavily-reused correction neurons stay correct** — the dilution risk.
+**Tune**: the brain-wide forget rate.
 
-**Tune**: the global static forget rate if needed.
+**Open**: heavily-reused neurons may need action-vote normalization across contexts. Revisit if dilution
+appears.
 
-**Open**: when a correction neuron is heavily reused, action votes may need normalization across the many
-contexts it now serves. Revisit if this experiment shows action-binding dilution; normalization is an
-add-on, not assumed up front ([neuron-reuse.md §5.2](./neuron-reuse.md), action-binding-dilution risk).
+**Gates**: class neurons survive 10k+ frames with action binding intact; heavily-reused neurons' strong
+connections converge toward a stable structural core.
 
-**Gates**:
+---
 
-- Class neurons survive 10k+ frames with action binding intact.
-- Heavily-reused neurons' strong d=0 connections converge toward a stable structural core (variance of the
-  strong-edge set decreases over time).
+## V4 — Eventual: chatbot / text
+
+Sequence reuse over tokens is where temporal reuse ultimately pays off — shared sub-sequence predictors across
+many conversations. Once the text-channel-to-action chatbot harness exists ([roadmap §4](./roadmap.md)),
+validate reuse there. Out of scope for the initial build, but the destination this design serves.
