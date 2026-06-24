@@ -20,16 +20,16 @@ This phase is **not bit-exact** — it restructures processing. Its gate is a *c
 3. **`process_temporal`** (d>0) — relationships between the current frame and past frames.
 
 **Both already run the same settling level-sweep** — `process_spatial_levels`
-([brain.rs:1126](../brain/brain-core/src/brain.rs)) and `process_temporal_levels`
-([brain.rs:1222](../brain/brain-core/src/brain.rs)) are the identical loop: walk levels bottom-up, each level's
+([brain.rs](../brain/brain-core/src/brain.rs)) and `process_temporal_levels`
+([brain.rs](../brain/brain-core/src/brain.rs)) are the identical loop: walk levels bottom-up, each level's
 matched patterns activate one level up, stop when a level produces no activations that push the hierarchy
 higher. The active set is fixed at the start of the sweep; freshly-minted error patterns are excluded from
 their own level and fire *next* frame. So the "wave" is **not new** — it is this existing sweep, just with the
 level no longer stored as an intrinsic neuron field.
 
 They stay two functions for the reasons they are two today, both narrow: temporal **persists per-neuron state
-across frames** (`write_back_level_neurons`, [brain.rs:1252](../brain/brain-core/src/brain.rs)) and reads d>0
-connections; spatial is **ephemeral** ([brain.rs:1149](../brain/brain-core/src/brain.rs)) and reads d=0. The
+across frames** (`write_back_level_neurons`, [brain.rs](../brain/brain-core/src/brain.rs)) and reads d>0
+connections; spatial is **ephemeral** ([brain.rs](../brain/brain-core/src/brain.rs)) and reads d=0. The
 sweep loop itself is the same.
 
 There is **no** `process_ages` collapse and **no** age-to-age chaining — the apex fans out to every temporal
@@ -80,7 +80,7 @@ The mechanism that lets corrections be coordinate-less while keeping locality at
 - **Neighborhood** at any level: A and B are neighbors iff their footprints **touch in the base neighbor
   graph** — `∃ base a ∈ footprint(A), base b ∈ footprint(B)` with `a`, `b` spatial-neighbors (or equal).
 - This replaces **both** coordinate-inheritance (spatial RF growth) **and** channel-neighbor filtering
-  (`is_spatial_neighbor_channel` / `is_temporal_neighbor_channel` — [thalamus.rs:617](../brain/brain-core/src/thalamus.rs)).
+  (`is_spatial_neighbor_channel` / `is_temporal_neighbor_channel` — [thalamus.rs](../brain/brain-core/src/thalamus.rs)).
   Receptive fields still grow one ring per layer — the union footprint widens naturally.
 
 **Representation:** footprint as a **bitset over base sensory neurons** (49–784 bits for MNIST — trivial).
@@ -101,14 +101,14 @@ processing*. All corrections (every distance, either wave) are coordinate-less �
 footprint for locality.
 
 This is **already safe on the output path** — verified, not assumed. `aggregate_votes` already **forbids a
-pattern neuron from being a vote target** ([brain.rs:1626-1638](../brain/brain-core/src/brain.rs)):
+pattern neuron from being a vote target** ([brain.rs](../brain/brain-core/src/brain.rs)):
 
 > "Every vote MUST target a neuron with a coordinate — sensory events and actions have coordinates by
 > construction. A vote toward a target without a coordinate means we learned a connection to a pattern
 > neuron upstream, which is a real architectural break."
 
 So a correction is **never** a candidate → never a dimension winner → never dequantized
-([brain.rs:1711-1746, 1832-1857](../brain/brain-core/src/brain.rs)). Output already resolves exclusively to
+([brain.rs](../brain/brain-core/src/brain.rs)). Output already resolves exclusively to
 base sensory/action neurons. A correction's coordinate today is used **only** for neighbor-filtering — which
 footprints replace. Removing it touches nothing on the prediction/action layer; the existing
 "no-coordinate ⇒ must not be a vote target" panic stays valid and becomes the load-bearing invariant.
@@ -119,17 +119,17 @@ footprints replace. Removing it touches nothing on the prediction/action layer; 
 
 - **`brain/brain-core/src/thalamus.rs`** — convert `process_spatial` and `process_temporal` to settling waves
   (propagate to fixpoint instead of a counted level-sweep). Delete **both** `neuron_spatial_levels` and
-  `neuron_temporal_levels` ([thalamus.rs:219](../brain/brain-core/src/thalamus.rs)) and all readers (mint
+  `neuron_temporal_levels` ([thalamus.rs](../brain/brain-core/src/thalamus.rs)) and all readers (mint
   child-level, sweep bounds, diagnostics, snapshot). Delete channel-neighbor machinery
   (`temporal_channel_neighbors`, `is_temporal_neighbor_channel`, `set_temporal_neighbors`, spatial
   equivalents) in favor of footprint adjacency.
 - **`brain/brain-core/src/neuron.rs`** — drop coordinate/dimension inheritance for corrections
-  ([neuron.rs:468](../brain/brain-core/src/neuron.rs)); add a `footprint` (bitset) to each neuron; correction
+  ([neuron.rs](../brain/brain-core/src/neuron.rs)); add a `footprint` (bitset) to each neuron; correction
   mint computes `footprint = ⋃ constituents`. Connection/error/learn steps filter by footprint adjacency
   instead of channel-neighbor.
 - **`brain/brain-core/src/memory.rs`** — `neuron_states` must hold a neuron at multiple depths in one stage
   (a settling wave can reach a neuron at more than one depth); the single `LevelAgeState` per `(neuron, frame)`
-  ([memory.rs:45](../brain/brain-core/src/memory.rs)) becomes multi-valued. Level indices become wave
+  ([memory.rs](../brain/brain-core/src/memory.rs)) becomes multi-valued. Level indices become wave
   activation state.
 - **`brain/brain-core/src/brain.rs`** — drive the two waves + apex handoff (structure unchanged); voting
   unchanged (already base-only).
@@ -157,7 +157,7 @@ footprints replace. Removing it touches nothing on the prediction/action layer; 
 1. **Footprint growth at apex.** Top-level footprints can cover most of the input — fine for adjacency, watch
    memory if base is huge (vision). Bitsets scale, but revisit.
 2. **Multi-depth `neuron_states` shape** — `(neuron, frame) → {depth → state}` vs `(neuron, frame, depth) →
-   state`. The temporal `neuron_states` ([memory.rs:45](../brain/brain-core/src/memory.rs)) currently holds one
+   state`. The temporal `neuron_states` ([memory.rs](../brain/brain-core/src/memory.rs)) currently holds one
    level per neuron per frame; reuse can routing-match a shared neuron from multiple parents at different depths
    in one sweep, so it must become multi-valued. (Spatial already does multi via `level → set`.) Pick the shape
    on eviction/code-shape grounds.

@@ -21,7 +21,7 @@ Because reuse applies at every distance, and the connection stores are split (`s
 
 The codebase already has two context indexes that map a **context neuron** → **patterns whose routing context
 references it**: `spatial_context_index` (no distance) and `temporal_context_index` (distance-keyed)
-([neuron.rs:227, 246](../brain/brain-core/src/neuron.rs)). The reuse indexes are the different inverse —
+([neuron.rs](../brain/brain-core/src/neuron.rs)). The reuse indexes are the different inverse —
 **connection target → neurons whose outgoing connection set includes it** — and there are **two of them,
 mirroring the context indexes' split types**, because the connection stores are themselves split
 (`spatial_connections` flat, `temporal_connections` distance-keyed). No such index exists today.
@@ -45,13 +45,13 @@ source sets. The Phase D lookup routes to the spatial index at d=0 and the tempo
 ### Membership, maintained on connection create
 
 Spatial connections are created in `create_connection`'s spatial insert
-([neuron.rs:514](../brain/brain-core/src/neuron.rs)) → update `spatial_connection_index`; temporal connections
-in the temporal insert ([neuron.rs:519](../brain/brain-core/src/neuron.rs)) → update
+([neuron.rs](../brain/brain-core/src/neuron.rs)) → update `spatial_connection_index`; temporal connections
+in the temporal insert ([neuron.rs](../brain/brain-core/src/neuron.rs)) → update
 `temporal_connection_index`. Both indexes are **membership-only** — they record *that* source→target exists,
 not the strength — so they change **only on create**, never on `strengthen_connection`.
 
 There is **no connection-delete/decay path today** (decay was removed —
-[neuron.rs:1581-1587](../brain/brain-core/src/neuron.rs)), so every indexed edge is live and no removal hook is
+[neuron.rs](../brain/brain-core/src/neuron.rs)), so every indexed edge is live and no removal hook is
 needed now. **If decay/delete returns**, drop `source` from `target`'s set on delete — leave a marked stub.
 
 ### DECIDE-THIS — strength-blind candidacy

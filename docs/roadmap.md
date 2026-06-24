@@ -45,40 +45,25 @@ cross-stream **isolation** knob parallel-stream learning relied on — that now 
 
 ---
 
-## 2. Re-introduce context refinement
+## 2. Context & connection refinement
 
-Removed in commit `8a17f4d` to prevent pattern-identity drift. On a matched pattern, **strengthen**
-common context entries, **add** novel, **weaken/delete** missing — so a pattern consolidates toward
-the common core of the configs it matches instead of staying frozen at mint-time identity. This is the
-missing abstraction/generalization step that would turn one-off corrections into general detectors and
-let the hierarchy climb past depth 2.
+Design in **[refinement.md](./refinement.md)**. The missing abstraction/generalization step: on a matched
+pattern, consolidate both its **sources** (context) and its **targets** (connections) toward the common
+core of the configs it matches, instead of leaving it frozen at mint-time identity. This is what turns
+one-off corrections into general detectors and lets the hierarchy climb past depth 2. Removed in commit
+`8a17f4d` to prevent pattern-identity drift; reintroduced here behind a flag.
 
-- Add an **option** and put it back into temporal processing.
-- Add the same logic to **spatial** processing behind the same flag.
-- Guard for reproducibility: refine only during training, freeze for eval (or consolidate in a
-  separate pass).
-- Test MNIST performance.
-- Test stock performance.
+Steps:
 
-**Refine targets (connections) too, symmetric to sources (context).** The refinement above
-consolidates a pattern's **context (sources)** — what activates it. A pattern has a second side: its
-**target connections** — what it predicts and votes for (event connections, action connections). Today
-those are refined only by strengthen-on-correct + mint-on-error (see
-[error-driven-learning.md](./error-driven-learning.md) "Pattern Evolution"), not by the same
-consolidate-toward-the-common-core logic. Apply the symmetric operation to the target side: on a matched
-pattern, **strengthen** common targets, **add** novel targets observed, **weaken/delete** targets that
-consistently fail to appear — so the pattern's *output* generalizes toward the common core, not just its
-identity. Both ends refine under the same flag.
-
-- Apply target refinement to **event** (prediction) connections — clean, structural, symmetric to
-  context refinement.
-- **Caveat for action connections:** action/reward connections are reward-smoothed and never-weakened
-  by design (the forward *value* channel). Structural weaken/delete on them would fight the reward
-  signal. So either restrict structural target refinement to event connections, or guard action
-  connections so refinement never overrides reward-carried value. Flagged as the open design question
-  for this extension.
-- Test MNIST and stocks with target refinement on, both independently and combined with context
-  refinement, to separate their contributions.
+1. **Context (sources).** Add an option and put context refinement back into temporal processing; add the
+   same logic to spatial behind the same flag.
+2. **Targets (connections).** Apply the symmetric operation to event (prediction) connections; settle the
+   action-connection caveat (reward-smoothed, never-weakened) — restrict to event connections or guard
+   action connections so refinement never overrides reward-carried value (open design question, see doc).
+3. **Reproducibility guard.** Refine only during training, freeze for eval (or consolidate in a separate
+   pass).
+4. **Validate.** Test MNIST and stocks with context and target refinement, independently and combined, to
+   separate their contributions.
 
 ---
 

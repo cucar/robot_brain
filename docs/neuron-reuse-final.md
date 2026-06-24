@@ -43,7 +43,7 @@ for ((distance, observed), errs) in by_group:
 
 1. For each target T in `observed`, read candidate sources from the Phase-B index at this distance.
 2. Score each candidate: `|candidate.connections ∩ observed| / |observed|`, or reuse the existing
-   common/missing/novel scoring (`match_observed` [neuron.rs:1140](../brain/brain-core/src/neuron.rs)). (Strength
+   common/missing/novel scoring (`match_observed` [neuron.rs](../brain/brain-core/src/neuron.rs)). (Strength
    weighting is the Phase-B strength-candidacy decision.)
 3. Filter ≥ the **merge threshold for this distance** (spatial threshold at d=0, temporal at d>0; 1.0 disables
    reuse + partial recognition together).
@@ -76,7 +76,7 @@ reconciliation across frames either.
 ## Reuse wires routing for next frame; no same-frame injection
 
 Like a mint, the lookup **installs** the erroring neurons' routing → R for the next time their context recurs
-([neuron.rs:1455-1471](../brain/brain-core/src/neuron.rs)); it does **not** activate R this frame. So there is
+([neuron.rs](../brain/brain-core/src/neuron.rs)); it does **not** activate R this frame. So there is
 no "inject R at a deeper level mid-sweep" problem — R is active this frame only if its own routing
 independently matched.
 
@@ -102,7 +102,7 @@ model** ([neuron-reuse.md §5.3](./neuron-reuse.md)). Any inhibition that's need
 - **MNIST + stocks**: neuron count drops further vs the Phase-A baseline; accuracy ≥ baseline.
 - **Profile**: per-group reuse lookup adds **< 20%** per-frame.
 - **Termination**: heavy cross-frame reuse still terminates — the level-sweep terminates as today
-  ([brain.rs:1174, 1278](../brain/brain-core/src/brain.rs)), and reuse only adds routing entries (fired next
+  ([brain.rs](../brain/brain-core/src/brain.rs)), and reuse only adds routing entries (fired next
   frame), so it cannot extend the current frame's sweep.
 
 ---
