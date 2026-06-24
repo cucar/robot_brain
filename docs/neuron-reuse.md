@@ -66,12 +66,14 @@ The same operation runs at every distance — **learn relationships at distance 
 - **d = k** — relationships between the current frame and k frames back. This is `process_temporal`.
 
 The **structure is unchanged**: `process_spatial` → apex handoff → `process_temporal`, each a separate
-function. They stay separate because their control flow differs: spatial **settles within the frame** (a
-multi-round wave to a fixpoint, deepening the within-frame hierarchy), while temporal **passes over the
-materialized sliding window** (last frame's apex is already at age 1; its hierarchy deepens *across* frames,
-not within one). That is the only irreducible spatial/temporal difference — space is the distance with no time
-to traverse, time is the distance that takes frames to traverse. Everything else — footprints, coordinate-less
-corrections, reuse — is shared. There is no `process_ages` collapse and no age-to-age chaining (§2.3).
+function. Both already run the **identical bottom-up level-sweep** that settles until no higher level fires
+(`process_spatial_levels` / `process_temporal_levels`, [brain.rs:1126, 1222](../brain/brain-core/src/brain.rs)) —
+the active set is fixed at the start, freshly-minted corrections fire next frame. They stay two functions for
+the narrow reasons they are two today: temporal **persists per-neuron state across frames** and reads d>0
+connections; spatial is **ephemeral** and reads d=0. That cross-frame persistence is the only irreducible
+spatial/temporal difference — space is the distance with no time to traverse, time is the distance that takes
+frames to traverse. Everything else — the settling sweep, footprints, coordinate-less corrections, reuse — is
+shared. There is no `process_ages` collapse and no age-to-age chaining (§2.3).
 
 ### 2.2 Footprints — Locality Without Coordinates
 

@@ -15,27 +15,38 @@ This phase is **not bit-exact** — it restructures processing. Its gate is a *c
 
 `process_spatial` and `process_temporal` **stay separate functions**. The structure is the same as today:
 
-1. **`process_spatial`** (d=0) — relationships *within* the current frame. Runs as a **wave**: propagate
-   until no more corrections are needed (a fixpoint), deepening the within-frame hierarchy.
+1. **`process_spatial`** (d=0) — relationships *within* the current frame.
 2. **Apex handoff** — the spatial apex feeds temporal, exactly as today.
-3. **`process_temporal`** (d>0) — relationships between the current frame and past frames. Also a **wave**,
-   over the materialized sliding window.
+3. **`process_temporal`** (d>0) — relationships between the current frame and past frames.
 
-They share the *operation* — "learn relationships at distance d" — and *all* the new machinery below
-(footprints, coordinate-less corrections, reuse). They stay two functions because their control flow differs:
-spatial **settles within the frame** (a multi-round wave to fixpoint), while temporal **passes over the
-materialized window** (last frame's apex is already at age 1; the temporal hierarchy deepens across frames,
-not within one). There is **no** `process_ages` collapse and **no** age-to-age chaining — the apex fans out to
-every temporal distance in parallel; d=1 does not feed d=2 (see [neuron-reuse.md §2.3](./neuron-reuse.md)).
+**Both already run the same settling level-sweep** — `process_spatial_levels`
+([brain.rs:1126](../brain/brain-core/src/brain.rs)) and `process_temporal_levels`
+([brain.rs:1222](../brain/brain-core/src/brain.rs)) are the identical loop: walk levels bottom-up, each level's
+matched patterns activate one level up, stop when a level produces no activations that push the hierarchy
+higher. The active set is fixed at the start of the sweep; freshly-minted error patterns are excluded from
+their own level and fire *next* frame. So the "wave" is **not new** — it is this existing sweep, just with the
+level no longer stored as an intrinsic neuron field.
+
+They stay two functions for the reasons they are two today, both narrow: temporal **persists per-neuron state
+across frames** (`write_back_level_neurons`, [brain.rs:1252](../brain/brain-core/src/brain.rs)) and reads d>0
+connections; spatial is **ephemeral** ([brain.rs:1149](../brain/brain-core/src/brain.rs)) and reads d=0. The
+sweep loop itself is the same.
+
+There is **no** `process_ages` collapse and **no** age-to-age chaining — the apex fans out to every temporal
+distance in parallel; d=1 does not feed d=2 (see [neuron-reuse.md §2.3](./neuron-reuse.md)).
 
 ---
 
-## Each stage is a wave (no stored levels)
+## No stored levels
 
-Processing within a stage is a **settling wave**, not a counted level-sweep. A neuron fires when its inputs
-are ready; the stage propagates until no neuron has an unsatisfied prediction error (a fixpoint). "Level"
-disappears as a stored quantity — a neuron's depth is just how many propagation rounds it sits from base,
-never recorded.
+The level-sweep already settles bottom-up until no higher level fires (above). What changes here is that
+**the level is no longer a stored intrinsic neuron field** — it is only the sweep's loop variable. The loop
+already drives off `max_active_level` read from memory's activation index, not the stored
+`neuron_spatial_levels` / `neuron_temporal_levels` maps; those maps are read only by mint (child = parent + 1),
+diagnostics, and serialization, all of which move to activation-derived or recomputed values. A neuron's depth
+becomes purely "how far the sweep had climbed when it fired," never recorded on the neuron.
+
+The sweep, unchanged in shape (only neighborhood and coordinate handling differ — see below):
 
 ```
 process_spatial (d=0):
@@ -143,14 +154,17 @@ footprints replace. Removing it touches nothing on the prediction/action layer; 
 
 ## Open questions
 
-1. **Within-stage settle depth.** Spatial settles to a fixpoint (within-frame hierarchy). Confirm temporal's
-   wave terminates cleanly over the window (its hierarchy deepens across frames, so the within-frame wave is
-   shallow — verify).
-2. **Fixpoint termination + deterministic mint order.** Define the fixpoint condition and a deterministic
-   order so runs are comparable. Footprint-adjacency bounds the blow-up (only adjacent things group).
-3. **Footprint growth at apex.** Top-level footprints can cover most of the input — fine for adjacency, watch
+> The settling sweep itself is **not** in question — it already exists and terminates (the loop exits when a
+> level produces no activations that push `max_active_level` higher, [brain.rs:1174, 1278](../brain/brain-core/src/brain.rs)).
+> Spatial and temporal run the identical loop today; this phase does not change it.
+
+1. **Deterministic mint order under footprints.** Footprint-clustering and mint order must be deterministic
+   for comparable runs (sorted keys, not hash order). New because footprints replace the coordinate-keyed
+   grouping.
+2. **Footprint growth at apex.** Top-level footprints can cover most of the input — fine for adjacency, watch
    memory if base is huge (vision). Bitsets scale, but revisit.
-4. **Subsumption under settling.** Definition unchanged (a neuron is subsumed if a covering correction fired
-   this frame); only the evaluation moves to the wave's fixpoint. No new definition needed.
-5. **Multi-depth `neuron_states` shape** — `(neuron, frame) → {depth → state}` vs `(neuron, frame, depth) →
-   state`. Pick on eviction/code-shape grounds.
+3. **Subsumption.** Definition unchanged (a neuron is subsumed if a covering correction fired this frame).
+   No new definition needed.
+4. **Multi-depth `neuron_states` shape** — `(neuron, frame) → {depth → state}` vs `(neuron, frame, depth) →
+   state`. Needed only once reuse can activate a neuron from multiple parents at different depths (Phase C/D);
+   groundwork here. Pick on eviction/code-shape grounds.
