@@ -114,16 +114,19 @@ So, only the base neurons are ever dequantized.
 
 ### 2.3 The Apex Fans Out; Ages Do Not Chain
 
-The spatial apex feeds temporal — and within temporal it feeds **every** distance in parallel (d=1, d=2, …),
-not a chain where d=1 feeds d=2. The depth chain (output→input) lives inside each wave and across frames, not
-along the age axis.
+Since spatial is d=0 and temporal is d>0, it's tempting to chain them: d=0 feeds d=1, d=1 feeds d=2, and so on. 
+But that does not work well. The design does not extend cleanly. 
 
-Cross-distance recurrence happens frame-to-frame: this frame's apex becomes next frame's age-1 context. Within
-a single frame, the older ages are **materialized memory** of past outputs, not a pipeline to re-run.
+Cross-distance recurrence happens frame-to-frame: this frame's apex becomes next frame's age-1 context. 
+Within a single frame, the older ages are **materialized memory** of past outputs, not a pipeline to re-run.
 Intra-frame age-chaining (feeding age d's output into age d+1's input in the same frame) would telescope the
 time axis into the depth axis — double-counting the window and breaking the persistence that lets an activated
 pattern vote every frame it is alive. So temporal relates the apex to each past age independently; there is no
 `process_ages` cascade.
+
+The spatial apex feeds every temporal distance in parallel (d=1, d=2, …).
+The depth chain (output→input) lives inside each wave and across frames, not along the age axis.
+This will not change.
 
 ---
 
