@@ -7,7 +7,7 @@ wired to it and the correction's footprint = the union. Because that wires many 
 **multi-parent ownership/lifecycle/activation machinery lands here too**. Applies at **all distances** — d=0
 and d>0 are the same code on the wave-front.
 
-Does **not** touch the reverse index or cross-frame lookup (Phase D). Settles **DECIDE-THIS #1**.
+Does **not** touch the reverse index or cross-frame lookup (Phase D).
 
 > **No DECIDE-THIS #0.** The clustering/anchor problem that coordinates created is gone. Corrections are
 > coordinate-less (Phase A), so a shared correction takes the **union footprint** — no anchor to reconcile.
@@ -39,23 +39,19 @@ This replaces today's per-erroring-neuron mints (spatial one-per-parent
 
 ---
 
-## DECIDE-THIS #1 — Mint-frame vs reuse-frame inhibition window
+## A minted correction fires next frame, not the mint frame
 
-The correction-wired inhibition ([neuron-reuse.md §4.2](./neuron-reuse.md)) says a corrected neuron learns the
-observed set but does not vote and is not error-checked during its inhibition window. *Which frame?*
+A minted correction is **installed into the erroring neuron's routing table** (`correct_errors` →
+`add_temporal_pattern`, [neuron.rs:1455-1471](../brain/brain-core/src/neuron.rs)) and fires the **next** time
+its context recurs — not the mint frame. The `correction_activations` value is **not** an activation of the new
+neuron; it records the ages where this neuron just minted a correction so the erroring parent **suppresses its
+own vote** at those ages this frame (`get_suppressed_ages`, [neuron.rs:1533-1534](../brain/brain-core/src/neuron.rs):
+*"had a bad inference last frame from an age… suppress the vote for that age"*).
 
-Corrections produce `correction_activations` out of the pass today
-([neuron.rs:1101, 1461-1464](../brain/brain-core/src/neuron.rs)), suggesting they activate the mint frame.
-**Recommended (confirm against code):** a freshly minted correction **does** activate its mint frame as a
-tagged correction-activation — learns the group's observed set, does not vote, is not error-checked (its
-one-frame window); on subsequent frames it fires via routing as a normal recognition. Trace
-`correction_activations` through the thalamus to confirm, and write the answer into
-[neuron-reuse.md §4.2](./neuron-reuse.md).
-
-> Batched mint alone mints **fresh** neurons, which already carry the fresh-mint exemption
-> ([spatial-processing.md §3.3 step 2](./spatial-processing.md)). So this phase needs no
-> `correction_wired_this_frame` set; it becomes load-bearing only in Phase D for *reused* (non-fresh)
-> neurons.
+So a fresh batched mint is **not active the mint frame**, and the erroring parent's wrong vote is already
+suppressed by the existing machinery. This phase therefore needs **no** `correction_wired_this_frame` set —
+fresh mints are covered. That set is only for Phase D, where a *reused, pre-existing* neuron may be
+independently active this frame (via its own routing match) while also being wired as a correction target.
 
 ---
 
@@ -74,11 +70,12 @@ decay at the same rate, differing only in strength and `last_activation_frame`. 
   [neuron.rs:242-243](../brain/brain-core/src/neuron.rs)) already permits the same child id across many
   parents' maps — the work is install + lifecycle, not storage.
 - **Thalamus activation of a shared neuron.** The frame after a batched mint, more than one parent can
-  match-and-activate the correction in one wave. Collapse to one activation (refractory, via `fired_this_frame`)
-  while crediting **every** activating parent: each routing entry strengthened, each subsumed. Today an
+  match-and-activate the correction in one wave (`activate_*_pattern(pattern_id, level+1)` from each). Today an
   activation carries one `activation.parent_id` and marks exactly that parent subsumed
-  ([brain.rs:1151-1157, 1255-1261](../brain/brain-core/src/brain.rs)); with N activating parents, **all N**
-  must be subsumed. → `fired_this_frame` lands here.
+  ([brain.rs:1151-1157, 1255-1261](../brain/brain-core/src/brain.rs)); with N activating parents, **all N** must
+  be credited (each routing entry strengthened, each subsumed). Whether the shared neuron fires **once**
+  (refractory, via a `fired_this_frame` set) or is activated **at each matched depth** (multi-depth memory) is
+  the open **multi-parent activation model** ([neuron-reuse.md §5.3](./neuron-reuse.md)) — decide it here.
 - **Refcounted reaping.** Reap only when **no** parent references the correction. The cascade path
   (`DeleteNeuron { target_id, parent_id }`, [column.rs:47, 218, 258-322](../brain/brain-core/src/column.rs),
   reaped around [thalamus.rs:1970](../brain/brain-core/src/thalamus.rs)) carries a single `parent_id`; replace
@@ -115,9 +112,9 @@ neurons.
 - **Unit — group batch (d=0 and d>0)**: co-failers with the same observed set at the same distance produce
   **exactly one** coordinate-less correction, footprint = union, all wired to it.
 - **Unit — distinct observed-sets stay separate**: different observed sets → separate corrections.
-- **Unit — shared activation, all parents subsumed**: the frame after a batched mint, two parents both
-  match-and-activate the correction. It fires **once** (refractory); **both** subsumed; both routing entries
-  strengthened.
+- **Unit — shared activation, all parents credited**: the frame after a batched mint, two parents both
+  match-and-activate the correction. **Both** are subsumed and both routing entries strengthened, per the
+  chosen multi-parent activation model (fires-once vs activated-per-depth).
 - **Unit — refcounted reaping**: a correction with two parents survives one parent's entry dying; reaped only
   when the second dies. Not reaped on the first host's death.
 - **Unit — multi-parent serialization round-trip**: snapshot/restore with both parents' routing entries intact

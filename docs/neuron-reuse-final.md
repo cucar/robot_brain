@@ -2,13 +2,14 @@
 
 **The feature — and a comparatively light phase**, because [Phase C](./neuron-reuse-frame.md) already built the
 multi-parent machinery and [Phase A](./neuron-reuse-wavefront.md) the coordinate-less wave-front substrate.
-Theory in [neuron-reuse.md §3.2, §3.4, §4.2](./neuron-reuse.md). This phase adds the cross-frame **reuse
-lookup** on top of Phase C's batched-mint path, consuming the reverse index from
-[Phase B](./neuron-reuse-index.md), plus the one new tracking set reuse-of-existing-neurons needs. Applies at
-**all distances**. After this phase, reuse is always on (no enable flag).
+Theory in [neuron-reuse.md §3.2, §3.4](./neuron-reuse.md). This phase adds the cross-frame **reuse lookup** on
+top of Phase C's batched-mint path, consuming the reverse index from [Phase B](./neuron-reuse-index.md).
+Applies at **all distances**. After this phase, reuse is always on (no enable flag). It needs **no new
+same-frame tracking set** — reuse installs routing for next frame, so there is no this-frame activation to
+inhibit (see below).
 
 What's **already done**: coordinate-less corrections + footprints + settling-wave `process_spatial`/`process_temporal` (Phase A);
-`fired_this_frame`/refractory, shared activation, refcounted reaping, multi-parent serialization, the
+multi-parent lifecycle (refcounted reaping, multi-parent serialization, shared-neuron activation), the
 `parent_id` audit, batched mint (Phase C). Phase D does not redo them.
 
 ---
@@ -18,7 +19,7 @@ What's **already done**: coordinate-less corrections + footprints + settling-wav
 Per (distance, observed-set) group with errors this frame: query the reverse index **once** against the
 group's observed reality for an existing neuron whose inference signature partially matches. If the best
 candidate scores ≥ the merge threshold for this distance, wire all co-failers to it; otherwise fall through to
-the Phase-C batched mint. Plus: add `correction_wired_this_frame` and subtract it from the voter set.
+the Phase-C batched mint.
 
 ---
 
@@ -32,8 +33,7 @@ queries  = by_group.keys().map(|(d, observed)| (observed, d))        // one quer
 results  = region.query_inference_sources_batch(queries)            // parallel, from Phase B index
 for ((distance, observed), errs) in by_group:
     if let Some(reuse) = score_and_pick(results[(distance, observed)], observed, merge_threshold(distance)):
-        for e in errs: wire_correction(e.erroring_neuron, reuse)
-        mark_correction_wired(reuse)        // §4.2: learn, no vote, no error-check
+        for e in errs: wire_correction(e.erroring_neuron, reuse)   // installs routing for next frame
     else:
         C = mint_one(observed, distance); C.footprint = ⋃ errs.footprint   // Phase C fallback
         for e in errs: wire_correction(e.erroring_neuron, C)
@@ -52,25 +52,18 @@ for ((distance, observed), errs) in by_group:
 The candidate's footprint need not match the group's — reuse is by inference output, not locality. A reused
 correction simply gains another parent; on activation its footprint is whatever it already covers.
 
-### Tracking set (the one D-only addition)
+### No new same-frame tracking set is needed
 
-`fired_this_frame` and the multi-parent machinery landed in [Phase C](./neuron-reuse-frame.md). Phase D adds
-one per-frame set, cleared at frame end:
+Reuse **installs routing for next frame** (above) — it does **not** activate the reused neuron this frame. An
+earlier plan added a `correction_wired_this_frame` set to suppress a reused neuron's "wiring-side-effect
+activation," but there is no such activation, so the set has nothing to act on. A reused neuron is active this
+frame only via its **own** routing match, in which case it votes and error-checks as a normal recognition
+(existing behavior — nothing to suppress). So Phase D is essentially **just the lookup** plus the multi-parent
+accrual that Phase C's machinery already handles.
 
-- **`correction_wired_this_frame`** — every correction target this frame that is a **reused pre-existing**
-  neuron. Members: learn the observed set, **do not vote**, **are not error-checked**.
-
-Why D-only: a freshly minted correction already carries the fresh-mint exemption (Phase C). A reused neuron is
-not fresh — it has a full prior connection set — so without an explicit tag it would vote (its activation is a
-wiring side-effect) and be error-checked against the current observed set (which its old connections may not
-match → spurious cascade). So this set is **the fresh-mint exemption extended to reused neurons**.
-
-### Voting: layer the exclusion, don't replace suppression
-
-Action voting collects every active (neuron, age) whose `activated_pattern_id` is `None`
-([memory.rs:197-206](../brain/brain-core/src/memory.rs), aggregated at
-[brain.rs:1623-1699](../brain/brain-core/src/brain.rs)). **Keep that suppression as is, and subtract
-`correction_wired_this_frame` on top.** Empty set ⇒ voter set bit-identical to the pre-D build.
+The one genuinely-new activation question — a shared neuron routing-matched from several parents at different
+depths in one sweep — is the **multi-parent activation model** ([neuron-reuse.md §5.3](./neuron-reuse.md));
+whether it needs any inhibition falls out of that decision, not a separate Phase-D set.
 
 ### Cross-frame accrual
 
@@ -80,23 +73,19 @@ reconciliation across frames either.
 
 ---
 
-## DECIDE-THIS #2 — Refractory vs cross-depth injection
+## Reuse wires routing for next frame; no same-frame injection
 
-A reused neuron R may **already have fired this frame** via its own routing match (in `fired_this_frame` at
-some wave depth), **and then** be selected as the correction target for an error whose source sits deeper.
+Like a mint, the lookup **installs** the erroring neurons' routing → R for the next time their context recurs
+([neuron.rs:1455-1471](../brain/brain-core/src/neuron.rs)); it does **not** activate R this frame. So there is
+no "inject R at a deeper level mid-sweep" problem — R is active this frame only if its own routing
+independently matched.
 
-**What Phase A settles:** memory can hold R at multiple depths in one frame
-([neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md)), so the representation is expressible. The remaining
-question is **wave sequencing**: if R is picked for a depth the settling wave has already passed, R's work at
-that depth can't run *this* frame even though memory can record the membership.
-
-**Recommended resolution:** refractory governs *fresh activation*; correction-wiring is a separate role. R's
-existing activation stands; record its correction-target depth in memory but **do not retro-run** a passed
-wave step — full participation realized **next** frame when the edited routing fires R from the start of the
-wave. If R has **not** fired this frame (the common case — found purely via the index), R *is* activated as a
-correction target like a fresh mint (added to `fired_this_frame` + `correction_wired_this_frame`, learns, no
-vote, no error-check). Confirm against `wire_correction`; write the resolved rule into
-[neuron-reuse.md §4.2](./neuron-reuse.md).
+The one place a shared neuron lands at **multiple depths in one frame** is multi-parent **routing**: under
+reuse, R can be routing-matched from several parents at different levels in one sweep
+(`activate_*_pattern(pattern_id, level+1)` from each), activating it at each level. Whether the temporal
+`neuron_states` can hold that — and whether such activations are processed at each depth or collapsed — is the
+multi-depth memory question in [Phase A](./neuron-reuse-wavefront.md), and the open **multi-parent activation
+model** ([neuron-reuse.md §5.3](./neuron-reuse.md)). Any inhibition that's needed falls out of that decision.
 
 ---
 
@@ -110,12 +99,11 @@ vote, no error-check). Confirm against `wire_correction`; write the resolved rul
 - **Unit — self-match filtered**.
 - **Unit — cross-frame multi-parent accrual**: reuse R (minted earlier) from a different parent this frame; R
   gains the new routing entry with independent strength; its connection set accumulates.
-- **Unit — voting bit-exact when no corrections active**.
-- **Unit — correction-wired excluded from voting**.
 - **MNIST + stocks**: neuron count drops further vs the Phase-A baseline; accuracy ≥ baseline.
 - **Profile**: per-group reuse lookup adds **< 20%** per-frame.
-- **Termination**: heavy cross-frame reuse still terminates — refractory + correction-wired inhibition bound
-  the frame.
+- **Termination**: heavy cross-frame reuse still terminates — the level-sweep terminates as today
+  ([brain.rs:1174, 1278](../brain/brain-core/src/brain.rs)), and reuse only adds routing entries (fired next
+  frame), so it cannot extend the current frame's sweep.
 
 ---
 

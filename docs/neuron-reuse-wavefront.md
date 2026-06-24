@@ -154,17 +154,10 @@ footprints replace. Removing it touches nothing on the prediction/action layer; 
 
 ## Open questions
 
-> The settling sweep itself is **not** in question — it already exists and terminates (the loop exits when a
-> level produces no activations that push `max_active_level` higher, [brain.rs:1174, 1278](../brain/brain-core/src/brain.rs)).
-> Spatial and temporal run the identical loop today; this phase does not change it.
-
-1. **Deterministic mint order under footprints.** Footprint-clustering and mint order must be deterministic
-   for comparable runs (sorted keys, not hash order). New because footprints replace the coordinate-keyed
-   grouping.
-2. **Footprint growth at apex.** Top-level footprints can cover most of the input — fine for adjacency, watch
+1. **Footprint growth at apex.** Top-level footprints can cover most of the input — fine for adjacency, watch
    memory if base is huge (vision). Bitsets scale, but revisit.
-3. **Subsumption.** Definition unchanged (a neuron is subsumed if a covering correction fired this frame).
-   No new definition needed.
-4. **Multi-depth `neuron_states` shape** — `(neuron, frame) → {depth → state}` vs `(neuron, frame, depth) →
-   state`. Needed only once reuse can activate a neuron from multiple parents at different depths (Phase C/D);
-   groundwork here. Pick on eviction/code-shape grounds.
+2. **Multi-depth `neuron_states` shape** — `(neuron, frame) → {depth → state}` vs `(neuron, frame, depth) →
+   state`. The temporal `neuron_states` ([memory.rs:45](../brain/brain-core/src/memory.rs)) currently holds one
+   level per neuron per frame; reuse can routing-match a shared neuron from multiple parents at different depths
+   in one sweep, so it must become multi-valued. (Spatial already does multi via `level → set`.) Pick the shape
+   on eviction/code-shape grounds.

@@ -21,20 +21,23 @@ Build order — each phase behind its own gate (theory §6):
    `process_temporal` into settling waves (structure unchanged); remove stored levels entirely;
    coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory.
    Rearchitecture — **not bit-exact** (characterized regression).
-2. **[Phase B — Index](./neuron-reuse-index.md)**: reverse inference index over **all** connections (d=0 and
-   d>0). Built, unit-tested, not yet consumed. Settles strength-candidacy.
+2. **[Phase B — Index](./neuron-reuse-index.md)**: **two** reverse connection indexes —
+   `spatial_connection_index` (no distance) and `temporal_connection_index` (distance-keyed), mirroring the
+   context-index split. Built, unit-tested, not yet consumed. Settles strength-candidacy.
 3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint at all distances (group by (distance,
-   observed-set), mint one coordinate-less correction with union footprint) **+ all the multi-parent machinery**
-   (refractory, shared activation, refcounted reaping, multi-parent serialization). Heaviest reuse phase.
-4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of C + `correction_wired_this_frame` +
-   cross-frame accrual, all distances. Light.
+   observed-set), mint one coordinate-less correction with union footprint) **+ the multi-parent machinery**
+   (refcounted reaping, multi-parent serialization, shared-neuron activation). Heaviest reuse phase.
+4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of C + cross-frame accrual, all
+   distances. Light (reuse installs routing for next frame, so it needs no new same-frame tracking set).
 5. **[Validation](./neuron-reuse-validation.md)**: MNIST spatial reuse + transfer, stocks full-pipeline +
    transfer, forget-rate long-run.
 
-Decisions to settle before building: **wave-front shape** (within-age settle vs single-pass, fixpoint +
-determinism — Phase A); **#1** mint-frame vs reuse-frame inhibition window (Phase C); **#2** refractory vs
-cross-depth injection (Phase D); **strength-candidacy** for the reuse index (Phase B). The old DECIDE-THIS #0
-(clustering/anchor) is **gone** — footprints + coordinate-less corrections eliminated it.
+Decisions to settle before building: **strength-candidacy** for the reuse index (does a weak incidental
+connection make a neuron a reuse candidate? — Phase B); **multi-parent activation model** (how a shared
+neuron routing-matched from several parents at different depths in one sweep is held and processed — Phase
+A/C/D). The clustering/anchor problem is gone (footprints + coordinate-less corrections), and the mint-frame
+and cross-depth "decisions" turned out to be answered by the existing code (corrections install for next
+frame, not the mint frame).
 
 Knock-on: the wave-front removes channel-neighbor filtering (replaced by footprints), which removes the
 cross-stream **isolation** knob parallel-stream learning relied on — that now needs a different primitive

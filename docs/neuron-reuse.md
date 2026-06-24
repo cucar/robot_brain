@@ -156,23 +156,24 @@ Reuse and batched mint both wire **many** parents to one correction, which break
 model (today a correction's strength lives in its one host's routing entry and it dies when that entry decays
 — [neuron.rs:64, 689-703, 709-714](../brain/brain-core/src/neuron.rs); the forget rate is brain-wide uniform —
 [brain.rs:366](../brain/brain-core/src/brain.rs)). The clean shape: per-parent routing entries on a shared,
-coordinate-less neuron; **reference-counted reaping** (alive while any parent references it); thalamus
-**collapses multiple same-frame activations to one** (refractory) while crediting every activating parent
-(all subsumed); `patterns.csv` serializes **many** `(parent, strength)` rows per pattern. Because corrections
-are coordinate-less, there is **no anchor to reconcile** across parents — only lifecycle and activation
-bookkeeping. Born with batched mint; mechanics in [neuron-reuse-frame.md](./neuron-reuse-frame.md).
+coordinate-less neuron; **reference-counted reaping** (alive while any parent references it); `patterns.csv`
+serializes **many** `(parent, strength)` rows per pattern. Because corrections are coordinate-less, there is
+**no anchor to reconcile** across parents — only lifecycle and activation bookkeeping. Born with batched mint;
+mechanics in [neuron-reuse-frame.md](./neuron-reuse-frame.md).
 
-### 4.2 Refractory and Correction-Wired Inhibition
+### 4.2 Same-Frame Activation
 
-Two per-frame tracking sets, cleared at frame end:
+A minted **or** reused correction is **installed into the erroring neuron's routing table and fires next
+frame** — not the frame it is wired ([neuron.rs:1455-1471](../brain/brain-core/src/neuron.rs)). The erroring
+parent's wrong vote this frame is already suppressed by the existing machinery (`get_suppressed_ages`,
+[neuron.rs:1533-1534](../brain/brain-core/src/neuron.rs)). So reuse adds **no** same-frame activation to
+inhibit: the originally-planned `correction_wired_this_frame` set has nothing to act on, and a reused neuron is
+active this frame only via its **own** routing match (a normal recognition).
 
-- **`fired_this_frame`** — refractory (each neuron fires at most once per frame). Load-bearing once a shared
-  neuron can be activated from many parents. Lands with batched mint.
-- **`correction_wired_this_frame`** — every correction target this frame that is a **reused pre-existing**
-  neuron. A fresh mint already has the fresh-mint exemption ([spatial-processing.md §3.3 step 2](./spatial-processing.md));
-  a reused neuron is not fresh, so it needs an explicit tag: learn the observed set, **don't vote** (layered
-  on the existing `activated_pattern_id` suppression, so empty ⇒ bit-identical voting), **don't error-check**
-  (its old connections must not spawn a fresh error cascade). Lands with the lookup.
+The genuinely-new activation case is **multi-parent routing**: a shared neuron can be routing-matched from
+several parents at different depths in one sweep, activating it at each. Whether that fires **once**
+(refractory) or **once per depth** (multi-depth memory) — and whether it needs any inhibition — is the open
+**multi-parent activation model** (§5.3).
 
 ---
 
@@ -195,17 +196,20 @@ Two per-frame tracking sets, cleared at frame end:
   identity.
 - **Footprint cost** at the apex (large footprints); bounded by bitsets, watch memory for huge base (vision).
 - **Reverse-index cost** — one lookup per group, sharded by column, updates at orchestration boundaries.
-- **Over-aggressive reuse** — too-low merge threshold; tune cautiously, lean on decay. See strength-candidacy
-  ([neuron-reuse-index.md](./neuron-reuse-index.md)).
+- **Over-aggressive reuse** — too-low merge threshold; tune cautiously. There is **no decay backstop** today
+  (connections never weaken — [neuron.rs:1581-1588](../brain/brain-core/src/neuron.rs)), so a bad reuse
+  persists. See strength-candidacy ([neuron-reuse-index.md](./neuron-reuse-index.md)).
 - **Action-binding dilution** — heavily-reused neurons; monitored long-run.
 
 ### 5.3 Decisions to settle before building
 
-1. **Wave-front shape** — within-age settle vs single-pass for d>0; fixpoint + determinism
-   ([neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md) OQ1–2).
-2. **Mint-frame vs reuse-frame inhibition window** ([neuron-reuse-frame.md](./neuron-reuse-frame.md) DECIDE-THIS #1).
-3. **Refractory vs cross-depth injection** for a reused neuron ([neuron-reuse-final.md](./neuron-reuse-final.md) DECIDE-THIS #2).
-4. **Strength-candidacy** for the reuse index ([neuron-reuse-index.md](./neuron-reuse-index.md)).
+1. **Strength-candidacy** for the reuse index — does a weak, incidental connection make a neuron a reuse
+   candidate, or is membership gated/weighted by strength? ([neuron-reuse-index.md](./neuron-reuse-index.md)).
+2. **Multi-parent activation model** — when reuse routing-matches a shared neuron from several parents at
+   different depths in one sweep, how is that held (multi-depth `neuron_states`) and is it processed at each
+   depth or collapsed? This also decides whether the `fired_this_frame` / `correction_wired_this_frame`
+   inhibition sets are needed at all ([neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md),
+   [neuron-reuse-final.md](./neuron-reuse-final.md)).
 
 ---
 
@@ -216,10 +220,10 @@ distances throughout.
 
 | Phase | Doc | Goal | Gate |
 |---|---|---|---|
-| **A** | [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md) | **Foundation.** Turn `process_spatial` and `process_temporal` into settling waves (structure kept); remove stored levels; coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory. | Characterized regression (MNIST + stocks comparable); footprint/fixpoint units. **Not bit-exact.** |
-| **B** | [neuron-reuse-index.md](./neuron-reuse-index.md) | Reverse **inference** index (target → distance → sources) over **all** connections (d=0 and d>0). Built, unit-tested, not yet consumed. Settles strength-candidacy. | Unit: target→sources correct across distances; size ∝ connection count. |
-| **C** | [neuron-reuse-frame.md](./neuron-reuse-frame.md) | **Batched mint** at all distances (group by (distance, observed-set), mint one coordinate-less correction with union footprint, wire all) **+ multi-parent machinery** (refractory, shared activation, refcounted reaping, multi-parent serialization). Settles DECIDE-THIS #1. | Within-group dedup drops neuron count; multi-parent lifecycle units. |
-| **D** | [neuron-reuse-final.md](./neuron-reuse-final.md) | Reuse **lookup** on top of C (consumes B) + `correction_wired_this_frame` + cross-frame accrual, all distances. Settles DECIDE-THIS #2. | Unit: cross-frame reuse via lookup; neuron count drops further; lookup < 20% per-frame overhead. |
+| **A** | [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md) | **Foundation.** Turn `process_spatial` and `process_temporal` into settling waves (structure kept); remove stored levels; coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory. | Characterized regression (MNIST + stocks comparable); footprint-adjacency units. **Not bit-exact.** |
+| **B** | [neuron-reuse-index.md](./neuron-reuse-index.md) | **Two** reverse connection indexes — `spatial_connection_index` (target → sources) and `temporal_connection_index` (target → distance → sources), mirroring the context-index split. Built, unit-tested, not yet consumed. Settles strength-candidacy. | Unit: target→sources correct per index; stores isolated; size ∝ connection count. |
+| **C** | [neuron-reuse-frame.md](./neuron-reuse-frame.md) | **Batched mint** at all distances (group by (distance, observed-set), mint one coordinate-less correction with union footprint, wire all) **+ multi-parent machinery** (refcounted reaping, multi-parent serialization, shared-neuron activation). | Within-group dedup drops neuron count; multi-parent lifecycle units. |
+| **D** | [neuron-reuse-final.md](./neuron-reuse-final.md) | Reuse **lookup** on top of C (consumes B) + cross-frame accrual, all distances. | Unit: cross-frame reuse via lookup; neuron count drops further; lookup < 20% per-frame overhead. |
 | **Validation** | [neuron-reuse-validation.md](./neuron-reuse-validation.md) | MNIST (spatial reuse, within-frame + cross-image), stocks (full pipeline + transfer), long-run forget-rate. | Per-experiment gates in the doc. |
 
 All phases depend on [spatial-processing](./spatial-processing.md) being complete (it is) — Phase A then
