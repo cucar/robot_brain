@@ -38,7 +38,7 @@ Two pieces:
 
 1. **Foundation (Phase A).** Unify spatial and temporal under one wave-front operation (still two functions). Drop coordinates from all
    corrections; carry locality as a **footprint** (the set of base sensory neurons a correction covers).
-   Neighborhood at any level = footprint overlap. Details: [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md).
+   Neighborhood at any level = footprint adjacency (footprints touch in the base neighbor graph). Details: [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md).
 2. **Reuse (Phases B–D).** The reuse criterion is **inference-output match**: does an existing neuron's
    connection set already produce the inference a correction would need? Per (distance, footprint-region) per
    frame, query a reverse index for a match (partial or exact); on a hit, wire all co-failing neurons to the existing neuron; on
@@ -52,7 +52,7 @@ no anchor to be ambiguous about. That is what makes reuse clean at d=0, not just
 Generalization is not produced by reuse alone — it is a stack of three contributions, and reuse is the
 middle one.
 
-1. **Substrate — the wave-front architecture.** Coordinate-less corrections with footprint-overlap
+1. **Substrate — the wave-front architecture.** Coordinate-less corrections with footprint-adjacency
    neighborhoods make representations compositional: a single correction can span regions and channels, so
    structure emerges through grouping rather than a raw cross-product (§2.2). This is also what makes reuse
    *legal* — multi-parent corrections require coordinate-less identity. Without this substrate there is no
@@ -102,7 +102,7 @@ Everything else (sweep, footprints, coordinate-less corrections, reuse) is share
 Only base sensory/action neurons have coordinates. 
 A correction has a **footprint** = the set of base sensory neurons it covers (base: itself; correction: union of constituents). 
 Footprints are sensory-only for now; action footprints come with the action-composition project. 
-Two neurons are **neighbors** if and only if their footprints intersect in the base neighbor graph. 
+Two neurons are **neighbors** if and only if their footprints **touch** in the base neighbor graph — some base neuron in one is adjacent to (or equal to) a base neuron in the other, not only when they share a base neuron. 
 This replaces coordinate-inheritance *and* channel-neighbor filtering, at every distance. 
 Locality is graded: low-level corrections are local, high-level ones span more as footprints grow.
 So, cross-region/cross-channel structure emerges through grouping rather than a raw cross-product. 
@@ -132,45 +132,109 @@ This will not change.
 
 ## 3. Reuse Mechanism (all distances)
 
-### 3.1 One Observed Reality Per (Distance, Footprint-Region)
+**Reuse precedence — four steps, in order.** Each frame, after the wave settles and errors are collected:
 
-At a given distance d, within a footprint-region, the realized reality is **singular** — one actual
-co-activation (d=0) or realized future (d>0) in that region this frame. Multiple neurons may err there, but
-all erred by predicting different wrong things about the *same* observed set. Correction targets the observed
-set. So there is at most one correction per (distance, observed-set) group, and the grouping key is the
-observed set itself (well-defined: the set of observed neuron ids). Co-failers with the same observed set are
-looking at the same base region, so their footprints overlap — grouping them and taking the **union footprint**
-is unambiguous. There is **no anchor policy and no clustering problem** (footprints dissolved both).
+1. **Reuse lookup (per request).** Each erroring neuron queries the reverse index for an existing neuron whose
+   inference output already covers its observed reality ≥ the merge threshold (§3.2). Hits are marked for reuse.
+2. **Group the remainder.** The requests with no match group by (distance, observed-set) — co-failers about the
+   same un-represented reality (§3.3).
+3. **Mint per group.** One new coordinate-less correction per residual group (§3.3).
+4. **Wire all together.** Every erroring neuron is then wired in one batched step — to its reused neuron (step
+   1) or to its group's fresh mint (step 3).
 
-### 3.2 Per-Group Lookup
+Two invariants make this clean:
 
-For each (distance, observed-set) group with errors:
+- **Grouping never gates reuse.** Grouping is only a batching step for the un-reusable residual; a neuron's
+  group never constrains which existing pattern it may reuse. Reuse is decided per request, before any grouping.
+- **Same reality → same pattern (automatic consolidation).** The lookup query *is* the observed reality, so two
+  neurons observing the same reality issue the same query and resolve to the same neuron; and the residual
+  groups by observed-set, so each distinct un-reusable reality mints exactly one neuron. Every distinct observed
+  reality therefore maps to exactly one pattern — reused or minted — with no fragmentation and no clustering.
 
-1. The thalamus knows the observed inference set for that group.
-2. Query the **reverse inference index**: for each observed target T, which existing neurons have a connection
-   to T at this distance?
-3. Score each candidate's inference signature against the observed set (common/missing/novel, same as pattern
-   recognition).
-4. If the best scores ≥ the **merge threshold for this distance**, wire all co-failers in the group to it.
-5. Else, mint (§3.3).
+The four steps are **distance- and level-invariant** — identical at d=0 (spatial) and d>0 (temporal) and at
+every level (§3.4). Executable reference:
+[`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) (§3.6).
 
-### 3.3 Batched Mint (Fallback)
+### 3.1 Observed reality — the per-neuron query and group key
 
-On a miss, mint **one** coordinate-less correction for the group's observed reality, footprint = union of the
-co-failers' footprints, and wire **all** co-failers to it. Within-frame dedup; no per-neuron duplicates.
+For each erroring unit N, `observed(N)` = the co-active units whose footprint **touches** N's in the base
+neighbor graph (adjacency, not set-overlap — §2.2). A unit predicts its neighbors, never itself, so N is
+excluded from its own observed-set. This observed set is used twice: as the **lookup query** (§3.2) and, for
+the residual, as the **group key** (§3.3). At a given (distance, footprint-region) the observed reality is
+**singular** — one actual co-activation (d=0) or realized future (d>0) this frame — so the group key is exact
+and well-defined, with no clustering algorithm and no anchor.
 
-### 3.4 Why Lookup Is Still Required
+### 3.2 Lookup — reuse an existing pattern (step 1)
 
-Batched mint is within-frame only. The same reality recurring next frame, to the mint path, is a fresh group
-that mints another duplicate. Lookup is the cross-frame collapse — and *is* the generalization mechanism
-(§1.3): a neuron reused across frames accumulates the structural core. Lookup first (cross-frame generalize),
-batched mint as the fallback beneath it (within-frame dedup).
+Per erroring neuron, query the **reverse inference index** ([Phase B](./neuron-reuse-index.md)): for each
+observed target T, which existing neurons connect to T at this distance? Score each candidate against the
+observed set (common/missing/novel, the pattern-recognition scoring). If the best ≥ the **merge threshold for
+this distance**, the neuron reuses that existing pattern. Because the query is purely the observed reality,
+co-failers issue identical queries and resolve identically — same reality, same pattern. Lookup is the
+cross-frame collapse and *is* the generalization mechanism (§1.3): a neuron reused across frames accumulates
+the structural core common to the contexts that reuse it. Details:
+[neuron-reuse-final.md](./neuron-reuse-final.md).
 
-### 3.5 Merge Threshold
+### 3.3 Group and mint the residual (steps 2–3)
 
-Reuse reads the **same merge threshold pattern recognition uses at that distance** (spatial threshold at d=0,
-temporal at d>0). No separate `reuseMergeThreshold`. Setting a distance's threshold to 1.0 disables reuse and
-partial recognition together.
+The neurons that found no match group by (distance, observed-set) — co-failers about the same observed reality.
+Per group, mint **one** coordinate-less correction (wired in step 4). Two rules:
+
+1. **Footprint = the bound cluster.** `footprint = union(co-failers' footprints) ∪ observed-set's footprints`.
+   The observed set must be included: co-failers' own footprints may be **disjoint** (four arms around a center
+   share the center as their observed *target*, not their coverage), so unioning only the co-failers would
+   leave a hole. Including the observed set keeps the footprint connected.
+2. **Isolated units never merge.** A unit with an *empty* observed-set (no neighbors) is its own group; empties
+   are never grouped together — that would bind disconnected structure and violate locality.
+
+Minting is within-frame only, which is *why* lookup precedes it: the same reality recurring next frame is, to
+the mint path alone, a fresh group that mints a duplicate; lookup is what collapses it across frames. Details:
+[neuron-reuse-frame.md](./neuron-reuse-frame.md).
+
+### 3.4 Levels — the same operation, self-similar, one ring at a time
+
+The four steps run per level. At level 1 the units are base neurons (footprint = {self}); at level k the units
+are the corrections produced at level k−1. Neighbor at every level is footprint-touch; observed-set, grouping,
+and the union∪observed footprint are identical. Binding is **radius-local** — a correction binds a unit with
+its footprint-adjacent co-active neighbors, one ring — so the footprint grows ~one ring per level. A
+whole-shape pattern is therefore a *high-level* object reached after several binding steps, never a level-1
+one; if level 1 swallowed the shape there would be nothing left to compose.
+
+### 3.5 Merge threshold — and why exact match alone is brittle
+
+Reuse reads the **same merge threshold pattern recognition uses at that distance** (spatial at d=0, temporal at
+d>0). No separate `reuseMergeThreshold`; setting a distance's threshold to 1.0 disables reuse and partial
+recognition together.
+
+The threshold matters more than it first appears. Both the lookup and the residual grouping turn on **observed
+reality**, and the simulation (§3.6) shows that *exact* match (threshold = 1.0) fires reuse only where there is
+local symmetry: on a clean plus the arms share an observed center and reuse strongly, but on irregular or solid
+shapes almost every unit sees a unique neighbor set, so within-frame reuse is near-zero (every unit a
+singleton). On natural input (MNIST), exact-match reuse is therefore rare — almost all consolidation must come
+from cross-frame **lookup** (§3.2) under a merge threshold < 1.0, plus refinement
+([refinement.md](./refinement.md)). The threshold is what lets *partial*-overlap realities resolve to the same
+pattern; exact match is the degenerate threshold=1.0 case.
+
+### 3.6 Worked examples (and the simulation)
+
+The reference simulation [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) runs the
+grouping + mint path per level on ASCII shapes (`node apps/mnist/jobs/wavefront-sim.js`). It models one frame,
+d=0, every unit erroring with **no index lookup** — i.e. steps 2–4 (group → mint → wire), the residual path on
+its own. Key results:
+
+- **Single plus** (center + 4 arms). The four arms each observe `{center}` → identical observed-set → **one
+  shared correction, 4 parents**, footprint = arms ∪ center (the whole plus, center included). One frame's
+  clearest within-frame sharing.
+- **Plus-of-pluses** (five pluses arranged as a plus). **Level 1 stays local**: max footprint 5px of 21px —
+  five small plus-patterns, never the whole shape. **Level 2** binds the four outer plus-patterns (they each
+  observe the center plus-pattern) into the whole figure — the *same* arms-around-a-center grouping one level
+  up. **Level 3** converges to one pattern. Self-similar, footprints 5 → 12 → 21.
+- **Irregular shapes** (uneven blob, ragged patch, solid block, L). Level 1 stays local (≤5px) on all of them,
+  but **shared groups drop to 0–1** — exact observed-set match barely fires without symmetry (§3.5). This is
+  the empirical case for the merge threshold and cross-frame lookup.
+- **Disconnected input** (two separate blobs, a 4-connected diagonal). Stays separate — the isolated-unit rule
+  (§3.3) keeps locality from binding across gaps. Diagonals bind only under 8-connectivity, a base-graph knob
+  worth choosing deliberately for MNIST's diagonal strokes.
 
 ---
 
@@ -226,6 +290,10 @@ several parents at different depths in one sweep, activating it at each. Whether
   (connections never weaken — [neuron.rs](../brain/brain-core/src/neuron.rs)), so a bad reuse
   persists. See strength-candidacy ([neuron-reuse-index.md](./neuron-reuse-index.md)).
 - **Action-binding dilution** — heavily-reused neurons; monitored long-run.
+- **Within-frame reuse is near-inert on irregular input** — exact observed-set match (§3.5) fires only on
+  local symmetry; on natural/asymmetric shapes nearly every unit is a singleton (shown in the reference
+  simulation, §3.6). Consolidation therefore leans almost entirely on cross-frame **lookup** + **refinement**,
+  not on within-frame grouping. The merge threshold (< 1.0) is what makes partial-overlap reuse possible.
 
 ### 5.3 Decisions to settle before building
 
@@ -254,3 +322,11 @@ distances throughout.
 
 All phases depend on [spatial-processing](./spatial-processing.md) being complete (it is) — Phase A then
 rebuilds its level model into the wave-front.
+
+**Reference simulation.** [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) is the
+executable spec for the §3 grouping: a clean, dependency-free proof of concept that runs the per-level
+operation on hand-drawn shapes (`node apps/mnist/jobs/wavefront-sim.js`). It currently models one spatial frame
+— grouping + mint, no index lookup or merge threshold — and is the place to validate algorithm changes before
+touching the brain. The intent is to grow it toward the port incrementally (add the index lookup, the
+threshold, then temporal distances), keeping it faithful enough that it maps cleanly onto `process_spatial` /
+the Phase-C/D code.

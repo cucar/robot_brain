@@ -11,8 +11,10 @@ Does **not** touch the reverse index or cross-frame lookup (Phase D).
 
 > **No DECIDE-THIS #0.** The clustering/anchor problem that coordinates created is gone. Corrections are
 > coordinate-less (Phase A), so a shared correction takes the **union footprint** — no anchor to reconcile.
-> And co-failers group by exact observed-set, which is well-defined; same observed-set ⇒ overlapping
-> footprints, so the union is unambiguous. No clustering policy, no anchor policy.
+> Co-failers group by exact observed-set, which is well-defined. Their own footprints may be **disjoint**
+> (they share the observed *target*, not necessarily their own coverage — think four arms around a center),
+> so the correction's footprint = union of the co-failers **∪ the observed set** — the whole bound cluster,
+> which is connected and unambiguous. No clustering policy, no anchor policy.
 
 ---
 
@@ -23,13 +25,17 @@ Replace per-erroring-neuron minting with **per-group** minting, at every distanc
 ```
 errors  = collect_errors_from_wave_fixpoint()           // each: (erroring_neuron, distance, observed, footprint)
 by_group = errors.group_by(|e| (e.distance, e.observed)) // observed reality singular per (distance, region)
+                                                         // empty observed ⇒ its OWN group (isolated, never merged)
 for ((distance, observed), errs) in by_group:
     C = mint_one(observed, distance)                    // ONE coordinate-less correction
-    C.footprint = ⋃ errs.footprint                      // union; no anchor
+    C.footprint = (⋃ errs.footprint) ∪ observed         // co-failers ∪ observed set (the bound cluster)
     for e in errs: wire_correction(e.erroring_neuron, C) // C gets many parents — see Multi-parent
 ```
 
-In Phase D the loop body becomes `lookup(observed, distance)` first, `mint_one` only on miss — the seam.
+Phase D adds a **per-request reuse lookup in front of this path**: each erroring neuron first looks up an
+existing neuron to reuse, and only the **misses** flow into the grouping + mint above — reused and freshly
+minted targets are then wired together (the seam; [neuron-reuse-final.md](./neuron-reuse-final.md)). In Phase C
+alone there is no lookup, so every error is residual: group all, mint per group, wire.
 Per-neuron error feedback stays per-neuron (each co-failer records its own Welford sample); grouping changes
 who-mints, not who-recorded. Iterate groups in sorted key order for determinism.
 
@@ -110,7 +116,7 @@ neurons.
 ## Acceptance gates (inline)
 
 - **Unit — group batch (d=0 and d>0)**: co-failers with the same observed set at the same distance produce
-  **exactly one** coordinate-less correction, footprint = union, all wired to it.
+  **exactly one** coordinate-less correction, footprint = union of co-failers ∪ observed set, all wired to it.
 - **Unit — distinct observed-sets stay separate**: different observed sets → separate corrections.
 - **Unit — shared activation, all parents credited**: the frame after a batched mint, two parents both
   match-and-activate the correction. **Both** are subsumed and both routing entries strengthened, per the
@@ -127,5 +133,14 @@ neurons.
 
 - **Wiring fan-out**: a group with k co-failers → k routing entries to **one** correction. The install path
   must take a list of parents for a single child.
-- **Footprint of the shared correction** = union of co-failers' footprints; no representative/anchor needed.
+- **Footprint of the shared correction** = union of co-failers' footprints **∪ the observed set** (the bound
+  cluster); co-failers' own footprints may be disjoint, so the observed set is what keeps it connected. No
+  representative/anchor needed.
+- **Isolated units**: a unit whose observed-set is **empty** (no footprint-adjacent co-active neighbor) is its
+  own group — never grouped with other empties. Grouping all empties together binds disconnected structure
+  (two separate blobs collapsing into one), which violates locality. Surfaced by the reference simulation.
 - **Determinism**: group iteration in sorted key order, not hash order.
+- **Executable spec**: [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) runs this
+  grouping per level on ASCII shapes (`node apps/mnist/jobs/wavefront-sim.js`) — the reference for what
+  batched mint should produce (local level-1 footprints, union∪observed, isolated units kept apart). It models
+  one frame with no index lookup, so it exercises this phase's mint path, not Phase D reuse.

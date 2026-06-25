@@ -2,7 +2,7 @@
 
 **The feature — and a comparatively light phase**, because [Phase C](./neuron-reuse-frame.md) already built the
 multi-parent machinery and [Phase A](./neuron-reuse-wavefront.md) the coordinate-less wave-front substrate.
-Theory in [neuron-reuse.md §3.2, §3.4](./neuron-reuse.md). This phase adds the cross-frame **reuse lookup** on
+Theory in [neuron-reuse.md §3.2, §3.5](./neuron-reuse.md). This phase adds the cross-frame **reuse lookup** on
 top of Phase C's batched-mint path, consuming the reverse index from [Phase B](./neuron-reuse-index.md).
 Applies at **all distances**. After this phase, reuse is always on (no enable flag). It needs **no new
 same-frame tracking set** — reuse installs routing for next frame, so there is no this-frame activation to
@@ -16,27 +16,43 @@ multi-parent lifecycle (refcounted reaping, multi-parent serialization, shared-n
 
 ## Goal
 
-Per (distance, observed-set) group with errors this frame: query the reverse index **once** against the
-group's observed reality for an existing neuron whose inference signature partially matches. If the best
-candidate scores ≥ the merge threshold for this distance, wire all co-failers to it; otherwise fall through to
-the Phase-C batched mint.
+**Lookup precedes grouping.** Each erroring neuron queries the reverse index against its observed reality for
+an existing neuron whose inference signature matches ≥ the merge threshold for this distance. The **hits reuse**
+that neuron; only the **misses** flow into the Phase-C path — grouped by (distance, observed-set) and minted
+one correction per group. Reused targets and fresh mints are then **wired together** in one batched step.
+
+Because the lookup query is purely the observed reality, co-failers (same observed-set) issue the identical
+query and resolve identically, so the per-request lookup may be **deduplicated to one query per distinct
+observed-set** without changing the outcome — an efficiency optimization, not a different algorithm.
 
 ---
 
 ## Design
 
-### The lookup, slotted into Phase C's seam
+### Lookup first, group the residual, mint, then wire
 
 ```
-by_group = errors.group_by(|e| (e.distance, e.observed))
-queries  = by_group.keys().map(|(d, observed)| (observed, d))        // one query per group
-results  = region.query_inference_sources_batch(queries)            // parallel, from Phase B index
-for ((distance, observed), errs) in by_group:
-    if let Some(reuse) = score_and_pick(results[(distance, observed)], observed, merge_threshold(distance)):
-        for e in errs: wire_correction(e.erroring_neuron, reuse)   // installs routing for next frame
-    else:
-        C = mint_one(observed, distance); C.footprint = ⋃ errs.footprint   // Phase C fallback
-        for e in errs: wire_correction(e.erroring_neuron, C)
+errors  = collect_errors_from_wave_fixpoint()                        // each: (neuron, distance, observed, footprint)
+
+// 1. Reuse lookup — per request. Queries dedup by (distance, observed); a result is observed-set-keyed,
+//    so all co-failers with the same observed reality resolve identically.
+queries = errors.map(|e| (e.observed, e.distance)).dedup()
+results = region.query_inference_sources_batch(queries)              // parallel, from Phase B index
+reused, residual = [], []
+for e in errors:
+    match score_and_pick(results[(e.distance, e.observed)], e.observed, merge_threshold(e.distance)):
+        Some(R) => reused.push((e.neuron, R)),                       // hit: reuse existing
+        None    => residual.push(e),                                 // miss: falls through to mint
+
+// 2-3. Group only the residual (Phase C) and mint one coordinate-less correction per group.
+mints = []
+for ((distance, observed), errs) in residual.group_by(|e| (e.distance, e.observed)):
+    C = mint_one(observed, distance); C.footprint = (⋃ errs.footprint) ∪ observed
+    for e in errs: mints.push((e.neuron, C))
+
+// 4. Wire everything together — reused targets and fresh mints alike. Installs routing for next frame.
+for (neuron, target) in reused ++ mints:
+    wire_correction(neuron, target)
 ```
 
 ### `find_reusable` / `score_and_pick`
