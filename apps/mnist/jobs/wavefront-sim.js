@@ -48,17 +48,28 @@
 // per-frame deferral, which is correct here because every unit is novel (nothing
 // to recognise, only to mint).
 //
-// Run:  node apps/mnist/jobs/wavefront-sim.js
+// Run (ASCII shapes):  node apps/mnist/jobs/wavefront-sim.js
+// Run (real MNIST):     node apps/mnist/jobs/wavefront-sim.js mnist [count] [imageSize] [radius]
 // Edit the `shapes` map at the bottom to try other inputs.
+
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadImages, loadLabels } from '../loader.js';
+import { MNISTPixelChannelsEncoder } from '../encoder.js';
+
+const SIM_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
 //  1. Geometry — the base neighbour graph
 // ---------------------------------------------------------------------------
 
 // Connectivity of the base neighbour graph: 4 = von Neumann (orthogonal),
-// 8 = Moore (orthogonal + diagonal). Set per run by runSimulation.
+// 8 = Moore (orthogonal + diagonal). Set per run by runSimulation / runMnist.
 // MNIST strokes are diagonal-heavy, so 4 vs 8 changes whether they bind.
 let connectivity = 4;
+// Radius of the base neighbour graph (Chebyshev for 8-conn, Manhattan for 4-conn).
+// MNIST mirrors the brain's encoder radius (1 = 3×3, 2 = 5×5); ASCII shapes use 1.
+let radius = 1;
 
 /**
  * Parse a multi-line ASCII grid into the set of active base-pixel ids.
@@ -82,11 +93,14 @@ function parseGrid(text) {
  */
 function listPixelNeighbors(pixelId) {
 	const [c, r] = pixelId.split(',').map(Number);
-	// Orthogonal neighbours always count.
-	const neighbors = [`${c - 1},${r}`, `${c + 1},${r}`, `${c},${r - 1}`, `${c},${r + 1}`];
-	// Diagonals only under 8-connectivity.
-	if (connectivity === 8) {
-		neighbors.push(`${c - 1},${r - 1}`, `${c + 1},${r - 1}`, `${c - 1},${r + 1}`, `${c + 1},${r + 1}`);
+	const neighbors = [];
+	for (let dr = -radius; dr <= radius; dr++) {
+		for (let dc = -radius; dc <= radius; dc++) {
+			if (dc === 0 && dr === 0) continue;
+			// 8-conn (Moore) takes the whole (2r+1)² window; 4-conn (von Neumann) keeps Manhattan ≤ r.
+			if (connectivity === 4 && Math.abs(dc) + Math.abs(dr) > radius) continue;
+			neighbors.push(`${c + dc},${r + dr}`);
+		}
 	}
 	return neighbors;
 }
@@ -116,6 +130,50 @@ function mergeFootprints(footprints) {
 	const out = new Set();
 	for (const fp of footprints) for (const pixel of fp) out.add(pixel);
 	return out;
+}
+
+/**
+ * Compute every active unit's observed-set in one pass, via an inverted
+ * pixel → units index, so adjacency is a local lookup rather than an O(N²)
+ * all-pairs scan — the JS analog of the Rust bitset dilate + AND. For each unit,
+ * the observed-set is the other units whose footprint TOUCHES its own.
+ * Returns Map<unitId, unit[]>, each list in active order for determinism.
+ */
+function computeObservedSets(active) {
+	// Inverted index: base pixel → the units whose footprint covers it.
+	const pixelToUnits = new Map();
+	for (const unit of active) {
+		for (const pixel of unit.footprint) {
+			let list = pixelToUnits.get(pixel);
+			if (!list) { list = []; pixelToUnits.set(pixel, list); }
+			list.push(unit);
+		}
+	}
+
+	// Each unit's position in `active`, so observed-sets stay in a deterministic order.
+	const order = new Map();
+	active.forEach((unit, i) => order.set(unit.id, i));
+
+	const observedByUnit = new Map();
+	for (const unit of active) {
+		// Candidate touchers: units covering a pixel equal or adjacent to one of ours.
+		const candidateIds = new Set();
+		for (const pixel of unit.footprint) {
+			for (const probe of [pixel, ...listPixelNeighbors(pixel)]) {
+				const list = pixelToUnits.get(probe);
+				if (!list) continue;
+				for (const other of list) if (other.id !== unit.id) candidateIds.add(other.id);
+			}
+		}
+		// Materialize in active order; confirm with the touch predicate (the index already
+		// yields exactly the touchers — the confirm just keeps doFootprintsTouch authoritative).
+		const observed = [...candidateIds]
+			.sort((a, b) => order.get(a) - order.get(b))
+			.map(id => active[order.get(id)])
+			.filter(other => doFootprintsTouch(unit.footprint, other.footprint));
+		observedByUnit.set(unit.id, observed);
+	}
+	return observedByUnit;
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +270,11 @@ class Brain {
 			active = corrections;
 		}
 
+		// The top level's corrections fired but were never re-processed (the sweep ended);
+		// add them so the apex (fired \ subsumed) surfaces the top-level patterns.
+		const topCorrections = levels.length ? levels[levels.length - 1].corrections : [];
+		for (const c of topCorrections) firedSet.add(c.id);
+
 		// Apex: fired neurons not absorbed by any parent (what would hand off to temporal).
 		const apex = [...firedSet].filter(id => !subsumedSet.has(id));
 		return { levels, firedSet, subsumedSet, apex };
@@ -236,9 +299,10 @@ class Brain {
 	 * Mirrors Thalamus::mint_spatial_corrections (group_by observed-set).
 	 */
 	mintSpatialCorrections(active) {
-		// Compute each unit's observed-set and a grouping key.
+		// Observed-sets for all active units in one indexed pass (scales to MNIST).
+		const observedByUnit = computeObservedSets(active);
 		const errors = active.map(unit => {
-			const observed = active.filter(other => other.id !== unit.id && doFootprintsTouch(unit.footprint, other.footprint));
+			const observed = observedByUnit.get(unit.id);
 			// Isolated units get a UNIQUE key so empties never group together.
 			// Rust port: the grouping key is a sorted Vec<NeuronId>, not a delimited string.
 			const key = observed.length === 0
@@ -377,6 +441,7 @@ function reportLevel(record, shapeSize, renderCap) {
  */
 function runSimulation(name, gridText, opts = {}) {
 	connectivity = opts.connectivity || 4;
+	radius = opts.radius || 1;
 	const maxLevels = opts.maxLevels || 10;
 	const renderCap = opts.renderCap || 8;
 
@@ -476,11 +541,185 @@ const shapes = {
 	],
 };
 
-// Run every shape under default 4-connectivity.
-for (const [name, lines] of Object.entries(shapes)) {
-	runSimulation(name, lines.join('\n'));
+// ---------------------------------------------------------------------------
+//  5. MNIST input — feed real binary digit patches through the wave-front
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a quantized bit array (row-major, imageSize²) into the set of active
+ * base-pixel ids. A pixel is active if its bucket value is non-zero — for binary
+ * MNIST this is the ON/stroke set, the direct analog of an ASCII 'X'.
+ * (Whether background/value-0 pixels should also be neurons is a Stage-C parity
+ * decision against the brain; for now the foreground stroke is the active set.)
+ */
+function bitsToActivePixels(bits, imageSize) {
+	const active = [];
+	for (let p = 0; p < bits.length; p++) {
+		if (bits[p] !== 0) active.push(`${p % imageSize},${Math.floor(p / imageSize)}`);
+	}
+	return active;
 }
 
-// Re-run the diagonal under 8-connectivity to contrast with the 4-conn result:
-// 4-conn shatters it into points, 8-conn binds it into one pattern.
-runSimulation('diagonal (8-conn)', shapes['diagonal (4-conn)'].join('\n'), { connectivity: 8 });
+/**
+ * Feed real MNIST test images through the wave-front grouping and report
+ * structural diagnostics per image — depth, per-level pattern counts, the
+ * level-1 max footprint, neuron count, apex size, and timing. No supervised
+ * readout yet (that is stage A3); this stage proves the sim runs on real digits
+ * and that the inverted index keeps it fast.
+ */
+function runMnist(opts = {}) {
+	const count = opts.count || 20;
+	const imageSize = opts.imageSize || 14;
+	const neighborhoodRadius = opts.radius || 1;
+	connectivity = 8;            // the brain's encoder uses square (Moore) neighborhoods
+	radius = neighborhoodRadius;
+
+	const dataDir = path.join(SIM_DIR, '..', 'data');
+	let images, labels;
+	try {
+		images = loadImages(path.join(dataDir, 't10k-images-idx3-ubyte.gz'));
+		labels = loadLabels(path.join(dataDir, 't10k-labels-idx1-ubyte.gz'));
+	} catch (err) {
+		console.log(`MNIST data not found in ${dataDir} (run jobs/download.js first): ${err.message}`);
+		return;
+	}
+	const encoder = new MNISTPixelChannelsEncoder(2, imageSize, neighborhoodRadius);
+
+	console.log(`\n################ MNIST (${count} test images, ${imageSize}×${imageSize} binary, radius ${neighborhoodRadius}, ${connectivity}-conn) ################`);
+	let totalMs = 0, sumDepth = 0, sumNeurons = 0, sumL1Max = 0, sumActive = 0;
+	for (let i = 0; i < count; i++) {
+		const bits = encoder.buildBits(images[i]);
+		const activePixels = bitsToActivePixels(bits, imageSize);
+
+		const start = process.hrtime.bigint();
+		const brain = new Brain();
+		const { levels, apex } = brain.processFrame(activePixels, 20);
+		const ms = Number(process.hrtime.bigint() - start) / 1e6;
+
+		const depth = levels.length;
+		const level1Max = levels[0].corrections.length ? Math.max(...levels[0].corrections.map(c => c.footprint.size)) : 0;
+		const perLevel = levels.map(l => l.corrections.length).join('/');
+		totalMs += ms; sumDepth += depth; sumNeurons += brain.neurons.size; sumL1Max += level1Max; sumActive += activePixels.length;
+		console.log(`  #${i} digit ${labels[i]}: ${activePixels.length}px | depth ${depth} | L-counts ${perLevel} | L1 max ${level1Max}px | ${brain.neurons.size} neurons | apex ${apex.length} | ${ms.toFixed(1)}ms`);
+	}
+	console.log('  ---');
+	console.log(`  avg over ${count}: ${(sumActive / count).toFixed(0)}px active | depth ${(sumDepth / count).toFixed(1)} | L1 max ${(sumL1Max / count).toFixed(1)}px | ${(sumNeurons / count).toFixed(0)} neurons | ${(totalMs / count).toFixed(1)}ms/img`);
+}
+
+// ---------------------------------------------------------------------------
+//  6. Supervised readout — the MNIST oracle (accuracy)
+// ---------------------------------------------------------------------------
+
+/**
+ * The footprint signature of a pattern neuron — its sorted base-pixel set.
+ * For binary MNIST this is the bound ON-pixel configuration, so it doubles as
+ * the exact-match recognition key: two images share a pattern iff identical sig.
+ */
+function correctionSignature(correction) {
+	return [...correction.footprint].sort().join('|');
+}
+
+/**
+ * Collect the voter signatures for one image: every pattern neuron its
+ * wave-front hierarchy produces (across all levels). Base pixels do not vote on
+ * their own — an isolated pixel votes via its singleton correction.
+ */
+function votersForImage(encoder, image, imageSize) {
+	const bits = encoder.buildBits(image);
+	const active = bitsToActivePixels(bits, imageSize);
+	const { levels } = new Brain().processFrame(active, 20);
+	const signatures = [];
+	for (const level of levels) for (const c of level.corrections) signatures.push(correctionSignature(c));
+	return signatures;
+}
+
+/**
+ * Train a per-pattern digit-count map on MNIST images, then decode test digits
+ * by NB-product over the matching patterns — the supervised readout that turns
+ * the sim into a full MNIST oracle. Every pattern is a voter keyed by its
+ * footprint signature; a test image's patterns recognise a trained pattern iff
+ * the signature matches EXACTLY (threshold = 1.0 — the exact-match baseline; the
+ * merge threshold that loosens this to partial-overlap reuse lands in stage D).
+ */
+function runMnistAccuracy(opts = {}) {
+	const trainCount = opts.trainCount || 2000;
+	const testCount = opts.testCount || 1000;
+	const imageSize = opts.imageSize || 14;
+	const neighborhoodRadius = opts.radius || 1;
+	connectivity = 8;          // square (Moore) neighbourhoods, as the brain's encoder
+	radius = neighborhoodRadius;
+	const EPS = 1e-3;          // mirrors the brain's NB Laplace floor
+
+	const dataDir = path.join(SIM_DIR, '..', 'data');
+	let trainImages, trainLabels, testImages, testLabels;
+	try {
+		trainImages = loadImages(path.join(dataDir, 'train-images-idx3-ubyte.gz'));
+		trainLabels = loadLabels(path.join(dataDir, 'train-labels-idx1-ubyte.gz'));
+		testImages = loadImages(path.join(dataDir, 't10k-images-idx3-ubyte.gz'));
+		testLabels = loadLabels(path.join(dataDir, 't10k-labels-idx1-ubyte.gz'));
+	} catch (err) {
+		console.log(`MNIST data not found in ${dataDir} (run jobs/download.js first): ${err.message}`);
+		return;
+	}
+	const encoder = new MNISTPixelChannelsEncoder(2, imageSize, neighborhoodRadius);
+
+	console.log(`\n################ MNIST readout (train ${trainCount}, test ${testCount}, ${imageSize}×${imageSize} binary, radius ${neighborhoodRadius}) ################`);
+
+	// TRAIN — accumulate per-signature digit counts (P(d|voter) = counts[d] / Σ counts).
+	const digitCounts = new Map(); // signature -> Int32Array(10)
+	const trainStart = Date.now();
+	for (let i = 0; i < trainCount; i++) {
+		const label = trainLabels[i];
+		for (const sig of votersForImage(encoder, trainImages[i], imageSize)) {
+			let counts = digitCounts.get(sig);
+			if (!counts) { counts = new Int32Array(10); digitCounts.set(sig, counts); }
+			counts[label]++;
+		}
+	}
+	console.log(`  trained: ${digitCounts.size} distinct pattern signatures from ${trainCount} images (${((Date.now() - trainStart) / 1000).toFixed(1)}s)`);
+
+	// EVAL — NB-product decode: argmax_d Σ_voter log(P(d|voter) + eps), frozen counts.
+	const evaluate = (images, labels, count, name) => {
+		let correct = 0, noMatch = 0;
+		for (let i = 0; i < count; i++) {
+			const logScores = new Float64Array(10);
+			let matched = 0;
+			for (const sig of votersForImage(encoder, images[i], imageSize)) {
+				const counts = digitCounts.get(sig);
+				if (!counts) continue;
+				matched++;
+				let total = 0;
+				for (let d = 0; d < 10; d++) total += counts[d];
+				for (let d = 0; d < 10; d++) logScores[d] += Math.log(counts[d] / total + EPS);
+			}
+			if (matched === 0) noMatch++;
+			let best = 0;
+			for (let d = 1; d < 10; d++) if (logScores[d] > logScores[best]) best = d;
+			if (best === labels[i]) correct++;
+		}
+		console.log(`  ${name}: ${(100 * correct / count).toFixed(2)}% (${correct}/${count})${noMatch ? `  [${noMatch} images had no matching pattern]` : ''}`);
+	};
+
+	evaluate(trainImages, trainLabels, Math.min(testCount, trainCount), 'train eval');
+	evaluate(testImages, testLabels, testCount, 'test  eval ');
+}
+
+// ---------------------------------------------------------------------------
+//  7. CLI dispatch
+// ---------------------------------------------------------------------------
+
+const argv = process.argv.slice(2);
+if (argv[0] === 'mnist') {
+	// node wavefront-sim.js mnist [count] [imageSize] [radius]
+	runMnist({ count: Number(argv[1]) || 20, imageSize: Number(argv[2]) || 14, radius: Number(argv[3]) || 1 });
+} else if (argv[0] === 'acc') {
+	// node wavefront-sim.js acc [trainCount] [testCount] [imageSize] [radius]
+	runMnistAccuracy({ trainCount: Number(argv[1]) || 2000, testCount: Number(argv[2]) || 1000, imageSize: Number(argv[3]) || 14, radius: Number(argv[4]) || 1 });
+} else {
+	// Default: run every ASCII shape under 4-connectivity, then the diagonal under 8-conn
+	// (4-conn shatters it into points, 8-conn binds it into one pattern).
+	for (const [name, lines] of Object.entries(shapes)) {
+		runSimulation(name, lines.join('\n'));
+	}
+	runSimulation('diagonal (8-conn)', shapes['diagonal (4-conn)'].join('\n'), { connectivity: 8 });
+}
