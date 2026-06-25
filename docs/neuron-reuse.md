@@ -303,7 +303,9 @@ via `get_suppressed_ages`) carries over unchanged.
 ## 6. Implementation
 
 Build order: wave-front foundation → index → batched mint → lookup, then validation. Reuse applies at all
-distances throughout.
+distances throughout. The **incremental migration + verification plan** (sim-as-oracle, step-by-step against
+MNIST numbers, merge threshold deferred) is in
+[neuron-reuse-wavefront-implementation.md](./neuron-reuse-wavefront-implementation.md).
 
 | Phase | Doc | Goal | Gate |
 |---|---|---|---|
