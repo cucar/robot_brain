@@ -59,8 +59,8 @@ for (neuron, target) in reused ++ mints:
 
 1. For each target T in `observed`, read candidate sources from the Phase-B index at this distance.
 2. Score each candidate: `|candidate.connections ∩ observed| / |observed|`, or reuse the existing
-   common/missing/novel scoring (`match_observed` [neuron.rs](../brain/brain-core/src/neuron.rs)). (Strength
-   weighting is the Phase-B strength-candidacy decision.)
+   common/missing/novel scoring (`match_observed` [neuron.rs](../brain/brain-core/src/neuron.rs)). Scoring is
+   **strength-blind** — the index is membership-only ([Phase B](./neuron-reuse-index.md)).
 3. Filter ≥ the **merge threshold for this distance** (spatial threshold at d=0, temporal at d>0; 1.0 disables
    reuse + partial recognition together).
 4. Return the best (tie-break smaller id), or `None`. **Filter self-matches.**
@@ -77,9 +77,9 @@ frame only via its **own** routing match, in which case it votes and error-check
 (existing behavior — nothing to suppress). So Phase D is essentially **just the lookup** plus the multi-parent
 accrual that Phase C's machinery already handles.
 
-The one genuinely-new activation question — a shared neuron routing-matched from several parents at different
-depths in one sweep — is the **multi-parent activation model** ([neuron-reuse.md §5.3](./neuron-reuse.md));
-whether it needs any inhibition falls out of that decision, not a separate Phase-D set.
+The one remaining activation case — a shared neuron routing-matched from several parents at different depths in
+one sweep — is activated **at each depth** (Phase A's multi-depth `neuron_states` holds it across levels), and
+needs **no** separate Phase-D inhibition set.
 
 ### Cross-frame accrual
 
@@ -98,10 +98,9 @@ independently matched.
 
 The one place a shared neuron lands at **multiple depths in one frame** is multi-parent **routing**: under
 reuse, R can be routing-matched from several parents at different levels in one sweep
-(`activate_*_pattern(pattern_id, level+1)` from each), activating it at each level. Whether the temporal
-`neuron_states` can hold that — and whether such activations are processed at each depth or collapsed — is the
-multi-depth memory question in [Phase A](./neuron-reuse-wavefront.md), and the open **multi-parent activation
-model** ([neuron-reuse.md §5.3](./neuron-reuse.md)). Any inhibition that's needed falls out of that decision.
+(`activate_*_pattern(pattern_id, level+1)` from each), activating it at each level. The multi-depth
+`neuron_states` ([Phase A](./neuron-reuse-wavefront.md)) **holds** a neuron active at several levels and each
+activation is **processed at its depth** (not collapsed); no extra inhibition set is needed.
 
 ---
 

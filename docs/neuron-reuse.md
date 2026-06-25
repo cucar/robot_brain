@@ -167,8 +167,10 @@ and well-defined, with no clustering algorithm and no anchor.
 ### 3.2 Lookup — reuse an existing pattern (step 1)
 
 Per erroring neuron, query the **reverse inference index** ([Phase B](./neuron-reuse-index.md)): for each
-observed target T, which existing neurons connect to T at this distance? Score each candidate against the
-observed set (common/missing/novel, the pattern-recognition scoring). If the best ≥ the **merge threshold for
+observed target T, which existing neurons connect to T at this distance? Candidacy is **strength-blind** — a
+neuron is a candidate if it has a connection to T, regardless of that connection's strength; strength governs
+voting and recognition, not reuse. Score each candidate against the observed set (common/missing/novel, the
+pattern-recognition scoring). If the best ≥ the **merge threshold for
 this distance**, the neuron reuses that existing pattern. Because the query is purely the observed reality,
 co-failers issue identical queries and resolve identically — same reality, same pattern. Lookup is the
 cross-frame collapse and *is* the generalization mechanism (§1.3): a neuron reused across frames accumulates
@@ -260,10 +262,11 @@ parent's wrong vote this frame is already suppressed by the existing machinery (
 inhibit: the originally-planned `correction_wired_this_frame` set has nothing to act on, and a reused neuron is
 active this frame only via its **own** routing match (a normal recognition).
 
-The genuinely-new activation case is **multi-parent routing**: a shared neuron can be routing-matched from
-several parents at different depths in one sweep, activating it at each. Whether that fires **once**
-(refractory) or **once per depth** (multi-depth memory) — and whether it needs any inhibition — is the open
-**multi-parent activation model** (§5.3).
+The remaining activation case is **multi-parent routing**: a shared neuron can be routing-matched from several
+parents at different depths in one sweep. It is activated **at each matched depth** — the multi-depth
+`neuron_states` holds a neuron active across levels rather than collapsing it to one — and needs **no** extra
+inhibition set; the existing newly-minted-correction inhibition (fires next frame, this-frame vote suppressed
+via `get_suppressed_ages`) carries over unchanged.
 
 ---
 
@@ -288,22 +291,12 @@ several parents at different depths in one sweep, activating it at each. Whether
 - **Reverse-index cost** — one lookup per group, sharded by column, updates at orchestration boundaries.
 - **Over-aggressive reuse** — too-low merge threshold; tune cautiously. There is **no decay backstop** today
   (connections never weaken — [neuron.rs](../brain/brain-core/src/neuron.rs)), so a bad reuse
-  persists. See strength-candidacy ([neuron-reuse-index.md](./neuron-reuse-index.md)).
+  persists. The **merge threshold is the only control** — candidacy is strength-blind (§3.2).
 - **Action-binding dilution** — heavily-reused neurons; monitored long-run.
 - **Within-frame reuse is near-inert on irregular input** — exact observed-set match (§3.5) fires only on
   local symmetry; on natural/asymmetric shapes nearly every unit is a singleton (shown in the reference
   simulation, §3.6). Consolidation therefore leans almost entirely on cross-frame **lookup** + **refinement**,
   not on within-frame grouping. The merge threshold (< 1.0) is what makes partial-overlap reuse possible.
-
-### 5.3 Decisions to settle before building
-
-1. **Strength-candidacy** for the reuse index — does a weak, incidental connection make a neuron a reuse
-   candidate, or is membership gated/weighted by strength? ([neuron-reuse-index.md](./neuron-reuse-index.md)).
-2. **Multi-parent activation model** — when reuse routing-matches a shared neuron from several parents at
-   different depths in one sweep, how is that held (multi-depth `neuron_states`) and is it processed at each
-   depth or collapsed? This also decides whether the `fired_this_frame` / `correction_wired_this_frame`
-   inhibition sets are needed at all ([neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md),
-   [neuron-reuse-final.md](./neuron-reuse-final.md)).
 
 ---
 
@@ -315,7 +308,7 @@ distances throughout.
 | Phase | Doc | Goal | Gate |
 |---|---|---|---|
 | **A** | [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md) | **Foundation.** Turn `process_spatial` and `process_temporal` into settling waves (structure kept); remove stored levels; coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory. | Characterized regression (MNIST + stocks comparable); footprint-adjacency units. **Not bit-exact.** |
-| **B** | [neuron-reuse-index.md](./neuron-reuse-index.md) | **Two** reverse connection indexes — `spatial_connection_index` (target → sources) and `temporal_connection_index` (target → distance → sources), mirroring the context-index split. Built, unit-tested, not yet consumed. Settles strength-candidacy. | Unit: target→sources correct per index; stores isolated; size ∝ connection count. |
+| **B** | [neuron-reuse-index.md](./neuron-reuse-index.md) | **Two** reverse connection indexes — `spatial_connection_index` (target → sources) and `temporal_connection_index` (target → distance → sources), mirroring the context-index split. Built, unit-tested, not yet consumed. Membership-only / strength-blind candidacy. | Unit: target→sources correct per index; stores isolated; size ∝ connection count. |
 | **C** | [neuron-reuse-frame.md](./neuron-reuse-frame.md) | **Batched mint** at all distances (group by (distance, observed-set), mint one coordinate-less correction with union footprint, wire all) **+ multi-parent machinery** (refcounted reaping, multi-parent serialization, shared-neuron activation). | Within-group dedup drops neuron count; multi-parent lifecycle units. |
 | **D** | [neuron-reuse-final.md](./neuron-reuse-final.md) | Reuse **lookup** on top of C (consumes B) + cross-frame accrual, all distances. | Unit: cross-frame reuse via lookup; neuron count drops further; lookup < 20% per-frame overhead. |
 | **Validation** | [neuron-reuse-validation.md](./neuron-reuse-validation.md) | MNIST (spatial reuse, within-frame + cross-image), stocks (full pipeline + transfer), long-run forget-rate. | Per-experiment gates in the doc. |

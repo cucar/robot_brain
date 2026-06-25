@@ -9,7 +9,7 @@ and d>0 are the same code on the wave-front.
 
 Does **not** touch the reverse index or cross-frame lookup (Phase D).
 
-> **No DECIDE-THIS #0.** The clustering/anchor problem that coordinates created is gone. Corrections are
+> **No clustering or anchor policy.** The clustering/anchor problem that coordinates created is gone. Corrections are
 > coordinate-less (Phase A), so a shared correction takes the **union footprint** — no anchor to reconcile.
 > Co-failers group by exact observed-set, which is well-defined. Their own footprints may be **disjoint**
 > (they share the observed *target*, not necessarily their own coverage — think four arms around a center),
@@ -79,9 +79,9 @@ decay at the same rate, differing only in strength and `last_activation_frame`. 
   match-and-activate the correction in one wave (`activate_*_pattern(pattern_id, level+1)` from each). Today an
   activation carries one `activation.parent_id` and marks exactly that parent subsumed
   ([brain.rs](../brain/brain-core/src/brain.rs)); with N activating parents, **all N** must
-  be credited (each routing entry strengthened, each subsumed). Whether the shared neuron fires **once**
-  (refractory, via a `fired_this_frame` set) or is activated **at each matched depth** (multi-depth memory) is
-  the open **multi-parent activation model** ([neuron-reuse.md §5.3](./neuron-reuse.md)) — decide it here.
+  be credited (each routing entry strengthened, each subsumed). The shared neuron is activated **at each
+  matched depth** (held by the multi-depth `neuron_states`), **not** fired once — so there is **no**
+  `fired_this_frame` set.
 - **Refcounted reaping.** Reap only when **no** parent references the correction. The cascade path
   (`DeleteNeuron { target_id, parent_id }`, [column.rs](../brain/brain-core/src/column.rs),
   reaped around [thalamus.rs](../brain/brain-core/src/thalamus.rs)) carries a single `parent_id`; replace
@@ -119,8 +119,8 @@ neurons.
   **exactly one** coordinate-less correction, footprint = union of co-failers ∪ observed set, all wired to it.
 - **Unit — distinct observed-sets stay separate**: different observed sets → separate corrections.
 - **Unit — shared activation, all parents credited**: the frame after a batched mint, two parents both
-  match-and-activate the correction. **Both** are subsumed and both routing entries strengthened, per the
-  chosen multi-parent activation model (fires-once vs activated-per-depth).
+  match-and-activate the correction. **Both** are subsumed and both routing entries strengthened, with the
+  neuron activated **per matched depth** (multi-depth `neuron_states`).
 - **Unit — refcounted reaping**: a correction with two parents survives one parent's entry dying; reaped only
   when the second dies. Not reaped on the first host's death.
 - **Unit — multi-parent serialization round-trip**: snapshot/restore with both parents' routing entries intact

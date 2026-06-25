@@ -46,8 +46,8 @@ Distinct from the spatial-only stocks baseline. Measures reuse on the full spati
 
 **Measure**: per-episode ROI and directional accuracy vs the Phase-A baseline; total neuron count.
 
-**Tune**: the per-distance merge thresholds and error thresholds; the strength-candidacy choice
-([Phase B](./neuron-reuse-index.md)).
+**Tune**: the per-distance merge thresholds and error thresholds. (Reuse is strength-blind — not a tunable;
+[Phase B](./neuron-reuse-index.md).)
 
 **Transfer** (the [future-work transfer-learning experiment](./future-work.md)): learn on stock set A, measure
 set B before/after — reuse should let B converge faster if A and B share spatio-temporal structure.

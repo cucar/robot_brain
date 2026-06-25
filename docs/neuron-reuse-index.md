@@ -54,23 +54,18 @@ There is **no connection-delete/decay path today** (decay was removed —
 [neuron.rs](../brain/brain-core/src/neuron.rs)), so every indexed edge is live and no removal hook is
 needed now. **If decay/delete returns**, drop `source` from `target`'s set on delete — leave a marked stub.
 
-### DECIDE-THIS — strength-blind candidacy
+### Strength-blind candidacy (membership-only)
 
-Membership ignores strength, and connections start at 1 and never decay, so a neuron that connected to T from
-a **single incidental co-occurrence** is as much a reuse candidate as one strongly bound to T. Phase D's
-default score is pure membership overlap, so many weak incidental edges can clear the merge threshold and
-trigger a bad reuse — with **no decay** to clean it up. Decide before Phase D consumes the index:
+The index records *that* a source→target connection exists, not its strength. A neuron that connected to T from
+a single incidental co-occurrence is therefore as much a reuse candidate as one strongly bound to T: candidacy
+is **strength-blind**. Strength governs voting, recognition, forgetting, and the death ledger — never
+error-correction grouping or reuse candidacy.
 
-1. **Membership-only** — cheapest; rely on the merge threshold (+ future decay). Risk: incidental edges drive
-   bad reuse.
-2. **Strength-gated membership** — an edge enters the index only once strength clears a floor (membership can
-   then appear on *strengthen*).
-3. **Strength-weighted scoring** — keep the index membership-only, weight matched targets by strength in
-   Phase D's score.
+Over-reuse is controlled not by a strength gate on the index but by:
 
-Recommend (2) or (3) over (1), given no decay backstop. With two separate indexes (and reuse already using
-different merge thresholds at d=0 vs d>0), this choice **can be made per index** if spatial co-activation and
-temporal sequence edges turn out to want different policies — but the question is the same for both.
+- the **merge threshold** in Phase D's scoring (the reuse control), and
+- pattern-level **forgetting + the death ledger** — a correction that drives bad reuse isn't reinforced and
+  dies, taking its index edges with it.
 
 ### Update batching at orchestration boundaries
 

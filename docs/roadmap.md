@@ -23,7 +23,7 @@ Build order — each phase behind its own gate (theory §6):
    Rearchitecture — **not bit-exact** (characterized regression).
 2. **[Phase B — Index](./neuron-reuse-index.md)**: **two** reverse connection indexes —
    `spatial_connection_index` (no distance) and `temporal_connection_index` (distance-keyed), mirroring the
-   context-index split. Built, unit-tested, not yet consumed. Settles strength-candidacy.
+   context-index split. Built, unit-tested, not yet consumed. Membership-only / strength-blind candidacy.
 3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint at all distances (group by (distance,
    observed-set), mint one coordinate-less correction with union footprint) **+ the multi-parent machinery**
    (refcounted reaping, multi-parent serialization, shared-neuron activation). Heaviest reuse phase.
@@ -32,12 +32,11 @@ Build order — each phase behind its own gate (theory §6):
 5. **[Validation](./neuron-reuse-validation.md)**: MNIST spatial reuse + transfer, stocks full-pipeline +
    transfer, forget-rate long-run.
 
-Decisions to settle before building: **strength-candidacy** for the reuse index (does a weak incidental
-connection make a neuron a reuse candidate? — Phase B); **multi-parent activation model** (how a shared
-neuron routing-matched from several parents at different depths in one sweep is held and processed — Phase
-A/C/D). The clustering/anchor problem is gone (footprints + coordinate-less corrections), and the mint-frame
-and cross-depth "decisions" turned out to be answered by the existing code (corrections install for next
-frame, not the mint frame).
+Design notes: reuse candidacy is **strength-blind** (the index is membership-only; strength governs
+voting/recognition and the forget/death-ledger, not error correction — Phase B); a shared neuron
+routing-matched at several depths is **processed at each depth** (Phase A multi-depth memory holds it), with
+**no** new inhibition set (Phase A/C/D). The clustering/anchor problem is gone (footprints + coordinate-less
+corrections); corrections install for next frame, not the mint frame.
 
 Knock-on: the wave-front removes channel-neighbor filtering (replaced by footprints), which removes the
 cross-stream **isolation** knob parallel-stream learning relied on — that now needs a different primitive
