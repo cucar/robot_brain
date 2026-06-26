@@ -1,47 +1,55 @@
-# Neuron Reuse — Phase C: Batched Mint + Multi-Parent
+# Neuron Reuse — Phase C: Cluster + Mint + Multi-Parent
+
+> **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
+> transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
+> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
+> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old `wavefront-sim.js` is
+> obsolete). This phase is the **cluster + mint** step; the detailed acceptance gates below predate the
+> correction and will firm up once the simulation validates the mechanism. The multi-parent machinery
+> (ownership, refcount reaping, serialization, shared activation) is unchanged.
 
 **The heaviest reuse phase** (Phase A, the wave-front, is heavier still). Theory in
-[neuron-reuse.md §3, §4](./neuron-reuse.md). Reshape the correction path so co-failers are grouped and **at
-most one coordinate-less correction is minted per (distance, observed-set) group**, with **all** co-failers
-wired to it and the correction's footprint = the union. Because that wires many parents to one neuron, the
-**multi-parent ownership/lifecycle/activation machinery lands here too**. Applies at **all distances** — d=0
-and d>0 are the same code on the wave-front.
+[neuron-reuse.md §3, §4](./neuron-reuse.md). Reshape the correction path: the per-frame **correction requests**
+— units whose **L0 prediction was wrong** despite a context match — are **clustered by transitively merging
+neighbor-connected requests**, and **one coordinate-less correction is minted per connected cluster**,
+predicting the **correct L0**. Each cluster's requests become the correction's **parents**, so the
+**multi-parent ownership/lifecycle/activation machinery lands here too**. Applies at all distances.
 
-Does **not** touch the reverse index or cross-frame lookup (Phase D).
+Does **not** touch the reverse index or cross-frame lookup/expansion (Phase D).
 
-> **No clustering or anchor policy.** The clustering/anchor problem that coordinates created is gone. Corrections are
-> coordinate-less (Phase A), so a shared correction takes the **union footprint** — no anchor to reconcile.
-> Co-failers group by exact observed-set, which is well-defined. Their own footprints may be **disjoint**
-> (they share the observed *target*, not necessarily their own coverage — think four arms around a center),
-> so the correction's footprint = union of the co-failers **∪ the observed set** — the whole bound cluster,
-> which is connected and unambiguous. No clustering policy, no anchor policy.
+> **Clustering = transitive merge (connected components), not a bucket-by-observed-set.** Two requests join the
+> same cluster if a chain of neighbor links connects them (base = coordinate neighborhood; higher = footprints
+> touch). One correction per connected blob; its footprint = the blob's coverage. Corrections are
+> coordinate-less, so the union footprint needs **no anchor** to reconcile. (The earlier
+> *group-by-identical-observed-set* rule was wrong — see [neuron-reuse.md §3.9](./neuron-reuse.md).)
 
 ---
 
 ## Goal
 
-Replace per-erroring-neuron minting with **per-group** minting, at every distance:
+Replace per-erroring-neuron minting with **per-cluster** minting, at every distance:
 
 ```
-errors  = collect_errors_from_wave_fixpoint()           // each: (erroring_neuron, distance, observed, footprint)
-by_group = errors.group_by(|e| (e.distance, e.observed)) // observed reality singular per (distance, region)
-                                                         // empty observed ⇒ its OWN group (isolated, never merged)
-for ((distance, observed), errs) in by_group:
-    C = mint_one(observed, distance)                    // ONE coordinate-less correction
-    C.footprint = (⋃ errs.footprint) ∪ observed         // co-failers ∪ observed set (the bound cluster)
-    for e in errs: wire_correction(e.erroring_neuron, C) // C gets many parents — see Multi-parent
+requests = collect_correction_requests()      // units whose L0 prediction missed (≥ error threshold)
+clusters = transitive_merge(requests, neighbor) // connected components; neighbor = coord nbhd (base) / footprints touch (higher)
+for cluster in clusters:
+    if cluster.neighbors().is_empty(): continue // need ≥1 neighbor for context — no isolated correction
+    C = mint_one(cluster)                       // ONE coordinate-less correction
+    C.footprint = ⋃ cluster.footprints          // the cluster's coverage
+    C.targets   = correct_L0(cluster)           // every pattern predicts L0
+    C.context   = cluster.neighbors()           // the level-below neighbors that recognize it
+    for r in cluster: wire_correction(r, C)     // C gets many parents — see Multi-parent
 ```
 
-Phase D adds a **per-request reuse lookup in front of this path**: each erroring neuron first looks up an
-existing neuron to reuse, and only the **misses** flow into the grouping + mint above — reused and freshly
-minted targets are then wired together (the seam; [neuron-reuse-final.md](./neuron-reuse-final.md)). In Phase C
-alone there is no lookup, so every error is residual: group all, mint per group, wire.
-Per-neuron error feedback stays per-neuron (each co-failer records its own Welford sample); grouping changes
-who-mints, not who-recorded. Iterate groups in sorted key order for determinism.
+Phase D adds, **in front of this**, the reuse lookup: a request that matches an existing pattern (≥ threshold)
+**reuses** it instead of minting, and a matched pattern adjacent to a cluster of new requests **expands** to
+absorb them ([neuron-reuse-final.md](./neuron-reuse-final.md)). In Phase C alone there is no lookup — every
+request mints into a fresh cluster. Per-request error feedback stays per-request (each records its own Welford
+sample); clustering changes who-mints, not who-recorded. Iterate clusters in sorted key order for determinism.
 
 This replaces today's per-erroring-neuron mints (spatial one-per-parent
 [thalamus.rs](../brain/brain-core/src/thalamus.rs); temporal one-per-(neuron,age)
-[thalamus.rs](../brain/brain-core/src/thalamus.rs)) — now unified on the wave-front and batched.
+[thalamus.rs](../brain/brain-core/src/thalamus.rs)) — now unified on the wave-front and clustered.
 
 ---
 
@@ -54,16 +62,16 @@ neuron; it records the ages where this neuron just minted a correction so the er
 own vote** at those ages this frame (`get_suppressed_ages`, [neuron.rs](../brain/brain-core/src/neuron.rs):
 *"had a bad inference last frame from an age… suppress the vote for that age"*).
 
-So a fresh batched mint is **not active the mint frame**, and the erroring parent's wrong vote is already
+So a fresh cluster mint is **not active the mint frame**, and the erroring parent's wrong vote is already
 suppressed by the existing machinery. This phase therefore needs **no** `correction_wired_this_frame` set —
 fresh mints are covered. That set is only for Phase D, where a *reused, pre-existing* neuron may be
 independently active this frame (via its own routing match) while also being wired as a correction target.
 
 ---
 
-## Multi-parent: batched mint is the first producer
+## Multi-parent: clustering is the first producer
 
-Theory in [neuron-reuse.md §4.1](./neuron-reuse.md). Wiring k co-failers to one correction makes it
+Theory in [neuron-reuse.md §4.1](./neuron-reuse.md). Wiring a cluster's k requests to one correction makes it
 multi-parent the moment it exists. Today a correction is owned by one host (strength in that host's routing
 entry, dies when that entry decays — [neuron.rs](../brain/brain-core/src/neuron.rs)); the
 forget rate is brain-wide uniform ([brain.rs](../brain/brain-core/src/brain.rs)), so per-parent entries
@@ -71,11 +79,11 @@ decay at the same rate, differing only in strength and `last_activation_frame`. 
 (Phase A), so there is **no anchor** to reconcile across parents — only lifecycle and activation bookkeeping.
 
 - **Install one child into many parents' routing tables.** The install path wires one correction into one
-  parent today ([thalamus.rs](../brain/brain-core/src/thalamus.rs)); batched mint installs it into
-  every co-failer's table. The routing-table structure (child → entry,
+  parent today ([thalamus.rs](../brain/brain-core/src/thalamus.rs)); the cluster mint installs it into
+  every request's table. The routing-table structure (child → entry,
   [neuron.rs](../brain/brain-core/src/neuron.rs)) already permits the same child id across many
   parents' maps — the work is install + lifecycle, not storage.
-- **Thalamus activation of a shared neuron.** The frame after a batched mint, more than one parent can
+- **Thalamus activation of a shared neuron.** The frame after a cluster mint, more than one parent can
   match-and-activate the correction in one wave (`activate_*_pattern(pattern_id, level+1)` from each). Today an
   activation carries one `activation.parent_id` and marks exactly that parent subsumed
   ([brain.rs](../brain/brain-core/src/brain.rs)); with N activating parents, **all N** must
@@ -115,32 +123,34 @@ neurons.
 
 ## Acceptance gates (inline)
 
-- **Unit — group batch (d=0 and d>0)**: co-failers with the same observed set at the same distance produce
-  **exactly one** coordinate-less correction, footprint = union of co-failers ∪ observed set, all wired to it.
-- **Unit — distinct observed-sets stay separate**: different observed sets → separate corrections.
-- **Unit — shared activation, all parents credited**: the frame after a batched mint, two parents both
+- **Unit — cluster mint (d=0 and d>0)**: a connected cluster of correction requests (transitively merged by
+  the neighbor relation) produces **exactly one** coordinate-less correction predicting the correct L0,
+  footprint = the cluster's coverage, with every request in the cluster wired to it as a parent.
+- **Unit — disconnected requests stay separate**: requests with no neighbor chain between them form separate
+  corrections.
+- **Unit — isolated request makes no correction**: a request with no neighbor produces no correction (the
+  ≥1-neighbor / no-context rule) and is never merged with other isolated requests.
+- **Unit — shared activation, all parents credited**: the frame after a cluster mint, two parents both
   match-and-activate the correction. **Both** are subsumed and both routing entries strengthened, with the
   neuron activated **per matched depth** (multi-depth `neuron_states`).
 - **Unit — refcounted reaping**: a correction with two parents survives one parent's entry dying; reaped only
   when the second dies. Not reaped on the first host's death.
 - **Unit — multi-parent serialization round-trip**: snapshot/restore with both parents' routing entries intact
   (independent strengths), then continue identically.
-- **MNIST + stocks**: total neuron count drops from within-frame dedup; accuracy ≥ the Phase-A baseline.
+- **MNIST + stocks**: total neuron count drops from clustering + reuse; accuracy ≥ the Phase-A baseline.
 
 ---
 
 ## Notes / gotchas
 
-- **Wiring fan-out**: a group with k co-failers → k routing entries to **one** correction. The install path
+- **Wiring fan-out**: a cluster with k requests → k routing entries to **one** correction. The install path
   must take a list of parents for a single child.
-- **Footprint of the shared correction** = union of co-failers' footprints **∪ the observed set** (the bound
-  cluster); co-failers' own footprints may be disjoint, so the observed set is what keeps it connected. No
-  representative/anchor needed.
-- **Isolated units**: a unit whose observed-set is **empty** (no footprint-adjacent co-active neighbor) is its
-  own group — never grouped with other empties. Grouping all empties together binds disconnected structure
-  (two separate blobs collapsing into one), which violates locality. Surfaced by the reference simulation.
-- **Determinism**: group iteration in sorted key order, not hash order.
-- **Executable spec**: [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) runs this
-  grouping per level on ASCII shapes (`node apps/mnist/jobs/wavefront-sim.js`) — the reference for what
-  batched mint should produce (local level-1 footprints, union∪observed, isolated units kept apart). It models
-  one frame with no index lookup, so it exercises this phase's mint path, not Phase D reuse.
+- **Footprint of the correction** = the cluster's coverage (the union of the requests' footprints and the
+  observed neighborhood the correction predicts). Corrections are coordinate-less, so the union needs no
+  representative/anchor.
+- **Isolated request**: a request with **no neighbor** (nothing in its neighborhood) has no context to
+  condition on, so it forms **no** correction this frame — it is not merged with other isolated requests
+  (which would bind disconnected structure and violate locality).
+- **Determinism**: cluster iteration in sorted key order, not hash order.
+- **Reference simulation**: the corrected spec is [neuron-reuse-simulation.md](./neuron-reuse-simulation.md)
+  (the old `wavefront-sim.js` is obsolete — it modeled the wrong group-by-observed-set mechanism).

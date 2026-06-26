@@ -1,5 +1,13 @@
 # Neuron Reuse — Validation
 
+> **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
+> transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
+> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md). The corrected
+> reference simulation is [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old `wavefront-sim.js`
+> is obsolete) — and the **first** validation is now the simulation's own merge/split-equilibrium experiment
+> (does pattern size settle into a regional regime, or collapse to one big blurry pattern?), which gates the
+> brain port. The brain experiments below still hold as *value* checks once the model is built.
+
 **Experiments that can only run after [Phase D](./neuron-reuse-final.md).** They ship no new mechanism — they
 confirm reuse does what the theory ([neuron-reuse.md](./neuron-reuse.md)) claims. Per-phase unit/acceptance
 gates live in the phase docs; this doc holds the cross-domain experiments.
@@ -21,8 +29,8 @@ The d=0 payoff: reuse collapses redundant spatial corrections within and across 
 + reuse on.
 
 **Measure**:
-- **Neuron count** vs the Phase-A (no-reuse) baseline: within-frame batched mint dedups co-failers; cross-image
-  lookup dedups recurring spatial structure.
+- **Neuron count** vs the Phase-A (no-reuse) baseline: in-frame clustering collapses connected requests into one
+  correction; cross-image lookup + expansion dedups recurring spatial structure.
 - **Accuracy** ≥ baseline.
 - **Transfer**: train digits **0–4**, then **5–9**; compare 5–9 accuracy vs training 5–9 from scratch.
   Sub-strokes shared across digits get reused → faster convergence / sub-linear neuron growth on 5–9.

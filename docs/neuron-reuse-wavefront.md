@@ -1,5 +1,13 @@
 # Neuron Reuse — Phase A: Wave-Front Processing + Footprints
 
+> **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
+> transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
+> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md). The corrected
+> reference simulation is [neuron-reuse-simulation.md](./neuron-reuse-simulation.md); the old `wavefront-sim.js`
+> is obsolete. The Phase-A **foundation** (coordinate-less corrections, footprints, settling waves) is
+> unchanged by the correction; statements elsewhere that assume the earlier *group-by-observed-set* model are
+> superseded.
+
 **The foundation phase.** Theory in [neuron-reuse.md §2](./neuron-reuse.md). Everything else in the reuse
 project sits on top of this. It keeps the existing processing **structure** — spatial processing → apex
 handoff → temporal processing — but turns each stage into a **settling wave**, removes stored levels, makes

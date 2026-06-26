@@ -1,5 +1,13 @@
 # Neuron Reuse — Phase B: Reverse Inference Index
 
+> **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
+> transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
+> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
+> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old `wavefront-sim.js` is
+> obsolete). This index still does its job — its **targets are L0 base neurons** (every pattern predicts L0),
+> so it maps *L0-target → patterns that predict it*, the candidate generator for reuse lookup. Statements
+> assuming the earlier *group-by-observed-set* model are superseded.
+
 **Prerequisite phase.** Theory in [neuron-reuse.md §3.2](./neuron-reuse.md). This phase **builds and validates
 the index but does not consume it** — the lookup that reads it lands in [Phase D](./neuron-reuse-final.md).
 Separating bring-up from consumption means an index bug and a reuse bug can never be confused.

@@ -12,8 +12,13 @@ Theory in **[neuron-reuse.md](./neuron-reuse.md)**. Allocates capacity onto the 
 processing — but each stage becomes a **settling wave**, stored levels are removed, only **base
 sensory/action neurons carry coordinates**, and all corrections are coordinate-less with **footprints** (the
 set of base neurons a correction covers) as the neighborhood primitive at every level. On that foundation,
-**reuse applies at all distances** (d=0 and d>0) — the spatial/temporal asymmetry is gone, and the old
-clustering/anchor problem dissolves (a shared correction takes the union footprint, no anchor).
+**reuse applies at all distances** (d=0 and d>0) — the spatial/temporal asymmetry is gone.
+
+> **Model corrected (mid-2026).** The reuse mechanism is **recognize → predict L0 → on misprediction,
+> transitively-merge-cluster the requests by neighborhood → reuse/expand a matched pattern or mint one**,
+> balanced by **merge** (clustering + reuse) vs **split** (refinement + forgetting). The next concrete step is
+> rebuilding the reference simulation to [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old
+> `wavefront-sim.js` is obsolete) and running its merge/split-equilibrium experiment before any brain port.
 
 Build order — each phase behind its own gate (theory §6):
 

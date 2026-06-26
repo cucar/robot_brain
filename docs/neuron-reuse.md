@@ -39,13 +39,14 @@ Two pieces:
 1. **Foundation (Phase A).** Unify spatial and temporal under one wave-front operation (still two functions). Drop coordinates from all
    corrections; carry locality as a **footprint** (the set of base sensory neurons a correction covers).
    Neighborhood at any level = footprint adjacency (footprints touch in the base neighbor graph). Details: [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md).
-2. **Reuse (Phases B–D).** The reuse criterion is **inference-output match**: does an existing neuron's
-   connection set already produce the inference a correction would need? Per (distance, footprint-region) per
-   frame, query a reverse index for a match (partial or exact); on a hit, wire all co-failing neurons to the existing neuron; on
-   a miss, mint **one** coordinate-less correction (footprint = union) and wire all co-failers to it.
+2. **Reuse (Phases B–D).** Each frame, recognized patterns predict L0 (§3.1); where a prediction is wrong, the
+   request is **clustered with its neighbors** (transitive merge) and either **reuses** an existing pattern (a
+   reverse-index match ≥ the merge threshold) or **mints** a new one. Reuse is the *merge* force — it lands many
+   contexts on shared, general patterns; refinement and forgetting are the *split* force that carves them back
+   toward regional patterns. Mechanism: §3.
 
-Because corrections are coordinate-less, a shared correction takes the **union footprint** of its parents —
-no anchor to be ambiguous about. That is what makes reuse clean at d=0, not just d>0.
+Because corrections are coordinate-less, a reused or expanded pattern can take a **union footprint** across all
+the parents that reuse it — no anchor to reconcile. That is what makes reuse clean at d=0, not just d>0.
 
 ### 1.3 How Generalization Arises
 
@@ -130,113 +131,141 @@ This will not change.
 
 ---
 
-## 3. Reuse Mechanism (all distances)
+## 3. Reuse Mechanism — recognize, mispredict, cluster, correct
 
-**Reuse precedence — four steps, in order.** Each frame, after the wave settles and errors are collected:
+This is the corrected model. (An earlier version of this section described a cold-start, single-frame
+"group every neuron by its observed-set" mechanism — that was **wrong**, and so is the simulation built on
+it. See §3.9 and [neuron-reuse-simulation.md](./neuron-reuse-simulation.md).)
 
-1. **Reuse lookup (per request).** Each erroring neuron queries the reverse index for an existing neuron whose
-   inference output already covers its observed reality ≥ the merge threshold (§3.2). Hits are marked for reuse.
-2. **Group the remainder.** The requests with no match group by (distance, observed-set) — co-failers about the
-   same un-represented reality (§3.3).
-3. **Mint per group.** One new coordinate-less correction per residual group (§3.3).
-4. **Wire all together.** Every erroring neuron is then wired in one batched step — to its reused neuron (step
-   1) or to its group's fresh mint (step 3).
+Each frame, spatial processing runs one loop: **recognize → predict L0 → on error, cluster the requests →
+mint/expand a more-contextual correction**. Reuse is the *merge* force woven through it; refinement and
+forgetting are the *split* force. The whole thing is distance- and level-invariant.
 
-Two invariants make this clean:
+### 3.1 Every level predicts L0
 
-- **Grouping never gates reuse.** Grouping is only a batching step for the un-reusable residual; a neuron's
-  group never constrains which existing pattern it may reuse. Reuse is decided per request, before any grouping.
-- **Same reality → same pattern (automatic consolidation).** The lookup query *is* the observed reality, so two
-  neurons observing the same reality issue the same query and resolve to the same neuron; and the residual
-  groups by observed-set, so each distinct un-reusable reality mints exactly one neuron. Every distinct observed
-  reality therefore maps to exactly one pattern — reused or minted — with no fragmentation and no clustering.
+A pattern has two sides:
 
-The four steps are **distance- and level-invariant** — identical at d=0 (spatial) and d>0 (temporal) and at
-every level (§3.4). Executable reference:
-[`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) (§3.6).
+- its **context (sources)** — the neighbors at the level below that recognize it (L1's context = base
+  neighbors; L2's context = L1 neighbors),
+- its **prediction (targets)** — **always base (L0) neurons.** Only base neurons are ever a prediction output;
+  corrections are never dequantized (§2.2).
 
-### 3.1 Observed reality — the per-neuron query and group key
+So the hierarchy is **context depth grounding out in L0**, not a tower of abstractions. An L1 pattern predicts
+the L0 reality in its region from its immediate context; an L2 predicts the *correct* L0 where L1 was wrong,
+from *more* context. More context (higher level) → sharper L0 prediction. Every level answers the same
+question — "what is the base reality here?" — with progressively more surrounding context.
 
-For each erroring unit N, `observed(N)` = the co-active units whose footprint **touches** N's in the base
-neighbor graph (adjacency, not set-overlap — §2.2). A unit predicts its neighbors, never itself, so N is
-excluded from its own observed-set. This observed set is used twice: as the **lookup query** (§3.2) and, for
-the residual, as the **group key** (§3.3). At a given (distance, footprint-region) the observed reality is
-**singular** — one actual co-activation (d=0) or realized future (d>0) this frame — so the group key is exact
-and well-defined, with no clustering algorithm and no anchor.
+### 3.2 Recognition: a context match fires a prediction
 
-### 3.2 Lookup — reuse an existing pattern (step 1)
+A unit checks its **context** — its active neighbors (the neighborhood). If that context matches a known
+pattern's stored context **≥ the merge threshold**, the pattern is *inferred* (fires) and predicts L0.
 
-Per erroring neuron, query the **reverse inference index** ([Phase B](./neuron-reuse-index.md)): for each
-observed target T, which existing neurons connect to T at this distance? Candidacy is **strength-blind** — a
-neuron is a candidate if it has a connection to T, regardless of that connection's strength; strength governs
-voting and recognition, not reuse. Score each candidate against the observed set (common/missing/novel, the
-pattern-recognition scoring). If the best ≥ the **merge threshold for
-this distance**, the neuron reuses that existing pattern. Because the query is purely the observed reality,
-co-failers issue identical queries and resolve identically — same reality, same pattern. Lookup is the
-cross-frame collapse and *is* the generalization mechanism (§1.3): a neuron reused across frames accumulates
-the structural core common to the contexts that reuse it. Details:
-[neuron-reuse-final.md](./neuron-reuse-final.md).
+- **base level:** context = the **coordinate neighborhood** (active neighbors within the radius).
+- **higher levels:** context = **footprint-touch** neighbors (§2.2).
 
-### 3.3 Group and mint the residual (steps 2–3)
+First exposure has nothing to recognize, so the active neurons just **learn** — record their context and take
+the default. Recognition (and therefore the whole hierarchy) only exists because the threshold lets an
+*approximate* context match fire a learned pattern; at exact match (θ=1.0) patterns almost never re-fire on new
+input and nothing climbs (§3.8).
 
-The neurons that found no match group by (distance, observed-set) — co-failers about the same observed reality.
-Per group, mint **one** coordinate-less correction (wired in step 4). Two rules:
+### 3.3 Error → a correction request
 
-1. **Footprint = the bound cluster.** `footprint = union(co-failers' footprints) ∪ observed-set's footprints`.
-   The observed set must be included: co-failers' own footprints may be **disjoint** (four arms around a center
-   share the center as their observed *target*, not their coverage), so unioning only the co-failers would
-   leave a hole. Including the observed set keeps the footprint connected.
-2. **Isolated units never merge.** A unit with an *empty* observed-set (no neighbors) is its own group; empties
-   are never grouped together — that would bind disconnected structure and violate locality.
+A fired pattern's **L0 prediction can be wrong** (beyond the error threshold) *even though its context
+matched* — the pattern was too general for this instance. That mismatch is the error, and the neuron votes a
+**correction request** to the thalamus. A novel image produces **hundreds** of these — wherever the image
+deviates from the accumulated expectation. Those requests are what gets clustered.
 
-Minting is within-frame only, which is *why* lookup precedes it: the same reality recurring next frame is, to
-the mint path alone, a fresh group that mints a duplicate; lookup is what collapses it across frames. Details:
-[neuron-reuse-frame.md](./neuron-reuse-frame.md).
+### 3.4 Clustering the requests — transitive merge by neighborhood
 
-### 3.4 Levels — the same operation, self-similar, one ring at a time
+The per-frame correction requests are grouped by **transitively merging neighbor-connected requests** (i.e.
+connected components over the neighbor relation): two requests are in the same cluster if a chain of neighbor
+links connects them.
 
-The four steps run per level. At level 1 the units are base neurons (footprint = {self}); at level k the units
-are the corrections produced at level k−1. Neighbor at every level is footprint-touch; observed-set, grouping,
-and the union∪observed footprint are identical. Binding is **radius-local** — a correction binds a unit with
-its footprint-adjacent co-active neighbors, one ring — so the footprint grows ~one ring per level. A
-whole-shape pattern is therefore a *high-level* object reached after several binding steps, never a level-1
-one; if level 1 swallowed the shape there would be nothing left to compose.
+- **neighbor relation:** base = coordinate neighborhood; higher levels = footprints touch.
+- **one correction per connected cluster.** Its **footprint** = the cluster's coverage; its **context** = the
+  cluster's neighbors; its **targets** = the correct L0 those neighbors should predict.
+- **a correction needs ≥ 1 neighbor (context).** An isolated request with no neighbor has no context to
+  condition on and **cannot form a higher correction** — there is nothing to predict *from*.
 
-### 3.5 Merge threshold — and why exact match alone is brittle
+Early on, with few patterns and a low threshold, this merges aggressively → **large, general, blurry
+corrections** (think "one blob in the middle of the image"). That is expected, and the split force (§3.6)
+carves them back down over time.
 
-Reuse reads the **same merge threshold pattern recognition uses at that distance** (spatial at d=0, temporal at
-d>0). No separate `reuseMergeThreshold`; setting a distance's threshold to 1.0 disables reuse and partial
-recognition together.
+### 3.5 Reuse — the merge force, across frames and within
 
-The threshold matters more than it first appears. Both the lookup and the residual grouping turn on **observed
-reality**, and the simulation (§3.6) shows that *exact* match (threshold = 1.0) fires reuse only where there is
-local symmetry: on a clean plus the arms share an observed center and reuse strongly, but on irregular or solid
-shapes almost every unit sees a unique neighbor set, so within-frame reuse is near-zero (every unit a
-singleton). On natural input (MNIST), exact-match reuse is therefore rare — almost all consolidation must come
-from cross-frame **lookup** (§3.2) under a merge threshold < 1.0, plus refinement
-([refinement.md](./refinement.md)). The threshold is what lets *partial*-overlap realities resolve to the same
-pattern; exact match is the degenerate threshold=1.0 case.
+Before minting, the requests consult the **reverse index** ([Phase B](./neuron-reuse-index.md)): does an
+existing pattern already predict this region's L0 ≥ the merge threshold? Hit → **reuse** (the requests wire to
+it as parents); miss → mint. Reuse lands many contexts on one shared, general pattern — that is the
+cross-frame convergence (§1.3).
 
-### 3.6 Worked examples (and the simulation)
+**Matched patterns and new requests merge in one pool (the unification — see §3.5.1).** A matched/reused
+pattern that neighbors a new cluster of requests is pulled into the same cluster: the requests wire to it and
+the pattern **expands** (its footprint/context grow to cover the new region). So reuse is not only
+mint-or-reuse — it is also **grow the reused pattern.**
 
-The reference simulation [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) runs the
-grouping + mint path per level on ASCII shapes (`node apps/mnist/jobs/wavefront-sim.js`). It models one frame,
-d=0, every unit erroring with **no index lookup** — i.e. steps 2–4 (group → mint → wire), the residual path on
-its own. Key results:
+#### 3.5.1 Unifying matched patterns with new requests
 
-- **Single plus** (center + 4 arms). The four arms each observe `{center}` → identical observed-set → **one
-  shared correction, 4 parents**, footprint = arms ∪ center (the whole plus, center included). One frame's
-  clearest within-frame sharing.
-- **Plus-of-pluses** (five pluses arranged as a plus). **Level 1 stays local**: max footprint 5px of 21px —
-  five small plus-patterns, never the whole shape. **Level 2** binds the four outer plus-patterns (they each
-  observe the center plus-pattern) into the whole figure — the *same* arms-around-a-center grouping one level
-  up. **Level 3** converges to one pattern. Self-similar, footprints 5 → 12 → 21.
-- **Irregular shapes** (uneven blob, ragged patch, solid block, L). Level 1 stays local (≤5px) on all of them,
-  but **shared groups drop to 0–1** — exact observed-set match barely fires without symmetry (§3.5). This is
-  the empirical case for the merge threshold and cross-frame lookup.
-- **Disconnected input** (two separate blobs, a 4-connected diagonal). Stays separate — the isolated-unit rule
-  (§3.3) keeps locality from binding across gaps. Diagonals bind only under 8-connectivity, a base-graph knob
-  worth choosing deliberately for MNIST's diagonal strokes.
+The clustering pool is **(this frame's matched/reused patterns) ∪ (this frame's new requests)**, transitively
+merged by neighborhood (§3.4). Three outcomes per connected cluster:
+
+1. **only new requests** → mint one new correction (§3.4).
+2. **contains a matched pattern, no others** → ordinary reuse; nothing to merge.
+3. **a matched pattern adjacent to new requests** → the requests wire to the matched pattern as new parents,
+   and the pattern's footprint/context **expand** to absorb the new region. One growing pattern, not a new
+   neuron beside it.
+
+Expansion mutates a *shared* pattern (it has many parents), so it drifts the pattern toward the union of the
+contexts that reuse it — which is exactly the merge force. It is held in check by the split force (§3.6); the
+two together set how big patterns get. **Open: the precise expansion rule** — how much a matched pattern may
+grow per frame, and whether expansion is gated by an overlap floor — is a design proposal here, to be settled
+in the simulation.
+
+### 3.6 Merge vs split — the two forces that set pattern size
+
+- **Merge** (grow / generalize): in-frame transitive clustering (§3.4) + inter-frame reuse incl. expansion
+  (§3.5). Pulls toward big, shared, general patterns.
+- **Split** (shrink / specialize): **refinement** ([refinement.md](./refinement.md)) consolidates a pattern
+  toward the common core of the contexts it matches; **forgetting** decays incidental parts. Pulls toward
+  smaller, regional patterns.
+
+Where the equilibrium lands — **one big general pattern** vs **many regional patterns** — depends on the rates
+(merge threshold, forget/refine rates, and **adaptive error thresholds**). The regional-pattern regime the
+hierarchy needs is the *balanced* middle, and whether it exists is an **empirical** question, not one settled
+on paper. The **[simulation](./neuron-reuse-simulation.md)** is the instrument built to answer it.
+
+### 3.7 How the hierarchy climbs — how L2 forms
+
+L2 cannot form inside one cold image; it needs L1 to already be a learned, *firing* vocabulary. Over frames:
+
+1. **L1 accumulates** — early frames mint general L1 corrections (large, blurry).
+2. **L1 fires by recognition** — on a later image, base contexts match L1 patterns ≥ threshold, so **several
+   L1 patterns fire**, each predicting L0 over its region.
+3. **A general L1 mispredicts L0** — its context matched, but it is too general, so its L0 prediction is wrong
+   (§3.3). The active regional L1 patterns are the **active parents** of that large shared L1 (some parents may
+   be inactive this frame).
+4. **It mints an L2** that predicts the **correct L0**, conditioned on **more context: the active parent's
+   *other* L1 neighbors.** (Needs ≥ 1 such neighbor — no neighbor, no context, no L2 — §3.4.)
+5. **L2s are formed** by transitively merging the mispredicting L1 patterns by **footprint adjacency**.
+
+Self-similar all the way up: recognize → mispredict L0 → cluster the mispredictors → mint a more-contextual
+correction that gets L0 right.
+
+### 3.8 The merge threshold is load-bearing at every level
+
+Recognition is an *approximate* context match (≥ threshold), not equality. Without it, a learned pattern almost
+never re-fires on a new image, so multiple patterns never co-fire, and a level can never produce the
+co-occurring mispredictions the next level is built from. The threshold is therefore **not a late
+optimization** — it is what lets the hierarchy form at all, and it is the same threshold for recognition and
+reuse (no separate `reuseMergeThreshold`; θ=1.0 disables both).
+
+### 3.9 The simulation is wrong; new spec
+
+The current [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) models the **wrong**
+mechanism: one cold frame, every neuron erroring, no recognition, no cross-frame state, grouping by
+identical observed-set. None of that matches the model above (no recognition, no predict-L0, no
+transitive-merge clustering, no merge/split). It must be rebuilt around recognize → mispredict L0 → cluster →
+mint/expand, across frames. The new specification is
+[neuron-reuse-simulation.md](./neuron-reuse-simulation.md); the existing sim should be treated as obsolete.
 
 ---
 
@@ -244,13 +273,13 @@ its own. Key results:
 
 ### 4.1 Multi-Parent References
 
-Reuse and batched mint both wire **many** parents to one correction, which breaks the single-host ownership
+Reuse and cluster mint both wire **many** parents to one correction, which breaks the single-host ownership
 model (today a correction's strength lives in its one host's routing entry and it dies when that entry decays
 — [neuron.rs](../brain/brain-core/src/neuron.rs); the forget rate is brain-wide uniform —
 [brain.rs](../brain/brain-core/src/brain.rs)). The clean shape: per-parent routing entries on a shared,
 coordinate-less neuron; **reference-counted reaping** (alive while any parent references it); `patterns.csv`
 serializes **many** `(parent, strength)` rows per pattern. Because corrections are coordinate-less, there is
-**no anchor to reconcile** across parents — only lifecycle and activation bookkeeping. Born with batched mint;
+**no anchor to reconcile** across parents — only lifecycle and activation bookkeeping. Born with cluster mint;
 mechanics in [neuron-reuse-frame.md](./neuron-reuse-frame.md).
 
 ### 4.2 Same-Frame Activation
@@ -277,11 +306,11 @@ via `get_suppressed_ages`) carries over unchanged.
 - **Symmetry** — one operation, one neighborhood primitive, one reuse mechanism across all distances.
 - **Compact structure at every level** — no redundant neurons computing the same inference, spatial or
   temporal.
-- **Transfer / generalization** — a shared correction links the contexts that produce the same observed
-  reality; structure transfers rather than being re-minted. (Cross-position transfer — the *same shape at a
-  different place* — is **not** provided; a correction fires only over its own footprint. That ceiling is the
+- **Transfer / generalization** — a shared correction links the contexts that predict the same L0 region;
+  structure transfers rather than being re-minted. (Cross-position transfer — the *same shape at a different
+  place* — is **not** provided; a correction fires only over its own footprint. That ceiling is the
   retinotopic/absolute-connection model, common to both spatial and temporal.)
-- **Content-addressable** — "is there a neuron that produces X?" answered via the reverse inference index.
+- **Content-addressable** — "is there a neuron that predicts this L0 region?" answered via the reverse index.
 
 ### 5.2 Risks
 
@@ -293,17 +322,20 @@ via `get_suppressed_ages`) carries over unchanged.
   (connections never weaken — [neuron.rs](../brain/brain-core/src/neuron.rs)), so a bad reuse
   persists. The **merge threshold is the only control** — candidacy is strength-blind (§3.2).
 - **Action-binding dilution** — heavily-reused neurons; monitored long-run.
-- **Within-frame reuse is near-inert on irregular input** — exact observed-set match (§3.5) fires only on
-  local symmetry; on natural/asymmetric shapes nearly every unit is a singleton (shown in the reference
-  simulation, §3.6). Consolidation therefore leans almost entirely on cross-frame **lookup** + **refinement**,
-  not on within-frame grouping. The merge threshold (< 1.0) is what makes partial-overlap reuse possible.
+- **Merge/split equilibrium is unproven** — the merge force (clustering + reuse, §3.4–3.5) and the split force
+  (refinement + forgetting, §3.6) must balance so patterns settle into *regional* sizes rather than collapsing
+  to one big blurry pattern (or staying tiny and never reusing). Whether a stable middle exists depends on the
+  rates (merge threshold, forget/refine, adaptive error) and is an **empirical** question — the
+  [simulation](./neuron-reuse-simulation.md) is built to answer it.
+- **Pattern expansion drift** — growing a matched pattern to absorb adjacent requests (§3.5.1) mutates a shared
+  neuron for all its parents; the expansion rule and its overlap gate are unsettled.
 
 ---
 
 ## 6. Implementation
 
-Build order: wave-front foundation → index → batched mint → lookup, then validation. Reuse applies at all
-distances throughout. The **incremental migration + verification plan** (sim-as-oracle, step-by-step against
+Build order: wave-front foundation → index → cluster + mint → lookup/expansion, then validation. Reuse applies
+at all distances throughout. The **incremental migration + verification plan** (sim-as-oracle, step-by-step against
 MNIST numbers, merge threshold deferred) is in
 [neuron-reuse-wavefront-implementation.md](./neuron-reuse-wavefront-implementation.md).
 
@@ -311,17 +343,15 @@ MNIST numbers, merge threshold deferred) is in
 |---|---|---|---|
 | **A** | [neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md) | **Foundation.** Turn `process_spatial` and `process_temporal` into settling waves (structure kept); remove stored levels; coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory. | Characterized regression (MNIST + stocks comparable); footprint-adjacency units. **Not bit-exact.** |
 | **B** | [neuron-reuse-index.md](./neuron-reuse-index.md) | **Two** reverse connection indexes — `spatial_connection_index` (target → sources) and `temporal_connection_index` (target → distance → sources), mirroring the context-index split. Built, unit-tested, not yet consumed. Membership-only / strength-blind candidacy. | Unit: target→sources correct per index; stores isolated; size ∝ connection count. |
-| **C** | [neuron-reuse-frame.md](./neuron-reuse-frame.md) | **Batched mint** at all distances (group by (distance, observed-set), mint one coordinate-less correction with union footprint, wire all) **+ multi-parent machinery** (refcounted reaping, multi-parent serialization, shared-neuron activation). | Within-group dedup drops neuron count; multi-parent lifecycle units. |
-| **D** | [neuron-reuse-final.md](./neuron-reuse-final.md) | Reuse **lookup** on top of C (consumes B) + cross-frame accrual, all distances. | Unit: cross-frame reuse via lookup; neuron count drops further; lookup < 20% per-frame overhead. |
+| **C** | [neuron-reuse-frame.md](./neuron-reuse-frame.md) | **Cluster + mint** — transitively merge neighbor-connected correction requests (coordinate neighborhood at base, footprint-touch higher); one correction per connected cluster, predicting the correct L0; **+ multi-parent machinery** (refcounted reaping, multi-parent serialization, shared-neuron activation). | Connected clusters mint one correction each; multi-parent lifecycle units. |
+| **D** | [neuron-reuse-final.md](./neuron-reuse-final.md) | Reuse **lookup + expansion** on top of C (consumes B): a request reuses a pattern whose L0 prediction matches ≥ threshold; a matched pattern adjacent to new requests **expands** to absorb them. Cross-frame accrual, all distances. | Cross-frame reuse via lookup; expansion grows matched patterns; neuron count drops; lookup < 20% per-frame. |
 | **Validation** | [neuron-reuse-validation.md](./neuron-reuse-validation.md) | MNIST (spatial reuse, within-frame + cross-image), stocks (full pipeline + transfer), long-run forget-rate. | Per-experiment gates in the doc. |
 
 All phases depend on [spatial-processing](./spatial-processing.md) being complete (it is) — Phase A then
 rebuilds its level model into the wave-front.
 
-**Reference simulation.** [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) is the
-executable spec for the §3 grouping: a clean, dependency-free proof of concept that runs the per-level
-operation on hand-drawn shapes (`node apps/mnist/jobs/wavefront-sim.js`). It currently models one spatial frame
-— grouping + mint, no index lookup or merge threshold — and is the place to validate algorithm changes before
-touching the brain. The intent is to grow it toward the port incrementally (add the index lookup, the
-threshold, then temporal distances), keeping it faithful enough that it maps cleanly onto `process_spatial` /
-the Phase-C/D code.
+**Reference simulation.** The current [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js)
+is **obsolete** — it models the wrong mechanism (cold-start, single-frame, no recognition, group-by-observed-set;
+§3.9). The correct simulation is specified in [neuron-reuse-simulation.md](./neuron-reuse-simulation.md): a
+multi-frame, recognition-based model (recognize → mispredict L0 → transitive-merge cluster → mint/expand) that
+is both the instrument for the merge/split equilibrium question (§3.6) and the oracle for the eventual port.

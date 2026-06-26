@@ -2,6 +2,13 @@
 //  Wave-front neuron-reuse — sequential reference simulation (proof of concept)
 // ============================================================================
 //
+//  ⚠ OBSOLETE — THIS SIMULATION MODELS THE WRONG MECHANISM. DO NOT BUILD ON IT.
+//  It is cold-start, single-frame, no recognition, active = ON pixels, and groups
+//  by identical observed-set. The correct model is recognize → predict L0 → on
+//  misprediction transitively-merge-cluster the requests → reuse/expand or mint,
+//  across many frames. See docs/neuron-reuse.md §3 and the rebuild spec
+//  docs/neuron-reuse-simulation.md. Kept only as a historical reference.
+//
 // A small, deterministic, dependency-free model of the wave-front grouping +
 // reuse algorithm described in docs/neuron-reuse.md (§2 footprints, §3 reuse).
 // It is the *executable spec* / oracle for the incremental migration described
