@@ -1,17 +1,18 @@
-# Neuron Reuse — Phase D: Reuse Lookup + Expansion
+# Neuron Reuse — Phase C: Reuse Lookup + Expansion
 
 > **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
 > transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
-> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
-> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old `wavefront-sim.js` is
-> obsolete). This phase is **lookup + expansion**; the detailed mechanics below predate the correction and
-> will firm up once the simulation validates the model.
+> one**, balanced by refinement (the split force: specialize + reference-drain reaping). See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
+> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md), now built and validated. This
+> phase is **lookup + expansion**; the detailed mechanics below predate the correction and will firm up
+> against the validated simulation. Note: the sim confirms reuse correctly matches by L0 output **across
+> levels** (a higher request reusing a lower pattern is content-addressable reuse, not a bug).
 
-**The feature — a comparatively light phase**, because [Phase C](./neuron-reuse-frame.md) built the
-cluster+mint and multi-parent machinery and [Phase A](./neuron-reuse-wavefront.md) the coordinate-less
-substrate. Theory in [neuron-reuse.md §3.5, §3.5.1](./neuron-reuse.md). This phase adds the cross-frame **reuse
-lookup AND pattern expansion** on top of Phase C, consuming the reverse index from
-[Phase B](./neuron-reuse-index.md). Applies at all distances; always on (no enable flag). Reuse installs
+**The feature — a comparatively light phase**, because [Phase B](./neuron-reuse-frame.md) built the
+cluster+mint and multi-parent machinery (the coordinate-less substrate is a prerequisite). Theory in
+[neuron-reuse.md §3.5, §3.5.1](./neuron-reuse.md). This phase adds the cross-frame **reuse
+lookup AND pattern expansion** on top of Phase B, consuming the reverse index from
+[Phase A](./neuron-reuse-index.md). Applies at all distances; always on (no enable flag). Reuse installs
 routing for next frame, so there is no this-frame activation to inhibit.
 
 ---
@@ -34,7 +35,7 @@ all install together.
 ```
 requests = collect_correction_requests()                 // units whose L0 prediction missed (≥ error threshold)
 
-// 1. Reuse lookup — per request, against the reverse index (Phase B): existing patterns predicting this L0 region.
+// 1. Reuse lookup — per request, against the reverse index (Phase A): existing patterns predicting this L0 region.
 matched, fresh = [], []
 for r in requests:
     match score_and_pick(index.candidates(r.targets, r.distance), r, merge_threshold(r.distance)):
@@ -61,7 +62,7 @@ A request carries the **L0 targets** it predicts (the correct base reality for i
 1. For each L0 target T the request predicts, read candidate sources from the Phase-B index at this distance.
 2. Score each candidate against the request's L0 targets (`|candidate.L0_connections ∩ targets| / |targets|`,
    or the existing common/missing/novel scoring `match_observed` [neuron.rs](../brain/brain-core/src/neuron.rs)).
-   Scoring is **strength-blind** — the index is membership-only ([Phase B](./neuron-reuse-index.md)).
+   Scoring is **strength-blind** — the index is membership-only ([Phase A](./neuron-reuse-index.md)).
 3. Filter ≥ the **merge threshold for this distance** (spatial at d=0, temporal at d>0; 1.0 disables reuse +
    partial recognition together).
 4. Return the best (tie-break smaller id), or `None`. **Filter self-matches.**
@@ -76,17 +77,17 @@ Reuse **installs routing for next frame** (above) — it does **not** activate t
 earlier plan added a `correction_wired_this_frame` set to suppress a reused neuron's "wiring-side-effect
 activation," but there is no such activation, so the set has nothing to act on. A reused neuron is active this
 frame only via its **own** routing match, in which case it votes and error-checks as a normal recognition
-(existing behavior — nothing to suppress). So Phase D is essentially **just the lookup** plus the multi-parent
-accrual that Phase C's machinery already handles.
+(existing behavior — nothing to suppress). So Phase C is essentially **just the lookup** plus the multi-parent
+accrual that Phase B's machinery already handles.
 
 The one remaining activation case — a shared neuron routing-matched from several parents at different depths in
-one sweep — is activated **at each depth** (Phase A's multi-depth `neuron_states` holds it across levels), and
+one sweep — is activated **at each depth** (the multi-depth `neuron_states` holds it across levels), and
 needs **no** separate Phase-D inhibition set.
 
 ### Cross-frame accrual
 
 The lookup wires a parent to a neuron that existed before this frame. The per-parent-entry / refcount /
-serialization machinery from Phase C handles this unchanged; coordinate-less corrections mean no anchor
+serialization machinery from Phase B handles this unchanged; coordinate-less corrections mean no anchor
 reconciliation across frames either.
 
 ---
@@ -101,7 +102,7 @@ independently matched.
 The one place a shared neuron lands at **multiple depths in one frame** is multi-parent **routing**: under
 reuse, R can be routing-matched from several parents at different levels in one sweep
 (`activate_*_pattern(pattern_id, level+1)` from each), activating it at each level. The multi-depth
-`neuron_states` ([Phase A](./neuron-reuse-wavefront.md)) **holds** a neuron active at several levels and each
+the multi-depth `neuron_states` **holds** a neuron active at several levels and each
 activation is **processed at its depth** (not collapsed); no extra inhibition set is needed.
 
 ---
@@ -118,7 +119,7 @@ activation is **processed at its depth** (not collapsed); no extra inhibition se
 - **Unit — self-match filtered**.
 - **Unit — cross-frame multi-parent accrual**: reuse R (minted earlier) from a different parent this frame; R
   gains the new routing entry with independent strength; its connection set accumulates.
-- **MNIST + stocks**: neuron count drops further vs the Phase-A baseline; accuracy ≥ baseline.
+- **MNIST + stocks**: neuron count drops further vs the no-reuse baseline; accuracy ≥ baseline.
 - **Profile**: per-request reuse lookup adds **< 20%** per-frame.
 - **Termination**: heavy cross-frame reuse still terminates — the level-sweep terminates as today
   ([brain.rs](../brain/brain-core/src/brain.rs)), and reuse only adds routing entries (fired next

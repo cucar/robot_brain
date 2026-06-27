@@ -1,21 +1,21 @@
-# Neuron Reuse — Phase C: Cluster + Mint + Multi-Parent
+# Neuron Reuse — Phase B: Cluster + Mint + Multi-Parent
 
 > **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
 > transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
-> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
-> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old `wavefront-sim.js` is
-> obsolete). This phase is the **cluster + mint** step; the detailed acceptance gates below predate the
-> correction and will firm up once the simulation validates the mechanism. The multi-parent machinery
+> one**, balanced by refinement (the split force: specialize + reference-drain reaping). See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
+> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md), now built and validated. This
+> phase is the **cluster + mint** step; the detailed acceptance gates below predate the correction and will
+> firm up against the validated simulation. The multi-parent machinery
 > (ownership, refcount reaping, serialization, shared activation) is unchanged.
 
-**The heaviest reuse phase** (Phase A, the wave-front, is heavier still). Theory in
+**The heaviest reuse phase.** Theory in
 [neuron-reuse.md §3, §4](./neuron-reuse.md). Reshape the correction path: the per-frame **correction requests**
 — units whose **L0 prediction was wrong** despite a context match — are **clustered by transitively merging
 neighbor-connected requests**, and **one coordinate-less correction is minted per connected cluster**,
 predicting the **correct L0**. Each cluster's requests become the correction's **parents**, so the
 **multi-parent ownership/lifecycle/activation machinery lands here too**. Applies at all distances.
 
-Does **not** touch the reverse index or cross-frame lookup/expansion (Phase D).
+Does **not** touch the reverse index or cross-frame lookup/expansion (Phase C).
 
 > **Clustering = transitive merge (connected components), not a bucket-by-observed-set.** Two requests join the
 > same cluster if a chain of neighbor links connects them (base = coordinate neighborhood; higher = footprints
@@ -41,15 +41,15 @@ for cluster in clusters:
     for r in cluster: wire_correction(r, C)     // C gets many parents — see Multi-parent
 ```
 
-Phase D adds, **in front of this**, the reuse lookup: a request that matches an existing pattern (≥ threshold)
+Phase C adds, **in front of this**, the reuse lookup: a request that matches an existing pattern (≥ threshold)
 **reuses** it instead of minting, and a matched pattern adjacent to a cluster of new requests **expands** to
-absorb them ([neuron-reuse-final.md](./neuron-reuse-final.md)). In Phase C alone there is no lookup — every
+absorb them ([neuron-reuse-final.md](./neuron-reuse-final.md)). In Phase B alone there is no lookup — every
 request mints into a fresh cluster. Per-request error feedback stays per-request (each records its own Welford
 sample); clustering changes who-mints, not who-recorded. Iterate clusters in sorted key order for determinism.
 
 This replaces today's per-erroring-neuron mints (spatial one-per-parent
 [thalamus.rs](../brain/brain-core/src/thalamus.rs); temporal one-per-(neuron,age)
-[thalamus.rs](../brain/brain-core/src/thalamus.rs)) — now unified on the wave-front and clustered.
+[thalamus.rs](../brain/brain-core/src/thalamus.rs)) — now unified and clustered.
 
 ---
 
@@ -64,7 +64,7 @@ own vote** at those ages this frame (`get_suppressed_ages`, [neuron.rs](../brain
 
 So a fresh cluster mint is **not active the mint frame**, and the erroring parent's wrong vote is already
 suppressed by the existing machinery. This phase therefore needs **no** `correction_wired_this_frame` set —
-fresh mints are covered. That set is only for Phase D, where a *reused, pre-existing* neuron may be
+fresh mints are covered. That set is only for Phase C, where a *reused, pre-existing* neuron may be
 independently active this frame (via its own routing match) while also being wired as a correction target.
 
 ---
@@ -76,7 +76,7 @@ multi-parent the moment it exists. Today a correction is owned by one host (stre
 entry, dies when that entry decays — [neuron.rs](../brain/brain-core/src/neuron.rs)); the
 forget rate is brain-wide uniform ([brain.rs](../brain/brain-core/src/brain.rs)), so per-parent entries
 decay at the same rate, differing only in strength and `last_activation_frame`. Corrections are coordinate-less
-(Phase A), so there is **no anchor** to reconcile across parents — only lifecycle and activation bookkeeping.
+so there is **no anchor** to reconcile across parents — only lifecycle and activation bookkeeping.
 
 - **Install one child into many parents' routing tables.** The install path wires one correction into one
   parent today ([thalamus.rs](../brain/brain-core/src/thalamus.rs)); the cluster mint installs it into
@@ -96,7 +96,7 @@ decay at the same rate, differing only in strength and `last_activation_frame`. 
   with a refcount over all referencing parents and scrub every parent's routing entry on death.
 - **Multi-parent serialization.** `patterns.csv` = `pattern,parent,strength`
   ([backup.rs](../brain/brain-core/src/backup.rs)) serializes a pattern under one parent;
-  a batched correction needs **many** `(parent, strength)` rows. Coordinate with Phase A's format bump.
+  a batched correction needs **many** `(parent, strength)` rows. Coordinate with the substrate's format bump.
 
 ### `parent_id` reader audit
 
@@ -137,7 +137,7 @@ neurons.
   when the second dies. Not reaped on the first host's death.
 - **Unit — multi-parent serialization round-trip**: snapshot/restore with both parents' routing entries intact
   (independent strengths), then continue identically.
-- **MNIST + stocks**: total neuron count drops from clustering + reuse; accuracy ≥ the Phase-A baseline.
+- **MNIST + stocks**: total neuron count drops from clustering + reuse; accuracy ≥ the no-reuse baseline.
 
 ---
 
@@ -153,4 +153,4 @@ neurons.
   (which would bind disconnected structure and violate locality).
 - **Determinism**: cluster iteration in sorted key order, not hash order.
 - **Reference simulation**: the corrected spec is [neuron-reuse-simulation.md](./neuron-reuse-simulation.md)
-  (the old `wavefront-sim.js` is obsolete — it modeled the wrong group-by-observed-set mechanism).
+  (now built and faithful — [neuron-reuse-simulation.md](./neuron-reuse-simulation.md)).

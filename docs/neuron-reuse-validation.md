@@ -2,22 +2,20 @@
 
 > **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
 > transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
-> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md). The corrected
-> reference simulation is [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old `wavefront-sim.js`
-> is obsolete) — and the **first** validation is now the simulation's own merge/split-equilibrium experiment
-> (does pattern size settle into a regional regime, or collapse to one big blurry pattern?), which gates the
-> brain port. The brain experiments below still hold as *value* checks once the model is built.
+> one**, balanced by refinement (the split force: specialize + reference-drain reaping). See [neuron-reuse.md §3](./neuron-reuse.md). The corrected
+> reference simulation is [neuron-reuse-simulation.md](./neuron-reuse-simulation.md), now built and validated.
+> Its merge/split-equilibrium experiment — the **first** validation — is **done**: a regional regime exists
+> under refinement (merge-only runs away to one blurry pattern); see
+> [neuron-reuse-simulation.md §11](./neuron-reuse-simulation.md). The brain experiments below hold as *value*
+> checks for the eventual port.
 
-**Experiments that can only run after [Phase D](./neuron-reuse-final.md).** They ship no new mechanism — they
+**Experiments that can only run after [Phase C](./neuron-reuse-final.md).** They ship no new mechanism — they
 confirm reuse does what the theory ([neuron-reuse.md](./neuron-reuse.md)) claims. Per-phase unit/acceptance
 gates live in the phase docs; this doc holds the cross-domain experiments.
 
 Reuse now applies at **all distances**, so both MNIST (spatial, d=0) and stocks (spatio-temporal) exercise it.
-Each phase gate proves *correctness*; this doc proves *value*.
-
-> First, a foundation check: [Phase A](./neuron-reuse-wavefront.md) is a rearchitecture (not bit-exact), so
-> the **characterized regression** on MNIST + stocks is a prerequisite for everything here — confirm the
-> wave-front learns comparably to the leveled baseline before measuring reuse on top.
+Each phase gate proves *correctness*; this doc proves *value*. (The prerequisite substrate and its characterized
+regression are a separate project — assumed in place here.)
 
 ---
 
@@ -25,11 +23,10 @@ Each phase gate proves *correctness*; this doc proves *value*.
 
 The d=0 payoff: reuse collapses redundant spatial corrections within and across images.
 
-**Setup**: the MNIST single-frame harness ([spatial-processing.md §5.3](./spatial-processing.md)), wave-front
-+ reuse on.
+**Setup**: the MNIST single-frame harness ([spatial-processing.md §5.3](./spatial-processing.md)), reuse on.
 
 **Measure**:
-- **Neuron count** vs the Phase-A (no-reuse) baseline: in-frame clustering collapses connected requests into one
+- **Neuron count** vs the no-reuse baseline: in-frame clustering collapses connected requests into one
   correction; cross-image lookup + expansion dedups recurring spatial structure.
 - **Accuracy** ≥ baseline.
 - **Transfer**: train digits **0–4**, then **5–9**; compare 5–9 accuracy vs training 5–9 from scratch.
@@ -48,14 +45,14 @@ reuse counts across the digit boundary non-trivial.
 
 ## V2 — Stocks full pipeline + transfer
 
-Distinct from the spatial-only stocks baseline. Measures reuse on the full spatio-temporal wave-front.
+Distinct from the spatial-only stocks baseline. Measures reuse on the full spatio-temporal pipeline.
 
-**Setup**: stocks, wave-front + reuse on, d=0 and d>0.
+**Setup**: stocks, reuse on, d=0 and d>0.
 
-**Measure**: per-episode ROI and directional accuracy vs the Phase-A baseline; total neuron count.
+**Measure**: per-episode ROI and directional accuracy vs the no-reuse baseline; total neuron count.
 
 **Tune**: the per-distance merge thresholds and error thresholds. (Reuse is strength-blind — not a tunable;
-[Phase B](./neuron-reuse-index.md).)
+[Phase A](./neuron-reuse-index.md).)
 
 **Transfer** (the [future-work transfer-learning experiment](./future-work.md)): learn on stock set A, measure
 set B before/after — reuse should let B converge faster if A and B share spatio-temporal structure.
@@ -63,7 +60,7 @@ set B before/after — reuse should let B converge faster if A and B share spati
 **Gates**: directional accuracy improves over prior baselines (target: lift off the 57–59% plateau); neuron
 count significantly lower than no-reuse; transfer effect present.
 
-> Note the footprint-graded locality from Phase A: cross-channel (cross-stock) relationships now form only
+> Note the footprint-graded locality: cross-channel (cross-stock) relationships now form only
 > through grouping (as footprints grow), not as a raw cross-product. Watch whether that helps or limits
 > cross-stock structure; it interacts with the reuse measurement.
 
@@ -92,5 +89,5 @@ connections converge toward a stable structural core.
 ## V4 — Eventual: chatbot / text
 
 Sequence reuse over tokens is where temporal reuse ultimately pays off — shared sub-sequence predictors across
-many conversations. Once the text-channel-to-action chatbot harness exists ([roadmap §4](./roadmap.md)),
+many conversations. Once the text-channel-to-action chatbot harness exists ([roadmap §6](./roadmap.md)),
 validate reuse there. Out of scope for the initial build, but the destination this design serves.

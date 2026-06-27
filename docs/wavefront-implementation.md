@@ -1,27 +1,27 @@
-# Neuron Reuse — Wave-Front Implementation & Migration Plan
+# Wave-Front Implementation & Migration Plan
 
-> **⚠ Model corrected — this plan needs revision.** The reuse mechanism is now **recognize → predict L0 → on
-> misprediction, transitively-merge-cluster the requests → reuse/expand or mint**, balanced by refinement +
-> forgetting ([neuron-reuse.md §3](./neuron-reuse.md)). The "sim-as-oracle" premise still holds, but the oracle
-> is the **rebuilt** sim specified in [neuron-reuse-simulation.md](./neuron-reuse-simulation.md), **not** the
-> obsolete `wavefront-sim.js`. The old detailed stages are **removed** (§3); the verification approach (§1) and
-> tracked numbers (§2) survive, and the brain migration cannot start until the rebuilt sim validates the
-> merge/split equilibrium.
+> **Oracle is built.** The reference simulation specified in
+> [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) is now **built and validated** —
+> [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) implements the corrected model
+> (recognize → predict L0 → cluster → reuse/mint, with refinement as the split force) and the merge/split
+> equilibrium has been characterized. The "sim-as-oracle" premise holds and the migration can now proceed
+> against it. The old detailed stages remain **removed** (§3); the verification approach (§1) and tracked
+> numbers (§2) stand.
 
-How to migrate the brain from the current spatial architecture to the wave-front incrementally, verifying each
-step against numbers from an MNIST verification run, and deferring the merge threshold to the very end. Theory:
-[neuron-reuse.md](./neuron-reuse.md). Phase specs: [A](./neuron-reuse-wavefront.md),
-[B](./neuron-reuse-index.md), [C](./neuron-reuse-frame.md), [D](./neuron-reuse-final.md). This doc is the
-*ordering and verification* layer over those.
+The migration plan for the [wave-front foundation](./wavefront.md): move the brain from the current spatial
+architecture to the wave-front incrementally, verifying each step against numbers from an MNIST verification
+run. Theory: [neuron-reuse.md](./neuron-reuse.md) §2. The reuse phases that build on this foundation are
+specs [A](./neuron-reuse-index.md), [B](./neuron-reuse-frame.md), [C](./neuron-reuse-final.md). This doc is
+the *ordering and verification* layer over the wave-front rearchitecture ([wavefront.md](./wavefront.md)).
 
 ---
 
 ## 1. Verification approach (what survives the model correction)
 
 The corrected model — recognition-based, multi-frame, merge/split ([neuron-reuse.md §3](./neuron-reuse.md)) —
-changes the migration substantially, and the **concrete step sequence is deferred** until the rebuilt
-simulation ([neuron-reuse-simulation.md](./neuron-reuse-simulation.md)) is built and the merge/split
-equilibrium is understood (§3). What survives is the **verification approach**:
+reshaped the migration, and the **concrete step sequence now follows from the rebuilt simulation**
+([neuron-reuse-simulation.md](./neuron-reuse-simulation.md)), which is built and validates the merge/split
+equilibrium (§3). The committed **verification approach** is:
 
 - **Sim as oracle.** The brain is verified against the **simulation**, never the old brain (different
   algorithms — they will not, and should not, match). Behavior-preserving refactors keep the brain's numbers ≈
@@ -68,7 +68,7 @@ for the headline trend.
 
 ---
 
-## 3. Migration stages — deferred pending the simulation
+## 3. Migration stages — defined against the built simulation
 
 The original detailed stages encoded the **old, wrong** model and are removed:
 
@@ -80,10 +80,11 @@ The two settled, model-agnostic anchors survive: **baseline the current brain an
 re-baseline reference), and **freeze the rebuilt sim as the spec** (a brain↔sim disagreement is a brain bug,
 fixed in the sim first).
 
-The corrected migration sequence — recognition → predict-L0 → cluster → reuse/expand, with refinement and
-forgetting — will be defined **once the rebuilt sim validates the model and the merge/split equilibrium**
-([neuron-reuse.md §3.6](./neuron-reuse.md)) is understood. Until then, only the verification approach (§1) and
-the tracked numbers (§2) are committed.
+The rebuilt sim now validates the model and the merge/split equilibrium
+([neuron-reuse.md §3.6](./neuron-reuse.md)) is characterized — refinement is the split force (it both
+specializes patterns and drains references to reap, no separate decay). The corrected migration sequence —
+recognition → predict-L0 → cluster → reuse/expand, with refinement — can now be defined against the sim's
+behavior. The verification approach (§1) and the tracked numbers (§2) are the committed anchors for it.
 
 ---
 
@@ -92,13 +93,13 @@ the tracked numbers (§2) are committed.
 Representation choices that survive the model correction:
 
 - **Footprints are bitsets** over base sensory neurons; adjacency = dilate one footprint by the precomputed
-  base neighbor-ring and AND with the other; nonzero ⇒ touch ([neuron-reuse-wavefront.md](./neuron-reuse-wavefront.md)).
+  base neighbor-ring and AND with the other; nonzero ⇒ touch ([wavefront.md](./wavefront.md)).
 - **Cluster membership via union-find** over the neighbor graph (the transitive merge); represent any set as a
   sorted `Vec<u32>` of indices, not a delimited string.
 - **Deterministic ordering** (sorted keys) everywhere, for reproducible diagnostics and to match the sim.
 - **Neighbor adjacency is footprint *touch* at every level** — base-graph overlap-or-adjacency, *not* parent
   membership. Graded locality (footprints span more as you climb) is the intended behavior: it is what lets
-  disjoint-but-abutting features become neighbors ([neuron-reuse.md §2.2, §3.4](./neuron-reuse.md)).
+  disjoint-but-abutting features become neighbors ([neuron-reuse.md §2, §3.4](./neuron-reuse.md)).
 
 ---
 

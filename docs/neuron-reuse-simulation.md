@@ -1,16 +1,19 @@
 # Neuron Reuse — Simulation Spec
 
-The specification for the **corrected** reference simulation. The existing
-[`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) is **obsolete** — it models the wrong
-mechanism (see §1) — and should be rebuilt to this spec (likely as a new job, e.g.
-`apps/mnist/jobs/reuse-sim.js`, retiring the old one).
+The specification for the **corrected** reference simulation, and the results of running it.
+[`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) is **built to this spec** (rewritten
+in place — the obsolete group-by-observed-set version is gone) and **validated**: see §11 for results. It is
+deterministic, dependency-free, and brain-shaped so the mechanism ports as a transliteration.
 
-The simulation has three jobs:
+The simulation has three jobs, all now discharged:
 
-1. **Validate** the corrected mechanism end to end ([neuron-reuse.md §3](./neuron-reuse.md)).
+1. **Validate** the corrected mechanism end to end ([neuron-reuse.md §3](./neuron-reuse.md)). ✓ — the
+   recognize → predict-L0 → cluster → reuse/mint loop runs and climbs (§11).
 2. **Answer the empirical question** the design cannot settle on paper: do patterns settle into *regional*
-   sizes, or collapse into **one big blurry pattern**? (the merge/split equilibrium — §3.6 there).
-3. **Oracle** for the eventual brain port (structures and flow mirror the brain).
+   sizes, or collapse into **one big blurry pattern**? (the merge/split equilibrium — §3.6 there). ✓ — a
+   regional regime exists under refinement; merge-only runs away (§11).
+3. **Oracle** for the eventual brain port (structures and flow mirror the brain). ✓ — reviewed faithful and
+   portable (§11).
 
 ---
 
@@ -192,6 +195,57 @@ Keep it deterministic (sorted keys), brain-shaped (so it ports), and dependency-
 
 ## 10. Open questions (carried from the design)
 
-- **Expansion rule (issue #1)** — growth cap and overlap gate (§5.2).
-- **Merge/split equilibrium (issue #2)** — does a regional regime exist, and under what rates (§8).
-- **Adaptive error thresholds** — the hoped-for split lever; form and effect (§5.3).
+- **Expansion rule (issue #1)** — growth cap and overlap gate (§5.2). *Resolved in-sim:* an overlap floor
+  (`expansionOverlapFloor`) gates absorption; ~0.34 keeps the biggest pattern from swallowing the field.
+- **Merge/split equilibrium (issue #2)** — does a regional regime exist, and under what rates (§8). *Resolved:*
+  yes — see §11.
+- **Adaptive error thresholds** — the hoped-for split lever; form and effect (§5.3). Implemented
+  (`adaptiveError`, conservative/neutral/aggressive Welford modes); aggressive is the climb lever.
+
+---
+
+## 11. Results (the sim is built and validated)
+
+Built in place in [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) — deterministic,
+dependency-free, brain-shaped. CLI modes: ASCII shapes (default), `mnist` (structure), `acc` (supervised
+readout), `sweep` (merge × error), `lifecycle` (merge/split over a stream), `climb` (per-level funnel). All
+results below are 14×14 binary MNIST, spatial-only (d=0).
+
+**The mechanism works end to end.** Recognition fires existing patterns (Jaccard context match ≥ θ), they
+predict L0 and mispredict, requests cluster by transitive merge (≥1-neighbor rule), and reuse-or-mint installs
+for a later frame. The hierarchy climbs (L1 → L2 → L3+).
+
+**Merge/split equilibrium (the §8 headline) — a regional regime exists.** Two regimes over the same stream:
+
+- **Merge only** (no split): footprints run away — L1 median grows to ~54px and max saturates near the whole
+  field; population grows unbounded; watched patterns grow and never come back down. The "one big blurry
+  pattern" failure.
+- **Merge + refine**: footprints settle **regional** — L1 median ~17–22px; individual patterns visibly **grow →
+  shrink → survive → spawn higher-level children** (per-position reliability pruning specializes them); L2/L3
+  climb. So the balanced middle the design hoped for is real, under refinement as the split force.
+
+**Split force = refinement (no forgetting/decay).** Refinement (a) consolidates context/targets toward the
+common core and prunes footprint positions a pattern predicts unreliably (specialize), and (b) **weakens parent
+references for parents absent when the pattern fires; a pattern that drains its last reference is reaped** — the
+multi-parent reference-count corollary (§4.1), not a time-based decay. Culling is therefore selective: a pattern
+dies only when it drifts off all the contexts that minted it.
+
+**The climb and reuse.** With reuse on, the hierarchy reaches L2–L3; the L2→L3 funnel shows valid requests that
+**reuse** an existing lower pattern (by L0 output) rather than minting a new level — this is **correct**
+content-addressable behavior, not a bug (with reuse forced off, the same requests mint and the hierarchy climbs
+to the level cap). Reuse is the merge force; it is gated by the same θ as recognition.
+
+**Accuracy (downstream check).** Supervised NB-product readout over fired patterns: **~50% test at 400 train,
+~58% at 2000 train** (best operating point, still climbing with data) — well above chance (10%), below the full
+spatial brain's ~96% as expected for a small single-distance sim. The merge threshold has a clear sweet spot:
+**θ ≤ 0.5 is degenerate** (patterns merge to a blob, predict one digit, ~14%); **θ ≈ 0.7–0.9** discriminates;
+**θ too high overfits** (memorizes train, no-match on test). Higher error tolerance keeps patterns general and
+deepens the climb.
+
+**Brain-applicability review.** No algorithm bugs; deterministic; eval freezes mutation. Every structure maps
+to a brain op (whole-field black/white base ↔ encoder; Jaccard recognition ↔ `match_observed`; per-position
+modal L0 + `(missing+novel)/union` error ↔ `mint_spatial_corrections`; transitive-merge cluster ↔ Phase B;
+reverse target index ↔ Phase A; multi-parent refcount reaping ↔ §4.1). Port notes: per-position reliability
+pruning and parent-reference draining are the concrete realization of target refinement (refinement.md §3) +
+refcounted reaping; the sim's child index is an internal cascade accelerator (the brain uses the existing
+`DeleteNeuron` cascade).

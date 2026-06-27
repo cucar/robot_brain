@@ -1,20 +1,21 @@
-# Neuron Reuse — Phase A: Wave-Front Processing + Footprints
+# Wave-Front Processing + Footprints
 
-> **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
-> transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
-> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md). The corrected
-> reference simulation is [neuron-reuse-simulation.md](./neuron-reuse-simulation.md); the old `wavefront-sim.js`
-> is obsolete. The Phase-A **foundation** (coordinate-less corrections, footprints, settling waves) is
-> unchanged by the correction; statements elsewhere that assume the earlier *group-by-observed-set* model are
-> superseded.
+> **Its own project.** The wave-front was originally Phase A of neuron reuse; it is now a **standalone
+> foundation project** (roadmap), because it is a large rearchitecture in its own right and the projects above
+> it — [adaptive grouping](./adaptive-grouping.md) and [neuron reuse](./neuron-reuse.md) — build on it.
+> Sequencing: adaptive grouping → **wave-front** → reuse. The reuse *mechanism* (recognize → predict L0 →
+> cluster → reuse/mint) lives in the reuse docs and is validated by the reference simulation
+> [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) (spec:
+> [neuron-reuse-simulation.md](./neuron-reuse-simulation.md)); this doc is the substrate that makes it legal.
 
-**The foundation phase.** Theory in [neuron-reuse.md §2](./neuron-reuse.md). Everything else in the reuse
-project sits on top of this. It keeps the existing processing **structure** — spatial processing → apex
+**The foundation.** It keeps the existing processing **structure** — spatial processing → apex
 handoff → temporal processing — but turns each stage into a **settling wave**, removes stored levels, makes
 **all** corrections coordinate-less, and introduces **footprints** as the universal neighborhood primitive.
 It subsumes the old "level as activation" idea — the wave removes levels outright rather than relocating them.
+Coordinate-less corrections are what make multi-parent reuse legal, so the wave-front is a hard prerequisite
+for the reuse project.
 
-This phase is **not bit-exact** — it restructures processing. Its gate is a *characterized* regression
+This project is **not bit-exact** — it restructures processing. Its gate is a *characterized* regression
 (MNIST + stocks still learn comparably), not byte-identity.
 
 ---
@@ -41,7 +42,7 @@ connections; spatial is **ephemeral** ([brain.rs](../brain/brain-core/src/brain.
 sweep loop itself is the same.
 
 There is **no** `process_ages` collapse and **no** age-to-age chaining — the apex fans out to every temporal
-distance in parallel; d=1 does not feed d=2 (see [neuron-reuse.md §2.3](./neuron-reuse.md)).
+distance in parallel; d=1 does not feed d=2.
 
 ---
 

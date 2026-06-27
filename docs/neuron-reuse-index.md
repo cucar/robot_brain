@@ -1,15 +1,14 @@
-# Neuron Reuse — Phase B: Reverse Inference Index
+# Neuron Reuse — Phase A: Reverse Inference Index
 
 > **⚠ Model corrected.** The reuse mechanism is now **recognize → predict L0 → on misprediction,
 > transitively-merge-cluster the correction requests by neighborhood → reuse/expand a matched pattern or mint
-> one**, balanced by refinement + forgetting. See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
-> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old `wavefront-sim.js` is
-> obsolete). This index still does its job — its **targets are L0 base neurons** (every pattern predicts L0),
+> one**, balanced by refinement (the split force: specialize + reference-drain reaping). See [neuron-reuse.md §3](./neuron-reuse.md) and the corrected
+> simulation spec [neuron-reuse-simulation.md](./neuron-reuse-simulation.md), now built and validated. This index still does its job — its **targets are L0 base neurons** (every pattern predicts L0),
 > so it maps *L0-target → patterns that predict it*, the candidate generator for reuse lookup. Statements
 > assuming the earlier *group-by-observed-set* model are superseded.
 
 **Prerequisite phase.** Theory in [neuron-reuse.md §3.2](./neuron-reuse.md). This phase **builds and validates
-the index but does not consume it** — the lookup that reads it lands in [Phase D](./neuron-reuse-final.md).
+the index but does not consume it** — the lookup that reads it lands in [Phase C](./neuron-reuse-final.md).
 Separating bring-up from consumption means an index bug and a reuse bug can never be confused.
 
 ---
@@ -48,7 +47,7 @@ temporal_connection_index: FxHashMap<NeuronId /*target*/, FxHashMap<Distance, Fx
 The spatial index has **no distance dimension** (d=0 co-activation is same-frame), exactly like
 `spatial_context_index`; the temporal index keys distance, like `temporal_context_index`. Both live on the
 **column**, sharded by the column owning the **source** neuron; a region-level fan-out query merges per-target
-source sets. The Phase D lookup routes to the spatial index at d=0 and the temporal index at d>0.
+source sets. The Phase C lookup routes to the spatial index at d=0 and the temporal index at d>0.
 
 ### Membership, maintained on connection create
 
@@ -71,14 +70,14 @@ error-correction grouping or reuse candidacy.
 
 Over-reuse is controlled not by a strength gate on the index but by:
 
-- the **merge threshold** in Phase D's scoring (the reuse control), and
+- the **merge threshold** in Phase C's scoring (the reuse control), and
 - pattern-level **forgetting + the death ledger** — a correction that drives bad reuse isn't reinforced and
   dies, taking its index edges with it.
 
 ### Update batching at orchestration boundaries
 
 Each neuron emits `IndexUpdate` events in its per-neuron result; the thalamus applies them at the
-**orchestration boundary** right after the dispatch, so the Phase D lookup sees this frame's deltas (including
+**orchestration boundary** right after the dispatch, so the Phase C lookup sees this frame's deltas (including
 corrections minted earlier this frame). Connection learning already routes through `create_connection`, so new
 edges hit the index by construction.
 
@@ -102,12 +101,12 @@ connection-restore path.
 - **Unit — stores isolated**: a spatial edge to T never appears in a temporal query for T, and vice versa.
 - **Unit — rebuild**: snapshot → restore → rebuild → both indexes match a fresh build edge-for-edge.
 - **Size**: each index's entry count ∝ its connection-store size.
-- **No behavior change**: indexes built but unconsumed → no effect on the wave-front's output.
+- **No behavior change**: indexes built but unconsumed → no effect on the output.
 
 ---
 
 ## Notes / gotchas
 
 - **Shard by the source neuron's column**, not the target.
-- **Self-edges** harmless here; Phase D filters self-matches at lookup.
-- **Sequencing**: consumed only by Phase D, so B can sit anywhere before D.
+- **Self-edges** harmless here; Phase C filters self-matches at lookup.
+- **Sequencing**: consumed only by Phase C, so A can sit anywhere before C.

@@ -5,43 +5,37 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ---
 
-## 1. Neuron Re-use (Wave-Front)
+## 1. Adaptive Grouping
 
-Theory in **[neuron-reuse.md](./neuron-reuse.md)**. Allocates capacity onto the error manifold
-(residual-fitting). The processing **structure is kept** — spatial processing → apex handoff → temporal
-processing — but each stage becomes a **settling wave**, stored levels are removed, only **base
-sensory/action neurons carry coordinates**, and all corrections are coordinate-less with **footprints** (the
-set of base neurons a correction covers) as the neighborhood primitive at every level. On that foundation,
-**reuse applies at all distances** (d=0 and d>0) — the spatial/temporal asymmetry is gone.
+Design in **[adaptive-grouping.md](./adaptive-grouping.md)**. Collapse the brain's two grouping thresholds — the
+**merge threshold** (recognition / reuse) and the **error threshold** (correction) — into one self-calibrating
+"sameness" operation. They are the same Jaccard test read from opposite sides, so `error = 1 − merge` is an
+**identity**, not a tuning coincidence. This is a **foundation change** that touches recognition and correction
+across the whole brain (spatial + temporal), which is why it comes first — **every demo is re-validated after
+each stage**.
 
-> **Model corrected (mid-2026).** The reuse mechanism is **recognize → predict L0 → on misprediction,
-> transitively-merge-cluster the requests by neighborhood → reuse/expand a matched pattern or mint one**,
-> balanced by **merge** (clustering + reuse) vs **split** (refinement + forgetting). The next concrete step is
-> rebuilding the reference simulation to [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) (the old
-> `wavefront-sim.js` is obsolete) and running its merge/split-equilibrium experiment before any brain port.
+Two stages:
 
-Build order — each phase behind its own gate (theory §6):
+1. **Unify** — `error = 1 − merge`; one grouping coefficient instead of two. Validated in the reference
+   simulation ([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) `couple` mode): coupled θ=0.8 ties the
+   two-parameter best (≈50% test on 14×14 binary MNIST) — the parameter deletion is free.
+2. **Unified adaptive grouping** — derive that one θ per-unit from its own Welford error stats
+   (`merge = 1 − (mean + k·σ)`; the brain already adapts the error side), removing the last hand-tuned
+   magnitude. Lands in two steps — adaptive-error / static-merge first to check stability, then fully coupled —
+   because of the blur-runaway risk.
 
-1. **[Phase A — Wave-front](./neuron-reuse-wavefront.md)**: the foundation. Turn `process_spatial` and
-   `process_temporal` into settling waves (structure unchanged); remove stored levels entirely;
-   coordinate-less corrections; footprints for neighborhood in both waves; multi-depth memory.
-   Rearchitecture — **not bit-exact** (characterized regression).
-2. **[Phase B — Index](./neuron-reuse-index.md)**: **two** reverse connection indexes —
-   `spatial_connection_index` (no distance) and `temporal_connection_index` (distance-keyed), mirroring the
-   context-index split. Built, unit-tested, not yet consumed. Membership-only / strength-blind candidacy.
-3. **[Phase C — Frame](./neuron-reuse-frame.md)**: batched mint at all distances (group by (distance,
-   observed-set), mint one coordinate-less correction with union footprint) **+ the multi-parent machinery**
-   (refcounted reaping, multi-parent serialization, shared-neuron activation). Heaviest reuse phase.
-4. **[Phase D — Final](./neuron-reuse-final.md)**: reuse lookup on top of C + cross-frame accrual, all
-   distances. Light (reuse installs routing for next frame, so it needs no new same-frame tracking set).
-5. **[Validation](./neuron-reuse-validation.md)**: MNIST spatial reuse + transfer, stocks full-pipeline +
-   transfer, forget-rate long-run.
+---
 
-Design notes: reuse candidacy is **strength-blind** (the index is membership-only; strength governs
-voting/recognition and the forget/death-ledger, not error correction — Phase B); a shared neuron
-routing-matched at several depths is **processed at each depth** (Phase A multi-depth memory holds it), with
-**no** new inhibition set (Phase A/C/D). The clustering/anchor problem is gone (footprints + coordinate-less
-corrections); corrections install for next frame, not the mint frame.
+## 2. Wave-Front (foundation)
+
+Design in **[wavefront.md](./wavefront.md)**, migration plan in
+**[wavefront-implementation.md](./wavefront-implementation.md)**. Split out of the reuse project into its own
+foundation workstream — it is a large rearchitecture and reuse cannot be built without it. Keep the processing
+**structure** (spatial processing → apex handoff → temporal processing) but turn each stage into a **settling
+wave**, remove stored levels, make **all** corrections coordinate-less, and use **footprints** (the set of base
+neurons a correction covers) as the neighborhood primitive at every level. Coordinate-less corrections are what
+make multi-parent reuse legal. **Not bit-exact** — characterized regression (MNIST + stocks comparable); the
+reference simulation ([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js)) is the oracle for the migration.
 
 Knock-on: the wave-front removes channel-neighbor filtering (replaced by footprints), which removes the
 cross-stream **isolation** knob parallel-stream learning relied on — that now needs a different primitive
@@ -49,7 +43,40 @@ cross-stream **isolation** knob parallel-stream learning relied on — that now 
 
 ---
 
-## 2. Context & connection refinement
+## 3. Neuron Re-use
+
+Theory in **[neuron-reuse.md](./neuron-reuse.md)**. Allocates capacity onto the error manifold
+(residual-fitting). On the wave-front foundation (§2), **reuse applies at all distances** (d=0 and d>0) — the
+spatial/temporal asymmetry is gone. The mechanism is **recognize → predict L0 → on misprediction,
+transitively-merge-cluster the requests by neighborhood → reuse/expand a matched pattern or mint one**, balanced
+by **merge** (clustering + reuse) vs **split** (refinement). **Built and validated in the reference simulation**
+([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js), spec
+[neuron-reuse-simulation.md](./neuron-reuse-simulation.md)) — the merge/split equilibrium is characterized and
+the mechanism ports faithfully — before the brain port below.
+
+Build order — each phase behind its own gate (theory §6):
+
+1. **[Phase A — Index](./neuron-reuse-index.md)**: **two** reverse connection indexes —
+   `spatial_connection_index` (no distance) and `temporal_connection_index` (distance-keyed), mirroring the
+   context-index split. Built, unit-tested, not yet consumed. Membership-only / strength-blind candidacy.
+2. **[Phase B — Frame](./neuron-reuse-frame.md)**: per-cluster mint at all distances (transitively merge
+   neighbor-connected requests, mint one coordinate-less correction with union footprint) **+ the multi-parent
+   machinery** (refcounted reaping, multi-parent serialization, shared-neuron activation). Heaviest reuse phase.
+3. **[Phase C — Final](./neuron-reuse-final.md)**: reuse lookup + expansion on top of B + cross-frame accrual,
+   all distances. Light (reuse installs routing for next frame, so it needs no new same-frame tracking set).
+4. **[Validation](./neuron-reuse-validation.md)**: MNIST spatial reuse + transfer, stocks full-pipeline +
+   transfer, long-run.
+
+Design notes: reuse candidacy is **strength-blind** (the index is membership-only; strength governs
+voting/recognition and the death-ledger, not error correction — Phase A); a shared neuron routing-matched at
+several depths is **processed at each depth** (the wave-front's multi-depth memory holds it), with **no** new
+inhibition set. The clustering/anchor problem is gone (footprints + coordinate-less corrections); corrections
+install for next frame, not the mint frame. The split force is **refinement** — it both specializes patterns and
+drains references to reap unreferenced ones (no separate decay/forgetting).
+
+---
+
+## 4. Context & connection refinement
 
 Design in **[refinement.md](./refinement.md)**. The missing abstraction/generalization step: on a matched
 pattern, consolidate both its **sources** (context) and its **targets** (connections) toward the common
@@ -71,7 +98,7 @@ Steps:
 
 ---
 
-## 3. Documentation & Publish
+## 5. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update README demos and examples.
 - **npm package** — prepare and publish to the registry.
@@ -79,7 +106,7 @@ Steps:
 
 ---
 
-## 4. Action composition
+## 6. Action composition
 
 See **[action-composition.md](./action-composition.md)**.
 
@@ -103,9 +130,9 @@ sequence. Open questions and full dependencies are in the doc.
 
 ---
 
-## 5. Global rewards
+## 7. Global rewards
 
-See **[global-rewards.md](./global-rewards.md)**. **Independent** of action composition (§4) — the reward
+See **[global-rewards.md](./global-rewards.md)**. **Independent** of action composition (§6) — the reward
 distribution policy holds with or without action composition, and can be decided separately. It meets
 composition at exactly one point: reward credits the **apex active action**, not base neurons.
 
@@ -124,13 +151,13 @@ Reference: https://claude.ai/share/f9732e46-a95c-44d2-8dee-b7217392834c
 
 ---
 
-## 6. Calculate up/down accuracy separately
+## 8. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 7. Neuron Limits
+## 9. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -148,7 +175,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 8. Exponential Temporal Binning Test
+## 10. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).
