@@ -14,7 +14,7 @@ use crate::neuron::{
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, DeathFrameEntry, Distance, ErrorMode, FrameNumber,
+    ChannelId, DeathFrameEntry, Distance, GroupMode, FrameNumber,
     NeuronId, Reward, Strength,
 };
 
@@ -92,23 +92,12 @@ pub struct Column {
     /// at which default action connections are pre-wired on new neurons.
     context_length: u32,
 
-    /// TemporalContext (d>0) merge threshold.
-    temporal_merge_threshold: f64,
+    /// The single brain-wide grouping coefficient θ, shared by spatial (d=0) and temporal (d>0).
+    /// Recognition fires at similarity ≥ θ; correction fires at similarity < θ (error threshold = 1 − θ).
+    group_threshold: f64,
 
-    /// Temporal error correction mode.
-    temporal_error_mode: ErrorMode,
-
-    /// Temporal static error threshold (used when temporal_error_mode == Static).
-    temporal_error_threshold: f64,
-
-    /// SpatialContext (d=0) merge threshold.
-    spatial_merge_threshold: f64,
-
-    /// Spatial error correction mode.
-    spatial_error_mode: ErrorMode,
-
-    /// Spatial static error threshold (used when spatial_error_mode == Static).
-    spatial_error_threshold: f64,
+    /// How the derived correction threshold adapts from per-unit Welford stats (shared spatial/temporal).
+    group_mode: GroupMode,
 
     /// The sole storage for owned Neurons. Keyed by neuron id.
     neurons: FxHashMap<NeuronId, Neuron>,
@@ -119,23 +108,15 @@ impl Column {
         channel_actions: FxHashMap<ChannelId, Vec<NeuronId>>,
         channel_default_actions: FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
-        temporal_merge_threshold: f64,
-        temporal_error_mode: ErrorMode,
-        temporal_error_threshold: f64,
-        spatial_merge_threshold: f64,
-        spatial_error_mode: ErrorMode,
-        spatial_error_threshold: f64,
+        group_threshold: f64,
+        group_mode: GroupMode,
     ) -> Self {
         Self {
             channel_actions,
             channel_default_actions,
             context_length,
-            temporal_merge_threshold,
-            temporal_error_mode,
-            temporal_error_threshold,
-            spatial_merge_threshold,
-            spatial_error_mode,
-            spatial_error_threshold,
+            group_threshold,
+            group_mode,
             neurons: FxHashMap::default(),
         }
     }
@@ -554,12 +535,8 @@ impl Column {
             let mut neuron = Neuron::new(
                 spec.id,
                 spec.forget_rate,
-                self.temporal_merge_threshold,
-                self.temporal_error_mode,
-                self.temporal_error_threshold,
-                self.spatial_merge_threshold,
-                self.spatial_error_mode,
-                self.spatial_error_threshold,
+                self.group_threshold,
+                self.group_mode,
                 self.channel_actions.clone(),
                 self.context_length,
             );
@@ -613,12 +590,8 @@ impl Column {
         let mut neuron = Neuron::new(
             data.id,
             data.pattern_forget_rate,
-            self.temporal_merge_threshold,
-            self.temporal_error_mode,
-            self.temporal_error_threshold,
-            self.spatial_merge_threshold,
-            self.spatial_error_mode,
-            self.spatial_error_threshold,
+            self.group_threshold,
+            self.group_mode,
             self.channel_actions.clone(),
             self.context_length,
         );
@@ -779,11 +752,7 @@ mod tests {
             FxHashMap::default(),
             2,
             0.5,
-            ErrorMode::Static,
-            0.5,
-            0.5,
-            ErrorMode::Static,
-            0.5,
+            GroupMode::Static,
         )
     }
 

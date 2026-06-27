@@ -144,10 +144,10 @@ pub enum ConsensusMode {
 }
 
 
-/// Error correction mode — determines how error thresholds are calculated.
+/// Group mode — determines how the derived correction threshold (1 − group_threshold) adapts from error stats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorMode {
-    /// Fixed threshold (user-supplied value).
+pub enum GroupMode {
+    /// Fixed threshold = the derived 1 − group_threshold (no adaptation).
     Static,
     /// mean + 1 standard deviation (fewer corrections).
     Conservative,

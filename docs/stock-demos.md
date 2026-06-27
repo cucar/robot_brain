@@ -17,7 +17,7 @@ repeats. Isolated to a single channel so you can see the brain converge on optim
 multi-channel reinforcement doing any of the work.
 
 ```bash
-node apps/stocks/jobs/synthetic-extended-test.js --error-mode static --error-threshold 0.3 --merge-threshold 0.9
+node apps/stocks/jobs/synthetic-extended-test.js --group-mode static --group-threshold 0.9
 ```
 
 **Expected output:**
@@ -37,7 +37,7 @@ repeating 12-day price cycle is presented 20 times — the brain discovers cross
 converges on optimal buy/sell timing.
 
 ```bash
-node apps/stocks/jobs/multi-channel-test.js --error-mode static --error-threshold 0.3 --merge-threshold 0.9
+node apps/stocks/jobs/multi-channel-test.js --group-mode static --group-threshold 0.9
 ```
 
 **Expected output:**
@@ -58,7 +58,7 @@ channel — the brain discovers cross-stock patterns and makes buy/sell/hold dec
 reward feedback.
 
 ```bash
-node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL,AWR,GM,EQIX,RTX,KGC,ALB,AAPL,CVX,HD,WPM,BEP,AREC,JNJ,SLB,PLD,EXK,NVDA,CAT,WFC,RGLD,WEAT,OXY,CEG,LOW,PAAS,MP,LMT,GS,COST,AG,TECK,MRK,INTC,BIP,PSA,DVN,AVAV,PEP,CDE,TSM --context-length 3 --max-positions 3 --transaction-cost 0.02 --columns 20 --spatial --spatial-error-mode conservative --spatial-merge-threshold 0.5 --temporal-error-mode static --temporal-error-threshold 0.4 --temporal-merge-threshold 0.9
+node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,HAL,AWR,GM,EQIX,RTX,KGC,ALB,AAPL,CVX,HD,WPM,BEP,AREC,JNJ,SLB,PLD,EXK,NVDA,CAT,WFC,RGLD,WEAT,OXY,CEG,LOW,PAAS,MP,LMT,GS,COST,AG,TECK,MRK,INTC,BIP,PSA,DVN,AVAV,PEP,CDE,TSM --context-length 3 --max-positions 3 --transaction-cost 0.02 --columns 20 --spatial
 ```
 
 **Expected output:**
@@ -67,33 +67,31 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $22500477.56
-   Average per Episode: $22500477.56
-   Average ROI: +150003.18%
-   Average Per-Frame ROI: +0.136216%
-   Average Sharpe Ratio: 0.58
-   Total Transaction Cost: $3034820.81 (0.02% per trade)
-   Total Trades: 25999
-   Average Trades per Episode: 25999.0
+   Total Net Profit: $1711007.14
+   Average per Episode: $1711007.14
+   Average ROI: +11406.71%
+   Average Per-Frame ROI: +0.088361%
+   Average Sharpe Ratio: 0.36
+   Total Transaction Cost: $318130.80 (0.02% per trade)
+   Total Trades: 28465
+   Average Trades per Episode: 28465.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $22500477.56 | ROI: +150003.18%, +0.136216%/frame, Sharpe: 0.58 (25999 trades)
+   Episode 1: $1711007.14 | ROI: +11406.71%, +0.088361%/frame, Sharpe: 0.36 (28465 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 43.43%
+   Episode 1: 43.01%
 ```
 
-The complete frame-by-frame run log (all 5,373 days) is saved in [demo3.log](demo3.log).
-
 The brain achieves only ~43% base-level prediction accuracy because it's predicting price movement groups.
-The **reward-weighted action selection** still turns a profit by learning which contexts produce better outcomes. With
-spatial co-activation enabled (`--spatial`), the brain trades direction accuracy for far more aggressive,
+The **reward-weighted action selection** still turns a profit by learning which contexts produce better outcomes. 
+With spatial co-activation enabled (`--spatial`), the brain trades direction accuracy for far more aggressive,
 concentrated position sizing: it is wrong about direction more often than not, but sizes the contexts that pay off.
 
-> **Reading this number honestly.** The +150,003% headline is a *total* return over ~21 years of daily data
-> (~5,370 frames) — it compounds to **roughly +42%/year**, strong but far less dramatic than the raw percentage
-> looks. It is also measured on a *curated* 50-symbol universe of names that survived and performed well over the
-> period (a survivorship bias), with low simulated friction and hyperparameters tuned in-sample. Crucially, the
+> **Reading this number honestly.** The *total* return over ~21 years of daily data (~5,370 frames) compounds to 
+> **roughly +25%/year**, strong but far less dramatic than the raw percentage looks. 
+> It is also measured on a *curated* 50-symbol universe of names that survived and performed well over the
+> period (a survivorship bias), with low simulated friction and hyperparameters tuned in-sample. The
 > base accuracy is **below 50%** and most of the edge comes from large, concentrated bets on a handful of volatile,
 > low-priced names — restrict the universe to stable, higher-priced names (e.g. via `--min-price 10`) and the
 > headline collapses to a far more sober ~+20%/year. The big number is a high-variance, in-sample artifact, not a
@@ -104,72 +102,6 @@ concentrated position sizing: it is wrong about direction more often than not, b
 > Out-of-sample performance peaks at **two training passes**, returning **~+20%/year at a real Sharpe of ~0.76**;
 > additional passes push in-sample return higher while held-out return decays (textbook overfitting). The execution
 > path has no look-ahead — the brain decides and trades at each day's close and is scored by the next day's move.
-
-### Brain P&L through the years
-
-Plotted on a single axis, 21 years of compounding flatten the early years into an invisible sliver, so the
-trajectory is broken into five windows (net profit is cumulative, from $0 on $15,000 of capital). The single most
-useful thing to know when reading these charts is **what the brain is actually holding**: this universe is
-dominated by uranium (`UUUU`), precious-metals and silver miners (`EXK`, `CDE`, `AG`, `AREC`, `PAAS`, `KGC`,
-`WPM`, `RGLD`), and other materials/energy (`TECK`, `MP`, `ALB`, `HAL`, `SLB`, `OXY`, `DVN`), with cyclical
-semiconductors (`MU`) and a few momentum names (`PLTR`, `NVDA`) layered on top. So the brain's P&L behaves far less
-like the S&P 500 and far more like **a leveraged, concentrated bet on the commodity cycle** — and almost every bump
-below lines up with a commodity boom, a commodity bust, or a single concentrated position.
-
-**2005–2009 — learning, then the first reflation**
-
-![Brain P&L 2005–2009](../images/demo3.1.jpg)
-
-The brain starts tiny (a few hundred neurons) with small positions, so the 2007–2008 financial crisis barely
-registers — there isn't much capital at risk yet. The first real gains come in 2009, when the post-crash reflation
-lifts commodities and the brain's miners/uranium with them (~$0 → ~$110K).
-
-**2010–2014 — supercycle peak, then the commodity bear**
-
-![Brain P&L 2010–2014](../images/demo3.2.jpg)
-
-2010–2011 rides the commodity *supercycle* (silver ran to ~$49 in 2011) up toward ~$320K. Then comes the stretch
-that looks like underperformance but isn't the brain's fault: the **2012–2015 commodity bear market.** Gold fell
-from ~$1,900 (2011) toward ~$1,050, silver collapsed from ~$49 to ~$15, and mining stocks were gutted — so a
-miner-heavy book simply churns sideways for years (~$240K–$300K through 2012–2013) before a 2014 bounce. The flat
-patch is the sector in a multi-year drawdown, not a learning failure.
-
-**2015–2019 — the 2016 miner rally and the 2018 Micron spike**
-
-![Brain P&L 2015–2019](../images/demo3.3.jpg)
-
-Two distinct events. First, the sharp **2016 precious-metals rally** (gold/silver miners doubled off the late-2015
-bottom) lifts the brain on `UUUU`/`EXK`/`AG`. Then the violent strike you can see late in the window: a concentrated
-**Micron (`MU`)** position during the 2017–18 memory-chip supercycle (MU ran ~$12 → ~$60) spikes P&L to ~$2.9M —
-which the Q4-2018 market crash and memory-cycle bust (MU back to ~$30) then erases, ending the window near $1.7M. A
-textbook concentrated-cyclical round trip.
-
-**2020–2024 — COVID, the reflation boom, then the AI-market lull**
-
-![Brain P&L 2020–2024](../images/demo3.4.jpg)
-
-The COVID crash dips it to ~$0.8M, then the 2020–2021 reflation/EV-materials boom drives a sharp recovery into
-`PLTR` (post-IPO moonshot), `MP` (rare earth), and uranium. The **2023–2024 stretch looks flat** for a specific
-reason: that was the "Magnificent-7" mega-cap-tech market, and a commodity-tilted book was on the wrong side of it —
-gold was rangebound, energy fell from its 2022 highs, lithium/materials crashed. The brain only keeps pace because
-of its AI-adjacent holdings (`PLTR`, `NVDA`, and `CEG` as a nuclear/AI-power play); the resource majority caps it,
-so it grinds gently up toward the mid-single-digit millions instead of exploding.
-
-**2025–2026 — everything fires, then gives back**
-
-![Brain P&L 2025–2026](../images/demo3.5.jpg)
-
-The window the whole basket was built for: in 2025 uranium ripped (`UUUU` ~$5 → ~$25), gold and silver printed
-records, and `PLTR` went parabolic — all at once — carrying P&L to an all-time high near **$46.8M**, helped by a
-giant `AREC` position (millions of shares of a sub-$1 stock, the penny-stock lottery ticket). Then it **gives back
-to ~$22.5M**: the same concentrated 2025 winners (`PLTR`, `UUUU`, `CEG`) pull back into 2026, and a book this
-concentrated halves on an ordinary sector retreat. The ending value is essentially wherever the last day lands in
-that volatility — which is exactly why the headline is a high-variance artifact, not a steady-state return.
-
-The throughline: the brain is doing real, learned position-taking, but what it has *learned to ride* is the
-commodity/hard-asset cycle of this particular universe. Its best years are commodity bull markets (2009–2011, 2016,
-2020–2021, 2025) and its worst are commodity bears and tech-led markets where resources lag (2012–2015, 2023–2024) —
-amplified at every turn by concentrated sizing.
 
 ### Random Baseline Comparison
 
@@ -236,29 +168,29 @@ The brain memorizes a repeating stock price sequence across 5 episodes, reaching
 market data. This demonstrates convergence on financial data — the same learning curve seen in text memorization.
 
 ```bash
-node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY --context-length 3 --forget-rate 0.0005 --error-mode static --error-threshold 0.3
+node apps/stocks/jobs/test.js --no-summary --episodes 5 --symbols KGC,GOLD,SPY --context-length 3 --forget-rate 0.0005 --group-mode static --group-threshold 0.9
 ```
 
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $1065294.34 | ROI: +7101.96%, +0.079632%/frame, Sharpe: 0.37 (5850 trades)
-   Episode 2: $615519461507821056.00 | ROI: +4103463076718807.00%, +0.585093%/frame, Sharpe: 3.67 (6461 trades)
-   Episode 3: $2.876735760514998e+22 | ROI: +191782384034333196288.00%, +0.786582%/frame, Sharpe: 4.76 (6433 trades)
-   Episode 4: $6.996816768276702e+23 | ROI: +4.664544512184468e+21%, +0.846464%/frame, Sharpe: 5.08 (6342 trades)
-   Episode 5: $8.228511106877497e+23 | ROI: +5.485674071251665e+21%, +0.849508%/frame, Sharpe: 5.06 (6286 trades)
+   Episode 1: $20328.94 | ROI: +135.53%, +0.015945%/frame, Sharpe: -0.02 (5774 trades)
+   Episode 2: $421151594682612160.00 | ROI: +2807677297884081.00%, +0.577989%/frame, Sharpe: 3.69 (6596 trades)
+   Episode 3: $1.1488338810649254e+21 | ROI: +7658892540432836608.00%, +0.726191%/frame, Sharpe: 4.44 (6574 trades)
+   Episode 4: $1.5532860766102382e+22 | ROI: +103552405107349209088.00%, +0.775023%/frame, Sharpe: 4.67 (6505 trades)
+   Episode 5: $1.0945958913554697e+23 | ROI: +729730594236979871744.00%, +0.811652%/frame, Sharpe: 4.84 (6500 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 52.47%
-   Episode 2: 55.46%
-   Episode 3: 58.72%
-   Episode 4: 59.81%
-   Episode 5: 60.33%
+   Episode 1: 51.03%
+   Episode 2: 55.54%
+   Episode 3: 57.72%
+   Episode 4: 58.46%
+   Episode 5: 58.90%
 ```
 
-The brain goes from 50% accuracy (random) to 60% in 5 episodes on 3 stocks × ~5,300 frames of real market data. The
-low forget rate allows patterns to survive the full sequence. Short context (3 frames) is used because of
-computation limits.
+The brain goes from 50% accuracy (random) to 59% in 5 episodes on 3 stocks × ~5,300 frames of real market data. 
+The low forget rate allows patterns to survive the full sequence. 
+Short context (3 frames) is used because of computation limits.
 
 ---
 

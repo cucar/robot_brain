@@ -37,12 +37,10 @@ The fastest meaningful run (~5–8 minutes, ~94.9% held-out) is 14×14:
 
 ```bash
 # 1. Train one episode and save
-node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 \
-  --episodes 1 --error-mode static --error-threshold 0.1 --merge-threshold 0.9 --save-brain mnist14
+node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 --episodes 1 --group-mode static --group-threshold 0.9 --save-brain mnist14
 
 # 2. Evaluate on the held-out test set (frozen)
-node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 \
-  --max-test-images 0 --load-brain mnist14 --disable-learning --test-data
+node apps/mnist/jobs/test.js --image-size 14 --buckets 2 --columns 20 --per-class 0 --max-test-images 0 --load-brain mnist14 --disable-learning --test-data
 ```
 
 Drop `--test-data` to evaluate on the training set instead. The eval run prints
@@ -85,10 +83,8 @@ and a real receptive field (`--radius 2`) drive the climb.
 The headline run (28×28, radius 2, merge 0.9):
 
 ```bash
-node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 \
-  --episodes 1 --error-mode static --error-threshold 0.1 --merge-threshold 0.9 --save-brain mnist28
-node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 \
-  --max-test-images 0 --load-brain mnist28 --disable-learning --test-data
+node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 --episodes 1 --group-mode static --group-threshold 0.9 --save-brain mnist28
+node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 --max-test-images 0 --load-brain mnist28 --disable-learning --test-data
 ```
 
 **Expected output of the evaluation run:**
@@ -132,44 +128,28 @@ number only marginally — the per-pixel counts saturate after one pass:
 The training accuracy keeps climbing toward 100% (the model memorizing the training set harder), but the
 test number plateaus at **96.44%** — extra episodes do not generalize. Best joint result: **96.44%**.
 
-### Error-threshold / merge sweep (28×28, radius 2)
+### Group threshold sweep (28×28, radius 2)
 
-Loosening the error threshold mints fewer corrections, trading a little accuracy for a much leaner model.
+Loosening the group threshold mints fewer corrections, trading a little accuracy for a much leaner model.
 The first four rows are each one **frozen, single-episode** train→eval pair at 28×28 radius 2 (recorded
 2026-06-22):
 
-| Config (`--error-threshold` / `--merge-threshold`) | Held-out test | Neurons | Depth |
-| --- | --- | --- | --- |
-| 0.1 / 0.9 (headline) | 96.26% (ep1) | 2.16M | 3 |
-| **0.2 / 0.8** | **96.15%** | **1.25M** | 3 |
-| 0.3 / 0.7 | 95.68% | 0.61M | 3 |
-| 0.4 / 0.6 | 94.63% | 0.32M | 3 |
-| 0.4 / 0.7 † | 95.73% | 132K | 3 |
+| Group threshold | Held-out test | Neurons | Depth |
+|-----------------| --- | --- | --- |
+| 0.9             | 96.26% (ep1) | 2.16M | 3 |
+| 0.8             | 96.15% | 1.25M | 3 |
+| 0.7             | 95.68% | 0.61M | 3 |
+| 0.6             | 94.63% | 0.32M | 3 |
 
-† **Prior capstone — kept for the record, not a clean sweep point.** This was the previous best, but it
-was **3 training episodes** under the **older in-process evaluation that still allowed correction minting
-during the test pass** — not the frozen single-episode protocol of the rows above. Its 95.73% is therefore
-optimistic relative to the frozen numbers (test-time minting leaks), and its much smaller 132K neuron
-count predates this session's spatial-processing changes, so neither figure compares apples-to-apples. The
-frozen runs supersede it: **96.44% joint** best, plus a clean Split-MNIST retention matrix.
+### Radius 3
 
-**`0.2 / 0.8` is the efficiency sweet spot** — within ~0.1pp of the headline (inside the ~1pp noise band)
-at **42% fewer neurons**. Past that the accuracy cost accelerates as the threshold loosens: the per-step
-drop goes −0.11pp (→0.2) → −0.47pp (→0.3) → −1.05pp (→0.4), so **the knee is around 0.3**. `0.3 / 0.7`
-gives up −0.58pp for a **72%** smaller model; `0.4 / 0.6` reaches **85% fewer neurons** (0.32M) but falls
-to 94.63%, below the ~92% logistic-regression line being less of a concern than the accelerating loss.
-`0.1 / 0.9` remains the absolute-accuracy config. Neuron count roughly halves at each step
-(2.16M → 1.25M → 0.61M → 0.32M); per-digit confusion across all four stays the usual 7/9, 2/8, 3/5
-pixel-marginal overlaps.
-
-### Configs that don't work
-
-- **Radius 3 at 28×28 — abandoned (2026-06-22).** Two attempts at the radius-3 gate (error 0.1 / merge
-  0.9). The model exhibits runaway growth: throughput fell from ~16 img/s to under 1 img/s (~0.85 img/s
-  measured) by the halfway point and kept decelerating, projecting a >12 hr single training pass, while
-  prequential accuracy was not pulling away from the radius-2 trajectory by anything close to enough to
-  justify the ~10× cost. This is the runaway-depth behavior at high resolution. If revisited, gate it
-  cheaply first with a 14×14 or `--per-class 500` smoke test before committing to full 28×28.
+**Radius 3 at 28×28 — abandoned (2026-06-22).** 
+Two attempts at the radius-3 gate (group 0.9). 
+The model exhibits runaway growth: throughput fell from ~16 img/s to under 1 img/s (~0.85 img/s measured) 
+by the halfway point and kept decelerating, projecting a >12 hr single training pass. 
+Prequential accuracy was not pulling away from the radius-2 trajectory by anything close enough to justify the ~10× cost. 
+This is the runaway-depth behavior at high resolution.
+Planned to be revisited after neuron reuse project.  
 
 ### Forget rate is not an accuracy lever here
 
@@ -218,8 +198,7 @@ This is the hardest CL regime, where naive backprop nets and regularization meth
 ~20%.
 
 ```bash
-node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 \
-  --split --error-mode static --error-threshold 0.1 --merge-threshold 0.9
+node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-class 0 --radius 2 --split --group-mode static --group-threshold 0.9
 ```
 
 A fast version (14×14, 200/class, 2k test) for a ~45-second illustration of the behavior:

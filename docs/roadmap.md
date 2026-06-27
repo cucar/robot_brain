@@ -7,18 +7,20 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ## 1. Adaptive Grouping
 
-Design in **[adaptive-grouping.md](./adaptive-grouping.md)**. Collapse the brain's two grouping thresholds — the
-**merge threshold** (recognition / reuse) and the **error threshold** (correction) — into one self-calibrating
-"sameness" operation. They are the same Jaccard test read from opposite sides, so `error = 1 − merge` is an
-**identity**, not a tuning coincidence. This is a **foundation change** that touches recognition and correction
-across the whole brain (spatial + temporal), which is why it comes first — **every demo is re-validated after
-each stage**.
+Design in **[adaptive-grouping.md](./adaptive-grouping.md)**. Collapse the brain's grouping thresholds — the
+**merge threshold** (recognition / reuse) and the **error threshold** (correction), each previously split spatial
+vs temporal — into one self-calibrating "sameness" parameter `groupThreshold` (θ). Merge and error are the same
+Jaccard test read from opposite sides, so `error = 1 − θ` is an **identity**, not a tuning coincidence; spatial
+and temporal share one θ because a brain has one notion of how-similar-is-the-same. This is a **foundation
+change** that touches recognition and correction across the whole brain (spatial + temporal), which is why it
+comes first — **every demo is re-validated after each stage**.
 
 Two stages:
 
-1. **Unify** — `error = 1 − merge`; one grouping coefficient instead of two. Validated in the reference
-   simulation ([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) `couple` mode): coupled θ=0.8 ties the
-   two-parameter best (≈50% test on 14×14 binary MNIST) — the parameter deletion is free.
+1. **Unify** — one shared `groupThreshold` (θ) with `error = 1 − θ`; six knobs become one (plus the shared error
+   mode). Validated in the reference simulation ([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js)
+   `couple` mode): coupled θ=0.8 ties the two-parameter best (≈50% test on 14×14 binary MNIST) — the parameter
+   deletion is free.
 2. **Unified adaptive grouping** — derive that one θ per-unit from its own Welford error stats
    (`merge = 1 − (mean + k·σ)`; the brain already adapts the error side), removing the last hand-tuned
    magnitude. Lands in two steps — adaptive-error / static-merge first to check stability, then fully coupled —

@@ -18,7 +18,7 @@ use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 
 use brain_core::brain::{Brain as CoreBrain, FrameResult};
-use brain_core::types::{ConsensusMode, Coordinate, ErrorMode, NeuronType};
+use brain_core::types::{ConsensusMode, Coordinate, GroupMode, NeuronType};
 
 // ── Helper: JS Map iteration ────────────────────────────────────────────────
 
@@ -141,56 +141,31 @@ impl JsBrain {
     ///
     /// Options shape (all optional, with defaults matching JS Brain):
     ///   contextLength: number (default 10)
-    ///   --- error / merge knobs (each resolves: per-phase flag ?? shared alias ?? default) ---
-    ///   errorCorrectionMode: string (default 'conservative')  — ALIAS, sets both phases
-    ///   errorCorrectionThreshold: number (default 0.5)        — ALIAS, sets both phases
-    ///   mergeThreshold: number (default 0.5)                  — ALIAS, sets both phases
-    ///   temporalErrorCorrectionMode / temporalErrorCorrectionThreshold / temporalMergeThreshold — temporal (d>0) overrides
-    ///   spatialErrorCorrectionMode / spatialErrorCorrectionThreshold / spatialMergeThreshold     — spatial (d=0) overrides
+    ///   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal:
+    ///     recognition / reuse fires at similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ)
+    ///   groupMode: string (default 'conservative') — how the derived correction threshold adapts
     ///   patternForgetRate: number (default 0.01)
     ///   regions: number (default 1)
     ///   columns: number (default 1)
     ///   consensus: string 'democratic' | 'nb' (default 'democratic')
     ///   debug: boolean (default false)
+    ///
+    /// The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
+    /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
+    /// opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.
     #[napi(constructor)]
     pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
-        let (context_length, temporal_error_mode, temporal_error_threshold, temporal_merge_threshold,
-             spatial_error_mode, spatial_error_threshold, spatial_merge_threshold,
+        let (context_length, group_threshold, group_mode,
              pattern_forget_rate, regions, columns, consensus_mode, debug) = match options {
             Some(ref opts) => {
                 let cl = get_opt_u32(opts, "contextLength")?.unwrap_or(10);
 
-                // The three error/merge knobs each resolve per phase as:
-                //   per-phase flag  ??  shared alias  ??  hard default
-                // The shared `errorCorrectionMode` / `errorCorrectionThreshold` / `mergeThreshold`
-                // options are aliases that set BOTH phases at once; a `temporal*` or `spatial*` flag,
-                // when present, overrides only its own phase. With no flags at all this reproduces
-                // the historical single-knob behavior (and the 95.73% MNIST run) bit-for-bit.
+                warn_retired_grouping_keys(opts)?;
 
-                // ── error mode ──
-                let shared_mode = get_opt_string(opts, "errorCorrectionMode")?;
-                let temporal_mode_str = get_opt_string(opts, "temporalErrorCorrectionMode")?
-                    .or_else(|| shared_mode.clone())
+                let group_threshold = get_opt_f64(opts, "groupThreshold")?.unwrap_or(0.5);
+                let mode_str = get_opt_string(opts, "groupMode")?
                     .unwrap_or_else(|| "conservative".to_string());
-                let temporal_mode = parse_error_mode(&temporal_mode_str)?;
-                let spatial_mode_str = get_opt_string(opts, "spatialErrorCorrectionMode")?
-                    .or(shared_mode)
-                    .unwrap_or_else(|| "conservative".to_string());
-                let spatial_mode = parse_error_mode(&spatial_mode_str)?;
-
-                // ── error threshold ──
-                let shared_et = get_opt_f64(opts, "errorCorrectionThreshold")?;
-                let temporal_et = get_opt_f64(opts, "temporalErrorCorrectionThreshold")?
-                    .or(shared_et).unwrap_or(0.5);
-                let spatial_et = get_opt_f64(opts, "spatialErrorCorrectionThreshold")?
-                    .or(shared_et).unwrap_or(0.5);
-
-                // ── merge threshold ──
-                let shared_mt = get_opt_f64(opts, "mergeThreshold")?;
-                let temporal_mt = get_opt_f64(opts, "temporalMergeThreshold")?
-                    .or(shared_mt).unwrap_or(0.5);
-                let spatial_mt = get_opt_f64(opts, "spatialMergeThreshold")?
-                    .or(shared_mt).unwrap_or(0.5);
+                let mode = parse_group_mode(&mode_str)?;
 
                 let pfr = get_opt_f64(opts, "patternForgetRate")?.unwrap_or(0.01);
                 let r = get_opt_u32(opts, "regions")?.unwrap_or(1) as usize;
@@ -199,15 +174,14 @@ impl JsBrain {
                     .unwrap_or_else(|| "democratic".to_string());
                 let consensus = parse_consensus_mode(&consensus_str)?;
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
-                (cl, temporal_mode, temporal_et, temporal_mt, spatial_mode, spatial_et, spatial_mt, pfr, r, c, consensus, d)
+                (cl, group_threshold, mode, pfr, r, c, consensus, d)
             }
-            None => (10, ErrorMode::Conservative, 0.5, 0.5, ErrorMode::Conservative, 0.5, 0.5, 0.01, 1, 1, ConsensusMode::Democratic, false),
+            None => (10, 0.5, GroupMode::Conservative, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
         Ok(Self {
             inner: RefCell::new(CoreBrain::new(
-                context_length, temporal_error_mode, temporal_error_threshold, temporal_merge_threshold,
-                spatial_error_mode, spatial_error_threshold, spatial_merge_threshold,
+                context_length, group_threshold, group_mode,
                 pattern_forget_rate, regions, columns, consensus_mode, debug,
             )),
         })
@@ -755,6 +729,42 @@ fn set_coordinate(env: &Env, parent: &mut JsObject, key: &str, coord: &Coordinat
 
 // ── Helper: read optional JS object properties ─────────────────────────────
 
+/// The grouping knobs retired when `mergeThreshold` / `errorCorrectionThreshold` (and their per-phase
+/// `spatial*` / `temporal*` variants) collapsed into the single `groupThreshold`, and the shared
+/// `errorCorrectionMode` was renamed to `groupMode`.
+const RETIRED_GROUPING_KEYS: &[&str] = &[
+    "mergeThreshold", "errorCorrectionThreshold", "errorCorrectionMode",
+    "spatialMergeThreshold", "spatialErrorCorrectionThreshold", "spatialErrorCorrectionMode",
+    "temporalMergeThreshold", "temporalErrorCorrectionThreshold", "temporalErrorCorrectionMode",
+];
+
+/// Warn (once, to stderr) if a caller still passes any retired grouping key, so a stale config or CLI flag
+/// fails loudly-enough rather than silently doing nothing. The keys are ignored either way.
+fn warn_retired_grouping_keys(opts: &JsObject) -> Result<()> {
+    let present: Vec<&str> = RETIRED_GROUPING_KEYS.iter().copied()
+        .filter(|k| is_present(opts, k).unwrap_or(false))
+        .collect();
+    if !present.is_empty() {
+        eprintln!(
+            "⚠️  Brain: ignoring retired grouping option(s) [{}] — they collapsed into the single `groupThreshold`. \
+             Set `groupThreshold` (and `groupMode`) instead.",
+            present.join(", "),
+        );
+    }
+    Ok(())
+}
+
+/// True if `key` is present on `obj` with a non-undefined, non-null value.
+fn is_present(obj: &JsObject, key: &str) -> Result<bool> {
+    match obj.get_named_property::<JsUnknown>(key) {
+        Ok(val) => {
+            let t = val.get_type()?;
+            Ok(t != napi::ValueType::Undefined && t != napi::ValueType::Null)
+        }
+        Err(_) => Ok(false),
+    }
+}
+
 fn get_opt_string(obj: &JsObject, key: &str) -> Result<Option<String>> {
     match obj.get_named_property::<JsUnknown>(key) {
         Ok(val) => {
@@ -861,14 +871,14 @@ fn get_opt_i32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<i32>>> {
     }
 }
 
-fn parse_error_mode(s: &str) -> Result<ErrorMode> {
+fn parse_group_mode(s: &str) -> Result<GroupMode> {
     match s {
-        "static" => Ok(ErrorMode::Static),
-        "conservative" => Ok(ErrorMode::Conservative),
-        "neutral" => Ok(ErrorMode::Neutral),
-        "aggressive" => Ok(ErrorMode::Aggressive),
+        "static" => Ok(GroupMode::Static),
+        "conservative" => Ok(GroupMode::Conservative),
+        "neutral" => Ok(GroupMode::Neutral),
+        "aggressive" => Ok(GroupMode::Aggressive),
         _ => Err(Error::from_reason(format!(
-            "Invalid errorCorrectionMode '{}'. Expected one of: static, conservative, neutral, aggressive", s
+            "Invalid groupMode '{}'. Expected one of: static, conservative, neutral, aggressive", s
         ))),
     }
 }

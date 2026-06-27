@@ -29,7 +29,7 @@ use crate::neuron::{
 use crate::quantizer::{QuantizeMode, Quantizer};
 use crate::region::Region;
 use crate::types::{
-    ChannelId, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
+    ChannelId, Coordinate, DimensionId, Distance, GroupMode, FrameNumber,
     Level, NeuronId, NeuronType, Reward,
 };
 
@@ -299,12 +299,8 @@ impl Thalamus {
         debug: bool,
         pattern_forget_rate: f64,
         context_length: u32,
-        temporal_merge_threshold: f64,
-        temporal_error_mode: ErrorMode,
-        temporal_error_threshold: f64,
-        spatial_merge_threshold: f64,
-        spatial_error_mode: ErrorMode,
-        spatial_error_threshold: f64,
+        group_threshold: f64,
+        group_mode: GroupMode,
         regions: usize,
         columns: usize,
     ) -> Self {
@@ -318,12 +314,8 @@ impl Thalamus {
                 &channel_actions,
                 &channel_default_actions,
                 context_length,
-                temporal_merge_threshold,
-                temporal_error_mode,
-                temporal_error_threshold,
-                spatial_merge_threshold,
-                spatial_error_mode,
-                spatial_error_threshold,
+                group_threshold,
+                group_mode,
             ));
         }
 
@@ -2282,7 +2274,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 4, 0.5, ErrorMode::Static, 0.5, 0.5, ErrorMode::Static, 0.5, 1, 1)
+        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1)
     }
 
     #[test]
@@ -2306,7 +2298,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 4, 0.5, ErrorMode::Static, 0.5, 0.5, ErrorMode::Static, 0.5, 3, 1);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);

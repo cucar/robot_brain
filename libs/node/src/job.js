@@ -205,9 +205,7 @@ export class Job {
 	 */
 	static BRAIN_CONFIG_KEYS = [
 		'contextLength', 'patternForgetRate',
-		'errorCorrectionMode', 'errorCorrectionThreshold', 'mergeThreshold',
-		'temporalErrorCorrectionMode', 'temporalErrorCorrectionThreshold', 'temporalMergeThreshold',
-		'spatialErrorCorrectionMode', 'spatialErrorCorrectionThreshold', 'spatialMergeThreshold',
+		'groupThreshold', 'groupMode',
 		'regions', 'columns', 'consensus',
 	];
 

@@ -10,12 +10,10 @@ export declare class Brain {
    *
    * Options shape (all optional, with defaults matching JS Brain):
    *   contextLength: number (default 10)
-   *   --- error / merge knobs (each resolves: per-phase flag ?? shared alias ?? default) ---
-   *   errorCorrectionMode: string (default 'conservative')  — ALIAS, sets both phases
-   *   errorCorrectionThreshold: number (default 0.5)        — ALIAS, sets both phases
-   *   mergeThreshold: number (default 0.5)                  — ALIAS, sets both phases
-   *   temporalErrorCorrectionMode / temporalErrorCorrectionThreshold / temporalMergeThreshold — temporal (d>0) overrides
-   *   spatialErrorCorrectionMode / spatialErrorCorrectionThreshold / spatialMergeThreshold     — spatial (d=0) overrides
+   *   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal:
+   *     recognition / reuse fires at similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ)
+   *   groupMode: string (default 'conservative') — how the derived correction threshold adapts
+   *   (retired: mergeThreshold / errorCorrectionThreshold and their spatial*/temporal* variants — now ignored with a warning)
    *   patternForgetRate: number (default 0.01)
    *   regions: number (default 1)
    *   columns: number (default 1)

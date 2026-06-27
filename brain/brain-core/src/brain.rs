@@ -32,7 +32,7 @@ use crate::thalamus::{
     PointLookup, Thalamus,
 };
 use crate::types::{
-    ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, ErrorMode, FrameNumber,
+    ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, GroupMode, FrameNumber,
     Level, NeuronId, NeuronType, Reward,
 };
 
@@ -357,12 +357,9 @@ impl Brain {
     ///
     /// # Arguments
     /// * `context_length` — number of frames a base neuron stays active (default 10)
-    /// * `temporal_error_correction_mode` — TEMPORAL (d>0) mode: 'static' | 'conservative' | 'neutral' | 'aggressive'
-    /// * `temporal_error_correction_threshold` — TEMPORAL fixed threshold when mode='static'; warmup fallback
-    /// * `temporal_merge_threshold` — TEMPORAL percentage of matched entries needed for context merge
-    /// * `spatial_error_correction_mode` — SPATIAL (d=0) error mode, independent of temporal
-    /// * `spatial_error_correction_threshold` — SPATIAL fixed/warmup error threshold
-    /// * `spatial_merge_threshold` — SPATIAL percentage of matched entries needed for context merge
+    /// * `group_threshold` — the single brain-wide grouping coefficient θ, shared by spatial (d=0) and temporal (d>0):
+    ///   recognition / reuse fires at similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ)
+    /// * `group_mode` — how the derived correction threshold adapts: 'static' | 'conservative' | 'neutral' | 'aggressive'
     /// * `pattern_forget_rate` — forget rate applied uniformly to every pattern neuron, all levels
     /// * `regions` — R — number of regions (1 for single-process)
     /// * `columns` — C — number of columns per region (1 for single-thread)
@@ -370,12 +367,8 @@ impl Brain {
     /// * `debug` — enable verbose logging
     pub fn new(
         context_length: u32,
-        temporal_error_correction_mode: ErrorMode,
-        temporal_error_correction_threshold: f64,
-        temporal_merge_threshold: f64,
-        spatial_error_correction_mode: ErrorMode,
-        spatial_error_correction_threshold: f64,
-        spatial_merge_threshold: f64,
+        group_threshold: f64,
+        group_mode: GroupMode,
         pattern_forget_rate: f64,
         regions: usize,
         columns: usize,
@@ -397,12 +390,8 @@ impl Brain {
                 debug,
                 pattern_forget_rate,
                 context_length,
-                temporal_merge_threshold,
-                temporal_error_correction_mode,
-                temporal_error_correction_threshold,
-                spatial_merge_threshold,
-                spatial_error_correction_mode,
-                spatial_error_correction_threshold,
+                group_threshold,
+                group_mode,
                 regions,
                 columns,
             ),
@@ -2077,12 +2066,8 @@ mod tests {
     fn make_brain() -> Brain {
         Brain::new(
             10,                       // context_length
-            ErrorMode::Conservative,  // temporal_error_correction_mode
-            0.5,                      // temporal_error_correction_threshold
-            0.5,                      // temporal_merge_threshold
-            ErrorMode::Conservative,  // spatial_error_correction_mode
-            0.5,                      // spatial_error_correction_threshold
-            0.5,                      // spatial_merge_threshold
+            0.5,                      // group_threshold
+            GroupMode::Conservative,  // group_mode
             0.01,                     // pattern_forget_rate
             1,                        // regions
             1,                        // columns

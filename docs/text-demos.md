@@ -13,7 +13,7 @@ reaching ~99.96% prediction accuracy within two episodes and staying flat there.
 Run the text test with hyperparameters tuned for text (the defaults are tuned for stock data):
 
 ```bash
-node apps/text/jobs/test.js --file abramov.txt --error-mode static --error-threshold 0.3 --context-length 20 --merge-threshold 0.9 --forget-rate 0.00003 --no-summary
+node apps/text/jobs/test.js --file abramov.txt --group-mode static --group-threshold 0.9 --context-length 20 --forget-rate 0.00003 --no-summary
 ```
 
 **Expected output:**

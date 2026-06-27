@@ -57,7 +57,7 @@ use crate::neuron::{
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, DeathFrameEntry, Distance, ErrorMode, FrameNumber, NeuronId, Reward,
+    ChannelId, DeathFrameEntry, Distance, GroupMode, FrameNumber, NeuronId, Reward,
 };
 
 pub struct Region {
@@ -73,12 +73,8 @@ impl Region {
         channel_actions: &FxHashMap<ChannelId, Vec<NeuronId>>,
         channel_default_actions: &FxHashMap<ChannelId, NeuronId>,
         context_length: u32,
-        temporal_merge_threshold: f64,
-        temporal_error_mode: ErrorMode,
-        temporal_error_threshold: f64,
-        spatial_merge_threshold: f64,
-        spatial_error_mode: ErrorMode,
-        spatial_error_threshold: f64,
+        group_threshold: f64,
+        group_mode: GroupMode,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -86,12 +82,8 @@ impl Region {
                 channel_actions.clone(),
                 channel_default_actions.clone(),
                 context_length,
-                temporal_merge_threshold,
-                temporal_error_mode,
-                temporal_error_threshold,
-                spatial_merge_threshold,
-                spatial_error_mode,
-                spatial_error_threshold,
+                group_threshold,
+                group_mode,
             ));
         }
         Self { c, columns }
@@ -498,11 +490,7 @@ mod tests {
             &FxHashMap::default(),
             2,
             0.5,
-            ErrorMode::Static,
-            0.5,
-            0.5,
-            ErrorMode::Static,
-            0.5,
+            GroupMode::Static,
         )
     }
 

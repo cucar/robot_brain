@@ -1,8 +1,14 @@
 # Adaptive Grouping — one self-calibrating "sameness" threshold
 
-This document is the **design** for collapsing the brain's two grouping thresholds — the **merge threshold**
-(recognition / reuse) and the **error threshold** (correction) — into a single operation, and then making that
-single threshold **adaptive** so it self-calibrates instead of being hand-tuned.
+This document is the **design** for collapsing the brain's grouping thresholds — the **merge threshold**
+(recognition / reuse) and the **error threshold** (correction), each previously split into a **spatial** and a
+**temporal** copy — into a single parameter `groupThreshold` (θ), and then making that single threshold
+**adaptive** so it self-calibrates instead of being hand-tuned.
+
+The collapse is total: the six historical knobs (`{spatial,temporal}MergeThreshold`,
+`{spatial,temporal}ErrorCorrectionThreshold`, `{spatial,temporal}ErrorCorrectionMode`) become **one** shared
+`groupThreshold` plus **one** shared `groupMode`. There is no per-phase split — a brain has one notion
+of how-similar-is-the-same, and it is the same on the input (d=0) and sequence (d>0) sides.
 
 It is a **foundation change to the existing brain**, independent of (and sequenced before) the wave-front and
 reuse projects: it touches **recognition and error correction everywhere — spatial and temporal**. Every demo
@@ -10,7 +16,7 @@ must be re-validated after each stage (§5).
 
 Two stages, in order:
 
-1. **Unify the thresholds** — `error = 1 − merge`. One grouping coefficient instead of two.
+1. **Unify the thresholds** — one `groupThreshold` (θ), shared spatial + temporal, with `error = 1 − θ`.
 2. **Unified adaptive grouping** — derive that one coefficient per-unit from its own running error statistics,
    removing the last hand-tuned magnitude.
 
@@ -60,12 +66,18 @@ the second is the first read from the other side.
 
 ---
 
-## 3. Stage 1 — unify the thresholds (`error = 1 − merge`)
+## 3. Stage 1 — unify the thresholds (one `groupThreshold`, `error = 1 − θ`)
 
-Replace the two parameters with one θ; set the error threshold to `1 − θ` wherever it is read (spatial and
-temporal). The merge threshold is already a single value per phase
-([neuron.rs `spatial_merge_threshold`](../brain/brain-core/src/neuron.rs)); the error threshold's **static**
-value becomes a derived quantity.
+Replace the six parameters with one θ ([neuron.rs `group_threshold`](../brain/brain-core/src/neuron.rs)) plus the
+shared error mode. Recognition reads θ directly ([neuron.rs `match_observed` call](../brain/brain-core/src/neuron.rs));
+the correction side sets the error threshold to `1 − θ` wherever it is read
+([neuron.rs `get_spatial_error_threshold` / `get_temporal_error_threshold`](../brain/brain-core/src/neuron.rs)) — its
+**static / warmup** value becomes a derived quantity. Spatial and temporal collapse onto the *same* θ, so the
+two correction getters survive only because they read different Welford buckets (spatial = one bucket, temporal =
+per-age); the threshold magnitude and the adaptation mode they apply are now one shared pair.
+
+Implemented across the whole plumbing chain — napi (`groupThreshold` option, retired keys warn-and-ignore) →
+`Brain::new` → `Thalamus::new` → `Region::new` → `Column::new` → `Neuron::new`.
 
 ### Validation (reference simulation)
 
@@ -144,8 +156,9 @@ rather than reuse the old two-number settings.
 ## 6. Acceptance gates
 
 **Stage 1 (unify):**
-- One θ parameter; the static error threshold is derived as `1 − θ` everywhere it was read (spatial + temporal).
-- A single-θ sweep on MNIST and stocks finds an operating point with accuracy **≥ the decoupled two-parameter
+- One `groupThreshold` (θ) shared brain-wide; the static / warmup error threshold is derived as `1 − θ`
+  everywhere it was read (spatial + temporal), and the six retired knobs are gone (retired napi keys warn-and-ignore).
+- A single-θ sweep on MNIST and stocks finds an operating point with accuracy **≥ the decoupled six-parameter
   baseline** (ties within noise are a pass — the win is the parameter, not the accuracy).
 - If a coupled penalty appears, it is closed by **normalizing** the two comparisons, not by re-decoupling.
 

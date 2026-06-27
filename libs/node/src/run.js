@@ -35,18 +35,11 @@ export function parseBrainArgs(argv = process.argv) {
 		reset: has('--reset'),
 		contextLength: num('--context-length', parseInt),
 		patternForgetRate: num('--forget-rate', parseFloat),
-		// Error / merge knobs. Each resolves in the napi layer as:
-		//   per-phase flag (--temporal-*/--spatial-*) ?? shared alias (--error-*/--merge-*) ?? default.
-		// The shared flags are aliases that set BOTH phases; the per-phase flags override one side.
-		errorCorrectionMode: str('--error-mode'),
-		errorCorrectionThreshold: num('--error-threshold', parseFloat),
-		mergeThreshold: num('--merge-threshold', parseFloat),
-		temporalErrorCorrectionMode: str('--temporal-error-mode'),
-		temporalErrorCorrectionThreshold: num('--temporal-error-threshold', parseFloat),
-		temporalMergeThreshold: num('--temporal-merge-threshold', parseFloat),
-		spatialErrorCorrectionMode: str('--spatial-error-mode'),
-		spatialErrorCorrectionThreshold: num('--spatial-error-threshold', parseFloat),
-		spatialMergeThreshold: num('--spatial-merge-threshold', parseFloat),
+		// The single grouping coefficient θ, shared by spatial and temporal: recognition / reuse fires at
+		// similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ). groupMode
+		// picks how the derived correction side adapts from per-unit Welford stats.
+		groupThreshold: num('--group-threshold', parseFloat),
+		groupMode: str('--group-mode'),
 		regions: num('--regions', parseInt),
 		columns: num('--columns', parseInt),
 		consensus: str('--consensus')
