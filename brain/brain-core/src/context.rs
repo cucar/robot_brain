@@ -272,16 +272,6 @@ impl TemporalContext {
         // if there are no known context entries, there cannot be a match
         if total_count == 0 { return None; }
 
-        // Temporal uses CONTAINMENT as the denominator: common / total_count, where total_count =
-        // common + missing (the known pattern's own entries). Deliberately NOT the Jaccard union — a
-        // temporal pattern keys on its expected antecedents within a naturally rich timeline, so other
-        // co-active context (novel observed entries) should not count against whether it matches; the
-        // history is expected to carry more than any single pattern's antecedents. Checked before the
-        // novel pass because novel entries affect only the score below, not the match decision. This
-        // is experimentally verified: the Jaccard union here hurt first-time accuracy on the stock
-        // demos (it sped up cross-episode learning, but we value first-time accuracy more).
-        if (common.len() as f64 / total_count as f64) < merge_threshold { return None; }
-
         // Pass 2: walk the observed context, finding entries with no counterpart in the known context.
         let mut novel = Vec::new();
         for (&neuron_id, distance_map) in &observed.entries {
@@ -301,6 +291,12 @@ impl TemporalContext {
                 }
             }
         }
+
+        // temporal uses the Jaccard UNION denominator common / (common + missing + novel),
+        // identical to spatial, instead of the historical containment common / (common + missing).
+        let union_size = (common.len() + missing.len() + novel.len()) as f64;
+        if union_size == 0.0 { return None; }
+        if (common.len() as f64 / union_size) < merge_threshold { return None; }
 
         // Round to 14 decimal places to avoid floating-point precision issues
         score = (score * 1e14).round() / 1e14;
