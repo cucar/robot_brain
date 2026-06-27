@@ -257,7 +257,7 @@ reward is the pressure that prunes the bush toward the causal skeleton.
 
 | Piece | New or existing | Notes |
 |---|---|---|
-| Adaptive mint threshold | **Exists — reuse for `d<0`** | `error_stats` Welford + `errorCorrectionMode` (`conservative = mean+σ`), per-(neuron, age). Action chunks mint on *backward* inference error using the same threshold. No separate operator. |
+| Adaptive mint threshold | **Exists — reuse for `d<0`** | `error_stats` Welford + `groupMode` (`neutral = mean`), per-(neuron, age). Action chunks mint on *backward* inference error using the same threshold. No separate operator. |
 | Action participation toggle | **Exists (dormant)** | `learnActionSequences` channel flag — `false` in every encoder today. The on-ramp for action pattern learning. |
 | Action-connection reward / **E → P coupling** | **Exists** | `learn_action_connections`, never-weakened, reward-smoothed. The **forward / value** channel — and the apex-event→apex-action coupling is this same vote pointed at a higher-level target. Reward targets the **apex** action, not base neurons — see [global-rewards.md](./global-rewards.md). |
 | Death Ledger pruning | **Exists — also the advantage filter** | Prunes chunks that stop paying (mint by structure, survive by value) and prunes the backward graph toward causality. |

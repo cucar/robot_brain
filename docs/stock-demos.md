@@ -67,29 +67,29 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 ============================================================
 📈 Overall Performance:
    Starting Capital: $15000.00
-   Total Net Profit: $4329678.08
-   Average per Episode: $4329678.08
-   Average ROI: +28864.52%
-   Average Per-Frame ROI: +0.105558%
-   Average Sharpe Ratio: 0.44
-   Total Transaction Cost: $714689.66 (0.02% per trade)
-   Total Trades: 27027
-   Average Trades per Episode: 27027.0
+   Total Net Profit: $2562690.23
+   Average per Episode: $2562690.23
+   Average ROI: +17084.60%
+   Average Per-Frame ROI: +0.095832%
+   Average Sharpe Ratio: 0.42
+   Total Transaction Cost: $621143.23 (0.02% per trade)
+   Total Trades: 28811
+   Average Trades per Episode: 28811.0
 
 💰 Net Profit & ROI by Episode:
-   Episode 1: $4329678.08 | ROI: +28864.52%, +0.105558%/frame, Sharpe: 0.44 (27027 trades)
+   Episode 1: $2562690.23 | ROI: +17084.60%, +0.095832%/frame, Sharpe: 0.42 (28811 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 43.29%
+   Episode 1: 11.04%
 ```
 
-The brain achieves only ~43% base-level prediction accuracy because it's predicting price movement groups.
+The brain achieves only ~11% base-level prediction accuracy because it's predicting price movement groups.
 The **reward-weighted action selection** still turns a profit by learning which contexts produce better outcomes. 
 With spatial co-activation enabled (`--spatial`), the brain trades direction accuracy for far more aggressive,
 concentrated position sizing: it is wrong about direction more often than not, but sizes the contexts that pay off.
 
 > **Reading this number honestly.** The *total* return over ~21 years of daily data (~5,370 frames) compounds to 
-> **roughly +25%/year**, strong but far less dramatic than the raw percentage looks. 
+> **roughly +28%/year**, strong but far less dramatic than the raw percentage looks. 
 > It is also measured on a *curated* 50-symbol universe of names that survived and performed well over the
 > period (a survivorship bias), with low simulated friction and hyperparameters tuned in-sample. The
 > base accuracy is **below 50%** and most of the edge comes from large, concentrated bets on a handful of volatile,
@@ -142,18 +142,18 @@ node apps/stocks/jobs/test.js --symbols SO,VALE,STLD,GOOGL,MU,PLTR,UUUU,PFE,CRM,
 **Expected output:**
 ```
 💰 Net Profit & ROI by Episode:
-   Episode 1: $3637393.29 | ROI: +24249.29%, +0.102325%/frame, Sharpe: 0.35 (8649 trades)
-   Episode 2: $52051437968907.87 | ROI: +347009586459.39%, +0.409686%/frame, Sharpe: 1.55 (8664 trades)
-   Episode 3: $4844437324937784320.00 | ROI: +32296248832918564.00%, +0.623723%/frame, Sharpe: 2.16 (8152 trades)
-   Episode 4: $508754139438123843584.00 | ROI: +3391694262920825856.00%, +0.710922%/frame, Sharpe: 2.44 (7914 trades)
-   Episode 5: $1.8817323238585461e+22 | ROI: +125448821590569730048.00%, +0.778621%/frame, Sharpe: 2.67 (7818 trades)
+   Episode 1: $830302.80 | ROI: +5535.35%, +0.075063%/frame, Sharpe: 0.22 (8479 trades)
+   Episode 2: $44566910.12 | ROI: +297112.73%, +0.148948%/frame, Sharpe: 0.49 (8747 trades)
+   Episode 3: $225986507.16 | ROI: +1506576.71%, +0.179208%/frame, Sharpe: 0.61 (8689 trades)
+   Episode 4: $2109464653.55 | ROI: +14063097.69%, +0.220863%/frame, Sharpe: 0.75 (8682 trades)
+   Episode 5: $29132233788.59 | ROI: +194214891.92%, +0.269846%/frame, Sharpe: 0.96 (8806 trades)
 
 📊 Base Level Accuracy by Episode:
-   Episode 1: 10.50%
-   Episode 2: 6.11%
-   Episode 3: 6.20%
-   Episode 4: 6.33%
-   Episode 5: 6.59%
+   Episode 1: 10.97%
+   Episode 2: 8.63%
+   Episode 3: 8.23%
+   Episode 4: 8.29%
+   Episode 5: 8.29%
 ```
 
 The astronomical ROI is compounding over many episodes of in-sample data — a stress test of action learning, not a

@@ -47,7 +47,7 @@ After: `FxHashMap<NeuronId, FxHashMap<Bin, Strength>>` where bin is a small inte
 - `strengthenNeuron(neuronId, distance)` — convert distance to bin.
 - `weakenNeuron(neuronId, distance)` — convert distance to bin.
 - `getMatchScore(strength, distance, observedDistances)` — both sides use bins. Exact match = full strength. Bin mismatch penalty uses bin delta (not frame delta), giving automatic coarser tolerance at higher levels.
-- `match(observed, offset, mergeThreshold, excludeIds)` — the offset/absoluteDistance logic needs rethinking. Currently converts pattern-relative distance to absolute by adding offset. With bins, the offset must be converted to a bin shift. This is the trickiest part — see open questions.
+- `match(observed, offset, groupThreshold, excludeIds)` — the offset/absoluteDistance logic needs rethinking. Currently converts pattern-relative distance to absolute by adding offset. With bins, the offset must be converted to a bin shift. This is the trickiest part — see open questions.
 
 Context needs to know level and contextLength to do the conversion. Options:
 - Pass them into the constructor and store them (context becomes level-aware).

@@ -159,7 +159,7 @@ A neuron's d=0 connections constitute predictions: "when I fire, I expect these 
 
 ### 4.3 Error Detection
 
-When a neuron fires during `process_spatial`, its d=0 connections constitute a predicted co-activation set. The thalamus compares this predicted set against the observed reality (the set of neurons fired in the same spatial phase). Missing predictions (expected neurons that didn't fire) and novel observations (unexpected neurons that did fire) both contribute to the mismatch rate. If the mismatch exceeds the error threshold, an error is generated.
+When a neuron fires during `process_spatial`, its d=0 connections constitute a predicted co-activation set. The thalamus compares this predicted set against the observed reality (the set of neurons fired in the same spatial phase) with the Jaccard-union error: missing predictions (expected neurons that didn't fire) and novel observations (unexpected neurons that did fire) both count toward the mismatch rate. If the mismatch exceeds the unit's correction threshold (`1 − groupThreshold`, adapted by `groupMode`), an error is generated.
 
 This is the same error detection logic temporal uses for d>0 — the only change is the distance the predictions are read at.
 

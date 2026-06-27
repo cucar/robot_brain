@@ -192,15 +192,17 @@ pub struct Neuron {
 
     pattern_forget_rate: f64,
 
-    /// The single brain-wide grouping coefficient θ, shared by spatial (d=0) and temporal (d>0).
-    /// Recognition / reuse fires when similarity ≥ θ ("same"); correction fires when similarity < θ ("different").
-    /// The correction (error) threshold is the derived complement `1 − θ` — they are one Jaccard test read from
-    /// opposite sides, so there is one number, not two, and no spatial/temporal split.
+    /// The single brain-wide grouping coefficient θ, shared by spatial (d=0) and temporal (d>0). It is the
+    /// SEED for the adaptive grouping threshold: when a unit has no error history, the live correction
+    /// threshold is the derived complement `1 − θ` and recognition fires at similarity ≥ θ. Once error
+    /// stats accrue, both sides float together off those stats — see [grouping_error_threshold], the sole
+    /// reader of this field. One number, read from opposite sides; no separate merge knob, no phase split.
     group_threshold: f64,
 
-    /// How the correction side of θ adapts from this unit's running Welford error stats:
-    /// Static keeps the derived `1 − θ`; the dynamic modes shift it by the observed mean ± σ.
-    /// Shared across spatial and temporal — the error stats buckets differ, the adaptation policy does not.
+    /// How the live grouping threshold adapts from this unit's running Welford error stats:
+    /// Static keeps the seed `1 − θ`; the dynamic modes shift the correction side to mean ± σ (and
+    /// recognition to `1 − that`). Shared across spatial and temporal — the error buckets differ, the
+    /// adaptation policy does not.
     group_mode: GroupMode,
 
     /// Brain-wide context_length, replicated on each neuron so recognize_patterns can implement the warmup gate:
@@ -257,13 +259,14 @@ impl Neuron {
     /// for alternative-action lookup during learning (per-channel Vec iteration).
     /// Populated by register_channel_spec() and shared across all neurons.
     ///
-    /// The error mode picks how the derived correction threshold `1 − θ` adapts:
-    ///   Static       — fixed threshold = `1 − group_threshold`
-    ///   Conservative — mean + σ of past per-age error rates  (learn outliers)
+    /// The group mode picks how the live grouping threshold adapts from past error rates (the temporal
+    /// per-age bucket, or the single spatial bucket); recognition then uses `1 − that` for the same bucket:
+    ///   Static       — fixed correction threshold = `1 − group_threshold`
+    ///   Conservative — mean + σ of past error rates  (learn outliers)
     ///   Neutral      — mean
     ///   Aggressive   — mean − σ (learn aggressively)
-    /// For dynamic modes, `1 − group_threshold` also serves as the warmup fallback until
-    /// ERROR_MIN_SAMPLES observations have been recorded at that age.
+    /// For dynamic modes, `1 − group_threshold` is the warmup fallback until ERROR_MIN_SAMPLES
+    /// observations have been recorded in that bucket.
     pub fn new(
         id: NeuronId,
         pattern_forget_rate: f64,
@@ -292,44 +295,49 @@ impl Neuron {
         }
     }
 
-    // ── Error threshold ──────────────────────────────────────────────────────
+    // ── Grouping threshold ─────────────────────────────────────────────────────
 
-    /// Temporal correction threshold for a given age, dispatched by self.group_mode.
-    /// The static / warmup value is the derived complement `1 − group_threshold`; dynamic modes shift it by the
-    /// per-age Welford stats once ERROR_MIN_SAMPLES observations exist at this age.
-    pub fn get_temporal_error_threshold(&self, age: Distance) -> f64 {
+    /// THE grouping operation's threshold, and the SOLE reader of `group_threshold` + `group_mode`.
+    ///
+    /// Given the relevant Welford error bucket (spatial: the single bucket; temporal: the per-age bucket),
+    /// returns the correction (error) threshold E ∈ [0,1]: the static / warmup value is the derived
+    /// complement `1 − group_threshold`; the dynamic modes shift it by the bucket's running error stats
+    /// (mean ± σ) once ERROR_MIN_SAMPLES observations exist. Recognition treats two connection sets as
+    /// "the same" when their match ratio ≥ `1 − E` ([grouping_merge_threshold]); correction mints when the
+    /// observed error ratio > E. One number, read from opposite sides — there is no separate merge knob.
+    fn grouping_error_threshold(&self, stats: Option<&WelfordState>) -> f64 {
         let fallback = 1.0 - self.group_threshold;
         if self.group_mode == GroupMode::Static { return fallback; }
-        let stats = match self.temporal_error_stats.get(age as usize) {
-            Some(Some(s)) => s,
-            _ => return fallback,
-        };
-        self.apply_group_mode(stats, self.group_mode, fallback)
-    }
-
-    /// Spatial correction threshold — uses a single bucket (no age dimension) and the same shared error mode.
-    /// The static / warmup value is the derived complement `1 − group_threshold`.
-    pub fn get_spatial_error_threshold(&self) -> f64 {
-        let fallback = 1.0 - self.group_threshold;
-        if self.group_mode == GroupMode::Static { return fallback; }
-        let stats = match &self.spatial_error_stats {
-            Some(s) => s,
-            None => return fallback,
-        };
-        self.apply_group_mode(stats, self.group_mode, fallback)
-    }
-
-    /// Shared mode-to-threshold mapping, given a populated Welford bucket, the mode to
-    /// apply, and the warmup fallback to use when the bucket has too few samples.
-    fn apply_group_mode(&self, stats: &WelfordState, mode: GroupMode, fallback: f64) -> f64 {
-        if stats.n < ERROR_MIN_SAMPLES { return fallback; }
-        let sigma = stats.std_dev();
-        match mode {
-            GroupMode::Conservative => stats.mean + sigma,
-            GroupMode::Neutral => stats.mean,
-            GroupMode::Aggressive => stats.mean - sigma,
-            GroupMode::Static => unreachable!(),
+        match stats {
+            Some(s) if s.n >= ERROR_MIN_SAMPLES => {
+                let sigma = s.std_dev();
+                match self.group_mode {
+                    GroupMode::Conservative => s.mean + sigma,
+                    GroupMode::Neutral => s.mean,
+                    GroupMode::Aggressive => s.mean - sigma,
+                    GroupMode::Static => unreachable!(),
+                }
+            }
+            _ => fallback,
         }
+    }
+
+    /// Recognition strictness: `1 − E` for the same error bucket. A reliable unit (low E) recognizes
+    /// strictly; an unreliable one (high E) recognizes loosely. Derived, never tuned independently.
+    fn grouping_merge_threshold(&self, stats: Option<&WelfordState>) -> f64 {
+        1.0 - self.grouping_error_threshold(stats)
+    }
+
+    /// Temporal correction threshold for a given age — selects the per-age bucket and defers to
+    /// [grouping_error_threshold]. Thin bucket-selector; the policy lives in one place.
+    pub fn get_temporal_error_threshold(&self, age: Distance) -> f64 {
+        self.grouping_error_threshold(self.temporal_error_stats.get(age as usize).and_then(|s| s.as_ref()))
+    }
+
+    /// Spatial correction threshold — selects the single spatial bucket and defers to
+    /// [grouping_error_threshold].
+    pub fn get_spatial_error_threshold(&self) -> f64 {
+        self.grouping_error_threshold(self.spatial_error_stats.as_ref())
     }
 
     // ── Error stats ──────────────────────────────────────────────────────────
@@ -1123,6 +1131,8 @@ impl Neuron {
         if candidates.is_empty() { return (Vec::new(), context_ref_updates); }
 
         // Score candidates and pick the best.
+        // Recognition strictness is the adaptive merge (1 − E) for the spatial bucket — same value correction reads.
+        let merge_threshold = self.grouping_merge_threshold(self.spatial_error_stats.as_ref());
         let eval_start = std::time::Instant::now();
         let candidate_count = candidates.len();
         let mut best: Option<PartialMatch> = None;
@@ -1130,7 +1140,7 @@ impl Neuron {
             if self.get_child_effective_activation_strength(pattern_id, current_frame) <= 0.0 { continue; }
             let entry = self.spatial_routing_table.get(&pattern_id)
                 .unwrap_or_else(|| panic!("recognize_spatial_patterns: pattern {} indexed but missing from spatial_routing_table", pattern_id));
-            let m = match entry.context.match_observed(observed, self.group_threshold) {
+            let m = match entry.context.match_observed(observed, merge_threshold) {
                 Some(m) => m,
                 None => continue,
             };
@@ -1348,6 +1358,8 @@ impl Neuron {
         timings.recognize_candidate_search += t.elapsed().as_secs_f64();
         if candidate_ids.is_empty() { return None; }
 
+        // Recognition strictness is the adaptive merge (1 − E) for this age's bucket — same value correction reads.
+        let merge_threshold = self.grouping_merge_threshold(self.temporal_error_stats.get(age as usize).and_then(|s| s.as_ref()));
         let eval_start = std::time::Instant::now();
         let candidate_count = candidate_ids.len();
         // go through the candidate patterns and find the best match
@@ -1363,7 +1375,7 @@ impl Neuron {
             // context.match_observed() handles the full scoring and threshold check;
             // the index only decides which child patterns are worth evaluating.
             // exclude_ids masks out brand-new neurons so they don't count as "novel" misses.
-            let m = match entry.context.match_observed(observed, age, self.group_threshold, Some(exclude_ids)) {
+            let m = match entry.context.match_observed(observed, age, merge_threshold, Some(exclude_ids)) {
                 Some(m) => m,
                 None => continue, // nothing to do if there is no match
             };

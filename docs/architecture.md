@@ -79,10 +79,10 @@ Unified struct for all neurons (sensory and pattern):
 - **Lazy Decay**: Strengths decay continuously based on frames elapsed since last activation
 - **Note**: All neuron metadata (level, coordinates, channel, type, parent) is stored externally in Thalamus lookup tables. Neurons are pure data processors.
 
-#### Context (`brain-core/src/context.rs`)
-Pattern context representation and matching:
-- **Entries**: `FxHashMap<NeuronId, FxHashMap<Distance, Strength>>` for O(1) lookup
-- **Matching**: Threshold-based pattern recognition
+#### Context (`brain-core/src/context/{spatial,temporal}.rs`)
+Pattern context representation and matching — one class per file (`SpatialContext`, `TemporalContext`):
+- **Entries**: `FxHashMap<NeuronId, FxHashMap<Distance, Strength>>` for O(1) lookup (spatial drops the distance dimension)
+- **Matching**: `match_observed` scores the Jaccard union `common / (common + missing + novel)`, identical for spatial and temporal; the caller passes the per-unit grouping threshold (see [error-driven-learning.md](./error-driven-learning.md))
 - **Merging**: Strengthens common, adds novel, weakens missing
 
 ### Class Relationships
@@ -117,7 +117,7 @@ When a neuron is active at age > 0 and a new neuron appears at age 0:
 
 ### Error Correction (Pattern Creation)
 
-Patterns are created only from **event prediction errors** — when the ratio of failed event predictions exceeds the per-(neuron, age) threshold. Actions are filtered out of the error calculation entirely; they are judged by reward, not by hit/miss.
+Patterns are created only from **event prediction errors** — when a unit's Jaccard-union error over its predicted-vs-actual events exceeds its grouping correction threshold **E** (`= 1 − groupThreshold`, adapted per unit by `groupMode`; see [error-driven-learning.md](./error-driven-learning.md)). Recognition and correction are one operation read from opposite sides of the same threshold. Actions are filtered out of the error calculation entirely; they are judged by reward, not by hit/miss.
 
 When a pattern is created and the parent had action connections with **negative reward**, the brain injects an alternative action connection at neutral reward (0.0) — giving the brain something else to try next time without penalizing the original.
 
@@ -128,7 +128,7 @@ When a pattern is created and the parent had action connections with **negative 
 | Scoring | Probability: strength / dimension total | Expected reward: weighted average |
 | Winner | Highest probability | Highest expected reward |
 | Connection weakening | Yes (wrong predictions) | Never |
-| Error correction trigger | Yes (misprediction ratio) | No |
+| Error correction trigger | Yes (Jaccard-union error > E) | No |
 | Negative reward handling | N/A | Inject alternative action at neutral reward |
 
 ### Exploration
@@ -472,10 +472,9 @@ All passed to `Brain::new()` and propagated to Thalamus → Region → Column �
 
 | Parameter                | Default          | Location | Description                                                                                                                                  |
 |--------------------------|------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------|
-| errorCorrectionMode      | `'conservative'` | Brain    | Threshold function for pattern creation: `static`, `conservative` (mean+σ), `neutral` (mean), `aggressive` (mean−σ). See error-driven-learning.md. |
-| errorCorrectionThreshold | 0.5              | Brain    | Static threshold (when mode=`static`); warmup fallback for dynamic modes (first 3 samples per (neuron, age))                                |
+| groupThreshold           | 0.5              | Neuron   | Grouping coefficient θ: recognition ≥ θ, correction > 1 − θ; shared spatial + temporal. Under dynamic `groupMode`, the per-unit seed/fallback. |
+| groupMode                | `'neutral'`      | Neuron   | Grouping-threshold adaptation: `static`, `conservative` (mean+σ), `neutral` (mean), `aggressive` (mean−σ). See error-driven-learning.md.       |
 | contextLength            | 10               | Memory   | Frames a neuron stays active                                                                                                                 |
-| mergeThreshold           | 0.5              | Context  | Min match ratio for pattern recognition                                                                                                      |
 | patternForgetRate        | 0.01             | Neuron   | Pattern prediction strength decay rate per frame                                                                                             |
 
 ---

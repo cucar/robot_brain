@@ -89,5 +89,5 @@ connections converge toward a stable structural core.
 ## V4 — Eventual: chatbot / text
 
 Sequence reuse over tokens is where temporal reuse ultimately pays off — shared sub-sequence predictors across
-many conversations. Once the text-channel-to-action chatbot harness exists ([roadmap §6](./roadmap.md)),
+many conversations. Once the text-channel-to-action chatbot harness exists ([roadmap §5](./roadmap.md)),
 validate reuse there. Out of scope for the initial build, but the destination this design serves.

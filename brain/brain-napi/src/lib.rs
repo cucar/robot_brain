@@ -141,9 +141,11 @@ impl JsBrain {
     ///
     /// Options shape (all optional, with defaults matching JS Brain):
     ///   contextLength: number (default 10)
-    ///   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal:
-    ///     recognition / reuse fires at similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ)
-    ///   groupMode: string (default 'conservative') — how the derived correction threshold adapts
+    ///   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal.
+    ///     It SEEDS one adaptive per-unit threshold: recognition fires at similarity ≥ θ and correction at < θ
+    ///     until a unit has error history, after which both float together off its stats (see groupMode).
+    ///   groupMode: string (default 'neutral') — how the live grouping threshold adapts from error stats
+    ///     ('static' pins it at the θ seed; conservative/neutral/aggressive shift it by mean ± σ)
     ///   patternForgetRate: number (default 0.01)
     ///   regions: number (default 1)
     ///   columns: number (default 1)
@@ -164,7 +166,7 @@ impl JsBrain {
 
                 let group_threshold = get_opt_f64(opts, "groupThreshold")?.unwrap_or(0.5);
                 let mode_str = get_opt_string(opts, "groupMode")?
-                    .unwrap_or_else(|| "conservative".to_string());
+                    .unwrap_or_else(|| "neutral".to_string());
                 let mode = parse_group_mode(&mode_str)?;
 
                 let pfr = get_opt_f64(opts, "patternForgetRate")?.unwrap_or(0.01);
@@ -176,7 +178,7 @@ impl JsBrain {
                 let d = get_opt_bool(opts, "debug")?.unwrap_or(false);
                 (cl, group_threshold, mode, pfr, r, c, consensus, d)
             }
-            None => (10, 0.5, GroupMode::Conservative, 0.01, 1, 1, ConsensusMode::Democratic, false),
+            None => (10, 0.5, GroupMode::Neutral, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
         Ok(Self {

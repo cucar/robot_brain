@@ -5,30 +5,7 @@ is one workstream; sub-bullets are the concrete steps inside it.
 
 ---
 
-## 1. Adaptive Grouping
-
-Design in **[adaptive-grouping.md](./adaptive-grouping.md)**. Collapse the brain's grouping thresholds — the
-**merge threshold** (recognition / reuse) and the **error threshold** (correction), each previously split spatial
-vs temporal — into one self-calibrating "sameness" parameter `groupThreshold` (θ). Merge and error are the same
-Jaccard test read from opposite sides, so `error = 1 − θ` is an **identity**, not a tuning coincidence; spatial
-and temporal share one θ because a brain has one notion of how-similar-is-the-same. This is a **foundation
-change** that touches recognition and correction across the whole brain (spatial + temporal), which is why it
-comes first — **every demo is re-validated after each stage**.
-
-Two stages:
-
-1. **Unify** — one shared `groupThreshold` (θ) with `error = 1 − θ`; six knobs become one (plus the shared error
-   mode). Validated in the reference simulation ([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js)
-   `couple` mode): coupled θ=0.8 ties the two-parameter best (≈50% test on 14×14 binary MNIST) — the parameter
-   deletion is free.
-2. **Unified adaptive grouping** — derive that one θ per-unit from its own Welford error stats
-   (`merge = 1 − (mean + k·σ)`; the brain already adapts the error side), removing the last hand-tuned
-   magnitude. Lands in two steps — adaptive-error / static-merge first to check stability, then fully coupled —
-   because of the blur-runaway risk.
-
----
-
-## 2. Wave-Front (foundation)
+## 1. Wave-Front (foundation)
 
 Design in **[wavefront.md](./wavefront.md)**, migration plan in
 **[wavefront-implementation.md](./wavefront-implementation.md)**. Split out of the reuse project into its own
@@ -45,10 +22,10 @@ cross-stream **isolation** knob parallel-stream learning relied on — that now 
 
 ---
 
-## 3. Neuron Re-use
+## 2. Neuron Re-use
 
 Theory in **[neuron-reuse.md](./neuron-reuse.md)**. Allocates capacity onto the error manifold
-(residual-fitting). On the wave-front foundation (§2), **reuse applies at all distances** (d=0 and d>0) — the
+(residual-fitting). On the wave-front foundation (§1), **reuse applies at all distances** (d=0 and d>0) — the
 spatial/temporal asymmetry is gone. The mechanism is **recognize → predict L0 → on misprediction,
 transitively-merge-cluster the requests by neighborhood → reuse/expand a matched pattern or mint one**, balanced
 by **merge** (clustering + reuse) vs **split** (refinement). **Built and validated in the reference simulation**
@@ -78,7 +55,7 @@ drains references to reap unreferenced ones (no separate decay/forgetting).
 
 ---
 
-## 4. Context & connection refinement
+## 3. Context & connection refinement
 
 Design in **[refinement.md](./refinement.md)**. The missing abstraction/generalization step: on a matched
 pattern, consolidate both its **sources** (context) and its **targets** (connections) toward the common
@@ -100,7 +77,7 @@ Steps:
 
 ---
 
-## 5. Documentation & Publish
+## 4. Documentation & Publish
 
 - **Update all documentation** — sync docs with the current architecture post-Rust migration; update README demos and examples.
 - **npm package** — prepare and publish to the registry.
@@ -108,7 +85,7 @@ Steps:
 
 ---
 
-## 6. Action composition
+## 5. Action composition
 
 See **[action-composition.md](./action-composition.md)**.
 
@@ -132,9 +109,9 @@ sequence. Open questions and full dependencies are in the doc.
 
 ---
 
-## 7. Global rewards
+## 6. Global rewards
 
-See **[global-rewards.md](./global-rewards.md)**. **Independent** of action composition (§6) — the reward
+See **[global-rewards.md](./global-rewards.md)**. **Independent** of action composition (§5) — the reward
 distribution policy holds with or without action composition, and can be decided separately. It meets
 composition at exactly one point: reward credits the **apex active action**, not base neurons.
 
@@ -153,13 +130,13 @@ Reference: https://claude.ai/share/f9732e46-a95c-44d2-8dee-b7217392834c
 
 ---
 
-## 8. Calculate up/down accuracy separately
+## 7. Calculate up/down accuracy separately
 
 Report directional accuracy (up vs down) independently to identify prediction bias.
 
 ---
 
-## 9. Neuron Limits
+## 8. Neuron Limits
 
 ### Max neuron count hyperparameter
 - Add a configurable cap on neuron count per region/column.
@@ -177,7 +154,7 @@ Report directional accuracy (up vs down) independently to identify prediction bi
 
 ---
 
-## 10. Exponential Temporal Binning Test
+## 9. Exponential Temporal Binning Test
 
 Implement the cortical temporal binning scheme in
 [experiment-temporal-binning.md](./experiment-temporal-binning.md).

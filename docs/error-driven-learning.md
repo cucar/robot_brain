@@ -13,6 +13,59 @@ Error-driven learning is the mechanism by which the brain creates patterns. Patt
 
 ---
 
+## Grouping: one operation for recognition and correction
+
+Recognition and error correction are the **same operation** — a Jaccard-union comparison of two sets of
+connections against one per-unit threshold — aimed at two different operands:
+
+- **Recognition / reuse** compares an observed context to a stored pattern's context; the pattern fires when
+  similarity ≥ θ ([`match_observed`](../brain/brain-core/src/context/spatial.rs) for spatial,
+  [temporal](../brain/brain-core/src/context/temporal.rs) for d>0).
+- **Correction** compares a unit's predicted L0 to the actual L0; the unit mints a correction when the error
+  exceeds `1 − θ` ([`get_union_error`](../brain/brain-core/src/thalamus.rs), used by `mint_spatial_corrections`
+  and `evaluate_vote_error`).
+
+Both use the Jaccard **union** denominator `common / (common + missing + novel)`, so match score and error sum to
+exactly 1 (`error = 1 − match`). There is one "sameness" coefficient **θ = `groupThreshold`**, shared by spatial
+(d=0) and temporal (d>0) and read from one side for recognition, the other for correction. No per-phase split, no
+separate merge knob.
+
+### The adaptive threshold
+
+θ self-calibrates per unit. [`Neuron::grouping_error_threshold(stats)`](../brain/brain-core/src/neuron.rs) is the
+**sole reader** of `groupThreshold` and `groupMode`; given a unit's Welford error bucket it returns the
+correction threshold **E**, and recognition uses `1 − E`:
+
+```
+E      = 1 − groupThreshold      // static mode, or warmup fallback (before the unit has error history)
+E      = mean ± σ                // dynamic groupMode: conservative (+σ), neutral (0), aggressive (−σ)
+merge  = 1 − E                   // recognition strictness — derived from the same value
+```
+
+Error buckets are per unit: spatial = a single bucket, temporal = per-age. A fresh unit has no patterns and no
+stats, so it **corrects first** (minting a child pattern and seeding its bucket at the `1 − groupThreshold`
+fallback); only then can it **recognize**, reusing the threshold the correction side established. In one line: a
+unit's recognition strictness equals one minus how wrong it usually is.
+
+### Modes (`groupMode`, default `neutral`)
+
+`groupMode` sets how E adapts from each unit's running error stats (Welford mean/variance per (neuron, age),
+warming up over the first 3 samples before leaving the `1 − groupThreshold` fallback):
+
+| Mode | E | Behavior |
+|------|---|----------|
+| `static` | `1 − groupThreshold` (fixed) | Uniform threshold across all neurons and ages |
+| `conservative` | `mean + σ` | **Generalize** — high bar to correct, loose recognition; stays precise on clean units |
+| `neutral` | `mean` | React to anything worse than this unit's typical error (default) |
+| `aggressive` | `mean − σ` | **Memorize** — low bar to correct, strict recognition; mints aggressively |
+
+The mode is a generalize↔memorize knob: conservative generalizes (fewer, blurrier patterns, best at predicting
+unseen inputs), aggressive memorizes (many exact patterns, exploits repeats but does not generalize), neutral
+sits between. The correction threshold ships with each cast vote, so the threshold-vs-actual comparison happens
+at the dispatch level (Brain → Thalamus → Region → Column) without a round-trip to the neuron.
+
+---
+
 ## When Patterns Are Created
 
 Patterns are created by `brain.learnNewPatterns()` which calls `neuron.learnNewPattern()` in two scenarios:
@@ -21,32 +74,20 @@ Patterns are created by `brain.learnNewPatterns()` which calls `neuron.learnNewP
 
 When a neuron's event predictions have a high error rate:
 - Neuron voted for events in previous frame (has saved votes and context)
-- The ratio of failed event predictions to total event predictions exceeds the per-(neuron, age) threshold determined by `errorCorrectionMode`
+- The Jaccard-union error over predicted-vs-actual events exceeds the unit's correction threshold **E** (the grouping threshold — see [Grouping](#grouping-one-operation-for-recognition-and-correction))
 - Create a pattern with the predictor as parent
-
-**Threshold modes** (`errorCorrectionMode`, default `'conservative'`):
-
-| Mode | Threshold | Behavior |
-|------|-----------|----------|
-| `static` | `errorCorrectionThreshold` (fixed) | Uniform threshold across all neurons and ages |
-| `conservative` | `mean + σ` | Learn outliers — high bar for noisy neurons, low bar for clean ones (robot-brain default) |
-| `neutral` | `mean` | React to anything worse than this neuron's typical error at this age |
-| `aggressive` | `mean − σ` | Memorize aggressively — fires on most non-trivial errors |
-
-For dynamic modes, each neuron maintains per-age running mean and variance of its own observed error rates via Welford's online algorithm. Until at least 3 samples have been observed for a given (neuron, age) pair, the threshold falls back to `errorCorrectionThreshold` (warmup). The threshold ships with each cast vote so the threshold-vs-actual comparison happens at the dispatch level (Brain → Thalamus → Region → Column) without an extra round-trip to the neuron.
 
 **Implementation** (conceptual — actual code is Rust):
 ```javascript
 // Dispatch side: threshold rode in with the prior-frame vote.
-let failedEvents = 0;
-let totalEvents = 0;
-for (const vote of state.votes) {
-  if (vote.neuron.type === 'event') {
-    totalEvents++;
-    if (!actualEvents.has(vote.neuron)) failedEvents++;
-  }
-}
-const eventError = failedEvents / totalEvents;
+// Jaccard-union error over the predicted-vs-actual EVENT sets (same comparison recognition uses).
+const predicted = new Set([...state.votes].filter(v => v.neuron.type === 'event').map(v => v.neuron));
+const actual = new Set([...actualEvents].filter(n => n.type === 'event'));
+let missing = 0, novel = 0;
+for (const p of predicted) if (!actual.has(p)) missing++;   // predicted, didn't happen
+for (const a of actual) if (!predicted.has(a)) novel++;     // happened, not predicted
+const union = new Set([...predicted, ...actual]).size;
+const eventError = union ? (missing + novel) / union : 0;
 if (eventError > state.threshold) {
   // Error rate too high - create error pattern
   pattern = neuron.createPattern(context, actualEvents);
@@ -234,6 +275,7 @@ for (peak of peaks) {
 
 common = []
 missing = []
+novel = []
 
 for (entry of pattern.context.entries) {
   if (observed.hasKey(entry.neuron, entry.distance)) {
@@ -242,11 +284,15 @@ for (entry of pattern.context.entries) {
     missing.push(entry)  // X at 3 ✗ (Y is there instead)
   }
 }
+for (entry of observed.entries) {  // distance ≥ 1 only (distance 0 is same-frame spatial)
+  if (!pattern.context.hasKey(entry.neuron, entry.distance)) novel.push(entry)  // Y at 3
+}
 
-matchRatio = common.length / pattern.context.entries.length
-// matchRatio = 2/3 = 67% >= mergeThreshold (50%)
+// Jaccard union: common / (common + missing + novel)
+matchRatio = common.length / (common.length + missing.length + novel.length)
+// matchRatio = 2/4 = 50% >= groupThreshold (50%)
 
-if (matchRatio >= mergeThreshold) {
+if (matchRatio >= groupThreshold) {
   score = sum(common.map(e => e.strength))
   return {score, common, missing, novel}
 }
@@ -403,18 +449,17 @@ for (newNeuron of newActiveNeurons) {
 // Neuron E appears instead
 // learnNewPatterns() may create a new pattern
 
-let failedEvents = 0;
-let totalEvents = 0;
-for (const vote of votes) {
-  if (vote.neuron.type === 'event') {
-    totalEvents++;
-    if (!newActiveNeurons.has(vote.neuron)) failedEvents++;
-  }
-}
-const eventError = failedEvents / totalEvents;
+// Jaccard-union error over predicted-vs-actual EVENT sets: (missing + novel) / union.
+const predicted = new Set([...votes].filter(v => v.neuron.type === 'event').map(v => v.neuron));
+const actual = new Set([...newActiveNeurons].filter(n => n.type === 'event'));
+let missing = 0, novel = 0;
+for (const p of predicted) if (!actual.has(p)) missing++;
+for (const a of actual) if (!predicted.has(a)) novel++;
+const union = new Set([...predicted, ...actual]).size;
+const eventError = union ? (missing + novel) / union : 0;
 
 // neuron is the pattern that voted; state.threshold was sent in with the vote
-// (computed by the neuron under whatever errorCorrectionMode is active).
+// (computed by the neuron under whatever groupMode is active).
 if (eventError > state.threshold) {
   // Create new pattern at level+1
   newPattern = neuron.createPattern(context, newActiveNeurons)

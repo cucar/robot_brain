@@ -1184,11 +1184,11 @@ impl Thalamus {
                     // No predictions means no error to evaluate (bootstrap: parent has no d=0 connections yet).
                     if predicted_events.is_empty() { continue; }
 
-                    let missing = predicted_events.difference(&observed_l0_minus_self).count();
-                    let novel = observed_l0_minus_self.difference(&predicted_events).count();
-                    let union_size = predicted_events.union(&observed_l0_minus_self).count();
-                    if union_size == 0 { continue; }
-                    let error_rate = (missing + novel) as f64 / union_size as f64;
+                    // Jaccard-union error over predicted-vs-observed L0 events (shared with temporal).
+                    let error_rate = match Self::get_union_error(&predicted_events, &observed_l0_minus_self) {
+                        Some(e) => e,
+                        None => continue, // empty union → nothing to compare
+                    };
 
                     // Always record the error rate — even when below threshold — so the parent's
                     // Welford stats at age=0 build up samples and dynamic modes can adapt.
@@ -1696,10 +1696,26 @@ impl Thalamus {
         }
     }
 
+    /// Jaccard-union error between an inferred set and an observed set: `(missing + novel) / union`, where
+    /// missing = inferred ∖ observed and novel = observed ∖ inferred. This is `1 − match` under the union
+    /// denominator — the SAME grouping comparison recognition uses, here over predicted-vs-actual connection
+    /// sets. Shared by spatial (`mint_spatial_corrections`) and temporal (`evaluate_vote_error`) correction;
+    /// both pass sets already restricted to the comparable kind (events). Returns None when the union is
+    /// empty (nothing to compare).
+    fn get_union_error(inferred: &FxHashSet<NeuronId>, observed: &FxHashSet<NeuronId>) -> Option<f64> {
+        let union_size = inferred.union(observed).count();
+        if union_size == 0 { return None; }
+        let missing = inferred.difference(observed).count();
+        let novel = observed.difference(inferred).count();
+        Some((missing + novel) as f64 / union_size as f64)
+    }
+
     /// Evaluate a single (neuron, age) prior-frame vote against current actuals.
     /// Returns the observed error rate (so it can be sent back to the neuron as
     /// feedback) and whether it crosses the threshold the neuron supplied when it
     /// cast the vote. The neuron owns its error stats — thalamus only judges.
+    /// Scores the prior-frame EVENT prediction against this frame's events with the shared Jaccard-union
+    /// error (`get_union_error`); actions are excluded because they are judged by reward, not hit/miss.
     fn evaluate_vote_error(&self, age: Distance, state: &LevelAgeState, actual_neuron_ids: &FxHashSet<NeuronId>, frame_number: FrameNumber) -> Option<VoteErrorResult> {
 
         // age=0 neurons cannot need correction because they are just voting now
@@ -1717,18 +1733,21 @@ impl Thalamus {
             _ => return None,
         };
 
-        // compare the inferred events to reality — events only, actions are
-        // judged by reward not hit/miss
-        let mut failed_events = 0u32;
-        let mut total_events = 0u32;
-        for vote in votes {
-            if self.get_neuron_type(vote.neuron_id) == Some(NeuronType::Event) {
-                total_events += 1;
-                if !actual_neuron_ids.contains(&vote.neuron_id) { failed_events += 1; }
-            }
-        }
-        if total_events == 0 { return None; }
-        let error_rate = failed_events as f64 / total_events as f64;
+        // predicted = the prior-frame event votes
+        let predicted: FxHashSet<NeuronId> = votes.iter()
+            .filter(|v| self.get_neuron_type(v.neuron_id) == Some(NeuronType::Event))
+            .map(|v| v.neuron_id)
+            .collect();
+        if predicted.is_empty() { return None; } // no predictions → nothing to evaluate
+
+        // observed = this frame's event neurons
+        let observed_events: FxHashSet<NeuronId> = actual_neuron_ids.iter()
+            .copied()
+            .filter(|&a| self.get_neuron_type(a) == Some(NeuronType::Event))
+            .collect();
+
+        // calculate the error rate between predicted and observed events
+        let error_rate = Self::get_union_error(&predicted, &observed_events)?;
 
         // the threshold rode in with the vote when it was cast last frame
         let threshold = state.threshold.unwrap_or(0.5);
@@ -2494,6 +2513,25 @@ mod tests {
         let result = t.evaluate_vote_error(1, &state, &actuals, 1000).unwrap();
         assert!(!result.fire);
         assert!((result.error_rate - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_evaluate_vote_error_counts_novel_actuals() {
+        // Union behavior: an actual event the votes failed to predict counts as novel.
+        // Predicted = {1}, actual events = {1, 2}: common=1, missing=0, novel=1 → error = 1/2 = 0.5.
+        // The old containment form (missing/total = 0/1) would have scored 0 and never fired here.
+        let t = make_thalamus_with_events();
+        let mut actuals = FxHashSet::default();
+        actuals.insert(1);
+        actuals.insert(2);
+        let state = LevelAgeState {
+            votes: Some(vec![Vote { neuron_id: 1, strength: 1.0, reward: 0.0, distance: 1 }]),
+            threshold: Some(0.3),
+            ..Default::default()
+        };
+        let result = t.evaluate_vote_error(1, &state, &actuals, 1000).unwrap();
+        assert!(result.fire);
+        assert!((result.error_rate - 0.5).abs() < 1e-10);
     }
 
     #[test]

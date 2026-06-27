@@ -10,9 +10,10 @@ export declare class Brain {
    *
    * Options shape (all optional, with defaults matching JS Brain):
    *   contextLength: number (default 10)
-   *   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal:
-   *     recognition / reuse fires at similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ)
-   *   groupMode: string (default 'conservative') — how the derived correction threshold adapts
+   *   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal.
+   *     Seeds one adaptive per-unit threshold: recognition fires at similarity ≥ θ, correction at < θ, then both
+   *     float together off the unit's error stats once it has history (see groupMode).
+   *   groupMode: string (default 'neutral') — how the live grouping threshold adapts from error stats
    *   (retired: mergeThreshold / errorCorrectionThreshold and their spatial*/temporal* variants — now ignored with a warning)
    *   patternForgetRate: number (default 0.01)
    *   regions: number (default 1)

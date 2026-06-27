@@ -89,7 +89,7 @@ node apps/mnist/jobs/test.js --image-size 28 --buckets 2 --columns 20 --per-clas
 
 **Expected output of the evaluation run:**
 ```
-🧩 Restored brain config from backup 'mnist28': errorCorrectionMode=static, errorCorrectionThreshold=0.1, mergeThreshold=0.9
+🧩 Restored brain config from backup 'mnist28': groupMode=static, groupThreshold=0.9
   Episode 1/1: eval(test)=96.26% (9626/10000) | 0:96% 1:99% 2:93% 3:94% 4:95% 5:86% 6:96% 7:95% 8:87% 9:91%
 
 Results

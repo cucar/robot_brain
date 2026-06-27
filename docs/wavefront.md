@@ -1,11 +1,10 @@
 # Wave-Front Processing + Footprints
 
 > **Its own project.** The wave-front was originally Phase A of neuron reuse; it is now a **standalone
-> foundation project** (roadmap), because it is a large rearchitecture in its own right and the projects above
-> it — [adaptive grouping](./adaptive-grouping.md) and [neuron reuse](./neuron-reuse.md) — build on it.
-> Sequencing: adaptive grouping → **wave-front** → reuse. The reuse *mechanism* (recognize → predict L0 →
-> cluster → reuse/mint) lives in the reuse docs and is validated by the reference simulation
-> [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) (spec:
+> foundation project** (roadmap), because it is a large rearchitecture in its own right that
+> [neuron reuse](./neuron-reuse.md) builds on. 
+> The reuse *mechanism* (recognize → predict L0 → cluster → reuse/mint) lives in the reuse docs and is validated
+> by the reference simulation [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) (spec:
 > [neuron-reuse-simulation.md](./neuron-reuse-simulation.md)); this doc is the substrate that makes it legal.
 
 **The foundation.** It keeps the existing processing **structure** — spatial processing → apex

@@ -35,9 +35,9 @@ export function parseBrainArgs(argv = process.argv) {
 		reset: has('--reset'),
 		contextLength: num('--context-length', parseInt),
 		patternForgetRate: num('--forget-rate', parseFloat),
-		// The single grouping coefficient θ, shared by spatial and temporal: recognition / reuse fires at
-		// similarity ≥ θ, correction fires at similarity < θ (error threshold = 1 − θ). groupMode
-		// picks how the derived correction side adapts from per-unit Welford stats.
+		// The single grouping coefficient θ, shared by spatial and temporal. It seeds one adaptive per-unit
+		// threshold: recognition fires at similarity ≥ θ, correction at < θ, then both float together off the
+		// unit's error stats once it has history. groupMode picks how that adaptation works.
 		groupThreshold: num('--group-threshold', parseFloat),
 		groupMode: str('--group-mode'),
 		regions: num('--regions', parseInt),

@@ -187,10 +187,9 @@ All hyperparameters are configured via the Brain constructor options and can be 
 
 | Parameter | Default | Command Line Option | Description |
 |-----------|---------|---------------------|-------------|
-| `errorCorrectionMode` | `'conservative'` | `--error-mode` | Threshold function for creating correction patterns: `static` (fixed), `conservative` (mean + σ — learn outliers), `neutral` (mean), `aggressive` (mean − σ — memorize aggressively). Per-(neuron, age) error rate stats are tracked online via Welford's algorithm. |
-| `errorCorrectionThreshold` | 0.5 | `--error-threshold` | When `errorCorrectionMode='static'`, the fixed prediction error threshold. For dynamic modes, the warmup fallback used until 3 samples have been observed at a given (neuron, age) pair. |
+| `groupThreshold` | 0.5 | `--group-threshold` | The single grouping coefficient θ: recognition / reuse fires when context similarity ≥ θ, correction mints when error > 1 − θ. Shared by spatial and temporal. Under dynamic `groupMode`, this is the per-unit seed/fallback. |
+| `groupMode` | `'neutral'` | `--group-mode` | How the live grouping threshold adapts from each unit's error stats: `static` (pinned at the θ seed), `conservative` (mean + σ — generalize), `neutral` (mean), `aggressive` (mean − σ — memorize). Per-unit error rates tracked online via Welford's algorithm. |
 | `contextLength` | 10 | `--context-length` | Frames a neuron stays active in the sliding window |
-| `mergeThreshold` | 0.5 | `--merge-threshold` | Min context match ratio for pattern recognition |
 | `patternForgetRate` | 0.01 | `--forget-rate` | Pattern prediction decay rate per frame |
 
 ## Command Line Options
@@ -212,9 +211,8 @@ node <path-to-job.js> [options]
 | `--transaction-cost <n>`| Simulated transaction cost per trade, as a percentage (e.g. `0.01` = 0.01%). Buys pay more, sells receive less. Reports total cost at end of run |
 | `--context-length <n>`| Sliding window size (frames) |
 | `--forget-rate <n>` | Pattern activation decay rate per frame |
-| `--error-mode <m>` | Error-correction threshold mode: `static`, `conservative`, `neutral`, `aggressive` |
-| `--error-threshold <n>`| Static threshold value (when mode=`static`); warmup fallback for dynamic modes |
-| `--merge-threshold <n>`| Threshold for pattern context matching |
+| `--group-threshold <n>`| Grouping coefficient θ (recognition ≥ θ, correction > 1 − θ); shared spatial + temporal |
+| `--group-mode <m>` | Grouping-threshold adaptation: `static`, `conservative`, `neutral`, `aggressive` |
 | `--debug` | Show detailed frame-by-frame processing |
 | `--diagnostic` | Show inference and conflict resolution details |
 | `--save-brain <label>` | Save a CSV backup on shutdown (incl. crash) under `<jobDir>/backups/<label>/` |
@@ -328,7 +326,7 @@ config (KGC,GLD,SPY) — a single episode here ends around `$22,675,481.59`.
 
 ```bash
 # 1. Run one episode and save a backup
-node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --save-brain roundtrip
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --group-mode static --group-threshold 0.7 --forget-rate 0.001 --save-brain roundtrip
 
 # 2. Import that backup folder into MySQL
 node apps/db/import.js apps/stocks/jobs/test/backups/roundtrip
@@ -339,7 +337,7 @@ node apps/db/export.js apps/stocks/jobs/test/backups/roundtrip
 
 # 4. Load the round-tripped backup and run another episode — should reach
 #    ~$8,441,629.32, matching what a continuous two-episode run produces
-node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --error-mode static --error-threshold 0.3 --forget-rate 0.001 --load-brain roundtrip
+node apps/stocks/jobs/test.js --no-summary --symbols KGC,GOLD,SPY --context-length 3 --group-mode static --group-threshold 0.7 --forget-rate 0.001 --load-brain roundtrip
 ```
 
 The `apps/db` import uses `LOAD DATA LOCAL INFILE`, which needs `local_infile=ON`
