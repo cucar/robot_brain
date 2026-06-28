@@ -13,8 +13,13 @@ foundation workstream — it is a large rearchitecture and reuse cannot be built
 **structure** (spatial processing → apex handoff → temporal processing) but turn each stage into a **settling
 wave**, remove stored levels, make **all** corrections coordinate-less, and use **footprints** (the set of base
 neurons a correction covers) as the neighborhood primitive at every level. Coordinate-less corrections are what
-make multi-parent reuse legal. **Not bit-exact** — characterized regression (MNIST + stocks comparable); the
-reference simulation ([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js)) is the oracle for the migration.
+make multi-parent reuse legal. **Single-parent is the dividing wall**: this project stays one-correction-per-parent
+throughout and never touches multi-parent machinery (clustering, reuse-lookup, multi-depth state, refcounted
+reaping) — all of that is §2. The migration is five gated stages (impl plan §3): baseline → footprints
+(additive) → switch neighborhood to footprint adjacency → coordinate-less corrections → remove stored levels.
+**Not bit-exact** — characterized regression (MNIST + stocks comparable); the reference simulation
+([`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js)) is the oracle for the **spatial** wave, while the
+temporal wave is held to characterized regression against a recorded baseline (the sim is spatial-only).
 
 Knock-on: the wave-front removes channel-neighbor filtering (replaced by footprints), which removes the
 cross-stream **isolation** knob parallel-stream learning relied on — that now needs a different primitive
