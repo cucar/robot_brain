@@ -12,8 +12,8 @@ the *ordering and verification* layer; the architecture it implements is [wavefr
   existing minting mechanism — one correction per erroring parent — and changes only the neighborhood primitive
   (footprints) and the bookkeeping (no stored levels, coordinate-less corrections). So the benchmark numbers
   should stay **≈ current**: minor movement is expected, collapse is not. For stocks, equal-or-better.
-- **In-place edits, no runtime flag.** The old path lives in git history; the reference is the recorded
-  pre-migration benchmark numbers (Stage 0).
+- **In-place edits, no runtime flag.** The old path lives in git history; the reference is the current
+  pre-migration benchmark numbers (§2), recorded before the first edit.
 - **Spatial first, then temporal.** Footprint adjacency at L1+ is the one real behavioral change (see
   [wavefront.md](./wavefront.md), Footprints); the temporal wave is structurally unchanged, so it should track
   the benchmark with no movement. Apply each substrate change on the spatial side, confirm the benchmark, then
@@ -75,7 +75,7 @@ count. Hold the MNIST 7×7 config fixed across all stages so these are comparabl
 > stored levels ([wavefront.md](./wavefront.md)). It does **not** change what gets minted — corrections stay
 > one-per-parent. The four substrate changes below are the whole of it.
 
-The migration is **five stages**, each behind its own gate (the §2 benchmark). Every stage is an in-place edit,
+The migration is **four stages**, each behind its own gate (the §2 benchmark). Every stage is an in-place edit,
 verified on the **spatial** side first, then transliterated to the **temporal** side. The dependency order is
 deliberate: introduce the replacement primitive, make it load-bearing, *then* delete the two stored fields it
 makes redundant.
@@ -149,9 +149,9 @@ Representation choices for the port:
 
 ## 5. Risks
 
-- **No live dual-run** (in-place choice): a divergence can only be compared against the recorded baseline numbers
-  (Stage 0), not a side-by-side run. Mitigation: keep every step a separate revertible commit; the fast MNIST 7×7
-  run localizes quickly.
+- **No live dual-run** (in-place choice): a divergence can only be compared against the recorded pre-migration
+  benchmark numbers (§2), not a side-by-side run. Mitigation: keep every step a separate revertible commit; the
+  fast MNIST 7×7 run localizes quickly.
 - **Characterized regression can hide a real bug** inside the tolerance band. Mitigation: the unit gates
   (footprint adjacency, wave fixpoint, coordinate-less) catch what the aggregate accuracy misses.
 - **Big steps** are the likeliest place to lose the thread; decompose on first sign of an unexplained

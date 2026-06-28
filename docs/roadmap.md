@@ -15,8 +15,8 @@ wave**, remove stored levels, make **all** corrections coordinate-less, and use 
 neurons a correction covers) as the neighborhood primitive at every level. Coordinate-less corrections are what
 make multi-parent reuse legal. **Single-parent is the dividing wall**: this project stays one-correction-per-parent
 throughout and never touches multi-parent machinery (clustering, reuse-lookup, multi-depth state, refcounted
-reaping) — all of that is §2. The migration is five gated stages (impl plan §3): baseline → footprints
-(additive) → switch neighborhood to footprint adjacency → coordinate-less corrections → remove stored levels.
+reaping) — all of that is §2. The migration is four gated stages (impl plan §3): footprints (additive) → switch
+neighborhood to footprint adjacency → coordinate-less corrections → remove stored levels.
 **Not bit-exact** — characterized regression against fixed benchmarks (impl plan §2): a fast MNIST 7×7 run is the
 per-stage gate (stays ~70%), with stocks demo 3 + demo 4 as cross-domain confirmation (similar or better).
 
