@@ -1,51 +1,12 @@
 # Wave-Front Processing + Footprints
 
-> **Its own project.** The wave-front was originally Phase A of neuron reuse; it is now a **standalone
-> foundation project** (roadmap), because it is a large rearchitecture in its own right that
-> [neuron reuse](./neuron-reuse.md) builds on. 
-> The reuse *mechanism* (recognize → predict L0 → cluster → reuse/mint) lives in the reuse docs and is validated
-> by the reference simulation [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) (spec:
-> [neuron-reuse-simulation.md](./neuron-reuse-simulation.md)); this doc is the substrate that makes it legal.
+The wave-front keeps the existing processing **structure** — spatial processing → apex handoff → temporal
+processing — but turns each stage into a **settling wave**: it removes stored levels, makes **all** corrections
+coordinate-less, and introduces **footprints** as the universal neighborhood primitive. A correction needs no
+coordinate because output resolves only to base neurons and footprints carry locality.
 
-**The foundation.** It keeps the existing processing **structure** — spatial processing → apex
-handoff → temporal processing — but turns each stage into a **settling wave**, removes stored levels, makes
-**all** corrections coordinate-less, and introduces **footprints** as the universal neighborhood primitive.
-It subsumes the old "level as activation" idea — the wave removes levels outright rather than relocating them.
-Coordinate-less corrections are what make multi-parent reuse legal, so the wave-front is a hard prerequisite
-for the reuse project.
-
-This project is **not bit-exact** — it restructures processing. Its gate is a *characterized* regression
-(MNIST + stocks still learn comparably), not byte-identity.
-
----
-
-## Scope: single-parent is the dividing wall
-
-The wave-front and [neuron reuse](./neuron-reuse.md) must stay **completely separated** — the wave-front never
-calls anything in reuse, and the dependency points one way (reuse builds on the wave-front, never the reverse).
-The clean line between them is **parent cardinality**:
-
-- **The wave-front is single-parent throughout.** `neuron_parents` stays scalar
-  ([thalamus.rs](../brain/brain-core/src/thalamus.rs)); every correction is minted from exactly one erroring
-  parent and lives in exactly one routing table; the brain mints **one correction per erroring parent**, exactly
-  as today. Nothing about parent count changes.
-- **Everything that requires a correction to have more than one parent is reuse**: refcounted reaping,
-  multi-parent serialization, shared-neuron multi-depth activation, transitive-merge clustering, reuse-lookup,
-  and expansion. None of it is in this project.
-
-Two consequences of single-parent that shape the rest of this doc:
-
-1. **No multi-depth neuron state.** A correction with one parent has one activation path, so it is processed at
-   exactly **one sweep depth per frame**. The multi-valued `(neuron, frame, depth)` state that the
-   `neuron_states` map would need belongs to reuse (shared neurons routing-matched from several parents at
-   different depths) — **not** here. The existing `(neuron, frame)` keying is unchanged.
-2. **Footprints are still in scope and still well-defined.** A correction's footprint is the union of its
-   **constituents' footprints**, where the constituents are its **context set** (the parent plus its co-active
-   neighbors) — already a plain `&[NeuronId]` passed to `add_spatial_pattern`
-   ([neuron.rs](../brain/brain-core/src/neuron.rs)). Footprint-as-union depends on a correction binding multiple
-   *context* neurons (always true), not on multiple *parents* (the reuse thing). So footprints live entirely in
-   the wave-front; reuse only ever *reads* them. **No clustering** — transitive-merge grouping of multiple
-   requests into one correction is reuse; the wave-front keeps one-correction-per-parent.
+It is **not bit-exact** — it restructures processing. Its gate is a *characterized* regression (MNIST + stocks
+still learn comparably), not byte-identity.
 
 ---
 
@@ -75,6 +36,17 @@ distance in parallel; d=1 does not feed d=2.
 
 ---
 
+## One correction per parent
+
+Every correction is minted from exactly one erroring parent and lives in that parent's routing table — one
+correction per erroring parent, as today (`neuron_parents` is scalar,
+[thalamus.rs](../brain/brain-core/src/thalamus.rs)). This is what keeps per-neuron sweep state simple: a
+correction with a single parent has a single activation path, so the sweep reaches it at exactly **one depth per
+frame**. Per-neuron state therefore stays keyed by `(neuron, frame)` — no depth dimension. (That key already
+handles the same neuron active at several *ages*; ages are the `frame` dimension, distinct from sweep depth.)
+
+---
+
 ## No stored levels
 
 The level-sweep already settles bottom-up until no higher level fires (above). What changes here is that
@@ -99,16 +71,16 @@ The sweep, unchanged in shape (only neighborhood and coordinate handling differ 
 
 ```
 process_spatial (d=0):
-  activate base sensory neurons          // each: footprint = {self}, coordinate + channel given
+  activate base sensory neurons          // each: footprint = {self}, coordinate + base-graph neighbors given
   repeat until fixpoint:
      fire d=0 routing matches            // activate existing corrections whose constituents are ready
      for each active neuron N:
         observed  = co-active neurons whose footprint is adjacent to N's    // neighborhood
         predicted = N's d=0 connection targets
         if mismatch > threshold:
-           C = correction over the footprint-adjacent erroring cluster      // coordinate-less
-           C.footprint = ⋃ cluster footprints
-           wire cluster → C
+           C = correction for N over its footprint-adjacent neighborhood    // coordinate-less
+           C.footprint = footprint(N) ∪ ⋃ neighborhood footprints
+           install C in N's routing table (context = neighborhood)
      stop when a pass fires nothing new and mints nothing
 
 apex handoff: apex (non-subsumed spatial fired set) → temporal
@@ -124,18 +96,19 @@ process_temporal (d>0):
 The mechanism that lets corrections be coordinate-less while keeping locality at every level.
 
 - A neuron's **footprint** = the set of **base sensory neurons** it ultimately covers.
-  - Base sensory neuron: `footprint = {itself}` (and it keeps its coordinate + channel-neighbors).
-  - Correction (any distance): `footprint = union of its constituents' footprints`, computed at mint.
+  - Base sensory neuron: `footprint = {itself}` (and it keeps its coordinate + base-graph neighbors).
+  - Correction (any distance): `footprint = union of its constituents' footprints`, computed at mint. Its
+    constituents are its **context set** — the parent plus the co-active neighbors the correction binds.
 - **Neighborhood** at any level: A and B are neighbors iff their footprints **touch in the base neighbor
   graph** — `∃ base a ∈ footprint(A), base b ∈ footprint(B)` with `a`, `b` spatial-neighbors (or equal).
 - This replaces **both** coordinate-inheritance (spatial RF growth) **and** channel-neighbor filtering
   (`is_spatial_neighbor_channel` / `is_temporal_neighbor_channel` — [thalamus.rs](../brain/brain-core/src/thalamus.rs)).
   Receptive fields still grow one ring per layer — the union footprint widens naturally.
 
-**What this actually changes vs. today (the regression expectation).** The brain already has spatial locality —
-it is just expressed at *channel* granularity. Retinotopic MNIST registers **one channel per pixel** and the
-encoder wires each pixel's `(2r+1)²` window via `setSpatialNeighbors` ([encoder.js](../apps/mnist/encoder.js)),
-so `is_spatial_neighbor_channel` *is* the pixel-radius neighborhood. Footprints therefore are **not** introducing
+**What this changes vs. today (the regression expectation).** The brain already has spatial locality — it is
+just expressed at *channel* granularity. Retinotopic MNIST registers **one channel per pixel** and the encoder
+wires each pixel's `(2r+1)²` window via `setSpatialNeighbors` ([encoder.js](../apps/mnist/encoder.js)), so
+`is_spatial_neighbor_channel` *is* the pixel-radius neighborhood. Footprints are therefore **not** introducing
 locality where there was none:
 
 - **At L0**, footprint touch in the base neighbor graph ≈ today's channel-neighbor window. Near-equivalent — the
@@ -143,9 +116,9 @@ locality where there was none:
   makes that equivalence hold (see [wavefront-implementation.md](./wavefront-implementation.md) §2).
 - **At L1+**, today's correction inherits its parent's *single pixel coordinate* and filters by that one pixel's
   window. Footprints replace that single-pixel anchor with the **union of covered pixels**, so the receptive
-  field grows one ring per layer. **This is the real behavioral change** — and the intended one (graded
-  locality). Expect the numbers to **move** here (favorably, per the sim), not reproduce the leveled baseline.
-  This is exactly why the gate is characterized regression, not bit-exactness.
+  field grows one ring per layer. **This is the real behavioral change**, and the intended one: graded locality.
+  Expect the numbers to **move** here, not reproduce the leveled baseline — which is exactly why the gate is
+  characterized regression, not bit-exactness.
 
 **Representation:** footprint as a **bitset over base sensory neurons** (49–784 bits for MNIST — trivial).
 Adjacency = dilate one footprint by the precomputed base neighbor-ring and AND with the other; nonzero ⇒
@@ -177,7 +150,7 @@ base sensory/action neurons. Removing the correction coordinate touches nothing 
 the existing "no-coordinate ⇒ must not be a vote target" panic stays valid and becomes the load-bearing
 invariant.
 
-**Three current uses of a correction's inherited coordinate must each be retired or re-homed** — the mint paths
+**Three current uses of a correction's inherited coordinate must each be retired** — the mint paths
 ([allocate_temporal_pattern_neuron](../brain/brain-core/src/thalamus.rs),
 [allocate_spatial_pattern_neuron](../brain/brain-core/src/thalamus.rs)) inherit the parent's full coordinate into
 `base_neurons` today, and the comments there cite three consumers:
@@ -188,10 +161,8 @@ invariant.
    shouldn't: corrections are forbidden as vote targets, so they never reach the per-dimension grouping). Verify,
    don't assume.
 3. **Restore** — today restore rederives a correction's coordinate by **walking `neuron_parents` to the L0
-   ancestor**. Coordinate-less corrections make this walk unnecessary for corrections (they carry no
-   coordinate); the walk survives only where something genuinely needs the base ancestor, and the
-   pattern's `base_neurons` insert at mint is dropped. The backup/restore changes ride with the
-   stored-level removal (format-version bump, below).
+   ancestor**. Coordinate-less corrections make this walk unnecessary, and the pattern's `base_neurons` insert at
+   mint is dropped. The backup/restore changes ride with the stored-level removal (format-version bump, below).
 
 Order matters: switch neighborhoods to footprint adjacency **first**, then drop the coordinate — otherwise
 neighbor filtering loses its input mid-migration.
@@ -211,13 +182,11 @@ neighbor filtering loses its input mid-migration.
   ([neuron.rs](../brain/brain-core/src/neuron.rs)); add a `footprint` (bitset) to each neuron; correction
   mint computes `footprint = ⋃ constituents`. Connection/error/learn steps filter by footprint adjacency
   instead of channel-neighbor.
-- **`brain/brain-core/src/memory.rs`** — **no shape change in this project.** A single-parent correction has one
-  activation path, so it is reached at exactly one depth per frame; the existing `LevelAgeState` per
-  `(neuron, frame)` ([memory.rs](../brain/brain-core/src/memory.rs)) is sufficient (it already handles the same
-  neuron at multiple *ages*, which is the `frame` dimension — not the same as multiple depths). The multi-valued
-  `(neuron, frame, depth)` state is a **reuse** change (shared neurons routing-matched from several parents at
-  different depths) and lives there, not here. The level *indices* (`spatial_level_index` /
-  `temporal_level_index`) still exist as the wave's activation state.
+- **`brain/brain-core/src/memory.rs`** — **no shape change.** Each correction is reached at one depth per frame
+  (one correction per parent), so the existing `LevelAgeState` per `(neuron, frame)`
+  ([memory.rs](../brain/brain-core/src/memory.rs)) is sufficient — it already handles the same neuron at multiple
+  *ages* (the `frame` dimension), which is distinct from sweep depth. The level *indices* (`spatial_level_index`
+  / `temporal_level_index`) remain as the wave's activation state.
 - **`brain/brain-core/src/brain.rs`** — drive the two waves + apex handoff (structure unchanged); voting
   unchanged (already base-only).
 - **`brain/brain-core/src/backup.rs`** — drop both level columns from `neurons.csv`; drop the correction
@@ -240,8 +209,8 @@ neighbor filtering loses its input mid-migration.
 - **Coordinate-less corrections unit**: corrections have no coordinate; voting/consensus/output unchanged
   (still base-only) on a fixed run; the `aggregate_votes` panic never fires.
 - **Apex/handoff**: the spatial apex feeds temporal with the structure unchanged — characterized regression of
-  demo-4 against the **recorded baseline** (the sim is spatial-only, so it is not the oracle for the temporal
-  wave; see [wavefront-implementation.md](./wavefront-implementation.md) §1).
+  demo-4 against the recorded baseline (verification approach in
+  [wavefront-implementation.md](./wavefront-implementation.md) §1).
 
 ---
 
@@ -249,11 +218,3 @@ neighbor filtering loses its input mid-migration.
 
 1. **Footprint growth at apex.** Top-level footprints can cover most of the input — fine for adjacency, watch
    memory if base is huge (vision). Bitsets scale, but revisit.
-
-**Resolved / re-homed (no longer open for this project):**
-
-- **Multi-depth `neuron_states` shape** — *moved to reuse.* Under single-parent every correction is reached at
-  one depth per frame, so `neuron_states` keeps its `(neuron, frame)` shape here. The multi-valued
-  `(neuron, frame, depth)` decision (`{depth → state}` vs a `(neuron, frame, depth)` key, picked on
-  eviction/code-shape grounds) belongs to the reuse project, which introduces the shared-neuron-at-many-depths
-  case. See "Scope: single-parent is the dividing wall" above.

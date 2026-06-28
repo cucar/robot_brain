@@ -1,29 +1,20 @@
 # Wave-Front Implementation & Migration Plan
 
-> **Spatial oracle is built.** The reference simulation specified in
-> [neuron-reuse-simulation.md](./neuron-reuse-simulation.md) is **built and validated** —
-> [`apps/mnist/jobs/wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js) implements the corrected model
-> (recognize → predict L0 → cluster → reuse/mint, with refinement as the split force) and the merge/split
-> equilibrium has been characterized. It is **spatial-only**, so it is the verification oracle for the
-> **spatial** wave of this migration (the temporal wave is held to characterized regression against a recorded
-> baseline — §1). The substrate migration is staged in §3; the verification approach (§1) and tracked numbers
-> (§2) are its anchors.
+> **Spatial oracle.** A reference simulation, [`wavefront-sim.js`](../apps/mnist/jobs/wavefront-sim.js), is built
+> and validated. It is **spatial-only (d=0)**, so it is the verification oracle for the **spatial** wave of this
+> migration; the temporal wave is held to characterized regression against a recorded baseline (§1).
 
-The migration plan for the [wave-front foundation](./wavefront.md): move the brain from the current spatial
-architecture to the wave-front incrementally, verifying each step against numbers from an MNIST verification
-run. Theory: [neuron-reuse.md](./neuron-reuse.md) §2. The reuse phases that build on this foundation are
-specs [A](./neuron-reuse-index.md), [B](./neuron-reuse-frame.md), [C](./neuron-reuse-final.md). This doc is
-the *ordering and verification* layer over the wave-front rearchitecture ([wavefront.md](./wavefront.md)).
+The plan to move the brain from the current architecture to the wave-front ([wavefront.md](./wavefront.md))
+incrementally, verifying each step against numbers from an MNIST run. This doc is the *ordering and verification*
+layer; the architecture it implements is [wavefront.md](./wavefront.md).
 
 ---
 
-## 1. Verification approach (what survives the model correction)
+## 1. Verification approach
 
-The **concrete step sequence is the substrate migration in §3** (footprints → neighborhood switch →
-coordinate-less → level-less), which follows from the wave-front substrate design
-([wavefront.md](./wavefront.md)), **not** from the reuse mechanism. The rebuilt simulation
-([neuron-reuse-simulation.md](./neuron-reuse-simulation.md)) is the **spatial verification oracle** for that
-migration, not its step list. The committed **verification approach** is:
+The **step sequence is the substrate migration in §3** (footprints → neighborhood switch → coordinate-less →
+level-less), which follows from the architecture ([wavefront.md](./wavefront.md)). The reference simulation
+supplies the target numbers for the spatial wave, not the step list. The committed **verification approach** is:
 
 - **Sim as oracle — for the spatial wave.** The brain is verified against the **simulation**, never the old
   brain (different algorithms — they will not, and should not, match). Behavior-preserving refactors keep the
@@ -43,14 +34,6 @@ migration, not its step list. The committed **verification approach** is:
   required).
 - **Config parity is mandatory** — sim and brain must share image size, binarization, and radius/connectivity,
   or the oracle is meaningless.
-
-What the correction **changes**:
-
-- **The merge threshold is NOT deferred.** The earlier plan introduced it last; that is wrong — the threshold
-  is intrinsic to **recognition** (an approximate context match), so without it the hierarchy never forms
-  ([neuron-reuse.md §3.8](./neuron-reuse.md)). There is no "exact-match wave-front first" stage.
-- **MNIST is one frame per image, but the hierarchy builds over many frames** via recognition, so the oracle is
-  the multi-frame corrected sim — not a single-frame pass.
 
 ---
 
@@ -80,16 +63,9 @@ for the headline trend.
 
 ## 3. Migration stages
 
-> **Scope reminder.** This is the migration for the **wave-front substrate only** — single-parent throughout
-> ([wavefront.md](./wavefront.md), "Scope: single-parent is the dividing wall"). The
-> recognition → predict-L0 → cluster → reuse/expand *mechanism* is the **reuse** project and is **not** staged
-> here; an earlier draft of this section sequenced it by mistake. The wave-front delivers four substrate changes
-> and nothing that requires a correction to have more than one parent.
-
-The original detailed stages encoded the old, wrong model and are removed (the original **Stage A** "build the
-sim" is superseded by [neuron-reuse-simulation.md](./neuron-reuse-simulation.md); the original **Stages C–D**
-"exact-match wave-front then deferred threshold" are invalid — the threshold is intrinsic to recognition, which
-is a reuse concern, not a wave-front one).
+> **Scope.** This migration moves the **substrate**: footprints, coordinate-less corrections, and the removal of
+> stored levels ([wavefront.md](./wavefront.md)). It does **not** change what gets minted — corrections stay
+> one-per-parent. The four substrate changes below are the whole of it.
 
 The migration is **five stages**, each behind its own gate. Every stage is an in-place edit (§1), verified on the
 **spatial** side first (against the sim oracle + baseline) then transliterated to the **temporal** side (against
@@ -125,7 +101,7 @@ the **first real behavioral change**.
 
 *Gate (characterized regression, not flat):* L0-dominated behavior ≈ baseline (footprint ≈ channel-neighbor at
 base); L1+ **moves toward the sim** as receptive fields grow by union rather than single-pixel anchor
-([wavefront.md](./wavefront.md), "What this actually changes"). Record the deltas; confirm no collapse and that
+(see [wavefront.md](./wavefront.md), Footprints). Record the deltas; confirm no collapse and that
 the depth/per-level trend tracks the sim's direction on the small fixed subset.
 
 ### Stage 3 — Coordinate-less corrections
@@ -162,18 +138,15 @@ serialized; apex/handoff demo-4 ≈ baseline.
 
 ## 4. Rust-port notes
 
-Representation choices that survive the model correction:
+Representation choices for the port:
 
 - **Footprints are bitsets** over base sensory neurons; adjacency = dilate one footprint by the precomputed
   base neighbor-ring and AND with the other; nonzero ⇒ touch ([wavefront.md](./wavefront.md)).
 - **Sets as sorted `Vec<u32>`** of indices, not delimited strings (footprint constituents, context sets).
 - **Deterministic ordering** (sorted keys) everywhere, for reproducible diagnostics and to match the sim.
-- *(Reuse-scope, not wave-front)* cluster membership via union-find over the neighbor graph (the transitive
-  merge) belongs to the reuse project — listed here only so the port keeps the footprint representation
-  union-find-friendly.
 - **Neighbor adjacency is footprint *touch* at every level** — base-graph overlap-or-adjacency, *not* parent
   membership. Graded locality (footprints span more as you climb) is the intended behavior: it is what lets
-  disjoint-but-abutting features become neighbors ([neuron-reuse.md §2, §3.4](./neuron-reuse.md)).
+  disjoint-but-abutting features become neighbors.
 
 ---
 
