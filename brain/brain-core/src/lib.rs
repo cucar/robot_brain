@@ -20,6 +20,7 @@ mod backup;
 mod column;
 mod context;
 mod diagnostics;
+mod footprint;
 mod memory;
 mod neuron;
 mod quantizer;

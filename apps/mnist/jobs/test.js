@@ -542,7 +542,13 @@ export default class MNISTTestJob extends Job {
 		const ips = (done / elapsed).toFixed(0);
 		const pct = (done / total * 100).toFixed(1);
 		const acc = (tally.correct / done * 100).toFixed(1);
-		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s   `);
+		// Live neuron count, cumulative mints, and per-level active-correction counts — the consolidation
+		// and hierarchy-depth signals during a long pass. Level counts reflect the last image's active set.
+		const summary = this.brain.getFrameSummary();
+		const minted = this.brain.getSpatialCorrectionCount();
+		const lc = this.brain.spatialLevelCounts();
+		const levels = lc.length ? lc.map((c, i) => `L${i + 1}:${c}`).join(' ') : 'flat';
+		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s | ${summary.neuronCount} neurons (${minted} minted) | depth ${summary.maxSpatialLevel}: ${levels}   `);
 	}
 
 	/**

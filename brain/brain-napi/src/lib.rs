@@ -295,7 +295,6 @@ impl JsBrain {
         let info = brain.inspect_neuron(neuron_id as u64);
         let mut obj = env.create_object()?;
         obj.set_named_property("neuronId", env.create_uint32(info.neuron_id as u32)?)?;
-        obj.set_named_property("temporalLevel", env.create_uint32(info.temporal_level as u32)?)?;
         match info.parent_id {
             Some(p) => obj.set_named_property("parentId", env.create_uint32(p as u32)?)?,
             None => obj.set_named_property("parentId", env.get_null()?)?,
@@ -407,32 +406,33 @@ impl JsBrain {
         Ok(self.inner.borrow().spatial_level_counts())
     }
 
-    /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
-    /// This is the set a channel may co-fire with in the same frame to form a spatial pattern.
-    /// Names not in the registry are silently ignored; an empty list shrinks the spatial
-    /// neighborhood to {itself}; channels with no call retain the default all-pairs spatial
-    /// neighborhood. Call AFTER registering all channels — neighbor names are resolved at this call.
+    /// Dump active spatial corrections (level ≥ 1) with the footprint of each, for visualizing the
+    /// hierarchy. Reflects the most recently processed frame. Returns a JSON string:
+    /// `[{"id":N,"level":L,"ch":[channelIds...],"bk":[bucketIds...]}, ...]` where ch[i]/bk[i] is one
+    /// base pixel the correction covers. Parse with JSON.parse on the JS side.
+    #[napi(js_name = "dumpActiveSpatialCorrections")]
+    pub fn dump_active_spatial_corrections(&self) -> Result<String> {
+        let raw = self.inner.borrow().dump_active_spatial_corrections();
+        let mut items = Vec::with_capacity(raw.len());
+        for (id, level, bases) in raw {
+            let ch: Vec<String> = bases.iter().map(|&(c, _)| c.to_string()).collect();
+            let bk: Vec<String> = bases.iter().map(|&(_, b)| b.to_string()).collect();
+            items.push(format!(
+                "{{\"id\":{},\"level\":{},\"ch\":[{}],\"bk\":[{}]}}",
+                id, level, ch.join(","), bk.join(",")
+            ));
+        }
+        Ok(format!("[{}]", items.join(",")))
+    }
+
+    /// Declare the base-level neighbor channel set for a registered channel — THE neighbor graph that
+    /// footprint adjacency uses in both waves (spatial and temporal). Names not in the registry are
+    /// silently ignored; an empty list shrinks the neighborhood to {itself}; channels with no call
+    /// retain the default all-pairs neighborhood. Call AFTER registering all channels — neighbor names
+    /// are resolved at this call. (Kept named `setSpatialNeighbors` for API stability.)
     #[napi(js_name = "setSpatialNeighbors")]
     pub fn set_spatial_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
         self.inner.borrow_mut().set_spatial_neighbors(&name, &neighbor_names);
-        Ok(())
-    }
-
-    /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
-    /// This is the set whose past a channel may sequence against to predict the future.
-    /// Same name-resolution and all-pairs-default semantics as `setSpatialNeighbors`.
-    #[napi(js_name = "setTemporalNeighbors")]
-    pub fn set_temporal_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
-        self.inner.borrow_mut().set_temporal_neighbors(&name, &neighbor_names);
-        Ok(())
-    }
-
-    /// Declare the same neighbor set for BOTH phases — convenience for channels whose spatial and
-    /// temporal neighbors coincide (e.g. retinotopic pixels). Equivalent to calling
-    /// `setSpatialNeighbors` and `setTemporalNeighbors` with the same list.
-    #[napi(js_name = "setChannelNeighbors")]
-    pub fn set_channel_neighbors(&self, name: String, neighbor_names: Vec<String>) -> Result<()> {
-        self.inner.borrow_mut().set_channel_neighbors(&name, &neighbor_names);
         Ok(())
     }
 

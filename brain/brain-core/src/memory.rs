@@ -166,11 +166,6 @@ impl Memory {
         self.frame_number
     }
 
-    /// Get the Set of neuron IDs at a specific age.
-    pub fn get_neuron_ids_at_age(&self, age: Distance) -> FxHashSet<NeuronId> {
-        let frame = self.frame_number - age as i64;
-        self.age_index.get(&frame).cloned().unwrap_or_default()
-    }
 
     /// Get the union of every active voter neuron id across all ages in the sliding window.
     /// A voter is an active neuron whose `activated_pattern_id` is None at that age.
@@ -394,6 +389,66 @@ impl Memory {
         self.temporal_level_index.len()
     }
 
+    /// Map each spatially-active neuron to the level it fired at this frame — the activation-derived
+    /// replacement for a stored spatial-level field. A neuron is active at exactly one level, so the
+    /// inversion is unambiguous. The wave's mint pass reads a parent's depth from here.
+    pub fn spatial_active_levels(&self) -> FxHashMap<NeuronId, Level> {
+        let mut levels = FxHashMap::default();
+        for (&level, ids) in &self.spatial_level_index {
+            for &id in ids {
+                levels.insert(id, level);
+            }
+        }
+        levels
+    }
+
+    /// Number of spatially-active correction neurons (levels ≥ 1) this frame. Diagnostic, recomputed
+    /// from the activation index now that levels are not stored on the neuron.
+    pub fn count_active_spatial_corrections(&self) -> usize {
+        self.spatial_level_index.iter()
+            .filter(|(&level, _)| level >= 1)
+            .map(|(_, ids)| ids.len())
+            .sum()
+    }
+
+    /// Per-level count of spatially-active corrections: index `i` is the count at level `i + 1`.
+    /// Length is the highest active correction level. Diagnostic, recomputed from the activation index.
+    pub fn spatial_level_counts(&self) -> Vec<u32> {
+        let max_level = self.spatial_level_index.keys().copied().max().unwrap_or(0);
+        if max_level == 0 {
+            return Vec::new();
+        }
+        let mut counts = vec![0u32; max_level as usize];
+        for (&level, ids) in &self.spatial_level_index {
+            if level >= 1 {
+                counts[(level - 1) as usize] = ids.len() as u32;
+            }
+        }
+        counts
+    }
+
+    /// Highest spatial level active this frame (0 = sensory only). Diagnostic.
+    pub fn get_spatial_max_level(&self) -> Level {
+        self.spatial_level_index.keys().copied().max().unwrap_or(0)
+    }
+
+    /// Highest temporal level active anywhere in the sliding window (0 = sensory only). Diagnostic.
+    pub fn get_temporal_max_level(&self) -> Level {
+        self.temporal_level_index.keys().copied().max().unwrap_or(0)
+    }
+
+    /// The temporal level a neuron is currently active at, if any — best-effort for diagnostic labels
+    /// now that levels are not stored. Returns the lowest active level if the neuron appears at several.
+    pub fn get_active_temporal_level(&self, neuron_id: NeuronId) -> Option<Level> {
+        let mut found: Option<Level> = None;
+        for (&level, frames) in &self.temporal_level_index {
+            if frames.values().any(|ids| ids.contains(&neuron_id)) {
+                found = Some(found.map_or(level, |f| f.min(level)));
+            }
+        }
+        found
+    }
+
     // ── Context snapshot ────────────────────────────────────────────────────
 
     /// Export active neuron activations with their full per-age state.
@@ -474,18 +529,17 @@ mod tests {
         m.activate_temporal_neuron(20, 0);
 
         // at age 0, both neurons should be present
-        let ids = m.get_neuron_ids_at_age(0);
-        assert!(ids.contains(&10));
-        assert!(ids.contains(&20));
+        let base = m.get_temporal_base_level();
+        assert!(base[0].contains(&10));
+        assert!(base[0].contains(&20));
         assert_eq!(m.depth(), 1);
 
         // advance to frame 2 — neurons move to age 1
         m.age(2);
         assert_eq!(m.depth(), 2);
-        let ids_age1 = m.get_neuron_ids_at_age(1);
-        assert!(ids_age1.contains(&10));
-        let ids_age0 = m.get_neuron_ids_at_age(0);
-        assert!(ids_age0.is_empty());
+        let base = m.get_temporal_base_level();
+        assert!(base[1].contains(&10));
+        assert!(base[0].is_empty());
     }
 
     #[test]
@@ -500,12 +554,12 @@ mod tests {
         m.age(2);
         m.age(3);
         // neuron 10 is now at age 2 — still in window (depth=3, ages 0..2)
-        assert!(m.get_neuron_ids_at_age(2).contains(&10));
+        assert!(m.get_temporal_base_level()[2].contains(&10));
 
         // advance past context_length — neuron 10 should be evicted
         m.age(4);
-        // frame 1 is evicted (4 - 3 = 1)
-        assert!(!m.get_neuron_ids_at_age(3).contains(&10));
+        // frame 1 is evicted (4 - 3 = 1) — neuron 10 is gone from every age slot
+        assert!(m.get_temporal_base_level().iter().all(|s| !s.contains(&10)));
         assert_eq!(m.neuron_states.len(), 0); // fully evicted
     }
 
@@ -620,12 +674,10 @@ mod tests {
         assert_eq!(m.depth(), 7); // span: 1 - (-5) + 1 = 7
 
         // restored neurons are reachable at correct ages
-        let ids = m.get_neuron_ids_at_age(2); // frame 1 - 2 = -1
-        assert!(ids.contains(&10));
-        let ids = m.get_neuron_ids_at_age(4); // frame 1 - 4 = -3
-        assert!(ids.contains(&20));
-        let ids = m.get_neuron_ids_at_age(6); // frame 1 - 6 = -5
-        assert!(ids.contains(&30));
+        let base = m.get_temporal_base_level();
+        assert!(base[2].contains(&10)); // frame 1 - 2 = -1
+        assert!(base[4].contains(&20)); // frame 1 - 4 = -3
+        assert!(base[6].contains(&30)); // frame 1 - 6 = -5
     }
 
     #[test]
