@@ -271,6 +271,43 @@ impl Region {
             });
     }
 
+    /// Register source neurons on target neurons' reverse connection index. Each entry is (target,
+    /// sources); routed by target like the context-ref dispatch. Same shape as `update_spatial_context_refs`.
+    pub fn update_spatial_connection_sources(&mut self, updates: &[(NeuronId, Vec<NeuronId>)]) {
+        let mut by_column: Vec<Vec<(NeuronId, Vec<NeuronId>)>> = (0..self.c).map(|_| Vec::new()).collect();
+        for (target_id, sources) in updates {
+            let col = self.route_neuron(*target_id);
+            by_column[col].push((*target_id, sources.clone()));
+        }
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_updates)| {
+                if !col_updates.is_empty() {
+                    col.update_spatial_connection_sources(&col_updates);
+                }
+            });
+    }
+
+    /// Every d=0 edge across this region's columns as (source, target) — drives the restore rebuild of
+    /// the reverse connection index.
+    pub fn collect_spatial_connection_edges(&self) -> Vec<(NeuronId, NeuronId)> {
+        self.columns.par_iter()
+            .flat_map(|col| col.collect_spatial_connection_edges())
+            .collect()
+    }
+
+    /// The reverse connection index of `target_id` (sources with a d=0 connection to it), if owned here.
+    pub fn get_spatial_connection_sources(&self, target_id: NeuronId) -> Option<FxHashSet<NeuronId>> {
+        let col = self.route_neuron(target_id);
+        self.columns[col].get_spatial_connection_sources(target_id).cloned()
+    }
+
+    /// Count of `neuron_id`'s d=0 connections (prediction breadth) for Jaccard reuse scoring, if owned here.
+    pub fn spatial_connection_count(&self, neuron_id: NeuronId) -> Option<usize> {
+        let col = self.route_neuron(neuron_id);
+        self.columns[col].spatial_connection_count(neuron_id)
+    }
+
     /// Partition context ref updates into per-column work lists by target neuron_id.
     fn route_context_ref_updates(
         &self,

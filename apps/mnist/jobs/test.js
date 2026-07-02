@@ -109,6 +109,10 @@ export default class MNISTTestJob extends Job {
 		if (episodes !== null) this.config.maxEpisodes = episodes;
 		if (process.argv.includes('--disable-learning')) this.config.disableLearning = true;
 		if (process.argv.includes('--test-data')) this.config.testData = true;
+		// --voter-stats: during a frozen pass, accumulate per-correction digit-firing histograms and print a
+		// selectivity summary at the end. Diagnoses whether corrections are sharp (fire on one digit → strong
+		// NB voter) or generic (fire across digits → flat P(d|voter) → dilutes the NB product).
+		if (process.argv.includes('--voter-stats')) this.config.voterStats = true;
 		if (process.argv.includes('--split')) this.config.split = true;
 		if (process.argv.includes('--no-balance')) this.config.noBalance = true;
 		const missIdx = process.argv.indexOf('--debug-miss');
@@ -122,6 +126,24 @@ export default class MNISTTestJob extends Job {
 		// network sheds rarely-seen corrections. Must be parsed before the null-default below so it sticks.
 		const forgetIdx = process.argv.indexOf('--forget-rate');
 		if (forgetIdx !== -1 && process.argv[forgetIdx + 1] !== undefined) this.options.patternForgetRate = parseFloat(process.argv[forgetIdx + 1]);
+
+		// Ablation toggles for the experimental spatial mechanisms. These map to env vars that brain-core
+		// reads once per process (see brain-core/src/config.rs); defaults (unset) leave every mechanism ON.
+		//   --reuse on|off                        — spatial neuron reuse (Phase C reuse lookup).
+		//   --refine none|context|connection|both — spatial pattern refinement (sources / targets).
+		const str = (flag) => {
+			const i = process.argv.indexOf(flag);
+			return i !== -1 && process.argv[i + 1] !== undefined ? process.argv[i + 1] : null;
+		};
+		const reuse = str('--reuse');
+		if (reuse !== null) process.env.BRAIN_REUSE = ['off', '0', 'false', 'no'].includes(reuse) ? '0' : '1';
+		const refine = str('--refine');
+		if (refine !== null) {
+			const ctx = refine === 'context' || refine === 'both';
+			const conn = refine === 'connection' || refine === 'both';
+			process.env.BRAIN_REFINE_CONTEXT = ctx ? '1' : '0';
+			process.env.BRAIN_REFINE_CONNECTION = conn ? '1' : '0';
+		}
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
@@ -387,6 +409,10 @@ export default class MNISTTestJob extends Job {
 		const indices = this.buildPassIndices(digit);
 		const phase = learning ? 'train' : 'eval';
 
+		// Voter-selectivity accumulator (frozen passes only): correctionId → per-digit firing histogram.
+		const voterHist = (this.config.voterStats && !learning) ? new Map() : null;
+		let voterFrames = 0, voterActiveSum = 0;
+
 		for (let i = 0; i < indices.length; i++) {
 			const idx = indices[i];
 			const label = labels[idx];
@@ -394,6 +420,17 @@ export default class MNISTTestJob extends Job {
 			// Classify the image (automatic inference), then record the predicted digit.
 			const predicted = this.classifyImage(bits[idx]);
 			this.recordPrediction(tally, label, predicted);
+
+			// Accumulate which digits each active correction fires on, plus its level and footprint size.
+			if (voterHist) {
+				const active = JSON.parse(this.brain.dumpActiveSpatialCorrections());
+				voterFrames++; voterActiveSum += active.length;
+				for (const a of active) {
+					let h = voterHist.get(a.id);
+					if (!h) { h = { digits: new Array(10).fill(0), total: 0, level: a.level, fp: a.ch.length }; voterHist.set(a.id, h); }
+					h.digits[label]++; h.total++;
+				}
+			}
 
 			// decodeDigit() returns -1 when no action inference is present — keep those out of the confusion matrix.
 			if (predicted >= 0 && predicted < 10) confusion[label][predicted]++;
@@ -414,12 +451,42 @@ export default class MNISTTestJob extends Job {
 		}
 		this.clearProgress();
 
+		if (voterHist) this.reportVoterStats(voterHist, voterFrames, voterActiveSum);
+
 		// Roll the tally up into a result, attach metadata, log a one-liner, and return.
 		const duration = Date.now() - startTime;
 		const result = { digit, episode, learning, ...this.summarizeTally(tally), confusion, duration, spatial: this.captureSpatialDiagnostics() };
 		this.logPass(result);
 		if (miss) this.reportMissAnalysis(miss);
 		return result;
+	}
+
+	/**
+	 * Print the voter-selectivity summary for a frozen pass. Selectivity = a correction's firings on its
+	 * most-common digit / its total firings: 1.0 = fires on ONE digit (sharp NB voter), 0.1 = fires
+	 * uniformly across all ten (dead-flat P(d|voter), pure NB noise). Reported overall, weighted by firing
+	 * count (frequent generic voters do the most damage to the NB product), and broken down by level.
+	 */
+	reportVoterStats(voterHist, frames, activeSum) {
+		const all = [...voterHist.values()];
+		const fired = all.filter((h) => h.total >= 3); // ignore one-off firings — no stable selectivity
+		const sel = (h) => Math.max(...h.digits) / h.total;
+		const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
+		const wmean = (hs) => { const w = hs.reduce((a, h) => a + h.total, 0); return w ? hs.reduce((a, h) => a + sel(h) * h.total, 0) / w : 0; };
+
+		const byLevel = new Map();
+		for (const h of fired) { if (!byLevel.has(h.level)) byLevel.set(h.level, []); byLevel.get(h.level).push(h); }
+
+		console.log(`\n── VOTER SELECTIVITY (${fired.length} corrections fired ≥3×, of ${all.length} distinct; ${(activeSum / (frames || 1)).toFixed(1)} active/frame) ──`);
+		console.log(`   selectivity  unweighted=${mean(fired.map(sel)).toFixed(3)}  firing-weighted=${wmean(fired).toFixed(3)}   (1.0 = one-digit sharp, 0.10 = flat across 10)`);
+		console.log(`   avg firings/correction=${mean(fired.map((h) => h.total)).toFixed(1)}   avg footprint(base px)=${mean(fired.map((h) => h.fp)).toFixed(1)}`);
+		const buckets = { '≥0.9': 0, '0.7-0.9': 0, '0.5-0.7': 0, '0.3-0.5': 0, '<0.3': 0 };
+		for (const h of fired) { const s = sel(h); buckets[s >= 0.9 ? '≥0.9' : s >= 0.7 ? '0.7-0.9' : s >= 0.5 ? '0.5-0.7' : s >= 0.3 ? '0.3-0.5' : '<0.3']++; }
+		console.log(`   selectivity buckets: ${Object.entries(buckets).map(([k, v]) => `${k}:${v}`).join('  ')}`);
+		for (const lvl of [...byLevel.keys()].sort((a, b) => a - b)) {
+			const hs = byLevel.get(lvl);
+			console.log(`   L${lvl}: ${hs.length} voters  sel(w)=${wmean(hs).toFixed(3)}  avg-firings=${mean(hs.map((h) => h.total)).toFixed(1)}  avg-fp=${mean(hs.map((h) => h.fp)).toFixed(1)}`);
+		}
 	}
 
 	/**

@@ -19,6 +19,8 @@ export class MNISTPixelChannelsEncoder {
 	 * @param {number} neighborhoodRadius - radius of each pixel's spatial neighborhood declared
 	 *   to the brain via setSpatialNeighbors. 1 = 3×3 window (up to 8 neighbors), 2 = 5×5 (up to 24),
 	 *   etc. Edge effects shrink the count for pixels near the image border.
+	 *   0 = FULL neighborhood: skip the declaration entirely so the brain keeps its all-pairs default
+	 *   (every pixel co-activates with every other). Only tractable with neuron reuse.
 	 */
 	constructor(buckets = 2, imageSize = 28, neighborhoodRadius = 1) {
 		if (28 % imageSize !== 0) throw new Error(`imageSize must divide 28 evenly, got ${imageSize}`);
@@ -85,6 +87,9 @@ export class MNISTPixelChannelsEncoder {
 	 */
 	registerPixelNeighborhoods(brain) {
 		const r = this.neighborhoodRadius;
+		// radius 0 = FULL neighborhood: skip declaration so the brain keeps its all-pairs default
+		// (every pixel a neighbor of every other). Declaring nothing is what yields full, not a wide window.
+		if (r === 0) return;
 		for (let p = 0; p < this.pixels; p++) {
 			const x = p % this.imageSize;
 			const y = Math.floor(p / this.imageSize);

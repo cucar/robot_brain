@@ -203,12 +203,21 @@ pub struct Thalamus {
     /// Sensory neuron metadata: neuron id → { channel_id, type, coordinate }.
     base_neurons: FxHashMap<NeuronId, BaseNeuron>,
 
-    /// Pattern neuron parent: neuron id → parent neuron id.
-    neuron_parents: FxHashMap<NeuronId, NeuronId>,
+    /// Pattern neuron parents: correction id → the set of parent neurons that host it. A correction is
+    /// minted with one parent; clustering and cross-frame reuse add more, so this is a set. A correction
+    /// is reaped only when its parent set empties (refcounted reaping).
+    neuron_parents: FxHashMap<NeuronId, FxHashSet<NeuronId>>,
 
     /// Cumulative count of spatial correction patterns minted by `mint_spatial_corrections`.
     /// Diagnostic — surfaced via Brain.get_spatial_correction_count() for harness validation.
     spatial_corrections_minted: u64,
+
+    /// Spatial correction → the level it was minted at (parent.level + 1). The reuse lookup filters
+    /// candidates to `mint_level == request.level + 1`, so a reused correction only ever gains parents
+    /// one level below it and therefore stays single-level — reuse never creates the multi-depth case
+    /// the spatial sweep can't represent. Transient (training-only): reuse runs only while learning, so
+    /// this is rebuilt as corrections are minted and never serialized.
+    correction_mint_level: FxHashMap<NeuronId, Level>,
 
     /// Per-neuron footprint: the set of base neurons a neuron ultimately covers, as a bitset over
     /// base-neuron bit indices. Base neuron = `{self}`; correction = `⋃ constituents` computed at mint.
@@ -324,6 +333,7 @@ impl Thalamus {
             base_neurons: FxHashMap::default(),
             neuron_parents: FxHashMap::default(),
             spatial_corrections_minted: 0,
+            correction_mint_level: FxHashMap::default(),
             neuron_footprints: FxHashMap::default(),
             base_neuron_bit: FxHashMap::default(),
             base_bit_channel: Vec::new(),
@@ -527,6 +537,78 @@ impl Thalamus {
         }
     }
 
+    /// Transitively merge correction requests whose footprints touch in the base neighbor graph —
+    /// connected components over the footprint-adjacency relation. This is the merge step of per-cluster
+    /// minting: one coordinate-less correction is minted per returned component (its parents are the
+    /// cluster's requests, its footprint the union of theirs). Returns clusters as index lists into
+    /// `footprints`, each sorted ascending, in ascending first-member order — fully deterministic.
+    /// Adjacency is directional (the all-pairs default makes a list-less channel a neighbor as a parent
+    /// but not as a target), so membership uses the SYMMETRIC closure: i and j merge if either touches
+    /// the other. Overlapping footprints merge trivially (`intersects` inside `footprints_adjacent`).
+    #[allow(dead_code)] // superseded by cluster_by_target_similarity; kept (tested) for the locality variant
+    fn cluster_by_footprint_adjacency(&self, footprints: &[Footprint]) -> Vec<Vec<usize>> {
+        let n = footprints.len();
+        let mut visited = vec![false; n];
+        let mut clusters = Vec::new();
+        for start in 0..n {
+            if visited[start] { continue; }
+            let mut comp = Vec::new();
+            let mut stack = vec![start];
+            visited[start] = true;
+            while let Some(i) = stack.pop() {
+                comp.push(i);
+                for j in 0..n {
+                    if visited[j] { continue; }
+                    if self.footprints_adjacent(&footprints[i], &footprints[j])
+                        || self.footprints_adjacent(&footprints[j], &footprints[i]) {
+                        visited[j] = true;
+                        stack.push(j);
+                    }
+                }
+            }
+            comp.sort_unstable();
+            clusters.push(comp);
+        }
+        clusters
+    }
+
+    /// Transitively merge requests whose L0 TARGET sets are similar — connected components over the
+    /// `match_observed`-style Jaccard `|∩| / |∪|` ≥ the (pairwise-averaged) ADAPTIVE merge threshold.
+    /// This is the grouping gate the clustering was missing: two requests merge only when they predict
+    /// substantially the SAME correct L0, NOT merely because their footprints touch. Tightening the
+    /// threshold makes clusters specific (less blur); loosening blurs them — this is the knob to sweep.
+    /// Deterministic: components sorted ascending, in ascending first-member order.
+    fn cluster_by_target_similarity(&self, targets: &[FxHashSet<NeuronId>], thresholds: &[f64]) -> Vec<Vec<usize>> {
+        let n = targets.len();
+        let mut visited = vec![false; n];
+        let mut clusters = Vec::new();
+        for start in 0..n {
+            if visited[start] { continue; }
+            let mut comp = Vec::new();
+            let mut stack = vec![start];
+            visited[start] = true;
+            while let Some(i) = stack.pop() {
+                comp.push(i);
+                for j in 0..n {
+                    if visited[j] { continue; }
+                    let inter = targets[i].intersection(&targets[j]).count();
+                    if inter == 0 { continue; }
+                    let union = targets[i].len() + targets[j].len() - inter;
+                    let jaccard = inter as f64 / union as f64;
+                    // Both requests must consider it a match — use the stricter (max) of their thresholds.
+                    let thr = thresholds[i].max(thresholds[j]);
+                    if jaccard >= thr {
+                        visited[j] = true;
+                        stack.push(j);
+                    }
+                }
+            }
+            comp.sort_unstable();
+            clusters.push(comp);
+        }
+        clusters
+    }
+
     /// Allocate a TEMPORAL pattern neuron. Pre-wires d=1..age connections toward each per-age
     /// active set, filtered by footprint adjacency to the parent — the new pattern only pre-wires
     /// toward footprint-adjacent targets, matching how learn_temporal_connections restricts future
@@ -574,7 +656,7 @@ impl Thalamus {
         // Reached solely via routing matches.
         // No stored level: a correction's depth is the sweep loop variable / activation index, not an intrinsic field.
         // The temporal sweep activates it at its parent's level + 1.
-        self.neuron_parents.insert(id, parent_id);
+        self.neuron_parents.entry(id).or_default().insert(parent_id);
 
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
@@ -609,7 +691,7 @@ impl Thalamus {
         // — votes toward coordinate-less targets are dropped before consensus — so it needs no
         // coordinate, channel, type, or stored level. Reached solely via routing matches; never
         // registered in neurons_by_value (value→neuron resolution must always land on the L0 base).
-        self.neuron_parents.insert(id, parent_id);
+        self.neuron_parents.entry(id).or_default().insert(parent_id);
 
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections: Vec::new() }
     }
@@ -656,9 +738,16 @@ impl Thalamus {
         self.base_neurons.get(&neuron_id).map(|b| b.neuron_type)
     }
 
-    /// Get the parent neuron ID for a pattern neuron.
+    /// A representative parent of a pattern neuron — any one of its parents. For diagnostics and the
+    /// label/context walk, where any path up to a base neuron suffices. Use `get_neuron_parents` when the
+    /// full set matters (install, reaping, delete cascade).
     pub fn get_neuron_parent(&self, neuron_id: NeuronId) -> Option<NeuronId> {
-        self.neuron_parents.get(&neuron_id).copied()
+        self.neuron_parents.get(&neuron_id).and_then(|s| s.iter().next().copied())
+    }
+
+    /// The full set of parents that host a pattern neuron (correction). None for base neurons.
+    pub fn get_neuron_parents(&self, neuron_id: NeuronId) -> Option<&FxHashSet<NeuronId>> {
+        self.neuron_parents.get(&neuron_id)
     }
 
     /// Whether a neuron is a base (sensory/action) neuron — the explicit base-neuron predicate that
@@ -990,6 +1079,20 @@ impl Thalamus {
             }
         }
 
+        // Reverse connection index (reuse Phase A): register each source on the reverse index of every
+        // d=0 target it newly connected to this level. Routed by target at the orchestration boundary, so
+        // a same-frame reuse lookup sees this level's edges. Unconsumed until reuse lookup (Phase C).
+        let mut conn_sources_by_target: FxHashMap<NeuronId, Vec<NeuronId>> = FxHashMap::default();
+        for result in &results {
+            for &target in &result.new_spatial_connection_targets {
+                conn_sources_by_target.entry(target).or_insert_with(Vec::new).push(result.parent_id);
+            }
+        }
+        if !conn_sources_by_target.is_empty() {
+            let batch: Vec<(NeuronId, Vec<NeuronId>)> = conn_sources_by_target.into_iter().collect();
+            self.dispatch_spatial_connection_sources(&batch);
+        }
+
         if self.debug && !activations.is_empty() {
             let detail: Vec<String> = activations.iter()
                 .map(|a| format!("parent={}, age={}, pattern={}", a.parent_id, a.age, a.pattern_id))
@@ -1135,34 +1238,34 @@ impl Thalamus {
             .map(|v| v.iter().copied().collect())
             .unwrap_or_default();
 
-        // process dispatch results
+        // FIRST PASS — collect correction REQUESTS. A request is a non-subsumed parent whose d=0
+        // prediction crossed the error threshold and has a non-empty neighborhood to condition on.
+        // Error feedback is recorded PER PARENT (unchanged), so the Welford / dynamic-threshold stats
+        // build up exactly as before regardless of clustering; only the MINT becomes per-cluster.
+        // Each request: (parent, level, neighborhood, L0 targets, merge threshold). The targets and
+        // threshold drive the Phase-C reuse lookup; neighborhood/level drive clustering and the mint.
+        let mut requests: Vec<(NeuronId, Level, Vec<NeuronId>, FxHashSet<NeuronId>, f64)> = Vec::new();
         for level_results in spatial_dispatch_results {
             for neuron_result in level_results {
                 let parent_id = neuron_result.parent_id;
 
                 // if this parent was already explained by a higher-level pattern that fired this frame,
-                // its role is represented — don't record an error sample and don't mint a sibling correction.
-                // This is the natural ceiling on hierarchy growth: subsumed parents stop being error sources.
+                // its role is represented — don't record an error sample and don't request a correction.
                 if spatial_subsumed.contains(&parent_id) { continue; }
 
-                // TODO: do not read the level from spatial levels here - read it from results instead
-                //  otherwise it will get messed up when we implement neuron reuse with multiple levels
                 let parent_level = spatial_levels.get(&parent_id).copied().unwrap_or(0);
                 let parent_fp = self.get_neuron_footprint(parent_id);
 
-                // Observed L0 events the parent's connections[0] should have predicted, minus the
-                // parent itself AND minus any L0 events whose footprint is not adjacent to the
-                // parent's. A parent base whose channel declared no neighbor list neighbors every
-                // channel (all-pairs default) — preserving original full-frame behavior.
+                // Observed L0 events the parent's connections[0] should have predicted, minus the parent
+                // and any L0 event whose footprint is not adjacent to the parent's (all-pairs default for
+                // a channel with no declared neighbor list).
                 let observed_l0_minus_self: FxHashSet<NeuronId> = l0_event_set.iter()
                     .copied()
                     .filter(|&id| id != parent_id)
                     .filter(|&id| self.fp_adjacent_to(&parent_fp, id))
                     .collect();
 
-                // Parent's neighborhood at its own spatial level — used as the context_entries of
-                // any correction we mint for this parent. Excludes the parent itself and any
-                // same-level fired neurons whose footprint is not adjacent to the parent's.
+                // Parent's same-level neighborhood, footprint-adjacent and excluding itself.
                 let neighborhood: Vec<NeuronId> = by_level.get(&parent_level)
                     .map(|v| v.iter().copied()
                         .filter(|&id| id != parent_id)
@@ -1173,16 +1276,9 @@ impl Thalamus {
                 for age_votes in &neuron_result.votes {
                     if age_votes.age != 0 { continue; }
 
-                    // Predicted L0 events from the parent's connections[0], after per-position
-                    // competition (fix 2.1). Each neighbor position — a (channel, dimension) —
-                    // predicts at most ONE bucket: the buckets of a position compete and the
-                    // strongest-voted wins. The predicted set is therefore the modal local
-                    // configuration (one neuron per neighbor position), so the error below is a
-                    // Hamming distance from the modal patch rather than novelty-vs-everything-ever-
-                    // seen. Without this, the parent's lifetime union of connections includes every
-                    // bucket of every neighbor, saturating the error rate at (b-1)/b and either
-                    // never minting or never quenching. Predictions toward non-neighbor channels are
-                    // excluded — the observed set is filtered the same way.
+                    // Predicted L0 events from connections[0], after per-position competition (the modal
+                    // local patch): each (channel, dim) position keeps only its strongest-voted bucket, so
+                    // the error below is a Hamming distance from the modal patch, not novelty-vs-everything.
                     let mut position_winners: FxHashMap<(ChannelId, DimensionId), (NeuronId, f64)> = FxHashMap::default();
                     for v in &age_votes.votes {
                         if self.get_neuron_type(v.neuron_id) != Some(NeuronType::Event) { continue; }
@@ -1212,43 +1308,185 @@ impl Thalamus {
                         None => continue, // empty union → nothing to compare
                     };
 
-                    // Always record the error rate — even when below threshold — so the parent's
-                    // Welford stats at age=0 build up samples and dynamic modes can adapt.
+                    // Per-parent error sample — recorded even below threshold so dynamic modes can adapt.
                     error_feedback.push((parent_id, error_rate));
 
-                    if error_rate <= age_votes.threshold { continue; }
+                    if crate::config::trace_error() {
+                        eprintln!(
+                            "[error] parent={} parent_lvl={} predicted={} observed={} error={:.3} thr={:.3} {}",
+                            parent_id, parent_level, predicted_events.len(), observed_l0_minus_self.len(),
+                            error_rate, age_votes.threshold,
+                            if error_rate > age_votes.threshold { "MINT" } else { "ok" }
+                        );
+                    }
 
-                    // Empty neighborhood means no signal to wire the correction's context against —
-                    // it could never match anything in future frames. Skip (parallels the
-                    // empty-state.context skip in get_level_corrections for temporal).
+                    if error_rate <= age_votes.threshold { continue; }
                     if neighborhood.is_empty() { continue; }
 
-                    // Allocate the correction at one level deeper in the parent's spatial hierarchy.
-                    let spec = self.allocate_spatial_pattern_neuron(parent_id);
-
-                    // Spatial context: the parent's level-k neighborhood (no distance dimension).
-                    let context_neuron_ids: Vec<NeuronId> = neighborhood.iter().copied().collect();
-
-                    // Footprint = parent ∪ the neighborhood it binds (its constituents).
-                    let fp = self.compute_correction_footprint(parent_id, &context_neuron_ids);
-                    self.neuron_footprints.insert(spec.id, fp);
-
-                    new_specs.push(NeuronCreateSpec {
-                        id: spec.id,
-                        forget_rate: spec.forget_rate,
-                        connections: Some(spec.connections),
-                    });
-                    install_ops.push(SpatialInstallOp {
-                        parent_id,
-                        pattern_id: spec.id,
-                        context_neuron_ids,
-                    });
-                    self.spatial_corrections_minted += 1;
+                    // A correction request — reuse/clustering/minting is deferred to the passes below.
+                    // merge_threshold = 1 − error_threshold: a candidate must predict ≥ this fraction of
+                    // the request's L0 targets to be reused (same threshold recognition uses).
+                    requests.push((parent_id, parent_level, neighborhood.clone(), observed_l0_minus_self.clone(), 1.0 - age_votes.threshold));
                 }
             }
         }
 
+        // REUSE LOOKUP (Phase C) — before clustering, each request tries to REUSE an existing correction
+        // that already predicts its L0 targets ≥ its merge threshold, at the level a fresh mint would
+        // produce (mint_level == level + 1). A hit wires the request's parent to that correction and
+        // installs it (no new neuron); a miss stays FRESH for clustering/minting. Cross-image reuse is
+        // what bends per-image minting down — recurring structure lands on a shared correction instead of
+        // a fresh one. (Footprint expansion of the reused pattern is deferred — an open knob per the doc.)
+        // Gated by the `BRAIN_REUSE` ablation toggle (default ON): when off, every request stays FRESH
+        // (skips the reuse lookup entirely) so each correction mints anew, isolating reuse's effect on count.
+        let mut fresh: Vec<usize> = Vec::new();
+        let reuse_on = crate::config::reuse_enabled();
+        for i in 0..requests.len() {
+            if !reuse_on { fresh.push(i); continue; }
+            let parent_id = requests[i].0;
+            let candidate_level = requests[i].1 + 1;
+            let merge_threshold = requests[i].4;
+            match self.find_reusable_correction(&requests[i].3, candidate_level, merge_threshold, parent_id) {
+                Some(p) => {
+                    self.neuron_parents.entry(p).or_default().insert(parent_id);
+                    let mut context_neuron_ids = requests[i].2.clone();
+                    context_neuron_ids.sort_unstable();
+                    install_ops.push(SpatialInstallOp { parent_id, pattern_id: p, context_neuron_ids });
+                }
+                None => fresh.push(i),
+            }
+        }
+
+        // SECOND PASS — per-cluster mint of the FRESH (non-reused) requests. Cluster them WITHIN each
+        // spatial level by TARGET SIMILARITY (match_observed Jaccard ≥ adaptive threshold) — only requests
+        // predicting substantially the same correct L0 merge, NOT merely footprint-adjacent ones — then
+        // mint ONE coordinate-less correction per cluster: parents = the cluster's requests (multi-parent),
+        // footprint = union of theirs, context = union of their neighborhoods minus their own parents.
+        // A singleton cluster reproduces the old single-parent mint exactly. The threshold is the knob.
+        let mut by_req_level: FxHashMap<Level, Vec<usize>> = FxHashMap::default();
+        for &i in &fresh {
+            by_req_level.entry(requests[i].1).or_insert_with(Vec::new).push(i);
+        }
+        let mut req_levels: Vec<Level> = by_req_level.keys().copied().collect();
+        req_levels.sort_unstable();
+
+        for level in req_levels {
+            let req_indices = by_req_level.get(&level).cloned().unwrap_or_default();
+            let target_sets: Vec<FxHashSet<NeuronId>> = req_indices.iter()
+                .map(|&i| requests[i].3.clone())
+                .collect();
+            let thresholds: Vec<f64> = req_indices.iter()
+                .map(|&i| requests[i].4)
+                .collect();
+            let clusters = self.cluster_by_target_similarity(&target_sets, &thresholds);
+
+            for cluster in clusters {
+                // Map local cluster indices back to request indices → the cluster's parents.
+                let members: Vec<usize> = cluster.iter().map(|&ci| req_indices[ci]).collect();
+                let parents: Vec<NeuronId> = members.iter().map(|&mi| requests[mi].0).collect();
+
+                // Context = union of the cluster's neighborhoods minus the cluster's own parents (a
+                // correction conditions on its NEIGHBORS, not on the units it corrects). Sorted for
+                // deterministic install order.
+                let mut context_set: FxHashSet<NeuronId> = FxHashSet::default();
+                for &mi in &members {
+                    for &n in &requests[mi].2 { context_set.insert(n); }
+                }
+                for &p in &parents { context_set.remove(&p); }
+                if context_set.is_empty() { continue; }
+                let mut context_neuron_ids: Vec<NeuronId> = context_set.into_iter().collect();
+                context_neuron_ids.sort_unstable();
+
+                // Allocate the shared correction; record EVERY cluster member as a parent.
+                let spec = self.allocate_spatial_pattern_neuron(parents[0]);
+                for &p in &parents[1..] {
+                    self.neuron_parents.entry(spec.id).or_default().insert(p);
+                }
+
+                // Footprint = union of all constituents (every parent ∪ the bound context).
+                let mut fp = self.compute_correction_footprint(parents[0], &context_neuron_ids);
+                for &p in &parents[1..] { fp.union_in_place(&self.get_neuron_footprint(p)); }
+                self.neuron_footprints.insert(spec.id, fp);
+
+                // Record the mint level (one deeper than the cluster's parents) so the reuse lookup can
+                // keep this correction single-level (it may only be reused by level-`level` requests).
+                self.correction_mint_level.insert(spec.id, level + 1);
+
+                new_specs.push(NeuronCreateSpec {
+                    id: spec.id,
+                    forget_rate: spec.forget_rate,
+                    connections: Some(spec.connections),
+                });
+                // Install the ONE correction into EVERY parent's routing table (multi-parent).
+                for &p in &parents {
+                    install_ops.push(SpatialInstallOp {
+                        parent_id: p,
+                        pattern_id: spec.id,
+                        context_neuron_ids: context_neuron_ids.clone(),
+                    });
+                }
+                self.spatial_corrections_minted += 1;
+            }
+        }
+
         (new_specs, install_ops, error_feedback)
+    }
+
+    /// Find an existing correction to REUSE for a request predicting `targets` (its correct L0). A
+    /// candidate qualifies iff it (a) was minted at `candidate_level` — the level a fresh mint would land
+    /// at, which keeps reuse single-level — (b) is not the requesting parent, and (c) predicts ≥
+    /// `merge_threshold` of the request's L0 targets, measured via the reverse connection index (how many
+    /// of `targets` the candidate has a d=0 connection to). Returns the best-covering candidate
+    /// (tie-break: smaller id) or None to mint fresh. Strength-blind — the reverse index is membership-only.
+    fn find_reusable_correction(
+        &self,
+        targets: &FxHashSet<NeuronId>,
+        candidate_level: Level,
+        merge_threshold: f64,
+        requesting_parent: NeuronId,
+    ) -> Option<NeuronId> {
+        if targets.is_empty() { return None; }
+
+        // Per-candidate coverage = how many of the request's L0 targets the candidate connects to.
+        let mut coverage: FxHashMap<NeuronId, usize> = FxHashMap::default();
+        for &t in targets {
+            for src in self.get_spatial_connection_sources(t) {
+                if src == requesting_parent { continue; }
+                if self.is_base_neuron(src) { continue; }
+                if self.correction_mint_level.get(&src).copied() != Some(candidate_level) { continue; }
+                *coverage.entry(src).or_insert(0) += 1;
+            }
+        }
+
+        // Score each candidate by Jaccard similarity of its L0 prediction to the request's targets:
+        // |∩| / |∪|, with |∪| = |candidate connections| + |targets| − |∩|. This PENALIZES over-general
+        // candidates — a correction that has accumulated broad connections has a large union and so a low
+        // score, so it is NOT reused. That is what stops the merge-runaway: only a candidate whose
+        // prediction genuinely matches the request (score ≥ θ) is reused; otherwise the request mints its
+        // own specific correction. Best score wins, tie-break on smaller id for determinism.
+        let n_targets = targets.len();
+        let mut best: Option<(NeuronId, f64)> = None;
+        let mut best_raw: (f64, usize, usize) = (0.0, 0, 0); // (score, cov, cand_conns) ignoring threshold
+        for (&cand, &cov) in &coverage {
+            let cand_count = self.get_spatial_connection_count(cand);
+            let union = cand_count + n_targets - cov; // cov ≤ min(cand_count, n_targets) ⇒ union ≥ both
+            if union == 0 { continue; }
+            let score = cov as f64 / union as f64;
+            if score > best_raw.0 { best_raw = (score, cov, cand_count); }
+            if score < merge_threshold { continue; }
+            match best {
+                Some((bid, bscore)) if bscore > score || (bscore == score && bid <= cand) => {}
+                _ => best = Some((cand, score)),
+            }
+        }
+        if crate::config::trace_reuse() {
+            eprintln!(
+                "[reuse] targets={} cands={} best_jac={:.3} (cov={} cand_conns={}) thr={:.3} {}",
+                n_targets, coverage.len(), best_raw.0, best_raw.1, best_raw.2, merge_threshold,
+                if best.is_some() { "HIT" } else { "MISS" }
+            );
+        }
+        best.map(|(id, _)| id)
     }
 
     /// Dispatch spatial error-feedback samples to the owning columns, where each neuron records
@@ -1325,6 +1563,36 @@ impl Thalamus {
             if region_updates.is_empty() { continue; }
             self.region_list[r].update_spatial_context_refs(&region_updates);
         }
+    }
+
+    /// Route reverse-connection-index updates to the columns owning each target neuron — the connection
+    /// analog of `dispatch_spatial_context_ref_updates`. Each entry is (target, sources): every source
+    /// gains an edge into the target's `spatial_connection_sources`.
+    fn dispatch_spatial_connection_sources(&mut self, update_batch: &[(NeuronId, Vec<NeuronId>)]) {
+        let mut by_region: Vec<Vec<(NeuronId, Vec<NeuronId>)>> = (0..self.regions).map(|_| Vec::new()).collect();
+        for (target_id, sources) in update_batch {
+            let r = self.route_neuron(*target_id);
+            by_region[r].push((*target_id, sources.clone()));
+        }
+        for (r, region_updates) in by_region.into_iter().enumerate() {
+            if region_updates.is_empty() { continue; }
+            self.region_list[r].update_spatial_connection_sources(&region_updates);
+        }
+    }
+
+    /// Reuse candidate generator (Phase A): the source neurons with a d=0 connection to `target`, read
+    /// from the target neuron's reverse connection index. The reuse lookup (Phase C) uses this to find
+    /// existing patterns that already predict an L0 target. Empty if the target is unknown.
+    pub fn get_spatial_connection_sources(&self, target: NeuronId) -> FxHashSet<NeuronId> {
+        let r = self.route_neuron(target);
+        self.region_list[r].get_spatial_connection_sources(target).unwrap_or_default()
+    }
+
+    /// Count of a candidate correction's d=0 connections — its prediction breadth, used as the Jaccard
+    /// denominator in reuse scoring so an over-general candidate scores low and is not reused.
+    pub fn get_spatial_connection_count(&self, neuron_id: NeuronId) -> usize {
+        let r = self.route_neuron(neuron_id);
+        self.region_list[r].spatial_connection_count(neuron_id).unwrap_or(0)
     }
 
     /// SPATIAL: walk the active neurons at this level and build the shared SpatialContext.
@@ -1932,7 +2200,7 @@ impl Thalamus {
             for id in &result.newly_deletable_ids {
                 if deleted_id_set.contains(id) || queued_ids.contains(id) { continue; }
                 queued_ids.insert(*id);
-                if let Some(&parent_id) = self.neuron_parents.get(id) {
+                if let Some(parent_id) = self.get_neuron_parent(*id) {
                     inbound_ops.push(DeleteOp::DeleteNeuron { target_id: *id, parent_id });
                 }
             }
@@ -1945,7 +2213,7 @@ impl Thalamus {
     fn build_delete_neuron_ops(&self, pattern_ids: &[NeuronId]) -> Vec<DeleteOp> {
         let mut ops = Vec::new();
         for &id in pattern_ids {
-            if let Some(&parent_id) = self.neuron_parents.get(&id) {
+            if let Some(parent_id) = self.get_neuron_parent(id) {
                 ops.push(DeleteOp::DeleteNeuron { target_id: id, parent_id });
             }
             // sensory neurons have no parent — skip
@@ -1984,6 +2252,7 @@ impl Thalamus {
         // Corrections carry a footprint but never a base bit (bases never die), so only the footprint
         // needs dropping here.
         self.neuron_footprints.remove(&id);
+        self.correction_mint_level.remove(&id);
     }
 
     // ── Snapshot / restore ──────────────────────────────────────────────────
@@ -2001,7 +2270,9 @@ impl Thalamus {
                 // from the constituent graph on restore. Spatial vs temporal corrections are distinguished
                 // by the serialized child's `spatial` flag, not a stored level.
                 let base_neuron = self.base_neurons.get(&entry.id).cloned();
-                let parent_id = self.neuron_parents.get(&entry.id).copied();
+                // Single representative parent in the snapshot entry; the authoritative multi-parent
+                // relation is serialized via patterns.csv (one row per parent) and rebuilt from children.
+                let parent_id = self.get_neuron_parent(entry.id);
                 neurons.push(SnapshotNeuronEntry {
                     neuron: entry.neuron,
                     base_neuron,
@@ -2047,7 +2318,7 @@ impl Thalamus {
             let neuron_id = entry.neuron.id;
             if neuron_id >= self.next_neuron_id { self.next_neuron_id = neuron_id + 1; }
             if let Some(parent_id) = entry.parent_id {
-                self.neuron_parents.insert(neuron_id, parent_id);
+                self.neuron_parents.entry(neuron_id).or_default().insert(parent_id);
             }
             // Base (sensory/action) neurons are exactly the entries carrying base data. Corrections have
             // none — they are coordinate-less, with no stored level; their depth is the wave's activation
@@ -2095,6 +2366,20 @@ impl Thalamus {
             self.region_list[r].restore_snapshot(region_buckets);
         }
 
+        // rebuild the reverse connection index (derived, never serialized): gather every d=0 edge and
+        // register each source on its target's `spatial_connection_sources`, routed by target.
+        let conn_edges: Vec<(NeuronId, NeuronId)> = self.region_list.iter()
+            .flat_map(|region| region.collect_spatial_connection_edges())
+            .collect();
+        let mut conn_by_target: FxHashMap<NeuronId, Vec<NeuronId>> = FxHashMap::default();
+        for (source, target) in conn_edges {
+            conn_by_target.entry(target).or_insert_with(Vec::new).push(source);
+        }
+        if !conn_by_target.is_empty() {
+            let batch: Vec<(NeuronId, Vec<NeuronId>)> = conn_by_target.into_iter().collect();
+            self.dispatch_spatial_connection_sources(&batch);
+        }
+
         // rebuild the death ledger from materialized activation strengths —
         // collect first, then register (can't borrow self immutably and mutably at once)
         let death_frames: Vec<_> = self.region_list.iter()
@@ -2112,6 +2397,7 @@ impl Thalamus {
         self.base_neurons.clear();
         self.neuron_parents.clear();
         self.neuron_footprints.clear();
+        self.correction_mint_level.clear();
         self.base_neuron_bit.clear();
         self.base_bit_channel.clear();
         self.base_bit_neuron.clear();
@@ -2342,7 +2628,7 @@ mod tests {
         assert!(dead.is_empty());
 
         // register as a correction (give it a parent) to simulate an actual live neuron
-        t.neuron_parents.insert(42, 7);
+        t.neuron_parents.entry(42).or_default().insert(7);
         t.register_death(42, 300);
         let dead = t.reap_dead_neurons(300);
         assert_eq!(dead, vec![42]);
@@ -2531,6 +2817,50 @@ mod tests {
         // Touches b (shared base) but not the isolated c.
         assert!(t.footprints_adjacent(&fp_corr, &t.get_neuron_footprint(b)));
         assert!(!t.footprints_adjacent(&fp_corr, &t.get_neuron_footprint(c)));
+    }
+
+    #[test]
+    fn test_cluster_merges_adjacent_separates_isolated() {
+        let (t, a, b, c, _x) = make_footprint_graph();
+        // a↔b are neighbors → one component; c is isolated → its own.
+        let fps = vec![t.get_neuron_footprint(a), t.get_neuron_footprint(b), t.get_neuron_footprint(c)];
+        let clusters = t.cluster_by_footprint_adjacency(&fps);
+        assert_eq!(clusters.len(), 2);
+        assert!(clusters.contains(&vec![0, 1]));
+        assert!(clusters.contains(&vec![2]));
+    }
+
+    #[test]
+    fn test_cluster_overlapping_footprints_merge() {
+        let (t, a, _b, _c, _x) = make_footprint_graph();
+        // Two copies of the same footprint overlap (intersects) → one component.
+        let fps = vec![t.get_neuron_footprint(a), t.get_neuron_footprint(a)];
+        let clusters = t.cluster_by_footprint_adjacency(&fps);
+        assert_eq!(clusters, vec![vec![0, 1]]);
+    }
+
+    #[test]
+    fn test_cluster_transitive_chain() {
+        // a↔b adjacent and the correction {a,b} touches b, so [a, corr(a,b), b] is one transitive chain
+        // even though a and b's roles differ — connectivity is via the shared/adjacent bases.
+        let (t, a, b, c, _x) = make_footprint_graph();
+        let fps = vec![
+            t.get_neuron_footprint(a),
+            t.compute_correction_footprint(a, &[b]),
+            t.get_neuron_footprint(b),
+            t.get_neuron_footprint(c), // isolated
+        ];
+        let clusters = t.cluster_by_footprint_adjacency(&fps);
+        assert_eq!(clusters.len(), 2);
+        assert!(clusters.contains(&vec![0, 1, 2]));
+        assert!(clusters.contains(&vec![3]));
+    }
+
+    #[test]
+    fn test_cluster_empty_input() {
+        let t = make_thalamus();
+        let clusters = t.cluster_by_footprint_adjacency(&[]);
+        assert!(clusters.is_empty());
     }
 
     /// Helper: create a thalamus with event neurons registered at IDs 1 and 2.
