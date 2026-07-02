@@ -143,10 +143,10 @@ export default class StockTestJob extends Job {
 			this.traders.push(trader);
 		}
 
-		// By default, spatial processing (d=0 co-activation) is OFF: the spatial neighbor list is used verbatim,
-		// so an empty list gives a channel NO spatial neighbors (not even itself) and the spatial sweep mints
-		// nothing — matching the pre-spatial `main` behavior. Temporal is unaffected: it has no neighborhood and
-		// always sequences against every active neuron.
+		// By default, spatial processing (d=0 co-activation) is OFF: an empty spatial neighbor list shrinks
+		// each channel's spatial neighborhood to {itself}, so the spatial sweep mints nothing — matching the
+		// pre-spatial `main` behavior. Temporal neighbors are left at the default all-pairs (every symbol can
+		// sequence against every other), which is the original stock behavior.
 		// With --spatial, we skip this loop entirely, leaving every channel at its default all-pairs spatial
 		// neighborhood — so all symbols are spatial neighbors and d=0 co-activation forms across the whole market.
 		if (!this.config.spatial)

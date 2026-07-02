@@ -1,11 +1,12 @@
-//! Runtime ablation toggles for experimental spatial mechanisms, read once per process from the environment.
+//! Runtime toggles for the experimental spatial refinement mechanisms, read once per process from the
+//! environment, plus diagnostic traces.
 //!
-//! These gate the spatial neuron-reuse and pattern-refinement paths so the training harness can run
-//! controlled ablations without threading config through every construction layer (neuron ← column ←
-//! region ← thalamus ← brain ← napi).
+//! These gate the spatial pattern-refinement paths so the training harness can run controlled ablations
+//! without threading config through every construction layer (neuron ← column ← region ← thalamus ←
+//! brain ← napi).
 //! Each flag is read once via `OnceLock` on first access and cached for the process lifetime, so one
 //! training run has a single fixed configuration — compare settings by running separate processes.
-//! Defaults preserve current behavior (every mechanism ON), so a run with no flags set is unchanged.
+//! Defaults preserve current behavior (refinement ON, traces OFF), so a run with no flags set is unchanged.
 
 use std::sync::OnceLock;
 
@@ -17,14 +18,8 @@ fn env_flag(name: &str, default: bool) -> bool {
     }
 }
 
-/// Spatial neuron reuse — the Phase C cross-frame reuse lookup in the mint path. Default ON.
-/// When off, every correction request mints fresh (no reuse), isolating reuse's effect on the neuron count.
-pub fn reuse_enabled() -> bool {
-    static V: OnceLock<bool> = OnceLock::new();
-    *V.get_or_init(|| env_flag("BRAIN_REUSE", true))
-}
-
-/// Spatial CONTEXT (sources) refinement — consolidating a matched pattern's inputs in recognition. Default ON.
+/// Spatial CONTEXT (sources) refinement — consolidating a matched pattern's stored context toward the
+/// observed configuration in recognition. Default ON.
 pub fn refine_context_enabled() -> bool {
     static V: OnceLock<bool> = OnceLock::new();
     *V.get_or_init(|| env_flag("BRAIN_REFINE_CONTEXT", true))
@@ -58,12 +53,4 @@ pub fn trace_refine() -> bool {
 pub fn trace_error() -> bool {
     static V: OnceLock<bool> = OnceLock::new();
     *V.get_or_init(|| env_flag("BRAIN_TRACE_ERROR", false))
-}
-
-/// Diagnostic: when set, the reuse lookup prints per request the number of candidates found, the best
-/// Jaccard achieved (even below threshold) with the winning candidate's coverage and connection count,
-/// and the threshold — so we can see whether reuse misses for lack of candidates or lack of overlap.
-pub fn trace_reuse() -> bool {
-    static V: OnceLock<bool> = OnceLock::new();
-    *V.get_or_init(|| env_flag("BRAIN_TRACE_REUSE", false))
 }

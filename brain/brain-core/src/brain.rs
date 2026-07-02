@@ -32,7 +32,7 @@ use crate::thalamus::{
     PointLookup, Thalamus,
 };
 use crate::types::{
-    BucketId, ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, GroupMode, FrameNumber,
+    ChannelId, ConsensusMode, Coordinate, DimensionId, Distance, GroupMode, FrameNumber,
     Level, NeuronId, NeuronType, Reward,
 };
 
@@ -133,6 +133,7 @@ pub struct FrameVote {
 #[derive(Debug, Clone)]
 pub struct InspectedNeuron {
     pub neuron_id: NeuronId,
+    pub temporal_level: Level,
     pub parent_id: Option<NeuronId>,
     /// (context_neuron_id, distance, strength) tuples from the parent's
     /// routing-table entry for this child pattern.
@@ -411,10 +412,27 @@ impl Brain {
         self.thalamus.register_channel_spec(name, dimensions, learn_action_sequences)
     }
 
-    /// Declare the base-level neighbor channel set for a registered channel — THE neighbor graph
-    /// footprint adjacency uses in both waves. See `Thalamus::set_spatial_neighbors`.
+    /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
+    /// See `Thalamus::set_spatial_neighbors`.
     pub fn set_spatial_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
         self.thalamus.set_spatial_neighbors(name, neighbor_names);
+    }
+
+    /// Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
+    /// See `Thalamus::set_spatial_neighbor_levels`.
+    pub fn set_spatial_neighbor_levels(&mut self, name: &str, neighbor_names_by_level: &[Vec<String>]) {
+        self.thalamus.set_spatial_neighbor_levels(name, neighbor_names_by_level);
+    }
+
+    /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
+    /// See `Thalamus::set_temporal_neighbors`.
+    pub fn set_temporal_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        self.thalamus.set_temporal_neighbors(name, neighbor_names);
+    }
+
+    /// Declare the same neighbor set for BOTH phases. See `Thalamus::set_channel_neighbors`.
+    pub fn set_channel_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
+        self.thalamus.set_channel_neighbors(name, neighbor_names);
     }
 
     // ── Context / reset ─────────────────────────────────────────────────────
@@ -758,11 +776,12 @@ impl Brain {
     /// Returns parent_id and level for any neuron; context_entries is empty
     /// for level-0 sensory neurons (no parent → no stored context).
     pub fn inspect_neuron(&self, neuron_id: NeuronId) -> InspectedNeuron {
+        let temporal_level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
         let parent = self.thalamus.get_neuron_parent(neuron_id);
         let context = parent
             .and_then(|_| self.thalamus.get_pattern_context_entries(neuron_id))
             .unwrap_or_default();
-        InspectedNeuron { neuron_id, parent_id: parent, context }
+        InspectedNeuron { neuron_id, temporal_level, parent_id: parent, context }
     }
 
     /// Inspection: dump a neuron's outgoing connections. Returns
@@ -776,30 +795,15 @@ impl Brain {
         self.thalamus.get_spatial_correction_count()
     }
 
-    /// Diagnostic: number of spatially-active correction neurons (levels ≥ 1) this frame. Recomputed
-    /// from the activation index now that levels are not stored on the neuron.
+    /// Diagnostic: number of correction neurons currently sitting above the base spatial level.
     pub fn count_active_spatial_corrections(&self) -> usize {
-        self.memory.count_active_spatial_corrections()
+        self.thalamus.count_active_spatial_corrections()
     }
 
-    /// Diagnostic: per-level count of active corrections. Index = (level - 1), so returned[0] = count
-    /// at level 1, etc. Recomputed from the activation index.
+    /// Diagnostic: per-level count of correction neurons. Index = (spatial_level - 1), so
+    /// returned[0] = count at level 1, returned[1] = count at level 2, etc. Length = highest level reached.
     pub fn spatial_level_counts(&self) -> Vec<u32> {
-        self.memory.spatial_level_counts()
-    }
-
-    /// Diagnostic: dump every active spatial correction (level ≥ 1) with its footprint resolved to
-    /// the (channel, bucket) of each base pixel it covers — for visualizing the spatial hierarchy.
-    /// Spatial state is per-frame, so call this right after process_frame on the image of interest.
-    /// Sorted by (level, id) for stable output.
-    pub fn dump_active_spatial_corrections(&self) -> Vec<(NeuronId, Level, Vec<(ChannelId, BucketId)>)> {
-        let mut out: Vec<(NeuronId, Level, Vec<(ChannelId, BucketId)>)> = self.memory.spatial_active_levels()
-            .into_iter()
-            .filter(|&(_, level)| level >= 1)
-            .map(|(id, level)| (id, level, self.thalamus.footprint_bases(id)))
-            .collect();
-        out.sort_by(|a, b| a.1.cmp(&b.1).then(a.0.cmp(&b.0)));
-        out
+        self.thalamus.spatial_level_counts()
     }
 
     /// Export a snapshot of all active neurons in context with their levels and phase.
@@ -823,8 +827,8 @@ impl Brain {
         FrameSummary {
             frame_number: self.frame_number,
             neuron_count: self.thalamus.get_neuron_count(),
-            max_temporal_level: self.memory.get_temporal_max_level(),
-            max_spatial_level: self.memory.get_spatial_max_level(),
+            max_temporal_level: self.thalamus.get_max_temporal_level(),
+            max_spatial_level: self.thalamus.get_max_spatial_level(),
             stats: self.diagnostics.get_stats(),
         }
     }
@@ -910,8 +914,10 @@ impl Brain {
             &mut timings,
         );
 
-        // Temporal inference builds the consensus from the temporal votes, then resolves them to their base neurons via spatial inferences
-        let (inferences, votes) = self.infer_neurons(&temporal.votes, &mut timings);
+        // Inference consumes temporal votes only. Spatial d=0 votes are same-frame co-activation
+        // predictions; they don't contribute to next-frame consensus or action voting (see doc §3.3
+        // and 1c spatial error pass).
+        let (inferences, resolved_votes) = self.infer_neurons(&temporal.votes, &mut timings);
 
         // Accumulate MAPE by comparing continuous event predictions to the actual input scalars.
         self.track_continuous_error(&inferences, inputs, &mut timings);
@@ -919,7 +925,7 @@ impl Brain {
         timings.finalize();
         FrameResult {
             inferences,
-            votes,
+            votes: resolved_votes,
             elapsed: timings.total,
             timings,
         }
@@ -1055,20 +1061,16 @@ impl Brain {
         timings.activate += t.elapsed().as_secs_f64();
     }
 
-    /// Score last frame's predictions against this frame's actuals and update the running accuracy/reward stats.
-    /// Runs at the start of temporal processing — the inferred set is from the previous frame's vote.
+    /// Compare this frame's sensory inputs to last frame's inferred predictions and update
+    /// the running event-accuracy / action-reward stats. Runs at the start of temporal
+    /// processing — the inferred set is from the previous frame's vote, and the actuals
+    /// are this frame's age-0 active neurons.
     fn track_inference_performance(&mut self) {
-        // The actuals MUST be the raw spatial base level (this frame's actual sensory events), NOT the temporal age-0 set.
-        // The age-0 set is the spatial APEX — post-subsumption — and holds correction patterns rather than the base events.
-        // A real event subsumed by a spatial correction is absent from the apex.
-        // Scoring base-resolving predictions against the apex would mark correct predictions wrong and collapse accuracy.
-        // Both sides must live at the base sensory level.
-        // Inferred winners already do — votes resolve to base before consensus — and the actuals are get_spatial_base_level.
-        let actual_base_events = self.memory.get_spatial_base_level();
+        let active_at_age_0 = self.memory.get_neuron_ids_at_age(0);
         let inferred = self.memory.get_inferred_neurons();
         let frame_rewards = self.rewards.first().cloned().unwrap_or_default();
         let results = self.thalamus.get_inference_results(
-            &actual_base_events,
+            &active_at_age_0,
             inferred,
             &frame_rewards,
         );
@@ -1430,14 +1432,10 @@ impl Brain {
         // Mint correction specs from the d=0 sweep's dispatch results.
         // For every non-subsumed fired neuron whose d=0 predictions mismatched the actual fired set, this builds a NeuronCreateSpec for a new correction pattern, an install op to wire it into the parent's routing table, and an error-rate sample for the parent's Welford stats.
         // Returned specs are deferred — they'll be materialized in the end-of-frame flush along with temporal specs.
-        // Per-neuron spatial depth is activation-derived: read each fired neuron's level from the
-        // sweep's activation index rather than a stored field (the wave's level is the loop variable).
-        let spatial_levels = self.memory.spatial_active_levels();
         let (specs, install_ops, feedback) = self.thalamus.mint_spatial_corrections(
             &spatial.dispatch_results,
             &spatial.fired_set,
             &spatial.subsumed_set,
-            &spatial_levels,
         );
 
         // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
@@ -1511,100 +1509,63 @@ impl Brain {
 
     // ── Inference (voting consensus) ────────────────────────────────────────
 
-    /// Infer predictions and outputs using voting architecture. Returns the scalar-space inferences and votes.
+    /// Infer predictions and outputs using voting architecture.
+    /// Returns the per-channel scalar-space inferences, the resolved per-vote
+    /// list (always populated; same path that produces inferences just retains
+    /// the raw data), and the raw winner list for memory persistence.
     fn infer_neurons(
         &mut self,
-        temporal_votes: &[FlatVote],
+        votes: &[FlatVote],
         timings: &mut FrameTimings,
     ) -> (FxHashMap<ChannelId, Vec<DimInferenceOutput>>, Vec<FrameVote>) {
         let t = Instant::now();
-
         // if no inference votes, wait for more data
-        if temporal_votes.is_empty() {
+        if votes.is_empty() {
             if self.debug { println!("No inferences found. Waiting for more data in future frames."); }
             timings.infer = t.elapsed().as_secs_f64();
             return (FxHashMap::default(), Vec::new());
         }
 
-        // resolve the spatial apex votes down to base targets
-        let base_votes = self.resolve_votes_to_base(temporal_votes);
+        // Aggregate votes and determine winners
+        let (winners, candidates, dim_best) = self.determine_consensus(votes);
 
-        // reach per-dimension consensus over the base targets
-        let (winners, candidates, dim_best) = self.determine_consensus(&base_votes);
+        // Resolve each vote with the metadata callers need to render/analyze without further round-trips.
+        // Targets without resolvable coordinates (shouldn't happen for event/action targets) are dropped.
+        // Gated on emit_votes because per-vote resolution allocates strings, slowing the performance down.
+        let resolved_votes: Vec<FrameVote> = if !self.emit_votes { Vec::new() } else {
+            votes.iter().filter_map(|v| {
+                let target_type = self.thalamus.get_neuron_type(v.neuron_id)?;
+                let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)?;
+                let channel_id = self.thalamus.get_neuron_channel_id(v.neuron_id)?;
+                Some(FrameVote {
+                    voter_id: v.voter_id,
+                    voter_label: self.format_neuron_label(v.voter_id),
+                    voter_temporal_level: self.thalamus.get_neuron_temporal_level(v.voter_id).unwrap_or(0),
+                    target_id: v.neuron_id,
+                    target_type,
+                    channel_id,
+                    dim_id: coord.dim_id,
+                    value: coord.bucket_id,
+                    distance: v.distance,
+                    strength: v.strength,
+                    reward: v.reward,
+                })
+            }).collect()
+        };
 
-        // persist winners to inject the executed actions into the next frame
+        // Save winners to memory (clears old inferences first)
         self.memory.save_inferred_neurons(winners);
 
-        // per-vote display/analysis metadata — empty unless emit_votes is on.
-        let votes = self.build_frame_votes(&base_votes);
+        // Build the scalar-space output
+        let inferences = self.build_inferences_by_channel(&candidates, &dim_best);
 
-        // build and return the scalar-space output
-        let inferences = self.build_inferences(&candidates, &dim_best);
         timings.infer = t.elapsed().as_secs_f64();
-        (inferences, votes)
-    }
-
-    /// Resolve apex votes down to the base sensory/action neurons per-dimension consensus understands.
-    fn resolve_votes_to_base(&self, temporal_votes: &[FlatVote]) -> Vec<FlatVote> {
-
-        // The fan-out is accumulated in place, not materialized as one vote per constituent.
-        // That bounds the consensus input by distinct (voter, target, distance) triples instead of total footprint area.
-        let mut acc: FxHashMap<(NeuronId, NeuronId, Distance), (f64, f64)> = FxHashMap::default();
-        for temporal_vote in temporal_votes {
-
-            // Temporal votes target the spatial apex set: base actions (already base) plus coordinate-less spatial event apex patterns.
-            // A vote toward an apex event predicts the pattern recurs; by construction its constituent base events recur too.
-            // So it fans out to one contribution per footprint constituent, each inheriting the vote's strength.
-            // Base targets resolve to themselves (footprint = {self}), so actions and un-chunked events pass straight through.
-            self.thalamus.for_each_base_neuron(temporal_vote.neuron_id, |base_id| {
-
-                // A voter reaching the same (target, distance) through overlapping footprints has its strength summed into one entry.
-                // reward is consumed only for action targets, which are base and never collide, so the first-writer reward is exact for them.
-                let entry = acc.entry((temporal_vote.voter_id, base_id, temporal_vote.distance)).or_insert((0.0, temporal_vote.reward));
-                entry.0 += temporal_vote.strength;
-            });
-        }
-        acc.into_iter()
-            .map(|((voter_id, neuron_id, distance), (strength, reward))| FlatVote {
-                voter_id, neuron_id, strength, reward, distance,
-            })
-            .collect()
-    }
-
-    /// Resolve each base vote into a FrameVote carrying display/analysis metadata, for FrameResult.votes.
-    fn build_frame_votes(&self, base_votes: &[FlatVote]) -> Vec<FrameVote> {
-
-        // Gated off unless emit_votes is on — per-vote resolution allocates voter-label strings and does metadata lookups.
-        // That cost is why it stays off on the training hot path.
-        if !self.emit_votes { return Vec::new(); }
-
-        base_votes.iter().filter_map(|v| {
-
-            // Every target is a base neuron with a coordinate after resolution, so these None arms are defensive only.
-            let target_type = self.thalamus.get_neuron_type(v.neuron_id)?;
-            let coord = self.thalamus.get_neuron_coordinate(v.neuron_id)?;
-            let channel_id = self.thalamus.get_neuron_channel_id(v.neuron_id)?;
-
-            Some(FrameVote {
-                voter_id: v.voter_id,
-                voter_label: self.format_neuron_label(v.voter_id),
-                voter_temporal_level: self.memory.get_active_temporal_level(v.voter_id).unwrap_or(0),
-                target_id: v.neuron_id,
-                target_type,
-                channel_id,
-                dim_id: coord.dim_id,
-                value: coord.bucket_id,
-                distance: v.distance,
-                strength: v.strength,
-                reward: v.reward,
-            })
-        }).collect()
+        (inferences, resolved_votes)
     }
 
     /// Aggregate votes and determine winners per dimension.
     /// Events win by strength (probability), actions win by reward.
     fn determine_consensus(&self, votes: &[FlatVote]) -> (Vec<InferredNeuron>, FxHashMap<NeuronId, Candidate>, FxHashMap<DimensionId, DimBestEntry>) {
-
         // Aggregate votes into candidates and dimension totals
         let (mut candidates, dim_total_strength) = self.aggregate_votes(votes);
 
@@ -1823,7 +1784,7 @@ impl Brain {
     /// Build the per-channel, per-dimension inference output in scalar space.
     /// For each dimension that received votes, produces a single entry containing the
     /// winning bucket's dequantized value plus a score-weighted continuous prediction.
-    fn build_inferences(
+    fn build_inferences_by_channel(
         &self,
         candidates: &FxHashMap<NeuronId, Candidate>,
         dim_best: &FxHashMap<DimensionId, DimBestEntry>,
@@ -2081,14 +2042,15 @@ impl Brain {
     /// Format a neuron's coordinates as a display label.
     /// For pattern neurons, resolves up the parent chain to find root sensory coordinates.
     fn format_neuron_label(&self, neuron_id: NeuronId) -> String {
-        // Corrections (coordinate-less, have a parent): resolve up the parent chain to a base neuron.
-        if !self.thalamus.is_base_neuron(neuron_id) {
+        // Pattern neurons: resolve parent chain to root sensory neuron
+        let level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
+        if level > 0 {
             if let Some(parent_id) = self.thalamus.get_neuron_parent(neuron_id) {
                 return self.format_neuron_label(parent_id);
             }
         }
 
-        // Base neurons: format coordinate (translate id-form to name-form for display)
+        // Sensory neurons: format coordinate (translate id-form to name-form for display)
         match self.thalamus.get_neuron_coordinate(neuron_id) {
             Some(coordinate) => {
                 match self.thalamus.coordinate_id_to_name(coordinate) {

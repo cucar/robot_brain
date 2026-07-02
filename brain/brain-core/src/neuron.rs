@@ -142,10 +142,6 @@ pub struct ProcessFrameResult {
     pub context_ref_updates: Vec<TemporalContextRefUpdate>,
     pub votes: Vec<AgeVotes>,
     pub timings: NeuronOpTimings,
-    /// d=0 targets this neuron formed a NEW connection to this frame. The thalamus routes each to its
-    /// owning column and registers this neuron as a source on the target's `spatial_connection_sources`.
-    /// Empty for the temporal frame (the temporal reverse index lands in the temporal reuse slice).
-    pub new_spatial_connection_targets: Vec<NeuronId>,
 }
 
 /**
@@ -235,12 +231,6 @@ pub struct Neuron {
     /// reference this neuron. No distance.
     spatial_context_refs: FxHashSet<NeuronId>,
 
-    /// Reverse spatial connection index: the set of source neurons that have a d=0 connection TO this
-    /// neuron — the inverse of `spatial_connections`, stored on the target (mirrors `spatial_context_refs`).
-    /// The reuse lookup reads a candidate L0 target's set to find existing patterns that already predict it.
-    /// Derived from the connection graph, so it is not serialized — rebuilt from materialized edges on restore.
-    spatial_connection_sources: FxHashSet<NeuronId>,
-
     /// Spatial Welford error stats — single bucket (spatial has no age dimension).
     spatial_error_stats: Option<WelfordState>,
 
@@ -296,7 +286,6 @@ impl Neuron {
             spatial_routing_table: FxHashMap::default(),
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
-            spatial_connection_sources: FxHashSet::default(),
             spatial_error_stats: None,
             temporal_connections: Vec::new(),
             temporal_routing_table: FxHashMap::default(),
@@ -815,6 +804,36 @@ impl Neuron {
         self.add_spatial_context_index(neuron_id, pattern_id);
     }
 
+    /// SPATIAL context refinement (sources): consolidate a matched pattern's stored context toward the
+    /// observed configuration — STRENGTHEN entries common to the match, ADD novel observed entries,
+    /// WEAKEN entries missing from the match and delete them at zero strength. Host-local (context +
+    /// the context index); the cross-neuron contextRef scrub is unnecessary at forget_rate 0.
+    fn refine_spatial_context(&mut self, pattern_id: NeuronId, m: &crate::types::MatchResult) {
+        {
+            let entry = self.spatial_routing_table.get_mut(&pattern_id)
+                .expect("refine_spatial_context: pattern not in spatial routing table");
+            for item in &m.common { entry.context.strengthen_neuron(item.neuron_id); }
+        }
+        for item in &m.novel { self.add_spatial_context(pattern_id, item.neuron_id, 1.0); }
+        let mut to_delete: Vec<NeuronId> = Vec::new();
+        {
+            let entry = self.spatial_routing_table.get_mut(&pattern_id)
+                .expect("refine_spatial_context: pattern not in spatial routing table");
+            for item in &m.missing {
+                if entry.context.weaken_neuron(item.neuron_id) { to_delete.push(item.neuron_id); }
+            }
+        }
+        let deleted = to_delete.len();
+        for nid in to_delete { let _ = self.remove_spatial_context(pattern_id, nid); }
+        if crate::config::trace_refine() {
+            let sz = self.spatial_routing_table.get(&pattern_id).map(|e| e.context.size()).unwrap_or(0);
+            eprintln!(
+                "[refine] pat={} ctx={} added(novel)={} weakened(missing)={} deleted={}",
+                pattern_id, sz, m.novel.len(), m.missing.len(), deleted
+            );
+        }
+    }
+
     /// Adds a neuron to the temporal context index.
     fn add_temporal_context_index(&mut self, neuron_id: NeuronId, distance: Distance, pattern_id: NeuronId) {
         let dist_map = self.temporal_context_index.entry(neuron_id).or_insert_with(FxHashMap::default);
@@ -901,29 +920,6 @@ impl Neuron {
         self.spatial_context_refs.insert(referencing_neuron_id);
     }
 
-    /// Register `source_id` as a neuron with a d=0 connection to this one — the reverse spatial
-    /// connection index, stored on the target. Mirrors `add_spatial_context_ref`.
-    pub fn add_spatial_connection_source(&mut self, source_id: NeuronId) {
-        self.spatial_connection_sources.insert(source_id);
-    }
-
-    /// The set of source neurons with a d=0 connection to this neuron (reverse spatial connection index).
-    pub fn get_spatial_connection_sources(&self) -> &FxHashSet<NeuronId> {
-        &self.spatial_connection_sources
-    }
-
-    /// This neuron's d=0 connection targets (forward edges). Used on restore to rebuild every target's
-    /// `spatial_connection_sources` from the materialized connection graph.
-    pub fn spatial_connection_targets(&self) -> impl Iterator<Item = NeuronId> + '_ {
-        self.spatial_connections.keys().copied()
-    }
-
-    /// Count of this neuron's d=0 connections — the candidate's prediction breadth, used as the Jaccard
-    /// denominator in reuse scoring so an over-general correction (many connections) scores low.
-    pub fn spatial_connection_count(&self) -> usize {
-        self.spatial_connections.len()
-    }
-
     /// Remove a TEMPORAL context reference from another neuron to this neuron.
     pub fn remove_temporal_context_ref(&mut self, referencing_neuron_id: NeuronId, distance: Distance) {
         let distances = match self.temporal_context_refs.get_mut(&referencing_neuron_id) {
@@ -985,35 +981,6 @@ impl Neuron {
             .map_or(false, |e| e.context.has_key(neuron_id))
     }
 
-    /// SPATIAL context refinement (sources): consolidate a matched pattern's stored context toward the
-    /// common core of the configs it matches — STRENGTHEN entries common to the match, ADD novel observed
-    /// entries, WEAKEN entries missing from the match and delete them at zero strength. Host-local (context
-    /// + the context index); the cross-neuron contextRef scrub is unnecessary at forget_rate 0.
-    fn refine_spatial_context(&mut self, pattern_id: NeuronId, m: &MatchResult) {
-        {
-            let entry = self.spatial_routing_table.get_mut(&pattern_id)
-                .expect("refine_spatial_context: pattern not in spatial routing table");
-            for item in &m.common { entry.context.strengthen_neuron(item.neuron_id); }
-        }
-        for item in &m.novel { self.add_spatial_context(pattern_id, item.neuron_id, 1.0); }
-        let mut to_delete: Vec<NeuronId> = Vec::new();
-        {
-            let entry = self.spatial_routing_table.get_mut(&pattern_id)
-                .expect("refine_spatial_context: pattern not in spatial routing table");
-            for item in &m.missing {
-                if entry.context.weaken_neuron(item.neuron_id) { to_delete.push(item.neuron_id); }
-            }
-        }
-        let deleted = to_delete.len();
-        for nid in to_delete { self.remove_spatial_context(pattern_id, nid); }
-        if crate::config::trace_refine() {
-            let sz = self.spatial_routing_table.get(&pattern_id).map(|e| e.context.size()).unwrap_or(0);
-            eprintln!(
-                "[refine] pat={} ctx={} added(novel)={} weakened(missing)={} deleted={}",
-                pattern_id, sz, m.novel.len(), m.missing.len(), deleted
-            );
-        }
-    }
 
     /// Apply a batch of TEMPORAL context-reference updates targeting this neuron.
     pub fn apply_temporal_context_ref_updates(&mut self, updates: &[TemporalContextRefUpdate]) {
@@ -1154,18 +1121,15 @@ impl Neuron {
 
         // Learn spatial connections AFTER vote generation so the vote reads the prior-frame
         // spatial_connections rather than the just-strengthened edges to this frame's co-actives.
-        let new_spatial_connection_targets = if should_learn {
+        if should_learn {
             let t = std::time::Instant::now();
-            let new_targets = self.learn_spatial_connections(actives);
+            self.learn_spatial_connections(actives);
             timings.learn_connections = t.elapsed().as_secs_f64();
-            new_targets
-        } else {
-            Vec::new()
-        };
+        }
 
         let mut context_ref_updates = match_refs;
         context_ref_updates.extend(correction_refs);
-        ProcessFrameResult { matches, correction_activations, context_ref_updates, votes, timings, new_spatial_connection_targets }
+        ProcessFrameResult { matches, correction_activations, context_ref_updates, votes, timings }
     }
 
     /// Spatial pattern recognition. Walks `spatial_routing_table` and finds the best matching child
@@ -1199,13 +1163,10 @@ impl Neuron {
         // Score candidates and pick the best.
         // Recognition strictness is the adaptive merge (1 − E) for the spatial bucket — same value correction reads.
         let merge_threshold = self.grouping_merge_threshold(self.spatial_error_stats.as_ref());
-        if crate::config::trace_match() {
-            eprintln!("[mthr] id={} merge_thr={:.3}", self.id, merge_threshold);
-        }
         let eval_start = std::time::Instant::now();
         let candidate_count = candidates.len();
         // Track the best candidate AND its full match (common/missing/novel) so context refinement can consolidate.
-        let mut best: Option<(NeuronId, MatchResult)> = None;
+        let mut best: Option<(PartialMatch, MatchResult)> = None;
         for pattern_id in candidates {
             if self.get_child_effective_activation_strength(pattern_id, current_frame) <= 0.0 { continue; }
             let entry = self.spatial_routing_table.get(&pattern_id)
@@ -1214,30 +1175,30 @@ impl Neuron {
                 Some(m) => m,
                 None => continue,
             };
-            let better = match &best {
-                None => true,
-                Some((bid, bm)) => m.score > bm.score || (m.score == bm.score && pattern_id < *bid), // prefer smaller id
-            };
-            if better { best = Some((pattern_id, m)); }
+            if let Some((ref b, _)) = best {
+                if m.score < b.score { continue; }
+                if m.score == b.score && pattern_id > b.pattern_id { continue; } // prefer smaller id
+            }
+            best = Some((PartialMatch { pattern_id, age: 0, score: m.score }, m));
         }
         timings.recognize_candidate_eval += eval_start.elapsed().as_secs_f64();
         timings.recognize_candidates_evaluated += candidate_count as u64;
 
-        let (best_id, best_match) = match best {
+        let (best, best_match) = match best {
             Some(b) => b,
             None => return (Vec::new(), context_ref_updates),
         };
 
-        // Context refinement (sources): consolidate the matched pattern's context toward the common core.
-        // Training-only (learning gate = reproducibility guard); paired with connection refinement so both
-        // the pattern's inputs AND its predictions adjust each match.
-        // Gated by the `BRAIN_REFINE_CONTEXT` ablation toggle (default ON).
-        if learning && crate::config::refine_context_enabled() { self.refine_spatial_context(best_id, &best_match); }
+        // Context refinement (sources): consolidate the matched pattern's context toward the observed
+        // configuration. Training-only (learning gate = reproducibility guard); paired with connection
+        // refinement so both the pattern's inputs AND its predictions adjust each match.
+        // Gated by the `BRAIN_REFINE_CONTEXT` toggle (default ON).
+        if learning && crate::config::refine_context_enabled() { self.refine_spatial_context(best.pattern_id, &best_match); }
 
         // Activate the winning pattern (strengthen child activation in learning mode).
-        let death_frame = if learning { self.strengthen_child_activation(best_id, current_frame) } else { None };
+        let death_frame = if learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
         let matches = vec![PatternMatch {
-            pattern_id: best_id,
+            pattern_id: best.pattern_id,
             age: 0,
             activate: true,
             death_frame,
@@ -1279,29 +1240,18 @@ impl Neuron {
 
     /// Spatial connection learning + TARGET REFINEMENT. Strengthens edges toward every co-active neuron
     /// (the observed L0: common targets restrengthen, novel ones are created) AND — this is target/connection
-    /// refinement — WEAKENS existing edges toward targets that were NOT observed this frame: predictions
-    /// that failed to appear. This consolidates the pattern's OUTPUT toward its reliable core, so unreliable
-    /// predictions decay to near-zero votes while consistent ones dominate. Weakening floors at 0 (keeps the
-    /// edge, so the reverse connection index stays valid; a target that recurs simply restrengthens).
-    /// Writes to `spatial_connections` only. Self-connections are skipped. Returns targets for which a NEW
-    /// edge was created (for the reverse index). Runs only during learning (the reproducibility guard).
-    fn learn_spatial_connections(&mut self, actives: &[ActiveNeuron]) -> Vec<NeuronId> {
-        let mut new_targets = Vec::new();
-        let active_ids: FxHashSet<NeuronId> = actives.iter().map(|a| a.id).collect();
-
-        // Strengthen common + add novel: upsert toward every co-active target (the observed L0).
+    /// refinement — PRUNES existing edges toward targets that were NOT observed this frame: predictions that
+    /// failed to appear are weakened by 1.0 and deleted outright at 0 or below (a pruned prediction is gone;
+    /// if the target recurs, a fresh edge is created). Writes to `spatial_connections` only. Self-connections
+    /// are skipped. Refinement is gated by the `BRAIN_REFINE_CONNECTION` toggle (default ON).
+    fn learn_spatial_connections(&mut self, actives: &[ActiveNeuron]) {
         for active in actives {
             if active.id == self.id { continue; }
-            if !self.has_connection(0, active.id) {
-                new_targets.push(active.id);
-            }
             self.upsert_connection(0, active.id, active.channel_id, active.reward);
         }
 
-        // Refine targets: PRUNE edges toward predictions that did NOT appear this frame — weaken by 1.0 and,
-        // at ≤0, DELETE the connection outright (not floor it). A pruned prediction is gone; if the target
-        // recurs, a fresh edge is created. Gated by `BRAIN_REFINE_CONNECTION` (default ON).
         if crate::config::refine_connection_enabled() {
+            let active_ids: FxHashSet<NeuronId> = actives.iter().map(|a| a.id).collect();
             let self_id = self.id;
             let mut to_prune: Vec<NeuronId> = Vec::new();
             for (&target, conn) in self.spatial_connections.iter_mut() {
@@ -1312,8 +1262,6 @@ impl Neuron {
             }
             for target in to_prune { self.spatial_connections.remove(&target); }
         }
-
-        new_targets
     }
 
     /// Temporal frame processing — per-age iteration over the sliding window. Matching
@@ -1370,8 +1318,7 @@ impl Neuron {
 
         let mut context_ref_updates = match_refs;
         context_ref_updates.extend(correction_refs);
-        // Temporal learning does not feed the spatial reverse index (that is the temporal reuse slice).
-        ProcessFrameResult { matches, correction_activations, context_ref_updates, votes, timings, new_spatial_connection_targets: Vec::new() }
+        ProcessFrameResult { matches, correction_activations, context_ref_updates, votes, timings }
     }
 
     // ── Pattern recognition ──────────────────────────────────────────────────
@@ -1802,47 +1749,6 @@ mod tests {
         assert!(n.has_connection(2, 10));
         assert!(!n.has_connection(2, 11));
         assert!(!n.has_connection(3, 10));
-    }
-
-    // ── Reuse Phase A: reverse spatial connection index (on the target neuron) ──
-
-    #[test]
-    fn test_learn_spatial_connections_reports_new_targets() {
-        let mut n = make_neuron(1);
-        let actives = vec![
-            ActiveNeuron { id: 2, channel_id: 0, reward: 0.0 },
-            ActiveNeuron { id: 3, channel_id: 0, reward: 0.0 },
-            ActiveNeuron { id: 1, channel_id: 0, reward: 0.0 }, // self — skipped
-        ];
-        let new1 = n.learn_spatial_connections(&actives);
-        assert_eq!(new1.len(), 2);
-        assert!(new1.contains(&2) && new1.contains(&3));
-        // Re-learning the same actives reports NO new targets (membership-only: already connected).
-        let new2 = n.learn_spatial_connections(&actives);
-        assert!(new2.is_empty());
-    }
-
-    #[test]
-    fn test_spatial_connection_sources_add_and_get() {
-        let mut n = make_neuron(100);
-        assert!(n.get_spatial_connection_sources().is_empty());
-        n.add_spatial_connection_source(1);
-        n.add_spatial_connection_source(2);
-        n.add_spatial_connection_source(1); // idempotent
-        let s = n.get_spatial_connection_sources();
-        assert_eq!(s.len(), 2);
-        assert!(s.contains(&1) && s.contains(&2));
-    }
-
-    #[test]
-    fn test_spatial_connection_targets_enumerates_only_d0() {
-        let mut n = make_neuron(1);
-        n.create_connection(0, 10, 1.0, 0.0);
-        n.create_connection(0, 11, 1.0, 0.0);
-        n.create_connection(2, 12, 1.0, 0.0); // temporal — excluded
-        let targets: FxHashSet<NeuronId> = n.spatial_connection_targets().collect();
-        assert_eq!(targets.len(), 2);
-        assert!(targets.contains(&10) && targets.contains(&11));
     }
 
     #[test]

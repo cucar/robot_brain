@@ -21,7 +21,6 @@ mod column;
 mod config;
 mod context;
 mod diagnostics;
-mod footprint;
 mod memory;
 mod neuron;
 mod quantizer;

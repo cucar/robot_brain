@@ -7,10 +7,10 @@
 /// Layout: `<job_dir>/backups/<YYYY-MM-DD_HH-mm-ss>/`
 ///   - `channels.csv`           id,name
 ///   - `dimensions.csv`         id,name
-///   - `neurons.csv`            id
+///   - `neurons.csv`            id,temporal_level,spatial_level
 ///   - `base_neurons.csv`       neuron_id,channel_id,type,dimension_id,val
 ///   - `connections.csv`        from_neuron_id,to_neuron_id,distance,strength,reward
-///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength,spatial
+///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength
 ///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength
 ///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2
 
@@ -28,7 +28,7 @@ use crate::neuron::{
 use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry};
 use crate::types::{
     ChannelId, ContextEntry, Coordinate, DimensionId, Distance,
-    NeuronId, NeuronType,
+    Level, NeuronId, NeuronType,
 };
 
 /// Hard cap on retained backup folders. The 11th save evicts the oldest by
@@ -130,11 +130,20 @@ impl Backup {
             dimension_name_to_id.insert(row[1].clone(), id);
         }
 
-        // Neurons: build neuron shells - neurons.csv is just the id census
+        // Neurons: build neuron shells keyed by id. The optional 3rd column carries spatial_level;
+        // pre-spatial snapshots omit it, so it defaults to 0 (sensory / base of the spatial hierarchy).
         let mut neurons: FxHashMap<NeuronId, SerializedNeuron> = FxHashMap::default();
+        let mut temporal_levels: FxHashMap<NeuronId, Level> = FxHashMap::default();
+        let mut spatial_levels: FxHashMap<NeuronId, Level> = FxHashMap::default();
         for row in read_csv(&folder.join("neurons.csv"))? {
-            if row.is_empty() { continue; }
+            if row.len() < 2 { continue; }
             let id: NeuronId = row[0].parse().map_err(|e| format!("Bad neuron id: {}", e))?;
+            let temporal_level: Level = row[1].parse().map_err(|e| format!("Bad temporal level: {}", e))?;
+            let spatial_level: Level = if row.len() >= 3 {
+                row[2].parse().map_err(|e| format!("Bad spatial level: {}", e))?
+            } else {
+                0
+            };
             neurons.insert(id, SerializedNeuron {
                 id,
                 pattern_forget_rate: self.pattern_forget_rate,
@@ -143,6 +152,8 @@ impl Backup {
                 context_refs: Vec::new(),
                 error_stats: Vec::new(),
             });
+            temporal_levels.insert(id, temporal_level);
+            spatial_levels.insert(id, spatial_level);
         }
 
         // Base neurons: level-0 sensory metadata
@@ -197,18 +208,18 @@ impl Backup {
         let patterns_file = folder.join("patterns.csv");
         if patterns_file.exists() {
             for row in read_csv(&patterns_file)? {
-                if row.len() < 4 { continue; }
+                if row.len() < 3 { continue; }
                 let pattern_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pattern id: {}", e))?;
                 let parent_id: NeuronId = row[1].parse().map_err(|e| format!("Bad parent id: {}", e))?;
                 let strength: f64 = row[2].parse().map_err(|e| format!("Bad strength: {}", e))?;
-                // The `spatial` flag is the explicit spatial-vs-temporal child discriminator (replacing
-                // the dropped level columns): "1" = spatial routing child, "0" = temporal.
-                let spatial = row[3] == "1";
 
                 neuron_parents.insert(pattern_id, parent_id);
 
                 let parent = neurons.get_mut(&parent_id)
                     .ok_or_else(|| format!("Pattern parent not found: {}", parent_id))?;
+                // A spatial pattern neuron (spatial_level >= 1) restores as a spatial child of its parent;
+                // a temporal pattern (spatial_level 0, temporal level >= 1) as a temporal child.
+                let spatial = spatial_levels.get(&pattern_id).copied().unwrap_or(0) != 0;
                 let child_idx = parent.children.len();
                 parent.children.push(SerializedChild {
                     pattern_id,
@@ -293,14 +304,23 @@ impl Backup {
             }
         }
 
-        // Assemble the snapshot shape Thalamus expects. Base data lives only on true base neurons
-        // (those present in base_neurons.csv); corrections are coordinate-less and carry only a parent.
+        // Assemble the snapshot shape Thalamus expects
         let mut neuron_entries = Vec::with_capacity(neurons.len());
         for (neuron_id, neuron) in neurons {
-            let base_neuron = base_neurons.get(&neuron_id).cloned();
+            let temporal_level = temporal_levels.get(&neuron_id).copied().unwrap_or(0);
+            let spatial_level = spatial_levels.get(&neuron_id).copied().unwrap_or(0);
+            // Only temporal_level 0 AND spatial_level 0 carry a stored base coordinate; spatial
+            // patterns also sit at temporal_level 0 but their coordinate is rederived in Thalamus::restore_snapshot.
+            let base_neuron = if temporal_level == 0 && spatial_level == 0 {
+                base_neurons.get(&neuron_id).cloned()
+            } else {
+                None
+            };
             let parent_id = neuron_parents.get(&neuron_id).copied();
             neuron_entries.push(SnapshotNeuronEntry {
                 neuron,
+                temporal_level,
+                spatial_level,
                 base_neuron,
                 parent_id,
             });
@@ -335,20 +355,24 @@ impl Backup {
         write_csv(&folder.join("dimensions.csv"), &rows)
     }
 
-    /// Write the neuron id census. Sorted by id. Levels are no longer stored — base vs correction is
-    /// resolved from base_neurons.csv / patterns.csv on load.
+    /// Write the neuron id+temporal_level+spatial_level table. Sorted by id.
     fn write_neurons(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut rows: Vec<Vec<String>> = snapshot.neurons.iter()
-            .map(|entry| vec![entry.neuron.id.to_string()])
+            .map(|entry| vec![
+                entry.neuron.id.to_string(),
+                entry.temporal_level.to_string(),
+                entry.spatial_level.to_string(),
+            ])
             .collect();
         rows.sort_by_key(|r| r[0].parse::<u64>().unwrap_or(0));
         write_csv(&folder.join("neurons.csv"), &rows)
     }
 
-    /// Write the base (sensory/action) neuron metadata table — only true base neurons carry it.
+    /// Write the temporal_level-0 sensory metadata table.
     fn write_base_neurons(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut rows: Vec<Vec<String>> = Vec::new();
         for entry in &snapshot.neurons {
+            if entry.temporal_level != 0 { continue; }
             if let Some(base) = &entry.base_neuron {
                 let type_str = match base.neuron_type {
                     NeuronType::Event => "event",
@@ -394,28 +418,23 @@ impl Backup {
 
         let mut w = open_csv(&folder.join("patterns.csv"))?;
         for entry in &snapshot.neurons {
-            // Every pattern (correction) has a parent; true base neurons do not.
+            // Every pattern neuron has a parent; true sensory/action neurons do not. Filter on parent
+            // presence rather than temporal level, because spatial pattern neurons also sit at level 0
+            // (their depth lives in spatial_level) and must still be recorded with their parent here.
             let parent_id = match entry.parent_id {
                 Some(p) => p,
                 None => continue,
             };
-            // Pull both the activation strength AND the spatial flag from the parent's child entry.
-            // The `spatial` flag is the explicit spatial-vs-temporal discriminator that replaces the
-            // dropped level columns — authoritative because the live snapshot tags each routing-table
-            // child by which table it came from.
             let mut strength = 0.0;
-            let mut spatial = false;
             if let Some(parent) = neuron_map.get(&parent_id) {
                 if let Some(child) = parent.children.iter().find(|c| c.pattern_id == entry.neuron.id) {
                     strength = child.activation_strength;
-                    spatial = child.spatial;
                 }
             }
             write_row(&mut w, &[
                 entry.neuron.id.to_string(),
                 parent_id.to_string(),
                 strength.to_string(),
-                if spatial { "1" } else { "0" }.to_string(),
             ])?;
         }
         w.flush().map_err(|e| format!("Failed to flush patterns.csv: {}", e))
@@ -731,6 +750,8 @@ mod tests {
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
                     },
+                    temporal_level: 0,
+                    spatial_level: 0,
                     base_neuron: Some(BaseNeuron {
                         channel_id: 1,
                         neuron_type: NeuronType::Event,
@@ -747,6 +768,8 @@ mod tests {
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
                     },
+                    temporal_level: 0,
+                    spatial_level: 0,
                     base_neuron: Some(BaseNeuron {
                         channel_id: 1,
                         neuron_type: NeuronType::Event,

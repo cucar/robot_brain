@@ -11,19 +11,15 @@ export declare class Brain {
    * Options shape (all optional, with defaults matching JS Brain):
    *   contextLength: number (default 10)
    *   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal.
-   *     It SEEDS one adaptive per-unit threshold: recognition fires at similarity ≥ θ and correction at < θ
-   *     until a unit has error history, after which both float together off its stats (see groupMode).
+   *     Seeds one adaptive per-unit threshold: recognition fires at similarity ≥ θ, correction at < θ, then both
+   *     float together off the unit's error stats once it has history (see groupMode).
    *   groupMode: string (default 'neutral') — how the live grouping threshold adapts from error stats
-   *     ('static' pins it at the θ seed; conservative/neutral/aggressive shift it by mean ± σ)
+   *   (retired: mergeThreshold / errorCorrectionThreshold and their spatial*/temporal* variants — now ignored with a warning)
    *   patternForgetRate: number (default 0.01)
    *   regions: number (default 1)
    *   columns: number (default 1)
    *   consensus: string 'democratic' | 'nb' (default 'democratic')
    *   debug: boolean (default false)
-   *
-   * The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
-   * variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
-   * opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.
    */
   constructor(options?: object | undefined | null)
   /**
@@ -104,20 +100,31 @@ export declare class Brain {
    */
   spatialLevelCounts(): Array<number>
   /**
-   * Dump active spatial corrections (level ≥ 1) with the footprint of each, for visualizing the
-   * hierarchy. Reflects the most recently processed frame. Returns a JSON string:
-   * `[{"id":N,"level":L,"ch":[channelIds...],"bk":[bucketIds...]}, ...]` where ch[i]/bk[i] is one
-   * base pixel the correction covers. Parse with JSON.parse on the JS side.
-   */
-  dumpActiveSpatialCorrections(): string
-  /**
-   * Declare the base-level neighbor channel set for a registered channel — THE neighbor graph that
-   * footprint adjacency uses in both waves (spatial and temporal). Names not in the registry are
-   * silently ignored; an empty list shrinks the neighborhood to {itself}; channels with no call
-   * retain the default all-pairs neighborhood. Call AFTER registering all channels — neighbor names
-   * are resolved at this call. (Kept named `setSpatialNeighbors` for API stability.)
+   * Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
+   * This is the set a channel may co-fire with in the same frame to form a spatial pattern.
+   * Names not in the registry are silently ignored; an empty list shrinks the spatial
+   * neighborhood to {itself}; channels with no call retain the default all-pairs spatial
+   * neighborhood. Call AFTER registering all channels — neighbor names are resolved at this call.
    */
   setSpatialNeighbors(name: string, neighborNames: Array<string>): void
+  /**
+   * Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
+   * neighborNamesByLevel[l] is the neighbor list a level-l neuron of this channel uses (e.g. the
+   * radius-(l+1) ring of a retinotopic pixel); levels past the end reuse the last set.
+   */
+  setSpatialNeighborLevels(name: string, neighborNamesByLevel: Array<Array<string>>): void
+  /**
+   * Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
+   * This is the set whose past a channel may sequence against to predict the future.
+   * Same name-resolution and all-pairs-default semantics as `setSpatialNeighbors`.
+   */
+  setTemporalNeighbors(name: string, neighborNames: Array<string>): void
+  /**
+   * Declare the same neighbor set for BOTH phases — convenience for channels whose spatial and
+   * temporal neighbors coincide (e.g. retinotopic pixels). Equivalent to calling
+   * `setSpatialNeighbors` and `setTemporalNeighbors` with the same list.
+   */
+  setChannelNeighbors(name: string, neighborNames: Array<string>): void
   /** Look up a dimension ID by its registered name. */
   getDimensionIdByName(name: string): unknown
   /** Look up a neuron ID by its (dimId, bucketId) coordinate. */

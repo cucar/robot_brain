@@ -28,9 +28,6 @@ pub struct ColumnProcessResult {
     pub context_ref_updates: Vec<TemporalContextRefUpdate>,
     pub votes: Vec<AgeVotes>,
     pub timings: crate::neuron::NeuronOpTimings,
-    /// d=0 targets `parent_id` formed a new connection to this frame; the thalamus routes each to its
-    /// owning column to register `parent_id` as a source on the target's reverse connection index.
-    pub new_spatial_connection_targets: Vec<NeuronId>,
 }
 
 /// Result of a delete cascade pulse inside a column.
@@ -150,7 +147,6 @@ impl Column {
                 context_ref_updates: result.context_ref_updates,
                 votes: result.votes,
                 timings: result.timings,
-                new_spatial_connection_targets: result.new_spatial_connection_targets,
             });
         }
         results
@@ -182,7 +178,6 @@ impl Column {
                 context_ref_updates: result.context_ref_updates,
                 votes: result.votes,
                 timings: result.timings,
-                new_spatial_connection_targets: result.new_spatial_connection_targets,
             });
         }
         results
@@ -532,43 +527,6 @@ impl Column {
         }
     }
 
-    /// Register source neurons on the reverse connection index of target neurons owned by this column.
-    /// Each batch entry is (target, sources): every source gains an edge into `target`'s
-    /// `spatial_connection_sources`. Same routing shape as `update_spatial_context_refs`.
-    pub fn update_spatial_connection_sources(&mut self, update_batch: &[(NeuronId, Vec<NeuronId>)]) {
-        for (target_id, sources) in update_batch {
-            if let Some(neuron) = self.neurons.get_mut(target_id) {
-                for &source_id in sources {
-                    neuron.add_spatial_connection_source(source_id);
-                }
-            }
-        }
-    }
-
-    /// Every d=0 edge owned by this column's neurons as (source, target) — drives the restore rebuild
-    /// of each target's reverse connection index (the index is derived, never serialized).
-    pub fn collect_spatial_connection_edges(&self) -> Vec<(NeuronId, NeuronId)> {
-        let mut edges = Vec::new();
-        for (&source_id, neuron) in self.neurons.iter() {
-            for target in neuron.spatial_connection_targets() {
-                edges.push((source_id, target));
-            }
-        }
-        edges
-    }
-
-    /// The reverse connection index of a target neuron owned by this column: the sources with a d=0
-    /// connection to it. None if the target is not owned here. The reuse lookup reads this for candidates.
-    pub fn get_spatial_connection_sources(&self, target_id: NeuronId) -> Option<&FxHashSet<NeuronId>> {
-        self.neurons.get(&target_id).map(|n| n.get_spatial_connection_sources())
-    }
-
-    /// Count of a candidate's d=0 connections (its prediction breadth) for Jaccard reuse scoring. None
-    /// if the neuron is not owned here.
-    pub fn spatial_connection_count(&self, neuron_id: NeuronId) -> Option<usize> {
-        self.neurons.get(&neuron_id).map(|n| n.spatial_connection_count())
-    }
-
     /// Op-1/Op-4: Construct new Neuron instances from specs and store them locally.
     /// Each spec carries everything needed to build the Neuron without reaching back
     /// to Thalamus: id, forget_rate, connections, and shared config is on the Column.
@@ -857,40 +815,5 @@ mod tests {
         col2.restore_snapshot(&serialized);
         assert_eq!(col2.neurons.len(), 2);
         assert!(col2.neurons.get(&2).unwrap().has_connection(1, 1));
-    }
-
-    // ── Reuse Phase A: reverse spatial connection index ─────────────────────
-
-    #[test]
-    fn test_connection_sources_two_sources_one_target() {
-        // Simulate the orchestration-boundary dispatch: register sources 1 and 2 on target 100.
-        let mut col = make_column();
-        col.create_neurons(&[NeuronCreateSpec { id: 100, forget_rate: 0.0, connections: None }]);
-        col.update_spatial_connection_sources(&[(100, vec![1, 2])]);
-        let sources = col.get_spatial_connection_sources(100).expect("target owned");
-        assert_eq!(sources.len(), 2);
-        assert!(sources.contains(&1) && sources.contains(&2));
-    }
-
-    #[test]
-    fn test_connection_sources_unknown_target_none() {
-        let col = make_column();
-        assert!(col.get_spatial_connection_sources(999).is_none());
-    }
-
-    #[test]
-    fn test_collect_spatial_connection_edges() {
-        // The forward d=0 edges, as (source, target), feed the restore rebuild. Temporal edges excluded.
-        let mut col = make_column();
-        col.create_neurons(&[
-            NeuronCreateSpec { id: 1, forget_rate: 0.0, connections: Some(vec![
-                ConnectionSpec { distance: 0, to_neuron_id: 100, strength: 1.0, reward: 0.0, channel_id: 0 },
-                ConnectionSpec { distance: 0, to_neuron_id: 101, strength: 1.0, reward: 0.0, channel_id: 0 },
-                ConnectionSpec { distance: 2, to_neuron_id: 102, strength: 1.0, reward: 0.0, channel_id: 0 },
-            ]) },
-        ]);
-        let edges: FxHashSet<(NeuronId, NeuronId)> = col.collect_spatial_connection_edges().into_iter().collect();
-        assert_eq!(edges.len(), 2);
-        assert!(edges.contains(&(1, 100)) && edges.contains(&(1, 101)));
     }
 }

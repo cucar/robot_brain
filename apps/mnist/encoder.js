@@ -19,8 +19,6 @@ export class MNISTPixelChannelsEncoder {
 	 * @param {number} neighborhoodRadius - radius of each pixel's spatial neighborhood declared
 	 *   to the brain via setSpatialNeighbors. 1 = 3×3 window (up to 8 neighbors), 2 = 5×5 (up to 24),
 	 *   etc. Edge effects shrink the count for pixels near the image border.
-	 *   0 = FULL neighborhood: skip the declaration entirely so the brain keeps its all-pairs default
-	 *   (every pixel co-activates with every other). Only tractable with neuron reuse.
 	 */
 	constructor(buckets = 2, imageSize = 28, neighborhoodRadius = 1) {
 		if (28 % imageSize !== 0) throw new Error(`imageSize must divide 28 evenly, got ${imageSize}`);
@@ -81,32 +79,39 @@ export class MNISTPixelChannelsEncoder {
 	}
 
 	/**
-	 * Declare a (2r+1)×(2r+1) neighborhood for each pixel channel — where r is `neighborhoodRadius`.
+	 * Declare per-level neighborhoods for each pixel channel — the LEVEL-BASED RADIUS.
+	 * A level-ℓ neuron at pixel (x, y) uses the (2r+1)×(2r+1) window with r = neighborhoodRadius + ℓ:
+	 * L0 sees the base radius (default 1 → 8 neighbors), L1 sees radius 2 (24), L2 radius 3 (48), …
+	 * Receptive fields therefore widen with hierarchy depth instead of at the base, so each level's
+	 * matching stays local relative to its vocabulary while coverage grows toward the whole image.
+	 * Rings stop once the radius covers the grid — deeper levels reuse the last (full) ring.
 	 * Converts each linear pixel index to (x, y) and lists in-bounds neighbors as channel names.
 	 * Edge/corner pixels naturally get fewer neighbors.
 	 */
 	registerPixelNeighborhoods(brain) {
-		const r = this.neighborhoodRadius;
-		// radius 0 = FULL neighborhood: skip declaration so the brain keeps its all-pairs default
-		// (every pixel a neighbor of every other). Declaring nothing is what yields full, not a wide window.
-		if (r === 0) return;
+		// Largest useful radius: covers the whole grid from any pixel (Chebyshev distance).
+		const maxRadius = this.imageSize - 1;
 		for (let p = 0; p < this.pixels; p++) {
 			const x = p % this.imageSize;
 			const y = Math.floor(p / this.imageSize);
-			const neighbors = [];
-			for (let dy = -r; dy <= r; dy++) {
-				for (let dx = -r; dx <= r; dx++) {
-					if (dx === 0 && dy === 0) continue;
-					const nx = x + dx;
-					const ny = y + dy;
-					if (nx < 0 || nx >= this.imageSize) continue;
-					if (ny < 0 || ny >= this.imageSize) continue;
-					neighbors.push(`px_${ny * this.imageSize + nx}`);
+			const levels = [];
+			for (let r = this.neighborhoodRadius; r <= maxRadius; r++) {
+				const neighbors = [];
+				for (let dy = -r; dy <= r; dy++) {
+					for (let dx = -r; dx <= r; dx++) {
+						if (dx === 0 && dy === 0) continue;
+						const nx = x + dx;
+						const ny = y + dy;
+						if (nx < 0 || nx >= this.imageSize) continue;
+						if (ny < 0 || ny >= this.imageSize) continue;
+						neighbors.push(`px_${ny * this.imageSize + nx}`);
+					}
 				}
+				levels.push(neighbors);
 			}
 			// MNIST neighborhoods are spatial (pixel co-activation), so declare them on the spatial
 			// side only; the temporal side stays all-pairs (irrelevant at context length 1).
-			brain.setSpatialNeighbors(`px_${p}`, neighbors);
+			brain.setSpatialNeighborLevels(`px_${p}`, levels);
 		}
 	}
 
