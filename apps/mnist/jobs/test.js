@@ -132,6 +132,26 @@ export default class MNISTTestJob extends Job {
 			process.env.BRAIN_REFINE_CONNECTION = (refine === 'connection' || refine === 'both') ? '1' : '0';
 		}
 
+		// --mint-min-samples N: spatial minting maturity gate — a neuron must hold N error samples before
+		// it may mint corrections (it accumulates stats and recognizes normally meanwhile). 0 = no gate.
+		// Maps to an env var brain-core reads once per process (see brain-core/src/config.rs); default 10.
+		const mintMinIdx = process.argv.indexOf('--mint-min-samples');
+		if (mintMinIdx !== -1 && process.argv[mintMinIdx + 1] !== undefined) process.env.BRAIN_MINT_MIN_SAMPLES = process.argv[mintMinIdx + 1];
+
+		// --match-threshold X: STATIC recognition merge threshold (decoupled from the error side, which
+		// keeps its adaptive grouping for correction minting). Unset = coupled legacy behavior.
+		const matchThrIdx = process.argv.indexOf('--match-threshold');
+		if (matchThrIdx !== -1 && process.argv[matchThrIdx + 1] !== undefined) process.env.BRAIN_MATCH_THRESHOLD = process.argv[matchThrIdx + 1];
+		// --match-info2: likelihood-ratio (MDL v2) recognition — hypothesis test vs the background model.
+		if (process.argv.includes('--match-info2')) process.env.BRAIN_MATCH_INFO2 = '1';
+		// --match-info: information-weighted (MDL) recognition — candidates scored in bits saved,
+		// acceptance = positive net compression; no thresholds (see brain-core/src/config.rs).
+		if (process.argv.includes('--match-info')) process.env.BRAIN_MATCH_INFO = '1';
+		// --match-stats: per-entry match-statistics recognition (experimental; see brain-core/src/config.rs).
+		if (process.argv.includes('--match-stats')) process.env.BRAIN_MATCH_STATS = '1';
+		// --match-all: NO match threshold — the best recognition candidate always fires (experimental).
+		if (process.argv.includes('--match-all')) process.env.BRAIN_MATCH_ALL = '1';
+
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
 		// The decode now lives in the brain — hand it the consensus rule so the winner read out of
@@ -551,7 +571,13 @@ export default class MNISTTestJob extends Job {
 		const ips = (done / elapsed).toFixed(0);
 		const pct = (done / total * 100).toFixed(1);
 		const acc = (tally.correct / done * 100).toFixed(1);
-		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s   `);
+		// Live neuron count, cumulative mints, and per-level active-correction counts — the consolidation
+		// and hierarchy-depth signals during a long pass. Level counts reflect the last image's active set.
+		const summary = this.brain.getFrameSummary();
+		const minted = this.brain.getSpatialCorrectionCount();
+		const lc = this.brain.spatialLevelCounts();
+		const levels = lc.length ? lc.map((c, i) => `L${i + 1}:${c}`).join(' ') : 'flat';
+		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s | ${summary.neuronCount} neurons (${minted} minted) | depth ${summary.maxSpatialLevel}: ${levels}   `);
 	}
 
 	/**

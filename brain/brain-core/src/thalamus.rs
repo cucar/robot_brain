@@ -1148,21 +1148,24 @@ impl Thalamus {
                 let parent_channel = self.get_neuron_channel_id(parent_id).unwrap_or(0);
 
                 // Observed L0 events the parent's connections[0] should have predicted, minus the
-                // parent itself AND minus any L0 events from channels outside the parent's neighbor
-                // graph. Channels with no registered neighbor list default to "all channels are
-                // neighbors" — preserving original full-frame behavior.
+                // parent itself AND minus any L0 events from channels outside the parent's BASE ring
+                // (level 0) — the INFERENCE neighborhood is the same base-radius L0 set at EVERY level;
+                // only the context neighborhood below widens with level. Channels with no registered
+                // neighbor list default to "all channels are neighbors" — preserving original
+                // full-frame behavior.
                 let observed_l0_minus_self: FxHashSet<NeuronId> = l0_event_set.iter()
                     .copied()
                     .filter(|&id| id != parent_id)
                     .filter(|&id| {
                         let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
-                        self.is_spatial_neighbor_channel(parent_channel, parent_level, target_channel)
+                        self.is_spatial_neighbor_channel(parent_channel, 0, target_channel)
                     })
                     .collect();
 
-                // Parent's neighborhood at its own spatial level — used as the context_entries of
-                // any correction we mint for this parent. Excludes the parent itself and any
-                // same-level fired neurons from non-neighbor channels.
+                // Parent's CONTEXT neighborhood — same-level fired neurons within the parent's
+                // level-ℓ ring (the ring that widens with level), used as the context_entries of any
+                // correction we mint for this parent. Excludes the parent itself and any same-level
+                // fired neurons from non-neighbor channels.
                 let neighborhood: Vec<NeuronId> = by_level.get(&parent_level)
                     .map(|v| v.iter().copied()
                         .filter(|&id| id != parent_id)
@@ -1190,7 +1193,7 @@ impl Thalamus {
                     for v in &age_votes.votes {
                         if self.get_neuron_type(v.neuron_id) != Some(NeuronType::Event) { continue; }
                         let target_channel = self.get_neuron_channel_id(v.neuron_id).unwrap_or(0);
-                        if !self.is_spatial_neighbor_channel(parent_channel, parent_level, target_channel) { continue; }
+                        if !self.is_spatial_neighbor_channel(parent_channel, 0, target_channel) { continue; }
                         let dim_id = match self.get_neuron_coordinate(v.neuron_id) {
                             Some(c) => c.dim_id,
                             None => continue,
@@ -1546,13 +1549,14 @@ impl Thalamus {
             full_actives.push(ActiveNeuron { id: neuron_id, channel_id, reward: 0.0 });
         }
 
-        // Per-task actives filtered by parent's neighbor channels at the parent's own spatial level
-        // (level-based radius: a deeper neuron reads its wider ring).
+        // Per-task actives filtered by parent's BASE ring (level 0) regardless of the parent's level:
+        // these are the d=0 connection-learning targets — the INFERENCE neighborhood. Every level of a
+        // pixel's correction stack predicts the same base-radius L0 neighbors (aiming at 100% there);
+        // only the CONTEXT neighborhood (task_contexts below) widens with level.
         let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
             let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
-            let parent_level = self.get_neuron_spatial_level(t.neuron_id);
             full_actives.iter()
-                .filter(|a| self.is_spatial_neighbor_channel(parent_channel, parent_level, a.channel_id))
+                .filter(|a| self.is_spatial_neighbor_channel(parent_channel, 0, a.channel_id))
                 .cloned()
                 .collect()
         }).collect();

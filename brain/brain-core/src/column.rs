@@ -609,6 +609,8 @@ impl Column {
                 neuron.add_spatial_child(child.pattern_id, child.activation_strength);
                 if let Some(entry) = neuron.get_spatial_routing_table_mut().get_mut(&child.pattern_id) {
                     entry.last_activation_frame = child.last_activation_frame;
+                    entry.match_stats = crate::types::WelfordState { n: child.match_n, mean: child.match_mean, m2: child.match_m2 };
+                    entry.fires = child.fires;
                 }
                 for ctx in &child.context {
                     neuron.add_spatial_context(child.pattern_id, ctx.neuron_id, ctx.strength);
@@ -634,6 +636,9 @@ impl Column {
                 }
             }
         }
+
+        // load local ring-neighbor frequency statistics (information-weighted recognition).
+        neuron.restore_spatial_ctx_freq(data.ctx_frames, &data.ctx_freq);
 
         // load per-(neuron, age) Welford error stats.
         // Spatial serializes as age=0; temporal serializes at its real age (>= 1).

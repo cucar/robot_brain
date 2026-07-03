@@ -10,9 +10,11 @@
 ///   - `neurons.csv`            id,temporal_level,spatial_level
 ///   - `base_neurons.csv`       neuron_id,channel_id,type,dimension_id,val
 ///   - `connections.csv`        from_neuron_id,to_neuron_id,distance,strength,reward
-///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength
+///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength,match_n,match_mean,match_m2
 ///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength
 ///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2
+///   - `spatial_freq.csv`       neuron_id,ctx_neuron_id,count — with one sentinel row per neuron
+///                              (ctx_neuron_id == neuron_id) carrying the frame denominator.
 
 use std::fs;
 use std::fs::File;
@@ -83,6 +85,7 @@ impl Backup {
         self.write_patterns(&folder, snapshot)?;
         self.write_contexts(&folder, snapshot)?;
         self.write_neuron_error_stats(&folder, snapshot)?;
+        self.write_spatial_freq(&folder, snapshot)?;
 
         println!("💾 Backup saved: {} ({} neurons)", folder.display(), snapshot.neurons.len());
 
@@ -151,6 +154,8 @@ impl Backup {
                 children: Vec::new(),
                 context_refs: Vec::new(),
                 error_stats: Vec::new(),
+                ctx_freq: Vec::new(),
+                ctx_frames: 0,
             });
             temporal_levels.insert(id, temporal_level);
             spatial_levels.insert(id, spatial_level);
@@ -212,6 +217,11 @@ impl Backup {
                 let pattern_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pattern id: {}", e))?;
                 let parent_id: NeuronId = row[1].parse().map_err(|e| format!("Bad parent id: {}", e))?;
                 let strength: f64 = row[2].parse().map_err(|e| format!("Bad strength: {}", e))?;
+                // Per-entry match stats (columns 3-5); absent in older backups → zeros (bar re-warms from init).
+                let match_n: u64 = if row.len() > 5 { row[3].parse().unwrap_or(0) } else { 0 };
+                let match_mean: f64 = if row.len() > 5 { row[4].parse().unwrap_or(0.0) } else { 0.0 };
+                let match_m2: f64 = if row.len() > 5 { row[5].parse().unwrap_or(0.0) } else { 0.0 };
+                let fires: u64 = if row.len() > 6 { row[6].parse().unwrap_or(0) } else { 0 };
 
                 neuron_parents.insert(pattern_id, parent_id);
 
@@ -227,6 +237,10 @@ impl Backup {
                     activation_strength: strength,
                     last_activation_frame: 0,
                     context: Vec::new(),
+                    match_n,
+                    match_mean,
+                    match_m2,
+                    fires,
                 });
 
                 children_map.entry(parent_id)
@@ -288,6 +302,19 @@ impl Backup {
         }
 
         // Per-(neuron, age) Welford error stats — optional, older snapshots may not have this
+        let spatial_freq_file = folder.join("spatial_freq.csv");
+        if spatial_freq_file.exists() {
+            for row in read_csv(&spatial_freq_file)? {
+                if row.len() < 3 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad freq neuron id: {}", e))?;
+                let ctx_id: NeuronId = row[1].parse().map_err(|e| format!("Bad freq ctx id: {}", e))?;
+                let count: u64 = row[2].parse().map_err(|e| format!("Bad freq count: {}", e))?;
+                let neuron = neurons.get_mut(&neuron_id)
+                    .ok_or_else(|| format!("spatial_freq neuron not found: {}", neuron_id))?;
+                if ctx_id == neuron_id { neuron.ctx_frames = count; } else { neuron.ctx_freq.push((ctx_id, count)); }
+            }
+        }
+
         let error_stats_file = folder.join("neuron_error_stats.csv");
         if error_stats_file.exists() {
             for row in read_csv(&error_stats_file)? {
@@ -426,15 +453,24 @@ impl Backup {
                 None => continue,
             };
             let mut strength = 0.0;
+            let (mut match_n, mut match_mean, mut match_m2, mut fires) = (0u64, 0.0f64, 0.0f64, 0u64);
             if let Some(parent) = neuron_map.get(&parent_id) {
                 if let Some(child) = parent.children.iter().find(|c| c.pattern_id == entry.neuron.id) {
                     strength = child.activation_strength;
+                    match_n = child.match_n;
+                    match_mean = child.match_mean;
+                    match_m2 = child.match_m2;
+                    fires = child.fires;
                 }
             }
             write_row(&mut w, &[
                 entry.neuron.id.to_string(),
                 parent_id.to_string(),
                 strength.to_string(),
+                match_n.to_string(),
+                match_mean.to_string(),
+                match_m2.to_string(),
+                fires.to_string(),
             ])?;
         }
         w.flush().map_err(|e| format!("Failed to flush patterns.csv: {}", e))
@@ -460,6 +496,29 @@ impl Backup {
     }
 
     /// Write the per-(neuron, age) Welford error-stats table. Sorted by (neuron_id, age).
+    /// Write the local ring-neighbor frequency table. One row per (neuron, ctx neuron) count, plus a
+    /// sentinel row per neuron (ctx id == own id — a neuron is never its own context entry) holding the
+    /// frame denominator. Only neurons with observations are written.
+    fn write_spatial_freq(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
+        let mut w = open_csv(&folder.join("spatial_freq.csv"))?;
+        for entry in &snapshot.neurons {
+            if entry.neuron.ctx_frames == 0 { continue; }
+            write_row(&mut w, &[
+                entry.neuron.id.to_string(),
+                entry.neuron.id.to_string(),
+                entry.neuron.ctx_frames.to_string(),
+            ])?;
+            for &(ctx_id, count) in &entry.neuron.ctx_freq {
+                write_row(&mut w, &[
+                    entry.neuron.id.to_string(),
+                    ctx_id.to_string(),
+                    count.to_string(),
+                ])?;
+            }
+        }
+        w.flush().map_err(|e| format!("Failed to flush spatial_freq.csv: {}", e))
+    }
+
     fn write_neuron_error_stats(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut rows: Vec<Vec<String>> = Vec::new();
         for entry in &snapshot.neurons {
@@ -749,6 +808,8 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
+                        ctx_freq: Vec::new(),
+                        ctx_frames: 0,
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -767,6 +828,8 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
+                        ctx_freq: Vec::new(),
+                        ctx_frames: 0,
                     },
                     temporal_level: 0,
                     spatial_level: 0,
