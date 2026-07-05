@@ -30,6 +30,14 @@ pub struct ColumnProcessResult {
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
+/// Per-neuron output of the spatial sweep, tagged with its owner.
+pub struct SpatialColumnResult {
+    pub parent_id: NeuronId,
+    pub matches: Vec<PatternMatch>,
+    pub votes: Option<crate::neuron::SpatialVotes>,
+    pub timings: crate::neuron::NeuronOpTimings,
+}
+
 /// Result of a delete cascade pulse inside a column.
 pub struct DeleteResult {
     pub outbound_ops: Vec<DeleteOp>,
@@ -99,6 +107,23 @@ pub struct Column {
     /// How the derived correction threshold adapts from per-unit Welford stats (shared spatial/temporal).
     group_mode: GroupMode,
 
+    // ── Temporary experimental toggles ──────────────────────────────────────────
+    // Handed to every neuron this column creates or loads; the field docs live on Neuron.
+    mint_min_samples: u64,
+    match_stats: bool,
+    match_all: bool,
+    match_threshold: Option<f64>,
+    match_info: bool,
+    match_info2: bool,
+    match_avg: bool,
+    refine_context: bool,
+    refine_connection: bool,
+    trace_match: bool,
+    trace_refine: bool,
+
+    /// Master learning toggle, fixed at construction and handed to every neuron this column creates or loads.
+    learning: bool,
+
     /// The sole storage for owned Neurons. Keyed by neuron id.
     neurons: FxHashMap<NeuronId, Neuron>,
 }
@@ -110,6 +135,18 @@ impl Column {
         context_length: u32,
         group_threshold: f64,
         group_mode: GroupMode,
+        learning: bool,
+        mint_min_samples: u64,
+        match_stats: bool,
+        match_all: bool,
+        match_threshold: Option<f64>,
+        match_info: bool,
+        match_info2: bool,
+        match_avg: bool,
+        refine_context: bool,
+        refine_connection: bool,
+        trace_match: bool,
+        trace_refine: bool,
     ) -> Self {
         Self {
             channel_actions,
@@ -117,6 +154,18 @@ impl Column {
             context_length,
             group_threshold,
             group_mode,
+            mint_min_samples,
+            match_stats,
+            match_all,
+            match_threshold,
+            match_info,
+            match_info2,
+            match_avg,
+            refine_context,
+            refine_connection,
+            trace_match,
+            trace_refine,
+            learning,
             neurons: FxHashMap::default(),
         }
     }
@@ -125,26 +174,22 @@ impl Column {
     /// and returns results parent_id-tagged in task order.
     pub fn process_spatial_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>, crate::context::SpatialContext)],
+        tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
-        learning: bool,
-    ) -> Vec<ColumnProcessResult> {
+    ) -> Vec<SpatialColumnResult> {
 
-        // Each task carries its own neighbor-filtered observed context
+        // Each task carries its own neighbor-filtered actives and observed co-activation.
         let mut results = Vec::with_capacity(tasks.len());
-        for (neuron_id, age_states, corrections, error_feedback, actives, observed_context) in tasks {
+        for (neuron_id, actives, observed_context) in tasks {
             let neuron = self.neurons.get_mut(neuron_id)
                 .unwrap_or_else(|| panic!("Column.process_spatial_level: neuron {} not found", neuron_id));
             let result = neuron.process_spatial_frame(
-                age_states, Some(observed_context), new_error_pattern_ids,
-                actives, frame_number, corrections, error_feedback, learning,
+                Some(observed_context), new_error_pattern_ids, actives, frame_number,
             );
-            results.push(ColumnProcessResult {
+            results.push(SpatialColumnResult {
                 parent_id: *neuron_id,
                 matches: result.matches,
-                correction_activations: result.correction_activations,
-                context_ref_updates: result.context_ref_updates,
                 votes: result.votes,
                 timings: result.timings,
             });
@@ -161,7 +206,6 @@ impl Column {
         level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
-        learning: bool,
     ) -> Vec<ColumnProcessResult> {
         let mut results = Vec::with_capacity(tasks.len());
         for (neuron_id, age_states, corrections, error_feedback, actives) in tasks {
@@ -169,7 +213,7 @@ impl Column {
                 .unwrap_or_else(|| panic!("Column.process_temporal_level: neuron {} not found", neuron_id));
             let result = neuron.process_temporal_frame(
                 age_states, memory_depth, level_context, new_error_pattern_ids,
-                actives, frame_number, corrections, error_feedback, learning,
+                actives, frame_number, corrections, error_feedback,
             );
             results.push(ColumnProcessResult {
                 parent_id: *neuron_id,
@@ -539,6 +583,18 @@ impl Column {
                 self.group_mode,
                 self.channel_actions.clone(),
                 self.context_length,
+                self.learning,
+                self.mint_min_samples,
+                self.match_stats,
+                self.match_all,
+                self.match_threshold,
+                self.match_info,
+                self.match_info2,
+                self.match_avg,
+                self.refine_context,
+                self.refine_connection,
+                self.trace_match,
+                self.trace_refine,
             );
             // pre-wire default action connections at neutral reward across all voting distances
             for distance in 1..self.context_length {
@@ -594,6 +650,18 @@ impl Column {
             self.group_mode,
             self.channel_actions.clone(),
             self.context_length,
+            self.learning,
+            self.mint_min_samples,
+            self.match_stats,
+            self.match_all,
+            self.match_threshold,
+            self.match_info,
+            self.match_info2,
+            self.match_avg,
+            self.refine_context,
+            self.refine_connection,
+            self.trace_match,
+            self.trace_refine,
         );
 
         // load directed connections (distance → target neuron id with strength and reward)
@@ -637,11 +705,15 @@ impl Column {
             }
         }
 
-        // load local ring-neighbor frequency statistics (information-weighted recognition).
-        neuron.restore_spatial_ctx_freq(data.ctx_frames, &data.ctx_freq);
+        // load local context-neighbor counts (information-weighted recognition).
+        neuron.restore_spatial_neighbor_counts(data.neighbor_frames, &data.neighbor_counts);
 
         // load per-(neuron, age) Welford error stats.
         // Spatial serializes as age=0; temporal serializes at its real age (>= 1).
+        for stat in &data.match_stats {
+            neuron.load_spatial_match_stats(stat.n, stat.mean, stat.m2);
+        }
+
         for stat in &data.error_stats {
             if stat.age == 0 {
                 neuron.load_spatial_error_stats(stat.n, stat.mean, stat.m2);
@@ -758,6 +830,8 @@ mod tests {
             2,
             0.5,
             GroupMode::Static,
+            true,
+            10, false, false, None, false, false, false, true, true, false, false,
         )
     }
 

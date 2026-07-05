@@ -20,6 +20,14 @@ export declare class Brain {
    *   columns: number (default 1)
    *   consensus: string 'democratic' | 'nb' (default 'democratic')
    *   debug: boolean (default false)
+   *   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
+   *
+   * TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
+   *   mintMinSamples: number (default 10), mintRepeat: boolean, mintRepeatCap: number (default 16)
+   *   matchStats / matchAll / matchInfo / matchInfo2 / matchAvg: boolean, matchThreshold: number
+   *   errorInfo / errorInfo2: boolean
+   *   refineContext / refineConnection: boolean (default true)
+   *   traceMatch / traceRefine / traceError: boolean
    */
   constructor(options?: object | undefined | null)
   /**
@@ -64,15 +72,6 @@ export declare class Brain {
    */
   setEmitVotes(enabled: boolean): void
   /**
-   * Master learning toggle.
-   * When false, subsequent `processFrame` calls skip op-2 (decay/reap) and error-correction pattern neuron creation.
-   * They also skip event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
-   * Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
-   * Pattern activation and voting still run, so inferences remain populated.
-   * Used by supervised harnesses (MNIST) for the held-out evaluation pass.
-   */
-  setLearning(learning: boolean): void
-  /**
    * Supervised wiring step that sits on top of the last `processFrame` call.
    * `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
    * Each `value` is quantized to the corresponding action neuron; reward is applied to that connection
@@ -110,7 +109,7 @@ export declare class Brain {
   /**
    * Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
    * neighborNamesByLevel[l] is the neighbor list a level-l neuron of this channel uses (e.g. the
-   * radius-(l+1) ring of a retinotopic pixel); levels past the end reuse the last set.
+   * radius-(l+1) neighborhood of a retinotopic pixel); levels past the end reuse the last set.
    */
   setSpatialNeighborLevels(name: string, neighborNamesByLevel: Array<Array<string>>): void
   /**

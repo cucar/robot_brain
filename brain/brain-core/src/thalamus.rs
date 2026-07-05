@@ -129,6 +129,15 @@ pub struct ProcessLevelResult {
     pub orchestration: OrchestrationTimings,
 }
 
+/// Output of one spatial level pass.
+/// Spatial creates no neurons during the level loop; corrections come from a separate pass, reading
+/// the per-neuron predictions through the dispatch results.
+pub struct SpatialLevelResult {
+    pub activations: Vec<Activation>,
+    pub results: Vec<crate::column::SpatialColumnResult>,
+    pub orchestration: OrchestrationTimings,
+}
+
 /**
  * Wall-clock for the orchestration steps inside thalamus.process_level that
  * wrap the per-neuron dispatch. Lets us see how much of process_levels is
@@ -197,6 +206,48 @@ pub struct Thalamus {
     regions: usize,
     columns: usize,
 
+    // ── Temporary experimental toggles ──────────────────────────────────────────
+    // Each of these is a pending decision, not a feature: when its experiment concludes, the winning
+    // behavior is hard-wired and the toggle is DELETED. Sixteen spatial options is not a sustainable
+    // surface — it is the current test matrix, and it must shrink.
+
+    /// MINT-ON-REPEAT (the mint-side MDL gate): a would-be spatial correction only becomes a real neuron
+    /// when its configuration RECURS — the first occurrence is noted in a transient per-parent pending
+    /// buffer; a later request whose neighborhood and targets both match a pending note (at the parent's
+    /// coupled merge threshold) promotes to a real mint. Recurrence is the evidence that the codebook cost
+    /// will amortize (dictionary coding / information gain); one-shot configurations never become neurons.
+    /// Pending notes are training-transient (not persisted). Default OFF.
+    mint_repeat: bool,
+
+    /// Capacity of the mint-on-repeat pending buffer (notes per parent, FIFO-evicted). Bounds the window
+    /// within which a configuration's recurrence can be proven: too small silently converts "must occur
+    /// twice" into "must occur twice in quick succession". Default 16.
+    mint_repeat_cap: usize,
+
+    /// INFORMATION-THEORETIC spatial pattern creation: instead of comparing an averaged error rate to an
+    /// averaged threshold, each prediction failure is measured as RESIDUAL SURPRISAL — the improbability
+    /// of the mismatched events under their base rates — and a correction is created once the surprisal
+    /// accumulated by a recurring configuration covers the cost of describing the new pattern. Severe
+    /// surprises can create immediately; mild ones must recur until paid for. No thresholds, no counts.
+    /// Replaces both the averaged-threshold trigger and the recur-twice gate when enabled. Default OFF.
+    error_info: bool,
+
+    /// IDENTITY-PRICED creation (surprisal ledger v2): the description cost of a new pattern is the number
+    /// of the code length needed to NAME its context and target sets out of the whole observed vocabulary,
+    /// instead of the base-rate improbability of its context. Frequency pricing makes always-active contexts
+    /// free to describe, which is what lets 1-2 element alias patterns stack into apex towers; naming costs
+    /// never drop below log2(vocabulary) per element, so a pattern whose events carry no information cannot pay.
+    error_info2: bool,
+
+    /// Diagnostic: when set, the spatial mint decision prints the predicted/observed L0 sizes, the measured
+    /// prediction error rate, and the adaptive error threshold it is compared against (per active neuron).
+    /// Shows whether errors cluster just under the adaptive threshold. Off by default (to stderr).
+    trace_error: bool,
+
+    /// Master learning toggle, fixed at construction and threaded to every region, column, and neuron
+    /// like the other options.
+    learning: bool,
+
     /// Coordinate → neuron id lookup (replaces JS neuronsByValue with string keys).
     /// Uses Coordinate directly as key since it derives Hash + Eq.
     neurons_by_value: FxHashMap<Coordinate, NeuronId>,
@@ -218,7 +269,7 @@ pub struct Thalamus {
     /// Absent entries default to 0 — pre-spatial-era persisted neurons inherit this on load.
     neuron_spatial_levels: FxHashMap<NeuronId, Level>,
 
-    /// Cumulative count of spatial correction patterns minted by `mint_spatial_corrections`.
+    /// Cumulative count of spatial correction patterns created by the spatial correction pass.
     /// Diagnostic — surfaced via Brain.get_spatial_correction_count() for harness validation.
     spatial_corrections_minted: u64,
 
@@ -247,16 +298,28 @@ pub struct Thalamus {
     channel_id_to_name: FxHashMap<ChannelId, String>,
 
     /// Per-channel SPATIAL neighbor sets, one per spatial level — restrict d=0 co-activation grouping
-    /// (spatial pattern minting and the spatial neighborhood/context built in `mint_spatial_corrections`)
+    /// (spatial pattern creation and the spatial neighborhood/context built by the correction pass)
     /// to the listed channels plus the channel itself.
     /// Index ℓ holds the neighbor set a LEVEL-ℓ neuron of this channel uses — the level-based radius:
-    /// an encoder declares a growing ring per level (e.g. radius 1 for L0, radius 2 for L1, …), so
+    /// an encoder declares a growing neighborhood per level (e.g. radius 1 for L0, radius 2 for L1, …), so
     /// receptive fields widen with hierarchy depth instead of at the base.
-    /// A level past the declared list reuses the LAST set (the rings stop growing once they cover the
+    /// A level past the declared list reuses the LAST set (the neighborhoods stop growing once they cover the
     /// input), and a flat single-set declaration applies that one set at every level.
     /// Separate from the temporal set so a channel can group spatially with its near neighbors while
     /// still sequencing temporally against a different (or unrestricted) channel set.
     spatial_channel_neighbors: FxHashMap<ChannelId, Vec<FxHashSet<ChannelId>>>,
+
+    /// MINT-ON-REPEAT pending buffer (training-transient, not persisted): parent → recent unpromoted
+    /// correction requests, each the (neighborhood, targets) pair of a first occurrence. A later
+    /// request matching a note (Jaccard ≥ the parent's coupled merge threshold on BOTH sets) promotes
+    /// to a real mint; unmatched requests are noted, FIFO-capped per parent.
+    pending_mints: FxHashMap<NeuronId, Vec<(FxHashSet<NeuronId>, FxHashSet<NeuronId>, f64)>>,
+
+    /// Base rates of neuron activation for information-theoretic creation (training-transient, not
+    /// persisted): how many frames each neuron has been active, over how many frames observed.
+    /// The improbability of a mismatched event under these rates is what the surprisal ledger prices.
+    activation_counts: FxHashMap<NeuronId, u64>,
+    activation_frames: u64,
 
     /// Per-channel TEMPORAL neighbor set — restricts d>0 sequence learning (temporal connection
     /// pre-wiring, temporal pattern minting, vote-error evaluation, and the per-task temporal
@@ -306,6 +369,23 @@ impl Thalamus {
         group_mode: GroupMode,
         regions: usize,
         columns: usize,
+        learning: bool,
+        mint_min_samples: u64,
+        mint_repeat: bool,
+        mint_repeat_cap: usize,
+        match_stats: bool,
+        match_all: bool,
+        match_threshold: Option<f64>,
+        match_info: bool,
+        match_info2: bool,
+        match_avg: bool,
+        error_info: bool,
+        error_info2: bool,
+        refine_context: bool,
+        refine_connection: bool,
+        trace_match: bool,
+        trace_refine: bool,
+        trace_error: bool,
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
         let channel_actions = FxHashMap::default();
@@ -319,6 +399,18 @@ impl Thalamus {
                 context_length,
                 group_threshold,
                 group_mode,
+                learning,
+                mint_min_samples,
+                match_stats,
+                match_all,
+                match_threshold,
+                match_info,
+                match_info2,
+                match_avg,
+                refine_context,
+                refine_connection,
+                trace_match,
+                trace_refine,
             ));
         }
 
@@ -328,6 +420,12 @@ impl Thalamus {
             context_length,
             regions,
             columns,
+            mint_repeat,
+            mint_repeat_cap,
+            error_info,
+            error_info2,
+            trace_error,
+            learning,
             neurons_by_value: FxHashMap::default(),
             base_neurons: FxHashMap::default(),
             neuron_parents: FxHashMap::default(),
@@ -343,6 +441,9 @@ impl Thalamus {
             channel_name_to_id: FxHashMap::default(),
             channel_id_to_name: FxHashMap::default(),
             spatial_channel_neighbors: FxHashMap::default(),
+            pending_mints: FxHashMap::default(),
+            activation_counts: FxHashMap::default(),
+            activation_frames: 0,
             temporal_channel_neighbors: FxHashMap::default(),
             dimension_name_to_id: FxHashMap::default(),
             dimension_id_to_name: FxHashMap::default(),
@@ -580,7 +681,7 @@ impl Thalamus {
 
     /// Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
     /// `neighbor_names_by_level[ℓ]` is the neighbor list a LEVEL-ℓ neuron of this channel uses
-    /// (e.g. the radius-(ℓ+1) ring of a retinotopic pixel). Levels past the end of the list reuse
+    /// (e.g. the radius-(ℓ+1) neighborhood of a retinotopic pixel). Levels past the end of the list reuse
     /// the last declared set. Each list is used verbatim like `set_spatial_neighbors`.
     pub fn set_spatial_neighbor_levels(&mut self, name: &str, neighbor_names_by_level: &[Vec<String>]) {
         if neighbor_names_by_level.is_empty() { return; }
@@ -616,7 +717,7 @@ impl Thalamus {
 
     /// Test whether `target_channel` is in `parent_channel`'s SPATIAL neighbor set at the given
     /// spatial level — the level-based radius: a level-ℓ parent reads its channel's ℓ-th declared
-    /// neighbor set (levels past the declared list reuse the last set, so rings stop growing once
+    /// neighbor set (levels past the declared list reuse the last set, so neighborhoods stop growing once
     /// they cover the input). Returns true if `parent_channel` has no spatial neighbor list
     /// registered (default all-pairs).
     pub fn is_spatial_neighbor_channel(&self, parent_channel: ChannelId, parent_level: Level, target_channel: ChannelId) -> bool {
@@ -954,47 +1055,28 @@ impl Thalamus {
         sensory_neurons: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
-        learning: bool,
-    ) -> ProcessLevelResult {
+    ) -> SpatialLevelResult {
+
         let mut orchestration = OrchestrationTimings::default();
 
-        // Aggregate per-neuron work and build the shared spatial level context.
-        // Non-learning mode still builds the level context so pattern activation can run.
+        // Aggregate the per-neuron work list and build the shared co-activation for this level.
+        // Non-learning mode still builds it so pattern activation can run.
         let t = std::time::Instant::now();
-        let (tasks, level_context) = self.get_spatial_level_tasks(level_neuron_ids, new_error_pattern_ids);
+        let (work_list, level_context) = self.get_spatial_level_tasks(level_neuron_ids, new_error_pattern_ids);
         orchestration.get_level_tasks = t.elapsed().as_secs_f64();
 
-        // Op-3: dispatch processSpatialFrame — the only cross-region round-trip in the level loop.
+        // Dispatch the per-neuron frame pass — the only cross-region round-trip in the level loop.
         let t = std::time::Instant::now();
-        let results = self.dispatch_spatial_frame(&tasks, &level_context, new_error_pattern_ids, sensory_neurons, frame_number, learning);
+        let results = self.dispatch_spatial_frame(&work_list, &level_context, new_error_pattern_ids, sensory_neurons, frame_number);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
-        // extract activations inline — needed to feed the next level
+        // Extract this level's pattern activations inline; they feed the next level up.
         let t = std::time::Instant::now();
         let mut activations = Vec::new();
         for result in &results {
-            self.collect_activations(result, &mut activations);
+            self.collect_spatial_activations(result, &mut activations);
         }
         orchestration.collect_activations = t.elapsed().as_secs_f64();
-
-        // Spatial doesn't persist per-neuron state, so there's no "stale state" to clear and
-        // no need to write back per-age votes — the spatial sweep doesn't reread them next frame.
-        // We still collect votes for downstream consumers (e.g. mint_spatial_corrections reads
-        // them through the dispatch results, not through level_neurons).
-        let mut votes = Vec::new();
-        for result in &results {
-            for vote_bucket in &result.votes {
-                for v in &vote_bucket.votes {
-                    votes.push(FlatVote {
-                        voter_id: result.parent_id,
-                        neuron_id: v.neuron_id,
-                        distance: v.distance,
-                        strength: v.strength,
-                        reward: v.reward,
-                    });
-                }
-            }
-        }
 
         if self.debug && !activations.is_empty() {
             let detail: Vec<String> = activations.iter()
@@ -1003,7 +1085,7 @@ impl Thalamus {
             println!("Spatial level {}: {} activations {}", level, activations.len(), detail.join("; "));
         }
 
-        ProcessLevelResult { activations, votes, neuron_specs: Vec::new(), results, orchestration }
+        SpatialLevelResult { activations, results, orchestration }
     }
 
     /// Temporal sweep dispatch for one level. Builds the temporal level_context (mints temporal
@@ -1019,7 +1101,6 @@ impl Thalamus {
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
-        learning: bool,
     ) -> ProcessLevelResult {
         let mut orchestration = OrchestrationTimings::default();
 
@@ -1028,13 +1109,13 @@ impl Thalamus {
         // It skips error-correction allocation and per-age error feedback recording.
         let t = std::time::Instant::now();
         let (tasks, level_context, new_neuron_specs) =
-            self.get_temporal_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids, learning);
+            self.get_temporal_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids);
         orchestration.get_level_tasks = t.elapsed().as_secs_f64();
 
         // Op-3: dispatch processTemporalFrame — the only cross-region round-trip in the level loop.
         let t = std::time::Instant::now();
         let current_rewards = rewards.first();
-        let results = self.dispatch_temporal_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], current_rewards, frame_number, learning);
+        let results = self.dispatch_temporal_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], current_rewards, frame_number);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
         // extract activations inline — needed to feed the next level
@@ -1104,162 +1185,376 @@ impl Thalamus {
     /// when L1 patterns recur in a similar L1-neighborhood.
     ///
     /// Symmetric mismatch — both missing predictions and novel observations count, per §4.3.
-    pub fn mint_spatial_corrections(
+    /// Create error-correction patterns from this frame's spatial prediction errors.
+    /// Every activated neuron's prediction is checked against reality, and an error above the neuron's
+    /// adaptive threshold produces a correction one level deeper, subject to the recurrence gate.
+    pub fn create_spatial_corrections(
         &mut self,
-        spatial_dispatch_results: &[Vec<ColumnProcessResult>],
-        spatial_fired: &FxHashSet<NeuronId>,
-        spatial_subsumed: &FxHashSet<NeuronId>,
+        dispatch_results: &[Vec<crate::column::SpatialColumnResult>],
+        activated_neurons: &FxHashSet<NeuronId>,
+        subsumed_neurons: &FxHashSet<NeuronId>,
     ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>, Vec<(NeuronId, f64)>) {
+
+        // Corrections created this frame are returned as creation specs plus install ops for their parents.
         let mut new_specs = Vec::new();
         let mut install_ops = Vec::new();
-        // Per-parent error feedback for `record_spatial_errors` — collected for every fired neuron
-        // that had any predictions, regardless of whether the error crosses the mint threshold.
-        // This is what lets dynamic error modes (conservative/neutral/aggressive) adapt — without
-        // these samples, get_spatial_error_threshold() stays in static-fallback mode forever.
+
+        // Error samples are collected for every checked neuron, even below the threshold.
+        // The samples feed each neuron's running error statistics, which is what lets the dynamic
+        // grouping modes adapt instead of staying on the static fallback forever.
         let mut error_feedback: Vec<(NeuronId, f64)> = Vec::new();
 
-        // Partition spatial_fired by spatial level. L0 keeps only event neurons (action neurons
-        // aren't part of the co-activation neighborhood). L1+ are correction pattern neurons —
-        // they have no NeuronType, so no type filter applies.
-        let mut by_level: FxHashMap<Level, Vec<NeuronId>> = FxHashMap::default();
-        for &id in spatial_fired {
-            let level = self.get_neuron_spatial_level(id);
-            if level == 0 && self.get_neuron_type(id) != Some(NeuronType::Event) { continue; }
-            by_level.entry(level).or_insert_with(Vec::new).push(id);
-        }
-
-        // L0 event set — used for both error eval (predicted-vs-observed) and as the "actuals"
-        // an Lk pattern's connections[0] is predicting.
-        let l0_event_set: FxHashSet<NeuronId> = by_level.get(&0)
-            .map(|v| v.iter().copied().collect())
-            .unwrap_or_default();
-
-        for results in spatial_dispatch_results {
-            for res in results {
-                let parent_id = res.parent_id;
-
-                // Subsumption gate: if this parent was already explained by a higher-level
-                // pattern that fired this frame, its role is represented — don't record an
-                // error sample and don't mint a sibling correction. This is the natural
-                // ceiling on hierarchy growth: subsumed parents stop being error sources.
-                if spatial_subsumed.contains(&parent_id) { continue; }
-
-                let parent_level = self.get_neuron_spatial_level(parent_id);
-                let parent_channel = self.get_neuron_channel_id(parent_id).unwrap_or(0);
-
-                // Observed L0 events the parent's connections[0] should have predicted, minus the
-                // parent itself AND minus any L0 events from channels outside the parent's BASE ring
-                // (level 0) — the INFERENCE neighborhood is the same base-radius L0 set at EVERY level;
-                // only the context neighborhood below widens with level. Channels with no registered
-                // neighbor list default to "all channels are neighbors" — preserving original
-                // full-frame behavior.
-                let observed_l0_minus_self: FxHashSet<NeuronId> = l0_event_set.iter()
-                    .copied()
-                    .filter(|&id| id != parent_id)
-                    .filter(|&id| {
-                        let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
-                        self.is_spatial_neighbor_channel(parent_channel, 0, target_channel)
-                    })
-                    .collect();
-
-                // Parent's CONTEXT neighborhood — same-level fired neurons within the parent's
-                // level-ℓ ring (the ring that widens with level), used as the context_entries of any
-                // correction we mint for this parent. Excludes the parent itself and any same-level
-                // fired neurons from non-neighbor channels.
-                let neighborhood: Vec<NeuronId> = by_level.get(&parent_level)
-                    .map(|v| v.iter().copied()
-                        .filter(|&id| id != parent_id)
-                        .filter(|&id| {
-                            let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
-                            self.is_spatial_neighbor_channel(parent_channel, parent_level, target_channel)
-                        })
-                        .collect())
-                    .unwrap_or_default();
-
-                for age_votes in &res.votes {
-                    if age_votes.age != 0 { continue; }
-
-                    // Predicted L0 events from the parent's connections[0], after per-position
-                    // competition (fix 2.1). Each neighbor position — a (channel, dimension) —
-                    // predicts at most ONE bucket: the buckets of a position compete and the
-                    // strongest-voted wins. The predicted set is therefore the modal local
-                    // configuration (one neuron per neighbor position), so the error below is a
-                    // Hamming distance from the modal patch rather than novelty-vs-everything-ever-
-                    // seen. Without this, the parent's lifetime union of connections includes every
-                    // bucket of every neighbor, saturating the error rate at (b-1)/b and either
-                    // never minting or never quenching. Predictions toward non-neighbor channels are
-                    // excluded — the observed set is filtered the same way.
-                    let mut position_winners: FxHashMap<(ChannelId, DimensionId), (NeuronId, f64)> = FxHashMap::default();
-                    for v in &age_votes.votes {
-                        if self.get_neuron_type(v.neuron_id) != Some(NeuronType::Event) { continue; }
-                        let target_channel = self.get_neuron_channel_id(v.neuron_id).unwrap_or(0);
-                        if !self.is_spatial_neighbor_channel(parent_channel, 0, target_channel) { continue; }
-                        let dim_id = match self.get_neuron_coordinate(v.neuron_id) {
-                            Some(c) => c.dim_id,
-                            None => continue,
-                        };
-                        let key = (target_channel, dim_id);
-                        match position_winners.get(&key) {
-                            // Strongest bucket wins; tie-break on smaller neuron id for determinism.
-                            Some(&(win_id, win_strength))
-                                if win_strength > v.strength
-                                    || (win_strength == v.strength && win_id <= v.neuron_id) => {}
-                            _ => { position_winners.insert(key, (v.neuron_id, v.strength)); }
-                        }
-                    }
-                    let predicted_events: FxHashSet<NeuronId> = position_winners.values().map(|&(id, _)| id).collect();
-
-                    // No predictions means no error to evaluate (bootstrap: parent has no d=0 connections yet).
-                    if predicted_events.is_empty() { continue; }
-
-                    // Jaccard-union error over predicted-vs-observed L0 events (shared with temporal).
-                    let error_rate = match Self::get_union_error(&predicted_events, &observed_l0_minus_self) {
-                        Some(e) => e,
-                        None => continue, // empty union → nothing to compare
-                    };
-
-                    // Always record the error rate — even when below threshold — so the parent's
-                    // Welford stats at age=0 build up samples and dynamic modes can adapt.
-                    error_feedback.push((parent_id, error_rate));
-
-                    if crate::config::trace_error() {
-                        eprintln!(
-                            "[error] parent={} parent_lvl={} predicted={} observed={} error={:.3} thr={:.3} {}",
-                            parent_id, parent_level, predicted_events.len(), observed_l0_minus_self.len(),
-                            error_rate, age_votes.threshold,
-                            if error_rate > age_votes.threshold { "MINT" } else { "ok" }
-                        );
-                    }
-
-                    if error_rate <= age_votes.threshold { continue; }
-
-                    // Empty neighborhood means no signal to wire the correction's context against —
-                    // it could never match anything in future frames. Skip (parallels the
-                    // empty-state.context skip in get_level_corrections for temporal).
-                    if neighborhood.is_empty() { continue; }
-
-                    // Allocate the correction at one level deeper in the parent's spatial hierarchy.
-                    let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id);
-
-                    // Spatial context: the parent's level-k neighborhood (no distance dimension).
-                    let context_neuron_ids: Vec<NeuronId> = neighborhood.iter().copied().collect();
-
-                    new_specs.push(NeuronCreateSpec {
-                        id: spec.id,
-                        forget_rate: spec.forget_rate,
-                        connections: Some(spec.connections),
-                    });
-                    install_ops.push(SpatialInstallOp {
-                        parent_id,
-                        pattern_id: spec.id,
-                        context_neuron_ids,
-                    });
-                    self.spatial_corrections_minted += 1;
-                }
+        // Information-theoretic creation prices surprises against base rates, so the activation
+        // counts are refreshed once per frame before any request is evaluated.
+        if self.error_info || self.error_info2 {
+            self.activation_frames += 1;
+            for &id in activated_neurons {
+                *self.activation_counts.entry(id).or_insert(0) += 1;
             }
         }
 
+        // A neuron is checked against peers at its own level for context and against the base level
+        // for predictions, so the activated set is grouped by level once, up front.
+        let spatial_levels = self.get_spatial_levels(activated_neurons);
+
+        // The base level events are the reality every prediction is compared to.
+        let base_events: FxHashSet<NeuronId> = spatial_levels.get(&0)
+            .map(|v| v.iter().copied().collect())
+            .unwrap_or_default();
+
+        // process the results of the spatial dispatch - check them against reality and correct the failures.
+        for column_result in dispatch_results.iter().flatten() {
+
+            // if the neuron recognized a higher-level pattern, it is subsumed - not to be corrected
+            if subsumed_neurons.contains(&column_result.parent_id) { continue; }
+
+            // neuron is not subsumed - check its spatial prediction against reality and correct if it fails.
+            self.correct_spatial_parent(column_result, &spatial_levels, &base_events, &mut new_specs, &mut install_ops, &mut error_feedback);
+        }
+
         (new_specs, install_ops, error_feedback)
+    }
+
+    /// Partition the activated event neurons by spatial level.
+    fn get_spatial_levels(&self, activated_neurons: &FxHashSet<NeuronId>) -> FxHashMap<Level, Vec<NeuronId>> {
+
+        // Bucket each activated neuron under its own level.
+        let mut levels: FxHashMap<Level, Vec<NeuronId>> = FxHashMap::default();
+        for &id in activated_neurons {
+
+            // get the spatial level of the activated neuron
+            let level = self.get_neuron_spatial_level(id);
+
+            // exclude actions - they play no part in co-activation
+            if level == 0 && self.get_neuron_type(id) != Some(NeuronType::Event) { continue; }
+
+            // index event neuron by level
+            levels.entry(level).or_insert_with(Vec::new).push(id);
+        }
+        levels
+    }
+
+    /// Check one neuron's spatial prediction against reality and create a correction when it fails.
+    fn correct_spatial_parent(
+        &mut self,
+        column_result: &crate::column::SpatialColumnResult,
+        spatial_levels: &FxHashMap<Level, Vec<NeuronId>>,
+        base_events: &FxHashSet<NeuronId>,
+        new_specs: &mut Vec<NeuronCreateSpec>,
+        install_ops: &mut Vec<SpatialInstallOp>,
+        error_feedback: &mut Vec<(NeuronId, f64)>,
+    ) {
+
+        // A neuron whose prediction was subsumed by a fired child cast no votes this frame.
+        let Some(spatial_votes) = &column_result.votes else { return };
+
+        // get the neuron that made the inference (spatial parent that will learn a new pattern)
+        let parent_id = column_result.parent_id;
+        let parent_level = self.get_neuron_spatial_level(parent_id);
+        let parent_channel = self.get_neuron_channel_id(parent_id).unwrap_or(0);
+
+        // Reality: the base level events inside the neuron's inference neighborhood
+        let observed_events = self.get_observed_base_events(parent_id, parent_channel, base_events);
+
+        // Prediction: the modal configuration voted by the neuron's base-level connections.
+        // No prediction means the neuron has no connections yet, so there is no error to measure.
+        let predicted_events = self.aggregate_spatial_event_votes(parent_channel, &spatial_votes.votes);
+        if predicted_events.is_empty() { return; }
+
+        // The error is the Jaccard-union distance between prediction and reality, shared with temporal.
+        // An empty union means there is nothing to compare.
+        let Some(error_rate) = Self::get_union_error(&predicted_events, &observed_events) else { return };
+
+        // record error feedback even below the threshold so the adaptive grouping modes keep learning this neuron's error distribution.
+        error_feedback.push((parent_id, error_rate));
+
+        // this is used for diagnostics - not really an error
+        if self.trace_error {
+            eprintln!(
+                "[error] parent={} parent_lvl={} predicted={} observed={} error={:.3} thr={:.3} {}",
+                parent_id, parent_level, predicted_events.len(), observed_events.len(),
+                error_rate, spatial_votes.threshold,
+                if error_rate > spatial_votes.threshold { "MINT" } else { "ok" }
+            );
+        }
+
+        // A correction with an empty context could never be recognized on a future frame.
+        let context_neighbors = self.list_context_neighbors(parent_id, parent_channel, parent_level, spatial_levels);
+        if context_neighbors.is_empty() { return; }
+
+        // Information-theoretic creation prices this failure in surprise and defers to the ledger;
+        // it replaces both the averaged-threshold trigger and the recur-twice gate below.
+        if self.error_info || self.error_info2 {
+            if !self.approve_correction_by_surprisal(parent_id, 1.0 - spatial_votes.threshold, &context_neighbors, &predicted_events, &observed_events) { return; }
+            self.create_spatial_correction(parent_id, parent_level, &context_neighbors, new_specs, install_ops);
+            return;
+        }
+
+        // Only errors above the neuron's own adaptive threshold are corrected.
+        if error_rate <= spatial_votes.threshold { return; }
+
+        // Only recurring configurations earn a neuron; a first occurrence is noted and deferred.
+        if !self.approve_correction_creation(parent_id, 1.0 - spatial_votes.threshold, &context_neighbors, &observed_events) { return; }
+
+        // Create one correction pattern for a neuron whose prediction failed.
+        self.create_spatial_correction(parent_id, parent_level, &context_neighbors, new_specs, install_ops);
+    }
+
+    /// Get the base-level events a neuron's prediction is answerable to.
+    fn get_observed_base_events(
+        &self,
+        parent_id: NeuronId,
+        parent_channel: ChannelId,
+        base_events: &FxHashSet<NeuronId>,
+    ) -> FxHashSet<NeuronId> {
+
+        base_events.iter()
+            .copied()
+            // A neuron cannot observe itself.
+            .filter(|&id| id != parent_id)
+            // neurons observe base events in their inference neighborhood - same radius regardless of the level.
+            // context neighborhood is at the same level as the neuron, and that's used for learning, not inference checks.
+            // channels with no declared neighbors default to all-pairs
+            .filter(|&id| {
+                let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
+                self.is_spatial_neighbor_channel(parent_channel, 0, target_channel)
+            })
+            .collect()
+    }
+
+    /// List the same-level neighbors that form the context of a correction created for a neuron.
+    fn list_context_neighbors(
+        &self,
+        parent_id: NeuronId,
+        parent_channel: ChannelId,
+        parent_level: Level,
+        spatial_levels: &FxHashMap<Level, Vec<NeuronId>>,
+    ) -> Vec<NeuronId> {
+
+        // A correction conditions on same-level peers within the level's context neighborhood, which widens with depth.
+        spatial_levels.get(&parent_level)
+            .map(|v| v.iter().copied()
+                // A correction never conditions on the neuron it corrects.
+                .filter(|&id| id != parent_id)
+                // Peers outside the level's context neighborhood do not qualify as context.
+                .filter(|&id| {
+                    let target_channel = self.get_neuron_channel_id(id).unwrap_or(0);
+                    self.is_spatial_neighbor_channel(parent_channel, parent_level, target_channel)
+                })
+                .collect())
+            .unwrap_or_default()
+    }
+
+    /// Aggregate a neuron's cast base-level votes into one winner per position.
+    /// The winner set is the neuron's effective prediction, so the error measured against it is a
+    /// distance from the typical local patch rather than novelty against everything ever seen.
+    fn aggregate_spatial_event_votes(&self, parent_channel: ChannelId, votes: &[Vote]) -> FxHashSet<NeuronId> {
+
+        // process spatial votes to
+        // Let the buckets of each position compete and keep one winner per position.
+        // Without the competition, a lifetime of accumulated connections saturates the error rate,
+        // and the correction machinery either never triggers or never quenches.
+        let mut position_winners: FxHashMap<(ChannelId, DimensionId), (NeuronId, f64)> = FxHashMap::default();
+        for vote in votes {
+
+            // exclude actions - we are only looking for event votes here
+            if self.get_neuron_type(vote.neuron_id) != Some(NeuronType::Event) { continue; }
+
+            // connection learning already restricts event connections to the neighborhood, so the brain should not vote outside it,
+            // but this protects against just in case the brain was restored from older backup or something.
+            let target_channel = self.get_neuron_channel_id(vote.neuron_id).unwrap_or(0);
+            if !self.is_spatial_neighbor_channel(parent_channel, 0, target_channel) { continue; }
+
+            // get the dimension of the vote
+            let dim_id = match self.get_neuron_coordinate(vote.neuron_id) {
+                Some(c) => c.dim_id,
+                None => continue,
+            };
+            let key = (target_channel, dim_id);
+            match position_winners.get(&key) {
+                // The strongest bucket wins; ties break to the smaller id for determinism.
+                Some(&(winner_id, winner_strength))
+                    if winner_strength > vote.strength
+                        || (winner_strength == vote.strength && winner_id <= vote.neuron_id) => {}
+                _ => { position_winners.insert(key, (vote.neuron_id, vote.strength)); }
+            }
+        }
+        position_winners.values().map(|&(id, _)| id).collect()
+    }
+
+    /// Approve or defer the creation of a correction; only recurring configurations are approved.
+    fn approve_correction_creation(
+        &mut self,
+        parent_id: NeuronId,
+        merge_threshold: f64,
+        context_neighbors: &[NeuronId],
+        target_events: &FxHashSet<NeuronId>,
+    ) -> bool {
+
+        // With the recurrence gate disabled, every request is approved immediately.
+        if !self.mint_repeat { return true; }
+
+        let neighbor_set: FxHashSet<NeuronId> = context_neighbors.iter().copied().collect();
+        let jaccard = |a: &FxHashSet<NeuronId>, b: &FxHashSet<NeuronId>| -> f64 {
+            let inter = a.intersection(b).count();
+            let union = a.len() + b.len() - inter;
+            if union == 0 { 0.0 } else { inter as f64 / union as f64 }
+        };
+
+        // Search the neuron's pending notes for a configuration matching this request.
+        // Both the context and the targets must clear the same sameness bar recognition uses.
+        let pending = self.pending_mints.entry(parent_id).or_insert_with(Vec::new);
+        let matching_note = pending.iter().position(|(neighbors, targets, _)|
+            jaccard(neighbors, &neighbor_set) >= merge_threshold && jaccard(targets, target_events) >= merge_threshold);
+
+        match matching_note {
+            Some(i) => {
+                // Recurrence proven: consume the note and approve.
+                pending.remove(i);
+                true
+            }
+            None => {
+                // First occurrence: note it and defer.
+                // The note buffer is capped first-in-first-out, so a configuration rarer than the
+                // window never earns a neuron.
+                pending.push((neighbor_set, target_events.clone(), 0.0));
+                let cap = self.mint_repeat_cap;
+                if pending.len() > cap { pending.remove(0); }
+                false
+            }
+        }
+    }
+
+    /// Approve or defer creation by accumulated surprisal; approval means the pattern is paid for.
+    fn approve_correction_by_surprisal(
+        &mut self,
+        parent_id: NeuronId,
+        merge_threshold: f64,
+        context_neighbors: &[NeuronId],
+        predicted_events: &FxHashSet<NeuronId>,
+        observed_events: &FxHashSet<NeuronId>,
+    ) -> bool {
+
+        // Improbability of one neuron being active under its observed base rate, smoothed so the
+        // first frames yield finite costs.
+        let frames = self.activation_frames;
+        let counts = &self.activation_counts;
+        let p_of = |id: NeuronId| -> f64 {
+            (counts.get(&id).copied().unwrap_or(0) + 1) as f64 / (frames + 2) as f64
+        };
+
+        // The failure's surprisal: events that appeared unpredicted cost the improbability of their
+        // presence; events predicted but absent cost the improbability of their absence.
+        let mut surprisal = 0.0;
+        for &id in observed_events.difference(predicted_events) {
+            surprisal += -p_of(id).log2();
+        }
+        for &id in predicted_events.difference(observed_events) {
+            surprisal += -(1.0 - p_of(id)).log2();
+        }
+        if surprisal <= 0.0 { return false; }
+
+        // The pattern's description cost.
+        // Identity pricing states which neurons form the context and target sets out of the whole
+        // observed vocabulary: log2 of the subset count, never below log2(vocabulary) per element.
+        // An always-active pair earns near-zero surprise per occurrence, so it can never pay this
+        // and alias chains stop stacking into towers.
+        // Frequency pricing states each context element at the improbability of its presence, so
+        // common neighbors are cheap to state and rare ones costly.
+        let description_cost: f64 = if self.error_info2 {
+            let vocabulary = self.activation_counts.len().max(2);
+            let name_bits = |k: usize| -> f64 {
+                (0..k.min(vocabulary)).map(|i| ((vocabulary - i) as f64 / (k.min(vocabulary) - i) as f64).log2()).sum()
+            };
+            name_bits(context_neighbors.len()) + name_bits(observed_events.len())
+        } else {
+            context_neighbors.iter().map(|&id| -p_of(id).log2()).sum()
+        };
+
+        // A severe enough surprise pays for the pattern outright.
+        if surprisal >= description_cost { return true; }
+
+        let neighbor_set: FxHashSet<NeuronId> = context_neighbors.iter().copied().collect();
+        let jaccard = |a: &FxHashSet<NeuronId>, b: &FxHashSet<NeuronId>| -> f64 {
+            let inter = a.intersection(b).count();
+            let union = a.len() + b.len() - inter;
+            if union == 0 { 0.0 } else { inter as f64 / union as f64 }
+        };
+
+        // A recurring configuration accumulates its surprisal in the matching note until paid for.
+        // Matching uses the same sameness bar as recognition, on both the context and the targets.
+        let pending = self.pending_mints.entry(parent_id).or_insert_with(Vec::new);
+        let matching_note = pending.iter().position(|(neighbors, targets, _)|
+            jaccard(neighbors, &neighbor_set) >= merge_threshold && jaccard(targets, observed_events) >= merge_threshold);
+
+        match matching_note {
+            Some(i) => {
+                // Add this occurrence's surprisal to the ledger; create once the pattern is paid for.
+                pending[i].2 += surprisal;
+                if pending[i].2 >= description_cost {
+                    pending.remove(i);
+                    true
+                } else {
+                    false
+                }
+            }
+            None => {
+                // First occurrence: open a ledger entry.
+                // The buffer is capped first-in-first-out, so a configuration rarer than the window
+                // never accumulates enough to be created.
+                pending.push((neighbor_set, observed_events.clone(), surprisal));
+                let cap = self.mint_repeat_cap;
+                if pending.len() > cap { pending.remove(0); }
+                false
+            }
+        }
+    }
+
+    /// Create one correction pattern for a neuron whose prediction failed.
+    fn create_spatial_correction(
+        &mut self,
+        parent_id: NeuronId,
+        parent_level: Level,
+        context_neighbors: &[NeuronId],
+        new_specs: &mut Vec<NeuronCreateSpec>,
+        install_ops: &mut Vec<SpatialInstallOp>,
+    ) {
+
+        // The correction lives one level deeper than the neuron it corrects.
+        let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id);
+        new_specs.push(NeuronCreateSpec {
+            id: spec.id,
+            forget_rate: spec.forget_rate,
+            connections: Some(spec.connections),
+        });
+
+        // Installation wires the neighborhood in as the correction's context on its parent.
+        install_ops.push(SpatialInstallOp {
+            parent_id,
+            pattern_id: spec.id,
+            context_neuron_ids: context_neighbors.to_vec(),
+        });
+        self.spatial_corrections_minted += 1;
     }
 
     /// Dispatch spatial error-feedback samples to the owning columns, where each neuron records
@@ -1339,43 +1634,29 @@ impl Thalamus {
     }
 
     /// SPATIAL: walk the active neurons at this level and build the shared SpatialContext.
-    /// Spatial corrections are minted in a separate pass (`mint_spatial_corrections`) after the
+    /// Spatial corrections are created in a separate pass after the
     /// sweep, NOT here — so no corrections, no per-age error feedback, no new_neuron_specs.
     /// Action neurons are NOT skipped — spatial co-activation includes everything that fired.
+    /// Build the spatial work list and the shared observed co-activation for one level.
     fn get_spatial_level_tasks(
         &mut self,
         level_neuron_ids: &FxHashSet<NeuronId>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-    ) -> (Vec<LevelTask>, SpatialContext) {
-        let _ = level_neuron_ids; // silence unused warning when no neurons fired
-        let mut tasks = Vec::new();
+    ) -> (Vec<NeuronId>, SpatialContext) {
+
+        let mut work_list = Vec::new();
         let mut level_context = SpatialContext::new();
 
+        // Every active neuron contributes to the shared co-activation.
+        // Freshly-created error patterns contribute context only: they have no children, history,
+        // or votes in their birth frame, so they skip the dispatch.
         for &neuron_id in level_neuron_ids {
-
-            // New error patterns only contribute to level_context — they have no children, history,
-            // or votes in their birth frame, so they skip dispatch.
-            if new_error_pattern_ids.contains(&neuron_id) {
-                level_context.add_neuron(neuron_id, 1.0);
-                continue;
-            }
-
-            // All other active neurons contribute to level_context AND get a dispatch task.
             level_context.add_neuron(neuron_id, 1.0);
-
-            // Spatial age_states is always {0 → default}. Kept in the LevelTask shape so column
-            // dispatch can stay one type; only the AgeState at age=0 is read inside the neuron.
-            let mut age_states = FxHashMap::default();
-            age_states.insert(0, AgeState { activated_pattern_id: None });
-            tasks.push(LevelTask {
-                neuron_id,
-                age_states,
-                corrections: Vec::new(),
-                error_feedback: Vec::new(),
-            });
+            if new_error_pattern_ids.contains(&neuron_id) { continue; }
+            work_list.push(neuron_id);
         }
 
-        (tasks, level_context)
+        (work_list, level_context)
     }
 
     /// TEMPORAL: walk the active neurons at this level, contribute to the shared TemporalContext,
@@ -1389,7 +1670,6 @@ impl Thalamus {
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
-        learning: bool,
     ) -> (Vec<LevelTask>, TemporalContext, Vec<NeuronCreateSpec>) {
         let mut tasks = Vec::new();
         let mut level_context = TemporalContext::new();
@@ -1417,7 +1697,7 @@ impl Thalamus {
 
             // Populate level_context and (in learning mode) collect error corrections + per-age accuracy feedback.
             let (corrections, error_feedback) = self.get_temporal_level_corrections(
-                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number, learning,
+                *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number,
             );
 
             // extract creation specs for Op-4
@@ -1459,7 +1739,6 @@ impl Thalamus {
         sensory_neurons: &[FxHashSet<NeuronId>],
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
-        learning: bool,
     ) -> (Vec<CorrectionSpec>, Vec<ErrorFeedback>) {
         let mut corrections = Vec::new();
         let mut error_feedback = Vec::new();
@@ -1477,7 +1756,7 @@ impl Thalamus {
             if age > 0 { level_context.add_neuron(neuron_id, age, 1.0); }
 
             // Non-learning mode is done after level_context population — no accuracy stats, no error pattern allocation.
-            if !learning { continue; }
+            if !self.learning { continue; }
 
             // skip if context is empty. empty context patterns can never match anything in future frames.
             // they would just keep regenerating useless siblings. we do this before vote error evaluation so that
@@ -1532,66 +1811,106 @@ impl Thalamus {
     }
 
     /// Spatial Op-3 dispatch — no rewards, no per-task channel-reward resolution.
+    /// Fan the level's spatial work out to the owning regions with per-neuron filtered views.
     fn dispatch_spatial_frame(
         &mut self,
-        tasks: &[LevelTask],
+        work_list: &[NeuronId],
         level_context: &SpatialContext,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        age0: &FxHashSet<NeuronId>,
+        base_events: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
-        learning: bool,
-    ) -> Vec<ColumnProcessResult> {
-        // Decorate age=0 sensory neurons. Spatial co-activation has no reward semantics, so every
-        // active gets reward=0.0 regardless of neuron type.
-        let mut full_actives = Vec::with_capacity(age0.len());
-        for &neuron_id in age0 {
+    ) -> Vec<crate::column::SpatialColumnResult> {
+
+        // Decorate the frame's base events once; co-activation carries no reward semantics.
+        let mut full_actives = Vec::with_capacity(base_events.len());
+        for &neuron_id in base_events {
             let channel_id = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
             full_actives.push(ActiveNeuron { id: neuron_id, channel_id, reward: 0.0 });
         }
 
-        // Per-task actives filtered by parent's BASE ring (level 0) regardless of the parent's level:
-        // these are the d=0 connection-learning targets — the INFERENCE neighborhood. Every level of a
-        // pixel's correction stack predicts the same base-radius L0 neighbors (aiming at 100% there);
-        // only the CONTEXT neighborhood (task_contexts below) widens with level.
-        let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
-            let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
-            full_actives.iter()
-                .filter(|a| self.is_spatial_neighbor_channel(parent_channel, 0, a.channel_id))
-                .cloned()
-                .collect()
+        // Each neuron learns co-activation edges toward base events inside its INFERENCE neighborhood only,
+        // because the inference neighborhood stays at the base radius on every level.
+        // The base events are bucketed by channel once, so each neuron assembles its list by walking
+        // whichever is smaller — its inference neighborhood's channels or the event set itself.
+        let mut actives_by_channel: FxHashMap<ChannelId, Vec<ActiveNeuron>> = FxHashMap::default();
+        for active in &full_actives {
+            actives_by_channel.entry(active.channel_id).or_insert_with(Vec::new).push(active.clone());
+        }
+        let task_actives: Vec<Vec<ActiveNeuron>> = work_list.iter().map(|&neuron_id| {
+            let parent_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
+            let inference_neighborhood = self.spatial_channel_neighbors.get(&parent_channel)
+                .map(|sets| &sets[0]);
+            match inference_neighborhood {
+                Some(neighborhood_channels) if neighborhood_channels.len() < full_actives.len() => {
+                    let mut list = Vec::new();
+                    for channel in neighborhood_channels {
+                        let Some(bucket) = actives_by_channel.get(channel) else { continue };
+                        list.extend(bucket.iter().cloned());
+                    }
+                    list
+                }
+                _ => {
+                    full_actives.iter()
+                        .filter(|a| self.is_spatial_neighbor_channel(parent_channel, 0, a.channel_id))
+                        .cloned()
+                        .collect()
+                }
+            }
         }).collect();
 
-        // Per-task observed context — the shared level context filtered to the parent's neighbor
-        // channels and minus the parent itself (fix 1.1). Without this, every neuron matched against
-        // the unfiltered whole-level co-activation set, which counted every non-neighbor active as
-        // novel and drove the Jaccard score below any sane threshold, so spatial matching never fired.
-        // Mirrors the neighbor-filtering already applied to `task_actives` and to the mint pass's
-        // `observed_l0_minus_self` / `neighborhood`.
-        let task_contexts: Vec<SpatialContext> = tasks.iter().map(|t| {
-            let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
-            let parent_level = self.get_neuron_spatial_level(t.neuron_id);
+        // Each neuron matches against the shared co-activation filtered to its own context neighborhood,
+        // minus itself. Without this filter every non-neighbor co-active would count as novel and
+        // drive match scores below any sane bar, so spatial matching would never fire.
+        // The shared co-activation is bucketed by channel once, so each neuron assembles its view by
+        // walking whichever is smaller — its neighborhood's channels or the co-activation itself — instead of
+        // every neuron scanning the full set (which was quadratic in the active count).
+        let mut context_by_channel: FxHashMap<ChannelId, Vec<(NeuronId, f64)>> = FxHashMap::default();
+        for (&ctx_id, &strength) in level_context.entries() {
+            let channel = self.get_neuron_channel_id(ctx_id).unwrap_or(0);
+            context_by_channel.entry(channel).or_insert_with(Vec::new).push((ctx_id, strength));
+        }
+        let task_contexts: Vec<SpatialContext> = work_list.iter().map(|&neuron_id| {
+            let parent_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
+            let parent_level = self.get_neuron_spatial_level(neuron_id);
             let mut ctx = SpatialContext::new();
-            for (&neuron_id, &strength) in level_context.entries() {
-                if neuron_id == t.neuron_id { continue; }
-                let target_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
-                if self.is_spatial_neighbor_channel(parent_channel, parent_level, target_channel) {
-                    ctx.add_neuron(neuron_id, strength);
+            let neighborhood = self.spatial_channel_neighbors.get(&parent_channel)
+                .map(|sets| &sets[(parent_level as usize).min(sets.len() - 1)]);
+            match neighborhood {
+                // Neighborhood smaller than the co-activation: walk its channels and pull their buckets.
+                Some(neighborhood_channels) if neighborhood_channels.len() < level_context.size() => {
+                    for channel in neighborhood_channels {
+                        let Some(bucket) = context_by_channel.get(channel) else { continue };
+                        for &(ctx_id, strength) in bucket {
+                            if ctx_id == neuron_id { continue; }
+                            ctx.add_neuron(ctx_id, strength);
+                        }
+                    }
+                }
+                // Otherwise scan the co-activation and filter, exactly as before.
+                _ => {
+                    for (&ctx_id, &strength) in level_context.entries() {
+                        if ctx_id == neuron_id { continue; }
+                        let target_channel = self.get_neuron_channel_id(ctx_id).unwrap_or(0);
+                        if self.is_spatial_neighbor_channel(parent_channel, parent_level, target_channel) {
+                            ctx.add_neuron(ctx_id, strength);
+                        }
+                    }
                 }
             }
             ctx
         }).collect();
 
-        let task_indices_by_region = self.bucket_by_region_indices(tasks, |t| t.neuron_id);
+        // Route each task to its owning region and fan out.
+        let task_indices_by_region = self.bucket_by_region_indices(work_list, |&id| id);
         let mut results = Vec::new();
         for (r, task_indices) in task_indices_by_region.iter().enumerate() {
             if task_indices.is_empty() { continue; }
             let region_tasks: Vec<_> = task_indices.iter().map(|&i| {
-                let task = &tasks[i];
-                (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone(), task_actives[i].clone(), task_contexts[i].clone())
+                (work_list[i], task_actives[i].clone(), task_contexts[i].clone())
             }).collect();
             let region_results = self.region_list[r].process_spatial_level(
                 &region_tasks, new_error_pattern_ids,
-                frame_number, learning,
+                frame_number,
             );
             results.extend(region_results);
         }
@@ -1608,7 +1927,6 @@ impl Thalamus {
         age0: &FxHashSet<NeuronId>,
         current_rewards: Option<&FxHashMap<ChannelId, Reward>>,
         frame_number: FrameNumber,
-        learning: bool,
     ) -> Vec<ColumnProcessResult> {
         // Decorate age=0 sensory neurons with channel id + pre-resolved reward.
         // Reward resolution is meaningful only for action neurons.
@@ -1642,7 +1960,7 @@ impl Thalamus {
             }).collect();
             let region_results = self.region_list[r].process_temporal_level(
                 &region_tasks, memory_depth, level_context_opt, new_error_pattern_ids,
-                frame_number, learning,
+                frame_number,
             );
             results.extend(region_results);
         }
@@ -1663,6 +1981,23 @@ impl Thalamus {
 
     /// Register deaths and collect activations from recognition matches
     /// and error-correction patterns.
+    /// Extract the fired pattern activations from one neuron's spatial result.
+    fn collect_spatial_activations(&mut self, result: &crate::column::SpatialColumnResult, activations: &mut Vec<Activation>) {
+
+        // Only recognition matches fire spatially; corrections install through their own pass.
+        for m in &result.matches {
+            if !m.activate { continue; }
+            if let Some(df) = m.death_frame {
+                self.register_death(m.pattern_id, df);
+            }
+            activations.push(Activation {
+                parent_id: result.parent_id,
+                pattern_id: m.pattern_id,
+                age: m.age,
+            });
+        }
+    }
+
     fn collect_activations(&mut self, result: &ColumnProcessResult, activations: &mut Vec<Activation>) {
 
         // recognition matches that fired
@@ -1740,7 +2075,7 @@ impl Thalamus {
     /// Jaccard-union error between an inferred set and an observed set: `(missing + novel) / union`, where
     /// missing = inferred ∖ observed and novel = observed ∖ inferred. This is `1 − match` under the union
     /// denominator — the SAME grouping comparison recognition uses, here over predicted-vs-actual connection
-    /// sets. Shared by spatial (`mint_spatial_corrections`) and temporal (`evaluate_vote_error`) correction;
+    /// sets. Shared by the spatial and temporal correction passes;
     /// both pass sets already restricted to the comparable kind (events). Returns None when the union is
     /// empty (nothing to compare).
     fn get_union_error(inferred: &FxHashSet<NeuronId>, observed: &FxHashSet<NeuronId>) -> Option<f64> {
@@ -2334,7 +2669,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1)
+        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, 10, false, 16, false, false, None, false, false, false, false, false, true, true, false, false, false)
     }
 
     #[test]
@@ -2358,7 +2693,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, 10, false, 16, false, false, None, false, false, false, false, false, true, true, false, false, false);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);

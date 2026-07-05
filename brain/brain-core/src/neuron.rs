@@ -33,6 +33,21 @@ const MATCH_MIN_SAMPLES: u64 = 3;
 /// that matches it at 50%+ until its match distribution takes over.
 const MATCH_BAR_INIT: f64 = 0.5;
 
+/// A neuron's same-frame co-activation prediction and the threshold it was cast under.
+/// Spatial has no age axis: the prediction is about this frame only.
+#[derive(Debug, Clone)]
+pub struct SpatialVotes {
+    pub votes: Vec<Vote>,
+    pub threshold: f64,
+}
+
+/// Per-neuron output of the spatial frame pass.
+pub struct SpatialFrameResult {
+    pub matches: Vec<PatternMatch>,
+    pub votes: Option<SpatialVotes>,
+    pub timings: NeuronOpTimings,
+}
+
 /// Entry in the spatial routing table for a child spatial-correction pattern.
 /// Spatial context has no distance dimension.
 #[derive(Debug, Clone)]
@@ -227,6 +242,82 @@ pub struct Neuron {
     /// skip matching until the context window has had a chance to fill up at the start of a sequence
     context_length: u32,
 
+    // ── Temporary experimental toggles ──────────────────────────────────────────
+    // Each of these is a pending decision, not a feature: when its experiment concludes, the winning
+    // behavior is hard-wired and the toggle is DELETED. Sixteen spatial options is not a sustainable
+    // surface — it is the current test matrix, and it must shrink.
+
+    /// MATURITY GATE for spatial correction minting: a neuron may not mint error-correction patterns until
+    /// its spatial error stats hold at least this many samples. Until then it only accumulates statistics
+    /// (error samples are recorded regardless of the mint decision) and keeps recognizing normally.
+    /// Rationale: "surprise" is only meaningful against an established distribution — newborn neurons
+    /// minting against 1-2 exposures of noise produce write-once corrections that never re-fire.
+    /// 0 disables the gate. Spatial only; temporal minting is untouched.
+    mint_min_samples: u64,
+
+    /// EXPERIMENTAL per-entry match statistics for spatial recognition: candidates are matched with no
+    /// shared threshold; the score-best candidate records its Jaccard ratio into its routing entry's match
+    /// stats and activates only if the ratio clears the entry's own bar (mean of its distribution, 0.5 until
+    /// warm). Default OFF = legacy recognition (shared adaptive merge threshold from the host's error stats).
+    /// Best measured form of the experiment; kept behind this flag after it traded too much selectivity
+    /// for its (large) compression — see the wavefront branch notes.
+    match_stats: bool,
+
+    /// MATCH-ALL spatial recognition: no match threshold at all — the best candidate (by score) always
+    /// fires, regardless of how well it matches. Recognition never rejects, so the vocabulary only grows
+    /// while a parent has no children yet. Experimental: tests whether refinement alone can keep pattern
+    /// identities discriminative without any rejection mechanism. Default OFF.
+    match_all: bool,
+
+    /// STATIC spatial match threshold: when set, legacy recognition uses this fixed merge threshold
+    /// instead of the adaptive coupling (1 − error threshold) — DECOUPLING recognition strictness from
+    /// the error side, which keeps its dynamic grouping for correction minting untouched. Unset = coupled.
+    match_threshold: Option<f64>,
+
+    /// INFORMATION-WEIGHTED spatial recognition (MDL): candidates are scored in information content instead of entry
+    /// counts. Each context entry is weighted by its surprisal under the host's local activation
+    /// frequencies — common entries contribute -log2(p), missing entries cost -log2(1-p), and the winner
+    /// must SAVE description length net of a naming cost (no threshold at all: acceptance = "does this fold compress?").
+    /// Novel entries drop out of the criterion — a pattern is not punished for what its siblings explain.
+    /// Default OFF.
+    match_info: bool,
+
+    /// LIKELIHOOD-RATIO spatial recognition (MDL v2): candidates are scored as a hypothesis test — for
+    /// each stored context entry, log2 of the ratio between its probability under the candidate (from the
+    /// entry's per-fire co-occurrence counts) and under the background model (the host's local marginal
+    /// frequencies). Present entries credit log(p(e|C)/p(e|bg)); absent entries cost
+    /// log((1-p(e|C))/(1-p(e|bg))); novel entries cancel (siblings encode them). Acceptance: score > 0 —
+    /// the candidate must explain the observation better than "no pattern". No thresholds. Default OFF.
+    match_info2: bool,
+
+    /// AVERAGED spatial match threshold: the neuron keeps running statistics over the match ratios of
+    /// its recognition events (recorded win-or-lose so the distribution stays uncensored) and its merge
+    /// threshold is their smoothed mean — the mirror image of the averaged error threshold on the
+    /// creation side. Falls back to the static grouping coefficient until enough samples exist.
+    /// Default OFF.
+    match_avg: bool,
+
+    /// Spatial CONTEXT (sources) refinement — consolidating a matched pattern's stored context toward the
+    /// observed configuration in recognition. Default ON.
+    refine_context: bool,
+
+    /// Spatial CONNECTION (targets) refinement — pruning a pattern's unobserved predictions in connection
+    /// learning. Default ON.
+    refine_connection: bool,
+
+    /// Diagnostic: when set, spatial `match_observed` prints its common/missing/novel/ratio/threshold per call
+    /// (to stderr). Off by default. Run over a tiny number of frames — it prints one line per candidate match.
+    trace_match: bool,
+
+    /// Diagnostic: when set, spatial context refinement prints the pattern id, its resulting context size, and
+    /// the pixels added (novel) vs removed (missing) on that refinement. Shows whether a context inflates
+    /// toward a union blur or contracts toward a specific core over exposures. Off by default (to stderr).
+    trace_refine: bool,
+
+    /// Master learning toggle, fixed at construction like every other option.
+    /// When false, recognition and voting still run but every substrate write is skipped.
+    learning: bool,
+
     /// Per-channel action neuron IDs — ordered Vec for deterministic alternative-action
     /// exploration (neurons are tried in registration order, not hash-iteration order).
     channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
@@ -252,13 +343,17 @@ pub struct Neuron {
     /// Spatial Welford error stats — single bucket (spatial has no age dimension).
     spatial_error_stats: Option<WelfordState>,
 
-    /// Local activation frequencies of this neuron's ring neighbors: how often each same-level
-    /// context neuron was co-active on frames this neuron processed. Drives the surprisal weights
-    /// of information-weighted recognition (BRAIN_MATCH_INFO). Persisted so frozen evaluation
-    /// matches with the trained statistics.
-    spatial_ctx_freq: FxHashMap<NeuronId, u64>,
-    /// Number of frames this neuron has observed a spatial context on (denominator for the above).
-    spatial_ctx_frames: u64,
+    /// Running statistics over the match ratios of this neuron's recognition events.
+    /// The averaged-match-threshold mode reads its merge bar from the mean of this distribution.
+    spatial_match_stats: Option<WelfordState>,
+
+    /// The background model of information-weighted recognition (the match-info toggles): per context
+    /// neighbor, the count of frames it was co-active while this neuron processed a frame. Divided by
+    /// the frame count below, this is the base rate a candidate pattern must beat to fire.
+    /// Persisted so frozen evaluation matches with the trained statistics.
+    spatial_neighbor_counts: FxHashMap<NeuronId, u64>,
+    /// Number of frames this neuron has observed a spatial context on (denominator for the counts above).
+    spatial_neighbor_frames: u64,
 
     // ── Temporal state (d>0 sequence, distance-keyed) ───────────────────────────
 
@@ -300,6 +395,18 @@ impl Neuron {
         group_mode: GroupMode,
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         context_length: u32,
+        learning: bool,
+        mint_min_samples: u64,
+        match_stats: bool,
+        match_all: bool,
+        match_threshold: Option<f64>,
+        match_info: bool,
+        match_info2: bool,
+        match_avg: bool,
+        refine_context: bool,
+        refine_connection: bool,
+        trace_match: bool,
+        trace_refine: bool,
     ) -> Self {
         Self {
             id,
@@ -307,14 +414,27 @@ impl Neuron {
             group_threshold,
             group_mode,
             context_length,
+            mint_min_samples,
+            match_stats,
+            match_all,
+            match_threshold,
+            match_info,
+            match_info2,
+            match_avg,
+            refine_context,
+            refine_connection,
+            trace_match,
+            trace_refine,
+            learning,
             channel_action_ids,
             spatial_connections: FxHashMap::default(),
             spatial_routing_table: FxHashMap::default(),
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
             spatial_error_stats: None,
-            spatial_ctx_freq: FxHashMap::default(),
-            spatial_ctx_frames: 0,
+            spatial_match_stats: None,
+            spatial_neighbor_counts: FxHashMap::default(),
+            spatial_neighbor_frames: 0,
             temporal_connections: Vec::new(),
             temporal_routing_table: FxHashMap::default(),
             temporal_context_index: FxHashMap::default(),
@@ -371,7 +491,7 @@ impl Neuron {
         // Applies ONLY to this mint-side threshold — recognition reads grouping_merge_threshold
         // directly, so the merge bar keeps its normal earned value during warmup.
         let n = self.spatial_error_stats.as_ref().map_or(0, |s| s.n);
-        if n < crate::config::mint_min_samples() { return 1.0; }
+        if n < self.mint_min_samples { return 1.0; }
         self.grouping_error_threshold(self.spatial_error_stats.as_ref())
     }
 
@@ -402,6 +522,11 @@ impl Neuron {
         self.temporal_error_stats[idx] = Some(WelfordState { n, mean, m2 });
     }
 
+    /// Restore the match-ratio statistics from a snapshot.
+    pub fn load_spatial_match_stats(&mut self, n: u64, mean: f64, m2: f64) {
+        self.spatial_match_stats = Some(WelfordState { n, mean, m2 });
+    }
+
     /// Restoration entry point: install the spatial Welford bucket.
     pub fn load_spatial_error_stats(&mut self, n: u64, mean: f64, m2: f64) {
         self.spatial_error_stats = Some(WelfordState { n, mean, m2 });
@@ -420,15 +545,18 @@ impl Neuron {
             children: self.serialize_children(),
             context_refs: self.serialize_context_refs(),
             error_stats: self.serialize_error_stats(),
-            ctx_freq: self.spatial_ctx_freq.iter().map(|(&id, &c)| (id, c)).collect(),
-            ctx_frames: self.spatial_ctx_frames,
+            match_stats: self.spatial_match_stats.as_ref()
+                .map(|s| vec![SerializedErrorStats { age: 0, n: s.n, mean: s.mean, m2: s.m2 }])
+                .unwrap_or_default(),
+            neighbor_counts: self.spatial_neighbor_counts.iter().map(|(&id, &c)| (id, c)).collect(),
+            neighbor_frames: self.spatial_neighbor_frames,
         }
     }
 
-    /// Restore the local ring-neighbor frequency statistics (information-weighted recognition).
-    pub fn restore_spatial_ctx_freq(&mut self, frames: u64, counts: &[(NeuronId, u64)]) {
-        self.spatial_ctx_frames = frames;
-        for &(id, c) in counts { self.spatial_ctx_freq.insert(id, c); }
+    /// Restore the context-neighbor counts backing information-weighted recognition.
+    pub fn restore_spatial_neighbor_counts(&mut self, frames: u64, counts: &[(NeuronId, u64)]) {
+        self.spatial_neighbor_frames = frames;
+        for &(id, c) in counts { self.spatial_neighbor_counts.insert(id, c); }
     }
 
     /// Serialize directed connections — flattens spatial (d=0) and temporal (d>0) into a single
@@ -878,7 +1006,7 @@ impl Neuron {
         }
         let deleted = to_delete.len();
         for nid in to_delete { let _ = self.remove_spatial_context(pattern_id, nid); }
-        if crate::config::trace_refine() {
+        if self.trace_refine {
             let sz = self.spatial_routing_table.get(&pattern_id).map(|e| e.context.size()).unwrap_or(0);
             eprintln!(
                 "[refine] pat={} ctx={} added(novel)={} weakened(missing)={} deleted={}",
@@ -1132,307 +1260,419 @@ impl Neuron {
     /// Writes co-activation predictions to `spatial_connections` for next-frame voting.
     pub fn process_spatial_frame(
         &mut self,
-        age_states: &FxHashMap<Distance, AgeState>,
-        level_context: Option<&SpatialContext>,
+        level_neighbors: Option<&SpatialContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        actives: &[ActiveNeuron],
+        base_neighbors: &[ActiveNeuron],
         current_frame: FrameNumber,
-        corrections: &[Correction],
-        _error_feedback: &[ErrorFeedback],
-        learning: bool,
-    ) -> ProcessFrameResult {
+    ) -> SpatialFrameResult {
         let mut timings = NeuronOpTimings::default();
 
-        // Check the age=0 state — the only meaningful slot for spatial.
-        let state_at_0 = age_states.get(&0);
-        let already_suppressed = state_at_0.map_or(false, |s| s.activated_pattern_id.is_some());
+        // Freshly-created error patterns skip all substrate learning in their birth frame.
+        let should_learn = self.learning && !new_error_pattern_ids.contains(&self.id);
 
-        // The "should learn" gate excludes new error patterns just minted this frame.
-        let should_learn = learning && !new_error_pattern_ids.contains(&self.id);
+        // The background model is learning-gated like every substrate update, so frozen evaluation stays frozen.
+        if should_learn { self.count_spatial_neighbors(level_neighbors); }
 
-        // Accumulate local ring-neighbor activation frequencies (surprisal weights for
-        // information-weighted recognition). Observation statistics, learning-gated like all
-        // substrate updates so frozen evaluation stays frozen.
-        if should_learn {
-            if let Some(lc) = level_context {
-                if lc.size() > 0 {
-                    self.spatial_ctx_frames += 1;
-                    for (&ctx_id, _) in lc.entries() {
-                        *self.spatial_ctx_freq.entry(ctx_id).or_insert(0) += 1;
-                    }
+        // Match child patterns against the observed co-activation; at most one fires.
+        let matches = self.recognize_spatial_patterns(level_neighbors, current_frame, &mut timings);
+
+        // Cast this frame's co-activation prediction unless a fired child already represents it.
+        let votes = self.generate_spatial_votes(&matches, &mut timings);
+
+        // Learn co-activation edges AFTER voting, so the vote reads the prior frame's edges rather
+        // than the ones just strengthened toward this frame's co-actives.
+        if should_learn { self.learn_spatial_connections(base_neighbors, &mut timings); }
+
+        SpatialFrameResult { matches, votes, timings }
+    }
+
+    /// Count each co-active context neighbor toward this neuron's background model.
+    fn count_spatial_neighbors(&mut self, level_context: Option<&SpatialContext>) {
+
+        // These counts, over the frame denominator, are the base rates of information-weighted
+        // recognition: how often each neighbor is active regardless of any pattern.
+        // Frames with no observed context teach nothing and do not advance the denominator.
+        if let Some(lc) = level_context {
+            if lc.size() > 0 {
+                self.spatial_neighbor_frames += 1;
+                for (&ctx_id, _) in lc.entries() {
+                    *self.spatial_neighbor_counts.entry(ctx_id).or_insert(0) += 1;
                 }
             }
         }
-
-        // Pattern recognition. For spatial, only age=0 is meaningful and only one pattern can match.
-        let t = std::time::Instant::now();
-        let (matches, match_refs) = if already_suppressed {
-            (Vec::new(), Vec::new())
-        } else {
-            self.recognize_spatial_patterns(level_context, current_frame, learning, &mut timings)
-        };
-        timings.recognize_patterns = t.elapsed().as_secs_f64();
-
-        // Install pre-created error-correction patterns. For spatial, `corrections` is currently
-        // empty — spatial corrections come from a separate mint pass in brain's process_spatial_corrections,
-        // not from inside process_spatial_frame. The empty-loop is kept for API symmetry.
-        let t = std::time::Instant::now();
-        let CorrectResult { correction_activations, context_ref_updates: correction_refs } = self.correct_errors(corrections, current_frame);
-        timings.correct_errors = t.elapsed().as_secs_f64();
-
-        // Cast spatial votes — single bucket at distance 0.
-        // Suppressed if any pattern was matched this frame (matches.activate) or a correction installed.
-        let t = std::time::Instant::now();
-        let votes = self.generate_spatial_votes(state_at_0, level_context, &matches, &correction_activations);
-        timings.generate_votes = t.elapsed().as_secs_f64();
-
-        // Learn spatial connections AFTER vote generation so the vote reads the prior-frame
-        // spatial_connections rather than the just-strengthened edges to this frame's co-actives.
-        if should_learn {
-            let t = std::time::Instant::now();
-            self.learn_spatial_connections(actives);
-            timings.learn_connections = t.elapsed().as_secs_f64();
-        }
-
-        let mut context_ref_updates = match_refs;
-        context_ref_updates.extend(correction_refs);
-        ProcessFrameResult { matches, correction_activations, context_ref_updates, votes, timings }
     }
 
     /// Spatial pattern recognition. Walks `spatial_routing_table` and finds the best matching child
-    /// pattern given the observed co-activation `SpatialContext`.
+    /// pattern given the observed co-activation `SpatialContext`, then runs it through the active
+    /// mode's acceptance gate; at most one pattern fires.
     fn recognize_spatial_patterns(
         &mut self,
-        level_context: Option<&SpatialContext>,
+        level_neighbors: Option<&SpatialContext>,
         current_frame: FrameNumber,
-        learning: bool,
         timings: &mut NeuronOpTimings,
-    ) -> (Vec<PatternMatch>, Vec<TemporalContextRefUpdate>) {
-        let context_ref_updates = Vec::new();
+    ) -> Vec<PatternMatch> {
+        let start = std::time::Instant::now();
+        let result = self.match_spatial_patterns(level_neighbors, current_frame, timings);
+        timings.recognize_patterns = start.elapsed().as_secs_f64();
+        result
+    }
 
-        // Bail if no observed context.
-        let observed = match level_context {
+    /// recognition: candidate listing, scoring, the mode acceptance gates, refinement, and activation of the winner.
+    fn match_spatial_patterns(
+        &mut self,
+        level_neighbors: Option<&SpatialContext>,
+        current_frame: FrameNumber,
+        timings: &mut NeuronOpTimings,
+    ) -> Vec<PatternMatch> {
+
+        // we cannot match any patterns if there is no observed context
+        let context_neighbors = match level_neighbors {
             Some(c) if c.size() > 0 => c,
-            _ => return (Vec::new(), context_ref_updates),
+            _ => return Vec::new(),
         };
 
-        // Candidate set via spatial_context_index — narrow to patterns that share at least one ctx neuron.
-        let t = std::time::Instant::now();
-        let mut candidates: FxHashSet<NeuronId> = FxHashSet::default();
-        for (&neuron_id, _) in observed.entries() {
-            if let Some(patterns) = self.spatial_context_index.get(&neuron_id) {
-                for &pid in patterns { candidates.insert(pid); }
-            }
-        }
-        timings.recognize_candidate_search += t.elapsed().as_secs_f64();
-        if candidates.is_empty() { return (Vec::new(), context_ref_updates); }
+        // Candidate set via spatial_context_index — narrow to patterns that share at least one context neuron.
+        let candidates = self.get_spatial_candidates(context_neighbors, timings);
+        if candidates.is_empty() { return Vec::new(); }
 
-        // Score candidates and pick the best — with NO shared threshold: every candidate's ratio is
-        // computed (threshold 0.0 disables match_observed's rejection), because recognition strictness
-        // is PER ENTRY. The single best candidate records its ratio into its entry's match stats —
-        // best-candidate sampling, win or lose, pass or fail — so each pattern's match distribution is
-        // uncensored (recording only accepted matches would ratchet the bar monotonically toward
-        // exact-match). It then activates only if the ratio clears its OWN bar: the mean of its match
-        // distribution, MATCH_BAR_INIT until MATCH_MIN_SAMPLES. Newborn patterns are generously
-        // foldable; crisp patterns earn strictness; variable patterns stay permissive.
-        // Score candidates and pick the best. Two modes:
-        //   legacy (default): candidates are filtered by the shared adaptive merge threshold (1 − E)
-        //   read from the HOST's error stats, then ranked by score — the original recognition.
-        //   match-stats (BRAIN_MATCH_STATS=1, experimental): no shared filter; every ratio is computed,
-        //   the score-best candidate records its ratio into its entry's match stats (uncensored
-        //   best-candidate sampling) and activates only if the ratio clears its OWN bar (the mean of
-        //   its match distribution, MATCH_BAR_INIT until MATCH_MIN_SAMPLES).
-        let use_match_stats = crate::config::match_stats_enabled();
-        // MATCH-ALL: no threshold anywhere — candidates are never filtered and the winner never rejected.
-        let use_match_all = crate::config::match_all_enabled();
-        // MATCH-INFO: MDL recognition — rank candidates by net bits saved, accept only if positive.
-        let use_match_info = crate::config::match_info_enabled();
-        // MATCH-INFO2: likelihood-ratio recognition — rank by evidence vs the background model.
-        let use_match_info2 = crate::config::match_info2_enabled();
-        let merge_threshold = if use_match_stats || use_match_all || use_match_info || use_match_info2 { 0.0 }
-            else if let Some(t) = crate::config::match_threshold_override() { t }
-            else { self.grouping_merge_threshold(self.spatial_error_stats.as_ref()) };
-        // Smoothed local frequency of a ring neighbor being co-active (Laplace: (c+1)/(frames+2)),
-        // so surprisals are finite from the first frame and converge with evidence.
-        let ctx_frames = self.spatial_ctx_frames;
-        let p_of = |freq: &FxHashMap<NeuronId, u64>, id: NeuronId| -> f64 {
-            (freq.get(&id).copied().unwrap_or(0) + 1) as f64 / (ctx_frames + 2) as f64
-        };
-        // Naming cost: bits to say WHICH child fired (log2 of the vocabulary size at this host).
-        let name_cost = (1.0 + self.spatial_routing_table.len() as f64).log2();
-        let eval_start = std::time::Instant::now();
-        let candidate_count = candidates.len();
-        // Track the best candidate, its full match (for context refinement), and its Jaccard ratio.
-        let mut best: Option<(PartialMatch, MatchResult, f64, f64)> = None;
-        for pattern_id in candidates {
-            if self.get_child_effective_activation_strength(pattern_id, current_frame) <= 0.0 { continue; }
-            let entry = self.spatial_routing_table.get(&pattern_id)
-                .unwrap_or_else(|| panic!("recognize_spatial_patterns: pattern {} indexed but missing from spatial_routing_table", pattern_id));
-            let m = match entry.context.match_observed(observed, merge_threshold) {
-                Some(m) => m,
-                None => continue,
-            };
-            // Rank value: net BITS SAVED in info mode (explained surprisal minus exception cost minus
-            // naming cost; novel entries cancel — siblings encode them), else the legacy match score.
-            let rank = if use_match_info2 {
-                // Likelihood ratio per stored entry, candidate model vs background model (Laplace both):
-                //   p(e|C)  = (co-occurrence count + 1) / (fires + 3)   [strength counts the mint frame]
-                //   p(e|bg) = (marginal count + 1) / (frames + 2)
-                // Present entries add log2(p_c/p_bg); absent (missing) entries add log2((1-p_c)/(1-p_bg)).
-                // OPTIMISTIC COLD START: a pattern minted FROM a configuration should start out believing
-                // its own context — smoothing pulls p(e|C) toward presence (alpha) instead of toward the
-                // uniform 0.5 that made newborns lose to high-frequency background entries. As fires
-                // accumulate, the observed counts dominate and the optimism washes out.
-                const ALPHA: f64 = 0.9;
-                let n_c = (entry.fires + 1) as f64;
-                let mut lr = 0.0;
-                for e in &m.common {
-                    let p_c = (e.strength + ALPHA) / (n_c + 1.0);
-                    let p_bg = p_of(&self.spatial_ctx_freq, e.neuron_id);
-                    lr += (p_c.min(0.999) / p_bg).log2();
-                }
-                for e in &m.missing {
-                    let p_c = (e.strength + ALPHA) / (n_c + 1.0);
-                    let p_bg = p_of(&self.spatial_ctx_freq, e.neuron_id);
-                    lr += ((1.0 - p_c.min(0.999)) / (1.0 - p_bg)).log2();
-                }
-                lr
-            } else if use_match_info {
-                let common_bits: f64 = m.common.iter().map(|e| -p_of(&self.spatial_ctx_freq, e.neuron_id).log2()).sum();
-                let missing_bits: f64 = m.missing.iter().map(|e| -(1.0 - p_of(&self.spatial_ctx_freq, e.neuron_id)).log2()).sum();
-                common_bits - missing_bits - name_cost
-            } else {
-                m.score
-            };
-            if let Some((ref b, _, _, brank)) = best {
-                if rank < brank { continue; }
-                if rank == brank && pattern_id > b.pattern_id { continue; } // prefer smaller id
-            }
-            let union = (m.common.len() + m.missing.len() + m.novel.len()) as f64;
-            let ratio = if union > 0.0 { m.common.len() as f64 / union } else { 0.0 };
-            best = Some((PartialMatch { pattern_id, age: 0, score: m.score }, m, ratio, rank));
-        }
-        timings.recognize_candidate_eval += eval_start.elapsed().as_secs_f64();
-        timings.recognize_candidates_evaluated += candidate_count as u64;
+        // Score every candidate and keep the single best with its Jaccard ratio and mode rank.
+        let merge_threshold = self.resolve_spatial_merge_threshold();
 
-        let (best, best_match, ratio, rank) = match best {
+        let best = self.pick_best_spatial_candidate(context_neighbors, candidates, merge_threshold, current_frame, timings);
+        let (best, ratio, rank) = match best {
             Some(b) => b,
-            None => return (Vec::new(), context_ref_updates),
+            None => return Vec::new(),
         };
 
-        // Info modes: the winner must carry positive evidence — net bits (v1) or log-likelihood ratio
-        // vs background (v2) — or nothing fires. No thresholds; acceptance is the criterion itself.
-        if use_match_info || use_match_info2 {
-            if crate::config::trace_match() {
-                eprintln!("[info] pat={} bits={:.2} ratio={:.3} {}", best.pattern_id, rank, ratio, if rank > 0.0 { "FIRE" } else { "reject" });
-            }
-            if rank <= 0.0 { return (Vec::new(), context_ref_updates); }
-        }
+        // Materialize the winning match's entry lists only for the consumers that need them —
+        // context refinement and the likelihood-model update. Every other path already has the
+        // numbers it needs, which is what keeps the scoring loop allocation-free.
+        let best_match = self.materialize_winner_match(&best, context_neighbors, merge_threshold);
 
-        // MDL-v2 model update on an accepted fire: count the fire and strengthen the entries that were
-        // present, so entry strength / fires tracks p(entry | pattern). This is the strengthen-common
-        // half of context refinement, standalone — no novel additions, no deletions, identities cannot
-        // drift; the likelihood model just sharpens toward the pattern's true co-occurrence profile.
-        if use_match_info2 && learning {
-            let entry = self.spatial_routing_table.get_mut(&best.pattern_id)
-                .expect("recognize_spatial_patterns: best pattern missing from spatial routing table");
-            entry.fires += 1;
-            for item in &best_match.common { entry.context.strengthen_neuron(item.neuron_id); }
-        }
-
-        // Match-stats mode: the winner's bar is read BEFORE this frame's sample is recorded, the sample
-        // is recorded win-or-lose, and activation requires the ratio to clear the winner's own bar.
-        // Under match-all the winner is never rejected (and no stats are needed), so this is skipped.
-        if use_match_stats && !use_match_all && !use_match_info {
-            let bar = {
-                let entry = self.spatial_routing_table.get(&best.pattern_id)
-                    .expect("recognize_spatial_patterns: best pattern missing from spatial routing table");
-                if entry.match_stats.n < MATCH_MIN_SAMPLES { MATCH_BAR_INIT } else { entry.match_stats.mean }
-            };
-            if learning {
-                self.spatial_routing_table.get_mut(&best.pattern_id)
-                    .expect("recognize_spatial_patterns: best pattern missing from spatial routing table")
-                    .match_stats.update(ratio);
-            }
-            if crate::config::trace_match() {
-                eprintln!("[recog] pat={} ratio={:.3} bar={:.3} {}", best.pattern_id, ratio, bar, if ratio >= bar { "FIRE" } else { "reject" });
-            }
-            if ratio < bar { return (Vec::new(), context_ref_updates); }
-        }
+        // The active mode's acceptance gate decides whether the winner fires, and the accepted
+        // fire sharpens the likelihood model in the hypothesis-test mode.
+        if !self.approve_info_winner(&best, ratio, rank) { return Vec::new(); }
+        if !self.approve_averaged_winner(&best, ratio) { return Vec::new(); }
+        self.update_likelihood_model(&best, best_match.as_ref());
+        if !self.approve_stats_winner(&best, ratio) { return Vec::new(); }
 
         // Context refinement (sources): consolidate the matched pattern's context toward the observed
         // configuration. Training-only (learning gate = reproducibility guard); paired with connection
         // refinement so both the pattern's inputs AND its predictions adjust each match.
-        // Gated by the `BRAIN_REFINE_CONTEXT` toggle (default ON). Runs only on a FIRED match.
-        if learning && crate::config::refine_context_enabled() { self.refine_spatial_context(best.pattern_id, &best_match); }
+        // Gated by the context-refinement toggle (default ON). Runs only on a FIRED match.
+        if self.learning && self.refine_context {
+            let m = best_match.as_ref()
+                .expect("winner match not materialized for refinement")
+                .clone();
+            self.refine_spatial_context(best.pattern_id, &m);
+        }
 
         // Activate the winning pattern (strengthen child activation in learning mode).
-        let death_frame = if learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
+        let death_frame = if self.learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
         let matches = vec![PatternMatch {
             pattern_id: best.pattern_id,
             age: 0,
             activate: true,
             death_frame,
         }];
-        (matches, context_ref_updates)
+        matches
     }
 
-    /// Generate spatial vote — a single bucket at distance 0. Suppressed if the neuron already
-    /// activated a higher-level pattern this frame, was matched by recognize_spatial_patterns,
-    /// or had a correction installed.
-    fn generate_spatial_votes(
-        &self,
-        state_at_0: Option<&AgeState>,
-        level_context: Option<&SpatialContext>,
-        matches: &[PatternMatch],
-        correction_activations: &[CorrectionActivation],
-    ) -> Vec<AgeVotes> {
-        // Suppression checks.
-        if state_at_0.map_or(false, |s| s.activated_pattern_id.is_some()) { return Vec::new(); }
-        for m in matches { if m.activate && m.age == 0 { return Vec::new(); } }
-        for c in correction_activations { if c.age == 0 { return Vec::new(); } }
+    /// returns the child patterns that share at least one context neuron with the observed co-activation.
+    fn get_spatial_candidates(&self, context_neighbors: &SpatialContext, timings: &mut NeuronOpTimings) -> FxHashSet<NeuronId> {
+        let start = std::time::Instant::now();
+        let mut candidates: FxHashSet<NeuronId> = FxHashSet::default();
 
-        let cast_votes = self.vote_at_distance(0);
-
-        // Context attached to this vote — the spatial co-active neurons.
-        let ctx_entries: Vec<ContextRefEntry> = if let Some(lc) = level_context {
-            lc.entries().keys()
-                .map(|&nid| ContextRefEntry { neuron_id: nid, distance: 0 })
-                .collect()
-        } else { Vec::new() };
-
-        vec![AgeVotes {
-            age: 0,
-            votes: cast_votes,
-            context: ctx_entries,
-            threshold: self.get_spatial_error_threshold(),
-        }]
-    }
-
-    /// Spatial connection learning + TARGET REFINEMENT. Strengthens edges toward every co-active neuron
-    /// (the observed L0: common targets restrengthen, novel ones are created) AND — this is target/connection
-    /// refinement — PRUNES existing edges toward targets that were NOT observed this frame: predictions that
-    /// failed to appear are weakened by 1.0 and deleted outright at 0 or below (a pruned prediction is gone;
-    /// if the target recurs, a fresh edge is created). Writes to `spatial_connections` only. Self-connections
-    /// are skipped. Refinement is gated by the `BRAIN_REFINE_CONNECTION` toggle (default ON).
-    fn learn_spatial_connections(&mut self, actives: &[ActiveNeuron]) {
-        for active in actives {
-            if active.id == self.id { continue; }
-            self.upsert_connection(0, active.id, active.channel_id, active.reward);
-        }
-
-        if crate::config::refine_connection_enabled() {
-            let active_ids: FxHashSet<NeuronId> = actives.iter().map(|a| a.id).collect();
-            let self_id = self.id;
-            let mut to_prune: Vec<NeuronId> = Vec::new();
-            for (&target, conn) in self.spatial_connections.iter_mut() {
-                if target != self_id && !active_ids.contains(&target) {
-                    conn.strength -= 1.0;
-                    if conn.strength <= 0.0 { to_prune.push(target); }
-                }
+        // find and return the patterns that have the context neighbor in them - those are the candidates for recognition
+        for (&neuron_id, _) in context_neighbors.entries() {
+            if let Some(patterns) = self.spatial_context_index.get(&neuron_id) {
+                for &pid in patterns { candidates.insert(pid); }
             }
-            for target in to_prune { self.spatial_connections.remove(&target); }
         }
+
+        timings.recognize_candidate_search += start.elapsed().as_secs_f64();
+        candidates
+    }
+
+    /// The candidate filter threshold for the active recognition mode.
+    /// legacy (default): candidates are filtered by the shared adaptive merge threshold (1 − E)
+    /// read from the HOST's error stats, then ranked by score — the original recognition.
+    /// A static override replaces the adaptive coupling with a fixed threshold when configured.
+    /// Every other mode disables the shared filter (threshold 0.0) because its strictness lives
+    /// elsewhere: per-entry match stats, the neuron's averaged match bar, the information criteria,
+    /// or nowhere at all (match-all never rejects).
+    fn resolve_spatial_merge_threshold(&self) -> f64 {
+        let any_mode = self.match_stats || self.match_all || self.match_info || self.match_info2 || self.match_avg;
+        if any_mode { return 0.0; }
+        if let Some(t) = self.match_threshold { return t; }
+        self.grouping_merge_threshold(self.spatial_error_stats.as_ref())
+    }
+
+    /// Smoothed local frequency of a context neighbor being co-active (Laplace: (c+1)/(frames+2)),
+    /// so surprisals are finite from the first frame and converge with evidence.
+    fn get_context_frequency(&self, id: NeuronId) -> f64 {
+        (self.spatial_neighbor_counts.get(&id).copied().unwrap_or(0) + 1) as f64 / (self.spatial_neighbor_frames + 2) as f64
+    }
+
+    /// Track the best candidate with its legacy score, Jaccard ratio, and mode-specific rank.
+    /// Scoring walks each stored context in place and allocates nothing per candidate; the winning
+    /// match's entry lists are materialized once AFTER the loop, only when a consumer needs them.
+    fn pick_best_spatial_candidate(
+        &self,
+        observed: &SpatialContext,
+        candidates: FxHashSet<NeuronId>,
+        merge_threshold: f64,
+        current_frame: FrameNumber,
+        timings: &mut NeuronOpTimings,
+    ) -> Option<(PartialMatch, f64, f64)> {
+
+        let start = std::time::Instant::now();
+        timings.recognize_candidates_evaluated += candidates.len() as u64;
+        let mut best: Option<(PartialMatch, f64, f64)> = None;
+        for pattern_id in candidates {
+            let candidate = match self.evaluate_spatial_candidate(pattern_id, observed, merge_threshold, current_frame) {
+                Some(c) => c,
+                None => continue,
+            };
+            if let Some((ref b, _, brank)) = best {
+                if candidate.2 < brank { continue; }
+                if candidate.2 == brank && pattern_id > b.pattern_id { continue; } // prefer smaller id
+            }
+            best = Some(candidate);
+        }
+        timings.recognize_candidate_eval += start.elapsed().as_secs_f64();
+        best
+    }
+
+    /// Score one candidate against the observed co-activation; None when it cannot match or falls
+    /// under the shared filter threshold.
+    fn evaluate_spatial_candidate(
+        &self,
+        pattern_id: NeuronId,
+        observed: &SpatialContext,
+        merge_threshold: f64,
+        current_frame: FrameNumber,
+    ) -> Option<(PartialMatch, f64, f64)> {
+
+        if self.get_child_effective_activation_strength(pattern_id, current_frame) <= 0.0 { return None; }
+        let entry = self.spatial_routing_table.get(&pattern_id)
+            .unwrap_or_else(|| panic!("evaluate_spatial_candidate: pattern {} indexed but missing from spatial_routing_table", pattern_id));
+
+        // One walk of the stored context: present entries add their strength, absent ones subtract,
+        // and the present/absent counts feed the ratio and the information modes.
+        let mut score = 0.0;
+        let mut common = 0usize;
+        let mut missing = 0usize;
+        for (&ctx_id, &strength) in entry.context.entries() {
+            if strength <= 0.0 { continue; }
+            if observed.has_key(ctx_id) { score += strength; common += 1; }
+            else { score -= strength; missing += 1; }
+        }
+
+        // A pattern with no live context entries cannot match anything.
+        if common + missing == 0 { return None; }
+
+        // Observed entries all carry strength 1.0 on the spatial side, so the novel part of the
+        // score is a per-entry unit subtraction, replicated as such to keep float order identical.
+        let novel = observed.size() - common;
+        for _ in 0..novel { score -= 1.0; }
+
+        // Round to 14 decimal places to avoid floating-point precision issues.
+        score = (score * 1e14).round() / 1e14;
+
+        let union = (common + missing + novel) as f64;
+        if union == 0.0 { return None; }
+        let ratio = common as f64 / union;
+        if ratio < merge_threshold { return None; }
+
+        let rank = self.rank_spatial_candidate(entry, observed, score);
+        Some((PartialMatch { pattern_id, age: 0, score }, ratio, rank))
+    }
+
+    /// Rank value: log-likelihood ratio vs the background model in the info modes (grouped as
+    /// present terms then absent terms, preserving the accumulation order), else the score.
+    fn rank_spatial_candidate(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext, score: f64) -> f64 {
+
+        if self.match_info2 { return self.rank_by_likelihood_ratio(entry, observed); }
+        if self.match_info { return self.rank_by_information(entry, observed); }
+        score
+    }
+
+    /// Likelihood ratio per stored entry, candidate model vs background model (Laplace both):
+    ///   p(e|C)  = (co-occurrence count + optimism) / (fires + 2)
+    ///   p(e|bg) = (marginal count + 1) / (frames + 2)
+    fn rank_by_likelihood_ratio(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext) -> f64 {
+
+        // OPTIMISTIC COLD START: a pattern minted FROM a configuration starts out believing its
+        // own context; as fires accumulate, the observed counts dominate and the optimism fades.
+        const ALPHA: f64 = 0.9;
+        let n_c = (entry.fires + 1) as f64;
+        let mut lr = 0.0;
+        for (&ctx_id, &strength) in entry.context.entries() {
+            if strength <= 0.0 || !observed.has_key(ctx_id) { continue; }
+            let p_c = (strength + ALPHA) / (n_c + 1.0);
+            let p_bg = self.get_context_frequency(ctx_id);
+            lr += (p_c.min(0.999) / p_bg).log2();
+        }
+        for (&ctx_id, &strength) in entry.context.entries() {
+            if strength <= 0.0 || observed.has_key(ctx_id) { continue; }
+            let p_c = (strength + ALPHA) / (n_c + 1.0);
+            let p_bg = self.get_context_frequency(ctx_id);
+            lr += ((1.0 - p_c.min(0.999)) / (1.0 - p_bg)).log2();
+        }
+        lr
+    }
+
+    /// Information-weighted rank: present entries credit their surprisal, absent entries cost the
+    /// surprisal of their absence, and the naming cost of saying WHICH child fired is subtracted
+    /// (log2 of the vocabulary size at this host).
+    fn rank_by_information(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext) -> f64 {
+
+        let name_cost = (1.0 + self.spatial_routing_table.len() as f64).log2();
+        let mut common_info = 0.0;
+        for (&ctx_id, &strength) in entry.context.entries() {
+            if strength <= 0.0 || !observed.has_key(ctx_id) { continue; }
+            common_info += -self.get_context_frequency(ctx_id).log2();
+        }
+        let mut missing_info = 0.0;
+        for (&ctx_id, &strength) in entry.context.entries() {
+            if strength <= 0.0 || observed.has_key(ctx_id) { continue; }
+            missing_info += -(1.0 - self.get_context_frequency(ctx_id)).log2();
+        }
+        common_info - missing_info - name_cost
+    }
+
+    /// Rebuild the winner's full match (common/missing/novel entry lists) for the consumers that
+    /// need them: context refinement and the likelihood-model update. None when no consumer will.
+    fn materialize_winner_match(&self, best: &PartialMatch, observed: &SpatialContext, merge_threshold: f64) -> Option<MatchResult> {
+
+        let need_winner_match = self.learning && (self.match_info2 || self.refine_context);
+        if !need_winner_match { return None; }
+        Some(self.spatial_routing_table.get(&best.pattern_id)
+            .expect("materialize_winner_match: best pattern missing from spatial routing table")
+            .context.match_observed(observed, merge_threshold, self.trace_match)
+            .expect("materialize_winner_match: winning candidate failed rematerialization"))
+    }
+
+    /// Info modes: the winner must carry positive evidence — net information (v1) or log-likelihood ratio
+    /// vs background (v2) — or nothing fires. No thresholds; acceptance is the criterion itself.
+    fn approve_info_winner(&self, best: &PartialMatch, ratio: f64, rank: f64) -> bool {
+
+        if !self.match_info && !self.match_info2 { return true; }
+        if self.trace_match {
+            eprintln!("[info] pat={} info={:.2} ratio={:.3} {}", best.pattern_id, rank, ratio, if rank > 0.0 { "FIRE" } else { "reject" });
+        }
+        rank > 0.0
+    }
+
+    /// Averaged-match-threshold mode: the bar is the smoothed mean of the ratios this neuron has
+    /// observed across ALL its recognition events, mirroring the averaged error threshold on the
+    /// creation side. The sample is recorded win-or-lose BEFORE the decision reads the bar, so the
+    /// distribution stays uncensored and the decision uses the state as of the previous event.
+    fn approve_averaged_winner(&mut self, best: &PartialMatch, ratio: f64) -> bool {
+
+        if !self.match_avg || self.match_all { return true; }
+        let bar = match &self.spatial_match_stats {
+            Some(stats) if stats.n >= ERROR_MIN_SAMPLES => stats.mean,
+            _ => self.group_threshold,
+        };
+        if self.learning {
+            self.spatial_match_stats.get_or_insert_with(WelfordState::new).update(ratio);
+        }
+        if self.trace_match {
+            eprintln!("[avg] pat={} ratio={:.3} bar={:.3} {}", best.pattern_id, ratio, bar, if ratio >= bar { "FIRE" } else { "reject" });
+        }
+        ratio >= bar
+    }
+
+    /// MDL-v2 model update on an accepted fire: count the fire and strengthen the entries that were
+    /// present, so entry strength / fires tracks p(entry | pattern). This is the strengthen-common
+    /// half of context refinement, standalone — no novel additions, no deletions, identities cannot
+    /// drift; the likelihood model just sharpens toward the pattern's true co-occurrence profile.
+    fn update_likelihood_model(&mut self, best: &PartialMatch, best_match: Option<&MatchResult>) {
+
+        if !self.match_info2 || !self.learning { return; }
+        let m = best_match
+            .expect("update_likelihood_model: winner match not materialized for the model update");
+        let entry = self.spatial_routing_table.get_mut(&best.pattern_id)
+            .expect("update_likelihood_model: best pattern missing from spatial routing table");
+        entry.fires += 1;
+        for item in &m.common { entry.context.strengthen_neuron(item.neuron_id); }
+    }
+
+    /// Match-stats mode: the winner's bar is read BEFORE this frame's sample is recorded, the sample
+    /// is recorded win-or-lose, and activation requires the ratio to clear the winner's own bar.
+    /// Under match-all the winner is never rejected (and no stats are needed), so this is skipped.
+    fn approve_stats_winner(&mut self, best: &PartialMatch, ratio: f64) -> bool {
+
+        if !self.match_stats || self.match_all || self.match_info { return true; }
+        let bar = {
+            let entry = self.spatial_routing_table.get(&best.pattern_id)
+                .expect("approve_stats_winner: best pattern missing from spatial routing table");
+            if entry.match_stats.n < MATCH_MIN_SAMPLES { MATCH_BAR_INIT } else { entry.match_stats.mean }
+        };
+        if self.learning {
+            self.spatial_routing_table.get_mut(&best.pattern_id)
+                .expect("approve_stats_winner: best pattern missing from spatial routing table")
+                .match_stats.update(ratio);
+        }
+        if self.trace_match {
+            eprintln!("[recog] pat={} ratio={:.3} bar={:.3} {}", best.pattern_id, ratio, bar, if ratio >= bar { "FIRE" } else { "reject" });
+        }
+        ratio >= bar
+    }
+
+    /// Cast this neuron's same-frame prediction, unless a fired child pattern already represents it.
+    fn generate_spatial_votes(&self, matches: &[PatternMatch], timings: &mut NeuronOpTimings) -> Option<SpatialVotes> {
+
+        let start = std::time::Instant::now();
+
+        // A fired child subsumes this neuron's own prediction for the frame.
+        let votes = if matches.iter().any(|m| m.activate) { None } else {
+            Some(SpatialVotes {
+                votes: self.vote_at_distance(0),
+                threshold: self.get_spatial_error_threshold(),
+            })
+        };
+        timings.generate_votes = start.elapsed().as_secs_f64();
+        votes
+    }
+
+    /// Spatial connection learning and target refinement, writing to `spatial_connections` only.
+    fn learn_spatial_connections(&mut self, neighbors: &[ActiveNeuron], timings: &mut NeuronOpTimings) {
+
+        let start = std::time::Instant::now();
+
+        // Strengthen edges toward every neighbor neuron in the observed base level
+        for neighbor in neighbors {
+
+            // neurons do not have connections to themselves
+            if neighbor.id == self.id { continue; }
+
+            // add new connection or strengthen existing connection
+            self.upsert_connection(0, neighbor.id, neighbor.channel_id, neighbor.reward);
+        }
+
+        // optional connection refinement: prune existing edges toward targets that were NOT observed this frame.
+        if self.refine_connection { self.refine_spatial_connections(neighbors); }
+        timings.learn_connections = start.elapsed().as_secs_f64();
+    }
+
+    /// Connection (target) refinement: prune existing edges toward targets that were NOT observed this frame.
+    fn refine_spatial_connections(&mut self, neighbors: &[ActiveNeuron]) {
+        let neighbor_ids: FxHashSet<NeuronId> = neighbors.iter().map(|a| a.id).collect();
+        let mut to_prune: Vec<NeuronId> = Vec::new();
+
+        // A prediction that failed to appear is weakened by 1.0; at 0 or below it is marked for deletion.
+        for (&target, conn) in self.spatial_connections.iter_mut() {
+            if target != self.id && !neighbor_ids.contains(&target) {
+                conn.strength -= 1.0;
+                if conn.strength <= 0.0 { to_prune.push(target); }
+            }
+        }
+
+        // A pruned prediction is gone outright; if the target recurs, a fresh edge is created.
+        for target in to_prune { self.spatial_connections.remove(&target); }
     }
 
     /// Temporal frame processing — per-age iteration over the sliding window. Matching
@@ -1450,18 +1690,17 @@ impl Neuron {
         current_frame: FrameNumber,
         corrections: &[Correction],
         error_feedback: &[ErrorFeedback],
-        learning: bool,
     ) -> ProcessFrameResult {
 
         // Fold prior-frame error feedback into per-age accuracy stats first.
         // That way the threshold attached to this frame's votes (computed in generate_votes) reflects the latest sample.
         // Non-learning mode skips this because accuracy stats are connection-substrate state.
-        if learning {
+        if self.learning {
             for fb in error_feedback { self.record_temporal_error(fb.age, fb.error_rate); }
         }
         let mut timings = NeuronOpTimings::default();
 
-        let should_learn = learning && !new_error_pattern_ids.contains(&self.id);
+        let should_learn = self.learning && !new_error_pattern_ids.contains(&self.id);
 
         // Temporal learns connections[age>0] which the vote step (connections[age+1]) doesn't read,
         // so it's safe to run learn FIRST and have the vote read the same-frame updated edges only
@@ -1474,7 +1713,7 @@ impl Neuron {
 
         // Match temporal patterns against the level_context if we have one and eligible ages.
         let t = std::time::Instant::now();
-        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_temporal_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, learning, &mut timings);
+        let RecognizeResult { matches, context_ref_updates: match_refs } = self.recognize_temporal_patterns(age_states, memory_depth, level_context, new_error_pattern_ids, current_frame, &mut timings);
         timings.recognize_patterns = t.elapsed().as_secs_f64();
 
         // Install pre-created temporal error-correction patterns as children and emit their contextRef adds.
@@ -1510,7 +1749,6 @@ impl Neuron {
         level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         current_frame: FrameNumber,
-        learning: bool,
         timings: &mut NeuronOpTimings,
     ) -> RecognizeResult {
         let mut matches = Vec::new();
@@ -1559,7 +1797,7 @@ impl Neuron {
 
             // Strengthen child activation automatically here, but only in learning mode.
             // Non-learning eval still activates the pattern but does not extend its life.
-            let death_frame = if activate && learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
+            let death_frame = if activate && self.learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
 
             // include the best match for the age in the results
             matches.push(PatternMatch {
@@ -1860,9 +2098,11 @@ pub struct SerializedNeuron {
     pub children: Vec<SerializedChild>,
     pub context_refs: Vec<SerializedContextRef>,
     pub error_stats: Vec<SerializedErrorStats>,
-    /// Local ring-neighbor activation counts + frame denominator (information-weighted recognition).
-    pub ctx_freq: Vec<(NeuronId, u64)>,
-    pub ctx_frames: u64,
+    /// Match-ratio statistics for the averaged-match-threshold mode (empty when never sampled).
+    pub match_stats: Vec<SerializedErrorStats>,
+    /// Local context-neighbor activation counts + frame denominator (information-weighted recognition).
+    pub neighbor_counts: Vec<(NeuronId, u64)>,
+    pub neighbor_frames: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -1912,13 +2152,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, 10, false, false, None, false, false, false, true, true, false, false)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true, 10, false, false, None, false, false, false, true, true, false, false)
     }
 
     #[test]
@@ -2001,7 +2241,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10);
+        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true, 10, false, false, None, false, false, false, true, true, false, false);
         // fewer than ERROR_MIN_SAMPLES → falls back to the derived 1 − group_threshold = 0.1
         n.record_temporal_error(0, 0.5);
         n.record_temporal_error(0, 0.5);

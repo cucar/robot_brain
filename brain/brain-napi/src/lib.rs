@@ -151,6 +151,14 @@ impl JsBrain {
     ///   columns: number (default 1)
     ///   consensus: string 'democratic' | 'nb' (default 'democratic')
     ///   debug: boolean (default false)
+    ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
+    ///
+    /// TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
+    ///   mintMinSamples: number (default 10), mintRepeat: boolean, mintRepeatCap: number (default 16)
+    ///   matchStats / matchAll / matchInfo / matchInfo2 / matchAvg: boolean, matchThreshold: number
+    ///   errorInfo / errorInfo2: boolean
+    ///   refineContext / refineConnection: boolean (default true)
+    ///   traceMatch / traceRefine / traceError: boolean
     ///
     /// The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
     /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
@@ -181,12 +189,38 @@ impl JsBrain {
             None => (10, 0.5, GroupMode::Neutral, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
-        Ok(Self {
-            inner: RefCell::new(CoreBrain::new(
-                context_length, group_threshold, group_mode,
-                pattern_forget_rate, regions, columns, consensus_mode, debug,
-            )),
-        })
+        // TEMPORARY experimental toggles for the spatial mechanisms under test, passed through like
+        // every other option — each is deleted when its experiment concludes; this list must shrink.
+        let opts = options.as_ref();
+        let mint_min_samples = opt_u32(opts, "mintMinSamples")?.map(u64::from).unwrap_or(10);
+        let mint_repeat = opt_bool(opts, "mintRepeat")?.unwrap_or(false);
+        let mint_repeat_cap = opt_u32(opts, "mintRepeatCap")?.map(|v| v as usize).unwrap_or(16);
+        let match_stats = opt_bool(opts, "matchStats")?.unwrap_or(false);
+        let match_all = opt_bool(opts, "matchAll")?.unwrap_or(false);
+        let match_threshold = opt_f64(opts, "matchThreshold")?;
+        let match_info = opt_bool(opts, "matchInfo")?.unwrap_or(false);
+        let match_info2 = opt_bool(opts, "matchInfo2")?.unwrap_or(false);
+        let match_avg = opt_bool(opts, "matchAvg")?.unwrap_or(false);
+        let error_info = opt_bool(opts, "errorInfo")?.unwrap_or(false);
+        let error_info2 = opt_bool(opts, "errorInfo2")?.unwrap_or(false);
+        let refine_context = opt_bool(opts, "refineContext")?.unwrap_or(true);
+        let refine_connection = opt_bool(opts, "refineConnection")?.unwrap_or(true);
+        let trace_match = opt_bool(opts, "traceMatch")?.unwrap_or(false);
+        let trace_refine = opt_bool(opts, "traceRefine")?.unwrap_or(false);
+        let trace_error = opt_bool(opts, "traceError")?.unwrap_or(false);
+
+        // The learning state is fixed at construction: a frozen evaluation is a separate brain
+        // instance loaded from a backup, not a toggled one.
+        let learning = opt_bool(options.as_ref(), "learning")?.unwrap_or(true);
+        let inner = CoreBrain::new(
+            context_length, group_threshold, group_mode,
+            pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
+            mint_min_samples, mint_repeat, mint_repeat_cap, match_stats, match_all, match_threshold,
+            match_info, match_info2, match_avg, error_info, error_info2, refine_context,
+            refine_connection, trace_match, trace_refine, trace_error,
+        );
+
+        Ok(Self { inner: RefCell::new(inner) })
     }
 
     /// Register a channel spec. Accepts the same spec shape as JS Brain.
@@ -339,18 +373,6 @@ impl JsBrain {
         Ok(())
     }
 
-    /// Master learning toggle.
-    /// When false, subsequent `processFrame` calls skip op-2 (decay/reap) and error-correction pattern neuron creation.
-    /// They also skip event→event connection strengthening, child-activation strengthening, and accuracy-stats tracking.
-    /// Sensory neuron creation (op-1) still runs because without it the frame cannot be processed at all.
-    /// Pattern activation and voting still run, so inferences remain populated.
-    /// Used by supervised harnesses (MNIST) for the held-out evaluation pass.
-    #[napi(js_name = "setLearning")]
-    pub fn set_learning(&self, learning: bool) -> Result<()> {
-        self.inner.borrow_mut().set_learning(learning);
-        Ok(())
-    }
-
     /// Supervised wiring step that sits on top of the last `processFrame` call.
     /// `actions: Map<channelId, Map<dimId, Map<value, reward>>>` names every action target with its per-value reward.
     /// Each `value` is quantized to the corresponding action neuron; reward is applied to that connection
@@ -420,7 +442,7 @@ impl JsBrain {
 
     /// Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
     /// `neighborNamesByLevel[l]` is the neighbor list a level-l neuron of this channel uses (e.g. the
-    /// radius-(l+1) ring of a retinotopic pixel); levels past the end reuse the last set. Each list is
+    /// radius-(l+1) neighborhood of a retinotopic pixel); levels past the end reuse the last set. Each list is
     /// used verbatim like `setSpatialNeighbors`. Call AFTER registering all channels.
     #[napi(js_name = "setSpatialNeighborLevels")]
     pub fn set_spatial_neighbor_levels(&self, name: String, neighbor_names_by_level: Vec<Vec<String>>) -> Result<()> {
@@ -881,6 +903,19 @@ fn get_opt_i32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<i32>>> {
         }
         Err(_) => Ok(None),
     }
+}
+
+/// Option-aware wrappers over the get_opt_* readers for options that may be absent entirely.
+fn opt_bool(opts: Option<&JsObject>, key: &str) -> Result<Option<bool>> {
+    match opts { Some(o) => get_opt_bool(o, key), None => Ok(None) }
+}
+
+fn opt_u32(opts: Option<&JsObject>, key: &str) -> Result<Option<u32>> {
+    match opts { Some(o) => get_opt_u32(o, key), None => Ok(None) }
+}
+
+fn opt_f64(opts: Option<&JsObject>, key: &str) -> Result<Option<f64>> {
+    match opts { Some(o) => get_opt_f64(o, key), None => Ok(None) }
 }
 
 fn parse_group_mode(s: &str) -> Result<GroupMode> {

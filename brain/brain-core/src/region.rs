@@ -75,6 +75,18 @@ impl Region {
         context_length: u32,
         group_threshold: f64,
         group_mode: GroupMode,
+        learning: bool,
+        mint_min_samples: u64,
+        match_stats: bool,
+        match_all: bool,
+        match_threshold: Option<f64>,
+        match_info: bool,
+        match_info2: bool,
+        match_avg: bool,
+        refine_context: bool,
+        refine_connection: bool,
+        trace_match: bool,
+        trace_refine: bool,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -84,6 +96,18 @@ impl Region {
                 context_length,
                 group_threshold,
                 group_mode,
+                learning,
+                mint_min_samples,
+                match_stats,
+                match_all,
+                match_threshold,
+                match_info,
+                match_info2,
+                match_avg,
+                refine_context,
+                refine_connection,
+                trace_match,
+                trace_refine,
             ));
         }
         Self { c, columns }
@@ -118,27 +142,27 @@ impl Region {
     /// in column-index order (stable regardless of thread scheduling).
     pub fn process_spatial_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>, crate::context::SpatialContext)],
+        tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
-        learning: bool,
-    ) -> Vec<ColumnProcessResult> {
+    ) -> Vec<crate::column::SpatialColumnResult> {
+
         // Phase 1: Route — clone each task into its owning column's work list.
-        // Must happen before par_iter so each column gets an owned Vec it can consume independently.
+        // Must happen before the parallel fan-out so each column owns a list it can consume independently.
         let column_tasks = self.build_column_tasks(tasks, |t| t.0);
 
         // Phase 2: Dispatch — each column processes its tasks in parallel.
-        // new_error_pattern_ids is read-only and implements Sync, so no synchronization needed
-        // Per-task actives and the per-task neighbor-filtered observed context travel inside each task's tuple - no shared level context for spatial
-        let nested: Vec<Vec<ColumnProcessResult>> = self.columns.par_iter_mut()
+        // The per-task actives and neighbor-filtered observed co-activation travel inside each tuple,
+        // so there is no shared mutable state to synchronize.
+        let nested: Vec<Vec<crate::column::SpatialColumnResult>> = self.columns.par_iter_mut()
             .zip(column_tasks.into_par_iter())
             .map(|(col, col_tasks)| {
                 if col_tasks.is_empty() { return Vec::new(); }
-                col.process_spatial_level(&col_tasks, new_error_pattern_ids, frame_number, learning)
+                col.process_spatial_level(&col_tasks, new_error_pattern_ids, frame_number)
             })
             .collect();
 
-        // Phase 3: Collect — flatten in column-index order (Rayon preserves it).
+        // Phase 3: Collect — flatten in column-index order (the parallel iterator preserves it).
         nested.into_iter().flatten().collect()
     }
 
@@ -151,7 +175,6 @@ impl Region {
         level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
-        learning: bool,
     ) -> Vec<ColumnProcessResult> {
         // Phase 1: Route — clone each task into its owning column's work list.
         // Must happen before par_iter so each column gets an owned Vec it can consume independently.
@@ -166,7 +189,7 @@ impl Region {
                 if col_tasks.is_empty() { return Vec::new(); }
                 col.process_temporal_level(
                     &col_tasks, memory_depth, level_context, new_error_pattern_ids,
-                    frame_number, learning,
+                    frame_number,
                 )
             })
             .collect();
@@ -491,6 +514,8 @@ mod tests {
             2,
             0.5,
             GroupMode::Static,
+            true,
+            10, false, false, None, false, false, false, true, true, false, false,
         )
     }
 

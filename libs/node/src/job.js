@@ -207,6 +207,10 @@ export class Job {
 		'contextLength', 'patternForgetRate',
 		'groupThreshold', 'groupMode',
 		'regions', 'columns', 'consensus',
+		'mintMinSamples', 'mintRepeat', 'mintRepeatCap',
+		'matchStats', 'matchAll', 'matchThreshold', 'matchInfo', 'matchInfo2', 'matchAvg',
+		'errorInfo', 'errorInfo2',
+		'refineContext', 'refineConnection',
 	];
 
 	/**

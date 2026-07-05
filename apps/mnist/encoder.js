@@ -84,7 +84,7 @@ export class MNISTPixelChannelsEncoder {
 	 * L0 sees the base radius (default 1 → 8 neighbors), L1 sees radius 2 (24), L2 radius 3 (48), …
 	 * Receptive fields therefore widen with hierarchy depth instead of at the base, so each level's
 	 * matching stays local relative to its vocabulary while coverage grows toward the whole image.
-	 * Rings stop once the radius covers the grid — deeper levels reuse the last (full) ring.
+	 * Neighborhoods stop growing once the radius covers the grid — deeper levels reuse the last (full) set.
 	 * Converts each linear pixel index to (x, y) and lists in-bounds neighbors as channel names.
 	 * Edge/corner pixels naturally get fewer neighbors.
 	 */

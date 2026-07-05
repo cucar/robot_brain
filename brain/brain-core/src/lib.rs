@@ -18,7 +18,6 @@ pub mod types;
 
 mod backup;
 mod column;
-mod config;
 mod context;
 mod diagnostics;
 mod memory;

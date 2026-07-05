@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Job, runJob } from 'robot-brain';
+import { Brain, Job, runJob } from 'robot-brain';
 import { MNISTPixelChannelsEncoder } from '../encoder.js';
 import { loadImages, loadLabels } from '../loader.js';
 
@@ -20,7 +20,7 @@ const PROGRESS_EVERY = 100;
  *   - default: train on the balanced training set (learning on), then `--save-brain <label>` persists it.
  *   - `--load-brain <label>`: resume from a saved brain — train another episode and save again, which is
  *     equivalent to having trained those episodes in one run.
- *   - `--disable-learning`: freeze the brain (setLearning(false)) — no wiring, no decay, no minting. Used for evaluation.
+ *   - `--disable-learning`: construct the brain frozen — no wiring, no decay, no minting. Used for evaluation.
  *   - `--test-data`: run the pass over the held-out test set instead of the training set.
  * Training evaluation = load the trained brain, `--disable-learning`, re-run over the training data.
  * Testing evaluation  = load the trained brain, `--disable-learning --test-data`.
@@ -49,7 +49,7 @@ export default class MNISTTestJob extends Job {
 			perClass: 0,
 			maxTestImages: 0,
 			maxEpisodes: 1,
-			// disableLearning: freeze the brain for this run (setLearning(false)) — no wiring, decay, or minting.
+			// disableLearning: the brain is constructed frozen for this run — no wiring, decay, or minting.
 			// This is how evaluation is done: load a trained brain, disable learning, and run a pass.
 			disableLearning: false,
 			// testData: run the pass over the held-out test set instead of the balanced training set.
@@ -122,35 +122,6 @@ export default class MNISTTestJob extends Job {
 		// network sheds rarely-seen corrections. Must be parsed before the null-default below so it sticks.
 		const forgetIdx = process.argv.indexOf('--forget-rate');
 		if (forgetIdx !== -1 && process.argv[forgetIdx + 1] !== undefined) this.options.patternForgetRate = parseFloat(process.argv[forgetIdx + 1]);
-
-		// --refine none|context|connection|both: spatial pattern refinement ablation. Maps to env vars
-		// brain-core reads once per process (see brain-core/src/config.rs); default (unset) is both ON.
-		const refineIdx = process.argv.indexOf('--refine');
-		if (refineIdx !== -1 && process.argv[refineIdx + 1] !== undefined) {
-			const refine = process.argv[refineIdx + 1];
-			process.env.BRAIN_REFINE_CONTEXT = (refine === 'context' || refine === 'both') ? '1' : '0';
-			process.env.BRAIN_REFINE_CONNECTION = (refine === 'connection' || refine === 'both') ? '1' : '0';
-		}
-
-		// --mint-min-samples N: spatial minting maturity gate — a neuron must hold N error samples before
-		// it may mint corrections (it accumulates stats and recognizes normally meanwhile). 0 = no gate.
-		// Maps to an env var brain-core reads once per process (see brain-core/src/config.rs); default 10.
-		const mintMinIdx = process.argv.indexOf('--mint-min-samples');
-		if (mintMinIdx !== -1 && process.argv[mintMinIdx + 1] !== undefined) process.env.BRAIN_MINT_MIN_SAMPLES = process.argv[mintMinIdx + 1];
-
-		// --match-threshold X: STATIC recognition merge threshold (decoupled from the error side, which
-		// keeps its adaptive grouping for correction minting). Unset = coupled legacy behavior.
-		const matchThrIdx = process.argv.indexOf('--match-threshold');
-		if (matchThrIdx !== -1 && process.argv[matchThrIdx + 1] !== undefined) process.env.BRAIN_MATCH_THRESHOLD = process.argv[matchThrIdx + 1];
-		// --match-info2: likelihood-ratio (MDL v2) recognition — hypothesis test vs the background model.
-		if (process.argv.includes('--match-info2')) process.env.BRAIN_MATCH_INFO2 = '1';
-		// --match-info: information-weighted (MDL) recognition — candidates scored in bits saved,
-		// acceptance = positive net compression; no thresholds (see brain-core/src/config.rs).
-		if (process.argv.includes('--match-info')) process.env.BRAIN_MATCH_INFO = '1';
-		// --match-stats: per-entry match-statistics recognition (experimental; see brain-core/src/config.rs).
-		if (process.argv.includes('--match-stats')) process.env.BRAIN_MATCH_STATS = '1';
-		// --match-all: NO match threshold — the best recognition candidate always fires (experimental).
-		if (process.argv.includes('--match-all')) process.env.BRAIN_MATCH_ALL = '1';
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
@@ -285,7 +256,6 @@ export default class MNISTTestJob extends Job {
 	async executeJob() {
 
 		// Freeze the brain up front when evaluating — no wiring, decay, or minting for the whole run.
-		if (this.config.disableLearning) this.brain.setLearning(false);
 		const learning = !this.config.disableLearning;
 
 		// Split-MNIST is a sequential class-incremental training protocol — only meaningful with
@@ -329,17 +299,15 @@ export default class MNISTTestJob extends Job {
 			// Strict sequential training: each task's data is seen once and never revisited.
 			// There are no task IDs, and the action space stays all ten digits throughout — the digit action
 			// channel is registered up front, so every learn() wires all ten (reward 1 on the true digit, 0 on the rest).
-			this.brain.setLearning(true);
 			const lo = 2 * task * cap;
 			const hi = (2 * task + 2) * cap;
 			const indices = Array.from({ length: hi - lo }, (_, k) => lo + k);
 			await this.trainTaskPass(task, indices);
 			if (this.isShuttingDown) return;
 
-			// Freeze and evaluate the FULL 10-class test set, binned by task.
+			// Evaluate the FULL 10-class test set, binned by task, on a frozen COPY of the brain.
 			// This row of the retention matrix exposes catastrophic forgetting (or its absence) across all tasks.
-			this.brain.setLearning(false);
-			const row = await this.evalTestByTask();
+			const row = await this.evalTestByTaskFrozen();
 			this.splitMatrix.push(row);
 			const rowStr = row.map((a, j) => `T${j}:${(a * 100).toFixed(1)}%`).join(' ');
 			console.log(`    ↳ after task ${task}: ${rowStr}`);
@@ -375,8 +343,25 @@ export default class MNISTTestJob extends Job {
 	}
 
 	/**
+	 * Run the per-task retention row against a frozen copy of the trained brain. Learning never changes
+	 * on a live instance: the trained state round-trips through a backup into a SEPARATE brain
+	 * constructed with learning off, and the training instance continues untouched afterwards.
+	 */
+	async evalTestByTaskFrozen() {
+		const label = 'split_frozen';
+		this.brain.save(this.getJobDir(), label);
+		const trained = this.brain;
+		this.brain = new Brain({ ...this.options, learning: false });
+		this.encoder.registerChannels(this.brain);
+		this.brain.load(this.getJobDir(), label);
+		const row = await this.evalTestByTask();
+		this.brain = trained;
+		return row;
+	}
+
+	/**
 	 * Frozen evaluation over the FULL 10-class test set, returning per-task accuracy [5]. A test image's
-	 * task is floor(label/2). setLearning(false) must already be in effect.
+	 * task is floor(label/2). Runs against the currently active brain instance.
 	 */
 	async evalTestByTask() {
 		const correct = new Array(5).fill(0);

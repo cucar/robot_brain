@@ -78,7 +78,7 @@ impl SpatialContext {
     /// the pattern does not contain) count against the match, so a small pattern can't over-fire on a large
     /// co-activation by matching a fraction of it. Same denominator as temporal — the grouping operation is
     /// identical across the two.
-    pub fn match_observed(&self, observed: &SpatialContext, merge_threshold: f64) -> Option<MatchResult> {
+    pub fn match_observed(&self, observed: &SpatialContext, merge_threshold: f64, trace: bool) -> Option<MatchResult> {
 
         // Pass 1: walk the known context, classifying each entry into common / missing.
         let mut common = Vec::new();
@@ -112,7 +112,7 @@ impl SpatialContext {
         // Jaccard union denominator: common / (common + missing + novel).
         let union_size = (common.len() + missing.len() + novel.len()) as f64;
         if union_size == 0.0 { return None; }
-        if crate::config::trace_match() {
+        if trace {
             let ratio = common.len() as f64 / union_size;
             eprintln!(
                 "[match] known_ctx={} common={} missing={} novel={} ratio={:.3} thr={:.3} {}",
@@ -143,7 +143,7 @@ mod tests {
         observed.add_neuron(1, 1.0);
         observed.add_neuron(2, 1.0);
 
-        let result = known.match_observed(&observed, 0.5).unwrap();
+        let result = known.match_observed(&observed, 0.5, false).unwrap();
         assert_eq!(result.common.len(), 2);
         assert_eq!(result.missing.len(), 0);
         assert_eq!(result.novel.len(), 0);
@@ -159,12 +159,12 @@ mod tests {
         observed.add_neuron(1, 1.0);
 
         // 1 common, 1 missing, 0 novel → 1/2 = 0.5
-        let r05 = known.match_observed(&observed, 0.5).unwrap();
+        let r05 = known.match_observed(&observed, 0.5, false).unwrap();
         assert_eq!(r05.common.len(), 1);
         assert_eq!(r05.missing.len(), 1);
 
         // below 0.9 threshold
-        assert!(known.match_observed(&observed, 0.9).is_none());
+        assert!(known.match_observed(&observed, 0.9, false).is_none());
     }
 
     #[test]
@@ -176,7 +176,7 @@ mod tests {
         observed.add_neuron(1, 1.0);
         observed.add_neuron(99, 1.0);
 
-        let result = known.match_observed(&observed, 0.5).unwrap();
+        let result = known.match_observed(&observed, 0.5, false).unwrap();
         assert_eq!(result.common.len(), 1);
         assert_eq!(result.novel.len(), 1);
         assert_eq!(result.novel[0].neuron_id, 99);

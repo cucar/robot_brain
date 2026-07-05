@@ -14,6 +14,9 @@ import { pathToFileURL } from 'node:url';
  */
 export function parseBrainArgs(argv = process.argv) {
 	const has = flag => argv.includes(flag);
+	// Brain-construction toggles use `flag` (true / null, NOT false): an absent flag stays null so a value
+	// persisted with a loaded brain can fill it in — an explicit CLI flag always wins over the backup.
+	const flag = f => argv.includes(f) ? true : null;
 	const num = (flag, parser) => {
 		const i = argv.indexOf(flag);
 		return i !== -1 && argv[i + 1] !== undefined ? parser(argv[i + 1]) : null;
@@ -22,6 +25,12 @@ export function parseBrainArgs(argv = process.argv) {
 		const i = argv.indexOf(flag);
 		return i !== -1 && argv[i + 1] !== undefined ? argv[i + 1] : null;
 	};
+
+	// --refine none|context|connection|both fans out into the two refinement booleans; unset leaves both
+	// null (core default: both ON, or the loaded brain's persisted values).
+	const refine = str('--refine');
+	const refineContext = refine === null ? null : (refine === 'context' || refine === 'both');
+	const refineConnection = refine === null ? null : (refine === 'connection' || refine === 'both');
 
 	return {
 		diagnostic: has('--diagnostic'),
@@ -42,7 +51,29 @@ export function parseBrainArgs(argv = process.argv) {
 		groupMode: str('--group-mode'),
 		regions: num('--regions', parseInt),
 		columns: num('--columns', parseInt),
-		consensus: str('--consensus')
+		consensus: str('--consensus'),
+		// Learning state, fixed for the life of the brain instance — a frozen evaluation is a separate
+		// instance constructed with learning off and loaded from a backup.
+		learning: has('--disable-learning') ? false : null,
+		// TEMPORARY experimental toggles, passed to the Brain constructor and round-tripped with saved
+		// brains. Each is deleted when its experiment concludes — see brain-core/src/types.rs.
+		mintMinSamples: num('--mint-min-samples', parseInt),
+		mintRepeat: flag('--mint-repeat'),
+		mintRepeatCap: num('--mint-repeat-cap', parseInt),
+		matchStats: flag('--match-stats'),
+		matchAll: flag('--match-all'),
+		matchThreshold: num('--match-threshold', parseFloat),
+		matchInfo: flag('--match-info'),
+		matchInfo2: flag('--match-info2'),
+		matchAvg: flag('--match-avg'),
+		// --error-avg pins the default averaged-threshold creation explicitly, overriding a loaded brain.
+		errorInfo: has('--error-avg') ? false : flag('--error-info'),
+		errorInfo2: flag('--error-info2'),
+		refineContext,
+		refineConnection,
+		traceMatch: flag('--trace-match'),
+		traceRefine: flag('--trace-refine'),
+		traceError: flag('--trace-error')
 	};
 }
 
