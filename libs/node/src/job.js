@@ -207,10 +207,8 @@ export class Job {
 		'contextLength', 'patternForgetRate',
 		'groupThreshold', 'groupMode',
 		'regions', 'columns', 'consensus',
-		'mintMinSamples',
-		'matchStats', 'matchAll', 'matchThreshold', 'matchInfo', 'matchAvg',
-		'errorInfo',
-		'refineContext', 'refineConnection'
+		'matchInfo',
+		'errorInfo'
 	];
 
 	/**

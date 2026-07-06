@@ -40,16 +40,6 @@ impl SpatialContext {
         *strength += 1.0;
     }
 
-    /// Decrement the strength of an existing entry by 1 (no-op if absent). Returns true when the entry has
-    /// decayed to ≤ 0 and should be deleted — the caller removes it and scrubs the context index. Used by
-    /// spatial context refinement to weaken/delete context neurons that were missing from a match.
-    pub fn weaken_neuron(&mut self, neuron_id: NeuronId) -> bool {
-        match self.entries.get_mut(&neuron_id) {
-            Some(strength) => { *strength -= 1.0; *strength <= 0.0 }
-            None => false,
-        }
-    }
-
     /// Remove an entry explicitly. Used by the spatial death cascade to scrub a dying context
     /// neuron from a child pattern's stored context.
     pub fn remove(&mut self, neuron_id: NeuronId) {

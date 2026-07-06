@@ -154,10 +154,8 @@ impl JsBrain {
     ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
     ///
     /// TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
-    ///   mintMinSamples: number (default 10)
-    ///   matchStats / matchAll / matchInfo / matchAvg: boolean, matchThreshold: number, errorInfo: boolean
-    ///   refineContext / refineConnection: boolean (default true)
-    ///   traceMatch / traceRefine / traceError: boolean
+    ///   matchInfo / errorInfo: boolean
+    ///   traceMatch / traceError: boolean
     ///
     /// The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
     /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
@@ -191,17 +189,9 @@ impl JsBrain {
         // TEMPORARY experimental toggles for the spatial mechanisms under test, passed through like
         // every other option — each is deleted when its experiment concludes; this list must shrink.
         let opts = options.as_ref();
-        let mint_min_samples = opt_u32(opts, "mintMinSamples")?.map(u64::from).unwrap_or(10);
-        let match_stats = opt_bool(opts, "matchStats")?.unwrap_or(false);
-        let match_all = opt_bool(opts, "matchAll")?.unwrap_or(false);
-        let match_threshold = opt_f64(opts, "matchThreshold")?;
         let match_info = opt_bool(opts, "matchInfo")?.unwrap_or(false);
-        let match_avg = opt_bool(opts, "matchAvg")?.unwrap_or(false);
         let error_info = opt_bool(opts, "errorInfo")?.unwrap_or(false);
-        let refine_context = opt_bool(opts, "refineContext")?.unwrap_or(true);
-        let refine_connection = opt_bool(opts, "refineConnection")?.unwrap_or(true);
         let trace_match = opt_bool(opts, "traceMatch")?.unwrap_or(false);
-        let trace_refine = opt_bool(opts, "traceRefine")?.unwrap_or(false);
         let trace_error = opt_bool(opts, "traceError")?.unwrap_or(false);
 
         // The learning state is fixed at construction: a frozen evaluation is a separate brain
@@ -210,9 +200,7 @@ impl JsBrain {
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            mint_min_samples, match_stats, match_all, match_threshold,
-            match_info, match_avg, error_info, refine_context,
-            refine_connection, trace_match, trace_refine, trace_error,
+            match_info, error_info, trace_match, trace_error,
         );
 
         Ok(Self { inner: RefCell::new(inner) })
@@ -910,14 +898,6 @@ fn get_opt_i32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<i32>>> {
 /// Option-aware wrappers over the get_opt_* readers for options that may be absent entirely.
 fn opt_bool(opts: Option<&JsObject>, key: &str) -> Result<Option<bool>> {
     match opts { Some(o) => get_opt_bool(o, key), None => Ok(None) }
-}
-
-fn opt_u32(opts: Option<&JsObject>, key: &str) -> Result<Option<u32>> {
-    match opts { Some(o) => get_opt_u32(o, key), None => Ok(None) }
-}
-
-fn opt_f64(opts: Option<&JsObject>, key: &str) -> Result<Option<f64>> {
-    match opts { Some(o) => get_opt_f64(o, key), None => Ok(None) }
 }
 
 fn parse_group_mode(s: &str) -> Result<GroupMode> {

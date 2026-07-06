@@ -112,17 +112,9 @@ pub struct Column {
 
     // ── Temporary experimental toggles ──────────────────────────────────────────
     // Handed to every neuron this column creates or loads; the field docs live on Neuron.
-    mint_min_samples: u64,
-    match_stats: bool,
-    match_all: bool,
-    match_threshold: Option<f64>,
     match_info: bool,
-    match_avg: bool,
     error_info: bool,
-    refine_context: bool,
-    refine_connection: bool,
     trace_match: bool,
-    trace_refine: bool,
     trace_error: bool,
 
     /// Master learning toggle, fixed at construction and handed to every neuron this column creates or loads.
@@ -140,17 +132,9 @@ impl Column {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
-        mint_min_samples: u64,
-        match_stats: bool,
-        match_all: bool,
-        match_threshold: Option<f64>,
         match_info: bool,
-        match_avg: bool,
         error_info: bool,
-        refine_context: bool,
-        refine_connection: bool,
         trace_match: bool,
-        trace_refine: bool,
         trace_error: bool,
     ) -> Self {
         Self {
@@ -159,17 +143,9 @@ impl Column {
             context_length,
             group_threshold,
             group_mode,
-            mint_min_samples,
-            match_stats,
-            match_all,
-            match_threshold,
             match_info,
-            match_avg,
             error_info,
-            refine_context,
-            refine_connection,
             trace_match,
-            trace_refine,
             trace_error,
             learning,
             neurons: FxHashMap::default(),
@@ -600,17 +576,9 @@ impl Column {
                 self.channel_actions.clone(),
                 self.context_length,
                 self.learning,
-                self.mint_min_samples,
-                self.match_stats,
-                self.match_all,
-                self.match_threshold,
                 self.match_info,
-                self.match_avg,
                 self.error_info,
-                self.refine_context,
-                self.refine_connection,
                 self.trace_match,
-                self.trace_refine,
                 self.trace_error,
             );
             // pre-wire default action connections at neutral reward across all voting distances
@@ -668,17 +636,9 @@ impl Column {
             self.channel_actions.clone(),
             self.context_length,
             self.learning,
-            self.mint_min_samples,
-            self.match_stats,
-            self.match_all,
-            self.match_threshold,
             self.match_info,
-            self.match_avg,
             self.error_info,
-            self.refine_context,
-            self.refine_connection,
             self.trace_match,
-            self.trace_refine,
             self.trace_error,
         );
 
@@ -695,7 +655,6 @@ impl Column {
                 neuron.add_spatial_child(child.pattern_id, child.activation_strength);
                 if let Some(entry) = neuron.get_spatial_routing_table_mut().get_mut(&child.pattern_id) {
                     entry.last_activation_frame = child.last_activation_frame;
-                    entry.match_stats = crate::types::WelfordState { n: child.match_n, mean: child.match_mean, m2: child.match_m2 };
                     entry.fires = child.fires;
                     entry.evidence = child.evidence;
                     entry.price = child.price;
@@ -732,10 +691,6 @@ impl Column {
 
         // load per-(neuron, age) Welford error stats.
         // Spatial serializes as age=0; temporal serializes at its real age (>= 1).
-        for stat in &data.match_stats {
-            neuron.load_spatial_match_stats(stat.n, stat.mean, stat.m2);
-        }
-
         for stat in &data.error_stats {
             if stat.age == 0 {
                 neuron.load_spatial_error_stats(stat.n, stat.mean, stat.m2);
@@ -853,7 +808,7 @@ mod tests {
             0.5,
             GroupMode::Static,
             true,
-            10, false, false, None, false, false, false, true, true, false, false, false,
+            false, false, false, false,
         )
     }
 

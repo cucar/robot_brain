@@ -10,10 +10,9 @@
 ///   - `neurons.csv`            id,temporal_level,spatial_level
 ///   - `base_neurons.csv`       neuron_id,channel_id,type,dimension_id,val
 ///   - `connections.csv`        from_neuron_id,to_neuron_id,distance,strength,reward
-///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength,match_n,match_mean,match_m2,fires,evidence,price
+///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength,fires,evidence,price
 ///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength
 ///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2
-///   - `neuron_match_stats.csv` neuron_id,n,mean,m2
 ///   - `spatial_freq.csv`       neuron_id,ctx_neuron_id,count — context-neighbor base rates, with one
 ///                              sentinel row per neuron (ctx_neuron_id == neuron_id) carrying the frame denominator.
 ///   - `spatial_inference_freq.csv` neuron_id,target_neuron_id,count — inference-neighbor base rates,
@@ -90,7 +89,6 @@ impl Backup {
         self.write_neuron_error_stats(&folder, snapshot)?;
         self.write_spatial_freq(&folder, snapshot)?;
         self.write_spatial_inference_freq(&folder, snapshot)?;
-        self.write_neuron_match_stats(&folder, snapshot)?;
 
         println!("💾 Backup saved: {} ({} neurons)", folder.display(), snapshot.neurons.len());
 
@@ -159,7 +157,6 @@ impl Backup {
                 children: Vec::new(),
                 context_refs: Vec::new(),
                 error_stats: Vec::new(),
-                match_stats: Vec::new(),
                 context_counts: Vec::new(),
                 context_frames: 0,
                 inference_counts: Vec::new(),
@@ -225,14 +222,10 @@ impl Backup {
                 let pattern_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pattern id: {}", e))?;
                 let parent_id: NeuronId = row[1].parse().map_err(|e| format!("Bad parent id: {}", e))?;
                 let strength: f64 = row[2].parse().map_err(|e| format!("Bad strength: {}", e))?;
-                // Per-entry match stats (columns 3-5); absent in older backups → zeros (bar re-warms from init).
-                let match_n: u64 = if row.len() > 5 { row[3].parse().unwrap_or(0) } else { 0 };
-                let match_mean: f64 = if row.len() > 5 { row[4].parse().unwrap_or(0.0) } else { 0.0 };
-                let match_m2: f64 = if row.len() > 5 { row[5].parse().unwrap_or(0.0) } else { 0.0 };
-                let fires: u64 = if row.len() > 6 { row[6].parse().unwrap_or(0) } else { 0 };
-                // Payment state (columns 7-8); absent in older backups → zeros (born paid).
-                let evidence: f64 = if row.len() > 8 { row[7].parse().unwrap_or(0.0) } else { 0.0 };
-                let price: f64 = if row.len() > 8 { row[8].parse().unwrap_or(0.0) } else { 0.0 };
+                let fires: u64 = if row.len() > 3 { row[3].parse().unwrap_or(0) } else { 0 };
+                // Payment state (columns 4-5); absent in older backups → zeros (born paid).
+                let evidence: f64 = if row.len() > 5 { row[4].parse().unwrap_or(0.0) } else { 0.0 };
+                let price: f64 = if row.len() > 5 { row[5].parse().unwrap_or(0.0) } else { 0.0 };
 
                 neuron_parents.insert(pattern_id, parent_id);
 
@@ -248,9 +241,6 @@ impl Backup {
                     activation_strength: strength,
                     last_activation_frame: 0,
                     context: Vec::new(),
-                    match_n,
-                    match_mean,
-                    match_m2,
                     fires,
                     evidence,
                     price,
@@ -338,20 +328,6 @@ impl Backup {
                 let neuron = neurons.get_mut(&neuron_id)
                     .ok_or_else(|| format!("spatial_inference_freq neuron not found: {}", neuron_id))?;
                 if target_id == neuron_id { neuron.inference_frames = count; } else { neuron.inference_counts.push((target_id, count)); }
-            }
-        }
-
-        let match_stats_file = folder.join("neuron_match_stats.csv");
-        if match_stats_file.exists() {
-            for row in read_csv(&match_stats_file)? {
-                if row.len() < 4 { continue; }
-                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad match-stats neuron id: {}", e))?;
-                let n: u64 = row[1].parse().map_err(|e| format!("Bad match-stats n: {}", e))?;
-                let mean: f64 = row[2].parse().map_err(|e| format!("Bad match-stats mean: {}", e))?;
-                let m2: f64 = row[3].parse().map_err(|e| format!("Bad match-stats m2: {}", e))?;
-                let neuron = neurons.get_mut(&neuron_id)
-                    .ok_or_else(|| format!("match_stats neuron not found: {}", neuron_id))?;
-                neuron.match_stats.push(SerializedErrorStats { age: 0, n, mean, m2 });
             }
         }
 
@@ -493,14 +469,11 @@ impl Backup {
                 None => continue,
             };
             let mut strength = 0.0;
-            let (mut match_n, mut match_mean, mut match_m2, mut fires) = (0u64, 0.0f64, 0.0f64, 0u64);
+            let mut fires = 0u64;
             let (mut evidence, mut price) = (0.0f64, 0.0f64);
             if let Some(parent) = neuron_map.get(&parent_id) {
                 if let Some(child) = parent.children.iter().find(|c| c.pattern_id == entry.neuron.id) {
                     strength = child.activation_strength;
-                    match_n = child.match_n;
-                    match_mean = child.match_mean;
-                    match_m2 = child.match_m2;
                     fires = child.fires;
                     evidence = child.evidence;
                     price = child.price;
@@ -510,9 +483,6 @@ impl Backup {
                 entry.neuron.id.to_string(),
                 parent_id.to_string(),
                 strength.to_string(),
-                match_n.to_string(),
-                match_mean.to_string(),
-                match_m2.to_string(),
                 fires.to_string(),
                 evidence.to_string(),
                 price.to_string(),
@@ -583,22 +553,6 @@ impl Backup {
             }
         }
         w.flush().map_err(|e| format!("Failed to flush spatial_inference_freq.csv: {}", e))
-    }
-
-    /// Write the per-neuron match-ratio statistics (one row per neuron that has samples).
-    fn write_neuron_match_stats(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
-        let mut w = open_csv(&folder.join("neuron_match_stats.csv"))?;
-        for entry in &snapshot.neurons {
-            for stat in &entry.neuron.match_stats {
-                write_row(&mut w, &[
-                    entry.neuron.id.to_string(),
-                    stat.n.to_string(),
-                    stat.mean.to_string(),
-                    stat.m2.to_string(),
-                ])?;
-            }
-        }
-        w.flush().map_err(|e| format!("Failed to flush neuron_match_stats.csv: {}", e))
     }
 
     fn write_neuron_error_stats(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
@@ -890,7 +844,6 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
-                        match_stats: Vec::new(),
                         context_counts: Vec::new(),
                         context_frames: 0,
                         inference_counts: Vec::new(),
@@ -913,7 +866,6 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
-                        match_stats: Vec::new(),
                         context_counts: Vec::new(),
                         context_frames: 0,
                         inference_counts: Vec::new(),

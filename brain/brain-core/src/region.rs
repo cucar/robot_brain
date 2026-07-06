@@ -76,17 +76,9 @@ impl Region {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
-        mint_min_samples: u64,
-        match_stats: bool,
-        match_all: bool,
-        match_threshold: Option<f64>,
         match_info: bool,
-        match_avg: bool,
         error_info: bool,
-        refine_context: bool,
-        refine_connection: bool,
         trace_match: bool,
-        trace_refine: bool,
         trace_error: bool,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
@@ -98,17 +90,9 @@ impl Region {
                 group_threshold,
                 group_mode,
                 learning,
-                mint_min_samples,
-                match_stats,
-                match_all,
-                match_threshold,
                 match_info,
-                match_avg,
                 error_info,
-                refine_context,
-                refine_connection,
                 trace_match,
-                trace_refine,
                 trace_error,
             ));
         }
@@ -515,7 +499,7 @@ mod tests {
             0.5,
             GroupMode::Static,
             true,
-            10, false, false, None, false, false, false, true, true, false, false, false,
+            false, false, false, false,
         )
     }
 

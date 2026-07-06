@@ -24,15 +24,6 @@ use crate::types::*;
 /// fallback. Not a tunable knob — kept here to avoid a magic number in the error-threshold getters.
 const ERROR_MIN_SAMPLES: u64 = 3;
 
-/// Minimum samples in a routing entry's MATCH stats before its bar leaves the init value.
-/// Below this, the entry matches at MATCH_BAR_INIT — newborn patterns are generously foldable
-/// until their own match evidence earns them strictness.
-const MATCH_MIN_SAMPLES: u64 = 3;
-
-/// Initial per-entry match bar (the grouping-threshold fallback): a new pattern folds anything
-/// that matches it at 50%+ until its match distribution takes over.
-const MATCH_BAR_INIT: f64 = 0.5;
-
 /// A neuron's same-frame co-activation prediction and the threshold it was cast under.
 /// Spatial has no age axis: the prediction is about this frame only.
 #[derive(Debug, Clone)]
@@ -77,11 +68,6 @@ pub struct SpatialRoutingEntry {
     /// common context entries, entry strength / fires approximates p(entry | pattern) — the
     /// likelihood model for likelihood-ratio recognition.
     pub fires: u64,
-    /// Welford stats over the match RATIOS observed when this entry was the best candidate
-    /// (recorded win-or-lose, so the distribution is uncensored). The entry's recognition bar is
-    /// the mean of this distribution — per-pattern earned strictness: crisp patterns converge to a
-    /// strict bar, variable patterns stay permissive and keep folding their variants.
-    pub match_stats: WelfordState,
     /// Evidence deposited toward this pattern's description cost, in bits.
     /// Under information-priced creation a pattern is born UNPAID: the recognizer matches it like
     /// any other candidate, but a match deposits the frame's surprisal here instead of firing.
@@ -287,33 +273,6 @@ pub struct Neuron {
     // behavior is hard-wired and the toggle is DELETED. This list is the current test matrix, and it
     // must shrink.
 
-    /// MATURITY GATE for spatial correction minting: a neuron may not mint error-correction patterns until
-    /// its spatial error stats hold at least this many samples. Until then it only accumulates statistics
-    /// (error samples are recorded regardless of the mint decision) and keeps recognizing normally.
-    /// Rationale: "surprise" is only meaningful against an established distribution — newborn neurons
-    /// minting against 1-2 exposures of noise produce write-once corrections that never re-fire.
-    /// 0 disables the gate. Spatial only; temporal minting is untouched.
-    mint_min_samples: u64,
-
-    /// EXPERIMENTAL per-entry match statistics for spatial recognition: candidates are matched with no
-    /// shared threshold; the score-best candidate records its Jaccard ratio into its routing entry's match
-    /// stats and activates only if the ratio clears the entry's own bar (mean of its distribution, 0.5 until
-    /// warm). Default OFF = legacy recognition (shared adaptive merge threshold from the host's error stats).
-    /// Best measured form of the experiment; kept behind this flag after it traded too much selectivity
-    /// for its (large) compression — see the wavefront branch notes.
-    match_stats: bool,
-
-    /// MATCH-ALL spatial recognition: no match threshold at all — the best candidate (by score) always
-    /// fires, regardless of how well it matches. Recognition never rejects, so the vocabulary only grows
-    /// while a parent has no children yet. Experimental: tests whether refinement alone can keep pattern
-    /// identities discriminative without any rejection mechanism. Default OFF.
-    match_all: bool,
-
-    /// STATIC spatial match threshold: when set, legacy recognition uses this fixed merge threshold
-    /// instead of the adaptive coupling (1 − error threshold) — DECOUPLING recognition strictness from
-    /// the error side, which keeps its dynamic grouping for correction minting untouched. Unset = coupled.
-    match_threshold: Option<f64>,
-
     /// LIKELIHOOD-RATIO spatial recognition (MDL): candidates are scored as a hypothesis test — for
     /// each stored context entry, log2 of the ratio between its probability under the candidate (from the
     /// entry's per-fire co-occurrence counts) and under the background model (the host's local marginal
@@ -321,21 +280,6 @@ pub struct Neuron {
     /// log((1-p(e|C))/(1-p(e|bg))); novel entries cancel (siblings encode them). Acceptance: score > 0 —
     /// the candidate must explain the observation better than "no pattern". No thresholds. Default OFF.
     match_info: bool,
-
-    /// AVERAGED spatial match threshold: the neuron keeps running statistics over the match ratios of
-    /// its recognition events (recorded win-or-lose so the distribution stays uncensored) and its merge
-    /// threshold is their smoothed mean — the mirror image of the averaged error threshold on the
-    /// creation side. Falls back to the static grouping coefficient until enough samples exist.
-    /// Default OFF.
-    match_avg: bool,
-
-    /// Spatial CONTEXT (sources) refinement — consolidating a matched pattern's stored context toward the
-    /// observed configuration in recognition. Default ON.
-    refine_context: bool,
-
-    /// Spatial CONNECTION (targets) refinement — pruning a pattern's unobserved predictions in connection
-    /// learning. Default ON.
-    refine_connection: bool,
 
     /// INFORMATION-PRICED spatial correction creation (MDL): a failed prediction is measured in
     /// surprisal under the neuron's local inference base rates, and every failure POOLS into the
@@ -354,11 +298,6 @@ pub struct Neuron {
     /// Diagnostic: when set, the spatial prediction evaluation prints the predicted/observed sizes, the
     /// measured error, and the threshold verdict per evaluated frame (to stderr). Off by default.
     trace_error: bool,
-
-    /// Diagnostic: when set, spatial context refinement prints the pattern id, its resulting context size, and
-    /// the pixels added (novel) vs removed (missing) on that refinement. Shows whether a context inflates
-    /// toward a union blur or contracts toward a specific core over exposures. Off by default (to stderr).
-    trace_refine: bool,
 
     /// Master learning toggle, fixed at construction like every other option.
     /// When false, recognition and voting still run but every substrate write is skipped.
@@ -395,10 +334,6 @@ pub struct Neuron {
 
     /// Spatial Welford error stats — single bucket (spatial has no age dimension).
     spatial_error_stats: Option<WelfordState>,
-
-    /// Running statistics over the match ratios of this neuron's recognition events.
-    /// The averaged-match-threshold mode reads its merge bar from the mean of this distribution.
-    spatial_match_stats: Option<WelfordState>,
 
     /// The background model of likelihood-ratio recognition (match-info): per CONTEXT neighbor, the
     /// count of frames it was co-active while this neuron processed a frame. Divided by the frame
@@ -470,17 +405,9 @@ impl Neuron {
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         context_length: u32,
         learning: bool,
-        mint_min_samples: u64,
-        match_stats: bool,
-        match_all: bool,
-        match_threshold: Option<f64>,
         match_info: bool,
-        match_avg: bool,
         error_info: bool,
-        refine_context: bool,
-        refine_connection: bool,
         trace_match: bool,
-        trace_refine: bool,
         trace_error: bool,
     ) -> Self {
         Self {
@@ -489,17 +416,9 @@ impl Neuron {
             group_threshold,
             group_mode,
             context_length,
-            mint_min_samples,
-            match_stats,
-            match_all,
-            match_threshold,
             match_info,
-            match_avg,
             error_info,
-            refine_context,
-            refine_connection,
             trace_match,
-            trace_refine,
             trace_error,
             learning,
             channel_action_ids,
@@ -509,7 +428,6 @@ impl Neuron {
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
             spatial_error_stats: None,
-            spatial_match_stats: None,
             spatial_context_counts: FxHashMap::default(),
             spatial_context_frames: 0,
             spatial_inference_counts: FxHashMap::default(),
@@ -567,13 +485,6 @@ impl Neuron {
     /// Spatial correction threshold — selects the single spatial bucket and defers to
     /// [grouping_error_threshold].
     pub fn get_spatial_error_threshold(&self) -> f64 {
-        // Maturity gate: until the spatial error stats hold enough samples, report an unreachable
-        // threshold (error_rate is at most 1.0, and minting requires error_rate > threshold), so the
-        // neuron accumulates its error distribution instead of minting corrections against noise.
-        // Applies ONLY to this mint-side threshold — recognition reads grouping_merge_threshold
-        // directly, so the merge bar keeps its normal earned value during warmup.
-        let n = self.spatial_error_stats.as_ref().map_or(0, |s| s.n);
-        if n < self.mint_min_samples { return 1.0; }
         self.grouping_error_threshold(self.spatial_error_stats.as_ref())
     }
 
@@ -605,11 +516,6 @@ impl Neuron {
         self.temporal_error_stats[idx] = Some(WelfordState { n, mean, m2 });
     }
 
-    /// Restore the match-ratio statistics from a snapshot.
-    pub fn load_spatial_match_stats(&mut self, n: u64, mean: f64, m2: f64) {
-        self.spatial_match_stats = Some(WelfordState { n, mean, m2 });
-    }
-
     /// Restoration entry point: install the spatial Welford bucket.
     pub fn load_spatial_error_stats(&mut self, n: u64, mean: f64, m2: f64) {
         self.spatial_error_stats = Some(WelfordState { n, mean, m2 });
@@ -628,9 +534,6 @@ impl Neuron {
             children: self.serialize_children(),
             context_refs: self.serialize_context_refs(),
             error_stats: self.serialize_error_stats(),
-            match_stats: self.spatial_match_stats.as_ref()
-                .map(|s| vec![SerializedErrorStats { age: 0, n: s.n, mean: s.mean, m2: s.m2 }])
-                .unwrap_or_default(),
             context_counts: self.spatial_context_counts.iter().map(|(&id, &c)| (id, c)).collect(),
             context_frames: self.spatial_context_frames,
             inference_counts: self.spatial_inference_counts.iter().map(|(&id, &c)| (id, c)).collect(),
@@ -701,9 +604,6 @@ impl Neuron {
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
-                match_n: entry.match_stats.n,
-                match_mean: entry.match_stats.mean,
-                match_m2: entry.match_stats.m2,
                 fires: entry.fires,
                 evidence: entry.evidence,
                 price: entry.price,
@@ -716,9 +616,6 @@ impl Neuron {
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
-                match_n: 0,
-                match_mean: 0.0,
-                match_m2: 0.0,
                 fires: 0,
                 evidence: 0.0,
                 price: 0.0,
@@ -1055,7 +952,6 @@ impl Neuron {
                 context: crate::context::SpatialContext::new(),
                 activation_strength: initial_strength,
                 last_activation_frame: 0,
-                match_stats: WelfordState::new(),
                 fires: 0,
                 evidence: 0.0,
                 price: 0.0,
@@ -1097,36 +993,6 @@ impl Neuron {
         }
 
         self.add_spatial_context_index(neuron_id, pattern_id);
-    }
-
-    /// SPATIAL context refinement (sources): consolidate a matched pattern's stored context toward the
-    /// observed configuration — STRENGTHEN entries common to the match, ADD novel observed entries,
-    /// WEAKEN entries missing from the match and delete them at zero strength. Host-local (context +
-    /// the context index); the cross-neuron contextRef scrub is unnecessary at forget_rate 0.
-    fn refine_spatial_context(&mut self, pattern_id: NeuronId, m: &crate::types::MatchResult) {
-        {
-            let entry = self.spatial_routing_table.get_mut(&pattern_id)
-                .expect("refine_spatial_context: pattern not in spatial routing table");
-            for item in &m.common { entry.context.strengthen_neuron(item.neuron_id); }
-        }
-        for item in &m.novel { self.add_spatial_context(pattern_id, item.neuron_id, 1.0); }
-        let mut to_delete: Vec<NeuronId> = Vec::new();
-        {
-            let entry = self.spatial_routing_table.get_mut(&pattern_id)
-                .expect("refine_spatial_context: pattern not in spatial routing table");
-            for item in &m.missing {
-                if entry.context.weaken_neuron(item.neuron_id) { to_delete.push(item.neuron_id); }
-            }
-        }
-        let deleted = to_delete.len();
-        for nid in to_delete { let _ = self.remove_spatial_context(pattern_id, nid); }
-        if self.trace_refine {
-            let sz = self.spatial_routing_table.get(&pattern_id).map(|e| e.context.size()).unwrap_or(0);
-            eprintln!(
-                "[refine] pat={} ctx={} added(novel)={} weakened(missing)={} deleted={}",
-                pattern_id, sz, m.novel.len(), m.missing.len(), deleted
-            );
-        }
     }
 
     /// Adds a neuron to the temporal context index.
@@ -1494,28 +1360,15 @@ impl Neuron {
             None => return (Vec::new(), unpaid_winner),
         };
 
-        // Materialize the winning match's entry lists only for the consumers that need them —
-        // context refinement and the likelihood-model update. Every other path already has the
-        // numbers it needs, which is what keeps the scoring loop allocation-free.
+        // Materialize the winning match's entry lists only for the consumers that need them — the
+        // likelihood-model update. Every other path already has the numbers it needs, which is
+        // what keeps the scoring loop allocation-free.
         let best_match = self.materialize_winner_match(&best, context_neighbors, merge_threshold);
 
         // The active mode's acceptance gate decides whether the winner fires, and the accepted
         // fire sharpens the likelihood model in the hypothesis-test mode.
         if !self.approve_info_winner(&best, ratio, rank) { return (Vec::new(), unpaid_winner); }
-        if !self.approve_averaged_winner(&best, ratio) { return (Vec::new(), unpaid_winner); }
         self.update_likelihood_model(&best, best_match.as_ref());
-        if !self.approve_stats_winner(&best, ratio) { return (Vec::new(), unpaid_winner); }
-
-        // Context refinement (sources): consolidate the matched pattern's context toward the observed
-        // configuration. Training-only (learning gate = reproducibility guard); paired with connection
-        // refinement so both the pattern's inputs AND its predictions adjust each match.
-        // Gated by the context-refinement toggle (default ON). Runs only on a FIRED match.
-        if self.learning && self.refine_context {
-            let m = best_match.as_ref()
-                .expect("winner match not materialized for refinement")
-                .clone();
-            self.refine_spatial_context(best.pattern_id, &m);
-        }
 
         // Activate the winning pattern (strengthen child activation in learning mode).
         let death_frame = if self.learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
@@ -1547,14 +1400,10 @@ impl Neuron {
     /// The candidate filter threshold for the active recognition mode.
     /// legacy (default): candidates are filtered by the shared adaptive merge threshold (1 − E)
     /// read from the HOST's error stats, then ranked by score — the original recognition.
-    /// A static override replaces the adaptive coupling with a fixed threshold when configured.
-    /// Every other mode disables the shared filter (threshold 0.0) because its strictness lives
-    /// elsewhere: per-entry match stats, the neuron's averaged match bar, the information criteria,
-    /// or nowhere at all (match-all never rejects).
+    /// The info mode disables the shared filter (threshold 0.0) because its strictness lives in
+    /// the likelihood-ratio criterion instead.
     fn resolve_spatial_merge_threshold(&self) -> f64 {
-        let any_mode = self.match_stats || self.match_all || self.match_info || self.match_avg;
-        if any_mode { return 0.0; }
-        if let Some(t) = self.match_threshold { return t; }
+        if self.match_info { return 0.0; }
         self.grouping_merge_threshold(self.spatial_error_stats.as_ref())
     }
 
@@ -1701,7 +1550,7 @@ impl Neuron {
     /// need them: context refinement and the likelihood-model update. None when no consumer will.
     fn materialize_winner_match(&self, best: &PartialMatch, observed: &SpatialContext, merge_threshold: f64) -> Option<MatchResult> {
 
-        let need_winner_match = self.learning && (self.match_info || self.refine_context);
+        let need_winner_match = self.learning && self.match_info;
         if !need_winner_match { return None; }
         Some(self.spatial_routing_table.get(&best.pattern_id)
             .expect("materialize_winner_match: best pattern missing from spatial routing table")
@@ -1720,26 +1569,6 @@ impl Neuron {
         rank > 0.0
     }
 
-    /// Averaged-match-threshold mode: the bar is the smoothed mean of the ratios this neuron has
-    /// observed across ALL its recognition events, mirroring the averaged error threshold on the
-    /// creation side. The sample is recorded win-or-lose BEFORE the decision reads the bar, so the
-    /// distribution stays uncensored and the decision uses the state as of the previous event.
-    fn approve_averaged_winner(&mut self, best: &PartialMatch, ratio: f64) -> bool {
-
-        if !self.match_avg || self.match_all { return true; }
-        let bar = match &self.spatial_match_stats {
-            Some(stats) if stats.n >= ERROR_MIN_SAMPLES => stats.mean,
-            _ => self.group_threshold,
-        };
-        if self.learning {
-            self.spatial_match_stats.get_or_insert_with(WelfordState::new).update(ratio);
-        }
-        if self.trace_match {
-            eprintln!("[avg] pat={} ratio={:.3} bar={:.3} {}", best.pattern_id, ratio, bar, if ratio >= bar { "FIRE" } else { "reject" });
-        }
-        ratio >= bar
-    }
-
     /// Likelihood-model update on an accepted fire: count the fire and strengthen the entries that
     /// were present, so entry strength / fires tracks p(entry | pattern). This is the strengthen-common
     /// half of context refinement, standalone — no novel additions, no deletions, identities cannot
@@ -1753,28 +1582,6 @@ impl Neuron {
             .expect("update_likelihood_model: best pattern missing from spatial routing table");
         entry.fires += 1;
         for item in &m.common { entry.context.strengthen_neuron(item.neuron_id); }
-    }
-
-    /// Match-stats mode: the winner's bar is read BEFORE this frame's sample is recorded, the sample
-    /// is recorded win-or-lose, and activation requires the ratio to clear the winner's own bar.
-    /// Under match-all the winner is never rejected (and no stats are needed), so this is skipped.
-    fn approve_stats_winner(&mut self, best: &PartialMatch, ratio: f64) -> bool {
-
-        if !self.match_stats || self.match_all { return true; }
-        let bar = {
-            let entry = self.spatial_routing_table.get(&best.pattern_id)
-                .expect("approve_stats_winner: best pattern missing from spatial routing table");
-            if entry.match_stats.n < MATCH_MIN_SAMPLES { MATCH_BAR_INIT } else { entry.match_stats.mean }
-        };
-        if self.learning {
-            self.spatial_routing_table.get_mut(&best.pattern_id)
-                .expect("approve_stats_winner: best pattern missing from spatial routing table")
-                .match_stats.update(ratio);
-        }
-        if self.trace_match {
-            eprintln!("[recog] pat={} ratio={:.3} bar={:.3} {}", best.pattern_id, ratio, bar, if ratio >= bar { "FIRE" } else { "reject" });
-        }
-        ratio >= bar
     }
 
     /// Cast this neuron's same-frame prediction, unless a fired child pattern already represents it.
@@ -2019,29 +1826,7 @@ impl Neuron {
             self.spatial_target_dims.insert(neighbor.id, (neighbor.channel_id, neighbor.dim_id));
         }
 
-        // optional connection refinement: prune existing edges toward targets that were NOT observed this frame.
-        if self.refine_connection { self.refine_spatial_connections(neighbors); }
         timings.learn_connections = start.elapsed().as_secs_f64();
-    }
-
-    /// Connection (target) refinement: prune existing edges toward targets that were NOT observed this frame.
-    fn refine_spatial_connections(&mut self, neighbors: &[ActiveNeuron]) {
-        let neighbor_ids: FxHashSet<NeuronId> = neighbors.iter().map(|a| a.id).collect();
-        let mut to_prune: Vec<NeuronId> = Vec::new();
-
-        // A prediction that failed to appear is weakened by 1.0; at 0 or below it is marked for deletion.
-        for (&target, conn) in self.spatial_connections.iter_mut() {
-            if target != self.id && !neighbor_ids.contains(&target) {
-                conn.strength -= 1.0;
-                if conn.strength <= 0.0 { to_prune.push(target); }
-            }
-        }
-
-        // A pruned prediction is gone outright; if the target recurs, a fresh edge is created.
-        for target in to_prune {
-            self.spatial_connections.remove(&target);
-            self.spatial_target_dims.remove(&target);
-        }
     }
 
     /// Temporal frame processing — per-age iteration over the sliding window. Matching
@@ -2152,13 +1937,6 @@ impl Neuron {
                 Some(b) => b,
                 None => continue, // try older age if there is a match
             };
-
-            // refine_context is intentionally disabled. Refining the matched pattern's
-            // stored context mid-training made recognition non-reproducible: training-time
-            // recognition saw "in-progress" patterns, later replays saw fully-refined ones,
-            // so trajectories diverged. Every match now uses the pattern exactly as it
-            // was created/installed. PartialMatch's common/missing/novel slices that
-            // refine_context needed are gone with it.
 
             // activate the matched pattern if it was not elected to be activated already
             let activate = !activated_pattern_ids.contains(&best.pattern_id);
@@ -2467,8 +2245,6 @@ pub struct SerializedNeuron {
     pub children: Vec<SerializedChild>,
     pub context_refs: Vec<SerializedContextRef>,
     pub error_stats: Vec<SerializedErrorStats>,
-    /// Match-ratio statistics for the averaged-match-threshold mode (empty when never sampled).
-    pub match_stats: Vec<SerializedErrorStats>,
     /// Local context-neighbor activation counts + frame denominator (likelihood-ratio recognition).
     pub context_counts: Vec<(NeuronId, u64)>,
     pub context_frames: u64,
@@ -2495,10 +2271,6 @@ pub struct SerializedChild {
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
     pub context: Vec<ContextEntry>,
-    /// Per-entry match stats (spatial only; zeros for temporal children).
-    pub match_n: u64,
-    pub match_mean: f64,
-    pub match_m2: f64,
     /// Accepted recognition fires (spatial only; likelihood-ratio denominator).
     pub fires: u64,
     /// Payment state of information-priced creation (spatial only; zeros for temporal children).
@@ -2528,13 +2300,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, 10, false, false, None, false, false, false, true, true, false, false, false)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, false, false, false, false)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true, 10, false, false, None, false, false, false, true, true, false, false, false)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true, false, false, false, false)
     }
 
     #[test]
@@ -2617,7 +2389,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true, 10, false, false, None, false, false, false, true, true, false, false, false);
+        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true, false, false, false, false);
         // fewer than ERROR_MIN_SAMPLES → falls back to the derived 1 − group_threshold = 0.1
         n.record_temporal_error(0, 0.5);
         n.record_temporal_error(0, 0.5);

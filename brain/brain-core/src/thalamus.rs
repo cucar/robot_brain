@@ -338,17 +338,9 @@ impl Thalamus {
         regions: usize,
         columns: usize,
         learning: bool,
-        mint_min_samples: u64,
-        match_stats: bool,
-        match_all: bool,
-        match_threshold: Option<f64>,
         match_info: bool,
-        match_avg: bool,
         error_info: bool,
-        refine_context: bool,
-        refine_connection: bool,
         trace_match: bool,
-        trace_refine: bool,
         trace_error: bool,
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
@@ -364,17 +356,9 @@ impl Thalamus {
                 group_threshold,
                 group_mode,
                 learning,
-                mint_min_samples,
-                match_stats,
-                match_all,
-                match_threshold,
                 match_info,
-                match_avg,
                 error_info,
-                refine_context,
-                refine_connection,
                 trace_match,
-                trace_refine,
                 trace_error,
             ));
         }
@@ -2368,7 +2352,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, 10, false, false, None, false, false, false, true, true, false, false, false)
+        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, false, false, false, false)
     }
 
     #[test]
@@ -2392,7 +2376,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, 10, false, false, None, false, false, false, true, true, false, false, false);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, false, false, false, false);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);

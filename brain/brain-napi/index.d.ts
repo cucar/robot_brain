@@ -23,10 +23,8 @@ export declare class Brain {
    *   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
    *
    * TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
-   *   mintMinSamples: number (default 10)
-   *   matchStats / matchAll / matchInfo / matchAvg: boolean, matchThreshold: number, errorInfo: boolean
-   *   refineContext / refineConnection: boolean (default true)
-   *   traceMatch / traceRefine / traceError: boolean
+   *   matchInfo / errorInfo: boolean
+   *   traceMatch / traceError: boolean
    *
    * The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
    * variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from

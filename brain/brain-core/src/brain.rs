@@ -393,17 +393,9 @@ impl Brain {
         consensus_mode: ConsensusMode,
         debug: bool,
         learning: bool,
-        mint_min_samples: u64,
-        match_stats: bool,
-        match_all: bool,
-        match_threshold: Option<f64>,
         match_info: bool,
-        match_avg: bool,
         error_info: bool,
-        refine_context: bool,
-        refine_connection: bool,
         trace_match: bool,
-        trace_refine: bool,
         trace_error: bool,
     ) -> Self {
         Self {
@@ -427,17 +419,9 @@ impl Brain {
                 regions,
                 columns,
                 learning,
-                mint_min_samples,
-                match_stats,
-                match_all,
-                match_threshold,
                 match_info,
-                match_avg,
                 error_info,
-                refine_context,
-                refine_connection,
                 trace_match,
-                trace_refine,
                 trace_error,
             ),
             memory: Memory::new(debug, context_length),
@@ -2107,7 +2091,7 @@ mod tests {
             ConsensusMode::Democratic, // consensus_mode
             false,                    // debug
             true,                     // learning
-            10, false, false, None, false, false, false, true, true, false, false, false,
+            false, false, false, false,
         )
     }
 
