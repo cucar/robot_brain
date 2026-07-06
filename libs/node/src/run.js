@@ -58,17 +58,15 @@ export function parseBrainArgs(argv = process.argv) {
 		// TEMPORARY experimental toggles, passed to the Brain constructor and round-tripped with saved
 		// brains. Each is deleted when its experiment concludes — see brain-core/src/types.rs.
 		mintMinSamples: num('--mint-min-samples', parseInt),
-		mintRepeat: flag('--mint-repeat'),
-		mintRepeatCap: num('--mint-repeat-cap', parseInt),
 		matchStats: flag('--match-stats'),
 		matchAll: flag('--match-all'),
 		matchThreshold: num('--match-threshold', parseFloat),
-		matchInfo: flag('--match-info'),
-		matchInfo2: flag('--match-info2'),
+		// --match-info2 is a back-compat alias from when the v1 and v2 information criteria coexisted.
+		matchInfo: argv.includes('--match-info') || argv.includes('--match-info2') ? true : null,
 		matchAvg: flag('--match-avg'),
 		// --error-avg pins the default averaged-threshold creation explicitly, overriding a loaded brain.
-		errorInfo: has('--error-avg') ? false : flag('--error-info'),
-		errorInfo2: flag('--error-info2'),
+		// --error-info2 is a back-compat alias, same as the match side.
+		errorInfo: has('--error-avg') ? false : (argv.includes('--error-info') || argv.includes('--error-info2') ? true : null),
 		refineContext,
 		refineConnection,
 		traceMatch: flag('--trace-match'),

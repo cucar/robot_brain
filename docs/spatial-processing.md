@@ -159,7 +159,7 @@ A neuron's d=0 connections constitute predictions: "when I fire, I expect these 
 
 ### 4.3 Error Detection
 
-When a neuron fires during `process_spatial`, its d=0 connections constitute a predicted co-activation set. The thalamus compares this predicted set against the observed reality (the set of neurons fired in the same spatial phase) with the Jaccard-union error: missing predictions (expected neurons that didn't fire) and novel observations (unexpected neurons that did fire) both count toward the mismatch rate. If the mismatch exceeds the unit's correction threshold (`1 − groupThreshold`, adapted by `groupMode`), an error is generated.
+When a neuron fires during `process_spatial`, its d=0 connections constitute a predicted co-activation set. The neuron itself compares this predicted set against the observed reality (the base events shipped to it with its task) with the Jaccard-union error: missing predictions (expected neurons that didn't fire) and novel observations (unexpected neurons that did fire) both count toward the mismatch rate. If the mismatch exceeds the unit's correction threshold (`1 − groupThreshold`, adapted by `groupMode`), the neuron requests a correction from the thalamus.
 
 This is the same error detection logic temporal uses for d>0 — the only change is the distance the predictions are read at.
 
@@ -171,7 +171,7 @@ The thalamus mints a correction neuron capturing the actual co-activation contex
 
 1. **First exposure**: Neurons A, B, C co-activate. No d=0 connections exist. No predictions, no errors. Thalamus records co-activations, builds d=0 connection entries: A↔B, A↔C, B↔C.
 2. **Repeated exposures**: Same neurons co-activate. d=0 connections strengthen. Each neuron now predicts its co-activation partners. Predictions match reality. No error. No correction neurons needed.
-3. **Conflicting exposure**: A new input activates A, D, E, F, G. Neuron A predicted B and C (its established d=0 partners), but sees D, E, F, G instead. Error exceeds threshold. Thalamus mints correction neuron C1 capturing the actual co-activation set. Updates A's routing table: in context of D, E, F, G, activate C1.
+3. **Conflicting exposure**: A new input activates A, D, E, F, G. Neuron A predicted B and C (its established d=0 partners), but sees D, E, F, G instead. Error exceeds threshold; A requests a correction. Thalamus mints correction neuron C1 capturing the actual co-activation set. Updates A's routing table: in context of D, E, F, G, activate C1.
 4. **Subsequent exposures**: When A, B, C recur — A predicts B and C correctly, no error, default wiring handles it. When A, D, E, F, G recur — A recognizes context, activates C1 directly.
 
 ### 4.6 Two Modes of Representation

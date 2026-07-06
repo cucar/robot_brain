@@ -154,9 +154,8 @@ impl JsBrain {
     ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
     ///
     /// TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
-    ///   mintMinSamples: number (default 10), mintRepeat: boolean, mintRepeatCap: number (default 16)
-    ///   matchStats / matchAll / matchInfo / matchInfo2 / matchAvg: boolean, matchThreshold: number
-    ///   errorInfo / errorInfo2: boolean
+    ///   mintMinSamples: number (default 10)
+    ///   matchStats / matchAll / matchInfo / matchAvg: boolean, matchThreshold: number, errorInfo: boolean
     ///   refineContext / refineConnection: boolean (default true)
     ///   traceMatch / traceRefine / traceError: boolean
     ///
@@ -193,16 +192,12 @@ impl JsBrain {
         // every other option — each is deleted when its experiment concludes; this list must shrink.
         let opts = options.as_ref();
         let mint_min_samples = opt_u32(opts, "mintMinSamples")?.map(u64::from).unwrap_or(10);
-        let mint_repeat = opt_bool(opts, "mintRepeat")?.unwrap_or(false);
-        let mint_repeat_cap = opt_u32(opts, "mintRepeatCap")?.map(|v| v as usize).unwrap_or(16);
         let match_stats = opt_bool(opts, "matchStats")?.unwrap_or(false);
         let match_all = opt_bool(opts, "matchAll")?.unwrap_or(false);
         let match_threshold = opt_f64(opts, "matchThreshold")?;
         let match_info = opt_bool(opts, "matchInfo")?.unwrap_or(false);
-        let match_info2 = opt_bool(opts, "matchInfo2")?.unwrap_or(false);
         let match_avg = opt_bool(opts, "matchAvg")?.unwrap_or(false);
         let error_info = opt_bool(opts, "errorInfo")?.unwrap_or(false);
-        let error_info2 = opt_bool(opts, "errorInfo2")?.unwrap_or(false);
         let refine_context = opt_bool(opts, "refineContext")?.unwrap_or(true);
         let refine_connection = opt_bool(opts, "refineConnection")?.unwrap_or(true);
         let trace_match = opt_bool(opts, "traceMatch")?.unwrap_or(false);
@@ -215,8 +210,8 @@ impl JsBrain {
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            mint_min_samples, mint_repeat, mint_repeat_cap, match_stats, match_all, match_threshold,
-            match_info, match_info2, match_avg, error_info, error_info2, refine_context,
+            mint_min_samples, match_stats, match_all, match_threshold,
+            match_info, match_avg, error_info, refine_context,
             refine_connection, trace_match, trace_refine, trace_error,
         );
 
@@ -427,6 +422,13 @@ impl JsBrain {
     #[napi(js_name = "spatialLevelCounts")]
     pub fn spatial_level_counts(&self) -> Result<Vec<u32>> {
         Ok(self.inner.borrow().spatial_level_counts())
+    }
+
+    /// Per-level count of PAID correction neurons — patterns that may fire, as opposed to unpaid
+    /// hypotheses still accumulating evidence toward their price. Same indexing as spatialLevelCounts.
+    #[napi(js_name = "spatialLevelPaidCounts")]
+    pub fn spatial_level_paid_counts(&self) -> Result<Vec<u32>> {
+        Ok(self.inner.borrow().spatial_level_paid_counts())
     }
 
     /// Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.

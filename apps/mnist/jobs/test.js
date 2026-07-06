@@ -461,6 +461,7 @@ export default class MNISTTestJob extends Job {
 			neuronCount: summary.neuronCount,
 			maxSpatialLevel: summary.maxSpatialLevel,
 			levelCounts: this.brain.spatialLevelCounts(),
+			levelPaidCounts: this.brain.spatialLevelPaidCounts(),
 			activeCorrections: this.brain.countActiveSpatialCorrections(),
 			cumulativeMinted: this.brain.getSpatialCorrectionCount(),
 		};
@@ -468,11 +469,12 @@ export default class MNISTTestJob extends Job {
 
 	/**
 	 * Format a spatial-diagnostics snapshot into a one-line summary.
+	 * Each level shows total and PAID counts — the difference is the unpaid hypothesis pool.
 	 */
 	formatSpatial(s) {
 		if (!s) return '';
 		const levels = s.levelCounts.length
-			? s.levelCounts.map((c, i) => `L${i + 1}:${c}`).join(' ')
+			? s.levelCounts.map((c, i) => `L${i + 1}:${c}(${s.levelPaidCounts?.[i] ?? c} paid)`).join(' ')
 			: '(no corrections)';
 		return `depth=${s.maxSpatialLevel} | ${levels} | ${s.activeCorrections} active, ${s.cumulativeMinted} minted cum | ${s.neuronCount} neurons`;
 	}
@@ -561,7 +563,8 @@ export default class MNISTTestJob extends Job {
 		const summary = this.brain.getFrameSummary();
 		const minted = this.brain.getSpatialCorrectionCount();
 		const lc = this.brain.spatialLevelCounts();
-		const levels = lc.length ? lc.map((c, i) => `L${i + 1}:${c}`).join(' ') : 'flat';
+		const paid = this.brain.spatialLevelPaidCounts();
+		const levels = lc.length ? lc.map((c, i) => `L${i + 1}:${c}/${paid[i] ?? c}p`).join(' ') : 'flat';
 		process.stdout.write(`\r    ${phase} ${done}/${total} (${pct}%) | ${acc}% acc | ${ips} img/s | ${summary.neuronCount} neurons (${minted} minted) | depth ${summary.maxSpatialLevel}: ${levels}   `);
 	}
 

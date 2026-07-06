@@ -381,7 +381,7 @@ impl Brain {
     /// * `learning` — fixed for the life of the instance: train with true and save; load into a fresh
     ///   instance constructed with false for frozen evaluation
     ///
-    /// The sixteen trailing parameters are TEMPORARY experimental toggles for the spatial mechanisms
+    /// The trailing parameters are TEMPORARY experimental toggles for the spatial mechanisms
     /// under test — each is deleted when its experiment concludes; this list must shrink.
     pub fn new(
         context_length: u32,
@@ -394,16 +394,12 @@ impl Brain {
         debug: bool,
         learning: bool,
         mint_min_samples: u64,
-        mint_repeat: bool,
-        mint_repeat_cap: usize,
         match_stats: bool,
         match_all: bool,
         match_threshold: Option<f64>,
         match_info: bool,
-        match_info2: bool,
         match_avg: bool,
         error_info: bool,
-        error_info2: bool,
         refine_context: bool,
         refine_connection: bool,
         trace_match: bool,
@@ -432,16 +428,12 @@ impl Brain {
                 columns,
                 learning,
                 mint_min_samples,
-                mint_repeat,
-                mint_repeat_cap,
                 match_stats,
                 match_all,
                 match_threshold,
                 match_info,
-                match_info2,
                 match_avg,
                 error_info,
-                error_info2,
                 refine_context,
                 refine_connection,
                 trace_match,
@@ -851,6 +843,12 @@ impl Brain {
         self.thalamus.spatial_level_counts()
     }
 
+    /// Diagnostic: per-level count of PAID correction neurons — patterns that may fire, as opposed
+    /// to unpaid hypotheses still accumulating evidence. Same indexing as [spatial_level_counts].
+    pub fn spatial_level_paid_counts(&self) -> Vec<u32> {
+        self.thalamus.spatial_level_paid_counts()
+    }
+
     /// Export a snapshot of all active neurons in context with their levels and phase.
     pub fn get_context_snapshot(&self) -> Vec<(NeuronId, FrameNumber, Level, LevelAgeState)> {
         self.memory.get_context_snapshot()
@@ -1144,7 +1142,7 @@ impl Brain {
     /// folds into the same buckets).
     fn process_spatial_levels(&mut self, timings: &mut FrameTimings) -> SpatialSweepResult {
 
-        // The sensory axis the thalamus uses for vote-error evaluation and connection learning.
+        // The sensory axis each neuron evaluates its prediction against and learns connections from.
         // For spatial this is the co-active set at level 0 of the spatial index — a single set,
         // no recency dimension.
         let sensory_neurons = self.memory.get_spatial_base_level();
@@ -1372,7 +1370,7 @@ impl Brain {
 
         // Mint corrections for parents whose d=0 predictions mismatched the actual fired set.
         // Each correction is a new pattern that gets installed in its parent's routing table for next frame's matching pass.
-        // Also collects per-parent error-rate samples so dynamic error modes (conservative/neutral/aggressive) have data to adapt their thresholds.
+        // The neurons already evaluated their own predictions and recorded their error samples during dispatch; only the approved requests are settled here.
         // Skipped in eval mode: minting and installing corrections mutates the spatial substrate, so a
         // setLearning(false) pass must not do it — otherwise the "frozen" eval keeps growing the hierarchy
         // (corrections install into routing tables that survive resetContext, so an image minted on can vote
@@ -1473,23 +1471,15 @@ impl Brain {
     /// Not timed — these passes are bookkeeping around the spatial sweep, not their own bucket.
     fn process_spatial_corrections(&mut self, spatial: &SpatialSweepResult) -> Vec<NeuronCreateSpec> {
 
-        // Mint correction specs from the d=0 sweep's dispatch results.
-        // For every non-subsumed fired neuron whose d=0 predictions mismatched the actual fired set, this builds a NeuronCreateSpec for a new correction pattern, an install op to wire it into the parent's routing table, and an error-rate sample for the parent's Welford stats.
+        // Settle the correction requests carried in the d=0 sweep's dispatch results.
+        // Each neuron already evaluated its own prediction and recorded its error sample during dispatch;
+        // this pass filters subsumed requesters, runs the recurrence/payment ledger, and builds a NeuronCreateSpec plus an install op per approved correction.
         // Returned specs are deferred — they'll be materialized in the end-of-frame flush along with temporal specs.
-        let (specs, install_ops, feedback) = self.thalamus.create_spatial_corrections(
-            &spatial.dispatch_results,
-            &spatial.fired_set,
-            &spatial.subsumed_set,
-        );
+        let (specs, install_ops) = self.thalamus.create_spatial_corrections(&spatial.dispatch_results, &spatial.subsumed_set);
 
         // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
         // This is a single dispatch per frame, not one per level.
         self.thalamus.install_spatial_corrections(install_ops, self.substrate_frame());
-
-        // Record per-parent error-rate samples for the spatial Welford stats.
-        // These samples are what let dynamic error-correction modes adapt the threshold over time.
-        // Without them, get_error_threshold falls back to a static value forever.
-        self.thalamus.record_spatial_errors(&feedback);
 
         // Return the spec batch.
         // process_spatial folds these into spatial.neuron_specs so they get materialized in the same flush as temporal specs.
@@ -2117,7 +2107,7 @@ mod tests {
             ConsensusMode::Democratic, // consensus_mode
             false,                    // debug
             true,                     // learning
-            10, false, 16, false, false, None, false, false, false, false, false, true, true, false, false, false,
+            10, false, false, None, false, false, false, true, true, false, false, false,
         )
     }
 

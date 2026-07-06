@@ -81,12 +81,13 @@ impl Region {
         match_all: bool,
         match_threshold: Option<f64>,
         match_info: bool,
-        match_info2: bool,
         match_avg: bool,
+        error_info: bool,
         refine_context: bool,
         refine_connection: bool,
         trace_match: bool,
         trace_refine: bool,
+        trace_error: bool,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -102,12 +103,13 @@ impl Region {
                 match_all,
                 match_threshold,
                 match_info,
-                match_info2,
                 match_avg,
+                error_info,
                 refine_context,
                 refine_connection,
                 trace_match,
                 trace_refine,
+                trace_error,
             ));
         }
         Self { c, columns }
@@ -144,6 +146,7 @@ impl Region {
         &mut self,
         tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
+        codebook_size: usize,
         frame_number: FrameNumber,
     ) -> Vec<crate::column::SpatialColumnResult> {
 
@@ -158,7 +161,7 @@ impl Region {
             .zip(column_tasks.into_par_iter())
             .map(|(col, col_tasks)| {
                 if col_tasks.is_empty() { return Vec::new(); }
-                col.process_spatial_level(&col_tasks, new_error_pattern_ids, frame_number)
+                col.process_spatial_level(&col_tasks, new_error_pattern_ids, codebook_size, frame_number)
             })
             .collect();
 
@@ -213,23 +216,20 @@ impl Region {
             .collect()
     }
 
-    // ── Spatial error-stats recording ──────────────────────────────────────
+    // ── Spatial target decoration (restore) ────────────────────────────────
 
-    /// Fan out spatial-error samples to owning columns. Each column updates its neurons'
-    /// spatial Welford bucket via `Neuron::record_spatial_error`.
-    pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
-        let mut by_column: Vec<Vec<(NeuronId, f64)>> = (0..self.c).map(|_| Vec::new()).collect();
-        for &(id, rate) in feedback {
-            let col = self.route_neuron(id);
-            by_column[col].push((id, rate));
-        }
+    /// Fan out the base-neuron position metadata so every column rebuilds its neurons' spatial
+    /// target positions. Restore-only: at runtime the metadata is captured at connection-learn time.
+    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, (ChannelId, crate::types::DimensionId)>) {
         self.columns.par_iter_mut()
-            .zip(by_column.into_par_iter())
-            .for_each(|(col, col_fb)| {
-                if !col_fb.is_empty() {
-                    col.record_spatial_errors(&col_fb);
-                }
-            });
+            .for_each(|col| col.decorate_spatial_targets(meta));
+    }
+
+    /// Diagnostic: gather the unpaid spatial patterns across this region's columns.
+    pub fn collect_unpaid_spatial_patterns(&self) -> Vec<NeuronId> {
+        self.columns.iter()
+            .flat_map(|col| col.collect_unpaid_spatial_patterns())
+            .collect()
     }
 
     // ── Spatial correction install (1c) ────────────────────────────────────
@@ -515,7 +515,7 @@ mod tests {
             0.5,
             GroupMode::Static,
             true,
-            10, false, false, None, false, false, false, true, true, false, false,
+            10, false, false, None, false, false, false, true, true, false, false, false,
         )
     }
 

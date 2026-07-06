@@ -11,10 +11,10 @@ export declare class Brain {
    * Options shape (all optional, with defaults matching JS Brain):
    *   contextLength: number (default 10)
    *   groupThreshold: number (default 0.5) — the single grouping coefficient θ, shared by spatial and temporal.
-   *     Seeds one adaptive per-unit threshold: recognition fires at similarity ≥ θ, correction at < θ, then both
-   *     float together off the unit's error stats once it has history (see groupMode).
+   *     It SEEDS one adaptive per-unit threshold: recognition fires at similarity ≥ θ and correction at < θ
+   *     until a unit has error history, after which both float together off its stats (see groupMode).
    *   groupMode: string (default 'neutral') — how the live grouping threshold adapts from error stats
-   *   (retired: mergeThreshold / errorCorrectionThreshold and their spatial*/temporal* variants — now ignored with a warning)
+   *     ('static' pins it at the θ seed; conservative/neutral/aggressive shift it by mean ± σ)
    *   patternForgetRate: number (default 0.01)
    *   regions: number (default 1)
    *   columns: number (default 1)
@@ -23,11 +23,14 @@ export declare class Brain {
    *   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
    *
    * TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
-   *   mintMinSamples: number (default 10), mintRepeat: boolean, mintRepeatCap: number (default 16)
-   *   matchStats / matchAll / matchInfo / matchInfo2 / matchAvg: boolean, matchThreshold: number
-   *   errorInfo / errorInfo2: boolean
+   *   mintMinSamples: number (default 10)
+   *   matchStats / matchAll / matchInfo / matchAvg: boolean, matchThreshold: number, errorInfo: boolean
    *   refineContext / refineConnection: boolean (default true)
    *   traceMatch / traceRefine / traceError: boolean
+   *
+   * The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
+   * variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
+   * opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.
    */
   constructor(options?: object | undefined | null)
   /**
@@ -99,6 +102,11 @@ export declare class Brain {
    */
   spatialLevelCounts(): Array<number>
   /**
+   * Per-level count of PAID correction neurons — patterns that may fire, as opposed to unpaid
+   * hypotheses still accumulating evidence toward their price. Same indexing as spatialLevelCounts.
+   */
+  spatialLevelPaidCounts(): Array<number>
+  /**
    * Declare the SPATIAL (d=0 co-activation) neighbor channel set for a registered channel.
    * This is the set a channel may co-fire with in the same frame to form a spatial pattern.
    * Names not in the registry are silently ignored; an empty list shrinks the spatial
@@ -108,8 +116,9 @@ export declare class Brain {
   setSpatialNeighbors(name: string, neighborNames: Array<string>): void
   /**
    * Declare per-level SPATIAL neighbor sets for a registered channel — the level-based radius.
-   * neighborNamesByLevel[l] is the neighbor list a level-l neuron of this channel uses (e.g. the
-   * radius-(l+1) neighborhood of a retinotopic pixel); levels past the end reuse the last set.
+   * `neighborNamesByLevel[l]` is the neighbor list a level-l neuron of this channel uses (e.g. the
+   * radius-(l+1) neighborhood of a retinotopic pixel); levels past the end reuse the last set. Each list is
+   * used verbatim like `setSpatialNeighbors`. Call AFTER registering all channels.
    */
   setSpatialNeighborLevels(name: string, neighborNamesByLevel: Array<Array<string>>): void
   /**

@@ -30,11 +30,14 @@ pub struct ColumnProcessResult {
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
-/// Per-neuron output of the spatial sweep, tagged with its owner.
+/// Per-neuron output of the spatial sweep, tagged with its owner. Votes never leave the neuron —
+/// it evaluates its own prediction and surfaces only the resulting correction request.
 pub struct SpatialColumnResult {
     pub parent_id: NeuronId,
     pub matches: Vec<PatternMatch>,
-    pub votes: Option<crate::neuron::SpatialVotes>,
+    pub correction_request: Option<crate::neuron::SpatialCorrectionRequest>,
+    /// A pattern paid off by this frame's deposit — the thalamus adds it to the codebook count.
+    pub promotion: Option<NeuronId>,
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
@@ -114,12 +117,13 @@ pub struct Column {
     match_all: bool,
     match_threshold: Option<f64>,
     match_info: bool,
-    match_info2: bool,
     match_avg: bool,
+    error_info: bool,
     refine_context: bool,
     refine_connection: bool,
     trace_match: bool,
     trace_refine: bool,
+    trace_error: bool,
 
     /// Master learning toggle, fixed at construction and handed to every neuron this column creates or loads.
     learning: bool,
@@ -141,12 +145,13 @@ impl Column {
         match_all: bool,
         match_threshold: Option<f64>,
         match_info: bool,
-        match_info2: bool,
         match_avg: bool,
+        error_info: bool,
         refine_context: bool,
         refine_connection: bool,
         trace_match: bool,
         trace_refine: bool,
+        trace_error: bool,
     ) -> Self {
         Self {
             channel_actions,
@@ -159,12 +164,13 @@ impl Column {
             match_all,
             match_threshold,
             match_info,
-            match_info2,
             match_avg,
+            error_info,
             refine_context,
             refine_connection,
             trace_match,
             trace_refine,
+            trace_error,
             learning,
             neurons: FxHashMap::default(),
         }
@@ -176,6 +182,7 @@ impl Column {
         &mut self,
         tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
+        codebook_size: usize,
         frame_number: FrameNumber,
     ) -> Vec<SpatialColumnResult> {
 
@@ -185,12 +192,13 @@ impl Column {
             let neuron = self.neurons.get_mut(neuron_id)
                 .unwrap_or_else(|| panic!("Column.process_spatial_level: neuron {} not found", neuron_id));
             let result = neuron.process_spatial_frame(
-                Some(observed_context), new_error_pattern_ids, actives, frame_number,
+                Some(observed_context), new_error_pattern_ids, actives, codebook_size, frame_number,
             );
             results.push(SpatialColumnResult {
                 parent_id: *neuron_id,
                 matches: result.matches,
-                votes: result.votes,
+                correction_request: result.correction_request,
+                promotion: result.promotion,
                 timings: result.timings,
             });
         }
@@ -514,16 +522,24 @@ impl Column {
         }
     }
 
-    /// Record spatial-error samples on owned neurons. Each (neuron_id, error_rate) pair updates
-    /// the neuron's spatial Welford bucket. Used so dynamic error modes for spatial
-    /// (conservative/neutral/aggressive) can adapt thresholds — without these samples the modes
-    /// silently fall back to the static threshold for spatial.
-    pub fn record_spatial_errors(&mut self, feedback: &[(NeuronId, f64)]) {
-        for &(id, rate) in feedback {
-            if let Some(neuron) = self.neurons.get_mut(&id) {
-                neuron.record_spatial_error(rate);
+    /// Rebuild the position metadata of spatial connection targets on every owned neuron.
+    /// Restore-only: at runtime the metadata is captured at connection-learn time.
+    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, (ChannelId, crate::types::DimensionId)>) {
+        for neuron in self.neurons.values_mut() {
+            neuron.decorate_spatial_targets(meta);
+        }
+    }
+
+    /// Diagnostic: list the UNPAID spatial patterns hosted by this column's neurons — hypotheses
+    /// whose deposited evidence has not yet covered their price.
+    pub fn collect_unpaid_spatial_patterns(&self) -> Vec<NeuronId> {
+        let mut unpaid = Vec::new();
+        for neuron in self.neurons.values() {
+            for (&pattern_id, entry) in neuron.get_spatial_routing_table() {
+                if !entry.is_paid() { unpaid.push(pattern_id); }
             }
         }
+        unpaid
     }
 
     /// Spatial correction install — for each op, add the new pattern as a child on the
@@ -542,8 +558,8 @@ impl Column {
                 None => continue,
             };
 
-            // Add the child pattern to the parent's spatial routing table.
-            let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids, frame_number);
+            // Add the child pattern to the parent's spatial routing table with its payment state.
+            let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids, frame_number, op.evidence, op.price);
             if let Some(df) = death_frame { deaths.push((op.pattern_id, df)); }
 
             // For each context-neuron target, emit a SpatialContextRefUpdate so the target's
@@ -589,12 +605,13 @@ impl Column {
                 self.match_all,
                 self.match_threshold,
                 self.match_info,
-                self.match_info2,
                 self.match_avg,
+                self.error_info,
                 self.refine_context,
                 self.refine_connection,
                 self.trace_match,
                 self.trace_refine,
+                self.trace_error,
             );
             // pre-wire default action connections at neutral reward across all voting distances
             for distance in 1..self.context_length {
@@ -656,12 +673,13 @@ impl Column {
             self.match_all,
             self.match_threshold,
             self.match_info,
-            self.match_info2,
             self.match_avg,
+            self.error_info,
             self.refine_context,
             self.refine_connection,
             self.trace_match,
             self.trace_refine,
+            self.trace_error,
         );
 
         // load directed connections (distance → target neuron id with strength and reward)
@@ -679,6 +697,8 @@ impl Column {
                     entry.last_activation_frame = child.last_activation_frame;
                     entry.match_stats = crate::types::WelfordState { n: child.match_n, mean: child.match_mean, m2: child.match_m2 };
                     entry.fires = child.fires;
+                    entry.evidence = child.evidence;
+                    entry.price = child.price;
                 }
                 for ctx in &child.context {
                     neuron.add_spatial_context(child.pattern_id, ctx.neuron_id, ctx.strength);
@@ -705,8 +725,10 @@ impl Column {
             }
         }
 
-        // load local context-neighbor counts (information-weighted recognition).
-        neuron.restore_spatial_neighbor_counts(data.neighbor_frames, &data.neighbor_counts);
+        // load the local background models: context counts for likelihood-ratio recognition,
+        // inference counts for information-priced correction creation.
+        neuron.restore_spatial_context_counts(data.context_frames, &data.context_counts);
+        neuron.restore_spatial_inference_counts(data.inference_frames, &data.inference_counts);
 
         // load per-(neuron, age) Welford error stats.
         // Spatial serializes as age=0; temporal serializes at its real age (>= 1).
@@ -831,7 +853,7 @@ mod tests {
             0.5,
             GroupMode::Static,
             true,
-            10, false, false, None, false, false, false, true, true, false, false,
+            10, false, false, None, false, false, false, true, true, false, false, false,
         )
     }
 
