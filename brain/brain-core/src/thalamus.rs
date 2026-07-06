@@ -1137,9 +1137,9 @@ impl Thalamus {
 
     /// Settle this frame's spatial correction requests. Each neuron evaluated its own prediction
     /// against reality during dispatch; a request means the failure was covered by no existing
-    /// pattern, paid or unpaid. This pass owns only what a neuron cannot decide locally — the
-    /// subsumption filter, id allocation, and pricing against the global codebook — and creates
-    /// every requested pattern, unpaid until its deposits cover its price.
+    /// pattern, paid or unpaid, and — under error-info — already cleared its own pending-mint
+    /// ledger, so it arrives pre-paid. This pass owns only what a neuron cannot decide locally —
+    /// the subsumption filter and id allocation — and creates every requested pattern.
     ///
     /// The CONTEXT of a minted correction is drawn from the parent's OWN level — for an Lk parent,
     /// the L(k+1) correction's context_entries are the level-k co-actives around it. This is what
@@ -1163,11 +1163,12 @@ impl Thalamus {
             // A subsumed neuron casts no votes and requests nothing, so this is a safety net.
             if subsumed_neurons.contains(&column_result.parent_id) { continue; }
 
-            // Information-priced creation: the pattern is born with the failure's surprisal as its
-            // opening evidence and must earn the rest through recognized recurrences before it may
-            // fire. Outside the info mode the price is zero and the pattern is born paid.
+            // Information-priced creation: the request already cleared its ledger's price at
+            // approval, so it arrives pre-paid — reuse that price rather than repricing against a
+            // codebook that may have moved on since. Outside the info mode the price is zero and
+            // the pattern is born paid.
             let parent_id = column_result.parent_id;
-            let price = if self.error_info { self.get_description_price(request.context_neighbors.len()) } else { 0.0 };
+            let price = if self.error_info { request.price } else { 0.0 };
 
             // Create one correction pattern for a neuron whose prediction failed.
             // A pattern whose opening evidence covers the price joins the codebook at birth.
@@ -1179,17 +1180,6 @@ impl Thalamus {
         }
 
         (new_specs, install_ops)
-    }
-
-    /// Bits to state which neurons form a new pattern's context, named out of the codebook:
-    /// log2 of the subset count over the sensory vocabulary plus the PAID patterns. The count is
-    /// the derived scale — the price rises as the codebook grows, so patterns whose context
-    /// carries little information stop paying for themselves, and alias chains cannot stack into
-    /// towers. Unpaid hypotheses are not codewords and do not inflate the price.
-    fn get_description_price(&self, context_size: usize) -> f64 {
-        let vocabulary = (self.neurons_by_value.len() + self.paid_spatial_patterns.len()).max(2);
-        let named = context_size.min(vocabulary);
-        (0..named).map(|i| ((vocabulary - i) as f64 / (named - i) as f64).log2()).sum()
     }
 
     /// Create one correction pattern for a neuron whose prediction failed.

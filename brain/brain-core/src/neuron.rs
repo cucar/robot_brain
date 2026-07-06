@@ -44,6 +44,21 @@ pub struct SpatialCorrectionRequest {
     /// Bits of surprise the failure carried under the neuron's local base rates (error-info mode).
     /// The new pattern is born with this as its opening evidence toward its price.
     pub surprisal: f64,
+    /// The description cost this request already cleared (error-info mode), 0 outside it.
+    /// Computed once, at approval, against the codebook size the neuron was given — the thalamus
+    /// reuses it verbatim rather than repricing against a codebook that may have moved on.
+    pub price: f64,
+}
+
+/// One entry in a neuron's pending spatial-mint ledger (error-info): a distinct failure shape,
+/// identified by its context and target sets, accumulating surprisal toward its naming price.
+/// Matched by Jaccard similarity on both sets — the same sameness bar recognition uses — so
+/// evidence for one recurring shape never leaks into another's tally.
+#[derive(Debug, Clone)]
+struct PendingSpatialMint {
+    context: FxHashSet<NeuronId>,
+    targets: FxHashSet<NeuronId>,
+    evidence: f64,
 }
 
 /// Per-neuron output of the spatial frame pass. Votes never leave the neuron — it evaluates its
@@ -353,16 +368,10 @@ pub struct Neuron {
     /// Number of frames this neuron has observed base events on (denominator for the counts above).
     spatial_inference_frames: u64,
 
-    /// Pooled failure statistics (error-info): per context neighbor, the count of FAILURE frames it
-    /// was co-active on. Every prediction failure pools here unconditionally — no sameness test —
-    /// and the correction's context is DERIVED from this distribution when the pooled evidence
-    /// covers its price: the modal failure context, the neighbors present on most failures.
-    /// Training-transient like the ledger it replaces; a restored brain re-pools from fresh failures.
-    spatial_failure_counts: FxHashMap<NeuronId, u64>,
-    /// Number of failure frames pooled (denominator for the counts above).
-    spatial_failure_frames: u64,
-    /// Accumulated surprisal across the pooled failures, in bits — spent when a correction mints.
-    spatial_failure_evidence: f64,
+    /// Pending spatial-correction ledger (error-info): one entry per distinct failure shape not
+    /// yet worth naming, accumulating surprisal until it covers its price. Training-transient; a
+    /// restored brain re-pools from fresh failures.
+    pending_spatial_mints: Vec<PendingSpatialMint>,
 
     // ── Temporal state (d>0 sequence, distance-keyed) ───────────────────────────
 
@@ -432,9 +441,7 @@ impl Neuron {
             spatial_context_frames: 0,
             spatial_inference_counts: FxHashMap::default(),
             spatial_inference_frames: 0,
-            spatial_failure_counts: FxHashMap::default(),
-            spatial_failure_frames: 0,
-            spatial_failure_evidence: 0.0,
+            pending_spatial_mints: Vec::new(),
             temporal_connections: Vec::new(),
             temporal_routing_table: FxHashMap::default(),
             temporal_context_index: FxHashMap::default(),
@@ -1681,11 +1688,9 @@ impl Neuron {
             .map(|lc| lc.entries().keys().copied().collect())
             .unwrap_or_default();
 
-        // Information-priced creation measures the failure in surprisal and POOLS it — every
-        // failure contributes to the parent's running failure statistics with no sameness test,
-        // the way samples pool at a decision-tree node. A correction is requested only when the
-        // pooled surprisal covers the price of the context DERIVED from that distribution: the
-        // modal failure context, which by construction matches what actually recurs.
+        // Information-priced creation measures the failure in surprisal and holds it against a
+        // ledger of pending failure shapes — a correction is requested only once a shape's pooled
+        // surprisal covers the price of naming it out of the codebook.
         // A matched unpaid pattern (a rare underpaid mint) still absorbs the surprisal as a deposit.
         if self.error_info {
             let surprisal = self.compute_spatial_surprisal(&predicted_events, &observed_events);
@@ -1696,15 +1701,15 @@ impl Neuron {
                 return (None, Some(deposit), if promoted { Some(unpaid_id) } else { None });
             }
             if context_neighbors.is_empty() { return (None, None, None); }
-            self.pool_spatial_failure(&context_neighbors, surprisal);
-            let Some(request) = self.derive_failure_correction(codebook_size) else { return (None, None, None) };
-            return (Some(request), None, None);
+            let merge_threshold = 1.0 - spatial_votes.threshold;
+            let request = self.approve_spatial_correction(&context_neighbors, &observed_events, surprisal, merge_threshold, codebook_size);
+            return (request, None, None);
         }
 
         // Only errors above the neuron's own adaptive threshold request a correction.
         if context_neighbors.is_empty() { return (None, None, None); }
         if error_rate <= spatial_votes.threshold { return (None, None, None); }
-        (Some(SpatialCorrectionRequest { context_neighbors, surprisal: 0.0 }), None, None)
+        (Some(SpatialCorrectionRequest { context_neighbors, surprisal: 0.0, price: 0.0 }), None, None)
     }
 
     /// Deposit a failed frame's surprisal into an unpaid pattern that matched the failing
@@ -1721,45 +1726,59 @@ impl Neuron {
         (self.strengthen_child_activation(pattern_id, current_frame), promoted)
     }
 
-    /// Pool one prediction failure into the running failure statistics: count the context
-    /// neighbors present on this failure and bank the failure's surprisal. Unconditional — no
-    /// sameness test decides whose evidence pools; the derivation below extracts what recurs.
-    fn pool_spatial_failure(&mut self, context_neighbors: &[NeuronId], surprisal: f64) {
-        self.spatial_failure_frames += 1;
-        for &id in context_neighbors {
-            *self.spatial_failure_counts.entry(id).or_insert(0) += 1;
-        }
-        self.spatial_failure_evidence += surprisal;
-    }
+    /// Approve or defer a spatial correction by accumulated surprisal. A severe enough single
+    /// failure pays for its own pattern outright; a milder one pools its surprisal in the ledger
+    /// entry matching its shape (Jaccard ≥ merge_threshold on both context and targets, the same
+    /// sameness bar recognition uses) until that entry's evidence covers the price of naming the
+    /// shape out of the codebook. A configuration only mints once it has recurred enough to be
+    /// worth stating; minting spends the entry's evidence, so the next one must be earned fresh.
+    fn approve_spatial_correction(
+        &mut self,
+        context_neighbors: &[NeuronId],
+        observed_events: &FxHashSet<NeuronId>,
+        surprisal: f64,
+        merge_threshold: f64,
+        codebook_size: usize,
+    ) -> Option<SpatialCorrectionRequest> {
 
-    /// Derive a correction request from the pooled failure statistics, if the pooled evidence
-    /// covers its price. The context is the MODAL failure context — the neighbors present on the
-    /// majority of pooled failures (Laplace-smoothed), the same modal derivation prediction uses.
-    /// The price names that context out of the codebook. Minting spends the pooled evidence and
-    /// resets the pool, so the next correction must be earned by fresh failures.
-    fn derive_failure_correction(&mut self, codebook_size: usize) -> Option<SpatialCorrectionRequest> {
-
-        // The modal failure context: present on more failures than not.
-        let frames = self.spatial_failure_frames;
-        let context_neighbors: Vec<NeuronId> = self.spatial_failure_counts.iter()
-            .filter(|(_, &c)| (c + 1) as f64 / (frames + 2) as f64 > 0.5)
-            .map(|(&id, _)| id)
-            .collect();
-        if context_neighbors.is_empty() { return None; }
-
-        // The price of naming the derived context out of the codebook.
+        // Bits to name a k-subset out of the codebook: log2 of the subset count, floored at one
+        // codeword per element so an always-active set can never mint for free. Priced on both the
+        // context and the target sets — naming what a pattern conditions on and what it predicts.
         let vocabulary = codebook_size.max(2);
-        let named = context_neighbors.len().min(vocabulary);
-        let price: f64 = (0..named).map(|i| ((vocabulary - i) as f64 / (named - i) as f64).log2()).sum();
-        if self.spatial_failure_evidence < price { return None; }
+        let name_bits = |k: usize| -> f64 {
+            let named = k.min(vocabulary);
+            (0..named).map(|i| ((vocabulary - i) as f64 / (named - i) as f64).log2()).sum()
+        };
+        let context_set: FxHashSet<NeuronId> = context_neighbors.iter().copied().collect();
+        let price = name_bits(context_set.len()) + name_bits(observed_events.len());
 
-        // The pooled evidence is spent on this pattern; the pool starts fresh.
-        let surprisal = self.spatial_failure_evidence;
-        self.spatial_failure_counts.clear();
-        self.spatial_failure_frames = 0;
-        self.spatial_failure_evidence = 0.0;
+        if surprisal >= price {
+            return Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal, price });
+        }
 
-        Some(SpatialCorrectionRequest { context_neighbors, surprisal })
+        let jaccard = |a: &FxHashSet<NeuronId>, b: &FxHashSet<NeuronId>| -> f64 {
+            let inter = a.intersection(b).count();
+            let union = a.len() + b.len() - inter;
+            if union == 0 { 0.0 } else { inter as f64 / union as f64 }
+        };
+
+        // A recurring configuration accumulates its surprisal in the matching ledger entry until paid.
+        let matching = self.pending_spatial_mints.iter().position(|note|
+            jaccard(&note.context, &context_set) >= merge_threshold && jaccard(&note.targets, observed_events) >= merge_threshold);
+
+        match matching {
+            Some(i) => {
+                self.pending_spatial_mints[i].evidence += surprisal;
+                let evidence = self.pending_spatial_mints[i].evidence;
+                if evidence < price { return None; }
+                self.pending_spatial_mints.remove(i);
+                Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: evidence, price })
+            }
+            None => {
+                self.pending_spatial_mints.push(PendingSpatialMint { context: context_set, targets: observed_events.clone(), evidence: surprisal });
+                None
+            }
+        }
     }
 
     /// Aggregate the cast base-level votes into one winner per position.
