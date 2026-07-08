@@ -850,3 +850,133 @@ All runs below: `--error-info --match-info`. "r" = base radius.
 **Reference points (from prior sessions, to beat):** 14×14 held-out 95.32% (MDL-v2 recognition);
 28×28 95.64%/132K (mint-repeat r2); main-branch channel-neighbor baseline 96.44%.
 Efficiency remains the open problem: neuron count scales positions × features.
+
+---
+
+## Session 2026-07-05/06 — likelihood-ratio pattern creation, local naming-cost pricing, backup bug fix
+
+Ported the Jaccard/group-threshold-based pending-mint ledger (from the prior session's consolidation work) to
+one that matches and mints purely on likelihood ratios, removing the ledger's remaining dependency on
+`groupMode`/`groupThreshold`. Then iterated on the naming-cost pricing basis to recover accuracy lost to the
+switch, and found/fixed a real backup/restore bug along the way. All runs `--match-info --error-info` (the
+`match-info2`/`error-info2` names from prior sessions are now aliases of the same flags). "r" = base radius.
+
+### Baseline — Jaccard-matched ledger, group-threshold-derived merge bar (start of session, committed)
+
+| options | depth | neurons | test | train |
+|---|---|---|---|---|
+| 7×7 r1 | 3 | 2,483 | 70.85 | — |
+| 14×14 r1 | 3 | 5,156 | 93.13 | — |
+| 28×28 r1 | 3 | 13,949 | 92.95 | — |
+| 28×28 r2 | 3 | 18,459 | 94.32 | — |
+| 28×28 r3 (killed @47.8%) | 3 | 17,534+ | — | — (partial) |
+
+### Failed experiment — MDL two-part-code merge test (reverted)
+
+Replaced the Jaccard/group-threshold merge test with "merge into whichever ledger entry makes the *union*
+cheaper to name than naming separately" (pure `name_bits`, no group-threshold dependency). Reverted: the
+naming-cost function is strongly subadditive for small sets against a large vocabulary, so "union is cheaper"
+came back true almost unconditionally — collapsing the ledger into a few catch-all buckets, the same failure
+mode as the pre-ledger pooled-derivation bug.
+
+| options | depth | neurons | test |
+|---|---|---|---|
+| 14×14 r1 | 4 | 20,352 | 94.18 |
+
+### Likelihood-ratio ledger — exact-context match + likelihood-ratio scoring, global codebook price (ALPHA=0.9)
+
+Pending-mint entries now track their own per-neighbor present/absent counts (an embryonic routing entry) and
+merge by the same no-threshold `rank > 0` rule recognition uses, scored against background — not Jaccard.
+`compute_spatial_evidence` also switched from plain self-information (`-log2(p)`) to a likelihood ratio against
+a fresh one-occurrence hypothesis, so a mismatch on an already-common event can argue *against* minting, not
+just for it.
+
+| options | depth | neurons | test | train |
+|---|---|---|---|---|
+| 7×7 r1 | 3 | 1,187 | 69.78 | 67.11 (frozen) |
+| 14×14 r1 | 3 | 4,786 | 92.85 | 92.12 (frozen) |
+| 14×14 r1, 2 episodes | 4 | 5,865 | 92.90 | 91.77 |
+| 28×28 r1 | 3 | 13,028 | 92.85 | 86.05 |
+| 28×28 r2 | 3 | 9,341 | 92.79 | 85.61 |
+| 28×28 r1, 4 buckets | 2 | 21,647 | 92.25 | 83.83 |
+
+Roughly matches the Jaccard baseline's accuracy at ~50–90% of its neuron count, but 28×28 r2 is a real
+regression from Jaccard's 94.32%. 4-buckets backfires again (more neurons, worse accuracy, shallower — matches
+the historical "grayscale backfires at low res" finding). 2-episode run: nearly all the train-accuracy gain in
+episode 2 was capacity growth with almost no test-accuracy gain (92.85→92.90, +0.05pp) — later shown to be a
+real, reproducible pattern (see the corrected 5-episode 7×7 run below).
+
+### Naming-cost pricing experiments (28×28 r2), chasing the historical 96.44% ceiling
+
+The naming price was `name_bits(context) + name_bits(target)`, both priced against the whole brain's neuron
+count — a category error, since context is drawn from the parent's own level/neighborhood and target from a
+fixed base-sensory population, not the whole codebook. Tried, in order:
+
+| approach | result | verdict |
+|---|---|---|
+| price context against this neuron's own children count | runaway — 158,612 neurons / depth 8 by 800 images | reverted, killed early |
+| price against `sqrt(global codebook size)` | 14,283 neurons, depth 5, 93.62% test, 89.11% train | worked, but an arbitrary dampening exponent |
+| price context against parent's own **level** population (brain-wide, `spatial_level_paid_counts()`) | 10,531 neurons, depth 3, 86.47% train (test not run) | modest gain, needed new cross-file plumbing |
+| price context/target against **this neuron's own** tracked-neighbor counts (`spatial_context_counts.len()` / `spatial_inference_counts.len()`, already-persisted, zero new plumbing), ALPHA=0.9 | 18,412 neurons, depth 15, **94.14%** test, 90.06% train | adopted |
+| same, **ALPHA=1.0** (plain Laplace, replaces an unexplained 0.9 tuning constant used in `compute_spatial_evidence`) | 28,800 neurons, depth 12, **94.74%** test, 90.97% train | **best result this session** |
+
+The per-neuron-children attempt cascades: every new neuron starts with zero children, so it and its own
+children are all cheap to mint in a chain with no global brake — exactly the "alias chains stack into towers"
+failure the original global-codebook pricing existed to prevent. The winning design instead reuses
+`spatial_context_counts`/`spatial_inference_counts` — per-neuron maps that already exist for the recognition
+background model, growing from empty at birth — as the naming population, giving each neuron a naturally
+adaptive, non-arbitrary, already-persisted pool with no new cross-file plumbing.
+
+`ALPHA` (Laplace-style optimism, pre-existing at 0.9 in recognition's cold-start) was reused for the new
+evidence/ledger math. At `ALPHA=1.0`, `rank_by_likelihood_ratio` and the ledger's `score_entry` stay
+well-behaved (their `p_c` has a real `count` term), but `compute_spatial_evidence`'s formula degenerates
+exactly to the old plain self-information surprisal (`log2(1.0/p) = -log2(p)`), losing the "a mismatch on a
+common event can argue against minting" property — flagged as an open, not-yet-resolved tension.
+
+### 5-episode 7×7, corrected (ALPHA=1.0, local pricing) — the accuracy-vs-neurons finding, now trustworthy
+
+| episode | train | test | neurons |
+|---|---|---|---|
+| 1 | 66.91 | 71.05 | 3,082 |
+| 2 | 68.52 | 71.00 | 3,323 |
+| 3 | 68.70 | 70.97 | 3,612 |
+| 4 | 68.73 | 70.94 | 3,946 |
+| 5 | 68.78 | 71.10 | 4,333 |
+
+Test accuracy is flat (71.0–71.1%, no trend) across all 5 episodes while train accuracy climbs and neuron count
+grows +40% (3,082→4,333) — almost the entire train-accuracy gain lands in episode 2; episodes 3–5 add ~1,000
+neurons for essentially no test-accuracy gain. Directly motivates a forgetting/rent mechanism (discussed,
+not yet implemented): patterns should pay ongoing description-length rent and earn credit per accepted fire,
+so low-value repeat-episode growth gets reaped instead of accumulating.
+
+### Bug found and fixed — pending-mint ledger not persisted across save/restore
+
+`pending_spatial_mints` (the per-neuron ledger of in-progress, not-yet-paid correction candidates) was never
+part of `SerializedNeuron`/`backup.rs` — silently dropped on save, empty on load. Continuing training via
+save→load→continue therefore lost all partially-accumulated evidence at each checkpoint, needing more total
+occurrences to mint the same patterns than one uninterrupted run — a real, growing divergence, not noise:
+
+| episode | continuous run | incremental, pre-fix | incremental, post-fix |
+|---|---|---|---|
+| 2 | 3,323 | 3,200 | 3,323 |
+| 3 | 3,612 | 3,305 | 3,612 |
+| 4 | 3,946 | 3,410 | 3,946 |
+| 5 | 4,333 | 3,516 | 4,333 |
+
+Fixed by adding `SerializedPendingMint` (context set, present/absent counts, occurrences, evidence) to
+`SerializedNeuron`, and three new CSV tables (`pending_mint_meta.csv`, `pending_mint_context.csv`,
+`pending_mint_counts.csv`) to `backup.rs`, keyed by `(neuron_id, ledger_entry_index)` since an entry holds a
+set and two counted maps. Also fixed a dormant off-by-one in `patterns.csv` parsing (the `evidence` column's
+bounds check required 6 columns instead of 5) — never triggered in practice since the writer always emits all
+6, but inconsistent with the intended back-compat fallback. Post-fix, the incremental and continuous 5-episode
+runs match neuron-for-neuron at every checkpoint (table above).
+
+### Other cleanup this session
+
+- Renamed newly-introduced pricing parameters away from "vocabulary"/"codebook" language (not used elsewhere
+  in the signatures this session touched) to plain neuron-count names, then simplified further by computing
+  them from existing per-neuron state instead of threading them as parameters at all.
+- Removed a `.min(0.999)` clamp copied into the ledger's `score_entry` out of habit — it guards against
+  `log2(0)` only where `p_c` is explicitly flipped via `(1 - p_c)` (recognition's absent-entries branch); the
+  ledger's present/absent counts are tracked separately with no such flip, so the clamp did nothing there.
+  Added an explanatory comment at the one place (recognition) where it's actually load-bearing.

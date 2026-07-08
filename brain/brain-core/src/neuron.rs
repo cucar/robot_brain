@@ -51,13 +51,17 @@ pub struct SpatialCorrectionRequest {
 }
 
 /// One entry in a neuron's pending spatial-mint ledger (error-info): a distinct failure shape,
-/// identified by its context and target sets, accumulating surprisal toward its naming price.
-/// Matched by Jaccard similarity on both sets — the same sameness bar recognition uses — so
-/// evidence for one recurring shape never leaks into another's tally.
+/// keyed by its exact same-level context (a correction's identity is its context, so failures in
+/// different neighborhoods never pool), accumulating evidence toward its naming price. Tracks its
+/// own emerging likelihood model over the mismatched events — present_counts/absent_counts are
+/// per-neighbor counts across the occurrences pooled so far, the same role `SpatialRoutingEntry`'s
+/// per-fire context strengths play for an already-born pattern's recognition.
 #[derive(Debug, Clone)]
 struct PendingSpatialMint {
     context: FxHashSet<NeuronId>,
-    targets: FxHashSet<NeuronId>,
+    present_counts: FxHashMap<NeuronId, u64>,
+    absent_counts: FxHashMap<NeuronId, u64>,
+    occurrences: u64,
     evidence: f64,
 }
 
@@ -77,12 +81,12 @@ pub struct SpatialFrameResult {
 #[derive(Debug, Clone)]
 pub struct SpatialRoutingEntry {
     pub context: SpatialContext,
+    /// Decaying activation trace. Doubles as the candidacy gauge (a dead pattern stops being a
+    /// recognition candidate) and, read through the same lazy decay, as the recognition trial
+    /// count: with per-fire strengthening of common context entries, entry strength / this value
+    /// approximates p(entry | pattern) — the likelihood model for likelihood-ratio recognition.
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
-    /// Accepted activations of this pattern (recognition fires). With per-fire strengthening of
-    /// common context entries, entry strength / fires approximates p(entry | pattern) — the
-    /// likelihood model for likelihood-ratio recognition.
-    pub fires: u64,
     /// Evidence deposited toward this pattern's description cost, in bits.
     /// Under information-priced creation a pattern is born UNPAID: the recognizer matches it like
     /// any other candidate, but a match deposits the frame's surprisal here instead of firing.
@@ -545,6 +549,13 @@ impl Neuron {
             context_frames: self.spatial_context_frames,
             inference_counts: self.spatial_inference_counts.iter().map(|(&id, &c)| (id, c)).collect(),
             inference_frames: self.spatial_inference_frames,
+            pending_mints: self.pending_spatial_mints.iter().map(|m| SerializedPendingMint {
+                context: m.context.iter().copied().collect(),
+                present_counts: m.present_counts.iter().map(|(&id, &c)| (id, c)).collect(),
+                absent_counts: m.absent_counts.iter().map(|(&id, &c)| (id, c)).collect(),
+                occurrences: m.occurrences,
+                evidence: m.evidence,
+            }).collect(),
         }
     }
 
@@ -558,6 +569,17 @@ impl Neuron {
     pub fn restore_spatial_inference_counts(&mut self, frames: u64, counts: &[(NeuronId, u64)]) {
         self.spatial_inference_frames = frames;
         for &(id, c) in counts { self.spatial_inference_counts.insert(id, c); }
+    }
+
+    /// Restore the pending spatial-mint ledger — in-progress correction candidates not yet paid off.
+    pub fn restore_pending_spatial_mints(&mut self, mints: &[SerializedPendingMint]) {
+        self.pending_spatial_mints = mints.iter().map(|m| PendingSpatialMint {
+            context: m.context.iter().copied().collect(),
+            present_counts: m.present_counts.iter().copied().collect(),
+            absent_counts: m.absent_counts.iter().copied().collect(),
+            occurrences: m.occurrences,
+            evidence: m.evidence,
+        }).collect();
     }
 
     /// Rebuild the position metadata of spatial connection targets from central base-neuron metadata.
@@ -611,7 +633,6 @@ impl Neuron {
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
-                fires: entry.fires,
                 evidence: entry.evidence,
                 price: entry.price,
             });
@@ -623,7 +644,6 @@ impl Neuron {
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
-                fires: 0,
                 evidence: 0.0,
                 price: 0.0,
             });
@@ -808,12 +828,17 @@ impl Neuron {
     /// Looks up in whichever routing table holds the pattern (spatial or temporal).
     pub fn get_child_effective_activation_strength(&self, pattern_id: NeuronId, current_frame: FrameNumber) -> f64 {
         if let Some(entry) = self.spatial_routing_table.get(&pattern_id) {
-            return f64::max(0.0, entry.activation_strength - (current_frame - entry.last_activation_frame) as f64 * self.pattern_forget_rate);
+            return self.decay_activation(entry.activation_strength, entry.last_activation_frame, current_frame);
         }
         if let Some(entry) = self.temporal_routing_table.get(&pattern_id) {
-            return f64::max(0.0, entry.activation_strength - (current_frame - entry.last_activation_frame) as f64 * self.pattern_forget_rate);
+            return self.decay_activation(entry.activation_strength, entry.last_activation_frame, current_frame);
         }
         0.0
+    }
+
+    /// Apply lazy time-decay to a stored activation strength, floored at zero.
+    fn decay_activation(&self, activation_strength: f64, last_activation_frame: FrameNumber, current_frame: FrameNumber) -> f64 {
+        f64::max(0.0, activation_strength - (current_frame - last_activation_frame) as f64 * self.pattern_forget_rate)
     }
 
     /// Materialize lazy decay for a child pattern.
@@ -959,7 +984,6 @@ impl Neuron {
                 context: crate::context::SpatialContext::new(),
                 activation_strength: initial_strength,
                 last_activation_frame: 0,
-                fires: 0,
                 evidence: 0.0,
                 price: 0.0,
             });
@@ -1252,7 +1276,6 @@ impl Neuron {
         level_neighbors: Option<&SpatialContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         base_neighbors: &[ActiveNeuron],
-        codebook_size: usize,
         current_frame: FrameNumber,
     ) -> SpatialFrameResult {
         let mut timings = NeuronOpTimings::default();
@@ -1277,7 +1300,7 @@ impl Neuron {
         // the surprisal pricing read the same substrate the votes were cast from.
         // A failure either deposits into the matched unpaid pattern or requests a new one.
         let (correction_request, deposit, promotion) = self.evaluate_spatial_prediction(
-            &votes, level_neighbors, base_neighbors, unpaid_winner, should_learn, codebook_size, current_frame, &mut timings,
+            &votes, level_neighbors, base_neighbors, unpaid_winner, should_learn, current_frame, &mut timings,
         );
 
         // A deposit refreshed the unpaid pattern's decay clock; its new death frame travels with
@@ -1421,9 +1444,18 @@ impl Neuron {
     }
 
     /// Smoothed local frequency of a base event being active in the inference neighborhood
-    /// (Laplace: (c+1)/(frames+2)) — the base rate that prices prediction failures.
+    /// (Laplace: (c+1)/(frames+2)) — the base rate the Layer 3 pending-mint ledger's `score_entry`
+    /// prices its own mismatch counts against. Layer 1's gate uses the unsmoothed
+    /// `get_inference_frequency_raw` instead — see that function for why.
     fn get_inference_frequency(&self, id: NeuronId) -> f64 {
         (self.spatial_inference_counts.get(&id).copied().unwrap_or(0) + 1) as f64 / (self.spatial_inference_frames + 2) as f64
+    }
+
+    /// Raw local frequency of a base event being active in the inference neighborhood (count/frames,
+    /// no smoothing). Used only by the Layer 1 correction gate (`compute_spatial_evidence`) —
+    /// an experiment in progress; Layer 3's ledger still uses the smoothed `get_inference_frequency`.
+    fn get_inference_frequency_raw(&self, id: NeuronId) -> f64 {
+        self.spatial_inference_counts.get(&id).copied().unwrap_or(0) as f64 / self.spatial_inference_frames as f64
     }
 
     /// Track the best candidate with its legacy score, Jaccard ratio, and mode-specific rank.
@@ -1516,38 +1548,46 @@ impl Neuron {
         let ratio = common as f64 / union;
         if ratio < merge_threshold { return None; }
 
-        let rank = self.rank_spatial_candidate(entry, observed, score);
+        let rank = self.rank_spatial_candidate(entry, observed, score, current_frame);
         Some((PartialMatch { pattern_id, age: 0, score }, ratio, rank))
     }
 
     /// Rank value: log-likelihood ratio vs the background model in the info mode (grouped as
     /// present terms then absent terms, preserving the accumulation order), else the score.
-    fn rank_spatial_candidate(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext, score: f64) -> f64 {
-
-        if self.match_info { return self.rank_by_likelihood_ratio(entry, observed); }
+    fn rank_spatial_candidate(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext, score: f64, current_frame: FrameNumber) -> f64 {
+        if self.match_info { return self.rank_by_likelihood_ratio(entry, observed, current_frame); }
         score
     }
 
-    /// Likelihood ratio per stored entry, candidate model vs background model (Laplace both):
-    ///   p(e|C)  = (co-occurrence count + optimism) / (fires + 2)
-    ///   p(e|bg) = (marginal count + 1) / (frames + 2)
-    fn rank_by_likelihood_ratio(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext) -> f64 {
+    /// Likelihood ratio per stored entry, candidate model vs background model:
+    ///   p(e|C)  = co-occurrence count / trial count                (raw MLE, no smoothing)
+    ///   p(e|bg) = (marginal count + 1) / (frames + 2)               (Laplace, unrelated estimator)
+    /// The trial count is this pattern's own decayed activation strength — the same value that
+    /// gates its candidacy — read at the current frame, not a separate immortal fire counter.
+    /// No optimism constant: `strength` is only ever visited here when > 0 (filtered below) and is
+    /// structurally bounded by `n_c` (every `strength += 1` fires alongside the `n_c` increment
+    /// that produced it, in the same accepted-fire event), so `p_c` is always well-defined and
+    /// in (0, 1] without smoothing. Letting `p_c` reach its true empirical value immediately,
+    /// rather than biasing it toward the prior at low sample counts, means a pattern that
+    /// mismatches on even one or two early fires loses recognition contests against a cleaner-
+    /// fitting rival sooner — encouraging blurry patterns to split into more specific ones instead
+    /// of absorbing every partial match.
+    fn rank_by_likelihood_ratio(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext, current_frame: FrameNumber) -> f64 {
 
-        // OPTIMISTIC COLD START: a pattern minted FROM a configuration starts out believing its
-        // own context; as fires accumulate, the observed counts dominate and the optimism fades.
-        const ALPHA: f64 = 0.9;
-        let n_c = (entry.fires + 1) as f64;
+        let n_c = self.decay_activation(entry.activation_strength, entry.last_activation_frame, current_frame);
         let mut lr = 0.0;
         for (&ctx_id, &strength) in entry.context.entries() {
             if strength <= 0.0 || !observed.has_key(ctx_id) { continue; }
-            let p_c = (strength + ALPHA) / (n_c + 1.0);
+            let p_c = strength / n_c;
             let p_bg = self.get_context_frequency(ctx_id);
             lr += (p_c.min(0.999) / p_bg).log2();
         }
         for (&ctx_id, &strength) in entry.context.entries() {
             if strength <= 0.0 || observed.has_key(ctx_id) { continue; }
-            let p_c = (strength + ALPHA) / (n_c + 1.0);
+            let p_c = strength / n_c;
             let p_bg = self.get_context_frequency(ctx_id);
+            // Capped below 1.0: this term flips to (1 - p_c), and p_c == 1.0 would make that
+            // exactly 0, sending the ratio to log2(0) = -infinity.
             lr += ((1.0 - p_c.min(0.999)) / (1.0 - p_bg)).log2();
         }
         lr
@@ -1576,10 +1616,12 @@ impl Neuron {
         rank > 0.0
     }
 
-    /// Likelihood-model update on an accepted fire: count the fire and strengthen the entries that
-    /// were present, so entry strength / fires tracks p(entry | pattern). This is the strengthen-common
-    /// half of context refinement, standalone — no novel additions, no deletions, identities cannot
-    /// drift; the likelihood model just sharpens toward the pattern's true co-occurrence profile.
+    /// Likelihood-model update on an accepted fire: strengthen the entries that were present, so
+    /// entry strength / activation_strength tracks p(entry | pattern). The fire itself is counted
+    /// by the caller's `strengthen_child_activation`, not here — one event, one increment. This is
+    /// the strengthen-common half of context refinement, standalone — no novel additions, no
+    /// deletions, identities cannot drift; the likelihood model just sharpens toward the pattern's
+    /// true co-occurrence profile.
     fn update_likelihood_model(&mut self, best: &PartialMatch, best_match: Option<&MatchResult>) {
 
         if !self.match_info || !self.learning { return; }
@@ -1587,7 +1629,6 @@ impl Neuron {
             .expect("update_likelihood_model: winner match not materialized for the model update");
         let entry = self.spatial_routing_table.get_mut(&best.pattern_id)
             .expect("update_likelihood_model: best pattern missing from spatial routing table");
-        entry.fires += 1;
         for item in &m.common { entry.context.strengthen_neuron(item.neuron_id); }
     }
 
@@ -1620,13 +1661,12 @@ impl Neuron {
         base_neighbors: &[ActiveNeuron],
         unpaid_winner: Option<NeuronId>,
         should_learn: bool,
-        codebook_size: usize,
         current_frame: FrameNumber,
         timings: &mut NeuronOpTimings,
     ) -> (Option<SpatialCorrectionRequest>, Option<PatternMatch>, Option<NeuronId>) {
 
         let start = std::time::Instant::now();
-        let result = self.check_spatial_prediction(votes, level_neighbors, base_neighbors, unpaid_winner, should_learn, codebook_size, current_frame);
+        let result = self.check_spatial_prediction(votes, level_neighbors, base_neighbors, unpaid_winner, should_learn, current_frame);
         timings.correct_errors = start.elapsed().as_secs_f64();
         result
     }
@@ -1641,7 +1681,6 @@ impl Neuron {
         base_neighbors: &[ActiveNeuron],
         unpaid_winner: Option<NeuronId>,
         should_learn: bool,
-        codebook_size: usize,
         current_frame: FrameNumber,
     ) -> (Option<SpatialCorrectionRequest>, Option<PatternMatch>, Option<NeuronId>) {
 
@@ -1665,7 +1704,7 @@ impl Neuron {
 
         // The error is the Jaccard-union distance between prediction and reality, shared with temporal.
         // An empty union means there is nothing to compare.
-        let Some(error_rate) = crate::types::get_union_error(&predicted_events, &observed_events) else { return (None, None, None) };
+        let Some(error_rate) = get_union_error(&predicted_events, &observed_events) else { return (None, None, None) };
 
         // Record the sample even below the threshold so the adaptive grouping modes keep learning
         // this neuron's error distribution. The threshold already rode in with the votes, so the
@@ -1688,21 +1727,21 @@ impl Neuron {
             .map(|lc| lc.entries().keys().copied().collect())
             .unwrap_or_default();
 
-        // Information-priced creation measures the failure in surprisal and holds it against a
+        // Information-priced creation scores the failure as evidence for a distinct source (a
+        // likelihood ratio against background, not plain self-information) and holds it against a
         // ledger of pending failure shapes — a correction is requested only once a shape's pooled
-        // surprisal covers the price of naming it out of the codebook.
-        // A matched unpaid pattern (a rare underpaid mint) still absorbs the surprisal as a deposit.
+        // evidence covers the cost of naming it.
+        // A matched unpaid pattern (a rare underpaid mint) still absorbs the evidence as a deposit.
         if self.error_info {
-            let surprisal = self.compute_spatial_surprisal(&predicted_events, &observed_events);
-            if surprisal <= 0.0 { return (None, None, None); }
+            let evidence = self.compute_spatial_evidence(&predicted_events, &observed_events);
+            if evidence <= 0.0 { return (None, None, None); }
             if let Some(unpaid_id) = unpaid_winner {
-                let (death_frame, promoted) = self.deposit_spatial_evidence(unpaid_id, surprisal, current_frame);
+                let (death_frame, promoted) = self.deposit_spatial_evidence(unpaid_id, evidence, current_frame);
                 let deposit = PatternMatch { pattern_id: unpaid_id, age: 0, activate: false, death_frame };
                 return (None, Some(deposit), if promoted { Some(unpaid_id) } else { None });
             }
             if context_neighbors.is_empty() { return (None, None, None); }
-            let merge_threshold = 1.0 - spatial_votes.threshold;
-            let request = self.approve_spatial_correction(&context_neighbors, &observed_events, surprisal, merge_threshold, codebook_size);
+            let request = self.approve_spatial_correction(&context_neighbors, &predicted_events, &observed_events, evidence);
             return (request, None, None);
         }
 
@@ -1726,56 +1765,95 @@ impl Neuron {
         (self.strengthen_child_activation(pattern_id, current_frame), promoted)
     }
 
-    /// Approve or defer a spatial correction by accumulated surprisal. A severe enough single
-    /// failure pays for its own pattern outright; a milder one pools its surprisal in the ledger
-    /// entry matching its shape (Jaccard ≥ merge_threshold on both context and targets, the same
-    /// sameness bar recognition uses) until that entry's evidence covers the price of naming the
-    /// shape out of the codebook. A configuration only mints once it has recurred enough to be
-    /// worth stating; minting spends the entry's evidence, so the next one must be earned fresh.
+    /// Approve or defer a spatial correction by accumulated evidence. A severe enough single
+    /// failure pays for its own pattern outright; a milder one pools its evidence in the ledger
+    /// entry matching its shape until that entry's evidence covers the cost of naming the shape.
+    ///
+    /// Matching has two parts. The SAME-LEVEL context must match EXACTLY — a correction's identity
+    /// is its context, so two failures in different neighborhoods are never the same shape, no
+    /// matter how similar their mismatched events look. Among same-context entries, the mismatched-
+    /// events shape (what was observed but unpredicted, what was predicted but absent) is scored by
+    /// the same likelihood-ratio math recognition uses on an established pattern's context — each
+    /// entry has been building its own per-neighbor presence/absence counts as occurrences pool
+    /// into it, exactly like a routing entry's per-fire context strengths. No threshold: merge into
+    /// whichever same-context entry scores highest, same acceptance rule as `approve_info_winner`'s
+    /// `rank > 0.0` — the criterion is "does this entry explain the occurrence better than
+    /// background," not a similarity cutoff.
     fn approve_spatial_correction(
         &mut self,
         context_neighbors: &[NeuronId],
+        predicted_events: &FxHashSet<NeuronId>,
         observed_events: &FxHashSet<NeuronId>,
-        surprisal: f64,
-        merge_threshold: f64,
-        codebook_size: usize,
+        evidence: f64,
     ) -> Option<SpatialCorrectionRequest> {
 
-        // Bits to name a k-subset out of the codebook: log2 of the subset count, floored at one
-        // codeword per element so an always-active set can never mint for free. Priced on both the
-        // context and the target sets — naming what a pattern conditions on and what it predicts.
-        let vocabulary = codebook_size.max(2);
-        let name_bits = |k: usize| -> f64 {
-            let named = k.min(vocabulary);
-            (0..named).map(|i| ((vocabulary - i) as f64 / (named - i) as f64).log2()).sum()
+        // Bits to name a k-subset: log2 of the subset count, floored at one codeword per element so
+        // an always-active set can never mint for free. Each set is named out of the pool it was
+        // ACTUALLY drawn from — not the whole brain's neuron count, but how many distinct same-level
+        // neighbors (for the context) or base neighbors (for the target) THIS neuron has itself ever
+        // observed. A young neuron has seen few, so naming is cheap; the pool only grows as it does.
+        let name_bits = |k: usize, count: usize| -> f64 {
+            let named = k.min(count);
+            (0..named).map(|i| ((count - i) as f64 / (named - i) as f64).log2()).sum()
         };
         let context_set: FxHashSet<NeuronId> = context_neighbors.iter().copied().collect();
-        let price = name_bits(context_set.len()) + name_bits(observed_events.len());
+        let level_neuron_count = self.spatial_context_counts.len().max(2);
+        let base_neuron_count = self.spatial_inference_counts.len().max(2);
+        let price = name_bits(context_set.len(), level_neuron_count) + name_bits(observed_events.len(), base_neuron_count);
 
-        if surprisal >= price {
-            return Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal, price });
+        if evidence >= price {
+            return Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: evidence, price });
         }
 
-        let jaccard = |a: &FxHashSet<NeuronId>, b: &FxHashSet<NeuronId>| -> f64 {
-            let inter = a.intersection(b).count();
-            let union = a.len() + b.len() - inter;
-            if union == 0 { 0.0 } else { inter as f64 / union as f64 }
+        // The two mismatch directions: events reality had that the prediction missed, and events
+        // the prediction claimed that reality didn't have. Each direction is scored against its own
+        // per-neighbor presence/absence counts, the same asymmetry `compute_spatial_evidence` uses.
+        let present_mismatch: FxHashSet<NeuronId> = observed_events.difference(predicted_events).copied().collect();
+        let absent_mismatch: FxHashSet<NeuronId> = predicted_events.difference(observed_events).copied().collect();
+
+        const ALPHA: f64 = 1.0;
+        let score_entry = |neuron: &Self, entry: &PendingSpatialMint| -> f64 {
+            let denom = (entry.occurrences + 1) as f64;
+            let mut score = 0.0;
+            for &id in &present_mismatch {
+                let count = entry.present_counts.get(&id).copied().unwrap_or(0) as f64;
+                let p_c = (count + ALPHA) / denom;
+                score += (p_c / neuron.get_inference_frequency(id)).log2();
+            }
+            for &id in &absent_mismatch {
+                let count = entry.absent_counts.get(&id).copied().unwrap_or(0) as f64;
+                let p_c = (count + ALPHA) / denom;
+                score += (p_c / (1.0 - neuron.get_inference_frequency(id))).log2();
+            }
+            score
         };
 
-        // A recurring configuration accumulates its surprisal in the matching ledger entry until paid.
-        let matching = self.pending_spatial_mints.iter().position(|note|
-            jaccard(&note.context, &context_set) >= merge_threshold && jaccard(&note.targets, observed_events) >= merge_threshold);
+        let best = self.pending_spatial_mints.iter().enumerate()
+            .filter(|(_, note)| note.context == context_set)
+            .map(|(i, note)| (i, score_entry(self, note)))
+            .filter(|&(_, score)| score > 0.0)
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        match matching {
-            Some(i) => {
-                self.pending_spatial_mints[i].evidence += surprisal;
-                let evidence = self.pending_spatial_mints[i].evidence;
-                if evidence < price { return None; }
+        match best {
+            Some((i, score)) => {
+                let note = &mut self.pending_spatial_mints[i];
+                for &id in &present_mismatch { *note.present_counts.entry(id).or_insert(0) += 1; }
+                for &id in &absent_mismatch { *note.absent_counts.entry(id).or_insert(0) += 1; }
+                note.occurrences += 1;
+                note.evidence += score;
+                let total_evidence = note.evidence;
+                if total_evidence < price { return None; }
                 self.pending_spatial_mints.remove(i);
-                Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: evidence, price })
+                Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: total_evidence, price })
             }
             None => {
-                self.pending_spatial_mints.push(PendingSpatialMint { context: context_set, targets: observed_events.clone(), evidence: surprisal });
+                let mut present_counts = FxHashMap::default();
+                for &id in &present_mismatch { present_counts.insert(id, 1); }
+                let mut absent_counts = FxHashMap::default();
+                for &id in &absent_mismatch { absent_counts.insert(id, 1); }
+                self.pending_spatial_mints.push(PendingSpatialMint {
+                    context: context_set, present_counts, absent_counts, occurrences: 1, evidence,
+                });
                 None
             }
         }
@@ -1806,25 +1884,36 @@ impl Neuron {
         position_winners.values().map(|&(id, _)| id).collect()
     }
 
-    /// Measure a prediction failure in bits under the local inference base rates: events that
-    /// appeared unpredicted cost the improbability of their presence; events predicted but absent
-    /// cost the improbability of their absence. The description cost this surprisal is weighed
-    /// against is priced by the thalamus against the global codebook — locally a failure only
-    /// carries evidence, it does not know what a new pattern costs the brain.
-    fn compute_spatial_surprisal(
+    /// Score a prediction failure as evidence for a distinct source, via a likelihood-ratio test
+    /// between two hypotheses for each mismatched event: H1, "this is a real, deliberate
+    /// occurrence" — its probability is 1 (not a tunable constant: it is what "confirmed occurrence"
+    /// MEANS, by definition), versus H0, "this is just background/chance" — probability `p_bg`, this
+    /// neuron's own observed rate for that event. There is no established pattern yet to fit a
+    /// softer H1 probability from (that is the very thing being decided) — this is not the same
+    /// constant recognition's cold-start smoothing uses, and is not smoothing at all; it is the
+    /// fixed certainty term of a hypothesis test. An event that appeared unpredicted is scored as
+    /// "confirmed present" against how often it's normally present; an event predicted but absent
+    /// is scored as "confirmed absent" against how often it's normally absent. Only the mismatched
+    /// events are scored — a perfect prediction has no mismatch and carries zero evidence for
+    /// anything.
+    ///
+    /// The naming cost this evidence is weighed against is computed in `approve_spatial_correction`
+    /// from how many neurons actually exist at the relevant levels — this function only measures
+    /// the failure itself, it does not know what a new pattern would cost to name.
+    fn compute_spatial_evidence(
         &self,
         predicted_events: &FxHashSet<NeuronId>,
         observed_events: &FxHashSet<NeuronId>,
     ) -> f64 {
 
-        let mut surprisal = 0.0;
+        let mut evidence = 0.0;
         for &id in observed_events.difference(predicted_events) {
-            surprisal += -self.get_inference_frequency(id).log2();
+            evidence += (1.0 / self.get_inference_frequency_raw(id)).log2();
         }
         for &id in predicted_events.difference(observed_events) {
-            surprisal += -(1.0 - self.get_inference_frequency(id)).log2();
+            evidence += (1.0 / (1.0 - self.get_inference_frequency_raw(id))).log2();
         }
-        surprisal
+        evidence
     }
 
     /// Spatial connection learning and target refinement, writing to `spatial_connections` only.
@@ -2270,6 +2359,18 @@ pub struct SerializedNeuron {
     /// Local inference-neighbor activation counts + frame denominator (information-priced creation).
     pub inference_counts: Vec<(NeuronId, u64)>,
     pub inference_frames: u64,
+    /// Pending spatial-mint ledger entries (error-info) not yet paid off.
+    pub pending_mints: Vec<SerializedPendingMint>,
+}
+
+/// One pending spatial-mint ledger entry, serialized. See `PendingSpatialMint`.
+#[derive(Debug, Clone, Default)]
+pub struct SerializedPendingMint {
+    pub context: Vec<NeuronId>,
+    pub present_counts: Vec<(NeuronId, u64)>,
+    pub absent_counts: Vec<(NeuronId, u64)>,
+    pub occurrences: u64,
+    pub evidence: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -2290,8 +2391,6 @@ pub struct SerializedChild {
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
     pub context: Vec<ContextEntry>,
-    /// Accepted recognition fires (spatial only; likelihood-ratio denominator).
-    pub fires: u64,
     /// Payment state of information-priced creation (spatial only; zeros for temporal children).
     /// A pattern with evidence < price is unpaid: matched by the recognizer but not yet firing.
     pub evidence: f64,

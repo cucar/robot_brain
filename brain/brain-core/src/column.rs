@@ -158,7 +158,6 @@ impl Column {
         &mut self,
         tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        codebook_size: usize,
         frame_number: FrameNumber,
     ) -> Vec<SpatialColumnResult> {
 
@@ -168,7 +167,7 @@ impl Column {
             let neuron = self.neurons.get_mut(neuron_id)
                 .unwrap_or_else(|| panic!("Column.process_spatial_level: neuron {} not found", neuron_id));
             let result = neuron.process_spatial_frame(
-                Some(observed_context), new_error_pattern_ids, actives, codebook_size, frame_number,
+                Some(observed_context), new_error_pattern_ids, actives, frame_number,
             );
             results.push(SpatialColumnResult {
                 parent_id: *neuron_id,
@@ -655,7 +654,6 @@ impl Column {
                 neuron.add_spatial_child(child.pattern_id, child.activation_strength);
                 if let Some(entry) = neuron.get_spatial_routing_table_mut().get_mut(&child.pattern_id) {
                     entry.last_activation_frame = child.last_activation_frame;
-                    entry.fires = child.fires;
                     entry.evidence = child.evidence;
                     entry.price = child.price;
                 }
@@ -688,6 +686,7 @@ impl Column {
         // inference counts for information-priced correction creation.
         neuron.restore_spatial_context_counts(data.context_frames, &data.context_counts);
         neuron.restore_spatial_inference_counts(data.inference_frames, &data.inference_counts);
+        neuron.restore_pending_spatial_mints(&data.pending_mints);
 
         // load per-(neuron, age) Welford error stats.
         // Spatial serializes as age=0; temporal serializes at its real age (>= 1).

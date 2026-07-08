@@ -1541,9 +1541,6 @@ impl Thalamus {
             ctx
         }).collect();
 
-        // The codebook size prices derived corrections: sensory vocabulary plus PAID patterns.
-        let codebook_size = self.neurons_by_value.len() + self.paid_spatial_patterns.len();
-
         // Route each task to its owning region and fan out.
         let task_indices_by_region = self.bucket_by_region_indices(work_list, |&id| id);
         let mut results = Vec::new();
@@ -1553,7 +1550,7 @@ impl Thalamus {
                 (work_list[i], task_actives[i].clone(), task_contexts[i].clone())
             }).collect();
             let region_results = self.region_list[r].process_spatial_level(
-                &region_tasks, new_error_pattern_ids, codebook_size,
+                &region_tasks, new_error_pattern_ids,
                 frame_number,
             );
             results.extend(region_results);

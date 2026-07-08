@@ -10,13 +10,19 @@
 ///   - `neurons.csv`            id,temporal_level,spatial_level
 ///   - `base_neurons.csv`       neuron_id,channel_id,type,dimension_id,val
 ///   - `connections.csv`        from_neuron_id,to_neuron_id,distance,strength,reward
-///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength,fires,evidence,price
+///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength,evidence,price
 ///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength
 ///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2
 ///   - `spatial_freq.csv`       neuron_id,ctx_neuron_id,count — context-neighbor base rates, with one
 ///                              sentinel row per neuron (ctx_neuron_id == neuron_id) carrying the frame denominator.
 ///   - `spatial_inference_freq.csv` neuron_id,target_neuron_id,count — inference-neighbor base rates,
 ///                              same sentinel convention as spatial_freq.csv.
+///   - `pending_mint_meta.csv`    neuron_id,entry_index,occurrences,evidence — one row per pending
+///                              spatial-mint ledger entry not yet paid off.
+///   - `pending_mint_context.csv` neuron_id,entry_index,context_neuron_id — one row per context member
+///                              of a pending-mint entry.
+///   - `pending_mint_counts.csv`  neuron_id,entry_index,present(1)/absent(0),neighbor_id,count — the
+///                              entry's per-neighbor presence/absence counts.
 
 use std::fs;
 use std::fs::File;
@@ -27,7 +33,7 @@ use rustc_hash::FxHashMap;
 
 use crate::neuron::{
     SerializedChild, SerializedConnection, SerializedContextRef,
-    SerializedErrorStats, SerializedNeuron,
+    SerializedErrorStats, SerializedNeuron, SerializedPendingMint,
 };
 use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry};
 use crate::types::{
@@ -89,6 +95,7 @@ impl Backup {
         self.write_neuron_error_stats(&folder, snapshot)?;
         self.write_spatial_freq(&folder, snapshot)?;
         self.write_spatial_inference_freq(&folder, snapshot)?;
+        self.write_pending_mints(&folder, snapshot)?;
 
         println!("💾 Backup saved: {} ({} neurons)", folder.display(), snapshot.neurons.len());
 
@@ -161,6 +168,7 @@ impl Backup {
                 context_frames: 0,
                 inference_counts: Vec::new(),
                 inference_frames: 0,
+                pending_mints: Vec::new(),
             });
             temporal_levels.insert(id, temporal_level);
             spatial_levels.insert(id, spatial_level);
@@ -222,10 +230,17 @@ impl Backup {
                 let pattern_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pattern id: {}", e))?;
                 let parent_id: NeuronId = row[1].parse().map_err(|e| format!("Bad parent id: {}", e))?;
                 let strength: f64 = row[2].parse().map_err(|e| format!("Bad strength: {}", e))?;
-                let fires: u64 = if row.len() > 3 { row[3].parse().unwrap_or(0) } else { 0 };
-                // Payment state (columns 4-5); absent in older backups → zeros (born paid).
-                let evidence: f64 = if row.len() > 5 { row[4].parse().unwrap_or(0.0) } else { 0.0 };
-                let price: f64 = if row.len() > 5 { row[5].parse().unwrap_or(0.0) } else { 0.0 };
+                // Older backups carried a `fires` column at index 3 (pattern_id,parent_id,strength,
+                // fires,evidence,price — 6 columns); the current format drops it (5 columns). Row
+                // length disambiguates which layout this file is in.
+                let (evidence, price) = if row.len() > 5 {
+                    (row[4].parse().unwrap_or(0.0), row[5].parse().unwrap_or(0.0))
+                } else {
+                    // Payment state; absent in even older backups → zeros (born paid).
+                    let evidence = if row.len() > 3 { row[3].parse().unwrap_or(0.0) } else { 0.0 };
+                    let price = if row.len() > 4 { row[4].parse().unwrap_or(0.0) } else { 0.0 };
+                    (evidence, price)
+                };
 
                 neuron_parents.insert(pattern_id, parent_id);
 
@@ -241,7 +256,6 @@ impl Backup {
                     activation_strength: strength,
                     last_activation_frame: 0,
                     context: Vec::new(),
-                    fires,
                     evidence,
                     price,
                 });
@@ -328,6 +342,56 @@ impl Backup {
                 let neuron = neurons.get_mut(&neuron_id)
                     .ok_or_else(|| format!("spatial_inference_freq neuron not found: {}", neuron_id))?;
                 if target_id == neuron_id { neuron.inference_frames = count; } else { neuron.inference_counts.push((target_id, count)); }
+            }
+        }
+
+        // Pending spatial-mint ledger — in-progress correction candidates not yet paid off.
+        // Optional, older snapshots omit it; each entry is keyed by (neuron, entry index) across
+        // three tables since an entry holds a set (context) and two counted maps (present/absent).
+        let pending_mint_meta_file = folder.join("pending_mint_meta.csv");
+        if pending_mint_meta_file.exists() {
+            for row in read_csv(&pending_mint_meta_file)? {
+                if row.len() < 4 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pending-mint neuron id: {}", e))?;
+                let entry_idx: usize = row[1].parse().map_err(|e| format!("Bad pending-mint entry index: {}", e))?;
+                let occurrences: u64 = row[2].parse().map_err(|e| format!("Bad pending-mint occurrences: {}", e))?;
+                let evidence: f64 = row[3].parse().map_err(|e| format!("Bad pending-mint evidence: {}", e))?;
+                let neuron = neurons.get_mut(&neuron_id)
+                    .ok_or_else(|| format!("pending_mint_meta neuron not found: {}", neuron_id))?;
+                if entry_idx >= neuron.pending_mints.len() { neuron.pending_mints.resize(entry_idx + 1, SerializedPendingMint::default()); }
+                neuron.pending_mints[entry_idx].occurrences = occurrences;
+                neuron.pending_mints[entry_idx].evidence = evidence;
+            }
+        }
+
+        let pending_mint_context_file = folder.join("pending_mint_context.csv");
+        if pending_mint_context_file.exists() {
+            for row in read_csv(&pending_mint_context_file)? {
+                if row.len() < 3 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pending-mint ctx neuron id: {}", e))?;
+                let entry_idx: usize = row[1].parse().map_err(|e| format!("Bad pending-mint ctx entry index: {}", e))?;
+                let ctx_id: NeuronId = row[2].parse().map_err(|e| format!("Bad pending-mint ctx id: {}", e))?;
+                let neuron = neurons.get_mut(&neuron_id)
+                    .ok_or_else(|| format!("pending_mint_context neuron not found: {}", neuron_id))?;
+                if entry_idx >= neuron.pending_mints.len() { neuron.pending_mints.resize(entry_idx + 1, SerializedPendingMint::default()); }
+                neuron.pending_mints[entry_idx].context.push(ctx_id);
+            }
+        }
+
+        let pending_mint_counts_file = folder.join("pending_mint_counts.csv");
+        if pending_mint_counts_file.exists() {
+            for row in read_csv(&pending_mint_counts_file)? {
+                if row.len() < 5 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad pending-mint counts neuron id: {}", e))?;
+                let entry_idx: usize = row[1].parse().map_err(|e| format!("Bad pending-mint counts entry index: {}", e))?;
+                let present = row[2] == "1";
+                let neighbor_id: NeuronId = row[3].parse().map_err(|e| format!("Bad pending-mint counts neighbor id: {}", e))?;
+                let count: u64 = row[4].parse().map_err(|e| format!("Bad pending-mint counts count: {}", e))?;
+                let neuron = neurons.get_mut(&neuron_id)
+                    .ok_or_else(|| format!("pending_mint_counts neuron not found: {}", neuron_id))?;
+                if entry_idx >= neuron.pending_mints.len() { neuron.pending_mints.resize(entry_idx + 1, SerializedPendingMint::default()); }
+                if present { neuron.pending_mints[entry_idx].present_counts.push((neighbor_id, count)); }
+                else { neuron.pending_mints[entry_idx].absent_counts.push((neighbor_id, count)); }
             }
         }
 
@@ -469,12 +533,10 @@ impl Backup {
                 None => continue,
             };
             let mut strength = 0.0;
-            let mut fires = 0u64;
             let (mut evidence, mut price) = (0.0f64, 0.0f64);
             if let Some(parent) = neuron_map.get(&parent_id) {
                 if let Some(child) = parent.children.iter().find(|c| c.pattern_id == entry.neuron.id) {
                     strength = child.activation_strength;
-                    fires = child.fires;
                     evidence = child.evidence;
                     price = child.price;
                 }
@@ -483,7 +545,6 @@ impl Backup {
                 entry.neuron.id.to_string(),
                 parent_id.to_string(),
                 strength.to_string(),
-                fires.to_string(),
                 evidence.to_string(),
                 price.to_string(),
             ])?;
@@ -553,6 +614,37 @@ impl Backup {
             }
         }
         w.flush().map_err(|e| format!("Failed to flush spatial_inference_freq.csv: {}", e))
+    }
+
+    /// Write the pending spatial-mint ledger — in-progress correction candidates not yet paid off.
+    /// Split across three tables since an entry holds a set (context) and two counted maps
+    /// (present/absent), keyed by (neuron id, entry index within that neuron's ledger).
+    fn write_pending_mints(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
+        let mut meta_w = open_csv(&folder.join("pending_mint_meta.csv"))?;
+        let mut ctx_w = open_csv(&folder.join("pending_mint_context.csv"))?;
+        let mut counts_w = open_csv(&folder.join("pending_mint_counts.csv"))?;
+        for entry in &snapshot.neurons {
+            for (idx, mint) in entry.neuron.pending_mints.iter().enumerate() {
+                write_row(&mut meta_w, &[
+                    entry.neuron.id.to_string(),
+                    idx.to_string(),
+                    mint.occurrences.to_string(),
+                    mint.evidence.to_string(),
+                ])?;
+                for &ctx_id in &mint.context {
+                    write_row(&mut ctx_w, &[entry.neuron.id.to_string(), idx.to_string(), ctx_id.to_string()])?;
+                }
+                for &(neighbor_id, count) in &mint.present_counts {
+                    write_row(&mut counts_w, &[entry.neuron.id.to_string(), idx.to_string(), "1".to_string(), neighbor_id.to_string(), count.to_string()])?;
+                }
+                for &(neighbor_id, count) in &mint.absent_counts {
+                    write_row(&mut counts_w, &[entry.neuron.id.to_string(), idx.to_string(), "0".to_string(), neighbor_id.to_string(), count.to_string()])?;
+                }
+            }
+        }
+        meta_w.flush().map_err(|e| format!("Failed to flush pending_mint_meta.csv: {}", e))?;
+        ctx_w.flush().map_err(|e| format!("Failed to flush pending_mint_context.csv: {}", e))?;
+        counts_w.flush().map_err(|e| format!("Failed to flush pending_mint_counts.csv: {}", e))
     }
 
     fn write_neuron_error_stats(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
@@ -848,6 +940,7 @@ mod tests {
                         context_frames: 0,
                         inference_counts: Vec::new(),
                         inference_frames: 0,
+                        pending_mints: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -870,6 +963,7 @@ mod tests {
                         context_frames: 0,
                         inference_counts: Vec::new(),
                         inference_frames: 0,
+                        pending_mints: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -907,6 +1001,39 @@ mod tests {
         let neuron1 = loaded.neurons.iter().find(|e| e.neuron.id == 1).unwrap();
         assert_eq!(neuron1.neuron.connections.len(), 1);
         assert_eq!(neuron1.neuron.connections[0].to_neuron_id, 2);
+
+        // cleanup
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn test_load_reads_old_six_column_patterns_csv() {
+        // Older backups wrote patterns.csv as pattern_id,parent_id,strength,fires,evidence,price
+        // (6 columns) before the `fires` column was dropped. Restore must still parse these
+        // correctly, skipping the fires column rather than misreading it as evidence.
+        let dir = temp_dir().join("brain_test_backup_legacy");
+        fs::remove_dir_all(&dir).ok();
+        let folder = dir.join("backups").join("legacy_test");
+        fs::create_dir_all(&folder).unwrap();
+
+        write_csv(&folder.join("channels.csv"), &[]).unwrap();
+        write_csv(&folder.join("dimensions.csv"), &[]).unwrap();
+        write_csv(&folder.join("neurons.csv"), &[
+            vec!["1".to_string(), "0".to_string(), "0".to_string()],
+            vec!["2".to_string(), "0".to_string(), "1".to_string()],
+        ]).unwrap();
+        write_csv(&folder.join("patterns.csv"), &[
+            vec!["2".to_string(), "1".to_string(), "3.0".to_string(), "7".to_string(), "12.5".to_string(), "4.0".to_string()],
+        ]).unwrap();
+
+        let backup = Backup::new(0.01);
+        let loaded = backup.load(&dir, "legacy_test").unwrap();
+
+        let parent = loaded.neurons.iter().find(|e| e.neuron.id == 1).unwrap();
+        let child = parent.neuron.children.iter().find(|c| c.pattern_id == 2).unwrap();
+        assert_eq!(child.activation_strength, 3.0);
+        assert_eq!(child.evidence, 12.5);
+        assert_eq!(child.price, 4.0);
 
         // cleanup
         fs::remove_dir_all(&dir).ok();
