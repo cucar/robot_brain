@@ -1884,18 +1884,24 @@ impl Neuron {
         position_winners.values().map(|&(id, _)| id).collect()
     }
 
-    /// Score a prediction failure as evidence for a distinct source, via a likelihood-ratio test
-    /// between two hypotheses for each mismatched event: H1, "this is a real, deliberate
-    /// occurrence" — its probability is 1 (not a tunable constant: it is what "confirmed occurrence"
-    /// MEANS, by definition), versus H0, "this is just background/chance" — probability `p_bg`, this
-    /// neuron's own observed rate for that event. There is no established pattern yet to fit a
-    /// softer H1 probability from (that is the very thing being decided) — this is not the same
-    /// constant recognition's cold-start smoothing uses, and is not smoothing at all; it is the
-    /// fixed certainty term of a hypothesis test. An event that appeared unpredicted is scored as
-    /// "confirmed present" against how often it's normally present; an event predicted but absent
-    /// is scored as "confirmed absent" against how often it's normally absent. Only the mismatched
-    /// events are scored — a perfect prediction has no mismatch and carries zero evidence for
-    /// anything.
+    /// Score a prediction failure as net evidence for a distinct source: evidence FOR a surprise,
+    /// from the two ways the prediction can be wrong, minus evidence AGAINST one, from the ways it
+    /// was right. All three terms share the same building block, `1 - p_bg(id)` — how rare `id`
+    /// normally is for this neuron — pointed at three different sets:
+    ///   - present, unpredicted (`id` showed up, wasn't predicted): `1 - p_bg(id)` — a RARE event
+    ///     appearing out of nowhere is surprising; a common one appearing is not. FOR.
+    ///   - predicted, absent (`id` was expected, didn't show): `p_bg(id)` — a RELIABLE event vanishing
+    ///     is surprising; a rarely-present one skipping a frame is not. FOR.
+    ///   - predicted AND present (a hit): `1 - p_bg(id)` — correctly calling a RARE event is strong
+    ///     evidence the existing prediction mechanism is already tracking something real; correctly
+    ///     calling a common one proves little (background alone would do it). AGAINST.
+    /// Only misses and hits are scored (asked not to bother with the fourth case, correctly
+    /// unpredicted-and-absent — the default, uninformative outcome under either hypothesis, and
+    /// exhaustively checking it would mean scanning the whole neighbor population, not just what's
+    /// active). Unlike the earlier log-ratio formula this replaces, `evidence_against` is a real,
+    /// independently varying quantity, not a fixed constant — so the net score can genuinely go
+    /// negative: a frame with a large miss can still net out as "not a surprise" if the same
+    /// prediction nailed other, harder (rarer) events in the same frame.
     ///
     /// The naming cost this evidence is weighed against is computed in `approve_spatial_correction`
     /// from how many neurons actually exist at the relevant levels — this function only measures
@@ -1906,14 +1912,18 @@ impl Neuron {
         observed_events: &FxHashSet<NeuronId>,
     ) -> f64 {
 
-        let mut evidence = 0.0;
+        let mut evidence_for = 0.0;
         for &id in observed_events.difference(predicted_events) {
-            evidence += (1.0 / self.get_inference_frequency_raw(id)).log2();
+            evidence_for += 1.0 - self.get_inference_frequency_raw(id);
         }
         for &id in predicted_events.difference(observed_events) {
-            evidence += (1.0 / (1.0 - self.get_inference_frequency_raw(id))).log2();
+            evidence_for += self.get_inference_frequency_raw(id);
         }
-        evidence
+        let mut evidence_against = 0.0;
+        for &id in predicted_events.intersection(observed_events) {
+            evidence_against += 1.0 - self.get_inference_frequency_raw(id);
+        }
+        evidence_for - evidence_against
     }
 
     /// Spatial connection learning and target refinement, writing to `spatial_connections` only.
