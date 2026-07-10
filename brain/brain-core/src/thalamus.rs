@@ -491,6 +491,7 @@ impl Thalamus {
                     strength: 1.0,
                     reward,
                     channel_id,
+                    dim_id: None,
                 });
             }
         }
@@ -534,11 +535,12 @@ impl Thalamus {
         self.pattern_forget_rate
     }
 
-    /// Allocate a SPATIAL pattern neuron. No pre-wired connections — spatial corrections are
-    /// allocated with empty connections; learn_spatial_connections will fill them on future
-    /// frames as the correction co-fires with others. The pattern occupies
-    /// spatial_level=parent.spatial_level+1; its temporal level stays 0 (it enters temporal via
-    /// the apex handoff at temporal_level_index[0]).
+    /// Allocate a SPATIAL pattern neuron. Pre-wired at distance 0 to the base events it was
+    /// actually created to predict — the same founding-connection treatment temporal corrections
+    /// already got — so it can predict from birth instead of starting blind and needing several
+    /// reactivations (each looking like total failure) before it learns anything on its own via
+    /// `learn_spatial_connections`. The pattern occupies spatial_level=parent.spatial_level+1; its
+    /// temporal level stays 0 (it enters temporal via the apex handoff at temporal_level_index[0]).
     /// Does NOT touch the parent's routing table (that happens inside column.install_spatial_corrections
     /// via add_spatial_pattern) and does NOT register death (death frame is known only after
     /// parent.add_spatial_pattern runs).
@@ -546,7 +548,19 @@ impl Thalamus {
         &mut self,
         level: Level,
         parent_id: NeuronId,
+        target_events: &[ActiveNeuron],
     ) -> PatternNeuronSpec {
+        let connections = target_events.iter()
+            .map(|target| ConnectionSpec {
+                distance: 0,
+                to_neuron_id: target.id,
+                strength: 1.0,
+                reward: target.reward,
+                channel_id: target.channel_id,
+                dim_id: Some(target.dim_id),
+            })
+            .collect();
+
         // allocate id and build the spec for Column.create_neurons
         let id = self.next_neuron_id;
         self.next_neuron_id += 1;
@@ -583,7 +597,7 @@ impl Thalamus {
             .clone();
         self.base_neurons.insert(id, inherited);
 
-        PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections: Vec::new() }
+        PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
 
     // ── Neuron metadata getters ─────────────────────────────────────────────
@@ -1173,7 +1187,7 @@ impl Thalamus {
             // Create one correction pattern for a neuron whose prediction failed.
             // A pattern whose opening evidence covers the price joins the codebook at birth.
             let parent_level = self.get_neuron_spatial_level(parent_id);
-            let pattern_id = self.create_spatial_correction(parent_id, parent_level, &request.context_neighbors, request.surprisal, price, &mut new_specs, &mut install_ops);
+            let pattern_id = self.create_spatial_correction(parent_id, parent_level, &request.context_neighbors, request.surprisal, price, &request.target_events, &mut new_specs, &mut install_ops);
             if request.surprisal >= price {
                 self.paid_spatial_patterns.insert(pattern_id);
             }
@@ -1190,12 +1204,13 @@ impl Thalamus {
         context_neighbors: &[NeuronId],
         evidence: f64,
         price: f64,
+        target_events: &[ActiveNeuron],
         new_specs: &mut Vec<NeuronCreateSpec>,
         install_ops: &mut Vec<SpatialInstallOp>,
     ) -> NeuronId {
 
         // The correction lives one level deeper than the neuron it corrects.
-        let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id);
+        let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id, target_events);
         new_specs.push(NeuronCreateSpec {
             id: spec.id,
             forget_rate: spec.forget_rate,

@@ -48,6 +48,13 @@ pub struct SpatialCorrectionRequest {
     /// Computed once, at approval, against the codebook size the neuron was given — the thalamus
     /// reuses it verbatim rather than repricing against a codebook that may have moved on.
     pub price: f64,
+    /// The base events actually observed this frame (what the new pattern is being created to
+    /// predict) — carried through so the thalamus can wire real founding connections at birth,
+    /// the same way temporal corrections already do. Without this, a spatial pattern is born
+    /// unable to predict anything until it separately relearns connections over future
+    /// reactivations, guaranteeing its first several uses look like total failure regardless of
+    /// what they actually represent.
+    pub target_events: Vec<ActiveNeuron>,
 }
 
 /// One entry in a neuron's pending spatial-mint ledger (error-info): a distinct failure shape,
@@ -1559,37 +1566,31 @@ impl Neuron {
         score
     }
 
-    /// Likelihood ratio per stored entry, candidate model vs background model:
-    ///   p(e|C)  = co-occurrence count / trial count                (raw MLE, no smoothing)
-    ///   p(e|bg) = (marginal count + 1) / (frames + 2)               (Laplace, unrelated estimator)
-    /// The trial count is this pattern's own decayed activation strength — the same value that
-    /// gates its candidacy — read at the current frame, not a separate immortal fire counter.
-    /// No optimism constant: `strength` is only ever visited here when > 0 (filtered below) and is
-    /// structurally bounded by `n_c` (every `strength += 1` fires alongside the `n_c` increment
-    /// that produced it, in the same accepted-fire event), so `p_c` is always well-defined and
-    /// in (0, 1] without smoothing. Letting `p_c` reach its true empirical value immediately,
-    /// rather than biasing it toward the prior at low sample counts, means a pattern that
-    /// mismatches on even one or two early fires loses recognition contests against a cleaner-
-    /// fitting rival sooner — encouraging blurry patterns to split into more specific ones instead
-    /// of absorbing every partial match.
+    /// Log-likelihood ratio of the observed context under this pattern's model versus background.
     fn rank_by_likelihood_ratio(&self, entry: &SpatialRoutingEntry, observed: &SpatialContext, current_frame: FrameNumber) -> f64 {
 
+        // Trials come from the pattern's own decayed activation, not a separate immortal fire counter.
         let n_c = self.decay_activation(entry.activation_strength, entry.last_activation_frame, current_frame);
         let mut lr = 0.0;
+
+        // Reward each stored context neuron present this frame by how much more the pattern expects it
+        // than background. p_c is a raw MLE (co-fires / trials) — no smoothing, deliberately.
         for (&ctx_id, &strength) in entry.context.entries() {
             if strength <= 0.0 || !observed.has_key(ctx_id) { continue; }
             let p_c = strength / n_c;
             let p_bg = self.get_context_frequency(ctx_id);
             lr += (p_c.min(0.999) / p_bg).log2();
         }
+
+        // Penalize each stored context neuron the pattern expected but that is absent this frame.
+        // The cap keeps p_c == 1 from making (1 - p_c) == 0, which would send the ratio to log2(0) = -inf.
         for (&ctx_id, &strength) in entry.context.entries() {
             if strength <= 0.0 || observed.has_key(ctx_id) { continue; }
             let p_c = strength / n_c;
             let p_bg = self.get_context_frequency(ctx_id);
-            // Capped below 1.0: this term flips to (1 - p_c), and p_c == 1.0 would make that
-            // exactly 0, sending the ratio to log2(0) = -infinity.
             lr += ((1.0 - p_c.min(0.999)) / (1.0 - p_bg)).log2();
         }
+
         lr
     }
 
@@ -1702,6 +1703,14 @@ impl Neuron {
             .filter(|&id| id != self.id)
             .collect();
 
+        // Same population, kept as full ActiveNeuron records (id, channel, dim, reward) rather than
+        // just ids — a new pattern's founding connections are wired from this, so it can predict
+        // observed_events from the moment it's born instead of learning them from scratch later.
+        let target_events: Vec<ActiveNeuron> = base_neighbors.iter()
+            .filter(|a| a.id != self.id)
+            .cloned()
+            .collect();
+
         // The error is the Jaccard-union distance between prediction and reality, shared with temporal.
         // An empty union means there is nothing to compare.
         let Some(error_rate) = get_union_error(&predicted_events, &observed_events) else { return (None, None, None) };
@@ -1741,14 +1750,14 @@ impl Neuron {
                 return (None, Some(deposit), if promoted { Some(unpaid_id) } else { None });
             }
             if context_neighbors.is_empty() { return (None, None, None); }
-            let request = self.approve_spatial_correction(&context_neighbors, &predicted_events, &observed_events, evidence);
+            let request = self.approve_spatial_correction(&context_neighbors, &predicted_events, &observed_events, evidence, &target_events);
             return (request, None, None);
         }
 
         // Only errors above the neuron's own adaptive threshold request a correction.
         if context_neighbors.is_empty() { return (None, None, None); }
         if error_rate <= spatial_votes.threshold { return (None, None, None); }
-        (Some(SpatialCorrectionRequest { context_neighbors, surprisal: 0.0, price: 0.0 }), None, None)
+        (Some(SpatialCorrectionRequest { context_neighbors, surprisal: 0.0, price: 0.0, target_events }), None, None)
     }
 
     /// Deposit a failed frame's surprisal into an unpaid pattern that matched the failing
@@ -1785,6 +1794,7 @@ impl Neuron {
         predicted_events: &FxHashSet<NeuronId>,
         observed_events: &FxHashSet<NeuronId>,
         evidence: f64,
+        target_events: &[ActiveNeuron],
     ) -> Option<SpatialCorrectionRequest> {
 
         // Bits to name a k-subset: log2 of the subset count, floored at one codeword per element so
@@ -1802,7 +1812,7 @@ impl Neuron {
         let price = name_bits(context_set.len(), level_neuron_count) + name_bits(observed_events.len(), base_neuron_count);
 
         if evidence >= price {
-            return Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: evidence, price });
+            return Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: evidence, price, target_events: target_events.to_vec() });
         }
 
         // The two mismatch directions: events reality had that the prediction missed, and events
@@ -1844,7 +1854,7 @@ impl Neuron {
                 let total_evidence = note.evidence;
                 if total_evidence < price { return None; }
                 self.pending_spatial_mints.remove(i);
-                Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: total_evidence, price })
+                Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: total_evidence, price, target_events: target_events.to_vec() })
             }
             None => {
                 let mut present_counts = FxHashMap::default();

@@ -14,7 +14,7 @@ use crate::neuron::{
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
-    ChannelId, DeathFrameEntry, Distance, GroupMode, FrameNumber,
+    ChannelId, DeathFrameEntry, Distance, DimensionId, GroupMode, FrameNumber,
     NeuronId, Reward, Strength,
 };
 
@@ -588,9 +588,13 @@ impl Column {
             }
 
             if let Some(ref connections) = spec.connections {
+                let mut target_dims: FxHashMap<NeuronId, (ChannelId, DimensionId)> = FxHashMap::default();
                 for conn in connections {
-                    // save the event/action connection
+                    // save the event connections the pattern was created to infer
                     neuron.create_connection(conn.distance, conn.to_neuron_id, conn.strength, conn.reward);
+                    if let Some(dim_id) = conn.dim_id {
+                        target_dims.insert(conn.to_neuron_id, (conn.channel_id, dim_id));
+                    }
 
                     // for actions with negative rewards, save an alternative with neutral reward
                     if conn.reward < 0.0 {
@@ -599,6 +603,10 @@ impl Column {
                         }
                     }
                 }
+                // Founding spatial (d=0) connections need their target's position recorded, the
+                // same way ordinary spatial learning does, or aggregate_spatial_prediction's
+                // per-position winner competition silently drops their votes.
+                if !target_dims.is_empty() { neuron.decorate_spatial_targets(&target_dims); }
             }
             self.neurons.insert(neuron.id, neuron);
         }
@@ -793,6 +801,10 @@ pub struct ConnectionSpec {
     pub strength: Strength,
     pub reward: Reward,
     pub channel_id: ChannelId,
+    /// Target's position, spatial (distance 0) connections only — `aggregate_spatial_prediction`'s
+    /// per-position winner competition needs it to consider this connection's votes at all. `None`
+    /// for temporal (distance > 0) connections, which don't use position-based competition.
+    pub dim_id: Option<DimensionId>,
 }
 
 #[cfg(test)]
@@ -841,7 +853,7 @@ mod tests {
                 id: 2,
                 forget_rate: 0.1,
                 connections: Some(vec![
-                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.0, channel_id: 0 },
+                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.0, channel_id: 0, dim_id: None },
                 ]),
             },
         ]);
@@ -858,7 +870,7 @@ mod tests {
                 id: 2,
                 forget_rate: 0.1,
                 connections: Some(vec![
-                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.5, channel_id: 0 },
+                    ConnectionSpec { distance: 1, to_neuron_id: 1, strength: 1.0, reward: 0.5, channel_id: 0, dim_id: None },
                 ]),
             },
         ]);
