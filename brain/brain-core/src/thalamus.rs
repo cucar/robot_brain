@@ -210,14 +210,6 @@ pub struct Thalamus {
     // Each of these is a pending decision, not a feature: when its experiment concludes, the winning
     // behavior is hard-wired and the toggle is DELETED.
 
-    /// INFORMATION-PRICED spatial pattern creation: each neuron measures its own prediction failures
-    /// in surprisal under its local inference base rates; an uncovered failure requests a new pattern,
-    /// which is created UNPAID and priced here against the global codebook. Unpaid patterns live in
-    /// the parent's routing table like any other: recognition matches them, matches deposit surprisal
-    /// toward the price, payment promotes them to firing, and ones that stop recurring decay away
-    /// through the normal forgetting machinery. Default OFF.
-    error_info: bool,
-
     /// Master learning toggle, fixed at construction and threaded to every region, column, and neuron
     /// like the other options.
     learning: bool,
@@ -246,12 +238,6 @@ pub struct Thalamus {
     /// Cumulative count of spatial correction patterns created by the spatial correction pass.
     /// Diagnostic — surfaced via Brain.get_spatial_correction_count() for harness validation.
     spatial_corrections_minted: u64,
-
-    /// The PAID spatial patterns — the actual codebook. Unpaid hypotheses are excluded: they are
-    /// not codewords yet, so they neither belong to the naming vocabulary nor inflate the price
-    /// of joining it. Maintained at creation (born paid), promotion (deposits covered the price),
-    /// and deletion; rebuilt from the routing tables on restore.
-    paid_spatial_patterns: FxHashSet<NeuronId>,
 
     /// Death ledger: frame_number → set of neuron ids scheduled to die.
     death_ledger: FxHashMap<FrameNumber, FxHashSet<NeuronId>>,
@@ -369,7 +355,6 @@ impl Thalamus {
             context_length,
             regions,
             columns,
-            error_info,
             learning,
             neurons_by_value: FxHashMap::default(),
             base_neurons: FxHashMap::default(),
@@ -377,7 +362,6 @@ impl Thalamus {
             neuron_temporal_levels: FxHashMap::default(),
             neuron_spatial_levels: FxHashMap::default(),
             spatial_corrections_minted: 0,
-            paid_spatial_patterns: FxHashSet::default(),
             death_ledger: FxHashMap::default(),
             neuron_death_frame: FxHashMap::default(),
             channel_specs: FxHashMap::default(),
@@ -742,22 +726,11 @@ impl Thalamus {
         counts
     }
 
-    /// Per-level count of PAID correction neurons — the patterns that may fire, as opposed to
-    /// unpaid hypotheses still accumulating evidence toward their price. Same indexing as
-    /// [spatial_level_counts]; subtracting gives the unpaid pool per level.
+    /// Per-level count of PAID correction neurons. Under the womb every born pattern is paid — the
+    /// unpaid hypotheses live in the womb as embryos, not the routing table — so this equals
+    /// [spatial_level_counts]. Retained for API stability with the diagnostics harness.
     pub fn spatial_level_paid_counts(&self) -> Vec<u32> {
-        let mut counts = self.spatial_level_counts();
-
-        // Walk the columns for unpaid pattern ids and subtract each from its level's total.
-        for region in &self.region_list {
-            for pattern_id in region.collect_unpaid_spatial_patterns() {
-                let lvl = self.get_neuron_spatial_level(pattern_id);
-                if lvl == 0 { continue; }
-                let idx = (lvl - 1) as usize;
-                if idx < counts.len() && counts[idx] > 0 { counts[idx] -= 1; }
-            }
-        }
-        counts
+        self.spatial_level_counts()
     }
 
     /// Get the coordinate for a base (sensory/action) neuron.
@@ -1149,27 +1122,26 @@ impl Thalamus {
 
     // ── Spatial error pass (1c) ─────────────────────────────────────────────
 
-    /// Settle this frame's spatial correction requests. Each neuron evaluated its own prediction
-    /// against reality during dispatch; a request means the failure was covered by no existing
-    /// pattern, paid or unpaid, and — under error-info — already cleared its own pending-mint
-    /// ledger, so it arrives pre-paid. This pass owns only what a neuron cannot decide locally —
-    /// the subsumption filter and id allocation — and creates every requested pattern.
+    /// Settle this frame's spatial births. A request means an embryo in the neuron's womb covered
+    /// its price and asks for the pattern it represents to be born. Every born pattern is paid — the
+    /// womb owns pricing and clustering entirely — so this pass owns only what a neuron cannot decide
+    /// locally: the subsumption filter, id allocation, and cross-neuron wiring.
     ///
-    /// The CONTEXT of a minted correction is drawn from the parent's OWN level — for an Lk parent,
-    /// the L(k+1) correction's context_entries are the level-k co-actives around it. This is what
-    /// lets the hierarchy grow: an L1 prediction failure mints an L2 whose context is L1 neighbors,
-    /// so L2 will fire next frame when L1 patterns recur in a similar L1-neighborhood.
+    /// The CONTEXT of a born correction is the embryo's converged center, drawn from the parent's OWN
+    /// level — for an Lk parent, the L(k+1) correction's context_entries are level-k co-actives. This
+    /// is what lets the hierarchy grow: an L1 prediction failure births an L2 whose context is L1
+    /// neighbors, so L2 will fire next frame when L1 patterns recur in a similar L1-neighborhood.
     pub fn create_spatial_corrections(
         &mut self,
         dispatch_results: &[Vec<crate::column::SpatialColumnResult>],
         subsumed_neurons: &FxHashSet<NeuronId>,
     ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>) {
 
-        // Corrections created this frame are returned as creation specs plus install ops for their parents.
+        // Corrections born this frame are returned as creation specs plus install ops for their parents.
         let mut new_specs = Vec::new();
         let mut install_ops = Vec::new();
 
-        // process the requests of the spatial dispatch - price them and create the corrections.
+        // process the birth requests of the spatial dispatch and create the corrections.
         for column_result in dispatch_results.iter().flatten() {
             let Some(request) = &column_result.correction_request else { continue };
 
@@ -1177,33 +1149,21 @@ impl Thalamus {
             // A subsumed neuron casts no votes and requests nothing, so this is a safety net.
             if subsumed_neurons.contains(&column_result.parent_id) { continue; }
 
-            // Information-priced creation: the request already cleared its ledger's price at
-            // approval, so it arrives pre-paid — reuse that price rather than repricing against a
-            // codebook that may have moved on since. Outside the info mode the price is zero and
-            // the pattern is born paid.
+            // Create one correction pattern for the paid-off embryo.
             let parent_id = column_result.parent_id;
-            let price = if self.error_info { request.price } else { 0.0 };
-
-            // Create one correction pattern for a neuron whose prediction failed.
-            // A pattern whose opening evidence covers the price joins the codebook at birth.
             let parent_level = self.get_neuron_spatial_level(parent_id);
-            let pattern_id = self.create_spatial_correction(parent_id, parent_level, &request.context_neighbors, request.surprisal, price, &request.target_events, &mut new_specs, &mut install_ops);
-            if request.surprisal >= price {
-                self.paid_spatial_patterns.insert(pattern_id);
-            }
+            self.create_spatial_correction(parent_id, parent_level, &request.context_neighbors, &request.target_events, &mut new_specs, &mut install_ops);
         }
 
         (new_specs, install_ops)
     }
 
-    /// Create one correction pattern for a neuron whose prediction failed.
+    /// Create one correction pattern for a paid-off embryo giving birth.
     fn create_spatial_correction(
         &mut self,
         parent_id: NeuronId,
         parent_level: Level,
         context_neighbors: &[NeuronId],
-        evidence: f64,
-        price: f64,
         target_events: &[ActiveNeuron],
         new_specs: &mut Vec<NeuronCreateSpec>,
         install_ops: &mut Vec<SpatialInstallOp>,
@@ -1217,14 +1177,11 @@ impl Thalamus {
             connections: Some(spec.connections),
         });
 
-        // Installation wires the neighborhood in as the correction's context on its parent,
-        // carrying the payment state the pattern is born with.
+        // Installation wires the embryo's center in as the correction's context on its parent.
         install_ops.push(SpatialInstallOp {
             parent_id,
             pattern_id: spec.id,
             context_neuron_ids: context_neighbors.to_vec(),
-            evidence,
-            price,
         });
         self.spatial_corrections_minted += 1;
         spec.id
@@ -1642,15 +1599,7 @@ impl Thalamus {
     /// Extract the fired pattern activations from one neuron's spatial result.
     fn collect_spatial_activations(&mut self, result: &crate::column::SpatialColumnResult, activations: &mut Vec<Activation>) {
 
-        // A deposit that paid a pattern off promotes it into the codebook — it now counts toward
-        // the naming vocabulary that prices future patterns.
-        if let Some(pattern_id) = result.promotion {
-            self.paid_spatial_patterns.insert(pattern_id);
-        }
-
         // Only recognition matches fire spatially; corrections install through their own pass.
-        // Non-firing entries are evidence deposits into unpaid patterns — their refreshed decay
-        // clock still reaches the death ledger, they just produce no activation.
         for m in &result.matches {
             if let Some(df) = m.death_frame {
                 self.register_death(m.pattern_id, df);
@@ -2005,7 +1954,6 @@ impl Thalamus {
     /// Remove a destroyed neuron from Thalamus-owned metadata maps.
     fn cleanup_deleted_neuron_metadata(&mut self, id: NeuronId) {
         self.unregister_death(id);
-        self.paid_spatial_patterns.remove(&id);
         let level = self.neuron_temporal_levels.remove(&id);
         self.neuron_spatial_levels.remove(&id);
         self.neuron_parents.remove(&id);
@@ -2167,19 +2115,6 @@ impl Thalamus {
             region.decorate_spatial_targets(&target_meta);
         }
 
-        // Rebuild the paid codebook from the restored routing tables: every spatial pattern minus
-        // the ones whose entries are still unpaid.
-        let mut paid: FxHashSet<NeuronId> = self.neuron_spatial_levels.iter()
-            .filter(|(_, &lvl)| lvl > 0)
-            .map(|(&id, _)| id)
-            .collect();
-        for region in &self.region_list {
-            for pattern_id in region.collect_unpaid_spatial_patterns() {
-                paid.remove(&pattern_id);
-            }
-        }
-        self.paid_spatial_patterns = paid;
-
         // rebuild the death ledger from materialized activation strengths —
         // collect first, then register (can't borrow self immutably and mutably at once)
         let death_frames: Vec<_> = self.region_list.iter()
@@ -2200,7 +2135,6 @@ impl Thalamus {
         self.neuron_parents.clear();
         self.death_ledger.clear();
         self.neuron_death_frame.clear();
-        self.paid_spatial_patterns.clear();
         self.temporal_level_counts.clear();
         self.next_neuron_id = 1;
     }
@@ -2298,16 +2232,14 @@ struct CorrectionSpec {
     context_entries: Vec<ContextRefEntry>,
 }
 
-/// Install op for a freshly-minted spatial correction. Records the parent whose routing table
-/// gains the pattern, the new pattern's id, the d=0 context entries to bind against, and the
-/// pattern's payment state (opening evidence and price; price 0 = born paid).
+/// Install op for a freshly-born spatial correction. Records the parent whose routing table gains
+/// the pattern, the new pattern's id, and the d=0 context entries (the embryo's center) to bind
+/// against. The pattern is born paid — its embryo already covered the price in the womb.
 #[derive(Debug, Clone)]
 pub struct SpatialInstallOp {
     pub parent_id: NeuronId,
     pub pattern_id: NeuronId,
     pub context_neuron_ids: Vec<NeuronId>,
-    pub evidence: f64,
-    pub price: f64,
 }
 
 /// Result of region.install_spatial_corrections — death frames for the death ledger plus

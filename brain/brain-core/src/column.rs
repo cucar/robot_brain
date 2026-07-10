@@ -36,8 +36,6 @@ pub struct SpatialColumnResult {
     pub parent_id: NeuronId,
     pub matches: Vec<PatternMatch>,
     pub correction_request: Option<crate::neuron::SpatialCorrectionRequest>,
-    /// A pattern paid off by this frame's deposit — the thalamus adds it to the codebook count.
-    pub promotion: Option<NeuronId>,
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
@@ -173,7 +171,6 @@ impl Column {
                 parent_id: *neuron_id,
                 matches: result.matches,
                 correction_request: result.correction_request,
-                promotion: result.promotion,
                 timings: result.timings,
             });
         }
@@ -505,18 +502,6 @@ impl Column {
         }
     }
 
-    /// Diagnostic: list the UNPAID spatial patterns hosted by this column's neurons — hypotheses
-    /// whose deposited evidence has not yet covered their price.
-    pub fn collect_unpaid_spatial_patterns(&self) -> Vec<NeuronId> {
-        let mut unpaid = Vec::new();
-        for neuron in self.neurons.values() {
-            for (&pattern_id, entry) in neuron.get_spatial_routing_table() {
-                if !entry.is_paid() { unpaid.push(pattern_id); }
-            }
-        }
-        unpaid
-    }
-
     /// Spatial correction install — for each op, add the new pattern as a child on the
     /// parent neuron with the d=0 context entries, register the resulting death frame, and emit
     /// ContextRefUpdates for each context-entry target so they know this parent now references them.
@@ -533,8 +518,8 @@ impl Column {
                 None => continue,
             };
 
-            // Add the child pattern to the parent's spatial routing table with its payment state.
-            let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids, frame_number, op.evidence, op.price);
+            // Add the child pattern to the parent's spatial routing table (born from a paid embryo).
+            let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids, frame_number);
             if let Some(df) = death_frame { deaths.push((op.pattern_id, df)); }
 
             // For each context-neuron target, emit a SpatialContextRefUpdate so the target's
@@ -662,8 +647,6 @@ impl Column {
                 neuron.add_spatial_child(child.pattern_id, child.activation_strength);
                 if let Some(entry) = neuron.get_spatial_routing_table_mut().get_mut(&child.pattern_id) {
                     entry.last_activation_frame = child.last_activation_frame;
-                    entry.evidence = child.evidence;
-                    entry.price = child.price;
                 }
                 for ctx in &child.context {
                     neuron.add_spatial_context(child.pattern_id, ctx.neuron_id, ctx.strength);
@@ -694,7 +677,7 @@ impl Column {
         // inference counts for information-priced correction creation.
         neuron.restore_spatial_context_counts(data.context_frames, &data.context_counts);
         neuron.restore_spatial_inference_counts(data.inference_frames, &data.inference_counts);
-        neuron.restore_pending_spatial_mints(&data.pending_mints);
+        neuron.restore_spatial_embryos(&data.embryos);
 
         // load per-(neuron, age) Welford error stats.
         // Spatial serializes as age=0; temporal serializes at its real age (>= 1).

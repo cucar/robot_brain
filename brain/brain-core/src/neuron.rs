@@ -32,22 +32,15 @@ pub struct SpatialVotes {
     pub threshold: f64,
 }
 
-/// A spatial correction request: the neuron evaluated its own prediction against reality, the
-/// failure cleared its creation gate, and no existing pattern — paid or unpaid — covered the
-/// configuration, so it asks the thalamus to mint a new one.
+/// A spatial correction request: an embryo in this neuron's womb accumulated enough evidence to
+/// cover its price, so the neuron asks the thalamus to give birth to the pattern it represents.
 /// The thalamus owns what the neuron cannot decide locally: the subsumption filter, id
-/// allocation, pricing against the global codebook, and cross-neuron wiring.
+/// allocation, and cross-neuron wiring. Pricing and clustering happened entirely in the womb.
 #[derive(Debug, Clone)]
 pub struct SpatialCorrectionRequest {
-    /// Same-level co-actives the correction will condition on (the neuron's received context view).
+    /// The embryo's converged context center — the same-level neighbors the born pattern will
+    /// condition on. This is the pooled center, not the noisy triggering frame's raw context.
     pub context_neighbors: Vec<NeuronId>,
-    /// Bits of surprise the failure carried under the neuron's local base rates (error-info mode).
-    /// The new pattern is born with this as its opening evidence toward its price.
-    pub surprisal: f64,
-    /// The description cost this request already cleared (error-info mode), 0 outside it.
-    /// Computed once, at approval, against the codebook size the neuron was given — the thalamus
-    /// reuses it verbatim rather than repricing against a codebook that may have moved on.
-    pub price: f64,
     /// The base events actually observed this frame (what the new pattern is being created to
     /// predict) — carried through so the thalamus can wire real founding connections at birth,
     /// the same way temporal corrections already do. Without this, a spatial pattern is born
@@ -57,19 +50,24 @@ pub struct SpatialCorrectionRequest {
     pub target_events: Vec<ActiveNeuron>,
 }
 
-/// One entry in a neuron's pending spatial-mint ledger (error-info): a distinct failure shape,
-/// keyed by its exact same-level context (a correction's identity is its context, so failures in
-/// different neighborhoods never pool), accumulating evidence toward its naming price. Tracks its
-/// own emerging likelihood model over the mismatched events — present_counts/absent_counts are
-/// per-neighbor counts across the occurrences pooled so far, the same role `SpatialRoutingEntry`'s
-/// per-fire context strengths play for an already-born pattern's recognition.
+/// An embryo in a parent neuron's womb (error-info): a not-yet-born cluster center. Context-only —
+/// it owns no neuron, no connections, no target data. Failures assigned to it fold their observed
+/// context into `context_counts` (an online mean center) and deposit their benefit into `evidence`.
+/// Fuzzy likelihood-ratio assignment pools near-miss contexts into one embryo, so the womb stays
+/// bounded where the old exact-context ledger exploded. Born when evidence covers price; evicted
+/// when evidence decays or is dragged below zero by incoherent (negative-benefit) deposits.
 #[derive(Debug, Clone)]
-struct PendingSpatialMint {
-    context: FxHashSet<NeuronId>,
-    present_counts: FxHashMap<NeuronId, u64>,
-    absent_counts: FxHashMap<NeuronId, u64>,
-    occurrences: u64,
+struct SpatialEmbryo {
+    /// Per-neighbor occurrence count. Over `n`, `count / n` is the center's soft membership
+    /// distribution — the likelihood model assignment scores an observed context against.
+    context_counts: FxHashMap<NeuronId, u64>,
+    /// Occurrence total: how many failures have been served by this embryo.
+    n: u64,
+    /// Accumulated benefit deposited by the assigned failures, in Layer 1's bits.
     evidence: f64,
+    /// Frame of the most recent deposit. Evidence decays from here at the parent's forget rate, so
+    /// an embryo that stops being served eventually falls to zero and is evicted (staleness).
+    last_frame: FrameNumber,
 }
 
 /// Per-neuron output of the spatial frame pass. Votes never leave the neuron — it evaluates its
@@ -77,9 +75,6 @@ struct PendingSpatialMint {
 pub struct SpatialFrameResult {
     pub matches: Vec<PatternMatch>,
     pub correction_request: Option<SpatialCorrectionRequest>,
-    /// A pattern whose deposit this frame covered its price — it joins the codebook, and the
-    /// thalamus counts it toward the naming vocabulary future patterns are priced against.
-    pub promotion: Option<NeuronId>,
     pub timings: NeuronOpTimings,
 }
 
@@ -94,24 +89,6 @@ pub struct SpatialRoutingEntry {
     /// approximates p(entry | pattern) — the likelihood model for likelihood-ratio recognition.
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
-    /// Evidence deposited toward this pattern's description cost, in bits.
-    /// Under information-priced creation a pattern is born UNPAID: the recognizer matches it like
-    /// any other candidate, but a match deposits the frame's surprisal here instead of firing.
-    /// The pattern may fire once its evidence covers its price; if it stops recurring it decays
-    /// and dies through the normal forgetting machinery — recurrence is recognition, eviction is
-    /// forgetting, and no separate ledger exists.
-    pub evidence: f64,
-    /// The description cost this pattern must pay before it may fire, in bits.
-    /// Priced by the thalamus against the global codebook size at creation; 0 outside
-    /// information-priced creation, so those patterns are born paid.
-    pub price: f64,
-}
-
-impl SpatialRoutingEntry {
-    /// A pattern may fire once its deposited evidence covers its description cost.
-    pub fn is_paid(&self) -> bool {
-        self.evidence >= self.price
-    }
 }
 
 /// Entry in the temporal routing table for a child temporal-correction pattern.
@@ -307,14 +284,13 @@ pub struct Neuron {
     /// the candidate must explain the observation better than "no pattern". No thresholds. Default OFF.
     match_info: bool,
 
-    /// INFORMATION-PRICED spatial correction creation (MDL): a failed prediction is measured in
-    /// surprisal under the neuron's local inference base rates, and every failure POOLS into the
-    /// neuron's running failure statistics — no sameness test, the way samples pool at a
-    /// decision-tree node. A correction mints when the pooled surprisal covers the price of the
-    /// context DERIVED from that distribution (the modal failure context), so patterns are born
-    /// matching what actually recurs. Minting spends the pool.
-    /// Replaces the averaged-threshold trigger; no thresholds, no counts, no separate ledger.
-    /// Default OFF.
+    /// FACILITY-LOCATION spatial correction creation (MDL): a failed prediction is scored as net
+    /// benefit under the neuron's local inference base rates (Layer 1), and a positive benefit is a
+    /// demand point served by the womb. Fuzzy likelihood-ratio assignment pools each failure into an
+    /// embryo — a recurring context cluster — whose center drifts toward the failures it serves and
+    /// whose evidence accumulates the benefit. A pattern is born when an embryo's evidence covers
+    /// its price (|context| + 1); incoherent or stale embryos are evicted on the forget-rate clock.
+    /// No thresholds, no exact-context ledger, no unpaid patterns. Default OFF.
     error_info: bool,
 
     /// Diagnostic: when set, spatial `match_observed` prints its common/missing/novel/ratio/threshold per call
@@ -379,10 +355,11 @@ pub struct Neuron {
     /// Number of frames this neuron has observed base events on (denominator for the counts above).
     spatial_inference_frames: u64,
 
-    /// Pending spatial-correction ledger (error-info): one entry per distinct failure shape not
-    /// yet worth naming, accumulating surprisal until it covers its price. Training-transient; a
-    /// restored brain re-pools from fresh failures.
-    pending_spatial_mints: Vec<PendingSpatialMint>,
+    /// The womb (error-info): the parent's set of embryos — not-yet-born cluster centers, each
+    /// pooling near-miss failure contexts by fuzzy likelihood-ratio assignment and accumulating
+    /// benefit toward its birth price. Bounded by construction (one embryo per recurring context
+    /// cluster) and self-pruning (incoherent or stale embryos are evicted).
+    spatial_embryos: Vec<SpatialEmbryo>,
 
     // ── Temporal state (d>0 sequence, distance-keyed) ───────────────────────────
 
@@ -452,7 +429,7 @@ impl Neuron {
             spatial_context_frames: 0,
             spatial_inference_counts: FxHashMap::default(),
             spatial_inference_frames: 0,
-            pending_spatial_mints: Vec::new(),
+            spatial_embryos: Vec::new(),
             temporal_connections: Vec::new(),
             temporal_routing_table: FxHashMap::default(),
             temporal_context_index: FxHashMap::default(),
@@ -556,12 +533,10 @@ impl Neuron {
             context_frames: self.spatial_context_frames,
             inference_counts: self.spatial_inference_counts.iter().map(|(&id, &c)| (id, c)).collect(),
             inference_frames: self.spatial_inference_frames,
-            pending_mints: self.pending_spatial_mints.iter().map(|m| SerializedPendingMint {
-                context: m.context.iter().copied().collect(),
-                present_counts: m.present_counts.iter().map(|(&id, &c)| (id, c)).collect(),
-                absent_counts: m.absent_counts.iter().map(|(&id, &c)| (id, c)).collect(),
-                occurrences: m.occurrences,
-                evidence: m.evidence,
+            embryos: self.spatial_embryos.iter().map(|e| SerializedEmbryo {
+                context_counts: e.context_counts.iter().map(|(&id, &c)| (id, c)).collect(),
+                n: e.n,
+                evidence: e.evidence,
             }).collect(),
         }
     }
@@ -578,14 +553,14 @@ impl Neuron {
         for &(id, c) in counts { self.spatial_inference_counts.insert(id, c); }
     }
 
-    /// Restore the pending spatial-mint ledger — in-progress correction candidates not yet paid off.
-    pub fn restore_pending_spatial_mints(&mut self, mints: &[SerializedPendingMint]) {
-        self.pending_spatial_mints = mints.iter().map(|m| PendingSpatialMint {
-            context: m.context.iter().copied().collect(),
-            present_counts: m.present_counts.iter().copied().collect(),
-            absent_counts: m.absent_counts.iter().copied().collect(),
-            occurrences: m.occurrences,
-            evidence: m.evidence,
+    /// Restore the womb — in-progress embryos accumulating toward birth. The decay clock rebases to
+    /// frame 0 (the restored brain starts counting fresh), matching how child activation clocks reset.
+    pub fn restore_spatial_embryos(&mut self, embryos: &[SerializedEmbryo]) {
+        self.spatial_embryos = embryos.iter().map(|e| SpatialEmbryo {
+            context_counts: e.context_counts.iter().copied().collect(),
+            n: e.n,
+            evidence: e.evidence,
+            last_frame: 0,
         }).collect();
     }
 
@@ -640,8 +615,6 @@ impl Neuron {
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
-                evidence: entry.evidence,
-                price: entry.price,
             });
         }
         for (&pattern_id, entry) in &self.temporal_routing_table {
@@ -651,8 +624,6 @@ impl Neuron {
                 activation_strength: entry.activation_strength,
                 last_activation_frame: entry.last_activation_frame,
                 context: entry.context.get_entries(),
-                evidence: 0.0,
-                price: 0.0,
             });
         }
         result
@@ -902,6 +873,14 @@ impl Neuron {
             }
         }
 
+        // Embryos carry no death-ledger entry, but their evidence decays on the same clock, so fold
+        // pending decay into the stored evidence and rebase to frame 0 like the children above.
+        let rate = self.pattern_forget_rate;
+        for embryo in &mut self.spatial_embryos {
+            embryo.evidence -= (current_frame - embryo.last_frame) as f64 * rate;
+            embryo.last_frame = 0;
+        }
+
         entries
     }
 
@@ -960,15 +939,11 @@ impl Neuron {
 
     /// Add a spatial child pattern to the spatial routing table and populate its context.
     /// Spatial context has no distance dimension — entries are just (pattern, ctx_neuron) pairs.
-    /// The pattern is born with its opening evidence and its price; it may fire once paid.
+    /// The pattern is born from an embryo that already covered its price, so it fires from birth.
     /// Returns death frame for pattern neurons.
-    pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId], current_frame: FrameNumber, evidence: f64, price: f64) -> Option<FrameNumber> {
+    pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId], current_frame: FrameNumber) -> Option<FrameNumber> {
         self.add_spatial_child(pattern_id, 0.0);
         for &ctx_neuron_id in context { self.add_spatial_context(pattern_id, ctx_neuron_id, 1.0); }
-        if let Some(entry) = self.spatial_routing_table.get_mut(&pattern_id) {
-            entry.evidence = evidence;
-            entry.price = price;
-        }
         self.strengthen_child_activation(pattern_id, current_frame)
     }
 
@@ -984,15 +959,12 @@ impl Neuron {
     }
 
     /// Add a spatial child pattern to the spatial routing table (no context yet).
-    /// Born paid (price 0) — the information-priced install path overwrites evidence and price.
     pub fn add_spatial_child(&mut self, pattern_id: NeuronId, initial_strength: f64) {
         if !self.spatial_routing_table.contains_key(&pattern_id) {
             self.spatial_routing_table.insert(pattern_id, SpatialRoutingEntry {
                 context: crate::context::SpatialContext::new(),
                 activation_strength: initial_strength,
                 last_activation_frame: 0,
-                evidence: 0.0,
-                price: 0.0,
             });
         }
     }
@@ -1297,28 +1269,23 @@ impl Neuron {
         }
 
         // Match child patterns against the observed co-activation; at most one fires.
-        // The best unpaid match rides along as the deposit target for a failure this frame.
-        let (mut matches, unpaid_winner) = self.recognize_spatial_patterns(level_neighbors, current_frame, &mut timings);
+        let matches = self.recognize_spatial_patterns(level_neighbors, current_frame, &mut timings);
 
         // Cast this frame's co-activation prediction unless a fired child already represents it.
         let votes = self.generate_spatial_votes(&matches, &mut timings);
 
         // Evaluate the prediction against observed reality BEFORE learning, so the comparison and
-        // the surprisal pricing read the same substrate the votes were cast from.
-        // A failure either deposits into the matched unpaid pattern or requests a new one.
-        let (correction_request, deposit, promotion) = self.evaluate_spatial_prediction(
-            &votes, level_neighbors, base_neighbors, unpaid_winner, should_learn, current_frame, &mut timings,
+        // the benefit measurement read the same substrate the votes were cast from. A worthwhile
+        // failure is assigned into the womb, which may birth a pattern once an embryo is paid off.
+        let correction_request = self.evaluate_spatial_prediction(
+            &votes, level_neighbors, base_neighbors, should_learn, current_frame, &mut timings,
         );
-
-        // A deposit refreshed the unpaid pattern's decay clock; its new death frame travels with
-        // the matches (activate=false) so the central death ledger stays current.
-        if let Some(d) = deposit { matches.push(d); }
 
         // Learn co-activation edges AFTER voting, so the vote reads the prior frame's edges rather
         // than the ones just strengthened toward this frame's co-actives.
         if should_learn { self.learn_spatial_connections(base_neighbors, &mut timings); }
 
-        SpatialFrameResult { matches, correction_request, promotion, timings }
+        SpatialFrameResult { matches, correction_request, timings }
     }
 
     /// Count each co-active context neighbor toward this neuron's context background model.
@@ -1353,16 +1320,14 @@ impl Neuron {
 
     /// Spatial pattern recognition. Walks `spatial_routing_table` and finds the best matching child
     /// pattern given the observed co-activation `SpatialContext`, then runs it through the active
-    /// mode's acceptance gate; at most one pattern fires.
-    /// Also returns the best matching UNPAID pattern: it cannot fire, but a match means the
-    /// observed configuration is one it already hypothesizes, so this frame's failure surprisal
-    /// deposits toward its price instead of proposing a duplicate.
+    /// mode's acceptance gate; at most one pattern fires. Every born pattern is fire-eligible —
+    /// there are no unpaid hypotheses in the routing table; those live in the womb as embryos.
     fn recognize_spatial_patterns(
         &mut self,
         level_neighbors: Option<&SpatialContext>,
         current_frame: FrameNumber,
         timings: &mut NeuronOpTimings,
-    ) -> (Vec<PatternMatch>, Option<NeuronId>) {
+    ) -> Vec<PatternMatch> {
         let start = std::time::Instant::now();
         let result = self.match_spatial_patterns(level_neighbors, current_frame, timings);
         timings.recognize_patterns = start.elapsed().as_secs_f64();
@@ -1375,26 +1340,25 @@ impl Neuron {
         level_neighbors: Option<&SpatialContext>,
         current_frame: FrameNumber,
         timings: &mut NeuronOpTimings,
-    ) -> (Vec<PatternMatch>, Option<NeuronId>) {
+    ) -> Vec<PatternMatch> {
 
         // we cannot match any patterns if there is no observed context
         let context_neighbors = match level_neighbors {
             Some(c) if c.size() > 0 => c,
-            _ => return (Vec::new(), None),
+            _ => return Vec::new(),
         };
 
         // Candidate set via spatial_context_index — narrow to patterns that share at least one context neuron.
         let candidates = self.get_spatial_candidates(context_neighbors, timings);
-        if candidates.is_empty() { return (Vec::new(), None); }
+        if candidates.is_empty() { return Vec::new(); }
 
         // Score every candidate and keep the single best with its Jaccard ratio and mode rank.
-        // Paid and unpaid patterns compete on separate tracks: only paid patterns may fire.
         let merge_threshold = self.resolve_spatial_merge_threshold();
 
-        let (best, unpaid_winner) = self.pick_best_spatial_candidate(context_neighbors, candidates, merge_threshold, current_frame, timings);
+        let best = self.pick_best_spatial_candidate(context_neighbors, candidates, merge_threshold, current_frame, timings);
         let (best, ratio, rank) = match best {
             Some(b) => b,
-            None => return (Vec::new(), unpaid_winner),
+            None => return Vec::new(),
         };
 
         // Materialize the winning match's entry lists only for the consumers that need them — the
@@ -1404,18 +1368,17 @@ impl Neuron {
 
         // The active mode's acceptance gate decides whether the winner fires, and the accepted
         // fire sharpens the likelihood model in the hypothesis-test mode.
-        if !self.approve_info_winner(&best, ratio, rank) { return (Vec::new(), unpaid_winner); }
+        if !self.approve_info_winner(&best, ratio, rank) { return Vec::new(); }
         self.update_likelihood_model(&best, best_match.as_ref());
 
         // Activate the winning pattern (strengthen child activation in learning mode).
         let death_frame = if self.learning { self.strengthen_child_activation(best.pattern_id, current_frame) } else { None };
-        let matches = vec![PatternMatch {
+        vec![PatternMatch {
             pattern_id: best.pattern_id,
             age: 0,
             activate: true,
             death_frame,
-        }];
-        (matches, unpaid_winner)
+        }]
     }
 
     /// returns the child patterns that share at least one context neuron with the observed co-activation.
@@ -1451,17 +1414,9 @@ impl Neuron {
         self.spatial_context_counts.get(&id).copied().unwrap_or(0) as f64 / self.spatial_context_frames as f64
     }
 
-    /// Smoothed local frequency of a base event being active in the inference neighborhood
-    /// (Laplace: (c+1)/(frames+2)) — the base rate the Layer 3 pending-mint ledger's `score_entry`
-    /// prices its own mismatch counts against. Layer 1's gate uses the unsmoothed
-    /// `get_inference_frequency_raw` instead — see that function for why.
-    fn get_inference_frequency(&self, id: NeuronId) -> f64 {
-        (self.spatial_inference_counts.get(&id).copied().unwrap_or(0) + 1) as f64 / (self.spatial_inference_frames + 2) as f64
-    }
-
     /// Raw local frequency of a base event being active in the inference neighborhood (count/frames,
-    /// no smoothing). Used only by the Layer 1 correction gate (`compute_spatial_evidence`) —
-    /// an experiment in progress; Layer 3's ledger still uses the smoothed `get_inference_frequency`.
+    /// no smoothing). The base rate the Layer 1 benefit gate (`compute_spatial_evidence`) weighs
+    /// each miss and hit against — how rare the event normally is for this neuron.
     fn get_inference_frequency_raw(&self, id: NeuronId) -> f64 {
         self.spatial_inference_counts.get(&id).copied().unwrap_or(0) as f64 / self.spatial_inference_frames as f64
     }
@@ -1476,34 +1431,16 @@ impl Neuron {
         merge_threshold: f64,
         current_frame: FrameNumber,
         timings: &mut NeuronOpTimings,
-    ) -> (Option<(PartialMatch, f64, f64)>, Option<NeuronId>) {
+    ) -> Option<(PartialMatch, f64, f64)> {
 
         let start = std::time::Instant::now();
         timings.recognize_candidates_evaluated += candidates.len() as u64;
         let mut best: Option<(PartialMatch, f64, f64)> = None;
-        let mut best_unpaid: Option<(NeuronId, f64)> = None;
         for pattern_id in candidates {
             let candidate = match self.evaluate_spatial_candidate(pattern_id, observed, merge_threshold, current_frame) {
                 Some(c) => c,
                 None => continue,
             };
-
-            // An unpaid pattern competes on its own track: it cannot fire, but the best unpaid
-            // match becomes the deposit target for this frame's failure surprisal. Acceptance is
-            // the same criterion firing would use — in the info mode the match must carry positive
-            // evidence; the other modes already applied their filter during scoring.
-            let paid = self.spatial_routing_table.get(&pattern_id).map_or(true, |e| e.is_paid());
-            if !paid {
-                if self.match_info && candidate.2 <= 0.0 { continue; }
-                match best_unpaid {
-                    // The higher rank wins; ties break to the smaller id for determinism.
-                    Some((uid, urank))
-                        if urank > candidate.2
-                            || (urank == candidate.2 && uid <= pattern_id) => {}
-                    _ => { best_unpaid = Some((pattern_id, candidate.2)); }
-                }
-                continue;
-            }
 
             if let Some((ref b, _, brank)) = best {
                 if candidate.2 < brank { continue; }
@@ -1512,7 +1449,7 @@ impl Neuron {
             best = Some(candidate);
         }
         timings.recognize_candidate_eval += start.elapsed().as_secs_f64();
-        (best, best_unpaid.map(|(id, _)| id))
+        best
     }
 
     /// Score one candidate against the observed co-activation; None when it cannot match or falls
@@ -1662,50 +1599,46 @@ impl Neuron {
 
     // ── Spatial prediction evaluation ────────────────────────────────────────
 
-    /// Evaluate this frame's prediction against observed reality; a failure either deposits its
-    /// surprisal into the matched unpaid pattern or builds a correction request. A neuron whose
-    /// child fired cast no votes — it is subsumed, so it evaluates nothing, records nothing, and
-    /// requests nothing.
+    /// Evaluate this frame's prediction against observed reality; a worthwhile failure becomes a
+    /// demand point assigned into the womb, which may birth a pattern. A neuron whose child fired
+    /// cast no votes — it is subsumed, so it evaluates nothing, records nothing, and requests nothing.
     fn evaluate_spatial_prediction(
         &mut self,
         votes: &Option<SpatialVotes>,
         level_neighbors: Option<&SpatialContext>,
         base_neighbors: &[ActiveNeuron],
-        unpaid_winner: Option<NeuronId>,
         should_learn: bool,
         current_frame: FrameNumber,
         timings: &mut NeuronOpTimings,
-    ) -> (Option<SpatialCorrectionRequest>, Option<PatternMatch>, Option<NeuronId>) {
+    ) -> Option<SpatialCorrectionRequest> {
 
         let start = std::time::Instant::now();
-        let result = self.check_spatial_prediction(votes, level_neighbors, base_neighbors, unpaid_winner, should_learn, current_frame);
+        let result = self.check_spatial_prediction(votes, level_neighbors, base_neighbors, should_learn, current_frame);
         timings.correct_errors = start.elapsed().as_secs_f64();
         result
     }
 
     /// The evaluation body: aggregate the cast votes into a prediction, measure the error against
-    /// the observed base events, record the sample, then either deposit the failure's surprisal
-    /// into the matched unpaid pattern or request a new one.
+    /// the observed base events, record the sample, then hand a worthwhile failure to the womb.
     fn check_spatial_prediction(
         &mut self,
         votes: &Option<SpatialVotes>,
         level_neighbors: Option<&SpatialContext>,
         base_neighbors: &[ActiveNeuron],
-        unpaid_winner: Option<NeuronId>,
         should_learn: bool,
         current_frame: FrameNumber,
-    ) -> (Option<SpatialCorrectionRequest>, Option<PatternMatch>, Option<NeuronId>) {
+    ) -> Option<SpatialCorrectionRequest> {
 
         // Frozen evaluation neither corrects nor accumulates error stats, so there is nothing to evaluate.
-        if !self.learning { return (None, None, None); }
+        if !self.learning { return None; }
 
         // No votes, no evaluation — the fired child that suppressed them owns this frame's prediction.
-        let Some(spatial_votes) = votes.as_ref() else { return (None, None, None) };
+        let Some(spatial_votes) = votes.as_ref() else { return None };
 
         // The prediction is the modal configuration voted by the base-level connections.
         // No prediction means the neuron has no connections yet, so there is no error to measure.
         let predicted_events = self.aggregate_spatial_prediction(&spatial_votes.votes);
-        if predicted_events.is_empty() { return (None, None, None); }
+        if predicted_events.is_empty() { return None; }
 
         // Reality: the observed base events in the inference neighborhood (the shipped actives are
         // pre-filtered to it), excluding the neuron itself — a neuron cannot observe itself.
@@ -1724,7 +1657,7 @@ impl Neuron {
 
         // The error is the Jaccard-union distance between prediction and reality, shared with temporal.
         // An empty union means there is nothing to compare.
-        let Some(error_rate) = get_union_error(&predicted_events, &observed_events) else { return (None, None, None) };
+        let Some(error_rate) = get_union_error(&predicted_events, &observed_events) else { return None };
 
         // Record the sample even below the threshold so the adaptive grouping modes keep learning
         // this neuron's error distribution. The threshold already rode in with the votes, so the
@@ -1746,138 +1679,102 @@ impl Neuron {
         let context_neighbors: Vec<NeuronId> = level_neighbors
             .map(|lc| lc.entries().keys().copied().collect())
             .unwrap_or_default();
+        if context_neighbors.is_empty() { return None; }
 
-        // Information-priced creation scores the failure as evidence for a distinct source (a
-        // likelihood ratio against background, not plain self-information) and holds it against a
-        // ledger of pending failure shapes — a correction is requested only once a shape's pooled
-        // evidence covers the cost of naming it.
-        // A matched unpaid pattern (a rare underpaid mint) still absorbs the evidence as a deposit.
+        // Facility location: Layer 1 scores the failure as net evidence for a distinct source (the
+        // benefit), and a positive benefit is a demand point served by the womb — assigned to an
+        // existing embryo (a recurring context cluster) or opening a new one. A pattern is born
+        // only when an embryo's pooled evidence covers its price. Minting is entirely a womb event.
         if self.error_info {
-            let evidence = self.compute_spatial_evidence(&predicted_events, &observed_events);
-            if evidence <= 0.0 { return (None, None, None); }
-            if let Some(unpaid_id) = unpaid_winner {
-                let (death_frame, promoted) = self.deposit_spatial_evidence(unpaid_id, evidence, current_frame);
-                let deposit = PatternMatch { pattern_id: unpaid_id, age: 0, activate: false, death_frame };
-                return (None, Some(deposit), if promoted { Some(unpaid_id) } else { None });
-            }
-            if context_neighbors.is_empty() { return (None, None, None); }
-            let request = self.approve_spatial_correction(&context_neighbors, &predicted_events, &observed_events, evidence, &target_events);
-            return (request, None, None);
+            let benefit = self.compute_spatial_evidence(&predicted_events, &observed_events);
+            if benefit <= 0.0 { return None; }
+            return self.assign_spatial_failure(&context_neighbors, benefit, &target_events, current_frame);
         }
 
-        // Only errors above the neuron's own adaptive threshold request a correction.
-        if context_neighbors.is_empty() { return (None, None, None); }
-        if error_rate <= spatial_votes.threshold { return (None, None, None); }
-        (Some(SpatialCorrectionRequest { context_neighbors, surprisal: 0.0, price: 0.0, target_events }), None, None)
+        // Legacy path: only errors above the neuron's own adaptive threshold request a correction,
+        // and the request is born paid immediately (no womb).
+        if error_rate <= spatial_votes.threshold { return None; }
+        Some(SpatialCorrectionRequest { context_neighbors, target_events })
     }
 
-    /// Deposit a failed frame's surprisal into an unpaid pattern that matched the failing
-    /// configuration. The pattern promotes the moment its evidence covers its price — from the
-    /// next frame it competes to fire. The deposit also refreshes the pattern's decay clock:
-    /// recurrence is what keeps a hypothesis alive.
-    /// Returns the refreshed death frame and whether this deposit paid the pattern off.
-    fn deposit_spatial_evidence(&mut self, pattern_id: NeuronId, surprisal: f64, current_frame: FrameNumber) -> (Option<FrameNumber>, bool) {
-        let entry = self.spatial_routing_table.get_mut(&pattern_id)
-            .expect("deposit_spatial_evidence: unpaid winner missing from spatial routing table");
-        let was_paid = entry.is_paid();
-        entry.evidence += surprisal;
-        let promoted = !was_paid && entry.is_paid();
-        (self.strengthen_child_activation(pattern_id, current_frame), promoted)
-    }
-
-    /// Approve or defer a spatial correction by accumulated evidence. A severe enough single
-    /// failure pays for its own pattern outright; a milder one pools its evidence in the ledger
-    /// entry matching its shape until that entry's evidence covers the cost of naming the shape.
-    ///
-    /// Matching has two parts. The SAME-LEVEL context must match EXACTLY — a correction's identity
-    /// is its context, so two failures in different neighborhoods are never the same shape, no
-    /// matter how similar their mismatched events look. Among same-context entries, the mismatched-
-    /// events shape (what was observed but unpredicted, what was predicted but absent) is scored by
-    /// the same likelihood-ratio math recognition uses on an established pattern's context — each
-    /// entry has been building its own per-neighbor presence/absence counts as occurrences pool
-    /// into it, exactly like a routing entry's per-fire context strengths. No threshold: merge into
-    /// whichever same-context entry scores highest, same acceptance rule as `approve_info_winner`'s
-    /// `rank > 0.0` — the criterion is "does this entry explain the occurrence better than
-    /// background," not a similarity cutoff.
-    fn approve_spatial_correction(
+    /// Serve-or-open: assign one worthwhile failure to the womb (the facility-location step). The
+    /// observed same-level context is scored against every embryo's center by the same likelihood-
+    /// ratio math recognition uses on born patterns — an embryo scores exactly like a routing entry
+    /// whose strengths are its center counts. The best embryo with positive rank serves the failure
+    /// (its center drifts toward it, its evidence gains the benefit); if none scores positive the
+    /// failure opens a new embryo. A served embryo whose evidence then covers its price gives birth.
+    /// Returns a birth request, or None when the failure was pooled without minting.
+    fn assign_spatial_failure(
         &mut self,
         context_neighbors: &[NeuronId],
-        predicted_events: &FxHashSet<NeuronId>,
-        observed_events: &FxHashSet<NeuronId>,
-        evidence: f64,
+        benefit: f64,
         target_events: &[ActiveNeuron],
+        current_frame: FrameNumber,
     ) -> Option<SpatialCorrectionRequest> {
 
-        // Bits to name a k-subset: log2 of the subset count, floored at one codeword per element so
-        // an always-active set can never mint for free. Each set is named out of the pool it was
-        // ACTUALLY drawn from — not the whole brain's neuron count, but how many distinct same-level
-        // neighbors (for the context) or base neighbors (for the target) THIS neuron has itself ever
-        // observed. A young neuron has seen few, so naming is cheap; the pool only grows as it does.
-        let name_bits = |k: usize, count: usize| -> f64 {
-            let named = k.min(count);
-            (0..named).map(|i| ((count - i) as f64 / (named - i) as f64).log2()).sum()
-        };
-        let context_set: FxHashSet<NeuronId> = context_neighbors.iter().copied().collect();
-        let level_neuron_count = self.spatial_context_counts.len().max(2);
-        let base_neuron_count = self.spatial_inference_counts.len().max(2);
-        let price = name_bits(context_set.len(), level_neuron_count) + name_bits(observed_events.len(), base_neuron_count);
+        let observed: FxHashSet<NeuronId> = context_neighbors.iter().copied().collect();
 
-        if evidence >= price {
-            return Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: evidence, price, target_events: target_events.to_vec() });
-        }
+        // Evict dead embryos first: incoherence drives evidence negative through bad deposits,
+        // staleness decays it away on the forget-rate clock. Both collapse to effective <= 0.
+        let rate = self.pattern_forget_rate;
+        self.spatial_embryos.retain(|e| e.evidence - (current_frame - e.last_frame) as f64 * rate > 0.0);
 
-        // The two mismatch directions: events reality had that the prediction missed, and events
-        // the prediction claimed that reality didn't have. Each direction is scored against its own
-        // per-neighbor presence/absence counts, the same asymmetry `compute_spatial_evidence` uses.
-        let present_mismatch: FxHashSet<NeuronId> = observed_events.difference(predicted_events).copied().collect();
-        let absent_mismatch: FxHashSet<NeuronId> = predicted_events.difference(observed_events).copied().collect();
-
-        const ALPHA: f64 = 1.0;
-        let score_entry = |neuron: &Self, entry: &PendingSpatialMint| -> f64 {
-            let denom = (entry.occurrences + 1) as f64;
-            let mut score = 0.0;
-            for &id in &present_mismatch {
-                let count = entry.present_counts.get(&id).copied().unwrap_or(0) as f64;
-                let p_c = (count + ALPHA) / denom;
-                score += (p_c / neuron.get_inference_frequency(id)).log2();
-            }
-            for &id in &absent_mismatch {
-                let count = entry.absent_counts.get(&id).copied().unwrap_or(0) as f64;
-                let p_c = (count + ALPHA) / denom;
-                score += (p_c / (1.0 - neuron.get_inference_frequency(id))).log2();
-            }
-            score
-        };
-
-        let best = self.pending_spatial_mints.iter().enumerate()
-            .filter(|(_, note)| note.context == context_set)
-            .map(|(i, note)| (i, score_entry(self, note)))
-            .filter(|&(_, score)| score > 0.0)
+        // Score the observed context against each embryo center; the best positive rank serves it.
+        let best = self.spatial_embryos.iter().enumerate()
+            .map(|(i, e)| (i, self.rank_embryo(e, &observed)))
+            .filter(|&(_, rank)| rank > 0.0)
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        match best {
-            Some((i, score)) => {
-                let note = &mut self.pending_spatial_mints[i];
-                for &id in &present_mismatch { *note.present_counts.entry(id).or_insert(0) += 1; }
-                for &id in &absent_mismatch { *note.absent_counts.entry(id).or_insert(0) += 1; }
-                note.occurrences += 1;
-                note.evidence += score;
-                let total_evidence = note.evidence;
-                if total_evidence < price { return None; }
-                self.pending_spatial_mints.remove(i);
-                Some(SpatialCorrectionRequest { context_neighbors: context_neighbors.to_vec(), surprisal: total_evidence, price, target_events: target_events.to_vec() })
-            }
-            None => {
-                let mut present_counts = FxHashMap::default();
-                for &id in &present_mismatch { present_counts.insert(id, 1); }
-                let mut absent_counts = FxHashMap::default();
-                for &id in &absent_mismatch { absent_counts.insert(id, 1); }
-                self.pending_spatial_mints.push(PendingSpatialMint {
-                    context: context_set, present_counts, absent_counts, occurrences: 1, evidence,
-                });
-                None
+        let Some((i, _)) = best else {
+            // No embryo explains this context: open a new one, seeded from the observed context,
+            // with the benefit as opening evidence. It cannot birth on first sight — a single
+            // benefit is under 1 and price is at least 2.
+            let mut context_counts = FxHashMap::default();
+            for &id in &observed { context_counts.insert(id, 1u64); }
+            self.spatial_embryos.push(SpatialEmbryo { context_counts, n: 1, evidence: benefit, last_frame: current_frame });
+            return None;
+        };
+
+        // Serve the winning embryo. Materialize its decay onto the clock before depositing, so the
+        // benefit adds to a decayed base rather than a stale one.
+        let embryo = &mut self.spatial_embryos[i];
+        embryo.evidence -= (current_frame - embryo.last_frame) as f64 * rate;
+        embryo.last_frame = current_frame;
+        for &id in &observed { *embryo.context_counts.entry(id).or_insert(0) += 1; }
+        embryo.n += 1;
+        embryo.evidence += benefit;
+
+        // Birth: an embryo whose pooled evidence covers its price becomes a pattern. Price is what
+        // the parent will actually store — the center's neighbor references plus the pattern itself.
+        let price = (embryo.context_counts.len() + 1) as f64;
+        if embryo.evidence < price { return None; }
+        let context: Vec<NeuronId> = embryo.context_counts.keys().copied().collect();
+        self.spatial_embryos.remove(i);
+        Some(SpatialCorrectionRequest { context_neighbors: context, target_events: target_events.to_vec() })
+    }
+
+    /// Score an observed context against an embryo's center by log-likelihood ratio versus the
+    /// background model — the exact scoring [rank_by_likelihood_ratio] applies to a born pattern,
+    /// with the embryo's `count / n` standing in for a routing entry's `strength / trials`. Present
+    /// center neighbors credit how much more the center expects them than background; absent ones
+    /// cost their expected-but-missing weight. Outcomes the background has never witnessed (p_bg 0
+    /// or 1) are skipped rather than priced against, same rule as recognition.
+    fn rank_embryo(&self, embryo: &SpatialEmbryo, observed: &FxHashSet<NeuronId>) -> f64 {
+        let n = embryo.n as f64;
+        let mut lr = 0.0;
+        for (&ctx_id, &count) in &embryo.context_counts {
+            let p_c = count as f64 / n;
+            if observed.contains(&ctx_id) {
+                let p_bg = self.get_context_frequency(ctx_id);
+                if p_bg <= 0.0 { continue; }
+                lr += (p_c.min(0.999) / p_bg).log2();
+            } else {
+                let p_bg = self.get_context_frequency(ctx_id);
+                if p_bg >= 1.0 { continue; }
+                lr += ((1.0 - p_c.min(0.999)) / (1.0 - p_bg)).log2();
             }
         }
+        lr
     }
 
     /// Aggregate the cast base-level votes into one winner per position.
@@ -2390,17 +2287,16 @@ pub struct SerializedNeuron {
     /// Local inference-neighbor activation counts + frame denominator (information-priced creation).
     pub inference_counts: Vec<(NeuronId, u64)>,
     pub inference_frames: u64,
-    /// Pending spatial-mint ledger entries (error-info) not yet paid off.
-    pub pending_mints: Vec<SerializedPendingMint>,
+    /// Womb embryos (error-info) — not-yet-born cluster centers still accumulating toward birth.
+    pub embryos: Vec<SerializedEmbryo>,
 }
 
-/// One pending spatial-mint ledger entry, serialized. See `PendingSpatialMint`.
+/// One womb embryo, serialized. See `SpatialEmbryo`. The decay clock (`last_frame`) is not
+/// persisted — restore rebases it to 0 alongside the child activation clocks.
 #[derive(Debug, Clone, Default)]
-pub struct SerializedPendingMint {
-    pub context: Vec<NeuronId>,
-    pub present_counts: Vec<(NeuronId, u64)>,
-    pub absent_counts: Vec<(NeuronId, u64)>,
-    pub occurrences: u64,
+pub struct SerializedEmbryo {
+    pub context_counts: Vec<(NeuronId, u64)>,
+    pub n: u64,
     pub evidence: f64,
 }
 
@@ -2422,10 +2318,6 @@ pub struct SerializedChild {
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
     pub context: Vec<ContextEntry>,
-    /// Payment state of information-priced creation (spatial only; zeros for temporal children).
-    /// A pattern with evidence < price is unpaid: matched by the recognizer but not yet firing.
-    pub evidence: f64,
-    pub price: f64,
 }
 
 #[derive(Debug, Clone)]

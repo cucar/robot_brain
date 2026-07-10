@@ -827,8 +827,8 @@ impl Brain {
         self.thalamus.spatial_level_counts()
     }
 
-    /// Diagnostic: per-level count of PAID correction neurons — patterns that may fire, as opposed
-    /// to unpaid hypotheses still accumulating evidence. Same indexing as [spatial_level_counts].
+    /// Diagnostic: per-level count of PAID correction neurons. Under the womb every born pattern is
+    /// paid (unpaid hypotheses are embryos, not routing entries), so this equals [spatial_level_counts].
     pub fn spatial_level_paid_counts(&self) -> Vec<u32> {
         self.thalamus.spatial_level_paid_counts()
     }

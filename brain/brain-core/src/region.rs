@@ -208,13 +208,6 @@ impl Region {
             .for_each(|col| col.decorate_spatial_targets(meta));
     }
 
-    /// Diagnostic: gather the unpaid spatial patterns across this region's columns.
-    pub fn collect_unpaid_spatial_patterns(&self) -> Vec<NeuronId> {
-        self.columns.iter()
-            .flat_map(|col| col.collect_unpaid_spatial_patterns())
-            .collect()
-    }
-
     // ── Spatial correction install (1c) ────────────────────────────────────
 
     /// Distribute spatial install ops to owning columns by parent_id, dispatch in parallel,
