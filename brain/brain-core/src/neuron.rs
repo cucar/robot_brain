@@ -1444,10 +1444,11 @@ impl Neuron {
         self.grouping_merge_threshold(self.spatial_error_stats.as_ref())
     }
 
-    /// Smoothed local frequency of a context neighbor being co-active (Laplace: (c+1)/(frames+2)),
-    /// so surprisals are finite from the first frame and converge with evidence.
+    /// Raw local frequency of a context neighbor being co-active (count/frames, no smoothing).
+    /// Can be exactly 0 (never seen present) or exactly 1 (never seen absent); the recognition
+    /// ranking skips outcomes the background has never witnessed rather than pricing them.
     fn get_context_frequency(&self, id: NeuronId) -> f64 {
-        (self.spatial_context_counts.get(&id).copied().unwrap_or(0) + 1) as f64 / (self.spatial_context_frames + 2) as f64
+        self.spatial_context_counts.get(&id).copied().unwrap_or(0) as f64 / self.spatial_context_frames as f64
     }
 
     /// Smoothed local frequency of a base event being active in the inference neighborhood
@@ -1577,8 +1578,13 @@ impl Neuron {
         // than background. p_c is a raw MLE (co-fires / trials) — no smoothing, deliberately.
         for (&ctx_id, &strength) in entry.context.entries() {
             if strength <= 0.0 || !observed.has_key(ctx_id) { continue; }
-            let p_c = strength / n_c;
+
+            // A raw background can be exactly 0; an outcome the background has never witnessed cannot be
+            // priced against it, so the term is skipped rather than smoothed into a finite surprise.
             let p_bg = self.get_context_frequency(ctx_id);
+            if p_bg <= 0.0 { continue; }
+
+            let p_c = strength / n_c;
             lr += (p_c.min(0.999) / p_bg).log2();
         }
 
@@ -1586,8 +1592,13 @@ impl Neuron {
         // The cap keeps p_c == 1 from making (1 - p_c) == 0, which would send the ratio to log2(0) = -inf.
         for (&ctx_id, &strength) in entry.context.entries() {
             if strength <= 0.0 || observed.has_key(ctx_id) { continue; }
-            let p_c = strength / n_c;
+
+            // A neighbor co-active on every frame so far has raw p_bg == 1 — its absence has never been
+            // witnessed, so it is skipped by the same rule as above instead of dividing by zero.
             let p_bg = self.get_context_frequency(ctx_id);
+            if p_bg >= 1.0 { continue; }
+
+            let p_c = strength / n_c;
             lr += ((1.0 - p_c.min(0.999)) / (1.0 - p_bg)).log2();
         }
 
