@@ -9,8 +9,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::context::TemporalContext;
 use crate::neuron::{
-    ActiveNeuron, AgeState, AgeVotes, Correction, TemporalContextRefUpdate, SpatialContextRefUpdate,
-    CorrectionActivation, ErrorFeedback, Neuron, PatternMatch, Vote,
+    ActiveNeuron, AgeVotes, TemporalContextRefUpdate, SpatialContextRefUpdate, TemporalNeuron,
+    CorrectionActivation, Neuron, PatternMatch, Vote,
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
@@ -181,22 +181,22 @@ impl Column {
     /// task and returns results parent_id-tagged in task order.
     pub fn process_temporal_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
+        temporal_neurons: &[TemporalNeuron],
         memory_depth: u32,
         level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
     ) -> Vec<ColumnProcessResult> {
-        let mut results = Vec::with_capacity(tasks.len());
-        for (neuron_id, age_states, corrections, error_feedback, actives) in tasks {
-            let neuron = self.neurons.get_mut(neuron_id)
-                .unwrap_or_else(|| panic!("Column.process_temporal_level: neuron {} not found", neuron_id));
+        let mut results = Vec::with_capacity(temporal_neurons.len());
+        for tn in temporal_neurons {
+            let neuron = self.neurons.get_mut(&tn.neuron_id)
+                .unwrap_or_else(|| panic!("Column.process_temporal_level: neuron {} not found", tn.neuron_id));
             let result = neuron.process_temporal_frame(
-                age_states, memory_depth, level_context, new_error_pattern_ids,
-                actives, frame_number, corrections, error_feedback,
+                &tn.age_states, memory_depth, level_context, new_error_pattern_ids,
+                tn.learning_work.as_ref(), frame_number,
             );
             results.push(ColumnProcessResult {
-                parent_id: *neuron_id,
+                parent_id: tn.neuron_id,
                 matches: result.matches,
                 correction_activations: result.correction_activations,
                 context_ref_updates: result.context_ref_updates,

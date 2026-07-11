@@ -193,6 +193,7 @@ impl JsBrain {
         let error_info = opt_bool(opts, "errorInfo")?.unwrap_or(false);
         let trace_match = opt_bool(opts, "traceMatch")?.unwrap_or(false);
         let trace_error = opt_bool(opts, "traceError")?.unwrap_or(false);
+        let apex_coverage = opt_bool(opts, "apexCoverage")?.unwrap_or(false);
 
         // The learning state is fixed at construction: a frozen evaluation is a separate brain
         // instance loaded from a backup, not a toggled one.
@@ -200,7 +201,7 @@ impl JsBrain {
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            match_info, error_info, trace_match, trace_error,
+            match_info, error_info, trace_match, trace_error, apex_coverage,
         );
 
         Ok(Self { inner: RefCell::new(inner) })

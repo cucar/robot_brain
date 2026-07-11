@@ -196,6 +196,27 @@ pub struct Correction {
     pub context_entries: Vec<ContextRefEntry>,
 }
 
+/// One active neuron to run through the temporal level pass — the dispatch subject.
+#[derive(Debug, Clone)]
+pub struct TemporalNeuron {
+    pub neuron_id: NeuronId,
+    /// What the neuron/window fired at each recency slot — recognition and voting read this every frame.
+    pub age_states: FxHashMap<Distance, AgeState>,
+    /// Some only on a learning pass; None on a frozen eval, so no learning work is carried or done.
+    pub learning_work: Option<TemporalLearningWork>,
+}
+
+/// One neuron's learning-only work for this frame — recomputed each frame, NOT the static `self.learning` flag.
+#[derive(Debug, Clone)]
+pub struct TemporalLearningWork {
+    /// Neighbor actives to learn connections from.
+    pub neighbors: Vec<ActiveNeuron>,
+    /// Error-correction patterns to install as children.
+    pub corrections: Vec<Correction>,
+    /// Last frame's accuracy samples to fold into the per-age stats.
+    pub error_feedback: Vec<ErrorFeedback>,
+}
+
 /// Results from process_frame.
 #[derive(Debug, Clone)]
 pub struct ProcessFrameResult {
@@ -1876,28 +1897,19 @@ impl Neuron {
         memory_depth: u32,
         level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        actives: &[ActiveNeuron],
+        learning_work: Option<&TemporalLearningWork>,
         current_frame: FrameNumber,
-        corrections: &[Correction],
-        error_feedback: &[ErrorFeedback],
     ) -> ProcessFrameResult {
-
-        // Fold prior-frame error feedback into per-age accuracy stats first.
-        // That way the threshold attached to this frame's votes (computed in generate_votes) reflects the latest sample.
-        // Non-learning mode skips this because accuracy stats are connection-substrate state.
-        if self.learning {
-            for fb in error_feedback { self.record_temporal_error(fb.age, fb.error_rate); }
-        }
         let mut timings = NeuronOpTimings::default();
 
-        let should_learn = self.learning && !new_error_pattern_ids.contains(&self.id);
+        if let Some(l) = learning_work {
 
-        // Temporal learns connections[age>0] which the vote step (connections[age+1]) doesn't read,
-        // so it's safe to run learn FIRST and have the vote read the same-frame updated edges only
-        // for ages that don't vote at this distance.
-        if should_learn {
+            // Record before voting so this frame's vote threshold reflects the latest accuracy sample.
+            for fb in &l.error_feedback { self.record_temporal_error(fb.age, fb.error_rate); }
+
+            // Safe to learn before voting: the vote reads connections[age+1]; this writes connections[age>0].
             let t = std::time::Instant::now();
-            self.learn_temporal_connections(age_states, actives);
+            self.learn_temporal_connections(age_states, &l.neighbors);
             timings.learn_connections = t.elapsed().as_secs_f64();
         }
 
@@ -1907,6 +1919,8 @@ impl Neuron {
         timings.recognize_patterns = t.elapsed().as_secs_f64();
 
         // Install pre-created temporal error-correction patterns as children and emit their contextRef adds.
+        // Empty on a frozen pass, so correct_errors is a no-op there.
+        let corrections: &[Correction] = learning_work.map_or(&[], |l| &l.corrections);
         let t = std::time::Instant::now();
         let CorrectResult { correction_activations, context_ref_updates: correction_refs } = self.correct_errors(corrections, current_frame);
         timings.correct_errors = t.elapsed().as_secs_f64();

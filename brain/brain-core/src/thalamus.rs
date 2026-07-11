@@ -23,7 +23,7 @@ use crate::context::{SpatialContext, TemporalContext};
 use crate::diagnostics::{InferenceResultItem, InferenceType};
 use crate::neuron::{
     ActiveNeuron, AgeState, ContextRefEntry, TemporalContextRefUpdate, SpatialContextRefUpdate,
-    Correction, ErrorFeedback,
+    Correction, ErrorFeedback, TemporalNeuron, TemporalLearningWork,
     SerializedNeuron, Vote,
 };
 use crate::quantizer::{QuantizeMode, Quantizer};
@@ -671,6 +671,26 @@ impl Thalamus {
         }
     }
 
+    /// Keep only the top neuron over each region: drop any apex neuron a higher-level one covers.
+    pub fn filter_apex_by_coverage(&self, apex: &FxHashSet<NeuronId>) -> FxHashSet<NeuronId> {
+
+        // Coverage needs each neuron's position-channel and spatial level; patterns inherit the parent's.
+        let members: Vec<(NeuronId, ChannelId, Level)> = apex.iter()
+            .filter_map(|&id| self.base_neurons.get(&id).map(|b| (id, b.channel_id, self.get_neuron_spatial_level(id))))
+            .collect();
+
+        // filter the covered neurons
+        let mut kept = FxHashSet::default();
+        for &(bid, bch, blvl) in &members {
+
+            // Covered when a strictly-higher neuron's level-based radius contains B's position.
+            let covered = members.iter().any(|&(aid, ach, alvl)|
+                aid != bid && alvl > blvl && self.is_spatial_neighbor_channel(ach, alvl, bch));
+            if !covered { kept.insert(bid); }
+        }
+        kept
+    }
+
     /// Test whether `target_channel` is in `parent_channel`'s TEMPORAL neighbor set.
     /// Returns true if `parent_channel` has no temporal neighbor list registered (default all-pairs).
     pub fn is_temporal_neighbor_channel(&self, parent_channel: ChannelId, target_channel: ChannelId) -> bool {
@@ -1056,14 +1076,13 @@ impl Thalamus {
         // Non-learning mode still builds the level context so pattern activation can run.
         // It skips error-correction allocation and per-age error feedback recording.
         let t = std::time::Instant::now();
-        let (tasks, level_context, new_neuron_specs) =
-            self.get_temporal_level_tasks(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids);
+        let (neurons, level_context, new_neuron_specs) =
+            self.prepare_temporal_neurons(level, level_neurons, sensory_neurons, rewards, frame_number, new_error_pattern_ids);
         orchestration.get_level_tasks = t.elapsed().as_secs_f64();
 
         // Op-3: dispatch processTemporalFrame — the only cross-region round-trip in the level loop.
         let t = std::time::Instant::now();
-        let current_rewards = rewards.first();
-        let results = self.dispatch_temporal_frame(&tasks, memory_depth, &level_context, new_error_pattern_ids, &sensory_neurons[0], current_rewards, frame_number);
+        let results = self.dispatch_temporal_neurons(&neurons, memory_depth, &level_context, new_error_pattern_ids, frame_number);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
         // extract activations inline — needed to feed the next level
@@ -1269,10 +1288,10 @@ impl Thalamus {
         (work_list, level_context)
     }
 
-    /// TEMPORAL: walk the active neurons at this level, contribute to the shared TemporalContext,
-    /// pre-create error-correction pattern neurons for any (neuron, age) whose previous votes
-    /// mismatched reality, and emit a task per neuron.
-    fn get_temporal_level_tasks(
+    /// Build one `TemporalNeuron` per active neuron at this level for the dispatch, contributing each
+    /// to the shared TemporalContext. On a learning pass each carries its `TemporalLearningWork`; a
+    /// frozen pass carries none and never builds the neighbor actives.
+    fn prepare_temporal_neurons(
         &mut self,
         level: Level,
         level_neurons: &FxHashMap<NeuronId, FxHashMap<Distance, LevelAgeState>>,
@@ -1280,24 +1299,28 @@ impl Thalamus {
         rewards: &[FxHashMap<ChannelId, Reward>],
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
-    ) -> (Vec<LevelTask>, TemporalContext, Vec<NeuronCreateSpec>) {
-        let mut tasks = Vec::new();
+    ) -> (Vec<TemporalNeuron>, TemporalContext, Vec<NeuronCreateSpec>) {
+        let mut neurons = Vec::new();
         let mut level_context = TemporalContext::new();
         let mut new_neuron_specs = Vec::new();
 
-        // collect neuron ids first to avoid borrow issues (level_neurons is immutable here,
-        // but self is borrowed mutably for allocate_temporal_pattern_neuron)
+        // Neighbor actives are for connection learning only — decorate the age-0 set once, and only
+        // when learning, so a frozen pass never pays for it.
+        let decorated_actives = if self.learning {
+            self.decorate_temporal_actives(&sensory_neurons[0], rewards.first())
+        } else {
+            Vec::new()
+        };
+
+        // Snapshot the entries first — the loop borrows self mutably (correction minting) while reading them.
         let neuron_entries: Vec<(NeuronId, FxHashMap<Distance, LevelAgeState>)> = level_neurons
             .iter()
             .map(|(&nid, ages)| (nid, ages.clone()))
             .collect();
         for (neuron_id, age_states) in &neuron_entries {
-
-            // skip action neurons for learning or contexts if the channel learns without them
             if self.skip_action_neuron(*neuron_id) { continue; }
 
-            // New error patterns only contribute to level_context — they have no children, history,
-            // or votes in their birth frame, so they skip dispatch and corrections.
+            // A new error pattern has no history or votes in its birth frame — it only feeds context.
             if new_error_pattern_ids.contains(neuron_id) {
                 for (&age, _) in age_states {
                     if age > 0 { level_context.add_neuron(*neuron_id, age, 1.0); }
@@ -1305,12 +1328,12 @@ impl Thalamus {
                 continue;
             }
 
-            // Populate level_context and (in learning mode) collect error corrections + per-age accuracy feedback.
+            // Feed level_context and, when learning, mint this neuron's corrections + gather its feedback.
             let (corrections, error_feedback) = self.get_temporal_level_corrections(
                 *neuron_id, level, &mut level_context, age_states, sensory_neurons, rewards, frame_number,
             );
 
-            // extract creation specs for Op-4
+            // Defer creation to the Op-4 batch, and mark each new pattern so it's skipped in its own birth frame.
             for correction in &corrections {
                 new_neuron_specs.push(NeuronCreateSpec {
                     id: correction.pattern_id,
@@ -1320,20 +1343,46 @@ impl Thalamus {
                 new_error_pattern_ids.insert(correction.pattern_id);
             }
 
-            // convert LevelAgeState to neuron::AgeState for dispatch
             let neuron_age_states: FxHashMap<Distance, AgeState> = age_states.iter()
                 .map(|(&age, state)| (age, AgeState { activated_pattern_id: state.activated_pattern_id }))
                 .collect();
-
-            tasks.push(LevelTask {
-                neuron_id: *neuron_id,
-                age_states: neuron_age_states,
-                corrections,
-                error_feedback,
-            });
+            let learning_work = self.learning.then(||
+                self.temporal_learning_work(*neuron_id, &decorated_actives, &corrections, error_feedback));
+            neurons.push(TemporalNeuron { neuron_id: *neuron_id, age_states: neuron_age_states, learning_work });
         }
 
-        (tasks, level_context, new_neuron_specs)
+        (neurons, level_context, new_neuron_specs)
+    }
+
+    /// One neuron's learning work: its neighbor actives (filtered to the channels it learns from), the
+    /// corrections to install, and the accuracy feedback to record.
+    fn temporal_learning_work(&self, neuron_id: NeuronId, decorated_actives: &[ActiveNeuron], corrections: &[CorrectionSpec], error_feedback: Vec<ErrorFeedback>) -> TemporalLearningWork {
+        let parent_channel = self.get_neuron_channel_id(neuron_id).unwrap_or(0);
+        let neighbors = decorated_actives.iter()
+            .filter(|n| self.is_temporal_neighbor_channel(parent_channel, n.channel_id))
+            .cloned()
+            .collect();
+        let corrections = corrections.iter().map(|c| Correction {
+            pattern_id: c.pattern_id,
+            age: c.age,
+            context_entries: c.context_entries.clone(),
+        }).collect();
+        TemporalLearningWork { neighbors, corrections, error_feedback }
+    }
+
+    /// Decorate active sensory neurons with channel, dimension, and pre-resolved reward (reward matters
+    /// only for action neurons) — the neighbor actives connection learning reads.
+    fn decorate_temporal_actives(&self, active_ids: &FxHashSet<NeuronId>, rewards: Option<&FxHashMap<ChannelId, Reward>>) -> Vec<ActiveNeuron> {
+        active_ids.iter().map(|&neuron_id| {
+            let (channel_id, dim_id, neuron_type) = self.base_neurons.get(&neuron_id)
+                .map(|b| (b.channel_id, b.coordinate.dim_id, Some(b.neuron_type)))
+                .unwrap_or((0, 0, None));
+            let reward = match (rewards, neuron_type) {
+                (Some(r), Some(NeuronType::Action)) => r.get(&channel_id).copied().unwrap_or(0.0),
+                _ => 0.0,
+            };
+            ActiveNeuron { id: neuron_id, channel_id, dim_id, reward }
+        }).collect()
     }
 
     /// For a single active temporal neuron: add its age>0 entries to the shared level_context and
@@ -1530,51 +1579,25 @@ impl Thalamus {
         results
     }
 
-    /// Temporal Op-3 dispatch — resolves per-action rewards from the current frame's rewards map.
-    fn dispatch_temporal_frame(
+    /// Temporal Op-3 dispatch — route each prepared active neuron to its owning region and run its
+    /// temporal frame there. Every neuron already carries its own learning work (or None), so this is
+    /// pure routing: bucket by region, clone each region's slice, dispatch.
+    fn dispatch_temporal_neurons(
         &mut self,
-        tasks: &[LevelTask],
+        neurons: &[TemporalNeuron],
         memory_depth: u32,
         level_context: &TemporalContext,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        age0: &FxHashSet<NeuronId>,
-        current_rewards: Option<&FxHashMap<ChannelId, Reward>>,
         frame_number: FrameNumber,
     ) -> Vec<ColumnProcessResult> {
-        // Decorate age=0 sensory neurons with channel id, dimension, and pre-resolved reward.
-        // Reward resolution is meaningful only for action neurons.
-        let mut full_actives = Vec::with_capacity(age0.len());
-        for &neuron_id in age0 {
-            let (channel_id, dim_id, neuron_type) = self.base_neurons.get(&neuron_id)
-                .map(|b| (b.channel_id, b.coordinate.dim_id, Some(b.neuron_type)))
-                .unwrap_or((0, 0, None));
-            let reward = match (current_rewards, neuron_type) {
-                (Some(rewards), Some(NeuronType::Action)) => rewards.get(&channel_id).copied().unwrap_or(0.0),
-                _ => 0.0,
-            };
-            full_actives.push(ActiveNeuron { id: neuron_id, channel_id, dim_id, reward });
-        }
-
-        // Per-task actives filtered by parent's neighbor channels.
-        let task_actives: Vec<Vec<ActiveNeuron>> = tasks.iter().map(|t| {
-            let parent_channel = self.get_neuron_channel_id(t.neuron_id).unwrap_or(0);
-            full_actives.iter()
-                .filter(|a| self.is_temporal_neighbor_channel(parent_channel, a.channel_id))
-                .cloned()
-                .collect()
-        }).collect();
-
-        let task_indices_by_region = self.bucket_by_region_indices(tasks, |t| t.neuron_id);
+        let indices_by_region = self.bucket_by_region_indices(neurons, |n| n.neuron_id);
         let level_context_opt = if level_context.size() > 0 { Some(level_context) } else { None };
         let mut results = Vec::new();
-        for (r, task_indices) in task_indices_by_region.iter().enumerate() {
-            if task_indices.is_empty() { continue; }
-            let region_tasks: Vec<_> = task_indices.iter().map(|&i| {
-                let task = &tasks[i];
-                (task.neuron_id, task.age_states.clone(), task.corrections_as_neuron_corrections(), task.error_feedback.clone(), task_actives[i].clone())
-            }).collect();
+        for (r, indices) in indices_by_region.iter().enumerate() {
+            if indices.is_empty() { continue; }
+            let region_neurons: Vec<TemporalNeuron> = indices.iter().map(|&i| neurons[i].clone()).collect();
             let region_results = self.region_list[r].process_temporal_level(
-                &region_tasks, memory_depth, level_context_opt, new_error_pattern_ids,
+                &region_neurons, memory_depth, level_context_opt, new_error_pattern_ids,
                 frame_number,
             );
             results.extend(region_results);
@@ -2204,24 +2227,6 @@ impl Thalamus {
 // ── Internal task/spec types ────────────────────────────────────────────────
 
 /// A task to be dispatched to a neuron during process_level.
-struct LevelTask {
-    neuron_id: NeuronId,
-    age_states: FxHashMap<Distance, AgeState>,
-    corrections: Vec<CorrectionSpec>,
-    error_feedback: Vec<ErrorFeedback>,
-}
-
-impl LevelTask {
-    /// Convert CorrectionSpecs to neuron::Corrections for dispatch.
-    fn corrections_as_neuron_corrections(&self) -> Vec<Correction> {
-        self.corrections.iter().map(|c| Correction {
-            pattern_id: c.pattern_id,
-            age: c.age,
-            context_entries: c.context_entries.clone(),
-        }).collect()
-    }
-}
-
 /// Error-correction pattern spec — carries connection data for neuron creation.
 #[derive(Debug, Clone)]
 struct CorrectionSpec {

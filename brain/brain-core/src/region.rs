@@ -52,7 +52,7 @@ use crate::column::{
 };
 use crate::context::TemporalContext;
 use crate::neuron::{
-    ActiveNeuron, AgeState, Correction, TemporalContextRefUpdate, ErrorFeedback,
+    ActiveNeuron, TemporalContextRefUpdate, TemporalNeuron,
     SerializedNeuron, Vote,
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
@@ -156,25 +156,25 @@ impl Region {
     /// in column-index order (stable regardless of thread scheduling).
     pub fn process_temporal_level(
         &mut self,
-        tasks: &[(NeuronId, FxHashMap<Distance, AgeState>, Vec<Correction>, Vec<ErrorFeedback>, Vec<ActiveNeuron>)],
+        temporal_neurons: &[TemporalNeuron],
         memory_depth: u32,
         level_context: Option<&TemporalContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
     ) -> Vec<ColumnProcessResult> {
-        // Phase 1: Route — clone each task into its owning column's work list.
+        // Phase 1: Route — clone each neuron into its owning column's work list.
         // Must happen before par_iter so each column gets an owned Vec it can consume independently.
-        let column_tasks = self.build_column_tasks(tasks, |t| t.0);
+        let column_neurons = self.build_column_tasks(temporal_neurons, |n| n.neuron_id);
 
-        // Phase 2: Dispatch — each column processes its tasks in parallel.
+        // Phase 2: Dispatch — each column processes its neurons in parallel.
         // Shared refs (level_context, new_error_pattern_ids) are read-only and implement Sync,
-        // so no synchronization needed. Per-task actives travel inside each task's tuple.
+        // so no synchronization needed. Each neuron carries its own learning work (or None).
         let nested: Vec<Vec<ColumnProcessResult>> = self.columns.par_iter_mut()
-            .zip(column_tasks.into_par_iter())
-            .map(|(col, col_tasks)| {
-                if col_tasks.is_empty() { return Vec::new(); }
+            .zip(column_neurons.into_par_iter())
+            .map(|(col, col_neurons)| {
+                if col_neurons.is_empty() { return Vec::new(); }
                 col.process_temporal_level(
-                    &col_tasks, memory_depth, level_context, new_error_pattern_ids,
+                    &col_neurons, memory_depth, level_context, new_error_pattern_ids,
                     frame_number,
                 )
             })

@@ -341,6 +341,11 @@ pub struct Brain {
     /// from a saved backup, running ordinary `process_frame` calls.
     learning: bool,
 
+    /// EXPERIMENTAL: when set, the spatial→temporal apex handoff drops any apex neuron covered by a
+    /// higher-level apex neuron's receptive field, so only the top neuron over each region reaches
+    /// temporal. Off by default (every fired-and-unsubsumed neuron is handed off).
+    apex_coverage: bool,
+
     /// Current frame data from all channels (rebuilt each frame).
     frame: Vec<FramePoint>,
 
@@ -397,6 +402,7 @@ impl Brain {
         error_info: bool,
         trace_match: bool,
         trace_error: bool,
+        apex_coverage: bool,
     ) -> Self {
         Self {
             context_length,
@@ -404,12 +410,13 @@ impl Brain {
             consensus_mode,
             emit_votes: false,
             learning,
+            apex_coverage,
             disabled_frames: 0,
             frame: Vec::new(),
             rewards: Vec::new(),
             frame_number: 0,
             diagnostics: Diagnostics::new(),
-            backup: Backup::new(pattern_forget_rate),
+            backup: Backup::new(pattern_forget_rate, learning),
             thalamus: Thalamus::new(
                 debug,
                 pattern_forget_rate,
@@ -1430,18 +1437,23 @@ impl Brain {
     ) {
         let t = Instant::now();
 
-        // Walk every neuron that fired anywhere in the spatial sweep this frame.
-        // fired_set includes sensory events at level 0 and any spatial correction patterns that matched at level 1+.
-        for &neuron_id in spatial_fired {
+        // The apex is what fired anywhere in the spatial sweep, minus the subsumed. A neuron is
+        // subsumed when a higher-level spatial pattern that absorbs it also fired this frame — the
+        // pattern represents its role, so letting it through would double-count in temporal voting.
+        let mut apex: FxHashSet<NeuronId> = spatial_fired.iter()
+            .filter(|id| !spatial_subsumed.contains(id))
+            .copied()
+            .collect();
 
-            // Skip subsumed neurons.
-            // A neuron is subsumed when a higher-level spatial pattern that absorbs it also fired this frame.
-            // Subsumed parents are silenced — the higher-level pattern represents their role in temporal.
-            // If we let them through, they'd vote alongside the pattern that subsumed them and double-count.
-            if spatial_subsumed.contains(&neuron_id) { continue; }
+        // EXPERIMENTAL: additionally drop apex neurons covered by a higher-level apex neuron's
+        // receptive-field radius, so only the top neuron over each region reaches temporal.
+        if self.apex_coverage {
+            apex = self.thalamus.filter_apex_by_coverage(&apex);
+        }
 
-            // Activate the survivor in temporal_level_index[0].
-            // This is the only path sensory events and spatial corrections take into the temporal sweep.
+        // Activate the survivors in temporal_level_index[0] — the only path sensory events and
+        // spatial corrections take into the temporal sweep.
+        for &neuron_id in &apex {
             self.memory.activate_temporal_neuron(neuron_id, 0);
         }
 
@@ -2091,7 +2103,7 @@ mod tests {
             ConsensusMode::Democratic, // consensus_mode
             false,                    // debug
             true,                     // learning
-            false, false, false, false,
+            false, false, false, false, false,
         )
     }
 

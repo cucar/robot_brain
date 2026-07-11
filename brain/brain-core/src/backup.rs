@@ -47,13 +47,16 @@ pub struct Backup {
     /// Brain-wide forget rate — applied uniformly to every pattern neuron on
     /// load since the snapshot doesn't carry per-neuron rates.
     pattern_forget_rate: f64,
+    /// The owning brain's learning flag, fixed for its life. A frozen (false) load skips the
+    /// training-only womb tables — the eval path never reads embryos.
+    learning: bool,
 }
 
 impl Backup {
-    /// Create a new Backup instance carrying the brain-wide forget rate that
-    /// will be assigned to every pattern neuron when loading from disk.
-    pub fn new(pattern_forget_rate: f64) -> Self {
-        Self { pattern_forget_rate }
+    /// Create a new Backup carrying the brain-wide forget rate assigned to every pattern neuron on
+    /// load, and the brain's learning flag that decides whether a load reads the training-only womb.
+    pub fn new(pattern_forget_rate: f64, learning: bool) -> Self {
+        Self { pattern_forget_rate, learning }
     }
 
     // ── Save ────────────────────────────────────────────────────────────────
@@ -333,11 +336,11 @@ impl Backup {
             }
         }
 
-        // Womb embryos — in-progress cluster centers still accumulating toward birth. Optional,
-        // older snapshots omit it; each embryo is keyed by (neuron, entry index) across two tables
-        // since it holds a scalar meta row (n, evidence) and a counted center map.
+        // Womb embryos (a meta row + a center map per embryo), optional on older snapshots. Skipped on a
+        // frozen load — training-only state the eval path never reads, and a large womb (millions of
+        // entries) is costly to parse and, measured, slows the frozen loop several-fold just by being resident.
         let embryo_meta_file = folder.join("embryo_meta.csv");
-        if embryo_meta_file.exists() {
+        if self.learning && embryo_meta_file.exists() {
             for row in read_csv(&embryo_meta_file)? {
                 if row.len() < 4 { continue; }
                 let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad embryo neuron id: {}", e))?;
@@ -353,7 +356,7 @@ impl Backup {
         }
 
         let embryo_context_file = folder.join("embryo_context.csv");
-        if embryo_context_file.exists() {
+        if self.learning && embryo_context_file.exists() {
             for row in read_csv(&embryo_context_file)? {
                 if row.len() < 4 { continue; }
                 let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad embryo ctx neuron id: {}", e))?;
@@ -877,7 +880,7 @@ mod tests {
         fs::remove_dir_all(&dir).ok(); // clean from previous runs
         fs::create_dir_all(&dir).unwrap();
 
-        let backup = Backup::new(0.01);
+        let backup = Backup::new(0.01, true);
 
         // Build a minimal snapshot
         let snapshot = Snapshot {
@@ -986,7 +989,7 @@ mod tests {
             vec!["2".to_string(), "1".to_string(), "3.0".to_string(), "7".to_string(), "12.5".to_string(), "4.0".to_string()],
         ]).unwrap();
 
-        let backup = Backup::new(0.01);
+        let backup = Backup::new(0.01, true);
         let loaded = backup.load(&dir, "legacy_test").unwrap();
 
         let parent = loaded.neurons.iter().find(|e| e.neuron.id == 1).unwrap();

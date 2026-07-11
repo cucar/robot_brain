@@ -980,3 +980,48 @@ runs match neuron-for-neuron at every checkpoint (table above).
   `log2(0)` only where `p_c` is explicitly flipped via `(1 - p_c)` (recognition's absent-entries branch); the
   ledger's present/absent counts are tracked separately with no such flip, so the clamp did nothing there.
   Added an explanatory comment at the one place (recognition) where it's actually load-bearing.
+
+## Session 2026-07-10 — womb conversion (algorithm2.md)
+
+The exact-context pending-mint ledger and the born-unpaid pattern machinery were replaced by the womb: each
+parent neuron holds a small set of context-only embryos (per-neighbor count + occurrence total `N` + accumulated
+benefit), a failure is served by the best embryo scoring positive under the same likelihood-ratio math
+recognition uses (fuzzy assignment, not exact-context match), and a pattern is born only when an embryo's
+evidence covers `price = |context| + 1`. Every born pattern is paid — there are no unpaid entries in the routing
+table. Embryo eviction reuses `pattern_forget_rate`: effective evidence = deposited − decay, evicted at ≤ 0,
+which unifies incoherence (negative-benefit deposits) and staleness (never re-served) into one rule. Recognition
+and the Layer 1 net-benefit gate carry over unchanged. This is the `--error-info` path; recognition is
+`--match-info`. Temporal (d>0) is untouched.
+
+Held-out test, full balanced set (54,210 imgs), 1 episode, `--error-info --match-info`, forget rate 0 (so
+embryos die by incoherence only, no staleness eviction):
+
+| Config | Womb test | Legacy static-θ0.9 baseline | Womb neurons | Legacy neurons | Depth |
+|---|---|---|---|---|---|
+| 14×14 r1 | **94.52%** (9452/10000) | 94.88% | 18.1K | 32K | 5 |
+| 28×28 r1 | **94.21%** (9421/10000) | 94.93% | 50.1K | 112K | 4 |
+| 28×28 r2 | **94.26%** (9426/10000) | 96.44% | 131K | 2.16M | 7 |
+
+**Finding:** the womb lands within ~0.4–0.7pp of the legacy averaged-threshold baseline while minting roughly
+half the neurons (18K vs 32K; 50K vs 112K), and self-organizes a deeper hierarchy (L4–L7, no caps). Fuzzy
+embryo pooling consolidates aggressively — fewer, better-earned patterns at a small accuracy cost at radius 1.
+At 28×28 **radius 2 buys essentially nothing** (94.21%→94.26%, +0.05pp) whereas the legacy path gains +1.5pp
+(94.93→96.44) — so the womb is not exploiting the larger receptive field, consistent with the aggressive
+consolidation into fewer, broader patterns.
+
+**Perf note (eval is slow at r2):** frozen eval of the r2 brain runs at ~1 img/s. Profiling the saved brains
+(`apps/mnist/jobs/profile_recog.js`) showed the r2 cost is **spatial** recognition — ~15.6K candidate scorings
+per frame at r1, exploding at r2 because radius-2 widens each pattern's stored context (13.5→63 entries) and
+forget-0 keeps all 131K patterns as permanent candidates. Separately, the **temporal sweep is O(active²)**:
+`dispatch_temporal_frame` rebuilds a per-neuron channel-filtered actives list by scanning the full active set
+for every active neuron (784²≈614K clone-filters/frame at 28×28), run unconditionally even with zero temporal
+patterns. It is a fixed ~14.5ms sidecar (dominates the fast r1/r14 frames, negligible next to r2's spatial cost).
+The active set it runs over is the spatial apex, whose size is **structurally pinned to the sensory-grid size**
+(784 at 28×28, 196 at 14×14): subsumption is strictly 1:1 — each firing pattern swaps out exactly its single
+parent host (pixel→L1, L1→L2, …), one in one out — so the apex can never drop below the grid size, it only
+trades pixels for patterns. Measured apex at 28×28 r1: 608 raw pixels + 176 fired patterns = 784 (14×14: 127 +
+69 = 196). So the O(N²) always runs over N≈grid-size; it cannot be shrunk by "compressing the apex" because the
+apex doesn't compress by design. (Earlier note that `suppressed=0` meant subsumption was broken was wrong —
+`suppressed` is a temporal field, trivially 0 with no temporal patterns; spatial subsumption works, it's just 1:1.)
+
+Backup format changed with the mechanism: `pending_mint_{meta,context,counts}.csv` (three tables) → `embryo_{meta,context}.csv` (two), and `patterns.csv` dropped its evidence/price columns (reader still tolerates the old wide rows).
