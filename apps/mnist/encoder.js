@@ -117,9 +117,12 @@ export class MNISTPixelChannelsEncoder {
 
 	/**
 	 * Map a raw 0–255 pixel value into a bucket id [0, buckets).
+	 * Block-averaging in buildBits pulls thin MNIST strokes down into the 30–130 range, so
+	 * bucket boundaries are spaced over 64 rather than the full 0–255 range (binary's boundary
+	 * lands at 32, not 128) — otherwise most stroke pixels fall under the threshold and vanish.
 	 */
 	quantize(value) {
-		const bucket = Math.floor(value * this.buckets / 256);
+		const bucket = Math.floor(value * this.buckets / 64);
 		return Math.min(bucket, this.buckets - 1);
 	}
 

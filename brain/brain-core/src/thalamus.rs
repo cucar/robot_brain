@@ -1318,6 +1318,8 @@ impl Thalamus {
             .map(|(&nid, ages)| (nid, ages.clone()))
             .collect();
         for (neuron_id, age_states) in &neuron_entries {
+
+            // skip action neurons for learning or contexts if the channel learns without them
             if self.skip_action_neuron(*neuron_id) { continue; }
 
             // A new error pattern has no history or votes in its birth frame — it only feeds context.
@@ -1343,9 +1345,11 @@ impl Thalamus {
                 new_error_pattern_ids.insert(correction.pattern_id);
             }
 
+            // convert LevelAgeState to neuron::AgeState for dispatch
             let neuron_age_states: FxHashMap<Distance, AgeState> = age_states.iter()
                 .map(|(&age, state)| (age, AgeState { activated_pattern_id: state.activated_pattern_id }))
                 .collect();
+            
             let learning_work = self.learning.then(||
                 self.temporal_learning_work(*neuron_id, &decorated_actives, &corrections, error_feedback));
             neurons.push(TemporalNeuron { neuron_id: *neuron_id, age_states: neuron_age_states, learning_work });
