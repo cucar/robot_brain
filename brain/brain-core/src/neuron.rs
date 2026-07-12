@@ -1744,8 +1744,8 @@ impl Neuron {
 
         let Some((i, _)) = best else {
             // No embryo explains this context: open a new one, seeded from the observed context,
-            // with the benefit as opening evidence. It cannot birth on first sight — a single
-            // benefit is under 1 and price is at least 2.
+            // with the benefit as opening evidence. Opening never births — a pattern is only born
+            // when a later failure serves the embryo and its pooled evidence covers the price.
             let mut context_counts = FxHashMap::default();
             for &id in &observed { context_counts.insert(id, 1u64); }
             self.spatial_embryos.push(SpatialEmbryo { context_counts, n: 1, evidence: benefit, last_frame: current_frame });
@@ -1762,8 +1762,13 @@ impl Neuron {
         embryo.evidence += benefit;
 
         // Birth: an embryo whose pooled evidence covers its price becomes a pattern. Price is what
-        // the parent will actually store — the center's neighbor references plus the pattern itself.
-        let price = (embryo.context_counts.len() + 1) as f64;
+        // the parent will actually store, in bits: each center reference names one neighbor out of
+        // the context alphabet this neuron has witnessed, and the pattern's own name distinguishes
+        // it among the parent's children once installed. The alphabet is at least the center size —
+        // every center member was witnessed as context by construction.
+        let alphabet = self.spatial_context_counts.len().max(embryo.context_counts.len()) as f64;
+        let price = embryo.context_counts.len() as f64 * alphabet.log2()
+            + (self.spatial_routing_table.len() as f64 + 1.0).log2();
         if embryo.evidence < price { return None; }
         let context: Vec<NeuronId> = embryo.context_counts.keys().copied().collect();
         self.spatial_embryos.remove(i);
@@ -1819,44 +1824,48 @@ impl Neuron {
         position_winners.values().map(|&(id, _)| id).collect()
     }
 
-    /// Score a prediction failure as net evidence for a distinct source: evidence FOR a surprise,
-    /// from the two ways the prediction can be wrong, minus evidence AGAINST one, from the ways it
-    /// was right. All three terms share the same building block, `1 - p_bg(id)` — how rare `id`
-    /// normally is for this neuron — pointed at three different sets:
-    ///   - present, unpredicted (`id` showed up, wasn't predicted): `1 - p_bg(id)` — a RARE event
-    ///     appearing out of nowhere is surprising; a common one appearing is not. FOR.
-    ///   - predicted, absent (`id` was expected, didn't show): `p_bg(id)` — a RELIABLE event vanishing
-    ///     is surprising; a rarely-present one skipping a frame is not. FOR.
-    ///   - predicted AND present (a hit): `1 - p_bg(id)` — correctly calling a RARE event is strong
-    ///     evidence the existing prediction mechanism is already tracking something real; correctly
-    ///     calling a common one proves little (background alone would do it). AGAINST.
-    /// Only misses and hits are scored (asked not to bother with the fourth case, correctly
-    /// unpredicted-and-absent — the default, uninformative outcome under either hypothesis, and
-    /// exhaustively checking it would mean scanning the whole neighbor population, not just what's
-    /// active). Unlike the earlier log-ratio formula this replaces, `evidence_against` is a real,
-    /// independently varying quantity, not a fixed constant — so the net score can genuinely go
-    /// negative: a frame with a large miss can still net out as "not a surprise" if the same
-    /// prediction nailed other, harder (rarer) events in the same frame.
-    ///
-    /// The naming cost this evidence is weighed against is computed in `approve_spatial_correction`
-    /// from how many neurons actually exist at the relevant levels — this function only measures
-    /// the failure itself, it does not know what a new pattern would cost to name.
+    /// Score a prediction failure as net evidence for a distinct source, in bits of surprisal.
+    /// Misses argue FOR a surprise, hits argue AGAINST one; the storage price this evidence
+    /// accumulates toward is charged where failures are assigned into the womb.
     fn compute_spatial_evidence(
         &self,
         predicted_events: &FxHashSet<NeuronId>,
         observed_events: &FxHashSet<NeuronId>,
     ) -> f64 {
 
+        // A neuron that has never counted an inference frame has no background model to price against.
+        if self.spatial_inference_frames == 0 { return 0.0; }
+
+        // Present, unpredicted: an event appearing out of nowhere is worth its full surprisal — the
+        // bits a pattern predicting it would have saved. An event the background has never witnessed
+        // cannot be priced against it and is skipped, the same rule recognition applies.
         let mut evidence_for = 0.0;
         for &id in observed_events.difference(predicted_events) {
-            evidence_for += 1.0 - self.get_inference_frequency_raw(id);
+            let p_bg = self.get_inference_frequency_raw(id);
+            if p_bg <= 0.0 { continue; }
+            evidence_for -= p_bg.log2();
         }
+
+        // Predicted, absent: a reliable event vanishing is surprising in proportion to its
+        // reliability. An event present on every frame so far has an unwitnessed absence and is
+        // skipped by the same rule; a never-present one prices its absence at zero bits naturally.
         for &id in predicted_events.difference(observed_events) {
-            evidence_for += self.get_inference_frequency_raw(id);
+            let p_bg = self.get_inference_frequency_raw(id);
+            if p_bg >= 1.0 { continue; }
+            evidence_for -= (1.0 - p_bg).log2();
         }
+
+        // Predicted AND present: correctly calling a rare event proves the existing mechanism is
+        // already tracking something real, worth exactly the bits the correct call saved. Because
+        // hits vary independently of misses the net score can genuinely go negative: a frame with a
+        // large miss still nets out as no surprise when the same prediction nailed rarer events.
+        // The fourth case, correctly unpredicted-and-absent, is uninformative under either
+        // hypothesis, and scoring it would mean scanning the whole neighbor population.
         let mut evidence_against = 0.0;
         for &id in predicted_events.intersection(observed_events) {
-            evidence_against += 1.0 - self.get_inference_frequency_raw(id);
+            let p_bg = self.get_inference_frequency_raw(id);
+            if p_bg <= 0.0 { continue; }
+            evidence_against -= p_bg.log2();
         }
         evidence_for - evidence_against
     }
