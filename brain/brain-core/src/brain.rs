@@ -134,6 +134,11 @@ pub struct FrameVote {
 pub struct InspectedNeuron {
     pub neuron_id: NeuronId,
     pub temporal_level: Level,
+    pub spatial_level: Level,
+    /// Channel of the neuron's own anchor coordinate: for sensory neurons their registered
+    /// channel, for spatial-correction neurons the founding pixel's channel (inherited at mint —
+    /// see thalamus.rs allocate_spatial_pattern_neuron). None only for coordinate-less neurons.
+    pub channel_id: Option<ChannelId>,
     pub parent_id: Option<NeuronId>,
     /// (context_neuron_id, distance, strength) tuples from the parent's
     /// routing-table entry for this child pattern.
@@ -805,11 +810,13 @@ impl Brain {
     /// for level-0 sensory neurons (no parent → no stored context).
     pub fn inspect_neuron(&self, neuron_id: NeuronId) -> InspectedNeuron {
         let temporal_level = self.thalamus.get_neuron_temporal_level(neuron_id).unwrap_or(0);
+        let spatial_level = self.thalamus.get_neuron_spatial_level(neuron_id);
+        let channel_id = self.thalamus.get_neuron_channel_id(neuron_id);
         let parent = self.thalamus.get_neuron_parent(neuron_id);
         let context = parent
             .and_then(|_| self.thalamus.get_pattern_context_entries(neuron_id))
             .unwrap_or_default();
-        InspectedNeuron { neuron_id, temporal_level, parent_id: parent, context }
+        InspectedNeuron { neuron_id, temporal_level, spatial_level, channel_id, parent_id: parent, context }
     }
 
     /// Inspection: dump a neuron's outgoing connections. Returns

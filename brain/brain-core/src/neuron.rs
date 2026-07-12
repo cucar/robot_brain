@@ -1566,9 +1566,7 @@ impl Neuron {
     /// Rebuild the winner's full match (common/missing/novel entry lists) for the consumers that
     /// need them: context refinement and the likelihood-model update. None when no consumer will.
     fn materialize_winner_match(&self, best: &PartialMatch, observed: &SpatialContext, merge_threshold: f64) -> Option<MatchResult> {
-
-        let need_winner_match = self.learning && self.match_info;
-        if !need_winner_match { return None; }
+        if !self.learning || !self.match_info { return None; }
         Some(self.spatial_routing_table.get(&best.pattern_id)
             .expect("materialize_winner_match: best pattern missing from spatial routing table")
             .context.match_observed(observed, merge_threshold, self.trace_match)
@@ -1578,7 +1576,6 @@ impl Neuron {
     /// Info mode: the winner must carry positive evidence — a log-likelihood ratio vs background
     /// above zero — or nothing fires. No thresholds; acceptance is the criterion itself.
     fn approve_info_winner(&self, best: &PartialMatch, ratio: f64, rank: f64) -> bool {
-
         if !self.match_info { return true; }
         if self.trace_match {
             eprintln!("[info] pat={} info={:.2} ratio={:.3} {}", best.pattern_id, rank, ratio, if rank > 0.0 { "FIRE" } else { "reject" });
@@ -1595,8 +1592,8 @@ impl Neuron {
     fn update_likelihood_model(&mut self, best: &PartialMatch, best_match: Option<&MatchResult>) {
 
         if !self.match_info || !self.learning { return; }
-        let m = best_match
-            .expect("update_likelihood_model: winner match not materialized for the model update");
+
+        let m = best_match.expect("update_likelihood_model: winner match not materialized for the model update");
         let entry = self.spatial_routing_table.get_mut(&best.pattern_id)
             .expect("update_likelihood_model: best pattern missing from spatial routing table");
         for item in &m.common { entry.context.strengthen_neuron(item.neuron_id); }
@@ -1604,7 +1601,6 @@ impl Neuron {
 
     /// Cast this neuron's same-frame prediction, unless a fired child pattern already represents it.
     fn generate_spatial_votes(&self, matches: &[PatternMatch], timings: &mut NeuronOpTimings) -> Option<SpatialVotes> {
-
         let start = std::time::Instant::now();
 
         // A fired child subsumes this neuron's own prediction for the frame.

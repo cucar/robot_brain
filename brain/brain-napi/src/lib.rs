@@ -302,8 +302,10 @@ impl JsBrain {
         Ok(arr)
     }
 
-    /// Inspect one neuron: returns { neuronId, temporalLevel, parentId | null,
-    /// context: [{ neuronId, distance, strength }, ...] }.
+    /// Inspect one neuron: returns { neuronId, temporalLevel, spatialLevel, channelId | null,
+    /// parentId | null, context: [{ neuronId, distance, strength }, ...] }.
+    /// channelId is the neuron's own anchor channel — for sensory neurons their registered
+    /// channel, for spatial-correction neurons the founding pixel's channel (inherited at mint).
     /// Context entries come from the parent neuron's routing-table entry
     /// for this child pattern. Level-0 sensory neurons have parent_id=null
     /// and empty context.
@@ -314,6 +316,11 @@ impl JsBrain {
         let mut obj = env.create_object()?;
         obj.set_named_property("neuronId", env.create_uint32(info.neuron_id as u32)?)?;
         obj.set_named_property("temporalLevel", env.create_uint32(info.temporal_level as u32)?)?;
+        obj.set_named_property("spatialLevel", env.create_uint32(info.spatial_level as u32)?)?;
+        match info.channel_id {
+            Some(c) => obj.set_named_property("channelId", env.create_uint32(c as u32)?)?,
+            None => obj.set_named_property("channelId", env.get_null()?)?,
+        }
         match info.parent_id {
             Some(p) => obj.set_named_property("parentId", env.create_uint32(p as u32)?)?,
             None => obj.set_named_property("parentId", env.get_null()?)?,
