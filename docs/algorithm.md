@@ -8,8 +8,11 @@ actions and rewards ride on that dictionary as connection payload — the compre
 decorates what it is worth, and salience-driven one-shot memory is explicitly out of scope (that is a hippocampal
 function; this is cortex).
 
-The mechanisms are specified on the spatial axis (same-frame co-occurrence, distance 0) and generalize to the
-temporal axis by swapping the co-occurrence counter — see [Temporal generalization](#temporal-generalization).
+Every mechanism is parameterized by two offsets on the neuron's own timeline — where the context is read and where
+the inference is aimed. Spatial processing reads and infers the present (`d = 0`); event processing reads history
+and infers the next frame (`d > 0`); action processing reads the future and infers the antecedent (`d < 0`). The
+mechanisms are specified on the spatial axis; what carries to the other two, and what deliberately does not, is in
+[Temporal generalization](#temporal-generalization).
 The neuron-side machinery lives in [`brain/brain-core/src/neuron.rs`](../brain/brain-core/src/neuron.rs) —
 recognition under the `match_info` flag, creation under `error_info` — and the thalamus-side machinery in
 [`brain/brain-core/src/thalamus.rs`](../brain/brain-core/src/thalamus.rs).
@@ -78,6 +81,58 @@ One design judgment sits on top of the facility-location skeleton and is stated 
 surprise). Clustering on when, paying with what. The formal competitive-ratio guarantees for online facility
 location cover the accumulate-then-open skeleton, not this metric split, nor evidence decay or center drift.
 
+## Lateral inference: every level is its own ground floor
+
+At every spatial level `k`, a neuron's context AND its inference target are the same population: the level-`k`
+co-activation in its neighborhood. L0 infers L0, L1 infers L1, L2 infers L2 — laterally, the way the sensory floor
+already works. No level is special; the radius schedule grows the neighborhood per level, and each level's surprise
+mints the level above it.
+
+The targets are **observed activations, never predictions**. A level-2 neuron predicts which level-2 patterns
+actually fire around it — real recognition events, grounded through their own likelihood-ratio chains to sensory —
+not what some other model guessed. This is what separates lateral inference from a level-below prediction cascade,
+where higher levels train against lower levels' *guesses* and error compounds up the tower with no anchor. That
+compounding argument is exactly why the event tower (`d > 0`) stays base-anchored (see
+[Temporal generalization](#temporal-generalization)): forward ground truth only exists at the next sensory frame.
+At `d = 0` there is no such asymmetry — same-level activity is observed in the same frame as everything else, so
+every level has its own ground truth.
+
+### Correction is explanation, not substitution
+
+A minted pattern does not fix its parent's forecast; it removes the situation from the class of things the parent
+needs to forecast. When the child fires, subsumption silences the parent's evaluation, and the chronic surprise
+that created the child stops being billed — the recurring configuration has moved from the data-bits column into
+the model, where it is paid once. Nothing consumes a downward prediction at `d = 0`: prediction and reality arrive
+in the same frame, so a same-frame forecast has zero lead time and its only value is surprise detection. Every
+neuron therefore casts exactly one vote stream, laterally at its own level. (This is `d = 0`-specific: forward
+forecasts have lead time and real consumers — see [Temporal generalization](#temporal-generalization).)
+
+The knowledge of what the situation looks like lives in the pattern's routing context — per-neighbor strength over
+trials is `p(constituent | pattern)`, a conditional model of the configuration one level below. One structure
+serves three roles: recognition going up, identity at the thalamus, and (as a future, deliberate feature — not part
+of the frame loop) top-down completion for generative decode.
+
+### The payload carve-out
+
+Action, reward, and label channels are exempt from laterality: any pattern at any level may hold direct connections
+to them. They are not part of the world-model's level structure — they are the payload the dictionary carries, the
+"Actions and Rewards" of the name. This keeps supervised readout and action selection fed by the full hierarchy
+while the model structure compresses. This carve-out is an empirical bet — that payload votes are ALL the
+cross-level prediction the system needs — and it is tested, not assumed (see the un-pinning phase in the
+[Implementation plan](#implementation-plan)).
+
+### What firing does and does not certify
+
+Acceptance is winner-take-all, but accuracy is never assumed. The rank prices the fired pattern's imperfection on
+every fire (expected-but-absent entries cost their bits inside it), and under earn/rent a chronically sloppy
+explainer banks little and dies insolvent. Drift is tracked by refinement and terminal drift self-corrects through
+narrow-then-remint. Systematic residue — including novel members the model never stored — accumulates in the
+post-natal sub-centers and surfaces as a split. Unsystematic residue silenced in this parent's ledger is still
+witnessed by overlapping neighbors whose children did not fire. The genuinely uncovered case is residue that is
+small, unsystematic, and single-witness — by construction noise-like. The faithful-MDL upgrade, held as a named
+future refinement, is partial explaining-away: on a fired frame the parent prices the residue against background
+plus the fired child's model and deposits the remainder into its womb.
+
 ## Estimation: KT for models, raw MLE for background
 
 Every likelihood-ratio score in the design compares a model's per-entry probability against a background's. The two
@@ -102,9 +157,9 @@ sides are estimated differently, on purpose:
   for it would price surprises against events that never happened.
 
 Each neuron keeps two background models: a **context** model (how often each same-level neighbor is co-active,
-per context frame) feeding recognition and embryo assignment, and an **inference** model (how often each base event
-is active in the inference neighborhood, per inference frame) feeding the benefit gate. Both are learning-gated
-like every substrate update, so frozen evaluation stays frozen.
+per context frame) feeding recognition and embryo assignment, and an **inference** model (how often each event in
+the inference population is active in the inference neighborhood, per inference frame) feeding the benefit gate.
+Both are learning-gated like every substrate update, so frozen evaluation stays frozen.
 
 ## Recognition
 
@@ -137,8 +192,9 @@ A neuron whose child fired this frame is *subsumed* — it casts no prediction a
 already represents it. Only a neuron with no firing child predicts and gets evaluated.
 
 When no child fired, the neuron casts its own prediction from its connections and compares it against the observed
-base events. A divergence is scored as net evidence for a distinct source, all terms in surprisal bits against the
-neuron's inference background model `p_bg(e)`:
+inference population — its own level's co-activation, under
+[lateral inference](#lateral-inference-every-level-is-its-own-ground-floor). A divergence is scored as net evidence
+for a distinct source, all terms in surprisal bits against the neuron's inference background model `p_bg(e)`:
 
 ```
 evidence_for     = Σ_{present, unpredicted}  -log2(p_bg(e))        // bits a correct prediction would have saved
@@ -232,10 +288,12 @@ ordinary refinement instead of rendering the pattern unfireable. Center shedding
 low-share members are born low and fade. A pattern born from more evidence starts further from death — the same
 evidence buying the same durability (see [Forgetting](#forgetting-earn-rent-death)).
 
-Founding connections are wired from the birth frame's observed base events (id, channel, dimension, reward), so the
-child predicts from its first activation and its own connection learning refines from there. Patterns represent
-situations; their initial reaction to the situation may be poor, and learning it is the child's job, not grounds
-for death. Born patterns die one way: the situation stops recurring and activation decays away.
+The newborn's birth knowledge is its seeded context model — that is what lets it fire and refine from its first
+opportunity. Its lateral connections at its own level start empty and are learned as its level populates, exactly
+as a sensory neuron's are; payload connections (action, reward, label channels) are wired from the birth frame so
+the pattern participates in readout immediately. Patterns represent situations; their initial reaction to the
+situation may be poor, and learning it is the child's job, not grounds for death. Born patterns die one way:
+insolvency (see [Forgetting](#forgetting-earn-rent-death)).
 
 ## Context refinement: plasticity of degree one
 
@@ -349,9 +407,11 @@ connection model loses by covering a second parent's frames; opening costs a ful
 everything the request would create. For genuine duplicates — the common case, since overlapping neighborhoods
 witness the same situation — serving wins by roughly the entire cost of the duplicate.
 
-Candidate lookup is by target signature: patterns predicting substantially the same base events as the request's
-target events. Requests born in the same frame are pooled before lookup — parents witnessing one surprise from
-adjacent neighborhoods produce requests with heavily overlapping targets, and one child serves the whole pool.
+Candidate lookup is by identity, and identity is the context center: a birth request carries a converged
+configuration model, and every existing pattern's routing context is the same kind of object at the same
+granularity — the serve test compares them with the likelihood machinery everything else already uses. Requests
+born in the same frame are pooled before lookup — parents witnessing one surprise from adjacent, overlapping
+neighborhoods produce requests with heavily overlapping centers, and one child serves the whole pool.
 
 A served pattern becomes a **multi-parent child**: one connection set, one id, and per-parent routing entries, each
 with its own context view, its own balance, and its own death clock. The pattern dies in a parent when
@@ -409,12 +469,37 @@ flowchart TD
 
 ## Temporal generalization
 
-Nothing above is same-frame-specific except which counter supplies co-occurrence. Spatial context counts answer
-"how often is this neighbor active in the same frame as the parent"; temporal context counts answer the same
-question per distance `d`. The currency, KT estimation, the womb, the price, the refinement dynamics, and the
-structural moves carry over with the distance axis as a parameter of the background model, not a separate
-mechanism. The temporal side currently runs a separate adaptive-grouping mechanism and keeps its own parallel
-structures; nothing here unifies them, and porting is deliberately deferred until the spatial side is proven.
+The three axes, in the (context, inference) parameterization:
+
+| Axis | Context read from | Inference aimed at | Ground truth anchor |
+|---|---|---|---|
+| Spatial (`d = 0`) | this frame, own level | this frame, own level | observed co-activation, per level |
+| Event (`d > 0`) | history, per distance | the next frame | the next sensory frame |
+| Action (`d < 0`) | what follows (the endpoint) | the antecedent actions | emitted primitives + reward filter |
+
+**What carries unconditionally: everything context-side.** The currency, KT estimation, the womb, subset pricing,
+refinement, and the structural moves only ever consume a configuration signature — they never assumed *when* the
+configuration was observed. The distance axis is a parameter of the background model, not a separate mechanism.
+
+**What does not carry: correction-by-explanation.** Explanation-only resolution is `d = 0`-specific, for a lead-time
+reason. A same-frame prediction arrives together with reality, so nothing downstream can act on it — its whole
+value is surprise detection, and subsumption alone settles the account. A `d > 0` forecast precedes reality; the
+gap is the point — anticipation is what action selection consumes — so a fired event pattern must actually cast
+its forward votes (substitution), not merely explain the history. Related: the event tower's inference stays
+anchored at the next **sensory** frame rather than going lateral, because forward ground truth exists nowhere else —
+a forward lateral cascade would train each level against the level below's guesses, compounding error with no
+anchor. The lateral rule is a `d = 0` result; it does not overturn the base anchoring of `d > 0`.
+
+**The action axis (`d < 0`) has its own design** — [action-composition.md](./action-composition.md) — and it is
+consistent with this document's economics: action chunks mint from backward inference error over actions only
+(structure, value-blind — the same value-blindness the cortex keeps everywhere), survive by forward reward on
+their connections (the payload carve-out doing its job), and are grounded by execution the way events are grounded
+by sensory — emitted primitives are real. Context = the endpoint action and what follows; inference = the
+antecedents that reliably preceded it. The womb, pricing, and forgetting economics here should port to `d < 0`
+minting when that design is built.
+
+The temporal side currently runs a separate adaptive-grouping mechanism and keeps its own parallel structures;
+nothing here unifies them, and porting is deliberately deferred until the spatial side is proven.
 
 ## Implementation plan
 
@@ -440,27 +525,97 @@ flat-rate staleness decay becomes the same rent on its own price; the death ledg
 effects: broad low-rank patterns die insolvent, sharp rarely-firing patterns survive; measured by pattern churn,
 per-level counts, and accuracy.
 
-**Phase 4 — thalamus reuse.** The largest phase, gated on a plumbing audit first: per-parent routing entries
-already exist, but subsumption, the death ledger, and the delete cascade assume one parent per pattern, and
-"dead in one parent, alive in another" needs an owner (per-entry balances from phase 3 provide it). Then: a
-target-signature index over existing patterns (maintained at mint/death, queried at request time), same-frame
-request pooling by target overlap, the MDL serve test, and an install-into-parent op for served requests. Measured
-primarily by apex pattern count and per-level neuron counts — this is the phase aimed at the apex explosion.
+**Phase 4 — lateral un-pinning.** Levels ≥ 1 stop targeting base events: the dispatch ships each level its own
+co-activation as the inference population, payload channels keep their base wiring, and newborn lateral
+connections start empty (the `target_events` plumbing narrows to payload). Runs before reuse because it changes
+the substrate everything downstream measures.
+*Test gate after implementation:* A/B against the pinned baseline on MNIST. The carve-out is an empirical bet —
+that payload votes are all the cross-level prediction readout needs. If accuracy drops materially, higher-level
+pixel votes were doing representational work the carve-out misattributes, and the design answer (top-down decode,
+or widening the carve-out) must be decided before any later phase builds on lateral semantics. Also compare
+per-level surprise rates: the point of the phase is that each level's failures become arrangement-scale.
 
-**Phase 5 — post-natal womb and split.** Sub-centers on born patterns (the embryo struct reused, serialized with
+**Phase 5 — thalamus reuse.** The largest phase, gated on a plumbing audit first: per-parent routing entries
+already exist, but subsumption, the death ledger, and the delete cascade assume one parent per pattern, and
+"dead in one parent, alive in another" needs an owner (per-entry balances from phase 3 provide it). Then: an
+identity index over existing patterns' context centers (maintained at mint/death, queried at request time),
+same-frame request pooling by center overlap, the MDL serve test, and an install-into-parent op for served
+requests. Measured primarily by apex pattern count, per-level neuron counts, and parents-per-pattern by level
+(stroke-scale patterns should be heavily shared — emergent translation invariance; digit-scale barely) — this is
+the phase aimed at the apex explosion.
+*Test gate after implementation — the multi-parent invariants, each exercised deliberately:* (1) subsumption with a
+shared child: the child firing in parent A must not silence parent B's evaluation unless it also fired there;
+(2) death-ledger dual clocks: a shared child insolvent in A and solvent in B survives, is removed from A's routing
+table and index only, and dies entirely on last release; (3) delete cascade: releasing the last parent reclaims the
+neuron, its context-index entries, and its contextRefs, with no orphan ids; (4) snapshot round-trip: a multi-parent
+child serializes once, restores into every parent's routing table, and recomputed death frames match per-entry
+balances; (5) id reuse after full release leaves no stale index entries. None of these can fail silently — each
+needs an assertion or a test, not an eyeball.
+
+**Phase 6 — post-natal womb and split.** Sub-centers on born patterns (the embryo struct reused, serialized with
 the routing entry), served on each fire; split request when the second sub-center covers the incremental price;
 thalamus-side execution with the original's balance divided by each sub-center's share. Measured on deliberately
 pooled synthetic situations — two interleaved contexts with distinct targets — for split latency and correctness,
-then on MNIST.
+then on MNIST. Watch for merge/split churn explicitly: reuse-merge and split evaluate the same criterion through
+different proxies, so a split whose products immediately re-serve into each other is the oscillation mode the
+proxies could reintroduce.
 
-**Phase 6 — defragmentation.** Decayed runner-up counts on routing entries, merge proposals over a persistence
+**Phase 7 — defragmentation.** Decayed runner-up counts on routing entries, merge proposals over a persistence
 line derived from the same economics (the pooled-versus-separate coding test), thalamus-side execution. Last
-because phases 2 and 4 should prevent most fragmentation from arising; this phase collects what still slips
+because phases 2 and 5 should prevent most fragmentation from arising; this phase collects what still slips
 through.
 
-## Open questions
+## Risks and open questions
 
-- **Serve-test tractability.** The reuse decision compares coding costs that depend on the existing pattern's fit
-  to the requesting parent's frames, which the thalamus cannot observe directly. The practical proxy — target-set
-  overlap between the request and the candidate — needs validation against cases where targets overlap but
-  contexts genuinely differ.
+Ranked; each is either resolved by a phase's test gate or held as a named design question. The pattern across the
+serious ones: context-side machinery generalizes because it never assumed when a configuration was observed;
+inference-side machinery is where each axis has its own consumer, and therefore its own semantics.
+
+### Risks
+
+- **The payload carve-out is an empirical bet.** Un-pinning removes higher-level pixel votes and assumes
+  full-hierarchy payload votes carry the readout. Tested at the phase 4 gate, A/B against the pinned baseline; a
+  material accuracy drop means the carve-out is too narrow and the answer (top-down decode, or a wider carve-out)
+  must be settled before later phases build on lateral semantics.
+- **Multi-parent plumbing.** Subsumption, the death ledger, and the delete cascade all assume one parent per
+  pattern; a partial retrofit corrupts lifecycle invariants in ways that show up as slow population drift, not
+  crashes. Addressed by the phase 5 audit and its five-invariant test gate.
+- **Reuse calibration.** Identity-by-context-center is the right object, but the serve test is unvalidated:
+  over-serving merges distinct situations into mush the split machinery must unwind; under-serving leaves the apex
+  explosion in place. Watch parents-per-pattern and split-rate-after-reuse together.
+- **Merge/split proxy churn.** The no-oscillation guarantee holds when merge and split evaluate one criterion;
+  in practice reuse-merge and post-natal split use different proxies of it. A split whose products re-serve into
+  each other is the churn signature; instrumented at the phase 6 gate.
+- **Cold-start churn under the new economics.** Tiny early alphabets mean near-zero prices — a burst of cheap
+  early patterns that rent must clean up. Principled, possibly ugly in the transient; measure churn rate in the
+  first thousand frames, not just settled counts.
+- **Hierarchy growth has no governor but economics.** No level caps, by design. With lateral inference every level
+  generates the surprise that feeds the next; if per-level rent does not bite fast enough, footprint-style
+  explosion returns recursively. Per-level neuron counts stay a standing metric.
+- **Winner-take-all residue.** Residue that is small, unsystematic, and single-witness vanishes without a ledger
+  entry. By construction noise-like; the named upgrade (partial explaining-away — residue priced against
+  background plus the fired child's model, deposited into the womb) is held until evidence says it matters.
+
+### Open questions
+
+- **Rent horizon derivation.** Now the only time constant in the design, so the planned context-length derivation
+  carries more weight than when it was one of several. The mechanisms consume the horizon identically wherever it
+  comes from.
+- **Subsumption scope under lateral semantics.** Exactly who is subsumed by a fire — the parent whose routing
+  table fired it, or every context member the pattern represents? The readings differ materially now that
+  explanation is the correction mechanism; the code's current behavior should be checked against a deliberate
+  decision rather than inherited.
+- **Background non-stationarity.** Background counts never decay while everything they price does. Irrelevant on
+  stationary data; on drifting domains every rank and price is measured against an aging null. Windowing the
+  backgrounds perturbs every number at once — its own experiment, after the structure is proven.
+- **Temporal identity semantics.** Two patterns with the same history context and different outcomes: one
+  stochastic situation whose connections learn the outcome distribution, or two situations needing different
+  histories to separate? The situation-detector philosophy says the former and the split machinery makes the
+  distinction discoverable; the temporal port should state the choice explicitly.
+- **Ordered-context pricing.** Temporal contexts are (member, distance) pairs, not sets; the subset-naming price
+  needs its per-distance alphabet form worked out at port time. Mechanical, but it is where "the distance axis is
+  just a parameter" gets cashed in or falsified.
+- **Action-side port.** The `d < 0` design (action-composition) predates this document's economics; its Welford
+  mint threshold is the kind of adaptive-threshold mechanism the womb replaced on the spatial side. Whether action
+  chunks should mint through a womb with subset pricing and rent, or keep their own gate, is a port-time decision —
+  the structure/value split (mint by structure, survive by value) is already aligned.
