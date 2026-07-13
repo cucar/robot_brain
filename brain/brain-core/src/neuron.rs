@@ -63,7 +63,7 @@ struct SpatialEmbryo {
     context_counts: FxHashMap<NeuronId, u64>,
     /// Occurrence total: how many failures have been served by this embryo.
     n: u64,
-    /// Accumulated benefit deposited by the assigned failures, in Layer 1's bits.
+    /// Accumulated benefit deposited by the assigned failures, in the surprise gate's bits.
     evidence: f64,
     /// Frame of the most recent deposit. Evidence decays from here at the parent's forget rate, so
     /// an embryo that stops being served eventually falls to zero and is evicted (staleness).
@@ -306,7 +306,7 @@ pub struct Neuron {
     match_info: bool,
 
     /// FACILITY-LOCATION spatial correction creation (MDL): a failed prediction is scored as net
-    /// benefit under the neuron's local inference base rates (Layer 1), and a positive benefit is a
+    /// benefit under the neuron's local inference base rates (the surprise gate), and a positive benefit is a
     /// demand point served by the womb. Fuzzy likelihood-ratio assignment pools each failure into an
     /// embryo — a recurring context cluster — whose center drifts toward the failures it serves and
     /// whose evidence accumulates the benefit. A pattern is born when an embryo's evidence covers
@@ -1436,7 +1436,7 @@ impl Neuron {
     }
 
     /// Raw local frequency of a base event being active in the inference neighborhood (count/frames,
-    /// no smoothing). The base rate the Layer 1 benefit gate (`compute_spatial_evidence`) weighs
+    /// no smoothing). The base rate the surprise gate (`compute_spatial_evidence`) weighs
     /// each miss and hit against — how rare the event normally is for this neuron.
     fn get_inference_frequency_raw(&self, id: NeuronId) -> f64 {
         self.spatial_inference_counts.get(&id).copied().unwrap_or(0) as f64 / self.spatial_inference_frames as f64
@@ -1698,7 +1698,7 @@ impl Neuron {
             .unwrap_or_default();
         if context_neighbors.is_empty() { return None; }
 
-        // Facility location: Layer 1 scores the failure as net evidence for a distinct source (the
+        // Facility location: the surprise gate scores the failure as net evidence for a distinct source (the
         // benefit), and a positive benefit is a demand point served by the womb — assigned to an
         // existing embryo (a recurring context cluster) or opening a new one. A pattern is born
         // only when an embryo's pooled evidence covers its price. Minting is entirely a womb event.
@@ -1762,17 +1762,25 @@ impl Neuron {
         embryo.evidence += benefit;
 
         // Birth: an embryo whose pooled evidence covers its price becomes a pattern. Price is what
-        // the parent will actually store, in bits: each center reference names one neighbor out of
-        // the context alphabet this neuron has witnessed, and the pattern's own name distinguishes
-        // it among the parent's children once installed. The alphabet is at least the center size —
-        // every center member was witnessed as context by construction.
-        let alphabet = self.spatial_context_counts.len().max(embryo.context_counts.len()) as f64;
-        let price = embryo.context_counts.len() as f64 * alphabet.log2()
+        // the parent will actually store, in bits: naming the center as an unordered subset of the
+        // context alphabet this neuron has witnessed, plus the pattern's own name among the parent's
+        // children once installed. The alphabet is at least the center size — every center member
+        // was witnessed as context by construction.
+        let alphabet = self.spatial_context_counts.len().max(embryo.context_counts.len());
+        let price = Self::name_bits(embryo.context_counts.len(), alphabet)
             + (self.spatial_routing_table.len() as f64 + 1.0).log2();
         if embryo.evidence < price { return None; }
         let context: Vec<NeuronId> = embryo.context_counts.keys().copied().collect();
         self.spatial_embryos.remove(i);
         Some(SpatialCorrectionRequest { context_neighbors: context, target_events: target_events.to_vec() })
+    }
+
+    /// Bits to name an unordered k-subset of an n-symbol alphabet: log2 of n-choose-k. Computed as
+    /// a telescoping product so nothing overflows. Naming a set, not k independent pointers — the
+    /// pointer form overpays by log2(k!) in order redundancy and overcharges dense subsets badly
+    /// (naming all n of n members carries zero information and costs zero here).
+    fn name_bits(k: usize, n: usize) -> f64 {
+        (0..k).map(|i| ((n - i) as f64 / (k - i) as f64).log2()).sum()
     }
 
     /// Score an observed context against an embryo's center by log-likelihood ratio versus the

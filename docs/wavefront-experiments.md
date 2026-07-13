@@ -981,7 +981,7 @@ runs match neuron-for-neuron at every checkpoint (table above).
   ledger's present/absent counts are tracked separately with no such flip, so the clamp did nothing there.
   Added an explanatory comment at the one place (recognition) where it's actually load-bearing.
 
-## Session 2026-07-10 — womb conversion (algorithm2.md)
+## Session 2026-07-10 — womb conversion (now part of algorithm.md, the UCAR design)
 
 The exact-context pending-mint ledger and the born-unpaid pattern machinery were replaced by the womb: each
 parent neuron holds a small set of context-only embryos (per-neighbor count + occurrence total `N` + accumulated
