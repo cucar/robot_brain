@@ -4,25 +4,24 @@ How the action hierarchy grows by the **same machinery** as the event hierarchy,
 held together: the inference runs backward in time (`d<0`), and **structure forms within a modality
 while the two modalities couple only at the apex**. This is **design, not yet built**.
 
-**The inference-scope gate is resolved, not pending** ([inference-level.md](./inference-level.md)). The
-earlier framing made this design wait on a `level-below` win in an event-side experiment, with `base`
-winning treated as a threat ("levels infer levels is undercut"). That experiment is concluded: `base` is
-the ground-truth-anchored default for the **event** tower, because the cascade's compounding error has no
-anchor there. But this design does **not** depend on events predicting events. It rests on
-**action→action** backward composition plus **apex event ↔ apex action** coupling — and both are anchored
-to reality the way `base` events are: emitted primitives are real (execution grounds the action hierarchy
-at the bottom, the way sensory grounds events), and the reward filter prunes the backward graph toward
-causality. So `base`-for-events **leaves this intact**; it removes the gate rather than failing it. The
-old worry dissolved once composition became action→action plus apex coupling instead of events predicting
-events.
+**The inference-scope gate is resolved, not pending** ([inference-level.md](./inference-level.md), since
+superseded by the UCAR design's uniform same-level rule — [algorithm.md](./algorithm.md)). The earlier
+framing made this design wait on a `level-below` win in an event-side experiment. That gate is gone in
+both directions: this design does **not** depend on how the event tower's inference scope is set. It rests
+on **action→action** backward composition plus **apex event ↔ apex action** coupling — and both are
+anchored to reality the way sensory grounds events: emitted primitives are real (execution grounds the
+action hierarchy at the bottom), and the reward filter prunes the backward graph toward causality. UCAR's
+lateral rule arriving on the event tower changes nothing here; under the staged rollout, actions are the
+last port (spatial validation first, then events, then this design).
 
 The reward-distribution / **global-rewards** design is the independent companion to this one — see
 [global-rewards.md](./global-rewards.md). The two meet at exactly **one** point: reward targets the apex
 action, not base neurons.
 
-> **Status: design only. Not built. The inference-scope gate is resolved
-> ([inference-level.md](./inference-level.md)) — `base`-for-events leaves this design intact, because
-> composition is action→action plus apex coupling, not events predicting events.**
+> **Status: design only. Not built. The inference-scope gate is resolved — this design is independent of
+> the event tower's inference scope (formerly `base` per [inference-level.md](./inference-level.md), now
+> same-level per the UCAR design, [algorithm.md](./algorithm.md)) — because composition is action→action
+> plus apex coupling, not events predicting events. Scheduled as the last port in UCAR's staged rollout.**
 > Recorded so the design isn't lost. Open questions are listed at the end; several are unresolved.
 
 ---
@@ -297,10 +296,12 @@ graph TD
     EXIST["Existing primitives:<br/>Welford thresholds, learnActionSequences flag,<br/>action-connection reward, Death Ledger"] --> CORE
 ```
 
-- **Inference-scope gate — resolved, no longer blocking** ([inference-level.md](./inference-level.md)).
-  The earlier "composition needs `level-below` to win or rethink" gate is closed: `base` is the event-tower
-  default, and this design grounds on **action→action** composition plus apex coupling (anchored by
-  execution and reward), not on events predicting events. No experiment blocks the build.
+- **Inference-scope gate — resolved, no longer blocking** ([inference-level.md](./inference-level.md),
+  superseded by UCAR's uniform same-level rule — [algorithm.md](./algorithm.md)). The earlier "composition
+  needs `level-below` to win or rethink" gate is closed in both directions: this design grounds on
+  **action→action** composition plus apex coupling (anchored by execution and reward), not on events
+  predicting events, so it is independent of the event tower's inference scope. No experiment blocks the
+  build; in UCAR's staged rollout it is the last port (spatial, then events, then actions).
 - **Test harness — the real long pole.** No current domain exercises action composition. Stocks have one
   binary action per channel (`actions: [-1, 1]`) — a "chunk" of buy-buy-buy is trivial. MNIST runs
   actions off. **Plan: convert the text channel from passive next-token prediction to action-based output

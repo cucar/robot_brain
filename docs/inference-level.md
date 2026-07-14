@@ -1,10 +1,15 @@
-# Inference Level Experiment — Concluded (Abandoned)
+# Inference Level Experiment — Concluded, then Superseded
 
-> **Status: concluded 2026-06-22. The experiment is abandoned and removed from the roadmap.**
-> "Inference levels are bust." The conceptual analysis below resolves the question without running the
-> four-variant sweep: `base` is the ground-truth-anchored default for the **event** tower, and the
-> compositional ambition ("levels infer levels") relocates to the **action** side, where it has an
-> anchor the event cascade lacks. The original experiment spec is preserved at the end for the record.
+> **Status: concluded 2026-06-22 (`base` as the event-tower default); superseded 2026-07-13 by the UCAR design
+> ([algorithm.md](./algorithm.md)), which adopts same-level inference on every axis.** The analysis below was
+> correct under its premises, and each premise has since been removed: minting no longer couples prediction-target
+> to correction-target (subsumption accounting decouples them), readout is owned by the payload carve-out (action,
+> reward, and label channels stay base-wired from every level), and bootstrap starvation is handled by the rent
+> economics. What stands is the analysis's core invariant, which UCAR keeps: **no level ever trains against
+> another level's predictions** — lateral targets are future or present *observed* activations, not the cascade of
+> guesses this document rightly rejected. Implementation remains `base` until the staged port reaches the temporal
+> tower (spatial is validated first, then events, then actions). The original reasoning and experiment spec are
+> preserved below for the record.
 
 This document originally proposed an empirical sweep over which neurons a level-L neuron predicts over
 (`base` / `same-level` / `level-below` / `all-levels`), to be picked on the stocks pipeline and to gate
@@ -89,7 +94,7 @@ compounding-error problem has no anchor, so `base` stands.
 
 ---
 
-## Conclusion / Decision
+## Conclusion / Decision (superseded — see status note at top)
 
 **`base` is the default for the event tower.** Events are evaluated against the next sensory frame; that
 is the only place `d>0` ground truth lives, so anchoring every level to sensory is correct and the

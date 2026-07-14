@@ -91,11 +91,9 @@ mints the level above it.
 The targets are **observed activations, never predictions**. A level-2 neuron predicts which level-2 patterns
 actually fire around it — real recognition events, grounded through their own likelihood-ratio chains to sensory —
 not what some other model guessed. This is what separates lateral inference from a level-below prediction cascade,
-where higher levels train against lower levels' *guesses* and error compounds up the tower with no anchor. That
-compounding argument is exactly why the event tower (`d > 0`) stays base-anchored (see
-[Temporal generalization](#temporal-generalization)): forward ground truth only exists at the next sensory frame.
-At `d = 0` there is no such asymmetry — same-level activity is observed in the same frame as everything else, so
-every level has its own ground truth.
+where higher levels train against lower levels' *guesses* and error compounds up the tower with no anchor. The
+rule is the same on every axis (see [Temporal generalization](#temporal-generalization)); implementation validates
+it on the spatial axis first.
 
 ### What subsumption settles at `d = 0`
 
@@ -470,36 +468,44 @@ flowchart TD
 
 ## Temporal generalization
 
-The three axes, in the (context, inference) parameterization:
+One rule on every axis: context and inference both read the neuron's own level, and the distance parameter only
+chooses *when*.
 
 | Axis | Context read from | Inference aimed at | Ground truth anchor |
 |---|---|---|---|
 | Spatial (`d = 0`) | this frame, own level | this frame, own level | observed co-activation, per level |
-| Event (`d > 0`) | history, per distance | the next frame | the next sensory frame |
-| Action (`d < 0`) | what follows (the endpoint) | the antecedent actions | emitted primitives + reward filter |
+| Event (`d > 0`) | history, own level, per distance | the next frame, own level | next frame's observed activations, per level (sensory at L0) |
+| Action (`d < 0`) | what follows (the endpoint), own level | the antecedent actions | emitted primitives + reward filter |
 
-**What carries unconditionally: everything context-side.** The currency, KT estimation, the womb, subset pricing,
+**Everything context-side carries unconditionally.** The currency, KT estimation, the womb, subset pricing,
 refinement, and the structural moves only ever consume a configuration signature — they never assumed *when* the
 configuration was observed. The distance axis is a parameter of the background model, not a separate mechanism.
 
-**What is chosen per axis: the inference scope, nothing else.** The firing and voting machinery is identical on
-every axis — fired pattern votes, subsumed parent doesn't. The one per-axis decision is what population the
-connections target. At `d = 0` the scope is lateral (own level): a same-frame forecast has zero lead time, so no
-consumer loses anything when votes move to the neuron's own level. At `d > 0` the scope is base (the next sensory
-frame): forward votes are consumed — they are the readout and the only place forward ground truth lives — and a
-forward lateral cascade would train each level against the level below's guesses, compounding error with no
-anchor. The lateral rule is a `d = 0` result; it does not overturn the base anchoring of `d > 0`.
+**The inference side is uniform too, because the targets are always observed activations, never predictions.**
+Next frame's level-k patterns actually fire — recognition events on real data, grounded through their own
+likelihood chains to sensory — so "which level-k patterns fire next frame" is exactly as observable as "which fire
+this frame." The invariant that matters is narrower than any per-axis anchoring rule: **no level ever trains
+against another level's guesses.** A cascade whose targets are lower-level *predictions* compounds error with no
+anchor and is rejected; a lateral rule whose targets are future *observed* activations is anchored at every level.
+The next-sensory-frame forecast does not disappear under laterality — it is L0's own lateral `d > 0` prediction
+(L0's level *is* sensory), plus payload votes from every level.
 
 **The action axis (`d < 0`) has its own design** — [action-composition.md](./action-composition.md) — and it is
 consistent with this document's economics: action chunks mint from backward inference error over actions only
 (structure, value-blind — the same value-blindness the cortex keeps everywhere), survive by forward reward on
 their connections (the payload carve-out doing its job), and are grounded by execution the way events are grounded
 by sensory — emitted primitives are real. Context = the endpoint action and what follows; inference = the
-antecedents that reliably preceded it. The womb, pricing, and forgetting economics here should port to `d < 0`
-minting when that design is built.
+antecedents that reliably preceded it. The womb, pricing, and forgetting economics port to `d < 0` minting when
+that build starts.
 
-The temporal side currently runs a separate adaptive-grouping mechanism and keeps its own parallel structures;
-nothing here unifies them, and porting is deliberately deferred until the spatial side is proven.
+**Design is uniform; implementation is staged.** The whole design is validated on the spatial axis first — every
+phase of the [Implementation plan](#implementation-plan), through reuse and refinement, runs and is measured at
+`d = 0` only. Only after spatial validation does the event tower port (same mechanisms, distance-parameterized
+backgrounds, its own un-pinning gate — the forward readout consumers, next-token and price forecasts, get the same
+A/B treatment the spatial carve-out gets). Actions come last: spatial action moments plus reverse-temporal
+(`d < 0`) chunk formation, coupling high-level event patterns to high-level action chunks at the apex. Until each
+port lands, the temporal side keeps its current base-anchored inference and its separate adaptive-grouping
+mechanism — parallel structures by design, unified only when the evidence says the spatial side has earned it.
 
 ## Implementation plan
 
@@ -525,10 +531,11 @@ flat-rate staleness decay becomes the same rent on its own price; the death ledg
 effects: broad low-rank patterns die insolvent, sharp rarely-firing patterns survive; measured by pattern churn,
 per-level counts, and accuracy.
 
-**Phase 4 — lateral un-pinning.** Levels ≥ 1 stop targeting base events: the dispatch ships each level its own
-co-activation as the inference population, payload channels keep their base wiring, and newborn lateral
-connections start empty (the `target_events` plumbing narrows to payload). Runs before reuse because it changes
-the substrate everything downstream measures.
+**Phase 4 — lateral un-pinning (spatial only).** Levels ≥ 1 stop targeting base events on the `d = 0` axis: the
+dispatch ships each level its own co-activation as the inference population, payload channels keep their base
+wiring, and newborn lateral connections start empty (the `target_events` plumbing narrows to payload). The
+temporal tower stays base-anchored until its own port. Runs before reuse because it changes the substrate
+everything downstream measures.
 *Test gate after implementation:* A/B against the pinned baseline on MNIST. The carve-out is an empirical bet —
 that payload votes are all the cross-level prediction readout needs. If accuracy drops materially, higher-level
 pixel votes were doing representational work the carve-out misattributes, and the design answer (top-down decode,
