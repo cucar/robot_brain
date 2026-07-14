@@ -206,18 +206,6 @@ impl Memory {
         pairs
     }
 
-    /// Active neuron sets at the base level (level 0 — the sensory substrate).
-    /// Spatial returns a single-element vec (just this frame's active sensory set).
-    /// Temporal returns one entry per recency slot inside the sliding window — index 0 is the
-    /// current frame, index 1 is the previous frame, and so on out to `depth() - 1`.
-    /// Downstream code on the spatial side only ever reads index `[0]`; the recency dimension is
-    /// there for temporal pattern allocation, which wires connections back across past frames.
-    /// Active sensory event neurons at the spatial base level (level 0).
-    /// Returns the single co-active set — no recency dimension, spatial is same-frame.
-    pub fn get_spatial_base_level(&self) -> FxHashSet<NeuronId> {
-        self.spatial_level_index.get(&0).cloned().unwrap_or_default()
-    }
-
     /// Active sensory event neurons at the temporal base level (level 0), per recency slot.
     /// Index 0 is the current frame, index 1 is the previous frame, etc., out to `depth() - 1`.
     /// Used by temporal pattern allocation to wire connections back across past frames.

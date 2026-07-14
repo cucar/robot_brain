@@ -36,18 +36,14 @@ pub struct SpatialVotes {
 /// cover its price, so the neuron asks the thalamus to give birth to the pattern it represents.
 /// The thalamus owns what the neuron cannot decide locally: the subsumption filter, id
 /// allocation, and cross-neuron wiring. Pricing and clustering happened entirely in the womb.
+/// The request carries no target events: under lateral inference the newborn's prediction
+/// substrate is its own level, learned from scratch as that level populates — its birth knowledge
+/// is the seeded context center, not a connection set.
 #[derive(Debug, Clone)]
 pub struct SpatialCorrectionRequest {
     /// The embryo's converged context center — the same-level neighbors the born pattern will
     /// condition on. This is the pooled center, not the noisy triggering frame's raw context.
     pub context_neighbors: Vec<NeuronId>,
-    /// The base events actually observed this frame (what the new pattern is being created to
-    /// predict) — carried through so the thalamus can wire real founding connections at birth,
-    /// the same way temporal corrections already do. Without this, a spatial pattern is born
-    /// unable to predict anything until it separately relearns connections over future
-    /// reactivations, guaranteeing its first several uses look like total failure regardless of
-    /// what they actually represent.
-    pub target_events: Vec<ActiveNeuron>,
 }
 
 /// An embryo in a parent neuron's womb (error-info): a not-yet-born cluster center. Context-only —
@@ -366,14 +362,14 @@ pub struct Neuron {
     /// Number of frames this neuron has observed a spatial context on (denominator for the counts above).
     spatial_context_frames: u64,
 
-    /// The background model of information-priced correction creation (error-info): per INFERENCE
-    /// neighbor (base events in the neuron's inference neighborhood), the count of frames it was
-    /// active while this neuron processed a frame. The context pair above tracks same-level peers;
-    /// this pair tracks the base level the neuron's predictions are answerable to — different
-    /// populations with different radii, so they cannot share one table.
+    /// The background model the surprise gate prices failures against: per neighbor this neuron
+    /// predicts, how many frames it was active while this neuron processed one.
+    /// Lateral inference draws predictions from the same level the context pair above tracks, but
+    /// the two answer different questions — "who identifies me" versus "who do I predict" — and
+    /// advance on different frames, so they stay separate tables.
     /// Persisted so frozen evaluation prices with the trained statistics.
     spatial_inference_counts: FxHashMap<NeuronId, u64>,
-    /// Number of frames this neuron has observed base events on (denominator for the counts above).
+    /// Number of frames this neuron observed anything to predict (denominator for the counts above).
     spatial_inference_frames: u64,
 
     /// The womb (error-info): the parent's set of embryos — not-yet-born cluster centers, each
@@ -1275,7 +1271,7 @@ impl Neuron {
         &mut self,
         level_neighbors: Option<&SpatialContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        base_neighbors: &[ActiveNeuron],
+        inference_neighbors: &[ActiveNeuron],
         current_frame: FrameNumber,
     ) -> SpatialFrameResult {
         let mut timings = NeuronOpTimings::default();
@@ -1286,7 +1282,7 @@ impl Neuron {
         // The background models are learning-gated like every substrate update, so frozen evaluation stays frozen.
         if should_learn {
             self.count_spatial_context(level_neighbors);
-            self.count_spatial_inference(base_neighbors);
+            self.count_spatial_inference(inference_neighbors);
         }
 
         // Match child patterns against the observed co-activation; at most one fires.
@@ -1299,12 +1295,12 @@ impl Neuron {
         // the benefit measurement read the same substrate the votes were cast from. A worthwhile
         // failure is assigned into the womb, which may birth a pattern once an embryo is paid off.
         let correction_request = self.evaluate_spatial_prediction(
-            &votes, level_neighbors, base_neighbors, should_learn, current_frame, &mut timings,
+            &votes, level_neighbors, inference_neighbors, should_learn, current_frame, &mut timings,
         );
 
         // Learn co-activation edges AFTER voting, so the vote reads the prior frame's edges rather
         // than the ones just strengthened toward this frame's co-actives.
-        if should_learn { self.learn_spatial_connections(base_neighbors, &mut timings); }
+        if should_learn { self.learn_spatial_connections(inference_neighbors, &mut timings); }
 
         SpatialFrameResult { matches, correction_request, timings }
     }
@@ -1325,15 +1321,15 @@ impl Neuron {
         }
     }
 
-    /// Count each observed base event toward this neuron's inference background model.
-    fn count_spatial_inference(&mut self, base_neighbors: &[ActiveNeuron]) {
+    /// Count each observed neighbor toward this neuron's inference background model.
+    fn count_spatial_inference(&mut self, inference_neighbors: &[ActiveNeuron]) {
 
-        // These counts, over the frame denominator, are the base rates that price prediction
-        // failures in information-priced creation: how surprising an event's presence or absence is.
-        // Frames with no observed base events teach nothing and do not advance the denominator.
-        if base_neighbors.is_empty() { return; }
+        // These counts, over the frame denominator, are the base rates the surprise gate prices
+        // failures against: how surprising an event's presence or absence normally is here.
+        // Frames with nothing observed teach nothing and do not advance the denominator.
+        if inference_neighbors.is_empty() { return; }
         self.spatial_inference_frames += 1;
-        for neighbor in base_neighbors {
+        for neighbor in inference_neighbors {
             if neighbor.id == self.id { continue; }
             *self.spatial_inference_counts.entry(neighbor.id).or_insert(0) += 1;
         }
@@ -1435,7 +1431,7 @@ impl Neuron {
         self.spatial_context_counts.get(&id).copied().unwrap_or(0) as f64 / self.spatial_context_frames as f64
     }
 
-    /// Raw local frequency of a base event being active in the inference neighborhood (count/frames,
+    /// Raw local frequency of a neighbor being active in the inference neighborhood (count/frames,
     /// no smoothing). The base rate the surprise gate (`compute_spatial_evidence`) weighs
     /// each miss and hit against — how rare the event normally is for this neuron.
     fn get_inference_frequency_raw(&self, id: NeuronId) -> f64 {
@@ -1623,25 +1619,25 @@ impl Neuron {
         &mut self,
         votes: &Option<SpatialVotes>,
         level_neighbors: Option<&SpatialContext>,
-        base_neighbors: &[ActiveNeuron],
+        inference_neighbors: &[ActiveNeuron],
         should_learn: bool,
         current_frame: FrameNumber,
         timings: &mut NeuronOpTimings,
     ) -> Option<SpatialCorrectionRequest> {
 
         let start = std::time::Instant::now();
-        let result = self.check_spatial_prediction(votes, level_neighbors, base_neighbors, should_learn, current_frame);
+        let result = self.check_spatial_prediction(votes, level_neighbors, inference_neighbors, should_learn, current_frame);
         timings.correct_errors = start.elapsed().as_secs_f64();
         result
     }
 
     /// The evaluation body: aggregate the cast votes into a prediction, measure the error against
-    /// the observed base events, record the sample, then hand a worthwhile failure to the womb.
+    /// what actually fired, record the sample, then hand a worthwhile failure to the womb.
     fn check_spatial_prediction(
         &mut self,
         votes: &Option<SpatialVotes>,
         level_neighbors: Option<&SpatialContext>,
-        base_neighbors: &[ActiveNeuron],
+        inference_neighbors: &[ActiveNeuron],
         should_learn: bool,
         current_frame: FrameNumber,
     ) -> Option<SpatialCorrectionRequest> {
@@ -1652,24 +1648,16 @@ impl Neuron {
         // No votes, no evaluation — the fired child that suppressed them owns this frame's prediction.
         let Some(spatial_votes) = votes.as_ref() else { return None };
 
-        // The prediction is the modal configuration voted by the base-level connections.
+        // The prediction is the modal configuration voted by the lateral connections.
         // No prediction means the neuron has no connections yet, so there is no error to measure.
         let predicted_events = self.aggregate_spatial_prediction(&spatial_votes.votes);
         if predicted_events.is_empty() { return None; }
 
-        // Reality: the observed base events in the inference neighborhood (the shipped actives are
-        // pre-filtered to it), excluding the neuron itself — a neuron cannot observe itself.
-        let observed_events: FxHashSet<NeuronId> = base_neighbors.iter()
-            .map(|a| a.id)
+        // Reality: what actually fired in the neighborhood (the shipped list is pre-filtered to it),
+        // excluding the neuron itself — a neuron cannot observe itself.
+        let observed_events: FxHashSet<NeuronId> = inference_neighbors.iter()
+            .map(|neighbor| neighbor.id)
             .filter(|&id| id != self.id)
-            .collect();
-
-        // Same population, kept as full ActiveNeuron records (id, channel, dim, reward) rather than
-        // just ids — a new pattern's founding connections are wired from this, so it can predict
-        // observed_events from the moment it's born instead of learning them from scratch later.
-        let target_events: Vec<ActiveNeuron> = base_neighbors.iter()
-            .filter(|a| a.id != self.id)
-            .cloned()
             .collect();
 
         // The error is the Jaccard-union distance between prediction and reality, shared with temporal.
@@ -1705,13 +1693,13 @@ impl Neuron {
         if self.error_info {
             let benefit = self.compute_spatial_evidence(&predicted_events, &observed_events);
             if benefit <= 0.0 { return None; }
-            return self.assign_spatial_failure(&context_neighbors, benefit, &target_events, current_frame);
+            return self.assign_spatial_failure(&context_neighbors, benefit, current_frame);
         }
 
         // Legacy path: only errors above the neuron's own adaptive threshold request a correction,
         // and the request is born paid immediately (no womb).
         if error_rate <= spatial_votes.threshold { return None; }
-        Some(SpatialCorrectionRequest { context_neighbors, target_events })
+        Some(SpatialCorrectionRequest { context_neighbors })
     }
 
     /// Serve-or-open: assign one worthwhile failure to the womb (the facility-location step). The
@@ -1725,7 +1713,6 @@ impl Neuron {
         &mut self,
         context_neighbors: &[NeuronId],
         benefit: f64,
-        target_events: &[ActiveNeuron],
         current_frame: FrameNumber,
     ) -> Option<SpatialCorrectionRequest> {
 
@@ -1772,7 +1759,7 @@ impl Neuron {
         if embryo.evidence < price { return None; }
         let context: Vec<NeuronId> = embryo.context_counts.keys().copied().collect();
         self.spatial_embryos.remove(i);
-        Some(SpatialCorrectionRequest { context_neighbors: context, target_events: target_events.to_vec() })
+        Some(SpatialCorrectionRequest { context_neighbors: context })
     }
 
     /// Bits to name an unordered k-subset of an n-symbol alphabet: log2 of n-choose-k. Computed as
@@ -1807,7 +1794,7 @@ impl Neuron {
         lr
     }
 
-    /// Aggregate the cast base-level votes into one winner per position.
+    /// Aggregate the cast votes into one winner per position.
     /// The winner set is the neuron's effective prediction, so the error measured against it is a
     /// distance from the typical local patch rather than novelty against everything ever seen.
     fn aggregate_spatial_prediction(&self, votes: &[Vote]) -> FxHashSet<NeuronId> {
@@ -1879,20 +1866,17 @@ impl Neuron {
     }
 
     /// Spatial connection learning and target refinement, writing to `spatial_connections` only.
-    fn learn_spatial_connections(&mut self, neighbors: &[ActiveNeuron], timings: &mut NeuronOpTimings) {
+    fn learn_spatial_connections(&mut self, inference_neighbors: &[ActiveNeuron], timings: &mut NeuronOpTimings) {
 
         let start = std::time::Instant::now();
 
-        // Strengthen edges toward every neighbor neuron in the observed base level
-        for neighbor in neighbors {
-
-            // neurons do not have connections to themselves
-            if neighbor.id == self.id { continue; }
-
-            // add new connection or strengthen existing connection
+        // Strengthen an edge toward everything that fired alongside this neuron — a neuron cannot
+        // connect to itself, so it is skipped. The id is copied out because the loop body mutates self.
+        let own_id = self.id;
+        for neighbor in inference_neighbors.iter().filter(|neighbor| neighbor.id != own_id) {
             self.upsert_connection(0, neighbor.id, neighbor.channel_id, neighbor.reward);
 
-            // record the target's position so prediction evaluation can group its votes
+            // Prediction evaluation groups votes by position, so each target's position is recorded here.
             self.spatial_target_dims.insert(neighbor.id, (neighbor.channel_id, neighbor.dim_id));
         }
 

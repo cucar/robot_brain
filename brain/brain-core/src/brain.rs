@@ -1140,11 +1140,6 @@ impl Brain {
     /// folds into the same buckets).
     fn process_spatial_levels(&mut self, timings: &mut FrameTimings) -> SpatialSweepResult {
 
-        // The sensory axis each neuron evaluates its prediction against and learns connections from.
-        // For spatial this is the co-active set at level 0 of the spatial index — a single set,
-        // no recency dimension.
-        let sensory_neurons = self.memory.get_spatial_base_level();
-
         // Maximum currently-active spatial level. Walked bottom-up; can grow as patterns at
         // higher levels fire and get activated.
         let mut max_active_level = self.memory.get_spatial_max_active_level();
@@ -1171,8 +1166,10 @@ impl Brain {
         loop {
             if self.debug { println!("Processing Spatial level {}", level); }
 
-            // Get the level's active neuron ids. Spatial neurons carry no per-neuron state, so
-            // this is just a flat set.
+            // The level's active neuron ids serve both roles under lateral inference: they identify
+            // each neuron (context) and they are what it predicts (inference). Spatial neurons carry
+            // no per-neuron state, so this is just a flat set. Level 0 needs no special case — its
+            // own level IS the sensory set.
             let t = Instant::now();
             let level_neuron_ids = self.memory.get_spatial_level_neurons(level);
             mem_timings.get_level_neurons += t.elapsed().as_secs_f64();
@@ -1184,7 +1181,6 @@ impl Brain {
             let result = self.thalamus.process_spatial_level(
                 level,
                 &level_neuron_ids,
-                &sensory_neurons,
                 self.substrate_frame(),
                 &mut new_error_pattern_ids,
             );
@@ -2120,6 +2116,102 @@ mod tests {
         assert_eq!(brain.frame_number, 0);
         assert!(brain.frame.is_empty());
         assert!(brain.rewards.is_empty());
+    }
+
+    /// The basic UCAR lifecycle on a single channel: a failure must recur before it mints (two
+    /// errors, never one), the newborn is inert on its birth frame and fires on the next
+    /// recurrence, its learned inference targets are its OWN level (lateral), and no L2 tower
+    /// appears while the L1 population predicts itself perfectly.
+    #[test]
+    fn test_spatial_pattern_lifecycle() {
+
+        // match_info + error_info turn on likelihood recognition and womb-based creation.
+        let mut brain = Brain::new(
+            4, 0.5, GroupMode::Conservative, 0.01, 1, 1, ConsensusMode::Democratic,
+            false, true, true, true, false, false, false,
+        );
+
+        // One channel, four binary dims — the smallest world with cross-dim structure to predict.
+        let dim_specs: Vec<DimSpecInput> = (0..4).map(|i| DimSpecInput {
+            name: format!("d{}", i),
+            kind: DimKind::Input,
+            resolution: 3,
+            mode: Some("static".to_string()),
+            boundaries: Some(vec![-0.5, 0.5]),
+            actions: None,
+            default_action: None,
+            warmup_samples: None,
+        }).collect();
+        let reg = brain.register_channel_spec("s", dim_specs, false);
+        let channel_id = reg.channel_id;
+        let dim_ids: Vec<DimensionId> = (0..4).map(|i| reg.dimension_ids[&format!("d{}", i)]).collect();
+
+        let feed = |brain: &mut Brain, values: [f64; 4]| {
+            let mut dim_values = FxHashMap::default();
+            for (i, v) in values.iter().enumerate() { dim_values.insert(dim_ids[i], *v); }
+            let mut inputs = FxHashMap::default();
+            inputs.insert(channel_id, dim_values);
+            brain.process_frame(&inputs, &FxHashMap::default());
+        };
+        // spatial_level_counts starts at level 1: index 0 = L1 patterns, index 1 = L2.
+        let l1_minted = |brain: &Brain| brain.thalamus.spatial_level_counts().first().copied().unwrap_or(0);
+
+        // A perfectly predicted world must not mint: the familiar configuration X repeats and every
+        // neuron's lateral prediction converges onto it.
+        let x = [1.0, 1.0, 1.0, 1.0];
+        for _ in 0..4 { feed(&mut brain, x); }
+        assert_eq!(l1_minted(&brain), 0, "a perfectly predicted world must not mint");
+
+        // First surprise: configuration Y breaks two positions. Worthwhile failures open embryos,
+        // and opening never births — one error must not create a pattern.
+        let y = [1.0, 1.0, -1.0, -1.0];
+        feed(&mut brain, y);
+        assert_eq!(l1_minted(&brain), 0, "one error must not mint — opening an embryo never births");
+
+        // Second recurrence: the failures serve their embryos, pooled evidence covers the young
+        // neuron's near-zero price, and patterns are born — but born AFTER the sweep, so the birth
+        // frame is inert: nothing is active at level 1 this frame.
+        feed(&mut brain, y);
+        assert!(l1_minted(&brain) >= 1, "the second recurrence of the failure must mint");
+        assert!(brain.memory.get_spatial_level_neurons(1).is_empty(),
+            "a newborn must not activate on its birth frame");
+
+        // Third recurrence: recognition fires the newborn — it is active at level 1 and, that same
+        // frame, learns its first lateral connections from the level-1 co-activation.
+        feed(&mut brain, y);
+        assert!(!brain.memory.get_spatial_level_neurons(1).is_empty(),
+            "the pattern must fire on the recurrence after its birth");
+
+        // A few more recurrences of both configurations to exercise lateral learning.
+        for _ in 0..4 { feed(&mut brain, y); }
+        let minted_after_y = l1_minted(&brain);
+
+        // Lateral inference: every spatial connection an L1 pattern has learned targets its OWN
+        // level — no L1 pattern holds a distance-0 edge back down to an L0 sensory neuron.
+        let snapshot = brain.thalamus.get_snapshot();
+        let l0_ids: FxHashSet<NeuronId> = snapshot.neurons.iter()
+            .filter(|e| e.spatial_level == 0)
+            .map(|e| e.neuron.id)
+            .collect();
+        let mut lateral_edges = 0usize;
+        for entry in snapshot.neurons.iter().filter(|e| e.spatial_level == 1) {
+            for conn in entry.neuron.connections.iter().filter(|c| c.distance == 0) {
+                assert!(!l0_ids.contains(&conn.to_neuron_id),
+                    "L1 pattern {} holds a downward d=0 edge to L0 neuron {} — inference must be lateral",
+                    entry.neuron.id, conn.to_neuron_id);
+                lateral_edges += 1;
+            }
+        }
+        assert!(lateral_edges > 0, "fired L1 patterns must have learned lateral connections by now");
+
+        // No towers: the L1 population co-fires consistently, so its lateral predictions converge
+        // and produce no worthwhile surprise — nothing pays for an L2. Towers must be earned by
+        // level-1 surprise, not conjured by level-0 recurrence.
+        for _ in 0..8 { feed(&mut brain, y); }
+        assert_eq!(brain.thalamus.spatial_level_counts().get(1).copied().unwrap_or(0), 0,
+            "an L2 must not appear while the L1 population predicts itself perfectly");
+        assert_eq!(l1_minted(&brain), minted_after_y,
+            "a fully explained world must stop minting at L1 as well");
     }
 
     #[test]

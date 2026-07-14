@@ -117,7 +117,7 @@ Action, reward, and label channels are exempt from laterality: any pattern at an
 to them. They are not part of the world-model's level structure — they are the payload the dictionary carries, the
 "Actions and Rewards" of the name. This keeps supervised readout and action selection fed by the full hierarchy
 while the model structure compresses. This carve-out is an empirical bet — that payload votes are ALL the
-cross-level prediction the system needs — and it is tested, not assumed (see the un-pinning phase in the
+cross-level prediction the system needs — and it is tested, not assumed (see the readout gate in the
 [Implementation plan](#implementation-plan)).
 
 ### What firing does and does not certify
@@ -420,7 +420,7 @@ Serve-or-open, one level up from the womb:
 
 ```mermaid
 flowchart TD
-    A[Birth request: converged center + target events] --> B{Existing same-level pattern<br/>explains this request?}
+    A[Birth request: the embryo's converged center] --> B{Existing same-level pattern<br/>explains this request?}
     B -->|serve: reuse is cheaper| C[Install existing pattern into the requesting parent's<br/>routing table, with the embryo's center as its local context]
     B -->|open: nothing serves| D[Mint a new pattern neuron]
     E[Same frame, multiple requests] --> F[Pool requests with shared targets first,<br/>then serve-or-open once per pool]
@@ -527,65 +527,73 @@ that build starts.
 **Design is uniform; implementation is staged.** The whole design is validated on the spatial axis first — every
 phase of the [Implementation plan](#implementation-plan), through reuse and refinement, runs and is measured at
 `d = 0` only. Only after spatial validation does the event tower port (same mechanisms, distance-parameterized
-backgrounds, its own un-pinning gate — the forward readout consumers, next-token and price forecasts, get the same
-A/B treatment the spatial carve-out gets). Actions come last: spatial action moments plus reverse-temporal
+backgrounds, and its own readout gate — the forward consumers, next-token and price forecasts, get the same
+treatment the spatial carve-out gets). Actions come last: spatial action moments plus reverse-temporal
 (`d < 0`) chunk formation, coupling high-level event patterns to high-level action chunks at the apex. Until each
 port lands, the temporal side keeps its current base-anchored inference and its separate adaptive-grouping
 mechanism — parallel structures by design, unified only when the evidence says the spatial side has earned it.
 
+## What is built
+
+**The currency.** The surprise gate scores failures in surprisal bits; the womb prices an embryo at
+`name_bits(|center|, alphabet) + log2(children + 1)`, both read from local state. Snapshots predating this carry
+womb evidence in the old linear units — they restore and decay away harmlessly, but must not be used for
+measurements.
+
+**Lateral inference.** Every spatial level's context and inference population are one and the same set: its own
+co-activation, cut to the level-scaled neighborhood. There is no privileged base population and no special case for
+level 0 — its own level *is* the sensory set. Newborn patterns carry no lateral connections; their birth knowledge
+is the seeded context center, and they learn what to predict as their level populates. Payload channels (action,
+reward, label) keep direct wiring from every level, so readout is fed by the whole hierarchy.
+
+**Growth above L1 is currently unbounded**, and the two structural drivers are both addressed by phases below.
+On 7×7 MNIST at forget rate 0, L1 settles at ~2.5K patterns and stops while L2 climbs past 30K and depth reaches 8:
+
+- **No rent.** At forget rate 0 nothing reclaims a pattern, so every cheap early mint is immortal and keeps feeding
+  the level above as fresh context. Phase 2 supplies the death side of the economics.
+- **A saturated neighborhood.** The declared radius grows with level (`r = base + level`), so on a 7×7 grid an L2
+  neighborhood already spans the whole image. Creation at that level is therefore priced against a whole-image
+  configuration rather than a local arrangement, which approaches per-image memorization. Phase 3's reuse collapses
+  the duplicate structure this produces; whether the lateral range should be decoupled from receptive-field growth
+  outright is an open question below.
+
 ## Implementation plan
 
 Phased so each lands independently and is measured before the next. The standing metrics per phase: MNIST accuracy,
-neuron counts per level, apex pattern count, and wall-clock per frame.
+neuron counts per level, apex pattern count, parents-per-pattern by level, and wall-clock per frame.
 
-**Phase 1 — currency (done).** `compute_spatial_evidence` in surprisal bits with skip rules and a zero-frames
-guard; womb price as `|center| × log2(alphabet) + log2(children + 1)`. Minting rates shift under the new units;
-this phase is measured before anything else changes. Note: snapshots taken before this phase carry womb evidence in
-linear units; those wombs decay away harmlessly, but cross-phase snapshots should not be used for measurements.
+**Phase 1 — estimation and birth seeding.** KT estimator in embryo assignment and pattern recognition ranking,
+removing the 0.999 cap. Birth seeding: context entry trial counts from the center counts and occurrence total, and
+the embryo's evidence as the newborn's opening balance (plumbed through the correction request and install op,
+which currently carry only the member list). Expected effects: fewer fragmented embryos, newborns that fire and
+refine instead of arriving unfireable, lower dead-on-arrival pattern counts.
 
-**Phase 2 — estimation and birth seeding.** KT estimator in embryo assignment and pattern recognition ranking,
-removing the 0.999 cap. Birth seeding: context entry trial counts from center counts and occurrence total, and the
-embryo's evidence as the newborn's opening balance (plumbed through the correction request and install op, which
-currently carry only the member list). Expected effects: fewer fragmented embryos, newborns that fire and refine,
-lower dead-on-arrival pattern counts.
-
-**Phase 3 — economic forgetting.** Separate the two accounts on routing entries: trials become the immortal fire
+**Phase 2 — economic forgetting.** Separate the two accounts on routing entries: trials become the immortal fire
 count feeding the likelihood model; a new balance field banks the recognition rank on every accepted fire and pays
 rent (`price / horizon`, with price carried from birth). Candidacy and death read the balance; the embryo's
 flat-rate staleness decay becomes the same rent on its own price; the death ledger re-registers from
 `balance / rent` on each bank event, recomputed from materialized balances on restore, never persisted. Expected
-effects: broad low-rank patterns die insolvent, sharp rarely-firing patterns survive; measured by pattern churn,
-per-level counts, and accuracy.
+effects: broad low-rank patterns die insolvent, sharp rarely-firing patterns survive. This is the phase that gives
+the hierarchy a governor, so it is measured by pattern churn and per-level counts as much as by accuracy.
 
-**Phase 4 — lateral un-pinning (spatial only).** Levels ≥ 1 stop targeting base events on the `d = 0` axis: the
-dispatch ships each level its own co-activation as the inference population, payload channels keep their base
-wiring, and newborn lateral connections start empty (the `target_events` plumbing narrows to payload). The
-temporal tower stays base-anchored until its own port. Runs before reuse because it changes the substrate
-everything downstream measures.
-*Test gate after implementation:* A/B against the pinned baseline on MNIST. The carve-out is an empirical bet —
-that payload votes are all the cross-level prediction readout needs. If accuracy drops materially, higher-level
-pixel votes were doing representational work the carve-out misattributes, and the design answer (top-down decode,
-or widening the carve-out) must be decided before any later phase builds on lateral semantics. Also compare
-per-level surprise rates: the point of the phase is that each level's failures become arrangement-scale.
-
-**Phase 5 — thalamus reuse.** The largest phase, gated on a plumbing audit first: per-parent routing entries
+**Phase 3 — thalamus reuse.** The largest phase, gated on a plumbing audit first: per-parent routing entries
 already exist, but subsumption, the death ledger, and the delete cascade assume one parent per pattern, and
-"dead in one parent, alive in another" needs an owner (per-entry balances from phase 3 provide it). Then: an
+"dead in one parent, alive in another" needs an owner (per-entry balances from phase 2 provide it). Then: an
 identity index over existing patterns' context centers (maintained at mint/death, queried at request time),
 same-frame request pooling by center overlap, the MDL serve test, and an install-into-parent op for served
 requests. Measured primarily by apex pattern count, per-level neuron counts, and parents-per-pattern by level
 (stroke-scale patterns should be heavily shared — emergent translation invariance; digit-scale barely) — this is
 the phase aimed at the apex explosion.
-*Test gate after implementation — the multi-parent invariants, each exercised deliberately:* (1) subsumption with a
-shared child: the child firing in parent A must not silence parent B's evaluation unless it also fired there;
-(2) death-ledger dual clocks: a shared child insolvent in A and solvent in B survives, is removed from A's routing
-table and index only, and dies entirely on last release; (3) delete cascade: releasing the last parent reclaims the
-neuron, its context-index entries, and its contextRefs, with no orphan ids; (4) snapshot round-trip: a multi-parent
-child serializes once, restores into every parent's routing table, and recomputed death frames match per-entry
-balances; (5) id reuse after full release leaves no stale index entries. None of these can fail silently — each
-needs an assertion or a test, not an eyeball.
+*Test gate — the multi-parent invariants, each exercised deliberately:* (1) subsumption with a shared child: the
+child firing in parent A must not silence parent B's evaluation unless it also fired there; (2) death-ledger dual
+clocks: a shared child insolvent in A and solvent in B survives, is removed from A's routing table and index only,
+and dies entirely on last release; (3) delete cascade: releasing the last parent reclaims the neuron, its
+context-index entries, and its contextRefs, with no orphan ids; (4) snapshot round-trip: a multi-parent child
+serializes once, restores into every parent's routing table, and recomputed death frames match per-entry balances;
+(5) id reuse after full release leaves no stale index entries. None of these can fail silently — each needs an
+assertion or a test, not an eyeball.
 
-**Phase 6 — post-natal womb and split.** Sub-centers on born patterns (the embryo struct reused, serialized with
+**Phase 4 — post-natal womb and split.** Sub-centers on born patterns (the embryo struct reused, serialized with
 the routing entry), served on each fire; split request when the second sub-center covers the incremental price;
 thalamus-side execution with the original's balance divided by each sub-center's share. Measured on deliberately
 pooled synthetic situations — two interleaved contexts with distinct targets — for split latency and correctness,
@@ -593,10 +601,16 @@ then on MNIST. Watch for merge/split churn explicitly: reuse-merge and split eva
 different proxies, so a split whose products immediately re-serve into each other is the oscillation mode the
 proxies could reintroduce.
 
-**Phase 7 — defragmentation.** Decayed runner-up counts on routing entries, merge proposals over a persistence
+**Phase 5 — defragmentation.** Decayed runner-up counts on routing entries, merge proposals over a persistence
 line derived from the same economics (the pooled-versus-separate coding test), thalamus-side execution. Last
-because phases 2 and 5 should prevent most fragmentation from arising; this phase collects what still slips
+because phases 1 and 3 should prevent most fragmentation from arising; this phase collects what still slips
 through.
+
+**The readout gate, once the hierarchy is bounded.** Payload votes carry the whole readout — that is an empirical
+bet, and it can only be read once growth is under control. After phase 2, and again after phase 3, compare MNIST
+accuracy and per-level surprise rates against the settled hierarchy. If accuracy falls short of what the level
+counts justify, the carve-out is too narrow and the design answer (top-down decode, or widening it) must be settled
+before later phases build further on lateral semantics.
 
 ## Risks and open questions
 
@@ -606,32 +620,36 @@ inference-side machinery is where each axis has its own consumer, and therefore 
 
 ### Risks
 
-- **The payload carve-out is an empirical bet.** Un-pinning removes higher-level pixel votes and assumes
-  full-hierarchy payload votes carry the readout. Tested at the phase 4 gate, A/B against the pinned baseline; a
-  material accuracy drop means the carve-out is too narrow and the answer (top-down decode, or a wider carve-out)
-  must be settled before later phases build on lateral semantics.
+- **Hierarchy growth has no governor but economics.** No level caps, by design. Every level generates the surprise
+  that feeds the next, so if rent does not bite hard enough the growth documented above persists rather than
+  settles. This is the phase-2 bet, and per-level neuron counts are the standing metric that reads it.
 - **Multi-parent plumbing.** Subsumption, the death ledger, and the delete cascade all assume one parent per
   pattern; a partial retrofit corrupts lifecycle invariants in ways that show up as slow population drift, not
-  crashes. Addressed by the phase 5 audit and its five-invariant test gate.
+  crashes. Addressed by the phase-3 audit and its five-invariant test gate.
 - **Reuse calibration.** Identity-by-context-center is the right object, but the serve test is unvalidated:
   over-serving merges distinct situations into mush the split machinery must unwind; under-serving leaves the apex
   explosion in place. Watch parents-per-pattern and split-rate-after-reuse together.
+- **The payload carve-out is an empirical bet.** Payload votes are assumed to carry the whole readout. Readable
+  only once growth is bounded — see the readout gate above.
 - **Merge/split proxy churn.** The no-oscillation guarantee holds when merge and split evaluate one criterion;
   in practice reuse-merge and post-natal split use different proxies of it. A split whose products re-serve into
-  each other is the churn signature; instrumented at the phase 6 gate.
-- **Cold-start churn under the new economics.** Tiny early alphabets mean near-zero prices — a burst of cheap
-  early patterns that rent must clean up. Principled, possibly ugly in the transient; measure churn rate in the
-  first thousand frames, not just settled counts.
-- **Hierarchy growth has no governor but economics.** No level caps, by design. With lateral inference every level
-  generates the surprise that feeds the next; if per-level rent does not bite fast enough, footprint-style
-  explosion returns recursively. Per-level neuron counts stay a standing metric.
+  each other is the churn signature; instrumented at the phase-4 gate.
+- **Cold-start churn.** Tiny early alphabets mean near-zero prices — a burst of cheap early patterns that rent must
+  clean up. Principled, possibly ugly in the transient; measure churn rate in the first thousand frames, not just
+  settled counts.
 - **Winner-take-all residue.** Residue that is small, unsystematic, and single-witness vanishes without a ledger
   entry. By construction noise-like; the named upgrade (partial explaining-away — residue priced against
   background plus the fired child's model, deposited into the womb) is held until evidence says it matters.
 
 ### Open questions
 
-- **Rent horizon derivation.** Now the only time constant in the design, so the planned context-length derivation
+- **Lateral range versus receptive-field growth.** One radius schedule serves both: the neighborhood a neuron
+  recognizes itself by, and the neighborhood it predicts. Because it widens with level, a small grid saturates —
+  at 7×7 an L2 neighborhood already spans the whole image, so creation there prices a whole-image configuration
+  rather than a local arrangement. Whether the lateral range should be bounded independently of depth (biology
+  keeps them separate: receptive fields grow across areas, while horizontal connections hold a roughly fixed
+  cortical range) is unresolved, and it is the deeper question behind the growth above.
+- **Rent horizon derivation.** The only time constant in the design, so the planned context-length derivation
   carries more weight than when it was one of several. The mechanisms consume the horizon identically wherever it
   comes from.
 - **Subsumption scope under lateral semantics.** Exactly who is subsumed by a fire — the parent whose routing
