@@ -368,6 +368,32 @@ The death ledger keeps its role as scheduler: on every bank event, remaining lif
 death frame is re-registered from it. Death frames are never persisted — they are recomputed from materialized
 balances on restore.
 
+### Lifecycle arithmetic: two quotients
+
+**Errors to create: `N ≈ price / average benefit`, floor of 2.** Opening an embryo never runs the birth check, so
+nothing mints on first sight; two errors is the structural minimum, and a brand-new neuron usually achieves it. Its
+first frame cannot err (no connections yet, nothing to predict from); its first worthwhile failure opens an embryo
+with a few bits of benefit; its second, landing in the same recurring context, serves and births — because a young
+neuron's price is nearly free (naming a center that is most of a tiny alphabet costs ~0–4 bits, and the pattern's
+name among zero existing children costs `log2(1) = 0`). The count grows with maturity by design: a rich alphabet
+and a crowded child table raise the price, so an experienced neuron demands more recurrences before adding
+structure. Two things stretch the count in practice: the errors must pool into the same embryo (a near-miss context
+serves it; an unrelated one opens a sibling), and rent between occurrences subtracts — errors spaced further apart
+than the horizon never accumulate.
+
+**Frames to forget: about one horizon of silence, regardless of size.** A newborn's opening balance is the
+evidence that just covered its price, so `balance ≈ price` and the price cancels out of its lifetime:
+`balance / rent ≈ price / (price / horizon) =` one horizon. A big pattern has bigger savings and bigger rent in
+exact proportion. After birth, each fire extends the clock by `(rank / price) × horizon` — a sharp pattern
+(rank 8 bits, price 4) banks two horizons per fire; a mushy one (rank 0.3 bits, price 20) banks 1.5% of one and
+must fire ~70× as often to stay solvent. The break-even condition in one line: **a pattern survives iff its
+situation recurs more often than once per `(rank / price) × horizon` frames.** Forgetting is not "N misses and
+out" — the recurrence interval must stay inside the window the pattern's own explanatory quality earns.
+
+Together, the full lifecycle in one sentence: a situation earns a pattern by recurring at least twice within a rent
+window with enough surprise to cover its naming cost, and keeps the pattern exactly as long as it keeps recurring
+within the window its own sharpness pays for.
+
 ## Structural plasticity
 
 ### The signal division
