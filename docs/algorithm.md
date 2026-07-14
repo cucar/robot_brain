@@ -97,15 +97,16 @@ compounding argument is exactly why the event tower (`d > 0`) stays base-anchore
 At `d = 0` there is no such asymmetry — same-level activity is observed in the same frame as everything else, so
 every level has its own ground truth.
 
-### Correction is explanation, not substitution
+### What subsumption settles at `d = 0`
 
-A minted pattern does not fix its parent's forecast; it removes the situation from the class of things the parent
-needs to forecast. When the child fires, subsumption silences the parent's evaluation, and the chronic surprise
-that created the child stops being billed — the recurring configuration has moved from the data-bits column into
-the model, where it is paid once. Nothing consumes a downward prediction at `d = 0`: prediction and reality arrive
-in the same frame, so a same-frame forecast has zero lead time and its only value is surprise detection. Every
-neuron therefore casts exactly one vote stream, laterally at its own level. (This is `d = 0`-specific: forward
-forecasts have lead time and real consumers — see [Temporal generalization](#temporal-generalization).)
+The firing mechanism is uniform on every axis: a fired pattern is an active neuron that votes from its own
+connections, and the subsumed parent's votes are suppressed. There is no separate correction mechanism — the only
+per-axis choice is the inference scope above, and everything else follows from it. At `d = 0` under the lateral
+scope, the child's votes land at its own level, so the parent's-level forecast loses that contributor; this is
+acceptable because a same-frame forecast has zero lead time — reality arrives with it — so nothing consumes it
+beyond surprise detection and the payload channels. What the child delivers is not a substitute forecast but an
+account: subsumption silences the parent's evaluation, and the chronic surprise that created the child stops being
+billed — the recurring configuration has moved from the data-bits column into the model, where it is paid once.
 
 The knowledge of what the situation looks like lives in the pattern's routing context — per-neighbor strength over
 trials is `p(constituent | pattern)`, a conditional model of the configuration one level below. One structure
@@ -481,13 +482,12 @@ The three axes, in the (context, inference) parameterization:
 refinement, and the structural moves only ever consume a configuration signature — they never assumed *when* the
 configuration was observed. The distance axis is a parameter of the background model, not a separate mechanism.
 
-**What does not carry: correction-by-explanation.** Explanation-only resolution is `d = 0`-specific, for a lead-time
-reason. A same-frame prediction arrives together with reality, so nothing downstream can act on it — its whole
-value is surprise detection, and subsumption alone settles the account. A `d > 0` forecast precedes reality; the
-gap is the point — anticipation is what action selection consumes — so a fired event pattern must actually cast
-its forward votes (substitution), not merely explain the history. Related: the event tower's inference stays
-anchored at the next **sensory** frame rather than going lateral, because forward ground truth exists nowhere else —
-a forward lateral cascade would train each level against the level below's guesses, compounding error with no
+**What is chosen per axis: the inference scope, nothing else.** The firing and voting machinery is identical on
+every axis — fired pattern votes, subsumed parent doesn't. The one per-axis decision is what population the
+connections target. At `d = 0` the scope is lateral (own level): a same-frame forecast has zero lead time, so no
+consumer loses anything when votes move to the neuron's own level. At `d > 0` the scope is base (the next sensory
+frame): forward votes are consumed — they are the readout and the only place forward ground truth lives — and a
+forward lateral cascade would train each level against the level below's guesses, compounding error with no
 anchor. The lateral rule is a `d = 0` result; it does not overturn the base anchoring of `d > 0`.
 
 **The action axis (`d < 0`) has its own design** — [action-composition.md](./action-composition.md) — and it is
@@ -603,7 +603,7 @@ inference-side machinery is where each axis has its own consumer, and therefore 
   comes from.
 - **Subsumption scope under lateral semantics.** Exactly who is subsumed by a fire — the parent whose routing
   table fired it, or every context member the pattern represents? The readings differ materially now that
-  explanation is the correction mechanism; the code's current behavior should be checked against a deliberate
+  subsumption is what retires a chronic surprise; the code's current behavior should be checked against a deliberate
   decision rather than inherited.
 - **Background non-stationarity.** Background counts never decay while everything they price does. Irrelevant on
   stationary data; on drifting domains every rank and price is measured against an aging null. Windowing the
