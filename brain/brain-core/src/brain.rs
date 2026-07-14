@@ -1474,7 +1474,9 @@ impl Brain {
         // Each neuron already evaluated its own prediction and recorded its error sample during dispatch;
         // this pass filters subsumed requesters, runs the recurrence/payment ledger, and builds a NeuronCreateSpec plus an install op per approved correction.
         // Returned specs are deferred — they'll be materialized in the end-of-frame flush along with temporal specs.
-        let (specs, install_ops) = self.thalamus.create_spatial_corrections(&spatial.dispatch_results, &spatial.subsumed_set);
+        // The fired set carries this frame's co-activation at every level — each newborn seeds its
+        // event connections from the level it is born into.
+        let (specs, install_ops) = self.thalamus.create_spatial_corrections(&spatial.dispatch_results, &spatial.subsumed_set, &spatial.fired_set);
 
         // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
         // This is a single dispatch per frame, not one per level.

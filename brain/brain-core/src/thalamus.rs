@@ -519,12 +519,16 @@ impl Thalamus {
         self.pattern_forget_rate
     }
 
-    /// Allocate a SPATIAL pattern neuron. Born with NO spatial connections: under lateral inference
-    /// its prediction substrate is its own level, which it learns from scratch as its level
-    /// populates, exactly as a sensory neuron does. Its birth knowledge is the seeded routing
-    /// context on its parent, not a connection set. The pattern occupies
-    /// spatial_level=parent.spatial_level+1; its temporal level stays 0 (it enters temporal via the
-    /// apex handoff at temporal_level_index[0]).
+    /// Allocate a SPATIAL pattern neuron, seeded with the d=0 event connections it was minted to
+    /// predict: the co-activation at its OWN level, observed on the birth frame, cut to its own
+    /// neighborhood. This is the spatial half of what [allocate_temporal_pattern_neuron] already
+    /// does — a pattern is born knowing the situation whose surprise paid its price, so it predicts
+    /// on its first fire instead of firing blind, subsuming its parent, and leaving the frame
+    /// unaccounted. Connectionless only when its level's neighborhood is genuinely empty at birth.
+    /// Post-natal refinement is unchanged: `learn_spatial_event_connections` keeps upserting these
+    /// edges on every frame the pattern is active, exactly as the temporal side does.
+    /// The pattern occupies spatial_level=parent.spatial_level+1; its temporal level stays 0 (it
+    /// enters temporal via the apex handoff at temporal_level_index[0]).
     /// Does NOT touch the parent's routing table (that happens inside column.install_spatial_corrections
     /// via add_spatial_pattern) and does NOT register death (death frame is known only after
     /// parent.add_spatial_pattern runs).
@@ -532,8 +536,8 @@ impl Thalamus {
         &mut self,
         level: Level,
         parent_id: NeuronId,
+        level_actives: &FxHashSet<NeuronId>,
     ) -> PatternNeuronSpec {
-        let connections = Vec::new();
 
         // allocate id and build the spec for Column.create_neurons
         let id = self.next_neuron_id;
@@ -570,6 +574,22 @@ impl Thalamus {
             ))
             .clone();
         self.base_neurons.insert(id, inherited);
+
+        // The seed: this frame's co-activation at the pattern's OWN level, cut to its neighborhood.
+        // Resolvable only here, once the coordinate and level above are registered — the cut reads both.
+        // Strength 1.0 and reward 0.0 are what `learn_spatial_event_connections` would write on a first
+        // fire; co-activation carries no reward, which lives on the payload channels.
+        let inference_neurons = self.decorate_inference_neurons(level_actives);
+        let connections = self.scan_neurons_for_neighbors(id, &inference_neurons).iter()
+            .map(|neighbor| ConnectionSpec {
+                distance: 0,
+                to_neuron_id: neighbor.id,
+                strength: 1.0,
+                reward: 0.0,
+                channel_id: neighbor.channel_id,
+                dim_id: Some(neighbor.dim_id),
+            })
+            .collect();
 
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
@@ -1145,11 +1165,16 @@ impl Thalamus {
         &mut self,
         dispatch_results: &[Vec<crate::column::SpatialColumnResult>],
         subsumed_neurons: &FxHashSet<NeuronId>,
+        fired_neurons: &FxHashSet<NeuronId>,
     ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>) {
 
         // Corrections born this frame are returned as creation specs plus install ops for their parents.
         let mut new_specs = Vec::new();
         let mut install_ops = Vec::new();
+
+        // The frame's co-activation, split by level: a newborn's event connections are seeded from
+        // the level it is born INTO, so each birth reads the bucket one above its parent's level.
+        let actives_by_level = self.bucket_fired_by_spatial_level(fired_neurons);
 
         // process the birth requests of the spatial dispatch and create the corrections.
         for column_result in dispatch_results.iter().flatten() {
@@ -1162,24 +1187,38 @@ impl Thalamus {
             // Create one correction pattern for the paid-off embryo.
             let parent_id = column_result.parent_id;
             let parent_level = self.get_neuron_spatial_level(parent_id);
-            self.create_spatial_correction(parent_id, parent_level, &request.context_neighbors, &mut new_specs, &mut install_ops);
+            let empty = FxHashSet::default();
+            let level_actives = actives_by_level.get(&(parent_level + 1)).unwrap_or(&empty);
+            self.create_spatial_correction(parent_id, parent_level, level_actives, &request.context_neighbors, &mut new_specs, &mut install_ops);
         }
 
         (new_specs, install_ops)
     }
 
-    /// Create one correction pattern for a paid-off embryo giving birth.
+    /// Bucket this frame's fired neurons by spatial level — the per-level co-activation a newborn
+    /// seeds its event connections from.
+    fn bucket_fired_by_spatial_level(&self, fired_neurons: &FxHashSet<NeuronId>) -> FxHashMap<Level, FxHashSet<NeuronId>> {
+        let mut by_level: FxHashMap<Level, FxHashSet<NeuronId>> = FxHashMap::default();
+        for &neuron_id in fired_neurons {
+            by_level.entry(self.get_neuron_spatial_level(neuron_id)).or_default().insert(neuron_id);
+        }
+        by_level
+    }
+
+    /// Create one correction pattern for a paid-off embryo giving birth. `level_actives` is the
+    /// co-activation at the newborn's own level — the events it is minted to predict.
     fn create_spatial_correction(
         &mut self,
         parent_id: NeuronId,
         parent_level: Level,
+        level_actives: &FxHashSet<NeuronId>,
         context_neighbors: &[NeuronId],
         new_specs: &mut Vec<NeuronCreateSpec>,
         install_ops: &mut Vec<SpatialInstallOp>,
     ) -> NeuronId {
 
         // The correction lives one level deeper than the neuron it corrects.
-        let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id);
+        let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id, level_actives);
         new_specs.push(NeuronCreateSpec {
             id: spec.id,
             forget_rate: spec.forget_rate,

@@ -1300,7 +1300,7 @@ impl Neuron {
 
         // Learn co-activation edges AFTER voting, so the vote reads the prior frame's edges rather
         // than the ones just strengthened toward this frame's co-actives.
-        if should_learn { self.learn_spatial_connections(inference_neighbors, &mut timings); }
+        if should_learn { self.learn_spatial_event_connections(inference_neighbors, &mut timings); }
 
         SpatialFrameResult { matches, correction_request, timings }
     }
@@ -1865,8 +1865,11 @@ impl Neuron {
         evidence_for - evidence_against
     }
 
-    /// Spatial connection learning and target refinement, writing to `spatial_connections` only.
-    fn learn_spatial_connections(&mut self, inference_neighbors: &[ActiveNeuron], timings: &mut NeuronOpTimings) {
+    /// Learn d=0 EVENT edges toward the co-active inference neighbors — the events this neuron
+    /// predicts. Distinct from the payload edges `Brain::learn` wires (voter → action targets,
+    /// carrying reward); both land in `spatial_connections`, and `aggregate_spatial_prediction`
+    /// tells them apart by whether the target has a recorded position in `spatial_target_dims`.
+    fn learn_spatial_event_connections(&mut self, inference_neighbors: &[ActiveNeuron], timings: &mut NeuronOpTimings) {
 
         let start = std::time::Instant::now();
 
