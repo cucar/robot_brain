@@ -81,16 +81,16 @@ One design judgment sits on top of the facility-location skeleton and is stated 
 surprise). Clustering on when, paying with what. The formal competitive-ratio guarantees for online facility
 location cover the accumulate-then-open skeleton, not this metric split, nor evidence decay or center drift.
 
-## Lateral inference: every level is its own ground floor
+## Same-level inference
 
 At every spatial level `k`, a neuron's context AND its inference target are the same population: the level-`k`
-co-activation in its neighborhood. L0 infers L0, L1 infers L1, L2 infers L2 — laterally, the way the sensory floor
-already works. No level is special; the radius schedule grows the neighborhood per level, and each level's surprise
+co-activation in its neighborhood. L0 infers L0, L1 infers L1, L2 infers L2 — each at its own level, the way the
+sensory floor already works. No level is special; the radius schedule grows the neighborhood per level, and each level's surprise
 mints the level above it.
 
 The targets are **observed activations, never predictions**. A level-2 neuron predicts which level-2 patterns
 actually fire around it — real recognition events, grounded through their own likelihood-ratio chains to sensory —
-not what some other model guessed. This is what separates lateral inference from a level-below prediction cascade,
+not what some other model guessed. This is what separates same-level inference from a level-below prediction cascade,
 where higher levels train against lower levels' *guesses* and error compounds up the tower with no anchor. The
 rule is the same on every axis (see [Temporal generalization](#temporal-generalization)); implementation validates
 it on the spatial axis first.
@@ -99,7 +99,7 @@ it on the spatial axis first.
 
 The firing mechanism is uniform on every axis: a fired pattern is an active neuron that votes from its own
 connections, and the subsumed parent's votes are suppressed. There is no separate correction mechanism — the only
-per-axis choice is the inference scope above, and everything else follows from it. At `d = 0` under the lateral
+per-axis choice is the inference scope above, and everything else follows from it. At `d = 0` under the same-level
 scope, the child's votes land at its own level, so the parent's-level forecast loses that contributor; this is
 acceptable because a same-frame forecast has zero lead time — reality arrives with it — so nothing consumes it
 beyond surprise detection and the payload channels. What the child delivers is not a substitute forecast but an
@@ -113,7 +113,7 @@ of the frame loop) top-down completion for generative decode.
 
 ### The payload carve-out
 
-Action, reward, and label channels are exempt from laterality: any pattern at any level may hold direct connections
+Action, reward, and label channels are exempt from the same-level rule: any pattern at any level may hold direct connections
 to them. They are not part of the world-model's level structure — they are the payload the dictionary carries, the
 "Actions and Rewards" of the name. This keeps supervised readout and action selection fed by the full hierarchy
 while the model structure compresses. This carve-out is an empirical bet — that payload votes are ALL the
@@ -192,7 +192,7 @@ already represents it. Only a neuron with no firing child predicts and gets eval
 
 When no child fired, the neuron casts its own prediction from its connections and compares it against the observed
 inference population — its own level's co-activation, under
-[lateral inference](#lateral-inference-every-level-is-its-own-ground-floor). A divergence is scored as net evidence
+[same-level inference](#same-level-inference-every-level-is-its-own-ground-floor). A divergence is scored as net evidence
 for a distinct source, all terms in surprisal bits against the neuron's inference background model `p_bg(e)`:
 
 ```
@@ -288,7 +288,7 @@ low-share members are born low and fade. A pattern born from more evidence start
 evidence buying the same durability (see [Forgetting](#forgetting-earn-rent-death)).
 
 The newborn's birth knowledge is its seeded context model — that is what lets it fire and refine from its first
-opportunity. Its lateral connections at its own level start empty and are learned as its level populates, exactly
+opportunity. Its connections at its own level start empty and are learned as its level populates, exactly
 as a sensory neuron's are; payload connections (action, reward, label channels) are wired from the birth frame so
 the pattern participates in readout immediately. Patterns represent situations; their initial reaction to the
 situation may be poor, and learning it is the child's job, not grounds for death. Born patterns die one way:
@@ -313,7 +313,7 @@ tracks the most recent frame instead of converging to a mode, and churns under a
 ## Connection refinement: the reaction is always plastic
 
 A pattern's context says when it fires; its connections say what it predicts when it does. The connections are
-refined by ordinary connection learning on every frame the pattern is active: edges toward observed co-actives
+refined by ordinary connection learning on every frame the pattern is active: connections toward observed co-actives
 strengthen, rewards update by exponential smoothing, and prediction is the position-winner competition — the
 strongest bucket per position wins, so the effective prediction is the modal configuration of the frames the
 pattern actually fires on. Connections never decay in absolute strength; forgetting is competitive and economic:
@@ -512,8 +512,8 @@ Next frame's level-k patterns actually fire — recognition events on real data,
 likelihood chains to sensory — so "which level-k patterns fire next frame" is exactly as observable as "which fire
 this frame." The invariant that matters is narrower than any per-axis anchoring rule: **no level ever trains
 against another level's guesses.** A cascade whose targets are lower-level *predictions* compounds error with no
-anchor and is rejected; a lateral rule whose targets are future *observed* activations is anchored at every level.
-The next-sensory-frame forecast does not disappear under laterality — it is L0's own lateral `d > 0` prediction
+anchor and is rejected; a same-level rule whose targets are future *observed* activations is anchored at every level.
+The next-sensory-frame forecast does not disappear under the same-level rule — it is L0's own same-level `d > 0` prediction
 (L0's level *is* sensory), plus payload votes from every level.
 
 **The action axis (`d < 0`) has its own design** — [action-composition.md](./action-composition.md) — and it is
@@ -540,9 +540,9 @@ mechanism — parallel structures by design, unified only when the evidence says
 womb evidence in the old linear units — they restore and decay away harmlessly, but must not be used for
 measurements.
 
-**Lateral inference.** Every spatial level's context and inference population are one and the same set: its own
+**Same-level inference.** Every spatial level's context and inference population are one and the same set: its own
 co-activation, cut to the level-scaled neighborhood. There is no privileged base population and no special case for
-level 0 — its own level *is* the sensory set. Newborn patterns carry no lateral connections; their birth knowledge
+level 0 — its own level *is* the sensory set. Newborn patterns carry no same-level connections; their birth knowledge
 is the seeded context center, and they learn what to predict as their level populates. Payload channels (action,
 reward, label) keep direct wiring from every level, so readout is fed by the whole hierarchy.
 
@@ -554,7 +554,7 @@ On 7×7 MNIST at forget rate 0, L1 settles at ~2.5K patterns and stops while L2 
 - **A saturated neighborhood.** The declared radius grows with level (`r = base + level`), so on a 7×7 grid an L2
   neighborhood already spans the whole image. Creation at that level is therefore priced against a whole-image
   configuration rather than a local arrangement, which approaches per-image memorization. Phase 3's reuse collapses
-  the duplicate structure this produces; whether the lateral range should be decoupled from receptive-field growth
+  the duplicate structure this produces; whether the same-level range should be decoupled from receptive-field growth
   outright is an open question below.
 
 ## Implementation plan
@@ -610,7 +610,7 @@ through.
 bet, and it can only be read once growth is under control. After phase 2, and again after phase 3, compare MNIST
 accuracy and per-level surprise rates against the settled hierarchy. If accuracy falls short of what the level
 counts justify, the carve-out is too narrow and the design answer (top-down decode, or widening it) must be settled
-before later phases build further on lateral semantics.
+before later phases build further on same-level semantics.
 
 ## Risks and open questions
 
@@ -643,16 +643,16 @@ inference-side machinery is where each axis has its own consumer, and therefore 
 
 ### Open questions
 
-- **Lateral range versus receptive-field growth.** One radius schedule serves both: the neighborhood a neuron
+- **Same-level range versus receptive-field growth.** One radius schedule serves both: the neighborhood a neuron
   recognizes itself by, and the neighborhood it predicts. Because it widens with level, a small grid saturates —
   at 7×7 an L2 neighborhood already spans the whole image, so creation there prices a whole-image configuration
-  rather than a local arrangement. Whether the lateral range should be bounded independently of depth (biology
+  rather than a local arrangement. Whether the same-level range should be bounded independently of depth (biology
   keeps them separate: receptive fields grow across areas, while horizontal connections hold a roughly fixed
   cortical range) is unresolved, and it is the deeper question behind the growth above.
 - **Rent horizon derivation.** The only time constant in the design, so the planned context-length derivation
   carries more weight than when it was one of several. The mechanisms consume the horizon identically wherever it
   comes from.
-- **Subsumption scope under lateral semantics.** Exactly who is subsumed by a fire — the parent whose routing
+- **Subsumption scope under same-level semantics.** Exactly who is subsumed by a fire — the parent whose routing
   table fired it, or every context member the pattern represents? The readings differ materially now that
   subsumption is what retires a chronic surprise; the code's current behavior should be checked against a deliberate
   decision rather than inherited.

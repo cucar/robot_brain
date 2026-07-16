@@ -11,7 +11,7 @@ both directions: this design does **not** depend on how the event tower's infere
 on **action→action** backward composition plus **apex event ↔ apex action** coupling — and both are
 anchored to reality the way sensory grounds events: emitted primitives are real (execution grounds the
 action hierarchy at the bottom), and the reward filter prunes the backward graph toward causality. UCAR's
-lateral rule arriving on the event tower changes nothing here; under the staged rollout, actions are the
+same-level rule arriving on the event tower changes nothing here; under the staged rollout, actions are the
 last port (spatial validation first, then events, then this design).
 
 The reward-distribution / **global-rewards** design is the independent companion to this one — see
@@ -132,7 +132,7 @@ For a high event **E** to invoke a high action chunk **P**, there is exactly one
 argument, now in the time domain. `P` has temporal extent. Across its span, base events flick on and off,
 but `E` is the one token whose activation **co-extends with the chunk's entire span** — that is what made
 `E` apex. So the reward-scored association `E → P` is the cleanest, lowest-variance one, while `base → P`
-links are noisy edge-effects the Death Ledger thins. Actions bind to the event level whose temporal
+links are noisy boundary artifacts the Death Ledger thins. Actions bind to the event level whose temporal
 extent matches their own, automatically, because only same-extent tokens reliably co-occur across the
 whole span.
 

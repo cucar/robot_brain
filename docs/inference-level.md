@@ -6,7 +6,7 @@
 > to correction-target (subsumption accounting decouples them), readout is owned by the payload carve-out (action,
 > reward, and label channels stay base-wired from every level), and bootstrap starvation is handled by the rent
 > economics. What stands is the analysis's core invariant, which UCAR keeps: **no level ever trains against
-> another level's predictions** — lateral targets are future or present *observed* activations, not the cascade of
+> another level's predictions** — same-level targets are future or present *observed* activations, not the cascade of
 > guesses this document rightly rejected. Implementation remains `base` until the staged port reaches the temporal
 > tower (spatial is validated first, then events, then actions). The original reasoning and experiment spec are
 > preserved below for the record.

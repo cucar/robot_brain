@@ -42,7 +42,7 @@ Spatial corrections in this design work the same way as temporal corrections, th
 ### 2.3 The Two Complementary Operations
 
 - **Pyramidal cells / d>0 connections**: learn *when* (temporal sequences across frames).
-- **Cortical lateral grouping / d=0 connections**: learn *what together* (spatial co-activation within a frame).
+- **Cortical same-level grouping / d=0 connections**: learn *what together* (spatial co-activation within a frame).
 
 The brain requires both operations to build efficient representations.
 
