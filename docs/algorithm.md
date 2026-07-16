@@ -60,6 +60,16 @@ exactly one place: **rent** — every piece of structure pays its own storage pr
 [Forgetting](#forgetting-earn-rent-death)), so "worth its price" always means "worth its price over the window the
 rent defines." Structure must persist, not merely occur, to justify itself — the same bet birth already makes.
 
+The horizon is the design's one unavoidable time constant — dimensionally it is just the inverse of a forget rate,
+and any system tracking a non-stationary source must pick one: how fast to stop trusting old evidence is a
+bias-variance choice that cannot be derived from nothing. What distinguishes rent from a forget rate is what the
+constant touches. A forget rate decays statistical state uniformly, so survival selects for fire frequency and
+forgetting corrupts the likelihood model on its way to deleting things. Rent charges each structure in proportion
+to its own price and drains an economic balance kept separate from trial counts: the horizon windows *existence*,
+never *calibration*, and who survives inside the window is decided by the rank-to-price ratio, which the constant
+does not touch. One constant serves every windowed quantity — embryo eviction, pattern death, per-parent routing
+entries, the balance cap.
+
 Deriving an optimum horizon from context length is a planned experiment, not a precondition: every mechanism here
 consumes the horizon identically wherever it comes from.
 
@@ -279,13 +289,13 @@ above the parent's own level, and the child inherits the embryo's distribution, 
 
 - each context entry is installed at strength = its center count;
 - the child's recognition trial count starts at the embryo's occurrence total `n`;
-- the child's opening balance is the evidence the embryo accumulated — infancy is pre-paid by the womb.
+- the child's opening balance is the evidence the embryo accumulated, capped at the price — infancy is pre-paid
+  by the womb, one horizon at most (see [Forgetting](#forgetting-earn-rent-death)).
 
 So the newborn's likelihood model starts at `p_c ≈ count / n` per entry — the soft membership the womb converged
 to. A neighbor served once in fifty enters at weight 1/50, its absence costs ~0 bits, and it dilutes away through
 ordinary refinement instead of rendering the pattern unfireable. Center shedding needs no explicit prune rule:
-low-share members are born low and fade. A pattern born from more evidence starts further from death — the same
-evidence buying the same durability (see [Forgetting](#forgetting-earn-rent-death)).
+low-share members are born low and fade.
 
 The newborn's birth knowledge is its seeded context model — that is what lets it fire and refine from its first
 opportunity. Its connections at its own level start empty and are learned as its level populates, exactly
@@ -348,6 +358,14 @@ one economic rule for everything:
 - **Rent.** Every piece of structure pays its own storage price amortized over the horizon:
   `rent = price / horizon` per frame. A big blurry pattern owes more per frame than a small crisp one
   automatically, because its price is bigger.
+- **Cap.** After banking, the balance is clamped at the pattern's price, so remaining life never exceeds one
+  horizon (`price / rent = horizon`). The horizon is the window over which evidence is trusted; without the cap,
+  costs are windowed but earnings are eternal — a pattern that banked thousands of fires would outlive a world
+  shift by thousands of horizons, still indexed and scored as a candidate while saving nothing. With it, every
+  pattern at every moment is at most one horizon of silence from death: the newborn's opening condition promoted
+  to a lifelong invariant. A fire refills the death clock toward full; it never extends it past full. Sharpness
+  still buys slack — a sharp pattern refills the whole clock from one fire, a mushy one refills only its
+  `rank / price` fraction — but it cannot be hoarded into immortality.
 - **Death.** Balance reaching zero releases the structure. One rule for every lifecycle stage: an embryo's
   deposits are its earnings and its eviction is insolvency; a newborn's opening balance is the evidence its
   embryo accumulated; a multi-parent child keeps a balance per parent routing entry — each entry banks the rank
@@ -381,14 +399,16 @@ structure. Two things stretch the count in practice: the errors must pool into t
 serves it; an unrelated one opens a sibling), and rent between occurrences subtracts — errors spaced further apart
 than the horizon never accumulate.
 
-**Frames to forget: about one horizon of silence, regardless of size.** A newborn's opening balance is the
-evidence that just covered its price, so `balance ≈ price` and the price cancels out of its lifetime:
+**Frames to forget: at most one horizon of silence, regardless of size or history.** A newborn's opening balance
+is the evidence that just covered its price, so `balance ≈ price` and the price cancels out of its lifetime:
 `balance / rent ≈ price / (price / horizon) =` one horizon. A big pattern has bigger savings and bigger rent in
-exact proportion. After birth, each fire extends the clock by `(rank / price) × horizon` — a sharp pattern
-(rank 8 bits, price 4) banks two horizons per fire; a mushy one (rank 0.3 bits, price 20) banks 1.5% of one and
-must fire ~70× as often to stay solvent. The break-even condition in one line: **a pattern survives iff its
-situation recurs more often than once per `(rank / price) × horizon` frames.** Forgetting is not "N misses and
-out" — the recurrence interval must stay inside the window the pattern's own explanatory quality earns.
+exact proportion, and the cap holds every pattern at this same ceiling for life. After birth, each fire refills
+the clock by `(rank / price) × horizon`, up to full — a sharp pattern (rank 8 bits, price 4) refills the whole
+clock on any single fire; a mushy one (rank 0.3 bits, price 20) refills 1.5% of it and must fire ~70× as often to
+stay solvent. The break-even condition in one line: **a pattern survives iff its situation recurs more often than
+once per `(rank / price) × horizon` frames, and never survives a full horizon of silence.** Forgetting is not
+"N misses and out" — the recurrence interval must stay inside the window the pattern's own explanatory quality
+earns.
 
 Together, the full lifecycle in one sentence: a situation earns a pattern by recurring at least twice within a rent
 window with enough surprise to cover its naming cost, and keeps the pattern exactly as long as it keeps recurring
@@ -569,12 +589,16 @@ which currently carry only the member list). Expected effects: fewer fragmented 
 refine instead of arriving unfireable, lower dead-on-arrival pattern counts.
 
 **Phase 2 — economic forgetting.** Separate the two accounts on routing entries: trials become the immortal fire
-count feeding the likelihood model; a new balance field banks the recognition rank on every accepted fire and pays
-rent (`price / horizon`, with price carried from birth). Candidacy and death read the balance; the embryo's
-flat-rate staleness decay becomes the same rent on its own price; the death ledger re-registers from
-`balance / rent` on each bank event, recomputed from materialized balances on restore, never persisted. Expected
-effects: broad low-rank patterns die insolvent, sharp rarely-firing patterns survive. This is the phase that gives
-the hierarchy a governor, so it is measured by pattern churn and per-level counts as much as by accuracy.
+count feeding the likelihood model; a new balance field banks the recognition rank on every accepted fire, clamps
+at the price (the balance cap), and pays rent (`price / horizon`, with price carried from birth). Candidacy and
+death read the balance; the embryo's flat-rate staleness decay becomes the same rent on its own price; the death
+ledger re-registers from `balance / rent` on each bank event, recomputed from materialized balances on restore,
+never persisted. The knob renames with the semantics: the brain-wide `pattern_forget_rate` becomes `horizon`
+throughout the core (the stored rate is its reciprocal today, so the rent math is untouched), the CLI gains
+`--horizon <frames>`, and `--forget-rate <r>` survives as an alias setting `horizon = 1/r`. Expected effects:
+broad low-rank patterns die insolvent, sharp rarely-firing patterns survive, and no pattern outlives a horizon of
+silence regardless of past earnings. This is the phase that gives the hierarchy a governor, so it is measured by
+pattern churn and per-level counts as much as by accuracy.
 
 **Phase 3 — thalamus reuse.** The largest phase, gated on a plumbing audit first: per-parent routing entries
 already exist, but subsumption, the death ledger, and the delete cascade assume one parent per pattern, and
@@ -649,9 +673,13 @@ inference-side machinery is where each axis has its own consumer, and therefore 
   rather than a local arrangement. Whether the same-level range should be bounded independently of depth (biology
   keeps them separate: receptive fields grow across areas, while horizontal connections hold a roughly fixed
   cortical range) is unresolved, and it is the deeper question behind the growth above.
-- **Rent horizon derivation.** The only time constant in the design, so the planned context-length derivation
+- **Rent horizon derivation from context length.** The only time constant in the design, so the planned context-length derivation
   carries more weight than when it was one of several. The mechanisms consume the horizon identically wherever it
-  comes from.
+  comes from. The balance cap raises the stakes further: the horizon is no longer just a rent divisor but the
+  longest recurrence interval any pattern can survive, so structure with a longer natural period is unlearnable
+  in cortex no matter how sharp — a deliberate scope cut (bridging long gaps is salience-driven one-shot memory,
+  the hippocampal function this design excludes), but it makes an undersized horizon a modeling error, not just a
+  churn cost.
 - **Subsumption scope under same-level semantics.** Exactly who is subsumed by a fire — the parent whose routing
   table fired it, or every context member the pattern represents? The readings differ materially now that
   subsumption is what retires a chronic surprise; the code's current behavior should be checked against a deliberate
