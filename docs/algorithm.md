@@ -3,9 +3,8 @@
 UCAR is the design for the full pattern lifecycle: recognition of existing patterns, creation of new ones, and
 their refinement after birth. The name states the theory: the substrate is an online compression engine whose
 dictionary entries are situations ("universal" in the coding sense — KT estimation and MDL pricing are
-universal-coding machinery, tuned to no assumed source), and actions and rewards ride on that dictionary as
-payload — the compressor decides what exists, reward decorates what it is worth, and salience-driven one-shot
-memory is explicitly out of scope (that is a hippocampal function; this is cortex).
+universal-coding machinery, tuned to no assumed source), and salience-driven one-shot memory is explicitly
+out of scope (that is a hippocampal function; this is cortex).
 
 The structural unit is the **channel pattern**: a neuron infers one target at a time, using everything else in its
 neighborhood as context. This document specifies the mechanism on the spatial axis (`d = 0`, same frame). The
@@ -430,7 +429,7 @@ recent frame instead of converging to a mode, and churns under alternating situa
 **Connection refinement does not exist**, and does not need to. The doc's older formulation — contested positions
 displacing each other, a modal winner per position — presupposed a pattern inferring many targets and drifting
 among them. A channel pattern asserts one value for one target; there is no position competition to run. The
-base-model connections are plain accumulated counts, and payload connections are written by supervision or by
+base-model connections are plain accumulated counts, and action connections are written by supervision or by
 reward.
 
 ## What the design does not have
@@ -468,20 +467,6 @@ A merge operator collapses interchangeable duplicates. Duplicates arose because 
 neighborhood, so overlapping ones drifted into each other. A channel pattern is a minimal conjunction for one
 target value; there is no drift toward an identical twin to collapse.
 
-## Payload and readout
-
-Action, reward, and label channels are exempt from the level structure: any neuron at any level may hold direct
-connections to them. They are not part of the world-model — they are the payload the dictionary carries, the
-"Actions and Rewards" of the name. This keeps supervised readout and action selection fed by the full hierarchy
-while the model structure compresses.
-
-**Subsumption does not silence payload votes.** A neuron whose child fired for target D is subsumed *for that
-target's world-model prediction only*; its payload votes still flow. Readout is fed by the whole hierarchy, not
-just the apex.
-
-This carve-out — that payload votes are ALL the cross-level prediction the system needs — is an empirical bet, and
-it is currently the design's **largest unvalidated risk**; see [Risks](#risks).
-
 ## One frame, in order
 
 ```mermaid
@@ -495,8 +480,6 @@ flowchart TD
     F -->|no| H[Deposit −log2 p D=actual given P<br/>into the womb for D, partitioned by actual value]
     H --> I{Embryo evidence ≥ price?}
     I -->|yes| J[Birth: level+1 pattern, filtered center,<br/>seeded distribution, balance capped at price]
-    D --> K[Payload votes flow regardless of subsumption]
-    G --> K
 ```
 
 ## Temporal: the open port
@@ -540,8 +523,7 @@ delay: level 1 must populate across channels before level 2 has anything to rela
 counts, and slot occupancy per level — the question is whether levels populate at all and whether depth settles.
 
 **Phase 4 — the readout gate.** Once growth is bounded and depth settles, compare held-out accuracy against what
-the level counts justify. This is the phase that answers whether the payload carve-out is sufficient; do not build
-past it if the answer is no.
+the level counts justify; do not build past this phase if the answer is no.
 
 ### Build implications
 
@@ -568,9 +550,8 @@ Concrete substrate changes this design requires, recorded so the implementation 
   produced a *worse* classifier — held-out accuracy fell well below training accuracy once redundant duplicate
   voters were removed, because the Naive-Bayes readout had been living on exactly the position-and-class-specific
   duplicates that compression deletes. Channel patterns do not obviously fix this: they make the dictionary
-  sharper and smaller, which is the same direction. If phase 4 confirms it, the design answer (top-down decode, or
-  widening the carve-out, or conditioning the payload on more than pattern identity) must be settled before
-  anything is built on top.
+  sharper and smaller, which is the same direction. If phase 4 confirms it, the design answer (e.g. a top-down
+  decode) must be settled before anything is built on top.
 - **Slot occupancy could go either way.** The recursion's tractability rests on most targets being handled by the
   pairwise base so that level vectors stay sparse. If the base is bad often, every target mints and the level
   width approaches `|neighbors|`, with each level multiplying. Measure occupancy in phase 1, before phase 3.
