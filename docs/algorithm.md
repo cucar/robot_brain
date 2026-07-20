@@ -67,7 +67,7 @@ build a joint out of parts that cannot express a joint, and the result need not 
 seen — if the left neighbor is usually on and the right neighbor is usually on but never both at once, that
 combination is a neighborhood that never occurs. Connections are used as the distribution they are.
 
-**What makes it free is what it cannot do.** The counters are one number per neighbor bucket, so the base model
+**What it cannot do.** The counters are one number per neighbor bucket, so the base model
 is bounded at `neighbor dimensions × buckets` and never grows with experience. And it stores each neighbor
 separately: it records that the left neighbor is usually on and that the right neighbor is usually on, but never
 that they are on *together*. It cannot represent a joint at all.
@@ -76,8 +76,13 @@ That gap is what patterns exist to fill, and it is why connections never compete
 is not a better version of the same thing, it is the only thing that can hold a configuration:
 
 ```
-marginal  →  pairwise (connections, free)  →  configurations (patterns, priced)
+marginal  →  pairwise (connections, bounded)  →  configurations (patterns, unbounded)
 ```
+
+Connections are not free — they are part of the neuron's line in the dictionary and are counted in its
+[cost](#the-cost). What separates them from patterns is that their count is capped at
+`neighbor dimensions × buckets` and stops growing, while a routing table has no such ceiling. A neuron's rent
+therefore rises with the patterns it opens, never with how long it has been counting.
 
 **A neuron updates its connections only on frames where no child fired.** The two are exclusive: a neuron either
 infers from its own connections or delegates to a child, so every frame is explained by exactly one of them and
@@ -147,7 +152,7 @@ is the tolerance that keeps two variations from opening two entries. One rule, t
 The shape of that rule is [facility location](#the-routing-table-is-a-facility-location-problem).
 
 **Promotion.** When an entry's accumulated service cost covers a horizon's worth of its
-[rent](#rent-what-an-entry-costs), a pattern is created for it, one at a time. The entry does not move: it stays
+rent, a pattern is created for it, one at a time. The entry does not move: it stays
 where it is and gains a child.
 
 ## The routing table is a facility location problem
@@ -165,7 +170,7 @@ the two are always solved together, because you cannot price a warehouse without
 | A customer, i.e. one unit of demand | One frame's observed neighborhood |
 | A facility | A routing table entry |
 | Opening a facility | Creating an entry, and eventually a pattern for it |
-| Opening cost | The entry's [rent](#rent-what-an-entry-costs) over one horizon |
+| Opening cost | The entry's rent over one horizon |
 | Serving a customer from a facility | Describing this frame's neighborhood through that entry |
 | Service cost, i.e. distance | What the mismatch costs — the positions the entry got wrong |
 | The assignment of customers to facilities | The [match](#recognition) |
@@ -177,7 +182,7 @@ demand piling up on a poorly-served region would have paid for a warehouse, a wa
 **What the opening cost is here.** Serving a customer badly is easy to picture — the entry got some positions
 wrong, and the mismatch costs something. Opening is less obvious, because nothing is physically built. What it
 costs is **holding the entry**: recording the configuration once, and thereafter making it harder every frame to
-say which entry served that frame. Charged per frame that is [rent](#rent-what-an-entry-costs); over a horizon it
+say which entry served that frame. Charged per frame that is rent; over a horizon it
 is what a warehouse cost to build.
 
 It is not a tax bolted on — without it the problem has a trivial and useless answer. If opening were free you
@@ -195,8 +200,55 @@ already defined, and the service cost is the mismatch, which is already measurab
 price, so it tolerates worse matches rather than opening again. A sparse neuron opens more readily. The tolerance
 falls out of the neuron's own circumstances instead of being set.
 
-Distance is measured **in bits**, not in the count of differing positions: a mismatch in a position that is almost
-always the same costs more than a mismatch in a position that varies anyway.
+Distance is the **number of neurons the entry would get wrong** — the same count that appears in the file as the
+corrections following an activation. Nothing weights one position above another.
+
+### The distance
+
+An entry names a configuration; the neuron observed one. The distance between them is the number of neurons the
+entry would get wrong, counted in both directions:
+
+```
+d(O, e) = |O △ C(e)|     neurons present that the entry does not name
+                       + neurons the entry names that are not present
+```
+
+This is Hamming distance over the neighborhood, and it is not a separate notion invented for matching — it is
+literally the corrections that would follow this activation in the file. The service cost and the match distance
+are the same number.
+
+### Serve or open
+
+Everything a neuron needs to decide is available the moment it observes `O`:
+
+- **Serving** from the closest entry costs `d(O, e*)` this frame — the neurons it gets wrong.
+- **Opening** a fresh entry at exactly `O` serves it with no error at all, but commits to holding it:
+  `(1 + |O|) / horizon` per frame, by [what a pattern costs](#what-rent-is-made-of).
+
+Both are per-frame quantities, so they compare directly. The neuron serves from `e*` when `d(O, e*)` is below
+what opening would cost per frame, and opens otherwise. **There is no threshold in that sentence** — the tolerance
+is `(1 + |O|) / horizon`, which the neuron already knows.
+
+Two properties fall out. A large configuration is expensive to open, so the neuron tolerates more error before
+opening one; a small one is cheap, so it opens readily. And a long horizon makes opening cheap per frame, so a
+patient system explores more.
+
+### The frame, step by step
+
+For an active neuron with observed neighborhood `O` and routing table `E`:
+
+1. **Measure.** Compute `d(O, e)` for every entry, and take the closest as `e*`.
+2. **Decide.** If `d(O, e*)` is below `(1 + |O|) / horizon`, serve from `e*`. Otherwise open a new embryo whose
+   configuration is `O`, and serve from that.
+3. **Act.** If the serving entry has a pattern, fire it — inference is delegated and the frame is done. If it does
+   not, the connections infer the neighborhood and update.
+4. **Bank.** The serving entry's balance rises by what it spared: the members it covered, less one for naming it,
+   less the neurons it got wrong.
+5. **Charge.** Every entry in the table drains its own rent, served or not.
+
+Step 4 is where the numbers close. An entry covering nine neurons with nothing wrong spares `9 − 1 − 0 = 8`,
+against a cost of `1 + 9 = 10` to hold. It needs to serve roughly twice within a horizon to stay solvent, and
+crossing a full horizon of rent is what creates its pattern.
 
 ### Arriving one at a time
 
@@ -233,64 +285,168 @@ absorbed silently, and nothing ever accumulates to open the second entry — the
 comparison has to be able to answer "none of these, open a new one," and it has to answer it before an entry with
 a pattern fires, since [firing delegates and accumulates nothing](#what-a-neuron-does-with-a-frame).
 
-## Rent: what an entry costs
+## The cost
 
-There is **one cost**, and it is a rate. An entry costs something every frame it exists, and that per-frame charge
-is its **rent**. What was called an opening price is nothing separate: it is simply rent over one horizon.
+### It is all one file
 
-### Why it is the same unit as service cost
+Take the whole run — every frame the brain has seen — and write it down as a single file that a decoder could
+read back to reproduce every frame exactly. The file has two parts:
 
-Describing one frame, once a neuron holds entries, means saying two things: **which entry served this frame**, and
-**what that entry got wrong about it**. Both are parts of one description of one frame, so both are counted the
-same way — in things you have to name.
+1. **The patterns (dictionary).** For each neuron, the configuration of every pattern it holds. Recording one means naming
+   which neighbors it involves.
+2. **The frames (history).** For each frame, its apex neurons, followed by whatever those apex neurons got wrong about the
+   level below them.
 
-The second of those is the service cost. The first is what rent pays for, and it is genuinely per-frame: the
-neuron identifies a serving entry on every frame, forever, and that identification gets harder the more entries
-it holds. Nothing about it is amortized from a one-time event.
+You could write the encoder and the decoder, run them, and measure the
+result. Its length is one number, and **every cost in this design is part of that number:**
 
-Only the write-down is one-time — recording the configuration itself happened once — and that is the single place
-the horizon enters, as the rate at which the write-down is paid off.
+| Brain                          | File                                                                  |
+|--------------------------------|-----------------------------------------------------------------------|
+| Cost of having a pattern       | Adding a symbol to the dictionary, once                               |
+| Cost of activating apex neuron | Recording a symbol in the frames history                              |
+| Cost of errors                 | The corrections that follow, because the symbol was not exactly right |
 
-So the neuron's bill for a frame is: rent for every entry standing, plus the mismatch on the entry that served it.
-Three charges, one description, one unit. They add.
+These are not comparable quantities needing a conversion factor between them. 
+They are the lengths of three sections of one document. 
+You can only add or subtract them because they are already the same thing: how long the file is.
+
+**Everything is counted in neurons.** One symbol is one neuron, and every cost above is a count of them:
+
+```
+activating an apex neuron  =  1
+the errors it made         =  the number of neurons it got wrong
+having a pattern           =  1 (itself) + |connections| + Σ over its born entries |configuration|
+```
+
+A neuron's line in the dictionary cannot be its id alone — an id reconstructs nothing. The decoder has to be told
+what the neuron does, and what it does is infer its neighborhood two ways: through its connections, and through
+the entries in its routing table. So its definition is itself, the neurons its connections reach, and the members
+of each born entry.
+
+**This is why an established neuron demands more before adding structure.** Nothing enforces that; it follows
+from counting. A neuron that has accumulated many connections and many entries simply has a longer line in the
+dictionary, so its rent is higher, so the next entry has more to beat. There is no crowding term anywhere — there
+is just more structure to write down.
+
+This is a **fixed-length code**: every neuron costs one symbol regardless of how often it is used. Pricing
+symbols by how often they actually occur is a variable-length code over the same file, and it is an experiment
+rather than the design — see [forgetting.md](forgetting.md).
+
+**Embryos are not in the file.** An entry with no pattern is the neuron's own bookkeeping — nothing about it is
+transmitted, and a decoder never learns it existed. It is ephemeral, and it costs the file nothing.
+
+That does not make it free to the machine. An embryo is charged the **rent of the pattern it is proposing**: it
+drains at exactly the rate that pattern would cost, and is deleted when it reaches zero. So an unborn entry has
+to earn like a pattern before it is allowed to become one, and what bounds the number of embryos is not an
+opening fee but the fact that most of them cannot cover the rent they are betting they can.
+
+This is why there is no separate opening test anywhere in the design. **Accumulating a horizon's worth of rent is
+the opening test.**
+
+### Where the horizon comes from
+
+Suppose the file covers `H` frames. 
+A pattern's configuration is named once; the frame part is written `H` times. 
+So a pattern is worth creating exactly when
+
+```
+cost of creating the pattern <  H × (per-frame saving from having it)
+```
+
+Divide both sides by `H`:
+
+```
+pattern cost / H  <  pattern savings per-frame
+```
+
+The left-hand side is **rent**. Rent is not a policy laid on top of the design. 
+It is not a second kind of cost. 
+It is what creating the pattern costs, viewed from inside a per-frame comparison. 
+The two sides balance because they were one inequality before it was divided.
 
 ### What rent is made of
 
 ```
-rent = name_bits(|configuration|, alphabet) / horizon        the write-down, spread out
-     + log2(entries(P) + 1) - log2(entries(P))               this entry's share of making identification harder
+rent(pattern) = pattern cost / horizon
 
-name_bits(k, n) = log2( C(n, k) )  =  Σ_{i=0}^{k-1} log2( (n-i) / (k-i) )
-
-alphabet   = max(neighbors ever witnessed, structural neighborhood cardinality)
-entries(P) = how many entries this neuron already holds
+pattern cost  = 1                                  the pattern neuron itself
+              + |connections|                      the neurons its connections reach
+              + Σ over its born entries |configuration|    the members of each entry it routes through
 ```
 
-The configuration is named as what it physically is — an unordered subset of the alphabet — rather than `k`
-independent pointers, which would waste `log2(k!)` bits on order and overcharge dense configurations.
+Every term is a count of neurons, and the whole thing is divided by the horizon. Nothing else enters.
 
-The alphabet is floored by the **structural** neighborhood cardinality. At cold start the witnessed set is tiny
-and the first recurring configuration equals it exactly, which would name it for nearly nothing and open for free;
-flooring charges it against the positions the decoder already knows exist.
+Cost is not fixed at birth. It is **whatever the neuron currently is** — as a pattern accumulates connections and
+opens entries of its own, its line in the dictionary grows and its rent rises with it. A pattern that sprawls has
+to serve more to stay solvent than one that stayed small.
 
-The crowding term is written as a **marginal** cost — what this entry adds to the difficulty of identifying a
-server — because identification is paid once per frame in total, not once per entry. A crowded neuron therefore
-charges more for the next entry than a sparse one does.
+An embryo has no pattern yet, so what it is charged is the cost of the pattern it is proposing: `1` for the
+neuron that would be created, plus the members of its own configuration, which is the entry its parent would
+route through.
 
-### Open and close are one comparison
+### The balance is the whole lifecycle
 
-Because everything is a rate, the two structural decisions are the same test with opposite signs:
+Rent is charged **in the routing table**, and every entry carries exactly one number: its **balance**. This is the
+same quantity [contraction](#contraction-building-the-level-above) reads as activation strength.
 
-- **Open** an entry when the service cost it would remove per frame exceeds the rent it would add per frame.
-- **Close** an entry when the service cost it removes per frame has fallen below the rent it costs per frame.
+- It **rises** when the entry serves a frame, by what having it spared.
+- It **drains** every frame by the entry's rent.
 
-Nothing else is needed. Promotion's "evidence covers price" is this same comparison written over a horizon rather
-than per frame — divide both sides by the horizon and it is rate against rate. [forgetting.md](forgetting.md)
-specifies how the close side is measured online.
+Where the balance sits decides what the entry is. There are no separate birth and death events — there is one
+number and three regimes on it:
+
+```
+balance ≥ one horizon of rent      the entry has a pattern
+0 < balance < one horizon of rent  the entry is an embryo
+balance = 0                        the entry is deleted
+```
+
+**Birth is a crossing, and it is reversible.** An entry accumulates until it can cover a horizon and its pattern
+comes into existence. If its demand moves away, it drains back down, the pattern is withdrawn, and the entry is
+an embryo again — holding everything it learned. If the demand returns, it is reborn without having lost its
+statistics. Only draining all the way to zero deletes it.
+
+That is why a pattern never falls off a cliff. The old distinction between "not yet born" and "died" collapses:
+both are the same entry at different points on one axis, and the axis is the balance.
+
+**Forgetting is not a separate mechanism.** Charging rent in the routing table *is* aging. What
+[forgetting.md](forgetting.md) still carries is only the question of whether this beats a uniform forget rate,
+which is an experiment rather than a mechanism.
+
+### What shrinking the file actually looks like
+
+The frame part of the file dominates, because it is written `H` times. Shortening it means **fewer apex neurons
+per frame**: 784 names on a 28×28 input if nothing compressed, 200 if level 1 covers the frame with 200 apex
+neurons, 50 if level 2 covers it with 50. That reduction is what the whole design is for.
+
+But the frame part alone is not the objective, and taking it as one has a degenerate optimum: memorize each frame
+as a single top-level pattern. One apex neuron, full coverage, the shortest possible frame part — and a dictionary
+holding one line per frame ever seen, which is longer than the input it replaced. So 784 → 200 → 50 is a win only
+when the patterns that achieved it are **reused across many frames** rather than opened per frame.
+
+Every structural decision is the same question: does the move shorten the file, dictionary included?
+**No similarity thresholds exist anywhere in the design.**
+
+### Every decision is local
+
+Each neuron charges rent and measures service cost over its own neighborhood only, so the sum of local ledgers is
+not the length of the file — the same base event is witnessed by every neuron whose neighborhood contains it.
+This is accepted: local ledgers gate local decisions cheaply and in parallel, and [contraction](#contraction-building-the-level-above)
+is what stops that redundancy from multiplying up the levels.
+
+Nothing consults a global total. Rent scales with the neuron's own entry count, never with the size of the brain,
+which is why a naive neuron opens cheaply — its exploration budget, not a leak, since the same local comparison
+that opened an entry closes it when demand moves away.
+
+The global quantity is therefore measured directly rather than summed: **apex neurons per level per frame, and
+the dictionary size that bought them.** That pair is the standing metric, and the local ledgers are only a cheap
+parallel proxy for it.
 
 ## Birth
 
-A promoted entry gains a pattern neuron **one level above the neuron's own level**.
+An entry whose balance crosses one horizon of rent gains a pattern neuron **one level above the neuron's own
+level**. If the balance later falls back below that line the pattern is withdrawn and the entry is an embryo
+again, so this is a crossing rather than a one-way event.
 
 - The pattern **inherits its parent's channel**. That channel then infers its neighbor channels at the higher
   level.
@@ -312,8 +468,9 @@ processed, contraction determines what propagates to level 1, level 1 is process
 frame's routing, recomputed each frame — patterns persist, owned by a channel; only which of them propagates
 upward is decided here.
 
-Each neuron carries an **activation strength**: how established the pattern it fired is. Contraction needs only
-an ordering over neighbors, so what exactly that quantity is remains [open](#open-questions).
+Each neuron carries an **activation strength**, and it is not a separate quantity: it is the
+[balance](#the-balance-is-the-whole-lifecycle) of the entry that fired. An entry deep into solvency is one whose
+demand keeps returning, so ranking by balance ranks by how established a pattern is.
 
 **The passes**, executed by the thalamus since these are cross-neuron comparisons:
 
@@ -382,51 +539,6 @@ flowchart TD
     L --> M[Process the next level up]
 ```
 
-## The cost
-
-Everything above is mechanism. This is what the mechanism is for.
-
-**A frame is described by its apex neurons — the ones that are not inhibited.** What describing a frame costs is
-the length of that list: 784 names on a 28×28 input if nothing compressed, 200 if level 1 covers the frame with
-200 apex neurons, 50 if level 2 covers it with 50. **Shrinking that list, while still covering the frame, is the
-goal.** Everything else in this document exists to make it shorter.
-
-Shortening it is not free. A pattern is a stored list of members, and remembering that list costs about what
-saying those members once costs — nine members remembered is about as expensive as nine names said. This is what
-makes the two sides comparable: **both are counted in things you have to name**, one for each frame and one for
-the dictionary that describes frames. They subtract directly.
-
-So a pattern naming nine members costs about nine, once, and saves about eight every frame it fires.
-
-Take the frame list alone as the objective and it has a degenerate optimum: memorize each frame as a single
-top-level pattern. One apex neuron, full coverage, the shortest possible list — and a dictionary holding one entry
-per frame ever seen, which is longer than the input it replaced. The target 784 → 200 → 50 is a win only when the
-patterns that achieved it are **reused across many frames** rather than minted per frame.
-
-Every structural decision is one question: does the move shorten the total, dictionary included?
-**No similarity thresholds exist anywhere in the design.**
-
-### The ledgers are local
-
-Each neuron keeps its own ledger over its own neighborhood, so the sum of local ledgers is not the total — the
-same base event is witnessed by every neuron whose neighborhood contains it. This is accepted: local ledgers gate
-local decisions cheaply and in parallel. Contraction is what stops that local redundancy from multiplying up the
-levels.
-
-The global quantity is measured directly instead of summed: **apex neurons per level per frame, and the
-dictionary size that bought them.** That pair is the standing metric for whether the design is working, and the
-local ledgers are only a cheap parallel proxy for it.
-
-### Everything is local
-
-Both decisions a neuron makes — open an entry, close an entry — are settled entirely from what that neuron holds.
-[Rent](#rent-what-an-entry-costs) scales with the neuron's own entry count, never with the size of the brain, and
-service cost is measured against its own neighborhood. Nothing consults a global total.
-
-A naive neuron therefore opens cheaply, and that is its exploration budget rather than a leak: an entry that stops
-earning its rent is closed by the same local comparison that opened it. What bounds the system is not a global
-account but the fact that rent rises as a neuron fills and closes happen wherever demand moves away.
-
 ## Implementation plan
 
 Each phase lands independently and is measured before the next. The headline metric is the objective itself:
@@ -466,6 +578,14 @@ Forgetting lands on its own track, specified and phased in [forgetting.md](forge
 - **Ranking born against unborn.** One match runs over the whole table, so an unborn entry can outscore a born
   one — the neuron would decline to fire a child it has in order to accumulate on an embryo instead. Whether that
   is correct is undecided.
+- **How eagerly to open.** Comparing this frame's service cost against a per-frame rent assumes the configuration
+  will recur on every frame, which makes opening almost free: at a horizon of 1000, a nine-member configuration
+  tolerates only `0.01` neurons of error before opening, so nearly every imperfect frame opens an embryo. The
+  online facility location result compares a single demand's distance against the **whole** opening cost and
+  opens with probability `d / cost`, which for one neuron wrong out of nine is a tenth rather than a certainty.
+  The eager rule is right when a configuration recurs constantly and badly wrong when it does not, and the
+  randomized rule is the principled hedge. Whether the design accepts randomization, or finds a deterministic
+  stand-in, is undecided — and it directly controls how many embryos exist.
 - **Configuration space beyond the small case.** Eight binary neighbors is 256 configurations — finite and
   countable. Radius 2 is 2²⁴, and more buckets multiply it further. Exact-configuration counting is bounded
   precisely in the regime where it is least needed. What replaces it when the neighborhood is larger?
@@ -474,8 +594,9 @@ Forgetting lands on its own track, specified and phased in [forgetting.md](forge
   each channel to a single state, but the space still expands with the structure. What bounds the womb there?
 - **Reuse.** Identity is keyed by absolute dimension, so nothing shares a shape across positions. Contraction
   fixes the width of each level, not the redundancy of the dictionary.
-- **Activation strength.** What is a neuron's strength when it fired no pattern at all, and do zero-strength
-  neurons participate in the inhibition passes or survive by default?
+- **Activation strength when nothing fired.** Strength is the balance of the entry that fired, so a neuron that
+  fired no pattern has none. Whether such neurons participate in the inhibition passes or survive by default is
+  undetermined.
 - **Parallelism.** The inhibition passes are cross-neuron comparisons and run in the thalamus. Whether they can
   be parallelised, or pushed into neurons given a shipped view of neighbor strengths, is undetermined.
 
@@ -487,10 +608,8 @@ Sections known to be missing or known to be placeholders, in the order they shou
    the boundary between levels, and together they determine which neurons are active at the level above. §Contraction
    currently describes only the inhibition half. Two questions inside it: whether reuse is keyed on the group's
    shape rather than on any single neuron's configuration, and which unit earns the saving once a group collapses.
-2. **§The cost, rewritten.** It is a placeholder standing on mechanism that item 1 has not settled yet. Once the
-   level transition is written, the cost section should be rebuilt on top of it rather than patched.
-3. **Terminology.** §Contraction says "survivor" and §The cost says "apex neuron" for the same set. Pick one.
-4. **Dictionary redundancy.** Currently filed under Risks, describing the same shape learned separately at every
+2. **Terminology.** §Contraction says "survivor" and §The cost says "apex neuron" for the same set. Pick one.
+3. **Dictionary redundancy.** Currently filed under Risks, describing the same shape learned separately at every
    position. That is item 1's subject, not a risk, and should move once item 1 exists.
 
 ## Temporal: the open port
