@@ -27,17 +27,23 @@ This is the only place topology enters the design.
 
 ## The unit: a neuron and its neighborhood
 
-A neuron's **context is its entire neighborhood** — the active neurons of its declared neighbor channels. A
-spatial pattern is a **named shape**: the neuron looks around and reports what it sees upward.
+A neuron's **neighborhood** is the active neurons of its declared neighbor channels, and the assignment of values
+it sees across them is its **configuration**. A spatial pattern is a **named configuration**: the neuron looks
+around and reports what it sees upward.
+
+**On the spatial axis, neighborhood, context, and inferences are one set.** The neurons a neuron infers are
+exactly the neurons it uses as context, which are exactly its neighbors — there is no separate target set and no
+separate conditioning set. Whether the inference comes from connections or from a fired child, it covers that one
+set and nothing else. This document says **neighborhood** throughout.
 
 **One configuration per neuron per frame.** The neighborhood is an assignment, so at any frame a neuron sees
 exactly one configuration. At radius 1 with binary channels there are 2⁸ = 256 possible configurations — a
 finite, small space.
 
-**At most one child fires per neuron per frame.** A neuron's configuration selects at most one pattern. This is
-load-bearing. If a neuron could activate several children, each channel would carry several active units, those
-would all become neighbors one level up, and the count would square at every level. One active unit per neuron
-preserves the "one active per channel" invariant all the way up.
+The substrate's "exactly one active per dimension" has to survive going up, which requires **at most one active
+unit per neuron per frame**. If a neuron could activate several children, each channel would carry several active
+units, those would all become neighbors one level up, and the count would square at every level. [Recognition](#recognition)
+is what makes this hold.
 
 ## The base model: what a neuron expects
 
@@ -46,17 +52,20 @@ counting.
 
 Every frame the neuron is active, it notes which bucket each neighbor dimension is in and adds one to a counter.
 Those counters are its **connections**. After enough frames they answer, for each neighbor dimension separately:
-which bucket is that dimension usually in, on the frames where I am active? That answer is the neuron's
-**default** for that neighbor.
+how often is that dimension in each of its buckets, on the frames where I am active?
 
-A pixel neuron that is on will find, across the frames where it was on, that its left neighbor was on in most of
-them. Its default for the left neighbor is "on". Taking the default for every neighbor at once gives the
-**default configuration** — the neighborhood this neuron expects to see.
+A pixel neuron that is on might find that across the 100 frames where it was on, its left neighbor was on in 60
+and off in 40. Its connections hold 60/40 — a distribution, not a verdict. The neuron infers with the whole
+distribution and never collapses it to a single expected value:
 
 ```
 p(D = b | P) = strength(P → D_b) / Σ_b' strength(P → D_b')
-default(D)   = argmax_b p(D = b | P)
 ```
+
+**There is no default configuration.** Combining the per-neighbor favorites into one expected neighborhood would
+build a joint out of parts that cannot express a joint, and the result need not be anything the neuron has ever
+seen — if the left neighbor is usually on and the right neighbor is usually on but never both at once, that
+combination is a neighborhood that never occurs. Connections are used as the distribution they are.
 
 **What makes it free is what it cannot do.** The counters are one number per neighbor bucket, so the base model
 is bounded at `neighbor dimensions × buckets` and never grows with experience. And it stores each neighbor
@@ -70,72 +79,223 @@ is not a better version of the same thing, it is the only thing that can hold a 
 marginal  →  pairwise (connections, free)  →  configurations (patterns, priced)
 ```
 
-## The demand signal
+**A neuron updates its connections only on frames where no child fired.** The two are exclusive: a neuron either
+infers from its own connections or delegates to a child, so every frame is explained by exactly one of them and
+neither learns from the other's frames. Connections stay the model of the typical neighborhood; patterns hold
+what pairwise cannot reach.
 
-**A neuron fails when its observed configuration differs from its default configuration.** The default is what
-the pairwise base model already explains for free; anything else is unexplained and is what the womb collects.
-There is no threshold: a configuration equal to the default deposits nothing.
+**Cold start is silence.** A neuron with no neighbors seen yet has no connections and infers nothing. That is the
+base case, not an error.
+
+## What a neuron does with a frame
+
+An active neuron does one of two things:
+
+1. **The neighborhood matches an entry that has a pattern.** Fire it. Inference is delegated to that child, and
+   nothing else happens — connections do not update and no evidence accumulates.
+2. **Anything else.** The connections infer the neighborhood, the connections update, and evidence accumulates on
+   the matched entry **sized by how badly the connections did**.
+
+Both halves of the second branch happen every time; they are not alternatives. There is no test for whether a
+frame was surprising enough to be worth collecting. **Surprise is the size of the deposit, not a gate on it.** A
+neighborhood the connections already predict well contributes almost nothing no matter how often it recurs — not
+because a threshold rejected it, but because there was nothing left to explain. A neighborhood they badly miss
+contributes a lot.
+
+That is also why connections learning from surprising frames is not a leak. Whatever pairwise can absorb, it
+absorbs, and each frame it absorbs makes the same neighborhood cheaper next time. What never shrinks is the part
+pairwise structurally cannot reach — the joint — and that residual is exactly what a pattern is for.
 
 ## Recognition
 
-**A neuron fires the pattern its configuration matches.** This is a match, not an economic test. Matching is
-partial — an observed configuration need not equal a stored one exactly, since the womb pools near
-configurations and the same tolerance applies here.
+A neuron keeps **one routing table**. Each entry is a configuration the neuron has observed, together with the
+statistics it has accumulated on that configuration. Some entries have a pattern neuron born from them; the rest
+do not, yet. That is the only difference between them — **an embryo is a routing table entry whose pattern has
+not been created yet.**
 
-At most one child fires; when several patterns match, the best match wins. On a fire, the pattern's statistics
-strengthen — this is [refinement](#refinement).
+**A neuron matches its observed neighborhood against every entry, and the best match wins.** This is a match, not
+an economic test. Matching is partial: an observed configuration need not equal a stored one exactly, which is
+what lets minor variations of a shape be recognized as that shape. **It is one algorithm over the whole table**,
+applied identically whether the entry it lands on is born or unborn. The exact rule is [open](#open-questions).
 
-## The womb: counting recurring configurations
+What happens next depends only on whether the winning entry has a pattern:
 
-Each neuron holds one womb, which accumulates statistics over the configurations the neuron has **failed** on
-and promotes the ones that recur enough to pay for themselves.
+- **Born.** Fire it. Firing is **delegation**: the neuron hands the job of describing this neighborhood to the
+  child rather than doing it from its own connections. **At most one child fires**, because a job is handed to one
+  delegate and not split among several — which is what preserves one-active-per-channel all the way up. On a fire
+  the entry's statistics strengthen; this is [refinement](#refinement).
+- **Unborn.** The entry accumulates evidence, and the neuron infers from its own connections as usual.
 
-At radius 1 binary, 256 configurations are possible and the default covers one, leaving 255 candidates. Minting
-one pattern per candidate would be an explosion, but only a small subset recurs: for a neuron sitting on a "1",
-vertical, horizontal and cross configurations recur far more than the rest. The womb keeps statistics on
-observed configurations and promotes the ones that pay.
+If nothing matches, the observed configuration opens a new entry, unborn.
 
-**The womb holds context only.** It does not cluster connections.
+## The womb: the unborn entries
 
-**Partial matching.** Two observed configurations differing in one position should often count as the same
-candidate, or the womb degenerates into one entry per distinct configuration ever seen. This is a
-facility-location problem: opening cost is the pattern's price, service cost is the extra bits to code a
-configuration through a center that is not exactly it. Distance is measured **in bits**, not in count of
-differing positions — a mismatch in a rare position matters more than one in a position that is almost always
-the same. The exact merge rule is [open](#open-questions).
+The **womb** is the unborn part of the routing table. It is not a separate structure and it does not have its own
+matching rule — it is the entries that have accumulated evidence but do not have a pattern yet.
 
-**Promotion.** When an accumulated configuration's evidence covers its price, it is promoted to a pattern, one
-at a time.
+At radius 1 binary, 256 configurations are possible. Opening one entry per configuration would be an explosion,
+but only a small subset both recurs and stays unexplained by the connections: for a neuron sitting on a "1",
+vertical, horizontal and cross configurations recur far more than the rest.
 
-## Price
+**The womb holds configurations only.** It does not cluster connections.
 
-A promoted configuration's price is what the neuron will actually store, in bits:
+**How few entries there are is decided by the match.** Two neighborhoods differing in one position should usually
+land on the same entry, or the table degenerates into one entry per distinct configuration ever seen. This is the
+same partial match [recognition](#recognition) uses — the tolerance that lets a born pattern fire on a variation
+is the tolerance that keeps two variations from opening two entries. One rule, two consequences.
+
+The shape of that rule is [facility location](#the-routing-table-is-a-facility-location-problem).
+
+**Promotion.** When an entry's accumulated service cost covers a horizon's worth of its
+[rent](#rent-what-an-entry-costs), a pattern is created for it, one at a time. The entry does not move: it stays
+where it is and gains a child.
+
+## The routing table is a facility location problem
+
+**The plain problem.** Customers are spread over a map. You may open warehouses. Opening one costs a fixed
+amount; serving a customer costs in proportion to how far it is from the warehouse serving it. Minimize the sum.
+Open too few and customers are served from far away; open too many and you pay to open them. The optimum balances
+the two. The half that decides which customer is served by which warehouse is the **demand routing** problem —
+the two are always solved together, because you cannot price a warehouse without knowing what it will serve.
+
+**The mapping is direct:**
+
+| Facility location | Here |
+|---|---|
+| A customer, i.e. one unit of demand | One frame's observed neighborhood |
+| A facility | A routing table entry |
+| Opening a facility | Creating an entry, and eventually a pattern for it |
+| Opening cost | The entry's [rent](#rent-what-an-entry-costs) over one horizon |
+| Serving a customer from a facility | Describing this frame's neighborhood through that entry |
+| Service cost, i.e. distance | What the mismatch costs — the positions the entry got wrong |
+| The assignment of customers to facilities | The [match](#recognition) |
+
+So **matching is the routing half and minting is the opening half**, and they are one problem. Every frame is a
+customer arriving. It is served by the entry it matches, at a cost equal to how wrong that entry was. When the
+demand piling up on a poorly-served region would have paid for a warehouse, a warehouse opens there.
+
+**What the opening cost is here.** Serving a customer badly is easy to picture — the entry got some positions
+wrong, and the mismatch costs something. Opening is less obvious, because nothing is physically built. What it
+costs is **holding the entry**: recording the configuration once, and thereafter making it harder every frame to
+say which entry served that frame. Charged per frame that is [rent](#rent-what-an-entry-costs); over a horizon it
+is what a warehouse cost to build.
+
+It is not a tax bolted on — without it the problem has a trivial and useless answer. If opening were free you
+would open a warehouse on top of every customer: perfect service, zero distance, and one facility per frame ever
+seen. The opening cost is the only thing standing between the design and memorizing every frame.
+
+### Why this replaces a threshold
+
+A threshold asks: *is this neighborhood within θ of that entry?* It needs θ, and θ is not derivable from
+anything.
+
+Facility location never asks that. It asks: **is it cheaper to serve this neighborhood from an entry that already
+exists, or to open a new one?** That comparison has no free parameter — the opening cost is the price, which is
+already defined, and the service cost is the mismatch, which is already measurable. A crowded neuron has a higher
+price, so it tolerates worse matches rather than opening again. A sparse neuron opens more readily. The tolerance
+falls out of the neuron's own circumstances instead of being set.
+
+Distance is measured **in bits**, not in the count of differing positions: a mismatch in a position that is almost
+always the same costs more than a mismatch in a position that varies anyway.
+
+### Arriving one at a time
+
+Textbook facility location is offline — all customers are known, then you solve. Here demand arrives one frame at
+a time and there is no going back. That is **online** facility location, and the standard treatment is: when a
+customer arrives far from every open facility, open a new one with probability proportional to distance over
+opening cost.
+
+The design uses the deterministic form of the same idea. Rather than opening with probability `distance / price`,
+an entry **accumulates** the distance and opens when the accumulated total reaches one horizon's rent. That is
+where the promotion rule comes from: **evidence is accumulated service cost** — demand that recurred in a place no
+warehouse served well — and what it has to cover is what holding a warehouse there would cost over a horizon.
+
+### Merge and split need no machinery of their own
+
+The standard local search for facility location has three moves, and each one is already something the design
+does for other reasons:
+
+- **Close.** Shut a facility and reassign its demand. This is death: an entry whose service saving has fallen
+  below its rent is released, and the frames it used to serve match elsewhere or open something new. Rent is
+  precisely how this move is made affordable — the exact version would re-solve the whole assignment to ask
+  whether closing helps, and rent asks the same question a little at a time, locally.
+- **Move.** Relocate a facility toward the customers it actually serves. This is [refinement](#refinement): the
+  stored configuration drifts toward the recurring core of the frames that match it.
+- **Split.** Divide a facility serving two populations. This is **move plus open** — refinement pulls the existing
+  entry toward whichever population dominates, the other population is then served badly, its service cost
+  accumulates, and it opens an entry of its own. Merge is likewise **close plus reassignment**.
+
+So neither merge nor split is a move the design has to add. They are what the ordinary operations compose into.
+
+**This holds on one condition:** the match has to be the serve-or-open comparison, not nearest-entry-wins. If a
+frame is always captured by its closest entry, then a badly-served frame is still *served*, its demand is
+absorbed silently, and nothing ever accumulates to open the second entry — the split can never happen. The
+comparison has to be able to answer "none of these, open a new one," and it has to answer it before an entry with
+a pattern fires, since [firing delegates and accumulates nothing](#what-a-neuron-does-with-a-frame).
+
+## Rent: what an entry costs
+
+There is **one cost**, and it is a rate. An entry costs something every frame it exists, and that per-frame charge
+is its **rent**. What was called an opening price is nothing separate: it is simply rent over one horizon.
+
+### Why it is the same unit as service cost
+
+Describing one frame, once a neuron holds entries, means saying two things: **which entry served this frame**, and
+**what that entry got wrong about it**. Both are parts of one description of one frame, so both are counted the
+same way — in things you have to name.
+
+The second of those is the service cost. The first is what rent pays for, and it is genuinely per-frame: the
+neuron identifies a serving entry on every frame, forever, and that identification gets harder the more entries
+it holds. Nothing about it is amortized from a one-time event.
+
+Only the write-down is one-time — recording the configuration itself happened once — and that is the single place
+the horizon enters, as the rate at which the write-down is paid off.
+
+So the neuron's bill for a frame is: rent for every entry standing, plus the mismatch on the entry that served it.
+Three charges, one description, one unit. They add.
+
+### What rent is made of
 
 ```
-price = name_bits(|configuration|, alphabet) + log2(children(P) + 1)
+rent = name_bits(|configuration|, alphabet) / horizon        the write-down, spread out
+     + log2(entries(P) + 1) - log2(entries(P))               this entry's share of making identification harder
 
 name_bits(k, n) = log2( C(n, k) )  =  Σ_{i=0}^{k-1} log2( (n-i) / (k-i) )
 
-alphabet    = max(neighbors ever witnessed, structural neighborhood cardinality)
-children(P) = this neuron's current child count
+alphabet   = max(neighbors ever witnessed, structural neighborhood cardinality)
+entries(P) = how many entries this neuron already holds
 ```
 
 The configuration is named as what it physically is — an unordered subset of the alphabet — rather than `k`
 independent pointers, which would waste `log2(k!)` bits on order and overcharge dense configurations.
 
 The alphabet is floored by the **structural** neighborhood cardinality. At cold start the witnessed set is tiny
-and the first recurring configuration equals it exactly, which would name it for ~0 bits and mint for free;
-flooring prices it against the positions the decoder already knows exist.
+and the first recurring configuration equals it exactly, which would name it for nearly nothing and open for free;
+flooring charges it against the positions the decoder already knows exist.
 
-A crowded child table raises the price, so an experienced neuron demands more recurrences before adding structure.
+The crowding term is written as a **marginal** cost — what this entry adds to the difficulty of identifying a
+server — because identification is paid once per frame in total, not once per entry. A crowded neuron therefore
+charges more for the next entry than a sparse one does.
+
+### Open and close are one comparison
+
+Because everything is a rate, the two structural decisions are the same test with opposite signs:
+
+- **Open** an entry when the service cost it would remove per frame exceeds the rent it would add per frame.
+- **Close** an entry when the service cost it removes per frame has fallen below the rent it costs per frame.
+
+Nothing else is needed. Promotion's "evidence covers price" is this same comparison written over a horizon rather
+than per frame — divide both sides by the horizon and it is rate against rate. [forgetting.md](forgetting.md)
+specifies how the close side is measured online.
 
 ## Birth
 
-A promoted configuration becomes a pattern neuron **one level above the neuron's own level**.
+A promoted entry gains a pattern neuron **one level above the neuron's own level**.
 
 - The pattern **inherits its parent's channel**. That channel then infers its neighbor channels at the higher
   level.
-- Its trigger is the promoted configuration.
+- Its trigger is the entry's configuration, and the entry keeps accumulating on it — what was evidence before
+  birth is [refinement](#refinement) after.
 - **It is born with no connections.** Its connections belong to its own level, which has not been observed at
   the moment of birth. As the level above populates, the newborn learns its connections there by ordinary
   co-occurrence counting.
@@ -210,15 +370,14 @@ Connections carry no refinement — they are plain accumulated counts.
 flowchart TD
     A[Frame: every dimension fires one bucket] --> B[For each active neuron at this level]
     B --> C[Observe the whole neighborhood configuration]
-    C --> D{Does the configuration match a child pattern?}
-    D -->|yes| E[Fire that ONE child at most one per neuron]
-    D -->|no| F{Configuration == default from pairwise connections?}
-    F -->|yes| G[Explained for free nothing to do]
-    F -->|no| H[Deposit the configuration into the womb]
+    C --> D{Best-matching routing table entry: does it have a pattern?}
+    D -->|yes| E[Fire that ONE child: inference is delegated to it]
+    D -->|no| F[Connections infer the neighborhood, and update]
+    F --> H[Evidence accumulates on the entry,<br/>sized by how badly they did]
     H --> I{Evidence covers price?}
     I -->|yes| J[Promote: pattern one level up, inherits channel,<br/>born with no connections]
     E --> K[Contraction: thalamus runs the inhibition passes]
-    G --> K
+    F --> K
     K --> L[Each group contributes one unit to the level above<br/>adjacency derived from the grouping]
     L --> M[Process the next level up]
 ```
@@ -258,19 +417,15 @@ The global quantity is measured directly instead of summed: **apex neurons per l
 dictionary size that bought them.** That pair is the standing metric for whether the design is working, and the
 local ledgers are only a cheap parallel proxy for it.
 
-### Two regulators
+### Everything is local
 
-Storage is paid once and savings recur, so judging a pattern needs a period over which it is required to have
-earned out. That period is the **horizon**, and it is specified in [forgetting.md](forgetting.md) along with the
-rent that charges against it.
+Both decisions a neuron makes — open an entry, close an entry — are settled entirely from what that neuron holds.
+[Rent](#rent-what-an-entry-costs) scales with the neuron's own entry count, never with the size of the brain, and
+service cost is measured against its own neighborhood. Nothing consults a global total.
 
-The two regulators act at different scales and neither substitutes for the other:
-
-- **Price is local.** A pattern is named among the alternatives its own neuron offers, so its price scales with
-  that neuron's child table, not with the size of the brain. A naive neuron mints cheaply — that is its
-  exploration budget, not a leak.
-- **Rent is global.** Total rent grows with every structure held, while total savings is bounded by how much
-  structure the world actually contains. This is the only place the size of the whole system enters.
+A naive neuron therefore opens cheaply, and that is its exploration budget rather than a leak: an entry that stops
+earning its rent is closed by the same local comparison that opened it. What bounds the system is not a global
+account but the fact that rent rises as a neuron fills and closes happen wherever demand moves away.
 
 ## Implementation plan
 
@@ -278,10 +433,10 @@ Each phase lands independently and is measured before the next. The headline met
 **survivors per level per frame, paired with the dictionary size that bought them.** Alongside it: MNIST accuracy
 (train and held-out), neuron counts per level, patterns per neuron, and wall-clock per frame.
 
-**Phase 1 — the configuration loop at level 0.** Whole-neighborhood context; the default configuration from
-pairwise connections; failure as "configuration ≠ default"; the per-neuron womb over configurations with partial
-matching; promotion when evidence covers price; recognition as a configuration match with at most one child per
-neuron. Capped at one level so the recursion is not a variable yet.
+**Phase 1 — the configuration loop at level 0.** The whole-neighborhood configuration; inference from the
+pairwise connection distributions; deposits sized by how badly those did; the per-neuron womb over configurations
+with partial matching; promotion when evidence covers price; recognition as a configuration match with at most
+one child per neuron. Capped at one level so the recursion is not a variable yet.
 
 **Phase 2 — contraction.** The inhibition passes, groups, derived adjacency, and the level-above construction.
 Measured by the per-level reduction factor and the depth at which it terminates; the prediction is
@@ -305,8 +460,12 @@ Forgetting lands on its own track, specified and phased in [forgetting.md](forge
 
 ## Open questions
 
-- **The womb's merge rule.** Facility location with bits as the distance is settled; what actually merges versus
-  stays separate is not. It decides whether the womb stays bounded.
+- **The match rule.** That it is [facility location](#the-routing-table-is-a-facility-location-problem) with bits
+  as the distance is settled; what exactly the distance is, and therefore what lands on the same entry versus
+  opens a new one, is not. It decides whether the routing table stays bounded.
+- **Ranking born against unborn.** One match runs over the whole table, so an unborn entry can outscore a born
+  one — the neuron would decline to fire a child it has in order to accumulate on an embryo instead. Whether that
+  is correct is undecided.
 - **Configuration space beyond the small case.** Eight binary neighbors is 256 configurations — finite and
   countable. Radius 2 is 2²⁴, and more buckets multiply it further. Exact-configuration counting is bounded
   precisely in the regime where it is least needed. What replaces it when the neighborhood is larger?
