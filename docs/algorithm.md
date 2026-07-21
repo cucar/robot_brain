@@ -280,32 +280,55 @@ A child carries two running quantities, answering different questions:
   error are independent, and that independence is what lets a useful child shed its ill-fitting demand rather than
   die of it.
 
-**The error accumulator decays over the horizon**, exactly as the balance drains over it. This is not a detail. A
-lifetime total cannot tell noise from structure: an entry averaging a twentieth of a neuron wrong still reaches
+**The error accumulator is a sliding window one horizon wide**, not a lifetime total. This is not a detail. A
+lifetime sum cannot tell noise from structure: an entry averaging a twentieth of a neuron wrong still reaches
 `|O|` eventually, so given enough frames *every* entry spawns, however well it fits. Only the rate distinguishes
 them, and a lifetime sum discards the rate.
 
-Decayed, the accumulator measures error **per horizon** rather than error ever. At a steady error rate `r` it
-settles at `r × horizon`, so it reaches `|O|` exactly when
+Windowed, the accumulator holds the errors of the last horizon, which at a steady error rate `r` is `r × horizon`.
+So it reaches `|O|` exactly when
 
 ```
 r × horizon ≥ |O|     and since rent = |O| / horizon,     r ≥ rent
 ```
 
-so **the opening test is that the entry's error rate exceeds the rent of the child it would open** — the honest
+and **the opening test is that the entry's error rate exceeds the rent of the child it would open** — the honest
 form of the comparison a single frame could never make. Errors below rent never open anything, no matter how long
-the entry runs; errors above it open children at a rate proportional to the excess.
+the entry runs; errors above it open children at a rate proportional to the excess. Because the window holds the
+actual errors rather than a decayed estimate of them, that threshold is exact.
 
 The [normal](#the-normal) carries only the second tally. It has no balance because it has nothing to prove and
 nothing to lose — it is never promoted and never deleted — but it accumulates error like anything else, and that
 is what lets it open the neuron's first child.
 
+### Holding the window
+
+The window is a queue of `(frame, error)` records spanning one horizon, holding the errors themselves rather than
+an estimate of them. Four things keep it small:
+
+- **Only nonzero errors are recorded.** A clean serve adds nothing to the sum, so it needs no record. This is what
+  the size scales with — error events, not activations — and it means a well-fitting entry keeps an empty queue and
+  costs nothing. An entry with a long queue is by definition one about to open a child and shed that error.
+- **Children do not multiply the records.** Exactly one entry serves per activation, so the union of a neuron's
+  queues is that neuron's own error history over the horizon. Opening children redistributes records among
+  entries; it never adds any.
+- **A window is aged only when its entry serves.** The opening test reads the serving entry's total and nothing
+  else, so a stale total elsewhere is never consulted. Each record is evicted exactly once, which is amortized
+  constant work per activation rather than work proportional to the number of children.
+- **The total is carried, not recomputed** — added on push, subtracted on eviction — so reading it is free and only
+  eviction costs anything.
+
+**The balance cannot be handled the same way**, because an entry whose balance has run out would otherwise go on
+winning matches. Rent drains at a constant rate, so the frame an entry reaches zero is computable the moment its
+balance changes; each neuron keeps those death frames in a heap and an activation touches only the entries that
+actually died, not all of them.
+
 ### The frame, step by step
 
-When a neuron becomes active it first **advances the clock lazily** by the frames elapsed since it last fired:
-every child drains that much rent from its balance, and any child reaching zero is culled; every entry's error
-accumulator decays over the same span. Both are touched only when the neuron fires, so a child unused across a
-long gap may already be dead when the neuron wakes, and an entry's stale error has faded by the time it matters.
+When a neuron becomes active it first **advances the clock** to the current frame: the death heap gives up every
+child whose balance has drained to zero since it last fired, and those are culled. A child unused across a long
+gap may already be dead when the neuron wakes. The error windows are not touched here — each is aged when its own
+entry serves, since nothing else reads it.
 
 Then, for observed neighborhood `O`:
 
@@ -560,7 +583,7 @@ Connections carry no refinement — they are plain accumulated counts.
 
 ```mermaid
 flowchart TD
-    A["Frame: every dimension fires one bucket"] --> B["For each active neuron: advance the clock —<br/>drain rent, decay error totals, cull any child at zero"]
+    A["Frame: every dimension fires one bucket"] --> B["For each active neuron: advance the clock —<br/>cull children the death heap says have run out"]
     B --> C["Observe neighborhood O; take closest entry e*<br/>the normal and every child compete alike"]
     C --> D["Accumulate: e* error total += distance from O to e*"]
     D --> E{"e* error total ≥ opening cost?"}
@@ -605,6 +628,13 @@ Forgetting lands on its own track, specified and phased in [forgetting.md](forge
 - **Cold-start churn.** Early on nearly every neighborhood is novel, so patterns open in bursts. The balance
   drains the ones that do not recur, but the transient can be large. Measure churn in the first thousand frames,
   not just settled counts.
+- **The densely-firing entry with persistent small error.** [Holding the window](#holding-the-window) is cheap
+  because clean serves record nothing, but an entry that fires on most frames and is slightly wrong on each records
+  on most of them. Activation is not sparse where it matters — with one bucket per dimension firing every frame,
+  the bucket-0 neuron of a mostly-off pixel is active almost always. The saving grace should be that such an entry
+  crosses its opening line quickly, sheds the error to a new child, and returns to recording nothing, making the
+  long queue a transient. That is an expectation, not a guarantee. Instrument the longest queue over the first
+  thousand frames rather than assuming it.
 - **Dictionary redundancy.** Contraction shrinks the width of each level; it does not shrink the dictionary. The
   same shape is learned separately at every position — this is the [reuse](#open-questions) question, and it is
   the largest source of waste the design does not yet address.
@@ -621,14 +651,12 @@ Ordered by when they should be settled: the routing table first, then level proc
   whether propagation should break ties toward a born child is undecided.
 - **The opening cost constant.** Opening is priced at `|O|`, the neighborhood size. Whether the child's own name
   belongs in it — `1 + |O|` — shifts every break-even by one neuron. Small, but pick one.
-- **The decay form for the error accumulator.** That it must be windowed to the horizon is settled. Whether it
-  decays geometrically with time constant `horizon` — which makes the threshold exactly `error rate ≥ rent` — or
-  drains at a fixed rate the way the balance does, which demands a sustained surplus over rent instead, is not.
-  The two differ in how sharply a marginal entry is judged.
 
-*Settled here:* the match tolerance is the serve-or-open comparison itself — a child absorbs variation until its
-accumulated error reaches `|O|`, so partial matching needs no separate threshold. Birth-frame attribution is
-settled too: on an opening frame the new child serves and banks, while `e*` only resets its accumulator.
+*Settled here:* the match tolerance is the serve-or-open comparison itself — an entry absorbs variation until its
+accumulated error reaches `|O|`, so partial matching needs no separate threshold. Birth-frame attribution: on an
+opening frame the new child serves and banks, while `e*` only resets its accumulator. And the error tally is an
+exact sliding window one horizon wide, not a decayed estimate, which makes the opening threshold exactly
+`error rate ≥ rent`.
 
 ### Level processing
 
