@@ -40,15 +40,13 @@ set and nothing else. This document says **neighborhood** throughout.
 exactly one configuration. At radius 1 with binary channels there are 2⁸ = 256 possible configurations — a
 finite, small space.
 
-The substrate's "exactly one active per dimension" has to survive going up, which requires **at most one active
-unit per neuron per frame**. If a neuron could activate several children, each channel would carry several active
-units, those would all become neighbors one level up, and the count would square at every level. [Recognition](#recognition)
-is what makes this hold.
+At most one child can be activated, per neuron per frame. 
+If a neuron could activate several children, each channel would carry several active
+units, those would all become neighbors one level up, and the count would square at every level.
 
 ## The base model: what a neuron expects
 
-Before any pattern exists, a neuron already has a cheap expectation about each neighbor, and it gets it by
-counting.
+Before any pattern exists, a neuron already has a cheap expectation about each neighbor, and it gets it by counting.
 
 Every frame the neuron is active, it notes which bucket each neighbor dimension is in and adds one to a counter.
 Those counters are its **connections**. After enough frames they answer, for each neighbor dimension separately:
@@ -62,7 +60,7 @@ distribution and never collapses it to a single expected value:
 p(D = b | P) = strength(P → D_b) / Σ_b' strength(P → D_b')
 ```
 
-**There is no default configuration.** Combining the per-neighbor favorites into one expected neighborhood would
+Combining the per-neighbor favorites into one expected neighborhood would
 build a joint out of parts that cannot express a joint, and the result need not be anything the neuron has ever
 seen — if the left neighbor is usually on and the right neighbor is usually on but never both at once, that
 combination is a neighborhood that never occurs. Connections are used as the distribution they are.
@@ -72,32 +70,51 @@ is bounded at `neighbor dimensions × buckets` and never grows with experience. 
 separately: it records that the left neighbor is usually on and that the right neighbor is usually on, but never
 that they are on *together*. It cannot represent a joint at all.
 
-That gap is what patterns exist to fill, and it is why connections never compete with the dictionary — a pattern
-is not a better version of the same thing, it is the only thing that can hold a configuration:
+That gap is what patterns exist to fill. 
+A pattern is not a better version of the same thing, it is the only thing that can hold a configuration:
 
 ```
-marginal  →  pairwise (connections, bounded)  →  configurations (patterns, unbounded)
+creation  → connections → child patterns
 ```
 
-Connections are not free — they are part of the neuron's line in the dictionary and are counted in its
-[cost](#the-cost). What separates them from patterns is that their count is capped at
-`neighbor dimensions × buckets` and stops growing, while a neuron's children have no such ceiling. A neuron's rent
-therefore rises with the patterns it opens, never with how long it has been counting.
+Connections are not free — they are part of the neuron's line in the dictionary and are counted in its [cost](#the-cost). 
+What separates them from patterns is that their count is capped at `neighbor dimensions × buckets` and stops growing, 
+while a neuron's children have no such ceiling. A neuron's rent cost rises with the patterns it creates.
 
-**A neuron updates its connections only on frames where no child fired.** The two are exclusive: a neuron either
-infers from its own connections or delegates to a child, so every frame is explained by exactly one of them and
-neither learns from the other's frames. Connections stay the model of the typical neighborhood; patterns hold
-what pairwise cannot reach.
+**A neuron updates its connections only on frames where no child fired.** 
+The two are exclusive: a neuron either infers from its own connections or delegates to a child.
+So, every frame is explained by exactly one of them and neither learns from the other's frames. 
+Connections stay the model of the typical neighborhood; patterns hold what they cannot reach.
 
-**Cold start is silence.** A neuron with no neighbors seen yet has no connections and infers nothing. That is the
-base case, not an error.
+**Cold start is silence.** A neuron with no neighbors seen yet has no connections and infers nothing. 
+That is the initial case, not an error.
+
+### The normal
+
+The neighborhood a neuron usually sees is its **normal**, and it is held as a routing table entry like any other:
+a stored configuration, set to the first context the neuron observes and [refined](#refinement) from its own
+context counts thereafter. The neuron measures distance from it exactly as it measures distance from a child.
+
+The normal is **not a child**. It has no pattern neuron, it never propagates, it is never promoted, and it does
+not die — a neuron always has a normal. What it does have is an error accumulator, like everything else.
+
+**On the spatial axis the normal and the connections are one statistic.** Because context and inference are the
+same set here, counting how often each neighbor was present when the normal served *is* counting connection
+strengths, and the normal's stored configuration is those counts resolved to a single neighborhood. The two names
+describe one object from two sides — the connections as a per-neighbor distribution, the normal as the
+configuration to measure against. Combining per-neighbor favorites into a configuration would be meaningless as an
+*equality test*, since the result need not be anything the neuron has ever seen; as a *position to measure
+distance from* it is exactly right, because that distance is the number of neurons the neuron got wrong.
+
+On the event axis they come apart, which is the whole difference between the axes — see
+[the open port](#temporal-the-open-port).
 
 ## What a neuron does with a frame
 
-An active neuron routes its neighborhood `O` to the closest of its **children**, or to its connections if it has
-none. That server does the inference — a **pattern** fires and delegates it to the child one level up; an
-**embryo**, or the connections, infers from the neighborhood directly. Either way the server banks what it spared,
-accumulates what it got wrong, and every child pays its rent. The full accounting is
+An active neuron routes its neighborhood `O` to the closest entry it has — one of its **children**, or its
+[normal](#the-normal). That server does the inference: a **pattern** fires and delegates it to the child one level
+up; the **normal**, or an **embryo**, infers for itself and propagates nothing. Either way the server banks what it
+spared, accumulates what it got wrong, and every child pays its rent. The full accounting is
 [facility location](#the-routing-table-is-a-facility-location-problem); this section is what it means. The
 connections update only when no pattern fired — the rule from [the base model](#the-base-model-what-a-neuron-expects).
 
@@ -112,23 +129,25 @@ cannot reach — the joint — and that residual is exactly what a child is for.
 
 ## Recognition
 
-A neuron keeps a set of **children**, each a stored configuration with the two running tallies —
-[balance and accumulated error](#two-tallies-per-child). Some have a pattern neuron; the rest are embryos. **An
-embryo is a child whose pattern has not been created yet** — that is the only difference, and matching treats them
-alike.
+A neuron's routing table holds its [normal](#the-normal) and its **children** — each a stored configuration.
+Children carry the two running tallies, [balance and accumulated error](#two-tallies); the normal
+carries only the error. Some children have a pattern neuron; the rest are embryos. **An embryo is a child whose
+pattern has not been created yet** — that is the only difference, and matching treats them alike.
 
-**The neuron matches its neighborhood against every child and the closest serves**, one algorithm over all of them,
-born or embryo. Matching is partial: the observation need not equal a stored configuration exactly, and a child
-keeps serving variations of a shape until its accumulated error would pay for a replacement. That is the whole
-tolerance — there is no separate threshold.
+**The neuron matches its neighborhood against every entry and the closest serves**, one algorithm over all of
+them, normal or child, born or embryo. Matching is partial: the observation need not equal a stored configuration
+exactly, and an entry keeps serving variations of a shape until its accumulated error would pay for a replacement.
+That is the whole tolerance — there is no separate threshold.
 
-What serving means depends on whether the winner has a pattern:
+What serving means depends on the winner:
 
 - **Pattern.** It fires — **delegation**: the neuron hands the job of describing this neighborhood to the child one
   level up, which propagates. **At most one pattern fires**, because the job goes to a single delegate, which is
   what preserves one-active-per-channel all the way up.
-- **Embryo.** Nothing propagates yet; the connections do the inference. The child still banks and accumulates,
-  climbing toward the birth line.
+- **Normal.** The neuron recognizes its usual situation and infers for itself, from its connections. Nothing is
+  delegated and nothing propagates, so **the neuron is the apex** — see [contraction](#contraction-building-the-level-above).
+- **Embryo.** The same as the normal for this frame — the neuron infers for itself and nothing propagates — but the
+  child banks toward its birth line as well.
 
 Either way the winner's stored configuration strengthens toward the core of what it actually serves — this is
 [refinement](#refinement).
@@ -213,35 +232,39 @@ are the same number.
 
 ### Serve or open: one comparison
 
-A neuron's **children** are its routing table — each a stored configuration, each an embryo or a pattern. When
-the neuron is active it faces one question about its neighborhood `O`: serve it from a child it has, or open a new
-one?
+A neuron's routing table holds its [normal](#the-normal) and its **children** — each a stored configuration, each
+child an embryo or a pattern. When the neuron is active it faces one question about its neighborhood `O`: serve it
+from an entry it has, or open a new child?
 
-**The closest child always serves.** Serving from `c*` costs `d(O, c*)` this frame — the neurons it gets wrong.
+**The closest entry always serves.** Serving from `e*` costs `d(O, e*)` this frame — the neurons it gets wrong.
 Opening a new child at `O` costs `|O|`, the size of the neighborhood: a newborn starts just below the birth line
 and takes one full horizon of rent to die unused, and one horizon of rent is `|O|`.
 
 The two do not compare frame-to-frame — `d` is paid now, `|O|` is a horizon-long commitment — so bridge them by
-**accumulation**. If `c*` keeps serving this demand it keeps paying `d`, so `c*` sums the errors it makes:
+**accumulation**. If `e*` keeps serving this demand it keeps paying `d`, so `e*` sums the errors it makes:
 
-> **Open a new child at `O` when `c*`'s accumulated error reaches `|O|`.**
+> **Open a new child at `O` when `e*`'s accumulated error reaches `|O|`.**
 
-By then, serving from `c*` has cost as much as building would have, so the new child has provably paid for itself.
-Below that line, tolerating `c*`'s imperfection is the cheaper option — **and that toleration is the partial
-match.** No separate matching threshold exists: a child absorbs variation up to exactly the point where a
+By then, serving from `e*` has cost as much as building would have, so the new child has provably paid for itself.
+Below that line, tolerating `e*`'s imperfection is the cheaper option — **and that toleration is the partial
+match.** No separate matching threshold exists: an entry absorbs variation up to exactly the point where a
 replacement would be cheaper, and the tolerance `|O|` is a number the neuron already holds. Novelty is the same
-rule at speed — an `O` far from every child makes `d ≈ |O|` in a single frame and opens a child at once. This is
+rule at speed — an `O` far from everything makes `d ≈ |O|` in a single frame and opens a child at once. This is
 the deterministic form of online facility location's randomized rule (open with probability `distance / cost`):
 accumulate instead of gamble, and open once the sum arrives.
 
-### Connections are the child of last resort
+### The normal is always in the comparison
 
-Before a neuron has any child, `O` is compared against its own [connections](#the-base-model-what-a-neuron-expects)
-— the neighborhood they predict — and the error is how far reality fell from it. That error accumulates exactly as
-a child's would, and reaching `|O|` buys the first child. The connections never retire: any frame no child serves
-is served, and scored, by them.
+The [normal](#the-normal) is one of the entries, so it competes for every frame on the same footing as the
+children. Before a neuron has any child it is the only candidate, and `O` is scored against it — the error being
+how far reality fell from the neuron's usual neighborhood. That error accumulates exactly as a child's would, and
+reaching `|O|` buys the first child. **The first child is opened by the same rule that later splits a crowded
+one**; there is no separate bootstrap.
 
-### Two tallies per child
+The normal never retires and never wins by default. Any frame where no child is closer is served, and scored, by
+it — and a neuron whose world genuinely is stable simply serves from its normal forever and opens nothing.
+
+### Two tallies
 
 A child carries two running quantities, answering different questions:
 
@@ -250,10 +273,14 @@ A child carries two running quantities, answering different questions:
   **pattern** that propagates a unit upward; below the line it is an **embryo**, recognized and banking toward
   birth but not yet propagating; at zero it is deleted. An embryo banks the savings it *would* deliver, which is
   how it climbs.
-- **Accumulated error** decides whether the child needs a *neighbor* — it sums the neurons the child gets wrong,
+- **Accumulated error** decides whether the entry needs a *neighbor* — it sums the neurons the entry gets wrong,
   and reaching `|O|` opens one. A child can be solvent overall yet sloppy on part of its territory; balance and
   error are independent, and that independence is what lets a useful child shed its ill-fitting demand rather than
   die of it.
+
+The [normal](#the-normal) carries only the second. It has no balance because it has nothing to prove and nothing
+to lose — it is never promoted and never deleted — but it accumulates error like anything else, and that is what
+lets it open the neuron's first child.
 
 ### The frame, step by step
 
@@ -263,20 +290,21 @@ unused across a long gap may already be dead when the neuron wakes.
 
 Then, for observed neighborhood `O`:
 
-1. **Route.** Take the closest child `c*` by `d(O, c*)`; the connections stand in when there is none.
-2. **Accumulate.** `c*` adds `d(O, c*)` to its error total.
-3. **Open?** If that total reaches `|O|`, create a new child at `O`; it becomes this frame's server, and `c*`'s
+1. **Route.** Take the closest entry `e*` by `d(O, e*)` — the normal and every child compete alike.
+2. **Accumulate.** `e*` adds `d(O, e*)` to its error total.
+3. **Open?** If that total reaches `|O|`, create a new child at `O`; it becomes this frame's server, and `e*`'s
    total drops by `|O|`.
-4. **Serve.** The server serves. A pattern fires and delegates inference to its upward neuron; an embryo, or the
-   connections, infers from the neighborhood and the connections update. At most one pattern fires.
-5. **Bank.** The server's balance rises by `members − 1 − errors`; crossing the birth line promotes an embryo to a
-   pattern.
+4. **Serve.** The server serves. A pattern fires and delegates inference to its upward neuron; the normal or an
+   embryo infers from the neighborhood itself, propagating nothing, and the connections update. At most one
+   pattern fires.
+5. **Bank.** A serving child's balance rises by `members − 1 − errors`, and crossing the birth line promotes an
+   embryo to a pattern. The normal has no balance and banks nothing.
 
 On an opening frame the new child is the server, so it banks its first serve — `|O| − 1`, landing just below the
-birth line — while `c*`, which only triggered the split, banks nothing. This is facility location's split move
-with nothing added to produce it: a broad child accumulates its own error and spawns a sub-child for the part it
-serves worst. Where that sub-child lands need not be representative; [refinement](#refinement) moves it toward the
-demand it actually serves.
+birth line — while `e*`, which only triggered the split, banks nothing. This is facility location's split move
+with nothing added to produce it: an entry accumulates its own error and spawns a child for the part it serves
+worst. Where that child lands need not be representative; [refinement](#refinement) moves it toward the demand it
+actually serves.
 
 ### Merge and split need no machinery of their own
 
@@ -294,7 +322,7 @@ does for other reasons:
   a sub-child opens. Merge is likewise **close plus reassignment**.
 
 So neither merge nor split is a move the design has to add; they are what the ordinary operations compose into.
-Nearest-wins is safe here precisely because the closest child, even while serving, still tallies what it got
+Nearest-wins is safe here precisely because the closest entry, even while serving, still tallies what it got
 wrong — a badly-served frame is never absorbed silently, and the accumulated error eventually forces the split.
 
 ## The cost
@@ -452,9 +480,10 @@ Each neuron carries an **activation strength**, and it is not a separate quantit
 [balance](#the-balance-is-the-whole-lifecycle) of the child that fired. A child deep into solvency is one whose
 demand keeps returning, so ranking by balance ranks by how established a pattern is.
 
-A neuron that fired no pattern — one served by its connections — has no such balance, and does not take part.
-Only neurons that delegated to a child are candidates here, which is consistent with contraction being what
-turns fired children into the level above.
+A neuron that fired no pattern — one that served from its [normal](#the-normal) or an embryo — has no such balance
+and does not take part. It delegated nothing and propagated nothing, so it is already the top of its own chain:
+**executing the normal is what makes a neuron an apex.** Only neurons that delegated to a child are candidates
+here, which is consistent with contraction being what turns fired children into the level above.
 
 **The passes**, executed by the thalamus since these are cross-neuron comparisons:
 
@@ -513,16 +542,16 @@ Connections carry no refinement — they are plain accumulated counts.
 ```mermaid
 flowchart TD
     A[Frame: every dimension fires one bucket] --> B[For each active neuron:<br/>advance rent on all children, cull any at zero]
-    B --> C[Observe neighborhood O; take closest child c*<br/>connections stand in if none]
-    C --> D[Accumulate: c* error total += d O, c*]
-    D --> E{c* error total ≥ |O|?}
+    B --> C[Observe neighborhood O; take closest entry e*<br/>the normal and every child compete alike]
+    C --> D[Accumulate: e* error total += d O, e*]
+    D --> E{e* error total ≥ |O|?}
     E -->|yes| F[Open a new child at O; it becomes the server]
-    E -->|no| G[c* is the server]
+    E -->|no| G[e* is the server]
     F --> H{Does the server have a pattern?}
     G --> H
     H -->|yes| I[Fire it — delegate inference, propagate a unit up]
-    H -->|no| J[Embryo or connections infer; connections update]
-    I --> K[Bank: server balance += members − 1 − errors;<br/>crossing the birth line promotes embryo to pattern]
+    H -->|no| J[Normal or embryo infers for itself;<br/>nothing propagates — this neuron is apex]
+    I --> K[Bank: serving child balance += members − 1 − errors;<br/>crossing the birth line promotes embryo to pattern]
     J --> K
     K --> L[Contraction: thalamus runs the inhibition passes]
     L --> M[Each group contributes one unit to the level above]
@@ -567,16 +596,16 @@ Ordered by when they should be settled: the routing table first, then level proc
 
 ### Routing table
 
-- **Ranking born against unborn.** The closest child serves, but a pattern propagates upward and an embryo does
-  not. When the closest child is an embryo while a slightly-worse-matching pattern exists, which serves — the
-  strictly closest, or the closest pattern? The document assumes strictly closest; whether propagation should
-  break ties toward a born child is undecided.
+- **Ranking born against unborn.** The closest entry serves, but a pattern propagates upward while the normal and
+  an embryo do not. When the closest entry is an embryo or the normal while a slightly-worse-matching pattern
+  exists, which serves — the strictly closest, or the closest pattern? The document assumes strictly closest;
+  whether propagation should break ties toward a born child is undecided.
 - **The opening cost constant.** Opening is priced at `|O|`, the neighborhood size. Whether the child's own name
   belongs in it — `1 + |O|` — shifts every break-even by one neuron. Small, but pick one.
 
 *Settled here:* the match tolerance is the serve-or-open comparison itself — a child absorbs variation until its
 accumulated error reaches `|O|`, so partial matching needs no separate threshold. Birth-frame attribution is
-settled too: on an opening frame the new child serves and banks, while `c*` only resets its accumulator.
+settled too: on an opening frame the new child serves and banks, while `e*` only resets its accumulator.
 
 ### Level processing
 
@@ -616,19 +645,21 @@ The event axis (`d > 0`) is not specified here. Two things are known about where
   connections are empty — the next frame has not been observed yet. It learns them once that frame arrives, the
   same rule as the spatial side: a newborn is born with no connections and learns them at its own level.
 
-**What transfers, and what does not.** The economics is axis-agnostic: serve from the closest child, accumulate
-error, open at cost, and the balance with rent and birth/death all need only a *distance* and an *opening cost*,
-not any particular meaning for them. That whole layer carries over unchanged.
+**The mechanism is the same on both axes.** A neuron holds a [normal](#the-normal) and children, routes each
+frame to the closest, accumulates the error of whichever served, and opens a child when that error covers the
+opening cost. Nothing in that needs the context and the inference to be the same set — it needs only a distance
+and an opening cost.
 
-What is spatial-specific is that a child does one job — its configuration is both what it matches against and what
-it infers, so match distance and service error are the same number. A temporal child does two: it recognizes a
-**context** at `d > 0` and predicts an **outcome** at the next frame, which are different sets. So the single
-distance splits in two — a routing distance on the context, a service error on the outcome — and a child can match
-its context well yet predict badly.
+What differs is **when the distance can be read**. On the spatial axis context and inference are one set, so the
+error is known in the same frame. On the event axis the normal is matched against a context at `d > 0` while what
+it infers is the next frame, so the error is only known once that frame arrives and is charged a frame late. That
+is a timing difference, not a structural one.
 
-That gap is the real problem temporal has and spatial does not: **one context can lead to several outcomes.**
-Opening "a new child at the demand point" is unambiguous spatially because the neighborhood fully specifies the
-child; temporally the demand point is a `(context, outcome)` pair, and two frames sharing a context but differing
-in outcome cannot both be served by a context-keyed child. Which one fires when the context recurs — resolved by
-balance, by recency, or by the child carrying a distribution over outcomes — is the decision the event axis has to
-make and the spatial axis never faces.
+The one thing the event axis faces that the spatial axis does not is that **one context can lead to several
+outcomes.** Spatially the demand point fully specifies the child, because the neighborhood is both the match and
+the prediction. Temporally the demand point is a `(context, outcome)` pair, and two frames sharing a context but
+differing in outcome cannot both be served by a context-keyed child. The economics degrades gracefully — the
+normal predicts the dominant outcome, eats the error on the rest, and that error opens children until whatever
+genuinely distinguishes the contexts is found. What remains after that is irreducible uncertainty, which no model
+removes. Whether the event axis needs more than this — a tiebreak among same-context children, or a child carrying
+several outcomes — is the open decision.
