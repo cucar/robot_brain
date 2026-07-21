@@ -98,7 +98,7 @@ context counts thereafter. The neuron measures distance from it exactly as it me
 The normal is **not a child**. It has no pattern neuron, it never propagates, it is never promoted, and it does
 not die — a neuron always has a normal. What it does have is an error accumulator, like everything else.
 
-**On the spatial axis the normal and the connections are one statistic.** Because context and inference are the
+**On the spatial axis the normal and the connections are the same.** Because context and inference are the
 same set here, counting how often each neighbor was present when the normal served *is* counting connection
 strengths, and the normal's stored configuration is those counts resolved to a single neighborhood. The two names
 describe one object from two sides — the connections as a per-neighbor distribution, the normal as the
@@ -106,7 +106,7 @@ configuration to measure against. Combining per-neighbor favorites into a config
 *equality test*, since the result need not be anything the neuron has ever seen; as a *position to measure
 distance from* it is exactly right, because that distance is the number of neurons the neuron got wrong.
 
-On the event axis they come apart, which is the whole difference between the axes — see
+On the temporal axis they come apart, which is the whole difference between the axes — see
 [the open port](#temporal-the-open-port).
 
 ## What a neuron does with a frame
@@ -241,9 +241,11 @@ Opening a new child at `O` costs `|O|`, the size of the neighborhood: a newborn 
 and takes one full horizon of rent to die unused, and one horizon of rent is `|O|`.
 
 The two do not compare frame-to-frame — `d` is paid now, `|O|` is a horizon-long commitment — so bridge them by
-**accumulation**. If `e*` keeps serving this demand it keeps paying `d`, so `e*` sums the errors it makes:
+**accumulation over the same horizon**. If `e*` keeps serving this demand it keeps paying `d`, so `e*` sums the
+errors it makes, and that sum [decays over the horizon](#two-tallies) so it measures a rate rather than a lifetime:
 
-> **Open a new child at `O` when `e*`'s accumulated error reaches `|O|`.**
+> **Open a new child at `O` when `e*`'s accumulated error reaches `|O|`** — equivalently, when `e*`'s error rate
+> exceeds the rent the new child would cost.
 
 By then, serving from `e*` has cost as much as building would have, so the new child has provably paid for itself.
 Below that line, tolerating `e*`'s imperfection is the cheaper option — **and that toleration is the partial
@@ -278,15 +280,32 @@ A child carries two running quantities, answering different questions:
   error are independent, and that independence is what lets a useful child shed its ill-fitting demand rather than
   die of it.
 
-The [normal](#the-normal) carries only the second. It has no balance because it has nothing to prove and nothing
-to lose — it is never promoted and never deleted — but it accumulates error like anything else, and that is what
-lets it open the neuron's first child.
+**The error accumulator decays over the horizon**, exactly as the balance drains over it. This is not a detail. A
+lifetime total cannot tell noise from structure: an entry averaging a twentieth of a neuron wrong still reaches
+`|O|` eventually, so given enough frames *every* entry spawns, however well it fits. Only the rate distinguishes
+them, and a lifetime sum discards the rate.
+
+Decayed, the accumulator measures error **per horizon** rather than error ever. At a steady error rate `r` it
+settles at `r × horizon`, so it reaches `|O|` exactly when
+
+```
+r × horizon ≥ |O|     and since rent = |O| / horizon,     r ≥ rent
+```
+
+so **the opening test is that the entry's error rate exceeds the rent of the child it would open** — the honest
+form of the comparison a single frame could never make. Errors below rent never open anything, no matter how long
+the entry runs; errors above it open children at a rate proportional to the excess.
+
+The [normal](#the-normal) carries only the second tally. It has no balance because it has nothing to prove and
+nothing to lose — it is never promoted and never deleted — but it accumulates error like anything else, and that
+is what lets it open the neuron's first child.
 
 ### The frame, step by step
 
-When a neuron becomes active it first **advances rent lazily**: every child drains `rent × (frames since this
-neuron last fired)`, and any child reaching zero is culled. Rent is touched only when the neuron fires, so a child
-unused across a long gap may already be dead when the neuron wakes.
+When a neuron becomes active it first **advances the clock lazily** by the frames elapsed since it last fired:
+every child drains that much rent from its balance, and any child reaching zero is culled; every entry's error
+accumulator decays over the same span. Both are touched only when the neuron fires, so a child unused across a
+long gap may already be dead when the neuron wakes, and an entry's stale error has faded by the time it matters.
 
 Then, for observed neighborhood `O`:
 
@@ -541,21 +560,21 @@ Connections carry no refinement — they are plain accumulated counts.
 
 ```mermaid
 flowchart TD
-    A[Frame: every dimension fires one bucket] --> B[For each active neuron:<br/>advance rent on all children, cull any at zero]
-    B --> C[Observe neighborhood O; take closest entry e*<br/>the normal and every child compete alike]
-    C --> D[Accumulate: e* error total += d O, e*]
-    D --> E{e* error total ≥ |O|?}
-    E -->|yes| F[Open a new child at O; it becomes the server]
-    E -->|no| G[e* is the server]
-    F --> H{Does the server have a pattern?}
+    A["Frame: every dimension fires one bucket"] --> B["For each active neuron: advance the clock —<br/>drain rent, decay error totals, cull any child at zero"]
+    B --> C["Observe neighborhood O; take closest entry e*<br/>the normal and every child compete alike"]
+    C --> D["Accumulate: e* error total += distance from O to e*"]
+    D --> E{"e* error total ≥ opening cost?"}
+    E -->|yes| F["Open a new child at O; it becomes the server"]
+    E -->|no| G["e* is the server"]
+    F --> H{"Does the server have a pattern?"}
     G --> H
-    H -->|yes| I[Fire it — delegate inference, propagate a unit up]
-    H -->|no| J[Normal or embryo infers for itself;<br/>nothing propagates — this neuron is apex]
-    I --> K[Bank: serving child balance += members − 1 − errors;<br/>crossing the birth line promotes embryo to pattern]
+    H -->|yes| I["Fire it — delegate inference, propagate a unit up"]
+    H -->|no| J["Normal or embryo infers for itself;<br/>nothing propagates — this neuron is apex"]
+    I --> K["Bank: serving child balance += members − 1 − errors;<br/>crossing the birth line promotes embryo to pattern"]
     J --> K
-    K --> L[Contraction: thalamus runs the inhibition passes]
-    L --> M[Each group contributes one unit to the level above]
-    M --> N[Process the next level up]
+    K --> L["Contraction: thalamus runs the inhibition passes"]
+    L --> M["Each group contributes one unit to the level above"]
+    M --> N["Process the next level up"]
 ```
 
 ## Implementation plan
@@ -602,6 +621,10 @@ Ordered by when they should be settled: the routing table first, then level proc
   whether propagation should break ties toward a born child is undecided.
 - **The opening cost constant.** Opening is priced at `|O|`, the neighborhood size. Whether the child's own name
   belongs in it — `1 + |O|` — shifts every break-even by one neuron. Small, but pick one.
+- **The decay form for the error accumulator.** That it must be windowed to the horizon is settled. Whether it
+  decays geometrically with time constant `horizon` — which makes the threshold exactly `error rate ≥ rent` — or
+  drains at a fixed rate the way the balance does, which demands a sustained surplus over rent instead, is not.
+  The two differ in how sharply a marginal entry is judged.
 
 *Settled here:* the match tolerance is the serve-or-open comparison itself — a child absorbs variation until its
 accumulated error reaches `|O|`, so partial matching needs no separate threshold. Birth-frame attribution is
