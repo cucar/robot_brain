@@ -151,9 +151,10 @@ is the tolerance that keeps two variations from opening two entries. One rule, t
 
 The shape of that rule is [facility location](#the-routing-table-is-a-facility-location-problem).
 
-**Promotion.** When an entry's accumulated service cost covers a horizon's worth of its
-rent, a pattern is created for it, one at a time. The entry does not move: it stays
-where it is and gains a child.
+**Promotion.** An entry becomes a pattern when its [balance](#the-balance-is-the-whole-lifecycle) crosses the
+opening line at one horizon of rent. The entry does not move: it stays where it is and gains a child. How that
+balance is banked, and how a badly-served entry opens a *new* one at the demand point, is the
+[facility location](#the-routing-table-is-a-facility-location-problem) machinery below.
 
 ## The routing table is a facility location problem
 
@@ -217,38 +218,55 @@ This is Hamming distance over the neighborhood, and it is not a separate notion 
 literally the corrections that would follow this activation in the file. The service cost and the match distance
 are the same number.
 
-### Serve or open
+### The closest entry serves; errors accumulate
 
-Everything a neuron needs to decide is available the moment it observes `O`:
+**The closest entry always serves.** There is no per-frame decision about whether to open instead, because a
+single frame cannot answer that question. One frame's error is a real cost, incurred once. Rent is an opening cost
+sliced into `horizon` pieces. Comparing them directly compares one real thing against a fraction of a hypothetical
+one, and the real thing wins every time — which would open something on nearly every imperfect frame.
 
-- **Serving** from the closest entry costs `d(O, e*)` this frame — the neurons it gets wrong.
-- **Opening** a fresh entry at exactly `O` serves it with no error at all, but commits to holding it:
-  `(1 + |O|) / horizon` per frame, by [what a pattern costs](#what-rent-is-made-of).
+Comparing like with like means **accumulating**. The neuron carries one running total: the service cost it has
+incurred, meaning every neuron gotten wrong by whatever did the inferring, summed over every frame. When that
+total covers what a new pattern would cost at the current observation, opening has already paid for itself, and
+one is created there.
 
-Both are per-frame quantities, so they compare directly. The neuron serves from `e*` when `d(O, e*)` is below
-what opening would cost per frame, and opens otherwise. **There is no threshold in that sentence** — the tolerance
-is `(1 + |O|) / horizon`, which the neuron already knows.
+An entry wrong by one neuron per frame, against an opening cost of ten, opens after ten such frames rather than on
+the first. An entry that serves perfectly accumulates nothing and never triggers anything, however long it runs.
 
-Two properties fall out. A large configuration is expensive to open, so the neuron tolerates more error before
-opening one; a small one is cheap, so it opens readily. And a long horizon makes opening cheap per frame, so a
-patient system explores more.
+**Nearest-wins is safe under accumulation.** [Merge and split](#merge-and-split-need-no-machinery-of-their-own)
+required that badly-served demand not be absorbed silently, or a split could never happen. Accumulation is what
+satisfies that: the closest entry does serve, but what it got wrong is still counted, and it eventually forces an
+opening.
+
+**The new pattern is created at the current observation** — the demand point that triggered it. That observation
+need not be representative of everything served badly; [refinement](#refinement) is what moves a pattern toward
+the frames it actually serves, so an imperfect placement corrects itself through ordinary use.
 
 ### The frame, step by step
 
 For an active neuron with observed neighborhood `O` and routing table `E`:
 
 1. **Measure.** Compute `d(O, e)` for every entry, and take the closest as `e*`.
-2. **Decide.** If `d(O, e*)` is below `(1 + |O|) / horizon`, serve from `e*`. Otherwise open a new embryo whose
-   configuration is `O`, and serve from that.
-3. **Act.** If the serving entry has a pattern, fire it — inference is delegated and the frame is done. If it does
-   not, the connections infer the neighborhood and update.
-4. **Bank.** The serving entry's balance rises by what it spared: the members it covered, less one for naming it,
+2. **Serve.** `e*` serves. If it has a pattern, fire it — inference is delegated. If it does not, the connections
+   infer the neighborhood and update. With an empty table, the connections serve.
+3. **Bank.** The serving entry's balance rises by what it spared: the members it covered, less one for naming it,
    less the neurons it got wrong.
-5. **Charge.** Every entry in the table drains its own rent, served or not.
+4. **Accumulate.** `e*` — the entry that served — adds the neurons it got wrong this frame to its own error
+   total.
+5. **Open.** If `e*`'s error total covers `1 + |O|`, create a pattern whose configuration is `O`, and subtract
+   that cost from `e*`'s total.
+6. **Charge.** Every entry in the table drains its own rent, served or not.
 
-Step 4 is where the numbers close. An entry covering nine neurons with nothing wrong spares `9 − 1 − 0 = 8`,
-against a cost of `1 + 9 = 10` to hold. It needs to serve roughly twice within a horizon to stay solvent, and
-crossing a full horizon of rent is what creates its pattern.
+Step 3 is where the numbers close. An entry covering nine neurons with nothing wrong spares `9 − 1 − 0 = 8`,
+against a cost of `1 + 9 = 10` to hold, so it needs to serve about twice within a horizon to stay solvent.
+
+The error total is kept **per entry**: the entry that served is the one whose inadequacy justifies a neighbor, so
+it is the one that accumulates. This is the split move — a broad entry serving a spread-out population accumulates
+its own error and spawns a sub-entry for the part it serves worst. An observation far from every entry makes the
+nearest one accumulate a large chunk at once, so novelty opens a pattern quickly.
+
+**The base model is the entry of last resort.** When the table is empty, or when the connections themselves do
+the inferring, their errors accumulate the same way — that is what buys the first pattern before any entry exists.
 
 ### Arriving one at a time
 
@@ -287,102 +305,66 @@ a pattern fires, since [firing delegates and accumulates nothing](#what-a-neuron
 
 ## The cost
 
-### It is all one file
+### One file, one per-frame ledger
 
-Take the whole run — every frame the brain has seen — and write it down as a single file that a decoder could
-read back to reproduce every frame exactly. The file has two parts:
+Take the whole run — every frame the brain has seen — and write it as a single file a decoder could read back to
+reproduce every frame exactly. The file has two parts:
 
-1. **The patterns (dictionary).** For each neuron, the configuration of every pattern it holds. Recording one means naming
-   which neighbors it involves.
-2. **The frames (history).** For each frame, its apex neurons, followed by whatever those apex neurons got wrong about the
+1. **The dictionary.** For each pattern, the configuration it holds — which neighbors it names.
+2. **The history.** For each frame, its apex neurons, followed by whatever those apex neurons got wrong about the
    level below them.
 
-You could write the encoder and the decoder, run them, and measure the
-result. Its length is one number, and **every cost in this design is part of that number:**
-
-| Brain                          | File                                                                  |
-|--------------------------------|-----------------------------------------------------------------------|
-| Cost of having a pattern       | Adding a symbol to the dictionary, once                               |
-| Cost of activating apex neuron | Recording a symbol in the frames history                              |
-| Cost of errors                 | The corrections that follow, because the symbol was not exactly right |
-
-These are not comparable quantities needing a conversion factor between them. 
-They are the lengths of three sections of one document. 
-You can only add or subtract them because they are already the same thing: how long the file is.
-
-**Everything is counted in neurons.** One symbol is one neuron, and every cost above is a count of them:
+You could write the encoder and decoder, run them, and measure the result. Its length is one number, and **every
+cost in this design is a part of it, counted in neurons** — one symbol is one neuron:
 
 ```
-activating an apex neuron  =  1
-the errors it made         =  the number of neurons it got wrong
-having a pattern           =  1 (itself) + |connections| + Σ over its born entries |configuration|
+activating an apex neuron  =  1                               a line in the history
+the errors it made         =  the neurons it got wrong        the corrections after it
+having a pattern           =  1 + |connections| + Σ over its born entries |configuration|   a line in the dictionary
 ```
 
-A neuron's line in the dictionary cannot be its id alone — an id reconstructs nothing. The decoder has to be told
-what the neuron does, and what it does is infer its neighborhood two ways: through its connections, and through
-the entries in its routing table. So its definition is itself, the neurons its connections reach, and the members
-of each born entry.
+A pattern's dictionary line cannot be its id alone — an id reconstructs nothing. The decoder has to be told what
+the neuron does, and what it does is infer its neighborhood two ways: through its connections, and through the
+entries in its routing table. So its line is itself, the neurons its connections reach, and the members of each
+born entry.
 
-**This is why an established neuron demands more before adding structure.** Nothing enforces that; it follows
-from counting. A neuron that has accumulated many connections and many entries simply has a longer line in the
-dictionary, so its rent is higher, so the next entry has more to beat. There is no crowding term anywhere — there
-is just more structure to write down.
-
-This is a **fixed-length code**: every neuron costs one symbol regardless of how often it is used. Pricing
-symbols by how often they actually occur is a variable-length code over the same file, and it is an experiment
-rather than the design — see [forgetting.md](forgetting.md).
-
-**Embryos are not in the file.** An entry with no pattern is the neuron's own bookkeeping — nothing about it is
-transmitted, and a decoder never learns it existed. It is ephemeral, and it costs the file nothing.
-
-That does not make it free to the machine. An embryo is charged the **rent of the pattern it is proposing**: it
-drains at exactly the rate that pattern would cost, and is deleted when it reaches zero. So an unborn entry has
-to earn like a pattern before it is allowed to become one, and what bounds the number of embryos is not an
-opening fee but the fact that most of them cannot cover the rent they are betting they can.
-
-This is why there is no separate opening test anywhere in the design. **Accumulating a horizon's worth of rent is
-the opening test.**
-
-### Where the horizon comes from
-
-Suppose the file covers `H` frames. 
-A pattern's configuration is named once; the frame part is written `H` times. 
-So a pattern is worth creating exactly when
+**The two parts look like different kinds of cost — one paid once, two paid every frame — but they are the same
+unit.** Divide the whole file by the `H` frames it covers, and all three land in one per-frame ledger:
 
 ```
-cost of creating the pattern <  H × (per-frame saving from having it)
+per-frame cost  =  Σ rent          having, spread: (pattern cost) / H, over every pattern held
+                +  activations      1 per apex neuron this frame
+                +  errors           neurons gotten wrong this frame
 ```
 
-Divide both sides by `H`:
+The dictionary does not sit outside the history; it **enters it as rent.** Rent is not a second kind of cost laid
+over the design — it is the one-time having-cost seen from inside the per-frame ledger, which is the only place a
+one-time cost and a recurring one can be compared. Every decision reads from this one ledger: serving pays
+activation plus errors, holding pays rent, and a pattern earns its keep when the errors it removes per frame beat
+the rent it adds.
 
-```
-pattern cost / H  <  pattern savings per-frame
-```
+**Cost is whatever the neuron currently is**, not what it was at birth: as a pattern grows its own connections and
+opens its own entries, its dictionary line lengthens and its rent rises with it. This is also why an established
+neuron demands more before adding structure — a longer line means higher rent means the next entry has more to
+beat. There is no crowding term anywhere; there is just more structure to write down.
 
-The left-hand side is **rent**. Rent is not a policy laid on top of the design. 
-It is not a second kind of cost. 
-It is what creating the pattern costs, viewed from inside a per-frame comparison. 
-The two sides balance because they were one inequality before it was divided.
+### The horizon is the one free choice
 
-### What rent is made of
+`H` is the only number not fixed by counting. Offline it is simply how long the file is. Online there is no known
+end and the source drifts, so `H` stands for how long the world is assumed to hold still — the payback period a
+pattern is bet to survive. Rent is how that bet is collected, one frame at a time. That is the single place the
+horizon enters the design.
 
-```
-rent(pattern) = pattern cost / horizon
+The bet can be lost, and losing it is not an accounting error. In the real file a pattern's dictionary line is
+paid in full once, however briefly it lives; a pattern that dies after five frames still cost its whole line but
+paid only five frames of rent. Being online means not knowing the future, so the design bets a horizon, charges
+rent against the bet, and lets the balance delete what does not pay.
 
-pattern cost  = 1                                  the pattern neuron itself
-              + |connections|                      the neurons its connections reach
-              + Σ over its born entries |configuration|    the members of each entry it routes through
-```
-
-Every term is a count of neurons, and the whole thing is divided by the horizon. Nothing else enters.
-
-Cost is not fixed at birth. It is **whatever the neuron currently is** — as a pattern accumulates connections and
-opens entries of its own, its line in the dictionary grows and its rent rises with it. A pattern that sprawls has
-to serve more to stay solvent than one that stayed small.
-
-An embryo has no pattern yet, so what it is charged is the cost of the pattern it is proposing: `1` for the
-neuron that would be created, plus the members of its own configuration, which is the entry its parent would
-route through.
+**Embryos are never in the file.** An entry with no pattern is the neuron's own bookkeeping — nothing about it is
+transmitted and a decoder never learns it existed. It is charged rent all the same, against the pattern it is
+proposing, so an unborn entry has to earn like a pattern before it becomes one. This is a **fixed-length code**:
+every neuron costs one symbol regardless of how often it is used. Pricing symbols by actual occurrence is a
+variable-length code over the same file, an experiment rather than the design — see [forgetting.md](forgetting.md).
 
 ### The balance is the whole lifecycle
 
@@ -392,19 +374,24 @@ same quantity [contraction](#contraction-building-the-level-above) reads as acti
 - It **rises** when the entry serves a frame, by what having it spared.
 - It **drains** every frame by the entry's rent.
 
-Where the balance sits decides what the entry is. There are no separate birth and death events — there is one
-number and three regimes on it:
+Where the balance sits decides what the entry is. It is one number climbing from zero toward a cap of **two
+horizons of rent**, and the opening line at one horizon is the midpoint it crosses on the way:
 
 ```
-balance ≥ one horizon of rent      the entry has a pattern
-0 < balance < one horizon of rent  the entry is an embryo
-balance = 0                        the entry is deleted
+2 horizons of rent                 the cap
+[1 horizon, 2 horizons] of rent    the entry has a pattern
+(0, 1 horizon) of rent             the entry is an embryo
+0                                  the entry is deleted
 ```
 
-**Birth is a crossing, and it is reversible.** An entry accumulates until it can cover a horizon and its pattern
-comes into existence. If its demand moves away, it drains back down, the pattern is withdrawn, and the entry is
-an embryo again — holding everything it learned. If the demand returns, it is reborn without having lost its
-statistics. Only draining all the way to zero deletes it.
+**Nothing happens to the balance at birth.** It accumulates continuously; crossing the midpoint simply changes
+what the entry is called, from embryo to pattern. There is no grant and no discontinuity — the second horizon is
+headroom a pattern earns by continuing to serve, and the cap is what stops it banking more life than two horizons.
+
+**The crossing is reversible.** A pattern near the midpoint that stops serving drains below it, is withdrawn, and
+is an embryo again — holding everything it learned. Serving again re-crosses and it is reborn without having lost
+its statistics. Flickering across the line is harmless because the crossing costs nothing; only draining all the
+way to zero deletes it.
 
 That is why a pattern never falls off a cliff. The old distinction between "not yet born" and "died" collapses:
 both are the same entry at different points on one axis, and the axis is the balance.
@@ -472,6 +459,10 @@ Each neuron carries an **activation strength**, and it is not a separate quantit
 [balance](#the-balance-is-the-whole-lifecycle) of the entry that fired. An entry deep into solvency is one whose
 demand keeps returning, so ranking by balance ranks by how established a pattern is.
 
+A neuron that fired no pattern — one served by its connections — has no such balance, and does not take part.
+Only neurons that delegated to a child are candidates here, which is consistent with contraction being what
+turns fired children into the level above.
+
 **The passes**, executed by the thalamus since these are cross-neuron comparisons:
 
 1. **Survivors.** A neuron survives if its activation strength is the local maximum among its **immediate
@@ -503,21 +494,24 @@ groups. The declared radius stays 1 forever.
 
 ## Estimation
 
-- **Model side: Krichevsky–Trofimov.** `p_c = (count + 1/2) / (n + 1)` — the minimax-regret universal estimator,
-  derived rather than tuned. It keeps probabilities off the 0/1 boundary without an arbitrary cap.
-- **Background side: raw MLE with the skip rule.** Background frequencies are plain counts over frames,
-  unsmoothed. An outcome the background has never witnessed cannot be priced against it, so its term is skipped
-  rather than smoothed into a finite surprise.
+**No probability sets a cost.** Distance is a count of neurons, cost is a count of neurons, savings is a count of
+neurons — the pricing never leaves whole numbers, so no estimator, smoothing, or boundary correction is needed.
 
-**The two must agree wherever they are compared.** Any test that admits a member to a pattern must use the same
-estimate recognition will later apply to it, or a pattern can be born unable to fire on its own configuration.
+The only frequencies in the design are the **connection counts**, and they are used raw. The base model predicts
+each neighbor by the argmax of its counts; a prediction only has to name a bucket, not price one, so nothing is
+smoothed. A newborn's configuration is the exact observation that opened it and it serves that observation with
+zero error, so the old worry that a pattern could be born unable to fire on its own configuration cannot arise.
+
+Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by how often each neuron
+occurs — the one variable-length code in which probabilities set costs.
 
 ## Refinement
 
-On a fire, matched entries strengthen and absent entries dilute relatively as the trial count grows. This is an
-online mode collapse: the stored configuration converges to the recurring core of the frames the pattern
-actually fires on, so a shape whose boundary was drawn slightly wrong at birth converges to the right one
-through ordinary fires. Low-share members are born low and fade, so no explicit prune rule is needed.
+On each serve, the members present strengthen and the absent ones dilute relatively as the serve count grows.
+This is an online mode collapse: the stored configuration converges to the recurring core of the frames the entry
+actually serves, so a shape whose boundary was drawn slightly wrong at birth converges to the right one through
+ordinary use. Low-share members are born low and fade, so no explicit prune rule is needed. This is facility
+location's **move**: a pattern relocating toward the demand it serves.
 
 Connections carry no refinement — they are plain accumulated counts.
 
@@ -525,18 +519,21 @@ Connections carry no refinement — they are plain accumulated counts.
 
 ```mermaid
 flowchart TD
-    A[Frame: every dimension fires one bucket] --> B[For each active neuron at this level]
-    B --> C[Observe the whole neighborhood configuration]
-    C --> D{Best-matching routing table entry: does it have a pattern?}
-    D -->|yes| E[Fire that ONE child: inference is delegated to it]
+    A[Frame: every dimension fires one bucket] --> B[For each active neuron: observe neighborhood O]
+    B --> C[Find the nearest routing entry e*]
+    C --> D{Does e* have a pattern?}
+    D -->|yes| E[Fire it — inference delegated to the child]
     D -->|no| F[Connections infer the neighborhood, and update]
-    F --> H[Evidence accumulates on the entry,<br/>sized by how badly they did]
-    H --> I{Evidence covers price?}
-    I -->|yes| J[Promote: pattern one level up, inherits channel,<br/>born with no connections]
-    E --> K[Contraction: thalamus runs the inhibition passes]
-    F --> K
-    K --> L[Each group contributes one unit to the level above<br/>adjacency derived from the grouping]
-    L --> M[Process the next level up]
+    E --> G[Bank: e* balance += members − 1 − errors]
+    F --> G
+    G --> H[Accumulate: e* error total += errors this frame]
+    H --> I{e* error total ≥ 1 + |O|?}
+    I -->|yes| J[Open a new pattern whose configuration is O]
+    I -->|no| K[Charge rent on every entry; drain, delete at zero]
+    J --> K
+    K --> L[Contraction: thalamus runs the inhibition passes]
+    L --> M[Each group contributes one unit to the level above]
+    M --> N[Process the next level up]
 ```
 
 ## Implementation plan
@@ -546,9 +543,9 @@ Each phase lands independently and is measured before the next. The headline met
 (train and held-out), neuron counts per level, patterns per neuron, and wall-clock per frame.
 
 **Phase 1 — the configuration loop at level 0.** The whole-neighborhood configuration; inference from the
-pairwise connection distributions; deposits sized by how badly those did; the per-neuron womb over configurations
-with partial matching; promotion when evidence covers price; recognition as a configuration match with at most
-one child per neuron. Capped at one level so the recursion is not a variable yet.
+pairwise connection distributions; the routing table with partial matching; the nearest entry serving, banking to
+its balance, and accumulating error to open new entries; promotion when the balance crosses the opening line;
+recognition as a match with at most one child per neuron. Capped at one level so the recursion is not a variable yet.
 
 **Phase 2 — contraction.** The inhibition passes, groups, derived adjacency, and the level-above construction.
 Measured by the per-level reduction factor and the depth at which it terminates; the prediction is
@@ -564,53 +561,68 @@ Forgetting lands on its own track, specified and phased in [forgetting.md](forge
 - **The readout is unvalidated.** Compressing harder can produce a *worse* classifier, because a Naive-Bayes
   readout can be living on exactly the position-and-class-specific duplicates that compression deletes. Phase 3
   is the gate.
-- **Cold-start churn.** Tiny early alphabets mean near-zero prices, so a burst of cheap early patterns appears
-  with nothing in this document to remove them. Measure churn in the first thousand frames, not just settled
-  counts.
+- **Cold-start churn.** Early on nearly every neighborhood is novel, so patterns open in bursts. The balance
+  drains the ones that do not recur, but the transient can be large. Measure churn in the first thousand frames,
+  not just settled counts.
 - **Dictionary redundancy.** Contraction shrinks the width of each level; it does not shrink the dictionary. The
-  same shape is learned separately at every position.
+  same shape is learned separately at every position — this is the [reuse](#open-questions) question, and it is
+  the largest source of waste the design does not yet address.
 
 ## Open questions
 
-- **The match rule.** That it is [facility location](#the-routing-table-is-a-facility-location-problem) with bits
-  as the distance is settled; what exactly the distance is, and therefore what lands on the same entry versus
-  opens a new one, is not. It decides whether the routing table stays bounded.
+Ordered by when they should be settled: the routing table first, then level processing.
+
+### Routing table
+
+- **The match tolerance.** That the match is [facility location](#the-routing-table-is-a-facility-location-problem)
+  with Hamming distance — the count of neurons an entry gets wrong — is settled. What partial-matching tolerance
+  rides on top, and therefore what lands on the same entry versus opens a new one, is not. It decides whether the
+  routing table stays bounded.
 - **Ranking born against unborn.** One match runs over the whole table, so an unborn entry can outscore a born
-  one — the neuron would decline to fire a child it has in order to accumulate on an embryo instead. Whether that
-  is correct is undecided.
-- **How eagerly to open.** Comparing this frame's service cost against a per-frame rent assumes the configuration
-  will recur on every frame, which makes opening almost free: at a horizon of 1000, a nine-member configuration
-  tolerates only `0.01` neurons of error before opening, so nearly every imperfect frame opens an embryo. The
-  online facility location result compares a single demand's distance against the **whole** opening cost and
-  opens with probability `d / cost`, which for one neuron wrong out of nine is a tenth rather than a certainty.
-  The eager rule is right when a configuration recurs constantly and badly wrong when it does not, and the
-  randomized rule is the principled hedge. Whether the design accepts randomization, or finds a deterministic
-  stand-in, is undecided — and it directly controls how many embryos exist.
+  one — the neuron would decline to fire a child it has in order to serve from an embryo instead. Whether that is
+  correct is undecided.
+- **Birth-frame attribution.** A newborn's starting balance is settled — it opens at zero and banks its first
+  serve like any entry, landing at `|O| − 1`, about two short of the opening line, so it becomes a pattern on its
+  second serve. What is not settled: on the birth frame the observation `O` was already served by `e*`, and now
+  the newborn serves it too. If both bank, the frame is double-counted. The likely rule is that the newborn takes
+  over serving `O` and banks it, while `e*` — whose accumulated error triggered the split — banks nothing that
+  frame, but this is not decided.
+
+### Level processing
+
+- **The level transition.** Contraction, grouping, reuse, and merging are one operation, run by the thalamus at
+  the boundary between levels, and together they decide which neurons are active at the level above. §Contraction
+  writes only the inhibition half. The two questions inside it: whether reuse is keyed on the group's shape rather
+  than on any single neuron's configuration, and which unit earns the saving once a group collapses. This is the
+  biggest gap in the document.
 - **Configuration space beyond the small case.** Eight binary neighbors is 256 configurations — finite and
   countable. Radius 2 is 2²⁴, and more buckets multiply it further. Exact-configuration counting is bounded
   precisely in the regime where it is least needed. What replaces it when the neighborhood is larger?
 - **Configuration space at higher levels.** Above level 0 the neighbors are patterns, and the per-channel
   alphabet grows as patterns are promoted, so the configuration space is not fixed. One-active-per-neuron holds
-  each channel to a single state, but the space still expands with the structure. What bounds the womb there?
-- **Reuse.** Identity is keyed by absolute dimension, so nothing shares a shape across positions. Contraction
-  fixes the width of each level, not the redundancy of the dictionary.
-- **Activation strength when nothing fired.** Strength is the balance of the entry that fired, so a neuron that
-  fired no pattern has none. Whether such neurons participate in the inhibition passes or survive by default is
-  undetermined.
-- **Parallelism.** The inhibition passes are cross-neuron comparisons and run in the thalamus. Whether they can
-  be parallelised, or pushed into neurons given a shipped view of neighbor strengths, is undetermined.
+  each channel to a single state, but the space still expands with the structure. What bounds the routing table there?
+- **Reuse across positions.** Identity is keyed by absolute dimension, so nothing shares a shape across positions —
+  the same configuration is learned separately everywhere it occurs. Contraction fixes the width of each level, not
+  this redundancy of the dictionary. It is filed under Risks today and belongs with the level transition.
+
+### Independent
+
+- **Parallelism.** The inhibition passes are cross-neuron comparisons and run in the thalamus. Whether they can be
+  parallelised, or pushed into neurons given a shipped view of neighbor strengths, is undetermined.
 
 ## Still to write
 
-Sections known to be missing or known to be placeholders, in the order they should be settled:
-
-1. **The level transition.** Contraction, grouping, reuse, and merging are one operation, run by the thalamus at
-   the boundary between levels, and together they determine which neurons are active at the level above. §Contraction
-   currently describes only the inhibition half. Two questions inside it: whether reuse is keyed on the group's
-   shape rather than on any single neuron's configuration, and which unit earns the saving once a group collapses.
-2. **Terminology.** §Contraction says "survivor" and §The cost says "apex neuron" for the same set. Pick one.
-3. **Dictionary redundancy.** Currently filed under Risks, describing the same shape learned separately at every
-   position. That is item 1's subject, not a risk, and should move once item 1 exists.
+- **Reconcile the early sections with the serve/bank/accumulate/open model.** §What a neuron does with a frame,
+  §Recognition, and §The womb were written before [facility location](#the-routing-table-is-a-facility-location-problem)
+  and still carry the older "deposit / promotion" framing. The concrete conflicts: §What a neuron does with a frame
+  says a firing pattern does "nothing else" — but a firing pattern banks savings, drains rent, and (open question)
+  may accumulate its own error to split; and "evidence sized by how badly the connections did" needs to read as the
+  neurons the server got wrong. These sections need one pass to match the model that §The cost and the facility
+  location section now define.
+- **The level-transition section.** Contraction, reuse, grouping, and merging as one thalamic operation. Everything
+  else in the document stands on top of it.
+- **Terminology.** §Contraction says "survivor" and §The cost says "apex neuron" for the same set. Pick one.
+- **Move dictionary redundancy out of Risks** and into the level-transition section once that exists.
 
 ## Temporal: the open port
 
