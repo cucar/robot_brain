@@ -5,8 +5,11 @@ their refinement after birth. The substrate is an online compression engine whos
 situations — "universal" in the sense that nothing in it assumes a particular source.
 
 The structural unit is the **neighborhood configuration**. A neuron looks at its whole neighborhood, and a
-recurring configuration that pays for itself is promoted to a pattern one level up. Resolution shrinks going up
+recurring configuration that pays for itself becomes a pattern one level up. Resolution shrinks going up
 by **contraction**: neighbors inhibit each other so only a spread-out subset propagates upward.
+
+Every structural decision a neuron makes is [one test](#the-one-test), evaluated exactly against the
+[frames it remembers](#the-history).
 
 This document specifies the spatial axis (`d = 0`, same frame). The event axis (`d > 0`) and action axis (`d < 0`) 
 are [open ports](#temporal-the-open-port).
@@ -79,7 +82,7 @@ creation  → connections → child patterns
 
 Connections are not free — they are part of the neuron's line in the dictionary and are counted in its [cost](#the-cost). 
 What separates them from patterns is that their count is capped at `neighbor dimensions × buckets` and stops growing, 
-while a neuron's children have no such ceiling. A neuron's rent cost rises with the patterns it creates.
+while a neuron's children have no such ceiling. A neuron's dictionary line grows with the children it creates.
 
 **A neuron updates its connections only on frames where no child fired.** 
 The two are exclusive: a neuron either infers from its own connections or delegates to a child.
@@ -95,8 +98,9 @@ The neighborhood a neuron usually sees is its **normal**, and it is held as a ro
 a stored configuration, set to the first context the neuron observes and [refined](#refinement) from its own
 context counts thereafter. The neuron measures distance from it exactly as it measures distance from a child.
 
-The normal is **not a child**. It has no pattern neuron, it never propagates, it is never promoted, and it does
-not die — a neuron always has a normal. What it does have is an error accumulator, like everything else.
+The normal is **not a child**. It has no pattern neuron, it never propagates, and it is never deleted — a neuron
+always has a normal, and its storage is the connections, which are paid for already. It competes for frames like
+any other entry and it appears in the [history](#the-history) like any other server.
 
 **On the spatial axis the normal and the connections are the same.** Because context and inference are the
 same set here, counting how often each neighbor was present when the normal served *is* counting connection
@@ -112,16 +116,17 @@ On the temporal axis they come apart, which is the whole difference between the 
 ## What a neuron does with a frame
 
 An active neuron routes its neighborhood `O` to the closest entry it has — one of its **children**, or its
-[normal](#the-normal). That server does the inference: a **pattern** fires and delegates it to the child one level
-up; the **normal**, or an **embryo**, infers for itself and propagates nothing. Either way the server banks what it
-spared, accumulates what it got wrong, and every child pays its rent. The full accounting is
-[facility location](#the-routing-table-is-a-facility-location-problem); this section is what it means. The
-connections update only when no pattern fired — the rule from [the base model](#the-base-model-what-a-neuron-expects).
+[normal](#the-normal). That server does the inference: a **child** fires and delegates it to the pattern one level
+up; the **normal** infers for itself and propagates nothing. The connections update only when the normal served —
+the rule from [the base model](#the-base-model-what-a-neuron-expects).
 
-**There is no surprise gate.** Nothing tests whether a frame was surprising enough to be worth keeping. A
+Then the neuron writes the frame into its [history](#the-history) and reconsiders its structure: at most one entry
+deleted, at most one child added, both by [the same test](#the-one-test). That is all a neuron ever does.
+
+**There is no surprise gate.** Nothing asks whether a frame was surprising enough to be worth keeping. A
 neighborhood the connections already predict well costs almost nothing to serve, no matter how often it recurs —
 not because a threshold rejected it, but because there was nothing left to explain. A neighborhood they miss costs
-a lot, and that cost is what accumulates toward opening a child. Surprise is the size of the bill, not a gate on it.
+a lot, and that cost is exactly what a new child would remove. Surprise is the size of the bill, not a gate on it.
 
 That is also why connections learning is not a leak. Whatever pairwise can absorb it absorbs, and each frame it
 absorbs makes that neighborhood cheaper to serve next time. What never shrinks is the part pairwise structurally
@@ -129,47 +134,52 @@ cannot reach — the joint — and that residual is exactly what a child is for.
 
 ## Recognition
 
-A neuron's routing table holds its [normal](#the-normal) and its **children** — each a stored configuration.
-Children carry the two running tallies, [balance and accumulated error](#two-tallies); the normal
-carries only the error. Some children have a pattern neuron; the rest are embryos. **An embryo is a child whose
-pattern has not been created yet** — that is the only difference, and matching treats them alike.
+A neuron's routing table holds its [normal](#the-normal) and its **children**, each a stored configuration. Every
+child has a pattern neuron one level up. There is no probationary stage: a child is created only once the history
+already shows it pays for itself, so there is nothing left for a trial period to establish.
 
-**The neuron matches its neighborhood against every entry and the closest serves**, one algorithm over all of
-them, normal or child, born or embryo. Matching is partial: the observation need not equal a stored configuration
-exactly, and an entry keeps serving variations of a shape until its accumulated error would pay for a replacement.
-That is the whole tolerance — there is no separate threshold.
+**The neuron matches its neighborhood against every entry and the closest serves** — one algorithm over all of
+them. Matching is partial: the observation need not equal a stored configuration exactly, and an entry goes on
+serving variations of a shape for as long as it is [worth its storage](#the-one-test). That is the whole
+tolerance; there is no separate threshold.
 
 What serving means depends on the winner:
 
-- **Pattern.** It fires — **delegation**: the neuron hands the job of describing this neighborhood to the child one
-  level up, which propagates. **At most one pattern fires**, because the job goes to a single delegate, which is
+- **A child.** It fires — **delegation**: the neuron hands the job of describing this neighborhood to the pattern
+  one level up, which propagates. **At most one child fires**, because the job goes to a single delegate, which is
   what preserves one-active-per-channel all the way up.
-- **Normal.** The neuron recognizes its usual situation and infers for itself, from its connections. Nothing is
-  delegated and nothing propagates, so **the neuron is the apex** — see [contraction](#contraction-building-the-level-above).
-- **Embryo.** The same as the normal for this frame — the neuron infers for itself and nothing propagates — but the
-  child banks toward its birth line as well.
+- **The normal.** The neuron recognizes its usual situation and infers for itself, from its connections. Nothing
+  is delegated and nothing propagates, so **the neuron is the apex** — see
+  [contraction](#contraction-building-the-level-above).
 
-Either way the winner's stored configuration strengthens toward the core of what it actually serves — this is
+Either way the winner's stored configuration moves toward the core of what it actually serves — this is
 [refinement](#refinement).
 
-## The womb: the unborn children
+## The history
 
-The **womb** is a neuron's embryos — the children it has opened but not yet promoted. It is not a separate
-structure and has no matching rule of its own; it is simply the children whose balance has not yet crossed the
-birth line.
+A neuron remembers the frames it was active for, one horizon back. Each record is the **neighborhood it observed**
+and **which entry served it**:
 
-At radius 1 binary, 256 configurations are possible. Opening one child per configuration would be an explosion,
-but only a small subset both recurs and stays unexplained by the connections: for a neuron sitting on a "1",
-vertical, horizontal and cross configurations recur far more than the rest. The others are served by whichever
-child is closest and never accumulate the error it would take to open one of their own.
+```
+history = [ (frame, O, server) ... ]      spanning the last horizon
+```
 
-**The womb holds configurations only.** It does not cluster connections.
+On each activation the neuron drops records older than the horizon and appends the current one. Nothing else
+accumulates — no balance, no running error, no rent. Every structural decision is read off this window directly.
 
-**Promotion and demotion.** An embryo becomes a pattern when its [balance](#the-balance-is-the-whole-lifecycle)
-crosses the birth line at one horizon of rent; it does not move, it stays where it is and gains a pattern neuron
-one level up. The same crossing runs in reverse: a pattern whose balance falls back below the line is withdrawn to
-an embryo, keeping everything it learned. How the balance is banked, and how a badly-served child opens a *new* one
-at the demand point, is the [facility location](#the-routing-table-is-a-facility-location-problem) machinery below.
+**It is small.** Eight binary neighbors pack into a byte, so a neuron active through most of a thousand-frame
+horizon carries on the order of a kilobyte. That is the whole of a neuron's memory beyond its connections and its
+entries.
+
+**It has to be the frames, not a summary.** A running error total cannot answer the question deletion asks: when
+an entry goes, its frames fall to whoever is next closest, and only the frames themselves say who that is. Caching
+each frame's second-best server does not rescue it either — the moment a deletion happens the second-best becomes
+the best, and no third-best was recorded to take its place. Keeping the frames is what makes deletion decidable at
+all, and having them makes every other decision exact rather than estimated.
+
+At radius 1 binary there are 256 possible configurations, but only a small subset both recurs and stays
+unexplained by the connections: for a neuron sitting on a "1", vertical, horizontal and cross configurations recur
+far more than the rest. The others are served by whichever entry is closest and never justify one of their own.
 
 ## The routing table is a facility location problem
 
@@ -183,38 +193,27 @@ the two are always solved together, because you cannot price a warehouse without
 
 | Facility location | Here |
 |---|---|
-| A customer, i.e. one unit of demand | One frame's observed neighborhood |
+| A customer, i.e. one unit of demand | One frame's observed neighborhood, kept in the [history](#the-history) |
 | A facility | A child |
-| Opening a facility | Creating a child, and eventually a pattern for it |
-| Opening cost | The child's rent over one horizon |
+| Opening a facility | Creating a child, and the pattern neuron it mints one level up |
+| Opening cost | `1 + |O|` — the neuron created, plus the configuration stored |
 | Serving a customer from a facility | Describing this frame's neighborhood through that child |
 | Service cost, i.e. distance | What the mismatch costs — the neurons the child got wrong |
 | The assignment of customers to facilities | The [match](#recognition) |
 
 So **matching is the routing half and minting is the opening half**, and they are one problem. Every frame is a
-customer arriving. It is served by the child it matches, at a cost equal to how wrong that child was. When the
-demand piling up on a poorly-served region would have paid for a warehouse, a warehouse opens there.
+customer arriving, served by the entry it matches, at a cost equal to how wrong that entry was.
 
-**What the opening cost is here.** Serving a customer badly is easy to picture — the child got some neurons wrong,
-and the mismatch costs something. Opening is less obvious, because nothing is physically built. What it costs is
-**holding the child**: recording the configuration once, and thereafter making it harder every frame to say which
-child served that frame. Charged per frame that is rent; over a horizon it is what a warehouse cost to build.
+**What the opening cost is here.** Serving badly is easy to picture — the child got some neurons wrong, and the
+mismatch costs something. Opening is less obvious, because nothing is physically built. It costs two things: the
+**pattern neuron minted one level up**, and the **configuration stored** in this neuron's routing table. Hence
+`1 + |O|`. What that new neuron later grows — its own connections, its own children — is its own affair, judged by
+its own tests at its own level. A neuron's *existence* is decided by its parent; a neuron's *structure* is decided
+by itself.
 
-It is not a tax bolted on — without it the problem has a trivial and useless answer. If opening were free you
-would open a warehouse on top of every customer: perfect service, zero distance, and one facility per frame ever
-seen. The opening cost is the only thing standing between the design and memorizing every frame.
-
-### Why this replaces a threshold
-
-A threshold asks: *is this neighborhood within θ of that child?* It needs θ, and θ is not derivable from anything.
-
-Facility location never asks that. It asks: **is it cheaper to serve this neighborhood from a child that already
-exists, or to open a new one?** That comparison has no free parameter — the opening cost is the child's own cost,
-already defined, and the service cost is the mismatch, already measurable. The tolerance falls out of the
-comparison rather than being set: a child absorbs error up to the price of a replacement.
-
-Distance is the **number of neurons the child would get wrong** — the same count that appears in the file as the
-corrections following an activation. Nothing weights one position above another.
+The opening cost is not a tax bolted on — without it the problem has a trivial and useless answer. If opening were
+free you would put a warehouse on top of every customer: perfect service, zero distance, and one facility per
+frame ever seen. It is the only thing standing between the design and memorizing every frame.
 
 ### The distance
 
@@ -230,238 +229,125 @@ This is Hamming distance over the neighborhood, and it is not a separate notion 
 literally the corrections that would follow this activation in the file. The service cost and the match distance
 are the same number.
 
-### Serve or open: one comparison
+### The one test
 
-A neuron's routing table holds its [normal](#the-normal) and its **children** — each a stored configuration, each
-child an embryo or a pattern. When the neuron is active it faces one question about its neighborhood `O`: serve it
-from an entry it has, or open a new child?
+There is exactly one structural rule in the design:
 
-**The closest entry always serves.** Serving from `e*` costs `d(O, e*)` this frame — the neurons it gets wrong.
-Opening a new child at `O` costs `|O|`, the size of the neighborhood: a newborn starts just below the birth line
-and takes one full horizon of rent to die unused, and one horizon of rent is `|O|`.
+> **An entry earns its place when the errors it removes from the history exceed what it costs to store.**
 
-The two do not compare frame-to-frame — `d` is paid now, `|O|` is a horizon-long commitment — so bridge them by
-**accumulation over the same horizon**. If `e*` keeps serving this demand it keeps paying `d`, so `e*` sums the
-errors it makes, and that sum [decays over the horizon](#two-tallies) so it measures a rate rather than a lifetime:
+Both halves are counts of neurons, and both are read off the [history](#the-history):
 
-> **Open a new child at `O` when `e*`'s accumulated error reaches `|O|`** — equivalently, when `e*`'s error rate
-> exceeds the rent the new child would cost.
+```
+cost(e)     =  1 + |C(e)|                                  the neuron it mints, plus its configuration
+benefit(e)  =  Σ over the history  [ d(O, next(O)) − d(O, e) ]   over the frames e wins
+```
 
-By then, serving from `e*` has cost as much as building would have, so the new child has provably paid for itself.
-Below that line, tolerating `e*`'s imperfection is the cheaper option — **and that toleration is the partial
-match.** No separate matching threshold exists: an entry absorbs variation up to exactly the point where a
-replacement would be cheaper, and the tolerance `|O|` is a number the neuron already holds. Novelty is the same
-rule at speed — an `O` far from everything makes `d ≈ |O|` in a single frame and opens a child at once. This is
-the deterministic form of online facility location's randomized rule (open with probability `distance / cost`):
-accumulate instead of gamble, and open once the sum arrives.
+where `next(O)` is the best entry *other than* `e` — what that frame would fall back to if `e` did not exist.
+Benefit is simply the total error `e` spares the window by existing.
+
+**The same test runs at both moments.** Applied to a configuration not yet stored, it says whether to **add**.
+Applied to one already stored, it says whether to **keep**. That identity is what makes the design stable: an
+entry cannot fail the test and then immediately pass the identical test, so nothing can be deleted and re-added in
+a loop. There is no separate opening rule, no threshold, and no accumulator — the question is asked directly of
+real frames.
+
+**Why this replaces a threshold.** A threshold asks *is this neighborhood within θ of that child?*, and θ is not
+derivable from anything. This asks *is this entry worth what it costs?* — where the cost is a count of neurons the
+neuron already knows and the benefit is measured against frames it already holds. Tolerance falls out rather than
+being set: an entry absorbs variation for exactly as long as absorbing it is cheaper than storing a replacement.
 
 ### The normal is always in the comparison
 
-The [normal](#the-normal) is one of the entries, so it competes for every frame on the same footing as the
-children. Before a neuron has any child it is the only candidate, and `O` is scored against it — the error being
-how far reality fell from the neuron's usual neighborhood. That error accumulates exactly as a child's would, and
-reaching `|O|` buys the first child. **The first child is opened by the same rule that later splits a crowded
-one**; there is no separate bootstrap.
+The [normal](#the-normal) competes for every frame on the same footing as the children, and before a neuron has any
+child it is the only candidate. **It is never deleted**: it is the neuron's own inference and the fallback when
+nothing else fits, and its storage is the connections, which are already paid for. Every other entry faces the
+test.
 
-The normal never retires and never wins by default. Any frame where no child is closer is served, and scored, by
-it — and a neuron whose world genuinely is stable simply serves from its normal forever and opens nothing.
-
-### Two tallies
-
-A child carries two running quantities, answering different questions:
-
-- **Balance** — savings minus rent — decides what the child *is*. Each serve adds what it spared,
-  `members − 1 − errors`; every frame drains rent. Crossing the birth line at one horizon of rent makes it a
-  **pattern** that propagates a unit upward; below the line it is an **embryo**, recognized and banking toward
-  birth but not yet propagating; at zero it is deleted. An embryo banks the savings it *would* deliver, which is
-  how it climbs.
-- **Accumulated error** decides whether the entry needs a *neighbor* — it sums the neurons the entry gets wrong,
-  and reaching `|O|` opens one. A child can be solvent overall yet sloppy on part of its territory; balance and
-  error are independent, and that independence is what lets a useful child shed its ill-fitting demand rather than
-  die of it.
-
-**The error accumulator is a sliding window one horizon wide**, not a lifetime total. This is not a detail. A
-lifetime sum cannot tell noise from structure: an entry averaging a twentieth of a neuron wrong still reaches
-`|O|` eventually, so given enough frames *every* entry spawns, however well it fits. Only the rate distinguishes
-them, and a lifetime sum discards the rate.
-
-Windowed, the accumulator holds the errors of the last horizon, which at a steady error rate `r` is `r × horizon`.
-So it reaches `|O|` exactly when
-
-```
-r × horizon ≥ |O|     and since rent = |O| / horizon,     r ≥ rent
-```
-
-and **the opening test is that the entry's error rate exceeds the rent of the child it would open** — the honest
-form of the comparison a single frame could never make. Errors below rent never open anything, no matter how long
-the entry runs; errors above it open children at a rate proportional to the excess. Because the window holds the
-actual errors rather than a decayed estimate of them, that threshold is exact.
-
-The [normal](#the-normal) carries only the second tally. It has no balance because it has nothing to prove and
-nothing to lose — it is never promoted and never deleted — but it accumulates error like anything else, and that
-is what lets it open the neuron's first child.
-
-### Holding the window
-
-The window is a queue of `(frame, error)` records spanning one horizon, holding the errors themselves rather than
-an estimate of them. Four things keep it small:
-
-- **Only nonzero errors are recorded.** A clean serve adds nothing to the sum, so it needs no record. This is what
-  the size scales with — error events, not activations — and it means a well-fitting entry keeps an empty queue and
-  costs nothing. An entry with a long queue is by definition one about to open a child and shed that error.
-- **Children do not multiply the records.** Exactly one entry serves per activation, so the union of a neuron's
-  queues is that neuron's own error history over the horizon. Opening children redistributes records among
-  entries; it never adds any.
-- **A window is aged only when its entry serves.** The opening test reads the serving entry's total and nothing
-  else, so a stale total elsewhere is never consulted. Each record is evicted exactly once, which is amortized
-  constant work per activation rather than work proportional to the number of children.
-- **The total is carried, not recomputed** — added on push, subtracted on eviction — so reading it is free and only
-  eviction costs anything.
-
-**The balance cannot be handled the same way**, because an entry whose balance has run out would otherwise go on
-winning matches. Rent drains at a constant rate, so the frame an entry reaches zero is computable the moment its
-balance changes; each neuron keeps those death frames in a heap and an activation touches only the entries that
-actually died, not all of them.
+A neuron whose world is genuinely stable serves from its normal forever and creates nothing.
 
 ### The frame, step by step
 
-When a neuron becomes active it first **advances the clock** to the current frame: the death heap gives up every
-child whose balance has drained to zero since it last fired, and those are culled. A child unused across a long
-gap may already be dead when the neuron wakes. The error windows are not touched here — each is aged when its own
-entry serves, since nothing else reads it.
+For an active neuron with observed neighborhood `O`:
 
-Then, for observed neighborhood `O`:
+1. **Age.** Drop history records older than the horizon.
+2. **Route.** Take the closest entry `e*` by `d(O, e*)`; the normal and every child compete alike.
+3. **Serve.** `e*` serves. A child fires and delegates to its pattern one level up; the normal infers for itself,
+   propagates nothing, and the connections update. At most one child fires.
+4. **Record.** Append `(frame, O, e*)` to the history.
+5. **Delete pass.** Test each child. Delete the one that fails by the widest margin — **at most one per frame**,
+   because deletions interact: two children covering the same demand each look redundant while the other stands,
+   and removing both at once would be wrong. Deleting one and re-testing next frame settles it correctly.
+6. **Add pass.** Test a candidate child at `O`. If it passes, create it — the pattern neuron one level up, and the
+   configuration in the routing table.
 
-1. **Route.** Take the closest entry `e*` by `d(O, e*)` — the normal and every child compete alike.
-2. **Accumulate.** `e*` adds `d(O, e*)` to its error total.
-3. **Open?** If that total reaches `|O|`, create a new child at `O`; it becomes this frame's server, and `e*`'s
-   total drops by `|O|`.
-4. **Serve.** The server serves. A pattern fires and delegates inference to its upward neuron; the normal or an
-   embryo infers from the neighborhood itself, propagating nothing, and the connections update. At most one
-   pattern fires.
-5. **Bank.** A serving child's balance rises by `members − 1 − errors`, and crossing the birth line promotes an
-   embryo to a pattern. The normal has no balance and banks nothing.
-
-On an opening frame the new child is the server, so it banks its first serve — `|O| − 1`, landing just below the
-birth line — while `e*`, which only triggered the split, banks nothing. This is facility location's split move
-with nothing added to produce it: an entry accumulates its own error and spawns a child for the part it serves
-worst. Where that child lands need not be representative; [refinement](#refinement) moves it toward the demand it
-actually serves.
+Steps 5 and 6 are the same test on different subjects. The delete pass folds into the routing scan of step 2,
+since both need each entry's distance to the frames it serves.
 
 ### Merge and split need no machinery of their own
 
-The standard local search for facility location has three moves, and each one is already something the design
-does for other reasons:
+The standard local search for facility location has three moves, and each is already something the design does:
 
-- **Close.** Shut a facility and reassign its demand. This is death: a child whose balance drains below zero is
-  released, and the frames it used to serve match elsewhere or open something new. Rent is what makes the move
-  affordable — the exact version would re-solve the whole assignment to ask whether closing helps, and rent asks
-  the same question a little at a time, locally.
-- **Move.** Relocate a facility toward the customers it actually serves. This is [refinement](#refinement): the
-  stored configuration drifts toward the recurring core of the frames that match it.
-- **Split.** Divide a facility serving two populations. This is **move plus open** — refinement pulls the child
-  toward whichever population dominates, the other is then served badly, its accumulated error reaches `|O|`, and
-  a sub-child opens. Merge is likewise **close plus reassignment**.
+- **Close.** Shut a facility and reassign its demand — the delete pass, evaluated exactly, because the history
+  says where each orphaned frame goes.
+- **Move.** Relocate a facility toward the customers it serves — [refinement](#refinement).
+- **Split.** Divide a facility serving two populations. This is **move plus add**: refinement pulls the child
+  toward whichever population dominates, the other is then served badly, and the add pass finds that a child at
+  the neglected demand point removes more error than it costs. Merge is likewise **close plus reassignment**.
 
 So neither merge nor split is a move the design has to add; they are what the ordinary operations compose into.
-Nearest-wins is safe here precisely because the closest entry, even while serving, still tallies what it got
-wrong — a badly-served frame is never absorbed silently, and the accumulated error eventually forces the split.
+Nearest-wins is safe because a badly-served frame is never absorbed silently — it stays in the history with its
+error visible, and the add pass sees it.
 
 ## The cost
 
-### One file, one per-frame ledger
+### It is all one file
 
 Take the whole run — every frame the brain has seen — and write it as a single file a decoder could read back to
 reproduce every frame exactly. The file has two parts:
 
-1. **The dictionary.** For each pattern, the configuration it holds — which neighbors it names.
-2. **The history.** For each frame, its apex neurons, followed by whatever those apex neurons got wrong about the
+1. **The dictionary.** For each neuron, what it is: itself, the neurons its connections reach, and the
+   configuration of each of its children. An id alone reconstructs nothing, so the decoder has to be told what the
+   neuron *does*, and what it does is infer its neighborhood two ways — through its connections and through its
+   children.
+2. **The frames.** For each frame, its apex neurons, followed by whatever those apex neurons got wrong about the
    level below them.
 
 You could write the encoder and decoder, run them, and measure the result. Its length is one number, and **every
 cost in this design is a part of it, counted in neurons** — one symbol is one neuron:
 
 ```
-activating an apex neuron  =  1                               a line in the history
-the errors it made         =  the neurons it got wrong        the corrections after it
-having a pattern           =  1 + |connections| + Σ over its born children |configuration|   a line in the dictionary
+activating an apex neuron  =  1                             a line in the frames
+the errors it made         =  the neurons it got wrong      the corrections after it
+having a child             =  1 + |configuration|           a line in the dictionary
 ```
 
-A pattern's dictionary line cannot be its id alone — an id reconstructs nothing. The decoder has to be told what
-the neuron does, and what it does is infer its neighborhood two ways: through its connections, and through its
-children. So its line is itself, the neurons its connections reach, and the members of each born child.
+This is a **fixed-length code**: every neuron costs one symbol regardless of how often it is used. Pricing symbols
+by actual occurrence is a variable-length code over the same file, an experiment rather than the design — see
+[forgetting.md](forgetting.md).
 
-**The two parts look like different kinds of cost — one paid once, two paid every frame — but they are the same
-unit.** Divide the whole file by the `H` frames it covers, and all three land in one per-frame ledger:
+### The window is what makes the two comparable
+
+The dictionary is written once; the frames are written over and over. Those are not comparable until you fix a
+stretch of frames to compare against, and that stretch is the **horizon**. Over one horizon the file is
 
 ```
-per-frame cost  =  Σ rent          having, spread: (pattern cost) / H, over every pattern held
-                +  activations      1 per apex neuron this frame
-                +  errors           neurons gotten wrong this frame
+L  =  Σ over entries (1 + |configuration|)        written once
+   +  Σ over frames in the horizon (1 + errors)   written every frame
 ```
 
-The dictionary does not sit outside the history; it **enters it as rent.** Rent is not a second kind of cost laid
-over the design — it is the one-time having-cost seen from inside the per-frame ledger, which is the only place a
-one-time cost and a recurring one can be compared. Every decision reads from this one ledger: serving pays
-activation plus errors, holding pays rent, and a pattern earns its keep when the errors it removes per frame beat
-the rent it adds.
-
-**Cost is whatever the neuron currently is**, not what it was at birth: as a pattern grows its own connections and
-opens its own children, its dictionary line lengthens and its rent rises with it. This is also why an established
-neuron demands more before adding structure — a longer line means higher rent means the next child has more to
-beat. There is no crowding term anywhere; there is just more structure to write down.
-
-### The horizon is the one free choice
+and [the one test](#the-one-test) is nothing more than the derivative of this: an entry belongs in `L` when
+removing it would lengthen the file more than deleting its line would shorten it. Add and delete are the two
+directions of that same difference. **Nothing is amortized and nothing is estimated** — the neuron holds the
+frames, so it evaluates the sum.
 
 `H` is the only number not fixed by counting. Offline it is simply how long the file is. Online there is no known
-end and the source drifts, so `H` stands for how long the world is assumed to hold still — the payback period a
-pattern is bet to survive. Rent is how that bet is collected, one frame at a time. That is the single place the
-horizon enters the design.
+end and the source drifts, so `H` stands for how long the world is assumed to hold still. That is the single place
+the horizon enters the design, and it is the design's only free parameter.
 
-The bet can be lost, and losing it is not an accounting error. In the real file a pattern's dictionary line is
-paid in full once, however briefly it lives; a pattern that dies after five frames still cost its whole line but
-paid only five frames of rent. Being online means not knowing the future, so the design bets a horizon, charges
-rent against the bet, and lets the balance delete what does not pay.
-
-**Embryos are never in the file.** A child with no pattern is the neuron's own bookkeeping — nothing about it is
-transmitted and a decoder never learns it existed. It is charged rent all the same, against the pattern it is
-proposing, so an embryo has to earn like a pattern before it becomes one. This is a **fixed-length code**:
-every neuron costs one symbol regardless of how often it is used. Pricing symbols by actual occurrence is a
-variable-length code over the same file, an experiment rather than the design — see [forgetting.md](forgetting.md).
-
-### The balance is the whole lifecycle
-
-Rent is charged against every **child**, and each carries exactly one number: its **balance**. This is the same
-quantity [contraction](#contraction-building-the-level-above) reads as activation strength.
-
-- It **rises** when the child serves a frame, by what having it spared.
-- It **drains** every frame by the child's rent.
-
-Where the balance sits decides what the child is. It is one number climbing from zero toward a cap of **two
-horizons of rent**, and the opening line at one horizon is the midpoint it crosses on the way:
-
-```
-2 horizons of rent                 the cap
-[1 horizon, 2 horizons] of rent    the child has a pattern
-(0, 1 horizon) of rent             the child is an embryo
-0                                  the child is deleted
-```
-
-**Nothing happens to the balance at birth.** It accumulates continuously; crossing the midpoint simply changes
-what the child is called, from embryo to pattern. There is no grant and no discontinuity — the second horizon is
-headroom a pattern earns by continuing to serve, and the cap is what stops it banking more life than two horizons.
-
-**The crossing is reversible.** A pattern near the midpoint that stops serving drains below it, is withdrawn, and
-is an embryo again — holding everything it learned. Serving again re-crosses and it is reborn without having lost
-its statistics. Flickering across the line is harmless because the crossing costs nothing; only draining all the
-way to zero deletes it.
-
-That is why a pattern never falls off a cliff. The old distinction between "not yet born" and "died" collapses:
-both are the same child at different points on one axis, and the axis is the balance.
-
-**Forgetting is not a separate mechanism.** Charging rent against children *is* aging. What
-[forgetting.md](forgetting.md) still carries is only the question of whether this beats a uniform forget rate,
-which is an experiment rather than a mechanism.
+**A short horizon overfits.** Minimizing `L` over the window is not minimizing it over the run: with too few
+frames in view, a neuron will build structure for coincidences that have not proven themselves beyond the window.
+That is the cost of the honesty — there is no smoothing left to hide behind, so horizon sensitivity should be
+expected to be sharp, and measured early.
 
 ### What shrinking the file actually looks like
 
@@ -479,33 +365,36 @@ Every structural decision is the same question: does the move shorten the file, 
 
 ### Every decision is local
 
-Each neuron charges rent and measures service cost over its own neighborhood only, so the sum of local ledgers is
-not the length of the file — the same base event is witnessed by every neuron whose neighborhood contains it.
-This is accepted: local ledgers gate local decisions cheaply and in parallel, and [contraction](#contraction-building-the-level-above)
-is what stops that redundancy from multiplying up the levels.
+Each neuron evaluates `L` over its own neighborhood only, so the sum of local evaluations is not the length of the
+file — the same base event is witnessed by every neuron whose neighborhood contains it. This is accepted: local
+evaluations gate local decisions cheaply and in parallel, and
+[contraction](#contraction-building-the-level-above) is what stops that redundancy from multiplying up the levels.
 
-Nothing consults a global total. Rent scales with the neuron's own child count, never with the size of the brain,
-which is why a naive neuron opens cheaply — its exploration budget, not a leak, since the same local comparison
-that opened a child closes it when demand moves away.
+Nothing consults a global total. A neuron's costs scale with what it holds, never with the size of the brain,
+which is why a naive neuron creates cheaply — its exploration budget, not a leak, since the same local test that
+created a child deletes it when the demand moves away.
 
 The global quantity is therefore measured directly rather than summed: **apex neurons per level per frame, and
-the dictionary size that bought them.** That pair is the standing metric, and the local ledgers are only a cheap
-parallel proxy for it.
+the dictionary size that bought them.** That pair is the standing metric, and the local evaluations are only a
+cheap parallel proxy for it.
 
-## Birth
+## Creating a child
 
-A child whose balance crosses one horizon of rent gains a pattern neuron **one level above the neuron's own
-level**. If the balance later falls back below that line the pattern is withdrawn and the child is an embryo
-again, so this is a crossing rather than a one-way event.
+When [the test](#the-one-test) passes on a candidate, the neuron creates a child: a configuration in its own
+routing table, and a **pattern neuron one level above its own level**. Both are what the `1 + |O|` paid for.
 
 - The pattern **inherits its parent's channel**. That channel then infers its neighbor channels at the higher
   level.
-- Its trigger is the child's configuration, and the child keeps accumulating on it — what was banked toward birth
-  becomes [refinement](#refinement) after.
-- **It is born with no connections.** Its connections belong to its own level, which has not been observed at
-  the moment of birth. As the level above populates, the newborn learns its connections there by ordinary
+- Its trigger is the child's configuration, which goes on moving under [refinement](#refinement).
+- **It is created with no connections.** Its connections belong to its own level, which has not been observed at
+  the moment of creation. As the level above populates, the newborn learns its connections there by ordinary
   co-occurrence counting.
-- Its balance carries over from the crossing, which is what [forgetting.md](forgetting.md) charges against.
+- Its own structure — those connections, and any children of its own — is judged by its own tests at its own
+  level. The parent decided that it should exist; nothing decides for it what it becomes.
+
+Deletion is the same event run backwards: the configuration leaves the routing table and the pattern neuron is
+released. Nothing irreplaceable goes with it, because the evidence lives in the [history](#the-history) rather
+than in the entry — if the same configuration is justified again, the add pass rebuilds it from the same frames.
 
 ## Contraction: building the level above
 
@@ -519,13 +408,14 @@ frame's routing, recomputed each frame — patterns persist, owned by a channel;
 upward is decided here.
 
 Each neuron carries an **activation strength**, and it is not a separate quantity: it is the
-[balance](#the-balance-is-the-whole-lifecycle) of the child that fired. A child deep into solvency is one whose
-demand keeps returning, so ranking by balance ranks by how established a pattern is.
+[benefit](#the-one-test) of the child that fired — the errors that child removes from the history. A child with a
+large benefit is one whose demand keeps returning and which serves it well, so ranking by benefit ranks by how
+established a pattern is.
 
-A neuron that fired no pattern — one that served from its [normal](#the-normal) or an embryo — has no such balance
-and does not take part. It delegated nothing and propagated nothing, so it is already the top of its own chain:
-**executing the normal is what makes a neuron an apex.** Only neurons that delegated to a child are candidates
-here, which is consistent with contraction being what turns fired children into the level above.
+A neuron that fired no child — one that served from its [normal](#the-normal) — has no such benefit and does not
+take part. It delegated nothing and propagated nothing, so it is already the top of its own chain: **executing the
+normal is what makes a neuron an apex.** Only neurons that delegated to a child are candidates here, which is
+consistent with contraction being what turns fired children into the level above.
 
 **The passes**, executed by the thalamus since these are cross-neuron comparisons:
 
@@ -563,19 +453,26 @@ neurons — the pricing never leaves whole numbers, so no estimator, smoothing, 
 
 The only frequencies in the design are the **connection counts**, and they are used raw. The base model predicts
 each neighbor by the argmax of its counts; a prediction only has to name a bucket, not price one, so nothing is
-smoothed. A newborn's configuration is the exact observation that opened it and it serves that observation with
-zero error, so the old worry that a pattern could be born unable to fire on its own configuration cannot arise.
+smoothed. A new child's configuration is the exact observation that created it and it serves that observation with
+zero error, so the old worry that a pattern could be created unable to fire on its own configuration cannot arise.
 
 Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by how often each neuron
 occurs — the one variable-length code in which probabilities set costs.
 
 ## Refinement
 
-On each serve, the members present strengthen and the absent ones dilute relatively as the serve count grows.
-This is an online mode collapse: the stored configuration converges to the recurring core of the frames the child
-actually serves, so a shape whose boundary was drawn slightly wrong at birth converges to the right one through
-ordinary use. Low-share members are born low and fade, so no explicit prune rule is needed. This is facility
-location's **move**: a pattern relocating toward the demand it serves.
+A child's configuration is the **median of the frames it serves**: for each neighbor, present in the configuration
+iff it is present in more than half of those frames. Under Hamming distance that is exactly the point minimising
+total distance to the frames served, so it is not an approximation of the right configuration — it is the right
+configuration, computable directly from the [history](#the-history).
+
+This is facility location's **move**: a child relocating onto the demand it serves. A shape whose boundary was
+drawn wrong when it was created corrects as soon as the frames say so, and a neighbor that only sometimes appears
+drops out of the configuration by falling under half, so no prune rule is needed.
+
+Because the median is recomputed rather than drifted toward, it can shift the moment the history changes — and a
+shifted configuration changes distances, so frames may change hands. That reassignment is what the delete and add
+passes see on the following frame.
 
 Connections carry no refinement — they are plain accumulated counts.
 
@@ -583,18 +480,17 @@ Connections carry no refinement — they are plain accumulated counts.
 
 ```mermaid
 flowchart TD
-    A["Frame: every dimension fires one bucket"] --> B["For each active neuron: advance the clock —<br/>cull children the death heap says have run out"]
+    A["Frame: every dimension fires one bucket"] --> B["For each active neuron:<br/>drop history records older than the horizon"]
     B --> C["Observe neighborhood O; take closest entry e*<br/>the normal and every child compete alike"]
-    C --> D["Accumulate: e* error total += distance from O to e*"]
-    D --> E{"e* error total ≥ opening cost?"}
-    E -->|yes| F["Open a new child at O; it becomes the server"]
-    E -->|no| G["e* is the server"]
-    F --> H{"Does the server have a pattern?"}
-    G --> H
-    H -->|yes| I["Fire it — delegate inference, propagate a unit up"]
-    H -->|no| J["Normal or embryo infers for itself;<br/>nothing propagates — this neuron is apex"]
-    I --> K["Bank: serving child balance += members − 1 − errors;<br/>crossing the birth line promotes embryo to pattern"]
-    J --> K
+    C --> D{"Is e* a child?"}
+    D -->|yes| E["Fire it — delegate inference, propagate a unit up"]
+    D -->|no| F["The normal infers for itself;<br/>connections update, nothing propagates — this neuron is apex"]
+    E --> G["Record the frame: O and the entry that served it"]
+    F --> G
+    G --> H["Delete pass: test each child.<br/>Does its benefit still cover 1 + its configuration?"]
+    H --> I["Delete the worst failure — at most one per frame"]
+    I --> J["Add pass: would a child at O remove more error<br/>from the history than 1 + O costs?"]
+    J --> K["If so, create it: configuration here, pattern neuron one level up"]
     K --> L["Contraction: thalamus runs the inhibition passes"]
     L --> M["Each group contributes one unit to the level above"]
     M --> N["Process the next level up"]
@@ -606,10 +502,11 @@ Each phase lands independently and is measured before the next. The headline met
 **survivors per level per frame, paired with the dictionary size that bought them.** Alongside it: MNIST accuracy
 (train and held-out), neuron counts per level, patterns per neuron, and wall-clock per frame.
 
-**Phase 1 — the configuration loop at level 0.** The whole-neighborhood configuration; inference from the
-pairwise connection distributions; the children with partial matching; the nearest child serving, banking to its
-balance, and accumulating error to open new children; promotion when the balance crosses the opening line;
-recognition as a match with at most one pattern firing per neuron. Capped at one level so the recursion is not a variable yet.
+**Phase 1 — the configuration loop at level 0.** The whole-neighborhood configuration; the normal and inference
+from the pairwise connection distributions; the history window; the nearest entry serving, with at most one child
+firing per neuron; the delete pass and the add pass, both running the one test against the history. Capped at one
+level so the recursion is not a variable yet. Measure the history's size and the wall-clock of the add pass early —
+they are what decide whether the exact evaluation is affordable.
 
 **Phase 2 — contraction.** The inhibition passes, groups, derived adjacency, and the level-above construction.
 Measured by the per-level reduction factor and the depth at which it terminates; the prediction is
@@ -618,23 +515,26 @@ Measured by the per-level reduction factor and the depth at which it terminates;
 **Phase 3 — the readout gate.** Once growth is bounded and depth settles, compare held-out accuracy against
 what the level counts justify. Do not build past this phase if the answer is no.
 
-Forgetting lands on its own track, specified and phased in [forgetting.md](forgetting.md).
+Variable-length pricing lands on its own track, specified in [forgetting.md](forgetting.md).
 
 ## Risks
 
 - **The readout is unvalidated.** Compressing harder can produce a *worse* classifier, because a Naive-Bayes
   readout can be living on exactly the position-and-class-specific duplicates that compression deletes. Phase 3
   is the gate.
-- **Cold-start churn.** Early on nearly every neighborhood is novel, so patterns open in bursts. The balance
-  drains the ones that do not recur, but the transient can be large. Measure churn in the first thousand frames,
-  not just settled counts.
-- **The densely-firing entry with persistent small error.** [Holding the window](#holding-the-window) is cheap
-  because clean serves record nothing, but an entry that fires on most frames and is slightly wrong on each records
-  on most of them. Activation is not sparse where it matters — with one bucket per dimension firing every frame,
-  the bucket-0 neuron of a mostly-off pixel is active almost always. The saving grace should be that such an entry
-  crosses its opening line quickly, sheds the error to a new child, and returns to recording nothing, making the
-  long queue a transient. That is an expectation, not a guarantee. Instrument the longest queue over the first
-  thousand frames rather than assuming it.
+- **Cold-start churn.** With a nearly-empty history every configuration looks novel, so early tests are decided by
+  very little evidence and children may be created and deleted in bursts. The tests correct themselves as the
+  window fills, but measure churn over the first thousand frames rather than settled counts.
+- **The add pass is the expensive step.** The delete pass can be kept cheap — the routing scan already touches
+  every entry, and per-child sums can be maintained incrementally. The add pass cannot: scoring a candidate at `O`
+  means measuring it against every frame in the history. Activation is not sparse where it matters, since with one
+  bucket per dimension firing every frame the bucket-0 neuron of a mostly-off pixel is active almost always, so
+  that history is long. Running the add pass only when the current frame was served with error above zero should
+  make it rare for a settled neuron, since a perfectly served frame cannot justify a new child. That is an
+  expectation, not a guarantee — instrument the wall-clock share of the add pass before trusting it.
+- **Window overfitting.** Every decision is exact with respect to the horizon and blind beyond it. Too short a
+  horizon and the neuron builds structure for coincidences; too long and it is slow to follow a drifting source.
+  With rent gone there is no smoothing anywhere, so sensitivity to the horizon should be sharper than before.
 - **Dictionary redundancy.** Contraction shrinks the width of each level; it does not shrink the dictionary. The
   same shape is learned separately at every position — this is the [reuse](#open-questions) question, and it is
   the largest source of waste the design does not yet address.
@@ -645,18 +545,21 @@ Ordered by when they should be settled: the routing table first, then level proc
 
 ### Routing table
 
-- **Ranking born against unborn.** The closest entry serves, but a pattern propagates upward while the normal and
-  an embryo do not. When the closest entry is an embryo or the normal while a slightly-worse-matching pattern
-  exists, which serves — the strictly closest, or the closest pattern? The document assumes strictly closest;
-  whether propagation should break ties toward a born child is undecided.
-- **The opening cost constant.** Opening is priced at `|O|`, the neighborhood size. Whether the child's own name
-  belongs in it — `1 + |O|` — shifts every break-even by one neuron. Small, but pick one.
+- **Ranking the normal against a child.** The closest entry serves, but a child propagates upward while the normal
+  does not. When the normal is closest by a hair and a child is nearly as close, which serves — the strictly
+  closest, or the one that propagates? The document assumes strictly closest; whether propagation should break
+  near-ties is undecided.
+- **Where a new child lands.** The add pass tests a candidate at the current observation `O`. A candidate placed at
+  the [median](#refinement) of the frames it would win might pass where the raw observation fails, and would land
+  better. Testing more than one candidate per frame costs more passes over the history.
+- **Whether one delete and one add per frame is enough.** It bounds the work and lets interacting deletions settle
+  one at a time, but it also caps how fast the structure can follow a shift. Whether that ceiling ever binds is
+  empirical.
 
-*Settled here:* the match tolerance is the serve-or-open comparison itself — an entry absorbs variation until its
-accumulated error reaches `|O|`, so partial matching needs no separate threshold. Birth-frame attribution: on an
-opening frame the new child serves and banks, while `e*` only resets its accumulator. And the error tally is an
-exact sliding window one horizon wide, not a decayed estimate, which makes the opening threshold exactly
-`error rate ≥ rent`.
+*Settled here:* partial matching needs no threshold — an entry serves variations for as long as it passes the one
+test. The add and delete rules are the same test, so nothing can be deleted and immediately re-added. The
+opening cost is `1 + |O|`: the pattern neuron minted one level up, plus the configuration stored here. And the
+history is the exact frames rather than any summary, because deletion cannot be evaluated without them.
 
 ### Level processing
 
@@ -694,23 +597,23 @@ The event axis (`d > 0`) is not specified here. Two things are known about where
 - **The context is the active neurons at `d > 0`**, used to infer the next frame.
 - **A temporal pattern infers its own level**, not the one below, so at the moment of its creation its event
   connections are empty — the next frame has not been observed yet. It learns them once that frame arrives, the
-  same rule as the spatial side: a newborn is born with no connections and learns them at its own level.
+  same rule as the spatial side: a new child has no connections and learns them at its own level.
 
-**The mechanism is the same on both axes.** A neuron holds a [normal](#the-normal) and children, routes each
-frame to the closest, accumulates the error of whichever served, and opens a child when that error covers the
-opening cost. Nothing in that needs the context and the inference to be the same set — it needs only a distance
-and an opening cost.
+**The mechanism is the same on both axes.** A neuron holds a [normal](#the-normal) and children, keeps a
+[history](#the-history) of the frames it was active for, routes each frame to the closest entry, and creates or
+deletes children by [the one test](#the-one-test). Nothing in that needs the context and the inference to be the
+same set — it needs only a distance and a storage cost.
 
 What differs is **when the distance can be read**. On the spatial axis context and inference are one set, so the
-error is known in the same frame. On the event axis the normal is matched against a context at `d > 0` while what
-it infers is the next frame, so the error is only known once that frame arrives and is charged a frame late. That
-is a timing difference, not a structural one.
+error is known in the same frame and the history record is complete when it is written. On the event axis the
+match is against a context at `d > 0` while what is inferred is the next frame, so a record cannot be scored until
+that frame arrives and is completed one frame late. That is a bookkeeping delay, not a structural difference.
 
 The one thing the event axis faces that the spatial axis does not is that **one context can lead to several
 outcomes.** Spatially the demand point fully specifies the child, because the neighborhood is both the match and
 the prediction. Temporally the demand point is a `(context, outcome)` pair, and two frames sharing a context but
 differing in outcome cannot both be served by a context-keyed child. The economics degrades gracefully — the
-normal predicts the dominant outcome, eats the error on the rest, and that error opens children until whatever
+normal predicts the dominant outcome, eats the error on the rest, and the test creates children until whatever
 genuinely distinguishes the contexts is found. What remains after that is irreducible uncertainty, which no model
 removes. Whether the event axis needs more than this — a tiebreak among same-context children, or a child carrying
 several outcomes — is the open decision.
