@@ -283,6 +283,11 @@ For an active neuron with observed neighborhood `O`:
 Steps 5 and 6 are the same test on different subjects. The delete pass folds into the routing scan of step 2,
 since both need each entry's distance to the frames it serves.
 
+**One of each per frame is not a throttle.** There is only ever one candidate to add, because the candidate is
+this frame's observation; and deletions have to be sequential to be correct. What bounds how fast the structure
+can follow a shift is how often the neuron is active, not the rule — a neuron firing through a thousand-frame
+horizon has a thousand chances to reshape a handful of children.
+
 ### Merge and split need no machinery of their own
 
 The standard local search for facility location has three moves, and each is already something the design does:
@@ -385,7 +390,14 @@ routing table, and a **pattern neuron one level above its own level**. Both are 
 
 - The pattern **inherits its parent's channel**. That channel then infers its neighbor channels at the higher
   level.
-- Its trigger is the child's configuration, which goes on moving under [refinement](#refinement).
+- Its configuration starts as the observation that justified it, and moves from there under
+  [refinement](#refinement) onto the median of what it actually serves. Starting at the observation is not a
+  guess to be improved on: the best configuration for a set of frames is the median of that set, but which frames
+  a candidate would win cannot be known until it is placed somewhere. Placing it on the demand that justified it
+  and letting refinement relocate it is the same two steps in the other order.
+- **A candidate rejected today is not lost.** Every frame offers a different candidate — its own observation — so
+  a neuron samples candidate positions from its own demand. A cluster worth a child will sooner or later present a
+  frame near its middle, and that candidate passes where an off-centre one failed.
 - **It is created with no connections.** Its connections belong to its own level, which has not been observed at
   the moment of creation. As the level above populates, the newborn learns its connections there by ordinary
   co-occurrence counting.
@@ -453,8 +465,8 @@ neurons — the pricing never leaves whole numbers, so no estimator, smoothing, 
 
 The only frequencies in the design are the **connection counts**, and they are used raw. The base model predicts
 each neighbor by the argmax of its counts; a prediction only has to name a bucket, not price one, so nothing is
-smoothed. A new child's configuration is the exact observation that created it and it serves that observation with
-zero error, so the old worry that a pattern could be created unable to fire on its own configuration cannot arise.
+smoothed. A new child's configuration is the exact observation that created it, so it serves that observation with
+zero error — a child can never be created unable to serve the demand that justified it.
 
 Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by how often each neuron
 occurs — the one variable-length code in which probabilities set costs.
@@ -535,39 +547,22 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
 - **Window overfitting.** Every decision is exact with respect to the horizon and blind beyond it. Too short a
   horizon and the neuron builds structure for coincidences; too long and it is slow to follow a drifting source.
   With rent gone there is no smoothing anywhere, so sensitivity to the horizon should be sharper than before.
-- **Dictionary redundancy.** Contraction shrinks the width of each level; it does not shrink the dictionary. The
-  same shape is learned separately at every position — this is the [reuse](#open-questions) question, and it is
-  the largest source of waste the design does not yet address.
 
 ## Open questions
 
-Ordered by when they should be settled: the routing table first, then level processing.
-
-### Routing table
-
-- **Ranking the normal against a child.** The closest entry serves, but a child propagates upward while the normal
-  does not. When the normal is closest by a hair and a child is nearly as close, which serves — the strictly
-  closest, or the one that propagates? The document assumes strictly closest; whether propagation should break
-  near-ties is undecided.
-- **Where a new child lands.** The add pass tests a candidate at the current observation `O`. A candidate placed at
-  the [median](#refinement) of the frames it would win might pass where the raw observation fails, and would land
-  better. Testing more than one candidate per frame costs more passes over the history.
-- **Whether one delete and one add per frame is enough.** It bounds the work and lets interacting deletions settle
-  one at a time, but it also caps how fast the structure can follow a shift. Whether that ceiling ever binds is
-  empirical.
-
-*Settled here:* partial matching needs no threshold — an entry serves variations for as long as it passes the one
-test. The add and delete rules are the same test, so nothing can be deleted and immediately re-added. The
-opening cost is `1 + |O|`: the pattern neuron minted one level up, plus the configuration stored here. And the
-history is the exact frames rather than any summary, because deletion cannot be evaluated without them.
+Everything still undecided sits at the boundary between levels.
 
 ### Level processing
 
+- **Whether propagation should break a near-tie.** The closest entry serves, but a child propagates upward while
+  the normal does not, so the two are not worth the same to the file: a name that propagates can be absorbed by
+  contraction and shared across a group, while an apex name is paid in full. How much worse a match is worth
+  accepting to gain that depends on what contraction does with the propagated unit, which is the level transition
+  below.
 - **The level transition.** Contraction, grouping, reuse, and merging are one operation, run by the thalamus at
-  the boundary between levels, and together they decide which neurons are active at the level above. §Contraction
-  writes only the inhibition half. The two questions inside it: whether reuse is keyed on the group's shape rather
-  than on any single neuron's configuration, and which unit earns the saving once a group collapses. This is the
-  biggest gap in the document.
+  the boundary between levels, and together they decide which neurons are active at the level above. Two questions
+  live inside it: whether reuse is keyed on the shape of a whole group rather than on any single neuron's
+  configuration, and which unit earns the saving once a group collapses into one.
 - **Configuration space beyond the small case.** Eight binary neighbors is 256 configurations — finite and
   countable. Radius 2 is 2²⁴, and more buckets multiply it further. Exact-configuration counting is bounded
   precisely in the regime where it is least needed. What replaces it when the neighborhood is larger?
@@ -575,8 +570,9 @@ history is the exact frames rather than any summary, because deletion cannot be 
   alphabet grows as patterns are promoted, so the configuration space is not fixed. One-active-per-neuron holds
   each channel to a single state, but the space still expands with the structure. What bounds the child count there?
 - **Reuse across positions.** Identity is keyed by absolute dimension, so nothing shares a shape across positions —
-  the same configuration is learned separately everywhere it occurs. Contraction fixes the width of each level, not
-  this redundancy of the dictionary. It is filed under Risks today and belongs with the level transition.
+  the same configuration is learned separately everywhere it occurs, and the dictionary carries one line for each
+  copy. Contraction fixes the width of each level; it does nothing about this. It is the largest source of waste in
+  the design.
 
 ### Independent
 
@@ -588,7 +584,6 @@ history is the exact frames rather than any summary, because deletion cannot be 
 - **The level-transition section.** Contraction, reuse, grouping, and merging as one thalamic operation. Everything
   else in the document stands on top of it.
 - **Terminology.** §Contraction says "survivor" and §The cost says "apex neuron" for the same set. Pick one.
-- **Move dictionary redundancy out of Risks** and into the level-transition section once that exists.
 
 ## Temporal: the open port
 

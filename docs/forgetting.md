@@ -11,12 +11,9 @@ sections are identical, and only the exchange from symbols to length differs.
 
 ## Forgetting is not a separate mechanism
 
-It was, in an earlier version of the design, where structure paid rent and died when its balance ran out. It no
-longer is. A neuron keeps a [history](algorithm.md#the-history) one horizon wide and deletes a child the moment it
-stops covering its own storage — so forgetting is just the delete half of the
-[one test](algorithm.md#the-one-test), and nothing about it needs a document of its own.
-
-What is left here is one experiment about how the file is priced.
+A neuron keeps a [history](algorithm.md#the-history) one horizon wide and deletes a child the moment it stops
+covering its own storage. Forgetting is the delete half of the [one test](algorithm.md#the-one-test) and needs no
+machinery of its own, so what remains here is one question about how the file is priced.
 
 ## What changes if symbols are priced by occurrence
 
