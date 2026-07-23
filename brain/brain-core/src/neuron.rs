@@ -24,11 +24,6 @@ use crate::types::*;
 /// fallback. Not a tunable knob — kept here to avoid a magic number in the error-threshold getters.
 const ERROR_MIN_SAMPLES: u64 = 3;
 
-/// Default spatial history horizon (frames) for the level-0 configuration loop — the design's single
-/// free parameter (docs/algorithm.md, "The cost"). Held as a per-neuron field so it can be wired to a
-/// Brain construction option; this constant is the current default.
-const DEFAULT_SPATIAL_HORIZON: u32 = 1000;
-
 /// A spatial correction request: an embryo in this neuron's womb accumulated enough evidence to
 /// cover its price, so the neuron asks the thalamus to give birth to the pattern it represents.
 /// The thalamus owns what the neuron cannot decide locally: the subsumption filter, id
@@ -43,9 +38,9 @@ pub struct SpatialCorrectionRequest {
     pub context_neighbors: Vec<NeuronId>,
 }
 
-/// Who served a frame in the level-0 configuration loop (UCAR, docs/algorithm.md): the neuron's
-/// [normal](../../../docs/algorithm.md) or one of its children. The history records this so the one
-/// test can ask, for any remembered frame, what it would fall back to if a given child did not exist.
+/// Who serves a frame in the level-0 configuration loop (UCAR, docs/algorithm.md): the neuron's
+/// normal, or one of its children. Produced by routing each frame (and recomputed for remembered
+/// frames by the one test and refinement) — never stored, since it is derivable from the observation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SpatialServer {
     /// The normal served — the neuron inferred from its own connections and propagated nothing.
@@ -54,16 +49,17 @@ pub enum SpatialServer {
     Child(NeuronId),
 }
 
-/// One remembered frame in a neuron's spatial history window: the observed neighborhood `O` (the
-/// active neighbor ids, sorted) and which routing entry served it. This IS the neuron's evidence —
-/// every structural decision (the one test's add and delete passes, and median refinement) reads
-/// this window directly rather than any summary. Spans the last `horizon` frames the neuron fired.
+/// One remembered frame in a neuron's spatial history window: the frame number and the observed
+/// neighborhood `O` (the active neighbor ids, sorted). This IS the neuron's evidence — every
+/// structural decision (the one test's add and delete passes, and median refinement) reads this
+/// window directly. Only `O` is stored: which entry serves any remembered frame is *recomputed* from
+/// `O` against the current entries (the same best-entry selection routing uses), so a stored server
+/// would go stale as configurations refine and is redundant. Spans the last `horizon` frames.
 #[derive(Debug, Clone)]
 struct SpatialHistoryRecord {
     frame: FrameNumber,
     /// The observed neighborhood, as a sorted, deduplicated set of neighbor neuron ids.
     observed: Vec<NeuronId>,
-    server: SpatialServer,
 }
 
 /// Per-neuron output of the spatial frame pass. Votes never leave the neuron — it routes its
@@ -169,15 +165,13 @@ pub struct AgeState {
     pub activated_pattern_id: Option<NeuronId>,
 }
 
-/// Active sensory neuron info passed into learn_connections.
-/// The dimension rides along so spatial learning can record each target's position — the
-/// per-position winner competition in prediction evaluation needs it for targets that are
-/// NOT active on the evaluated frame, so it cannot be resolved from the frame's actives.
+/// Active neuron info for the co-activation neighborhood: its id, channel, and reward. (The old
+/// per-target dimension — used by the removed prediction/vote substrate — is gone; the configuration
+/// loop keys on neuron ids alone.)
 #[derive(Debug, Clone)]
 pub struct ActiveNeuron {
     pub id: NeuronId,
     pub channel_id: ChannelId,
-    pub dim_id: DimensionId,
     pub reward: Reward,
 }
 
@@ -292,36 +286,6 @@ pub struct Neuron {
     /// skip matching until the context window has had a chance to fill up at the start of a sequence
     context_length: u32,
 
-    // ── Temporary experimental toggles ──────────────────────────────────────────
-    // Each of these is a pending decision, not a feature: when its experiment concludes, the winning
-    // behavior is hard-wired and the toggle is DELETED. This list is the current test matrix, and it
-    // must shrink.
-
-    /// LIKELIHOOD-RATIO spatial recognition (MDL): candidates are scored as a hypothesis test — for
-    /// each stored context entry, log2 of the ratio between its probability under the candidate (from the
-    /// entry's per-fire co-occurrence counts) and under the background model (the host's local marginal
-    /// frequencies). Present entries credit log(p(e|C)/p(e|bg)); absent entries cost
-    /// log((1-p(e|C))/(1-p(e|bg))); novel entries cancel (siblings encode them). Acceptance: score > 0 —
-    /// the candidate must explain the observation better than "no pattern". No thresholds. Default OFF.
-    match_info: bool,
-
-    /// FACILITY-LOCATION spatial correction creation (MDL): a failed prediction is scored as net
-    /// benefit under the neuron's local inference base rates (the surprise gate), and a positive benefit is a
-    /// demand point served by the womb. Fuzzy likelihood-ratio assignment pools each failure into an
-    /// embryo — a recurring context cluster — whose center drifts toward the failures it serves and
-    /// whose evidence accumulates the benefit. A pattern is born when an embryo's evidence covers
-    /// its price (|context| + 1); incoherent or stale embryos are evicted on the forget-rate clock.
-    /// No thresholds, no exact-context ledger, no unpaid patterns. Default OFF.
-    error_info: bool,
-
-    /// Diagnostic: when set, spatial `match_observed` prints its common/missing/novel/ratio/threshold per call
-    /// (to stderr). Off by default. Run over a tiny number of frames — it prints one line per candidate match.
-    trace_match: bool,
-
-    /// Diagnostic: when set, the spatial prediction evaluation prints the predicted/observed sizes, the
-    /// measured error, and the threshold verdict per evaluated frame (to stderr). Off by default.
-    trace_error: bool,
-
     /// Master learning toggle, fixed at construction like every other option.
     /// When false, recognition and voting still run but every substrate write is skipped.
     learning: bool,
@@ -384,10 +348,11 @@ pub struct Neuron {
     /// Ephemeral: it refills as the neuron fires after a restore, so it is never serialized.
     spatial_history: Vec<SpatialHistoryRecord>,
 
-    /// The horizon: how many frames of history the one test evaluates over — the design's single free
-    /// parameter, "how long the world is assumed to hold still" (docs/algorithm.md, "The cost"). Held
-    /// per-neuron so it can later be wired to a Brain construction option; defaults to
-    /// `DEFAULT_SPATIAL_HORIZON`.
+    /// The horizon: how many frames of history the one test evaluates over — "how long the world is
+    /// assumed to hold still" (docs/algorithm.md, "The cost"). This is the **inverse of the forget
+    /// rate**, not an independent knob: a pattern's decay clock and the evidence window are the same
+    /// timescale, so the horizon is derived as `round(1 / pattern_forget_rate)` at construction. No
+    /// new free parameter is introduced.
     horizon: u32,
 
     // ── Temporal state (d>0 sequence, distance-keyed) ───────────────────────────
@@ -431,10 +396,6 @@ impl Neuron {
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         context_length: u32,
         learning: bool,
-        match_info: bool,
-        error_info: bool,
-        trace_match: bool,
-        trace_error: bool,
     ) -> Self {
         Self {
             id,
@@ -442,10 +403,6 @@ impl Neuron {
             group_threshold,
             group_mode,
             context_length,
-            match_info,
-            error_info,
-            trace_match,
-            trace_error,
             learning,
             channel_action_ids,
             spatial_connections: FxHashMap::default(),
@@ -459,7 +416,8 @@ impl Neuron {
             spatial_inference_counts: FxHashMap::default(),
             spatial_inference_frames: 0,
             spatial_history: Vec::new(),
-            horizon: DEFAULT_SPATIAL_HORIZON,
+            // The horizon is the inverse of the forget rate — the same timescale, not a new knob.
+            horizon: if pattern_forget_rate > 0.0 { (1.0 / pattern_forget_rate).round().max(1.0) as u32 } else { u32::MAX },
             temporal_connections: Vec::new(),
             temporal_routing_table: FxHashMap::default(),
             temporal_context_index: FxHashMap::default(),
@@ -1319,8 +1277,8 @@ impl Neuron {
             return SpatialFrameResult { matches, correction_request: None, deleted_children: Vec::new(), timings };
         }
 
-        // 4. Record this frame into the history.
-        self.spatial_history.push(SpatialHistoryRecord { frame: current_frame, observed, server });
+        // 4. Record this frame into the history (only the observed neighborhood is kept).
+        self.spatial_history.push(SpatialHistoryRecord { frame: current_frame, observed });
 
         // The winner's stored configuration moves toward the core of what it serves (median refinement).
         if let SpatialServer::Child(pid) = server {
@@ -1418,10 +1376,20 @@ impl Neuron {
     /// hands. Updates the local inverted index; cross-neuron context refs are settled at install and
     /// delete, so a refinement that drops a neighbor leaves a harmless stale ref until then.
     fn refine_child_median(&mut self, pattern_id: NeuronId) {
+        // The frames this child serves are recomputed from the observations against the current
+        // entries — the same best-entry selection routing and the delete pass use — not read from a
+        // stored server, so refinement stays consistent as sibling configurations change.
+        let normal = self.normal_config_set();
+        let configs: Vec<(NeuronId, FxHashSet<NeuronId>)> = self.spatial_routing_table.iter()
+            .map(|(&pid, e)| (pid, Self::child_config_set(e)))
+            .collect();
+
         let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
         let mut served: u64 = 0;
         for rec in &self.spatial_history {
-            if rec.server != SpatialServer::Child(pattern_id) { continue; }
+            let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
+            let (winner, _, _) = Self::spatial_route_two(&obs, &normal, &configs);
+            if winner != SpatialServer::Child(pattern_id) { continue; }
             served += 1;
             for &id in &rec.observed { *counts.entry(id).or_insert(0) += 1; }
         }

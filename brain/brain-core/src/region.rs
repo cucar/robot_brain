@@ -76,10 +76,6 @@ impl Region {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
-        match_info: bool,
-        error_info: bool,
-        trace_match: bool,
-        trace_error: bool,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -90,10 +86,6 @@ impl Region {
                 group_threshold,
                 group_mode,
                 learning,
-                match_info,
-                error_info,
-                trace_match,
-                trace_error,
             ));
         }
         Self { c, columns }
@@ -491,7 +483,6 @@ mod tests {
             0.5,
             GroupMode::Static,
             true,
-            false, false, false, false,
         )
     }
 

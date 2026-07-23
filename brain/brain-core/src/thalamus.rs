@@ -329,10 +329,6 @@ impl Thalamus {
         regions: usize,
         columns: usize,
         learning: bool,
-        match_info: bool,
-        error_info: bool,
-        trace_match: bool,
-        trace_error: bool,
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
         let channel_actions = FxHashMap::default();
@@ -347,10 +343,6 @@ impl Thalamus {
                 group_threshold,
                 group_mode,
                 learning,
-                match_info,
-                error_info,
-                trace_match,
-                trace_error,
             ));
         }
 
@@ -1438,14 +1430,14 @@ impl Thalamus {
     /// only for action neurons) — the neighbor actives connection learning reads.
     fn decorate_temporal_actives(&self, active_ids: &FxHashSet<NeuronId>, rewards: Option<&FxHashMap<ChannelId, Reward>>) -> Vec<ActiveNeuron> {
         active_ids.iter().map(|&neuron_id| {
-            let (channel_id, dim_id, neuron_type) = self.base_neurons.get(&neuron_id)
-                .map(|b| (b.channel_id, b.coordinate.dim_id, Some(b.neuron_type)))
-                .unwrap_or((0, 0, None));
+            let (channel_id, neuron_type) = self.base_neurons.get(&neuron_id)
+                .map(|b| (b.channel_id, Some(b.neuron_type)))
+                .unwrap_or((0, None));
             let reward = match (rewards, neuron_type) {
                 (Some(r), Some(NeuronType::Action)) => r.get(&channel_id).copied().unwrap_or(0.0),
                 _ => 0.0,
             };
-            ActiveNeuron { id: neuron_id, channel_id, dim_id, reward }
+            ActiveNeuron { id: neuron_id, channel_id, reward }
         }).collect()
     }
 
@@ -1558,13 +1550,12 @@ impl Thalamus {
         inference_events.iter().map(|&neuron_id| {
 
             // Pattern neurons resolve here too: they inherit their parent's coordinate at birth.
-            // The dimension rides along so each neuron can record its targets' positions at learn time.
-            let (channel_id, dim_id) = self.base_neurons.get(&neuron_id)
-                .map(|b| (b.channel_id, b.coordinate.dim_id))
-                .unwrap_or((0, 0));
+            let channel_id = self.base_neurons.get(&neuron_id)
+                .map(|b| b.channel_id)
+                .unwrap_or(0);
 
             // Co-activation carries no reward semantics — reward lives on the payload channels.
-            ActiveNeuron { id: neuron_id, channel_id, dim_id, reward: 0.0 }
+            ActiveNeuron { id: neuron_id, channel_id, reward: 0.0 }
         }).collect()
     }
 

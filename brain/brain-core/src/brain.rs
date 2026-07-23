@@ -403,10 +403,6 @@ impl Brain {
         consensus_mode: ConsensusMode,
         debug: bool,
         learning: bool,
-        match_info: bool,
-        error_info: bool,
-        trace_match: bool,
-        trace_error: bool,
         apex_coverage: bool,
     ) -> Self {
         Self {
@@ -431,10 +427,6 @@ impl Brain {
                 regions,
                 columns,
                 learning,
-                match_info,
-                error_info,
-                trace_match,
-                trace_error,
             ),
             memory: Memory::new(debug, context_length),
         }

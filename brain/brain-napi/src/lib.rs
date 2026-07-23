@@ -153,10 +153,6 @@ impl JsBrain {
     ///   debug: boolean (default false)
     ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
     ///
-    /// TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
-    ///   matchInfo / errorInfo: boolean
-    ///   traceMatch / traceError: boolean
-    ///
     /// The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
     /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
     /// opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.
@@ -186,14 +182,7 @@ impl JsBrain {
             None => (10, 0.5, GroupMode::Neutral, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
-        // TEMPORARY experimental toggles for the spatial mechanisms under test, passed through like
-        // every other option — each is deleted when its experiment concludes; this list must shrink.
-        let opts = options.as_ref();
-        let match_info = opt_bool(opts, "matchInfo")?.unwrap_or(false);
-        let error_info = opt_bool(opts, "errorInfo")?.unwrap_or(false);
-        let trace_match = opt_bool(opts, "traceMatch")?.unwrap_or(false);
-        let trace_error = opt_bool(opts, "traceError")?.unwrap_or(false);
-        let apex_coverage = opt_bool(opts, "apexCoverage")?.unwrap_or(false);
+        let apex_coverage = opt_bool(options.as_ref(), "apexCoverage")?.unwrap_or(false);
 
         // The learning state is fixed at construction: a frozen evaluation is a separate brain
         // instance loaded from a backup, not a toggled one.
@@ -201,7 +190,7 @@ impl JsBrain {
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            match_info, error_info, trace_match, trace_error, apex_coverage,
+            apex_coverage,
         );
 
         Ok(Self { inner: RefCell::new(inner) })

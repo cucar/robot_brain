@@ -111,13 +111,6 @@ pub struct Column {
     /// How the derived correction threshold adapts from per-unit Welford stats (shared spatial/temporal).
     group_mode: GroupMode,
 
-    // ── Temporary experimental toggles ──────────────────────────────────────────
-    // Handed to every neuron this column creates or loads; the field docs live on Neuron.
-    match_info: bool,
-    error_info: bool,
-    trace_match: bool,
-    trace_error: bool,
-
     /// Master learning toggle, fixed at construction and handed to every neuron this column creates or loads.
     learning: bool,
 
@@ -133,10 +126,6 @@ impl Column {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
-        match_info: bool,
-        error_info: bool,
-        trace_match: bool,
-        trace_error: bool,
     ) -> Self {
         Self {
             channel_actions,
@@ -144,10 +133,6 @@ impl Column {
             context_length,
             group_threshold,
             group_mode,
-            match_info,
-            error_info,
-            trace_match,
-            trace_error,
             learning,
             neurons: FxHashMap::default(),
         }
@@ -564,10 +549,6 @@ impl Column {
                 self.channel_actions.clone(),
                 self.context_length,
                 self.learning,
-                self.match_info,
-                self.error_info,
-                self.trace_match,
-                self.trace_error,
             );
             // pre-wire default action connections at neutral reward across all voting distances
             for distance in 1..self.context_length {
@@ -632,10 +613,6 @@ impl Column {
             self.channel_actions.clone(),
             self.context_length,
             self.learning,
-            self.match_info,
-            self.error_info,
-            self.trace_match,
-            self.trace_error,
         );
 
         // load directed connections (distance → target neuron id with strength and reward)

@@ -22,10 +22,6 @@ export declare class Brain {
    *   debug: boolean (default false)
    *   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
    *
-   * TEMPORARY experimental toggles (all optional; deleted as experiments conclude — see brain-core/src/types.rs):
-   *   matchInfo / errorInfo: boolean
-   *   traceMatch / traceError: boolean
-   *
    * The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
    * variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
    * opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.

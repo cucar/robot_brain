@@ -13,18 +13,23 @@ Each session appends its own runs below, newest first. Keep the columns consiste
 **First brain.rs run of the [UCAR](algorithm.md) design.** Replaced the spatial path's threshold-based
 grouping (Jaccard `match_observed` + adaptive Welford thresholds) and the womb/embryo minting with the
 **level-0 configuration loop**: a routing table (normal + children as stored configurations), a per-neuron
-**history window** (horizon 1000), **Hamming distance** `|O △ C|`, the **one test** (add/delete over the
-history), and **median refinement**. Minting is capped to base (level-0) parents, so the hierarchy settles at
-**depth 2** (Phase 1: "capped at one level"). Newborns are created **with no connections** (per spec).
-Temporal (`d>0`) is untouched — the design's open port.
+**history window**, **Hamming distance** `|O △ C|`, the **one test** (add/delete over the history), and
+**median refinement**. Minting is capped to base (level-0) parents, so the hierarchy settles at **depth 2**
+(Phase 1: "capped at one level"). Newborns are created **with no connections** (per spec). Temporal (`d>0`)
+is untouched — the design's open port. The **horizon is not a new parameter**: it is `round(1 / forget_rate)`
+(the decay clock and the evidence window are one timescale), so 100 at the default forget rate 0.01.
 
 Phase 1's gate is **affordability + churn + counts, not accuracy** (accuracy is the Phase-3 readout gate). All
 runs `--image-size 7 --buckets 2 --columns 20`.
 
-| options | depth | active L1 | minted / deleted cum | neurons | train acc | test acc |
-|---|---|---|---|---|---|---|
-| per-class 100 (1000 img), 1 ep, save | 2 (L1) | 396 | 592 / 196 | 483 | 56.3% | **54.4%** (frozen, 500 test) |
-| per-class 200 (2000 img), 1 ep | 2 (L1) | 449 | 665 / 216 | 536 | 58.0% | — |
+| options | horizon | depth | active L1 | minted / deleted cum | neurons |
+|---|---|---|---|---|---|
+| per-class 100 (1000 img), 1 ep | 1000 (hardcoded) | 2 (L1) | 396 | 592 / 196 | 483 |
+| per-class 200 (2000 img), 1 ep | 1000 (hardcoded) | 2 (L1) | 449 | 665 / 216 | 536 |
+| per-class 100 (1000 img), 1 ep | 100 (= 1/forget_rate) | 2 (L1) | 369 | 408 / 39 | 456 |
+
+(Accuracy — a Phase-3 concern — is not the gate and is omitted; the last row's derived horizon is the one to
+carry forward. Frozen save→load round-trips cleanly.)
 
 **Findings.**
 - **The one test must be symmetric.** A first cut evaluated the delete pass over the frames a child was
@@ -44,9 +49,13 @@ runs `--image-size 7 --buckets 2 --columns 20`.
 - **Depth-2 cap holds**; structure stabilizes (~400–450 active L1 patterns); accuracy (~54–58%) is far below the
   leveled baseline's 71% **as expected** — no contraction (Phase 2), no readout tuning (Phase 3).
 
-*Deferred to Phase-1 follow-up:* remove the vestigial experimental toggles (`match_info`/`error_info`/`trace_*`)
-and old spatial fields (Welford `spatial_error_stats`, `spatial_target_dims`, `spatial_inference_*`) that now
-warn as dead — they ripple into the napi/JS constructor surface. Wire the horizon to a Brain construction option.
+**Follow-up done in the same session.** The one-test asymmetry is fixed (above). The history record now stores
+only the observed `O` — which entry serves any remembered frame is recomputed, so median refinement and the
+delete pass share the same best-entry selection as routing (no stale stored server). The horizon is derived from
+the forget rate rather than hardcoded. The vestigial experimental toggles (`match_info`/`error_info`/`trace_*`)
+and the dead `dim_id` are removed across the napi/JS constructor surface; brain-core builds with **zero warnings**.
+The old always-empty spatial serialization fields (`spatial_inference_*`, spatial Welford bucket) still round-trip
+as empty and are left for the Stage-3/4 format-version bump.
 
 ---
 

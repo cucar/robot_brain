@@ -49,16 +49,7 @@ export function parseBrainArgs(argv = process.argv) {
 		// Learning state, fixed for the life of the brain instance — a frozen evaluation is a separate
 		// instance constructed with learning off and loaded from a backup.
 		learning: has('--disable-learning') ? false : null,
-		// TEMPORARY experimental toggles, passed to the Brain constructor and round-tripped with saved
-		// brains. Each is deleted when its experiment concludes — see brain-core/src/types.rs.
-		// --match-info2 is a back-compat alias from when the v1 and v2 information criteria coexisted.
-		matchInfo: argv.includes('--match-info') || argv.includes('--match-info2') ? true : null,
-		// --error-avg pins the default averaged-threshold creation explicitly, overriding a loaded brain.
-		// --error-info2 is a back-compat alias, same as the match side.
-		errorInfo: has('--error-avg') ? false : (argv.includes('--error-info') || argv.includes('--error-info2') ? true : null),
 		apexCoverage: flag('--apex-coverage'),
-		traceMatch: flag('--trace-match'),
-		traceError: flag('--trace-error')
 	};
 }
 
