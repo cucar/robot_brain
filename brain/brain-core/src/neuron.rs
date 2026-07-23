@@ -2064,4 +2064,106 @@ mod tests {
         normal.sort_unstable();
         assert_eq!(normal, vec![7, 8, 9]);
     }
+
+    /// Phase 1 compresses: on a stationary recurring input, the level-0 configuration loop settles to
+    /// a local optimum of the per-neuron description length and shrinks it below the normal-only
+    /// baseline. The neuron sees one usual configuration A (the normal) and one distinct, recurring
+    /// deviation B; it must keep A as the normal, mint exactly one child at B, stop churning, and end
+    /// at a state where no add/delete/refine move improves L — a machine-checked local-optimum
+    /// certificate — with L strictly below "no children" (the compression the design is for).
+    ///
+    /// This drives a single Neuron and simulates the thalamus install: a mint request installs a child
+    /// with context = O one level up (add_spatial_pattern), exactly as create/install do; a deleted
+    /// child is already scrubbed from the neuron locally, so there is nothing more to do here.
+    #[test]
+    fn test_phase1_compresses_recurring_configuration() {
+        // forget_rate 0.05 -> horizon = round(1/0.05) = 20. Period-5 input, run 6 horizons.
+        let mut n = Neuron::new(1, 0.05, 0.9, GroupMode::Static, FxHashMap::default(), 10, true);
+        let horizon: i64 = 20;
+        let config_a: Vec<NeuronId> = vec![10, 11, 12];       // usual: 3 of every 5 frames -> the normal
+        let config_b: Vec<NeuronId> = vec![20, 21, 22, 23];   // deviation: 2 of every 5 -> should be a child
+        let a_set: FxHashSet<NeuronId> = config_a.iter().copied().collect();
+        let b_set: FxHashSet<NeuronId> = config_b.iter().copied().collect();
+
+        let empty_new: FxHashSet<NeuronId> = FxHashSet::default();
+        let no_inference: Vec<ActiveNeuron> = Vec::new();
+        let mut next_pid: NeuronId = 1000;
+        let total_frames = 6 * horizon;
+
+        let mut mints = 0usize;
+        let (mut mints_settled, mut deletes_settled) = (0usize, 0usize);
+        for f in 0..total_frames {
+            let obs = if f % 5 < 3 { &config_a } else { &config_b };
+            let mut ctx = crate::context::SpatialContext::new();
+            for &id in obs { ctx.add_neuron(id, 1.0); }
+
+            let res = n.process_spatial_frame(Some(&ctx), &empty_new, &no_inference, f);
+
+            let settled = f >= 4 * horizon; // watch the last two horizons for churn
+            if let Some(req) = res.correction_request {
+                n.add_spatial_pattern(next_pid, &req.context_neighbors, f); // simulate the level-0 install
+                next_pid += 1;
+                mints += 1;
+                if settled { mints_settled += 1; }
+            }
+            if settled { deletes_settled += res.deleted_children.len(); }
+        }
+
+        // 1. It built structure and then settled — no churn over the last two horizons.
+        assert!(mints >= 1, "expected a child to be minted for the recurring deviation B");
+        assert_eq!(mints_settled, 0, "structure must stop minting once settled");
+        assert_eq!(deletes_settled, 0, "structure must stop deleting once settled");
+
+        // 2. Exactly one child, refined to B; the normal settled to A.
+        let entries = n.spatial_entries();
+        let children: Vec<(NeuronId, FxHashSet<NeuronId>)> = entries.iter()
+            .filter_map(|(s, cfg)| match s { SpatialServer::Child(id) => Some((*id, cfg.clone())), _ => None })
+            .collect();
+        assert_eq!(children.len(), 1, "exactly one child should survive for the single recurring deviation");
+        assert_eq!(children[0].1, b_set, "the child's refined configuration must be exactly B");
+        let normal_cfg = entries.iter().find_map(|(s, cfg)| matches!(s, SpatialServer::Normal).then(|| cfg.clone())).unwrap();
+        assert_eq!(normal_cfg, a_set, "the normal must settle to the usual configuration A");
+
+        // 3. Local-optimum certificate: no add improves, no child fails delete, refine is a fixpoint.
+        assert!(n.spatial_add_pass(&a_set).is_none(), "no improving add at the settled state (A is the normal)");
+        assert!(n.spatial_add_pass(&b_set).is_none(), "no improving add at the settled state (B is a child)");
+        assert!(n.spatial_delete_pass(None).is_none(), "no child fails the delete test at the settled state");
+        let child_id = children[0].0;
+        n.refine_server_median(SpatialServer::Normal);
+        n.refine_server_median(SpatialServer::Child(child_id));
+        let key = |e: &Vec<(SpatialServer, FxHashSet<NeuronId>)>| {
+            let mut k: Vec<(u64, Vec<NeuronId>)> = e.iter().map(|(s, c)| {
+                let mut v: Vec<NeuronId> = c.iter().copied().collect(); v.sort_unstable();
+                (match s { SpatialServer::Normal => 0, SpatialServer::Child(id) => *id }, v)
+            }).collect();
+            k.sort(); k
+        };
+        assert_eq!(key(&entries), key(&n.spatial_entries()), "refinement is a fixpoint at the settled state");
+
+        // 4. Compression: L_local with the settled structure is strictly below the normal-only baseline.
+        // L = Σ over entries (1 + |config|) + Σ over history frames (distance to the nearest entry).
+        // The normal's (1 + |config|) term is identical in both models (same normal A), so it cancels —
+        // the comparison isolates "children storage + reduced service" vs "service paid every frame".
+        let obs_of = |rec: &SpatialHistoryRecord| -> FxHashSet<NeuronId> { rec.observed.iter().copied().collect() };
+        let final_entries = n.spatial_entries();
+        let mut l_settled: u32 = final_entries.iter().map(|(_, c)| 1 + c.len() as u32).sum();
+        for rec in &n.spatial_history {
+            l_settled += Neuron::spatial_select(&obs_of(rec), &final_entries).1;
+        }
+        // Normal-only baseline: a single normal = the median over ALL remembered frames, no children.
+        let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
+        for rec in &n.spatial_history { for &id in &rec.observed { *counts.entry(id).or_insert(0) += 1; } }
+        let total = n.spatial_history.len() as u64;
+        let baseline_normal: FxHashSet<NeuronId> = counts.into_iter().filter(|(_, c)| c * 2 > total).map(|(id, _)| id).collect();
+        let mut l_normal_only: u32 = 1 + baseline_normal.len() as u32;
+        for rec in &n.spatial_history {
+            l_normal_only += Neuron::spatial_distance(&obs_of(rec), &baseline_normal);
+        }
+        eprintln!(
+            "[phase1-compress] settled L={} vs normal-only L={} ({} children; window={} frames; mints total={})",
+            l_settled, l_normal_only, children.len(), n.spatial_history.len(), mints
+        );
+        assert!(l_settled < l_normal_only,
+            "Phase 1 must compress: settled L={} should be below normal-only L={}", l_settled, l_normal_only);
+    }
 }
