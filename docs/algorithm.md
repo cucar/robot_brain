@@ -24,6 +24,13 @@ The encoder declares **channels**; each channel declares **dimensions**; each di
 A neuron's coordinate is `(dim_id, bucket_id)`; its channel is the channel owning that dimension. 
 The "off" state of a binary pixel is its bucket-0 neuron firing, not an absence.
 
+**Identity is absolute.** A neuron is bound to its position, so the same shape appearing at two positions is two
+different configurations over two different neurons, learned independently. Nothing shares a shape across
+positions the way a convolution shares a filter — a retinotopic layout cannot, and the design does not try to.
+Each position pays for its own patterns out of its own [history](#the-history), so the redundancy is bounded by
+what actually recurs there, and learning the same shape many times over is treated as how the substrate works,
+not as waste to be recovered. Sharing structure across contexts is a concern of the event axis, not this one.
+
 The encoder also declares which channels are neighbors of which. This declaration is for base level only. 
 Neighborhood is detected dynamically in higher levels. Receptive fields grow with depth through composition. 
 This is the only place topology enters the design.
@@ -363,7 +370,7 @@ neurons, 50 if level 2 covers it with 50. That reduction is what the whole desig
 But the frame part alone is not the objective, and taking it as one has a degenerate optimum: memorize each frame
 as a single top-level pattern. One apex neuron, full coverage, the shortest possible frame part — and a dictionary
 holding one line per frame ever seen, which is longer than the input it replaced. So 784 → 200 → 50 is a win only
-when the patterns that achieved it are **reused across many frames** rather than opened per frame.
+when the patterns that achieved it **recur across many frames** rather than being opened one per frame.
 
 Every structural decision is the same question: does the move shorten the file, dictionary included?
 **No similarity thresholds exist anywhere in the design.**
@@ -480,7 +487,7 @@ within distance two on the grid — and settles in a handful of rounds, so it is
 parallelising; the coordination would cost more than it saved. The **oldest-id** tiebreak does double duty: it
 makes the outcome deterministic, so a recurring input yields a recurring group for the level above to latch onto,
 and it consolidates grouping onto established patterns, so a new one wins only when it genuinely covers more —
-a steady pressure toward reuse rather than proliferation.
+a steady pressure toward fewer, settled groups rather than a churn of interchangeable ones.
 
 ### What this builds
 
@@ -593,14 +600,6 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
   With rent gone there is no smoothing anywhere, so sensitivity to the horizon should be sharper than before.
 
 ## Open questions
-
-- **Reuse across positions.** Identity is keyed by absolute dimension, so nothing shares a shape across positions —
-  the same configuration is learned separately everywhere it occurs, and the dictionary carries one line for each
-  copy. Contraction shrinks the width of a level but does nothing about this, and it is the largest source of waste
-  in the design. A solution needs a notion of "the same shape, elsewhere," which exists at level 0 where a grid is
-  declared and does not obviously exist above it, where adjacency is only ever derived. The
-  [one test](#the-one-test) is also per-neuron, so justifying a shape shared across positions means pooling several
-  neurons' histories, and what that pooled test is is undecided.
 
 - **Whether a neuron should offer a bid it is not serving from.** A neuron serves its closest entry, so if its
   normal fits slightly better than its best child, it makes no [bid](#contraction-building-the-level-above) — even
