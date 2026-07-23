@@ -446,34 +446,45 @@ Corrections are a quantity in that accounting, not an object the machine builds.
 not join a group and is not represented above; the file would state it, but the running brain need only *count*
 how many there are to know what a grouping costs.
 
-### The greedy rule
+### Election, by rounds
 
 Set cover is NP-hard, so the thalamus does not solve it exactly — and it does not need to, because unlike the
-[routing table](#the-one-test) it mints nothing that lasts. A grouping that is a few units short of optimal costs
-a few extra symbols on one frame and is gone the next. The whole design is local greedy descent on file length;
-contraction is one more step of it.
+[routing table](#the-one-test) it mints nothing that lasts. A grouping a few units short of optimal costs a few
+extra symbols on one frame and is gone the next. The whole design is local descent on file length; contraction is
+one more step of it, run as an **election** over the bids.
 
-The rule is greedy prize-collecting set cover:
+A bid targets the neurons it would cover, so each active neuron receives votes from every bid that names it
+correctly. The neuron elects one of them — the one covering the **most neurons this frame**, ties broken by the
+**oldest id**. An elected bid survives only if it wins **two or more** neurons; a bid that wins just one covers a
+single neuron for a cost of 1 and has saved nothing, so it is dropped and its neuron released.
 
-1. Every active neuron starts uncovered.
-2. Accept the bid covering the **most still-uncovered** neurons; mark them covered.
-3. Repeat **while some bid still covers two or more** uncovered neurons.
-4. Whatever remains uncovered is a correction.
+**The two is derived, not chosen.** A bid costs 1 and rescues each neuron it covers from being a correction, worth
+1 apiece; covering `k` changes the total by `1 − k`, which pays at `k ≥ 2` and breaks even at 1. So a neuron whose
+child matches nothing around it wins only itself and correctly stays a correction rather than propagating a
+useless unit.
 
-**The two is derived, not chosen.** Accepting a bid costs 1 and rescues each neuron it newly covers from being a
-correction, worth 1 apiece. A bid covering `k` fresh neurons changes the total by `1 − k`: it pays at `k ≥ 2`,
-breaks even at 1, loses below. So a neuron whose child matches nothing around it covers only itself, `k = 1`, and
-correctly stays a correction rather than propagating a useless unit.
+One round does not minimize, because a neuron may have elected a bid that then failed, or elected a fresh bid when
+a surviving one already covered it. So the election **repeats**:
 
-Ties are broken by neuron id, which keeps the grouping deterministic — the same active neurons and bids always
-produce the same result, so a recurring input yields a recurring group for the level above to latch onto. If
-grouping quality is later found to cost apex neurons, greedy can be followed by local search — single add, drop,
-and swap improvements until none lowers the total — which erases the order-dependence at the price of more work.
-It stays cheap because bids only interact within distance two on the grid.
+1. Every neuron elects its best-covering bid; bids winning two or more survive, the rest are dropped.
+2. A neuron whose elected bid was dropped re-votes — now **preferring a bid that already survived**, since that
+   coverage is already paid for, over electing a new one. If none covers it, it becomes a correction.
+3. Repeat until no neuron changes its vote.
+
+This settles, because every round only ever drops a bid or moves a neuron onto coverage already bought — so
+`promotions + corrections` strictly decreases, and it is a non-negative integer. What it settles on is a local
+optimum, not the global one, which is the same guarantee greedy gives and all a per-frame throwaway needs.
+
+The election runs **sequentially in the thalamus**. The instance is small — a few hundred bids that interact only
+within distance two on the grid — and settles in a handful of rounds, so it is far too quick to be worth
+parallelising; the coordination would cost more than it saved. The **oldest-id** tiebreak does double duty: it
+makes the outcome deterministic, so a recurring input yields a recurring group for the level above to latch onto,
+and it consolidates grouping onto established patterns, so a new one wins only when it genuinely covers more —
+a steady pressure toward reuse rather than proliferation.
 
 ### What this builds
 
-**The level above.** Each accepted bid contributes one unit. The adjacency at that level is **derived**: two units
+**The level above.** Each surviving bid contributes one unit. The adjacency at that level is **derived**: two units
 are neighbors iff any of their members were neighbors below. The neighbor relation is declared once, at level 0,
 and every level above computes its own.
 
@@ -535,8 +546,8 @@ flowchart TD
     H --> I["Delete the worst failure — at most one per frame"]
     I --> J["Add pass: would a child at O remove more error<br/>from the history than 1 + O costs?"]
     J --> K["If so, create it: configuration here, pattern neuron one level up"]
-    K --> L["Contraction: thalamus covers the active neurons with the fewest bids"]
-    L --> M["Each accepted bid is one unit above; uncovered neurons are corrections"]
+    K --> L["Contraction: thalamus runs the election over bids until it settles"]
+    L --> M["Each surviving bid is one unit above; uncovered neurons are corrections"]
     M --> N["Process the next level up"]
 ```
 
@@ -552,10 +563,10 @@ firing per neuron; the delete pass and the add pass, both running the one test a
 level so the recursion is not a variable yet. Measure the history's size and the wall-clock of the add pass early —
 they are what decide whether the exact evaluation is affordable.
 
-**Phase 2 — contraction.** The bids, greedy prize-collecting set cover, derived adjacency, and the level-above
+**Phase 2 — contraction.** The bids, the election over rounds, derived adjacency, and the level-above
 construction. Measured by the per-level reduction factor actually achieved and the depth at which it settles.
 Because the reduction is data-dependent rather than topological, watch whether a badly-predicted frame fails to
-collapse, and whether greedy leaves enough on the table to warrant the local-search pass.
+collapse, and how many rounds the election takes to settle.
 
 **Phase 3 — the readout gate.** Once growth is bounded and depth settles, compare held-out accuracy against
 what the level counts justify. Do not build past this phase if the answer is no.
@@ -605,9 +616,10 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
   grows as patterns are created, so the configuration space is not fixed. One-active-per-neuron holds each channel
   to a single state, but the space still expands with the structure. What bounds the child count there?
 
-- **Parallelism.** Greedy set cover is sequential — each accepted bid changes which neuron the next one should
-  cover. Whether contraction can be parallelised across the well-separated bid clusters a sparse frame breaks
-  into, and whether the routing-table passes can run across neurons at once, is undetermined.
+- **Parallelism.** The routing-table passes are independent across neurons and could run at once; whether that is
+  worth the coordination is untested. Contraction's election is sequential and deliberately so — small enough to
+  settle in a handful of rounds, so parallelising it would cost more than it saved — but on much larger inputs than
+  MNIST that judgement would need revisiting.
 
 ## Temporal: the open port
 
