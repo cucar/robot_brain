@@ -1336,37 +1336,59 @@ impl Neuron {
             .collect()
     }
 
-    /// Route the observed neighborhood to the closest entry. The normal and every child compete
-    /// alike; ties break toward the normal (free, never propagates) and then the smallest child id,
-    /// consolidating grouping onto the established pattern (docs/algorithm.md, "Election": oldest id).
-    fn route_spatial(&self, observed: &FxHashSet<NeuronId>) -> (SpatialServer, u32) {
-        let normal = self.normal_config_set();
-        let mut best_server = SpatialServer::Normal;
-        let mut best_dist = Self::spatial_distance(observed, &normal);
+    /// All of this neuron's routing entries — its normal and its children — as (server,
+    /// configuration) pairs. The normal is an entry like any other (docs/algorithm.md, "The
+    /// normal"): it competes on distance and can serve, but has no pattern neuron, never propagates,
+    /// and is never deleted. Its configuration materialises from the connection counts ("its storage
+    /// is the connections"); each child carries its configuration in the routing table.
+    fn spatial_entries(&self) -> Vec<(SpatialServer, FxHashSet<NeuronId>)> {
+        let mut entries = Vec::with_capacity(self.spatial_routing_table.len() + 1);
+        entries.push((SpatialServer::Normal, self.normal_config_set()));
         for (&pid, entry) in &self.spatial_routing_table {
-            let d = Self::spatial_distance(observed, &Self::child_config_set(entry));
-            if d < best_dist {
-                best_dist = d;
-                best_server = SpatialServer::Child(pid);
-            } else if d == best_dist {
-                if let SpatialServer::Child(bid) = best_server {
-                    if pid < bid { best_server = SpatialServer::Child(pid); }
-                }
-            }
+            entries.push((SpatialServer::Child(pid), Self::child_config_set(entry)));
         }
-        (best_server, best_dist)
+        entries
     }
 
-    /// The closest distance over the entries OTHER than `exclude` — what a frame would fall back to
-    /// if that child did not exist. `next(O)` in the one test (docs/algorithm.md, "The one test").
-    fn best_spatial_distance_excluding(&self, observed: &FxHashSet<NeuronId>, normal: &FxHashSet<NeuronId>, exclude: Option<NeuronId>) -> u32 {
-        let mut best = Self::spatial_distance(observed, normal);
-        for (&pid, entry) in &self.spatial_routing_table {
-            if Some(pid) == exclude { continue; }
-            let d = Self::spatial_distance(observed, &Self::child_config_set(entry));
-            if d < best { best = d; }
+    /// On a distance tie, does `candidate` outrank the current best `incumbent`? The normal outranks
+    /// any child (it is free and never propagates, so grouping consolidates onto it); among children
+    /// the smaller id outranks (docs/algorithm.md, "Election": oldest id). Order-independent, so the
+    /// children's hash-map iteration order does not change the winner.
+    fn spatial_outranks(candidate: SpatialServer, incumbent: SpatialServer) -> bool {
+        match (candidate, incumbent) {
+            (SpatialServer::Normal, SpatialServer::Child(_)) => true,
+            (SpatialServer::Child(c), SpatialServer::Child(i)) => c < i,
+            _ => false,
         }
-        best
+    }
+
+    /// Select the entry that serves an observation — the closest, ties broken by [spatial_outranks] —
+    /// and the runner-up distance, `next(O)`: what the frame falls back to if the winner is removed.
+    /// One pass over all entries, the normal among them. This is THE best-entry selection that
+    /// routing, refinement, and both halves of the one test share, so they can never disagree.
+    fn spatial_select(observed: &FxHashSet<NeuronId>, entries: &[(SpatialServer, FxHashSet<NeuronId>)]) -> (SpatialServer, u32, u32) {
+        let mut best: Option<(SpatialServer, u32)> = None;
+        let mut runner_d = u32::MAX;
+        for (server, config) in entries {
+            let d = Self::spatial_distance(observed, config);
+            match best {
+                Some((bserver, bd)) if d < bd || (d == bd && Self::spatial_outranks(*server, bserver)) => {
+                    runner_d = runner_d.min(bd);
+                    best = Some((*server, d));
+                }
+                Some(_) => { runner_d = runner_d.min(d); }
+                None => { best = Some((*server, d)); }
+            }
+        }
+        let (server, best_d) = best.expect("spatial_select: a neuron always has a normal entry");
+        (server, best_d, runner_d)
+    }
+
+    /// Route the observed neighborhood to the closest entry — the normal and every child compete
+    /// alike (docs/algorithm.md, "What a neuron does with a frame"). Returns the server and its distance.
+    fn route_spatial(&self, observed: &FxHashSet<NeuronId>) -> (SpatialServer, u32) {
+        let (server, best_d, _) = Self::spatial_select(observed, &self.spatial_entries());
+        (server, best_d)
     }
 
     /// Median refinement: the child's configuration becomes the coordinate-wise median of the frames
@@ -1379,16 +1401,13 @@ impl Neuron {
         // The frames this child serves are recomputed from the observations against the current
         // entries — the same best-entry selection routing and the delete pass use — not read from a
         // stored server, so refinement stays consistent as sibling configurations change.
-        let normal = self.normal_config_set();
-        let configs: Vec<(NeuronId, FxHashSet<NeuronId>)> = self.spatial_routing_table.iter()
-            .map(|(&pid, e)| (pid, Self::child_config_set(e)))
-            .collect();
+        let entries = self.spatial_entries();
 
         let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
         let mut served: u64 = 0;
         for rec in &self.spatial_history {
             let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
-            let (winner, _, _) = Self::spatial_route_two(&obs, &normal, &configs);
+            let (winner, _, _) = Self::spatial_select(&obs, &entries);
             if winner != SpatialServer::Child(pattern_id) { continue; }
             served += 1;
             for &id in &rec.observed { *counts.entry(id).or_insert(0) += 1; }
@@ -1418,31 +1437,6 @@ impl Neuron {
         entry.context = ctx;
     }
 
-    /// Route a record to its winning entry AND the runner-up distance in one pass, replicating
-    /// [route_spatial]'s tie rules (normal wins ties; smallest child id among tied children). The
-    /// runner-up is `next(O)` in the one test: what the frame falls back to if the winner is removed.
-    fn spatial_route_two(
-        observed: &FxHashSet<NeuronId>,
-        normal: &FxHashSet<NeuronId>,
-        configs: &[(NeuronId, FxHashSet<NeuronId>)],
-    ) -> (SpatialServer, u32, u32) {
-        let mut best_server = SpatialServer::Normal;
-        let mut best_d = Self::spatial_distance(observed, normal);
-        let mut runner_d = u32::MAX;
-        for (pid, cfg) in configs {
-            let d = Self::spatial_distance(observed, cfg);
-            let beats = d < best_d || (d == best_d && matches!(best_server, SpatialServer::Child(bid) if *pid < bid));
-            if beats {
-                runner_d = runner_d.min(best_d);
-                best_d = d;
-                best_server = SpatialServer::Child(*pid);
-            } else {
-                runner_d = runner_d.min(d);
-            }
-        }
-        (best_server, best_d, runner_d)
-    }
-
     /// The one test's delete half — the SAME test as the add half, so nothing can be deleted then
     /// immediately re-added in a loop (docs/algorithm.md, "The one test"). For each child, benefit =
     /// Σ over the history frames it is currently the closest entry for of [runner-up distance −
@@ -1450,27 +1444,26 @@ impl Neuron {
     /// storage is retired — at most one per frame, the widest failure, because deletions interact.
     fn spatial_delete_pass(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
         if self.spatial_routing_table.is_empty() { return None; }
-        let normal = self.normal_config_set();
-        let configs: Vec<(NeuronId, FxHashSet<NeuronId>)> = self.spatial_routing_table.iter()
-            .map(|(&pid, e)| (pid, Self::child_config_set(e)))
-            .collect();
+        let entries = self.spatial_entries();
 
         // Attribute each remembered frame to its current winner; accumulate that child's benefit.
         let mut benefit: FxHashMap<NeuronId, f64> = FxHashMap::default();
         for rec in &self.spatial_history {
             let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
-            let (winner, best_d, runner_d) = Self::spatial_route_two(&obs, &normal, &configs);
+            let (winner, best_d, runner_d) = Self::spatial_select(&obs, &entries);
             if let SpatialServer::Child(pid) = winner {
                 *benefit.entry(pid).or_insert(0.0) += (runner_d - best_d) as f64;
             }
         }
 
         // Retire the child that fails its storage by the widest margin, never the one serving this
-        // frame (it has fired and been handed to the apex — releasing it now would dangle).
+        // frame (it has fired and been handed to the apex — releasing it now would dangle). The
+        // normal is among `entries` but is never retired: it owns no cost line, so it never fails.
         let mut worst: Option<(NeuronId, f64)> = None;
-        for (pid, cfg) in &configs {
+        for (server, config) in &entries {
+            let SpatialServer::Child(pid) = server else { continue };
             if Some(*pid) == serving { continue; }
-            let cost = 1.0 + cfg.len() as f64;
+            let cost = 1.0 + config.len() as f64;
             let margin = benefit.get(pid).copied().unwrap_or(0.0) - cost;
             if margin < 0.0 && worst.map_or(true, |(_, m)| margin < m) {
                 worst = Some((*pid, margin));
@@ -1488,13 +1481,13 @@ impl Neuron {
     /// Mint when benefit ≥ cost. This is the design's expensive step — it measures the candidate
     /// against every remembered frame (docs/algorithm.md, "Risks": the add pass).
     fn spatial_add_pass(&mut self, observed: &FxHashSet<NeuronId>) -> Option<SpatialCorrectionRequest> {
-        let normal = self.normal_config_set();
+        let entries = self.spatial_entries();
         let cost = 1.0 + observed.len() as f64;
         let mut benefit = 0.0;
         for rec in &self.spatial_history {
             let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
             let d_cand = Self::spatial_distance(&obs, observed);
-            let d_best = self.best_spatial_distance_excluding(&obs, &normal, None);
+            let (_, d_best, _) = Self::spatial_select(&obs, &entries);
             if d_cand < d_best { benefit += (d_best - d_cand) as f64; }
         }
         if benefit < cost { return None; }
