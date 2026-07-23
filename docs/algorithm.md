@@ -6,7 +6,7 @@ situations — "universal" in the sense that nothing in it assumes a particular 
 
 The structural unit is the **neighborhood configuration**. A neuron looks at its whole neighborhood, and a
 recurring configuration that pays for itself becomes a pattern one level up. Resolution shrinks going up
-by **contraction**: neighbors inhibit each other so only a spread-out subset propagates upward.
+by **contraction**: the thalamus keeps only the fewest units that still reconstruct the level below.
 
 Every structural decision a neuron makes is [one test](#the-one-test), evaluated exactly against the
 [frames it remembers](#the-history).
@@ -146,11 +146,11 @@ tolerance; there is no separate threshold.
 What serving means depends on the winner:
 
 - **A child.** It fires — **delegation**: the neuron hands the job of describing this neighborhood to the pattern
-  one level up, which propagates. **At most one child fires**, because the job goes to a single delegate, which is
-  what preserves one-active-per-channel all the way up.
+  one level up, which offers to propagate. **At most one child fires**, because the job goes to a single delegate,
+  which is what preserves one-active-per-channel all the way up.
 - **The normal.** The neuron recognizes its usual situation and infers for itself, from its connections. Nothing
-  is delegated and nothing propagates, so **the neuron is the apex** — see
-  [contraction](#contraction-building-the-level-above).
+  is delegated and nothing is offered upward. Whether the neuron is compressed away or stated on its own is then
+  up to whether a neighbor covers it — see [contraction](#contraction-building-the-level-above).
 
 Either way the winner's stored configuration moves toward the core of what it actually serves — this is
 [refinement](#refinement).
@@ -411,49 +411,81 @@ than in the entry — if the same configuration is justified again, the add pass
 ## Contraction: building the level above
 
 A neuron firing a child is not yet compression. If all 49 neurons of a 7×7 grid fire a child, level 1 has 49
-active units and nothing has been compressed. **Contraction is what makes the level above smaller than the level
-below.**
+active units and nothing has shrunk. **Contraction is the thalamus choosing, each frame, the fewest units at the
+level above that reconstruct the level below.**
 
-Contraction runs **in the thalamus**, **dynamically between levels** during the level sweep: level 0 is
-processed, contraction determines what propagates to level 1, level 1 is processed, and so on. It is this
-frame's routing, recomputed each frame — patterns persist, owned by a channel; only which of them propagates
-upward is decided here.
+It runs **between levels** during the sweep: level 0 is processed, contraction decides what propagates to level 1,
+level 1 is processed, and so on. Nothing it decides persists — it is this frame's grouping, recomputed next frame.
 
-Each neuron carries an **activation strength**, and it is not a separate quantity: it is the
-[benefit](#the-one-test) of the child that fired — the errors that child removes from the history. A child with a
-large benefit is one whose demand keeps returning and which serves it well, so ranking by benefit ranks by how
-established a pattern is.
+### What a firing neuron offers
 
-A neuron that fired no child — one that served from its [normal](#the-normal) — has no such benefit and does not
-take part. It delegated nothing and propagated nothing, so it is already the top of its own chain: **executing the
-normal is what makes a neuron an apex.** Only neurons that delegated to a child are candidates here, which is
-consistent with contraction being what turns fired children into the level above.
+A neuron that fired a child is offering to describe a patch of the level. Its child names a whole neighborhood, so
+if it propagates, the decoder expanding that one unit recovers every neuron the configuration names — the ones it
+names **correctly** for free, and the ones it names wrong only with a correction. So each firing neuron hands the
+thalamus a **bid**: the active neurons it would cover correctly this frame, itself included.
 
-**The passes**, executed by the thalamus since these are cross-neuron comparisons:
+A neuron that fired no child — one that served from its [normal](#the-normal) — makes no bid. It is still an
+active neuron that has to be accounted for, but it can only be covered by a neighbor's bid, never propagate one of
+its own.
 
-1. **Survivors.** A neuron survives if its activation strength is the local maximum among its **immediate
-   neighbors** — radius 1 only, never further. A survivor inhibits those neighbors.
-2. **Coverage.** Among neurons that neither survived nor are adjacent to a survivor, take the local maxima of
-   that remaining set; they survive too. Repeat until every neuron survives or touches a survivor.
-3. **Groups.** Each inhibited neuron is absorbed by the adjacent survivor with the **highest activation
-   strength**, ties broken by **neuron id**.
+### The objective
 
-Nothing propagates. A survivor only ever inhibits its immediate neighbors, so a group is a survivor plus some of
-its neighbors — **at most 9 cells**. The extra passes add survivors in uncovered areas; they never stretch an
-existing group.
-
-**The level above.** Each group contributes one unit. The adjacency at that level is **derived**: two units are
-neighbors iff any of their members were neighbors below. The neighbor relation is declared once, at level 0, and
-every level above computes its own.
-
-**Termination is structural.** Because no two survivors can be adjacent, the survivor count is capped by the
-maximum independent set of the grid — on 7×7 with 8-connectivity, every other row and column, i.e. 16:
+The thalamus accepts a subset of the bids. Each accepted bid propagates one unit upward, at a cost of 1. Every
+active neuron not covered by an accepted bid is a **correction** — stated in the file as itself, also at a cost of
+1. So the frame's contribution from this level is
 
 ```
-49  →  ≤16  →  ≤4  →  1
+promotions  +  corrections
 ```
 
-The reduction is enforced by the topology, not by tuning and not by the data.
+and the thalamus minimizes it. This is **prize-collecting set cover**: cover the active neurons with as few
+propagated units as possible, and pay a unit penalty for each one left uncovered. Both terms are counts of
+neurons, so it is the same currency as everywhere else, restricted to one frame.
+
+Corrections are a quantity in that accounting, not an object the machine builds. An uncovered neuron simply does
+not join a group and is not represented above; the file would state it, but the running brain need only *count*
+how many there are to know what a grouping costs.
+
+### The greedy rule
+
+Set cover is NP-hard, so the thalamus does not solve it exactly — and it does not need to, because unlike the
+[routing table](#the-one-test) it mints nothing that lasts. A grouping that is a few units short of optimal costs
+a few extra symbols on one frame and is gone the next. The whole design is local greedy descent on file length;
+contraction is one more step of it.
+
+The rule is greedy prize-collecting set cover:
+
+1. Every active neuron starts uncovered.
+2. Accept the bid covering the **most still-uncovered** neurons; mark them covered.
+3. Repeat **while some bid still covers two or more** uncovered neurons.
+4. Whatever remains uncovered is a correction.
+
+**The two is derived, not chosen.** Accepting a bid costs 1 and rescues each neuron it newly covers from being a
+correction, worth 1 apiece. A bid covering `k` fresh neurons changes the total by `1 − k`: it pays at `k ≥ 2`,
+breaks even at 1, loses below. So a neuron whose child matches nothing around it covers only itself, `k = 1`, and
+correctly stays a correction rather than propagating a useless unit.
+
+Ties are broken by neuron id, which keeps the grouping deterministic — the same active neurons and bids always
+produce the same result, so a recurring input yields a recurring group for the level above to latch onto. If
+grouping quality is later found to cost apex neurons, greedy can be followed by local search — single add, drop,
+and swap improvements until none lowers the total — which erases the order-dependence at the price of more work.
+It stays cheap because bids only interact within distance two on the grid.
+
+### What this builds
+
+**The level above.** Each accepted bid contributes one unit. The adjacency at that level is **derived**: two units
+are neighbors iff any of their members were neighbors below. The neighbor relation is declared once, at level 0,
+and every level above computes its own.
+
+**Reach is radius 1, because a configuration cannot name past its own neighborhood.** A bid covers at most a
+neuron and its immediate neighbors — nine cells — not by stipulation but because that is all a child's
+configuration describes.
+
+**The reduction is set by the data, not the topology.** Two adjacent neurons can both be accepted when their bids
+cover different neurons, so there is no independent-set bound and no `49 → 16 → 4 → 1` guarantee. A frame the
+patterns predict well collapses hard — most neurons covered by a few bids; a frame full of surprise barely
+collapses at all — many neurons left as their own corrections. Contraction shrinks a level exactly to the extent
+the level is predictable, which is the honest thing for it to do.
 
 **Receptive fields grow by composition.** A level-1 unit covers its group; a level-2 unit covers a group of
 groups. The declared radius stays 1 forever.
@@ -495,23 +527,23 @@ flowchart TD
     A["Frame: every dimension fires one bucket"] --> B["For each active neuron:<br/>drop history records older than the horizon"]
     B --> C["Observe neighborhood O; take closest entry e*<br/>the normal and every child compete alike"]
     C --> D{"Is e* a child?"}
-    D -->|yes| E["Fire it — delegate inference, propagate a unit up"]
-    D -->|no| F["The normal infers for itself;<br/>connections update, nothing propagates — this neuron is apex"]
+    D -->|yes| E["Fire it — delegate inference; bid to cover this neighborhood"]
+    D -->|no| F["The normal infers for itself; connections update; no bid"]
     E --> G["Record the frame: O and the entry that served it"]
     F --> G
     G --> H["Delete pass: test each child.<br/>Does its benefit still cover 1 + its configuration?"]
     H --> I["Delete the worst failure — at most one per frame"]
     I --> J["Add pass: would a child at O remove more error<br/>from the history than 1 + O costs?"]
     J --> K["If so, create it: configuration here, pattern neuron one level up"]
-    K --> L["Contraction: thalamus runs the inhibition passes"]
-    L --> M["Each group contributes one unit to the level above"]
+    K --> L["Contraction: thalamus covers the active neurons with the fewest bids"]
+    L --> M["Each accepted bid is one unit above; uncovered neurons are corrections"]
     M --> N["Process the next level up"]
 ```
 
 ## Implementation plan
 
 Each phase lands independently and is measured before the next. The headline metric is the objective itself:
-**survivors per level per frame, paired with the dictionary size that bought them.** Alongside it: MNIST accuracy
+**apex neurons per level per frame, paired with the dictionary size that bought them.** Alongside it: MNIST accuracy
 (train and held-out), neuron counts per level, patterns per neuron, and wall-clock per frame.
 
 **Phase 1 — the configuration loop at level 0.** The whole-neighborhood configuration; the normal and inference
@@ -520,9 +552,10 @@ firing per neuron; the delete pass and the add pass, both running the one test a
 level so the recursion is not a variable yet. Measure the history's size and the wall-clock of the add pass early —
 they are what decide whether the exact evaluation is affordable.
 
-**Phase 2 — contraction.** The inhibition passes, groups, derived adjacency, and the level-above construction.
-Measured by the per-level reduction factor and the depth at which it terminates; the prediction is
-49 → ≤16 → ≤4 → 1.
+**Phase 2 — contraction.** The bids, greedy prize-collecting set cover, derived adjacency, and the level-above
+construction. Measured by the per-level reduction factor actually achieved and the depth at which it settles.
+Because the reduction is data-dependent rather than topological, watch whether a badly-predicted frame fails to
+collapse, and whether greedy leaves enough on the table to warrant the local-search pass.
 
 **Phase 3 — the readout gate.** Once growth is bounded and depth settles, compare held-out accuracy against
 what the level counts justify. Do not build past this phase if the answer is no.
@@ -550,40 +583,31 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
 
 ## Open questions
 
-Everything still undecided sits at the boundary between levels.
-
-### Level processing
-
-- **Whether propagation should break a near-tie.** The closest entry serves, but a child propagates upward while
-  the normal does not, so the two are not worth the same to the file: a name that propagates can be absorbed by
-  contraction and shared across a group, while an apex name is paid in full. How much worse a match is worth
-  accepting to gain that depends on what contraction does with the propagated unit, which is the level transition
-  below.
-- **The level transition.** Contraction, grouping, reuse, and merging are one operation, run by the thalamus at
-  the boundary between levels, and together they decide which neurons are active at the level above. Two questions
-  live inside it: whether reuse is keyed on the shape of a whole group rather than on any single neuron's
-  configuration, and which unit earns the saving once a group collapses into one.
-- **Configuration space beyond the small case.** Eight binary neighbors is 256 configurations — finite and
-  countable. Radius 2 is 2²⁴, and more buckets multiply it further. Exact-configuration counting is bounded
-  precisely in the regime where it is least needed. What replaces it when the neighborhood is larger?
-- **Configuration space at higher levels.** Above level 0 the neighbors are patterns, and the per-channel
-  alphabet grows as patterns are promoted, so the configuration space is not fixed. One-active-per-neuron holds
-  each channel to a single state, but the space still expands with the structure. What bounds the child count there?
 - **Reuse across positions.** Identity is keyed by absolute dimension, so nothing shares a shape across positions —
   the same configuration is learned separately everywhere it occurs, and the dictionary carries one line for each
-  copy. Contraction fixes the width of each level; it does nothing about this. It is the largest source of waste in
-  the design.
+  copy. Contraction shrinks the width of a level but does nothing about this, and it is the largest source of waste
+  in the design. A solution needs a notion of "the same shape, elsewhere," which exists at level 0 where a grid is
+  declared and does not obviously exist above it, where adjacency is only ever derived. The
+  [one test](#the-one-test) is also per-neuron, so justifying a shape shared across positions means pooling several
+  neurons' histories, and what that pooled test is is undecided.
 
-### Independent
+- **Whether a neuron should offer a bid it is not serving from.** A neuron serves its closest entry, so if its
+  normal fits slightly better than its best child, it makes no [bid](#contraction-building-the-level-above) — even
+  though firing the child, at a little more error, might have let it cover several neighbors and shrink the frame.
+  Serving strictly closest can therefore foreclose a grouping the file would prefer. Whether a neuron should offer
+  its best child's coverage regardless of what it serves from, and let the thalamus weigh it, is undecided.
 
-- **Parallelism.** The inhibition passes are cross-neuron comparisons and run in the thalamus. Whether they can be
-  parallelised, or pushed into neurons given a shipped view of neighbor strengths, is undetermined.
+- **Configuration space beyond the small case.** Eight binary neighbors is 256 configurations — finite and
+  countable. Radius 2 is 2²⁴, and more buckets multiply it further. The neighborhood is small precisely where it
+  is easy; what represents a configuration, and measures distance between configurations, when it is large?
 
-## Still to write
+- **Configuration space at higher levels.** Above level 0 the neighbors are patterns, and the per-channel alphabet
+  grows as patterns are created, so the configuration space is not fixed. One-active-per-neuron holds each channel
+  to a single state, but the space still expands with the structure. What bounds the child count there?
 
-- **The level-transition section.** Contraction, reuse, grouping, and merging as one thalamic operation. Everything
-  else in the document stands on top of it.
-- **Terminology.** §Contraction says "survivor" and §The cost says "apex neuron" for the same set. Pick one.
+- **Parallelism.** Greedy set cover is sequential — each accepted bid changes which neuron the next one should
+  cover. Whether contraction can be parallelised across the well-separated bid clusters a sparse frame breaks
+  into, and whether the routing-table passes can run across neurons at once, is undetermined.
 
 ## Temporal: the open port
 
