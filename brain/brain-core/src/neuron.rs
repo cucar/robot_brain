@@ -322,13 +322,15 @@ pub struct Neuron {
     /// Spatial Welford error stats — single bucket (spatial has no age dimension).
     spatial_error_stats: Option<WelfordState>,
 
-    /// The background model of likelihood-ratio recognition (match-info): per CONTEXT neighbor, the
-    /// count of frames it was co-active while this neuron processed a frame. Divided by the frame
-    /// count below, this is the base rate a candidate pattern must beat to fire.
-    /// Persisted so frozen evaluation matches with the trained statistics.
-    spatial_context_counts: FxHashMap<NeuronId, u64>,
-    /// Number of frames this neuron has observed a spatial context on (denominator for the counts above).
-    spatial_context_frames: u64,
+    /// The **normal** — a routing-table entry like any other (docs/algorithm.md, "The normal"),
+    /// holding a stored **context** configuration. It has no pattern neuron, never propagates, and is
+    /// never deleted; recognition measures distance to it exactly as to a child, and it refines to the
+    /// median of the frames it serves, exactly like a child. Routing-table entries are context (for
+    /// recognition); connections are a separate concern (for inference). On the d=0 axis context and
+    /// inference are one set so the normal's context coincides with the connections — but that is an
+    /// artifact of d=0, not relied on here: the normal is stored and refined purely as context.
+    /// Persisted so a frozen brain routes against the trained configuration.
+    spatial_normal: SpatialContext,
 
     /// The background model the surprise gate prices failures against: per neighbor this neuron
     /// predicts, how many frames it was active while this neuron processed one.
@@ -411,8 +413,7 @@ impl Neuron {
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
             spatial_error_stats: None,
-            spatial_context_counts: FxHashMap::default(),
-            spatial_context_frames: 0,
+            spatial_normal: SpatialContext::new(),
             spatial_inference_counts: FxHashMap::default(),
             spatial_inference_frames: 0,
             spatial_history: Vec::new(),
@@ -504,8 +505,13 @@ impl Neuron {
             children: self.serialize_children(),
             context_refs: self.serialize_context_refs(),
             error_stats: self.serialize_error_stats(),
-            context_counts: self.spatial_context_counts.iter().map(|(&id, &c)| (id, c)).collect(),
-            context_frames: self.spatial_context_frames,
+            // Persist the normal's stored context configuration through the (now-freed) context_counts
+            // slot: each neighbor in the configuration at count 1. The old per-neighbor context-count
+            // background model is gone — the normal is a stored config, not a distribution. The frame
+            // field is the sentinel that carries the config's size; it must be non-zero for a
+            // non-empty normal, or the backup writer skips the whole neuron (backup.rs).
+            context_counts: self.spatial_normal.entries().keys().map(|&id| (id, 1u64)).collect(),
+            context_frames: self.spatial_normal.size() as u64,
             inference_counts: self.spatial_inference_counts.iter().map(|(&id, &c)| (id, c)).collect(),
             inference_frames: self.spatial_inference_frames,
             // The womb/embryo path is superseded by the level-0 configuration loop (UCAR); nothing
@@ -514,10 +520,15 @@ impl Neuron {
         }
     }
 
-    /// Restore the context-neighbor counts backing likelihood-ratio recognition.
-    pub fn restore_spatial_context_counts(&mut self, frames: u64, counts: &[(NeuronId, u64)]) {
-        self.spatial_context_frames = frames;
-        for &(id, c) in counts { self.spatial_context_counts.insert(id, c); }
+    /// Restore the normal's stored context configuration (persisted through the context_counts slot;
+    /// each listed neighbor is a member of the configuration — the count is ignored). The frame
+    /// denominator is obsolete now that the normal is a stored config rather than a count distribution.
+    pub fn restore_spatial_context_counts(&mut self, _frames: u64, counts: &[(NeuronId, u64)]) {
+        let mut ctx = SpatialContext::new();
+        for &(id, _) in counts {
+            if !ctx.has_key(id) { ctx.add_neuron(id, 1.0); }
+        }
+        self.spatial_normal = ctx;
     }
 
     /// Restore the inference-neighbor counts backing information-priced correction creation.
@@ -1213,7 +1224,7 @@ impl Neuron {
         &mut self,
         level_neighbors: Option<&SpatialContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        inference_neighbors: &[ActiveNeuron],
+        _inference_neighbors: &[ActiveNeuron],
         current_frame: FrameNumber,
     ) -> SpatialFrameResult {
         let mut timings = NeuronOpTimings::default();
@@ -1256,17 +1267,10 @@ impl Neuron {
                 vec![PatternMatch { pattern_id: pid, age: 0, activate: true, death_frame: None }]
             }
             SpatialServer::Normal => {
-                // The normal infers for itself and propagates nothing; its model — the per-neighbor
-                // context counts, whose median IS the normal's configuration — updates only here, on
-                // the frames no child fired (docs/algorithm.md, "The base model": the two are
-                // exclusive). The old event-edge substrate (learn_spatial_event_connections) is not
-                // written: nothing in the configuration loop reads it, and edges toward churned
-                // pattern neighbors would dangle. The readout's voter→action edges are wired
-                // separately by Brain::learn and are untouched.
-                if should_learn {
-                    self.count_spatial_context(level_neighbors);
-                }
-                let _ = inference_neighbors;
+                // The normal serves: the neuron recognises its usual neighbourhood and infers for
+                // itself, propagating nothing. Its stored context configuration is refined below like
+                // any winner — there is no serve-time bookkeeping, and no connections are written (the
+                // readout's voter→action edges are wired separately by Brain::learn, untouched).
                 Vec::new()
             }
         };
@@ -1280,10 +1284,9 @@ impl Neuron {
         // 4. Record this frame into the history (only the observed neighborhood is kept).
         self.spatial_history.push(SpatialHistoryRecord { frame: current_frame, observed });
 
-        // The winner's stored configuration moves toward the core of what it serves (median refinement).
-        if let SpatialServer::Child(pid) = server {
-            self.refine_child_median(pid);
-        }
+        // The winner's stored configuration moves toward the core of what it serves (median
+        // refinement) — the normal exactly like a child (docs/algorithm.md, "Refinement").
+        self.refine_server_median(server);
 
         // 5 & 6. The one test, on the history: delete the single worst-failing child (at most one —
         // deletions interact), then test a child at O. The add pass is the design's expensive step.
@@ -1318,34 +1321,21 @@ impl Neuron {
         (observed.len() + config.len() - 2 * inter) as u32
     }
 
-    /// A child's stored configuration as a set of neighbor ids (its live context entries).
-    fn child_config_set(entry: &SpatialRoutingEntry) -> FxHashSet<NeuronId> {
-        entry.context.entries().iter().filter(|(_, &s)| s > 0.0).map(|(&id, _)| id).collect()
-    }
-
-    /// The normal's configuration: the coordinate-wise median of the neighborhoods it has served —
-    /// for each neighbor, present iff present in more than half of the normal-served frames. On the
-    /// spatial axis this IS the connections resolved to one neighborhood (docs/algorithm.md, "The
-    /// normal"): the per-neighbor context counts over the normal-served frame denominator.
-    fn normal_config_set(&self) -> FxHashSet<NeuronId> {
-        if self.spatial_context_frames == 0 { return FxHashSet::default(); }
-        let frames = self.spatial_context_frames;
-        self.spatial_context_counts.iter()
-            .filter(|(_, &c)| c * 2 > frames)
-            .map(|(&id, _)| id)
-            .collect()
+    /// A stored configuration as a set of neighbor ids (its live entries). Used for both the normal
+    /// and children — every routing-table entry is a context configuration of the same shape.
+    fn config_set(context: &SpatialContext) -> FxHashSet<NeuronId> {
+        context.entries().iter().filter(|(_, &s)| s > 0.0).map(|(&id, _)| id).collect()
     }
 
     /// All of this neuron's routing entries — its normal and its children — as (server,
-    /// configuration) pairs. The normal is an entry like any other (docs/algorithm.md, "The
-    /// normal"): it competes on distance and can serve, but has no pattern neuron, never propagates,
-    /// and is never deleted. Its configuration materialises from the connection counts ("its storage
-    /// is the connections"); each child carries its configuration in the routing table.
+    /// configuration) pairs. Every entry is a stored **context** configuration; the normal is one of
+    /// them (docs/algorithm.md, "The normal"), competing on distance and able to serve, but with no
+    /// pattern neuron, never propagating, and never deleted.
     fn spatial_entries(&self) -> Vec<(SpatialServer, FxHashSet<NeuronId>)> {
         let mut entries = Vec::with_capacity(self.spatial_routing_table.len() + 1);
-        entries.push((SpatialServer::Normal, self.normal_config_set()));
+        entries.push((SpatialServer::Normal, Self::config_set(&self.spatial_normal)));
         for (&pid, entry) in &self.spatial_routing_table {
-            entries.push((SpatialServer::Child(pid), Self::child_config_set(entry)));
+            entries.push((SpatialServer::Child(pid), Self::config_set(&entry.context)));
         }
         entries
     }
@@ -1391,16 +1381,14 @@ impl Neuron {
         (server, best_d)
     }
 
-    /// Median refinement: the child's configuration becomes the coordinate-wise median of the frames
-    /// it serves — present iff present in more than half. Under Hamming distance that is exactly the
-    /// point minimising total distance to those frames, so it is the right configuration, not an
-    /// approximation (docs/algorithm.md, "Refinement"). Recomputed, so it can shift as frames change
-    /// hands. Updates the local inverted index; cross-neuron context refs are settled at install and
-    /// delete, so a refinement that drops a neighbor leaves a harmless stale ref until then.
-    fn refine_child_median(&mut self, pattern_id: NeuronId) {
-        // The frames this child serves are recomputed from the observations against the current
-        // entries — the same best-entry selection routing and the delete pass use — not read from a
-        // stored server, so refinement stays consistent as sibling configurations change.
+    /// Median refinement of whichever entry served this frame — the normal exactly like a child
+    /// (docs/algorithm.md, "The normal", "Refinement"). Its configuration becomes the coordinate-wise
+    /// median of the frames it serves: present iff present in more than half. Under Hamming distance
+    /// that is exactly the point minimising total distance to those frames. The served frames are
+    /// recomputed from the observations against the current entries — the same best-entry selection
+    /// routing and the one test use — not read from a stored server, so refinement stays consistent
+    /// as sibling configurations change.
+    fn refine_server_median(&mut self, server: SpatialServer) {
         let entries = self.spatial_entries();
 
         let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
@@ -1408,33 +1396,42 @@ impl Neuron {
         for rec in &self.spatial_history {
             let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
             let (winner, _, _) = Self::spatial_select(&obs, &entries);
-            if winner != SpatialServer::Child(pattern_id) { continue; }
+            if winner != server { continue; }
             served += 1;
             for &id in &rec.observed { *counts.entry(id).or_insert(0) += 1; }
         }
         if served == 0 { return; }
         let new_config: FxHashSet<NeuronId> = counts.iter().filter(|(_, &c)| c * 2 > served).map(|(&id, _)| id).collect();
 
-        let old_config = match self.spatial_routing_table.get(&pattern_id) {
-            Some(entry) => Self::child_config_set(entry),
-            None => return,
+        let old_config = match server {
+            SpatialServer::Normal => Self::config_set(&self.spatial_normal),
+            SpatialServer::Child(pid) => match self.spatial_routing_table.get(&pid) {
+                Some(entry) => Self::config_set(&entry.context),
+                None => return,
+            },
         };
         if new_config == old_config { return; }
 
-        for id in old_config.difference(&new_config) {
-            if let Some(set) = self.spatial_context_index.get_mut(id) {
-                set.remove(&pattern_id);
-                if set.is_empty() { self.spatial_context_index.remove(id); }
-            }
-        }
-        for id in new_config.difference(&old_config) {
-            self.spatial_context_index.entry(*id).or_default().insert(pattern_id);
-        }
-
-        let entry = self.spatial_routing_table.get_mut(&pattern_id).unwrap();
+        // Rebuild the stored configuration. Children also maintain the inverted index that maps a
+        // context neighbor to the patterns naming it; the normal is not indexed (nothing looks a
+        // pattern up through the normal), so it only rewrites its config.
         let mut ctx = SpatialContext::new();
         for &id in &new_config { ctx.add_neuron(id, 1.0); }
-        entry.context = ctx;
+        match server {
+            SpatialServer::Normal => { self.spatial_normal = ctx; }
+            SpatialServer::Child(pid) => {
+                for id in old_config.difference(&new_config) {
+                    if let Some(set) = self.spatial_context_index.get_mut(id) {
+                        set.remove(&pid);
+                        if set.is_empty() { self.spatial_context_index.remove(id); }
+                    }
+                }
+                for id in new_config.difference(&old_config) {
+                    self.spatial_context_index.entry(*id).or_default().insert(pid);
+                }
+                if let Some(entry) = self.spatial_routing_table.get_mut(&pid) { entry.context = ctx; }
+            }
+        }
     }
 
     /// The one test's delete half — the SAME test as the add half, so nothing can be deleted then
@@ -1505,22 +1502,6 @@ impl Neuron {
                 if let Some(set) = self.spatial_context_index.get_mut(&ctx_id) {
                     set.remove(&pattern_id);
                     if set.is_empty() { self.spatial_context_index.remove(&ctx_id); }
-                }
-            }
-        }
-    }
-
-    /// Count each co-active context neighbor toward this neuron's context background model.
-    fn count_spatial_context(&mut self, level_context: Option<&SpatialContext>) {
-
-        // These counts, over the frame denominator, are the base rates of likelihood-ratio
-        // recognition: how often each neighbor is active regardless of any pattern.
-        // Frames with no observed context teach nothing and do not advance the denominator.
-        if let Some(lc) = level_context {
-            if lc.size() > 0 {
-                self.spatial_context_frames += 1;
-                for (&ctx_id, _) in lc.entries() {
-                    *self.spatial_context_counts.entry(ctx_id).or_insert(0) += 1;
                 }
             }
         }
