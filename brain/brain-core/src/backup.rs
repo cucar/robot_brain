@@ -11,16 +11,11 @@
 ///   - `base_neurons.csv`       neuron_id,channel_id,type,dimension_id,val
 ///   - `connections.csv`        from_neuron_id,to_neuron_id,distance,strength,reward
 ///   - `patterns.csv`           pattern_neuron_id,parent_neuron_id,strength
-///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength
-///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2
-///   - `spatial_freq.csv`       neuron_id,ctx_neuron_id,count — context-neighbor base rates, with one
-///                              sentinel row per neuron (ctx_neuron_id == neuron_id) carrying the frame denominator.
-///   - `spatial_inference_freq.csv` neuron_id,target_neuron_id,count — inference-neighbor base rates,
-///                              same sentinel convention as spatial_freq.csv.
-///   - `embryo_meta.csv`          neuron_id,entry_index,n,evidence — one row per womb embryo still
-///                              accumulating toward birth.
-///   - `embryo_context.csv`       neuron_id,entry_index,context_neuron_id,count — one row per center
-///                              neighbor of an embryo, with its occurrence count.
+///   - `contexts.csv`           pattern_neuron_id,context_neuron_id,context_age,strength — each routing
+///                              entry's stored context. A child's rows are keyed by the child's pattern
+///                              id (age 0 spatial, >=1 temporal); a neuron's NORMAL is keyed by the
+///                              neuron's own id with context_age == u32::MAX (NORMAL_CONTEXT_AGE).
+///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2 — temporal per-age Welford error stats.
 
 use std::fs;
 use std::fs::File;
@@ -31,8 +26,14 @@ use rustc_hash::FxHashMap;
 
 use crate::neuron::{
     SerializedChild, SerializedConnection, SerializedContextRef,
-    SerializedEmbryo, SerializedErrorStats, SerializedNeuron,
+    SerializedErrorStats, SerializedNeuron,
 };
+
+/// Sentinel `context_age` marking a `contexts.csv` row as a neuron's **normal** (its stored context
+/// configuration) rather than a child's context. Real spatial contexts use age 0 and temporal ones a
+/// small distance, so `u32::MAX` can never collide. The row's pattern-id column holds the owning
+/// neuron's id, and the row routes straight to that neuron's normal — no parent/child lookup.
+const NORMAL_CONTEXT_AGE: Distance = u32::MAX;
 use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry};
 use crate::types::{
     ChannelId, ContextEntry, Coordinate, DimensionId, Distance,
@@ -47,16 +48,12 @@ pub struct Backup {
     /// Brain-wide forget rate — applied uniformly to every pattern neuron on
     /// load since the snapshot doesn't carry per-neuron rates.
     pattern_forget_rate: f64,
-    /// The owning brain's learning flag, fixed for its life. A frozen (false) load skips the
-    /// training-only womb tables — the eval path never reads embryos.
-    learning: bool,
 }
 
 impl Backup {
-    /// Create a new Backup carrying the brain-wide forget rate assigned to every pattern neuron on
-    /// load, and the brain's learning flag that decides whether a load reads the training-only womb.
-    pub fn new(pattern_forget_rate: f64, learning: bool) -> Self {
-        Self { pattern_forget_rate, learning }
+    /// Create a new Backup carrying the brain-wide forget rate assigned to every pattern neuron on load.
+    pub fn new(pattern_forget_rate: f64) -> Self {
+        Self { pattern_forget_rate }
     }
 
     // ── Save ────────────────────────────────────────────────────────────────
@@ -94,9 +91,6 @@ impl Backup {
         self.write_patterns(&folder, snapshot)?;
         self.write_contexts(&folder, snapshot)?;
         self.write_neuron_error_stats(&folder, snapshot)?;
-        self.write_spatial_freq(&folder, snapshot)?;
-        self.write_spatial_inference_freq(&folder, snapshot)?;
-        self.write_embryos(&folder, snapshot)?;
 
         println!("💾 Backup saved: {} ({} neurons)", folder.display(), snapshot.neurons.len());
 
@@ -165,11 +159,7 @@ impl Backup {
                 children: Vec::new(),
                 context_refs: Vec::new(),
                 error_stats: Vec::new(),
-                context_counts: Vec::new(),
-                context_frames: 0,
-                inference_counts: Vec::new(),
-                inference_frames: 0,
-                embryos: Vec::new(),
+                normal_context: Vec::new(),
             });
             temporal_levels.insert(id, temporal_level);
             spatial_levels.insert(id, spatial_level);
@@ -268,6 +258,16 @@ impl Backup {
                 let context_age: Distance = row[2].parse().map_err(|e| format!("Bad ctx age: {}", e))?;
                 let strength: f64 = row[3].parse().map_err(|e| format!("Bad ctx strength: {}", e))?;
 
+                // A normal row (sentinel age): the neuron's own stored context configuration, keyed by
+                // its own id. Route straight to its normal — no parent/child lookup, and the normal is
+                // never a delete-cascade target, so no contextRef is built for it.
+                if context_age == NORMAL_CONTEXT_AGE {
+                    let neuron = neurons.get_mut(&pattern_id)
+                        .ok_or_else(|| format!("normal-context neuron not found: {}", pattern_id))?;
+                    neuron.normal_context.push(context_id);
+                    continue;
+                }
+
                 // Find the child entry on the parent and push the context entry
                 let parent_id = neuron_parents.get(&pattern_id)
                     .ok_or_else(|| format!("contexts parent not found for pattern {}", pattern_id))?;
@@ -306,67 +306,6 @@ impl Backup {
                         });
                     }
                 }
-            }
-        }
-
-        // Local background models — optional, older snapshots may not have them.
-        let spatial_freq_file = folder.join("spatial_freq.csv");
-        if spatial_freq_file.exists() {
-            for row in read_csv(&spatial_freq_file)? {
-                if row.len() < 3 { continue; }
-                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad freq neuron id: {}", e))?;
-                let ctx_id: NeuronId = row[1].parse().map_err(|e| format!("Bad freq ctx id: {}", e))?;
-                let count: u64 = row[2].parse().map_err(|e| format!("Bad freq count: {}", e))?;
-                let neuron = neurons.get_mut(&neuron_id)
-                    .ok_or_else(|| format!("spatial_freq neuron not found: {}", neuron_id))?;
-                if ctx_id == neuron_id { neuron.context_frames = count; } else { neuron.context_counts.push((ctx_id, count)); }
-            }
-        }
-
-        let inference_freq_file = folder.join("spatial_inference_freq.csv");
-        if inference_freq_file.exists() {
-            for row in read_csv(&inference_freq_file)? {
-                if row.len() < 3 { continue; }
-                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad inference-freq neuron id: {}", e))?;
-                let target_id: NeuronId = row[1].parse().map_err(|e| format!("Bad inference-freq target id: {}", e))?;
-                let count: u64 = row[2].parse().map_err(|e| format!("Bad inference-freq count: {}", e))?;
-                let neuron = neurons.get_mut(&neuron_id)
-                    .ok_or_else(|| format!("spatial_inference_freq neuron not found: {}", neuron_id))?;
-                if target_id == neuron_id { neuron.inference_frames = count; } else { neuron.inference_counts.push((target_id, count)); }
-            }
-        }
-
-        // Womb embryos (a meta row + a center map per embryo), optional on older snapshots. Skipped on a
-        // frozen load — training-only state the eval path never reads, and a large womb (millions of
-        // entries) is costly to parse and, measured, slows the frozen loop several-fold just by being resident.
-        let embryo_meta_file = folder.join("embryo_meta.csv");
-        if self.learning && embryo_meta_file.exists() {
-            for row in read_csv(&embryo_meta_file)? {
-                if row.len() < 4 { continue; }
-                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad embryo neuron id: {}", e))?;
-                let entry_idx: usize = row[1].parse().map_err(|e| format!("Bad embryo entry index: {}", e))?;
-                let n: u64 = row[2].parse().map_err(|e| format!("Bad embryo n: {}", e))?;
-                let evidence: f64 = row[3].parse().map_err(|e| format!("Bad embryo evidence: {}", e))?;
-                let neuron = neurons.get_mut(&neuron_id)
-                    .ok_or_else(|| format!("embryo_meta neuron not found: {}", neuron_id))?;
-                if entry_idx >= neuron.embryos.len() { neuron.embryos.resize(entry_idx + 1, SerializedEmbryo::default()); }
-                neuron.embryos[entry_idx].n = n;
-                neuron.embryos[entry_idx].evidence = evidence;
-            }
-        }
-
-        let embryo_context_file = folder.join("embryo_context.csv");
-        if self.learning && embryo_context_file.exists() {
-            for row in read_csv(&embryo_context_file)? {
-                if row.len() < 4 { continue; }
-                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad embryo ctx neuron id: {}", e))?;
-                let entry_idx: usize = row[1].parse().map_err(|e| format!("Bad embryo ctx entry index: {}", e))?;
-                let ctx_id: NeuronId = row[2].parse().map_err(|e| format!("Bad embryo ctx id: {}", e))?;
-                let count: u64 = row[3].parse().map_err(|e| format!("Bad embryo ctx count: {}", e))?;
-                let neuron = neurons.get_mut(&neuron_id)
-                    .ok_or_else(|| format!("embryo_context neuron not found: {}", neuron_id))?;
-                if entry_idx >= neuron.embryos.len() { neuron.embryos.resize(entry_idx + 1, SerializedEmbryo::default()); }
-                neuron.embryos[entry_idx].context_counts.push((ctx_id, count));
             }
         }
 
@@ -527,6 +466,7 @@ impl Backup {
     fn write_contexts(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
         let mut w = open_csv(&folder.join("contexts.csv"))?;
         for entry in &snapshot.neurons {
+            // Each child's stored context configuration, keyed by the child's pattern id.
             for child in &entry.neuron.children {
                 for ctx in &child.context {
                     write_row(&mut w, &[
@@ -537,76 +477,18 @@ impl Backup {
                     ])?;
                 }
             }
-        }
-        w.flush().map_err(|e| format!("Failed to flush contexts.csv: {}", e))
-    }
-
-    /// Write the local context-neighbor count table. One row per (neuron, ctx neuron) count, plus a
-    /// sentinel row per neuron (ctx id == own id — a neuron is never its own context entry) holding the
-    /// frame denominator. Only neurons with observations are written.
-    fn write_spatial_freq(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
-        let mut w = open_csv(&folder.join("spatial_freq.csv"))?;
-        for entry in &snapshot.neurons {
-            if entry.neuron.context_frames == 0 { continue; }
-            write_row(&mut w, &[
-                entry.neuron.id.to_string(),
-                entry.neuron.id.to_string(),
-                entry.neuron.context_frames.to_string(),
-            ])?;
-            for &(ctx_id, count) in &entry.neuron.context_counts {
+            // The neuron's normal — a routing entry like a child, but with no pattern neuron, so it is
+            // keyed by the owning neuron's own id and marked with the NORMAL_CONTEXT_AGE sentinel.
+            for &ctx_id in &entry.neuron.normal_context {
                 write_row(&mut w, &[
                     entry.neuron.id.to_string(),
                     ctx_id.to_string(),
-                    count.to_string(),
+                    NORMAL_CONTEXT_AGE.to_string(),
+                    "1".to_string(),
                 ])?;
             }
         }
-        w.flush().map_err(|e| format!("Failed to flush spatial_freq.csv: {}", e))
-    }
-
-    /// Write the local inference-neighbor count table — same shape and sentinel convention as
-    /// spatial_freq.csv, over the base events a neuron's predictions are answerable to.
-    fn write_spatial_inference_freq(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
-        let mut w = open_csv(&folder.join("spatial_inference_freq.csv"))?;
-        for entry in &snapshot.neurons {
-            if entry.neuron.inference_frames == 0 { continue; }
-            write_row(&mut w, &[
-                entry.neuron.id.to_string(),
-                entry.neuron.id.to_string(),
-                entry.neuron.inference_frames.to_string(),
-            ])?;
-            for &(target_id, count) in &entry.neuron.inference_counts {
-                write_row(&mut w, &[
-                    entry.neuron.id.to_string(),
-                    target_id.to_string(),
-                    count.to_string(),
-                ])?;
-            }
-        }
-        w.flush().map_err(|e| format!("Failed to flush spatial_inference_freq.csv: {}", e))
-    }
-
-    /// Write the womb — in-progress embryos still accumulating toward birth. Split across two tables
-    /// since an embryo holds a scalar meta row (n, evidence) and a counted center map, keyed by
-    /// (neuron id, entry index within that neuron's womb).
-    fn write_embryos(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
-        let mut meta_w = open_csv(&folder.join("embryo_meta.csv"))?;
-        let mut ctx_w = open_csv(&folder.join("embryo_context.csv"))?;
-        for entry in &snapshot.neurons {
-            for (idx, embryo) in entry.neuron.embryos.iter().enumerate() {
-                write_row(&mut meta_w, &[
-                    entry.neuron.id.to_string(),
-                    idx.to_string(),
-                    embryo.n.to_string(),
-                    embryo.evidence.to_string(),
-                ])?;
-                for &(ctx_id, count) in &embryo.context_counts {
-                    write_row(&mut ctx_w, &[entry.neuron.id.to_string(), idx.to_string(), ctx_id.to_string(), count.to_string()])?;
-                }
-            }
-        }
-        meta_w.flush().map_err(|e| format!("Failed to flush embryo_meta.csv: {}", e))?;
-        ctx_w.flush().map_err(|e| format!("Failed to flush embryo_context.csv: {}", e))
+        w.flush().map_err(|e| format!("Failed to flush contexts.csv: {}", e))
     }
 
     fn write_neuron_error_stats(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
@@ -880,7 +762,7 @@ mod tests {
         fs::remove_dir_all(&dir).ok(); // clean from previous runs
         fs::create_dir_all(&dir).unwrap();
 
-        let backup = Backup::new(0.01, true);
+        let backup = Backup::new(0.01);
 
         // Build a minimal snapshot
         let snapshot = Snapshot {
@@ -898,11 +780,7 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
-                        context_counts: Vec::new(),
-                        context_frames: 0,
-                        inference_counts: Vec::new(),
-                        inference_frames: 0,
-                        embryos: Vec::new(),
+                        normal_context: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -921,11 +799,7 @@ mod tests {
                         children: Vec::new(),
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
-                        context_counts: Vec::new(),
-                        context_frames: 0,
-                        inference_counts: Vec::new(),
-                        inference_frames: 0,
-                        embryos: Vec::new(),
+                        normal_context: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -989,7 +863,7 @@ mod tests {
             vec!["2".to_string(), "1".to_string(), "3.0".to_string(), "7".to_string(), "12.5".to_string(), "4.0".to_string()],
         ]).unwrap();
 
-        let backup = Backup::new(0.01, true);
+        let backup = Backup::new(0.01);
         let loaded = backup.load(&dir, "legacy_test").unwrap();
 
         let parent = loaded.neurons.iter().find(|e| e.neuron.id == 1).unwrap();

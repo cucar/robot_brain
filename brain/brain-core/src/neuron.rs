@@ -319,9 +319,6 @@ pub struct Neuron {
     /// reference this neuron. No distance.
     spatial_context_refs: FxHashSet<NeuronId>,
 
-    /// Spatial Welford error stats — single bucket (spatial has no age dimension).
-    spatial_error_stats: Option<WelfordState>,
-
     /// The **normal** — a routing-table entry like any other (docs/algorithm.md, "The normal"),
     /// holding a stored **context** configuration. It has no pattern neuron, never propagates, and is
     /// never deleted; recognition measures distance to it exactly as to a child, and it refines to the
@@ -331,16 +328,6 @@ pub struct Neuron {
     /// artifact of d=0, not relied on here: the normal is stored and refined purely as context.
     /// Persisted so a frozen brain routes against the trained configuration.
     spatial_normal: SpatialContext,
-
-    /// The background model the surprise gate prices failures against: per neighbor this neuron
-    /// predicts, how many frames it was active while this neuron processed one.
-    /// Lateral inference draws predictions from the same level the context pair above tracks, but
-    /// the two answer different questions — "who identifies me" versus "who do I predict" — and
-    /// advance on different frames, so they stay separate tables.
-    /// Persisted so frozen evaluation prices with the trained statistics.
-    spatial_inference_counts: FxHashMap<NeuronId, u64>,
-    /// Number of frames this neuron observed anything to predict (denominator for the counts above).
-    spatial_inference_frames: u64,
 
     // ── Level-0 configuration loop (UCAR, docs/algorithm.md) ────────────────────
 
@@ -412,10 +399,7 @@ impl Neuron {
             spatial_routing_table: FxHashMap::default(),
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
-            spatial_error_stats: None,
             spatial_normal: SpatialContext::new(),
-            spatial_inference_counts: FxHashMap::default(),
-            spatial_inference_frames: 0,
             spatial_history: Vec::new(),
             // The horizon is the inverse of the forget rate — the same timescale, not a new knob.
             horizon: if pattern_forget_rate > 0.0 { (1.0 / pattern_forget_rate).round().max(1.0) as u32 } else { u32::MAX },
@@ -487,11 +471,6 @@ impl Neuron {
         self.temporal_error_stats[idx] = Some(WelfordState { n, mean, m2 });
     }
 
-    /// Restoration entry point: install the spatial Welford bucket.
-    pub fn load_spatial_error_stats(&mut self, n: u64, mean: f64, m2: f64) {
-        self.spatial_error_stats = Some(WelfordState { n, mean, m2 });
-    }
-
     // ── Serialization ────────────────────────────────────────────────────────
 
     /// Serialize persistent state into a plain object for snapshotting and backup.
@@ -505,41 +484,20 @@ impl Neuron {
             children: self.serialize_children(),
             context_refs: self.serialize_context_refs(),
             error_stats: self.serialize_error_stats(),
-            // Persist the normal's stored context configuration through the (now-freed) context_counts
-            // slot: each neighbor in the configuration at count 1. The old per-neighbor context-count
-            // background model is gone — the normal is a stored config, not a distribution. The frame
-            // field is the sentinel that carries the config's size; it must be non-zero for a
-            // non-empty normal, or the backup writer skips the whole neuron (backup.rs).
-            context_counts: self.spatial_normal.entries().keys().map(|&id| (id, 1u64)).collect(),
-            context_frames: self.spatial_normal.size() as u64,
-            inference_counts: self.spatial_inference_counts.iter().map(|(&id, &c)| (id, c)).collect(),
-            inference_frames: self.spatial_inference_frames,
-            // The womb/embryo path is superseded by the level-0 configuration loop (UCAR); nothing
-            // to persist. Kept as an empty list so the snapshot format is unchanged this pass.
-            embryos: Vec::new(),
+            // The normal's stored context configuration — its member neighbor ids. Persisted like a
+            // child's context (in contexts.csv), just with no pattern neuron.
+            normal_context: self.spatial_normal.entries().keys().copied().collect(),
         }
     }
 
-    /// Restore the normal's stored context configuration (persisted through the context_counts slot;
-    /// each listed neighbor is a member of the configuration — the count is ignored). The frame
-    /// denominator is obsolete now that the normal is a stored config rather than a count distribution.
-    pub fn restore_spatial_context_counts(&mut self, _frames: u64, counts: &[(NeuronId, u64)]) {
+    /// Restore the normal's stored context configuration from its member neighbor ids.
+    pub fn restore_spatial_normal(&mut self, context_ids: &[NeuronId]) {
         let mut ctx = SpatialContext::new();
-        for &(id, _) in counts {
+        for &id in context_ids {
             if !ctx.has_key(id) { ctx.add_neuron(id, 1.0); }
         }
         self.spatial_normal = ctx;
     }
-
-    /// Restore the inference-neighbor counts backing information-priced correction creation.
-    pub fn restore_spatial_inference_counts(&mut self, frames: u64, counts: &[(NeuronId, u64)]) {
-        self.spatial_inference_frames = frames;
-        for &(id, c) in counts { self.spatial_inference_counts.insert(id, c); }
-    }
-
-    /// No-op: the womb/embryo path is superseded by the level-0 configuration loop (UCAR). Kept so
-    /// the restore call site in Column is unchanged this pass; any embryos in an old snapshot are dropped.
-    pub fn restore_spatial_embryos(&mut self, _embryos: &[SerializedEmbryo]) {}
 
     /// Rebuild the position metadata of spatial connection targets from central base-neuron metadata.
     /// Snapshots do not persist the map — connection learning restricted every target to the inference
@@ -628,22 +586,12 @@ impl Neuron {
         result
     }
 
-    /// Serialize per-age Welford error stats. The spatial bucket surfaces as age=0; temporal
-    /// entries surface as their age index.
-    /// Age 0 is reused for the spatial bucket because temporal age 0 never carries stats: error
-    /// feedback only comes from evaluate_vote_error, which returns None for age 0 (an age-0 neuron is
-    /// just voting now, nothing to correct). So temporal_error_stats[0] is always None and skipping it
-    /// drops nothing — the debug_assert guards that invariant against future changes to the feedback path.
+    /// Serialize the temporal per-age Welford error stats (age >= 1). Age 0 never carries stats —
+    /// error feedback comes from evaluate_vote_error, which returns None for age 0 (an age-0 neuron is
+    /// just voting now, nothing to correct) — so it is skipped. (The spatial axis has no error stats;
+    /// the configuration loop is threshold-free.)
     fn serialize_error_stats(&self) -> Vec<SerializedErrorStats> {
-        debug_assert!(
-            self.temporal_error_stats.first().map_or(true, |s| s.is_none()),
-            "temporal_error_stats[0] is unexpectedly populated — serialize aliases age 0 onto the spatial \
-             bucket on the assumption it is always empty (see evaluate_vote_error's age-0 guard)"
-        );
         let mut result = Vec::new();
-        if let Some(s) = &self.spatial_error_stats {
-            result.push(SerializedErrorStats { age: 0, n: s.n, mean: s.mean, m2: s.m2 });
-        }
         for (age, stats) in self.temporal_error_stats.iter().enumerate() {
             if age == 0 { continue; }
             if let Some(s) = stats {
@@ -1916,23 +1864,9 @@ pub struct SerializedNeuron {
     pub children: Vec<SerializedChild>,
     pub context_refs: Vec<SerializedContextRef>,
     pub error_stats: Vec<SerializedErrorStats>,
-    /// Local context-neighbor activation counts + frame denominator (likelihood-ratio recognition).
-    pub context_counts: Vec<(NeuronId, u64)>,
-    pub context_frames: u64,
-    /// Local inference-neighbor activation counts + frame denominator (information-priced creation).
-    pub inference_counts: Vec<(NeuronId, u64)>,
-    pub inference_frames: u64,
-    /// Womb embryos (error-info) — not-yet-born cluster centers still accumulating toward birth.
-    pub embryos: Vec<SerializedEmbryo>,
-}
-
-/// One womb embryo, serialized. See `SpatialEmbryo`. The decay clock (`last_frame`) is not
-/// persisted — restore rebases it to 0 alongside the child activation clocks.
-#[derive(Debug, Clone, Default)]
-pub struct SerializedEmbryo {
-    pub context_counts: Vec<(NeuronId, u64)>,
-    pub n: u64,
-    pub evidence: f64,
+    /// The normal's stored context configuration — its member neighbor ids. A routing-table entry
+    /// like a child's context, just with no pattern neuron (docs/algorithm.md, "The normal").
+    pub normal_context: Vec<NeuronId>,
 }
 
 #[derive(Debug, Clone)]
@@ -1976,13 +1910,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, false, false, false, false)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true, false, false, false, false)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true)
     }
 
     #[test]
@@ -2065,7 +1999,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true, false, false, false, false);
+        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true);
         // fewer than ERROR_MIN_SAMPLES → falls back to the derived 1 − group_threshold = 0.1
         n.record_temporal_error(0, 0.5);
         n.record_temporal_error(0, 0.5);
@@ -2113,11 +2047,11 @@ mod tests {
         n.add_temporal_child(100, 0.0);
         n.add_temporal_context(100, 20, 1, 1.0);
         n.add_temporal_context_ref(50, 2);
-        // Spatial error stat lives in its own single bucket; the test originally used age=0 which
-        // was the spatial slot under the unified-storage model.
-        n.record_spatial_error(0.4);
-        n.record_spatial_error(0.6);
-        n.record_spatial_error(0.5);
+        // Temporal per-age Welford error stats (age >= 1) round-trip; the spatial axis has none.
+        n.record_temporal_error(1, 0.4);
+        n.record_temporal_error(1, 0.6);
+        // The normal is a stored context configuration; it round-trips like a child's context.
+        n.restore_spatial_normal(&[7, 8, 9]);
 
         let s = n.serialize();
         assert_eq!(s.id, 1);
@@ -2126,5 +2060,8 @@ mod tests {
         assert_eq!(s.children[0].context.len(), 1);
         assert_eq!(s.context_refs.len(), 1);
         assert_eq!(s.error_stats.len(), 1);
+        let mut normal = s.normal_context.clone();
+        normal.sort_unstable();
+        assert_eq!(normal, vec![7, 8, 9]);
     }
 }

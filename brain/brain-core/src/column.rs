@@ -656,16 +656,12 @@ impl Column {
 
         // load the local background models: context counts for likelihood-ratio recognition,
         // inference counts for information-priced correction creation.
-        neuron.restore_spatial_context_counts(data.context_frames, &data.context_counts);
-        neuron.restore_spatial_inference_counts(data.inference_frames, &data.inference_counts);
-        neuron.restore_spatial_embryos(&data.embryos);
+        neuron.restore_spatial_normal(&data.normal_context);
 
-        // load per-(neuron, age) Welford error stats.
-        // Spatial serializes as age=0; temporal serializes at its real age (>= 1).
+        // load per-(neuron, age) temporal Welford error stats (age >= 1). The spatial axis has no
+        // error stats (the configuration loop is threshold-free), so age 0 never appears.
         for stat in &data.error_stats {
-            if stat.age == 0 {
-                neuron.load_spatial_error_stats(stat.n, stat.mean, stat.m2);
-            } else {
+            if stat.age >= 1 {
                 neuron.load_temporal_error_stats(stat.age, stat.n, stat.mean, stat.m2);
             }
         }
@@ -783,7 +779,6 @@ mod tests {
             0.5,
             GroupMode::Static,
             true,
-            false, false, false, false,
         )
     }
 

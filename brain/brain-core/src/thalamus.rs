@@ -2429,7 +2429,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, false, false, false, false)
+        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true)
     }
 
     #[test]
@@ -2453,7 +2453,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, false, false, false, false);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);
