@@ -407,6 +407,13 @@ impl JsBrain {
         Ok(self.inner.borrow().get_spatial_correction_count() as u32)
     }
 
+    /// Cumulative count of spatial children retired by the one test's delete pass since brain start.
+    /// Paired with getSpatialCorrectionCount, this is the cold-start churn the Phase-1 gate watches.
+    #[napi(js_name = "getSpatialDeletionCount")]
+    pub fn get_spatial_deletion_count(&self) -> Result<u32> {
+        Ok(self.inner.borrow().get_spatial_deletion_count() as u32)
+    }
+
     /// Number of correction neurons currently sitting above the base spatial level.
     #[napi(js_name = "countActiveSpatialCorrections")]
     pub fn count_active_spatial_corrections(&self) -> Result<u32> {

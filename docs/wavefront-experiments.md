@@ -8,6 +8,48 @@ Each session appends its own runs below, newest first. Keep the columns consiste
 
 ---
 
+## Session 2026-07-23 — UCAR Phase 1 in brain.rs: the level-0 configuration loop
+
+**First brain.rs run of the [UCAR](algorithm.md) design.** Replaced the spatial path's threshold-based
+grouping (Jaccard `match_observed` + adaptive Welford thresholds) and the womb/embryo minting with the
+**level-0 configuration loop**: a routing table (normal + children as stored configurations), a per-neuron
+**history window** (horizon 1000), **Hamming distance** `|O △ C|`, the **one test** (add/delete over the
+history), and **median refinement**. Minting is capped to base (level-0) parents, so the hierarchy settles at
+**depth 2** (Phase 1: "capped at one level"). Newborns are created **with no connections** (per spec).
+Temporal (`d>0`) is untouched — the design's open port.
+
+Phase 1's gate is **affordability + churn + counts, not accuracy** (accuracy is the Phase-3 readout gate). All
+runs `--image-size 7 --buckets 2 --columns 20`.
+
+| options | depth | active L1 | minted / deleted cum | neurons | train acc | test acc |
+|---|---|---|---|---|---|---|
+| per-class 100 (1000 img), 1 ep, save | 2 (L1) | 396 | 592 / 196 | 483 | 56.3% | **54.4%** (frozen, 500 test) |
+| per-class 200 (2000 img), 1 ep | 2 (L1) | 449 | 665 / 216 | 536 | 58.0% | — |
+
+**Findings.**
+- **The one test must be symmetric.** A first cut evaluated the delete pass over the frames a child was
+  *recorded* serving while the add pass evaluated over frames a candidate *would win* — an asymmetry that made
+  minting/deletion oscillate: **~21,900 mint + 21,800 delete over 2000 frames (~11/frame)**. Making both halves
+  evaluate over "the frames the entry is currently the closest for, with `next(O)` the runner-up" (the design's
+  "same test") collapsed churn to **665 mint / 216 delete (~0.3/frame)** and raised accuracy 49.7% → 58%. This
+  is the load-bearing invariant of the design ("an entry cannot fail the test and then immediately pass it").
+- **The add pass is the expensive step** (as the design flags). It is `O(history × entries)` per active neuron
+  per frame; training throughput falls from ~340 img/s to ~60 img/s as the history fills toward the horizon and
+  children accumulate (~450). Gating the add pass to error>0 frames helped little (most frames carry error).
+  Frozen eval — no add pass — runs at ~600 img/s. Incremental per-child benefit sums (design: "the delete pass
+  folds into the routing scan") are the obvious next optimization, deferred.
+- **Two spec-conformance fixes surfaced via save/restore** (dangling connection targets to churned patterns):
+  the old event-edge substrate (`learn_spatial_event_connections`) is now unread and not written; newborns are
+  created with no connections. Save → frozen-load round-trips cleanly after both.
+- **Depth-2 cap holds**; structure stabilizes (~400–450 active L1 patterns); accuracy (~54–58%) is far below the
+  leveled baseline's 71% **as expected** — no contraction (Phase 2), no readout tuning (Phase 3).
+
+*Deferred to Phase-1 follow-up:* remove the vestigial experimental toggles (`match_info`/`error_info`/`trace_*`)
+and old spatial fields (Welford `spatial_error_stats`, `spatial_target_dims`, `spatial_inference_*`) that now
+warn as dead — they ripple into the napi/JS constructor surface. Wire the horizon to a Brain construction option.
+
+---
+
 ## Session 2026-06-25/26 — reference simulation (JS, not brain.rs): build + validate, then found the model wrong
 
 **Not a brain.rs run.** These are runs of the standalone JS reference simulation

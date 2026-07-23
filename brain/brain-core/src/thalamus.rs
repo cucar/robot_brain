@@ -239,6 +239,11 @@ pub struct Thalamus {
     /// Diagnostic — surfaced via Brain.get_spatial_correction_count() for harness validation.
     spatial_corrections_minted: u64,
 
+    /// Cumulative count of spatial children retired by the one test's delete pass. Paired with
+    /// `spatial_corrections_minted`, this is the cold-start churn the Phase-1 gate watches
+    /// (docs/algorithm.md, "Risks"). Surfaced via Brain.get_spatial_deletion_count().
+    spatial_corrections_deleted: u64,
+
     /// Death ledger: frame_number → set of neuron ids scheduled to die.
     death_ledger: FxHashMap<FrameNumber, FxHashSet<NeuronId>>,
 
@@ -362,6 +367,7 @@ impl Thalamus {
             neuron_temporal_levels: FxHashMap::default(),
             neuron_spatial_levels: FxHashMap::default(),
             spatial_corrections_minted: 0,
+            spatial_corrections_deleted: 0,
             death_ledger: FxHashMap::default(),
             neuron_death_frame: FxHashMap::default(),
             channel_specs: FxHashMap::default(),
@@ -575,21 +581,14 @@ impl Thalamus {
             .clone();
         self.base_neurons.insert(id, inherited);
 
-        // The seed: this frame's co-activation at the pattern's OWN level, cut to its neighborhood.
-        // Resolvable only here, once the coordinate and level above are registered — the cut reads both.
-        // Strength 1.0 and reward 0.0 are what `learn_spatial_event_connections` would write on a first
-        // fire; co-activation carries no reward, which lives on the payload channels.
-        let inference_neurons = self.decorate_inference_neurons(level_actives);
-        let connections = self.scan_neurons_for_neighbors(id, &inference_neurons).iter()
-            .map(|neighbor| ConnectionSpec {
-                distance: 0,
-                to_neuron_id: neighbor.id,
-                strength: 1.0,
-                reward: 0.0,
-                channel_id: neighbor.channel_id,
-                dim_id: Some(neighbor.dim_id),
-            })
-            .collect();
+        // A newborn is created with NO connections (docs/algorithm.md, "Creating a child": "It is
+        // created with no connections. Its connections belong to its own level, which has not been
+        // observed at the moment of creation."). It learns its own model by ordinary counting as the
+        // level above it populates. Seeding edges toward this frame's co-active neighbors — which may
+        // themselves be churned away by the delete pass — is both off-spec and a source of dangling
+        // connection targets on restore.
+        let _ = level_actives;
+        let connections = Vec::new();
 
         PatternNeuronSpec { id, forget_rate: self.pattern_forget_rate, connections }
     }
@@ -733,6 +732,11 @@ impl Thalamus {
     /// Cumulative count of spatial corrections minted since brain start (or last hard reset).
     pub fn get_spatial_correction_count(&self) -> u64 {
         self.spatial_corrections_minted
+    }
+
+    /// Cumulative count of spatial children retired by the delete pass since brain start.
+    pub fn get_spatial_deletion_count(&self) -> u64 {
+        self.spatial_corrections_deleted
     }
 
     /// Count of neurons currently sitting above the base level in the spatial hierarchy.
@@ -1184,15 +1188,42 @@ impl Thalamus {
             // A subsumed neuron casts no votes and requests nothing, so this is a safety net.
             if subsumed_neurons.contains(&column_result.parent_id) { continue; }
 
-            // Create one correction pattern for the paid-off embryo.
+            // Create one correction pattern for the add pass's birth request.
             let parent_id = column_result.parent_id;
             let parent_level = self.get_neuron_spatial_level(parent_id);
+
+            // Phase 1 cap (docs/algorithm.md, "Implementation plan": capped at one level so the
+            // recursion is not a variable yet): only base (level-0) neurons mint. Level-1 patterns
+            // therefore never acquire children, so the hierarchy settles at depth 2 and the level-0
+            // configuration loop is what gets measured. Lift this cap when contraction lands (Phase 2).
+            if parent_level != 0 { continue; }
+
             let empty = FxHashSet::default();
             let level_actives = actives_by_level.get(&(parent_level + 1)).unwrap_or(&empty);
             self.create_spatial_correction(parent_id, parent_level, level_actives, &request.context_neighbors, &mut new_specs, &mut install_ops);
         }
 
         (new_specs, install_ops)
+    }
+
+    /// Retire the children the one test's delete pass flagged this frame. Each neuron already removed
+    /// the child from its own routing table and index; here the thalamus releases the pattern neuron
+    /// and scrubs its cross-neuron references through the delete cascade. Safe to run before the apex
+    /// handoff: a retired child did not serve this frame (only one entry serves per neuron per frame),
+    /// so it is not in this frame's fired/apex set. Returns the ids actually released.
+    pub fn delete_spatial_children(
+        &mut self,
+        dispatch_results: &[Vec<crate::column::SpatialColumnResult>],
+        current_frame: FrameNumber,
+    ) -> Vec<NeuronId> {
+        let mut to_delete: Vec<NeuronId> = Vec::new();
+        for column_result in dispatch_results.iter().flatten() {
+            to_delete.extend(column_result.deleted_children.iter().copied());
+        }
+        if to_delete.is_empty() { return Vec::new(); }
+        let deleted = self.delete_patterns(&to_delete, current_frame);
+        self.spatial_corrections_deleted += deleted.len() as u64;
+        deleted
     }
 
     /// Bucket this frame's fired neurons by spatial level — the per-level co-activation a newborn

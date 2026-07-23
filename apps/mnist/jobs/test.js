@@ -464,6 +464,7 @@ export default class MNISTTestJob extends Job {
 			levelPaidCounts: this.brain.spatialLevelPaidCounts(),
 			activeCorrections: this.brain.countActiveSpatialCorrections(),
 			cumulativeMinted: this.brain.getSpatialCorrectionCount(),
+			cumulativeDeleted: this.brain.getSpatialDeletionCount(),
 		};
 	}
 
@@ -476,7 +477,7 @@ export default class MNISTTestJob extends Job {
 		const levels = s.levelCounts.length
 			? s.levelCounts.map((c, i) => `L${i + 1}:${c}(${s.levelPaidCounts?.[i] ?? c} paid)`).join(' ')
 			: '(no corrections)';
-		return `depth=${s.maxSpatialLevel} | ${levels} | ${s.activeCorrections} active, ${s.cumulativeMinted} minted cum | ${s.neuronCount} neurons`;
+		return `depth=${s.maxSpatialLevel} | ${levels} | ${s.activeCorrections} active, ${s.cumulativeMinted} minted / ${s.cumulativeDeleted ?? 0} deleted cum | ${s.neuronCount} neurons`;
 	}
 
 	/**

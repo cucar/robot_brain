@@ -92,6 +92,8 @@ export declare class Brain {
   resetAccuracyStats(): void
   /** Cumulative count of spatial corrections minted since brain start (or last hard reset). */
   getSpatialCorrectionCount(): number
+  /** Cumulative count of spatial children retired by the one test's delete pass since brain start. */
+  getSpatialDeletionCount(): number
   /** Number of correction neurons currently sitting above the base spatial level. */
   countActiveSpatialCorrections(): number
   /**

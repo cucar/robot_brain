@@ -830,6 +830,12 @@ impl Brain {
         self.thalamus.get_spatial_correction_count()
     }
 
+    /// Diagnostic: cumulative number of spatial children retired by the one test's delete pass.
+    /// Paired with the mint count, this is the cold-start churn the Phase-1 gate watches.
+    pub fn get_spatial_deletion_count(&self) -> u64 {
+        self.thalamus.get_spatial_deletion_count()
+    }
+
     /// Diagnostic: number of correction neurons currently sitting above the base spatial level.
     pub fn count_active_spatial_corrections(&self) -> usize {
         self.thalamus.count_active_spatial_corrections()
@@ -1481,6 +1487,11 @@ impl Brain {
         // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
         // This is a single dispatch per frame, not one per level.
         self.thalamus.install_spatial_corrections(install_ops, self.substrate_frame());
+
+        // Retire the children the one test's delete pass flagged this frame (docs/algorithm.md, "The
+        // one test"). Runs before the apex handoff — a retired child did not serve this frame, so it
+        // is not in the apex — releasing the pattern neurons and scrubbing their references.
+        self.thalamus.delete_spatial_children(&spatial.dispatch_results, self.substrate_frame());
 
         // Return the spec batch.
         // process_spatial folds these into spatial.neuron_specs so they get materialized in the same flush as temporal specs.

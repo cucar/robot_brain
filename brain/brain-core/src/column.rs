@@ -36,6 +36,9 @@ pub struct SpatialColumnResult {
     pub parent_id: NeuronId,
     pub matches: Vec<PatternMatch>,
     pub correction_request: Option<crate::neuron::SpatialCorrectionRequest>,
+    /// Children this neuron's delete pass retired this frame — the thalamus releases the pattern
+    /// neurons and scrubs their cross-neuron references.
+    pub deleted_children: Vec<NeuronId>,
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
@@ -171,6 +174,7 @@ impl Column {
                 parent_id: *neuron_id,
                 matches: result.matches,
                 correction_request: result.correction_request,
+                deleted_children: result.deleted_children,
                 timings: result.timings,
             });
         }
