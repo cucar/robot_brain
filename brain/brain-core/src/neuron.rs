@@ -1269,9 +1269,10 @@ impl Neuron {
         // not change), so nothing else moves here.
         self.spatial_history.push(SpatialHistoryRecord { frame: current_frame, observed, server });
 
-        // The winner's stored configuration moves toward the core of what it serves (median
-        // refinement) — the normal exactly like a child (docs/algorithm.md, "Refinement").
-        self.refine_server_median(server);
+        // The winner consolidates toward the core of what it serves — strengthen present, add novel,
+        // weaken absent — using this frame's observation (docs/refinement.md §2). The normal exactly
+        // like a child.
+        self.refine_server(server, &observed_set);
 
         // 5 & 6. The one test, on the history: delete the single worst-failing child (at most one —
         // deletions interact), then test a child at O. The add pass is the design's expensive step.
@@ -1376,47 +1377,55 @@ impl Neuron {
         }
     }
 
-    /// Median refinement of whichever entry served this frame — the normal exactly like a child
-    /// (docs/algorithm.md, "The normal", "Refinement"). Its configuration becomes the coordinate-wise
-    /// median of the frames it serves: present iff present in more than half. Under Hamming distance
-    /// that is exactly the point minimising total distance to those frames. The served frames are the
-    /// ones whose `server` is this entry. If the median actually moves the configuration, distances
-    /// change, so the frames' servers are reassigned.
-    fn refine_server_median(&mut self, server: SpatialServer) {
-        let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
-        let mut served: u64 = 0;
-        for rec in &self.spatial_history {
-            if rec.server != server { continue; }
-            served += 1;
-            for &id in &rec.observed { *counts.entry(id).or_insert(0) += 1; }
+    /// Refinement (docs/refinement.md §2): consolidate the entry that just served toward the common
+    /// core of the configurations it matches, using ONLY this frame's observation `O` — the normal
+    /// exactly like a child (docs/algorithm.md, "The normal", "Refinement"):
+    ///   - **strengthen** the neighbors it names that are present in `O`,
+    ///   - **add** the novel neighbors present in `O` that it does not yet name,
+    ///   - **weaken** the neighbors it names that are absent, deleting one at strength 0.
+    /// Local to the matched entry and this frame, O(|O| + |config|); no history scan. The median of the
+    /// frames it serves is the fixpoint of this update (a neighbor stays named iff it keeps appearing in
+    /// more than half its matches), reached incrementally rather than recomputed each frame.
+    ///
+    /// A neighbor entering or leaving the configuration changes distances, so those frames may change
+    /// hands — the servers are reassigned then (only on an actual membership change, not every frame).
+    fn refine_server(&mut self, server: SpatialServer, observed: &FxHashSet<NeuronId>) {
+        let entry = match self.spatial_routing_table.get_mut(&server) { Some(e) => e, None => return };
+
+        let mut added: Vec<NeuronId> = Vec::new();
+        let mut removed: Vec<NeuronId> = Vec::new();
+
+        // Present: strengthen if already named, else add as a novel neighbor.
+        for &id in observed {
+            if entry.context.has_key(id) {
+                entry.context.strengthen_neuron(id);
+            } else {
+                entry.context.add_neuron(id, 1.0);
+                added.push(id);
+            }
         }
-        if served == 0 { return; }
-        let new_config: FxHashSet<NeuronId> = counts.iter().filter(|(_, &c)| c * 2 > served).map(|(&id, _)| id).collect();
+        // Named but absent: weaken, dropping the neighbor at strength 0.
+        let named: Vec<NeuronId> = entry.context.entries().keys().copied().collect();
+        for id in named {
+            if !observed.contains(&id) && entry.context.weaken_neuron(id) {
+                removed.push(id);
+            }
+        }
 
-        let old_config = match self.spatial_routing_table.get(&server) {
-            Some(entry) => Self::config_set(&entry.context),
-            None => return,
-        };
-        if new_config == old_config { return; }
+        // Nothing entered or left the configuration → distances are unchanged, no reassignment needed.
+        if added.is_empty() && removed.is_empty() { return; }
 
-        // A child also maintains the inverted index that maps a context neighbor to the patterns
-        // naming it; the normal is not indexed (nothing looks a pattern up through the normal).
+        // A child maintains the inverted index that maps a context neighbor to the patterns naming it;
+        // the normal is not indexed (nothing looks a pattern up through the normal).
         if let SpatialServer::Child(pid) = server {
-            for id in old_config.difference(&new_config) {
+            for &id in &added { self.spatial_context_index.entry(id).or_default().insert(pid); }
+            for id in &removed {
                 if let Some(set) = self.spatial_context_index.get_mut(id) {
                     set.remove(&pid);
                     if set.is_empty() { self.spatial_context_index.remove(id); }
                 }
             }
-            for id in new_config.difference(&old_config) {
-                self.spatial_context_index.entry(*id).or_default().insert(pid);
-            }
         }
-
-        // Rebuild the entry's stored configuration.
-        let mut ctx = SpatialContext::new();
-        for &id in &new_config { ctx.add_neuron(id, 1.0); }
-        if let Some(entry) = self.spatial_routing_table.get_mut(&server) { entry.context = ctx; }
 
         // The configuration moved, so some frames may now be served by a different entry.
         self.reassign_all_servers();
@@ -2194,8 +2203,10 @@ mod tests {
         assert!(n.spatial_add_pass(&b_set).is_none(), "no improving add at the settled state (B is a child)");
         assert!(n.spatial_delete_pass(None).is_none(), "no child fails the delete test at the settled state");
         let child_id = children[0].0;
-        n.refine_server_median(SpatialServer::Normal);
-        n.refine_server_median(SpatialServer::Child(child_id));
+        // Refining each settled entry with the configuration it serves only strengthens what it already
+        // names — no neighbor enters or leaves — so the configurations are unchanged: a fixpoint.
+        n.refine_server(SpatialServer::Normal, &a_set);
+        n.refine_server(SpatialServer::Child(child_id), &b_set);
         let key = |e: &Vec<(SpatialServer, FxHashSet<NeuronId>)>| {
             let mut k: Vec<(u64, Vec<NeuronId>)> = e.iter().map(|(s, c)| {
                 let mut v: Vec<NeuronId> = c.iter().copied().collect(); v.sort_unstable();

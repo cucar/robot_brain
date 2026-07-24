@@ -40,6 +40,21 @@ impl SpatialContext {
         *strength += 1.0;
     }
 
+    /// Decrement the strength of an existing entry by 1, deleting it at or below zero. Returns true if
+    /// the entry was removed. Refinement's "weaken / delete entries missing from the match"
+    /// (docs/refinement.md §2): a neighbor the entry names but does not observe this frame decays, and
+    /// drops out of the configuration when it falls under the frames that keep it — no prune rule.
+    pub fn weaken_neuron(&mut self, neuron_id: NeuronId) -> bool {
+        if let Some(strength) = self.entries.get_mut(&neuron_id) {
+            *strength -= 1.0;
+            if *strength <= 0.0 {
+                self.entries.remove(&neuron_id);
+                return true;
+            }
+        }
+        false
+    }
+
     /// Remove an entry explicitly. Used by the spatial death cascade to scrub a dying context
     /// neuron from a child pattern's stored context.
     pub fn remove(&mut self, neuron_id: NeuronId) {
