@@ -51,24 +51,24 @@ pub enum SpatialServer {
     Child(NeuronId),
 }
 
-/// One remembered frame in a neuron's spatial history window: the observed neighborhood `O` and its
-/// **cached assignment** — which entry currently serves it (`server`), that entry's distance
-/// (`best_dist`), and the runner-up distance (`runner_dist` = `next(O)`). The assignment is not a
-/// stale label: it is maintained under structural change — recomputed for every record whenever an
-/// entry's configuration changes or a child is added/removed (`rebuild_spatial_assignments`), and set
-/// fresh when the record is appended. Adding or ageing a frame does not change existing assignments
-/// (the configs are unchanged), so between structural changes the cache is exact. The one test's add
-/// and delete passes and median refinement then read the assignment directly, turning per-frame
-/// O(history × entries) rescans into O(history). Spans the last `horizon` frames.
+/// One remembered frame in a neuron's spatial history window: the frame number, the observed
+/// neighborhood `O`, and **which entry served it** (`server`) — exactly the record the design keeps,
+/// `(frame, O, server)` (docs/algorithm.md, "The history"). The frames themselves are the evidence.
+///
+/// No distances and no second-best are stored. The design rejects a second-best cache deliberately
+/// ("caching each frame's second-best server does not rescue it — the moment a deletion happens the
+/// second-best becomes the best, and no third-best was recorded"): the second-best is needed only by
+/// the delete pass, only for the frames a *child* served, and it is recomputed from `O` there. `server`
+/// records which entry won, so the delete pass can find a child's frames by a plain filter without
+/// recomputing the winner. Spans the last `horizon` frames.
 #[derive(Debug, Clone)]
 struct SpatialHistoryRecord {
     frame: FrameNumber,
     /// The observed neighborhood, as a sorted, deduplicated set of neighbor neuron ids.
     observed: Vec<NeuronId>,
-    /// Cached assignment against the current entries — kept consistent by rebuild-on-change.
+    /// The entry that served this frame — the winner at record time, kept current by reassigning a
+    /// deleted child's frames on deletion.
     server: SpatialServer,
-    best_dist: u32,
-    runner_dist: u32,
 }
 
 /// Per-neuron output of the spatial frame pass. Votes never leave the neuron — it routes its
@@ -888,9 +888,9 @@ impl Neuron {
         self.add_spatial_child(pattern_id, 0.0);
         for &ctx_neuron_id in context { self.add_spatial_context(pattern_id, ctx_neuron_id, 1.0); }
         let death = self.strengthen_child_activation(pattern_id, current_frame);
-        // A new entry joined the table: frames it now wins move to it — re-assign the cache so the
-        // one test sees the child from its first frame.
-        self.rebuild_spatial_assignments();
+        // A new entry joined the table: frames it now wins move to it — reassign servers so the one
+        // test sees the child from its first frame.
+        self.reassign_all_servers();
         death
     }
 
@@ -1230,10 +1230,11 @@ impl Neuron {
         // 1. Age: drop history records older than the horizon.
         self.age_spatial_history(current_frame);
 
-        // 2. Route: the closest entry serves — the normal and every child compete alike. This also
-        // gives the runner-up distance, which is `next(O)` cached in the record for the one test.
+        // 2. Route: the closest entry serves — the normal and every child compete alike. Routing needs
+        // only the winner and its distance; the second-best is not computed here (only the delete pass
+        // needs `next(O)`, and only for a child's own frames).
         let t = std::time::Instant::now();
-        let (server, served_distance, runner_distance) = Self::spatial_select(&observed_set, &self.spatial_entries());
+        let (server, served_distance) = Self::spatial_route(&observed_set, &self.spatial_entries());
         timings.recognize_patterns += t.elapsed().as_secs_f64();
 
         // 3. Serve. A child fires and delegates to the pattern one level up; the normal infers for
@@ -1264,15 +1265,9 @@ impl Neuron {
             return SpatialFrameResult { matches, correction_request: None, deleted_children: Vec::new(), timings };
         }
 
-        // 4. Record this frame into the history with its assignment. Existing records are unaffected
-        // (the entries did not change), so no rebuild is needed here.
-        self.spatial_history.push(SpatialHistoryRecord {
-            frame: current_frame,
-            observed,
-            server,
-            best_dist: served_distance,
-            runner_dist: runner_distance,
-        });
+        // 4. Record this frame `(frame, O, server)`. Existing records are unaffected (the entries did
+        // not change), so nothing else moves here.
+        self.spatial_history.push(SpatialHistoryRecord { frame: current_frame, observed, server });
 
         // The winner's stored configuration moves toward the core of what it serves (median
         // refinement) — the normal exactly like a child (docs/algorithm.md, "Refinement").
@@ -1339,56 +1334,45 @@ impl Neuron {
         }
     }
 
-    /// Select the entry that serves an observation — the closest, ties broken by [spatial_outranks] —
-    /// and the runner-up distance, `next(O)`: what the frame falls back to if the winner is removed.
-    /// One pass over all entries, the normal among them. This is THE best-entry selection that
-    /// routing, refinement, and both halves of the one test share, so they can never disagree.
-    fn spatial_select(observed: &FxHashSet<NeuronId>, entries: &[(SpatialServer, FxHashSet<NeuronId>)]) -> (SpatialServer, u32, u32) {
+    /// Route an observation to the entry that serves it — the closest, ties broken by [spatial_outranks]
+    /// — and its distance. One pass over all entries, the normal among them. Routing needs only the
+    /// winner; the second-best is computed by the delete pass alone, so it is not returned here.
+    fn spatial_route(observed: &FxHashSet<NeuronId>, entries: &[(SpatialServer, FxHashSet<NeuronId>)]) -> (SpatialServer, u32) {
         let mut best: Option<(SpatialServer, u32)> = None;
-        let mut runner_d = u32::MAX;
         for (server, config) in entries {
             let d = Self::spatial_distance(observed, config);
             match best {
-                Some((bserver, bd)) if d < bd || (d == bd && Self::spatial_outranks(*server, bserver)) => {
-                    runner_d = runner_d.min(bd);
-                    best = Some((*server, d));
-                }
-                Some(_) => { runner_d = runner_d.min(d); }
-                None => { best = Some((*server, d)); }
+                Some((bserver, bd)) if d < bd || (d == bd && Self::spatial_outranks(*server, bserver)) => best = Some((*server, d)),
+                None => best = Some((*server, d)),
+                _ => {}
             }
         }
-        let (server, best_d) = best.expect("spatial_select: a neuron always has a normal entry");
-        (server, best_d, runner_d)
+        best.expect("spatial_route: a neuron always has a normal entry")
     }
 
-    /// Re-assign every remembered frame against the current entries and cache the result on the
-    /// record (`server`, `best_dist`, `runner_dist`). This is the one place the O(history × entries)
-    /// rescan lives; it runs ONLY when an entry's configuration changes or a child is added/removed —
-    /// the events that can invalidate an existing assignment. Between such events the cache is exact,
-    /// so the one test's passes and refinement read it directly instead of rescanning each frame.
-    fn rebuild_spatial_assignments(&mut self) {
+    /// Re-assign every remembered frame's server against the current entries. Used when a configuration
+    /// moves (refinement) or a child is minted — events that can change which entry is closest to a
+    /// frame. Deletion does NOT use this: removing a child can only change the winner of the frames that
+    /// child served, so it reassigns just those (see [remove_spatial_child]).
+    fn reassign_all_servers(&mut self) {
         let entries = self.spatial_entries();
         for rec in &mut self.spatial_history {
             let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
-            let (server, best_d, runner_d) = Self::spatial_select(&obs, &entries);
+            let (server, _best) = Self::spatial_route(&obs, &entries);
             rec.server = server;
-            rec.best_dist = best_d;
-            rec.runner_dist = runner_d;
         }
     }
 
-    /// Debug-only invariant: the cached assignment on every record must match a fresh selection
-    /// against the current entries. A failure means a structural change was made without a following
-    /// `rebuild_spatial_assignments`, which would silently corrupt the one test's benefit sums.
+    /// Debug-only invariant: every record's stored `server` must be the entry that is currently closest
+    /// to its observation. The delete pass groups frames by `server` and trusts it as the winner, so a
+    /// stale server would mis-attribute a frame's benefit.
     #[cfg(debug_assertions)]
-    fn debug_assert_spatial_assignments(&self) {
+    fn debug_assert_spatial_servers(&self) {
         let entries = self.spatial_entries();
         for rec in &self.spatial_history {
             let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
-            let (server, best_d, runner_d) = Self::spatial_select(&obs, &entries);
-            debug_assert_eq!(rec.server, server, "cached spatial assignment stale (server)");
-            debug_assert_eq!(rec.best_dist, best_d, "cached spatial assignment stale (best_dist)");
-            debug_assert_eq!(rec.runner_dist, runner_d, "cached spatial assignment stale (runner_dist)");
+            let (server, _best) = Self::spatial_route(&obs, &entries);
+            debug_assert_eq!(rec.server, server, "record server stale");
         }
     }
 
@@ -1396,9 +1380,8 @@ impl Neuron {
     /// (docs/algorithm.md, "The normal", "Refinement"). Its configuration becomes the coordinate-wise
     /// median of the frames it serves: present iff present in more than half. Under Hamming distance
     /// that is exactly the point minimising total distance to those frames. The served frames are the
-    /// ones the cached assignment attributes to this entry — the same best-entry selection routing and
-    /// the one test use. If the median actually moves the configuration, the assignments are rebuilt so
-    /// the cache stays consistent with the new stored entry.
+    /// ones whose `server` is this entry. If the median actually moves the configuration, distances
+    /// change, so the frames' servers are reassigned.
     fn refine_server_median(&mut self, server: SpatialServer) {
         let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
         let mut served: u64 = 0;
@@ -1435,29 +1418,38 @@ impl Neuron {
         for &id in &new_config { ctx.add_neuron(id, 1.0); }
         if let Some(entry) = self.spatial_routing_table.get_mut(&server) { entry.context = ctx; }
 
-        // The configuration moved, so some frames may now be served by a different entry: re-assign
-        // and refresh every record's cache before the one test reads it.
-        self.rebuild_spatial_assignments();
+        // The configuration moved, so some frames may now be served by a different entry.
+        self.reassign_all_servers();
     }
 
     /// The one test's delete half — the SAME test as the add half, so nothing can be deleted then
-    /// immediately re-added in a loop (docs/algorithm.md, "The one test"). For each child, benefit =
-    /// Σ over the history frames it is currently the closest entry for of [runner-up distance −
-    /// its distance]; cost = 1 + |config|. A child that no longer wins enough frames to cover its
+    /// immediately re-added in a loop (docs/algorithm.md, "The one test"). For each child,
+    /// benefit = Σ over the frames it serves of [next(O) − d(O, child)]; cost = 1 + |config|. `next(O)`
+    /// — the closest other entry, the fallback if the child were gone — is computed here, and only for
+    /// the frames a child served: the normal serves the rest and is never deleted, so those frames
+    /// never need a second-best. A child that no longer spares the window enough error to cover its
     /// storage is retired — at most one per frame, the widest failure, because deletions interact.
     fn spatial_delete_pass(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
         // The table always holds the normal; nothing to retire unless there is at least one child.
         if self.spatial_routing_table.len() <= 1 { return None; }
         #[cfg(debug_assertions)]
-        self.debug_assert_spatial_assignments();
+        self.debug_assert_spatial_servers();
         let entries = self.spatial_entries();
 
-        // Attribute each remembered frame to its cached winner; accumulate that child's benefit.
+        // For each frame a child served, recompute its distance to that child (best) and to the closest
+        // other entry (next(O)); the difference is the error the child spares that frame. Frames the
+        // normal served are skipped without touching the entries — they cannot support a deletion.
         let mut benefit: FxHashMap<NeuronId, f64> = FxHashMap::default();
         for rec in &self.spatial_history {
-            if let SpatialServer::Child(pid) = rec.server {
-                *benefit.entry(pid).or_insert(0.0) += (rec.runner_dist - rec.best_dist) as f64;
+            let SpatialServer::Child(pid) = rec.server else { continue };
+            let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
+            let mut best = u32::MAX; // distance to the child that served this frame
+            let mut next = u32::MAX; // distance to the closest other entry — next(O)
+            for (server, config) in &entries {
+                let d = Self::spatial_distance(&obs, config);
+                if *server == SpatialServer::Child(pid) { best = d; } else { next = next.min(d); }
             }
+            *benefit.entry(pid).or_insert(0.0) += (next - best) as f64;
         }
 
         // Retire the child that fails its storage by the widest margin, never the one serving this
@@ -1480,20 +1472,24 @@ impl Neuron {
     }
 
     /// The one test's add half: the candidate is this frame's observation O. Benefit = Σ over the
-    /// whole history of [distance to the current best entry − distance to the candidate], counted
-    /// only on the frames the candidate is strictly closer (the frames it would win); cost = 1 + |O|.
-    /// Mint when benefit ≥ cost. This is the design's expensive step — it measures the candidate
-    /// against every remembered frame (docs/algorithm.md, "Risks": the add pass).
+    /// whole history of [distance to the frame's server − distance to the candidate], counted only on
+    /// the frames the candidate is strictly closer (the frames it would win); cost = 1 + |O|. Mint when
+    /// benefit ≥ cost. This is the design's expensive step — it measures the candidate against every
+    /// remembered frame (docs/algorithm.md, "Risks": the add pass).
     fn spatial_add_pass(&mut self, observed: &FxHashSet<NeuronId>) -> Option<SpatialCorrectionRequest> {
         #[cfg(debug_assertions)]
-        self.debug_assert_spatial_assignments();
+        self.debug_assert_spatial_servers();
+        // A frame's current best distance is its distance to the entry that served it, looked up by the
+        // record's server — no cached distance needed.
+        let cfg_of: FxHashMap<SpatialServer, FxHashSet<NeuronId>> = self.spatial_entries().into_iter().collect();
         let cost = 1.0 + observed.len() as f64;
         let mut benefit = 0.0;
         for rec in &self.spatial_history {
+            let server_config = match cfg_of.get(&rec.server) { Some(c) => c, None => continue };
             let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
+            let d_best = Self::spatial_distance(&obs, server_config);
             let d_cand = Self::spatial_distance(&obs, observed);
-            // `best_dist` is the cached distance to this frame's current best entry.
-            if d_cand < rec.best_dist { benefit += (rec.best_dist - d_cand) as f64; }
+            if d_cand < d_best { benefit += (d_best - d_cand) as f64; }
         }
         if benefit < cost { return None; }
         let mut context_neighbors: Vec<NeuronId> = observed.iter().copied().collect();
@@ -1512,8 +1508,15 @@ impl Neuron {
                     if set.is_empty() { self.spatial_context_index.remove(&ctx_id); }
                 }
             }
-            // A child left the table: frames it served fall to another entry — re-assign the cache.
-            self.rebuild_spatial_assignments();
+            // Only the frames this child served can change hands — removing it cannot change the winner
+            // of a frame it did not win. Reassign just those to their next-best (now their best).
+            let entries = self.spatial_entries();
+            for rec in &mut self.spatial_history {
+                if rec.server != SpatialServer::Child(pattern_id) { continue; }
+                let obs: FxHashSet<NeuronId> = rec.observed.iter().copied().collect();
+                let (server, _best) = Self::spatial_route(&obs, &entries);
+                rec.server = server;
+            }
         }
     }
 
@@ -2210,7 +2213,7 @@ mod tests {
         let final_entries = n.spatial_entries();
         let mut l_settled: u32 = final_entries.iter().map(|(_, c)| 1 + c.len() as u32).sum();
         for rec in &n.spatial_history {
-            l_settled += Neuron::spatial_select(&obs_of(rec), &final_entries).1;
+            l_settled += Neuron::spatial_route(&obs_of(rec), &final_entries).1;
         }
         // Normal-only baseline: a single normal = the median over ALL remembered frames, no children.
         let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
