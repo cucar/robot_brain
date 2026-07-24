@@ -520,7 +520,7 @@ impl Thalamus {
     /// Allocate a SPATIAL pattern neuron, seeded with the d=0 event connections it was minted to
     /// predict: the co-activation at its OWN level, observed on the birth frame, cut to its own
     /// neighborhood. This is the spatial half of what [allocate_temporal_pattern_neuron] already
-    /// does — a pattern is born knowing the situation whose surprise paid its price, so it predicts
+    /// does — a pattern is created knowing the configuration that justified it, so it predicts
     /// on its first fire instead of firing blind, subsuming its parent, and leaving the frame
     /// unaccounted. Connectionless only when its level's neighborhood is genuinely empty at birth.
     /// Post-natal refinement is unchanged: `learn_spatial_event_connections` keeps upserting these
@@ -752,8 +752,8 @@ impl Thalamus {
         counts
     }
 
-    /// Per-level count of PAID correction neurons. Under the womb every born pattern is paid — the
-    /// unpaid hypotheses live in the womb as embryos, not the routing table — so this equals
+    /// Per-level count of PAID correction neurons. Every child in a routing table has passed the one
+    /// test (it pays for its storage); there are no unpaid trial children, so this equals
     /// [spatial_level_counts]. Retained for API stability with the diagnostics harness.
     pub fn spatial_level_paid_counts(&self) -> Vec<u32> {
         self.spatial_level_counts()
@@ -1148,14 +1148,14 @@ impl Thalamus {
 
     // ── Spatial error pass (1c) ─────────────────────────────────────────────
 
-    /// Settle this frame's spatial births. A request means an embryo in the neuron's womb covered
-    /// its price and asks for the pattern it represents to be born. Every born pattern is paid — the
-    /// womb owns pricing and clustering entirely — so this pass owns only what a neuron cannot decide
-    /// locally: the subsumption filter, id allocation, and cross-neuron wiring.
+    /// Settle this frame's spatial mints. A request means the neuron's add pass ran the one test over
+    /// its history and found a child at O pays for its storage. The add pass owns pricing entirely, so
+    /// this pass owns only what a neuron cannot decide locally: the subsumption filter, id allocation,
+    /// and cross-neuron wiring.
     ///
-    /// The CONTEXT of a born correction is the embryo's converged center, drawn from the parent's OWN
-    /// level — for an Lk parent, the L(k+1) correction's context_entries are level-k co-actives. This
-    /// is what lets the hierarchy grow: an L1 prediction failure births an L2 whose context is L1
+    /// The CONTEXT of a new correction is the observation O that justified it, drawn from the parent's
+    /// OWN level — for an Lk parent, the L(k+1) correction's context_entries are level-k co-actives.
+    /// This is what lets the hierarchy grow: an L1 prediction failure mints an L2 whose context is L1
     /// neighbors, so L2 will fire next frame when L1 patterns recur in a similar L1-neighborhood.
     pub fn create_spatial_corrections(
         &mut self,
@@ -1164,15 +1164,15 @@ impl Thalamus {
         fired_neurons: &FxHashSet<NeuronId>,
     ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>) {
 
-        // Corrections born this frame are returned as creation specs plus install ops for their parents.
+        // Corrections minted this frame are returned as creation specs plus install ops for their parents.
         let mut new_specs = Vec::new();
         let mut install_ops = Vec::new();
 
         // The frame's co-activation, split by level: a newborn's event connections are seeded from
-        // the level it is born INTO, so each birth reads the bucket one above its parent's level.
+        // the level it is created INTO, so each mint reads the bucket one above its parent's level.
         let actives_by_level = self.bucket_fired_by_spatial_level(fired_neurons);
 
-        // process the birth requests of the spatial dispatch and create the corrections.
+        // process the add-pass requests of the spatial dispatch and create the corrections.
         for column_result in dispatch_results.iter().flatten() {
             let Some(request) = &column_result.correction_request else { continue };
 
@@ -1180,7 +1180,7 @@ impl Thalamus {
             // A subsumed neuron casts no votes and requests nothing, so this is a safety net.
             if subsumed_neurons.contains(&column_result.parent_id) { continue; }
 
-            // Create one correction pattern for the add pass's birth request.
+            // Create one correction pattern for the add pass's request.
             let parent_id = column_result.parent_id;
             let parent_level = self.get_neuron_spatial_level(parent_id);
 
@@ -1228,7 +1228,7 @@ impl Thalamus {
         by_level
     }
 
-    /// Create one correction pattern for a paid-off embryo giving birth. `level_actives` is the
+    /// Create one correction pattern for an add-pass request. `level_actives` is the
     /// co-activation at the newborn's own level — the events it is minted to predict.
     fn create_spatial_correction(
         &mut self,
@@ -1248,7 +1248,7 @@ impl Thalamus {
             connections: Some(spec.connections),
         });
 
-        // Installation wires the embryo's center in as the correction's context on its parent.
+        // Installation wires the observation O in as the correction's context on its parent.
         install_ops.push(SpatialInstallOp {
             parent_id,
             pattern_id: spec.id,
@@ -1692,8 +1692,8 @@ impl Thalamus {
         frame_number: FrameNumber,
     ) -> Vec<crate::column::SpatialColumnResult> {
 
-        // Route on the neuron's own id: a region owns the neuron's routing table, so its matching,
-        // womb, and connection learning must all run where its state lives. The buckets hold indices
+        // Route on the neuron's own id: a region owns the neuron's routing table, so its routing, the
+        // one test, and connection learning must all run where its state lives. The buckets hold indices
         // rather than ids because the two neighbor lists are positional — parallel to work_list.
         let indices_by_region = self.bucket_by_region_indices(work_list, |&id| id);
 
@@ -2375,9 +2375,9 @@ struct CorrectionSpec {
     context_entries: Vec<ContextRefEntry>,
 }
 
-/// Install op for a freshly-born spatial correction. Records the parent whose routing table gains
-/// the pattern, the new pattern's id, and the d=0 context entries (the embryo's center) to bind
-/// against. The pattern is born paid — its embryo already covered the price in the womb.
+/// Install op for a freshly-minted spatial correction. Records the parent whose routing table gains
+/// the pattern, the new pattern's id, and the d=0 context entries (the observation O) to bind
+/// against. The add pass already ran the one test, so the pattern is installed straight away.
 #[derive(Debug, Clone)]
 pub struct SpatialInstallOp {
     pub parent_id: NeuronId,

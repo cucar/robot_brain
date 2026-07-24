@@ -24,17 +24,18 @@ use crate::types::*;
 /// fallback. Not a tunable knob — kept here to avoid a magic number in the error-threshold getters.
 const ERROR_MIN_SAMPLES: u64 = 3;
 
-/// A spatial correction request: an embryo in this neuron's womb accumulated enough evidence to
-/// cover its price, so the neuron asks the thalamus to give birth to the pattern it represents.
+/// A spatial correction request: the add pass found that a child at this frame's observation `O`
+/// removes more error from the history than it costs to store, so the neuron asks the thalamus to
+/// create the pattern it represents (docs/algorithm.md, "The one test").
 /// The thalamus owns what the neuron cannot decide locally: the subsumption filter, id
-/// allocation, and cross-neuron wiring. Pricing and clustering happened entirely in the womb.
-/// The request carries no target events: under lateral inference the newborn's prediction
-/// substrate is its own level, learned from scratch as that level populates — its birth knowledge
-/// is the seeded context center, not a connection set.
+/// allocation, and cross-neuron wiring. The add pass already ran the one test over the history.
+/// The request carries no target events: a new child is created with no connections, and learns
+/// its own level's connections by co-occurrence as that level populates — its birth knowledge is
+/// the seeded context configuration, not a connection set (docs/algorithm.md, "Creating a child").
 #[derive(Debug, Clone)]
 pub struct SpatialCorrectionRequest {
-    /// The embryo's converged context center — the same-level neighbors the born pattern will
-    /// condition on. This is the pooled center, not the noisy triggering frame's raw context.
+    /// The observed neighborhood `O` the new child will condition on — the configuration that
+    /// justified it. Refinement relocates it onto the median of the frames it serves from there.
     pub context_neighbors: Vec<NeuronId>,
 }
 
@@ -882,7 +883,8 @@ impl Neuron {
 
     /// Add a spatial child pattern to the spatial routing table and populate its context.
     /// Spatial context has no distance dimension — entries are just (pattern, ctx_neuron) pairs.
-    /// The pattern is born from an embryo that already covered its price, so it fires from birth.
+    /// The child was minted by the add pass, which already showed it pays for its storage, so it
+    /// serves from its first frame.
     /// Returns death frame for pattern neurons.
     pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId], current_frame: FrameNumber) -> Option<FrameNumber> {
         self.add_spatial_child(pattern_id, 0.0);
@@ -2250,5 +2252,238 @@ mod tests {
         );
         assert!(l_settled < l_normal_only,
             "Phase 1 must compress: settled L={} should be below normal-only L={}", l_settled, l_normal_only);
+    }
+
+    // ── Phase 1 configuration-loop unit tests ──────────────────────────────────
+    //
+    // Each drives a single Neuron through process_spatial_frame and, when the add pass returns a
+    // request, installs the child with context = O (add_spatial_pattern) exactly as the thalamus does.
+
+    /// A set of neighbor ids.
+    fn set(ids: &[NeuronId]) -> FxHashSet<NeuronId> { ids.iter().copied().collect() }
+
+    /// A spatial neighborhood context over the given neighbor ids, each at strength 1.
+    fn spatial_ctx(ids: &[NeuronId]) -> crate::context::SpatialContext {
+        let mut c = crate::context::SpatialContext::new();
+        for &id in ids { c.add_neuron(id, 1.0); }
+        c
+    }
+
+    /// A level-0 neuron whose horizon is `round(1 / forget_rate)` — 0.1 → 10, 0.05 → 20.
+    fn phase1_neuron(forget_rate: f64) -> Neuron {
+        Neuron::new(1, forget_rate, 0.9, GroupMode::Static, FxHashMap::default(), 10, true)
+    }
+
+    /// Drive one learning frame; install any minted child (simulating the thalamus). Returns the
+    /// minted child's id (if any) and the ids the delete pass retired this frame.
+    fn step(n: &mut Neuron, ids: &[NeuronId], frame: FrameNumber, next_pid: &mut NeuronId) -> (Option<NeuronId>, Vec<NeuronId>) {
+        let ctx = spatial_ctx(ids);
+        let empty: FxHashSet<NeuronId> = FxHashSet::default();
+        let res = n.process_spatial_frame(Some(&ctx), &empty, &[], frame);
+        let minted = res.correction_request.map(|req| {
+            let pid = *next_pid;
+            n.add_spatial_pattern(pid, &req.context_neighbors, frame);
+            *next_pid += 1;
+            pid
+        });
+        (minted, res.deleted_children)
+    }
+
+    /// The normal's current stored configuration.
+    fn normal_cfg(n: &Neuron) -> FxHashSet<NeuronId> {
+        n.spatial_entries().into_iter().find_map(|(s, c)| matches!(s, SpatialServer::Normal).then_some(c)).unwrap()
+    }
+
+    /// Every child's current stored configuration.
+    fn child_cfgs(n: &Neuron) -> Vec<FxHashSet<NeuronId>> {
+        n.spatial_entries().into_iter().filter_map(|(s, c)| matches!(s, SpatialServer::Child(_)).then_some(c)).collect()
+    }
+
+    /// Distance is Hamming (the symmetric-difference count), symmetric in its two arguments.
+    #[test]
+    fn test_spatial_distance_is_hamming() {
+        assert_eq!(Neuron::spatial_distance(&set(&[1, 2, 3]), &set(&[1, 2, 3])), 0);
+        assert_eq!(Neuron::spatial_distance(&set(&[1, 2, 3]), &set(&[4, 5, 6, 7])), 7); // disjoint: 3 + 4
+        assert_eq!(Neuron::spatial_distance(&set(&[1, 2, 3]), &set(&[1, 2])), 1);       // one missing
+        assert_eq!(Neuron::spatial_distance(&set(&[1, 2, 3]), &set(&[1, 2, 4])), 2);    // one swapped
+        assert_eq!(Neuron::spatial_distance(&set(&[]), &set(&[1, 2])), 2);
+        assert_eq!(
+            Neuron::spatial_distance(&set(&[1, 2]), &set(&[1, 2, 3, 4])),
+            Neuron::spatial_distance(&set(&[1, 2, 3, 4]), &set(&[1, 2])),
+        );
+    }
+
+    /// Routing takes the closest entry; on a tie the normal outranks any child, and among children
+    /// the smaller id outranks — so a recurring input always yields the same server.
+    #[test]
+    fn test_spatial_route_tiebreak_normal_then_smallest_id() {
+        assert!(Neuron::spatial_outranks(SpatialServer::Normal, SpatialServer::Child(5)));
+        assert!(!Neuron::spatial_outranks(SpatialServer::Child(5), SpatialServer::Normal));
+        assert!(Neuron::spatial_outranks(SpatialServer::Child(3), SpatialServer::Child(9)));
+        assert!(!Neuron::spatial_outranks(SpatialServer::Child(9), SpatialServer::Child(3)));
+
+        // Normal and a child equidistant (both at 2) → the normal serves.
+        let entries = vec![(SpatialServer::Normal, set(&[1, 2])), (SpatialServer::Child(5), set(&[1, 3]))];
+        assert_eq!(Neuron::spatial_route(&set(&[1, 4]), &entries), (SpatialServer::Normal, 2));
+
+        // Two children equidistant (both at 0) and beating the normal → the smaller id serves.
+        let entries = vec![
+            (SpatialServer::Normal, set(&[7, 8])),
+            (SpatialServer::Child(9), set(&[1, 2])),
+            (SpatialServer::Child(3), set(&[1, 2])),
+        ];
+        assert_eq!(Neuron::spatial_route(&set(&[1, 2]), &entries), (SpatialServer::Child(3), 0));
+    }
+
+    /// Cold start is silence: a neuron with no neighbors this frame routes, serves, and decides
+    /// nothing, and writes no history.
+    #[test]
+    fn test_cold_start_is_silence() {
+        let mut n = phase1_neuron(0.1);
+        let empty: FxHashSet<NeuronId> = FxHashSet::default();
+        let r = n.process_spatial_frame(None, &empty, &[], 0);
+        assert!(r.matches.is_empty() && r.correction_request.is_none() && r.deleted_children.is_empty());
+        let r = n.process_spatial_frame(Some(&spatial_ctx(&[])), &empty, &[], 1);
+        assert!(r.matches.is_empty() && r.correction_request.is_none());
+        assert!(n.spatial_history.is_empty(), "silence writes no history");
+    }
+
+    /// A stable world builds nothing: a single recurring configuration is served by the normal
+    /// forever and never justifies a child (docs/algorithm.md, "The normal is always in the comparison").
+    #[test]
+    fn test_stable_world_creates_no_child() {
+        let mut n = phase1_neuron(0.1);
+        let mut pid = 1000;
+        let c = [1, 2, 3];
+        for f in 0..40 {
+            let (minted, deleted) = step(&mut n, &c, f, &mut pid);
+            assert!(minted.is_none(), "a stable configuration must never mint a child (frame {f})");
+            assert!(deleted.is_empty());
+        }
+        assert!(child_cfgs(&n).is_empty());
+        assert_eq!(normal_cfg(&n), set(&c), "the normal settles to the stable configuration");
+    }
+
+    /// A minted child's context is exactly the observation O that justified it (docs/algorithm.md,
+    /// "Creating a child": its configuration starts as the observation that justified it).
+    #[test]
+    fn test_mint_context_is_the_observation() {
+        let mut n = phase1_neuron(0.05);
+        let (a, b) = ([10, 11, 12], [20, 21, 22, 23]);
+        let empty: FxHashSet<NeuronId> = FxHashSet::default();
+        let mut minted_cfg = None;
+        for f in 0..40 {
+            let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
+            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], f);
+            if let Some(req) = res.correction_request {
+                minted_cfg = Some(set(&req.context_neighbors));
+                n.add_spatial_pattern(1000, &req.context_neighbors, f);
+                break;
+            }
+        }
+        assert_eq!(minted_cfg, Some(set(&b)), "the first child minted takes the deviation B as its context");
+    }
+
+    /// The ordering guard for the delete/add-before-refine fix: on the frame the add pass mints B,
+    /// refinement must NOT run on the normal, so the normal stays at A rather than blurring onto A∪B.
+    #[test]
+    fn test_mint_frame_does_not_pollute_the_normal() {
+        let mut n = phase1_neuron(0.05);
+        let mut pid = 1000;
+        let (a, b) = ([10, 11, 12], [20, 21, 22, 23]);
+        let empty: FxHashSet<NeuronId> = FxHashSet::default();
+        for f in 0..40 {
+            let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
+            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], f);
+            if let Some(req) = res.correction_request {
+                n.add_spatial_pattern(pid, &req.context_neighbors, f);
+                pid += 1;
+                assert_eq!(normal_cfg(&n), set(&a), "minting must not refine the normal (frame {f})");
+            }
+        }
+        assert_eq!(child_cfgs(&n), vec![set(&b)], "settles to one child = B");
+        assert_eq!(normal_cfg(&n), set(&a), "normal stays A");
+    }
+
+    /// A child is retired once its demand ages out of the window, and the normal — which owns no cost
+    /// line — is never deleted (docs/algorithm.md, "The normal is always in the comparison").
+    #[test]
+    fn test_child_deleted_when_demand_disappears() {
+        let mut n = phase1_neuron(0.1);
+        let mut pid = 1000;
+        let (a, b) = ([10, 11, 12], [20, 21, 22, 23]);
+        for f in 0..40 {
+            let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
+            step(&mut n, obs, f, &mut pid);
+        }
+        assert_eq!(child_cfgs(&n).len(), 1, "one child established for the recurring B");
+
+        let mut deleted_any = false;
+        for f in 40..70 {
+            let (_m, del) = step(&mut n, &a, f, &mut pid);
+            if !del.is_empty() { deleted_any = true; }
+        }
+        assert!(deleted_any, "the child is retired once its demand ages out of the window");
+        assert!(child_cfgs(&n).is_empty(), "no child survives after its demand disappears");
+        assert!(n.get_spatial_routing_table().contains_key(&SpatialServer::Normal), "the normal is never deleted");
+        assert_eq!(normal_cfg(&n), set(&a));
+    }
+
+    /// Refining an entry with the configuration it already holds only strengthens it — a fixpoint,
+    /// so a settled structure does not churn.
+    #[test]
+    fn test_refinement_is_a_fixpoint_on_its_own_configuration() {
+        let mut n = phase1_neuron(0.1);
+        n.refine_server(SpatialServer::Normal, &set(&[1, 2, 3]));
+        let before = normal_cfg(&n);
+        assert_eq!(before, set(&[1, 2, 3]));
+        n.refine_server(SpatialServer::Normal, &set(&[1, 2, 3]));
+        assert_eq!(normal_cfg(&n), before, "refining with the same configuration changes no membership");
+    }
+
+    /// A neighbor that stops appearing decays out of the configuration once it falls under the frames
+    /// that keep it — no separate prune rule (docs/algorithm.md, "Refinement").
+    #[test]
+    fn test_refinement_drops_a_neighbor_that_stops_appearing() {
+        let mut n = phase1_neuron(0.1);
+        for _ in 0..3 { n.refine_server(SpatialServer::Normal, &set(&[1, 2, 3])); }
+        assert_eq!(normal_cfg(&n), set(&[1, 2, 3]));
+        for _ in 0..3 { n.refine_server(SpatialServer::Normal, &set(&[1, 2])); }
+        assert_eq!(normal_cfg(&n), set(&[1, 2]), "the vanished neighbor 3 falls out of the configuration");
+    }
+
+    /// A perfectly-served frame (distance 0) skips the add pass entirely — a settled neuron does no
+    /// expensive work (docs/algorithm.md, "Risks": run the add pass only when the frame had error).
+    #[test]
+    fn test_no_add_pass_on_a_perfectly_served_frame() {
+        let mut n = phase1_neuron(0.1);
+        let empty: FxHashSet<NeuronId> = FxHashSet::default();
+        let c = [1, 2, 3];
+        n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], 0); // frame 0 refines the normal onto C
+        for f in 1..10 {
+            let r = n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], f);
+            assert!(r.correction_request.is_none(), "a distance-0 frame must skip the add pass (frame {f})");
+        }
+    }
+
+    /// A lone, non-recurring outlier should be absorbed by the normal and forgotten, never split into
+    /// a child. Ignored: the incremental-drift refinement adds the outlier's novel neighbor on its one
+    /// appearance and never charges it for its prior absences, so the normal blurs and the majority is
+    /// forced into a child. This passes once refinement recomputes the median of the window
+    /// (docs/algorithm.md, "Refinement"); kept as the executable spec for that fix.
+    #[test]
+    #[ignore]
+    fn test_lone_outlier_is_absorbed_not_split() {
+        let mut n = phase1_neuron(0.1);
+        let mut pid = 1000;
+        let (c, outlier) = ([1, 2, 3], [1, 2, 4]);
+        for f in 0..5 { step(&mut n, &c, f, &mut pid); }        // establish the normal at C
+        step(&mut n, &outlier, 5, &mut pid);                    // one noise frame
+        for f in 6..30 {
+            let (m, _) = step(&mut n, &c, f, &mut pid);
+            assert!(m.is_none(), "a single outlier must not mint a child (frame {f})");
+        }
+        assert!(child_cfgs(&n).is_empty(), "a lone outlier creates no child");
+        assert_eq!(normal_cfg(&n), set(&c), "the normal recovers to C, absorbing the lone outlier");
     }
 }

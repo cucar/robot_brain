@@ -510,7 +510,7 @@ impl Column {
                 None => continue,
             };
 
-            // Add the child pattern to the parent's spatial routing table (born from a paid embryo).
+            // Add the child pattern to the parent's spatial routing table (minted by the add pass).
             let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids, frame_number);
             if let Some(df) = death_frame { deaths.push((op.pattern_id, df)); }
 

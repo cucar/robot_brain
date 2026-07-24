@@ -839,8 +839,8 @@ impl Brain {
         self.thalamus.spatial_level_counts()
     }
 
-    /// Diagnostic: per-level count of PAID correction neurons. Under the womb every born pattern is
-    /// paid (unpaid hypotheses are embryos, not routing entries), so this equals [spatial_level_counts].
+    /// Diagnostic: per-level count of PAID correction neurons. Every child in a routing table has
+    /// passed the one test, so there are no unpaid trial children and this equals [spatial_level_counts].
     pub fn spatial_level_paid_counts(&self) -> Vec<u32> {
         self.thalamus.spatial_level_paid_counts()
     }
@@ -1469,11 +1469,12 @@ impl Brain {
     fn process_spatial_corrections(&mut self, spatial: &SpatialSweepResult) -> Vec<NeuronCreateSpec> {
 
         // Settle the correction requests carried in the d=0 sweep's dispatch results.
-        // Each neuron already evaluated its own prediction and recorded its error sample during dispatch;
-        // this pass filters subsumed requesters, runs the recurrence/payment ledger, and builds a NeuronCreateSpec plus an install op per approved correction.
+        // Each neuron already ran the one test over its own history during dispatch — the add pass
+        // produced a request only when a child at O pays for its storage; this pass filters subsumed
+        // requesters and builds a NeuronCreateSpec plus an install op per request.
         // Returned specs are deferred — they'll be materialized in the end-of-frame flush along with temporal specs.
         // The fired set carries this frame's co-activation at every level — each newborn seeds its
-        // event connections from the level it is born into.
+        // event connections from the level it is created into.
         let (specs, install_ops) = self.thalamus.create_spatial_corrections(&spatial.dispatch_results, &spatial.subsumed_set, &spatial.fired_set);
 
         // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
