@@ -10,7 +10,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use crate::context::TemporalContext;
 use crate::neuron::{
     ActiveNeuron, AgeVotes, TemporalContextRefUpdate, SpatialContextRefUpdate, TemporalNeuron,
-    CorrectionActivation, Neuron, PatternMatch, Vote,
+    CorrectionActivation, Neuron, PatternMatch, SpatialServer, Vote,
 };
 use crate::thalamus::{SpatialInstallOp, SpatialInstallResult};
 use crate::types::{
@@ -296,7 +296,10 @@ impl Column {
         // then queue the child for deletion. Spatial context has no distance dimension.
         let spatial_children: Vec<(NeuronId, Vec<NeuronId>)> = neuron.get_spatial_routing_table()
             .iter()
-            .map(|(&child_id, entry)| (child_id, entry.context.entries().keys().copied().collect()))
+            .filter_map(|(&server, entry)| match server {
+                SpatialServer::Child(child_id) => Some((child_id, entry.context.entries().keys().copied().collect())),
+                SpatialServer::Normal => None, // the normal has no pattern neuron and is never orphaned/deleted
+            })
             .collect();
         for (child_pattern_id, ctx_neuron_ids) in &spatial_children {
             for &ctx_neuron_id in ctx_neuron_ids {
@@ -335,7 +338,7 @@ impl Column {
         let mut outbound_ops = Vec::new();
 
         // Try the SPATIAL side first.
-        if let Some(entry) = parent.get_spatial_routing_table().get(&pattern_id) {
+        if let Some(entry) = parent.get_spatial_routing_table().get(&SpatialServer::Child(pattern_id)) {
             let ctx_neuron_ids: Vec<NeuronId> = entry.context.entries().keys().copied().collect();
             for ctx_neuron_id in ctx_neuron_ids {
                 if !parent.has_spatial_context_key(pattern_id, ctx_neuron_id) { continue; }
@@ -626,7 +629,7 @@ impl Column {
         for child in &data.children {
             if child.spatial {
                 neuron.add_spatial_child(child.pattern_id, child.activation_strength);
-                if let Some(entry) = neuron.get_spatial_routing_table_mut().get_mut(&child.pattern_id) {
+                if let Some(entry) = neuron.get_spatial_routing_table_mut().get_mut(&SpatialServer::Child(child.pattern_id)) {
                     entry.last_activation_frame = child.last_activation_frame;
                 }
                 for ctx in &child.context {

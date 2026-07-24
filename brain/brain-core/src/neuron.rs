@@ -39,13 +39,15 @@ pub struct SpatialCorrectionRequest {
 }
 
 /// Who serves a frame in the level-0 configuration loop (UCAR, docs/algorithm.md): the neuron's
-/// normal, or one of its children. Produced by routing each frame (and recomputed for remembered
-/// frames by the one test and refinement) — never stored, since it is derivable from the observation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// normal, or one of its children. Also the KEY of the spatial routing table: a routing-table entry
+/// is the normal or a child (docs/algorithm.md, "The normal"), so `SpatialServer` names both the
+/// winner of the one test and which entry a stored `SpatialRoutingEntry` belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpatialServer {
-    /// The normal served — the neuron inferred from its own connections and propagated nothing.
+    /// The normal — serves the usual neighbourhood, has no pattern neuron, never propagates, is never
+    /// deleted. Present as an entry in the routing table like any other.
     Normal,
-    /// A child served — it fired and delegated to the pattern one level up.
+    /// A child — when it serves it fires and delegates to the pattern one level up.
     Child(NeuronId),
 }
 
@@ -307,27 +309,24 @@ pub struct Neuron {
     /// learning, so its votes are skipped — the same restriction the connection learning enforces.
     spatial_target_dims: FxHashMap<NeuronId, (ChannelId, DimensionId)>,
 
-    /// Spatial routing table: child_pattern_id → SpatialRoutingEntry.
-    /// Spatial correction patterns hosted by this neuron.
-    spatial_routing_table: FxHashMap<NeuronId, SpatialRoutingEntry>,
+    /// Spatial routing table: every entry is a routing-table entry keyed by which one it is — the
+    /// `Normal` or a `Child(pattern_id)` (docs/algorithm.md, "The normal": the normal is "a routing
+    /// table entry like any other"). Each entry stores a **context** configuration recognition measures
+    /// distance to and refines toward the median of the frames it serves. The `Normal` key is always
+    /// present (inserted at construction); it has no pattern neuron, never propagates, and is never
+    /// deleted — child-specific machinery (minting/releasing pattern neurons, serializing children,
+    /// the inverted index) filters to `Child(_)` entries. Connections are a separate concern (for
+    /// inference); on the d=0 axis the normal's context coincides with the connections, but that is an
+    /// artifact of d=0, not relied on here — the normal is stored and refined purely as context.
+    spatial_routing_table: FxHashMap<SpatialServer, SpatialRoutingEntry>,
 
-    /// Spatial inverted index: ctx_neuron_id → set of pattern_ids that reference it.
-    /// No distance keying — spatial context entries have no distance.
+    /// Spatial inverted index: ctx_neuron_id → set of child pattern_ids that reference it. Children
+    /// only — the normal is not indexed (nothing looks a pattern up through the normal).
     spatial_context_index: FxHashMap<NeuronId, FxHashSet<NeuronId>>,
 
     /// Spatial context references: set of parent neurons whose spatial routing tables
     /// reference this neuron. No distance.
     spatial_context_refs: FxHashSet<NeuronId>,
-
-    /// The **normal** — a routing-table entry like any other (docs/algorithm.md, "The normal"),
-    /// holding a stored **context** configuration. It has no pattern neuron, never propagates, and is
-    /// never deleted; recognition measures distance to it exactly as to a child, and it refines to the
-    /// median of the frames it serves, exactly like a child. Routing-table entries are context (for
-    /// recognition); connections are a separate concern (for inference). On the d=0 axis context and
-    /// inference are one set so the normal's context coincides with the connections — but that is an
-    /// artifact of d=0, not relied on here: the normal is stored and refined purely as context.
-    /// Persisted so a frozen brain routes against the trained configuration.
-    spatial_normal: SpatialContext,
 
     // ── Level-0 configuration loop (UCAR, docs/algorithm.md) ────────────────────
 
@@ -396,10 +395,19 @@ impl Neuron {
             channel_action_ids,
             spatial_connections: FxHashMap::default(),
             spatial_target_dims: FxHashMap::default(),
-            spatial_routing_table: FxHashMap::default(),
+            // The routing table always contains the normal (an entry with no pattern neuron); children
+            // are added as they are minted.
+            spatial_routing_table: {
+                let mut m: FxHashMap<SpatialServer, SpatialRoutingEntry> = FxHashMap::default();
+                m.insert(SpatialServer::Normal, SpatialRoutingEntry {
+                    context: SpatialContext::new(),
+                    activation_strength: 0.0,
+                    last_activation_frame: 0,
+                });
+                m
+            },
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
-            spatial_normal: SpatialContext::new(),
             spatial_history: Vec::new(),
             // The horizon is the inverse of the forget rate — the same timescale, not a new knob.
             horizon: if pattern_forget_rate > 0.0 { (1.0 / pattern_forget_rate).round().max(1.0) as u32 } else { u32::MAX },
@@ -486,8 +494,13 @@ impl Neuron {
             error_stats: self.serialize_error_stats(),
             // The normal's stored context configuration — its member neighbor ids. Persisted like a
             // child's context (in contexts.csv), just with no pattern neuron.
-            normal_context: self.spatial_normal.entries().keys().copied().collect(),
+            normal_context: self.normal_entry().context.entries().keys().copied().collect(),
         }
+    }
+
+    /// The normal routing-table entry — always present.
+    fn normal_entry(&self) -> &SpatialRoutingEntry {
+        self.spatial_routing_table.get(&SpatialServer::Normal).expect("normal routing entry must always exist")
     }
 
     /// Restore the normal's stored context configuration from its member neighbor ids.
@@ -496,7 +509,8 @@ impl Neuron {
         for &id in context_ids {
             if !ctx.has_key(id) { ctx.add_neuron(id, 1.0); }
         }
-        self.spatial_normal = ctx;
+        self.spatial_routing_table.get_mut(&SpatialServer::Normal)
+            .expect("normal routing entry must always exist").context = ctx;
     }
 
     /// Rebuild the position metadata of spatial connection targets from central base-neuron metadata.
@@ -543,7 +557,9 @@ impl Neuron {
     /// entries surface with distance=0 (a placeholder for the snapshot format).
     fn serialize_children(&self) -> Vec<SerializedChild> {
         let mut result = Vec::new();
-        for (&pattern_id, entry) in &self.spatial_routing_table {
+        // Children only — the normal entry is serialized separately (normal_context), not as a child.
+        for (&server, entry) in &self.spatial_routing_table {
+            let SpatialServer::Child(pattern_id) = server else { continue };
             result.push(SerializedChild {
                 pattern_id,
                 spatial: true,
@@ -730,7 +746,7 @@ impl Neuron {
     /// Get effective activation strength for a child pattern with lazy decay.
     /// Looks up in whichever routing table holds the pattern (spatial or temporal).
     pub fn get_child_effective_activation_strength(&self, pattern_id: NeuronId, current_frame: FrameNumber) -> f64 {
-        if let Some(entry) = self.spatial_routing_table.get(&pattern_id) {
+        if let Some(entry) = self.spatial_routing_table.get(&SpatialServer::Child(pattern_id)) {
             return self.decay_activation(entry.activation_strength, entry.last_activation_frame, current_frame);
         }
         if let Some(entry) = self.temporal_routing_table.get(&pattern_id) {
@@ -747,7 +763,7 @@ impl Neuron {
     /// Materialize lazy decay for a child pattern.
     pub fn materialize_child_strength(&mut self, pattern_id: NeuronId, current_frame: FrameNumber) {
         let effective = self.get_child_effective_activation_strength(pattern_id, current_frame);
-        if let Some(entry) = self.spatial_routing_table.get_mut(&pattern_id) {
+        if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id)) {
             entry.activation_strength = effective;
             return;
         }
@@ -782,12 +798,13 @@ impl Neuron {
         }
 
         // Spatial children carry death frames too, so materialize and reset them identically.
-        let spatial_ids: Vec<NeuronId> = self.spatial_routing_table.keys().copied().collect();
+        let spatial_ids: Vec<NeuronId> = self.spatial_routing_table.keys()
+            .filter_map(|s| if let SpatialServer::Child(id) = s { Some(*id) } else { None }).collect();
         for pattern_id in spatial_ids {
 
             // Fold any pending lazy decay into the stored strength so the snapshot is exact.
             self.materialize_child_strength(pattern_id, current_frame);
-            if let Some(entry) = self.spatial_routing_table.get_mut(&pattern_id) {
+            if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id)) {
 
                 // Rebase the activation clock to 0 — the restored brain starts counting frames fresh.
                 entry.last_activation_frame = 0;
@@ -816,7 +833,9 @@ impl Neuron {
         }
 
         // Spatial children use the same strength/forget-rate decay model, so compute them identically.
-        for (&pattern_id, entry) in &self.spatial_routing_table {
+        // The normal has no pattern neuron and no death frame, so it is skipped.
+        for (&server, entry) in &self.spatial_routing_table {
+            let SpatialServer::Child(pattern_id) = server else { continue };
             let death_frame = (entry.activation_strength / self.pattern_forget_rate).ceil() as FrameNumber;
             entries.push(DeathFrameEntry { pattern_id, death_frame });
         }
@@ -827,12 +846,12 @@ impl Neuron {
     /// Increments activation strength for a child pattern - materializes all owner-scoped lazy decay first.
     /// Returns death frame for pattern neurons.
     pub fn strengthen_child_activation(&mut self, pattern_id: NeuronId, current_frame: FrameNumber) -> Option<FrameNumber> {
-        if !self.spatial_routing_table.contains_key(&pattern_id) && !self.temporal_routing_table.contains_key(&pattern_id) { return None; }
+        if !self.spatial_routing_table.contains_key(&SpatialServer::Child(pattern_id)) && !self.temporal_routing_table.contains_key(&pattern_id) { return None; }
 
         // update all strengths based on decay rate first
         self.materialize_child_strength(pattern_id, current_frame);
 
-        let entry_strength = if let Some(entry) = self.spatial_routing_table.get_mut(&pattern_id) {
+        let entry_strength = if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id)) {
             entry.activation_strength += 1.0;
             entry.last_activation_frame = current_frame;
             entry.activation_strength
@@ -877,8 +896,8 @@ impl Neuron {
 
     /// Add a spatial child pattern to the spatial routing table (no context yet).
     pub fn add_spatial_child(&mut self, pattern_id: NeuronId, initial_strength: f64) {
-        if !self.spatial_routing_table.contains_key(&pattern_id) {
-            self.spatial_routing_table.insert(pattern_id, SpatialRoutingEntry {
+        if !self.spatial_routing_table.contains_key(&SpatialServer::Child(pattern_id)) {
+            self.spatial_routing_table.insert(SpatialServer::Child(pattern_id), SpatialRoutingEntry {
                 context: crate::context::SpatialContext::new(),
                 activation_strength: initial_strength,
                 last_activation_frame: 0,
@@ -910,7 +929,7 @@ impl Neuron {
 
     /// Adds an entry to a SPATIAL pattern's context by neuron_id (no distance).
     pub fn add_spatial_context(&mut self, pattern_id: NeuronId, neuron_id: NeuronId, strength: Strength) {
-        let entry = self.spatial_routing_table.get_mut(&pattern_id)
+        let entry = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id))
             .unwrap_or_else(|| panic!("add_spatial_context: pattern not found in spatial routing table: {}", pattern_id));
 
         if entry.context.has_key(neuron_id) {
@@ -1032,7 +1051,7 @@ impl Neuron {
             None => return affected_patterns,
         };
         for &pattern_id in &pattern_ids {
-            let entry = self.spatial_routing_table.get_mut(&pattern_id)
+            let entry = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id))
                 .unwrap_or_else(|| panic!("remove_spatial_context_neuron: pattern {} not found in spatial routing table of neuron {}", pattern_id, self.id));
             entry.context.remove(neuron_id);
             affected_patterns.insert(pattern_id);
@@ -1049,7 +1068,7 @@ impl Neuron {
     /// Remove a single context entry from a SPATIAL child pattern's context.
     /// Returns true if the context neuron is no longer referenced by any child spatial pattern.
     pub fn remove_spatial_context(&mut self, pattern_id: NeuronId, neuron_id: NeuronId) -> bool {
-        if let Some(entry) = self.spatial_routing_table.get_mut(&pattern_id) {
+        if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id)) {
             entry.context.remove(neuron_id);
         }
         // scrub the inverted index for (pattern, ctx_neuron)
@@ -1065,7 +1084,7 @@ impl Neuron {
 
     /// Check if a context entry exists for a spatial child pattern (for same-pulse de-dup).
     pub fn has_spatial_context_key(&self, pattern_id: NeuronId, neuron_id: NeuronId) -> bool {
-        self.spatial_routing_table.get(&pattern_id)
+        self.spatial_routing_table.get(&SpatialServer::Child(pattern_id))
             .map_or(false, |e| e.context.has_key(neuron_id))
     }
 
@@ -1101,7 +1120,7 @@ impl Neuron {
     }
 
     /// Read-only access to the spatial routing table (for delete cascade).
-    pub fn get_spatial_routing_table(&self) -> &FxHashMap<NeuronId, SpatialRoutingEntry> {
+    pub fn get_spatial_routing_table(&self) -> &FxHashMap<SpatialServer, SpatialRoutingEntry> {
         &self.spatial_routing_table
     }
 
@@ -1130,14 +1149,14 @@ impl Neuron {
     }
 
     /// Mutable access to the spatial routing table (for Column restore — sets last_activation_frame).
-    pub fn get_spatial_routing_table_mut(&mut self) -> &mut FxHashMap<NeuronId, SpatialRoutingEntry> {
+    pub fn get_spatial_routing_table_mut(&mut self) -> &mut FxHashMap<SpatialServer, SpatialRoutingEntry> {
         &mut self.spatial_routing_table
     }
 
 
     /// Remove a child pattern from whichever routing table holds it (for Column delete cascade).
     pub fn remove_routing_entry(&mut self, pattern_id: NeuronId) {
-        if self.spatial_routing_table.remove(&pattern_id).is_some() { return; }
+        if self.spatial_routing_table.remove(&SpatialServer::Child(pattern_id)).is_some() { return; }
         self.temporal_routing_table.remove(&pattern_id);
     }
 
@@ -1206,7 +1225,7 @@ impl Neuron {
         let matches = match server {
             SpatialServer::Child(pid) => {
                 if self.learning {
-                    if let Some(entry) = self.spatial_routing_table.get_mut(&pid) {
+                    if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pid)) {
                         entry.last_activation_frame = current_frame;
                     }
                 }
@@ -1280,12 +1299,9 @@ impl Neuron {
     /// them (docs/algorithm.md, "The normal"), competing on distance and able to serve, but with no
     /// pattern neuron, never propagating, and never deleted.
     fn spatial_entries(&self) -> Vec<(SpatialServer, FxHashSet<NeuronId>)> {
-        let mut entries = Vec::with_capacity(self.spatial_routing_table.len() + 1);
-        entries.push((SpatialServer::Normal, Self::config_set(&self.spatial_normal)));
-        for (&pid, entry) in &self.spatial_routing_table {
-            entries.push((SpatialServer::Child(pid), Self::config_set(&entry.context)));
-        }
-        entries
+        self.spatial_routing_table.iter()
+            .map(|(&server, entry)| (server, Self::config_set(&entry.context)))
+            .collect()
     }
 
     /// On a distance tie, does `candidate` outrank the current best `incumbent`? The normal outranks
@@ -1351,35 +1367,30 @@ impl Neuron {
         if served == 0 { return; }
         let new_config: FxHashSet<NeuronId> = counts.iter().filter(|(_, &c)| c * 2 > served).map(|(&id, _)| id).collect();
 
-        let old_config = match server {
-            SpatialServer::Normal => Self::config_set(&self.spatial_normal),
-            SpatialServer::Child(pid) => match self.spatial_routing_table.get(&pid) {
-                Some(entry) => Self::config_set(&entry.context),
-                None => return,
-            },
+        let old_config = match self.spatial_routing_table.get(&server) {
+            Some(entry) => Self::config_set(&entry.context),
+            None => return,
         };
         if new_config == old_config { return; }
 
-        // Rebuild the stored configuration. Children also maintain the inverted index that maps a
-        // context neighbor to the patterns naming it; the normal is not indexed (nothing looks a
-        // pattern up through the normal), so it only rewrites its config.
-        let mut ctx = SpatialContext::new();
-        for &id in &new_config { ctx.add_neuron(id, 1.0); }
-        match server {
-            SpatialServer::Normal => { self.spatial_normal = ctx; }
-            SpatialServer::Child(pid) => {
-                for id in old_config.difference(&new_config) {
-                    if let Some(set) = self.spatial_context_index.get_mut(id) {
-                        set.remove(&pid);
-                        if set.is_empty() { self.spatial_context_index.remove(id); }
-                    }
+        // A child also maintains the inverted index that maps a context neighbor to the patterns
+        // naming it; the normal is not indexed (nothing looks a pattern up through the normal).
+        if let SpatialServer::Child(pid) = server {
+            for id in old_config.difference(&new_config) {
+                if let Some(set) = self.spatial_context_index.get_mut(id) {
+                    set.remove(&pid);
+                    if set.is_empty() { self.spatial_context_index.remove(id); }
                 }
-                for id in new_config.difference(&old_config) {
-                    self.spatial_context_index.entry(*id).or_default().insert(pid);
-                }
-                if let Some(entry) = self.spatial_routing_table.get_mut(&pid) { entry.context = ctx; }
+            }
+            for id in new_config.difference(&old_config) {
+                self.spatial_context_index.entry(*id).or_default().insert(pid);
             }
         }
+
+        // Rebuild the entry's stored configuration.
+        let mut ctx = SpatialContext::new();
+        for &id in &new_config { ctx.add_neuron(id, 1.0); }
+        if let Some(entry) = self.spatial_routing_table.get_mut(&server) { entry.context = ctx; }
     }
 
     /// The one test's delete half — the SAME test as the add half, so nothing can be deleted then
@@ -1388,7 +1399,8 @@ impl Neuron {
     /// its distance]; cost = 1 + |config|. A child that no longer wins enough frames to cover its
     /// storage is retired — at most one per frame, the widest failure, because deletions interact.
     fn spatial_delete_pass(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
-        if self.spatial_routing_table.is_empty() { return None; }
+        // The table always holds the normal; nothing to retire unless there is at least one child.
+        if self.spatial_routing_table.len() <= 1 { return None; }
         let entries = self.spatial_entries();
 
         // Attribute each remembered frame to its current winner; accumulate that child's benefit.
@@ -1444,7 +1456,7 @@ impl Neuron {
     /// Remove a retired child from this neuron's local routing structures. The thalamus releases the
     /// pattern neuron and scrubs its cross-neuron references from the id in `deleted_children`.
     fn remove_spatial_child(&mut self, pattern_id: NeuronId) {
-        if let Some(entry) = self.spatial_routing_table.remove(&pattern_id) {
+        if let Some(entry) = self.spatial_routing_table.remove(&SpatialServer::Child(pattern_id)) {
             let ctx_ids: Vec<NeuronId> = entry.context.entries().keys().copied().collect();
             for ctx_id in ctx_ids {
                 if let Some(set) = self.spatial_context_index.get_mut(&ctx_id) {
