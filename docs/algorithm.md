@@ -601,12 +601,6 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
 
 ## Open questions
 
-- **Whether a neuron should offer a bid it is not serving from.** A neuron serves its closest entry, so if its
-  normal fits slightly better than its best child, it makes no [bid](#contraction-building-the-level-above) — even
-  though firing the child, at a little more error, might have let it cover several neighbors and shrink the frame.
-  Serving strictly closest can therefore foreclose a grouping the file would prefer. Whether a neuron should offer
-  its best child's coverage regardless of what it serves from, and let the thalamus weigh it, is undecided.
-
 - **Configuration space beyond the small case.** Eight binary neighbors is 256 configurations — finite and
   countable. Radius 2 is 2²⁴, and more buckets multiply it further. The neighborhood is small precisely where it
   is easy; what represents a configuration, and measures distance between configurations, when it is large?
