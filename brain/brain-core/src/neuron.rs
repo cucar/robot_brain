@@ -1269,13 +1269,12 @@ impl Neuron {
         // not change), so nothing else moves here.
         self.spatial_history.push(SpatialHistoryRecord { frame: current_frame, observed, server });
 
-        // The winner consolidates toward the core of what it serves — strengthen present, add novel,
-        // weaken absent — using this frame's observation (docs/refinement.md §2). The normal exactly
-        // like a child.
-        self.refine_server(server, &observed_set);
-
-        // 5 & 6. The one test, on the history: delete the single worst-failing child (at most one —
-        // deletions interact), then test a child at O. The add pass is the design's expensive step.
+        // 5 & 6, BEFORE refinement. The one test runs on the configurations as they stand this frame,
+        // NOT after refinement has moved the served entry toward O. Order is load-bearing: if refinement
+        // ran first, the served entry would already have absorbed O, hiding from the add pass exactly the
+        // error that justifies a child. That is the cold-start pollution — the normal serving a minority
+        // B blurs onto A∪B before the add pass can mint B, so B's error is spent into the normal and no
+        // child is ever born for it. Delete the single worst-failing child, then test a child at O.
         let t = std::time::Instant::now();
         let serving = match server { SpatialServer::Child(pid) => Some(pid), SpatialServer::Normal => None };
         let deleted_children = match self.spatial_delete_pass(serving) {
@@ -1287,6 +1286,16 @@ impl Neuron {
         // entirely (docs/algorithm.md, "Risks": run the add pass only when the frame had error).
         let correction_request = if served_distance > 0 { self.spatial_add_pass(&observed_set) } else { None };
         timings.correct_errors += t.elapsed().as_secs_f64();
+
+        // Refinement LAST, and on the entry the frame ENDS UP routed to. When the add pass mints a child
+        // at O, this frame belongs to that newborn: the thalamus installs it with context = O and
+        // reroutes the record onto it, and refining a config that already equals O is a no-op — so there
+        // is nothing to do here. Crucially the old server (the normal) must NOT be refined on a mint
+        // frame, or it re-absorbs O and the pollution returns. So refine the served entry only when no
+        // child was minted; the newborn's own refinement begins on its next frame.
+        if correction_request.is_none() {
+            self.refine_server(server, &observed_set);
+        }
 
         SpatialFrameResult { matches, correction_request, deleted_children, timings }
     }
