@@ -123,6 +123,9 @@ pub struct Column {
     refine: bool,
     delete: bool,
 
+    /// The spatial evidence window in frames — the horizon each neuron ages its history against.
+    horizon: u32,
+
     /// The sole storage for owned Neurons. Keyed by neuron id.
     neurons: FxHashMap<NeuronId, Neuron>,
 }
@@ -137,6 +140,7 @@ impl Column {
         learning: bool,
         refine: bool,
         delete: bool,
+        horizon: u32,
     ) -> Self {
         Self {
             channel_actions,
@@ -147,6 +151,7 @@ impl Column {
             learning,
             refine,
             delete,
+            horizon,
             neurons: FxHashMap::default(),
         }
     }
@@ -577,6 +582,7 @@ impl Column {
                 self.learning,
                 self.refine,
                 self.delete,
+                self.horizon,
             );
             // pre-wire default action connections at neutral reward across all voting distances
             for distance in 1..self.context_length {
@@ -643,6 +649,7 @@ impl Column {
             self.learning,
             self.refine,
             self.delete,
+            self.horizon,
         );
 
         // load directed connections (distance → target neuron id with strength and reward)
@@ -815,6 +822,7 @@ mod tests {
             true,
             true,
             true,
+            100,
         )
     }
 

@@ -25,7 +25,7 @@ const PROGRESS_EVERY = 100;
  * Training evaluation = load the trained brain, `--disable-learning`, re-run over the training data.
  * Testing evaluation  = load the trained brain, `--disable-learning --test-data`.
  *
- * Per image: resetContext → processFrame populates sensory activations → decode the winning digit. When
+ * Per image: processFrame populates sensory activations → decode the winning digit. When
  * learning is on, learn(actions, 1) then wires every active sensory neuron to every digit action neuron with
  * reward=1 on the correct digit and reward=0 on the rest; the smoothed-reward update converges each
  * connection's reward to P(d|V) — the per-voter posterior.
@@ -131,10 +131,38 @@ export default class MNISTTestJob extends Job {
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
+
+		// --horizon: the spatial history window in frames. The frame counter climbs monotonically for the
+		// whole run (classifyImage no longer resets it), so the sliding window must be exactly one episode
+		// long. Any shorter and a neuron forgets evidence mid-pass; any longer and a second pass over the
+		// same image counts twice, and at forget rate 0 the one test's benefit grows without bound and
+		// memorizes every configuration. Default it to the episode length; --horizon overrides.
+		const horizon = num('--horizon');
+		if (horizon !== null) this.options.horizon = horizon;
+		if (this.options.horizon == null) this.options.horizon = this.resolveEpisodeLength();
+
 		// The decode now lives in the brain — hand it the consensus rule so the winner read out of
 		// `inferences` is already the chosen rule's pick (no votes marshalled). The NB Laplace floor
 		// is a baked brain constant, no longer a knob.
 		this.options.consensus = this.config.consensus;
+	}
+
+	/**
+	 * The number of images in one training pass — the natural horizon. Joint mode runs one pass over the
+	 * balanced set (cap × 10 images); Split-MNIST trains one two-class task (2 × cap) per pass; --no-balance
+	 * trains the full natural set. cap is the per-class quota, taken from the smallest class when --per-class
+	 * is left at 0 so the operator need not know the floor, and never above that floor when it is set.
+	 * Reads only the tiny label file (the images are loaded later in configureChannels).
+	 */
+	resolveEpisodeLength() {
+		const dataDir = path.join(__dirname, '..', 'data');
+		const labels = loadLabels(this.findDataFile(dataDir, 'train-labels-idx1-ubyte'));
+		if (this.config.noBalance) return labels.length;
+		const counts = new Array(10).fill(0);
+		for (const label of labels) counts[label]++;
+		const floor = Math.min(...counts);
+		const cap = this.config.perClass > 0 ? Math.min(this.config.perClass, floor) : floor;
+		return this.config.split ? 2 * cap : 10 * cap;
 	}
 
 	/**
@@ -242,6 +270,7 @@ export default class MNISTTestJob extends Job {
 		console.log(`  Buckets: ${this.config.buckets}`);
 		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
+		console.log(`  Horizon: ${this.options.horizon} frames (spatial history window = one episode)`);
 		console.log(`  Refinement: ${this.options.spatialRefine === false ? 'OFF' : 'ON'} | Delete pass: ${this.options.spatialDelete === false ? 'OFF' : 'ON'}`);
 		console.log(`  Consensus: ${this.config.consensus}`);
 		console.log(`  Dataset: ${this.config.testData ? 'test (held-out)' : 'training (balanced)'}`);
@@ -387,7 +416,7 @@ export default class MNISTTestJob extends Job {
 
 	/**
 	 * One pass over the active dataset. For each image:
-	 *   resetContext → processFrame → decode prediction → (if learning) learn(actions, 1).
+	 *   processFrame → decode prediction → (if learning) learn(actions, 1).
 	 * When learning is on the recorded accuracy is prequential — the brain's guess *before* this image's
 	 * supervised wire lands. When learning is off it is a clean frozen evaluation with the fixed model.
 	 * `digit` restricts a split-mode training pass to one digit's slice; null walks the whole dataset.
@@ -492,9 +521,14 @@ export default class MNISTTestJob extends Job {
 	 * Shared by every pass — training (pre-update prediction) and frozen evaluation.
 	 * The brain applies the configured consensus rule ('democratic' | 'nb') internally, so the
 	 * winning digit comes straight off `inferences` — no per-vote marshalling on the hot path.
+	 *
+	 * The frame counter is NOT reset per image: it climbs monotonically across the whole run so the
+	 * neuron's spatial history is a real sliding window (one horizon = one episode long), never a stack
+	 * of frame-1 records that can never age out. Spatial co-activation is wiped inside the brain each
+	 * frame regardless, and temporal is inert at context length 1, so each image is still classified
+	 * independently without a reset.
 	 */
 	classifyImage(bits) {
-		this.brain.resetContext();
 		const inputs = this.encoder.encodeImage(bits);
 		const inferResult = this.brain.processFrame(inputs, EMPTY_REWARDS);
 		// --debug-miss reaggregates votes app-side for its rank/margin breakdown; stash them when on.

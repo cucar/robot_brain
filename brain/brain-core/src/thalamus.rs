@@ -351,6 +351,7 @@ impl Thalamus {
         learning: bool,
         refine: bool,
         delete: bool,
+        horizon: u32,
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
         let channel_actions = FxHashMap::default();
@@ -367,6 +368,7 @@ impl Thalamus {
                 learning,
                 refine,
                 delete,
+                horizon,
             ));
         }
 
@@ -2659,7 +2661,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, true, true)
+        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, true, true, 10)
     }
 
     // ── Contraction election (docs/algorithm.md, "Contraction: Election, by rounds") ────────────
@@ -2817,7 +2819,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, true, true);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, true, true, 10);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);

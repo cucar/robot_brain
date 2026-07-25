@@ -154,6 +154,8 @@ impl JsBrain {
     ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
     ///   spatialRefine: boolean (default true) — refine the served entry toward what it serves each frame
     ///   spatialDelete: boolean (default true) — run the delete pass that retires children below their cost
+    ///   horizon: number (default round(1/patternForgetRate)) — spatial history window in frames; set it to
+    ///     the episode length so the sliding window holds exactly one episode of evidence
     ///
     /// The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
     /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
@@ -194,10 +196,17 @@ impl JsBrain {
         // isolate their contribution without a rebuild.
         let refine = opt_bool(options.as_ref(), "spatialRefine")?.unwrap_or(true);
         let delete = opt_bool(options.as_ref(), "spatialDelete")?.unwrap_or(true);
+
+        // The spatial evidence window in frames. Its own knob, decoupled from the temporal forget rate.
+        // Callers that do not set it fall back to the forget-rate timescale (round(1/rate)), which is the
+        // window the spatial history used before the split — so existing demos keep their behaviour.
+        let horizon = opt_u32(options.as_ref(), "horizon")?.unwrap_or_else(|| {
+            if pattern_forget_rate > 0.0 { (1.0 / pattern_forget_rate).round().max(1.0) as u32 } else { u32::MAX }
+        });
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            apex_coverage, refine, delete,
+            apex_coverage, refine, delete, horizon,
         );
 
         Ok(Self { inner: RefCell::new(inner) })
@@ -909,6 +918,10 @@ fn get_opt_i32_array(obj: &JsObject, key: &str) -> Result<Option<Vec<i32>>> {
 /// Option-aware wrappers over the get_opt_* readers for options that may be absent entirely.
 fn opt_bool(opts: Option<&JsObject>, key: &str) -> Result<Option<bool>> {
     match opts { Some(o) => get_opt_bool(o, key), None => Ok(None) }
+}
+
+fn opt_u32(opts: Option<&JsObject>, key: &str) -> Result<Option<u32>> {
+    match opts { Some(o) => get_opt_u32(o, key), None => Ok(None) }
 }
 
 fn parse_group_mode(s: &str) -> Result<GroupMode> {

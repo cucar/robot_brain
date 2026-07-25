@@ -373,15 +373,17 @@ pub struct Neuron {
 
     /// The sliding history window: the frames this neuron fired for, one horizon back, each holding
     /// the observed neighborhood and which entry served it. The one test (add/delete passes) and
-    /// median refinement read this directly; nothing else accumulates — no balance, no running error.
-    /// Ephemeral: it refills as the neuron fires after a restore, so it is never serialized.
+    /// refinement read this directly; nothing else accumulates — no balance, no running error.
+    /// Serialized rebased to the save frame so the window survives a restore mid-run (see
+    /// `materialize_and_reset_children`); it also refills as the neuron fires afterwards.
     spatial_history: Vec<SpatialHistoryRecord>,
 
     /// The horizon: how many frames of history the one test evaluates over — "how long the world is
-    /// assumed to hold still" (docs/algorithm.md, "The cost"). This is the **inverse of the forget
-    /// rate**, not an independent knob: a pattern's decay clock and the evidence window are the same
-    /// timescale, so the horizon is derived as `round(1 / pattern_forget_rate)` at construction. No
-    /// new free parameter is introduced.
+    /// assumed to hold still" (docs/algorithm.md, "The cost"). This is its own knob, in frames, set at
+    /// construction. Set it to the episode length and the sliding window holds exactly one episode of
+    /// evidence, so no input is ever counted twice. It is decoupled from `pattern_forget_rate` (which
+    /// now drives only the temporal decay clock); callers that leave it unset fall back to the old
+    /// `round(1 / pattern_forget_rate)` timescale for backward compatibility.
     horizon: u32,
 
     // ── Temporal state (d>0 sequence, distance-keyed) ───────────────────────────
@@ -427,6 +429,7 @@ impl Neuron {
         learning: bool,
         refine: bool,
         delete: bool,
+        horizon: u32,
     ) -> Self {
         Self {
             id,
@@ -454,8 +457,8 @@ impl Neuron {
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
             spatial_history: Vec::new(),
-            // The horizon is the inverse of the forget rate — the same timescale, not a new knob.
-            horizon: if pattern_forget_rate > 0.0 { (1.0 / pattern_forget_rate).round().max(1.0) as u32 } else { u32::MAX },
+            // The horizon is its own knob (the spatial evidence window in frames), set directly.
+            horizon: horizon.max(1),
             temporal_connections: Vec::new(),
             temporal_routing_table: FxHashMap::default(),
             temporal_context_index: FxHashMap::default(),
@@ -880,6 +883,15 @@ impl Neuron {
             }
         }
 
+        // Rebase the spatial history onto the same fresh clock. Each record's frame becomes an offset
+        // relative to the save frame — always ≤ 0 — so when the restored brain resumes at frame 0 and
+        // ticks forward, the sliding horizon window expires them on the same schedule they would have
+        // followed had the brain never stopped. Absolute frames would instead all sit far in the future
+        // of a frame-0 restart and never expire, freezing the window.
+        for rec in &mut self.spatial_history {
+            rec.frame -= current_frame;
+        }
+
         entries
     }
 
@@ -1287,7 +1299,7 @@ impl Neuron {
         let observed_set: FxHashSet<NeuronId> = observed.iter().copied().collect();
 
         // 1. Age: drop history records older than the horizon.
-        self.age_spatial_history();
+        self.age_spatial_history(current_frame);
 
         // Seed the normal on the neuron's first observation (docs/algorithm.md, "The normal": a stored
         // configuration **set to the first context the neuron observes**, and refined from there). The
@@ -1386,10 +1398,10 @@ impl Neuron {
     /// Leaving it in would tell the one test the neuron is serving its neighbourhood badly (as `Normal`)
     /// and drive a child the neuron never needs, since a neighbour already covers it every such frame.
     ///
-    /// The record to drop is the one just appended this frame — the tail. Frame numbers repeat across
-    /// episodes (an app that resets context per input restarts numbering), so the tail is matched, not a
-    /// global frame-number scan. Removing a record does not move any entry, so no server reassignment is
-    /// needed; the delete/add passes simply see one fewer frame next time.
+    /// The record to drop is the one just appended this frame — the tail. Matching the tail against the
+    /// current frame guards against dropping an older record on a frame this neuron did not record.
+    /// Removing a record does not move any entry, so no server reassignment is needed; the delete/add
+    /// passes simply see one fewer frame next time.
     pub fn drop_inhibited_spatial_frame(&mut self, current_frame: FrameNumber) {
         if self.spatial_history.last().map_or(false, |r| r.frame == current_frame) {
             self.spatial_history.pop();
@@ -1399,18 +1411,19 @@ impl Neuron {
     /// Drop history records older than the horizon (docs/algorithm.md, "The frame, step by step":
     /// the neuron remembers **the frames it was active for**, one horizon back).
     ///
-    /// The window is counted in this neuron's own activations, not in frame numbers. A neuron appends
-    /// exactly one record per activation, so the last `horizon` records are precisely that window, and
-    /// it stays correct when the frame counter is not monotonic — an app that treats each input as its
-    /// own episode calls `reset_context`, which restarts frame numbering, and a frame-number cutoff
-    /// would then never expire anything. An unbounded history breaks the one test outright: the add
-    /// pass sums its benefit over every remembered frame while an entry's cost stays `1 + |config|`, so
-    /// benefit grows without bound and every frame carrying any error looks worth a new child.
-    fn age_spatial_history(&mut self) {
-        let horizon = self.horizon as usize;
-        if self.spatial_history.len() > horizon {
-            self.spatial_history.drain(..self.spatial_history.len() - horizon);
-        }
+    /// This is a sliding window in frame numbers: keep every record within `horizon` frames of the
+    /// current one, drop the rest. It requires the frame counter to climb monotonically — the host must
+    /// not reset it per input, or a per-input restart would leave every record at the same low frame and
+    /// the cutoff would never expire anything. Set the horizon to the episode length and the window holds
+    /// exactly one episode, sliding one frame at a time, so no image is ever counted twice. A neuron that
+    /// was not active at an expiring frame simply has no record for it; there is nothing to drop.
+    ///
+    /// An unbounded window breaks the one test outright: the add pass sums its benefit over every
+    /// remembered frame while an entry's cost stays `1 + |config|`, so as episodes accumulate, benefit
+    /// grows without bound and every configuration eventually looks worth its own child.
+    fn age_spatial_history(&mut self, current_frame: FrameNumber) {
+        let cutoff = current_frame - self.horizon as FrameNumber;
+        self.spatial_history.retain(|r| r.frame >= cutoff);
     }
 
     /// Hamming distance between an observed neighborhood and a stored configuration: |O △ C| — the
@@ -2126,13 +2139,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true, 100)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true, true, true)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true, true, true, 100)
     }
 
     #[test]
@@ -2215,7 +2228,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true, true, true);
+        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true, true, true, 100);
         // fewer than ERROR_MIN_SAMPLES → falls back to the derived 1 − group_threshold = 0.1
         n.record_temporal_error(0, 0.5);
         n.record_temporal_error(0, 0.5);
@@ -2293,9 +2306,9 @@ mod tests {
     /// child is already scrubbed from the neuron locally, so there is nothing more to do here.
     #[test]
     fn test_phase1_compresses_recurring_configuration() {
-        // forget_rate 0.05 -> horizon = round(1/0.05) = 20. Period-5 input, run 6 horizons.
-        let mut n = Neuron::new(1, 0.05, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true);
+        // Horizon 20 (its own parameter now). Period-5 input, run 6 horizons.
         let horizon: i64 = 20;
+        let mut n = Neuron::new(1, 0.05, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true, horizon as u32);
         let config_a: Vec<NeuronId> = vec![10, 11, 12];       // usual: 3 of every 5 frames -> the normal
         let config_b: Vec<NeuronId> = vec![20, 21, 22, 23];   // deviation: 2 of every 5 -> should be a child
         let a_set: FxHashSet<NeuronId> = config_a.iter().copied().collect();
@@ -2400,9 +2413,11 @@ mod tests {
         c
     }
 
-    /// A level-0 neuron whose horizon is `round(1 / forget_rate)` — 0.1 → 10, 0.05 → 20.
+    /// A level-0 neuron whose horizon is `round(1 / forget_rate)` — 0.1 → 10, 0.05 → 20. The horizon is
+    /// now its own parameter, so these Phase-1 tests keep the old rate-derived value to preserve intent.
     fn phase1_neuron(forget_rate: f64) -> Neuron {
-        Neuron::new(1, forget_rate, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true)
+        let horizon = (1.0 / forget_rate).round().max(1.0) as u32;
+        Neuron::new(1, forget_rate, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true, horizon)
     }
 
     /// Drive one learning frame; install any minted child (simulating the thalamus). Returns the

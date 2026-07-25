@@ -78,6 +78,7 @@ impl Region {
         learning: bool,
         refine: bool,
         delete: bool,
+        horizon: u32,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -90,6 +91,7 @@ impl Region {
                 learning,
                 refine,
                 delete,
+                horizon,
             ));
         }
         Self { c, columns }
@@ -502,6 +504,7 @@ mod tests {
             true,
             true,
             true,
+            100,
         )
     }
 

@@ -409,6 +409,7 @@ impl Brain {
         apex_coverage: bool,
         refine: bool,
         delete: bool,
+        horizon: u32,
     ) -> Self {
         Self {
             context_length,
@@ -434,6 +435,7 @@ impl Brain {
                 learning,
                 refine,
                 delete,
+                horizon,
             ),
             memory: Memory::new(debug, context_length),
         }
@@ -2157,6 +2159,7 @@ mod tests {
             false,                    // apex_coverage
             true,                     // refine
             true,                     // delete
+            100,                      // horizon
         )
     }
 
