@@ -76,6 +76,8 @@ impl Region {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
+        refine: bool,
+        delete: bool,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
         for _ in 0..c {
@@ -86,6 +88,8 @@ impl Region {
                 group_threshold,
                 group_mode,
                 learning,
+                refine,
+                delete,
             ));
         }
         Self { c, columns }
@@ -242,6 +246,19 @@ impl Region {
                 if !col_updates.is_empty() {
                     col.update_temporal_context_refs(&col_updates);
                 }
+            });
+    }
+
+    /// Drop this frame from the history of every inhibited neuron this region owns, routed by neuron id.
+    pub fn prune_inhibited_spatial_history(&mut self, ids: &[NeuronId], frame_number: FrameNumber) {
+        let mut by_column: Vec<Vec<NeuronId>> = (0..self.c).map(|_| Vec::new()).collect();
+        for &id in ids {
+            by_column[self.route_neuron(id)].push(id);
+        }
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_ids)| {
+                if !col_ids.is_empty() { col.prune_inhibited_spatial_history(&col_ids, frame_number); }
             });
     }
 
@@ -482,6 +499,8 @@ mod tests {
             2,
             0.5,
             GroupMode::Static,
+            true,
+            true,
             true,
         )
     }

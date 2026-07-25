@@ -302,6 +302,9 @@ struct SpatialSweepResult {
     dispatch_results: Vec<Vec<crate::column::SpatialColumnResult>>,
     fired_set: FxHashSet<NeuronId>,
     subsumed_set: FxHashSet<NeuronId>,
+    /// Neurons inhibited by contraction (covered by a neighbour's winning bid, winners excluded). They
+    /// contributed nothing, so their mint is withheld and this frame is dropped from their history.
+    inhibited_set: FxHashSet<NeuronId>,
 }
 
 /// Output of the temporal level-sweep.
@@ -404,6 +407,8 @@ impl Brain {
         debug: bool,
         learning: bool,
         apex_coverage: bool,
+        refine: bool,
+        delete: bool,
     ) -> Self {
         Self {
             context_length,
@@ -427,6 +432,8 @@ impl Brain {
                 regions,
                 columns,
                 learning,
+                refine,
+                delete,
             ),
             memory: Memory::new(debug, context_length),
         }
@@ -1158,6 +1165,13 @@ impl Brain {
         // The apex set is `fired \ subsumed` and feeds `temporal_level_index[0]` via the handoff.
         let mut fired_set: FxHashSet<NeuronId> = FxHashSet::default();
         let mut subsumed_set: FxHashSet<NeuronId> = FxHashSet::default();
+        let mut winner_set: FxHashSet<NeuronId> = FxHashSet::default();
+
+        // Each active unit's anchor — the base neuron it sits on — carried up the levels so each level
+        // can place its units relative to one another and derive adjacency by occlusion. At the base a
+        // neuron anchors on itself; a promoted unit inherits the anchor of the bidder that won it, so an
+        // anchor stays a single cell no matter how much the unit covers.
+        let mut anchors: FxHashMap<NeuronId, NeuronId> = FxHashMap::default();
 
         // Process neurons level-by-level — Op-3 dispatch is the only per-level round-trip.
         let mut level: Level = 0;
@@ -1175,10 +1189,17 @@ impl Brain {
             // Snapshot what fired at this level. Used by the apex handoff after the sweep.
             for &nid in &level_neuron_ids { fired_set.insert(nid); }
 
+            // At the base, every neuron anchors on itself; higher levels inherit their anchors from the
+            // level below's election (set at the end of the previous iteration).
+            if level == 0 {
+                anchors = level_neuron_ids.iter().map(|&id| (id, id)).collect();
+            }
+
             // Process the level: aggregate view, match spatial patterns, generate d=0 votes.
             let result = self.thalamus.process_spatial_level(
                 level,
                 &level_neuron_ids,
+                &anchors,
                 self.substrate_frame(),
                 &mut new_error_pattern_ids,
             );
@@ -1186,14 +1207,17 @@ impl Brain {
 
             // Spatial state is ephemeral — nothing to write back, by design.
 
-            // Activate matched patterns at level+1. Each activation marks its parent_id as
-            // subsumed — that parent's role this frame is already represented by the
-            // higher-level pattern it activated.
+            // Contraction promoted a subset of this level's fired children to units at level+1; only
+            // those propagate. Every neuron a surviving bid covers is subsumed — its role is already
+            // represented by the promoted unit — so the apex is what contraction left uncovered.
             let t = Instant::now();
             for activation in &result.activations {
                 self.memory.activate_spatial_pattern(activation.pattern_id, level + 1);
-                subsumed_set.insert(activation.parent_id);
+                // A promoted bid's own neuron won and propagated — it contributed, so it is NOT inhibited
+                // even though it sits in its own covered set.
+                winner_set.insert(activation.parent_id);
             }
+            for &id in &result.subsumed { subsumed_set.insert(id); }
             mem_timings.activate_patterns += t.elapsed().as_secs_f64();
 
             // If we produced any activations, push the max active level up.
@@ -1206,13 +1230,21 @@ impl Brain {
             for col_res in &result.results { neuron_timings.add(&col_res.timings); }
             dispatch_results.push(result.results);
 
+            // Carry the promoted units' anchors up so the next level can place them against each other.
+            anchors = result.unit_anchors;
+
             // If we reached the top of the active hierarchy, exit.
             if level as usize >= max_active_level { break; }
             level += 1;
         }
 
+        // Inhibited = covered by a neighbour's surviving bid, excluding the winners themselves. These
+        // neurons contributed nothing this frame — a neighbour's unit represents them — so they neither
+        // mint nor keep the frame as evidence (docs/algorithm.md, "Contraction").
+        let inhibited_set: FxHashSet<NeuronId> = subsumed_set.difference(&winner_set).copied().collect();
+
         Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
-        SpatialSweepResult { neuron_specs, dispatch_results, fired_set, subsumed_set }
+        SpatialSweepResult { neuron_specs, dispatch_results, fired_set, subsumed_set, inhibited_set }
     }
 
     /// Run the temporal level-by-level sweep over `temporal_level_index`.
@@ -1475,11 +1507,21 @@ impl Brain {
         // Returned specs are deferred — they'll be materialized in the end-of-frame flush along with temporal specs.
         // The fired set carries this frame's co-activation at every level — each newborn seeds its
         // event connections from the level it is created into.
-        let (specs, install_ops) = self.thalamus.create_spatial_corrections(&spatial.dispatch_results, &spatial.subsumed_set, &spatial.fired_set);
+        let (specs, install_ops) = self.thalamus.create_spatial_corrections(&spatial.dispatch_results, &spatial.inhibited_set, &spatial.fired_set);
 
         // Install the corrections into their parents' routing tables so the parents can recognize the correction's context next frame.
         // This is a single dispatch per frame, not one per level.
         self.thalamus.install_spatial_corrections(install_ops, self.substrate_frame());
+
+        // Register reverse context-refs for neighbors refinement added to a child this frame, so their
+        // later deletion scrubs the child's stored context instead of leaving a dangling reference.
+        self.thalamus.register_refinement_context_refs(&spatial.dispatch_results);
+
+        // Drop this frame from the history of every inhibited neuron: a neighbour's unit represented it,
+        // so it contributed nothing and the frame is not its evidence (docs/algorithm.md, "Contraction").
+        // This is what keeps a covered neuron from re-requesting a child it never needs — the polluting
+        // frame is gone, not left recorded as its own Normal serving badly.
+        self.thalamus.prune_inhibited_spatial_history(&spatial.inhibited_set, self.substrate_frame());
 
         // Retire the children the one test's delete pass flagged this frame (docs/algorithm.md, "The
         // one test"). Runs before the apex handoff — a retired child did not serve this frame, so it
@@ -2113,6 +2155,8 @@ mod tests {
             false,                    // debug
             true,                     // learning
             false,                    // apex_coverage
+            true,                     // refine
+            true,                     // delete
         )
     }
 

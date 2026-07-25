@@ -152,6 +152,8 @@ impl JsBrain {
     ///   consensus: string 'democratic' | 'nb' (default 'democratic')
     ///   debug: boolean (default false)
     ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
+    ///   spatialRefine: boolean (default true) — refine the served entry toward what it serves each frame
+    ///   spatialDelete: boolean (default true) — run the delete pass that retires children below their cost
     ///
     /// The retired per-phase `mergeThreshold` / `errorCorrectionThreshold` knobs and their `spatial*` / `temporal*`
     /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
@@ -187,10 +189,15 @@ impl JsBrain {
         // The learning state is fixed at construction: a frozen evaluation is a separate brain
         // instance loaded from a backup, not a toggled one.
         let learning = opt_bool(options.as_ref(), "learning")?.unwrap_or(true);
+
+        // Spatial refinement and the delete pass, both on by design. Exposed so an experiment can
+        // isolate their contribution without a rebuild.
+        let refine = opt_bool(options.as_ref(), "spatialRefine")?.unwrap_or(true);
+        let delete = opt_bool(options.as_ref(), "spatialDelete")?.unwrap_or(true);
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            apex_coverage,
+            apex_coverage, refine, delete,
         );
 
         Ok(Self { inner: RefCell::new(inner) })

@@ -133,9 +133,24 @@ pub struct ProcessLevelResult {
 /// Spatial creates no neurons during the level loop; corrections come from a separate pass, settling
 /// the per-neuron correction requests carried in the dispatch results.
 pub struct SpatialLevelResult {
+    /// The bids that survived contraction — one promoted unit each, the active set for the level above.
     pub activations: Vec<Activation>,
+    /// Every active neuron covered by a surviving bid: its role is represented above, so it is subsumed
+    /// at this level and does not itself reach the apex (docs/algorithm.md, "Contraction").
+    pub subsumed: FxHashSet<NeuronId>,
+    /// Each promoted unit's anchor — the base neuron it sits on, inherited from the bidder that won it.
+    /// The level above measures distance between anchors on the declared base graph to derive adjacency.
+    pub unit_anchors: FxHashMap<NeuronId, NeuronId>,
     pub results: Vec<crate::column::SpatialColumnResult>,
     pub orchestration: OrchestrationTimings,
+}
+
+/// Outcome of the contraction election over one level's bids (docs/algorithm.md, "Contraction").
+struct SpatialElection {
+    /// The surviving bids, one promoted unit each — the active set for the level above.
+    activations: Vec<Activation>,
+    /// Every active neuron a surviving bid covers — subsumed at this level.
+    subsumed: FxHashSet<NeuronId>,
 }
 
 /**
@@ -280,6 +295,11 @@ pub struct Thalamus {
     /// still sequencing temporally against a different (or unrestricted) channel set.
     spatial_channel_neighbors: FxHashMap<ChannelId, Vec<FxHashSet<ChannelId>>>,
 
+    /// Memoised hop distances on the declared base neighbour graph: source channel → every channel
+    /// reachable from it. The graph never changes after declaration, so each source is explored once.
+    /// Used by [occluded_neighbors] to place units relative to one another above the base level.
+    base_channel_distances: FxHashMap<ChannelId, FxHashMap<ChannelId, u32>>,
+
     /// Per-channel TEMPORAL neighbor set — restricts d>0 sequence learning (temporal connection
     /// pre-wiring, temporal pattern minting, vote-error evaluation, and the per-task temporal
     /// context) to the listed channels plus the channel itself.
@@ -329,6 +349,8 @@ impl Thalamus {
         regions: usize,
         columns: usize,
         learning: bool,
+        refine: bool,
+        delete: bool,
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
         let channel_actions = FxHashMap::default();
@@ -343,6 +365,8 @@ impl Thalamus {
                 group_threshold,
                 group_mode,
                 learning,
+                refine,
+                delete,
             ));
         }
 
@@ -369,6 +393,7 @@ impl Thalamus {
             channel_name_to_id: FxHashMap::default(),
             channel_id_to_name: FxHashMap::default(),
             spatial_channel_neighbors: FxHashMap::default(),
+            base_channel_distances: FxHashMap::default(),
             temporal_channel_neighbors: FxHashMap::default(),
             dimension_name_to_id: FxHashMap::default(),
             dimension_id_to_name: FxHashMap::default(),
@@ -1026,6 +1051,7 @@ impl Thalamus {
         &mut self,
         level: Level,
         level_neuron_ids: &FxHashSet<NeuronId>,
+        anchors: &FxHashMap<NeuronId, NeuronId>,
         frame_number: FrameNumber,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
     ) -> SpatialLevelResult {
@@ -1040,27 +1066,37 @@ impl Thalamus {
 
         // Dispatch the per-neuron frame pass — the only cross-region round-trip in the level loop.
         // The level's actives feed both roles: the co-activation identifies each neuron, and the
-        // same set is what it predicts.
+        // same set is what it predicts. Adjacency is derived above the base (docs/algorithm.md,
+        // "Contraction: What this builds"); at level 0 every unit anchors on its own cell, so it reduces
+        // to the declared base neighbour graph and that cheaper path is used instead.
         let t = std::time::Instant::now();
-        let results = self.dispatch_spatial_frame(&work_list, &level_context, new_error_pattern_ids, level_neuron_ids, frame_number);
+        let results = self.dispatch_spatial_frame(level, &work_list, &level_context, anchors, new_error_pattern_ids, level_neuron_ids, frame_number);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
-        // Extract this level's pattern activations inline; they feed the next level up.
+        // Contraction: run the election over this frame's bids to decide which fired children actually
+        // propagate as units above, and which active neurons they cover (docs/algorithm.md, "Contraction").
+        // This replaces "every fired child propagates" — the reduction is what the hierarchy climb is for.
         let t = std::time::Instant::now();
-        let mut activations = Vec::new();
-        for result in &results {
-            self.collect_spatial_activations(result, &mut activations);
+        let bids: Vec<crate::neuron::SpatialBid> = results.iter().filter_map(|r| r.bid.clone()).collect();
+        let election = Self::elect_spatial_bids(&bids);
+
+        // Each promoted unit anchors where its bidder anchored — one base cell, never a growing region.
+        // Coverage still grows by composition (a unit represents everything its bid covered); only the
+        // adjacency key stays a point, which is what keeps the neighbour graph local and sparse.
+        let mut unit_anchors: FxHashMap<NeuronId, NeuronId> = FxHashMap::default();
+        for a in &election.activations {
+            if let Some(&anchor) = anchors.get(&a.parent_id) { unit_anchors.insert(a.pattern_id, anchor); }
         }
         orchestration.collect_activations = t.elapsed().as_secs_f64();
 
-        if self.debug && !activations.is_empty() {
-            let detail: Vec<String> = activations.iter()
-                .map(|a| format!("parent={}, age={}, pattern={}", a.parent_id, a.age, a.pattern_id))
+        if self.debug && !election.activations.is_empty() {
+            let detail: Vec<String> = election.activations.iter()
+                .map(|a| format!("parent={}, pattern={}", a.parent_id, a.pattern_id))
                 .collect();
-            println!("Spatial level {}: {} activations {}", level, activations.len(), detail.join("; "));
+            println!("Spatial level {}: {} bids -> {} promoted {}", level, bids.len(), election.activations.len(), detail.join("; "));
         }
 
-        SpatialLevelResult { activations, results, orchestration }
+        SpatialLevelResult { activations: election.activations, subsumed: election.subsumed, unit_anchors, results, orchestration }
     }
 
     /// Temporal sweep dispatch for one level. Builds the temporal level_context (mints temporal
@@ -1150,8 +1186,7 @@ impl Thalamus {
 
     /// Settle this frame's spatial mints. A request means the neuron's add pass ran the one test over
     /// its history and found a child at O pays for its storage. The add pass owns pricing entirely, so
-    /// this pass owns only what a neuron cannot decide locally: the subsumption filter, id allocation,
-    /// and cross-neuron wiring.
+    /// this pass owns only what a neuron cannot decide locally: id allocation and cross-neuron wiring.
     ///
     /// The CONTEXT of a new correction is the observation O that justified it, drawn from the parent's
     /// OWN level — for an Lk parent, the L(k+1) correction's context_entries are level-k co-actives.
@@ -1160,7 +1195,7 @@ impl Thalamus {
     pub fn create_spatial_corrections(
         &mut self,
         dispatch_results: &[Vec<crate::column::SpatialColumnResult>],
-        subsumed_neurons: &FxHashSet<NeuronId>,
+        inhibited_neurons: &FxHashSet<NeuronId>,
         fired_neurons: &FxHashSet<NeuronId>,
     ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>) {
 
@@ -1173,23 +1208,26 @@ impl Thalamus {
         let actives_by_level = self.bucket_fired_by_spatial_level(fired_neurons);
 
         // process the add-pass requests of the spatial dispatch and create the corrections.
+        //
+        // Inhibition: a neuron covered by a neighbour's winning bid is already represented correctly one
+        // level up (a bid only covers neurons it names right), so it does not need its own child, and the
+        // frame that justified this request is being dropped from its history for the same reason. Only a
+        // correction — an uncovered neuron — mints. Winners are NOT inhibited (they propagated), so the
+        // set here excludes them. This keeps the dictionary near the coverage optimum instead of one
+        // child per (neuron, recurring config).
         for column_result in dispatch_results.iter().flatten() {
             let Some(request) = &column_result.correction_request else { continue };
 
-            // A neuron represented by a fired higher-level pattern is subsumed — not to be corrected.
-            // A subsumed neuron casts no votes and requests nothing, so this is a safety net.
-            if subsumed_neurons.contains(&column_result.parent_id) { continue; }
+            if inhibited_neurons.contains(&column_result.parent_id) { continue; }
 
             // Create one correction pattern for the add pass's request.
             let parent_id = column_result.parent_id;
             let parent_level = self.get_neuron_spatial_level(parent_id);
 
-            // Phase 1 cap (docs/algorithm.md, "Implementation plan": capped at one level so the
-            // recursion is not a variable yet): only base (level-0) neurons mint. Level-1 patterns
-            // therefore never acquire children, so the hierarchy settles at depth 2 and the level-0
-            // configuration loop is what gets measured. Lift this cap when contraction lands (Phase 2).
-            if parent_level != 0 { continue; }
-
+            // Phase 2 lifts the level-0 mint cap: a neuron at any level whose add pass paid mints a
+            // child one level up, so the hierarchy climbs past depth 2 (docs/algorithm.md, "Contraction:
+            // Receptive fields grow by composition"). Contraction keeps the per-level active sets small
+            // enough that higher levels mint from a settled, not exploding, neighbourhood.
             let empty = FxHashSet::default();
             let level_actives = actives_by_level.get(&(parent_level + 1)).unwrap_or(&empty);
             self.create_spatial_correction(parent_id, parent_level, level_actives, &request.context_neighbors, &mut new_specs, &mut install_ops);
@@ -1300,6 +1338,20 @@ impl Thalamus {
         }
     }
 
+    /// Drop this frame from the history of every neuron contraction inhibited (covered by a neighbour's
+    /// winning bid). A subsumed neuron contributed nothing to the file, so the frame is not its evidence
+    /// (docs/algorithm.md, "Contraction"). Routes each neuron to its owning region.
+    pub fn prune_inhibited_spatial_history(&mut self, inhibited: &FxHashSet<NeuronId>, frame_number: FrameNumber) {
+        if inhibited.is_empty() { return; }
+        let mut by_region: Vec<Vec<NeuronId>> = (0..self.regions).map(|_| Vec::new()).collect();
+        for &id in inhibited {
+            by_region[self.route_neuron(id)].push(id);
+        }
+        for (r, ids) in by_region.into_iter().enumerate() {
+            if !ids.is_empty() { self.region_list[r].prune_inhibited_spatial_history(&ids, frame_number); }
+        }
+    }
+
     /// Spatial counterpart of `dispatch_temporal_context_ref_updates` — routes SpatialContextRefUpdates
     /// to the columns that own each target neuron, then dispatches in parallel.
     fn dispatch_spatial_context_ref_updates(&mut self, update_batch: &[(NeuronId, Vec<SpatialContextRefUpdate>)]) {
@@ -1312,6 +1364,22 @@ impl Thalamus {
             if region_updates.is_empty() { continue; }
             self.region_list[r].update_spatial_context_refs(&region_updates);
         }
+    }
+
+    /// Register the reverse context-refs for neighbors refinement added to a child this frame. Each
+    /// added context neuron gets a ref back to the parent, so a later deletion of that neighbor scrubs
+    /// it from the child's stored context (docs/algorithm.md, "Refinement"). Mirrors the install path,
+    /// which registers the same refs for a newborn's initial configuration.
+    pub fn register_refinement_context_refs(&mut self, dispatch_results: &[Vec<crate::column::SpatialColumnResult>]) {
+        let mut by_target: FxHashMap<NeuronId, Vec<SpatialContextRefUpdate>> = FxHashMap::default();
+        for cr in dispatch_results.iter().flatten() {
+            for &ctx_id in &cr.context_ref_adds {
+                by_target.entry(ctx_id).or_default().push(SpatialContextRefUpdate { neuron_id: ctx_id, parent_id: cr.parent_id });
+            }
+        }
+        if by_target.is_empty() { return; }
+        let batch: Vec<(NeuronId, Vec<SpatialContextRefUpdate>)> = by_target.into_iter().collect();
+        self.dispatch_spatial_context_ref_updates(&batch);
     }
 
     /// SPATIAL: walk the active neurons at this level and build the shared SpatialContext.
@@ -1528,21 +1596,135 @@ impl Thalamus {
     /// Spatial Op-3 dispatch — no rewards, no per-task channel-reward resolution.
     fn dispatch_spatial_frame(
         &mut self,
+        level: Level,
         work_list: &[NeuronId],
         level_context: &SpatialContext,
+        anchors: &FxHashMap<NeuronId, NeuronId>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         inference_events: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
     ) -> Vec<crate::column::SpatialColumnResult> {
 
         // What a neuron predicts and what identifies it are one and the same since d=0 (spatial processing)
-        // so both are cut to the same level-scaled neighborhood — they differ only in payload:
-        // inference carries each neighbor's position and reward, context carries only its strength.
+        // so both are cut to the same neighborhood — they differ only in payload: inference carries each
+        // neighbor's position and reward, context carries only its strength.
         let inference_neurons = self.decorate_inference_neurons(inference_events);
-        let inference_neighbors = self.select_inference_neighbors(work_list, &inference_neurons);
-        let context_neighbors = self.select_context_neighbors(work_list, level_context);
+        let (inference_neighbors, context_neighbors) = if level == 0 {
+            // Base level: the declared channel neighbour graph. Every unit anchors on its own cell here,
+            // so the occlusion rule below provably yields exactly this graph — the declared path is kept
+            // because it is cheaper, and because it leaves level 0 byte-for-byte unchanged.
+            (self.select_inference_neighbors(work_list, &inference_neurons),
+             self.select_context_neighbors(work_list, level_context))
+        } else {
+            // Above the base the level is sparse, so a fixed radius is wrong in both directions: it
+            // invents neighbours where the level thinned out and misses real ones across a gap. Instead
+            // adjacency is by occlusion — see [occluded_neighbors].
+            self.occluded_neighbors(work_list, level_context, &inference_neurons, anchors)
+        };
 
         self.dispatch_to_regions(work_list, inference_neighbors, context_neighbors, new_error_pattern_ids, frame_number)
+    }
+
+    /// Per-neuron neighbour lists above the base, by **occlusion**: two active units are neighbours iff
+    /// no other active unit lies between them. Distance is hop count on the declared base neighbour
+    /// graph, measured between the units' anchors, and `w` is between `u` and `v` exactly when it sits on
+    /// a shortest path: `d(u,w) + d(w,v) == d(u,v)`.
+    ///
+    /// This gives the neighbourhood a **dynamic range**. Where a level is dense the nearest units block
+    /// everything behind them and the result is the immediate ring; where a level has thinned out a unit
+    /// still reaches across the gap to the first unit in each direction, and no further. A fixed radius
+    /// cannot do both — it invents neighbours in the sparse case and truncates real ones in the dense
+    /// case. On a full base level every cell is occupied, so every pair beyond one hop has an active unit
+    /// on the path between them and this reduces exactly to the declared neighbour graph, which is why
+    /// level 0 can keep the cheaper declared path.
+    ///
+    /// Returns the inference neighbours (id + channel) and context neighbours (id + strength) per
+    /// work-list neuron, in work-list order, self excluded.
+    fn occluded_neighbors(
+        &mut self,
+        work_list: &[NeuronId],
+        level_context: &SpatialContext,
+        inference_neurons: &[ActiveNeuron],
+        anchors: &FxHashMap<NeuronId, NeuronId>,
+    ) -> (Vec<Vec<ActiveNeuron>>, Vec<SpatialContext>) {
+
+        // Each active unit sits at its anchor's base channel. Units whose anchor is unknown cannot be
+        // placed, so they take part in nothing.
+        let mut active: Vec<(NeuronId, ChannelId)> = level_context.entries().keys()
+            .filter_map(|&uid| anchors.get(&uid)
+                .and_then(|&a| self.get_neuron_channel_id(a))
+                .map(|ch| (uid, ch)))
+            .collect();
+        active.sort_unstable();
+
+        let inf_by_id: FxHashMap<NeuronId, ActiveNeuron> = inference_neurons.iter().map(|n| (n.id, n.clone())).collect();
+        let mut inference_out = Vec::with_capacity(work_list.len());
+        let mut context_out = Vec::with_capacity(work_list.len());
+        for &uid in work_list {
+            let neighbor_ids = match anchors.get(&uid).and_then(|&a| self.get_neuron_channel_id(a)) {
+                Some(ch) => self.unoccluded_units(uid, ch, &active),
+                None => Vec::new(),
+            };
+            let inf: Vec<ActiveNeuron> = neighbor_ids.iter().filter_map(|id| inf_by_id.get(id).cloned()).collect();
+            let mut ctx = SpatialContext::new();
+            for id in &neighbor_ids {
+                if let Some(&strength) = level_context.entries().get(id) { ctx.add_neuron(*id, strength); }
+            }
+            inference_out.push(inf);
+            context_out.push(ctx);
+        }
+        (inference_out, context_out)
+    }
+
+    /// The active units visible from `uid` at base channel `from`: those with no other active unit
+    /// between them and it. Candidates are walked nearest-first, so only the units already known to be
+    /// closer can occlude one — anything at or beyond the same distance cannot lie on a shortest path.
+    fn unoccluded_units(&mut self, uid: NeuronId, from: ChannelId, active: &[(NeuronId, ChannelId)]) -> Vec<NeuronId> {
+        // Distances from this unit's channel to every other active unit's channel, nearest first.
+        let mut ranked: Vec<(u32, NeuronId, ChannelId)> = active.iter()
+            .filter(|&&(vid, _)| vid != uid)
+            .filter_map(|&(vid, vch)| self.base_channel_distance(from, vch).map(|d| (d, vid, vch)))
+            .collect();
+        ranked.sort_unstable();
+
+        let mut visible: Vec<NeuronId> = Vec::new();
+        for i in 0..ranked.len() {
+            let (d_uv, vid, vch) = ranked[i];
+            // Co-located units (distance 0) cannot have anything between them, so they always see
+            // each other; otherwise a strictly closer unit on a shortest path occludes.
+            let blocked = d_uv > 0 && ranked[..i].iter().any(|&(d_uw, _, wch)| {
+                d_uw < d_uv && self.base_channel_distance(wch, vch).map_or(false, |d_wv| d_uw + d_wv == d_uv)
+            });
+            if !blocked { visible.push(vid); }
+        }
+        visible.sort_unstable();
+        visible
+    }
+
+    /// Hop distance between two base channels on the declared neighbour graph, memoised per source.
+    /// The graph is fixed at declaration time, so each source is explored once and reused for the rest of
+    /// the run. `None` when the target is unreachable; a channel that declared no neighbours is
+    /// unrestricted, so everything is one hop from it (matching [is_spatial_neighbor_channel]).
+    fn base_channel_distance(&mut self, from: ChannelId, to: ChannelId) -> Option<u32> {
+        if from == to { return Some(0); }
+        if !self.spatial_channel_neighbors.contains_key(&from) { return Some(1); }
+        if let Some(d) = self.base_channel_distances.get(&from) { return d.get(&to).copied(); }
+
+        // Breadth-first from `from` over the declared level-0 neighbour sets.
+        let mut dist: FxHashMap<ChannelId, u32> = FxHashMap::default();
+        dist.insert(from, 0);
+        let mut queue = std::collections::VecDeque::new();
+        queue.push_back(from);
+        while let Some(ch) = queue.pop_front() {
+            let d = dist[&ch];
+            let Some(sets) = self.spatial_channel_neighbors.get(&ch) else { continue };
+            for &next in &sets[0] {
+                if !dist.contains_key(&next) { dist.insert(next, d + 1); queue.push_back(next); }
+            }
+        }
+        let result = dist.get(&to).copied();
+        self.base_channel_distances.insert(from, dist);
+        result
     }
 
     /// Resolve each active event's position once, up front — every neighbor list below reads it.
@@ -1755,23 +1937,71 @@ impl Thalamus {
         }
     }
 
-    /// Register deaths and collect activations from recognition matches
-    /// and error-correction patterns.
-    /// Extract the fired pattern activations from one neuron's spatial result.
-    fn collect_spatial_activations(&mut self, result: &crate::column::SpatialColumnResult, activations: &mut Vec<Activation>) {
-
-        // Only recognition matches fire spatially; corrections install through their own pass.
-        for m in &result.matches {
-            if let Some(df) = m.death_frame {
-                self.register_death(m.pattern_id, df);
-            }
-            if !m.activate { continue; }
-            activations.push(Activation {
-                parent_id: result.parent_id,
-                pattern_id: m.pattern_id,
-                age: m.age,
-            });
+    /// Run the contraction election over one level's bids (docs/algorithm.md, "Contraction: Election,
+    /// by rounds"). Prize-collecting set cover: cover the active neurons with as few promoted units as
+    /// possible, each uncovered neuron a correction. Each active neuron elects the bid covering the most
+    /// of the level (ties broken by the oldest, i.e. smallest, promoted pattern id); a bid is promoted
+    /// only when at least two neurons elect it, since a bid covering one neuron saves nothing. A neuron
+    /// whose elected bid is dropped re-votes, preferring a bid that already survived — its cover is
+    /// bought — over reviving another. The rounds repeat until no vote changes; the instance is small
+    /// and settles in a handful of rounds, so it runs sequentially here.
+    fn elect_spatial_bids(bids: &[crate::neuron::SpatialBid]) -> SpatialElection {
+        // neuron -> indices of the bids that name it. Voters are iterated in id order and the pool in
+        // bid order, so the outcome is independent of dispatch order.
+        let mut covering: FxHashMap<NeuronId, Vec<usize>> = FxHashMap::default();
+        for (i, bid) in bids.iter().enumerate() {
+            for &n in &bid.covered { covering.entry(n).or_default().push(i); }
         }
+        let mut voters: Vec<NeuronId> = covering.keys().copied().collect();
+        voters.sort_unstable();
+
+        // elected[voter] = chosen bid index, or None (an uncovered voter — a correction).
+        let mut elected: FxHashMap<NeuronId, Option<usize>> = voters.iter().map(|&n| (n, None)).collect();
+
+        // The best bid in a pool: the widest cover, ties to the smaller (older) promoted pattern id.
+        let best_in = |pool: &[usize]| -> Option<usize> {
+            pool.iter().copied().max_by(|&a, &b| {
+                bids[a].covered.len().cmp(&bids[b].covered.len())
+                    .then(bids[b].pattern_id.cmp(&bids[a].pattern_id))
+            })
+        };
+
+        // The election settles because each changing round drops a bid or moves a voter onto already
+        // bought cover, so promotions + corrections strictly falls; bound the rounds by the bid count as
+        // a backstop (a per-frame grouping a little short of optimal is acceptable, docs/algorithm.md).
+        for _ in 0..bids.len() + 1 {
+            let survivors = Self::spatial_survivors(&elected);
+            let mut changed = false;
+            for &n in &voters {
+                let cands = &covering[&n];
+                let surviving: Vec<usize> = cands.iter().copied().filter(|i| survivors.contains(i)).collect();
+                let pick = if surviving.is_empty() { best_in(cands) } else { best_in(&surviving) };
+                if elected[&n] != pick { elected.insert(n, pick); changed = true; }
+            }
+            if !changed { break; }
+        }
+
+        // Promote each surviving bid to one unit above and mark every neuron it covers subsumed.
+        let survivors = Self::spatial_survivors(&elected);
+        let mut survivor_indices: Vec<usize> = survivors.iter().copied().collect();
+        survivor_indices.sort_by_key(|&i| bids[i].pattern_id);
+        let mut activations = Vec::new();
+        let mut subsumed: FxHashSet<NeuronId> = FxHashSet::default();
+        for i in survivor_indices {
+            let bid = &bids[i];
+            activations.push(Activation { parent_id: bid.bidder_id, pattern_id: bid.pattern_id, age: 0 });
+            for &n in &bid.covered { subsumed.insert(n); }
+        }
+        SpatialElection { activations, subsumed }
+    }
+
+    /// The bids at least two voters currently elect — the survivors of this election round.
+    fn spatial_survivors(elected: &FxHashMap<NeuronId, Option<usize>>) -> FxHashSet<usize> {
+        let mut wins: FxHashMap<usize, u32> = FxHashMap::default();
+        for &sel in elected.values() {
+            if let Some(i) = sel { *wins.entry(i).or_insert(0) += 1; }
+        }
+        wins.into_iter().filter(|&(_, c)| c >= 2).map(|(i, _)| i).collect()
     }
 
     fn collect_activations(&mut self, result: &ColumnProcessResult, activations: &mut Vec<Activation>) {
@@ -2429,7 +2659,141 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true)
+        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, true, true)
+    }
+
+    // ── Contraction election (docs/algorithm.md, "Contraction: Election, by rounds") ────────────
+
+    /// A bid from `bidder` promoting `pattern`, covering `covered`.
+    fn bid(bidder: NeuronId, pattern: NeuronId, covered: &[NeuronId]) -> crate::neuron::SpatialBid {
+        crate::neuron::SpatialBid { bidder_id: bidder, pattern_id: pattern, covered: covered.to_vec() }
+    }
+
+    /// The promoted pattern ids of an election, sorted.
+    fn promoted(e: &SpatialElection) -> Vec<NeuronId> {
+        let mut v: Vec<NeuronId> = e.activations.iter().map(|a| a.pattern_id).collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// The subsumed set of an election, sorted.
+    fn covered_sorted(e: &SpatialElection) -> Vec<NeuronId> {
+        let mut v: Vec<NeuronId> = e.subsumed.iter().copied().collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// A bid winning two or more neurons is promoted and subsumes them.
+    #[test]
+    fn test_election_promotes_a_bid_that_covers_two() {
+        let e = Thalamus::elect_spatial_bids(&[bid(10, 100, &[10, 11])]);
+        assert_eq!(promoted(&e), vec![100]);
+        assert_eq!(covered_sorted(&e), vec![10, 11]);
+    }
+
+    /// A bid covering only one neuron saves nothing and is dropped — the neuron is a correction.
+    #[test]
+    fn test_election_drops_a_bid_that_covers_only_one() {
+        let e = Thalamus::elect_spatial_bids(&[bid(10, 100, &[10])]);
+        assert!(promoted(&e).is_empty());
+        assert!(e.subsumed.is_empty());
+    }
+
+    /// The wider cover wins a contested neuron; the loser, left with a single neuron, is dropped, so
+    /// its uncovered neuron becomes a correction.
+    #[test]
+    fn test_election_wider_cover_wins_and_starves_the_loser() {
+        let e = Thalamus::elect_spatial_bids(&[bid(1, 100, &[1, 2, 3]), bid(4, 101, &[3, 4])]);
+        assert_eq!(promoted(&e), vec![100], "only the width-3 bid is promoted");
+        assert_eq!(covered_sorted(&e), vec![1, 2, 3], "neuron 4 is left a correction");
+    }
+
+    /// Equal covers tie to the oldest (smallest) promoted pattern id — the consolidation pressure.
+    #[test]
+    fn test_election_ties_break_to_the_oldest_id() {
+        let e = Thalamus::elect_spatial_bids(&[bid(1, 200, &[1, 2]), bid(2, 100, &[1, 2])]);
+        assert_eq!(promoted(&e), vec![100], "the older (smaller-id) pattern wins the tie");
+        assert_eq!(covered_sorted(&e), vec![1, 2]);
+    }
+
+    /// Two disjoint covers are both accepted — adjacency does not force a single winner.
+    #[test]
+    fn test_election_accepts_two_disjoint_covers() {
+        let e = Thalamus::elect_spatial_bids(&[bid(1, 100, &[1, 2]), bid(3, 101, &[3, 4])]);
+        assert_eq!(promoted(&e), vec![100, 101]);
+        assert_eq!(covered_sorted(&e), vec![1, 2, 3, 4]);
+    }
+
+    /// No bids (every neuron served from its normal) → nothing promoted, nothing subsumed.
+    #[test]
+    fn test_election_empty_when_no_bids() {
+        let e = Thalamus::elect_spatial_bids(&[]);
+        assert!(promoted(&e).is_empty() && e.subsumed.is_empty());
+    }
+
+    /// A thalamus whose base graph is a line of `n` channels (ids 1..=n), each adjacent to the channels
+    /// either side of it, with one base neuron per channel sharing the channel's id.
+    fn line_thalamus(n: u32) -> Thalamus {
+        let mut t = make_thalamus();
+        for ch in 1..=n {
+            t.base_neurons.insert(ch as NeuronId, BaseNeuron {
+                channel_id: ch, neuron_type: NeuronType::Event,
+                coordinate: Coordinate { dim_id: ch as DimensionId, bucket_id: 0 },
+            });
+            let mut nbrs = FxHashSet::default();
+            if ch > 1 { nbrs.insert(ch - 1); }
+            if ch < n { nbrs.insert(ch + 1); }
+            t.spatial_channel_neighbors.insert(ch, vec![nbrs]);
+        }
+        t
+    }
+
+    /// The context neighbour ids each work-list unit sees, given anchors on a line base graph.
+    fn neighbors_on_line(t: &mut Thalamus, units: &[(NeuronId, NeuronId)]) -> Vec<Vec<NeuronId>> {
+        let mut level_context = SpatialContext::new();
+        for &(uid, _) in units { level_context.add_neuron(uid, 1.0); }
+        let inference: Vec<ActiveNeuron> = units.iter()
+            .map(|&(uid, _)| ActiveNeuron { id: uid, channel_id: 0, reward: 0.0 }).collect();
+        let anchors: FxHashMap<NeuronId, NeuronId> = units.iter().copied().collect();
+        let work: Vec<NeuronId> = units.iter().map(|&(uid, _)| uid).collect();
+        let (_inf, ctx) = t.occluded_neighbors(&work, &level_context, &inference, &anchors);
+        ctx.iter().map(|c| { let mut v: Vec<NeuronId> = c.entries().keys().copied().collect(); v.sort_unstable(); v }).collect()
+    }
+
+    /// Occlusion adjacency: a unit sees the nearest unit in each direction, and nothing behind it. On a
+    /// fully-occupied line that is exactly the declared neighbour graph.
+    #[test]
+    fn test_occluded_neighbors_are_the_declared_graph_when_dense() {
+        let mut t = line_thalamus(4);
+        // One unit per cell: 100@1, 101@2, 102@3, 103@4.
+        let n = neighbors_on_line(&mut t, &[(100, 1), (101, 2), (102, 3), (103, 4)]);
+        assert_eq!(n[0], vec![101], "the unit at cell 1 sees only its immediate neighbour");
+        assert_eq!(n[1], vec![100, 102], "an interior unit sees both immediate neighbours, nothing beyond");
+        assert_eq!(n[2], vec![101, 103]);
+        assert_eq!(n[3], vec![102]);
+    }
+
+    /// Where the level has thinned out, a unit still reaches across the gap to the first unit beyond it —
+    /// the range is dynamic, not a fixed radius.
+    #[test]
+    fn test_occluded_neighbors_reach_across_a_gap() {
+        let mut t = line_thalamus(7);
+        // Units only at cells 1, 4 and 7 — two empty cells between each pair.
+        let n = neighbors_on_line(&mut t, &[(100, 1), (101, 4), (102, 7)]);
+        assert_eq!(n[0], vec![101], "cell 1 reaches across the gap to cell 4");
+        assert_eq!(n[1], vec![100, 102], "cell 4 sees both, across gaps in each direction");
+        assert_eq!(n[2], vec![101], "cell 7 reaches back to cell 4, and no further");
+    }
+
+    /// A unit between two others occludes them: they are neighbours of it, not of each other, however
+    /// far apart they are. This is what stops the neighbourhood growing without bound as levels thin.
+    #[test]
+    fn test_occluded_neighbors_block_behind_an_intervening_unit() {
+        let mut t = line_thalamus(9);
+        let n = neighbors_on_line(&mut t, &[(100, 1), (101, 5), (102, 9)]);
+        assert_eq!(n[0], vec![101], "cell 1 cannot see cell 9 — cell 5 is between them");
+        assert_eq!(n[2], vec![101], "and cell 9 cannot see cell 1");
+        assert_eq!(n[1], vec![100, 102], "the middle unit sees both");
     }
 
     #[test]
@@ -2453,7 +2817,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, true, true);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);

@@ -34,11 +34,16 @@ pub struct ColumnProcessResult {
 /// it evaluates its own prediction and surfaces only the resulting correction request.
 pub struct SpatialColumnResult {
     pub parent_id: NeuronId,
-    pub matches: Vec<PatternMatch>,
+    /// The contraction bid this neuron offered this frame, or None when it served from its normal.
+    /// A child that served produces a bid; the normal produces none — this is the only climb signal.
+    pub bid: Option<crate::neuron::SpatialBid>,
     pub correction_request: Option<crate::neuron::SpatialCorrectionRequest>,
     /// Children this neuron's delete pass retired this frame — the thalamus releases the pattern
     /// neurons and scrubs their cross-neuron references.
     pub deleted_children: Vec<NeuronId>,
+    /// Context neurons refinement added to a child of this neuron this frame — each needs a reverse
+    /// context-ref registered on it (parent = this neuron), dispatched by the thalamus.
+    pub context_ref_adds: Vec<NeuronId>,
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
@@ -114,6 +119,10 @@ pub struct Column {
     /// Master learning toggle, fixed at construction and handed to every neuron this column creates or loads.
     learning: bool,
 
+    /// Spatial refinement / delete-pass toggles, handed to every neuron this column creates or loads.
+    refine: bool,
+    delete: bool,
+
     /// The sole storage for owned Neurons. Keyed by neuron id.
     neurons: FxHashMap<NeuronId, Neuron>,
 }
@@ -126,6 +135,8 @@ impl Column {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
+        refine: bool,
+        delete: bool,
     ) -> Self {
         Self {
             channel_actions,
@@ -134,6 +145,8 @@ impl Column {
             group_threshold,
             group_mode,
             learning,
+            refine,
+            delete,
             neurons: FxHashMap::default(),
         }
     }
@@ -157,9 +170,10 @@ impl Column {
             );
             results.push(SpatialColumnResult {
                 parent_id: *neuron_id,
-                matches: result.matches,
+                bid: result.bid,
                 correction_request: result.correction_request,
                 deleted_children: result.deleted_children,
+                context_ref_adds: result.context_ref_adds,
                 timings: result.timings,
             });
         }
@@ -529,6 +543,15 @@ impl Column {
         SpatialInstallResult { deaths, context_ref_updates }
     }
 
+    /// Drop this frame from the history of every inhibited neuron this column owns.
+    pub fn prune_inhibited_spatial_history(&mut self, ids: &[NeuronId], frame_number: FrameNumber) {
+        for &id in ids {
+            if let Some(neuron) = self.neurons.get_mut(&id) {
+                neuron.drop_inhibited_spatial_frame(frame_number);
+            }
+        }
+    }
+
     /// Spatial counterpart of update_temporal_context_refs — dispatches SpatialContextRefUpdates to the
     /// target neurons owned by this column.
     pub fn update_spatial_context_refs(&mut self, update_batch: &[(NeuronId, Vec<SpatialContextRefUpdate>)]) {
@@ -552,6 +575,8 @@ impl Column {
                 self.channel_actions.clone(),
                 self.context_length,
                 self.learning,
+                self.refine,
+                self.delete,
             );
             // pre-wire default action connections at neutral reward across all voting distances
             for distance in 1..self.context_length {
@@ -616,6 +641,8 @@ impl Column {
             self.channel_actions.clone(),
             self.context_length,
             self.learning,
+            self.refine,
+            self.delete,
         );
 
         // load directed connections (distance → target neuron id with strength and reward)
@@ -660,6 +687,10 @@ impl Column {
         // load the local background models: context counts for likelihood-ratio recognition,
         // inference counts for information-priced correction creation.
         neuron.restore_spatial_normal(&data.normal_context);
+
+        // Restore the history window — the frames the one test evaluates over. Without it a reloaded
+        // neuron has no evidence and stops growing structure, so resuming would not match training straight through.
+        neuron.restore_spatial_history(&data.spatial_history);
 
         // load per-(neuron, age) temporal Welford error stats (age >= 1). The spatial axis has no
         // error stats (the configuration loop is threshold-free), so age 0 never appears.
@@ -781,6 +812,8 @@ mod tests {
             2,
             0.5,
             GroupMode::Static,
+            true,
+            true,
             true,
         )
     }

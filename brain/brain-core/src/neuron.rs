@@ -72,15 +72,40 @@ struct SpatialHistoryRecord {
     server: SpatialServer,
 }
 
+/// A contraction bid (docs/algorithm.md, "Contraction: what a firing neuron offers"). A neuron that
+/// served from a child offers to describe a patch of this level: its child names a whole
+/// neighborhood, so the units it covers correctly can be recovered by expanding that one unit above.
+/// The bid names exactly those correctly-covered active neurons — the bidder itself plus the neighbors
+/// its child's configuration names that are actually present (`O ∩ config ∪ {self}`) — so the
+/// thalamus's election can weigh this cover against its competitors. A neuron serving from its normal
+/// makes no bid.
+#[derive(Debug, Clone)]
+pub struct SpatialBid {
+    /// The bidding neuron (this level). It is covered by its own bid, so it appears in `covered`.
+    pub bidder_id: NeuronId,
+    /// The child pattern one level up that propagates as a single unit if this bid wins the election.
+    pub pattern_id: NeuronId,
+    /// The active neurons this bid covers correctly, sorted and deduplicated — the members whose role
+    /// the promoted unit represents. Their level-below adjacency derives the unit's neighbors above.
+    pub covered: Vec<NeuronId>,
+}
+
 /// Per-neuron output of the spatial frame pass. Votes never leave the neuron — it routes its
 /// neighborhood to the closest entry, then reconsiders its structure: a birth request from the add
 /// pass and/or children retired by the delete pass, both decided by the one test over the history.
 pub struct SpatialFrameResult {
-    pub matches: Vec<PatternMatch>,
+    /// The contraction bid this neuron offers, or None when it served from its normal (docs/algorithm.md,
+    /// "Contraction"). This is the climb signal: a child that serves bids, the normal does not. Produced
+    /// on both learning and frozen passes — the climb (and the election) runs during eval too.
+    pub bid: Option<SpatialBid>,
     pub correction_request: Option<SpatialCorrectionRequest>,
     /// Children the delete pass retired this frame (at most one — deletions are sequential). The
     /// thalamus releases the pattern neurons and scrubs their cross-neuron references.
     pub deleted_children: Vec<NeuronId>,
+    /// Context neurons refinement added to a child's configuration this frame. Each needs a reverse
+    /// context-ref registered on it (dispatched by the thalamus) so the death cascade can reach the
+    /// child that now references it — otherwise a refined-in neighbor that dies dangles in the snapshot.
+    pub context_ref_adds: Vec<NeuronId>,
     pub timings: NeuronOpTimings,
 }
 
@@ -300,6 +325,14 @@ pub struct Neuron {
     /// When false, recognition and voting still run but every substrate write is skipped.
     learning: bool,
 
+    /// Whether the served entry is refined toward what it serves each frame (docs/algorithm.md,
+    /// "Refinement"). Off freezes every entry at its mint-time configuration.
+    refine: bool,
+
+    /// Whether the delete pass retires children that no longer cover their storage cost. Off lets an
+    /// entry stay even once its benefit has gone negative.
+    delete: bool,
+
     /// Per-channel action neuron IDs — ordered Vec for deterministic alternative-action
     /// exploration (neurons are tried in registration order, not hash-iteration order).
     channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
@@ -392,6 +425,8 @@ impl Neuron {
         channel_action_ids: FxHashMap<ChannelId, Vec<NeuronId>>,
         context_length: u32,
         learning: bool,
+        refine: bool,
+        delete: bool,
     ) -> Self {
         Self {
             id,
@@ -400,6 +435,8 @@ impl Neuron {
             group_mode,
             context_length,
             learning,
+            refine,
+            delete,
             channel_action_ids,
             spatial_connections: FxHashMap::default(),
             spatial_target_dims: FxHashMap::default(),
@@ -503,7 +540,27 @@ impl Neuron {
             // The normal's stored context configuration — its member neighbor ids. Persisted like a
             // child's context (in contexts.csv), just with no pattern neuron.
             normal_context: self.normal_entry().context.entries().keys().copied().collect(),
+            spatial_history: self.serialize_spatial_history(),
         }
+    }
+
+    /// Flatten the history window for the snapshot, oldest first so a restore rebuilds it in order.
+    fn serialize_spatial_history(&self) -> Vec<SerializedHistoryRecord> {
+        self.spatial_history.iter().map(|r| SerializedHistoryRecord {
+            frame: r.frame,
+            served_child: match r.server { SpatialServer::Child(id) => Some(id), SpatialServer::Normal => None },
+            observed: r.observed.clone(),
+        }).collect()
+    }
+
+    /// Rebuild the history window from a snapshot. Records arrive oldest first and are appended as
+    /// they are, so the restored neuron carries exactly the evidence it had when saved.
+    pub fn restore_spatial_history(&mut self, records: &[SerializedHistoryRecord]) {
+        self.spatial_history = records.iter().map(|r| SpatialHistoryRecord {
+            frame: r.frame,
+            observed: r.observed.clone(),
+            server: match r.served_child { Some(id) => SpatialServer::Child(id), None => SpatialServer::Normal },
+        }).collect();
     }
 
     /// The normal routing-table entry — always present.
@@ -1225,12 +1282,26 @@ impl Neuron {
                 v.sort_unstable();
                 v
             }
-            _ => return SpatialFrameResult { matches: Vec::new(), correction_request: None, deleted_children: Vec::new(), timings },
+            _ => return SpatialFrameResult { bid: None, correction_request: None, deleted_children: Vec::new(), context_ref_adds: Vec::new(), timings },
         };
         let observed_set: FxHashSet<NeuronId> = observed.iter().copied().collect();
 
         // 1. Age: drop history records older than the horizon.
-        self.age_spatial_history(current_frame);
+        self.age_spatial_history();
+
+        // Seed the normal on the neuron's first observation (docs/algorithm.md, "The normal": a stored
+        // configuration **set to the first context the neuron observes**, and refined from there). The
+        // normal owns no separate storage and cannot be created empty and left that way: an empty
+        // configuration sits at distance |O| from every neighbourhood, so the neuron would report a full
+        // error on frames it is in fact seeing its usual situation, and the add pass would price children
+        // against a fallback that never fits anything. Seeding belongs here, not to refinement —
+        // refinement moves a configuration that already exists.
+        if self.learning && self.normal_entry().context.size() == 0 {
+            let mut ctx = SpatialContext::new();
+            for &id in &observed_set { ctx.add_neuron(id, 1.0); }
+            self.spatial_routing_table.get_mut(&SpatialServer::Normal)
+                .expect("normal routing entry must always exist").context = ctx;
+        }
 
         // 2. Route: the closest entry serves — the normal and every child compete alike. Routing needs
         // only the winner and its distance; the second-best is not computed here (only the delete pass
@@ -1239,32 +1310,38 @@ impl Neuron {
         let (server, served_distance) = Self::spatial_route(&observed_set, &self.spatial_entries());
         timings.recognize_patterns += t.elapsed().as_secs_f64();
 
-        // 3. Serve. A child fires and delegates to the pattern one level up; the normal infers for
-        // itself, propagates nothing, and the connections update — the two are exclusive.
-        let matches = match server {
-            SpatialServer::Child(pid) => {
-                if self.learning {
-                    if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pid)) {
-                        entry.last_activation_frame = current_frame;
-                    }
+        // 3. Serve. A child that serves delegates to the pattern one level up (it bids to contraction,
+        // below); the normal infers for itself and propagates nothing. A serving child updates its
+        // activation clock — the only serve-time bookkeeping; the normal has none, and no connections are
+        // written (the readout's voter→action edges are wired separately by Brain::learn, untouched).
+        if let SpatialServer::Child(pid) = server {
+            if self.learning {
+                if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pid)) {
+                    entry.last_activation_frame = current_frame;
                 }
-                // No decay in the level-0 loop: a child lives until the delete pass retires it, so it
-                // registers no death frame.
-                vec![PatternMatch { pattern_id: pid, age: 0, activate: true, death_frame: None }]
             }
-            SpatialServer::Normal => {
-                // The normal serves: the neuron recognises its usual neighbourhood and infers for
-                // itself, propagating nothing. Its stored context configuration is refined below like
-                // any winner — there is no serve-time bookkeeping, and no connections are written (the
-                // readout's voter→action edges are wired separately by Brain::learn, untouched).
-                Vec::new()
+        }
+
+        // The bid this neuron offers contraction (docs/algorithm.md, "Contraction"). A child that
+        // served covers the neurons it names correctly this frame — its present, named neighbors plus
+        // itself; the normal makes no bid. Produced on both learning and frozen passes, since the climb
+        // (and thus the election) runs during eval too.
+        let bid = match server {
+            SpatialServer::Child(pid) => {
+                let config = Self::config_set(&self.spatial_routing_table[&SpatialServer::Child(pid)].context);
+                let mut covered: Vec<NeuronId> = observed_set.iter().copied().filter(|id| config.contains(id)).collect();
+                covered.push(self.id);
+                covered.sort_unstable();
+                covered.dedup();
+                Some(SpatialBid { bidder_id: self.id, pattern_id: pid, covered })
             }
+            SpatialServer::Normal => None,
         };
 
         // Frozen evaluation stops here: it routes and serves (so it still classifies) but writes no
         // history and makes no structural change.
         if !should_learn {
-            return SpatialFrameResult { matches, correction_request: None, deleted_children: Vec::new(), timings };
+            return SpatialFrameResult { bid, correction_request: None, deleted_children: Vec::new(), context_ref_adds: Vec::new(), timings };
         }
 
         // 4. Record this frame `(frame, O, server)`. Existing records are unaffected (the entries did
@@ -1279,7 +1356,7 @@ impl Neuron {
         // child is ever born for it. Delete the single worst-failing child, then test a child at O.
         let t = std::time::Instant::now();
         let serving = match server { SpatialServer::Child(pid) => Some(pid), SpatialServer::Normal => None };
-        let deleted_children = match self.spatial_delete_pass(serving) {
+        let deleted_children = match if self.delete { self.spatial_delete_pass(serving) } else { None } {
             Some(pid) => vec![pid],
             None => Vec::new(),
         };
@@ -1295,17 +1372,45 @@ impl Neuron {
         // is nothing to do here. Crucially the old server (the normal) must NOT be refined on a mint
         // frame, or it re-absorbs O and the pollution returns. So refine the served entry only when no
         // child was minted; the newborn's own refinement begins on its next frame.
-        if correction_request.is_none() {
-            self.refine_server(server, &observed_set);
-        }
+        let context_ref_adds = if self.refine && correction_request.is_none() {
+            self.refine_server(server, &observed_set)
+        } else {
+            Vec::new()
+        };
 
-        SpatialFrameResult { matches, correction_request, deleted_children, timings }
+        SpatialFrameResult { bid, correction_request, deleted_children, context_ref_adds, timings }
     }
 
-    /// Drop history records older than the horizon (docs/algorithm.md, "The frame, step by step").
-    fn age_spatial_history(&mut self, current_frame: FrameNumber) {
-        let cutoff = current_frame - self.horizon as FrameNumber;
-        self.spatial_history.retain(|r| r.frame >= cutoff);
+    /// Drop this frame's record from the history — the neuron was inhibited (subsumed) by a neighbour's
+    /// unit in contraction, so it contributed nothing to the file and this frame is not its evidence.
+    /// Leaving it in would tell the one test the neuron is serving its neighbourhood badly (as `Normal`)
+    /// and drive a child the neuron never needs, since a neighbour already covers it every such frame.
+    ///
+    /// The record to drop is the one just appended this frame — the tail. Frame numbers repeat across
+    /// episodes (an app that resets context per input restarts numbering), so the tail is matched, not a
+    /// global frame-number scan. Removing a record does not move any entry, so no server reassignment is
+    /// needed; the delete/add passes simply see one fewer frame next time.
+    pub fn drop_inhibited_spatial_frame(&mut self, current_frame: FrameNumber) {
+        if self.spatial_history.last().map_or(false, |r| r.frame == current_frame) {
+            self.spatial_history.pop();
+        }
+    }
+
+    /// Drop history records older than the horizon (docs/algorithm.md, "The frame, step by step":
+    /// the neuron remembers **the frames it was active for**, one horizon back).
+    ///
+    /// The window is counted in this neuron's own activations, not in frame numbers. A neuron appends
+    /// exactly one record per activation, so the last `horizon` records are precisely that window, and
+    /// it stays correct when the frame counter is not monotonic — an app that treats each input as its
+    /// own episode calls `reset_context`, which restarts frame numbering, and a frame-number cutoff
+    /// would then never expire anything. An unbounded history breaks the one test outright: the add
+    /// pass sums its benefit over every remembered frame while an entry's cost stays `1 + |config|`, so
+    /// benefit grows without bound and every frame carrying any error looks worth a new child.
+    fn age_spatial_history(&mut self) {
+        let horizon = self.horizon as usize;
+        if self.spatial_history.len() > horizon {
+            self.spatial_history.drain(..self.spatial_history.len() - horizon);
+        }
     }
 
     /// Hamming distance between an observed neighborhood and a stored configuration: |O △ C| — the
@@ -1400,8 +1505,16 @@ impl Neuron {
     ///
     /// A neighbor entering or leaving the configuration changes distances, so those frames may change
     /// hands — the servers are reassigned then (only on an actual membership change, not every frame).
-    fn refine_server(&mut self, server: SpatialServer, observed: &FxHashSet<NeuronId>) {
-        let entry = match self.spatial_routing_table.get_mut(&server) { Some(e) => e, None => return };
+    ///
+    /// Returns the context neurons this frame ADDED to a child's configuration. Each needs a reverse
+    /// context-ref registered on it (the caller dispatches that), so that when the neighbor is later
+    /// deleted, the death cascade can find this child and scrub the reference. Without it, a
+    /// refinement-added neighbor that dies leaves a dangling context entry that breaks a later restore.
+    /// Removals are not reported: a stale reverse ref only makes the cascade attempt a scrub that finds
+    /// nothing and no-ops, so leaving it is harmless. The normal has no reverse refs (nothing is looked
+    /// up through it), so a normal refine reports nothing.
+    fn refine_server(&mut self, server: SpatialServer, observed: &FxHashSet<NeuronId>) -> Vec<NeuronId> {
+        let entry = match self.spatial_routing_table.get_mut(&server) { Some(e) => e, None => return Vec::new() };
 
         let mut added: Vec<NeuronId> = Vec::new();
         let mut removed: Vec<NeuronId> = Vec::new();
@@ -1424,11 +1537,11 @@ impl Neuron {
         }
 
         // Nothing entered or left the configuration → distances are unchanged, no reassignment needed.
-        if added.is_empty() && removed.is_empty() { return; }
+        if added.is_empty() && removed.is_empty() { return Vec::new(); }
 
         // A child maintains the inverted index that maps a context neighbor to the patterns naming it;
         // the normal is not indexed (nothing looks a pattern up through the normal).
-        if let SpatialServer::Child(pid) = server {
+        let ref_adds = if let SpatialServer::Child(pid) = server {
             for &id in &added { self.spatial_context_index.entry(id).or_default().insert(pid); }
             for id in &removed {
                 if let Some(set) = self.spatial_context_index.get_mut(id) {
@@ -1436,10 +1549,14 @@ impl Neuron {
                     if set.is_empty() { self.spatial_context_index.remove(id); }
                 }
             }
-        }
+            added
+        } else {
+            Vec::new()
+        };
 
         // The configuration moved, so some frames may now be served by a different entry.
         self.reassign_all_servers();
+        ref_adds
     }
 
     /// The one test's delete half — the SAME test as the add half, so nothing can be deleted then
@@ -1952,6 +2069,20 @@ pub struct SerializedNeuron {
     /// The normal's stored context configuration — its member neighbor ids. A routing-table entry
     /// like a child's context, just with no pattern neuron (docs/algorithm.md, "The normal").
     pub normal_context: Vec<NeuronId>,
+    /// The neuron's history window — the frames it was active for, each with the neighborhood observed
+    /// and which entry served it. This is the evidence the one test reads, so it has to survive a
+    /// restore: dropping it resets the neuron's accumulated benefit to zero and its structure stops
+    /// growing, which is not what continuing to train from a snapshot is supposed to mean.
+    pub spatial_history: Vec<SerializedHistoryRecord>,
+}
+
+/// One remembered frame, flattened for the snapshot. `served_child` is the child pattern that served
+/// the frame, or `None` when the normal did (the normal has no pattern id of its own).
+#[derive(Debug, Clone)]
+pub struct SerializedHistoryRecord {
+    pub frame: FrameNumber,
+    pub served_child: Option<NeuronId>,
+    pub observed: Vec<NeuronId>,
 }
 
 #[derive(Debug, Clone)]
@@ -1995,13 +2126,13 @@ mod tests {
     use super::*;
 
     fn make_neuron(id: NeuronId) -> Neuron {
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true)
     }
 
     fn make_neuron_with_actions(id: NeuronId, channel_id: ChannelId, action_ids: Vec<NeuronId>) -> Neuron {
         let mut channel_actions = FxHashMap::default();
         channel_actions.insert(channel_id, action_ids);
-        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true)
+        Neuron::new(id, 0.01, 0.9, GroupMode::Static, channel_actions, 10, true, true, true)
     }
 
     #[test]
@@ -2084,7 +2215,7 @@ mod tests {
 
     #[test]
     fn test_error_threshold_dynamic_warmup() {
-        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true);
+        let mut n = Neuron::new(1, 0.01, 0.9, GroupMode::Neutral, FxHashMap::default(), 10, true, true, true);
         // fewer than ERROR_MIN_SAMPLES → falls back to the derived 1 − group_threshold = 0.1
         n.record_temporal_error(0, 0.5);
         n.record_temporal_error(0, 0.5);
@@ -2163,7 +2294,7 @@ mod tests {
     #[test]
     fn test_phase1_compresses_recurring_configuration() {
         // forget_rate 0.05 -> horizon = round(1/0.05) = 20. Period-5 input, run 6 horizons.
-        let mut n = Neuron::new(1, 0.05, 0.9, GroupMode::Static, FxHashMap::default(), 10, true);
+        let mut n = Neuron::new(1, 0.05, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true);
         let horizon: i64 = 20;
         let config_a: Vec<NeuronId> = vec![10, 11, 12];       // usual: 3 of every 5 frames -> the normal
         let config_b: Vec<NeuronId> = vec![20, 21, 22, 23];   // deviation: 2 of every 5 -> should be a child
@@ -2271,7 +2402,7 @@ mod tests {
 
     /// A level-0 neuron whose horizon is `round(1 / forget_rate)` — 0.1 → 10, 0.05 → 20.
     fn phase1_neuron(forget_rate: f64) -> Neuron {
-        Neuron::new(1, forget_rate, 0.9, GroupMode::Static, FxHashMap::default(), 10, true)
+        Neuron::new(1, forget_rate, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, true, true)
     }
 
     /// Drive one learning frame; install any minted child (simulating the thalamus). Returns the
@@ -2342,9 +2473,9 @@ mod tests {
         let mut n = phase1_neuron(0.1);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let r = n.process_spatial_frame(None, &empty, &[], 0);
-        assert!(r.matches.is_empty() && r.correction_request.is_none() && r.deleted_children.is_empty());
+        assert!(r.bid.is_none() && r.correction_request.is_none() && r.deleted_children.is_empty());
         let r = n.process_spatial_frame(Some(&spatial_ctx(&[])), &empty, &[], 1);
-        assert!(r.matches.is_empty() && r.correction_request.is_none());
+        assert!(r.bid.is_none() && r.correction_request.is_none());
         assert!(n.spatial_history.is_empty(), "silence writes no history");
     }
 

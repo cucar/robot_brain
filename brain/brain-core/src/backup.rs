@@ -15,6 +15,9 @@
 ///                              entry's stored context. A child's rows are keyed by the child's pattern
 ///                              id (age 0 spatial, >=1 temporal); a neuron's NORMAL is keyed by the
 ///                              neuron's own id with context_age == u32::MAX (NORMAL_CONTEXT_AGE).
+///   - `spatial_history.csv`   neuron_id,frame,served_child,observed — the history window: one row per
+///                              remembered frame, `served_child` empty when the normal served, `observed`
+///                              a space-separated neighbor id list. This is the evidence the one test reads.
 ///   - `neuron_error_stats.csv` neuron_id,age,n,mean,m2 — temporal per-age Welford error stats.
 
 use std::fs;
@@ -26,7 +29,7 @@ use rustc_hash::FxHashMap;
 
 use crate::neuron::{
     SerializedChild, SerializedConnection, SerializedContextRef,
-    SerializedErrorStats, SerializedNeuron,
+    SerializedErrorStats, SerializedHistoryRecord, SerializedNeuron,
 };
 
 /// Sentinel `context_age` marking a `contexts.csv` row as a neuron's **normal** (its stored context
@@ -37,7 +40,7 @@ const NORMAL_CONTEXT_AGE: Distance = u32::MAX;
 use crate::thalamus::{BaseNeuron, Snapshot, SnapshotNeuronEntry};
 use crate::types::{
     ChannelId, ContextEntry, Coordinate, DimensionId, Distance,
-    Level, NeuronId, NeuronType,
+    FrameNumber, Level, NeuronId, NeuronType,
 };
 
 /// Hard cap on retained backup folders. The 11th save evicts the oldest by
@@ -90,6 +93,7 @@ impl Backup {
         self.write_connections(&folder, snapshot)?;
         self.write_patterns(&folder, snapshot)?;
         self.write_contexts(&folder, snapshot)?;
+        self.write_spatial_history(&folder, snapshot)?;
         self.write_neuron_error_stats(&folder, snapshot)?;
 
         println!("💾 Backup saved: {} ({} neurons)", folder.display(), snapshot.neurons.len());
@@ -160,6 +164,7 @@ impl Backup {
                 context_refs: Vec::new(),
                 error_stats: Vec::new(),
                 normal_context: Vec::new(),
+                spatial_history: Vec::new(),
             });
             temporal_levels.insert(id, temporal_level);
             spatial_levels.insert(id, spatial_level);
@@ -306,6 +311,30 @@ impl Backup {
                         });
                     }
                 }
+            }
+        }
+
+        // The history window. Rows are written in order per neuron, so appending as they are read
+        // preserves it. Absent file = an older backup with no history — the neuron restores empty,
+        // exactly as before this table existed.
+        let history_file = folder.join("spatial_history.csv");
+        if history_file.exists() {
+            for row in read_csv(&history_file)? {
+                if row.len() < 4 { continue; }
+                let neuron_id: NeuronId = row[0].parse().map_err(|e| format!("Bad history neuron id: {}", e))?;
+                let frame: FrameNumber = row[1].parse().map_err(|e| format!("Bad history frame: {}", e))?;
+                let served_child: Option<NeuronId> = if row[2].is_empty() {
+                    None
+                } else {
+                    Some(row[2].parse().map_err(|e| format!("Bad history server: {}", e))?)
+                };
+                let mut observed = Vec::new();
+                for id in row[3].split_whitespace() {
+                    observed.push(id.parse::<NeuronId>().map_err(|e| format!("Bad history observed id: {}", e))?);
+                }
+                let neuron = neurons.get_mut(&neuron_id)
+                    .ok_or_else(|| format!("spatial_history neuron not found: {}", neuron_id))?;
+                neuron.spatial_history.push(SerializedHistoryRecord { frame, served_child, observed });
             }
         }
 
@@ -489,6 +518,28 @@ impl Backup {
             }
         }
         w.flush().map_err(|e| format!("Failed to flush contexts.csv: {}", e))
+    }
+
+    /// Write the spatial history window — the frames each neuron was active for, in order. This is the
+    /// evidence the one test evaluates, so a snapshot that omitted it would restore a neuron that has
+    /// forgotten everything it ever saw and stops growing structure (docs/algorithm.md, "The history").
+    /// Streamed row-by-row: with a long horizon this is the largest table by far.
+    /// Row: `neuron_id,frame,served_child,observed` where `served_child` is empty when the normal served
+    /// and `observed` is a space-separated neighbor id list (kept in one field so the row stays fixed-arity).
+    fn write_spatial_history(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
+        let mut w = open_csv(&folder.join("spatial_history.csv"))?;
+        for entry in &snapshot.neurons {
+            for rec in &entry.neuron.spatial_history {
+                let observed = rec.observed.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(" ");
+                write_row(&mut w, &[
+                    entry.neuron.id.to_string(),
+                    rec.frame.to_string(),
+                    rec.served_child.map_or(String::new(), |id| id.to_string()),
+                    observed,
+                ])?;
+            }
+        }
+        w.flush().map_err(|e| format!("Failed to flush spatial_history.csv: {}", e))
     }
 
     fn write_neuron_error_stats(&self, folder: &Path, snapshot: &Snapshot) -> Result<(), String> {
@@ -781,6 +832,7 @@ mod tests {
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
                         normal_context: Vec::new(),
+                        spatial_history: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
@@ -800,6 +852,7 @@ mod tests {
                         context_refs: Vec::new(),
                         error_stats: Vec::new(),
                         normal_context: Vec::new(),
+                        spatial_history: Vec::new(),
                     },
                     temporal_level: 0,
                     spatial_level: 0,
