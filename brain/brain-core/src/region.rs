@@ -76,8 +76,6 @@ impl Region {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
-        refine: bool,
-        delete: bool,
         horizon: u32,
     ) -> Self {
         let mut columns = Vec::with_capacity(c);
@@ -89,8 +87,6 @@ impl Region {
                 group_threshold,
                 group_mode,
                 learning,
-                refine,
-                delete,
                 horizon,
             ));
         }
@@ -501,8 +497,6 @@ mod tests {
             2,
             0.5,
             GroupMode::Static,
-            true,
-            true,
             true,
             100,
         )

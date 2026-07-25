@@ -349,8 +349,6 @@ impl Thalamus {
         regions: usize,
         columns: usize,
         learning: bool,
-        refine: bool,
-        delete: bool,
         horizon: u32,
     ) -> Self {
         // construct the Region[R] tree — each Region constructs its Column[C]
@@ -366,8 +364,6 @@ impl Thalamus {
                 group_threshold,
                 group_mode,
                 learning,
-                refine,
-                delete,
                 horizon,
             ));
         }
@@ -1366,22 +1362,6 @@ impl Thalamus {
             if region_updates.is_empty() { continue; }
             self.region_list[r].update_spatial_context_refs(&region_updates);
         }
-    }
-
-    /// Register the reverse context-refs for neighbors refinement added to a child this frame. Each
-    /// added context neuron gets a ref back to the parent, so a later deletion of that neighbor scrubs
-    /// it from the child's stored context (docs/algorithm.md, "Refinement"). Mirrors the install path,
-    /// which registers the same refs for a newborn's initial configuration.
-    pub fn register_refinement_context_refs(&mut self, dispatch_results: &[Vec<crate::column::SpatialColumnResult>]) {
-        let mut by_target: FxHashMap<NeuronId, Vec<SpatialContextRefUpdate>> = FxHashMap::default();
-        for cr in dispatch_results.iter().flatten() {
-            for &ctx_id in &cr.context_ref_adds {
-                by_target.entry(ctx_id).or_default().push(SpatialContextRefUpdate { neuron_id: ctx_id, parent_id: cr.parent_id });
-            }
-        }
-        if by_target.is_empty() { return; }
-        let batch: Vec<(NeuronId, Vec<SpatialContextRefUpdate>)> = by_target.into_iter().collect();
-        self.dispatch_spatial_context_ref_updates(&batch);
     }
 
     /// SPATIAL: walk the active neurons at this level and build the shared SpatialContext.
@@ -2661,7 +2641,7 @@ mod tests {
     use super::*;
 
     fn make_thalamus() -> Thalamus {
-        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, true, true, 10)
+        Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 1, 1, true, 10)
     }
 
     // ── Contraction election (docs/algorithm.md, "Contraction: Election, by rounds") ────────────
@@ -2819,7 +2799,7 @@ mod tests {
 
     #[test]
     fn test_routing() {
-        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, true, true, 10);
+        let t = Thalamus::new(false, 0.1, 4, 0.5, GroupMode::Static, 3, 1, true, 10);
         assert_eq!(t.route_neuron(1), 1);
         assert_eq!(t.route_neuron(2), 2);
         assert_eq!(t.route_neuron(3), 0);

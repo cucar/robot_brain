@@ -152,8 +152,6 @@ impl JsBrain {
     ///   consensus: string 'democratic' | 'nb' (default 'democratic')
     ///   debug: boolean (default false)
     ///   learning: boolean (default true) — fixed for the life of the instance; construct with false for frozen evaluation
-    ///   spatialRefine: boolean (default true) — refine the served entry toward what it serves each frame
-    ///   spatialDelete: boolean (default true) — run the delete pass that retires children below their cost
     ///   horizon: number (default round(1/patternForgetRate)) — spatial history window in frames; set it to
     ///     the episode length so the sliding window holds exactly one episode of evidence
     ///
@@ -192,11 +190,6 @@ impl JsBrain {
         // instance loaded from a backup, not a toggled one.
         let learning = opt_bool(options.as_ref(), "learning")?.unwrap_or(true);
 
-        // Spatial refinement and the delete pass, both on by design. Exposed so an experiment can
-        // isolate their contribution without a rebuild.
-        let refine = opt_bool(options.as_ref(), "spatialRefine")?.unwrap_or(true);
-        let delete = opt_bool(options.as_ref(), "spatialDelete")?.unwrap_or(true);
-
         // The spatial evidence window in frames. Its own knob, decoupled from the temporal forget rate.
         // Callers that do not set it fall back to the forget-rate timescale (round(1/rate)), which is the
         // window the spatial history used before the split — so existing demos keep their behaviour.
@@ -206,7 +199,7 @@ impl JsBrain {
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            apex_coverage, refine, delete, horizon,
+            apex_coverage, horizon,
         );
 
         Ok(Self { inner: RefCell::new(inner) })

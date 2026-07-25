@@ -123,11 +123,6 @@ export default class MNISTTestJob extends Job {
 		const forgetIdx = process.argv.indexOf('--forget-rate');
 		if (forgetIdx !== -1 && process.argv[forgetIdx + 1] !== undefined) this.options.patternForgetRate = parseFloat(process.argv[forgetIdx + 1]);
 
-		// --no-refine / --no-delete: turn off spatial refinement or the delete pass (both on by default).
-		// Refinement consolidates an entry toward what it serves; the delete pass retires children that no
-		// longer cover their storage. Off means entries stay frozen at mint-time and nothing is reclaimed.
-		if (process.argv.includes('--no-refine')) this.options.spatialRefine = false;
-		if (process.argv.includes('--no-delete')) this.options.spatialDelete = false;
 
 		if (this.options.contextLength == null) this.options.contextLength = 1;
 		if (this.options.patternForgetRate == null) this.options.patternForgetRate = 0;
@@ -271,7 +266,6 @@ export default class MNISTTestJob extends Job {
 		console.log(`  Context length: ${this.options.contextLength}`);
 		console.log(`  Forget rate: ${this.options.patternForgetRate}`);
 		console.log(`  Horizon: ${this.options.horizon} frames (spatial history window = one episode)`);
-		console.log(`  Refinement: ${this.options.spatialRefine === false ? 'OFF' : 'ON'} | Delete pass: ${this.options.spatialDelete === false ? 'OFF' : 'ON'}`);
 		console.log(`  Consensus: ${this.config.consensus}`);
 		console.log(`  Dataset: ${this.config.testData ? 'test (held-out)' : 'training (balanced)'}`);
 		console.log(`  Learning: ${this.config.disableLearning ? 'OFF (frozen — evaluation)' : 'ON'}`);

@@ -407,8 +407,6 @@ impl Brain {
         debug: bool,
         learning: bool,
         apex_coverage: bool,
-        refine: bool,
-        delete: bool,
         horizon: u32,
     ) -> Self {
         Self {
@@ -433,8 +431,6 @@ impl Brain {
                 regions,
                 columns,
                 learning,
-                refine,
-                delete,
                 horizon,
             ),
             memory: Memory::new(debug, context_length),
@@ -1515,10 +1511,6 @@ impl Brain {
         // This is a single dispatch per frame, not one per level.
         self.thalamus.install_spatial_corrections(install_ops, self.substrate_frame());
 
-        // Register reverse context-refs for neighbors refinement added to a child this frame, so their
-        // later deletion scrubs the child's stored context instead of leaving a dangling reference.
-        self.thalamus.register_refinement_context_refs(&spatial.dispatch_results);
-
         // Drop this frame from the history of every inhibited neuron: a neighbour's unit represented it,
         // so it contributed nothing and the frame is not its evidence (docs/algorithm.md, "Contraction").
         // This is what keeps a covered neuron from re-requesting a child it never needs — the polluting
@@ -2166,8 +2158,6 @@ mod tests {
             false,                    // debug
             true,                     // learning
             false,                    // apex_coverage
-            true,                     // refine
-            true,                     // delete
             100,                      // horizon
         )
     }

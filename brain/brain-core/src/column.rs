@@ -41,9 +41,6 @@ pub struct SpatialColumnResult {
     /// Children this neuron's delete pass retired this frame — the thalamus releases the pattern
     /// neurons and scrubs their cross-neuron references.
     pub deleted_children: Vec<NeuronId>,
-    /// Context neurons refinement added to a child of this neuron this frame — each needs a reverse
-    /// context-ref registered on it (parent = this neuron), dispatched by the thalamus.
-    pub context_ref_adds: Vec<NeuronId>,
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
@@ -119,10 +116,6 @@ pub struct Column {
     /// Master learning toggle, fixed at construction and handed to every neuron this column creates or loads.
     learning: bool,
 
-    /// Spatial refinement / delete-pass toggles, handed to every neuron this column creates or loads.
-    refine: bool,
-    delete: bool,
-
     /// The spatial evidence window in frames — the horizon each neuron ages its history against.
     horizon: u32,
 
@@ -138,8 +131,6 @@ impl Column {
         group_threshold: f64,
         group_mode: GroupMode,
         learning: bool,
-        refine: bool,
-        delete: bool,
         horizon: u32,
     ) -> Self {
         Self {
@@ -149,8 +140,6 @@ impl Column {
             group_threshold,
             group_mode,
             learning,
-            refine,
-            delete,
             horizon,
             neurons: FxHashMap::default(),
         }
@@ -178,7 +167,6 @@ impl Column {
                 bid: result.bid,
                 correction_request: result.correction_request,
                 deleted_children: result.deleted_children,
-                context_ref_adds: result.context_ref_adds,
                 timings: result.timings,
             });
         }
@@ -580,8 +568,6 @@ impl Column {
                 self.channel_actions.clone(),
                 self.context_length,
                 self.learning,
-                self.refine,
-                self.delete,
                 self.horizon,
             );
             // pre-wire default action connections at neutral reward across all voting distances
@@ -647,8 +633,6 @@ impl Column {
             self.channel_actions.clone(),
             self.context_length,
             self.learning,
-            self.refine,
-            self.delete,
             self.horizon,
         );
 
@@ -819,8 +803,6 @@ mod tests {
             2,
             0.5,
             GroupMode::Static,
-            true,
-            true,
             true,
             100,
         )
