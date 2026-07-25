@@ -143,6 +143,33 @@ impl Memory {
         }
     }
 
+    /// Retract deleted neurons from every activation index.
+    /// Deletion in the substrate removes a neuron from its column and routing tables, but a neuron
+    /// handed to temporal via the apex handoff also lives in these frame-keyed indices for the whole
+    /// window. If we do not scrub it here, `get_temporal_level_neurons` keeps returning the dead id
+    /// for the frames still in the window and the next temporal sweep dispatches a neuron its column
+    /// no longer owns. A deleted neuron's votes must leave with it, so this is correctness, not just
+    /// crash-avoidance. Called by the brain right after each delete cascade returns the removed ids.
+    pub fn purge_neurons(&mut self, deleted_ids: &[NeuronId]) {
+        for &neuron_id in deleted_ids {
+            // The neuron's own state map holds exactly the frames it is active in — use them to scrub
+            // the frame-keyed indices without walking the whole window.
+            let frames = match self.neuron_states.remove(&neuron_id) {
+                Some(states) => states,
+                None => continue, // not active anywhere in the window — nothing to retract
+            };
+            for frame in frames.keys() {
+                if let Some(ids) = self.age_index.get_mut(frame) {
+                    ids.remove(&neuron_id);
+                    if ids.is_empty() { self.age_index.remove(frame); }
+                }
+                for level_frames in self.temporal_level_index.values_mut() {
+                    if let Some(ids) = level_frames.get_mut(frame) { ids.remove(&neuron_id); }
+                }
+            }
+        }
+    }
+
     /// Test convenience: do all three steps of a frame tick in one call (sync, reset spatial,
     /// advance temporal window). Production code calls the three methods individually at the
     /// appropriate points in `process_frame` / `process_spatial` / `process_temporal`.
@@ -358,15 +385,6 @@ impl Memory {
     pub fn save_inferred_neurons(&mut self, inferences: Vec<InferredNeuron>) {
         self.inferred_neurons = inferences;
         if self.debug { println!("Saved {} inferences", self.inferred_neurons.len()); }
-    }
-
-    /// Verify that none of the deleted pattern ids are currently active.
-    pub fn assert_not_active(&self, deleted_pattern_ids: &[NeuronId]) {
-        for &pattern_id in deleted_pattern_ids {
-            if self.neuron_states.contains_key(&pattern_id) {
-                panic!("BUG: deleting active neuron {}", pattern_id);
-            }
-        }
     }
 
     /// Count of active spatial levels — equals the highest active level + 1. Levels are built
@@ -617,12 +635,16 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "BUG: deleting active neuron")]
-    fn test_assert_not_active() {
+    fn test_purge_neurons_retracts_active_neuron() {
         let mut m = Memory::new(false, 4);
         m.age(1);
         m.activate_temporal_neuron(42, 0);
-        m.assert_not_active(&[42]);
+        assert!(m.get_temporal_level_neurons(0).contains_key(&42));
+
+        // deletion must retract the neuron from every activation index, even while it is active
+        m.purge_neurons(&[42]);
+        assert!(!m.get_temporal_level_neurons(0).contains_key(&42));
+        assert!(!m.get_neuron_ids_at_age(0).contains(&42));
     }
 
     #[test]

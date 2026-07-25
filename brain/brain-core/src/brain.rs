@@ -38,7 +38,7 @@ use crate::types::{
 
 /// Laplace-style floor added inside the Nb consensus log so a zero posterior (reward == 0) doesn't send a
 /// candidate to negative infinity. Out-of-range rewards (< 0 or > 1) are rejected upstream, not floored.
-const NB_EPS: f64 = 1e-3;
+const NB_EPS: f64 = 1e-6;
 
 // ── Re-exports for the N-API layer ──────────────────────────────────────────
 // These types live in crate-private modules but are part of Brain's public API.
@@ -1528,7 +1528,11 @@ impl Brain {
         // Retire the children the one test's delete pass flagged this frame (docs/algorithm.md, "The
         // one test"). Runs before the apex handoff — a retired child did not serve this frame, so it
         // is not in the apex — releasing the pattern neurons and scrubbing their references.
-        self.thalamus.delete_spatial_children(&spatial.dispatch_results, self.substrate_frame());
+        // A retired child may still be live in the temporal window from an earlier frame's apex
+        // handoff, so retract its activations from memory too — otherwise the next temporal sweep
+        // dispatches a neuron its column no longer owns.
+        let deleted = self.thalamus.delete_spatial_children(&spatial.dispatch_results, self.substrate_frame());
+        self.memory.purge_neurons(&deleted);
 
         // Return the spec batch.
         // process_spatial folds these into spatial.neuron_specs so they get materialized in the same flush as temporal specs.
@@ -2106,8 +2110,13 @@ impl Brain {
         // delete dead patterns (with recursive cleanup of context references)
         let deleted_pattern_ids = self.thalamus.delete_patterns(&dead_pattern_ids, self.substrate_frame());
 
-        // verify no deleted patterns are active — that would be a bug
-        self.memory.assert_not_active(&deleted_pattern_ids);
+        // Retract the reaped neurons from memory's activation indices. A neuron can fire (entering the
+        // sliding window) and then decay to death a frame or two later, so with a multi-frame window a
+        // reaped neuron is often still active in the window. Leaving its activations behind is exactly
+        // what let a deleted id reach temporal dispatch and panic the column; its votes must die with
+        // it. (This replaces an assert that only held at context-length 1, where the window is a single
+        // frame and a neuron active this frame could not yet be reaped.)
+        self.memory.purge_neurons(&deleted_pattern_ids);
 
         if self.debug { println!("=== CLEANUP COMPLETED ===\n"); }
         timings.cleanup_dead = t.elapsed().as_secs_f64();
