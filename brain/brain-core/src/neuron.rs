@@ -162,6 +162,70 @@ impl SpatialHistory {
     }
 }
 
+/// Sentinel for the distance cache: an uncomputed matrix cell, and an entry whose configuration has not
+/// been interned yet. A real spatial distance over a finite neighbourhood is tiny, so `u32::MAX` can
+/// never collide with one.
+const DIST_SENTINEL: u32 = u32::MAX;
+
+/// Per-neuron memoisation of [Neuron::spatial_distance] between neighbourhood configurations.
+///
+/// Since refinement was removed, every stored configuration (the normal, every child, every remembered
+/// observation) is **frozen** for its lifetime — so the distance between any two configurations is a
+/// constant. The route, delete and add passes recompute the same `d(O, config)` on every active frame
+/// (a background neuron sees the same `O` and the same entries for thousands of consecutive frames), and
+/// the delete pass alone is `O(D · E)` distance calls per frame. Caching turns all of that into O(1)
+/// lookups after each distinct pair is seen once, with **no invalidation** needed for correctness: a
+/// cell only goes stale if a configuration changes, and the one place that happens — a child's context
+/// shrinking when a member is purged — resets the entry's interned id (so it re-interns as a new config).
+///
+/// Configurations are interned to dense per-neuron ids; distances live in a growable lower-triangular
+/// matrix indexed by those ids. Bitmap/popcount packing is deliberately avoided so this works unchanged
+/// at any bucket count, not just binary (docs/algorithm.md, "Open questions": configuration space beyond
+/// the small case). The interned set is bounded by the distinct configurations the neuron actually sees
+/// in its horizon (≤ 256 at radius 1 binary), so the matrix stays small.
+#[derive(Debug, Clone, Default)]
+struct SpatialDistanceCache {
+    /// configuration (sorted, deduplicated id list) → its dense id.
+    ids: FxHashMap<Vec<NeuronId>, u32>,
+    /// dense id → the configuration, for computing a distance on a cache miss.
+    configs: Vec<Vec<NeuronId>>,
+    /// Lower-triangular distance matrix: `dist[hi][lo]` (hi ≥ lo) is `d(configs[hi], configs[lo])`,
+    /// `DIST_SENTINEL` until first computed. Row `i` has length `i + 1`; the diagonal is 0.
+    dist: Vec<Vec<u32>>,
+}
+
+impl SpatialDistanceCache {
+    /// Intern a configuration to its dense id, assigning a fresh one (and a new matrix row) on first sight.
+    fn intern(&mut self, config: &[NeuronId]) -> u32 {
+        if let Some(&id) = self.ids.get(config) { return id; }
+        let id = self.configs.len() as u32;
+        self.ids.insert(config.to_vec(), id);
+        self.configs.push(config.to_vec());
+        let mut row = vec![DIST_SENTINEL; id as usize + 1];
+        row[id as usize] = 0; // a configuration is at distance 0 from itself
+        self.dist.push(row);
+        id
+    }
+
+    /// The cached [Neuron::spatial_distance] between two interned configurations, computed once and
+    /// stored. In debug builds a cache hit is re-verified against a fresh merge, so any missed
+    /// invalidation (a config that changed without its id being reset) trips the assert immediately.
+    fn distance(&mut self, a: u32, b: u32) -> u32 {
+        let (lo, hi) = if a <= b { (a as usize, b as usize) } else { (b as usize, a as usize) };
+        let cached = self.dist[hi][lo];
+        if cached != DIST_SENTINEL {
+            debug_assert_eq!(
+                cached, Neuron::spatial_distance(&self.configs[hi], &self.configs[lo]),
+                "spatial distance cache stale — a cached configuration changed without resetting its id",
+            );
+            return cached;
+        }
+        let d = Neuron::spatial_distance(&self.configs[hi], &self.configs[lo]);
+        self.dist[hi][lo] = d;
+        d
+    }
+}
+
 /// A contraction bid (docs/algorithm.md, "Contraction: what a firing neuron offers"). A neuron that
 /// served from a child offers to describe a patch of this level: its child names a whole
 /// neighborhood, so the units it covers correctly can be recovered by expanding that one unit above.
@@ -206,6 +270,12 @@ pub struct SpatialRoutingEntry {
     /// approximates p(entry | pattern) — the likelihood model for likelihood-ratio recognition.
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
+    /// This entry's configuration interned into the neuron's [SpatialDistanceCache], so the hot passes
+    /// read its id without re-sorting/re-hashing the context every frame. `DIST_SENTINEL` means
+    /// "not interned yet" — set lazily by `spatial_entry_ids`, and reset to it whenever the context is
+    /// mutated (a purge shrinking the config) so the id re-derives against the new configuration.
+    /// Not serialized: it is a pure cache, rebuilt on the first frame after a restore.
+    pub config_id: u32,
 }
 
 /// Entry in the temporal routing table for a child temporal-correction pattern.
@@ -456,6 +526,11 @@ pub struct Neuron {
     /// `materialize_and_reset_children`); it also refills as the neuron fires afterwards.
     spatial_history: SpatialHistory,
 
+    /// Memoised pairwise distances between this neuron's neighbourhood configurations. A pure cache over
+    /// frozen configs (see [SpatialDistanceCache]); the route/delete/add passes read it instead of
+    /// recomputing [Neuron::spatial_distance] every active frame.
+    spatial_dist_cache: SpatialDistanceCache,
+
     /// The horizon: how many frames of history the one test evaluates over — "how long the world is
     /// assumed to hold still" (docs/algorithm.md, "The cost"). This is its own knob, in frames, set at
     /// construction. Set it to the episode length and the sliding window holds exactly one episode of
@@ -525,12 +600,14 @@ impl Neuron {
                     context: SpatialContext::new(),
                     activation_strength: 0.0,
                     last_activation_frame: 0,
+                    config_id: DIST_SENTINEL,
                 });
                 m
             },
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
             spatial_history: SpatialHistory::default(),
+            spatial_dist_cache: SpatialDistanceCache::default(),
             // The horizon is its own knob (the spatial evidence window in frames), set directly.
             horizon: horizon.max(1),
             temporal_connections: Vec::new(),
@@ -662,8 +739,10 @@ impl Neuron {
         for &id in context_ids {
             if !ctx.has_key(id) { ctx.add_neuron(id, 1.0); }
         }
-        self.spatial_routing_table.get_mut(&SpatialServer::Normal)
-            .expect("normal routing entry must always exist").context = ctx;
+        let normal = self.spatial_routing_table.get_mut(&SpatialServer::Normal)
+            .expect("normal routing entry must always exist");
+        normal.context = ctx;
+        normal.config_id = DIST_SENTINEL; // config changed — re-derive its interned distance id
     }
 
     /// Rebuild the position metadata of spatial connection targets from central base-neuron metadata.
@@ -1069,6 +1148,7 @@ impl Neuron {
                 context: crate::context::SpatialContext::new(),
                 activation_strength: initial_strength,
                 last_activation_frame: 0,
+                config_id: DIST_SENTINEL,
             });
         }
     }
@@ -1105,6 +1185,8 @@ impl Neuron {
         } else {
             entry.context.add_neuron(neuron_id, strength);
         }
+        // The configuration changed — drop its interned id so the distance cache re-derives it.
+        entry.config_id = DIST_SENTINEL;
 
         self.add_spatial_context_index(neuron_id, pattern_id);
     }
@@ -1222,6 +1304,7 @@ impl Neuron {
             let entry = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id))
                 .unwrap_or_else(|| panic!("remove_spatial_context_neuron: pattern {} not found in spatial routing table of neuron {}", pattern_id, self.id));
             entry.context.remove(neuron_id);
+            entry.config_id = DIST_SENTINEL; // config shrank — re-derive its interned distance id
             affected_patterns.insert(pattern_id);
         }
         self.spatial_context_index.remove(&neuron_id);
@@ -1238,6 +1321,7 @@ impl Neuron {
     pub fn remove_spatial_context(&mut self, pattern_id: NeuronId, neuron_id: NeuronId) -> bool {
         if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id)) {
             entry.context.remove(neuron_id);
+            entry.config_id = DIST_SENTINEL; // config shrank — re-derive its interned distance id
         }
         // scrub the inverted index for (pattern, ctx_neuron)
         if let Some(patterns) = self.spatial_context_index.get_mut(&neuron_id) {
@@ -1395,15 +1479,24 @@ impl Neuron {
         if self.learning && self.normal_entry().context.size() == 0 {
             let mut ctx = SpatialContext::new();
             for &id in &observed { ctx.add_neuron(id, 1.0); }
-            self.spatial_routing_table.get_mut(&SpatialServer::Normal)
-                .expect("normal routing entry must always exist").context = ctx;
+            let normal = self.spatial_routing_table.get_mut(&SpatialServer::Normal)
+                .expect("normal routing entry must always exist");
+            normal.context = ctx;
+            normal.config_id = DIST_SENTINEL; // config changed — re-derive its interned distance id
         }
+
+        // Intern this frame's observation once and prepare the interned (server, config id) list of every
+        // routing entry. Every distance the passes below need is now a cache lookup keyed on these ids —
+        // route, the delete pass's next(O) scan, and the add pass — instead of a fresh merge per call, and
+        // instead of re-sorting every entry's config each pass (docs: [SpatialDistanceCache]).
+        let observed_id = self.spatial_dist_cache.intern(&observed);
+        let entries = self.spatial_entry_ids();
 
         // 2. Route: the closest entry serves — the normal and every child compete alike. Routing needs
         // only the winner and its distance; the second-best is not computed here (only the delete pass
         // needs `next(O)`, and only for a child's own frames).
         let t = std::time::Instant::now();
-        let (server, served_distance) = Self::spatial_route(&observed, &self.spatial_entries());
+        let (server, served_distance) = self.spatial_route_cached(observed_id, &entries);
         timings.recognize_patterns += t.elapsed().as_secs_f64();
 
         // 3. Serve. A child that serves delegates to the pattern one level up (it bids to contraction,
@@ -1451,14 +1544,14 @@ impl Neuron {
         // at O.
         let t = std::time::Instant::now();
         let serving = match server { SpatialServer::Child(pid) => Some(pid), SpatialServer::Normal => None };
-        let deleted_children = match self.spatial_delete_pass(serving) {
+        let deleted_children = match self.spatial_delete_pass_cached(serving, &entries) {
             Some(pid) => vec![pid],
             None => Vec::new(),
         };
         // Run the add pass only when this frame was served with error above zero: a perfectly-served
         // frame cannot justify a new child, so a settled neuron skips the design's expensive step
         // entirely (docs/algorithm.md, "Risks": run the add pass only when the frame had error).
-        let correction_request = if served_distance > 0 { self.spatial_add_pass(&observed) } else { None };
+        let correction_request = if served_distance > 0 { self.spatial_add_pass_cached(observed_id, &observed) } else { None };
         timings.correct_errors += t.elapsed().as_secs_f64();
 
         SpatialFrameResult { bid, correction_request, deleted_children, timings }
@@ -1565,6 +1658,10 @@ impl Neuron {
     /// Route an observation to the entry that serves it — the closest, ties broken by [spatial_outranks]
     /// — and its distance. One pass over all entries, the normal among them. Routing needs only the
     /// winner; the second-best is computed by the delete pass alone, so it is not returned here.
+    ///
+    /// Kept for the debug server invariant and tests — the hot per-frame path uses
+    /// [spatial_route_cached] over interned ids instead.
+    #[allow(dead_code)]
     fn spatial_route(observed: &[NeuronId], entries: &[(SpatialServer, Vec<NeuronId>)]) -> (SpatialServer, u32) {
         let mut best: Option<(SpatialServer, u32)> = None;
         for (server, config) in entries {
@@ -1578,6 +1675,41 @@ impl Neuron {
         best.expect("spatial_route: a neuron always has a normal entry")
     }
 
+    /// Intern every routing entry's configuration into the distance cache (once per entry lifetime,
+    /// since configs are frozen) and return the `(server, config id)` list the hot passes iterate.
+    /// This replaces the per-frame `spatial_entries` sort-and-allocate: an entry keeps its interned id
+    /// on `config_id` and only re-derives it when its context is mutated (which resets it to
+    /// `DIST_SENTINEL`). Ids index [SpatialDistanceCache::configs], so a config's length (its storage
+    /// cost) is read from there without touching the entry again.
+    fn spatial_entry_ids(&mut self) -> Vec<(SpatialServer, u32)> {
+        let Self { spatial_routing_table, spatial_dist_cache, .. } = self;
+        let mut out = Vec::with_capacity(spatial_routing_table.len());
+        for (&server, entry) in spatial_routing_table.iter_mut() {
+            if entry.config_id == DIST_SENTINEL {
+                let cfg = Self::config_sorted(&entry.context);
+                entry.config_id = spatial_dist_cache.intern(&cfg);
+            }
+            out.push((server, entry.config_id));
+        }
+        out
+    }
+
+    /// Cached counterpart of [spatial_route]: same nearest-wins with the same [spatial_outranks]
+    /// tie-break, but every distance is a lookup keyed on the interned observation and entry ids.
+    fn spatial_route_cached(&mut self, observed_id: u32, entries: &[(SpatialServer, u32)]) -> (SpatialServer, u32) {
+        let cache = &mut self.spatial_dist_cache;
+        let mut best: Option<(SpatialServer, u32)> = None;
+        for &(server, cid) in entries {
+            let d = cache.distance(observed_id, cid);
+            match best {
+                Some((bserver, bd)) if d < bd || (d == bd && Self::spatial_outranks(server, bserver)) => best = Some((server, d)),
+                None => best = Some((server, d)),
+                _ => {}
+            }
+        }
+        best.expect("spatial_route_cached: a neuron always has a normal entry")
+    }
+
     /// Pull the configurations a freshly minted child now serves onto it. Used when a child is minted. A
     /// new entry can only LOWER a configuration's service distance, never raise it, so a configuration
     /// moves to the newborn exactly when the newborn is strictly closer than its cached best. Ties never
@@ -1587,8 +1719,11 @@ impl Neuron {
     /// NOT use this — removing a child can only change the winner of the configurations that child served,
     /// so it reassigns just those (see [remove_spatial_child]).
     fn reassign_after_mint(&mut self, child_id: NeuronId, config: &[NeuronId]) {
-        for (observed, ev) in self.spatial_history.iter_mut() {
-            let d = Self::spatial_distance(observed, config);
+        let Self { spatial_history, spatial_dist_cache, .. } = self;
+        let child_cid = spatial_dist_cache.intern(config);
+        for (observed, ev) in spatial_history.iter_mut() {
+            let oid = spatial_dist_cache.intern(observed);
+            let d = spatial_dist_cache.distance(oid, child_cid);
             if d < ev.best_distance {
                 ev.server = SpatialServer::Child(child_id);
                 ev.best_distance = d;
@@ -1616,6 +1751,11 @@ impl Neuron {
     /// the frames a child served: the normal serves the rest and is never deleted, so those frames
     /// never need a second-best. A child that no longer spares the window enough error to cover its
     /// storage is retired — at most one per frame, the widest failure, because deletions interact.
+    ///
+    /// Reference implementation over freshly-merged distances; the per-frame path is
+    /// [spatial_delete_pass_cached], which reads the same distances from the cache. Kept for the tests
+    /// that assert the settled-state behaviour directly.
+    #[allow(dead_code)]
     fn spatial_delete_pass(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
         // The table always holds the normal; nothing to retire unless there is at least one child.
         if self.spatial_routing_table.len() <= 1 { return None; }
@@ -1659,12 +1799,65 @@ impl Neuron {
         Some(pid)
     }
 
+    /// Cached counterpart of [spatial_delete_pass]: identical benefit/margin computation and identical
+    /// choice of the widest-failing child, but `next(O)` — the per-child, per-config scan over all other
+    /// entries, the pass's `O(D · E)` core — is read from the distance cache keyed on interned ids
+    /// instead of recomputing a merge for each pair every frame. `entries` is the interned `(server,
+    /// config id)` list already built this frame by `spatial_entry_ids`; config lengths (the storage
+    /// cost) come from the cache's stored configs.
+    fn spatial_delete_pass_cached(&mut self, serving: Option<NeuronId>, entries: &[(SpatialServer, u32)]) -> Option<NeuronId> {
+        // The table always holds the normal; nothing to retire unless there is at least one child.
+        if self.spatial_routing_table.len() <= 1 { return None; }
+        #[cfg(debug_assertions)]
+        self.debug_assert_spatial_servers();
+
+        let pid = {
+            let Self { spatial_history, spatial_dist_cache, .. } = self;
+
+            // For each configuration a child served, next(O) is the closest OTHER entry — computed from
+            // cached distances. best is the stored `best_distance`. The gap, times the config's
+            // multiplicity, is the error the child spares the window.
+            let mut benefit: FxHashMap<NeuronId, f64> = FxHashMap::default();
+            for (observed, ev) in spatial_history.iter() {
+                let SpatialServer::Child(cpid) = ev.server else { continue };
+                let oid = spatial_dist_cache.intern(observed);
+                let best = ev.best_distance;
+                let mut next = u32::MAX;
+                for &(server, cid) in entries {
+                    if server == SpatialServer::Child(cpid) { continue; } // its own server; best is stored
+                    next = next.min(spatial_dist_cache.distance(oid, cid));
+                }
+                *benefit.entry(cpid).or_insert(0.0) += (next - best) as f64 * ev.frames.len() as f64;
+            }
+
+            // Retire the child failing its storage by the widest margin, never the one serving this frame.
+            let mut worst: Option<(NeuronId, f64)> = None;
+            for &(server, cid) in entries {
+                let SpatialServer::Child(cpid) = server else { continue };
+                if Some(cpid) == serving { continue; }
+                let cost = 1.0 + spatial_dist_cache.configs[cid as usize].len() as f64;
+                let margin = benefit.get(&cpid).copied().unwrap_or(0.0) - cost;
+                if margin < 0.0 && worst.map_or(true, |(_, m)| margin < m) {
+                    worst = Some((cpid, margin));
+                }
+            }
+            worst.map(|(p, _)| p)
+        }?;
+
+        self.remove_spatial_child(pid);
+        Some(pid)
+    }
+
     /// The one test's add half: the candidate is this frame's observation O. Benefit = Σ over the
     /// whole history of [distance to the frame's server − distance to the candidate], counted only on
     /// the frames the candidate is strictly closer (the frames it would win); cost = 1 + |O|. Mint when
     /// benefit ≥ cost. This is the design's expensive step — but measuring the candidate against every
     /// distinct configuration rather than every remembered frame is exactly what the histogram buys
     /// (docs/algorithm.md, "Risks": the add pass).
+    ///
+    /// Reference implementation over freshly-merged distances; the per-frame path is
+    /// [spatial_add_pass_cached]. Kept for the tests that assert the settled state directly.
+    #[allow(dead_code)]
     fn spatial_add_pass(&mut self, observed: &[NeuronId]) -> Option<SpatialCorrectionRequest> {
         #[cfg(debug_assertions)]
         self.debug_assert_spatial_servers();
@@ -1682,6 +1875,26 @@ impl Neuron {
         Some(SpatialCorrectionRequest { context_neighbors: observed.to_vec() })
     }
 
+    /// Cached counterpart of [spatial_add_pass]: same benefit sum, with the candidate distance to each
+    /// distinct configuration read from the cache keyed on interned ids. `observed_id` is the interned
+    /// current observation O (which is itself a history configuration, so its own row hits at distance 0).
+    fn spatial_add_pass_cached(&mut self, observed_id: u32, observed: &[NeuronId]) -> Option<SpatialCorrectionRequest> {
+        #[cfg(debug_assertions)]
+        self.debug_assert_spatial_servers();
+        let cost = 1.0 + observed.len() as f64;
+        let mut benefit = 0.0;
+        {
+            let Self { spatial_history, spatial_dist_cache, .. } = self;
+            for (obs, ev) in spatial_history.iter() {
+                let oid = spatial_dist_cache.intern(obs);
+                let d_cand = spatial_dist_cache.distance(oid, observed_id);
+                if d_cand < ev.best_distance { benefit += (ev.best_distance - d_cand) as f64 * ev.frames.len() as f64; }
+            }
+        }
+        if benefit < cost { return None; }
+        Some(SpatialCorrectionRequest { context_neighbors: observed.to_vec() })
+    }
+
     /// Remove a retired child from this neuron's local routing structures. The thalamus releases the
     /// pattern neuron and scrubs its cross-neuron references from the id in `deleted_children`.
     fn remove_spatial_child(&mut self, pattern_id: NeuronId) {
@@ -1695,13 +1908,25 @@ impl Neuron {
             }
             // Only the configurations this child served can change hands — removing it cannot change the
             // winner of a configuration it did not win. Reassign just those to their next-best (now their
-            // best), and refresh their cached distance to that new server.
-            let entries = self.spatial_entries();
-            for (observed, ev) in self.spatial_history.iter_mut() {
+            // best), and refresh their cached distance to that new server. The child is already gone from
+            // the table, so `spatial_entry_ids` returns exactly the surviving entries to route against.
+            let entries = self.spatial_entry_ids();
+            let Self { spatial_history, spatial_dist_cache, .. } = self;
+            for (observed, ev) in spatial_history.iter_mut() {
                 if ev.server != SpatialServer::Child(pattern_id) { continue; }
-                let (server, best) = Self::spatial_route(observed, &entries);
+                let oid = spatial_dist_cache.intern(observed);
+                let mut best: Option<(SpatialServer, u32)> = None;
+                for &(server, cid) in &entries {
+                    let d = spatial_dist_cache.distance(oid, cid);
+                    match best {
+                        Some((bserver, bd)) if d < bd || (d == bd && Self::spatial_outranks(server, bserver)) => best = Some((server, d)),
+                        None => best = Some((server, d)),
+                        _ => {}
+                    }
+                }
+                let (server, b) = best.expect("remove_spatial_child: a neuron always has a normal entry");
                 ev.server = server;
-                ev.best_distance = best;
+                ev.best_distance = b;
             }
         }
     }
