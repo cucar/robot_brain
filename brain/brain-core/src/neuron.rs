@@ -52,30 +52,114 @@ pub enum SpatialServer {
     Child(NeuronId),
 }
 
-/// One remembered frame in a neuron's spatial history window: the frame number, the observed
-/// neighborhood `O`, **which entry served it** (`server`), and that server's distance (`best_distance`)
-/// — the record the design keeps, `(frame, O, server)`, plus the served distance cached alongside it
-/// (docs/algorithm.md, "The history"). The frames themselves are the evidence.
+/// A neuron's spatial history window, deduplicated by observed neighborhood (docs/algorithm.md, "The
+/// history"). The design remembers "the frames it was active for, one horizon back" — but every frame
+/// that observed the same neighborhood `O` carries the same observation, is served by the same entry,
+/// and at the same distance, so the one test's sums (the add and delete passes) depend only on HOW MANY
+/// frames each distinct `O` contributed, never on their identities. So the window is stored as a
+/// histogram: one entry per distinct `O`, holding the frames it occurred on (for exact horizon
+/// windowing) rather than a record per frame. Decisions are identical to the per-frame window; what
+/// changes is that the observation and its cached server/distance are stored once per distinct
+/// configuration instead of once per frame, and the add pass scans distinct configurations rather than
+/// every remembered frame — the design's expensive step (docs/algorithm.md, "Risks").
+#[derive(Debug, Clone, Default)]
+struct SpatialHistory {
+    /// observed neighborhood (sorted, deduplicated id list) → its evidence in the window.
+    configs: FxHashMap<Vec<NeuronId>, ConfigEvidence>,
+    /// The configuration recorded on the most recent `record` — the only entry a same-frame
+    /// `drop_last_if_frame` may undo (contraction can retract this frame's record after it was written).
+    last_key: Option<Vec<NeuronId>>,
+}
+
+/// The evidence one distinct neighborhood accumulated over the window: the frames it was observed on,
+/// plus the cached server and served distance every per-frame record used to carry.
 ///
-/// The served distance is cached because entries are frozen at their seed/mint configuration: a record's
-/// distance to its server only changes when the SERVER changes (a mint pulls the record onto the newborn,
-/// a deletion drops it to its next-best), and both of those already rewrite `server` here — so the cache
-/// stays exact with no separate invalidation. This is NOT a second-best cache (the design rejects that,
-/// since a deletion promotes the second-best and no third-best was recorded); it is the FIRST-best, the
-/// one distance both the add and delete passes would otherwise recompute against a frozen config every
-/// frame. `best_distance` is derived, so it is not serialized — a restore recomputes it from the routing
-/// table. Spans the last `horizon` frames.
+/// The served distance is cached because entries are frozen at their seed/mint configuration: a
+/// configuration's distance to its server only changes when the SERVER changes (a mint pulls it onto the
+/// newborn, a deletion drops it to its next-best), and both of those already rewrite `server` here — so
+/// the cache stays exact with no separate invalidation. It is the FIRST-best, not a second-best cache
+/// (the design rejects that, since a deletion promotes the second-best and no third-best was recorded);
+/// the observations themselves are still held, so any next-best is recomputed exactly when deletion asks.
 #[derive(Debug, Clone)]
-struct SpatialHistoryRecord {
-    frame: FrameNumber,
-    /// The observed neighborhood, as a sorted, deduplicated set of neighbor neuron ids.
-    observed: Vec<NeuronId>,
-    /// The entry that served this frame — the winner at record time, kept current by reassigning on a
-    /// mint (records the newborn pulls in) and on a deletion (the retired child's frames).
+struct ConfigEvidence {
+    /// Frames within the window on which this exact configuration was observed. Its length is the
+    /// multiplicity `n[O]`; aging drops the stale front, a retracted frame pops the tail.
+    frames: Vec<FrameNumber>,
+    /// The entry that serves this configuration — kept current by reassigning on a mint (configs the
+    /// newborn pulls in) and on a deletion (the retired child's configs).
     server: SpatialServer,
-    /// Distance from `observed` to `server`'s configuration — the frame's current service cost. Written
-    /// with `server` and read by the add/delete passes so neither recomputes it over the whole window.
+    /// Distance from this configuration to `server`'s stored configuration — its current service cost.
     best_distance: u32,
+}
+
+impl SpatialHistory {
+    /// True when no frame is remembered (every configuration has aged out, or none was ever recorded).
+    #[allow(dead_code)] // read by tests; kept as the window's natural query
+    fn is_empty(&self) -> bool {
+        self.configs.values().all(|e| e.frames.is_empty())
+    }
+
+    /// Total frames across all configurations — the window's size, what a per-frame record list's
+    /// `.len()` reported.
+    #[allow(dead_code)] // read by tests; kept as the window's natural query
+    fn total_frames(&self) -> usize {
+        self.configs.values().map(|e| e.frames.len()).sum()
+    }
+
+    /// The distinct configurations and their evidence — what the add/delete passes and refinement scan.
+    fn iter(&self) -> impl Iterator<Item = (&Vec<NeuronId>, &ConfigEvidence)> {
+        self.configs.iter()
+    }
+    fn iter_mut(&mut self) -> impl Iterator<Item = (&Vec<NeuronId>, &mut ConfigEvidence)> {
+        self.configs.iter_mut()
+    }
+
+    fn clear(&mut self) {
+        self.configs.clear();
+        self.last_key = None;
+    }
+
+    /// Append this frame's record. Identical observations fold into one entry with the frame added to
+    /// its list; the cached server/distance are refreshed — unchanged for a recurring configuration
+    /// (entries are frozen between structural edits), set for a first-seen one.
+    fn record(&mut self, frame: FrameNumber, observed: &[NeuronId], server: SpatialServer, best_distance: u32) {
+        let key = observed.to_vec();
+        let ev = self.configs.entry(key.clone()).or_insert_with(|| ConfigEvidence {
+            frames: Vec::new(), server, best_distance,
+        });
+        ev.frames.push(frame);
+        ev.server = server;
+        ev.best_distance = best_distance;
+        self.last_key = Some(key);
+    }
+
+    /// Drop the record written this frame if it is still the tail — contraction retracts a frame whose
+    /// neuron was subsumed by a neighbour (`drop_inhibited_spatial_frame`). Only the most recent `record`
+    /// can be undone, and only if its frame matches.
+    fn drop_last_if_frame(&mut self, frame: FrameNumber) {
+        let Some(key) = self.last_key.take() else { return };
+        if let Some(ev) = self.configs.get_mut(&key) {
+            if ev.frames.last() == Some(&frame) {
+                ev.frames.pop();
+                if ev.frames.is_empty() { self.configs.remove(&key); }
+            }
+        }
+    }
+
+    /// Drop frames older than the cutoff; a configuration with no frames left leaves the window.
+    fn age(&mut self, cutoff: FrameNumber) {
+        self.configs.retain(|_, ev| {
+            ev.frames.retain(|&f| f >= cutoff);
+            !ev.frames.is_empty()
+        });
+    }
+
+    /// Shift every remembered frame by `-delta` — the restore rebasing (materialize_and_reset_children).
+    fn rebase(&mut self, delta: FrameNumber) {
+        for ev in self.configs.values_mut() {
+            for f in &mut ev.frames { *f -= delta; }
+        }
+    }
 }
 
 /// A contraction bid (docs/algorithm.md, "Contraction: what a firing neuron offers"). A neuron that
@@ -370,7 +454,7 @@ pub struct Neuron {
     /// this directly; nothing else accumulates — no balance, no running error.
     /// Serialized rebased to the save frame so the window survives a restore mid-run (see
     /// `materialize_and_reset_children`); it also refills as the neuron fires afterwards.
-    spatial_history: Vec<SpatialHistoryRecord>,
+    spatial_history: SpatialHistory,
 
     /// The horizon: how many frames of history the one test evaluates over — "how long the world is
     /// assumed to hold still" (docs/algorithm.md, "The cost"). This is its own knob, in frames, set at
@@ -446,7 +530,7 @@ impl Neuron {
             },
             spatial_context_index: FxHashMap::default(),
             spatial_context_refs: FxHashSet::default(),
-            spatial_history: Vec::new(),
+            spatial_history: SpatialHistory::default(),
             // The horizon is its own knob (the spatial evidence window in frames), set directly.
             horizon: horizon.max(1),
             temporal_connections: Vec::new(),
@@ -537,27 +621,34 @@ impl Neuron {
         }
     }
 
-    /// Flatten the history window for the snapshot, oldest first so a restore rebuilds it in order.
+    /// Flatten the history window for the snapshot, one row per remembered frame (the histogram expanded
+    /// back to the `(frame, served_child, observed)` records the on-disk format keeps), oldest first so a
+    /// restore rebuilds it in order.
     fn serialize_spatial_history(&self) -> Vec<SerializedHistoryRecord> {
-        self.spatial_history.iter().map(|r| SerializedHistoryRecord {
-            frame: r.frame,
-            served_child: match r.server { SpatialServer::Child(id) => Some(id), SpatialServer::Normal => None },
-            observed: r.observed.clone(),
-        }).collect()
+        let mut out: Vec<SerializedHistoryRecord> = Vec::new();
+        for (observed, ev) in self.spatial_history.iter() {
+            let served_child = match ev.server { SpatialServer::Child(id) => Some(id), SpatialServer::Normal => None };
+            for &frame in &ev.frames {
+                out.push(SerializedHistoryRecord { frame, served_child, observed: observed.clone() });
+            }
+        }
+        out.sort_by_key(|r| r.frame);
+        out
     }
 
-    /// Rebuild the history window from a snapshot. Records arrive oldest first and are appended as
-    /// they are, so the restored neuron carries exactly the evidence it had when saved. The cached
-    /// `best_distance` is derived, not serialized, so it is recomputed here as the record's distance to
-    /// its stored server — the routing table (normal and children) is already loaded at this point.
+    /// Rebuild the history window from a snapshot. Records are folded back into the per-configuration
+    /// histogram, so the restored neuron carries exactly the evidence it had when saved. The cached
+    /// `best_distance` is derived, not serialized, so it is recomputed here as the configuration's
+    /// distance to its stored server — the routing table (normal and children) is already loaded here.
     pub fn restore_spatial_history(&mut self, records: &[SerializedHistoryRecord]) {
         let cfg_of: FxHashMap<SpatialServer, Vec<NeuronId>> = self.spatial_entries().into_iter().collect();
-        self.spatial_history = records.iter().map(|r| {
+        self.spatial_history.clear();
+        for r in records {
             let server = match r.served_child { Some(id) => SpatialServer::Child(id), None => SpatialServer::Normal };
             let best_distance = cfg_of.get(&server)
                 .map_or(0, |config| Self::spatial_distance(&r.observed, config));
-            SpatialHistoryRecord { frame: r.frame, observed: r.observed.clone(), server, best_distance }
-        }).collect();
+            self.spatial_history.record(r.frame, &r.observed, server, best_distance);
+        }
     }
 
     /// The normal routing-table entry — always present.
@@ -877,14 +968,12 @@ impl Neuron {
             }
         }
 
-        // Rebase the spatial history onto the same fresh clock. Each record's frame becomes an offset
+        // Rebase the spatial history onto the same fresh clock. Each remembered frame becomes an offset
         // relative to the save frame — always ≤ 0 — so when the restored brain resumes at frame 0 and
         // ticks forward, the sliding horizon window expires them on the same schedule they would have
         // followed had the brain never stopped. Absolute frames would instead all sit far in the future
         // of a frame-0 restart and never expire, freezing the window.
-        for rec in &mut self.spatial_history {
-            rec.frame -= current_frame;
-        }
+        self.spatial_history.rebase(current_frame);
 
         entries
     }
@@ -1351,12 +1440,11 @@ impl Neuron {
             return SpatialFrameResult { bid, correction_request: None, deleted_children: Vec::new(), timings };
         }
 
-        // 4. Record this frame `(frame, O, server)` with its served distance. Existing records are
-        // unaffected (the entries did not change), so nothing else moves here. `observed` is kept for the
-        // add pass below (its candidate is exactly this frame's O), so the record takes a clone.
-        self.spatial_history.push(SpatialHistoryRecord {
-            frame: current_frame, observed: observed.clone(), server, best_distance: served_distance,
-        });
+        // 4. Record this frame `(frame, O, server)` with its served distance. Existing configurations are
+        // unaffected (the entries did not change), so nothing else moves here. This frame folds into its
+        // configuration's entry — a fresh occurrence of a known `O`, or a new configuration if unseen.
+        // `observed` is kept for the add pass below (its candidate is exactly this frame's O).
+        self.spatial_history.record(current_frame, &observed, server, served_distance);
 
         // 5 & 6, the one test. Entries are frozen at their seed/mint configuration, so the test reads
         // them exactly as they stand this frame. Delete the single worst-failing child, then test a child
@@ -1386,9 +1474,7 @@ impl Neuron {
     /// Removing a record does not move any entry, so no server reassignment is needed; the delete/add
     /// passes simply see one fewer frame next time.
     pub fn drop_inhibited_spatial_frame(&mut self, current_frame: FrameNumber) {
-        if self.spatial_history.last().map_or(false, |r| r.frame == current_frame) {
-            self.spatial_history.pop();
-        }
+        self.spatial_history.drop_last_if_frame(current_frame);
     }
 
     /// Drop history records older than the horizon (docs/algorithm.md, "The frame, step by step":
@@ -1406,7 +1492,7 @@ impl Neuron {
     /// grows without bound and every configuration eventually looks worth its own child.
     fn age_spatial_history(&mut self, current_frame: FrameNumber) {
         let cutoff = current_frame - self.horizon as FrameNumber;
-        self.spatial_history.retain(|r| r.frame >= cutoff);
+        self.spatial_history.age(cutoff);
     }
 
     /// Hamming distance between an observed neighborhood and a stored configuration: |O △ C| — the
@@ -1492,20 +1578,20 @@ impl Neuron {
         best.expect("spatial_route: a neuron always has a normal entry")
     }
 
-    /// Pull the records a freshly minted child now serves onto it. Used when a child is minted. A new
-    /// entry can only LOWER a record's service distance, never raise it, so a record moves to the newborn
-    /// exactly when the newborn is strictly closer than the record's cached best. Ties never move: the
-    /// newborn holds the largest id, and the tie-break gives the incumbent (the normal, or any older
-    /// child) the win — hence `<`, not `<=`. One merge per record against the newborn's config: O(H),
-    /// where re-routing against every entry would be O(H·E). Deletion does NOT use this — removing a child
-    /// can only change the winner of the frames that child served, so it reassigns just those (see
-    /// [remove_spatial_child]).
+    /// Pull the configurations a freshly minted child now serves onto it. Used when a child is minted. A
+    /// new entry can only LOWER a configuration's service distance, never raise it, so a configuration
+    /// moves to the newborn exactly when the newborn is strictly closer than its cached best. Ties never
+    /// move: the newborn holds the largest id, and the tie-break gives the incumbent (the normal, or any
+    /// older child) the win — hence `<`, not `<=`. One merge per DISTINCT configuration against the
+    /// newborn's config, where re-routing against every entry would be a factor of E slower. Deletion does
+    /// NOT use this — removing a child can only change the winner of the configurations that child served,
+    /// so it reassigns just those (see [remove_spatial_child]).
     fn reassign_after_mint(&mut self, child_id: NeuronId, config: &[NeuronId]) {
-        for rec in &mut self.spatial_history {
-            let d = Self::spatial_distance(&rec.observed, config);
-            if d < rec.best_distance {
-                rec.server = SpatialServer::Child(child_id);
-                rec.best_distance = d;
+        for (observed, ev) in self.spatial_history.iter_mut() {
+            let d = Self::spatial_distance(observed, config);
+            if d < ev.best_distance {
+                ev.server = SpatialServer::Child(child_id);
+                ev.best_distance = d;
             }
         }
     }
@@ -1516,10 +1602,10 @@ impl Neuron {
     #[cfg(debug_assertions)]
     fn debug_assert_spatial_servers(&self) {
         let entries = self.spatial_entries();
-        for rec in &self.spatial_history {
-            let (server, best) = Self::spatial_route(&rec.observed, &entries);
-            debug_assert_eq!(rec.server, server, "record server stale");
-            debug_assert_eq!(rec.best_distance, best, "record best_distance stale");
+        for (observed, ev) in self.spatial_history.iter() {
+            let (server, best) = Self::spatial_route(observed, &entries);
+            debug_assert_eq!(ev.server, server, "config server stale");
+            debug_assert_eq!(ev.best_distance, best, "config best_distance stale");
         }
     }
 
@@ -1537,20 +1623,21 @@ impl Neuron {
         self.debug_assert_spatial_servers();
         let entries = self.spatial_entries();
 
-        // For each frame a child served, its distance to that child (best) is the cached `best_distance`;
-        // only next(O) — the closest OTHER entry, the fallback if the child were gone — is computed here.
-        // The difference is the error the child spares that frame. Frames the normal served are skipped
-        // without touching the entries — they cannot support a deletion.
+        // For each configuration a child served, its distance to that child (best) is the cached
+        // `best_distance`; only next(O) — the closest OTHER entry, the fallback if the child were gone —
+        // is computed here. The difference, times how many frames the configuration contributed, is the
+        // error the child spares the window. Configurations the normal served are skipped without
+        // touching the entries — they cannot support a deletion.
         let mut benefit: FxHashMap<NeuronId, f64> = FxHashMap::default();
-        for rec in &self.spatial_history {
-            let SpatialServer::Child(pid) = rec.server else { continue };
-            let best = rec.best_distance; // cached distance to the child that served this frame
+        for (observed, ev) in self.spatial_history.iter() {
+            let SpatialServer::Child(pid) = ev.server else { continue };
+            let best = ev.best_distance; // cached distance to the child that served this configuration
             let mut next = u32::MAX; // distance to the closest other entry — next(O)
             for (server, config) in &entries {
                 if *server == SpatialServer::Child(pid) { continue; } // its own server; best is cached
-                next = next.min(Self::spatial_distance(&rec.observed, config));
+                next = next.min(Self::spatial_distance(observed, config));
             }
-            *benefit.entry(pid).or_insert(0.0) += (next - best) as f64;
+            *benefit.entry(pid).or_insert(0.0) += (next - best) as f64 * ev.frames.len() as f64;
         }
 
         // Retire the child that fails its storage by the widest margin, never the one serving this
@@ -1575,18 +1662,20 @@ impl Neuron {
     /// The one test's add half: the candidate is this frame's observation O. Benefit = Σ over the
     /// whole history of [distance to the frame's server − distance to the candidate], counted only on
     /// the frames the candidate is strictly closer (the frames it would win); cost = 1 + |O|. Mint when
-    /// benefit ≥ cost. This is the design's expensive step — it measures the candidate against every
-    /// remembered frame (docs/algorithm.md, "Risks": the add pass).
+    /// benefit ≥ cost. This is the design's expensive step — but measuring the candidate against every
+    /// distinct configuration rather than every remembered frame is exactly what the histogram buys
+    /// (docs/algorithm.md, "Risks": the add pass).
     fn spatial_add_pass(&mut self, observed: &[NeuronId]) -> Option<SpatialCorrectionRequest> {
         #[cfg(debug_assertions)]
         self.debug_assert_spatial_servers();
-        // Each frame's current best distance is the cached `best_distance` — no entry lookup, no recompute.
-        // Only the candidate distance is measured, one linear merge per record over sorted slices.
+        // Each configuration's current best distance is the cached `best_distance` — no entry lookup, no
+        // recompute. Only the candidate distance is measured, one linear merge per distinct configuration
+        // over sorted slices, weighted by how many frames that configuration contributed.
         let cost = 1.0 + observed.len() as f64;
         let mut benefit = 0.0;
-        for rec in &self.spatial_history {
-            let d_cand = Self::spatial_distance(&rec.observed, observed);
-            if d_cand < rec.best_distance { benefit += (rec.best_distance - d_cand) as f64; }
+        for (obs, ev) in self.spatial_history.iter() {
+            let d_cand = Self::spatial_distance(obs, observed);
+            if d_cand < ev.best_distance { benefit += (ev.best_distance - d_cand) as f64 * ev.frames.len() as f64; }
         }
         if benefit < cost { return None; }
         // The candidate is already the sorted observation O — the minted child takes it verbatim.
@@ -1604,15 +1693,15 @@ impl Neuron {
                     if set.is_empty() { self.spatial_context_index.remove(&ctx_id); }
                 }
             }
-            // Only the frames this child served can change hands — removing it cannot change the winner
-            // of a frame it did not win. Reassign just those to their next-best (now their best), and
-            // refresh their cached distance to that new server.
+            // Only the configurations this child served can change hands — removing it cannot change the
+            // winner of a configuration it did not win. Reassign just those to their next-best (now their
+            // best), and refresh their cached distance to that new server.
             let entries = self.spatial_entries();
-            for rec in &mut self.spatial_history {
-                if rec.server != SpatialServer::Child(pattern_id) { continue; }
-                let (server, best) = Self::spatial_route(&rec.observed, &entries);
-                rec.server = server;
-                rec.best_distance = best;
+            for (observed, ev) in self.spatial_history.iter_mut() {
+                if ev.server != SpatialServer::Child(pattern_id) { continue; }
+                let (server, best) = Self::spatial_route(observed, &entries);
+                ev.server = server;
+                ev.best_distance = best;
             }
         }
     }
@@ -2309,22 +2398,22 @@ mod tests {
         // the comparison isolates "children storage + reduced service" vs "service paid every frame".
         let final_entries = n.spatial_entries();
         let mut l_settled: u32 = final_entries.iter().map(|(_, c)| 1 + c.len() as u32).sum();
-        for rec in &n.spatial_history {
-            l_settled += Neuron::spatial_route(&rec.observed, &final_entries).1;
+        for (obs, ev) in n.spatial_history.iter() {
+            l_settled += Neuron::spatial_route(obs, &final_entries).1 * ev.frames.len() as u32;
         }
         // Normal-only baseline: a single normal = the median over ALL remembered frames, no children.
         let mut counts: FxHashMap<NeuronId, u64> = FxHashMap::default();
-        for rec in &n.spatial_history { for &id in &rec.observed { *counts.entry(id).or_insert(0) += 1; } }
-        let total = n.spatial_history.len() as u64;
+        for (obs, ev) in n.spatial_history.iter() { for &id in obs { *counts.entry(id).or_insert(0) += ev.frames.len() as u64; } }
+        let total = n.spatial_history.total_frames() as u64;
         let mut baseline_normal: Vec<NeuronId> = counts.into_iter().filter(|(_, c)| c * 2 > total).map(|(id, _)| id).collect();
         baseline_normal.sort_unstable();
         let mut l_normal_only: u32 = 1 + baseline_normal.len() as u32;
-        for rec in &n.spatial_history {
-            l_normal_only += Neuron::spatial_distance(&rec.observed, &baseline_normal);
+        for (obs, ev) in n.spatial_history.iter() {
+            l_normal_only += Neuron::spatial_distance(obs, &baseline_normal) * ev.frames.len() as u32;
         }
         eprintln!(
-            "[phase1-compress] settled L={} vs normal-only L={} ({} children; window={} frames; mints total={})",
-            l_settled, l_normal_only, children.len(), n.spatial_history.len(), mints
+            "[phase1-compress] settled L={} vs normal-only L={} ({} children; window={} frames, {} distinct configs; mints total={})",
+            l_settled, l_normal_only, children.len(), n.spatial_history.total_frames(), n.spatial_history.iter().count(), mints
         );
         assert!(l_settled < l_normal_only,
             "Phase 1 must compress: settled L={} should be below normal-only L={}", l_settled, l_normal_only);
