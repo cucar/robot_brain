@@ -23,7 +23,7 @@ use crate::context::{SpatialContext, TemporalContext};
 use crate::diagnostics::{InferenceResultItem, InferenceType};
 use crate::neuron::{
     ActiveNeuron, AgeState, ContextRefEntry, TemporalContextRefUpdate, SpatialContextRefUpdate,
-    Correction, ErrorFeedback, TemporalNeuron, TemporalLearningWork,
+    Correction, ErrorFeedback, SpatialServer, TemporalNeuron, TemporalLearningWork,
     SerializedNeuron, Vote,
 };
 use crate::quantizer::{QuantizeMode, Quantizer};
@@ -142,15 +142,10 @@ pub struct SpatialLevelResult {
     /// The level above measures distance between anchors on the declared base graph to derive adjacency.
     pub unit_anchors: FxHashMap<NeuronId, NeuronId>,
     pub results: Vec<crate::column::SpatialColumnResult>,
+    /// Pattern neurons released this frame (children the one test retired, applied at commit/inline and
+    /// cross-neuron cleaned here). The brain purges these from its active-set memory.
+    pub deleted: Vec<NeuronId>,
     pub orchestration: OrchestrationTimings,
-}
-
-/// Outcome of the contraction election over one level's bids (docs/algorithm.md, "Contraction").
-struct SpatialElection {
-    /// The surviving bids, one promoted unit each — the active set for the level above.
-    activations: Vec<Activation>,
-    /// Every active neuron a surviving bid covers — subsumed at this level.
-    subsumed: FxHashSet<NeuronId>,
 }
 
 /**
@@ -1051,6 +1046,7 @@ impl Thalamus {
         level_neuron_ids: &FxHashSet<NeuronId>,
         anchors: &FxHashMap<NeuronId, NeuronId>,
         frame_number: FrameNumber,
+        learning: bool,
         new_error_pattern_ids: &mut FxHashSet<NeuronId>,
     ) -> SpatialLevelResult {
 
@@ -1071,30 +1067,132 @@ impl Thalamus {
         let results = self.dispatch_spatial_frame(level, &work_list, &level_context, anchors, new_error_pattern_ids, level_neuron_ids, frame_number);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
 
-        // Contraction: run the election over this frame's bids to decide which fired children actually
-        // propagate as units above, and which active neurons they cover (docs/algorithm.md, "Contraction").
-        // This replaces "every fired child propagates" — the reduction is what the hierarchy climb is for.
+        // Contraction: ONE election over every child-activation request this frame. Recognition bids
+        // (re-fire an existing child) and new-child bids (an error correction — create a child at `O`
+        // covering `O ∪ {parent}`) compete together (docs/algorithm.md, "Contraction"). A request earns a
+        // unit only by covering ≥ 2, so it is the single gate over all child activation, recognized or
+        // new. Winners activate THIS frame — a recognized child fires; a new-child winner is created and
+        // fires now (serve = activation). Losers do nothing, so nothing of theirs is ever committed.
         let t = std::time::Instant::now();
-        let bids: Vec<crate::neuron::SpatialBid> = results.iter().filter_map(|r| r.bid.clone()).collect();
-        let election = Self::elect_spatial_bids(&bids);
+        let combined: Vec<crate::neuron::SpatialBid> = results.iter().filter_map(|r| r.bid.clone()).collect();
+        let elected = Self::elect_spatial_bids(&combined);
+        let by_parent: FxHashMap<NeuronId, &crate::column::SpatialColumnResult> =
+            results.iter().map(|r| (r.parent_id, r)).collect();
 
-        // Each promoted unit anchors where its bidder anchored — one base cell, never a growing region.
-        // Coverage still grows by composition (a unit represents everything its bid covered); only the
-        // adjacency key stays a point, which is what keeps the neighbour graph local and sparse.
-        let mut unit_anchors: FxHashMap<NeuronId, NeuronId> = FxHashMap::default();
-        for a in &election.activations {
-            if let Some(&anchor) = anchors.get(&a.parent_id) { unit_anchors.insert(a.pattern_id, anchor); }
+        // Split winners into recognition (an existing child) and new-child (to be created now).
+        let mut recognized: Vec<Activation> = Vec::new();
+        let mut new_child_parents: Vec<NeuronId> = Vec::new();
+        for a in &elected {
+            if a.pattern_id == crate::neuron::NEW_CHILD_BID { new_child_parents.push(a.parent_id); }
+            else { recognized.push(a.clone()); }
         }
+        let recog_keys: FxHashSet<(NeuronId, NeuronId)> =
+            recognized.iter().map(|a| (a.parent_id, a.pattern_id)).collect();
         orchestration.collect_activations = t.elapsed().as_secs_f64();
 
-        if self.debug && !election.activations.is_empty() {
-            let detail: Vec<String> = election.activations.iter()
-                .map(|a| format!("parent={}, pattern={}", a.parent_id, a.pattern_id))
-                .collect();
-            println!("Spatial level {}: {} bids -> {} promoted {}", level, bids.len(), election.activations.len(), detail.join("; "));
+        // Create each new-child winner NOW: allocate a pattern neuron (no connections — it learns them at
+        // its own level), create the object so the level above can dispatch to it, and install it on its
+        // parent with context = O. It fires this frame via `activations` below.
+        let mut activations: Vec<Activation> = recognized.clone();
+        let mut new_specs: Vec<NeuronCreateSpec> = Vec::new();
+        let mut install_ops: Vec<SpatialInstallOp> = Vec::new();
+        let mut new_child_of: FxHashMap<NeuronId, NeuronId> = FxHashMap::default();
+        let empty = FxHashSet::default();
+        for &parent in &new_child_parents {
+            let parent_level = self.get_neuron_spatial_level(parent);
+            let obs = by_parent.get(&parent).map(|r| r.observed.clone()).unwrap_or_default();
+            let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent, &empty);
+            new_child_of.insert(parent, spec.id);
+            // The new child is an L+1 pattern: activate it at level+1 so it fires in the next level of
+            // THIS frame's sweep (not a future image). But it is BORN this frame — it has no history at
+            // its own level yet, so it must be excluded from the level+1 work list this frame (it fires
+            // and propagates, but does not itself route/mint/record until next frame). Without this it is
+            // processed as a settled unit at birth and drives a within-frame minting cascade up the sweep.
+            new_error_pattern_ids.insert(spec.id);
+            activations.push(Activation { parent_id: parent, pattern_id: spec.id, age: 0 });
+            install_ops.push(SpatialInstallOp { parent_id: parent, pattern_id: spec.id, context_neuron_ids: obs });
+            new_specs.push(NeuronCreateSpec { id: spec.id, forget_rate: spec.forget_rate, connections: Some(spec.connections) });
+        }
+        if !new_specs.is_empty() { self.create_neurons(&new_specs); }
+        if !install_ops.is_empty() { self.install_spatial_corrections(install_ops, frame_number); }
+        self.spatial_corrections_minted += new_child_of.len() as u64;
+
+        // Subsumed = neurons covered by a RECOGNITION winner. A new child fires this frame (so `learn`
+        // wires it and the level above can latch onto it), but does NOT subsume its coverage on its birth
+        // frame: subsumption means "these neurons are represented above," which only an established unit
+        // has earned — a brand-new, still-unwired child removing its covered base neurons from the apex
+        // would strip the readout of its trained voters before it can replace them. From the next frame on
+        // the child is recognized like any other and subsumes normally.
+        let mut subsumed: FxHashSet<NeuronId> = FxHashSet::default();
+        for b in &combined {
+            if b.pattern_id != crate::neuron::NEW_CHILD_BID && recog_keys.contains(&(b.bidder_id, b.pattern_id)) {
+                for &n in &b.covered { subsumed.insert(n); }
+            }
         }
 
-        SpatialLevelResult { activations: election.activations, subsumed: election.subsumed, unit_anchors, results, orchestration }
+        // Commit the winners' frames (record + delete); pure normal-serves already finalized inline. Any
+        // retired child (from a commit or an inline normal-serve) is released cross-neuron via delete_patterns.
+        let mut commit_ops: Vec<crate::column::SpatialCommitOp> = Vec::new();
+        let mut deleted: Vec<NeuronId> = Vec::new();
+        for a in &recognized {
+            if let Some(r) = by_parent.get(&a.parent_id) {
+                if let Some(pid) = r.delete_candidate { if pid != a.pattern_id { deleted.push(pid); } }
+                commit_ops.push(crate::column::SpatialCommitOp {
+                    parent_id: a.parent_id, observed: r.observed.clone(),
+                    server: SpatialServer::Child(a.pattern_id), served_distance: r.served_distance,
+                    delete_candidate: r.delete_candidate,
+                });
+            }
+        }
+        for (&parent, &new_id) in &new_child_of {
+            if let Some(r) = by_parent.get(&parent) {
+                if let Some(pid) = r.delete_candidate { deleted.push(pid); }
+                commit_ops.push(crate::column::SpatialCommitOp {
+                    parent_id: parent, observed: r.observed.clone(),
+                    server: SpatialServer::Child(new_id), served_distance: 0,
+                    delete_candidate: r.delete_candidate,
+                });
+            }
+        }
+        for r in &results {
+            if r.bid.is_none() { if let Some(pid) = r.delete_candidate { deleted.push(pid); } }
+        }
+
+        let debug_line = if self.debug {
+            Some(format!("Spatial level {}: {} bids -> {} recognized, {} new children",
+                level, combined.len(), recognized.len(), new_child_of.len()))
+        } else { None };
+
+        // Anchors for the level above (recognition winners + new children).
+        let mut unit_anchors: FxHashMap<NeuronId, NeuronId> = FxHashMap::default();
+        for a in &activations {
+            if let Some(&anchor) = anchors.get(&a.parent_id) { unit_anchors.insert(a.pattern_id, anchor); }
+        }
+
+        // A frozen (eval) pass classifies via the climb but writes no history and retires nothing.
+        let released = if learning {
+            if !commit_ops.is_empty() { self.commit_spatial_frames(commit_ops, frame_number); }
+            if deleted.is_empty() { Vec::new() } else { self.delete_patterns(&deleted, frame_number) }
+        } else {
+            Vec::new()
+        };
+        self.spatial_corrections_deleted += released.len() as u64;
+
+        if let Some(line) = debug_line { println!("{}", line); }
+
+        SpatialLevelResult { activations, subsumed, unit_anchors, results, deleted: released, orchestration }
+    }
+
+    /// Commit the winning child-activation requests, routed to their owning regions by parent id.
+    fn commit_spatial_frames(&mut self, ops: Vec<crate::column::SpatialCommitOp>, frame_number: FrameNumber) {
+        let mut by_region: Vec<Vec<crate::column::SpatialCommitOp>> = (0..self.regions).map(|_| Vec::new()).collect();
+        for op in ops {
+            let r = self.route_neuron(op.parent_id);
+            by_region[r].push(op);
+        }
+        for (r, region_ops) in by_region.into_iter().enumerate() {
+            if !region_ops.is_empty() { self.region_list[r].commit_spatial_frames(region_ops, frame_number); }
+        }
     }
 
     /// Temporal sweep dispatch for one level. Builds the temporal level_context (mints temporal
@@ -1182,117 +1280,6 @@ impl Thalamus {
 
     // ── Spatial error pass (1c) ─────────────────────────────────────────────
 
-    /// Settle this frame's spatial mints. A request means the neuron's add pass ran the one test over
-    /// its history and found a child at O pays for its storage. The add pass owns pricing entirely, so
-    /// this pass owns only what a neuron cannot decide locally: id allocation and cross-neuron wiring.
-    ///
-    /// The CONTEXT of a new correction is the observation O that justified it, drawn from the parent's
-    /// OWN level — for an Lk parent, the L(k+1) correction's context_entries are level-k co-actives.
-    /// This is what lets the hierarchy grow: an L1 prediction failure mints an L2 whose context is L1
-    /// neighbors, so L2 will fire next frame when L1 patterns recur in a similar L1-neighborhood.
-    pub fn create_spatial_corrections(
-        &mut self,
-        dispatch_results: &[Vec<crate::column::SpatialColumnResult>],
-        inhibited_neurons: &FxHashSet<NeuronId>,
-        fired_neurons: &FxHashSet<NeuronId>,
-    ) -> (Vec<NeuronCreateSpec>, Vec<SpatialInstallOp>) {
-
-        // Corrections minted this frame are returned as creation specs plus install ops for their parents.
-        let mut new_specs = Vec::new();
-        let mut install_ops = Vec::new();
-
-        // The frame's co-activation, split by level: a newborn's event connections are seeded from
-        // the level it is created INTO, so each mint reads the bucket one above its parent's level.
-        let actives_by_level = self.bucket_fired_by_spatial_level(fired_neurons);
-
-        // process the add-pass requests of the spatial dispatch and create the corrections.
-        //
-        // Inhibition: a neuron covered by a neighbour's winning bid is already represented correctly one
-        // level up (a bid only covers neurons it names right), so it does not need its own child, and the
-        // frame that justified this request is being dropped from its history for the same reason. Only a
-        // correction — an uncovered neuron — mints. Winners are NOT inhibited (they propagated), so the
-        // set here excludes them. This keeps the dictionary near the coverage optimum instead of one
-        // child per (neuron, recurring config).
-        for column_result in dispatch_results.iter().flatten() {
-            let Some(request) = &column_result.correction_request else { continue };
-
-            if inhibited_neurons.contains(&column_result.parent_id) { continue; }
-
-            // Create one correction pattern for the add pass's request.
-            let parent_id = column_result.parent_id;
-            let parent_level = self.get_neuron_spatial_level(parent_id);
-
-            // Phase 2 lifts the level-0 mint cap: a neuron at any level whose add pass paid mints a
-            // child one level up, so the hierarchy climbs past depth 2 (docs/algorithm.md, "Contraction:
-            // Receptive fields grow by composition"). Contraction keeps the per-level active sets small
-            // enough that higher levels mint from a settled, not exploding, neighbourhood.
-            let empty = FxHashSet::default();
-            let level_actives = actives_by_level.get(&(parent_level + 1)).unwrap_or(&empty);
-            self.create_spatial_correction(parent_id, parent_level, level_actives, &request.context_neighbors, &mut new_specs, &mut install_ops);
-        }
-
-        (new_specs, install_ops)
-    }
-
-    /// Retire the children the one test's delete pass flagged this frame. Each neuron already removed
-    /// the child from its own routing table and index; here the thalamus releases the pattern neuron
-    /// and scrubs its cross-neuron references through the delete cascade. Safe to run before the apex
-    /// handoff: a retired child did not serve this frame (only one entry serves per neuron per frame),
-    /// so it is not in this frame's fired/apex set. Returns the ids actually released.
-    pub fn delete_spatial_children(
-        &mut self,
-        dispatch_results: &[Vec<crate::column::SpatialColumnResult>],
-        current_frame: FrameNumber,
-    ) -> Vec<NeuronId> {
-        let mut to_delete: Vec<NeuronId> = Vec::new();
-        for column_result in dispatch_results.iter().flatten() {
-            to_delete.extend(column_result.deleted_children.iter().copied());
-        }
-        if to_delete.is_empty() { return Vec::new(); }
-        let deleted = self.delete_patterns(&to_delete, current_frame);
-        self.spatial_corrections_deleted += deleted.len() as u64;
-        deleted
-    }
-
-    /// Bucket this frame's fired neurons by spatial level — the per-level co-activation a newborn
-    /// seeds its event connections from.
-    fn bucket_fired_by_spatial_level(&self, fired_neurons: &FxHashSet<NeuronId>) -> FxHashMap<Level, FxHashSet<NeuronId>> {
-        let mut by_level: FxHashMap<Level, FxHashSet<NeuronId>> = FxHashMap::default();
-        for &neuron_id in fired_neurons {
-            by_level.entry(self.get_neuron_spatial_level(neuron_id)).or_default().insert(neuron_id);
-        }
-        by_level
-    }
-
-    /// Create one correction pattern for an add-pass request. `level_actives` is the
-    /// co-activation at the newborn's own level — the events it is minted to predict.
-    fn create_spatial_correction(
-        &mut self,
-        parent_id: NeuronId,
-        parent_level: Level,
-        level_actives: &FxHashSet<NeuronId>,
-        context_neighbors: &[NeuronId],
-        new_specs: &mut Vec<NeuronCreateSpec>,
-        install_ops: &mut Vec<SpatialInstallOp>,
-    ) -> NeuronId {
-
-        // The correction lives one level deeper than the neuron it corrects.
-        let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent_id, level_actives);
-        new_specs.push(NeuronCreateSpec {
-            id: spec.id,
-            forget_rate: spec.forget_rate,
-            connections: Some(spec.connections),
-        });
-
-        // Installation wires the observation O in as the correction's context on its parent.
-        install_ops.push(SpatialInstallOp {
-            parent_id,
-            pattern_id: spec.id,
-            context_neuron_ids: context_neighbors.to_vec(),
-        });
-        self.spatial_corrections_minted += 1;
-        spec.id
-    }
 
     /// Install minted spatial corrections into their parents' routing tables. Each install adds
     /// the child pattern as an entry on the parent neuron and emits ContextRefUpdates so the
@@ -1927,7 +1914,7 @@ impl Thalamus {
     /// whose elected bid is dropped re-votes, preferring a bid that already survived — its cover is
     /// bought — over reviving another. The rounds repeat until no vote changes; the instance is small
     /// and settles in a handful of rounds, so it runs sequentially here.
-    fn elect_spatial_bids(bids: &[crate::neuron::SpatialBid]) -> SpatialElection {
+    fn elect_spatial_bids(bids: &[crate::neuron::SpatialBid]) -> Vec<Activation> {
         // neuron -> indices of the bids that name it. Voters are iterated in id order and the pool in
         // bid order, so the outcome is independent of dispatch order.
         let mut covering: FxHashMap<NeuronId, Vec<usize>> = FxHashMap::default();
@@ -1963,18 +1950,15 @@ impl Thalamus {
             if !changed { break; }
         }
 
-        // Promote each surviving bid to one unit above and mark every neuron it covers subsumed.
+        // Promote each surviving bid to one unit above. The neurons a winner covers are derived by the
+        // caller (`process_spatial_level`), which applies the birth-exclusion rule the election does not
+        // know about, so the election returns only the promotion decision.
         let survivors = Self::spatial_survivors(&elected);
         let mut survivor_indices: Vec<usize> = survivors.iter().copied().collect();
         survivor_indices.sort_by_key(|&i| bids[i].pattern_id);
-        let mut activations = Vec::new();
-        let mut subsumed: FxHashSet<NeuronId> = FxHashSet::default();
-        for i in survivor_indices {
-            let bid = &bids[i];
-            activations.push(Activation { parent_id: bid.bidder_id, pattern_id: bid.pattern_id, age: 0 });
-            for &n in &bid.covered { subsumed.insert(n); }
-        }
-        SpatialElection { activations, subsumed }
+        survivor_indices.into_iter()
+            .map(|i| Activation { parent_id: bids[i].bidder_id, pattern_id: bids[i].pattern_id, age: 0 })
+            .collect()
     }
 
     /// The bids at least two voters currently elect — the survivors of this election round.
@@ -2652,25 +2636,31 @@ mod tests {
     }
 
     /// The promoted pattern ids of an election, sorted.
-    fn promoted(e: &SpatialElection) -> Vec<NeuronId> {
-        let mut v: Vec<NeuronId> = e.activations.iter().map(|a| a.pattern_id).collect();
+    fn promoted(elected: &[Activation]) -> Vec<NeuronId> {
+        let mut v: Vec<NeuronId> = elected.iter().map(|a| a.pattern_id).collect();
         v.sort_unstable();
         v
     }
 
-    /// The subsumed set of an election, sorted.
-    fn covered_sorted(e: &SpatialElection) -> Vec<NeuronId> {
-        let mut v: Vec<NeuronId> = e.subsumed.iter().copied().collect();
+    /// The neurons the promoted bids cover, sorted and deduplicated — derived from the winners rather
+    /// than stored, since the winning bids fully determine the coverage.
+    fn covered_sorted(elected: &[Activation], bids: &[crate::neuron::SpatialBid]) -> Vec<NeuronId> {
+        let mut v: Vec<NeuronId> = elected.iter()
+            .filter_map(|a| bids.iter().find(|b| b.bidder_id == a.parent_id && b.pattern_id == a.pattern_id))
+            .flat_map(|b| b.covered.iter().copied())
+            .collect();
         v.sort_unstable();
+        v.dedup();
         v
     }
 
     /// A bid winning two or more neurons is promoted and subsumes them.
     #[test]
     fn test_election_promotes_a_bid_that_covers_two() {
-        let e = Thalamus::elect_spatial_bids(&[bid(10, 100, &[10, 11])]);
+        let bids = [bid(10, 100, &[10, 11])];
+        let e = Thalamus::elect_spatial_bids(&bids);
         assert_eq!(promoted(&e), vec![100]);
-        assert_eq!(covered_sorted(&e), vec![10, 11]);
+        assert_eq!(covered_sorted(&e, &bids), vec![10, 11]);
     }
 
     /// A bid covering only one neuron saves nothing and is dropped — the neuron is a correction.
@@ -2678,39 +2668,41 @@ mod tests {
     fn test_election_drops_a_bid_that_covers_only_one() {
         let e = Thalamus::elect_spatial_bids(&[bid(10, 100, &[10])]);
         assert!(promoted(&e).is_empty());
-        assert!(e.subsumed.is_empty());
     }
 
     /// The wider cover wins a contested neuron; the loser, left with a single neuron, is dropped, so
     /// its uncovered neuron becomes a correction.
     #[test]
     fn test_election_wider_cover_wins_and_starves_the_loser() {
-        let e = Thalamus::elect_spatial_bids(&[bid(1, 100, &[1, 2, 3]), bid(4, 101, &[3, 4])]);
+        let bids = [bid(1, 100, &[1, 2, 3]), bid(4, 101, &[3, 4])];
+        let e = Thalamus::elect_spatial_bids(&bids);
         assert_eq!(promoted(&e), vec![100], "only the width-3 bid is promoted");
-        assert_eq!(covered_sorted(&e), vec![1, 2, 3], "neuron 4 is left a correction");
+        assert_eq!(covered_sorted(&e, &bids), vec![1, 2, 3], "neuron 4 is left a correction");
     }
 
     /// Equal covers tie to the oldest (smallest) promoted pattern id — the consolidation pressure.
     #[test]
     fn test_election_ties_break_to_the_oldest_id() {
-        let e = Thalamus::elect_spatial_bids(&[bid(1, 200, &[1, 2]), bid(2, 100, &[1, 2])]);
+        let bids = [bid(1, 200, &[1, 2]), bid(2, 100, &[1, 2])];
+        let e = Thalamus::elect_spatial_bids(&bids);
         assert_eq!(promoted(&e), vec![100], "the older (smaller-id) pattern wins the tie");
-        assert_eq!(covered_sorted(&e), vec![1, 2]);
+        assert_eq!(covered_sorted(&e, &bids), vec![1, 2]);
     }
 
     /// Two disjoint covers are both accepted — adjacency does not force a single winner.
     #[test]
     fn test_election_accepts_two_disjoint_covers() {
-        let e = Thalamus::elect_spatial_bids(&[bid(1, 100, &[1, 2]), bid(3, 101, &[3, 4])]);
+        let bids = [bid(1, 100, &[1, 2]), bid(3, 101, &[3, 4])];
+        let e = Thalamus::elect_spatial_bids(&bids);
         assert_eq!(promoted(&e), vec![100, 101]);
-        assert_eq!(covered_sorted(&e), vec![1, 2, 3, 4]);
+        assert_eq!(covered_sorted(&e, &bids), vec![1, 2, 3, 4]);
     }
 
     /// No bids (every neuron served from its normal) → nothing promoted, nothing subsumed.
     #[test]
     fn test_election_empty_when_no_bids() {
         let e = Thalamus::elect_spatial_bids(&[]);
-        assert!(promoted(&e).is_empty() && e.subsumed.is_empty());
+        assert!(promoted(&e).is_empty());
     }
 
     /// A thalamus whose base graph is a line of `n` channels (ids 1..=n), each adjacent to the channels

@@ -34,14 +34,29 @@ pub struct ColumnProcessResult {
 /// it evaluates its own prediction and surfaces only the resulting correction request.
 pub struct SpatialColumnResult {
     pub parent_id: NeuronId,
-    /// The contraction bid this neuron offered this frame, or None when it served from its normal.
-    /// A child that served produces a bid; the normal produces none — this is the only climb signal.
+    /// This neuron's single child-activation request for the election, or None for a pure normal-serve
+    /// (finalized inline). Real `pattern_id` = recognize; `NEW_CHILD_BID` = request a new child.
     pub bid: Option<crate::neuron::SpatialBid>,
-    pub correction_request: Option<crate::neuron::SpatialCorrectionRequest>,
-    /// Children this neuron's delete pass retired this frame — the thalamus releases the pattern
-    /// neurons and scrubs their cross-neuron references.
-    pub deleted_children: Vec<NeuronId>,
+    /// The observation `O`, for the commit's record and new-child config. Empty when there is no request.
+    pub observed: Vec<NeuronId>,
+    /// Distance `O`→selected entry, for the commit's record.
+    pub served_distance: u32,
+    /// Delete decision — applied by the commit if a request wins, or (bid None) already applied inline by
+    /// a normal-serve and reported here only so the thalamus runs the cross-neuron cleanup.
+    pub delete_candidate: Option<NeuronId>,
     pub timings: crate::neuron::NeuronOpTimings,
+}
+
+/// A committed child-activation: after the election, the thalamus tells each winning neuron to finalize
+/// its frame (record + delete) via [crate::neuron::Neuron::commit_spatial_frame]. `server` is the entry
+/// that ended up serving — the recognized child, or the newly minted one.
+#[derive(Debug, Clone)]
+pub struct SpatialCommitOp {
+    pub parent_id: NeuronId,
+    pub observed: Vec<NeuronId>,
+    pub server: crate::neuron::SpatialServer,
+    pub served_distance: u32,
+    pub delete_candidate: Option<NeuronId>,
 }
 
 /// Result of a delete cascade pulse inside a column.
@@ -165,12 +180,24 @@ impl Column {
             results.push(SpatialColumnResult {
                 parent_id: *neuron_id,
                 bid: result.bid,
-                correction_request: result.correction_request,
-                deleted_children: result.deleted_children,
+                observed: result.observed,
+                served_distance: result.served_distance,
+                delete_candidate: result.delete_candidate,
                 timings: result.timings,
             });
         }
         results
+    }
+
+    /// Commit the child-activation requests that won this level's election: each winning neuron records
+    /// its frame and applies its delete (see [crate::neuron::Neuron::commit_spatial_frame]). Losers are
+    /// not in `ops`, so they finalize nothing — nothing to roll back.
+    pub fn commit_spatial_frames(&mut self, ops: &[SpatialCommitOp], frame_number: FrameNumber) {
+        for op in ops {
+            if let Some(neuron) = self.neurons.get_mut(&op.parent_id) {
+                neuron.commit_spatial_frame(&op.observed, op.server, op.served_distance, op.delete_candidate, frame_number);
+            }
+        }
     }
 
     /// Op-3 down-trip body for the TEMPORAL sweep. Calls neuron.process_temporal_frame on every

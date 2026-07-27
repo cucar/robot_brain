@@ -24,21 +24,6 @@ use crate::types::*;
 /// fallback. Not a tunable knob — kept here to avoid a magic number in the error-threshold getters.
 const ERROR_MIN_SAMPLES: u64 = 3;
 
-/// A spatial correction request: the add pass found that a child at this frame's observation `O`
-/// removes more error from the history than it costs to store, so the neuron asks the thalamus to
-/// create the pattern it represents (docs/algorithm.md, "The one test").
-/// The thalamus owns what the neuron cannot decide locally: the subsumption filter, id
-/// allocation, and cross-neuron wiring. The add pass already ran the one test over the history.
-/// The request carries no target events: a new child is created with no connections, and learns
-/// its own level's connections by co-occurrence as that level populates — its birth knowledge is
-/// the seeded context configuration, not a connection set (docs/algorithm.md, "Creating a child").
-#[derive(Debug, Clone)]
-pub struct SpatialCorrectionRequest {
-    /// The observed neighborhood `O` the new child will condition on — the configuration that
-    /// justified it. Refinement relocates it onto the median of the frames it serves from there.
-    pub context_neighbors: Vec<NeuronId>,
-}
-
 /// Who serves a frame in the level-0 configuration loop (UCAR, docs/algorithm.md): the neuron's
 /// normal, or one of its children. Also the KEY of the spatial routing table: a routing-table entry
 /// is the normal or a child (docs/algorithm.md, "The normal"), so `SpatialServer` names both the
@@ -94,14 +79,14 @@ struct ConfigEvidence {
 
 impl SpatialHistory {
     /// True when no frame is remembered (every configuration has aged out, or none was ever recorded).
-    #[allow(dead_code)] // read by tests; kept as the window's natural query
+    #[cfg(test)]
     fn is_empty(&self) -> bool {
         self.configs.values().all(|e| e.frames.is_empty())
     }
 
     /// Total frames across all configurations — the window's size, what a per-frame record list's
     /// `.len()` reported.
-    #[allow(dead_code)] // read by tests; kept as the window's natural query
+    #[cfg(test)]
     fn total_frames(&self) -> usize {
         self.configs.values().map(|e| e.frames.len()).sum()
     }
@@ -244,18 +229,30 @@ pub struct SpatialBid {
     pub covered: Vec<NeuronId>,
 }
 
+/// Sentinel `pattern_id` on a [SpatialBid] that marks it as a request to create a **new** child (an
+/// error correction) rather than to re-fire an existing one. An error correction is a child-activation
+/// request just like recognition, so it competes in the same contraction election; the child is created
+/// only if the request wins. `u64::MAX` never collides with a real allocated id, and being the largest
+/// possible id it loses every election tie-break to an established child — the "consolidate onto older
+/// patterns" rule (docs/algorithm.md, "Election": oldest id wins ties).
+pub const NEW_CHILD_BID: NeuronId = NeuronId::MAX;
+
 /// Per-neuron output of the spatial frame pass. Votes never leave the neuron — it routes its
 /// neighborhood to the closest entry, then reconsiders its structure: a birth request from the add
 /// pass and/or children retired by the delete pass, both decided by the one test over the history.
 pub struct SpatialFrameResult {
-    /// The contraction bid this neuron offers, or None when it served from its normal (docs/algorithm.md,
-    /// "Contraction"). This is the climb signal: a child that serves bids, the normal does not. Produced
-    /// on both learning and frozen passes — the climb (and the election) runs during eval too.
+    /// This neuron's single child-activation request for the election, or None for a pure normal-serve.
+    /// A real `pattern_id` recognizes an existing child; `NEW_CHILD_BID` requests a new child at `O`.
+    /// The request is a pure decision — nothing is recorded/mutated for it here; [Neuron::commit_spatial_frame]
+    /// does that, and only if it wins. A pure normal-serve is finalized inline (no round-trip).
     pub bid: Option<SpatialBid>,
-    pub correction_request: Option<SpatialCorrectionRequest>,
-    /// Children the delete pass retired this frame (at most one — deletions are sequential). The
-    /// thalamus releases the pattern neurons and scrubs their cross-neuron references.
-    pub deleted_children: Vec<NeuronId>,
+    /// The observation `O`, kept for the commit's record and (for a new-child winner) the child's config.
+    pub observed: Vec<NeuronId>,
+    /// Distance `O`→selected entry, for the commit's record.
+    pub served_distance: u32,
+    /// The child the delete pass would retire — applied by the commit only if the request wins. For a
+    /// pure normal-serve it is applied inline and reported here for cross-neuron cleanup (bid is None).
+    pub delete_candidate: Option<NeuronId>,
     pub timings: NeuronOpTimings,
 }
 
@@ -1464,57 +1461,39 @@ impl Neuron {
                 v.sort_unstable();
                 v
             }
-            _ => return SpatialFrameResult { bid: None, correction_request: None, deleted_children: Vec::new(), timings },
+            _ => return SpatialFrameResult { bid: None, observed: Vec::new(), served_distance: 0, delete_candidate: None, timings },
         };
 
-        // 1. Age: drop history records older than the horizon.
+        // 1. Age.
         self.age_spatial_history(current_frame);
 
-        // Seed the normal on the neuron's first observation (docs/algorithm.md, "The normal": a stored
-        // configuration **set to the first context the neuron observes**). The normal owns no separate
-        // storage and cannot be created empty and left that way: an empty configuration sits at distance
-        // |O| from every neighbourhood, so the neuron would report a full error on frames it is in fact
-        // seeing its usual situation, and the add pass would price children against a fallback that never
-        // fits anything. Entries are frozen at their seed/mint configuration — nothing moves them after.
+        // Seed the normal on the neuron's first observation (idempotent, election-independent).
         if self.learning && self.normal_entry().context.size() == 0 {
             let mut ctx = SpatialContext::new();
             for &id in &observed { ctx.add_neuron(id, 1.0); }
             let normal = self.spatial_routing_table.get_mut(&SpatialServer::Normal)
                 .expect("normal routing entry must always exist");
             normal.context = ctx;
-            normal.config_id = DIST_SENTINEL; // config changed — re-derive its interned distance id
+            normal.config_id = DIST_SENTINEL;
         }
 
-        // Intern this frame's observation once and prepare the interned (server, config id) list of every
-        // routing entry. Every distance the passes below need is now a cache lookup keyed on these ids —
-        // route, the delete pass's next(O) scan, and the add pass — instead of a fresh merge per call, and
-        // instead of re-sorting every entry's config each pass (docs: [SpatialDistanceCache]).
         let observed_id = self.spatial_dist_cache.intern(&observed);
         let entries = self.spatial_entry_ids();
 
-        // 2. Route: the closest entry serves — the normal and every child compete alike. Routing needs
-        // only the winner and its distance; the second-best is not computed here (only the delete pass
-        // needs `next(O)`, and only for a child's own frames).
+        // 2. Route.
         let t = std::time::Instant::now();
         let (server, served_distance) = self.spatial_route_cached(observed_id, &entries);
         timings.recognize_patterns += t.elapsed().as_secs_f64();
 
-        // 3. Serve. A child that serves delegates to the pattern one level up (it bids to contraction,
-        // below); the normal infers for itself and propagates nothing. A serving child updates its
-        // activation clock — the only serve-time bookkeeping; the normal has none, and no connections are
-        // written (the readout's voter→action edges are wired separately by Brain::learn, untouched).
-        if let SpatialServer::Child(pid) = server {
-            if self.learning {
-                if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pid)) {
-                    entry.last_activation_frame = current_frame;
-                }
-            }
-        }
+        // The one test as DECISIONS only. Delete candidate = worst-failing child (never the one that
+        // served). The add pass (only when the normal served with error) decides whether a new child at O
+        // pays; since the current frame is not recorded before it runs, it folds in this frame explicitly.
+        let t = std::time::Instant::now();
+        let serving = match server { SpatialServer::Child(pid) => Some(pid), SpatialServer::Normal => None };
+        let delete_candidate = if should_learn { self.spatial_delete_candidate(serving, &entries) } else { None };
 
-        // The bid this neuron offers contraction (docs/algorithm.md, "Contraction"). A child that
-        // served covers the neurons it names correctly this frame — its present, named neighbors plus
-        // itself; the normal makes no bid. Produced on both learning and frozen passes, since the climb
-        // (and thus the election) runs during eval too.
+        // This neuron's single child-activation request for the election: recognize the selected child, or
+        // (normal selected + add pays) request a new child at O. Recognition already covers O, so never both.
         let bid = match server {
             SpatialServer::Child(pid) => {
                 let config = Self::config_sorted(&self.spatial_routing_table[&SpatialServer::Child(pid)].context);
@@ -1524,37 +1503,55 @@ impl Neuron {
                 covered.dedup();
                 Some(SpatialBid { bidder_id: self.id, pattern_id: pid, covered })
             }
-            SpatialServer::Normal => None,
+            SpatialServer::Normal => {
+                if should_learn && served_distance > 0 && self.spatial_add_pass_pays(observed_id, &observed, served_distance) {
+                    let mut covered = observed.clone();
+                    covered.push(self.id);
+                    covered.sort_unstable();
+                    covered.dedup();
+                    Some(SpatialBid { bidder_id: self.id, pattern_id: NEW_CHILD_BID, covered })
+                } else {
+                    None
+                }
+            }
         };
-
-        // Frozen evaluation stops here: it routes and serves (so it still classifies) but writes no
-        // history and makes no structural change.
-        if !should_learn {
-            return SpatialFrameResult { bid, correction_request: None, deleted_children: Vec::new(), timings };
-        }
-
-        // 4. Record this frame `(frame, O, server)` with its served distance. Existing configurations are
-        // unaffected (the entries did not change), so nothing else moves here. This frame folds into its
-        // configuration's entry — a fresh occurrence of a known `O`, or a new configuration if unseen.
-        // `observed` is kept for the add pass below (its candidate is exactly this frame's O).
-        self.spatial_history.record(current_frame, &observed, server, served_distance);
-
-        // 5 & 6, the one test. Entries are frozen at their seed/mint configuration, so the test reads
-        // them exactly as they stand this frame. Delete the single worst-failing child, then test a child
-        // at O.
-        let t = std::time::Instant::now();
-        let serving = match server { SpatialServer::Child(pid) => Some(pid), SpatialServer::Normal => None };
-        let deleted_children = match self.spatial_delete_pass_cached(serving, &entries) {
-            Some(pid) => vec![pid],
-            None => Vec::new(),
-        };
-        // Run the add pass only when this frame was served with error above zero: a perfectly-served
-        // frame cannot justify a new child, so a settled neuron skips the design's expensive step
-        // entirely (docs/algorithm.md, "Risks": run the add pass only when the frame had error).
-        let correction_request = if served_distance > 0 { self.spatial_add_pass_cached(observed_id, &observed) } else { None };
         timings.correct_errors += t.elapsed().as_secs_f64();
 
-        SpatialFrameResult { bid, correction_request, deleted_children, timings }
+        // A pure normal-serve (learning, no request) does not enter the election — finalize it inline:
+        // record it (server = Normal) and apply its delete now. If a neighbour's winning bid subsumes it
+        // this frame, the sweep's inhibition-prune drops this record. A REQUEST records nothing here —
+        // commit_spatial_frame does that, and only if it wins. (bid None + delete_candidate Some => the
+        // delete was applied inline and only needs cross-neuron cleanup.)
+        if should_learn && bid.is_none() {
+            self.spatial_history.record(current_frame, &observed, server, served_distance);
+            if let Some(pid) = delete_candidate { self.remove_spatial_child(pid); }
+            return SpatialFrameResult { bid: None, observed: Vec::new(), served_distance, delete_candidate, timings };
+        }
+
+        SpatialFrameResult { bid, observed, served_distance, delete_candidate, timings }
+    }
+
+    /// Commit a child-activation request that won the election — called by the thalamus only for the
+    /// winner (a recognized child, or a new child just created at `O`). Applies what the frame pass
+    /// deferred: bump the serving child's clock, record `(frame, O, server)`, retire the delete candidate
+    /// (never the child that served). A losing request is never committed, so nothing needs rolling back.
+    pub fn commit_spatial_frame(
+        &mut self,
+        observed: &[NeuronId],
+        server: SpatialServer,
+        served_distance: u32,
+        delete_candidate: Option<NeuronId>,
+        current_frame: FrameNumber,
+    ) {
+        if let SpatialServer::Child(pid) = server {
+            if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pid)) {
+                entry.last_activation_frame = current_frame;
+            }
+        }
+        self.spatial_history.record(current_frame, observed, server, served_distance);
+        if let Some(pid) = delete_candidate {
+            if SpatialServer::Child(pid) != server { self.remove_spatial_child(pid); }
+        }
     }
 
     /// Drop this frame's record from the history — the neuron was inhibited (subsumed) by a neighbour's
@@ -1661,7 +1658,7 @@ impl Neuron {
     ///
     /// Kept for the debug server invariant and tests — the hot per-frame path uses
     /// [spatial_route_cached] over interned ids instead.
-    #[allow(dead_code)]
+    #[cfg(any(test, debug_assertions))]
     fn spatial_route(observed: &[NeuronId], entries: &[(SpatialServer, Vec<NeuronId>)]) -> (SpatialServer, u32) {
         let mut best: Option<(SpatialServer, u32)> = None;
         for (server, config) in entries {
@@ -1755,7 +1752,7 @@ impl Neuron {
     /// Reference implementation over freshly-merged distances; the per-frame path is
     /// [spatial_delete_pass_cached], which reads the same distances from the cache. Kept for the tests
     /// that assert the settled-state behaviour directly.
-    #[allow(dead_code)]
+    #[cfg(test)]
     fn spatial_delete_pass(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
         // The table always holds the normal; nothing to retire unless there is at least one child.
         if self.spatial_routing_table.len() <= 1 { return None; }
@@ -1805,13 +1802,16 @@ impl Neuron {
     /// instead of recomputing a merge for each pair every frame. `entries` is the interned `(server,
     /// config id)` list already built this frame by `spatial_entry_ids`; config lengths (the storage
     /// cost) come from the cache's stored configs.
-    fn spatial_delete_pass_cached(&mut self, serving: Option<NeuronId>, entries: &[(SpatialServer, u32)]) -> Option<NeuronId> {
+    ///
+    /// Returns the child to retire as a **decision only** — it does not remove it. The frame pass applies
+    /// it inline for a pure normal-serve; for a request the commit applies it, and only if the request won.
+    fn spatial_delete_candidate(&mut self, serving: Option<NeuronId>, entries: &[(SpatialServer, u32)]) -> Option<NeuronId> {
         // The table always holds the normal; nothing to retire unless there is at least one child.
         if self.spatial_routing_table.len() <= 1 { return None; }
         #[cfg(debug_assertions)]
         self.debug_assert_spatial_servers();
 
-        let pid = {
+        {
             let Self { spatial_history, spatial_dist_cache, .. } = self;
 
             // For each configuration a child served, next(O) is the closest OTHER entry — computed from
@@ -1842,10 +1842,7 @@ impl Neuron {
                 }
             }
             worst.map(|(p, _)| p)
-        }?;
-
-        self.remove_spatial_child(pid);
-        Some(pid)
+        }
     }
 
     /// The one test's add half: the candidate is this frame's observation O. Benefit = Σ over the
@@ -1856,9 +1853,9 @@ impl Neuron {
     /// (docs/algorithm.md, "Risks": the add pass).
     ///
     /// Reference implementation over freshly-merged distances; the per-frame path is
-    /// [spatial_add_pass_cached]. Kept for the tests that assert the settled state directly.
-    #[allow(dead_code)]
-    fn spatial_add_pass(&mut self, observed: &[NeuronId]) -> Option<SpatialCorrectionRequest> {
+    /// [spatial_add_pass_pays]. Kept for the tests that assert the settled state directly.
+    #[cfg(test)]
+    fn spatial_add_pass(&mut self, observed: &[NeuronId]) -> bool {
         #[cfg(debug_assertions)]
         self.debug_assert_spatial_servers();
         // Each configuration's current best distance is the cached `best_distance` — no entry lookup, no
@@ -1870,19 +1867,19 @@ impl Neuron {
             let d_cand = Self::spatial_distance(obs, observed);
             if d_cand < ev.best_distance { benefit += (ev.best_distance - d_cand) as f64 * ev.frames.len() as f64; }
         }
-        if benefit < cost { return None; }
-        // The candidate is already the sorted observation O — the minted child takes it verbatim.
-        Some(SpatialCorrectionRequest { context_neighbors: observed.to_vec() })
+        // A child at O pays for its storage — the neuron would ask the thalamus to mint it.
+        benefit >= cost
     }
 
-    /// Cached counterpart of [spatial_add_pass]: same benefit sum, with the candidate distance to each
-    /// distinct configuration read from the cache keyed on interned ids. `observed_id` is the interned
-    /// current observation O (which is itself a history configuration, so its own row hits at distance 0).
-    fn spatial_add_pass_cached(&mut self, observed_id: u32, observed: &[NeuronId]) -> Option<SpatialCorrectionRequest> {
+    /// Does a new child at `O` pay for its storage? The add half of the one test as a decision: benefit
+    /// sums, over distinct history configurations, the error a child at `O` would spare (cached
+    /// `best_distance` minus candidate distance), plus this frame's own contribution `served_distance`
+    /// (the current frame is not yet recorded — a request records nothing until it commits). Cost `1+|O|`.
+    fn spatial_add_pass_pays(&mut self, observed_id: u32, observed: &[NeuronId], served_distance: u32) -> bool {
         #[cfg(debug_assertions)]
         self.debug_assert_spatial_servers();
         let cost = 1.0 + observed.len() as f64;
-        let mut benefit = 0.0;
+        let mut benefit = served_distance as f64;
         {
             let Self { spatial_history, spatial_dist_cache, .. } = self;
             for (obs, ev) in spatial_history.iter() {
@@ -1891,8 +1888,7 @@ impl Neuron {
                 if d_cand < ev.best_distance { benefit += (ev.best_distance - d_cand) as f64 * ev.frames.len() as f64; }
             }
         }
-        if benefit < cost { return None; }
-        Some(SpatialCorrectionRequest { context_neighbors: observed.to_vec() })
+        benefit >= cost
     }
 
     /// Remove a retired child from this neuron's local routing structures. The thalamus releases the
@@ -2573,28 +2569,20 @@ mod tests {
         let config_a: Vec<NeuronId> = vec![10, 11, 12];       // usual: 3 of every 5 frames -> the normal
         let config_b: Vec<NeuronId> = vec![20, 21, 22, 23];   // deviation: 2 of every 5 -> should be a child
 
-        let empty_new: FxHashSet<NeuronId> = FxHashSet::default();
-        let no_inference: Vec<ActiveNeuron> = Vec::new();
         let mut next_pid: NeuronId = 1000;
         let total_frames = 6 * horizon;
 
         let mut mints = 0usize;
         let (mut mints_settled, mut deletes_settled) = (0usize, 0usize);
         for f in 0..total_frames {
-            let obs = if f % 5 < 3 { &config_a } else { &config_b };
-            let mut ctx = crate::context::SpatialContext::new();
-            for &id in obs { ctx.add_neuron(id, 1.0); }
-
-            let res = n.process_spatial_frame(Some(&ctx), &empty_new, &no_inference, f);
-
+            let obs: &[NeuronId] = if f % 5 < 3 { &config_a } else { &config_b };
             let settled = f >= 4 * horizon; // watch the last two horizons for churn
-            if let Some(req) = res.correction_request {
-                n.add_spatial_pattern(next_pid, &req.context_neighbors, f); // simulate the level-0 install
-                next_pid += 1;
+            let (minted, deleted) = step(&mut n, obs, f, &mut next_pid);
+            if minted.is_some() {
                 mints += 1;
                 if settled { mints_settled += 1; }
             }
-            if settled { deletes_settled += res.deleted_children.len(); }
+            if settled { deletes_settled += deleted.len(); }
         }
 
         // 1. It built structure and then settled — no churn over the last two horizons.
@@ -2613,8 +2601,8 @@ mod tests {
         assert_eq!(normal_cfg, config_a, "the normal must be the usual configuration A");
 
         // 3. Local-optimum certificate: no add improves, no child fails delete.
-        assert!(n.spatial_add_pass(&config_a).is_none(), "no improving add at the settled state (A is the normal)");
-        assert!(n.spatial_add_pass(&config_b).is_none(), "no improving add at the settled state (B is a child)");
+        assert!(!n.spatial_add_pass(&config_a), "no improving add at the settled state (A is the normal)");
+        assert!(!n.spatial_add_pass(&config_b), "no improving add at the settled state (B is a child)");
         assert!(n.spatial_delete_pass(None).is_none(), "no child fails the delete test at the settled state");
 
         // 4. Compression: L_local with the settled structure is strictly below the normal-only baseline.
@@ -2671,19 +2659,34 @@ mod tests {
         Neuron::new(1, forget_rate, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, horizon)
     }
 
-    /// Drive one learning frame; install any minted child (simulating the thalamus). Returns the
-    /// minted child's id (if any) and the ids the delete pass retired this frame.
+    /// Drive one learning frame through the compute→elect→commit path, standing in for the thalamus at
+    /// n=1: a request wins the election iff its cover has ≥2 members. A winning new-child request creates
+    /// and commits the child; a winning recognition commits; a losing request commits nothing; a pure
+    /// normal-serve is already finalized inline by the frame pass. Returns the minted child id (if any)
+    /// and the ids retired this frame.
     fn step(n: &mut Neuron, ids: &[NeuronId], frame: FrameNumber, next_pid: &mut NeuronId) -> (Option<NeuronId>, Vec<NeuronId>) {
         let ctx = spatial_ctx(ids);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let res = n.process_spatial_frame(Some(&ctx), &empty, &[], frame);
-        let minted = res.correction_request.map(|req| {
+        let Some(bid) = res.bid else {
+            // Pure normal-serve: already committed inline; any delete was applied inline too.
+            return (None, res.delete_candidate.into_iter().collect());
+        };
+        if bid.covered.len() < 2 {
+            return (None, Vec::new()); // loses the election (covers <2): nothing commits
+        }
+        let deleted: Vec<NeuronId> = res.delete_candidate.into_iter().collect();
+        if bid.pattern_id == NEW_CHILD_BID {
             let pid = *next_pid;
-            n.add_spatial_pattern(pid, &req.context_neighbors, frame);
             *next_pid += 1;
-            pid
-        });
-        (minted, res.deleted_children)
+            n.add_spatial_pattern(pid, &res.observed, frame);
+            n.commit_spatial_frame(&res.observed, SpatialServer::Child(pid), 0, res.delete_candidate, frame);
+            (Some(pid), deleted)
+        } else {
+            let pid = bid.pattern_id;
+            n.commit_spatial_frame(&res.observed, SpatialServer::Child(pid), res.served_distance, res.delete_candidate, frame);
+            (None, deleted)
+        }
     }
 
     /// The normal's current stored configuration (sorted id list).
@@ -2739,9 +2742,9 @@ mod tests {
         let mut n = phase1_neuron(0.1);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let r = n.process_spatial_frame(None, &empty, &[], 0);
-        assert!(r.bid.is_none() && r.correction_request.is_none() && r.deleted_children.is_empty());
+        assert!(r.bid.is_none() && r.delete_candidate.is_none());
         let r = n.process_spatial_frame(Some(&spatial_ctx(&[])), &empty, &[], 1);
-        assert!(r.bid.is_none() && r.correction_request.is_none());
+        assert!(r.bid.is_none());
         assert!(n.spatial_history.is_empty(), "silence writes no history");
     }
 
@@ -2772,10 +2775,12 @@ mod tests {
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
             let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], f);
-            if let Some(req) = res.correction_request {
-                minted_cfg = Some(set(&req.context_neighbors));
-                n.add_spatial_pattern(1000, &req.context_neighbors, f);
-                break;
+            if let Some(bid) = &res.bid {
+                if bid.pattern_id == NEW_CHILD_BID {
+                    minted_cfg = Some(set(&res.observed));
+                    n.add_spatial_pattern(1000, &res.observed, f);
+                    break;
+                }
             }
         }
         assert_eq!(minted_cfg, Some(set(&b)), "the first child minted takes the deviation B as its context");
@@ -2788,13 +2793,10 @@ mod tests {
         let mut n = phase1_neuron(0.05);
         let mut pid = 1000;
         let (a, b) = ([10, 11, 12], [20, 21, 22, 23]);
-        let empty: FxHashSet<NeuronId> = FxHashSet::default();
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
-            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], f);
-            if let Some(req) = res.correction_request {
-                n.add_spatial_pattern(pid, &req.context_neighbors, f);
-                pid += 1;
+            let (minted, _) = step(&mut n, obs, f, &mut pid);
+            if minted.is_some() {
                 assert_eq!(normal_cfg(&n), set(&a), "minting must not disturb the frozen normal (frame {f})");
             }
         }
@@ -2836,7 +2838,7 @@ mod tests {
         n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], 0); // frame 0 seeds the normal onto C
         for f in 1..10 {
             let r = n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], f);
-            assert!(r.correction_request.is_none(), "a distance-0 frame must skip the add pass (frame {f})");
+            assert!(r.bid.is_none(), "a distance-0 normal-serve must make no request (frame {f})");
         }
     }
 }

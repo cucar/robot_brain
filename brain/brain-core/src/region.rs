@@ -247,6 +247,20 @@ impl Region {
             });
     }
 
+    /// Commit the winning child-activation requests this region owns, routed by parent neuron id.
+    pub fn commit_spatial_frames(&mut self, ops: Vec<crate::column::SpatialCommitOp>, frame_number: FrameNumber) {
+        let mut by_column: Vec<Vec<crate::column::SpatialCommitOp>> = (0..self.c).map(|_| Vec::new()).collect();
+        for op in ops {
+            let c = self.route_neuron(op.parent_id);
+            by_column[c].push(op);
+        }
+        self.columns.par_iter_mut()
+            .zip(by_column.into_par_iter())
+            .for_each(|(col, col_ops)| {
+                if !col_ops.is_empty() { col.commit_spatial_frames(&col_ops, frame_number); }
+            });
+    }
+
     /// Drop this frame from the history of every inhibited neuron this region owns, routed by neuron id.
     pub fn prune_inhibited_spatial_history(&mut self, ids: &[NeuronId], frame_number: FrameNumber) {
         let mut by_column: Vec<Vec<NeuronId>> = (0..self.c).map(|_| Vec::new()).collect();
