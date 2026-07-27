@@ -292,7 +292,7 @@ pub struct Thalamus {
 
     /// Memoised hop distances on the declared base neighbour graph: source channel → every channel
     /// reachable from it. The graph never changes after declaration, so each source is explored once.
-    /// Used by [occluded_neighbors] to place units relative to one another above the base level.
+    /// Used by [gabriel_neighbors] to place units relative to one another above the base level.
     base_channel_distances: FxHashMap<ChannelId, FxHashMap<ChannelId, u32>>,
 
     /// Per-channel TEMPORAL neighbor set — restricts d>0 sequence learning (temporal connection
@@ -1580,36 +1580,41 @@ impl Thalamus {
         let inference_neurons = self.decorate_inference_neurons(inference_events);
         let (inference_neighbors, context_neighbors) = if level == 0 {
             // Base level: the declared channel neighbour graph. Every unit anchors on its own cell here,
-            // so the occlusion rule below provably yields exactly this graph — the declared path is kept
+            // so the Gabriel rule below provably yields exactly this graph — the declared path is kept
             // because it is cheaper, and because it leaves level 0 byte-for-byte unchanged.
             (self.select_inference_neighbors(work_list, &inference_neurons),
              self.select_context_neighbors(work_list, level_context))
         } else {
             // Above the base the level is sparse, so a fixed radius is wrong in both directions: it
             // invents neighbours where the level thinned out and misses real ones across a gap. Instead
-            // adjacency is by occlusion — see [occluded_neighbors].
-            self.occluded_neighbors(work_list, level_context, &inference_neurons, anchors)
+            // adjacency is the Gabriel graph over the units' anchors — see [gabriel_neighbors].
+            self.gabriel_neighbors(work_list, level_context, &inference_neurons, anchors)
         };
 
         self.dispatch_to_regions(work_list, inference_neighbors, context_neighbors, new_error_pattern_ids, frame_number)
     }
 
-    /// Per-neuron neighbour lists above the base, by **occlusion**: two active units are neighbours iff
-    /// no other active unit lies between them. Distance is hop count on the declared base neighbour
-    /// graph, measured between the units' anchors, and `w` is between `u` and `v` exactly when it sits on
-    /// a shortest path: `d(u,w) + d(w,v) == d(u,v)`.
+    /// Per-neuron neighbour lists above the base by the **Gabriel graph** over the units' anchors: two
+    /// active units `u`, `v` are neighbours iff no other active unit `w` lies in the closed disk that has
+    /// `uv` as its diameter — in any metric, `d(u,w)² + d(w,v)² ≤ d(u,v)²`. Distance is hop count on the
+    /// declared base neighbour graph, measured between anchors.
     ///
-    /// This gives the neighbourhood a **dynamic range**. Where a level is dense the nearest units block
-    /// everything behind them and the result is the immediate ring; where a level has thinned out a unit
-    /// still reaches across the gap to the first unit in each direction, and no further. A fixed radius
-    /// cannot do both — it invents neighbours in the sparse case and truncates real ones in the dense
-    /// case. On a full base level every cell is occupied, so every pair beyond one hop has an active unit
-    /// on the path between them and this reduces exactly to the declared neighbour graph, which is why
-    /// level 0 can keep the cheaper declared path.
+    /// This gives the neighbourhood a **dynamic range**. Where a level is dense the nearest units fill the
+    /// disks and the result is the immediate ring; where a level has thinned out a unit still reaches
+    /// across the gap to the first unit in each direction, and no further. A fixed radius cannot do both —
+    /// it invents neighbours in the sparse case and truncates real ones in the dense case.
+    ///
+    /// The Gabriel test prunes a **superset** of the old geodesic-occlusion rule: `d(u,w)+d(w,v)=d(u,v)`
+    /// implies `d(u,w)²+d(w,v)² ≤ d(u,v)²`, so any unit occlusion blocked is blocked here too, plus the
+    /// interior of the disk — a smaller, more stable neighbourhood that curbs higher-level proliferation.
+    /// It preserves the guarantees that matter: the Gabriel graph is connected (contains the EMST), and on
+    /// a full base level every distance-1 edge survives (nothing fits its radius-½ disk) while every longer
+    /// edge is blocked by an occupied intermediate cell — so it reduces exactly to the declared neighbour
+    /// graph, which is why level 0 can keep the cheaper declared path.
     ///
     /// Returns the inference neighbours (id + channel) and context neighbours (id + strength) per
     /// work-list neuron, in work-list order, self excluded.
-    fn occluded_neighbors(
+    fn gabriel_neighbors(
         &mut self,
         work_list: &[NeuronId],
         level_context: &SpatialContext,
@@ -1631,7 +1636,7 @@ impl Thalamus {
         let mut context_out = Vec::with_capacity(work_list.len());
         for &uid in work_list {
             let neighbor_ids = match anchors.get(&uid).and_then(|&a| self.get_neuron_channel_id(a)) {
-                Some(ch) => self.unoccluded_units(uid, ch, &active),
+                Some(ch) => self.gabriel_neighbors_of(uid, ch, &active),
                 None => Vec::new(),
             };
             let inf: Vec<ActiveNeuron> = neighbor_ids.iter().filter_map(|id| inf_by_id.get(id).cloned()).collect();
@@ -1645,10 +1650,11 @@ impl Thalamus {
         (inference_out, context_out)
     }
 
-    /// The active units visible from `uid` at base channel `from`: those with no other active unit
-    /// between them and it. Candidates are walked nearest-first, so only the units already known to be
-    /// closer can occlude one — anything at or beyond the same distance cannot lie on a shortest path.
-    fn unoccluded_units(&mut self, uid: NeuronId, from: ChannelId, active: &[(NeuronId, ChannelId)]) -> Vec<NeuronId> {
+    /// The Gabriel neighbours of `uid` at base channel `from`: the active units `v` with no other active
+    /// unit `w` inside the closed disk of diameter `uv`, i.e. `d(u,w)² + d(w,v)² ≤ d(u,v)²`. A blocker
+    /// must satisfy `d(u,w) ≤ d(u,v)`, so candidates are walked nearest-first and only the strictly-closer
+    /// prefix can block one — a `w` at the same distance as `v` would need `d(w,v) = 0`, i.e. `w = v`.
+    fn gabriel_neighbors_of(&mut self, uid: NeuronId, from: ChannelId, active: &[(NeuronId, ChannelId)]) -> Vec<NeuronId> {
         // Distances from this unit's channel to every other active unit's channel, nearest first.
         let mut ranked: Vec<(u32, NeuronId, ChannelId)> = active.iter()
             .filter(|&&(vid, _)| vid != uid)
@@ -1659,10 +1665,10 @@ impl Thalamus {
         let mut visible: Vec<NeuronId> = Vec::new();
         for i in 0..ranked.len() {
             let (d_uv, vid, vch) = ranked[i];
-            // Co-located units (distance 0) cannot have anything between them, so they always see
-            // each other; otherwise a strictly closer unit on a shortest path occludes.
+            // Co-located units (distance 0) admit no disk interior, so they always see each other;
+            // otherwise a closer unit falling in the uv-diameter disk occludes v.
             let blocked = d_uv > 0 && ranked[..i].iter().any(|&(d_uw, _, wch)| {
-                d_uw < d_uv && self.base_channel_distance(wch, vch).map_or(false, |d_wv| d_uw + d_wv == d_uv)
+                self.base_channel_distance(wch, vch).map_or(false, |d_wv| d_uw * d_uw + d_wv * d_wv <= d_uv * d_uv)
             });
             if !blocked { visible.push(vid); }
         }
@@ -2722,25 +2728,54 @@ mod tests {
         t
     }
 
-    /// The context neighbour ids each work-list unit sees, given anchors on a line base graph.
-    fn neighbors_on_line(t: &mut Thalamus, units: &[(NeuronId, NeuronId)]) -> Vec<Vec<NeuronId>> {
+    /// A thalamus whose base graph is a `w`×`h` grid with 8-connectivity — so BFS hop distance is the
+    /// Chebyshev distance — channel id `y*w + x + 1`, one base neuron per cell sharing the channel's id.
+    fn grid_thalamus(w: u32, h: u32) -> Thalamus {
+        let mut t = make_thalamus();
+        let id = |x: u32, y: u32| y * w + x + 1;
+        for y in 0..h {
+            for x in 0..w {
+                let ch = id(x, y);
+                t.base_neurons.insert(ch as NeuronId, BaseNeuron {
+                    channel_id: ch, neuron_type: NeuronType::Event,
+                    coordinate: Coordinate { dim_id: ch as DimensionId, bucket_id: 0 },
+                });
+                let mut nbrs = FxHashSet::default();
+                for dy in -1i32..=1 {
+                    for dx in -1i32..=1 {
+                        if dx == 0 && dy == 0 { continue; }
+                        let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                        if nx >= 0 && nx < w as i32 && ny >= 0 && ny < h as i32 {
+                            nbrs.insert(id(nx as u32, ny as u32));
+                        }
+                    }
+                }
+                t.spatial_channel_neighbors.insert(ch, vec![nbrs]);
+            }
+        }
+        t
+    }
+
+    /// The context neighbour ids each work-list unit sees, given anchors (base channel ids) on a base graph.
+    fn neighbors_seen(t: &mut Thalamus, units: &[(NeuronId, NeuronId)]) -> Vec<Vec<NeuronId>> {
         let mut level_context = SpatialContext::new();
         for &(uid, _) in units { level_context.add_neuron(uid, 1.0); }
         let inference: Vec<ActiveNeuron> = units.iter()
             .map(|&(uid, _)| ActiveNeuron { id: uid, channel_id: 0, reward: 0.0 }).collect();
         let anchors: FxHashMap<NeuronId, NeuronId> = units.iter().copied().collect();
         let work: Vec<NeuronId> = units.iter().map(|&(uid, _)| uid).collect();
-        let (_inf, ctx) = t.occluded_neighbors(&work, &level_context, &inference, &anchors);
+        let (_inf, ctx) = t.gabriel_neighbors(&work, &level_context, &inference, &anchors);
         ctx.iter().map(|c| { let mut v: Vec<NeuronId> = c.entries().keys().copied().collect(); v.sort_unstable(); v }).collect()
     }
 
-    /// Occlusion adjacency: a unit sees the nearest unit in each direction, and nothing behind it. On a
-    /// fully-occupied line that is exactly the declared neighbour graph.
+    /// Gabriel adjacency on a line: every other unit is collinear, so the empty-disk test reduces to the
+    /// nearest unit in each direction and nothing behind it. On a fully-occupied line that is exactly the
+    /// declared neighbour graph.
     #[test]
-    fn test_occluded_neighbors_are_the_declared_graph_when_dense() {
+    fn test_gabriel_neighbors_are_the_declared_graph_when_dense() {
         let mut t = line_thalamus(4);
         // One unit per cell: 100@1, 101@2, 102@3, 103@4.
-        let n = neighbors_on_line(&mut t, &[(100, 1), (101, 2), (102, 3), (103, 4)]);
+        let n = neighbors_seen(&mut t, &[(100, 1), (101, 2), (102, 3), (103, 4)]);
         assert_eq!(n[0], vec![101], "the unit at cell 1 sees only its immediate neighbour");
         assert_eq!(n[1], vec![100, 102], "an interior unit sees both immediate neighbours, nothing beyond");
         assert_eq!(n[2], vec![101, 103]);
@@ -2750,24 +2785,39 @@ mod tests {
     /// Where the level has thinned out, a unit still reaches across the gap to the first unit beyond it —
     /// the range is dynamic, not a fixed radius.
     #[test]
-    fn test_occluded_neighbors_reach_across_a_gap() {
+    fn test_gabriel_neighbors_reach_across_a_gap() {
         let mut t = line_thalamus(7);
         // Units only at cells 1, 4 and 7 — two empty cells between each pair.
-        let n = neighbors_on_line(&mut t, &[(100, 1), (101, 4), (102, 7)]);
+        let n = neighbors_seen(&mut t, &[(100, 1), (101, 4), (102, 7)]);
         assert_eq!(n[0], vec![101], "cell 1 reaches across the gap to cell 4");
         assert_eq!(n[1], vec![100, 102], "cell 4 sees both, across gaps in each direction");
         assert_eq!(n[2], vec![101], "cell 7 reaches back to cell 4, and no further");
     }
 
-    /// A unit between two others occludes them: they are neighbours of it, not of each other, however
-    /// far apart they are. This is what stops the neighbourhood growing without bound as levels thin.
+    /// A unit between two others fills the disk between them: they are neighbours of it, not of each
+    /// other, however far apart they are. This is what stops the neighbourhood growing without bound.
     #[test]
-    fn test_occluded_neighbors_block_behind_an_intervening_unit() {
+    fn test_gabriel_neighbors_block_behind_an_intervening_unit() {
         let mut t = line_thalamus(9);
-        let n = neighbors_on_line(&mut t, &[(100, 1), (101, 5), (102, 9)]);
+        let n = neighbors_seen(&mut t, &[(100, 1), (101, 5), (102, 9)]);
         assert_eq!(n[0], vec![101], "cell 1 cannot see cell 9 — cell 5 is between them");
         assert_eq!(n[2], vec![101], "and cell 9 cannot see cell 1");
         assert_eq!(n[1], vec![100, 102], "the middle unit sees both");
+    }
+
+    /// The Gabriel-specific case that geodesic occlusion misses: an off-axis unit inside the uv-diameter
+    /// disk but not on any shortest u→v path. On the 8-connected grid put u=(0,0), v=(5,0), w=(3,3):
+    /// Chebyshev d(u,w)=3, d(w,v)=3, d(u,v)=5. The old rule kept v (3+3=6 ≠ 5, w off the geodesic);
+    /// Gabriel prunes it (3²+3²=18 ≤ 5²=25, w inside the disk), so u sees only w.
+    #[test]
+    fn test_gabriel_prunes_the_disk_interior_off_the_geodesic() {
+        let mut t = grid_thalamus(6, 4);
+        let ch = |x: u32, y: u32| (y * 6 + x + 1) as NeuronId; // matches grid_thalamus id scheme
+        let (u, v, w) = (ch(0, 0), ch(5, 0), ch(3, 3));
+        let n = neighbors_seen(&mut t, &[(100, u), (101, v), (102, w)]);
+        assert_eq!(n[0], vec![102], "u sees only w — v is pruned though it is not on a shortest u→v path");
+        assert_eq!(n[1], vec![102], "v likewise sees only w");
+        assert_eq!(n[2], vec![100, 101], "the interior unit w sees both endpoints");
     }
 
     #[test]
