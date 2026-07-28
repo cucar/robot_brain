@@ -295,6 +295,13 @@ pub struct Thalamus {
     /// not just the adjacency graph. Set by the encoder at registration; empty for non-spatial workloads.
     channel_positions: FxHashMap<ChannelId, (i32, i32)>,
 
+    /// The largest base-level declared neighbourhood degree across all channels — the size of a COMPLETE
+    /// neighbourhood (8 for a retinotopic 3×3 field). Minting is gated on the observed neighbourhood
+    /// reaching this, so only fully-surrounded units form patterns. Coordinate-free (derived from the
+    /// declared graph, not positions). Stays 0 when nothing is declared (all-pairs), which disables the
+    /// gate — the correct default for non-spatial workloads that have no notion of a full neighbourhood.
+    spatial_capacity: usize,
+
 
     /// Per-channel TEMPORAL neighbor set — restricts d>0 sequence learning (temporal connection
     /// pre-wiring, temporal pattern minting, vote-error evaluation, and the per-task temporal
@@ -388,6 +395,7 @@ impl Thalamus {
             channel_id_to_name: FxHashMap::default(),
             spatial_channel_neighbors: FxHashMap::default(),
             channel_positions: FxHashMap::default(),
+            spatial_capacity: 0,
             temporal_channel_neighbors: FxHashMap::default(),
             dimension_name_to_id: FxHashMap::default(),
             dimension_id_to_name: FxHashMap::default(),
@@ -637,6 +645,7 @@ impl Thalamus {
     /// itself. Channels with NO call retain the default all-pairs spatial neighborhood.
     pub fn set_spatial_neighbors(&mut self, name: &str, neighbor_names: &[String]) {
         let (channel_id, neighbor_ids) = self.resolve_neighbor_ids(name, neighbor_names);
+        self.spatial_capacity = self.spatial_capacity.max(neighbor_ids.len());
         self.spatial_channel_neighbors.insert(channel_id, vec![neighbor_ids]);
     }
 
@@ -653,6 +662,9 @@ impl Thalamus {
             channel = channel_id;
             sets.push(neighbor_ids);
         }
+        // The base-level (index 0) degree is a full immediate neighbourhood; the completeness gate is
+        // sized to the largest such degree across channels.
+        self.spatial_capacity = self.spatial_capacity.max(sets.first().map_or(0, |s| s.len()));
         self.spatial_channel_neighbors.insert(channel, sets);
     }
 
@@ -1593,11 +1605,17 @@ impl Thalamus {
             // The declared path is kept because it is cheaper and leaves level 0 byte-for-byte unchanged.
             (self.select_inference_neighbors(work_list, &inference_neurons),
              self.select_context_neighbors(work_list, level_context))
-        } else {
-            // Above the base the level is sparse, so a fixed radius is wrong in both directions: it
-            // invents neighbours where the level thinned out and misses real ones across a gap. Instead
-            // adjacency is the nearest active unit in each compass sector — see [directional_neighbors].
+        } else if !self.channel_positions.is_empty() {
+            // Above the base WITH coordinates (a retinotopic modality): a fixed radius is wrong in both
+            // directions — it invents neighbours where the level thinned out and misses real ones across a
+            // gap. Adjacency is the nearest active unit in each compass sector — see [directional_neighbors].
             self.directional_neighbors(work_list, level_context, &inference_neurons, anchors)
+        } else {
+            // Above the base WITHOUT coordinates (non-spatial workloads, e.g. stocks): fall back to the
+            // declared-graph selection used at the base. The directional rule needs positions these
+            // workloads do not have; the declared graph is the coordinate-free adjacency they do carry.
+            (self.select_inference_neighbors(work_list, &inference_neurons),
+             self.select_context_neighbors(work_list, level_context))
         };
 
         self.dispatch_to_regions(work_list, inference_neighbors, context_neighbors, new_error_pattern_ids, frame_number)
@@ -1833,6 +1851,7 @@ impl Thalamus {
         // one test, and connection learning must all run where its state lives. The buckets hold indices
         // rather than ids because the two neighbor lists are positional — parallel to work_list.
         let indices_by_region = self.bucket_by_region_indices(work_list, |&id| id);
+        let capacity = self.spatial_capacity; // size of a complete neighbourhood — the minting gate
 
         let mut results = Vec::new();
         for (r, task_indices) in indices_by_region.iter().enumerate() {
@@ -1849,7 +1868,7 @@ impl Thalamus {
 
             // Freshly-minted patterns ride along so the region can skip them — they have no history
             // to learn from in the frame they were born.
-            results.extend(self.region_list[r].process_spatial_level(&region_tasks, new_error_pattern_ids, frame_number));
+            results.extend(self.region_list[r].process_spatial_level(&region_tasks, new_error_pattern_ids, capacity, frame_number));
         }
         results
     }

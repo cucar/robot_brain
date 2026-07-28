@@ -1445,6 +1445,7 @@ impl Neuron {
         level_neighbors: Option<&SpatialContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         _inference_neighbors: &[ActiveNeuron],
+        spatial_capacity: usize,
         current_frame: FrameNumber,
     ) -> SpatialFrameResult {
         let mut timings = NeuronOpTimings::default();
@@ -1504,12 +1505,14 @@ impl Neuron {
                 Some(SpatialBid { bidder_id: self.id, pattern_id: pid, covered })
             }
             SpatialServer::Normal => {
-                // Only mint when the neighbourhood is COMPLETE — all eight compass directions occupied
-                // (|O| == 8, the directional rule's cap). Partial neighbourhoods (sparse/edge units) are
-                // the varied, one-off configurations that drive higher-level proliferation; gating minting
-                // on a full ring restricts new patterns to fully-surrounded, reproducible local structure.
-                // Recognition of existing children is unaffected — a partial unit still serves and fires.
-                let complete_neighbourhood = observed.len() >= 8;
+                // Only mint when the neighbourhood is COMPLETE — the observed set reaches the capacity of a
+                // full neighbourhood (`spatial_capacity` = the declared graph's max degree, 8 for a 3×3
+                // retinotopic field). Partial neighbourhoods (sparse/edge units) are the varied, one-off
+                // configurations that drive higher-level proliferation; gating minting on a full complement
+                // restricts new patterns to fully-surrounded, reproducible local structure. The capacity
+                // comes from the declared graph, not coordinates, so this holds for any modality; it is 0
+                // when nothing is declared (all-pairs), which disables the gate. Recognition is unaffected.
+                let complete_neighbourhood = observed.len() >= spatial_capacity;
                 if should_learn && served_distance > 0 && complete_neighbourhood
                     && self.spatial_add_pass_pays(observed_id, &observed, served_distance) {
                     let mut covered = observed.clone();
@@ -2675,7 +2678,7 @@ mod tests {
     fn step(n: &mut Neuron, ids: &[NeuronId], frame: FrameNumber, next_pid: &mut NeuronId) -> (Option<NeuronId>, Vec<NeuronId>) {
         let ctx = spatial_ctx(ids);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
-        let res = n.process_spatial_frame(Some(&ctx), &empty, &[], frame);
+        let res = n.process_spatial_frame(Some(&ctx), &empty, &[], 8, frame); // capacity 8 = a complete ring
         let Some(bid) = res.bid else {
             // Pure normal-serve: already committed inline; any delete was applied inline too.
             return (None, res.delete_candidate.into_iter().collect());
@@ -2749,9 +2752,9 @@ mod tests {
     fn test_cold_start_is_silence() {
         let mut n = phase1_neuron(0.1);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
-        let r = n.process_spatial_frame(None, &empty, &[], 0);
+        let r = n.process_spatial_frame(None, &empty, &[], 8, 0);
         assert!(r.bid.is_none() && r.delete_candidate.is_none());
-        let r = n.process_spatial_frame(Some(&spatial_ctx(&[])), &empty, &[], 1);
+        let r = n.process_spatial_frame(Some(&spatial_ctx(&[])), &empty, &[], 8, 1);
         assert!(r.bid.is_none());
         assert!(n.spatial_history.is_empty(), "silence writes no history");
     }
@@ -2783,7 +2786,7 @@ mod tests {
         let mut minted_cfg = None;
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
-            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], f);
+            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], 8, f);
             if let Some(bid) = &res.bid {
                 if bid.pattern_id == NEW_CHILD_BID {
                     minted_cfg = Some(set(&res.observed));
@@ -2846,10 +2849,31 @@ mod tests {
         let mut n = phase1_neuron(0.1);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let c = [1, 2, 3];
-        n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], 0); // frame 0 seeds the normal onto C
+        n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], 8, 0); // frame 0 seeds the normal onto C
         for f in 1..10 {
-            let r = n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], f);
+            let r = n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], 8, f);
             assert!(r.bid.is_none(), "a distance-0 normal-serve must make no request (frame {f})");
         }
+    }
+
+    /// The completeness gate: minting requires |O| >= spatial_capacity (a full-degree complement). A
+    /// recurring deviation whose neighbourhood is below capacity never mints; the same deviation mints
+    /// once capacity matches its size. This is the coordinate-free control on higher-level proliferation.
+    #[test]
+    fn test_capacity_gates_minting() {
+        let recurring_deviation_mints = |capacity: usize| {
+            let mut n = phase1_neuron(0.05);
+            let empty: FxHashSet<NeuronId> = FxHashSet::default();
+            let (a, b) = ([10, 11, 12, 13], [20, 21, 22, 23]); // 4-neighbour configs
+            let mut minted = false;
+            for f in 0..40 {
+                let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
+                let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], capacity, f);
+                if res.bid.as_ref().is_some_and(|bid| bid.pattern_id == NEW_CHILD_BID) { minted = true; }
+            }
+            minted
+        };
+        assert!(!recurring_deviation_mints(8), "a 4-neighbour deviation must not mint when capacity is 8 (incomplete)");
+        assert!(recurring_deviation_mints(4), "the same deviation mints when capacity matches its size (complete)");
     }
 }

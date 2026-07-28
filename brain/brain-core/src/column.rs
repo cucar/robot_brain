@@ -166,6 +166,7 @@ impl Column {
         &mut self,
         tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
+        spatial_capacity: usize,
         frame_number: FrameNumber,
     ) -> Vec<SpatialColumnResult> {
 
@@ -175,7 +176,7 @@ impl Column {
             let neuron = self.neurons.get_mut(neuron_id)
                 .unwrap_or_else(|| panic!("Column.process_spatial_level: neuron {} not found", neuron_id));
             let result = neuron.process_spatial_frame(
-                Some(observed_context), new_error_pattern_ids, actives, frame_number,
+                Some(observed_context), new_error_pattern_ids, actives, spatial_capacity, frame_number,
             );
             results.push(SpatialColumnResult {
                 parent_id: *neuron_id,

@@ -124,6 +124,7 @@ impl Region {
         &mut self,
         tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
+        spatial_capacity: usize,
         frame_number: FrameNumber,
     ) -> Vec<crate::column::SpatialColumnResult> {
 
@@ -138,7 +139,7 @@ impl Region {
             .zip(column_tasks.into_par_iter())
             .map(|(col, col_tasks)| {
                 if col_tasks.is_empty() { return Vec::new(); }
-                col.process_spatial_level(&col_tasks, new_error_pattern_ids, frame_number)
+                col.process_spatial_level(&col_tasks, new_error_pattern_ids, spatial_capacity, frame_number)
             })
             .collect();
 
