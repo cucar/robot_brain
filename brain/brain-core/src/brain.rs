@@ -461,6 +461,11 @@ impl Brain {
         self.thalamus.set_spatial_neighbor_levels(name, neighbor_names_by_level);
     }
 
+    /// Set a channel's 2D retinotopic position — see `Thalamus::set_channel_position`.
+    pub fn set_channel_position(&mut self, name: &str, x: i32, y: i32) {
+        self.thalamus.set_channel_position(name, x, y);
+    }
+
     /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
     /// See `Thalamus::set_temporal_neighbors`.
     pub fn set_temporal_neighbors(&mut self, name: &str, neighbor_names: &[String]) {

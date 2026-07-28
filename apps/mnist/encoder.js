@@ -112,6 +112,9 @@ export class MNISTPixelChannelsEncoder {
 			// MNIST neighborhoods are spatial (pixel co-activation), so declare them on the spatial
 			// side only; the temporal side stays all-pairs (irrelevant at context length 1).
 			brain.setSpatialNeighborLevels(`px_${p}`, levels);
+			// Retinotopic position of this pixel channel — the brain needs 2D coordinates (not just
+			// adjacency) to place units by compass direction for the above-base neighbour rule.
+			brain.setChannelPosition(`px_${p}`, x, y);
 		}
 	}
 

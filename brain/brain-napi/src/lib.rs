@@ -453,6 +453,14 @@ impl JsBrain {
         Ok(())
     }
 
+    /// Set a channel's 2D retinotopic position. The above-base neighbour rule places units by compass
+    /// direction, which needs coordinates rather than only the adjacency graph. Call after registering.
+    #[napi(js_name = "setChannelPosition")]
+    pub fn set_channel_position(&self, name: String, x: i32, y: i32) -> Result<()> {
+        self.inner.borrow_mut().set_channel_position(&name, x, y);
+        Ok(())
+    }
+
     /// Declare the TEMPORAL (d>0 sequence) neighbor channel set for a registered channel.
     /// This is the set whose past a channel may sequence against to predict the future.
     /// Same name-resolution and all-pairs-default semantics as `setSpatialNeighbors`.

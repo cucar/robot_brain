@@ -1504,7 +1504,14 @@ impl Neuron {
                 Some(SpatialBid { bidder_id: self.id, pattern_id: pid, covered })
             }
             SpatialServer::Normal => {
-                if should_learn && served_distance > 0 && self.spatial_add_pass_pays(observed_id, &observed, served_distance) {
+                // Only mint when the neighbourhood is COMPLETE — all eight compass directions occupied
+                // (|O| == 8, the directional rule's cap). Partial neighbourhoods (sparse/edge units) are
+                // the varied, one-off configurations that drive higher-level proliferation; gating minting
+                // on a full ring restricts new patterns to fully-surrounded, reproducible local structure.
+                // Recognition of existing children is unaffected — a partial unit still serves and fires.
+                let complete_neighbourhood = observed.len() >= 8;
+                if should_learn && served_distance > 0 && complete_neighbourhood
+                    && self.spatial_add_pass_pays(observed_id, &observed, served_distance) {
                     let mut covered = observed.clone();
                     covered.push(self.id);
                     covered.sort_unstable();
@@ -2566,8 +2573,9 @@ mod tests {
         // Horizon 20 (its own parameter now). Period-5 input, run 6 horizons.
         let horizon: i64 = 20;
         let mut n = Neuron::new(1, 0.05, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, horizon as u32);
-        let config_a: Vec<NeuronId> = vec![10, 11, 12];       // usual: 3 of every 5 frames -> the normal
-        let config_b: Vec<NeuronId> = vec![20, 21, 22, 23];   // deviation: 2 of every 5 -> should be a child
+        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        let config_a: Vec<NeuronId> = vec![10, 11, 12, 13, 14, 15, 16, 17]; // usual: 3 of every 5 frames -> the normal
+        let config_b: Vec<NeuronId> = vec![20, 21, 22, 23, 24, 25, 26, 27]; // deviation: 2 of every 5 -> should be a child
 
         let mut next_pid: NeuronId = 1000;
         let total_frames = 6 * horizon;
@@ -2754,7 +2762,7 @@ mod tests {
     fn test_stable_world_creates_no_child() {
         let mut n = phase1_neuron(0.1);
         let mut pid = 1000;
-        let c = [1, 2, 3];
+        let c = [1, 2, 3, 4, 5, 6, 7, 8]; // complete neighbourhood, so minting is gate-eligible but never justified
         for f in 0..40 {
             let (minted, deleted) = step(&mut n, &c, f, &mut pid);
             assert!(minted.is_none(), "a stable configuration must never mint a child (frame {f})");
@@ -2769,7 +2777,8 @@ mod tests {
     #[test]
     fn test_mint_context_is_the_observation() {
         let mut n = phase1_neuron(0.05);
-        let (a, b) = ([10, 11, 12], [20, 21, 22, 23]);
+        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        let (a, b) = ([10, 11, 12, 13, 14, 15, 16, 17], [20, 21, 22, 23, 24, 25, 26, 27]);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let mut minted_cfg = None;
         for f in 0..40 {
@@ -2792,7 +2801,8 @@ mod tests {
     fn test_mint_frame_does_not_pollute_the_normal() {
         let mut n = phase1_neuron(0.05);
         let mut pid = 1000;
-        let (a, b) = ([10, 11, 12], [20, 21, 22, 23]);
+        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        let (a, b) = ([10, 11, 12, 13, 14, 15, 16, 17], [20, 21, 22, 23, 24, 25, 26, 27]);
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
             let (minted, _) = step(&mut n, obs, f, &mut pid);
@@ -2810,7 +2820,8 @@ mod tests {
     fn test_child_deleted_when_demand_disappears() {
         let mut n = phase1_neuron(0.1);
         let mut pid = 1000;
-        let (a, b) = ([10, 11, 12], [20, 21, 22, 23]);
+        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        let (a, b) = ([10, 11, 12, 13, 14, 15, 16, 17], [20, 21, 22, 23, 24, 25, 26, 27]);
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
             step(&mut n, obs, f, &mut pid);
