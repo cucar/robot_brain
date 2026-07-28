@@ -348,11 +348,6 @@ pub struct Brain {
     /// from a saved backup, running ordinary `process_frame` calls.
     learning: bool,
 
-    /// EXPERIMENTAL: when set, the spatial→temporal apex handoff drops any apex neuron covered by a
-    /// higher-level apex neuron's receptive field, so only the top neuron over each region reaches
-    /// temporal. Off by default (every fired-and-unsubsumed neuron is handed off).
-    apex_coverage: bool,
-
     /// Current frame data from all channels (rebuilt each frame).
     frame: Vec<FramePoint>,
 
@@ -405,7 +400,6 @@ impl Brain {
         consensus_mode: ConsensusMode,
         debug: bool,
         learning: bool,
-        apex_coverage: bool,
         horizon: u32,
     ) -> Self {
         Self {
@@ -414,7 +408,6 @@ impl Brain {
             consensus_mode,
             emit_votes: false,
             learning,
-            apex_coverage,
             disabled_frames: 0,
             frame: Vec::new(),
             rewards: Vec::new(),
@@ -1470,16 +1463,10 @@ impl Brain {
         // The apex is what fired anywhere in the spatial sweep, minus the subsumed. A neuron is
         // subsumed when a higher-level spatial pattern that absorbs it also fired this frame — the
         // pattern represents its role, so letting it through would double-count in temporal voting.
-        let mut apex: FxHashSet<NeuronId> = spatial_fired.iter()
+        let apex: FxHashSet<NeuronId> = spatial_fired.iter()
             .filter(|id| !spatial_subsumed.contains(id))
             .copied()
             .collect();
-
-        // EXPERIMENTAL: additionally drop apex neurons covered by a higher-level apex neuron's
-        // receptive-field radius, so only the top neuron over each region reaches temporal.
-        if self.apex_coverage {
-            apex = self.thalamus.filter_apex_by_coverage(&apex);
-        }
 
         // Activate the survivors in temporal_level_index[0] — the only path sensory events and
         // spatial corrections take into the temporal sweep.
@@ -2108,7 +2095,6 @@ mod tests {
             ConsensusMode::Democratic, // consensus_mode
             false,                    // debug
             true,                     // learning
-            false,                    // apex_coverage
             100,                      // horizon
         )
     }

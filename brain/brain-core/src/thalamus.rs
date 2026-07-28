@@ -711,26 +711,6 @@ impl Thalamus {
         }
     }
 
-    /// Keep only the top neuron over each region: drop any apex neuron a higher-level one covers.
-    pub fn filter_apex_by_coverage(&self, apex: &FxHashSet<NeuronId>) -> FxHashSet<NeuronId> {
-
-        // Coverage needs each neuron's position-channel and spatial level; patterns inherit the parent's.
-        let members: Vec<(NeuronId, ChannelId, Level)> = apex.iter()
-            .filter_map(|&id| self.base_neurons.get(&id).map(|b| (id, b.channel_id, self.get_neuron_spatial_level(id))))
-            .collect();
-
-        // filter the covered neurons
-        let mut kept = FxHashSet::default();
-        for &(bid, bch, blvl) in &members {
-
-            // Covered when a strictly-higher neuron's level-based radius contains B's position.
-            let covered = members.iter().any(|&(aid, ach, alvl)|
-                aid != bid && alvl > blvl && self.is_spatial_neighbor_channel(ach, alvl, bch));
-            if !covered { kept.insert(bid); }
-        }
-        kept
-    }
-
     /// Test whether `target_channel` is in `parent_channel`'s TEMPORAL neighbor set.
     /// Returns true if `parent_channel` has no temporal neighbor list registered (default all-pairs).
     pub fn is_temporal_neighbor_channel(&self, parent_channel: ChannelId, target_channel: ChannelId) -> bool {

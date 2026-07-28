@@ -14,9 +14,6 @@ import { pathToFileURL } from 'node:url';
  */
 export function parseBrainArgs(argv = process.argv) {
 	const has = flag => argv.includes(flag);
-	// Brain-construction toggles use `flag` (true / null, NOT false): an absent flag stays null so a value
-	// persisted with a loaded brain can fill it in — an explicit CLI flag always wins over the backup.
-	const flag = f => argv.includes(f) ? true : null;
 	const num = (flag, parser) => {
 		const i = argv.indexOf(flag);
 		return i !== -1 && argv[i + 1] !== undefined ? parser(argv[i + 1]) : null;
@@ -49,7 +46,6 @@ export function parseBrainArgs(argv = process.argv) {
 		// Learning state, fixed for the life of the brain instance — a frozen evaluation is a separate
 		// instance constructed with learning off and loaded from a backup.
 		learning: has('--disable-learning') ? false : null,
-		apexCoverage: flag('--apex-coverage'),
 	};
 }
 

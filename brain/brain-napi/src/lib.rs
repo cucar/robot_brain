@@ -184,8 +184,6 @@ impl JsBrain {
             None => (10, 0.5, GroupMode::Neutral, 0.01, 1, 1, ConsensusMode::Democratic, false),
         };
 
-        let apex_coverage = opt_bool(options.as_ref(), "apexCoverage")?.unwrap_or(false);
-
         // The learning state is fixed at construction: a frozen evaluation is a separate brain
         // instance loaded from a backup, not a toggled one.
         let learning = opt_bool(options.as_ref(), "learning")?.unwrap_or(true);
@@ -199,7 +197,7 @@ impl JsBrain {
         let inner = CoreBrain::new(
             context_length, group_threshold, group_mode,
             pattern_forget_rate, regions, columns, consensus_mode, debug, learning,
-            apex_coverage, horizon,
+            horizon,
         );
 
         Ok(Self { inner: RefCell::new(inner) })
