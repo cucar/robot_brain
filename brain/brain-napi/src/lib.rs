@@ -451,7 +451,7 @@ impl JsBrain {
         Ok(())
     }
 
-    /// Set a channel's 2D retinotopic position. The above-base neighbour rule places units by compass
+    /// Set a channel's 2D retinotopic position. The above-base neighbor rule places units by compass
     /// direction, which needs coordinates rather than only the adjacency graph. Call after registering.
     #[napi(js_name = "setChannelPosition")]
     pub fn set_channel_position(&self, name: String, x: i32, y: i32) -> Result<()> {

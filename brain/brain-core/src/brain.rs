@@ -1237,8 +1237,8 @@ impl Brain {
         if !deleted_all.is_empty() { self.memory.purge_neurons(&deleted_all); }
 
         // Inhibited = covered by a winning bid, excluding the winners themselves — a normal-serve a
-        // neighbour's unit now represents. Its inline record is dropped so it does not read as serving
-        // its neighbourhood badly (docs/algorithm.md, "Contraction").
+        // neighbor's unit now represents. Its inline record is dropped so it does not read as serving
+        // its neighborhood badly (docs/algorithm.md, "Contraction").
         let inhibited_set: FxHashSet<NeuronId> = subsumed_set.difference(&winner_set).copied().collect();
 
         Self::flush_sweep_timings(timings, &neuron_timings, &orch_timings, &mem_timings);
@@ -1393,7 +1393,7 @@ impl Brain {
         // New children (error corrections) are now created and fired inside the level sweep itself —
         // gated on winning the contraction election, in-frame — and retired children are already released
         // there. The only thing left to settle is contraction's retraction: a normal-serve a winning
-        // neighbour subsumed drops its inline history record so it does not read as serving badly
+        // neighbor subsumed drops its inline history record so it does not read as serving badly
         // (docs/algorithm.md, "Contraction"). Skipped in eval — a frozen pass writes no history to drop.
         if self.learning {
             self.thalamus.prune_inhibited_spatial_history(&spatial.inhibited_set, self.substrate_frame());

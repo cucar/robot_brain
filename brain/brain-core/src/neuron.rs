@@ -30,7 +30,7 @@ const ERROR_MIN_SAMPLES: u64 = 3;
 /// winner of the one test and which entry a stored `SpatialRoutingEntry` belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SpatialServer {
-    /// The normal — serves the usual neighbourhood, has no pattern neuron, never propagates, is never
+    /// The normal — serves the usual neighborhood, has no pattern neuron, never propagates, is never
     /// deleted. Present as an entry in the routing table like any other.
     Normal,
     /// A child — when it serves it fires and delegates to the pattern one level up.
@@ -119,7 +119,7 @@ impl SpatialHistory {
     }
 
     /// Drop the record written this frame if it is still the tail — contraction retracts a frame whose
-    /// neuron was subsumed by a neighbour (`drop_inhibited_spatial_frame`). Only the most recent `record`
+    /// neuron was subsumed by a neighbor (`drop_inhibited_spatial_frame`). Only the most recent `record`
     /// can be undone, and only if its frame matches.
     fn drop_last_if_frame(&mut self, frame: FrameNumber) {
         let Some(key) = self.last_key.take() else { return };
@@ -148,11 +148,11 @@ impl SpatialHistory {
 }
 
 /// Sentinel for the distance cache: an uncomputed matrix cell, and an entry whose configuration has not
-/// been interned yet. A real spatial distance over a finite neighbourhood is tiny, so `u32::MAX` can
+/// been interned yet. A real spatial distance over a finite neighborhood is tiny, so `u32::MAX` can
 /// never collide with one.
 const DIST_SENTINEL: u32 = u32::MAX;
 
-/// Per-neuron memoisation of [Neuron::spatial_distance] between neighbourhood configurations.
+/// Per-neuron memoization of [Neuron::spatial_distance] between neighborhood configurations.
 ///
 /// Since refinement was removed, every stored configuration (the normal, every child, every remembered
 /// observation) is **frozen** for its lifetime — so the distance between any two configurations is a
@@ -523,7 +523,7 @@ pub struct Neuron {
     /// `materialize_and_reset_children`); it also refills as the neuron fires afterwards.
     spatial_history: SpatialHistory,
 
-    /// Memoised pairwise distances between this neuron's neighbourhood configurations. A pure cache over
+    /// Memoised pairwise distances between this neuron's neighborhood configurations. A pure cache over
     /// frozen configs (see [SpatialDistanceCache]); the route/delete/add passes read it instead of
     /// recomputing [Neuron::spatial_distance] every active frame.
     spatial_dist_cache: SpatialDistanceCache,
@@ -1505,15 +1505,15 @@ impl Neuron {
                 Some(SpatialBid { bidder_id: self.id, pattern_id: pid, covered })
             }
             SpatialServer::Normal => {
-                // Only mint when the neighbourhood is COMPLETE — the observed set reaches the capacity of a
-                // full neighbourhood (`spatial_capacity` = the declared graph's max degree, 8 for a 3×3
-                // retinotopic field). Partial neighbourhoods (sparse/edge units) are the varied, one-off
+                // Only mint when the neighborhood is COMPLETE — the observed set reaches the capacity of a
+                // full neighborhood (`spatial_capacity` = the declared graph's max degree, 8 for a 3×3
+                // retinotopic field). Partial neighborhoods (sparse/edge units) are the varied, one-off
                 // configurations that drive higher-level proliferation; gating minting on a full complement
                 // restricts new patterns to fully-surrounded, reproducible local structure. The capacity
                 // comes from the declared graph, not coordinates, so this holds for any modality; it is 0
                 // when nothing is declared (all-pairs), which disables the gate. Recognition is unaffected.
-                let complete_neighbourhood = observed.len() >= spatial_capacity;
-                if should_learn && served_distance > 0 && complete_neighbourhood
+                let complete_neighborhood = observed.len() >= spatial_capacity;
+                if should_learn && served_distance > 0 && complete_neighborhood
                     && self.spatial_add_pass_pays(observed_id, &observed, served_distance) {
                     let mut covered = observed.clone();
                     covered.push(self.id);
@@ -1528,7 +1528,7 @@ impl Neuron {
         timings.correct_errors += t.elapsed().as_secs_f64();
 
         // A pure normal-serve (learning, no request) does not enter the election — finalize it inline:
-        // record it (server = Normal) and apply its delete now. If a neighbour's winning bid subsumes it
+        // record it (server = Normal) and apply its delete now. If a neighbor's winning bid subsumes it
         // this frame, the sweep's inhibition-prune drops this record. A REQUEST records nothing here —
         // commit_spatial_frame does that, and only if it wins. (bid None + delete_candidate Some => the
         // delete was applied inline and only needs cross-neuron cleanup.)
@@ -1564,10 +1564,10 @@ impl Neuron {
         }
     }
 
-    /// Drop this frame's record from the history — the neuron was inhibited (subsumed) by a neighbour's
+    /// Drop this frame's record from the history — the neuron was inhibited (subsumed) by a neighbor's
     /// unit in contraction, so it contributed nothing to the file and this frame is not its evidence.
-    /// Leaving it in would tell the one test the neuron is serving its neighbourhood badly (as `Normal`)
-    /// and drive a child the neuron never needs, since a neighbour already covers it every such frame.
+    /// Leaving it in would tell the one test the neuron is serving its neighborhood badly (as `Normal`)
+    /// and drive a child the neuron never needs, since a neighbor already covers it every such frame.
     ///
     /// The record to drop is the one just appended this frame — the tail. Matching the tail against the
     /// current frame guards against dropping an older record on a frame this neuron did not record.
@@ -1796,7 +1796,7 @@ impl Neuron {
             if Some(*pid) == serving { continue; }
             let cost = 1.0 + config.len() as f64;
             let margin = benefit.get(pid).copied().unwrap_or(0.0) - cost;
-            if margin < 0.0 && worst.map_or(true, |(_, m)| margin < m) {
+            if margin <= 0.0 && worst.map_or(true, |(_, m)| margin < m) {
                 worst = Some((*pid, margin));
             }
         }
@@ -1847,7 +1847,7 @@ impl Neuron {
                 if Some(cpid) == serving { continue; }
                 let cost = 1.0 + spatial_dist_cache.configs[cid as usize].len() as f64;
                 let margin = benefit.get(&cpid).copied().unwrap_or(0.0) - cost;
-                if margin < 0.0 && worst.map_or(true, |(_, m)| margin < m) {
+                if margin <= 0.0 && worst.map_or(true, |(_, m)| margin < m) {
                     worst = Some((cpid, margin));
                 }
             }
@@ -1858,7 +1858,7 @@ impl Neuron {
     /// The one test's add half: the candidate is this frame's observation O. Benefit = Σ over the
     /// whole history of [distance to the frame's server − distance to the candidate], counted only on
     /// the frames the candidate is strictly closer (the frames it would win); cost = 1 + |O|. Mint when
-    /// benefit ≥ cost. This is the design's expensive step — but measuring the candidate against every
+    /// benefit > cost. This is the design's expensive step — but measuring the candidate against every
     /// distinct configuration rather than every remembered frame is exactly what the histogram buys
     /// (docs/algorithm.md, "Risks": the add pass).
     ///
@@ -1878,7 +1878,7 @@ impl Neuron {
             if d_cand < ev.best_distance { benefit += (ev.best_distance - d_cand) as f64 * ev.frames.len() as f64; }
         }
         // A child at O pays for its storage — the neuron would ask the thalamus to mint it.
-        benefit >= cost
+        benefit > cost
     }
 
     /// Does a new child at `O` pay for its storage? The add half of the one test as a decision: benefit
@@ -1898,7 +1898,7 @@ impl Neuron {
                 if d_cand < ev.best_distance { benefit += (ev.best_distance - d_cand) as f64 * ev.frames.len() as f64; }
             }
         }
-        benefit >= cost
+        benefit > cost
     }
 
     /// Remove a retired child from this neuron's local routing structures. The thalamus releases the
@@ -2576,7 +2576,7 @@ mod tests {
         // Horizon 20 (its own parameter now). Period-5 input, run 6 horizons.
         let horizon: i64 = 20;
         let mut n = Neuron::new(1, 0.05, 0.9, GroupMode::Static, FxHashMap::default(), 10, true, horizon as u32);
-        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        // Complete (8-neighbor) configurations — minting now requires a full neighborhood.
         let config_a: Vec<NeuronId> = vec![10, 11, 12, 13, 14, 15, 16, 17]; // usual: 3 of every 5 frames -> the normal
         let config_b: Vec<NeuronId> = vec![20, 21, 22, 23, 24, 25, 26, 27]; // deviation: 2 of every 5 -> should be a child
 
@@ -2765,7 +2765,7 @@ mod tests {
     fn test_stable_world_creates_no_child() {
         let mut n = phase1_neuron(0.1);
         let mut pid = 1000;
-        let c = [1, 2, 3, 4, 5, 6, 7, 8]; // complete neighbourhood, so minting is gate-eligible but never justified
+        let c = [1, 2, 3, 4, 5, 6, 7, 8]; // complete neighborhood, so minting is gate-eligible but never justified
         for f in 0..40 {
             let (minted, deleted) = step(&mut n, &c, f, &mut pid);
             assert!(minted.is_none(), "a stable configuration must never mint a child (frame {f})");
@@ -2780,7 +2780,7 @@ mod tests {
     #[test]
     fn test_mint_context_is_the_observation() {
         let mut n = phase1_neuron(0.05);
-        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        // Complete (8-neighbor) configurations — minting now requires a full neighborhood.
         let (a, b) = ([10, 11, 12, 13, 14, 15, 16, 17], [20, 21, 22, 23, 24, 25, 26, 27]);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let mut minted_cfg = None;
@@ -2804,7 +2804,7 @@ mod tests {
     fn test_mint_frame_does_not_pollute_the_normal() {
         let mut n = phase1_neuron(0.05);
         let mut pid = 1000;
-        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        // Complete (8-neighbor) configurations — minting now requires a full neighborhood.
         let (a, b) = ([10, 11, 12, 13, 14, 15, 16, 17], [20, 21, 22, 23, 24, 25, 26, 27]);
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
@@ -2823,7 +2823,7 @@ mod tests {
     fn test_child_deleted_when_demand_disappears() {
         let mut n = phase1_neuron(0.1);
         let mut pid = 1000;
-        // Complete (8-neighbour) configurations — minting now requires a full neighbourhood.
+        // Complete (8-neighbor) configurations — minting now requires a full neighborhood.
         let (a, b) = ([10, 11, 12, 13, 14, 15, 16, 17], [20, 21, 22, 23, 24, 25, 26, 27]);
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
@@ -2857,14 +2857,14 @@ mod tests {
     }
 
     /// The completeness gate: minting requires |O| >= spatial_capacity (a full-degree complement). A
-    /// recurring deviation whose neighbourhood is below capacity never mints; the same deviation mints
+    /// recurring deviation whose neighborhood is below capacity never mints; the same deviation mints
     /// once capacity matches its size. This is the coordinate-free control on higher-level proliferation.
     #[test]
     fn test_capacity_gates_minting() {
         let recurring_deviation_mints = |capacity: usize| {
             let mut n = phase1_neuron(0.05);
             let empty: FxHashSet<NeuronId> = FxHashSet::default();
-            let (a, b) = ([10, 11, 12, 13], [20, 21, 22, 23]); // 4-neighbour configs
+            let (a, b) = ([10, 11, 12, 13], [20, 21, 22, 23]); // 4-neighbor configs
             let mut minted = false;
             for f in 0..40 {
                 let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
@@ -2873,7 +2873,7 @@ mod tests {
             }
             minted
         };
-        assert!(!recurring_deviation_mints(8), "a 4-neighbour deviation must not mint when capacity is 8 (incomplete)");
+        assert!(!recurring_deviation_mints(8), "a 4-neighbor deviation must not mint when capacity is 8 (incomplete)");
         assert!(recurring_deviation_mints(4), "the same deviation mints when capacity matches its size (complete)");
     }
 }

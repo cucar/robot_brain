@@ -290,16 +290,16 @@ pub struct Thalamus {
     /// still sequencing temporally against a different (or unrestricted) channel set.
     spatial_channel_neighbors: FxHashMap<ChannelId, Vec<FxHashSet<ChannelId>>>,
 
-    /// 2D retinotopic position of each base channel, `channel_id -> (x, y)`. The above-base neighbour
+    /// 2D retinotopic position of each base channel, `channel_id -> (x, y)`. The above-base neighbor
     /// rule ([directional_neighbors]) places active units by compass direction, which needs coordinates,
     /// not just the adjacency graph. Set by the encoder at registration; empty for non-spatial workloads.
     channel_positions: FxHashMap<ChannelId, (i32, i32)>,
 
-    /// The largest base-level declared neighbourhood degree across all channels — the size of a COMPLETE
-    /// neighbourhood (8 for a retinotopic 3×3 field). Minting is gated on the observed neighbourhood
+    /// The largest base-level declared neighborhood degree across all channels — the size of a COMPLETE
+    /// neighborhood (8 for a retinotopic 3×3 field). Minting is gated on the observed neighborhood
     /// reaching this, so only fully-surrounded units form patterns. Coordinate-free (derived from the
     /// declared graph, not positions). Stays 0 when nothing is declared (all-pairs), which disables the
-    /// gate — the correct default for non-spatial workloads that have no notion of a full neighbourhood.
+    /// gate — the correct default for non-spatial workloads that have no notion of a full neighborhood.
     spatial_capacity: usize,
 
 
@@ -662,7 +662,7 @@ impl Thalamus {
             channel = channel_id;
             sets.push(neighbor_ids);
         }
-        // The base-level (index 0) degree is a full immediate neighbourhood; the completeness gate is
+        // The base-level (index 0) degree is a full immediate neighborhood; the completeness gate is
         // sized to the largest such degree across channels.
         self.spatial_capacity = self.spatial_capacity.max(sets.first().map_or(0, |s| s.len()));
         self.spatial_channel_neighbors.insert(channel, sets);
@@ -1063,7 +1063,7 @@ impl Thalamus {
         // The level's actives feed both roles: the co-activation identifies each neuron, and the
         // same set is what it predicts. Adjacency is derived above the base (docs/algorithm.md,
         // "Contraction: What this builds"); at level 0 every unit anchors on its own cell, so it reduces
-        // to the declared base neighbour graph and that cheaper path is used instead.
+        // to the declared base neighbor graph and that cheaper path is used instead.
         let t = std::time::Instant::now();
         let results = self.dispatch_spatial_frame(level, &work_list, &level_context, anchors, new_error_pattern_ids, level_neuron_ids, frame_number);
         orchestration.dispatch_frame = t.elapsed().as_secs_f64();
@@ -1324,7 +1324,7 @@ impl Thalamus {
         }
     }
 
-    /// Drop this frame from the history of every neuron contraction inhibited (covered by a neighbour's
+    /// Drop this frame from the history of every neuron contraction inhibited (covered by a neighbor's
     /// winning bid). A subsumed neuron contributed nothing to the file, so the frame is not its evidence
     /// (docs/algorithm.md, "Contraction"). Routes each neuron to its owning region.
     pub fn prune_inhibited_spatial_history(&mut self, inhibited: &FxHashSet<NeuronId>, frame_number: FrameNumber) {
@@ -1580,14 +1580,14 @@ impl Thalamus {
         // neighbor's position and reward, context carries only its strength.
         let inference_neurons = self.decorate_inference_neurons(inference_events);
         let (inference_neighbors, context_neighbors) = if level == 0 {
-            // Base level: the declared channel neighbour graph — the retinotopic 3×3 receptive field,
+            // Base level: the declared channel neighbor graph — the retinotopic 3×3 receptive field,
             // which already is the eight compass directions, so the directional rule would reproduce it.
             // The declared path is kept because it is cheaper and leaves level 0 byte-for-byte unchanged.
             (self.select_inference_neighbors(work_list, &inference_neurons),
              self.select_context_neighbors(work_list, level_context))
         } else if !self.channel_positions.is_empty() {
             // Above the base WITH coordinates (a retinotopic modality): a fixed radius is wrong in both
-            // directions — it invents neighbours where the level thinned out and misses real ones across a
+            // directions — it invents neighbors where the level thinned out and misses real ones across a
             // gap. Adjacency is the nearest active unit in each compass sector — see [directional_neighbors].
             self.directional_neighbors(work_list, level_context, &inference_neurons, anchors)
         } else {
@@ -1601,18 +1601,18 @@ impl Thalamus {
         self.dispatch_to_regions(work_list, inference_neighbors, context_neighbors, new_error_pattern_ids, frame_number)
     }
 
-    /// Per-neuron neighbour lists above the base by the **eight-sector nearest** rule over the units'
-    /// anchors: each unit's neighbourhood is the single closest active unit in each of the eight compass
-    /// sectors (E, NE, N, NW, W, SW, S, SE), so a unit has at most eight neighbours — one per occupied
+    /// Per-neuron neighbor lists above the base by the **eight-sector nearest** rule over the units'
+    /// anchors: each unit's neighborhood is the single closest active unit in each of the eight compass
+    /// sectors (E, NE, N, NW, W, SW, S, SE), so a unit has at most eight neighbors — one per occupied
     /// direction. Direction and distance are read from the anchors' retinotopic positions.
     ///
-    /// This gives the neighbourhood a bounded **dynamic range**. Where a level is dense each sector's
+    /// This gives the neighborhood a bounded **dynamic range**. Where a level is dense each sector's
     /// nearest is the adjacent unit (the immediate ring); where it has thinned out a sector still reaches
     /// across the gap to the first unit in that direction, and no further. A fixed radius cannot do both —
-    /// it invents neighbours in the sparse case and truncates real ones in the dense case — and unlike an
+    /// it invents neighbors in the sparse case and truncates real ones in the dense case — and unlike an
     /// empty-disk rule the count is capped at eight, so `|O|` cannot grow with local density.
     ///
-    /// Returns the inference neighbours (id + channel) and context neighbours (id + strength) per
+    /// Returns the inference neighbors (id + channel) and context neighbors (id + strength) per
     /// work-list neuron, in work-list order, self excluded. Units whose anchor has no registered position
     /// take no part (they cannot be placed by direction).
     fn directional_neighbors(
@@ -1654,7 +1654,7 @@ impl Thalamus {
         (inference_out, context_out)
     }
 
-    /// The eight-sector nearest neighbours of `uid` at position `upos`: the closest active unit in each of
+    /// The eight-sector nearest neighbors of `uid` at position `upos`: the closest active unit in each of
     /// eight 45° compass sectors. Sector index is `round(atan2(dy, dx) / 45°) mod 8`; within a sector the
     /// nearest by squared Euclidean distance wins, ties broken by smaller id for determinism. A co-located
     /// unit (same position — anchors are distinct in practice) has no direction and is skipped.
@@ -1831,7 +1831,7 @@ impl Thalamus {
         // one test, and connection learning must all run where its state lives. The buckets hold indices
         // rather than ids because the two neighbor lists are positional — parallel to work_list.
         let indices_by_region = self.bucket_by_region_indices(work_list, |&id| id);
-        let capacity = self.spatial_capacity; // size of a complete neighbourhood — the minting gate
+        let capacity = self.spatial_capacity; // size of a complete neighborhood — the minting gate
 
         let mut results = Vec::new();
         for (r, task_indices) in indices_by_region.iter().enumerate() {
@@ -2737,7 +2737,7 @@ mod tests {
         t
     }
 
-    /// The context neighbour ids each work-list unit sees, given anchors (base channel ids) on a base graph.
+    /// The context neighbor ids each work-list unit sees, given anchors (base channel ids) on a base graph.
     fn neighbors_seen(t: &mut Thalamus, units: &[(NeuronId, NeuronId)]) -> Vec<Vec<NeuronId>> {
         let mut level_context = SpatialContext::new();
         for &(uid, _) in units { level_context.add_neuron(uid, 1.0); }
@@ -2750,14 +2750,14 @@ mod tests {
     }
 
     /// On a line only the east and west sectors are occupied, so the rule keeps the nearest unit in each
-    /// direction and nothing behind it. On a fully-occupied line that is exactly the immediate neighbours.
+    /// direction and nothing behind it. On a fully-occupied line that is exactly the immediate neighbors.
     #[test]
     fn test_directional_neighbors_are_the_immediate_ring_when_dense() {
         let mut t = line_thalamus(4);
         // One unit per cell: 100@1, 101@2, 102@3, 103@4.
         let n = neighbors_seen(&mut t, &[(100, 1), (101, 2), (102, 3), (103, 4)]);
-        assert_eq!(n[0], vec![101], "the unit at cell 1 sees only its immediate east neighbour");
-        assert_eq!(n[1], vec![100, 102], "an interior unit sees both immediate neighbours, nothing beyond");
+        assert_eq!(n[0], vec![101], "the unit at cell 1 sees only its immediate east neighbor");
+        assert_eq!(n[1], vec![100, 102], "an interior unit sees both immediate neighbors, nothing beyond");
         assert_eq!(n[2], vec![101, 103]);
         assert_eq!(n[3], vec![102]);
     }
@@ -2775,7 +2775,7 @@ mod tests {
     }
 
     /// The nearest unit in a direction hides the ones behind it in the same sector: cell 5 is the east
-    /// neighbour of cell 1, and cell 9 (further east, same sector) is not seen. Bounds the neighbourhood.
+    /// neighbor of cell 1, and cell 9 (further east, same sector) is not seen. Bounds the neighborhood.
     #[test]
     fn test_directional_neighbors_keep_only_the_nearest_per_sector() {
         let mut t = line_thalamus(9);
