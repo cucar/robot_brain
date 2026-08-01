@@ -53,22 +53,22 @@ import { MNISTPixelChannelsEncoder } from '../encoder.js';
 const SIM_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
-//  1. Geometry — the base neighbour graph
+//  1. Geometry — the base neighbor graph
 // ---------------------------------------------------------------------------
 
-// Connectivity of the base neighbour graph: 4 = von Neumann (orthogonal),
+// Connectivity of the base neighbor graph: 4 = von Neumann (orthogonal),
 // 8 = Moore (orthogonal + diagonal). Set per run by the runners below.
 let connectivity = 8;
-// Radius of the base neighbour graph (Chebyshev for 8-conn, Manhattan for 4-conn).
+// Radius of the base neighbor graph (Chebyshev for 8-conn, Manhattan for 4-conn).
 // MNIST mirrors the brain's encoder radius (1 = 3×3, 2 = 5×5); ASCII shapes use 1.
 let radius = 1;
 
-// Memoized neighbour lists per position id — positions repeat every frame and the
-// neighbour ring never changes, so caching turns the hot adjacency probe into a lookup.
+// Memoized neighbor lists per position id — positions repeat every frame and the
+// neighbor ring never changes, so caching turns the hot adjacency probe into a lookup.
 let neighborCache = new Map();
 
 /**
- * Reset the per-position neighbour cache.
+ * Reset the per-position neighbor cache.
  * Called whenever connectivity or radius changes so stale rings are never reused.
  */
 function resetGeometry() {
@@ -76,8 +76,8 @@ function resetGeometry() {
 }
 
 /**
- * List the coordinate neighbours of a base position under the current connectivity.
- * These edges define the base neighbour graph; footprint adjacency is built on top.
+ * List the coordinate neighbors of a base position under the current connectivity.
+ * These edges define the base neighbor graph; footprint adjacency is built on top.
  */
 function listPixelNeighbors(pixelId) {
 	const cached = neighborCache.get(pixelId);
@@ -115,7 +115,7 @@ function buildPosIndex(items) {
 
 /**
  * The ids whose footprint TOUCHES the given footprint, via the inverted index: dilate the
- * footprint by the neighbour ring and collect every id covering a probed position. `excludeId`
+ * footprint by the neighbor ring and collect every id covering a probed position. `excludeId`
  * drops self. This is exactly doFootprintsTouch, computed once per footprint rather than per pair.
  */
 function touchingIds(footprint, posIndex, excludeId) {
@@ -181,7 +181,7 @@ function scoreContextMatch(known, observed, mergeThreshold) {
 /**
  * Collapse an id→strength target map to its per-position MODAL base-id set — the
  * strongest-voted value at each position, ties broken on smaller id for determinism.
- * This is the brain's per-position competition (one prediction per neighbour position).
+ * This is the brain's per-position competition (one prediction per neighbor position).
  */
 function modalPrediction(targets) {
 	const winnerByPos = new Map(); // pos -> { id, strength }
@@ -228,14 +228,14 @@ class Brain {
 		this.errorMode = opts.errorMode ?? 'conservative';  // adaptive direction: conservative | neutral | aggressive
 		this.reliabilityFloor = opts.reliabilityFloor ?? 0.6; // drop a footprint position predicted right < this often
 		this.refineMinSamples = opts.refineMinSamples ?? 5; // min per-position samples before a position may be pruned
-		this.expansionOverlapFloor = opts.expansionOverlapFloor ?? 0.0; // min overlap to absorb a neighbour
+		this.expansionOverlapFloor = opts.expansionOverlapFloor ?? 0.0; // min overlap to absorb a neighbor
 		// Parent reference strengths (multi-parent refcount). Same integer-counter arithmetic as the
 		// brain's connection/context entries: created at 1 when a parent is wired, +1 when the parent
 		// is active as the pattern fires, −1 when absent, deleted at 0, no cap. Refinement draining
 		// these references to zero is what reaps a pattern — not decay.
 		this.maxLevels = opts.maxLevels ?? 12;
 
-		// Persistent base neurons, keyed `pos=value`. Each carries learned neighbour connections.
+		// Persistent base neurons, keyed `pos=value`. Each carries learned neighbor connections.
 		this.bases = new Map();
 		// Persistent pattern neurons (corrections), keyed by minted id.
 		this.patterns = new Map();
@@ -279,7 +279,7 @@ class Brain {
 	 * Activate the base sensory field: one neuron per position carrying this image's
 	 * value (black or white). Base neurons are persistent — created lazily, reused
 	 * across frames so their learned connections accumulate. Records the frame's
-	 * value-at-position map so neighbours can be read back during prediction.
+	 * value-at-position map so neighbors can be read back during prediction.
 	 * Returns the active base neurons in row-major (deterministic) order.
 	 */
 	activateBase(bits, imageSize) {
@@ -297,7 +297,7 @@ class Brain {
 					pos,
 					value,
 					footprint: new Set([pos]),
-					connections: new Map(), // neighbour base-id → strength (its learned L0 prediction)
+					connections: new Map(), // neighbor base-id → strength (its learned L0 prediction)
 				};
 				this.bases.set(id, neuron);
 			}
@@ -370,9 +370,9 @@ class Brain {
 
 	/**
 	 * For every active unit at this level, predict L0 via its connections (per-position
-	 * modal), compare to the observed L0 in its neighbourhood, and emit a correction
-	 * request when the error clears the threshold and the unit has ≥1 neighbour for
-	 * context. Base units also LEARN their neighbour connections here (the only place
+	 * modal), compare to the observed L0 in its neighborhood, and emit a correction
+	 * request when the error clears the threshold and the unit has ≥1 neighbor for
+	 * context. Base units also LEARN their neighbor connections here (the only place
 	 * the L0 predictor is built). Returns the request descriptors for clustering.
 	 */
 	collectRequests(active, level, learning) {
@@ -400,7 +400,7 @@ class Brain {
 			const threshold = this.thresholdFor(unit.id);
 			if (error <= threshold) continue;
 			funnel.mispredict++;
-			if (neighbors.length === 0) { funnel.neighborless++; continue; } // ≥1-neighbour rule — no context, no correction
+			if (neighbors.length === 0) { funnel.neighborless++; continue; } // ≥1-neighbor rule — no context, no correction
 
 			funnel.requests++;
 			requests.push({ unit, level, observedL0, neighbors, footprint: unit.footprint });
@@ -420,7 +420,7 @@ class Brain {
 
 	/**
 	 * The observed L0 base-id set a unit is accountable for: at the base level, the
-	 * actual values at the unit's coordinate-neighbour positions; at higher levels,
+	 * actual values at the unit's coordinate-neighbor positions; at higher levels,
 	 * the actual values over the unit's footprint region. This is what the prediction
 	 * is scored against (the correct L0 reality the unit should have predicted).
 	 */
@@ -441,7 +441,7 @@ class Brain {
 	}
 
 	/**
-	 * Strengthen a base neuron's connections to the actual values at its neighbour
+	 * Strengthen a base neuron's connections to the actual values at its neighbor
 	 * positions this frame — the running tally whose per-position mode is its L0 prediction.
 	 */
 	learnBaseConnections(unit) {
@@ -454,9 +454,9 @@ class Brain {
 	}
 
 	/**
-	 * The neighbours of a unit among the active set at this level: coordinate adjacency
-	 * at the base, footprint-touch at higher levels (the §2.2 footprint neighbourhood).
-	 * The unit is never its own neighbour.
+	 * The neighbors of a unit among the active set at this level: coordinate adjacency
+	 * at the base, footprint-touch at higher levels (the §2.2 footprint neighborhood).
+	 * The unit is never its own neighbor.
 	 */
 	neighborsOf(unit, level, posIndex, idToUnit) {
 		const out = [];
@@ -474,7 +474,7 @@ class Brain {
 	// ── Cluster + reuse/mint/expand ───────────────────────────────────────────
 
 	/**
-	 * Cluster the requests by transitive merge over the neighbour relation and, per
+	 * Cluster the requests by transitive merge over the neighbor relation and, per
 	 * connected cluster, either reuse/expand a matched pattern or mint a fresh one
 	 * predicting the correct L0. Reuse lookup runs first (per request, against the
 	 * reverse target index); matched patterns join the clustering pool so an adjacent
@@ -501,7 +501,7 @@ class Brain {
 
 		const minted = [], reused = [], expanded = [];
 		for (const cluster of clusters) {
-			if (cluster.neighbors.size === 0) continue; // need ≥1 neighbour for context
+			if (cluster.neighbors.size === 0) continue; // need ≥1 neighbor for context
 
 			if (cluster.patterns.length > 0) {
 				// Reuse: wire the cluster's requests to the (smallest-id) matched pattern, expand it.
@@ -550,8 +550,8 @@ class Brain {
 
 	/**
 	 * Connected components over the unified pool (requests ∪ matched patterns) by the
-	 * neighbour relation at this level. Each component reports its requests, its matched
-	 * patterns, the union footprint, and the neighbour-source set (context) it conditions
+	 * neighbor relation at this level. Each component reports its requests, its matched
+	 * patterns, the union footprint, and the neighbor-source set (context) it conditions
 	 * on. Pool members are joined when their footprints touch (coordinate ring at base).
 	 * Iteration is in sorted-id order for determinism.
 	 */
@@ -591,7 +591,7 @@ class Brain {
 
 	/**
 	 * Mint one coordinate-less correction over a connected cluster: footprint = the
-	 * cluster's coverage, context = the cluster's neighbour sources, targets = the
+	 * cluster's coverage, context = the cluster's neighbor sources, targets = the
 	 * correct L0 the cluster's requests should have predicted. Every request in the
 	 * cluster is wired as a parent. The correction is registered in both indexes so it
 	 * is a recognition candidate (by context) and a reuse candidate (by target) next frame.
@@ -960,7 +960,7 @@ function newDiagnostics() {
 	// Lifetime event counters track the merge/split balance: births + expansions are the
 	// merge force, deaths + prunes are the split force. `history` snapshots them at checkpoints.
 	// `funnelByLevel` traces the climb: per level, how active units flow active → mispredict →
-	// (neighbour-gated) request → mint vs reuse, so a stalled level (e.g. no L3) is localizable.
+	// (neighbor-gated) request → mint vs reuse, so a stalled level (e.g. no L3) is localizable.
 	return { byLevel: new Map(), births: 0, deaths: 0, expansions: 0, refinements: 0, prunes: 0, history: [], funnelByLevel: new Map() };
 }
 
@@ -1404,7 +1404,7 @@ function runLifecycle(opts = {}) {
 
 /**
  * Print the per-level climb funnel: how active units at each level flow active → mispredict
- * → (after the ≥1-neighbour rule) request → mint vs reuse. A level whose `requests` collapse to
+ * → (after the ≥1-neighbor rule) request → mint vs reuse. A level whose `requests` collapse to
  * zero (all mispredictors are neighborless) or whose `minted` is zero while `reused` is high
  * tells us exactly why the next level never forms.
  */

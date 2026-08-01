@@ -406,7 +406,7 @@ routing table, and a **pattern neuron one level above its own level**. Both are 
   child's.
 - **A candidate rejected today is not lost.** Every frame offers a different candidate — its own observation — so
   a neuron samples candidate positions from its own demand. A cluster worth a child will sooner or later present a
-  frame near its middle, and that candidate passes where an off-centre one failed.
+  frame near its middle, and that candidate passes where an off-center one failed.
 - **It is created with no connections.** Its connections belong to its own level, which has not been observed at
   the moment of creation. As the level above populates, the newborn learns its connections there by ordinary
   co-occurrence counting.

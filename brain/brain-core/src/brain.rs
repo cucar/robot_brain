@@ -582,7 +582,9 @@ impl Brain {
 
         // votes.csv: neuron_id, activation_offset, voted_neuron_id, strength, reward, distance
         let mut vote_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
+        // level is not part of this CSV's schema (see column comment above) — active_neurons.csv is
+        // the only export that needs it.
+        for (id, frame, _, state) in &activations {
             let offset = frame - self.frame_number;
             if let Some(ref votes) = state.votes {
                 for vote in votes {
@@ -598,7 +600,9 @@ impl Brain {
 
         // context_refs.csv: neuron_id, activation_offset, ref_neuron_id, ref_distance
         let mut ref_rows: Vec<Vec<String>> = Vec::new();
-        for (id, frame, _level, state) in &activations {
+        // level is not part of this CSV's schema (see column comment above) — active_neurons.csv is
+        // the only export that needs it.
+        for (id, frame, _, state) in &activations {
             let offset = frame - self.frame_number;
             if let Some(ref ctx) = state.context {
                 for entry in ctx {

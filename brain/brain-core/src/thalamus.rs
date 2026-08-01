@@ -1115,7 +1115,7 @@ impl Thalamus {
             new_specs.push(NeuronCreateSpec { id: spec.id, forget_rate: spec.forget_rate, connections: Some(spec.connections) });
         }
         if !new_specs.is_empty() { self.create_neurons(&new_specs); }
-        if !install_ops.is_empty() { self.install_spatial_corrections(install_ops, frame_number); }
+        if !install_ops.is_empty() { self.install_spatial_corrections(install_ops); }
         self.spatial_corrections_minted += new_child_of.len() as u64;
 
         // Subsumed = neurons covered by a RECOGNITION winner. A new child fires this frame (so `learn`
@@ -1288,7 +1288,7 @@ impl Thalamus {
     /// registered in the death ledger.
     /// Corrections are NOT activated this frame — they're routing-table entries that match and fire
     /// on the next frame's spatial sweep (per spatial-processing.md §5.1).
-    pub fn install_spatial_corrections(&mut self, install_ops: Vec<SpatialInstallOp>, frame_number: FrameNumber) {
+    pub fn install_spatial_corrections(&mut self, install_ops: Vec<SpatialInstallOp>) {
         if install_ops.is_empty() { return; }
 
         // Bucket by owning region (route on parent_id — that's whose routing table changes).
@@ -1303,7 +1303,7 @@ impl Thalamus {
         let mut all_context_refs: Vec<SpatialContextRefUpdate> = Vec::new();
         for (r, region_ops) in by_region.into_iter().enumerate() {
             if region_ops.is_empty() { continue; }
-            let result = self.region_list[r].install_spatial_corrections(region_ops, frame_number);
+            let result = self.region_list[r].install_spatial_corrections(region_ops);
             all_deaths.extend(result.deaths);
             all_context_refs.extend(result.context_ref_updates);
         }
@@ -2124,7 +2124,7 @@ impl Thalamus {
         let mut flat = Vec::new();
         for (r, region_pairs) in by_region.iter().enumerate() {
             if region_pairs.is_empty() { continue; }
-            for (voter_id, _age, votes) in self.region_list[r].collect_votes_for_voter_ages(region_pairs) {
+            for (voter_id, votes) in self.region_list[r].collect_votes_for_voter_ages(region_pairs) {
                 for vote in votes {
                     flat.push(FlatVote {
                         voter_id,
@@ -2442,16 +2442,16 @@ impl Thalamus {
             self.region_list[r].restore_snapshot(region_buckets);
         }
 
-        // Rebuild the position metadata of spatial connection targets on every restored neuron.
-        // Snapshots do not persist the (channel, dimension) per target; lateral connection learning
-        // wires toward same-level events — L0 sensories and spatial patterns alike — and both carry
-        // coordinates in base metadata (patterns inherit their parent's), so the map is derivable.
-        let target_meta: FxHashMap<NeuronId, (ChannelId, DimensionId)> = self.base_neurons.iter()
+        // Rebuild the channel metadata of spatial connection targets on every restored neuron.
+        // Snapshots do not persist the channel per target; lateral connection learning wires toward
+        // same-level events — L0 sensories and spatial patterns alike — and both carry their channel
+        // in base metadata (patterns inherit their parent's), so the map is derivable.
+        let target_meta: FxHashMap<NeuronId, ChannelId> = self.base_neurons.iter()
             .filter(|(id, b)| {
                 b.neuron_type == NeuronType::Event
                     && self.neuron_temporal_levels.get(*id).copied().unwrap_or(0) == 0
             })
-            .map(|(&id, b)| (id, (b.channel_id, b.coordinate.dim_id)))
+            .map(|(&id, b)| (id, b.channel_id))
             .collect();
         for region in &mut self.region_list {
             region.decorate_spatial_targets(&target_meta);
@@ -2745,7 +2745,9 @@ mod tests {
             .map(|&(uid, _)| ActiveNeuron { id: uid, channel_id: 0, reward: 0.0 }).collect();
         let anchors: FxHashMap<NeuronId, NeuronId> = units.iter().copied().collect();
         let work: Vec<NeuronId> = units.iter().map(|&(uid, _)| uid).collect();
-        let (_inf, ctx) = t.directional_neighbors(&work, &level_context, &inference, &anchors);
+        // inference_neighbors (the first return value) is real in production (dispatch_to_regions
+        // uses both), but this test only asserts what each unit sees as context.
+        let (_, ctx) = t.directional_neighbors(&work, &level_context, &inference, &anchors);
         ctx.iter().map(|c| { let mut v: Vec<NeuronId> = c.entries().keys().copied().collect(); v.sort_unstable(); v }).collect()
     }
 

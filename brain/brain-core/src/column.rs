@@ -265,7 +265,7 @@ impl Column {
 
                 // scrub a dead neuron from a parent's spatial children's context entries
                 DeleteOp::PurgeSpatialContextNeuron { target_id, dying_neuron_id } => {
-                    self.purge_spatial_context_neuron(*target_id, *dying_neuron_id, current_frame, &mut newly_deletable_ids);
+                    self.purge_spatial_context_neuron(*target_id, *dying_neuron_id);
                 }
 
                 // drop a stale temporal contextRef on a context neuron
@@ -449,8 +449,6 @@ impl Column {
         &mut self,
         target_id: NeuronId,
         dying_neuron_id: NeuronId,
-        _current_frame: FrameNumber,
-        _newly_deletable_ids: &mut Vec<NeuronId>,
     ) {
         let parent = match self.neurons.get_mut(&target_id) {
             Some(n) => n,
@@ -519,7 +517,7 @@ impl Column {
 
     /// Rebuild the position metadata of spatial connection targets on every owned neuron.
     /// Restore-only: at runtime the metadata is captured at connection-learn time.
-    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, (ChannelId, crate::types::DimensionId)>) {
+    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, ChannelId>) {
         for neuron in self.neurons.values_mut() {
             neuron.decorate_spatial_targets(meta);
         }
@@ -530,7 +528,7 @@ impl Column {
     /// ContextRefUpdates for each context-entry target so they know this parent now references them.
     /// Corrections are NOT activated this frame; the routing-table entry will fire on next frame's
     /// spatial sweep via the recognize_patterns path.
-    pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>, frame_number: FrameNumber) -> SpatialInstallResult {
+    pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>) -> SpatialInstallResult {
         let mut deaths = Vec::new();
         let mut context_ref_updates: Vec<SpatialContextRefUpdate> = Vec::new();
 
@@ -542,7 +540,7 @@ impl Column {
             };
 
             // Add the child pattern to the parent's spatial routing table (minted by the add pass).
-            let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids, frame_number);
+            let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids);
             if let Some(df) = death_frame { deaths.push((op.pattern_id, df)); }
 
             // For each context-neuron target, emit a SpatialContextRefUpdate so the target's
@@ -602,12 +600,12 @@ impl Column {
             }
 
             if let Some(ref connections) = spec.connections {
-                let mut target_dims: FxHashMap<NeuronId, (ChannelId, DimensionId)> = FxHashMap::default();
+                let mut target_channels: FxHashMap<NeuronId, ChannelId> = FxHashMap::default();
                 for conn in connections {
                     // save the event connections the pattern was created to infer
                     neuron.create_connection(conn.distance, conn.to_neuron_id, conn.strength, conn.reward);
-                    if let Some(dim_id) = conn.dim_id {
-                        target_dims.insert(conn.to_neuron_id, (conn.channel_id, dim_id));
+                    if conn.dim_id.is_some() {
+                        target_channels.insert(conn.to_neuron_id, conn.channel_id);
                     }
 
                     // for actions with negative rewards, save an alternative with neutral reward
@@ -620,7 +618,7 @@ impl Column {
                 // Founding spatial (d=0) connections need their target's position recorded, the
                 // same way ordinary spatial learning does, or aggregate_spatial_prediction's
                 // per-position winner competition silently drops their votes.
-                if !target_dims.is_empty() { neuron.decorate_spatial_targets(&target_dims); }
+                if !target_channels.is_empty() { neuron.decorate_spatial_targets(&target_channels); }
             }
             self.neurons.insert(neuron.id, neuron);
         }
@@ -762,14 +760,15 @@ impl Column {
     /// Mirrors how `Neuron::generate_votes` walks ages inside process_frame.
     /// Calls `neuron.vote(age)` for each pair and tags the resulting Votes with their natural distance = age + 1.
     /// Used by Brain.learn() to collect the post-wire inference vote pool without re-running process_frame.
-    /// Returns (voter_id, age, votes) triples; empty vote lists are filtered out.
-    pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Distance, Vec<Vote>)> {
+    /// Returns (voter_id, votes) pairs; empty vote lists are filtered out. The age itself is not returned —
+    /// callers already have it in `voter_ages`, and each Vote carries its own natural distance.
+    pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Vec<Vote>)> {
         let mut out = Vec::new();
         for &(voter_id, age) in voter_ages {
             if let Some(neuron) = self.neurons.get(&voter_id) {
                 let votes = neuron.vote(age);
                 if !votes.is_empty() {
-                    out.push((voter_id, age, votes));
+                    out.push((voter_id, votes));
                 }
             }
         }

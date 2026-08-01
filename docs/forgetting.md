@@ -32,7 +32,7 @@ shifts — a child naming common neurons becomes cheap to keep, and one naming r
 ## Why it is not the design
 
 It is more machinery for an unproven gain. Fixed-length counting gives the same answer wherever occurrence is not
-badly skewed, and it optimises the standing metric — apex neurons per level — directly and without a single
+badly skewed, and it optimizes the standing metric — apex neurons per level — directly and without a single
 logarithm. The variable-length version only pays for itself if occurrence really is skewed enough to change
 decisions, and that is a measurement, not an assumption.
 

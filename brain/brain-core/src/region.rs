@@ -198,7 +198,7 @@ impl Region {
 
     /// Fan out the base-neuron position metadata so every column rebuilds its neurons' spatial
     /// target positions. Restore-only: at runtime the metadata is captured at connection-learn time.
-    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, (ChannelId, crate::types::DimensionId)>) {
+    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, ChannelId>) {
         self.columns.par_iter_mut()
             .for_each(|col| col.decorate_spatial_targets(meta));
     }
@@ -207,7 +207,7 @@ impl Region {
 
     /// Distribute spatial install ops to owning columns by parent_id, dispatch in parallel,
     /// and merge per-column results (deaths + context-ref updates).
-    pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>, frame_number: FrameNumber) -> SpatialInstallResult {
+    pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>) -> SpatialInstallResult {
         let mut by_column: Vec<Vec<SpatialInstallOp>> = (0..self.c).map(|_| Vec::new()).collect();
         for op in ops {
             let c = self.route_neuron(op.parent_id);
@@ -220,7 +220,7 @@ impl Region {
                 if col_ops.is_empty() {
                     return SpatialInstallResult { deaths: Vec::new(), context_ref_updates: Vec::new() };
                 }
-                col.install_spatial_corrections(col_ops, frame_number)
+                col.install_spatial_corrections(col_ops)
             })
             .collect();
 
@@ -355,14 +355,14 @@ impl Region {
     }
 
     /// Route (voter_id, age) pairs to owning columns by voter_id and run a read-only vote sweep in parallel.
-    /// Returns per-(voter, age) vote lists in column-index order.
-    pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Distance, Vec<Vote>)> {
+    /// Returns per-voter vote lists in column-index order.
+    pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Vec<Vote>)> {
         let mut by_column: Vec<Vec<(NeuronId, Distance)>> = (0..self.c).map(|_| Vec::new()).collect();
         for &pair in voter_ages {
             let col = self.route_neuron(pair.0);
             by_column[col].push(pair);
         }
-        let nested: Vec<Vec<(NeuronId, Distance, Vec<Vote>)>> = self.columns.par_iter()
+        let nested: Vec<Vec<(NeuronId, Vec<Vote>)>> = self.columns.par_iter()
             .zip(by_column.into_par_iter())
             .map(|(col, col_pairs)| {
                 if col_pairs.is_empty() { return Vec::new(); }

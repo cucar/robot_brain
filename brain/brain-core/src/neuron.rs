@@ -773,9 +773,9 @@ impl Neuron {
     /// Rebuild each spatial connection target's channel from central base-neuron metadata. Snapshots do
     /// not persist the map, so it is re-attached on restore; the consensus that reads the normal off the
     /// connections groups by this channel.
-    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, (ChannelId, DimensionId)>) {
+    pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, ChannelId>) {
         for &target_id in self.spatial_connections.keys() {
-            if let Some(&(channel_id, _dim_id)) = meta.get(&target_id) {
+            if let Some(&channel_id) = meta.get(&target_id) {
                 self.spatial_target_channels.insert(target_id, channel_id);
             }
         }
@@ -1122,7 +1122,7 @@ impl Neuron {
     /// one test says it pays and is retired by the delete pass when it stops (docs/algorithm.md, "The one
     /// test"). There is no decay clock and nothing reaps it on a timer — that is the temporal axis only.
     /// The return stays `Option<FrameNumber>` for a uniform mint interface and is always `None` here.
-    pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId], _current_frame: FrameNumber) -> Option<FrameNumber> {
+    pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId]) -> Option<FrameNumber> {
         self.add_spatial_child(pattern_id, 0.0);
         for &ctx_neuron_id in context { self.add_spatial_context(pattern_id, ctx_neuron_id, 1.0); }
         // A new entry joined the table: frames it now wins move to it — reassign so the one test sees the
@@ -1900,7 +1900,7 @@ impl Neuron {
     ///
     /// Reference implementation over freshly-merged distances; the per-frame path is
     /// [spatial_delete_pass_cached], which reads the same distances from the cache. Kept for the tests
-    /// that assert the settled-state behaviour directly.
+    /// that assert the settled-state behavior directly.
     #[cfg(test)]
     fn spatial_delete_pass(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
         // The table always holds the normal; nothing to retire unless there is at least one child.
@@ -2450,7 +2450,7 @@ impl Neuron {
     /// drifts down by ~1/episode until it finally hits 0, then dies abruptly, shifting the
     /// neuron's vote profile and triggering a cascade of error-pattern creation. For deterministic
     /// memorization scenarios we want predictions that ever occurred to remain available;
-    /// non-occurrences should not erase them. Mirrors the action-connection behaviour, which
+    /// non-occurrences should not erase them. Mirrors the action-connection behavior, which
     /// was already kept-only-strengthen.
     /// Temporal connection learning — strengthen temporal_connections[age] for every active age>0.
     /// A neuron active at age=k learns a k-distance prediction toward each current actives (which
@@ -2848,7 +2848,7 @@ mod tests {
         if bid.pattern_id == NEW_CHILD_BID {
             let pid = *next_pid;
             *next_pid += 1;
-            n.add_spatial_pattern(pid, &res.observed, frame);
+            n.add_spatial_pattern(pid, &res.observed);
             n.commit_spatial_frame(&res.observed, SpatialServer::Child(pid), 0, res.delete_candidate, frame);
             (Some(pid), deleted)
         } else {
@@ -2948,7 +2948,7 @@ mod tests {
             if let Some(bid) = &res.bid {
                 if bid.pattern_id == NEW_CHILD_BID {
                     minted_cfg = Some(set(&res.observed));
-                    n.add_spatial_pattern(1000, &res.observed, f);
+                    n.add_spatial_pattern(1000, &res.observed);
                     break;
                 }
             }
@@ -2992,8 +2992,10 @@ mod tests {
         assert_eq!(child_cfgs(&n).len(), 1, "one child established for the recurring B");
 
         let mut deleted_any = false;
+        // This phase only asserts retirement (del) — a's config is already established, so step
+        // never mints here.
         for f in 40..70 {
-            let (_m, del) = step(&mut n, &a, f, &mut pid);
+            let (_, del) = step(&mut n, &a, f, &mut pid);
             if !del.is_empty() { deleted_any = true; }
         }
         assert!(deleted_any, "the child is retired once its demand ages out of the window");

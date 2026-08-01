@@ -97,7 +97,7 @@ class DebugVotesJob extends MNISTTestJob {
 		this.missImages++;
 
 		const byVoter = new Map();
-		for (const v of this._lastVotes || []) {
+		for (const v of this.lastVotes || []) {
 			if (v.targetType !== 'action' || v.channelId !== this.encoder.digitChannelId) continue;
 			if (v.value !== predicted && v.value !== label) continue;
 			if (!byVoter.has(v.voterId)) byVoter.set(v.voterId, {});

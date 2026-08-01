@@ -526,7 +526,7 @@ export default class MNISTTestJob extends Job {
 		const inputs = this.encoder.encodeImage(bits);
 		const inferResult = this.brain.processFrame(inputs, EMPTY_REWARDS);
 		// --debug-miss reaggregates votes app-side for its rank/margin breakdown; stash them when on.
-		if (this.config.debugMiss > 0) this._lastVotes = inferResult.votes;
+		if (this.config.debugMiss > 0) this.lastVotes = inferResult.votes;
 		return this.encoder.decodeDigit(inferResult.inferences);
 	}
 
@@ -632,7 +632,7 @@ export default class MNISTTestJob extends Job {
 	 * voter counts for both hits and misses. Prints the first `debugMiss` misses in detail.
 	 */
 	analyzeMiss(miss, label, predicted, bits) {
-		const { logScore, voterCount } = this.scoreDigitsNB(this._lastVotes);
+		const { logScore, voterCount } = this.scoreDigitsNB(this.lastVotes);
 		if (predicted === label) { miss.voterHitSum += voterCount; miss.hits++; return; }
 		const ranked = [...logScore.entries()].sort((a, b) => b[1] - a[1]);
 		const trueRankIdx = ranked.findIndex(([d]) => d === label); // 0-based; -1 if true digit got no votes

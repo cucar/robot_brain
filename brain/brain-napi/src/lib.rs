@@ -24,7 +24,7 @@ use brain_core::types::{ConsensusMode, Coordinate, GroupMode, NeuronType};
 
 /// Read a JS Map<number, V> by calling its entries() iterator and collecting.
 /// Returns (key, JsUnknown) pairs so the caller can interpret V.
-fn read_js_map(_env: &Env, map_obj: &JsObject) -> Result<Vec<(i64, JsUnknown)>> {
+fn read_js_map(map_obj: &JsObject) -> Result<Vec<(i64, JsUnknown)>> {
     let size: u32 = map_obj.get_named_property::<JsNumber>("size")?.get_uint32()?;
     if size == 0 { return Ok(Vec::new()); }
 
@@ -46,8 +46,8 @@ fn read_js_map(_env: &Env, map_obj: &JsObject) -> Result<Vec<(i64, JsUnknown)>> 
 }
 
 /// Read a JS Map<number, number> into an FxHashMap.
-fn read_number_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, f64>> {
-    let entries = read_js_map(env, map_obj)?;
+fn read_number_map(map_obj: &JsObject) -> Result<FxHashMap<u32, f64>> {
+    let entries = read_js_map(map_obj)?;
     let mut result = FxHashMap::default();
     for (key, val) in entries {
         let v: f64 = val.coerce_to_number()?.get_double()?;
@@ -57,12 +57,12 @@ fn read_number_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, f64>>
 }
 
 /// Read a JS Map<number, Map<number, number>> into nested FxHashMaps.
-fn read_nested_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, FxHashMap<u32, f64>>> {
-    let entries = read_js_map(env, map_obj)?;
+fn read_nested_map(map_obj: &JsObject) -> Result<FxHashMap<u32, FxHashMap<u32, f64>>> {
+    let entries = read_js_map(map_obj)?;
     let mut result = FxHashMap::default();
     for (key, val) in entries {
         let inner_obj: JsObject = val.coerce_to_object()?;
-        let inner = read_number_map(env, &inner_obj)?;
+        let inner = read_number_map(&inner_obj)?;
         result.insert(key as u32, inner);
     }
     Ok(result)
@@ -71,7 +71,7 @@ fn read_nested_map(env: &Env, map_obj: &JsObject) -> Result<FxHashMap<u32, FxHas
 /// Read a JS Map<number, number> as a Vec<(f64, f64)>, preserving f64 precision on the key side.
 /// Used for the (value, reward) inner maps in the `learn()` actions payload — value is the action scalar
 /// (continuous in stocks, integer in MNIST) so we can't truncate it to int64 like read_number_map does.
-fn read_value_reward_pairs(_env: &Env, map_obj: &JsObject) -> Result<Vec<(f64, f64)>> {
+fn read_value_reward_pairs(map_obj: &JsObject) -> Result<Vec<(f64, f64)>> {
     let size: u32 = map_obj.get_named_property::<JsNumber>("size")?.get_uint32()?;
     if size == 0 { return Ok(Vec::new()); }
 
@@ -95,18 +95,17 @@ fn read_value_reward_pairs(_env: &Env, map_obj: &JsObject) -> Result<Vec<(f64, f
 /// Read a JS Map<channelId, Map<dimId, Map<value, reward>>> — the `learn()` actions payload shape.
 /// Outer two layers are integer-keyed (channelId, dimId); the innermost is value-keyed (action scalar) with reward as the value.
 fn read_actions_map(
-    env: &Env,
     map_obj: &JsObject,
 ) -> Result<FxHashMap<u32, FxHashMap<u32, Vec<(f64, f64)>>>> {
-    let entries = read_js_map(env, map_obj)?;
+    let entries = read_js_map(map_obj)?;
     let mut result = FxHashMap::default();
     for (key, val) in entries {
         let inner_obj: JsObject = val.coerce_to_object()?;
-        let inner_entries = read_js_map(env, &inner_obj)?;
+        let inner_entries = read_js_map(&inner_obj)?;
         let mut inner = FxHashMap::default();
         for (dim_key, dim_val) in inner_entries {
             let dim_obj: JsObject = dim_val.coerce_to_object()?;
-            let pairs = read_value_reward_pairs(env, &dim_obj)?;
+            let pairs = read_value_reward_pairs(&dim_obj)?;
             inner.insert(dim_key as u32, pairs);
         }
         result.insert(key as u32, inner);
@@ -159,7 +158,7 @@ impl JsBrain {
     /// variants collapsed into the single `groupThreshold` — `error = 1 − merge` is one Jaccard test read from
     /// opposite sides, so there is one number, not six. Passing any retired key logs a one-time warning and is ignored.
     #[napi(constructor)]
-    pub fn new(_env: Env, options: Option<JsObject>) -> Result<Self> {
+    pub fn new(options: Option<JsObject>) -> Result<Self> {
         let (context_length, group_threshold, group_mode,
              pattern_forget_rate, regions, columns, consensus_mode, debug) = match options {
             Some(ref opts) => {
@@ -190,7 +189,7 @@ impl JsBrain {
 
         // The spatial evidence window in frames. Its own knob, decoupled from the temporal forget rate.
         // Callers that do not set it fall back to the forget-rate timescale (round(1/rate)), which is the
-        // window the spatial history used before the split — so existing demos keep their behaviour.
+        // window the spatial history used before the split — so existing demos keep their behavior.
         let horizon = opt_u32(options.as_ref(), "horizon")?.unwrap_or_else(|| {
             if pattern_forget_rate > 0.0 { (1.0 / pattern_forget_rate).round().max(1.0) as u32 } else { u32::MAX }
         });
@@ -269,8 +268,8 @@ impl JsBrain {
     #[napi(js_name = "processFrame")]
     pub fn process_frame(&self, env: Env, inputs: JsObject, rewards: JsObject) -> Result<JsObject> {
         // Marshal inputs: Map<number, Map<number, number>> → FxHashMap
-        let rust_inputs = read_nested_map(&env, &inputs)?;
-        let rust_rewards = read_number_map(&env, &rewards)?;
+        let rust_inputs = read_nested_map(&inputs)?;
+        let rust_rewards = read_number_map(&rewards)?;
 
         // Call core
         let frame_result = self.inner.borrow_mut().process_frame(&rust_inputs, &rust_rewards);
@@ -288,7 +287,9 @@ impl JsBrain {
         let brain = self.inner.borrow();
         let snapshot = brain.get_context_snapshot();
         let mut arr = env.create_array_with_length(snapshot.len())?;
-        for (i, (neuron_id, _frame, temporal_level, state)) in snapshot.iter().enumerate() {
+        // Activation frame is part of the shared snapshot tuple (used elsewhere for CSV export offsets)
+        // but not part of this API's returned shape — see the doc comment above.
+        for (i, (neuron_id, _, temporal_level, state)) in snapshot.iter().enumerate() {
             let mut obj = env.create_object()?;
             obj.set_named_property("neuronId", env.create_uint32(*neuron_id as u32)?)?;
             obj.set_named_property("temporalLevel", env.create_uint32(*temporal_level as u32)?)?;
@@ -371,7 +372,7 @@ impl JsBrain {
     /// Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
     #[napi(js_name = "learn")]
     pub fn learn(&self, env: Env, actions: JsObject, distance: u32) -> Result<JsObject> {
-        let rust_actions = read_actions_map(&env, &actions)?;
+        let rust_actions = read_actions_map(&actions)?;
         let frame_result = self.inner.borrow_mut().learn(&rust_actions, distance);
         build_frame_result(&env, &frame_result)
     }
