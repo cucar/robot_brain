@@ -121,22 +121,39 @@ impl SpatialHistory {
     /// Drop the record written this frame if it is still the tail — contraction retracts a frame whose
     /// neuron was subsumed by a neighbor (`drop_inhibited_spatial_frame`). Only the most recent `record`
     /// can be undone, and only if its frame matches.
-    fn drop_last_if_frame(&mut self, frame: FrameNumber) {
-        let Some(key) = self.last_key.take() else { return };
-        if let Some(ev) = self.configs.get_mut(&key) {
+    /// Returns the retracted configuration and the server it was recorded under, so the caller can undo
+    /// its base-model contribution when it was a normal-serve.
+    fn drop_last_if_frame(&mut self, frame: FrameNumber) -> Option<(Vec<NeuronId>, SpatialServer)> {
+        let key = self.last_key.take()?;
+        let (popped, server, empty) = {
+            let ev = self.configs.get_mut(&key)?;
             if ev.frames.last() == Some(&frame) {
                 ev.frames.pop();
-                if ev.frames.is_empty() { self.configs.remove(&key); }
+                (true, ev.server, ev.frames.is_empty())
+            } else {
+                (false, ev.server, false)
             }
-        }
+        };
+        if !popped { return None; }
+        if empty { self.configs.remove(&key); }
+        Some((key, server))
     }
 
-    /// Drop frames older than the cutoff; a configuration with no frames left leaves the window.
-    fn age(&mut self, cutoff: FrameNumber) {
-        self.configs.retain(|_, ev| {
+    /// Drop frames older than the cutoff; a configuration with no frames left leaves the window. Returns,
+    /// for every configuration that was served by the normal, its config and how many frames it lost — the
+    /// caller uses this to keep the base-model counts (docs/algorithm.md, "The base model") windowed.
+    fn age(&mut self, cutoff: FrameNumber) -> Vec<(Vec<NeuronId>, usize)> {
+        let mut dropped_normal = Vec::new();
+        self.configs.retain(|cfg, ev| {
+            let before = ev.frames.len();
             ev.frames.retain(|&f| f >= cutoff);
+            let removed = before - ev.frames.len();
+            if removed > 0 && ev.server == SpatialServer::Normal {
+                dropped_normal.push((cfg.clone(), removed));
+            }
             !ev.frames.is_empty()
         });
+        dropped_normal
     }
 
     /// Shift every remembered frame by `-delta` — the restore rebasing (materialize_and_reset_children).
@@ -353,9 +370,9 @@ pub struct AgeState {
     pub activated_pattern_id: Option<NeuronId>,
 }
 
-/// Active neuron info for the co-activation neighborhood: its id, channel, and reward. (The old
-/// per-target dimension — used by the removed prediction/vote substrate — is gone; the configuration
-/// loop keys on neuron ids alone.)
+/// Active neuron info for the co-activation neighborhood: its id, channel, and reward. The channel is
+/// what the normal's consensus groups by — each channel has exactly one event dimension, so one winning
+/// bucket per neighbor channel (docs/algorithm.md, "The base model").
 #[derive(Debug, Clone)]
 pub struct ActiveNeuron {
     pub id: NeuronId,
@@ -486,14 +503,22 @@ pub struct Neuron {
 
     /// Spatial outgoing connections: target_neuron_id → connection data.
     /// One flat map — there's no distance dimension because spatial is same-frame.
+    ///
+    /// On the d=0 axis these are the **base model**: `strength` is the windowed count of how many
+    /// normal-served frames this neighbor was active on (docs/algorithm.md, "The base model"). The
+    /// normal's neighborhood is read off them by a per-channel consensus — within each neighbor channel
+    /// (which has exactly one event dimension), the bucket with the highest count wins. The count is
+    /// maintained in lockstep with the history: incremented when the normal serves a frame, decremented
+    /// when such a frame ages out or is retracted, and moved whenever a neighborhood's server changes
+    /// between the normal and a child. The invariant is `strength(n) = Σ over history neighborhoods served
+    /// by the normal that contain n of their frame counts`.
     spatial_connections: FxHashMap<NeuronId, ConnectionData>,
 
-    /// Position metadata per spatial connection target: target_neuron_id → (channel, dimension).
-    /// Captured at connection-learn time (the target is active and decorated at that moment) and
-    /// rebuilt from central metadata on restore. Prediction evaluation groups votes by position
-    /// through this map; a target with no entry never entered the inference neighborhood through
-    /// learning, so its votes are skipped — the same restriction the connection learning enforces.
-    spatial_target_dims: FxHashMap<NeuronId, (ChannelId, DimensionId)>,
+    /// Each connection target's channel: target_neuron_id → channel. The normal's consensus groups the
+    /// connection counts by this to pick one winning bucket per channel. Filled as connections are learned
+    /// (the thalamus supplies each neighbor's channel via the frame's actives) and rebuilt from central
+    /// metadata on restore ([decorate_spatial_targets]).
+    spatial_target_channels: FxHashMap<NeuronId, ChannelId>,
 
     /// Spatial routing table: every entry is a routing-table entry keyed by which one it is — the
     /// `Normal` or a `Child(pattern_id)` (docs/algorithm.md, "The normal": the normal is "a routing
@@ -588,7 +613,7 @@ impl Neuron {
             learning,
             channel_action_ids,
             spatial_connections: FxHashMap::default(),
-            spatial_target_dims: FxHashMap::default(),
+            spatial_target_channels: FxHashMap::default(),
             // The routing table always contains the normal (an entry with no pattern neuron); children
             // are added as they are minted.
             spatial_routing_table: {
@@ -723,6 +748,9 @@ impl Neuron {
                 .map_or(0, |config| Self::spatial_distance(&r.observed, config));
             self.spatial_history.record(r.frame, &r.observed, server, best_distance);
         }
+        // Per-frame `record` above does not touch the base-model counts; rebuild them from the restored
+        // normal-served slice so the counts and their denominator match the window exactly.
+        self.recompute_spatial_connections();
     }
 
     /// The normal routing-table entry — always present.
@@ -742,13 +770,13 @@ impl Neuron {
         normal.config_id = DIST_SENTINEL; // config changed — re-derive its interned distance id
     }
 
-    /// Rebuild the position metadata of spatial connection targets from central base-neuron metadata.
-    /// Snapshots do not persist the map — connection learning restricted every target to the inference
-    /// neighborhood when the edge was created, so the metadata is derivable and re-attached on restore.
+    /// Rebuild each spatial connection target's channel from central base-neuron metadata. Snapshots do
+    /// not persist the map, so it is re-attached on restore; the consensus that reads the normal off the
+    /// connections groups by this channel.
     pub fn decorate_spatial_targets(&mut self, meta: &FxHashMap<NeuronId, (ChannelId, DimensionId)>) {
         for &target_id in self.spatial_connections.keys() {
-            if let Some(&m) = meta.get(&target_id) {
-                self.spatial_target_dims.insert(target_id, m);
+            if let Some(&(channel_id, _dim_id)) = meta.get(&target_id) {
+                self.spatial_target_channels.insert(target_id, channel_id);
             }
         }
     }
@@ -757,15 +785,11 @@ impl Neuron {
     /// distance-keyed array for snapshot back-compat.
     fn serialize_connections(&self) -> Vec<SerializedConnection> {
         let mut result = Vec::new();
-        // spatial at distance 0
-        for (&to_neuron_id, conn) in &self.spatial_connections {
-            result.push(SerializedConnection {
-                distance: 0,
-                to_neuron_id,
-                strength: conn.strength,
-                reward: conn.reward,
-            });
-        }
+        // Spatial (distance 0) connections are NOT serialized: they are the base-model marginal, derived
+        // from the normal-served slice of the history, and rebuilt on restore by recompute_spatial_connections.
+        // Persisting them would both duplicate the history and dangle — a count toward a spatial child that
+        // was later deleted would fail restore's target-exists check (the history itself does not validate
+        // its observed ids, so rebuilding from it is the consistent choice).
         // temporal at distance > 0
         for (distance, targets) in self.temporal_connections.iter().enumerate() {
             if distance == 0 { continue; } // temporal slot 0 is unused
@@ -1026,23 +1050,8 @@ impl Neuron {
             }
         }
 
-        // Spatial children carry death frames too, so materialize and reset them identically.
-        let spatial_ids: Vec<NeuronId> = self.spatial_routing_table.keys()
-            .filter_map(|s| if let SpatialServer::Child(id) = s { Some(*id) } else { None }).collect();
-        for pattern_id in spatial_ids {
-
-            // Fold any pending lazy decay into the stored strength so the snapshot is exact.
-            self.materialize_child_strength(pattern_id, current_frame);
-            if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pattern_id)) {
-
-                // Rebase the activation clock to 0 — the restored brain starts counting frames fresh.
-                entry.last_activation_frame = 0;
-
-                // Recompute the death frame from the now-materialized strength rather than persisting it.
-                let death_frame = (entry.activation_strength / self.pattern_forget_rate).ceil() as FrameNumber;
-                entries.push(DeathFrameEntry { pattern_id, death_frame });
-            }
-        }
+        // Spatial children carry no death frame — they live and die by the one test, not a decay clock —
+        // so nothing to materialize or schedule for them here (docs/algorithm.md, "Creating a child").
 
         // Rebase the spatial history onto the same fresh clock. Each remembered frame becomes an offset
         // relative to the save frame — always ≤ 0 — so when the restored brain resumes at frame 0 and
@@ -1068,13 +1077,8 @@ impl Neuron {
             entries.push(DeathFrameEntry { pattern_id, death_frame });
         }
 
-        // Spatial children use the same strength/forget-rate decay model, so compute them identically.
-        // The normal has no pattern neuron and no death frame, so it is skipped.
-        for (&server, entry) in &self.spatial_routing_table {
-            let SpatialServer::Child(pattern_id) = server else { continue };
-            let death_frame = (entry.activation_strength / self.pattern_forget_rate).ceil() as FrameNumber;
-            entries.push(DeathFrameEntry { pattern_id, death_frame });
-        }
+        // Spatial children carry no death frame — retirement is the one test's delete pass, not a decay
+        // clock — so none are added here (docs/algorithm.md, "Creating a child").
 
         entries
     }
@@ -1113,18 +1117,21 @@ impl Neuron {
     /// Spatial context has no distance dimension — entries are just (pattern, ctx_neuron) pairs.
     /// The child was minted by the add pass, which already showed it pays for its storage, so it
     /// serves from its first frame.
-    /// Returns death frame for pattern neurons.
-    pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId], current_frame: FrameNumber) -> Option<FrameNumber> {
+    ///
+    /// Spatial children carry **no death frame**: on the d=0 axis a pattern lives exactly as long as the
+    /// one test says it pays and is retired by the delete pass when it stops (docs/algorithm.md, "The one
+    /// test"). There is no decay clock and nothing reaps it on a timer — that is the temporal axis only.
+    /// The return stays `Option<FrameNumber>` for a uniform mint interface and is always `None` here.
+    pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId], _current_frame: FrameNumber) -> Option<FrameNumber> {
         self.add_spatial_child(pattern_id, 0.0);
         for &ctx_neuron_id in context { self.add_spatial_context(pattern_id, ctx_neuron_id, 1.0); }
-        let death = self.strengthen_child_activation(pattern_id, current_frame);
         // A new entry joined the table: frames it now wins move to it — reassign so the one test sees the
         // child from its first frame. The newborn's config is exactly `context`, sorted for the merge.
         let mut config: Vec<NeuronId> = context.to_vec();
         config.sort_unstable();
         config.dedup();
         self.reassign_after_mint(pattern_id, &config);
-        death
+        None
     }
 
     /// Add a temporal child pattern to the temporal routing table (no context yet).
@@ -1444,7 +1451,7 @@ impl Neuron {
         &mut self,
         level_neighbors: Option<&SpatialContext>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
-        _inference_neighbors: &[ActiveNeuron],
+        inference_neighbors: &[ActiveNeuron],
         spatial_capacity: usize,
         current_frame: FrameNumber,
     ) -> SpatialFrameResult {
@@ -1465,18 +1472,24 @@ impl Neuron {
             _ => return SpatialFrameResult { bid: None, observed: Vec::new(), served_distance: 0, delete_candidate: None, timings },
         };
 
+        // Record each neighbor's channel so the normal's consensus can group its connection counts by
+        // channel (docs/algorithm.md, "The base model": one winning bucket per neighbor channel). The
+        // neuron sees neighbors as bare ids; the thalamus supplies each one's channel via the actives here.
+        if should_learn {
+            for a in inference_neighbors {
+                self.spatial_target_channels.entry(a.id).or_insert(a.channel_id);
+            }
+        }
+
         // 1. Age.
         self.age_spatial_history(current_frame);
 
-        // Seed the normal on the neuron's first observation (idempotent, election-independent).
-        if self.learning && self.normal_entry().context.size() == 0 {
-            let mut ctx = SpatialContext::new();
-            for &id in &observed { ctx.add_neuron(id, 1.0); }
-            let normal = self.spatial_routing_table.get_mut(&SpatialServer::Normal)
-                .expect("normal routing entry must always exist");
-            normal.context = ctx;
-            normal.config_id = DIST_SENTINEL;
-        }
+        // The normal is the base model's current prediction: the per-channel consensus of the learned
+        // connection counts — one winning bucket per neighbor channel (docs/algorithm.md, "The normal").
+        // Refresh it to the counts as they stand and, if it moved, re-evaluate which entry serves each
+        // remembered neighborhood. Cold start (no counts yet) leaves it empty — the normal predicts nothing
+        // until it has learned, which is silence, not an error.
+        if self.learning { self.refresh_normal_config(); }
 
         let observed_id = self.spatial_dist_cache.intern(&observed);
         let entries = self.spatial_entry_ids();
@@ -1534,11 +1547,54 @@ impl Neuron {
         // delete was applied inline and only needs cross-neuron cleanup.)
         if should_learn && bid.is_none() {
             self.spatial_history.record(current_frame, &observed, server, served_distance);
+            // A pure normal-serve is the base model learning from this frame: fold O into the counts
+            // (docs/algorithm.md, "The base model": connections update only on frames where no child fired).
+            if server == SpatialServer::Normal { self.adjust_spatial_connections(&observed, 1); }
             if let Some(pid) = delete_candidate { self.remove_spatial_child(pid); }
             return SpatialFrameResult { bid: None, observed: Vec::new(), served_distance, delete_candidate, timings };
         }
 
         SpatialFrameResult { bid, observed, served_distance, delete_candidate, timings }
+    }
+
+    /// Fold `frames` normal-served occurrences of a neighborhood into the base-model counts
+    /// (docs/algorithm.md, "The base model"): every neighbor's count moves by `frames` (positive when the
+    /// normal gains these frames, negative when it loses them). Concentrating every mutation here is what
+    /// preserves the invariant that [spatial_connections] holds exactly the normal-served marginal — each
+    /// neighbor's count of normal-served frames it was active on.
+    fn adjust_spatial_connections(&mut self, neighborhood: &[NeuronId], frames: i64) {
+        if frames == 0 { return; }
+        if frames > 0 {
+            for &n in neighborhood {
+                self.spatial_connections.entry(n)
+                    .or_insert(ConnectionData { strength: 0.0, reward: 0.0 })
+                    .strength += frames as f64;
+            }
+        } else {
+            for &n in neighborhood {
+                if let Some(c) = self.spatial_connections.get_mut(&n) {
+                    c.strength += frames as f64; // frames is negative
+                    if c.strength <= 0.0 { self.spatial_connections.remove(&n); }
+                }
+            }
+        }
+    }
+
+    /// Rebuild the base-model counts from the history — each neighbor's count of normal-served frames.
+    /// Used after a bulk history load (restore), where per-frame `record` did not run.
+    fn recompute_spatial_connections(&mut self) {
+        self.spatial_connections.clear();
+        let Self { spatial_history, spatial_connections, .. } = self;
+        for (neighborhood, ev) in spatial_history.iter() {
+            if ev.server != SpatialServer::Normal { continue; }
+            let n = ev.frames.len();
+            if n == 0 { continue; }
+            for &id in neighborhood {
+                spatial_connections.entry(id)
+                    .or_insert(ConnectionData { strength: 0.0, reward: 0.0 })
+                    .strength += n as f64;
+            }
+        }
     }
 
     /// Commit a child-activation request that won the election — called by the thalamus only for the
@@ -1553,11 +1609,8 @@ impl Neuron {
         delete_candidate: Option<NeuronId>,
         current_frame: FrameNumber,
     ) {
-        if let SpatialServer::Child(pid) = server {
-            if let Some(entry) = self.spatial_routing_table.get_mut(&SpatialServer::Child(pid)) {
-                entry.last_activation_frame = current_frame;
-            }
-        }
+        // Spatial children have no decay clock to bump — they live by the one test, not activation
+        // recency (docs/algorithm.md, "Creating a child").
         self.spatial_history.record(current_frame, observed, server, served_distance);
         if let Some(pid) = delete_candidate {
             if SpatialServer::Child(pid) != server { self.remove_spatial_child(pid); }
@@ -1574,7 +1627,10 @@ impl Neuron {
     /// Removing a record does not move any entry, so no server reassignment is needed; the delete/add
     /// passes simply see one fewer frame next time.
     pub fn drop_inhibited_spatial_frame(&mut self, current_frame: FrameNumber) {
-        self.spatial_history.drop_last_if_frame(current_frame);
+        if let Some((config, server)) = self.spatial_history.drop_last_if_frame(current_frame) {
+            // If the retracted frame was a normal-serve, undo the count it added this frame.
+            if server == SpatialServer::Normal { self.adjust_spatial_connections(&config, -1); }
+        }
     }
 
     /// Drop history records older than the horizon (docs/algorithm.md, "The frame, step by step":
@@ -1592,7 +1648,11 @@ impl Neuron {
     /// grows without bound and every configuration eventually looks worth its own child.
     fn age_spatial_history(&mut self, current_frame: FrameNumber) {
         let cutoff = current_frame - self.horizon as FrameNumber;
-        self.spatial_history.age(cutoff);
+        let dropped_normal = self.spatial_history.age(cutoff);
+        // Frames leaving the window stop counting toward the normal-served marginal.
+        for (config, removed) in dropped_normal {
+            self.adjust_spatial_connections(&config, -(removed as i64));
+        }
     }
 
     /// Hamming distance between an observed neighborhood and a stored configuration: |O △ C| — the
@@ -1638,6 +1698,74 @@ impl Neuron {
         let mut v: Vec<NeuronId> = context.entries().iter().filter(|(_, &s)| s > 0.0).map(|(&id, _)| id).collect();
         v.sort_unstable();
         v
+    }
+
+    /// The normal's neighborhood: a per-channel consensus over the base-model counts. Each neighbor
+    /// channel has exactly one event dimension, so within a channel exactly one bucket fires per frame;
+    /// the winner is the bucket with the highest count, ties broken by the smaller id. That is the same
+    /// democratic per-dimension winner the vote path uses (`determine_dimension_winners`), applied to the
+    /// spatial connections — one winning bucket per channel, which names a bucket without pricing one, so
+    /// no estimator enters (docs/algorithm.md, "The normal").
+    fn spatial_normal_config(&self) -> Vec<NeuronId> {
+        let mut best: FxHashMap<ChannelId, (NeuronId, f64)> = FxHashMap::default();
+        for (&id, c) in &self.spatial_connections {
+            if c.strength <= 0.0 { continue; }
+            let Some(&channel) = self.spatial_target_channels.get(&id) else { continue };
+            let wins = match best.get(&channel) {
+                None => true,
+                Some(&(bid, bstrength)) => c.strength > bstrength || (c.strength == bstrength && id < bid),
+            };
+            if wins { best.insert(channel, (id, c.strength)); }
+        }
+        let mut v: Vec<NeuronId> = best.values().map(|&(id, _)| id).collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// Recompute the normal's configuration `P` and, if it changed, install it and re-evaluate every
+    /// remembered configuration's serving entry. Because a bucket's frames are one identical observation,
+    /// each bucket moves whole; a bucket crossing between the normal and a child carries its count with it,
+    /// so the base-model marginal stays exact against the current model. The re-routed distances refresh
+    /// each `best_distance`, which is what lets the add/delete passes keep reading it cached even though the
+    /// normal is no longer frozen.
+    fn refresh_normal_config(&mut self) {
+        let p = self.spatial_normal_config();
+        if p == Self::config_sorted(&self.normal_entry().context) { return; }
+        {
+            let normal = self.spatial_routing_table.get_mut(&SpatialServer::Normal)
+                .expect("normal routing entry must always exist");
+            let mut ctx = SpatialContext::new();
+            for &id in &p { ctx.add_neuron(id, 1.0); }
+            normal.context = ctx;
+            normal.config_id = DIST_SENTINEL;
+        }
+        let entries = self.spatial_entry_ids();
+        let mut moved: Vec<(Vec<NeuronId>, i64)> = Vec::new();
+        {
+            let Self { spatial_history, spatial_dist_cache, .. } = self;
+            for (observed, ev) in spatial_history.iter_mut() {
+                let oid = spatial_dist_cache.intern(observed);
+                let mut best: Option<(SpatialServer, u32)> = None;
+                for &(server, cid) in &entries {
+                    let d = spatial_dist_cache.distance(oid, cid);
+                    match best {
+                        Some((bs, bd)) if d < bd || (d == bd && Self::spatial_outranks(server, bs)) => best = Some((server, d)),
+                        None => best = Some((server, d)),
+                        _ => {}
+                    }
+                }
+                let (server, b) = best.expect("refresh_normal_config: a neuron always has a normal entry");
+                let was_normal = ev.server == SpatialServer::Normal;
+                let now_normal = server == SpatialServer::Normal;
+                if was_normal != now_normal {
+                    let f = ev.frames.len() as i64;
+                    moved.push((observed.clone(), if now_normal { f } else { -f }));
+                }
+                ev.server = server;
+                ev.best_distance = b;
+            }
+        }
+        for (cfg, delta) in moved { self.adjust_spatial_connections(&cfg, delta); }
     }
 
     /// All of this neuron's routing entries — its normal and its children — as (server, sorted
@@ -1726,15 +1854,26 @@ impl Neuron {
     /// NOT use this — removing a child can only change the winner of the configurations that child served,
     /// so it reassigns just those (see [remove_spatial_child]).
     fn reassign_after_mint(&mut self, child_id: NeuronId, config: &[NeuronId]) {
-        let Self { spatial_history, spatial_dist_cache, .. } = self;
-        let child_cid = spatial_dist_cache.intern(config);
-        for (observed, ev) in spatial_history.iter_mut() {
-            let oid = spatial_dist_cache.intern(observed);
-            let d = spatial_dist_cache.distance(oid, child_cid);
-            if d < ev.best_distance {
-                ev.server = SpatialServer::Child(child_id);
-                ev.best_distance = d;
+        // Configurations moving off the normal onto the newborn stop counting toward the normal-served
+        // marginal — collect them here (can't touch self.spatial_connections while borrowing the history).
+        let mut moved_off_normal: Vec<(Vec<NeuronId>, usize)> = Vec::new();
+        {
+            let Self { spatial_history, spatial_dist_cache, .. } = self;
+            let child_cid = spatial_dist_cache.intern(config);
+            for (observed, ev) in spatial_history.iter_mut() {
+                let oid = spatial_dist_cache.intern(observed);
+                let d = spatial_dist_cache.distance(oid, child_cid);
+                if d < ev.best_distance {
+                    if ev.server == SpatialServer::Normal {
+                        moved_off_normal.push((observed.clone(), ev.frames.len()));
+                    }
+                    ev.server = SpatialServer::Child(child_id);
+                    ev.best_distance = d;
+                }
             }
+        }
+        for (cfg, frames) in moved_off_normal {
+            self.adjust_spatial_connections(&cfg, -(frames as i64));
         }
     }
 
@@ -1917,22 +2056,33 @@ impl Neuron {
             // best), and refresh their cached distance to that new server. The child is already gone from
             // the table, so `spatial_entry_ids` returns exactly the surviving entries to route against.
             let entries = self.spatial_entry_ids();
-            let Self { spatial_history, spatial_dist_cache, .. } = self;
-            for (observed, ev) in spatial_history.iter_mut() {
-                if ev.server != SpatialServer::Child(pattern_id) { continue; }
-                let oid = spatial_dist_cache.intern(observed);
-                let mut best: Option<(SpatialServer, u32)> = None;
-                for &(server, cid) in &entries {
-                    let d = spatial_dist_cache.distance(oid, cid);
-                    match best {
-                        Some((bserver, bd)) if d < bd || (d == bd && Self::spatial_outranks(server, bserver)) => best = Some((server, d)),
-                        None => best = Some((server, d)),
-                        _ => {}
+            // Configurations that fall back onto the normal rejoin the normal-served marginal — collect
+            // them and fold them in after the history borrow ends.
+            let mut moved_to_normal: Vec<(Vec<NeuronId>, usize)> = Vec::new();
+            {
+                let Self { spatial_history, spatial_dist_cache, .. } = self;
+                for (observed, ev) in spatial_history.iter_mut() {
+                    if ev.server != SpatialServer::Child(pattern_id) { continue; }
+                    let oid = spatial_dist_cache.intern(observed);
+                    let mut best: Option<(SpatialServer, u32)> = None;
+                    for &(server, cid) in &entries {
+                        let d = spatial_dist_cache.distance(oid, cid);
+                        match best {
+                            Some((bserver, bd)) if d < bd || (d == bd && Self::spatial_outranks(server, bserver)) => best = Some((server, d)),
+                            None => best = Some((server, d)),
+                            _ => {}
+                        }
                     }
+                    let (server, b) = best.expect("remove_spatial_child: a neuron always has a normal entry");
+                    if server == SpatialServer::Normal {
+                        moved_to_normal.push((observed.clone(), ev.frames.len()));
+                    }
+                    ev.server = server;
+                    ev.best_distance = b;
                 }
-                let (server, b) = best.expect("remove_spatial_child: a neuron always has a normal entry");
-                ev.server = server;
-                ev.best_distance = b;
+            }
+            for (cfg, frames) in moved_to_normal {
+                self.adjust_spatial_connections(&cfg, frames as i64);
             }
         }
     }
@@ -2663,6 +2813,14 @@ mod tests {
         c
     }
 
+    /// The observed neighbors as actives carrying their channel — what the thalamus passes so the normal's
+    /// per-channel consensus can group the connection counts. Each id's channel is `id % 10`, so an
+    /// A-config id and the B-config id at the same position (e.g. 12 and 22) share channel 2 and compete
+    /// there, exactly as the on/off buckets of one pixel do; the majority state wins the channel.
+    fn actives(ids: &[NeuronId]) -> Vec<ActiveNeuron> {
+        ids.iter().map(|&id| ActiveNeuron { id, channel_id: (id % 10) as ChannelId, reward: 0.0 }).collect()
+    }
+
     /// A level-0 neuron whose horizon is `round(1 / forget_rate)` — 0.1 → 10, 0.05 → 20. The horizon is
     /// now its own parameter, so these Phase-1 tests keep the old rate-derived value to preserve intent.
     fn phase1_neuron(forget_rate: f64) -> Neuron {
@@ -2678,7 +2836,7 @@ mod tests {
     fn step(n: &mut Neuron, ids: &[NeuronId], frame: FrameNumber, next_pid: &mut NeuronId) -> (Option<NeuronId>, Vec<NeuronId>) {
         let ctx = spatial_ctx(ids);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
-        let res = n.process_spatial_frame(Some(&ctx), &empty, &[], 8, frame); // capacity 8 = a complete ring
+        let res = n.process_spatial_frame(Some(&ctx), &empty, &actives(ids), 8, frame); // capacity 8 = a complete ring
         let Some(bid) = res.bid else {
             // Pure normal-serve: already committed inline; any delete was applied inline too.
             return (None, res.delete_candidate.into_iter().collect());
@@ -2786,7 +2944,7 @@ mod tests {
         let mut minted_cfg = None;
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
-            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], 8, f);
+            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &actives(obs), 8, f);
             if let Some(bid) = &res.bid {
                 if bid.pattern_id == NEW_CHILD_BID {
                     minted_cfg = Some(set(&res.observed));
@@ -2798,19 +2956,21 @@ mod tests {
         assert_eq!(minted_cfg, Some(set(&b)), "the first child minted takes the deviation B as its context");
     }
 
-    /// Entries are frozen at their seed/mint configuration: the normal is seeded to A on the first frame
-    /// and never moves, so minting B never disturbs it — the normal stays A throughout.
+    /// A is the usual neighborhood (3 of every 5 frames), so it wins every channel's consensus and the
+    /// normal stays A. Minting B never pulls the normal off A: B's frames are served by the child, so they
+    /// never count toward the normal's marginal (the exclusivity rule) — they can only reinforce A.
     #[test]
     fn test_mint_frame_does_not_pollute_the_normal() {
         let mut n = phase1_neuron(0.05);
         let mut pid = 1000;
-        // Complete (8-neighbor) configurations — minting now requires a full neighborhood.
+        // Complete (8-neighbor) neighborhoods — minting requires a full neighborhood. A and B share
+        // channels position-wise (id % 10), so A's majority state wins each channel.
         let (a, b) = ([10, 11, 12, 13, 14, 15, 16, 17], [20, 21, 22, 23, 24, 25, 26, 27]);
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
             let (minted, _) = step(&mut n, obs, f, &mut pid);
             if minted.is_some() {
-                assert_eq!(normal_cfg(&n), set(&a), "minting must not disturb the frozen normal (frame {f})");
+                assert_eq!(normal_cfg(&n), set(&a), "minting must not pull the normal off A (frame {f})");
             }
         }
         assert_eq!(child_cfgs(&n), vec![set(&b)], "settles to one child = B");

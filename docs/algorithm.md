@@ -101,9 +101,12 @@ That is the initial case, not an error.
 
 ### The normal
 
-The neighborhood a neuron usually sees is its **normal**, and it is held as a routing table entry like any other:
-a stored configuration, set to the first context the neuron observes and [refined](#refinement) from its own
-context counts thereafter. The neuron measures distance from it exactly as it measures distance from a child.
+The neighborhood a neuron usually sees is its **normal**, and it is a routing table entry like any other — but it
+is not stored independently. It is read off the [connections](#the-base-model-what-a-neuron-expects) as their
+**per-channel consensus**: within each neighbor channel (one event dimension, so exactly one bucket fires per
+frame) the bucket its counts most favor wins, ties broken by the older id. That is the argmax base-model
+prediction resolved to a single neighborhood, recomputed as the counts are learned — not a frozen first
+observation. The neuron measures distance from it exactly as it measures distance from a child.
 
 The normal is **not a child**. It has no pattern neuron, it never propagates, and it is never deleted — a neuron
 always has a normal, and its storage is the connections, which are paid for already. It competes for frames like
@@ -397,11 +400,10 @@ routing table, and a **pattern neuron one level above its own level**. Both are 
 
 - The pattern **inherits its parent's channel**. That channel then infers its neighbor channels at the higher
   level.
-- Its configuration starts as the observation that justified it, and moves from there under
-  [refinement](#refinement) onto the median of what it actually serves. Starting at the observation is not a
-  guess to be improved on: the best configuration for a set of frames is the median of that set, but which frames
-  a candidate would win cannot be known until it is placed somewhere. Placing it on the demand that justified it
-  and letting refinement relocate it is the same two steps in the other order.
+- Its configuration is the observation that justified it, and it is **frozen there** — a child never moves off its
+  mint neighborhood (see [refinement](#refinement)). It serves that exact demand at zero error from its first
+  frame; the drift onto the typical neighborhood is the normal's job, through its connection consensus, not the
+  child's.
 - **A candidate rejected today is not lost.** Every frame offers a different candidate — its own observation — so
   a neuron samples candidate positions from its own demand. A cluster worth a child will sooner or later present a
   frame near its middle, and that candidate passes where an off-centre one failed.
@@ -523,20 +525,20 @@ occurs — the one variable-length code in which probabilities set costs.
 
 ## Refinement
 
-A child's configuration is the **median of the frames it serves**: for each neighbor, present in the configuration
-iff it is present in more than half of those frames. Under Hamming distance that is exactly the point minimising
-total distance to the frames served, so it is not an approximation of the right configuration — it is the right
-configuration, computable directly from the [history](#the-history).
+**A child's configuration is frozen at the observation that minted it and never moves.** The frames it serves do
+not pull it around; it stays the exact neighborhood the add pass justified. The only entry that tracks the data is
+the **normal**, and it tracks it through the connections: each frame the normal serves folds into the
+[connection counts](#the-base-model-what-a-neuron-expects), and the normal — their per-channel consensus — shifts
+as the counts do. A neighbor that becomes usual wins its channel's consensus and enters the normal; one that fades
+loses it and drops out. There is no separate prune rule and no per-child median to recompute.
 
-This is facility location's **move**: a child relocating onto the demand it serves. A shape whose boundary was
-drawn wrong when it was created corrects as soon as the frames say so, and a neighbor that only sometimes appears
-drops out of the configuration by falling under half, so no prune rule is needed.
+Facility location's **move** therefore lives entirely on the normal, not the children. Because the normal is
+recomputed from the counts rather than drifted toward, it can shift the moment the counts change — and a shifted
+normal changes distances, so frames may change hands between it and the children. That reassignment is what the
+delete and add passes see on the following frame.
 
-Because the median is recomputed rather than drifted toward, it can shift the moment the history changes — and a
-shifted configuration changes distances, so frames may change hands. That reassignment is what the delete and add
-passes see on the following frame.
-
-Connections carry no refinement — they are plain accumulated counts.
+The connections themselves carry no refinement — they are plain windowed counts; the consensus over them is the
+refinement.
 
 ## One frame, in order
 

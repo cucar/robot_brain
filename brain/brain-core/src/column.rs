@@ -443,13 +443,14 @@ impl Column {
     }
 
     /// Scrub a dead neuron from a parent's SPATIAL children's context entries.
-    /// Affected children whose activation strength decayed to zero become cascade candidates.
+    /// Spatial children have no decay clock — retirement is the one test's delete pass, not a cascade —
+    /// so this only keeps references consistent (scrubs the dead neuron); it never marks a child deletable.
     fn purge_spatial_context_neuron(
         &mut self,
         target_id: NeuronId,
         dying_neuron_id: NeuronId,
-        current_frame: FrameNumber,
-        newly_deletable_ids: &mut Vec<NeuronId>,
+        _current_frame: FrameNumber,
+        _newly_deletable_ids: &mut Vec<NeuronId>,
     ) {
         let parent = match self.neurons.get_mut(&target_id) {
             Some(n) => n,
@@ -457,12 +458,7 @@ impl Column {
         };
         // same-pulse RemovePattern may have already cleaned this entry
         if !parent.has_spatial_context_index_entry(dying_neuron_id) { return; }
-        let affected_patterns = parent.remove_spatial_context_neuron(dying_neuron_id);
-        for pattern_id in affected_patterns {
-            if parent.can_delete_child(pattern_id, current_frame) {
-                newly_deletable_ids.push(pattern_id);
-            }
-        }
+        let _ = parent.remove_spatial_context_neuron(dying_neuron_id);
     }
 
     /// Drop a single TEMPORAL contextRef entry on a context neuron.
