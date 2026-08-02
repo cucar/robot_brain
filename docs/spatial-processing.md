@@ -72,7 +72,7 @@ The neuron does not distinguish between temporal and spatial connections — the
 
 ### 3.3 Two-Phase Processing Model
 
-Each frame runs the same processing twice in sequence: spatial first, temporal second. Spatial and temporal are not different mechanisms — they are the same level-sweep, the same per-neuron parallel work, the same prediction/error/correction loop. The only difference is which connection slot drives matching and which frame the resulting votes apply to: spatial reads `connections[0]` and votes for the current frame; temporal reads `connections[d>0]` and votes for frames d ahead. Mechanically identical; semantically one is "what's here now alongside me" and the other is "what comes next."
+Each frame runs the same processing twice in sequence: spatial first, temporal second. Spatial and temporal are not different mechanisms — they are the same level loop, the same per-neuron parallel work, the same prediction/error/correction loop. The only difference is which connection slot drives matching and which frame the resulting votes apply to: spatial reads `connections[0]` and votes for the current frame; temporal reads `connections[d>0]` and votes for frames d ahead. Mechanically identical; semantically one is "what's here now alongside me" and the other is "what comes next."
 
 The motivation for running spatial first is the feedforward sensory cascade. Object identification must precede motion tracking — you cannot have a d>0 prediction "ball moves left" until "ball" is a recognized entity in both frames. If temporal ran first, its d>0 predictions could only operate on raw sensory neurons (the only thing active at age=0 within the frame), which is the combinatorial-explosion bottleneck the design was meant to fix. By running spatial first, temporal sees the spatial hierarchy's apex as its input — objects and groupings, not raw pixels — and its d>0 predictions form between meaningful entities across frames.
 
@@ -107,7 +107,7 @@ Activate sensory neurons
     spatial_level_index[0]  ← sensory
     │
     ▼
-process_spatial  (level-sweep over spatial_level_index, votes for current frame)
+process_spatial  (level by level over spatial_level_index, votes for current frame)
     │
     │   For level 0..max in spatial_level_index:
     │     • d=0 pattern recognition (routing matches on connections[0]
@@ -125,7 +125,7 @@ Apex handoff  (between phases)
     │       temporal_level_index[0].insert(N)
     │
     ▼
-process_temporal  (level-sweep over temporal_level_index, votes for future frames)
+process_temporal  (level by level over temporal_level_index, votes for future frames)
     │
     │   For level 0..max in temporal_level_index:
     │     • d>0 pattern recognition (routing matches on connections[d>0]
@@ -143,7 +143,7 @@ Next frame
 
 The two phases can't step on each other for two reasons: they read disjoint connection slots (spatial = `connections[0]`, temporal = `connections[d>0]`), and they iterate disjoint indexes. The same neuron can sit at very different levels in the two indexes — that's the point.
 
-For the first frame on a fresh brain, no spatial corrections exist; the apex set is just the sensory neurons, and temporal behaves exactly as it does today. As spatial corrections accumulate, apex shifts from sensory pixels to spatial groupings, and temporal starts its sweep over those richer inputs.
+For the first frame on a fresh brain, no spatial corrections exist; the apex set is just the sensory neurons, and temporal behaves exactly as it does today. As spatial corrections accumulate, apex shifts from sensory pixels to spatial groupings, and temporal processing starts over those richer inputs.
 
 ---
 
@@ -185,7 +185,7 @@ The thalamus mints a correction neuron capturing the actual co-activation contex
 
 ### 5.1 How Hierarchy Emerges
 
-Spatial hierarchy emerges along two axes — within a single spatial phase (via the level-sweep and existing routing) and across frames (via the routing tables accumulating new entries over time).
+Spatial hierarchy emerges along two axes — within a single spatial phase (via the level loop and existing routing) and across frames (via the routing tables accumulating new entries over time).
 
 **Within a spatial phase.** When `process_spatial` runs in frame N:
 
@@ -196,9 +196,9 @@ Spatial hierarchy emerges along two axes — within a single spatial phase (via 
 
 A single frame can therefore deepen the spatial hierarchy by at most one fresh layer at the top, plus however deep the existing routing structure already reaches.
 
-**Across frames.** Frame N's fresh mints become routing-table entries in their source neurons. In frame N+1's spatial phase, those entries match and fire the corresponding correction neurons mid-sweep — so the sweep naturally reaches one level deeper than it did in frame N. Over many frames, the spatial hierarchy reaches arbitrary depth, even though any single frame only adds one fresh layer.
+**Across frames.** Frame N's fresh mints become routing-table entries in their source neurons. In frame N+1's spatial phase, those entries match and fire the corresponding correction neurons partway up — so spatial processing naturally reaches one level deeper than it did in frame N. Over many frames, the spatial hierarchy reaches arbitrary depth, even though any single frame only adds one fresh layer.
 
-**Apex handoff to temporal.** At the end of the spatial phase, the apex set is computed: neurons that fired in spatial but did not have their d=0 routing fire any higher-level spatial neuron this frame. Each apex neuron is inserted into `temporal_level_index[0]` — regardless of its `spatial_level`. So a human-object at spatial_level 7 and a cube-object at spatial_level 3 both feed temporal at temporal_level 0, as equal inputs. Temporal then does its own level-sweep over `temporal_level_index`, learning d>0 sequences over spatial groupings rather than over raw pixels.
+**Apex handoff to temporal.** At the end of the spatial phase, the apex set is computed: neurons that fired in spatial but did not have their d=0 routing fire any higher-level spatial neuron this frame. Each apex neuron is inserted into `temporal_level_index[0]` — regardless of its `spatial_level`. So a human-object at spatial_level 7 and a cube-object at spatial_level 3 both feed temporal at temporal_level 0, as equal inputs. Temporal processing then runs its own level loop over `temporal_level_index`, learning d>0 sequences over spatial groupings rather than over raw pixels.
 
 ### 5.2 Walkthrough: MNIST Digits "1" and "7"
 
@@ -222,7 +222,7 @@ Using a simplified 3x3 grid:
 With spatial-first, MNIST processing becomes:
 
 1. Show one frame. Pixel neurons activate into `spatial_level_index[0]`.
-2. `process_spatial` runs. Level-sweep seeds from the sensory pixels. On first exposure, no corrections exist yet — sweep stops at level 0, mints corrections from d=0 errors. On subsequent exposures, routing matches activate previously-minted corrections, the sweep deepens, and possibly one new layer mints at the top.
+2. `process_spatial` runs. The level loop seeds from the sensory pixels. On first exposure, no corrections exist yet — it stops at level 0, mints corrections from d=0 errors. On subsequent exposures, routing matches activate previously-minted corrections, the climb deepens, and possibly one new layer mints at the top.
 3. Apex handoff: every spatial-fired neuron not subsumed by a higher-level spatial activation this frame is inserted into `temporal_level_index[0]`. On first exposure with no corrections, this is just the sensory pixels.
 4. `process_temporal` runs over `temporal_level_index`. For single-frame MNIST there's no cross-frame context, so temporal does no useful work, but it runs uniformly for architectural consistency.
 5. Action voting runs as it does today.
@@ -230,4 +230,4 @@ With spatial-first, MNIST processing becomes:
 
 One frame per image. Training loop: show image → spatial + temporal phases run → learn digit → next image.
 
-Inference is symmetric: on a test image, the spatial sweep activates pre-trained correction neurons via routing matches (not as fresh wirings), and those activated neurons vote for the digit action.
+Inference is symmetric: on a test image, spatial processing activates pre-trained correction neurons via routing matches (not as fresh wirings), and those activated neurons vote for the digit action.

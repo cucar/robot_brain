@@ -368,7 +368,7 @@ impl JsBrain {
     /// on the dim — correct value with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
     /// `distance` is the connection-table slot at which to wire and read back.
     /// Wires every currently-active age-0 voter to every supplied action target at the given distance.
-    /// Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
+    /// Then runs post-wire inference at age (distance - 1) and returns the resulting FrameResult.
     /// Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
     #[napi(js_name = "learn")]
     pub fn learn(&self, env: Env, actions: JsObject, distance: u32) -> Result<JsObject> {
@@ -404,7 +404,7 @@ impl JsBrain {
         Ok(self.inner.borrow().get_spatial_correction_count() as u32)
     }
 
-    /// Cumulative count of spatial children retired by the one test's delete pass since brain start.
+    /// Cumulative count of spatial children retired by the delete test since brain start.
     /// Paired with getSpatialCorrectionCount, this is the cold-start churn the Phase-1 gate watches.
     #[napi(js_name = "getSpatialDeletionCount")]
     pub fn get_spatial_deletion_count(&self) -> Result<u32> {

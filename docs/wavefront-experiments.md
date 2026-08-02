@@ -32,16 +32,16 @@ runs `--image-size 7 --buckets 2 --columns 20`.
 carry forward. Frozen save→load round-trips cleanly.)
 
 **Findings.**
-- **The one test must be symmetric.** A first cut evaluated the delete pass over the frames a child was
-  *recorded* serving while the add pass evaluated over frames a candidate *would win* — an asymmetry that made
+- **The one test must be symmetric.** A first cut evaluated the delete test over the frames a child was
+  *recorded* serving while the add test evaluated over frames a candidate *would win* — an asymmetry that made
   minting/deletion oscillate: **~21,900 mint + 21,800 delete over 2000 frames (~11/frame)**. Making both halves
   evaluate over "the frames the entry is currently the closest for, with `next(O)` the runner-up" (the design's
   "same test") collapsed churn to **665 mint / 216 delete (~0.3/frame)** and raised accuracy 49.7% → 58%. This
   is the load-bearing invariant of the design ("an entry cannot fail the test and then immediately pass it").
-- **The add pass is the expensive step** (as the design flags). It is `O(history × entries)` per active neuron
+- **The add test is the expensive step** (as the design flags). It is `O(history × entries)` per active neuron
   per frame; training throughput falls from ~340 img/s to ~60 img/s as the history fills toward the horizon and
-  children accumulate (~450). Gating the add pass to error>0 frames helped little (most frames carry error).
-  Frozen eval — no add pass — runs at ~600 img/s. Incremental per-child benefit sums (design: "the delete pass
+  children accumulate (~450). Gating the add test to error>0 frames helped little (most frames carry error).
+  Frozen eval — no add test — runs at ~600 img/s. Incremental per-child benefit sums (design: "the delete test
   folds into the routing scan") are the obvious next optimization, deferred.
 - **Two spec-conformance fixes surfaced via save/restore** (dangling connection targets to churned patterns):
   the old event-edge substrate (`learn_spatial_event_connections`) is now unread and not written; newborns are
@@ -51,7 +51,7 @@ carry forward. Frozen save→load round-trips cleanly.)
 
 **Follow-up done in the same session.** The one-test asymmetry is fixed (above). The history record now stores
 only the observed `O` — which entry serves any remembered frame is recomputed, so median refinement and the
-delete pass share the same best-entry selection as routing (no stale stored server). The horizon is derived from
+delete test share the same best-entry selection as routing (no stale stored server). The horizon is derived from
 the forget rate rather than hardcoded. The vestigial experimental toggles (`match_info`/`error_info`/`trace_*`)
 and the dead `dim_id` are removed across the napi/JS constructor surface; brain-core builds with **zero warnings**.
 The old always-empty spatial serialization fields (`spatial_inference_*`, spatial Welford bucket) still round-trip
@@ -110,8 +110,8 @@ test images, 8-connectivity (Moore, matching the brain's encoder).
 | 10 imgs, 28×28, r2 (the 96.44% config) | 93px | 3.4 | 18.8px | 228 | — | 88.9 (tail to ~340ms on dense digits 0/9) |
 | 6 imgs, 14×14, r1 (after apex fix) | 20px | 3.3 | 5.7px | 58 | 1 (2 on one image) | 3.6 |
 
-**Bug found and fixed:** the top level's corrections were minted but never re-added to `fired_set` (the sweep
-ends before reprocessing them), so `apex` always reported 0. Fixed by adding the final level's corrections to
+**Bug found and fixed:** the top level's corrections were minted but never re-added to `fired_set` (the level
+loop ends before reprocessing them), so `apex` always reported 0. Fixed by adding the final level's corrections to
 `fired_set` before computing `apex = fired \ subsumed`.
 
 **Finding:** level-1 stays local on real digits too (max ~19px of ~93 active at 28×28 r2, ≈20%), depth bounded
@@ -187,7 +187,7 @@ misprediction cluster by transitive merge → reuse/mint, refinement as the spli
 | 300 | 150 | 0.5 | 0.3 | on | off | 326 | 1 | 8.50%→ still broken | — | pre-fix #2: local recognition fixed, but vote-collection id bug still zeroed voters |
 | 300 | 150 | 0.5 | 0.3 | on | off | 326 | 326 | **28.00%** | **32.67%** | both bugs fixed — first valid accuracy number |
 | 60 | 60 | 0.5 | 0.3 | on | off | — | — | — | — | (superseded by sweep below) |
-| 2000 | 500 | 0.9 | 0.4 | on | on | 6,263 | 6,463 | **58.20%** | 76.20% | best-so-far config at scale; deepest sweep reached L4; 43 min wall-clock. L0 min 0% reuse, L1 31% reuse — reuse barely fires at θ=0.9 |
+| 2000 | 500 | 0.9 | 0.4 | on | on | 6,263 | 6,463 | **58.20%** | 76.20% | best-so-far config at scale; deepest level reached L4; 43 min wall-clock. L0 min 0% reuse, L1 31% reuse — reuse barely fires at θ=0.9 |
 | 60 | 60 | 0.66 | 0.33 | on | on | 129 | 128 | 40.00% | 56.67% | best test acc seen at 60 images — but see next row |
 | 500 | 500 | 0.66 | 0.33 | on | on | 1,002 | 1,001 | **27.00%** | 32.60% | same config at scale gets *worse* — 0.66 is left of the true optimum (see coupled sweep, peaks at θ=0.8); low θ degrades with more data as merge blurs patterns (train acc also collapsed 56.7%→32.6%, not overfitting) |
 
@@ -305,7 +305,7 @@ active → mispredict → (≥1-neighbor gate) → request → mint vs reuse.
 | L1→L2 | 35,164 | 22,793 | 4 | 22,789 | 23 | 376 |
 | L2→L3 | 4,633 | 3,675 | 3 | 3,672 | **0** | **351** |
 
-Live: 378 patterns (L1:355, L2:23), deepest sweep level 3, **0 L3+ patterns**.
+Live: 378 patterns (L1:355, L2:23), deepest level reached 3, **0 L3+ patterns**.
 
 **Verdict (per user: correct behavior, not a bug).** All 3,672 valid L2→L3 requests **reuse** an existing lower
 pattern (matched by L0 output, across levels) instead of minting — genuine content-addressable reuse, not a
@@ -1063,7 +1063,7 @@ consolidation into fewer, broader patterns.
 **Perf note (eval is slow at r2):** frozen eval of the r2 brain runs at ~1 img/s. Profiling the saved brains
 (`apps/mnist/jobs/profile_recog.js`) showed the r2 cost is **spatial** recognition — ~15.6K candidate scorings
 per frame at r1, exploding at r2 because radius-2 widens each pattern's stored context (13.5→63 entries) and
-forget-0 keeps all 131K patterns as permanent candidates. Separately, the **temporal sweep is O(active²)**:
+forget-0 keeps all 131K patterns as permanent candidates. Separately, **temporal processing is O(active²)**:
 `dispatch_temporal_frame` rebuilds a per-neuron channel-filtered actives list by scanning the full active set
 for every active neuron (784²≈614K clone-filters/frame at 28×28), run unconditionally even with zero temporal
 patterns. It is a fixed ~14.5ms sidecar (dominates the fast r1/r14 frames, negligible next to r2's spatial cost).

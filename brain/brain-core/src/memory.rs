@@ -51,13 +51,13 @@ pub struct Memory {
 
     /// Spatial level index — `level → set of neuron ids`. Age-free.
     /// Wiped at the top of every frame by `reset_spatial`. Spatial activations land here and
-    /// nowhere else — no age_index, no neuron_states. The spatial sweep reads this back via
+    /// nowhere else — no age_index, no neuron_states. Spatial processing reads this back via
     /// `get_spatial_level_neurons(level)` which fabricates a default per-neuron state
     /// at age=0 on demand (spatial never persists per-neuron state).
     spatial_level_index: FxHashMap<Level, FxHashSet<NeuronId>>,
 
     /// Temporal level index — `level → frame → set of neuron ids`.
-    /// Frame keying lets the temporal sweep recover age (`age = frame_number - frame`) without
+    /// Frame keying lets temporal processing recover age (`age = frame_number - frame`) without
     /// migrating per-neuron Maps each frame. Eviction in `advance_temporal_window` is a single
     /// delete-by-frame.
     temporal_level_index: FxHashMap<Level, FxHashMap<FrameNumber, FxHashSet<NeuronId>>>,
@@ -147,7 +147,7 @@ impl Memory {
     /// Deletion in the substrate removes a neuron from its column and routing tables, but a neuron
     /// handed to temporal via the apex handoff also lives in these frame-keyed indices for the whole
     /// window. If we do not scrub it here, `get_temporal_level_neurons` keeps returning the dead id
-    /// for the frames still in the window and the next temporal sweep dispatches a neuron its column
+    /// for the frames still in the window and the next round of temporal processing dispatches a neuron its column
     /// no longer owns. A deleted neuron's votes must leave with it, so this is correctness, not just
     /// crash-avoidance. Called by the brain right after each delete cascade returns the removed ids.
     pub fn purge_neurons(&mut self, deleted_ids: &[NeuronId]) {
@@ -219,7 +219,7 @@ impl Memory {
     /// Same neuron active at multiple ages emits one pair per non-suppressed age.
     /// Mirrors how `Neuron::generate_votes` walks ages inside process_frame.
     /// Inhibited states (those whose `activated_pattern_id` is set) are skipped.
-    /// Used by Brain.learn() to drive the post-wire vote sweep.
+    /// Used by Brain.learn() to drive the post-wire vote collection.
     /// Every active voter at every valid age contributes a vote.
     pub fn get_active_voter_ages(&self) -> Vec<(NeuronId, Distance)> {
         let mut pairs = Vec::new();
@@ -251,7 +251,7 @@ impl Memory {
 
     /// Active spatial neurons at a level — just the id set, no per-neuron state, no age dimension.
     /// Spatial neurons don't persist per-neuron state (nothing reads it across the level loop),
-    /// so the sweep gets a fresh default state every time it asks for one.
+    /// so spatial processing gets a fresh default state every time it asks for one.
     pub fn get_spatial_level_neurons(&self, level: Level) -> FxHashSet<NeuronId> {
         self.spatial_level_index.get(&level).cloned().unwrap_or_default()
     }
@@ -309,7 +309,7 @@ impl Memory {
 
     /// Activate a sensory neuron in the spatial level index. Age-free, state-free — writes only
     /// to spatial_level_index. Nothing else needs to know that this neuron fired in spatial:
-    /// the sweep reads spatial_level_index back, and the apex handoff promotes survivors into
+    /// spatial processing reads spatial_level_index back, and the apex handoff promotes survivors into
     /// temporal via the separate temporal activation path.
     pub fn activate_spatial_neuron(&mut self, neuron_id: NeuronId, level: Level) {
         self.spatial_level_index.entry(level)
@@ -389,13 +389,13 @@ impl Memory {
 
     /// Count of active spatial levels — equals the highest active level + 1. Levels are built
     /// bottom-up and are always contiguous from 0 (a level can't be active without the one below it),
-    /// so there are never gaps. Used as the initial upper bound for the bottom-up spatial sweep.
+    /// so there are never gaps. Used as the initial upper bound for bottom-up spatial processing.
     pub fn get_spatial_max_active_level(&self) -> usize {
         self.spatial_level_index.len()
     }
 
     /// Count of active temporal levels — equals the highest active level + 1. Same contiguity
-    /// invariant as the spatial side. Used as the initial upper bound for the bottom-up temporal sweep.
+    /// invariant as the spatial side. Used as the initial upper bound for bottom-up temporal processing.
     pub fn get_temporal_max_active_level(&self) -> usize {
         self.temporal_level_index.len()
     }

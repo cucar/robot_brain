@@ -76,7 +76,7 @@ export declare class Brain {
    * on the dim — correct value with reward=1, others with reward=0 — so `conn.reward` converges to P(target|voter).
    * `distance` is the connection-table slot at which to wire and read back.
    * Wires every currently-active age-0 voter to every supplied action target at the given distance.
-   * Then runs a post-wire inference sweep at age (distance - 1) and returns the resulting FrameResult.
+   * Then runs post-wire inference at age (distance - 1) and returns the resulting FrameResult.
    * Single-frame supervised harnesses (MNIST) pass distance=1 to match the existing temporal voting slot.
    */
   learn(actions: object, distance: number): object
@@ -88,7 +88,7 @@ export declare class Brain {
   resetAccuracyStats(): void
   /** Cumulative count of spatial corrections minted since brain start (or last hard reset). */
   getSpatialCorrectionCount(): number
-  /** Cumulative count of spatial children retired by the one test's delete pass since brain start. */
+  /** Cumulative count of spatial children retired by the delete test since brain start. */
   getSpatialDeletionCount(): number
   /** Number of correction neurons currently sitting above the base spatial level. */
   countActiveSpatialCorrections(): number

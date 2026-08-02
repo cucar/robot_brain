@@ -47,7 +47,7 @@ operator and no event-side asymmetry.
 This is the spine of the design and it mirrors the event side exactly:
 
 - **Event patterns are built from events only.** An event pattern is a spatial/temporal composition of
-  *lower events* (down to sensory). It never mints from actions. Separately, once the sweep settles,
+  *lower events* (down to sensory). It never mints from actions. Separately, once the level loop settles,
   **apex events vote actions**.
 - **By symmetry, action patterns are built from actions only.** An action chunk is a spatial/temporal
   composition of *lower actions*. It never mints from events. Separately, **apex events couple to apex
@@ -82,7 +82,7 @@ spatial processing groups co-firing actions into action moments** — a simultan
 (`d=0` "chord", e.g. turn-and-accelerate). The output is the apex action set: every action-fired neuron
 not subsumed by a higher-level action activation this frame. These apex actions **are the
 action-temporal-level-0 neurons at age 0**, and `d<0` chunk formation builds on them — exactly
-symmetric to how apex events seed the event temporal sweep.
+symmetric to how apex events seed event temporal processing.
 
 **Single-channel degeneracy (flagged).** When the action output is a single channel emitting one token
 per frame (the chatbot harness), action spatial is trivial — one action is its own apex, no bundle to

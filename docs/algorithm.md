@@ -284,13 +284,13 @@ For an active neuron with observed neighborhood `O`:
 3. **Serve.** `e*` serves. A child fires and delegates to its pattern one level up; the normal infers for itself,
    propagates nothing, and the connections update. At most one child fires.
 4. **Record.** Append `(frame, O, e*)` to the history.
-5. **Delete pass.** Test each child. Delete the one that fails by the widest margin — **at most one per frame**,
+5. **Delete test.** Test each child. Delete the one that fails by the widest margin — **at most one per frame**,
    because deletions interact: two children covering the same demand each look redundant while the other stands,
    and removing both at once would be wrong. Deleting one and re-testing next frame settles it correctly.
-6. **Add pass.** Test a candidate child at `O`. If it passes, create it — the pattern neuron one level up, and the
+6. **Add test.** Test a candidate child at `O`. If it passes, create it — the pattern neuron one level up, and the
    configuration in the routing table.
 
-Steps 5 and 6 are the same test on different subjects. The delete pass folds into the routing scan of step 2,
+Steps 5 and 6 are the same test on different subjects. The delete test folds into the routing scan of step 2,
 since both need each entry's distance to the frames it serves.
 
 **One of each per frame is not a throttle.** There is only ever one candidate to add, because the candidate is
@@ -302,16 +302,16 @@ horizon has a thousand chances to reshape a handful of children.
 
 The standard local search for facility location has three moves, and each is already something the design does:
 
-- **Close.** Shut a facility and reassign its demand — the delete pass, evaluated exactly, because the history
+- **Close.** Shut a facility and reassign its demand — the delete test, evaluated exactly, because the history
   says where each orphaned frame goes.
 - **Move.** Relocate a facility toward the customers it serves — [refinement](#refinement).
 - **Split.** Divide a facility serving two populations. This is **move plus add**: refinement pulls the child
-  toward whichever population dominates, the other is then served badly, and the add pass finds that a child at
+  toward whichever population dominates, the other is then served badly, and the add test finds that a child at
   the neglected demand point removes more error than it costs. Merge is likewise **close plus reassignment**.
 
 So neither merge nor split is a move the design has to add; they are what the ordinary operations compose into.
 Nearest-wins is safe because a badly-served frame is never absorbed silently — it stays in the history with its
-error visible, and the add pass sees it.
+error visible, and the add test sees it.
 
 ## The cost
 
@@ -415,7 +415,7 @@ routing table, and a **pattern neuron one level above its own level**. Both are 
 
 Deletion is the same event run backwards: the configuration leaves the routing table and the pattern neuron is
 released. Nothing irreplaceable goes with it, because the evidence lives in the [history](#the-history) rather
-than in the entry — if the same configuration is justified again, the add pass rebuilds it from the same frames.
+than in the entry — if the same configuration is justified again, the add test rebuilds it from the same frames.
 
 ## Contraction: building the level above
 
@@ -423,7 +423,7 @@ A neuron firing a child is not yet compression. If all 49 neurons of a 7×7 grid
 active units and nothing has shrunk. **Contraction is the thalamus choosing, each frame, the fewest units at the
 level above that reconstruct the level below.**
 
-It runs **between levels** during the sweep: level 0 is processed, contraction decides what propagates to level 1,
+It runs **between levels** during spatial processing: level 0 is processed, contraction decides what propagates to level 1,
 level 1 is processed, and so on. Nothing it decides persists — it is this frame's grouping, recomputed next frame.
 
 ### What a firing neuron offers
@@ -526,7 +526,7 @@ occurs — the one variable-length code in which probabilities set costs.
 ## Refinement
 
 **A child's configuration is frozen at the observation that minted it and never moves.** The frames it serves do
-not pull it around; it stays the exact neighborhood the add pass justified. The only entry that tracks the data is
+not pull it around; it stays the exact neighborhood the add test justified. The only entry that tracks the data is
 the **normal**, and it tracks it through the connections: each frame the normal serves folds into the
 [connection counts](#the-base-model-what-a-neuron-expects), and the normal — their per-channel consensus — shifts
 as the counts do. A neighbor that becomes usual wins its channel's consensus and enters the normal; one that fades
@@ -535,7 +535,7 @@ loses it and drops out. There is no separate prune rule and no per-child median 
 Facility location's **move** therefore lives entirely on the normal, not the children. Because the normal is
 recomputed from the counts rather than drifted toward, it can shift the moment the counts change — and a shifted
 normal changes distances, so frames may change hands between it and the children. That reassignment is what the
-delete and add passes see on the following frame.
+delete and add tests see on the following frame.
 
 The connections themselves carry no refinement — they are plain windowed counts; the consensus over them is the
 refinement.
@@ -551,9 +551,9 @@ flowchart TD
     D -->|no| F["The normal infers for itself; connections update; no bid"]
     E --> G["Record the frame: O and the entry that served it"]
     F --> G
-    G --> H["Delete pass: test each child.<br/>Does its benefit still cover 1 + its configuration?"]
+    G --> H["Delete test: test each child.<br/>Does its benefit still cover 1 + its configuration?"]
     H --> I["Delete the worst failure — at most one per frame"]
-    I --> J["Add pass: would a child at O remove more error<br/>from the history than 1 + O costs?"]
+    I --> J["Add test: would a child at O remove more error<br/>from the history than 1 + O costs?"]
     J --> K["If so, create it: configuration here, pattern neuron one level up"]
     K --> L["Contraction: thalamus runs the election over bids until it settles"]
     L --> M["Each surviving bid is one unit above; uncovered neurons are corrections"]
@@ -566,10 +566,10 @@ Each phase lands independently and is measured before the next. The headline met
 **apex neurons per level per frame, paired with the dictionary size that bought them.** Alongside it: MNIST accuracy
 (train and held-out), neuron counts per level, patterns per neuron, and wall-clock per frame.
 
-**Phase 1 — the configuration loop at level 0.** The whole-neighborhood configuration; the normal and inference
+**Phase 1 — spatial processing at level 0.** The whole-neighborhood configuration; the normal and inference
 from the pairwise connection distributions; the history window; the nearest entry serving, with at most one child
-firing per neuron; the delete pass and the add pass, both running the one test against the history. Capped at one
-level so the recursion is not a variable yet. Measure the history's size and the wall-clock of the add pass early —
+firing per neuron; the delete test and the add test, both running the one test against the history. Capped at one
+level so the recursion is not a variable yet. Measure the history's size and the wall-clock of the add test early —
 they are what decide whether the exact evaluation is affordable.
 
 **Phase 2 — contraction.** The bids, the election over rounds, derived adjacency, and the level-above
@@ -590,13 +590,13 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
 - **Cold-start churn.** With a nearly-empty history every configuration looks novel, so early tests are decided by
   very little evidence and children may be created and deleted in bursts. The tests correct themselves as the
   window fills, but measure churn over the first thousand frames rather than settled counts.
-- **The add pass is the expensive step.** The delete pass can be kept cheap — the routing scan already touches
-  every entry, and per-child sums can be maintained incrementally. The add pass cannot: scoring a candidate at `O`
+- **The add test is the expensive step.** The delete test can be kept cheap — the routing scan already touches
+  every entry, and per-child sums can be maintained incrementally. The add test cannot: scoring a candidate at `O`
   means measuring it against every frame in the history. Activation is not sparse where it matters, since with one
   bucket per dimension firing every frame the bucket-0 neuron of a mostly-off pixel is active almost always, so
-  that history is long. Running the add pass only when the current frame was served with error above zero should
+  that history is long. Running the add test only when the current frame was served with error above zero should
   make it rare for a settled neuron, since a perfectly served frame cannot justify a new child. That is an
-  expectation, not a guarantee — instrument the wall-clock share of the add pass before trusting it.
+  expectation, not a guarantee — instrument the wall-clock share of the add test before trusting it.
 - **Window overfitting.** Every decision is exact with respect to the horizon and blind beyond it. Too short a
   horizon and the neuron builds structure for coincidences; too long and it is slow to follow a drifting source.
   With rent gone there is no smoothing anywhere, so sensitivity to the horizon should be sharper than before.

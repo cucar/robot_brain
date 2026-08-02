@@ -249,7 +249,7 @@ pub struct Thalamus {
     /// Diagnostic — surfaced via Brain.get_spatial_correction_count() for harness validation.
     spatial_corrections_minted: u64,
 
-    /// Cumulative count of spatial children retired by the one test's delete pass. Paired with
+    /// Cumulative count of spatial children retired by the delete test. Paired with
     /// `spatial_corrections_minted`, this is the cold-start churn the Phase-1 gate watches
     /// (docs/algorithm.md, "Risks"). Surfaced via Brain.get_spatial_deletion_count().
     spatial_corrections_deleted: u64,
@@ -569,7 +569,7 @@ impl Thalamus {
         self.next_neuron_id += 1;
 
         // register metadata centrally (Neuron construction deferred to create_neurons).
-        // Spatial pattern neurons sit at temporal level 0 — they enter the temporal sweep via the
+        // Spatial pattern neurons sit at temporal level 0 — they enter temporal processing via the
         // apex handoff, NOT as a pattern at temporal level+1.
         self.neuron_parents.insert(id, parent_id);
         self.neuron_temporal_levels.insert(id, 0);
@@ -604,7 +604,7 @@ impl Thalamus {
         // created with no connections. Its connections belong to its own level, which has not been
         // observed at the moment of creation."). It learns its own model by ordinary counting as the
         // level above it populates. Seeding edges toward this frame's co-active neighbors — which may
-        // themselves be churned away by the delete pass — is both off-spec and a source of dangling
+        // themselves be churned away by the delete test — is both off-spec and a source of dangling
         // connection targets on restore.
         let _ = level_actives;
         let connections = Vec::new();
@@ -745,7 +745,7 @@ impl Thalamus {
         self.spatial_corrections_minted
     }
 
-    /// Cumulative count of spatial children retired by the delete pass since brain start.
+    /// Cumulative count of spatial children retired by the delete test since brain start.
     pub fn get_spatial_deletion_count(&self) -> u64 {
         self.spatial_corrections_deleted
     }
@@ -1037,7 +1037,7 @@ impl Thalamus {
     /// creation specs, raw dispatch results) alongside activations and votes.
     /// The caller accumulates deferred work across levels and flushes it once
     /// after the loop via apply_level_results.
-    /// Spatial sweep dispatch for one level. Builds the spatial level_context, runs the d=0
+    /// Spatial processing dispatch for one level. Builds the spatial level_context, runs the d=0
     /// co-activation work on every active neuron, collects activations + votes.
     /// The caller accumulates deferred work across levels and flushes it once after the loop
     /// via apply_level_results.
@@ -1105,10 +1105,10 @@ impl Thalamus {
             let spec = self.allocate_spatial_pattern_neuron(parent_level + 1, parent, &empty);
             new_child_of.insert(parent, spec.id);
             // The new child is an L+1 pattern: activate it at level+1 so it fires in the next level of
-            // THIS frame's sweep (not a future image). But it is BORN this frame — it has no history at
+            // THIS frame (not a future image). But it is BORN this frame — it has no history at
             // its own level yet, so it must be excluded from the level+1 work list this frame (it fires
             // and propagates, but does not itself route/mint/record until next frame). Without this it is
-            // processed as a settled unit at birth and drives a within-frame minting cascade up the sweep.
+            // processed as a settled unit at birth and drives a within-frame minting cascade up the levels.
             new_error_pattern_ids.insert(spec.id);
             activations.push(Activation { parent_id: parent, pattern_id: spec.id, age: 0 });
             install_ops.push(SpatialInstallOp { parent_id: parent, pattern_id: spec.id, context_neuron_ids: obs });
@@ -1196,7 +1196,7 @@ impl Thalamus {
         }
     }
 
-    /// Temporal sweep dispatch for one level. Builds the temporal level_context (mints temporal
+    /// Temporal processing dispatch for one level. Builds the temporal level_context (mints temporal
     /// corrections for prior-frame vote misses), runs d>0 work per (neuron, age), collects votes.
     /// The caller accumulates deferred work across levels and flushes it once after the loop
     /// via apply_level_results.
@@ -1287,7 +1287,7 @@ impl Thalamus {
     /// target neurons know the parent references them. Death frames returned from add_pattern are
     /// registered in the death ledger.
     /// Corrections are NOT activated this frame — they're routing-table entries that match and fire
-    /// on the next frame's spatial sweep (per spatial-processing.md §5.1).
+    /// in the next frame's spatial processing (per spatial-processing.md §5.1).
     pub fn install_spatial_corrections(&mut self, install_ops: Vec<SpatialInstallOp>) {
         if install_ops.is_empty() { return; }
 
@@ -1353,8 +1353,8 @@ impl Thalamus {
     }
 
     /// SPATIAL: walk the active neurons at this level and build the shared SpatialContext.
-    /// Spatial corrections are created in a separate pass after the
-    /// sweep, NOT here — so no corrections, no per-age error feedback, no new_neuron_specs.
+    /// Spatial corrections are minted during the election, NOT here —
+    /// so no corrections, no per-age error feedback, no new_neuron_specs.
     /// Action neurons are NOT skipped — spatial co-activation includes everything that fired.
     /// Build the spatial work list and the shared observed co-activation for one level.
     fn get_spatial_level_tasks(
@@ -2089,7 +2089,7 @@ impl Thalamus {
         }
     }
 
-    // ── Brain.learn(): supervised wiring + read-only vote sweep ────────────
+    // ── Brain.learn(): supervised wiring + read-only vote collection ───────
 
     /// Brain.learn() entry point.
     /// Routes a batch of supervised voter→action wirings to the owning region/column by voter_id.
@@ -2109,7 +2109,7 @@ impl Thalamus {
         }
     }
 
-    /// Read-only vote sweep over (voter_id, age) pairs from currently-active non-suppressed voters.
+    /// Collect votes read-only over (voter_id, age) pairs from currently-active non-suppressed voters.
     /// Routes each pair to its owning region by voter_id, calls `neuron.vote(age)` per pair, and flattens to FlatVotes.
     /// Mirrors what `Neuron::generate_votes` does inside process_frame.
     /// Every active voter at every valid age contributes its connections[age+1] entries.
@@ -2558,7 +2558,7 @@ struct CorrectionSpec {
 
 /// Install op for a freshly-minted spatial correction. Records the parent whose routing table gains
 /// the pattern, the new pattern's id, and the d=0 context entries (the observation O) to bind
-/// against. The add pass already ran the one test, so the pattern is installed straight away.
+/// against. The add test already ran, so the pattern is installed straight away.
 #[derive(Debug, Clone)]
 pub struct SpatialInstallOp {
     pub parent_id: NeuronId,

@@ -227,7 +227,7 @@ impl Backup {
                 let parent_id: NeuronId = row[1].parse().map_err(|e| format!("Bad parent id: {}", e))?;
                 let strength: f64 = row[2].parse().map_err(|e| format!("Bad strength: {}", e))?;
                 // Extra trailing columns from older backups (a `fires` column, or the retired
-                // evidence/price payment state) are ignored — the add pass prices a child before it is
+                // evidence/price payment state) are ignored — the add test prices a child before it is
                 // created, so a routing-table child carries no payment state to restore.
 
                 neuron_parents.insert(pattern_id, parent_id);
@@ -898,7 +898,7 @@ mod tests {
     #[test]
     fn test_load_reads_old_six_column_patterns_csv() {
         // Older backups wrote patterns.csv with extra trailing columns (a `fires` column, and the
-        // retired evidence/price payment state — up to 6 columns). The add pass prices a child before
+        // retired evidence/price payment state — up to 6 columns). The add test prices a child before
         // it is created, so restore ignores everything past strength but must still parse the leading
         // columns correctly rather than choking on the extra fields.
         let dir = temp_dir().join("brain_test_backup_legacy");

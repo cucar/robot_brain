@@ -24,7 +24,7 @@ use crate::types::*;
 /// fallback. Not a tunable knob — kept here to avoid a magic number in the error-threshold getters.
 const ERROR_MIN_SAMPLES: u64 = 3;
 
-/// Who serves a frame in the level-0 configuration loop (UCAR, docs/algorithm.md): the neuron's
+/// Who serves a frame in spatial processing (docs/algorithm.md): the neuron's
 /// normal, or one of its children. Also the KEY of the spatial routing table: a routing-table entry
 /// is the normal or a child (docs/algorithm.md, "The normal"), so `SpatialServer` names both the
 /// winner of the one test and which entry a stored `SpatialRoutingEntry` belongs to.
@@ -40,12 +40,12 @@ pub enum SpatialServer {
 /// A neuron's spatial history window, deduplicated by observed neighborhood (docs/algorithm.md, "The
 /// history"). The design remembers "the frames it was active for, one horizon back" — but every frame
 /// that observed the same neighborhood `O` carries the same observation, is served by the same entry,
-/// and at the same distance, so the one test's sums (the add and delete passes) depend only on HOW MANY
+/// and at the same distance, so the one test's sums (the add and delete tests) depend only on HOW MANY
 /// frames each distinct `O` contributed, never on their identities. So the window is stored as a
 /// histogram: one entry per distinct `O`, holding the frames it occurred on (for exact horizon
 /// windowing) rather than a record per frame. Decisions are identical to the per-frame window; what
 /// changes is that the observation and its cached server/distance are stored once per distinct
-/// configuration instead of once per frame, and the add pass scans distinct configurations rather than
+/// configuration instead of once per frame, and the add test scans distinct configurations rather than
 /// every remembered frame — the design's expensive step (docs/algorithm.md, "Risks").
 #[derive(Debug, Clone, Default)]
 struct SpatialHistory {
@@ -91,7 +91,7 @@ impl SpatialHistory {
         self.configs.values().map(|e| e.frames.len()).sum()
     }
 
-    /// The distinct configurations and their evidence — what the add/delete passes and refinement scan.
+    /// The distinct configurations and their evidence — what the add/delete tests and refinement scan.
     fn iter(&self) -> impl Iterator<Item = (&Vec<NeuronId>, &ConfigEvidence)> {
         self.configs.iter()
     }
@@ -173,9 +173,9 @@ const DIST_SENTINEL: u32 = u32::MAX;
 ///
 /// Since refinement was removed, every stored configuration (the normal, every child, every remembered
 /// observation) is **frozen** for its lifetime — so the distance between any two configurations is a
-/// constant. The route, delete and add passes recompute the same `d(O, config)` on every active frame
+/// constant. Routing, deleting and adding recompute the same `d(O, config)` on every active frame
 /// (a background neuron sees the same `O` and the same entries for thousands of consecutive frames), and
-/// the delete pass alone is `O(D · E)` distance calls per frame. Caching turns all of that into O(1)
+/// the delete test alone is `O(D · E)` distance calls per frame. Caching turns all of that into O(1)
 /// lookups after each distinct pair is seen once, with **no invalidation** needed for correctness: a
 /// cell only goes stale if a configuration changes, and the one place that happens — a child's context
 /// shrinking when a member is purged — resets the entry's interned id (so it re-interns as a new config).
@@ -254,9 +254,9 @@ pub struct SpatialBid {
 /// patterns" rule (docs/algorithm.md, "Election": oldest id wins ties).
 pub const NEW_CHILD_BID: NeuronId = NeuronId::MAX;
 
-/// Per-neuron output of the spatial frame pass. Votes never leave the neuron — it routes its
+/// Per-neuron output of one frame of spatial processing. Votes never leave the neuron — it routes its
 /// neighborhood to the closest entry, then reconsiders its structure: a birth request from the add
-/// pass and/or children retired by the delete pass, both decided by the one test over the history.
+/// test and/or children retired by the delete test, both decided by the one test over the history.
 pub struct SpatialFrameResult {
     /// This neuron's single child-activation request for the election, or None for a pure normal-serve.
     /// A real `pattern_id` recognizes an existing child; `NEW_CHILD_BID` requests a new child at `O`.
@@ -267,7 +267,7 @@ pub struct SpatialFrameResult {
     pub observed: Vec<NeuronId>,
     /// Distance `O`→selected entry, for the commit's record.
     pub served_distance: u32,
-    /// The child the delete pass would retire — applied by the commit only if the request wins. For a
+    /// The child the delete test would retire — applied by the commit only if the request wins. For a
     /// pure normal-serve it is applied inline and reported here for cross-neuron cleanup (bid is None).
     pub delete_candidate: Option<NeuronId>,
     pub timings: NeuronOpTimings,
@@ -284,7 +284,7 @@ pub struct SpatialRoutingEntry {
     /// approximates p(entry | pattern) — the likelihood model for likelihood-ratio recognition.
     pub activation_strength: f64,
     pub last_activation_frame: FrameNumber,
-    /// This entry's configuration interned into the neuron's [SpatialDistanceCache], so the hot passes
+    /// This entry's configuration interned into the neuron's [SpatialDistanceCache], so the hot paths
     /// read its id without re-sorting/re-hashing the context every frame. `DIST_SENTINEL` means
     /// "not interned yet" — set lazily by `spatial_entry_ids`, and reset to it whenever the context is
     /// mutated (a purge shrinking the config) so the id re-derives against the new configuration.
@@ -395,13 +395,13 @@ pub struct Correction {
     pub context_entries: Vec<ContextRefEntry>,
 }
 
-/// One active neuron to run through the temporal level pass — the dispatch subject.
+/// One active neuron to run through temporal processing — the dispatch subject.
 #[derive(Debug, Clone)]
 pub struct TemporalNeuron {
     pub neuron_id: NeuronId,
     /// What the neuron/window fired at each recency slot — recognition and voting read this every frame.
     pub age_states: FxHashMap<Distance, AgeState>,
-    /// Some only on a learning pass; None on a frozen eval, so no learning work is carried or done.
+    /// Some only when learning; None on a frozen eval, so no learning work is carried or done.
     pub learning_work: Option<TemporalLearningWork>,
 }
 
@@ -539,17 +539,17 @@ pub struct Neuron {
     /// reference this neuron. No distance.
     spatial_context_refs: FxHashSet<NeuronId>,
 
-    // ── Level-0 configuration loop (UCAR, docs/algorithm.md) ────────────────────
+    // ── Spatial processing (docs/algorithm.md) ──────────────────────────────────
 
     /// The sliding history window: the frames this neuron fired for, one horizon back, each holding
-    /// the observed neighborhood and which entry served it. The one test (add/delete passes) reads
+    /// the observed neighborhood and which entry served it. The one test (add/delete tests) reads
     /// this directly; nothing else accumulates — no balance, no running error.
     /// Serialized rebased to the save frame so the window survives a restore mid-run (see
     /// `materialize_and_reset_children`); it also refills as the neuron fires afterwards.
     spatial_history: SpatialHistory,
 
     /// Memoised pairwise distances between this neuron's neighborhood configurations. A pure cache over
-    /// frozen configs (see [SpatialDistanceCache]); the route/delete/add passes read it instead of
+    /// frozen configs (see [SpatialDistanceCache]); routing and the add/delete tests read it instead of
     /// recomputing [Neuron::spatial_distance] every active frame.
     spatial_dist_cache: SpatialDistanceCache,
 
@@ -858,7 +858,7 @@ impl Neuron {
     /// Serialize the temporal per-age Welford error stats (age >= 1). Age 0 never carries stats —
     /// error feedback comes from evaluate_vote_error, which returns None for age 0 (an age-0 neuron is
     /// just voting now, nothing to correct) — so it is skipped. (The spatial axis has no error stats;
-    /// the configuration loop is threshold-free.)
+    /// it is threshold-free.)
     fn serialize_error_stats(&self) -> Vec<SerializedErrorStats> {
         let mut result = Vec::new();
         for (age, stats) in self.temporal_error_stats.iter().enumerate() {
@@ -1077,7 +1077,7 @@ impl Neuron {
             entries.push(DeathFrameEntry { pattern_id, death_frame });
         }
 
-        // Spatial children carry no death frame — retirement is the one test's delete pass, not a decay
+        // Spatial children carry no death frame — retirement is the delete test, not a decay
         // clock — so none are added here (docs/algorithm.md, "Creating a child").
 
         entries
@@ -1115,11 +1115,11 @@ impl Neuron {
 
     /// Add a spatial child pattern to the spatial routing table and populate its context.
     /// Spatial context has no distance dimension — entries are just (pattern, ctx_neuron) pairs.
-    /// The child was minted by the add pass, which already showed it pays for its storage, so it
+    /// The child was minted by the add test, which already showed it pays for its storage, so it
     /// serves from its first frame.
     ///
     /// Spatial children carry **no death frame**: on the d=0 axis a pattern lives exactly as long as the
-    /// one test says it pays and is retired by the delete pass when it stops (docs/algorithm.md, "The one
+    /// one test says it pays and is retired by the delete test when it stops (docs/algorithm.md, "The one
     /// test"). There is no decay clock and nothing reaps it on a timer — that is the temporal axis only.
     /// The return stays `Option<FrameNumber>` for a uniform mint interface and is always `None` here.
     pub fn add_spatial_pattern(&mut self, pattern_id: NeuronId, context: &[NeuronId]) -> Option<FrameNumber> {
@@ -1413,7 +1413,7 @@ impl Neuron {
     /// Remove a child pattern from whichever routing table holds it (for Column delete cascade).
     pub fn remove_routing_entry(&mut self, pattern_id: NeuronId) {
         if self.spatial_routing_table.contains_key(&SpatialServer::Child(pattern_id)) {
-            // Scrub the context index and re-assign the cache — same bookkeeping as a delete-pass retire.
+            // Scrub the context index and re-assign the cache — same bookkeeping as a delete-test retire.
             self.remove_spatial_child(pattern_id);
             return;
         }
@@ -1436,24 +1436,18 @@ impl Neuron {
 
     // ── Frame processing ─────────────────────────────────────────────────────
 
-    /// Process a frame for this neuron: derive per-age tasks, learn connections, match patterns,
-    /// install pre-created error-correction patterns, and cast votes. One call per active neuron
-    /// per frame. Matching is skipped when level_context is None/empty. Votes are cast for each
-    /// eligible voting age unless suppressed by a this-frame match (activate=true) or
-    /// error-correction activation at the same age.
-    /// Spatial frame processing — the level-0 configuration loop (UCAR, docs/algorithm.md).
-    /// The neuron observes its neighborhood `O`, routes it to the closest entry (its normal or one
-    /// of its children), serves it, records the frame, then reconsiders its structure by the one
-    /// test: the delete pass retires a child that no longer covers its storage, and the add pass
-    /// mints a child at `O` when it would remove more history-error than it costs. No thresholds,
-    /// no votes leaving the neuron, no per-age iteration — every decision is read off the history.
+    /// One frame for one neuron: called once for every neuron that was active at this level (docs/algorithm.md).
+    /// The neuron observes its neighborhood and routes it to whichever entry is closest — its normal or one of its children.
+    /// The one test then reviews that structure: retire a child that stopped paying its storage, mint one that would.
+    /// Both come back as decisions, not mutations, since a child activates only by winning the level's election.
+    /// A plain normal-serve joins no election, so it is the one path recorded and applied here.
     pub fn process_spatial_frame(
         &mut self,
-        level_neighbors: Option<&SpatialContext>,
-        new_error_pattern_ids: &FxHashSet<NeuronId>,
-        inference_neighbors: &[ActiveNeuron],
-        spatial_capacity: usize,
-        current_frame: FrameNumber,
+        level_neighbors: Option<&SpatialContext>,    // O: this neuron's active neighbors; empty is silence
+        new_error_pattern_ids: &FxHashSet<NeuronId>, // patterns born this frame, which learn nothing yet
+        inference_neighbors: &[ActiveNeuron],        // the same neighbors, carrying the channel the normal groups by
+        spatial_capacity: usize,                     // declared max degree; minting needs a full neighborhood
+        current_frame: FrameNumber,                  // ages the history window and stamps this frame's record
     ) -> SpatialFrameResult {
         let mut timings = NeuronOpTimings::default();
 
@@ -1500,7 +1494,7 @@ impl Neuron {
         timings.recognize_patterns += t.elapsed().as_secs_f64();
 
         // The one test as DECISIONS only. Delete candidate = worst-failing child (never the one that
-        // served). The add pass (only when the normal served with error) decides whether a new child at O
+        // served). The add test (only when the normal served with error) decides whether a new child at O
         // pays; since the current frame is not recorded before it runs, it folds in this frame explicitly.
         let t = std::time::Instant::now();
         let serving = match server { SpatialServer::Child(pid) => Some(pid), SpatialServer::Normal => None };
@@ -1527,7 +1521,7 @@ impl Neuron {
                 // when nothing is declared (all-pairs), which disables the gate. Recognition is unaffected.
                 let complete_neighborhood = observed.len() >= spatial_capacity;
                 if should_learn && served_distance > 0 && complete_neighborhood
-                    && self.spatial_add_pass_pays(observed_id, &observed, served_distance) {
+                    && self.spatial_add_pays(observed_id, &observed, served_distance) {
                     let mut covered = observed.clone();
                     covered.push(self.id);
                     covered.sort_unstable();
@@ -1542,7 +1536,7 @@ impl Neuron {
 
         // A pure normal-serve (learning, no request) does not enter the election — finalize it inline:
         // record it (server = Normal) and apply its delete now. If a neighbor's winning bid subsumes it
-        // this frame, the sweep's inhibition-prune drops this record. A REQUEST records nothing here —
+        // this frame, the inhibition-prune drops this record. A REQUEST records nothing here —
         // commit_spatial_frame does that, and only if it wins. (bid None + delete_candidate Some => the
         // delete was applied inline and only needs cross-neuron cleanup.)
         if should_learn && bid.is_none() {
@@ -1598,7 +1592,7 @@ impl Neuron {
     }
 
     /// Commit a child-activation request that won the election — called by the thalamus only for the
-    /// winner (a recognized child, or a new child just created at `O`). Applies what the frame pass
+    /// winner (a recognized child, or a new child just created at `O`). Applies what the frame
     /// deferred: bump the serving child's clock, record `(frame, O, server)`, retire the delete candidate
     /// (never the child that served). A losing request is never committed, so nothing needs rolling back.
     pub fn commit_spatial_frame(
@@ -1625,7 +1619,7 @@ impl Neuron {
     /// The record to drop is the one just appended this frame — the tail. Matching the tail against the
     /// current frame guards against dropping an older record on a frame this neuron did not record.
     /// Removing a record does not move any entry, so no server reassignment is needed; the delete/add
-    /// passes simply see one fewer frame next time.
+    /// tests simply see one fewer frame next time.
     pub fn drop_inhibited_spatial_frame(&mut self, current_frame: FrameNumber) {
         if let Some((config, server)) = self.spatial_history.drop_last_if_frame(current_frame) {
             // If the retracted frame was a normal-serve, undo the count it added this frame.
@@ -1643,7 +1637,7 @@ impl Neuron {
     /// exactly one episode, sliding one frame at a time, so no image is ever counted twice. A neuron that
     /// was not active at an expiring frame simply has no record for it; there is nothing to drop.
     ///
-    /// An unbounded window breaks the one test outright: the add pass sums its benefit over every
+    /// An unbounded window breaks the one test outright: the add test sums its benefit over every
     /// remembered frame while an entry's cost stays `1 + |config|`, so as episodes accumulate, benefit
     /// grows without bound and every configuration eventually looks worth its own child.
     fn age_spatial_history(&mut self, current_frame: FrameNumber) {
@@ -1661,8 +1655,8 @@ impl Neuron {
     /// distance are the same number.
     ///
     /// Both operands are sorted, deduplicated id lists, so this is a single linear merge: no hashing and
-    /// no allocation. The history-scan passes call it once per remembered frame, so a per-call heap set
-    /// there dominated the sweep; a merge over two small slices costs nothing to set up.
+    /// no allocation. The history scans call it once per remembered frame, so a per-call heap set
+    /// there dominated spatial processing; a merge over two small slices costs nothing to set up.
     fn spatial_distance(observed: &[NeuronId], config: &[NeuronId]) -> u32 {
         let (mut i, mut j, mut inter) = (0usize, 0usize, 0u32);
         while i < observed.len() && j < config.len() {
@@ -1692,7 +1686,7 @@ impl Neuron {
 
     /// A stored configuration as a SORTED list of its live neighbor ids. Used for both the normal and
     /// children — every routing-table entry is a context configuration of the same shape. Configurations
-    /// are frozen after seed/mint, so this is built fresh each pass with no cache to keep in sync, and the
+    /// are frozen after seed/mint, so this is built fresh each frame with no cache to keep in sync, and the
     /// sort is what lets [spatial_distance] merge instead of hash.
     fn config_sorted(context: &SpatialContext) -> Vec<NeuronId> {
         let mut v: Vec<NeuronId> = context.entries().iter().filter(|(_, &s)| s > 0.0).map(|(&id, _)| id).collect();
@@ -1726,7 +1720,7 @@ impl Neuron {
     /// remembered configuration's serving entry. Because a bucket's frames are one identical observation,
     /// each bucket moves whole; a bucket crossing between the normal and a child carries its count with it,
     /// so the base-model marginal stays exact against the current model. The re-routed distances refresh
-    /// each `best_distance`, which is what lets the add/delete passes keep reading it cached even though the
+    /// each `best_distance`, which is what lets the add/delete tests keep reading it cached even though the
     /// normal is no longer frozen.
     fn refresh_normal_config(&mut self) {
         let p = self.spatial_normal_config();
@@ -1791,8 +1785,8 @@ impl Neuron {
     }
 
     /// Route an observation to the entry that serves it — the closest, ties broken by [spatial_outranks]
-    /// — and its distance. One pass over all entries, the normal among them. Routing needs only the
-    /// winner; the second-best is computed by the delete pass alone, so it is not returned here.
+    /// — and its distance. One walk over all entries, the normal among them. Routing needs only the
+    /// winner; the second-best is computed by the delete test alone, so it is not returned here.
     ///
     /// Kept for the debug server invariant and tests — the hot per-frame path uses
     /// [spatial_route_cached] over interned ids instead.
@@ -1811,7 +1805,7 @@ impl Neuron {
     }
 
     /// Intern every routing entry's configuration into the distance cache (once per entry lifetime,
-    /// since configs are frozen) and return the `(server, config id)` list the hot passes iterate.
+    /// since configs are frozen) and return the `(server, config id)` list the hot paths iterate.
     /// This replaces the per-frame `spatial_entries` sort-and-allocate: an entry keeps its interned id
     /// on `config_id` and only re-derives it when its context is mutated (which resets it to
     /// `DIST_SENTINEL`). Ids index [SpatialDistanceCache::configs], so a config's length (its storage
@@ -1878,7 +1872,7 @@ impl Neuron {
     }
 
     /// Debug-only invariant: every record's stored `server` and `best_distance` must match a fresh route
-    /// against the current entries. The delete pass groups frames by `server` and reads `best_distance`
+    /// against the current entries. The delete test groups frames by `server` and reads `best_distance`
     /// as the served cost, so a stale value would mis-attribute a frame's benefit.
     #[cfg(debug_assertions)]
     fn debug_assert_spatial_servers(&self) {
@@ -1899,10 +1893,10 @@ impl Neuron {
     /// storage is retired — at most one per frame, the widest failure, because deletions interact.
     ///
     /// Reference implementation over freshly-merged distances; the per-frame path is
-    /// [spatial_delete_pass_cached], which reads the same distances from the cache. Kept for the tests
+    /// [spatial_delete_candidate], which reads the same distances from the cache. Kept for the tests
     /// that assert the settled-state behavior directly.
     #[cfg(test)]
-    fn spatial_delete_pass(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
+    fn spatial_delete_candidate_uncached(&mut self, serving: Option<NeuronId>) -> Option<NeuronId> {
         // The table always holds the normal; nothing to retire unless there is at least one child.
         if self.spatial_routing_table.len() <= 1 { return None; }
         #[cfg(debug_assertions)]
@@ -1945,15 +1939,15 @@ impl Neuron {
         Some(pid)
     }
 
-    /// Cached counterpart of [spatial_delete_pass]: identical benefit/margin computation and identical
+    /// Cached counterpart of [spatial_delete_candidate_uncached]: identical benefit/margin computation and identical
     /// choice of the widest-failing child, but `next(O)` — the per-child, per-config scan over all other
-    /// entries, the pass's `O(D · E)` core — is read from the distance cache keyed on interned ids
+    /// entries, the test's `O(D · E)` core — is read from the distance cache keyed on interned ids
     /// instead of recomputing a merge for each pair every frame. `entries` is the interned `(server,
     /// config id)` list already built this frame by `spatial_entry_ids`; config lengths (the storage
     /// cost) come from the cache's stored configs.
     ///
-    /// Returns the child to retire as a **decision only** — it does not remove it. The frame pass applies
-    /// it inline for a pure normal-serve; for a request the commit applies it, and only if the request won.
+    /// Returns the child to retire as a **decision only** — it does not remove it. A pure normal-serve
+    /// applies it inline; for a request the commit applies it, and only if the request won.
     fn spatial_delete_candidate(&mut self, serving: Option<NeuronId>, entries: &[(SpatialServer, u32)]) -> Option<NeuronId> {
         // The table always holds the normal; nothing to retire unless there is at least one child.
         if self.spatial_routing_table.len() <= 1 { return None; }
@@ -1999,12 +1993,12 @@ impl Neuron {
     /// the frames the candidate is strictly closer (the frames it would win); cost = 1 + |O|. Mint when
     /// benefit > cost. This is the design's expensive step — but measuring the candidate against every
     /// distinct configuration rather than every remembered frame is exactly what the histogram buys
-    /// (docs/algorithm.md, "Risks": the add pass).
+    /// (docs/algorithm.md, "Risks": the add test).
     ///
     /// Reference implementation over freshly-merged distances; the per-frame path is
-    /// [spatial_add_pass_pays]. Kept for the tests that assert the settled state directly.
+    /// [spatial_add_pays]. Kept for the tests that assert the settled state directly.
     #[cfg(test)]
-    fn spatial_add_pass(&mut self, observed: &[NeuronId]) -> bool {
+    fn spatial_add_pays_uncached(&mut self, observed: &[NeuronId]) -> bool {
         #[cfg(debug_assertions)]
         self.debug_assert_spatial_servers();
         // Each configuration's current best distance is the cached `best_distance` — no entry lookup, no
@@ -2024,7 +2018,7 @@ impl Neuron {
     /// sums, over distinct history configurations, the error a child at `O` would spare (cached
     /// `best_distance` minus candidate distance), plus this frame's own contribution `served_distance`
     /// (the current frame is not yet recorded — a request records nothing until it commits). Cost `1+|O|`.
-    fn spatial_add_pass_pays(&mut self, observed_id: u32, observed: &[NeuronId], served_distance: u32) -> bool {
+    fn spatial_add_pays(&mut self, observed_id: u32, observed: &[NeuronId], served_distance: u32) -> bool {
         #[cfg(debug_assertions)]
         self.debug_assert_spatial_servers();
         let cost = 1.0 + observed.len() as f64;
@@ -2120,7 +2114,7 @@ impl Neuron {
         timings.recognize_patterns = t.elapsed().as_secs_f64();
 
         // Install pre-created temporal error-correction patterns as children and emit their contextRef adds.
-        // Empty on a frozen pass, so correct_errors is a no-op there.
+        // Empty when frozen, so correct_errors is a no-op there.
         let corrections: &[Correction] = learning_work.map_or(&[], |l| &l.corrections);
         let t = std::time::Instant::now();
         let CorrectResult { correction_activations, context_ref_updates: correction_refs } = self.correct_errors(corrections, current_frame);
@@ -2711,7 +2705,7 @@ mod tests {
         assert_eq!(normal, vec![7, 8, 9]);
     }
 
-    /// Phase 1 compresses: on a stationary recurring input, the level-0 configuration loop settles to
+    /// Spatial processing compresses: on a stationary recurring input, a neuron settles to
     /// a local optimum of the per-neuron description length and shrinks it below the normal-only
     /// baseline. The neuron sees one usual configuration A (the normal) and one distinct, recurring
     /// deviation B; it must keep A as the normal, mint exactly one child at B, stop churning, and end
@@ -2762,9 +2756,9 @@ mod tests {
         assert_eq!(normal_cfg, config_a, "the normal must be the usual configuration A");
 
         // 3. Local-optimum certificate: no add improves, no child fails delete.
-        assert!(!n.spatial_add_pass(&config_a), "no improving add at the settled state (A is the normal)");
-        assert!(!n.spatial_add_pass(&config_b), "no improving add at the settled state (B is a child)");
-        assert!(n.spatial_delete_pass(None).is_none(), "no child fails the delete test at the settled state");
+        assert!(!n.spatial_add_pays_uncached(&config_a), "no improving add at the settled state (A is the normal)");
+        assert!(!n.spatial_add_pays_uncached(&config_b), "no improving add at the settled state (B is a child)");
+        assert!(n.spatial_delete_candidate_uncached(None).is_none(), "no child fails the delete test at the settled state");
 
         // 4. Compression: L_local with the settled structure is strictly below the normal-only baseline.
         // L = Σ over entries (1 + |config|) + Σ over history frames (distance to the nearest entry).
@@ -2790,12 +2784,12 @@ mod tests {
             l_settled, l_normal_only, children.len(), n.spatial_history.total_frames(), n.spatial_history.iter().count(), mints
         );
         assert!(l_settled < l_normal_only,
-            "Phase 1 must compress: settled L={} should be below normal-only L={}", l_settled, l_normal_only);
+            "spatial processing must compress: settled L={} should be below normal-only L={}", l_settled, l_normal_only);
     }
 
-    // ── Phase 1 configuration-loop unit tests ──────────────────────────────────
+    // ── Spatial processing unit tests ──────────────────────────────────────────
     //
-    // Each drives a single Neuron through process_spatial_frame and, when the add pass returns a
+    // Each drives a single Neuron through process_spatial_frame and, when the add test returns a
     // request, installs the child with context = O (add_spatial_pattern) exactly as the thalamus does.
 
     /// A configuration as the sorted, deduplicated id list the spatial helpers now speak.
@@ -2831,7 +2825,7 @@ mod tests {
     /// Drive one learning frame through the compute→elect→commit path, standing in for the thalamus at
     /// n=1: a request wins the election iff its cover has ≥2 members. A winning new-child request creates
     /// and commits the child; a winning recognition commits; a losing request commits nothing; a pure
-    /// normal-serve is already finalized inline by the frame pass. Returns the minted child id (if any)
+    /// normal-serve is already finalized inline. Returns the minted child id (if any)
     /// and the ids retired this frame.
     fn step(n: &mut Neuron, ids: &[NeuronId], frame: FrameNumber, next_pid: &mut NeuronId) -> (Option<NeuronId>, Vec<NeuronId>) {
         let ctx = spatial_ctx(ids);
@@ -3004,10 +2998,10 @@ mod tests {
         assert_eq!(normal_cfg(&n), set(&a));
     }
 
-    /// A perfectly-served frame (distance 0) skips the add pass entirely — a settled neuron does no
-    /// expensive work (docs/algorithm.md, "Risks": run the add pass only when the frame had error).
+    /// A perfectly-served frame (distance 0) skips the add test entirely — a settled neuron does no
+    /// expensive work (docs/algorithm.md, "Risks": run the add test only when the frame had error).
     #[test]
-    fn test_no_add_pass_on_a_perfectly_served_frame() {
+    fn test_no_add_test_on_a_perfectly_served_frame() {
         let mut n = phase1_neuron(0.1);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let c = [1, 2, 3];

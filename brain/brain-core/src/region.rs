@@ -118,7 +118,7 @@ impl Region {
 
     // ── Op-3: Process level (hot path) ─────────────────────────────────────
 
-    /// SPATIAL sweep: route tasks to owning columns, fan out in parallel, concatenate results
+    /// SPATIAL processing: route tasks to owning columns, fan out in parallel, concatenate results
     /// in column-index order (stable regardless of thread scheduling).
     pub fn process_spatial_level(
         &mut self,
@@ -147,7 +147,7 @@ impl Region {
         nested.into_iter().flatten().collect()
     }
 
-    /// TEMPORAL sweep: route tasks to owning columns, fan out in parallel, concatenate results
+    /// TEMPORAL processing: route tasks to owning columns, fan out in parallel, concatenate results
     /// in column-index order (stable regardless of thread scheduling).
     pub fn process_temporal_level(
         &mut self,
@@ -334,7 +334,7 @@ impl Region {
         by_column
     }
 
-    // ── Brain.learn(): supervised action wiring + read-only vote sweep ────
+    // ── Brain.learn(): supervised action wiring + read-only vote collection ────
 
     /// Route voter→action wirings to owning columns by voter_id and dispatch in parallel.
     /// Each tuple is (voter_id, action_id, reward).
@@ -354,7 +354,7 @@ impl Region {
             });
     }
 
-    /// Route (voter_id, age) pairs to owning columns by voter_id and run a read-only vote sweep in parallel.
+    /// Route (voter_id, age) pairs to owning columns by voter_id and collect votes read-only in parallel.
     /// Returns per-voter vote lists in column-index order.
     pub fn collect_votes_for_voter_ages(&self, voter_ages: &[(NeuronId, Distance)]) -> Vec<(NeuronId, Vec<Vote>)> {
         let mut by_column: Vec<Vec<(NeuronId, Distance)>> = (0..self.c).map(|_| Vec::new()).collect();

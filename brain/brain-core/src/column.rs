@@ -30,7 +30,7 @@ pub struct ColumnProcessResult {
     pub timings: crate::neuron::NeuronOpTimings,
 }
 
-/// Per-neuron output of the spatial sweep, tagged with its owner. Votes never leave the neuron —
+/// Per-neuron output of spatial processing, tagged with its owner. Votes never leave the neuron —
 /// it evaluates its own prediction and surfaces only the resulting correction request.
 pub struct SpatialColumnResult {
     pub parent_id: NeuronId,
@@ -160,7 +160,7 @@ impl Column {
         }
     }
 
-    /// Op-3 down-trip body for the SPATIAL sweep. Calls neuron.process_spatial_frame on every task
+    /// Op-3 down-trip body for SPATIAL processing. Calls neuron.process_spatial_frame on every task
     /// and returns results parent_id-tagged in task order.
     pub fn process_spatial_level(
         &mut self,
@@ -201,7 +201,7 @@ impl Column {
         }
     }
 
-    /// Op-3 down-trip body for the TEMPORAL sweep. Calls neuron.process_temporal_frame on every
+    /// Op-3 down-trip body for TEMPORAL processing. Calls neuron.process_temporal_frame on every
     /// task and returns results parent_id-tagged in task order.
     pub fn process_temporal_level(
         &mut self,
@@ -443,7 +443,7 @@ impl Column {
     }
 
     /// Scrub a dead neuron from a parent's SPATIAL children's context entries.
-    /// Spatial children have no decay clock — retirement is the one test's delete pass, not a cascade —
+    /// Spatial children have no decay clock — retirement is the delete test, not a cascade —
     /// so this only keeps references consistent (scrubs the dead neuron); it never marks a child deletable.
     fn purge_spatial_context_neuron(
         &mut self,
@@ -527,7 +527,7 @@ impl Column {
     /// parent neuron with the d=0 context entries, register the resulting death frame, and emit
     /// ContextRefUpdates for each context-entry target so they know this parent now references them.
     /// Corrections are NOT activated this frame; the routing-table entry will fire on next frame's
-    /// spatial sweep via the recognize_patterns path.
+    /// spatial processing via the recognize_patterns path.
     pub fn install_spatial_corrections(&mut self, ops: Vec<SpatialInstallOp>) -> SpatialInstallResult {
         let mut deaths = Vec::new();
         let mut context_ref_updates: Vec<SpatialContextRefUpdate> = Vec::new();
@@ -539,7 +539,7 @@ impl Column {
                 None => continue,
             };
 
-            // Add the child pattern to the parent's spatial routing table (minted by the add pass).
+            // Add the child pattern to the parent's spatial routing table (minted by the add test).
             let death_frame = parent.add_spatial_pattern(op.pattern_id, &op.context_neuron_ids);
             if let Some(df) = death_frame { deaths.push((op.pattern_id, df)); }
 
@@ -755,7 +755,7 @@ impl Column {
         }
     }
 
-    /// Read-only vote sweep over (voter_id, age) pairs owned by this column.
+    /// Collect votes read-only over (voter_id, age) pairs owned by this column.
     /// Each pair represents one active non-suppressed voter at a specific age.
     /// Mirrors how `Neuron::generate_votes` walks ages inside process_frame.
     /// Calls `neuron.vote(age)` for each pair and tags the resulting Votes with their natural distance = age + 1.
