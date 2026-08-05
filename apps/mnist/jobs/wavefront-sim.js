@@ -33,8 +33,8 @@
 //
 // Brain mapping (camelCase here → snake_case there), so the port stays a transliteration:
 //   Brain.processFrame           ~ Brain::process_frame / process_spatial
-//   Brain.runLevelSweep          ~ process_spatial_levels (settling sweep)
-//   Brain.collectRequests        ~ the predict-L0 + error eval inside the sweep
+//   Brain.runLevelLoop           ~ process_spatial_levels (the settling level loop)
+//   Brain.collectRequests        ~ the predict-L0 + error eval inside the loop
 //   Brain.clusterReuseMint       ~ thalamus mint_spatial_corrections + reuse lookup
 //   Brain.recognizeHigher        ~ recognize_spatial_patterns (the climb)
 //   scoreContextMatch            ~ SpatialContext::match_observed (Jaccard)
@@ -264,15 +264,15 @@ class Brain {
 	}
 
 	/**
-	 * Process one frame: activate the whole base field, then run the settling level sweep
+	 * Process one frame: activate the whole base field, then run the settling level loop
 	 * (which also refines matched patterns and reaps any left unreferenced). `learning` gates
-	 * all structural mutation so an eval pass is reproducible (no mint / expand / refine / reap / learn).
+	 * all structural mutation so an eval run is reproducible (no mint / expand / refine / reap / learn).
 	 * Returns the per-level record plus the set of pattern ids that fired this frame.
 	 */
 	processFrame(bits, imageSize, learning = true) {
 		this.frame++;
 		const active = this.activateBase(bits, imageSize);
-		return this.runLevelSweep(active, learning);
+		return this.runLevelLoop(active, learning);
 	}
 
 	/**
@@ -308,14 +308,14 @@ class Brain {
 	}
 
 	/**
-	 * The settling level sweep. At each level the active units predict L0 and the
+	 * The settling level loop. At each level the active units predict L0 and the
 	 * mispredictors become correction requests; requests cluster and reuse/mint
 	 * corrections that install for a later frame. In parallel, existing patterns one
 	 * level up are RECOGNIZED and become the next level's active set — that is the climb.
-	 * The sweep stops when no higher level is recognized (a cold brain stops at level 0).
+	 * The climb stops when no higher level is recognized (a cold brain stops at level 0).
 	 * Mirrors process_spatial_levels (the fired/subsumed bookkeeping).
 	 */
-	runLevelSweep(activeBase, learning) {
+	runLevelLoop(activeBase, learning) {
 		const levels = [];
 		const firedPatternIds = new Set();
 		const doomed = []; // patterns whose last parent reference drained this frame (refcount → 0)
@@ -1185,7 +1185,7 @@ function runAccuracy(opts = {}) {
 			console.error(`  [m${opts.mergeThreshold ?? 0.5} e${opts.errorThreshold ?? 0.3}] trained ${i + 1}/${trainCount} | ${brain.patterns.size} patterns | deepest ${deepest}`);
 		}
 	}
-	console.log(`  trained: ${brain.patterns.size} patterns, ${digitCounts.size} of them voted, deepest sweep ${deepest} (${((Date.now() - trainStart) / 1000).toFixed(1)}s)`);
+	console.log(`  trained: ${brain.patterns.size} patterns, ${digitCounts.size} of them voted, deepest level ${deepest} (${((Date.now() - trainStart) / 1000).toFixed(1)}s)`);
 
 	// EVAL — freeze structure (learning off → no mint/refine/reap) and NB-product decode.
 	const evaluate = (images, labels, n, name) => {
@@ -1446,12 +1446,12 @@ function runClimb(opts = {}) {
 		if ((i + 1) % Math.max(1, Math.floor(trainCount / 10)) === 0) {
 			const snap = brain.snapshot();
 			const perLevel = [...snap.byLevel.keys()].sort((a, b) => a - b).map(l => `L${l}:${snap.byLevel.get(l).length}`).join(' ');
-			console.error(`  f${i + 1} | deepest sweep ${deepest} | ${perLevel}`);
+			console.error(`  f${i + 1} | deepest level ${deepest} | ${perLevel}`);
 		}
 	}
 
 	const snap = brain.snapshot();
-	console.log(`\n  live: ${snap.patternCount} patterns, ${snap.baseCount} base; deepest sweep reached level ${deepest}`);
+	console.log(`\n  live: ${snap.patternCount} patterns, ${snap.baseCount} base; deepest level reached ${deepest}`);
 	for (const level of [...snap.byLevel.keys()].sort((a, b) => a - b)) {
 		console.log(`    level ${level}: ${snap.byLevel.get(level).length} patterns | footprints ${summarizeSizes(snap.byLevel.get(level))}`);
 	}
