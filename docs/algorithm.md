@@ -241,9 +241,9 @@ thresholds, probation periods, or hysteresis.
 
 ## The frame, step by step
 
-Two processes run over the same frame, and they are **independent**. The neuron's own pipeline — route, serve,
-record, review, reconsider structure — reads and writes only the neuron's own state, and depends on nothing
-the election decides. Contraction reads the level's recognition bids and decides only what is represented
+Two processes run over the same frame, and they are **independent**. The neuron's own pipeline — route and
+record, serve, infer, review, reconsider structure — reads and writes only the neuron's own state, and depends
+on nothing the election decides. Contraction reads the level's recognition bids and decides only what is represented
 above; it has **zero side effects on neuron state**. Creation still follows the review rather than
 participating in recognition — that ordering is forced by the event axis, where recognition happens at frame
 `f` but the error is only known at `f+1`, so a new child can never bid in the election that judged the frame
@@ -254,26 +254,34 @@ For an active neuron with observed neighborhood `O`:
 1. **Age.** If the history ring is full, evict the oldest record. Its histogram count decrements; if the normal
    served it, its neighborhood leaves the connection counts; if a child served it, that child's benefit drops —
    and a child whose benefit falls strictly below its cost is deleted now ([deletion](#deletion)).
-2. **Route.** The closest entry serves — the normal and every child compete by `d(O, ·)`, ties to the older
-   entry. Both the best and the runner-up are kept: **server** and **fallback**.
-3. **Serve and bid.** A child serves by firing; the neuron hands its **recognition bid** to the thalamus — an
-   offer to represent its patch at the level above. The normal serves by inferring from the connections; it
-   makes no bid. **Only recognition bids exist** — creation never bids
-   ([contraction](#contraction-building-the-level-above)). The bid is the pipeline's only output to the
-   election, and the election sends nothing back.
-4. **Record.** Every active neuron appends `(O, server, best_distance, fallback, fallback_distance)` — the
-   server is whatever routing chose, promoted or not, covered or not. If the normal served, fold `O` into the
-   connection counts. A neuron's evidence is the frames it was active for — full stop; no election outcome
-   ever edits a history.
-5. **Review.** The error of the inference — the served distance, the neurons the server got wrong. Spatially it
-   is known immediately; on the event axis the actuals arrive next frame and the review — and everything after
-   it — runs then.
-6. **Add test and settle** — only when the normal served and the error is nonzero. The candidate is this
-   frame's observation, exactly; if the solo test fails, price the swap. At most one add per frame. A passing
-   test mints the child **now, for later**: it is installed in the routing table but fires for the first time
-   on the next frame its neighborhood recurs — it never covers, propagates, or serves on its birth frame
+2. **Route and record** — one operation. The closest entry serves — the normal and every child compete by
+   `d(O, ·)`, ties to the older entry; the best and the runner-up come out of the same scan, and the record
+   `(O, server, best_distance, fallback, fallback_distance)` is written down right there. Every active neuron
+   records, unconditionally — a neuron's evidence is the frames it was active for, full stop; no election
+   outcome ever edits a history. If the normal serves, fold `O` into the connection counts.
+3. **Serve.** If a child was recognized, it **activates**: it fires, and the neuron hands the thalamus its
+   **recognition bid** — an offer to represent its patch at the level above. **The neuron is done for the
+   frame.** The record already carries the served distance as priced demand; nothing else on this path needs
+   doing. The bid is the pipeline's only output to the election, and the election sends nothing back — only
+   recognition bids exist; creation never bids ([contraction](#contraction-building-the-level-above)). If the
+   normal serves, there is no activation and no bid — the neuron continues.
+4. **Infer** — normal path only, at frame `f`. The neuron predicts its inference set from the connections,
+   used as the per-neighbor distribution they are. On the spatial axis the inference is the neighborhood
+   itself; on the event axis it is the vote for the frame ahead.
+5. **Review** — when the inference resolves: the same frame spatially, frame `f+1` on the event axis. The
+   error is the neurons the inference got wrong — spatially, the served distance.
+6. **Add test and settle** — only on a nonzero error. The candidate is this frame's observation, exactly; if
+   the solo test fails, price the swap. At most one add per frame. A passing test mints the child **now, for
+   later**: it is installed in the routing table but fires for the first time on the next frame its
+   neighborhood recurs — it never covers, propagates, or serves on its birth frame
    ([creating a child](#creating-a-child)). Then [settlement](#settlement) runs: reassignments, count
    subtraction, normal recomputation, benefit updates, and any deletes they trigger.
+
+The early return at step 3 is the seam between the axes: everything before it happens at recognition time —
+frame `f` on both axes — and everything after it happens when the inference resolves, which is the same frame
+spatially and the next frame temporally. Recognition is the fast path: a settled neuron in a familiar world
+runs steps 1–3 and exits; the histogram pass, the swap pricing, and settlement all live strictly behind "the
+normal erred," which is the rare case by design.
 
 Meanwhile — before, after, or alongside; the pipeline cannot tell — contraction runs its election over the
 level's bids and promotes the survivors to the level above. Subsumption is purely a statement about
@@ -314,7 +322,7 @@ benefit  =  Σ over histogram entries e with d(e.O, O) < e.best_distance:
 commit iff  benefit > 1 + |O|
 ```
 
-There is no special term for the triggering frame: it was recorded in step 4, so it sits in the histogram as a
+There is no special term for the triggering frame: it was recorded in step 2, so it sits in the histogram as a
 normal-served entry at distance `error`, and the candidate wins it at distance 0 like any other record. One
 pass over the histogram — never more distinct neighborhoods than the horizon holds. Note the records it wins
 may include frames currently served *badly by children*, not only by the normal: an add repairs whatever
@@ -608,31 +616,35 @@ entry's count (drop the entry at zero). If its server was the normal: subtract t
 `connections`, decrement `served`, mark the normal dirty. If a child: `benefits[child] -= (fallback_distance −
 best_distance)`; if the benefit falls strictly below that child's cost, `delete_child(child)`.
 
-**`route(O) → (server, best_d, fallback, fb_d)`** — frame step 2. If `O` is already in the histogram, read the
-stored assignment (settlement and deletion keep it current). Otherwise scan the normal and every child for the
-two smallest distances; ties to the older entry.
+**`route_and_record(O) → (server, best_d, fallback, fb_d)`** — frame step 2, one operation. If `O` is already
+in the histogram, read the stored assignment (settlement and deletion keep it current); otherwise scan the
+normal and every child for the two smallest distances, ties to the older entry. Then write the record from the
+same scan: push the ref, upsert the histogram entry — the server is routing's choice, promoted or not, covered
+or not. If the normal serves: add `O` to `connections`, increment `served`, mark dirty. Nothing recorded here
+is ever revoked — there is no pending state and no retraction.
 
-**`serve_and_bid(server)`** — frame step 3. Child: fire it and hand the thalamus a recognition bid — the
-active neurons the child's configuration names correctly, bidder included, plus `f` = its named-but-absent
-count. Normal: infer from `connections`, used as the per-neighbor distribution they are; no bid.
+**`serve(server)`** — frame step 3. Child: **activate it** — it fires, and the thalamus gets the recognition
+bid: the active neurons the child's configuration names correctly, bidder included, plus `f` = its
+named-but-absent count. **Then return — the neuron is done for the frame.** The record already carries the
+served distance as priced demand (a badly-served child frame is demand a future add can win); the add test
+never runs on this path — the neighborhood was recognized, and the description job went up a level with the
+child. Normal: no activation, no bid; fall through to the steps below.
 
 *(The election runs in the thalamus, concurrently as far as the neuron is concerned — see
 [contraction](#contraction-building-the-level-above). It reads the bids and writes only the level above; none
 of the methods below depend on its outcome.)*
 
-**`record(O, server, best_d, fallback, fb_d)`** — frame step 4, every active neuron. Push the ref; upsert the
-histogram entry — the server is routing's choice, promoted or not, covered or not. If the normal served: add
-`O` to `connections`, increment `served`, mark dirty. Nothing recorded here is ever revoked — there is no
-pending state and no retraction.
+**`infer()`** — frame step 4, normal path only, at frame `f`. Predict the inference set from `connections`,
+used as the per-neighbor distribution they are. Spatially the inference is the neighborhood itself; temporally
+it is the vote for the frame ahead.
 
-**`review(server, best_d) → error`** — frame step 5. Spatial: `error = best_d`, immediately. A child-served
-error is recorded and priced (it is demand a future add can win) but does not run the add test — the
-neighborhood was recognized, and the description job went up a level with the child.
+**`review(best_d) → error`** — frame step 5, when the inference resolves: spatially `error = best_d`,
+immediately; temporally at `f+1`, when the actuals arrive — and `add_test` below runs then too.
 
-**`add_test(O)`** — frame step 6, only when `server == Normal` and the error is nonzero. Solo benefit = `Σ`
-over histogram entries strictly closer to `O` than to their current server of `(best_distance − d)·count` —
-the triggering frame is already recorded, so its error enters through its own entry, no special term. Pass iff
-`benefit > 1 + |O|`, else `swap_test(O)`.
+**`add_test(O)`** — frame step 6, only on a nonzero error. Solo benefit = `Σ` over histogram entries strictly
+closer to `O` than to their current server of `(best_distance − d)·count` — the triggering frame is already
+recorded, so its error enters through its own entry, no special term. Pass iff `benefit > 1 + |O|`, else
+`swap_test(O)`.
 
 **`swap_test(C)`** — for the child `X` most overlapped by `C`'s would-be wins (found during the solo pass; a
 heuristic — see [the swap](#the-swap)): price `{add C, delete X}` jointly — reassign `X`'s records to the best
@@ -689,18 +701,17 @@ occurs — the one variable-length code in which probabilities set costs.
 ```mermaid
 flowchart TD
     A["Frame: active neurons = departures from rest"] --> B["Age: if the ring is full, evict the oldest record<br/>(counts, benefits update; starved child deletes)"]
-    B --> C["Route: closest of normal + children serves;<br/>keep server AND fallback"]
-    C --> D{"Is the server a child?"}
-    D -->|yes| E["Fire it — hand the thalamus a recognition bid"]
-    D -->|no| F["The normal infers from the connections; no bid"]
-    E --> J["Record the frame (O, server, fallback, distances) —<br/>unconditional: no election outcome edits a history"]
-    F --> J
-    E -.->|"bid (the only output;<br/>nothing comes back)"| X["Contraction, independently: election over<br/>recognition bids; survivors are the level above.<br/>Promotion only — zero side effects on neuron state"]
-    J --> K["Review: error = the neurons the server got wrong<br/>(same frame spatially; next frame on the event axis)"]
-    K --> L{"Normal served AND error > 0?"}
+    B --> C["Route AND record, one operation:<br/>closest entry serves, runner-up is the fallback;<br/>the record is written from the same scan, unconditionally"]
+    C --> D{"Was a child recognized?"}
+    D -->|yes| E["Serve: the child ACTIVATES — fires, bids.<br/>DONE for the frame (the record already<br/>carries the distance as priced demand)"]
+    E -.->|"bid (the only output;<br/>nothing comes back)"| X["Contraction, independently:<br/>election over recognition bids;<br/>survivors are the level above.<br/>Promotion only — zero side<br/>effects on neuron state"]
+    D -->|no| F["Infer (frame f): the normal predicts<br/>from the connections; no activation, no bid"]
+    F --> K["Review (when the inference resolves —<br/>same frame spatially, f+1 temporally):<br/>error = the neurons the inference got wrong"]
+    K --> L{"Error > 0?"}
     L -->|yes| M["Add test: candidate = this frame's observation.<br/>Solo benefit > 1+|O|? Else price the swap.<br/>A mint serves NEXT recurrence, never its birth frame.<br/>Settle: reassign wins, purify the normal, update benefits,<br/>delete anything that stopped paying — cascade until quiet"]
     L -->|no| N["Nothing to reconsider"]
-    M --> O["Process the next level up"]
+    E --> O["Process the next level up"]
+    M --> O
     N --> O
     X --> O
 ```
