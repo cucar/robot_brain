@@ -158,8 +158,9 @@ of references in arrival order for eviction.
 
 **Aging is one-out-one-in.** Once the ring is full, recording this frame evicts exactly the oldest record —
 "age before add" is the data structure, not a rule to remember. Eviction has consequences
-([deletion](#deletion)). If contraction later inhibits the neuron this frame (a neighbor's unit covered it),
-the frame is **retracted**: pop the tail and reverse its effects — the frame was not this neuron's evidence.
+([deletion](#deletion)). Recording happens **after** contraction's election ([the frame](#the-frame-step-by-step)):
+a neuron whose activation was covered by a neighbor's winning unit simply never records the frame — it was not
+that neuron's evidence, and since nothing was written, nothing needs unwinding.
 
 **Why the fallback is stored.** The delete test asks what an entry's frames would cost without it, and the
 answer is the fallback. Storing it (and its distance) is what lets every entry's benefit be maintained as a
@@ -241,6 +242,11 @@ thresholds, probation periods, or hysteresis.
 
 ## The frame, step by step
 
+Recognition comes first, the election decides what the frame *means*, and only then does the neuron learn from
+it. This ordering is forced by the event axis — there, recognition happens at frame `f` but the error is only
+known at `f+1`, so creation can never participate in frame `f`'s election — and the spatial axis follows the
+same order rather than exploiting the coincidence that its inference resolves in the same frame.
+
 For an active neuron with observed neighborhood `O`:
 
 1. **Age.** If the history ring is full, evict the oldest record. Its histogram count decrements; if the normal
@@ -248,59 +254,80 @@ For an active neuron with observed neighborhood `O`:
    and a child whose benefit falls strictly below its cost is deleted now ([deletion](#deletion)).
 2. **Route.** The closest entry serves — the normal and every child compete by `d(O, ·)`, ties to the older
    entry. Both the best and the runner-up are kept: **server** and **fallback**.
-3. **Serve.** A child fires and delegates to its pattern one level up. The normal infers for itself from the
-   connections and propagates nothing.
-4. **Review.** The error of the inference. Spatially, inference and neighborhood are the same set, so the error
-   is known immediately: it is the served distance — the neurons the server got wrong. On the event axis the
-   actuals arrive next frame and the review is one frame late; the mechanics are otherwise identical.
-5. **Add test** — only when the normal served and the error is nonzero. The candidate is this frame's
-   observation, exactly. If the solo test fails, price the swap. At most one add per frame — there is only ever
-   one candidate, this frame's observation. A passing decision is **pending**, not committed: nothing is
-   minted yet. ([Creating a child](#creating-a-child).)
-6. **Record.** Append `(O, server, best_distance, fallback, fallback_distance)` — also pending. If the normal
-   served, fold `O` into the connection counts.
-7. **Confirm and settle.** Contraction runs over the level. If the election inhibits this neuron (a neighbor's
-   unit covered it), the pending record is retracted and the pending add or swap is discarded — the frame was
-   not this neuron's evidence, and nothing was minted, so there is nothing to unwind. Otherwise the record
-   stands, the pending move commits (the mint happens now), and [settlement](#settlement) runs:
-   reassignments, count subtraction, normal recomputation, benefit updates, and any deletes they trigger.
-   Structural changes are transactions confirmed by contraction, never side effects of a frame that may yet
-   be revoked.
+3. **Serve and bid.** A child serves by firing; the neuron hands its **recognition bid** to the thalamus — an
+   offer to represent its patch at the level above. The normal serves by inferring from the connections; it
+   makes no bid. **Only recognition bids exist** — creation never bids
+   ([contraction](#contraction-building-the-level-above)).
+4. **Election.** Contraction runs over the level's bids and decides two things per neuron: whether its bid is
+   **promoted** (one unit at the level above, its covered neurons subsumed), and whether the neuron itself was
+   **covered** by a neighbor's winning unit. A covered neuron is done for the frame: it records nothing, learns
+   nothing, and runs no tests — the frame was never its evidence.
+5. **Record.** Every surviving (uncovered) neuron appends `(O, server, best_distance, fallback,
+   fallback_distance)` — the server is whatever routing chose, promoted or not. If the normal served, fold `O`
+   into the connection counts.
+6. **Review.** The error of the inference. Spatially it is the served distance, known immediately; on the event
+   axis the actuals arrive next frame and the review — and everything after it — runs then. Note the error
+   reviewed here is the **post-election** error: a covered neuron never reaches this step, so the only errors
+   that can justify structure are the ones that actually survived into the file as corrections.
+7. **Add test and settle** — only when the normal served and the error is nonzero. The candidate is this
+   frame's observation, exactly; if the solo test fails, price the swap. At most one add per frame. A passing
+   test mints the child **now, for later**: it is installed in the routing table but fires for the first time
+   on the next frame its neighborhood recurs — it never covers, propagates, or serves on its birth frame
+   ([creating a child](#creating-a-child)). Then [settlement](#settlement) runs: reassignments, count
+   subtraction, normal recomputation, benefit updates, and any deletes they trigger.
+
+Because the election precedes every write, there is no pending state and nothing to retract: inhibition is
+simply the absence of steps 5–7 for that neuron. Structure is never built from a frame the election revoked.
 
 ## Creating a child
 
 **The trigger is an error, nothing else.** No background process proposes candidates and no accumulator waits
 to fire. The neuron served from its normal, inferred, and the inference was wrong — that error is the only
-moment structure is considered, on the spatial axis in the same frame, on the event axis when the actuals
-arrive. A neighborhood the connections already predict costs nothing to serve no matter how often it recurs;
-surprise is the size of the bill, not a gate on it.
+moment structure is considered, on the spatial axis in the same frame after the election, on the event axis
+when the actuals arrive. And it is the **post-election** error: a neuron covered by a neighbor's unit never
+runs the test, so only errors that actually cost the file anything can create structure. A neighborhood the
+connections already predict costs nothing to serve no matter how often it recurs; surprise is the size of the
+bill, not a gate on it.
 
-**The candidate is the observation.** `C = O`, exactly. The child therefore serves the frame that justified it
-at zero error from its first frame — a child can never be created unable to serve the demand that justified
-it. **A candidate rejected today is not lost.** Every future error offers a new candidate — its own
-observation — so the neuron samples candidate positions from its own demand. A cluster worth a child will
-sooner or later present a frame near its middle, and that candidate passes where an off-center one failed; the
-[swap](#the-swap) then retires the off-center early mint.
+**Creation happens after recognition, never inside it.** A new child is minted after the election and fires
+for the first time on the next frame its neighborhood recurs. It does not serve, cover, or propagate on its
+birth frame — that frame was already encoded, corrections and all. This is forced by axis uniformity (on the
+event axis the error arrives a frame after the election it would have needed to bid in, so same-frame creation
+is impossible there) and it is the founding criterion enforced at the finest grain: **structure never pays off
+on the evidence that created it, only on recurrence.** Nothing compresses at first exposure. It also keeps the
+election single-purpose — recognition bids only — with no birth-frame special cases: no newborn subsuming
+neurons it hasn't earned, no newborn processed mid-cascade at its own level.
+
+**The candidate is the observation.** `C = O`, exactly. Whenever that neighborhood recurs, the child serves it
+at zero error — a child can never be created unable to serve the demand that justified it; it just serves it
+starting next time. **A candidate rejected today is not lost.** Every future error offers a new candidate —
+its own observation — so the neuron samples candidate positions from its own demand. A cluster worth a child
+will sooner or later present a frame near its middle, and that candidate passes where an off-center one
+failed; the [swap](#the-swap) then retires the off-center early mint.
 
 **The solo test.** Would a child at `O` pay for its storage?
 
 ```
-benefit  =  error                                            // this frame, not yet recorded
-         +  Σ over histogram entries e with d(e.O, O) < e.best_distance:
-                 (e.best_distance − d(e.O, O)) · e.count     // the records it would win
+benefit  =  Σ over histogram entries e with d(e.O, O) < e.best_distance:
+                (e.best_distance − d(e.O, O)) · e.count     // the records it would win
 commit iff  benefit > 1 + |O|
 ```
 
-One pass over the histogram — never more distinct neighborhoods than the horizon holds. Note the records it
-wins may include frames
-currently served *badly by children*, not only by the normal: an add repairs whatever demand it sits closest
-to.
+There is no special term for the triggering frame: it was recorded in step 5, so it sits in the histogram as a
+normal-served entry at distance `error`, and the candidate wins it at distance 0 like any other record. One
+pass over the histogram — never more distinct neighborhoods than the horizon holds. Note the records it wins
+may include frames currently served *badly by children*, not only by the normal: an add repairs whatever
+demand it sits closest to.
 
 ### The swap
 
 If the solo test fails, the candidate gets one more chance, jointly with a deletion. Take the child `X` whose
 served records `C` would win the most of (the overlap is visible in the solo pass; in practice one or two
-children qualify), and price the joint move `{add C, delete X}` exactly:
+children qualify), and price the joint move `{add C, delete X}` exactly. Examining only the most-overlapped
+child is a **heuristic**, not an exhaustive search over one-for-one swaps — in principle a barely-overlapping
+child with a large storage refund could be the better joint move. Overlap is where the money almost always is,
+and the exact variant (price the swap against every child) stays affordable if diagnostics ever justify it,
+since the test only runs on a normal-served error:
 
 ```
 Δ =   Σ over X's records:  cost served by X  −  cost served by best of (surviving entries + C)
@@ -411,11 +438,23 @@ and the one test is nothing more than the derivative of this: an entry belongs i
 lengthen the file more than deleting its line would shorten it. **Nothing is amortized and nothing is
 estimated** — the neuron holds the frames, so it evaluates the sum.
 
-**Where the connections sit in this accounting.** The connections are in the dictionary — but their line is
-**capped** at the neighbor alphabet and exists whether or not the neuron has any children, so no add, swap, or
-delete ever changes it. A term that is the same on both sides of every comparison drops out of the decision,
-which is why the sums above price only children and frames. "Storage-free" for the normal means exactly this:
-its storage is the connections' capped line, already paid for — not that it costs nothing in the file.
+**Which file `L` prices — the convention, stated once.** `L` is the cost of re-encoding the **remembered
+window under the current dictionary** — not the transcript that was actually emitted. It has to be: the delete
+test reprices frames that went out the door long ago, under entries that did not exist when they were emitted.
+Past emissions are sunk; the window is the pricing model. A structural move is judged by the window it leaves
+behind, never by the frames it missed — so a child minted this frame is credited for the triggering frame
+through that frame's *record* (reassigned to it in settlement), even though the emitted frame itself carried
+the corrections.
+
+**Where the connections sit in this accounting.** The connections' dictionary line is defined as **fixed**: one
+counter per eligible neighbor, present even at zero — a preallocated vector in the pricing model, whatever the
+code stores. (Counts *move* as frames change hands, and a count may sit at zero, but the line's length never
+changes.) A line that exists whether or not the neuron has children, with a length no add, swap, or delete can
+change, is the same on both sides of every comparison and drops out of the decision — which is why the sums
+above price only children and frames. At higher levels the eligible alphabet grows over time, but that growth
+is caused and priced by mints at the level below, not by this neuron's decisions, so the argument survives
+there. "Storage-free" for the normal means exactly this: its storage is the connections' fixed line, already
+paid for — not that it costs nothing in the file.
 
 **A short horizon overfits.** With too few frames in view, a neuron builds structure for coincidences that
 have not proven themselves beyond the window. There is no smoothing to hide behind, so sensitivity to the
@@ -445,34 +484,58 @@ it decides persists — it is this frame's grouping, recomputed next frame.
 Only **active** neurons need accounting for; a dimension at rest is unstated and costs nothing to leave
 uncovered.
 
-**What a firing neuron offers.** A neuron that fired a child offers to describe a patch: the active neurons
-its child's configuration names correctly this frame, itself included — its **bid**. The configuration names
-only the neighborhood; the bidder itself is implied, because a child *is* its parent in that neighborhood —
-the entry lives in the parent's routing table, so expanding the unit recovers the parent along with the
-neighbors it names. That is why the bid includes the bidder without the configuration listing it. A neuron
-that served from its normal makes no bid; it can be covered by a neighbor's bid but never propagates one of
-its own.
+**Recognition bids only.** The election's input is one **recognition bid** per neuron whose routing chose a
+child: the active neurons that child's configuration names correctly this frame, the bidder included. The
+configuration names only the neighborhood; the bidder itself is implied, because a child *is* its parent in
+that neighborhood — the entry lives in the parent's routing table, so expanding the unit recovers the parent
+along with the neighbors it names. A neuron that served from its normal makes no bid; it can be covered by a
+neighbor's bid but never propagates one of its own. **Creation never bids.** A child minted this frame (step 7)
+does not exist for this frame's election — it first competes at its next recognition. This is what keeps the
+two axes identical: on the event axis the error arrives one frame after the election it would have needed to
+bid in, so same-frame creation bids are impossible there, and the spatial axis does not exploit the
+coincidence that its inference resolves in-frame.
 
-A bid also carries a price for what it gets wrong. If the configuration names neurons that are **not** active
-this frame, the decoder expanding the unit would assert them, and corrections must turn them off. So a bid's
-cost is `1 + f`, where `f` is its named-but-absent count this frame — not a flat 1. Routing keeps `f` small
-(the closest entry served), but it must be charged, or a large sloppy pattern looks artificially cheap.
+**The election decides promotion, not serving.** Routing decided who serves; the election decides what is
+*represented above*. A child that matched but whose bid loses still serves its frame in the history — the
+neuron simply is not represented at the level above and stands as a correction at this one. A neuron covered
+by a neighbor's winning bid is **subsumed**: represented above by that unit, so it records nothing of its own.
+
+**A bid's price.** If the configuration names neurons that are **not** active this frame, the decoder
+expanding the unit would assert them, and corrections must turn them off. So a bid's cost is `1 + f`, where
+`f` is its named-but-absent count this frame — not a flat 1. Routing keeps `f` small (the closest entry
+served), but it must be charged, or a large sloppy pattern looks artificially cheap.
 
 **The objective.** The thalamus accepts a subset of the bids. Each accepted bid propagates one unit upward at
 its cost `1 + f`. Every active neuron not covered by an accepted bid is a correction — stated as itself, at
 cost 1. The thalamus minimizes `Σ accepted (1 + f) + corrections`. This is prize-collecting set cover, in the
 same currency as everything else, restricted to one frame.
 
-**Election, by rounds.** Set cover is NP-hard, but contraction mints nothing that lasts — a grouping a few
-units short of optimal costs a few extra symbols on one frame and is gone the next. Each active neuron elects
-the bid covering the most neurons this frame, ties to the oldest id; a bid survives only if the neurons it
-wins outweigh its price — covering `k` at cost `1 + f` changes the total by `1 + f − k`, so it pays iff
-`k ≥ 2 + f` (for a clean bid, `f = 0`, the familiar "two or more"; the threshold is derived, not chosen).
-Neurons whose bid was dropped re-vote, preferring bids that already survived, ties keeping the current vote;
-if none covers them, they become corrections. Repeat until no vote changes — each round either drops a bid or
-moves a neuron onto coverage already paid for, so the total strictly decreases and it settles. The election
-runs sequentially in the thalamus; the instance is small and the oldest-id tiebreak makes it deterministic and
-consolidates grouping onto established patterns.
+**The election, in detail.** Set cover is NP-hard, but contraction mints nothing that lasts — a grouping a few
+units short of optimal costs a few extra symbols on one frame and is gone the next — so it is settled by a
+cheap election:
+
+- **Voters** are every active neuron named by at least one bid, including neurons that made no bid themselves.
+  Voters are walked in sorted id order and bids in a fixed order, so the outcome is independent of dispatch
+  order. Active neurons no bid names are corrections from the start and never vote.
+- **The ranking rule**: among a pool of bids, the best is the one covering the most neurons this frame; ties
+  go to the **older pattern id**. Ranking is a total, deterministic order, so no vote can ever flip-flop on a
+  tie.
+- **Rounds**: (1) compute the **survivors** — bids whose current voters outweigh their price, `k ≥ 2 + f`
+  (covering `k` at cost `1 + f` changes the total by `1 + f − k`; for a clean bid this is the familiar "two
+  or more" — the threshold is derived, not chosen). On the first pass nobody has voted, so there are no
+  survivors yet. (2) Each voter looks at the bids naming it: if any survived, it elects the best *among the
+  survivors* — herding onto coverage already paid for; if none survived, it elects the best among *all* of
+  them again — which means a dropped bid can be **resurrected** when enough orphaned voters re-converge on
+  it. (3) Repeat until a full pass changes no vote, with a round cap at the bid count as a backstop —
+  resurrection makes the objective's descent non-strict in pathological cases, and a per-frame throwaway
+  grouping slightly short of optimal is acceptable.
+- **Outcome**: the final survivors are promoted, one unit each at the level above; their covered neurons are
+  subsumed. Voters whose final pick did not survive, and actives covered by nothing, are the corrections.
+
+The election runs sequentially in the thalamus; the instance is small — bids only interact within about two
+grid hops — and settles in a handful of rounds. The older-id tiebreak does double duty: deterministic outcomes
+(a recurring input yields a recurring group for the level above to latch onto), and steady pressure toward
+established patterns over interchangeable new ones.
 
 **What this builds.** Each surviving bid contributes one unit to the level above. Adjacency there is
 **derived**: two units are neighbors iff any of their members were neighbors below. Reach is radius 1 by
@@ -543,37 +606,39 @@ best_distance)`; if the benefit falls strictly below that child's cost, `delete_
 stored assignment (settlement and deletion keep it current). Otherwise scan the normal and every child for the
 two smallest distances; ties to the older entry.
 
-**`serve(server)`** — frame step 3. Child: fire it — delegate upward, bid in contraction. Normal: infer from
-`connections`, used as the per-neighbor distribution they are.
+**`serve_and_bid(server)`** — frame step 3. Child: fire it and hand the thalamus a recognition bid — the
+active neurons the child's configuration names correctly, bidder included, plus `f` = its named-but-absent
+count. Normal: infer from `connections`, used as the per-neighbor distribution they are; no bid.
 
-**`review(server, best_d) → error`** — frame step 4. Spatial: `error = best_d`, immediately. A child-served
+*(The election runs in the thalamus between steps 3 and 5 — see
+[contraction](#contraction-building-the-level-above). A neuron covered by a neighbor's winning unit stops
+here: none of the methods below run for it this frame.)*
+
+**`record(O, server, best_d, fallback, fb_d)`** — frame step 5, uncovered neurons only. Push the ref; upsert
+the histogram entry — the server is routing's choice whether or not the bid was promoted. If the normal
+served: add `O` to `connections`, increment `served`, mark dirty. Because the election already ran, nothing
+recorded here is ever revoked — there is no pending state and no retraction.
+
+**`review(server, best_d) → error`** — frame step 6. Spatial: `error = best_d`, immediately. A child-served
 error is recorded and priced (it is demand a future add can win) but does not run the add test — the
 neighborhood was recognized, and the description job went up a level with the child.
 
-**`add_test(O, error)`** — frame step 5, only when `server == Normal` and `error > 0`. Solo benefit = `error +
-Σ` over histogram entries strictly closer to `O` than to their current server of `(best_distance − d)·count`.
-Pass iff `benefit > 1 + |O|`, else `swap_test(O)`. A pass produces a **pending decision**, not a mint —
-contraction has not confirmed the frame yet.
+**`add_test(O)`** — frame step 7, only when `server == Normal` and the error is nonzero. Solo benefit = `Σ`
+over histogram entries strictly closer to `O` than to their current server of `(best_distance − d)·count` —
+the triggering frame is already recorded, so its error enters through its own entry, no special term. Pass iff
+`benefit > 1 + |O|`, else `swap_test(O)`.
 
-**`swap_test(C)`** — for the child `X` most overlapped by `C`'s would-be wins (found during the solo pass):
-price `{add C, delete X}` jointly — reassign `X`'s records to the best of the surviving entries plus `C`, sum
-the changes, add `C`'s wins over the records `X` did **not** serve (the two sums are disjoint), refund
-`1 + |C(X)|`, charge `1 + |C|`; the normal frozen. A positive score is a pending decision for both halves as
-one move.
+**`swap_test(C)`** — for the child `X` most overlapped by `C`'s would-be wins (found during the solo pass; a
+heuristic — see [the swap](#the-swap)): price `{add C, delete X}` jointly — reassign `X`'s records to the best
+of the surviving entries plus `C`, sum the changes, add `C`'s wins over the records `X` did **not** serve (the
+two sums are disjoint), refund `1 + |C(X)|`, charge `1 + |C|`; the normal frozen.
 
-**`record(O, server, best_d, fallback, fb_d)`** — frame step 6. Push the ref; upsert the histogram entry. If
-the normal served: add `O` to `connections`, increment `served`, mark dirty. Pending until contraction
-confirms.
+**`commit_add(C)`** — on a passing test: mint through the thalamus (pattern neuron one level up, parent's
+channel, no connections); insert into `children`; then `settle(C)`. **The newborn does not fire this frame** —
+it is a routing-table entry that first serves, bids, and subsumes on the next frame its neighborhood recurs.
+For a swap, `delete_child(X)` runs in the same move.
 
-**`retract()`** — called by the thalamus when contraction inhibited this neuron this frame: pop the tail,
-reverse `record`'s effects, and discard the pending add/swap decision. Nothing was minted and nothing settled,
-so there is nothing to unwind — the frame was not this neuron's evidence.
-
-**`commit_add(C)`** — called after contraction confirms the neuron was not inhibited, for a pending decision:
-mint through the thalamus (pattern neuron one level up, parent's channel, no connections); insert into
-`children`; then `settle(C)`. For a pending swap, `delete_child(X)` runs in the same transaction.
-
-**`settle(C)`** — frame step 7, after confirmation:
+**`settle(C)`** — frame step 7, after a commit:
 1. For each histogram entry `C` wins (`d < best_distance`): old server's benefit drops by its gap; `fallback ←`
    old server, `server ← C`, distances update; `benefits[C]` gains the new gap; if the old server was the
    normal, subtract `count` copies of the neighborhood from `connections`, decrement `served`, mark dirty.
@@ -620,19 +685,19 @@ flowchart TD
     A["Frame: active neurons = departures from rest"] --> B["Age: if the ring is full, evict the oldest record<br/>(counts, benefits update; starved child deletes)"]
     B --> C["Route: closest of normal + children serves;<br/>keep server AND fallback"]
     C --> D{"Is the server a child?"}
-    D -->|yes| E["Fire it — delegate upward; bid in contraction"]
-    D -->|no| F["The normal infers from the connections"]
-    E --> G["Review: error = the neurons the server got wrong<br/>(same frame spatially; next frame on the event axis)"]
+    D -->|yes| E["Fire it — hand the thalamus a recognition bid"]
+    D -->|no| F["The normal infers from the connections; no bid"]
+    E --> G["Contraction: election over recognition bids;<br/>survivors are the level above (creation never bids)"]
     F --> G
-    G --> H{"Normal served AND error > 0?"}
-    H -->|yes| I["Add test: candidate = this frame's observation.<br/>Solo benefit > 1+|O|? Else price the swap.<br/>A pass is PENDING — nothing minted yet"]
-    H -->|no| J["Record the frame (O, server, fallback, distances) — pending"]
-    I --> J
-    J --> K["Contraction: election over bids;<br/>survivors are the level above"]
-    K --> L{"Was this neuron inhibited<br/>(covered by a neighbor's unit)?"}
-    L -->|yes| M["Retract: drop the pending record,<br/>discard the pending add/swap — nothing to unwind"]
-    L -->|no| N["Confirm: record stands; pending move commits (mint now).<br/>Settle: reassign wins, purify the normal, update benefits,<br/>delete anything that stopped paying — cascade until quiet"]
-    M --> O["Process the next level up"]
+    G --> H{"Covered by a neighbor's<br/>winning unit?"}
+    H -->|yes| I["Done for the frame: no record, no learning —<br/>the frame was never this neuron's evidence"]
+    H -->|no| J["Record the frame (O, server, fallback, distances)"]
+    J --> K["Review: error = the neurons the server got wrong<br/>(same frame spatially; next frame on the event axis)"]
+    K --> L{"Normal served AND error > 0?"}
+    L -->|yes| M["Add test: candidate = this frame's observation.<br/>Solo benefit > 1+|O|? Else price the swap.<br/>A mint serves NEXT recurrence, never its birth frame.<br/>Settle: reassign wins, purify the normal, update benefits,<br/>delete anything that stopped paying — cascade until quiet"]
+    L -->|no| N["Nothing to reconsider"]
+    I --> O["Process the next level up"]
+    M --> O
     N --> O
 ```
 
@@ -646,7 +711,7 @@ neuron counts per level, and wall-clock per frame.
 
 **Phase 1 — substrate and evidence.** Sparse activation (rest states declared in the encoder; rest-bucket
 neurons no longer emitted); the FIFO history with the histogram, stored fallbacks, and running benefits;
-routing and serving; recording and retraction. No structural moves yet — verify the running benefits agree with a
+routing and serving; election-before-record. No structural moves yet — verify the running benefits agree with a
 brute-force recomputation on a fixed run, and measure history memory and per-frame wall-clock.
 
 **Phase 2 — the dictionary lifecycle.** The error-triggered add test, the swap, event-driven deletes, and
@@ -661,6 +726,34 @@ actually achieved and the depth at which it settles.
 past this phase if the answer is no.
 
 Variable-length pricing lands on its own track, specified in [forgetting.md](forgetting.md).
+
+### Changes required in the current code (not yet implemented)
+
+The current implementation (`thalamus.rs` / `neuron.rs` on this branch) predates the recognition-only
+election. Bringing it in line is its own session; the deltas are:
+
+1. **Remove the new-child bid path.** Delete the `NEW_CHILD_BID` sentinel (`neuron.rs`) and every branch keyed
+   on it: the request construction in `process_spatial_frame`, the split into `recognized` /
+   `new_child_parents` in `process_spatial_level`, and the mid-frame create-install-activate block. New
+   children stop competing in `elect_spatial_bids` entirely.
+2. **Move minting after the election.** The add test (and swap) runs for surviving, uncovered, normal-served
+   neurons with a nonzero error, after commit of the frame's records. The mint allocates and installs the
+   child but does **not** activate it: it fires first on its next recognition.
+3. **Delete the birth special cases** — they exist only to patch mid-frame minting: the newborn's insertion
+   into `new_error_pattern_ids` for the level above, the no-subsume-on-birth-frame rule, and the
+   fires-but-does-not-record state.
+4. **Define the losing recognizer.** Today a losing bid commits nothing and the frame vanishes from its
+   neuron's evidence. Under the promotion-only election, a losing recognition bid still commits its frame
+   (server = the child, at its routed distance); only *covered* neurons skip the record. Subsumption stays
+   winners-only.
+5. **Record after the election.** Replace the inline normal-serve record + `prune_inhibited_spatial_history`
+   retraction with record-only-for-uncovered-neurons (or keep the prune as the mechanism if measurements favor
+   it — the semantics, not the plumbing, are the spec: an inhibited frame never becomes evidence).
+6. **Price false positives in bids.** `covered` stays correct-names-only; carry `f = |config \ observed|` on
+   the bid and change the survival test in `spatial_survivors` from a flat `≥ 2` to `k ≥ 2 + f`. This is a
+   known gap between the doc and the code.
+7. **Watch the MNIST gate for the one expected regression:** action wiring reaches a new child one recurrence
+   later than today, since newborns no longer fire on their birth frame.
 
 ## Risks
 
@@ -710,6 +803,11 @@ The event axis (`d > 0`) is not specified here. What is known about where it lan
   situation looked like) and outcome-side (what followed) — and both move together when a record changes hands
   between entries. The record cannot be scored until the next frame arrives; it is completed one frame late.
   That is a bookkeeping delay, not a structural difference.
+- **Its election runs at recognition time, over recognition bids only** — at frame `f`, when the context
+  matches. The error exists only at `f+1`, one frame after the election it would have needed to bid in, so
+  creation structurally cannot compete. This is the constraint the spatial frame order is copied from
+  ([the frame](#the-frame-step-by-step)): recognition elects, creation follows the review, the newborn first
+  competes at its next recognition — identical on both axes.
 - **A temporal pattern infers its own level**, so at the moment of its creation its event connections are
   empty — the next frame has not been observed yet. It learns them once that frame arrives, the same rule as
   the spatial side.
