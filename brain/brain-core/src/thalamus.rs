@@ -1575,30 +1575,27 @@ impl Thalamus {
         frame_number: FrameNumber,
     ) -> Vec<crate::column::SpatialColumnResult> {
 
-        // What a neuron predicts and what identifies it are one and the same since d=0 (spatial processing)
-        // so both are cut to the same neighborhood — they differ only in payload: inference carries each
-        // neighbor's position and reward, context carries only its strength.
-        let inference_neurons = self.decorate_inference_neurons(inference_events);
-        let (inference_neighbors, context_neighbors) = if level == 0 {
+        // What a neuron predicts and what identifies it are one and the same since d=0 (spatial
+        // processing), so one neighbor list per neuron serves both roles.
+        let active_neurons = self.decorate_inference_neurons(inference_events);
+        let spatial_neighbors = if level == 0 {
             // Base level: the declared channel neighbor graph — the retinotopic 3×3 receptive field,
             // which already is the eight compass directions, so the directional rule would reproduce it.
             // The declared path is kept because it is cheaper and leaves level 0 byte-for-byte unchanged.
-            (self.select_inference_neighbors(work_list, &inference_neurons),
-             self.select_context_neighbors(work_list, level_context))
+            self.select_spatial_neighbors(work_list, &active_neurons)
         } else if !self.channel_positions.is_empty() {
             // Above the base WITH coordinates (a retinotopic modality): a fixed radius is wrong in both
             // directions — it invents neighbors where the level thinned out and misses real ones across a
             // gap. Adjacency is the nearest active unit in each compass sector — see [directional_neighbors].
-            self.directional_neighbors(work_list, level_context, &inference_neurons, anchors)
+            self.directional_neighbors(work_list, level_context, &active_neurons, anchors)
         } else {
             // Above the base WITHOUT coordinates (non-spatial workloads, e.g. stocks): fall back to the
             // declared-graph selection used at the base. The directional rule needs positions these
             // workloads do not have; the declared graph is the coordinate-free adjacency they do carry.
-            (self.select_inference_neighbors(work_list, &inference_neurons),
-             self.select_context_neighbors(work_list, level_context))
+            self.select_spatial_neighbors(work_list, &active_neurons)
         };
 
-        self.dispatch_to_regions(work_list, inference_neighbors, context_neighbors, new_error_pattern_ids, frame_number)
+        self.dispatch_to_regions(work_list, spatial_neighbors, new_error_pattern_ids, frame_number)
     }
 
     /// Per-neuron neighbor lists above the base by the **eight-sector nearest** rule over the units'
@@ -1612,16 +1609,15 @@ impl Thalamus {
     /// it invents neighbors in the sparse case and truncates real ones in the dense case — and unlike an
     /// empty-disk rule the count is capped at eight, so `|O|` cannot grow with local density.
     ///
-    /// Returns the inference neighbors (id + channel) and context neighbors (id + strength) per
-    /// work-list neuron, in work-list order, self excluded. Units whose anchor has no registered position
-    /// take no part (they cannot be placed by direction).
+    /// Returns the neighbors (id + channel) per work-list neuron, in work-list order, self excluded.
+    /// Units whose anchor has no registered position take no part (they cannot be placed by direction).
     fn directional_neighbors(
         &mut self,
         work_list: &[NeuronId],
         level_context: &SpatialContext,
-        inference_neurons: &[ActiveNeuron],
+        active_neurons: &[ActiveNeuron],
         anchors: &FxHashMap<NeuronId, NeuronId>,
-    ) -> (Vec<Vec<ActiveNeuron>>, Vec<SpatialContext>) {
+    ) -> Vec<Vec<ActiveNeuron>> {
 
         // Each active unit sits at its anchor's base channel; place it at that channel's 2D position.
         // Units whose anchor has no position cannot be placed, so they take part in nothing.
@@ -1633,9 +1629,8 @@ impl Thalamus {
             .collect();
         active.sort_unstable();
 
-        let inf_by_id: FxHashMap<NeuronId, ActiveNeuron> = inference_neurons.iter().map(|n| (n.id, n.clone())).collect();
-        let mut inference_out = Vec::with_capacity(work_list.len());
-        let mut context_out = Vec::with_capacity(work_list.len());
+        let by_id: FxHashMap<NeuronId, ActiveNeuron> = active_neurons.iter().map(|n| (n.id, n.clone())).collect();
+        let mut neighbors_out = Vec::with_capacity(work_list.len());
         for &uid in work_list {
             let neighbor_ids = match anchors.get(&uid)
                 .and_then(|&a| self.get_neuron_channel_id(a))
@@ -1643,15 +1638,9 @@ impl Thalamus {
                 Some(pos) => Self::directional_neighbors_of(uid, pos, &active),
                 None => Vec::new(),
             };
-            let inf: Vec<ActiveNeuron> = neighbor_ids.iter().filter_map(|id| inf_by_id.get(id).cloned()).collect();
-            let mut ctx = SpatialContext::new();
-            for id in &neighbor_ids {
-                if let Some(&strength) = level_context.entries().get(id) { ctx.add_neuron(*id, strength); }
-            }
-            inference_out.push(inf);
-            context_out.push(ctx);
+            neighbors_out.push(neighbor_ids.iter().filter_map(|id| by_id.get(id).cloned()).collect());
         }
-        (inference_out, context_out)
+        neighbors_out
     }
 
     /// The eight-sector nearest neighbors of `uid` at position `upos`: the closest active unit in each of
@@ -1694,29 +1683,30 @@ impl Thalamus {
         }).collect()
     }
 
-    /// Per neuron: the events it predicts and learns edges toward, cut to its own neighborhood.
-    fn select_inference_neighbors(
+    /// Per neuron: the frame's actives cut to its own neighborhood — the events that identify it and
+    /// the ones it predicts, which are the same set at d=0.
+    fn select_spatial_neighbors(
         &self,
         work_list: &[NeuronId],
-        inference_neurons: &[ActiveNeuron],
+        active_neurons: &[ActiveNeuron],
     ) -> Vec<Vec<ActiveNeuron>> {
 
         // Bucketing once lets each neuron walk whichever side is smaller, instead of every neuron
         // scanning the full set — that scan was quadratic in the active count.
-        let by_channel = Self::bucket_neurons_by_channel(inference_neurons);
+        let by_channel = Self::bucket_neurons_by_channel(active_neurons);
         work_list.iter()
             .map(|&neuron_id| match self.get_neighbor_channels(neuron_id) {
-                Some(channels) if channels.len() < inference_neurons.len() =>
+                Some(channels) if channels.len() < active_neurons.len() =>
                     Self::gather_neurons_from_channels(channels, &by_channel),
-                _ => self.scan_neurons_for_neighbors(neuron_id, inference_neurons),
+                _ => self.scan_neurons_for_neighbors(neuron_id, active_neurons),
             })
             .collect()
     }
 
     /// Group the frame's active neurons by channel, so a neighborhood walk can pull whole buckets.
-    fn bucket_neurons_by_channel(inference_neurons: &[ActiveNeuron]) -> FxHashMap<ChannelId, Vec<ActiveNeuron>> {
+    fn bucket_neurons_by_channel(active_neurons: &[ActiveNeuron]) -> FxHashMap<ChannelId, Vec<ActiveNeuron>> {
         let mut by_channel: FxHashMap<ChannelId, Vec<ActiveNeuron>> = FxHashMap::default();
-        for neuron in inference_neurons {
+        for neuron in active_neurons {
             by_channel.entry(neuron.channel_id).or_insert_with(Vec::new).push(neuron.clone());
         }
         by_channel
@@ -1735,70 +1725,12 @@ impl Thalamus {
 
     /// The wide walk: scan the active set and keep this neuron's neighbors. Chosen when the
     /// neighborhood is wider than the active set, or unrestricted.
-    fn scan_neurons_for_neighbors(&self, neuron_id: NeuronId, inference_neurons: &[ActiveNeuron]) -> Vec<ActiveNeuron> {
+    fn scan_neurons_for_neighbors(&self, neuron_id: NeuronId, active_neurons: &[ActiveNeuron]) -> Vec<ActiveNeuron> {
         let (channel, level) = self.get_neighborhood_key(neuron_id);
-        inference_neurons.iter()
+        active_neurons.iter()
             .filter(|neuron| self.is_spatial_neighbor_channel(channel, level, neuron.channel_id))
             .cloned()
             .collect()
-    }
-
-    /// Per neuron: the shared co-activation cut to its own neighborhood, minus itself. Without the
-    /// cut every non-neighbor co-active counts as novel, dragging match scores below any sane bar —
-    /// spatial matching would never fire.
-    fn select_context_neighbors(&self, work_list: &[NeuronId], level_context: &SpatialContext) -> Vec<SpatialContext> {
-        let by_channel = self.bucket_context_by_channel(level_context);
-        work_list.iter()
-            .map(|&neuron_id| match self.get_neighbor_channels(neuron_id) {
-                Some(channels) if channels.len() < level_context.size() =>
-                    Self::gather_context_from_channels(neuron_id, channels, &by_channel),
-                _ => self.scan_context_for_neighbors(neuron_id, level_context),
-            })
-            .collect()
-    }
-
-    /// Group the co-activation by channel — the context-side counterpart of [bucket_neurons_by_channel].
-    fn bucket_context_by_channel(&self, level_context: &SpatialContext) -> FxHashMap<ChannelId, Vec<(NeuronId, f64)>> {
-        let mut by_channel: FxHashMap<ChannelId, Vec<(NeuronId, f64)>> = FxHashMap::default();
-        for (&ctx_id, &strength) in level_context.entries() {
-            let channel = self.get_neuron_channel_id(ctx_id).unwrap_or(0);
-            by_channel.entry(channel).or_insert_with(Vec::new).push((ctx_id, strength));
-        }
-        by_channel
-    }
-
-    /// The narrow walk, context side: pull each neighbor channel's bucket, skipping the neuron itself.
-    fn gather_context_from_channels(
-        neuron_id: NeuronId,
-        channels: &FxHashSet<ChannelId>,
-        by_channel: &FxHashMap<ChannelId, Vec<(NeuronId, f64)>>,
-    ) -> SpatialContext {
-        let mut neighbors = SpatialContext::new();
-        for (ctx_id, strength) in channels.iter()
-            .filter_map(|channel| by_channel.get(channel))
-            .flat_map(|bucket| bucket.iter())
-            .filter(|&&(ctx_id, _)| ctx_id != neuron_id)
-        {
-            neighbors.add_neuron(*ctx_id, *strength);
-        }
-        neighbors
-    }
-
-    /// The wide walk, context side: scan the co-activation and keep this neuron's neighbors.
-    fn scan_context_for_neighbors(&self, neuron_id: NeuronId, level_context: &SpatialContext) -> SpatialContext {
-        let (channel, level) = self.get_neighborhood_key(neuron_id);
-        let mut neighbors = SpatialContext::new();
-        for (&ctx_id, &strength) in level_context.entries()
-            .iter()
-            .filter(|(&ctx_id, _)| ctx_id != neuron_id)
-            .filter(|(&ctx_id, _)| {
-                let target = self.get_neuron_channel_id(ctx_id).unwrap_or(0);
-                self.is_spatial_neighbor_channel(channel, level, target)
-            })
-        {
-            neighbors.add_neuron(ctx_id, strength);
-        }
-        neighbors
     }
 
     /// A neuron's declared neighbor channels at its own spatial level — the level-based radius, which
@@ -1817,19 +1749,18 @@ impl Thalamus {
 
     /// Route each prepared task to its owning region and run the level there.
     /// The only cross-region round-trip in the level loop, so everything a neuron needs for the whole
-    /// frame pass — its neighbors both ways — is assembled before this call and shipped in one go.
+    /// frame pass — its neighborhood — is assembled before this call and shipped in one go.
     fn dispatch_to_regions(
         &mut self,
         work_list: &[NeuronId],
-        inference_neighbors: Vec<Vec<ActiveNeuron>>,
-        context_neighbors: Vec<SpatialContext>,
+        spatial_neighbors: Vec<Vec<ActiveNeuron>>,
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         frame_number: FrameNumber,
     ) -> Vec<crate::column::SpatialColumnResult> {
 
         // Route on the neuron's own id: a region owns the neuron's routing table, so its routing, the
         // one test, and connection learning must all run where its state lives. The buckets hold indices
-        // rather than ids because the two neighbor lists are positional — parallel to work_list.
+        // rather than ids because the neighbor lists are positional — parallel to work_list.
         let indices_by_region = self.bucket_by_region_indices(work_list, |&id| id);
         let capacity = self.spatial_capacity; // size of a complete neighborhood — the minting gate
 
@@ -1839,11 +1770,11 @@ impl Thalamus {
             // Regions with nothing active this frame are skipped rather than sent an empty batch.
             if task_indices.is_empty() { continue; }
 
-            // Re-pair each index into the (neuron, what it predicts, what identifies it) triple the
-            // column expects. Cloned because the region takes ownership; the source vectors are
-            // dropped at the end of the frame anyway.
+            // Re-pair each index into the (neuron, its neighborhood) pair the column expects. Cloned
+            // because the region takes ownership; the source vectors are dropped at the end of the
+            // frame anyway.
             let region_tasks: Vec<_> = task_indices.iter()
-                .map(|&i| (work_list[i], inference_neighbors[i].clone(), context_neighbors[i].clone()))
+                .map(|&i| (work_list[i], spatial_neighbors[i].clone()))
                 .collect();
 
             // Freshly-minted patterns ride along so the region can skip them — they have no history
@@ -2737,18 +2668,16 @@ mod tests {
         t
     }
 
-    /// The context neighbor ids each work-list unit sees, given anchors (base channel ids) on a base graph.
+    /// The neighbor ids each work-list unit sees, given anchors (base channel ids) on a base graph.
     fn neighbors_seen(t: &mut Thalamus, units: &[(NeuronId, NeuronId)]) -> Vec<Vec<NeuronId>> {
         let mut level_context = SpatialContext::new();
         for &(uid, _) in units { level_context.add_neuron(uid, 1.0); }
-        let inference: Vec<ActiveNeuron> = units.iter()
+        let actives: Vec<ActiveNeuron> = units.iter()
             .map(|&(uid, _)| ActiveNeuron { id: uid, channel_id: 0, reward: 0.0 }).collect();
         let anchors: FxHashMap<NeuronId, NeuronId> = units.iter().copied().collect();
         let work: Vec<NeuronId> = units.iter().map(|&(uid, _)| uid).collect();
-        // inference_neighbors (the first return value) is real in production (dispatch_to_regions
-        // uses both), but this test only asserts what each unit sees as context.
-        let (_, ctx) = t.directional_neighbors(&work, &level_context, &inference, &anchors);
-        ctx.iter().map(|c| { let mut v: Vec<NeuronId> = c.entries().keys().copied().collect(); v.sort_unstable(); v }).collect()
+        let neighbors = t.directional_neighbors(&work, &level_context, &actives, &anchors);
+        neighbors.iter().map(|ns| { let mut v: Vec<NeuronId> = ns.iter().map(|n| n.id).collect(); v.sort_unstable(); v }).collect()
     }
 
     /// On a line only the east and west sectors are occupied, so the rule keeps the nearest unit in each

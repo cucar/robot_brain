@@ -14,11 +14,6 @@ impl SpatialContext {
         Self { entries: FxHashMap::default() }
     }
 
-    /// Number of context entries (one per neuron).
-    pub fn size(&self) -> usize {
-        self.entries.len()
-    }
-
     /// Add a neuron at a given strength.
     /// Panics if the entry already exists — caller must check first.
     pub fn add_neuron(&mut self, neuron_id: NeuronId, strength: Strength) {

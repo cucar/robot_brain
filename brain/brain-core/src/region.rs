@@ -122,7 +122,7 @@ impl Region {
     /// in column-index order (stable regardless of thread scheduling).
     pub fn process_spatial_level(
         &mut self,
-        tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
+        tasks: &[(NeuronId, Vec<ActiveNeuron>)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         spatial_capacity: usize,
         frame_number: FrameNumber,
@@ -133,8 +133,8 @@ impl Region {
         let column_tasks = self.build_column_tasks(tasks, |t| t.0);
 
         // Phase 2: Dispatch — each column processes its tasks in parallel.
-        // The per-task actives and neighbor-filtered observed co-activation travel inside each tuple,
-        // so there is no shared mutable state to synchronize.
+        // The per-task neighbor-filtered actives travel inside each tuple, so there is no shared
+        // mutable state to synchronize.
         let nested: Vec<Vec<crate::column::SpatialColumnResult>> = self.columns.par_iter_mut()
             .zip(column_tasks.into_par_iter())
             .map(|(col, col_tasks)| {

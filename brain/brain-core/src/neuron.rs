@@ -1436,16 +1436,16 @@ impl Neuron {
 
     // ── Frame processing ─────────────────────────────────────────────────────
 
-    /// One frame for one neuron: called once for every neuron that was active at this level (docs/algorithm.md).
-    /// The neuron observes its neighborhood and routes it to whichever entry is closest — its normal or one of its children.
-    /// The one test then reviews that structure: retire a child that stopped paying its storage, mint one that would.
-    /// Both come back as decisions, not mutations, since a child activates only by winning the level's election.
-    /// A plain normal-serve joins no election, so it is the one path recorded and applied here.
+    /// Processes a spatial frame for the neuron. called once for every neuron that was active at a spatial level.
+    /// The neuron observes its neighborhood and decides if it fits its "normal" (handle itself) or one of its children should be activated to recognize it.
+    /// The neuron may decide to create a new child to handle a new pattern, if the benefits outweigh the costs.
+    /// It also decides if there are children to be deleted since they are no longer cost-effective (benefits no longer outweigh the costs).
+    /// Note that when the neuron requests a child to be activated, the thalamus may or may not grant that request, depending on the neighbors.
+    /// In that case, the thalamus would call drop_inhibited_spatial_frame to inhibit the neuron for the frame.
     pub fn process_spatial_frame(
         &mut self,
-        level_neighbors: Option<&SpatialContext>,    // O: this neuron's active neighbors; empty is silence
+        spatial_neighbors: &[ActiveNeuron],          // O: this neuron's active neighbors, each carrying the channel the normal groups by; empty is silence
         new_error_pattern_ids: &FxHashSet<NeuronId>, // patterns born this frame, which learn nothing yet
-        inference_neighbors: &[ActiveNeuron],        // the same neighbors, carrying the channel the normal groups by
         spatial_capacity: usize,                     // declared max degree; minting needs a full neighborhood
         current_frame: FrameNumber,                  // ages the history window and stamps this frame's record
     ) -> SpatialFrameResult {
@@ -1457,20 +1457,18 @@ impl Neuron {
         // O: the observed neighborhood — the active neighbors of this neuron's declared neighbor
         // channels, as a sorted set. Cold start (no neighbors seen yet) is silence: there is nothing
         // to route, serve, or decide (docs/algorithm.md, "The base model": cold start is silence).
-        let observed: Vec<NeuronId> = match level_neighbors {
-            Some(lc) if lc.size() > 0 => {
-                let mut v: Vec<NeuronId> = lc.entries().keys().copied().collect();
-                v.sort_unstable();
-                v
-            }
-            _ => return SpatialFrameResult { bid: None, observed: Vec::new(), served_distance: 0, delete_candidate: None, timings },
-        };
+        let mut observed: Vec<NeuronId> = spatial_neighbors.iter().map(|a| a.id).filter(|&id| id != self.id).collect();
+        observed.sort_unstable();
+        observed.dedup();
+        if observed.is_empty() {
+            return SpatialFrameResult { bid: None, observed: Vec::new(), served_distance: 0, delete_candidate: None, timings };
+        }
 
         // Record each neighbor's channel so the normal's consensus can group its connection counts by
         // channel (docs/algorithm.md, "The base model": one winning bucket per neighbor channel). The
         // neuron sees neighbors as bare ids; the thalamus supplies each one's channel via the actives here.
         if should_learn {
-            for a in inference_neighbors {
+            for a in spatial_neighbors {
                 self.spatial_target_channels.entry(a.id).or_insert(a.channel_id);
             }
         }
@@ -2800,13 +2798,6 @@ mod tests {
         v
     }
 
-    /// A spatial neighborhood context over the given neighbor ids, each at strength 1.
-    fn spatial_ctx(ids: &[NeuronId]) -> crate::context::SpatialContext {
-        let mut c = crate::context::SpatialContext::new();
-        for &id in ids { c.add_neuron(id, 1.0); }
-        c
-    }
-
     /// The observed neighbors as actives carrying their channel — what the thalamus passes so the normal's
     /// per-channel consensus can group the connection counts. Each id's channel is `id % 10`, so an
     /// A-config id and the B-config id at the same position (e.g. 12 and 22) share channel 2 and compete
@@ -2828,9 +2819,8 @@ mod tests {
     /// normal-serve is already finalized inline. Returns the minted child id (if any)
     /// and the ids retired this frame.
     fn step(n: &mut Neuron, ids: &[NeuronId], frame: FrameNumber, next_pid: &mut NeuronId) -> (Option<NeuronId>, Vec<NeuronId>) {
-        let ctx = spatial_ctx(ids);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
-        let res = n.process_spatial_frame(Some(&ctx), &empty, &actives(ids), 8, frame); // capacity 8 = a complete ring
+        let res = n.process_spatial_frame(&actives(ids), &empty, 8, frame); // capacity 8 = a complete ring
         let Some(bid) = res.bid else {
             // Pure normal-serve: already committed inline; any delete was applied inline too.
             return (None, res.delete_candidate.into_iter().collect());
@@ -2904,10 +2894,8 @@ mod tests {
     fn test_cold_start_is_silence() {
         let mut n = phase1_neuron(0.1);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
-        let r = n.process_spatial_frame(None, &empty, &[], 8, 0);
+        let r = n.process_spatial_frame(&[], &empty, 8, 0);
         assert!(r.bid.is_none() && r.delete_candidate.is_none());
-        let r = n.process_spatial_frame(Some(&spatial_ctx(&[])), &empty, &[], 8, 1);
-        assert!(r.bid.is_none());
         assert!(n.spatial_history.is_empty(), "silence writes no history");
     }
 
@@ -2938,7 +2926,7 @@ mod tests {
         let mut minted_cfg = None;
         for f in 0..40 {
             let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
-            let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &actives(obs), 8, f);
+            let res = n.process_spatial_frame(&actives(obs), &empty, 8, f);
             if let Some(bid) = &res.bid {
                 if bid.pattern_id == NEW_CHILD_BID {
                     minted_cfg = Some(set(&res.observed));
@@ -3005,9 +2993,9 @@ mod tests {
         let mut n = phase1_neuron(0.1);
         let empty: FxHashSet<NeuronId> = FxHashSet::default();
         let c = [1, 2, 3];
-        n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], 8, 0); // frame 0 seeds the normal onto C
+        n.process_spatial_frame(&actives(&c), &empty, 8, 0); // frame 0 seeds the normal onto C
         for f in 1..10 {
-            let r = n.process_spatial_frame(Some(&spatial_ctx(&c)), &empty, &[], 8, f);
+            let r = n.process_spatial_frame(&actives(&c), &empty, 8, f);
             assert!(r.bid.is_none(), "a distance-0 normal-serve must make no request (frame {f})");
         }
     }
@@ -3024,7 +3012,7 @@ mod tests {
             let mut minted = false;
             for f in 0..40 {
                 let obs = if f % 5 < 3 { &a[..] } else { &b[..] };
-                let res = n.process_spatial_frame(Some(&spatial_ctx(obs)), &empty, &[], capacity, f);
+                let res = n.process_spatial_frame(&actives(obs), &empty, capacity, f);
                 if res.bid.as_ref().is_some_and(|bid| bid.pattern_id == NEW_CHILD_BID) { minted = true; }
             }
             minted

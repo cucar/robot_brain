@@ -164,19 +164,19 @@ impl Column {
     /// and returns results parent_id-tagged in task order.
     pub fn process_spatial_level(
         &mut self,
-        tasks: &[(NeuronId, Vec<ActiveNeuron>, crate::context::SpatialContext)],
+        tasks: &[(NeuronId, Vec<ActiveNeuron>)],
         new_error_pattern_ids: &FxHashSet<NeuronId>,
         spatial_capacity: usize,
         frame_number: FrameNumber,
     ) -> Vec<SpatialColumnResult> {
 
-        // Each task carries its own neighbor-filtered actives and observed co-activation.
+        // Each task carries its own neighbor-filtered actives — the neuron's observed neighborhood.
         let mut results = Vec::with_capacity(tasks.len());
-        for (neuron_id, actives, observed_context) in tasks {
+        for (neuron_id, neighbors) in tasks {
             let neuron = self.neurons.get_mut(neuron_id)
                 .unwrap_or_else(|| panic!("Column.process_spatial_level: neuron {} not found", neuron_id));
             let result = neuron.process_spatial_frame(
-                Some(observed_context), new_error_pattern_ids, actives, spatial_capacity, frame_number,
+                neighbors, new_error_pattern_ids, spatial_capacity, frame_number,
             );
             results.push(SpatialColumnResult {
                 parent_id: *neuron_id,
