@@ -163,7 +163,7 @@ the frame is **retracted**: pop the tail and reverse its effects — the frame w
 
 **Why the fallback is stored.** The delete test asks what an entry's frames would cost without it, and the
 answer is the fallback. Storing it (and its distance) is what lets every entry's benefit be maintained as a
-**running margin**, updated only by events — so no test ever scans.
+**running benefit**, updated only by events — so no test ever scans.
 
 **It has to be the frames, not a summary.** A running error total cannot answer what deletion asks: when an
 entry goes, its frames fall to their fallbacks, and the *new* runner-up for those frames must be recomputed
@@ -225,22 +225,27 @@ cost(e)     =  1 + |C(e)|
 benefit(e)  =  Σ over the records e serves:  (fallback_distance − best_distance) · count
 ```
 
-Benefit is maintained as a **running margin** per child. It changes only on events — the child gains a record,
-loses a record to eviction, or an entry appears, disappears, or moves nearby — so the delete test is O(1) per
-event and nothing ever scans.
+Benefit is maintained as a **running benefit** per child. It changes only on events — the child gains a
+record, loses a record to eviction, or an entry appears, disappears, or moves nearby — so the delete test is
+O(1) per event and no test ever scans the history.
+
+To keep the words unambiguous: **benefit** is the sum above, **cost** is `1 + |C(e)|`, and **margin** always
+means `benefit − cost`. The rule is strict on both sides: an entry is **added** only when its margin is
+strictly positive, and **deleted** only when its margin is strictly negative. At exact equality nothing
+happens — an existing entry is kept, a candidate is rejected — so the boundary can never flip-flop.
 
 **Stability is a potential argument.** Every committed structural change — add, swap, delete — strictly
-decreases the file length `L` over the horizon (adds and swaps commit only on strictly positive margin;
-deletes fire only on strictly negative margin). `L` is a non-negative integer, so cascades terminate, nothing
-oscillates, and no entry can churn. This replaces any need for thresholds, probation periods, or hysteresis.
+decreases the file length `L` over the horizon, by the strict-margin rule above. `L` is a non-negative
+integer, so cascades terminate, nothing oscillates, and no entry can churn. This replaces any need for
+thresholds, probation periods, or hysteresis.
 
 ## The frame, step by step
 
 For an active neuron with observed neighborhood `O`:
 
 1. **Age.** If the history ring is full, evict the oldest record. Its histogram count decrements; if the normal
-   served it, its neighborhood leaves the connection counts; if a child served it, that child's margin drops —
-   and a child whose benefit no longer covers its cost is deleted now ([deletion](#deletion)).
+   served it, its neighborhood leaves the connection counts; if a child served it, that child's benefit drops —
+   and a child whose benefit falls strictly below its cost is deleted now ([deletion](#deletion)).
 2. **Route.** The closest entry serves — the normal and every child compete by `d(O, ·)`, ties to the older
    entry. Both the best and the runner-up are kept: **server** and **fallback**.
 3. **Serve.** A child fires and delegates to its pattern one level up. The normal infers for itself from the
@@ -250,11 +255,17 @@ For an active neuron with observed neighborhood `O`:
    actuals arrive next frame and the review is one frame late; the mechanics are otherwise identical.
 5. **Add test** — only when the normal served and the error is nonzero. The candidate is this frame's
    observation, exactly. If the solo test fails, price the swap. At most one add per frame — there is only ever
-   one candidate, this frame's observation. ([Creating a child](#creating-a-child).)
-6. **Record.** Append `(O, server, best_distance, fallback, fallback_distance)`. If the normal served, fold `O`
-   into the connection counts.
-7. **Settle** — only if step 5 committed. Reassignments, count subtraction, normal recomputation, margin
-   updates, and any deletes they trigger ([settlement](#settlement)).
+   one candidate, this frame's observation. A passing decision is **pending**, not committed: nothing is
+   minted yet. ([Creating a child](#creating-a-child).)
+6. **Record.** Append `(O, server, best_distance, fallback, fallback_distance)` — also pending. If the normal
+   served, fold `O` into the connection counts.
+7. **Confirm and settle.** Contraction runs over the level. If the election inhibits this neuron (a neighbor's
+   unit covered it), the pending record is retracted and the pending add or swap is discarded — the frame was
+   not this neuron's evidence, and nothing was minted, so there is nothing to unwind. Otherwise the record
+   stands, the pending move commits (the mint happens now), and [settlement](#settlement) runs:
+   reassignments, count subtraction, normal recomputation, benefit updates, and any deletes they trigger.
+   Structural changes are transactions confirmed by contraction, never side effects of a frame that may yet
+   be revoked.
 
 ## Creating a child
 
@@ -293,11 +304,14 @@ children qualify), and price the joint move `{add C, delete X}` exactly:
 
 ```
 Δ =   Σ over X's records:  cost served by X  −  cost served by best of (surviving entries + C)
-   +  Σ over C's solo wins against surviving entries
+   +  Σ over records NOT served by X that C wins:  (best_distance − d) · count
    +  (1 + |C(X)|)          // X's storage refunded
    −  (1 + |C|)             // C's storage charged
 commit iff  Δ > 0
 ```
+
+The two sums are over **disjoint** record sets — the first reprices everything `X` served, the second counts
+`C`'s gains everywhere else — so no improvement is ever counted twice.
 
 The normal is priced **frozen** at its current configuration. That is conservative: the recomputation
 afterward only improves things, so a positive frozen score understates the realized gain and is always safe to
@@ -329,7 +343,7 @@ An entry dies the moment its benefit no longer covers its storage — and that m
 event, so **there is no delete scan**. Exactly two kinds of event can push a margin negative:
 
 1. **Eviction** (frame step 1). Served records leave the history one at a time as demand drifts; the margin
-   slides; when benefit no longer covers cost, the child is starved and deleted. Without this, entries whose
+   slides; when benefit falls strictly below cost, the child is starved and deleted. Without this, entries whose
    demand vanished would live forever.
 2. **Settlement** (frame step 7). A committed add or swap either takes records from a child directly, or
    plants a closer fallback under records it keeps — **fallback collapse**: the child still serves its frames,
@@ -397,6 +411,12 @@ and the one test is nothing more than the derivative of this: an entry belongs i
 lengthen the file more than deleting its line would shorten it. **Nothing is amortized and nothing is
 estimated** — the neuron holds the frames, so it evaluates the sum.
 
+**Where the connections sit in this accounting.** The connections are in the dictionary — but their line is
+**capped** at the neighbor alphabet and exists whether or not the neuron has any children, so no add, swap, or
+delete ever changes it. A term that is the same on both sides of every comparison drops out of the decision,
+which is why the sums above price only children and frames. "Storage-free" for the normal means exactly this:
+its storage is the connections' capped line, already paid for — not that it costs nothing in the file.
+
 **A short horizon overfits.** With too few frames in view, a neuron builds structure for coincidences that
 have not proven themselves beyond the window. There is no smoothing to hide behind, so sensitivity to the
 horizon should be expected to be sharp, and measured early.
@@ -426,23 +446,33 @@ Only **active** neurons need accounting for; a dimension at rest is unstated and
 uncovered.
 
 **What a firing neuron offers.** A neuron that fired a child offers to describe a patch: the active neurons
-its child's configuration names correctly this frame, itself included — its **bid**. A neuron that served from
-its normal makes no bid; it can be covered by a neighbor's bid but never propagates one of its own.
+its child's configuration names correctly this frame, itself included — its **bid**. The configuration names
+only the neighborhood; the bidder itself is implied, because a child *is* its parent in that neighborhood —
+the entry lives in the parent's routing table, so expanding the unit recovers the parent along with the
+neighbors it names. That is why the bid includes the bidder without the configuration listing it. A neuron
+that served from its normal makes no bid; it can be covered by a neighbor's bid but never propagates one of
+its own.
+
+A bid also carries a price for what it gets wrong. If the configuration names neurons that are **not** active
+this frame, the decoder expanding the unit would assert them, and corrections must turn them off. So a bid's
+cost is `1 + f`, where `f` is its named-but-absent count this frame — not a flat 1. Routing keeps `f` small
+(the closest entry served), but it must be charged, or a large sloppy pattern looks artificially cheap.
 
 **The objective.** The thalamus accepts a subset of the bids. Each accepted bid propagates one unit upward at
-a cost of 1. Every active neuron not covered by an accepted bid is a correction — stated as itself, also at
-cost 1. The thalamus minimizes `promotions + corrections`. This is prize-collecting set cover, in the same
-currency as everything else, restricted to one frame.
+its cost `1 + f`. Every active neuron not covered by an accepted bid is a correction — stated as itself, at
+cost 1. The thalamus minimizes `Σ accepted (1 + f) + corrections`. This is prize-collecting set cover, in the
+same currency as everything else, restricted to one frame.
 
 **Election, by rounds.** Set cover is NP-hard, but contraction mints nothing that lasts — a grouping a few
 units short of optimal costs a few extra symbols on one frame and is gone the next. Each active neuron elects
-the bid covering the most neurons this frame, ties to the oldest id; a bid surviving with fewer than two
-elected neurons is dropped (a bid costs 1 and rescues each covered neuron from being a correction at 1 apiece,
-so covering `k` changes the total by `1 − k` — it pays at `k ≥ 2`; the two is derived, not chosen). Neurons
-whose bid was dropped re-vote, preferring bids that already survived; if none covers them, they become
-corrections. Repeat until no vote changes — `promotions + corrections` strictly decreases each round, so it
-settles. The election runs sequentially in the thalamus; the instance is small and the oldest-id tiebreak
-makes it deterministic and consolidates grouping onto established patterns.
+the bid covering the most neurons this frame, ties to the oldest id; a bid survives only if the neurons it
+wins outweigh its price — covering `k` at cost `1 + f` changes the total by `1 + f − k`, so it pays iff
+`k ≥ 2 + f` (for a clean bid, `f = 0`, the familiar "two or more"; the threshold is derived, not chosen).
+Neurons whose bid was dropped re-vote, preferring bids that already survived, ties keeping the current vote;
+if none covers them, they become corrections. Repeat until no vote changes — each round either drops a bid or
+moves a neuron onto coverage already paid for, so the total strictly decreases and it settles. The election
+runs sequentially in the thalamus; the instance is small and the oldest-id tiebreak makes it deterministic and
+consolidates grouping onto established patterns.
 
 **What this builds.** Each surviving bid contributes one unit to the level above. Adjacency there is
 **derived**: two units are neighbors iff any of their members were neighbors below. Reach is radius 1 by
@@ -474,7 +504,7 @@ history:
                  fallback_distance }        // d(config, fallback's configuration)
 
 // the running one test
-margins:      Map<child_id, benefit>        // Σ (fallback_distance − best_distance)·count over records served
+benefits:     Map<child_id, benefit>        // Σ (fallback_distance − best_distance)·count over records served
 ```
 
 **What must always hold.** Every method may do what it wants while it runs, but by the time it returns these
@@ -486,9 +516,10 @@ by recomputing from the raw history and comparing against the incrementally-main
 - Every histogram entry's `server` / `fallback` really are the closest and second-closest entries under the
   *current* entry set. Adds, deletes, and normal movement re-derive them; this is what lets routing read the
   stored assignment instead of rescanning when the neighborhood is already remembered.
-- `margins[child]` always equals what a from-scratch recomputation of its benefit would give:
+- `benefits[child]` always equals what a from-scratch recomputation would give:
   `Σ (fallback_distance − best_distance)·count` over the entries it serves. The delete test is then just
-  `margins[child] > 1 + |children[child]|`, checked only when an event moved the margin.
+  "delete iff `benefits[child] < 1 + |children[child]|`" — strictly below cost, kept at equality — checked
+  only when an event moved the benefit.
 - Every committed structural change strictly decreases `L`. Since `L` is a non-negative whole number, cascades
   terminate and nothing can churn.
 
@@ -505,8 +536,8 @@ never holds more entries than the horizon.
 
 **`evict_if_full()`** — frame step 1. If the ring is at capacity: pop the oldest ref; decrement its histogram
 entry's count (drop the entry at zero). If its server was the normal: subtract the neighborhood from
-`connections`, decrement `served`, mark the normal dirty. If a child: `margins[child] -= (fallback_distance −
-best_distance)`; if the margin no longer covers that child's cost, `delete_child(child)`.
+`connections`, decrement `served`, mark the normal dirty. If a child: `benefits[child] -= (fallback_distance −
+best_distance)`; if the benefit falls strictly below that child's cost, `delete_child(child)`.
 
 **`route(O) → (server, best_d, fallback, fb_d)`** — frame step 2. If `O` is already in the histogram, read the
 stored assignment (settlement and deletion keep it current). Otherwise scan the normal and every child for the
@@ -521,46 +552,55 @@ neighborhood was recognized, and the description job went up a level with the ch
 
 **`add_test(O, error)`** — frame step 5, only when `server == Normal` and `error > 0`. Solo benefit = `error +
 Σ` over histogram entries strictly closer to `O` than to their current server of `(best_distance − d)·count`.
-Commit iff `benefit > 1 + |O|`, else `swap_test(O)`.
+Pass iff `benefit > 1 + |O|`, else `swap_test(O)`. A pass produces a **pending decision**, not a mint —
+contraction has not confirmed the frame yet.
 
 **`swap_test(C)`** — for the child `X` most overlapped by `C`'s would-be wins (found during the solo pass):
 price `{add C, delete X}` jointly — reassign `X`'s records to the best of the surviving entries plus `C`, sum
-the changes, add `C`'s solo wins against survivors, refund `1 + |C(X)|`, charge `1 + |C|`; the normal frozen.
-Commit both halves as one move iff positive.
+the changes, add `C`'s wins over the records `X` did **not** serve (the two sums are disjoint), refund
+`1 + |C(X)|`, charge `1 + |C|`; the normal frozen. A positive score is a pending decision for both halves as
+one move.
 
 **`record(O, server, best_d, fallback, fb_d)`** — frame step 6. Push the ref; upsert the histogram entry. If
-the normal served: add `O` to `connections`, increment `served`, mark dirty.
+the normal served: add `O` to `connections`, increment `served`, mark dirty. Pending until contraction
+confirms.
 
 **`retract()`** — called by the thalamus when contraction inhibited this neuron this frame: pop the tail,
-reverse `record`'s effects. The frame was not this neuron's evidence.
+reverse `record`'s effects, and discard the pending add/swap decision. Nothing was minted and nothing settled,
+so there is nothing to unwind — the frame was not this neuron's evidence.
 
-**`commit_add(C)`** — mint through the thalamus (pattern neuron one level up, parent's channel, no
-connections); insert into `children`; then `settle(C)`.
+**`commit_add(C)`** — called after contraction confirms the neuron was not inhibited, for a pending decision:
+mint through the thalamus (pattern neuron one level up, parent's channel, no connections); insert into
+`children`; then `settle(C)`. For a pending swap, `delete_child(X)` runs in the same transaction.
 
-**`settle(C)`** — frame step 7:
-1. For each histogram entry `C` wins (`d < best_distance`): old server's margin drops by its gap; `fallback ←`
-   old server, `server ← C`, distances update; `margins[C]` gains the new gap; if the old server was the
+**`settle(C)`** — frame step 7, after confirmation:
+1. For each histogram entry `C` wins (`d < best_distance`): old server's benefit drops by its gap; `fallback ←`
+   old server, `server ← C`, distances update; `benefits[C]` gains the new gap; if the old server was the
    normal, subtract `count` copies of the neighborhood from `connections`, decrement `served`, mark dirty.
 2. For each entry where `C` is closer than the stored fallback but not the server: replace the fallback,
-   adjust the server's margin by the change in gap.
+   adjust the server's benefit by the change in gap.
 3. If dirty: `refresh_normal()`.
-4. Any margin below its cost: `delete_child`, one at a time, re-checking after each.
+4. Any benefit strictly below its cost: `delete_child`, one at a time, re-checking after each.
 
 **`refresh_normal()`** — recompute `normal = { n : 2·count(n) > served }`. If it changed: re-derive `server` /
 `fallback` for the histogram entries (bounded by the horizon); apply any handoffs exactly as in `settle`
-step 1 — records
-leaving the normal subtract counts, records arriving add them — and re-check touched margins. Strictly
-improving; terminates.
+step 1 — records leaving the normal subtract counts, records arriving add them — and re-check touched
+benefits. A record changes hands only for a **strictly** smaller distance — ties keep the incumbent — so every
+handoff shortens the file by at least one symbol and the pass cannot cycle; when no strict improvement
+remains, it stops.
 
-**`delete_child(X)`** — remove from `children` and `margins`; release the pattern neuron through the thalamus.
-For each entry served by `X`: `server ← fallback`, `best_distance ← fallback_distance`, recompute a fresh
-fallback against the survivors; entries landing on the normal add their counts (dirty). For each entry whose
-*fallback* was `X`: recompute the fallback, adjust the server's margin. `refresh_normal()` if dirty; re-check
-any margin the reassignments moved — cascade sequentially.
+**`delete_child(X)`** — remove from `children` and `benefits`; release the pattern neuron through the
+thalamus. For each entry served by `X`: `server ← fallback`, `best_distance ← fallback_distance`, recompute a
+fresh fallback against the survivors; entries landing on the normal add their counts (dirty). For each entry
+whose *fallback* was `X`: recompute the fallback, adjust the server's benefit. `refresh_normal()` if dirty;
+re-check any benefit the reassignments moved — cascade sequentially.
 
-**Wall-clock shape:** routing is one distance per entry; the add test is one pass over the histogram, and only
-runs on a normal-served error — rare for a settled neuron; settlement and deletion are bounded by the
-histogram; margins make every delete decision O(1) per event. Nothing scans per frame.
+**Wall-clock shape:** no test ever scans the history — the add test is one pass over the histogram and only
+runs on a normal-served error, rare for a settled neuron; settlement and deletion are bounded by the
+histogram; the running benefits make every delete decision O(1) per event. What *does* scale with the
+dictionary is routing itself: a novel neighborhood is one distance against the normal and every child, so the
+per-frame cost grows with the child count. The one test is what bounds that count — only children that pay
+for their storage survive — but how large it gets in practice is the open question below.
 
 ## Estimation
 
@@ -577,7 +617,7 @@ occurs — the one variable-length code in which probabilities set costs.
 
 ```mermaid
 flowchart TD
-    A["Frame: active neurons = departures from rest"] --> B["Age: if the ring is full, evict the oldest record<br/>(counts, margins update; starved child deletes)"]
+    A["Frame: active neurons = departures from rest"] --> B["Age: if the ring is full, evict the oldest record<br/>(counts, benefits update; starved child deletes)"]
     B --> C["Route: closest of normal + children serves;<br/>keep server AND fallback"]
     C --> D{"Is the server a child?"}
     D -->|yes| E["Fire it — delegate upward; bid in contraction"]
@@ -585,12 +625,15 @@ flowchart TD
     E --> G["Review: error = the neurons the server got wrong<br/>(same frame spatially; next frame on the event axis)"]
     F --> G
     G --> H{"Normal served AND error > 0?"}
-    H -->|yes| I["Add test: candidate = this frame's observation.<br/>Solo benefit > 1+|O|? Else price the swap."]
-    H -->|no| J["Record the frame (O, server, fallback, distances)"]
+    H -->|yes| I["Add test: candidate = this frame's observation.<br/>Solo benefit > 1+|O|? Else price the swap.<br/>A pass is PENDING — nothing minted yet"]
+    H -->|no| J["Record the frame (O, server, fallback, distances) — pending"]
     I --> J
-    J --> K["Settle (only if something committed):<br/>reassign wins, purify the normal, update margins,<br/>delete anything that stopped paying — cascade until quiet"]
-    K --> L["Contraction: election over bids; survivors are the level above"]
-    L --> M["Process the next level up"]
+    J --> K["Contraction: election over bids;<br/>survivors are the level above"]
+    K --> L{"Was this neuron inhibited<br/>(covered by a neighbor's unit)?"}
+    L -->|yes| M["Retract: drop the pending record,<br/>discard the pending add/swap — nothing to unwind"]
+    L -->|no| N["Confirm: record stands; pending move commits (mint now).<br/>Settle: reassign wins, purify the normal, update benefits,<br/>delete anything that stopped paying — cascade until quiet"]
+    M --> O["Process the next level up"]
+    N --> O
 ```
 
 ## Implementation plan
@@ -602,8 +645,8 @@ deletes per thousand frames, which should decay as dictionaries settle), MNIST a
 neuron counts per level, and wall-clock per frame.
 
 **Phase 1 — substrate and evidence.** Sparse activation (rest states declared in the encoder; rest-bucket
-neurons no longer emitted); the FIFO history with the histogram, stored fallbacks, and running margins;
-routing and serving; recording and retraction. No structural moves yet — verify the margins agree with a
+neurons no longer emitted); the FIFO history with the histogram, stored fallbacks, and running benefits;
+routing and serving; recording and retraction. No structural moves yet — verify the running benefits agree with a
 brute-force recomputation on a fixed run, and measure history memory and per-frame wall-clock.
 
 **Phase 2 — the dictionary lifecycle.** The error-triggered add test, the swap, event-driven deletes, and
