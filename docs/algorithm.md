@@ -86,7 +86,7 @@ it never asks which channel a neuron belongs to, which is what makes variable-ch
 ## The base model: what a neuron expects
 
 Before any pattern exists, a neuron already has a cheap expectation about its neighborhood, and it gets it by
-counting. The counters are its **connections**, and they are governed by one invariant:
+counting. The counters are its **connections**, and they are governed by one rule that must always hold:
 
 > **The connection counts are the sufficient statistics of exactly the frames the normal currently serves,
 > within the history.**
@@ -138,12 +138,12 @@ A neuron whose world is genuinely stable serves from its normal forever and crea
 
 ## The history
 
-A neuron remembers the last **K** frames it was active for — its **horizon**, measured in its own activations,
-not in absolute time. **There are no frame numbers anywhere in the history and nothing needs them**: benefit is
-a sum over records, cost is a count of stored neurons, and the only role time ever played was eviction order,
-which a FIFO provides by construction. This also makes the one test neuron-invariant under sparse activation: a
-busy neuron and a rarely-active neuron judge over the same amount of *evidence*, not the same amount of someone
-else's clock.
+A neuron remembers a fixed number of frames it was active for — its **horizon**, measured in its own
+activations, not in absolute time. **There are no frame numbers anywhere in the history and nothing needs
+them**: benefit is a sum over records, cost is a count of stored neurons, and the only role time ever played
+was eviction order, which a FIFO provides by construction. This also makes the one test uniform across neurons
+under sparse activation: a busy neuron and a rarely-active neuron judge over the same amount of *evidence*,
+not the same amount of someone else's clock.
 
 Each record is:
 
@@ -175,7 +175,7 @@ the structure died, and if the world did change while the neuron slept, the erro
 and restructuring proceeds at the pace of new evidence, which is the only pace a neuron can honestly claim to
 know anything at.
 
-`K` is the design's **only free parameter**.
+The horizon — the history's capacity — is the design's **only free parameter**.
 
 ## The routing table is a facility location problem
 
@@ -280,7 +280,8 @@ benefit  =  error                                            // this frame, not 
 commit iff  benefit > 1 + |O|
 ```
 
-One pass over the histogram — at most `K` distinct neighborhoods. Note the records it wins may include frames
+One pass over the histogram — never more distinct neighborhoods than the horizon holds. Note the records it
+wins may include frames
 currently served *badly by children*, not only by the normal: an add repairs whatever demand it sits closest
 to.
 
@@ -356,11 +357,11 @@ What follows a committed add or swap, in order — each step exact against the h
    fallback: the fallback is replaced and the server's margin adjusts by the change in the gap.
 3. **The normal purifies.** Records captured from the normal leave the connection counts. The normal
    recomputes; if it moved, distances to it changed — server and fallback re-derive for the remembered
-   records (the histogram is at most `K` entries), and any handoffs move counts again.
+   records (the histogram is bounded by the horizon), and any handoffs move counts again.
 4. **Margins that went negative trigger deletion**, sequentially, cascading as needed.
 
 Every step strictly decreases `L`, so settlement terminates. Its work is bounded by the histogram size, which
-is bounded by `K`.
+is bounded by the horizon.
 
 ## The cost: it is all one file
 
@@ -385,7 +386,7 @@ symbols by actual occurrence is a variable-length code over the same file, an ex
 design — see [forgetting.md](forgetting.md).
 
 **The horizon is what makes the two parts comparable.** The dictionary is written once; the frames are written
-over and over. Over one horizon — for each neuron, its last `K` activations — the file is
+over and over. Over one horizon — for each neuron, the activations its history holds — the file is
 
 ```
 L  =  Σ over entries (1 + |configuration|)          written once
@@ -397,8 +398,8 @@ lengthen the file more than deleting its line would shorten it. **Nothing is amo
 estimated** — the neuron holds the frames, so it evaluates the sum.
 
 **A short horizon overfits.** With too few frames in view, a neuron builds structure for coincidences that
-have not proven themselves beyond the window. There is no smoothing to hide behind, so sensitivity to `K`
-should be expected to be sharp, and measured early.
+have not proven themselves beyond the window. There is no smoothing to hide behind, so sensitivity to the
+horizon should be expected to be sharp, and measured early.
 
 **What shrinking the file looks like.** The frame part dominates, because it is written every frame.
 Shortening it means fewer apex neurons per frame: 784 names on a 28×28 input if nothing compressed, 200 if
@@ -464,9 +465,9 @@ normal:       config                        // cached majority set { n : 2·coun
 
 // the evidence
 history:
-  ring:       FIFO<config_ref>, capacity K  // arrival order = eviction order
+  ring:       FIFO<config_ref>              // capacity = the horizon; arrival order = eviction order
   histogram:  Map<config, {
-                 count,                     // how many of the K records are this neighborhood
+                 count,                     // how many remembered records are this neighborhood
                  server,                    // Normal | Child(id) — closest entry under the CURRENT entry set
                  best_distance,             // d(config, server's configuration)
                  fallback,                  // second-closest entry
@@ -476,17 +477,20 @@ history:
 margins:      Map<child_id, benefit>        // Σ (fallback_distance − best_distance)·count over records served
 ```
 
-Invariants, restated on the state:
+**What must always hold.** Every method may do what it wants while it runs, but by the time it returns these
+four statements must be true again. They are the design's debug assertions — each one is checkable in a test
+by recomputing from the raw history and comparing against the incrementally-maintained state:
 
-- **I1** — `connections` / `served` describe exactly the histogram entries with `server == Normal`, weighted
-  by count. `normal` is their element-wise majority.
-- **I2** — every histogram entry's `server` / `fallback` are the closest and second-closest entries under the
-  *current* entry set. Adds, deletes, and normal movement re-derive them; routing reads them for free when
-  the neighborhood is already remembered.
-- **I3** — `margins[child] = Σ (fallback_distance − best_distance)·count` over the entries it serves; the
-  delete test is `margins[child] > 1 + |children[child]|`, checked only when an event moved the margin.
-- **I4** — every committed structural change strictly decreases `L`; `L` is a non-negative integer, so nothing
-  cycles.
+- `connections` / `served` describe exactly the histogram entries with `server == Normal`, weighted by count —
+  a from-scratch recount of the normal-served records always matches. `normal` is their element-wise majority.
+- Every histogram entry's `server` / `fallback` really are the closest and second-closest entries under the
+  *current* entry set. Adds, deletes, and normal movement re-derive them; this is what lets routing read the
+  stored assignment instead of rescanning when the neighborhood is already remembered.
+- `margins[child]` always equals what a from-scratch recomputation of its benefit would give:
+  `Σ (fallback_distance − best_distance)·count` over the entries it serves. The delete test is then just
+  `margins[child] > 1 + |children[child]|`, checked only when an event moved the margin.
+- Every committed structural change strictly decreases `L`. Since `L` is a non-negative whole number, cascades
+  terminate and nothing can churn.
 
 The normal has no margin: no storage line, never deleted.
 
@@ -497,7 +501,7 @@ outcome-side counts — both moved together when a record changes hands, and rec
 ## Neuron methods
 
 In call order within a frame. All distances are the [fit](#the-fit); all sums run over the histogram, which
-has at most `K` entries.
+never holds more entries than the horizon.
 
 **`evict_if_full()`** — frame step 1. If the ring is at capacity: pop the oldest ref; decrement its histogram
 entry's count (drop the entry at zero). If its server was the normal: subtract the neighborhood from
@@ -505,8 +509,8 @@ entry's count (drop the entry at zero). If its server was the normal: subtract t
 best_distance)`; if the margin no longer covers that child's cost, `delete_child(child)`.
 
 **`route(O) → (server, best_d, fallback, fb_d)`** — frame step 2. If `O` is already in the histogram, read the
-stored assignment (I2 keeps it current). Otherwise scan the normal and every child for the two smallest
-distances; ties to the older entry.
+stored assignment (settlement and deletion keep it current). Otherwise scan the normal and every child for the
+two smallest distances; ties to the older entry.
 
 **`serve(server)`** — frame step 3. Child: fire it — delegate upward, bid in contraction. Normal: infer from
 `connections`, used as the per-neighbor distribution they are.
@@ -543,7 +547,8 @@ connections); insert into `children`; then `settle(C)`.
 4. Any margin below its cost: `delete_child`, one at a time, re-checking after each.
 
 **`refresh_normal()`** — recompute `normal = { n : 2·count(n) > served }`. If it changed: re-derive `server` /
-`fallback` for the histogram entries (at most `K`); apply any handoffs exactly as in `settle` step 1 — records
+`fallback` for the histogram entries (bounded by the horizon); apply any handoffs exactly as in `settle`
+step 1 — records
 leaving the normal subtract counts, records arriving add them — and re-check touched margins. Strictly
 improving; terminates.
 
@@ -618,7 +623,7 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
 
 - **The readout is unvalidated.** Compressing harder can produce a worse classifier, because a readout can be
   living on exactly the position-and-class-specific duplicates that compression deletes. Phase 4 is the gate.
-- **`K` sensitivity is sharp.** Every decision is exact with respect to the horizon and blind beyond it; there
+- **Horizon sensitivity is sharp.** Every decision is exact with respect to the horizon and blind beyond it; there
   is no smoothing anywhere. Too small and neurons build structure for coincidences; too large and they are
   slow to follow a drifting source. Measure early.
 - **Cold-start churn.** With a nearly-empty history, early tests are decided by very little evidence and
@@ -641,7 +646,7 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
 
 - **Configuration space beyond the small case.** Eight binary neighbors is 256 possible neighborhoods — finite
   and countable, and sparsity shrinks it further in practice. Radius 2 and richer alphabets multiply it. The
-  histogram bounds what is *remembered* at `K`, but what bounds the number of *distinct* neighborhoods worth
+  histogram bounds what is *remembered* at the horizon, but what bounds the number of *distinct* neighborhoods worth
   remembering when the space is large?
 - **Configuration space at higher levels.** Above level 0 the neighbors are patterns, and the per-channel
   alphabet grows as patterns are created. At-most-one-active per neuron holds each channel to a single state,
