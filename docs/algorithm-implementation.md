@@ -89,22 +89,32 @@ it is the vote for the frame ahead.
 **`review(best_d) → error`** — frame step 5, when the inference resolves: spatially `error = best_d`,
 immediately; temporally at `f+1`, when the actuals arrive — and `add_test` below runs then too.
 
-**`add_test(O)`** — frame step 6, only on a nonzero error. Solo benefit = `Σ` over histogram entries strictly
-closer to `O` than to their current server of `(best_distance − d)·count` — the triggering frame is already
-recorded, so its error enters through its own entry, no special term. Pass iff `benefit > 1 + |O|`, else
-`swap_test(O)`.
+**`add_test(O) → Option<MintRequest>`** — frame step 6, only on a nonzero error. Solo benefit = `Σ` over
+histogram entries strictly closer to `O` than to their current server of `(best_distance − d)·count` — the
+triggering frame is already recorded, so its error enters through its own entry, no special term. Pass iff
+`benefit > 1 + |O|`, else `swap_test(O)`. A pass returns a **request**, not a child: `{definition: O, level:
+own + 1, channel: own, retire: Option<child_id>}` — everything the allocation needs, decided here so the
+allocator decides nothing. The neuron's state is unchanged at this point; a request that never comes back
+leaves nothing to undo.
 
 **`swap_test(C)`** — for the child `X` most overlapped by `C`'s would-be wins (found during the solo pass; a
 heuristic — see algorithm.md, "The swap"): price `{add C, delete X}` jointly — reassign `X`'s records to the
 best of the surviving entries plus `C`, sum the changes, add `C`'s wins over the records `X` did **not** serve
-(the two sums are disjoint), refund `1 + |C(X)|`, charge `1 + |C|`; the normal frozen.
+(the two sums are disjoint), refund `1 + |C(X)|`, charge `1 + |C|`; the normal frozen. A pass returns the same
+request with `retire = Some(X)`.
 
-**`commit_add(C)`** — on a passing test: mint through the thalamus (pattern neuron one level up, parent's
-channel, no connections); insert into `children`; then `settle(C)`. **The newborn does not fire this frame** —
-it is a routing-table entry that first serves, bids, and subsumes on the next frame its context recurs.
-For a swap, `delete_child(X)` runs in the same move.
+**The round trip.** `add_test` ends the neuron's first pass. The thalamus collects the frame's requests, batch-
+allocates a pattern neuron per request (level and channel off the request, no connections), creates the objects
+so the level above can dispatch to them, and dispatches `register_child` back to each requesting parent. This
+is the same shape as today's install path, moved after the review; the difference is that the returned id is
+what `settle` needs, so registration and settlement run in the second dispatch rather than inline.
 
-**`settle(C)`** — frame step 6, after a commit:
+**`register_child(id, C)`** — frame step 7, on the returned identity: insert `(id → C)` into `children`, seed
+`benefits[id] = 0`, then `settle(id)`. For a swap, `delete_child(X)` runs first in the same move, so the
+records `X` held are already loose when `C` competes for them. **The newborn does not fire this frame** — it is
+a routing-table entry that first serves, bids, and subsumes on the next frame its context recurs.
+
+**`settle(C)`** — frame step 7, after registration:
 1. For each histogram entry `C` wins (`d < best_distance`): old server's benefit drops by its gap; `fallback ←`
    old server, `server ← C`, distances update; `benefits[C]` gains the new gap; if the old server was the
    normal, subtract `count` copies of the context from `connections`, decrement `served`, mark dirty.
@@ -120,8 +130,10 @@ benefits. A record changes hands only for a **strictly** smaller distance — ti
 handoff shortens the file by at least one symbol and the pass cannot cycle; when no strict improvement
 remains, it stops.
 
-**`delete_child(X)`** — remove from `children` and `benefits`; release the pattern neuron through the
-thalamus. For each entry served by `X`: `server ← fallback`, `best_distance ← fallback_distance`, recompute a
+**`delete_child(X)`** — remove from `children` and `benefits`, and report `X` on the pass's result so the
+thalamus can release the pattern neuron and scrub its cross-neuron references. Unlike a mint, a delete needs no
+round trip: the neuron already holds everything the reassignment requires, and the released id is only of
+interest outside. For each entry served by `X`: `server ← fallback`, `best_distance ← fallback_distance`, recompute a
 fresh fallback against the survivors; entries landing on the normal add their counts (dirty). For each entry
 whose *fallback* was `X`: recompute the fallback, adjust the server's benefit. `refresh_normal()` if dirty;
 re-check any benefit the reassignments moved — cascade sequentially.
@@ -144,20 +156,28 @@ settle), task accuracy (train and held-out), neuron counts per level, and wall-c
 
 ### Stage 1 — spatial event processing
 
-**Phase 1 — substrate and evidence.** Sparse activation (a dimension with nothing happening supplies no
-symbol; no neuron is emitted for it); the FIFO history with the histogram, stored fallbacks, and running
-benefits; routing and serving; unconditional recording. No structural moves yet — verify the running benefits
-agree with a brute-force recomputation on a fixed run, and measure history memory and per-frame wall-clock.
+**Phase 1 — substrate, evidence, and the dictionary lifecycle.** Two halves that could have landed separately
+but do not, because the first has nothing to measure on its own: a brain that records evidence and builds no
+structure produces no exposure curves, and the accuracy it reports is the readout's, not the algorithm's.
 
-**Phase 2 — the dictionary lifecycle.** The error-triggered add test, the swap, event-driven deletes, and
-settlement. This is the heart. Gate on the exposure curves: dictionary size sublinear in exposures, apex per
-frame falling, churn decaying. Cap at one level so the recursion is not a variable yet.
+- *Substrate and evidence.* Sparse activation (a dimension with nothing happening supplies no symbol; no neuron
+  is emitted for it); the FIFO history with the histogram, stored fallbacks, and running benefits; routing and
+  serving; unconditional recording.
+- *The lifecycle.* The error-triggered add test, the swap, event-driven deletes, and settlement. This is the
+  heart.
 
-**Phase 3 — contraction.** The bids, the election, the neighbor filter rule, and the level-above
+The evidence half is verified rather than measured: the four invariants under "What must always hold" become
+`debug_assertions` that recompute from the raw history and compare against the incrementally-maintained state
+on every mutation, so a divergence trips at the frame that caused it instead of showing up as a bad curve
+later. Gate the phase on the exposure curves: dictionary size sublinear in exposures, apex per frame falling,
+churn decaying. Also measure history memory and per-frame wall-clock. Cap at one level so the recursion is not
+a variable yet.
+
+**Phase 2 — contraction.** The bids, the election, the neighbor filter rule, and the level-above
 construction, adapted to the sparse substrate (only active neurons need cover). Measured by the per-level
 reduction factor actually achieved and the depth at which it settles.
 
-**Phase 4 — the readout gate.** Compare held-out accuracy against what the level counts justify. Do not build
+**Phase 3 — the readout gate.** Compare held-out accuracy against what the level counts justify. Do not build
 past this phase if the answer is no.
 
 ### Stage 2 — temporal event processing
@@ -178,31 +198,76 @@ Variable-length pricing lands on its own track, specified in [forgetting.md](for
 
 ## Changes required in the current code (not yet implemented)
 
-The current implementation (`thalamus.rs` / `neuron.rs` on this branch) predates the recognition-only
-election. Bringing it in line is its own session; the deltas are:
+The current implementation (`thalamus.rs` / `neuron.rs` on this branch) predates most of the above. Each delta
+is tagged with the phase it lands in.
 
-1. **Remove the new-child bid path.** Delete the `NEW_CHILD_BID` sentinel (`neuron.rs`) and every branch keyed
+**Phase 1 — the substrate and the evidence.**
+
+1. **Sparse emission is an encoder change only.** `build_frame` iterates whatever the inputs map holds, so
+   omitting a dimension — or a whole channel — already works with no change in the brain. On MNIST it is the
+   encoder skipping off pixels.
+2. **Rebuild the history.** `SpatialHistory` becomes a FIFO ring of context refs plus a histogram carrying
+   `count`, `server`, `best_distance`, `fallback`, `fallback_distance`. The per-config `frames: Vec<FrameNumber>`
+   and the absolute-frame `age_spatial_history` cutoff both go: capacity is the horizon in the neuron's own
+   activations, and eviction is one-out-one-in off the ring. `SpatialHistory::rebase` goes with the frame
+   numbers.
+3. **Store the fallback.** Routing returns the two smallest distances from one scan instead of the winner only,
+   and writes both into the record. This is what every later item reads.
+4. **Replace the delete scan with running benefits.** `spatial_delete_candidate` and
+   `spatial_delete_candidate_uncached` are deleted outright — not ported. Delete becomes
+   `benefits[child] < 1 + |definition|`, checked only where an event moved the benefit (eviction, settlement),
+   strictly below cost, all failing children sequentially with cascade. Today's version scans the histogram on
+   every active neuron every frame, deletes at most one, and deletes at equality; all three change.
+5. **Switch the normal to element-wise majority.** `spatial_normal_config`'s per-channel argmax becomes
+   `{ n : 2·count(n) > served }`, which needs a new `served` counter. `spatial_target_channels` and the channel
+   plumbing that feeds it go — the normal is channel-free.
+6. **Add the swap and settlement.** Both are new. `reassign_after_mint` is settlement step 1 only and is
+   subsumed by `settle`.
+7. **Remove the new-child bid path.** Delete the `NEW_CHILD_BID` sentinel (`neuron.rs`) and every branch keyed
    on it: the request construction in `process_spatial_frame`, the split into `recognized` /
    `new_child_parents` in `process_spatial_level`, and the mid-frame create-install-activate block. New
    children stop competing in `elect_spatial_bids` entirely.
-2. **Move minting after the review.** The add test (and swap) runs for normal-served neurons with a nonzero
-   error, after the frame's records commit — no election input of any kind. The mint allocates and installs
-   the child but does **not** activate it: it fires first on its next recognition.
-3. **Delete the birth special cases** — they exist only to patch mid-frame minting: the newborn's insertion
+8. **Move minting after the review, as a request and a reply.** The add test runs for normal-served neurons
+   with a nonzero error, after the record is written — no election input of any kind. It returns a request; the
+   thalamus batch-allocates and dispatches `register_child` back; the parent registers and settles. The
+   existing install path (`allocate_spatial_pattern_neuron`, `install_spatial_corrections`) is the right shape
+   already and moves after the review. The newborn is **not** activated: it fires first on its next
+   recognition.
+9. **Delete the birth special cases** — they exist only to patch mid-frame minting: the newborn's insertion
    into `new_error_pattern_ids` for the level above, the no-subsume-on-birth-frame rule, and the
    fires-but-does-not-record state.
-4. **Record unconditionally.** Every active neuron commits its frame, as routed: winners, losing recognizers
-   (server = the child, at its routed distance), normal-serves, covered or not. Today a losing bid commits
-   nothing and the frame vanishes — that goes.
-5. **Delete the evidence coupling to the election.** Remove `prune_inhibited_spatial_history` /
-   `drop_inhibited_spatial_frame` and the subsumed-set plumbing from the evidence path entirely. The subsumed
-   set survives only where it belongs: deciding what the level above (and the apex handoff) sees. The
-   election writes nothing into any neuron.
-6. **Price false positives in bids.** `covered` stays correct-names-only; carry `f = |definition \ observed|`
-   on the bid and change the survival test in `spatial_survivors` from a flat `≥ 2` to `k ≥ 2 + f`. This is a
-   known gap between the doc and the code.
-7. **Watch the MNIST gate for the one expected regression:** action wiring reaches a new child one recurrence
-   later than today, since newborns no longer fire on their birth frame.
-8. **Replace the above-base adjacency heuristics with the filter rule.** The eight-sector nearest rule
-   (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: while a neighbor filter is
-   declared for a level, it applies; above the declared levels, the neighborhood is the level's active set.
+10. **Record unconditionally.** Every active neuron commits its frame, as routed: winners, losing recognizers
+    (server = the child, at its routed distance), normal-serves, covered or not. Today a losing bid commits
+    nothing and the frame vanishes — that goes.
+11. **Delete the evidence coupling to the election.** Remove `prune_inhibited_spatial_history` /
+    `drop_inhibited_spatial_frame` and the subsumed-set plumbing from the evidence path entirely. The subsumed
+    set survives only where it belongs: deciding what the level above (and the apex handoff) sees. The
+    election writes nothing into any neuron. With nothing left to commit conditionally, the whole
+    decide-then-commit round trip goes too: `SpatialCommitOp`, `commit_spatial_frame`, and the
+    thalamus/region/column `commit_spatial_frames` chain.
+12. **Remove the completeness gate.** `observed.len() >= spatial_capacity` in `process_spatial_frame` has no
+    counterpart in the design, and under sparse activation it would rarely pass. `spatial_capacity` and its
+    plumbing go with it.
+13. **Drop the spatial recency machinery.** `activation_strength`, `last_activation_frame`, the lazy decay,
+    death frames, `forget_rate`, and `can_delete_child` describe nothing in the design on the spatial side —
+    children live and die by the one test, not by activation recency.
+14. **Backups break.** The persisted history changes shape (ring, fallbacks, `served`), so old backups are
+    unloadable. Accepted: no migration path, bump the format and fail loudly on an old file.
+15. **The invariants become debug assertions.** The four statements under "What must always hold", each
+    recomputed from the raw history and compared against the incrementally-maintained state.
+
+**Phase 2 — contraction.**
+
+16. **Price false positives in bids.** `covered` stays correct-names-only; carry `f = |definition \ observed|`
+    on the bid and change the survival test in `spatial_survivors` from a flat `≥ 2` to `k ≥ 2 + f`. This is a
+    known gap between the doc and the code.
+17. **Replace the above-base adjacency heuristics with the filter rule.** The eight-sector nearest rule
+    (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: while a neighbor filter is
+    declared for a level, it applies; above the declared levels, the neighborhood is the level's active set.
+    `channel_positions` and `set_channel_position` are only there to serve the sector rule and go with it;
+    `set_spatial_neighbor_levels` stays — the declared per-level sets *are* the filter.
+
+**Phase 3 — the readout gate.**
+
+18. **Watch for the one expected regression:** action wiring reaches a new child one recurrence later than
+    today, since newborns no longer fire on their birth frame.

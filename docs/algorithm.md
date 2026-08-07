@@ -336,7 +336,7 @@ For an active neuron with observed neighborhood `O`:
    `(O, server, best_distance, fallback, fallback_distance)` is written down right there. Every active neuron
    records, unconditionally — a neuron's evidence is the frames it was active for, full stop; no election
    outcome ever edits a history. If the normal serves, fold `O` into the connection counts.
-3. **Serve.** If a child was recognized, it **activates**: it fires, and the neuron hands the thalamus its
+3. **Serve.** If a child was recognized, it **activates**: it fires, and the neuron hands the machine its
    **recognition bid** — an offer to represent its patch at the level above. **The neuron is done for the
    frame.** The record already carries the served distance as priced demand; nothing else on this path needs
    doing. The bid is the pipeline's only output to the election, and the election sends nothing back — only
@@ -347,18 +347,28 @@ For an active neuron with observed neighborhood `O`:
    itself; on the temporal axis it is the vote for the frame ahead.
 5. **Review** — when the inference resolves: the same frame spatially, frame `f+1` on the temporal axis. The
    error is the neurons the inference got wrong — spatially, the served distance.
-6. **Add test and settle** — only on a nonzero error. The candidate is this frame's observation, exactly; if
-   the solo test fails, price the swap. At most one add per frame. A passing test mints the child **now, for
-   later**: it is installed in the routing table but fires for the first time on the next frame its
-   neighborhood recurs — it never covers, propagates, or serves on its birth frame
-   ([creating a child](#creating-a-child)). Then [settlement](#settlement) runs: reassignments, count
-   subtraction, normal recomputation, benefit updates, and any deletes they trigger.
+6. **Add test** — only on a nonzero error. The candidate is this frame's observation, exactly; if the solo test
+   fails, price the swap. At most one add per frame. A passing test does not create the pattern — the neuron
+   **requests** one. A neuron names its own children but cannot bring them into being: a pattern is a symbol at
+   the level above, and that level's alphabet belongs to the machine, not to any neuron in it.
+7. **Register and settle.** The machine creates the requested pattern and returns its identity; the neuron
+   registers it as an entry, and [settlement](#settlement) follows — reassignments, count subtraction, normal
+   recomputation, benefit updates, and any deletes they trigger. Settlement is what needs the identity: it
+   writes the newborn in as the server of every record it won, and a record cannot name an entry that has no
+   name yet. The newborn is installed **now, for later** — it fires for the first time on the next frame its
+   neighborhood recurs, and never covers, propagates, or serves on its birth frame
+   ([creating a child](#creating-a-child)).
 
 The early return at step 3 is the seam between the axes: everything before it happens at recognition time —
 frame `f` on both axes — and everything after it happens when the inference resolves, which is the same frame
 spatially and the next frame temporally. Recognition is the fast path: a settled neuron in a familiar world
 runs steps 1–3 and exits; the histogram pass, the swap pricing, and settlement all live strictly behind "the
 normal erred," which is the rare case by design.
+
+The step 6/7 boundary is the pipeline's one other suspension point, and unlike the bid it is a **request and a
+reply**: the neuron cannot proceed until the requested pattern has an identity. It is not a transaction, though
+— nothing is provisional while the request is out, because the record was already written at step 2 and stands
+whether or not the request is ever granted.
 
 Meanwhile — before, after, or alongside; the pipeline cannot tell — contraction runs its election over the
 level's bids and promotes the survivors to the level above. Subsumption is purely a statement about
@@ -437,8 +447,10 @@ prices "center in, one incumbent out" as a single move; it pays, commits, and th
 the ordinary delete test and follows. This is how early one-shot structure consolidates into fewer, better
 entries as exposure accumulates.
 
-**What the child is, at birth.** The pattern **inherits its parent's channel** and mints **one level above its
-parent's level** — both are what the `1 + |O|` paid for. It is **created with no connections**: its connections
+**What the child is, at birth.** The parent requests, the machine creates. The pattern **inherits its parent's
+channel** and mints **one level above its parent's level** — both are what the `1 + |O|` paid for, and both are
+carried on the request, so the machine allocating the symbol decides nothing about what it means. It is
+**created with no connections**: its connections
 belong to its own level, which has not been observed at the moment of creation; it learns them there by
 ordinary counting. The temporal case is the same rule one frame over: a new temporal pattern's inference
 connections are empty until the next frame arrives, and it learns them then. Its definition is **frozen at
@@ -459,7 +471,7 @@ event, so **there is no delete scan**. Exactly two kinds of event can push a mar
 1. **Eviction** (frame step 1). Served records leave the history one at a time as demand drifts; the margin
    slides; when benefit falls strictly below cost, the child is starved and deleted. Without this, entries whose
    demand vanished would live forever.
-2. **Settlement** (frame step 6). A committed add or swap either takes records from a child directly, or
+2. **Settlement** (frame step 7). A committed add or swap either takes records from a child directly, or
    plants a closer fallback under records it keeps — **fallback collapse**: the child still serves its frames,
    but the error it spares shrank because the frames now have somewhere better to fall.
 
@@ -556,13 +568,15 @@ degenerate optimum — memorize each frame as one top-level pattern — which th
 local decisions cheaply and in parallel; contraction stops the redundancy from multiplying up the levels. The
 global quantity is measured directly rather than summed: **apex neurons per level per frame, and the
 dictionary size that bought them.** That pair is the standing metric — and under this design it should *fall
-with exposure* on recurring data: early structure is provisional, swaps consolidate it, the normal purifies,
-and a single frame can never out-bid the opening cost on its own.
+with exposure* on recurring data: early structure is provisional, swaps consolidate it, the normal purifies.
+A single frame far enough from the normal *can* out-bid the opening cost on its own — its error alone can
+exceed `1 + |O|` — and such one-shot mints are retired by starvation or the swap if the frame never recurs
+([risks](#risks)).
 
 ## Contraction: building the level above
 
 A neuron firing a child is not yet compression. If 49 active neurons all fire children, level 1 has 49 active
-units and nothing has shrunk. **Contraction is the thalamus choosing, each frame, the fewest units at the
+units and nothing has shrunk. **Contraction is the machine choosing, each frame, the fewest units at the
 level above that reconstruct the active neurons below.** It runs between levels during spatial processing:
 level 0 is processed, contraction decides what propagates to level 1, level 1 is processed, and so on. Nothing
 it decides persists — it is this frame's grouping, recomputed next frame.
@@ -575,7 +589,7 @@ child: the active neurons that child's definition names correctly this frame, th
 definition names only the neighborhood; the bidder itself is implied, because a child *is* its parent in
 that neighborhood — the entry lives in the parent's routing table, so expanding the unit recovers the parent
 along with the neighbors it names. A neuron that served from its normal makes no bid; it can be covered by a
-neighbor's bid but never propagates one of its own. **Creation never bids.** A child minted this frame (step 6)
+neighbor's bid but never propagates one of its own. **Creation never bids.** A child minted this frame (steps 6–7)
 does not exist for this frame's election — it first competes at its next recognition. This is what keeps the
 two axes identical: on the temporal axis the error arrives one frame after the election it would have needed to
 bid in, so same-frame creation bids are impossible there, and the spatial axis does not exploit the
@@ -596,9 +610,9 @@ expanding the unit would assert them, and corrections must turn them off. So a b
 `f` is its named-but-absent count this frame — not a flat 1. Routing keeps `f` small (the closest entry
 served), but it must be charged, or a large sloppy pattern looks artificially cheap.
 
-**The objective.** The thalamus accepts a subset of the bids. Each accepted bid propagates one unit upward at
+**The objective.** The machine accepts a subset of the bids. Each accepted bid propagates one unit upward at
 its cost `1 + f`. Every active neuron not covered by an accepted bid is a correction — stated as itself, at
-cost 1. The thalamus minimizes `Σ accepted (1 + f) + corrections`. This is prize-collecting set cover, in the
+cost 1. The machine minimizes `Σ accepted (1 + f) + corrections`. This is prize-collecting set cover, in the
 same currency as everything else, restricted to one frame.
 
 **The election, in detail.** Set cover is NP-hard, but contraction mints nothing that lasts — a grouping a few
@@ -623,7 +637,7 @@ cheap election:
 - **Outcome**: the final survivors are promoted, one unit each at the level above; their covered neurons are
   subsumed. Voters whose final pick did not survive, and actives covered by nothing, are the corrections.
 
-The election runs sequentially in the thalamus; the instance is small — bids only interact within about two
+The election runs sequentially; the instance is small — bids only interact within about two
 grid hops — and settles in a handful of rounds. The older-id tiebreak does double duty: deterministic outcomes
 (a recurring input yields a recurring group for the level above to latch onto), and steady pressure toward
 established patterns over interchangeable new ones.
@@ -657,10 +671,12 @@ flowchart TD
     D -->|no| F["Infer (frame f): the normal predicts<br/>from the connections; no activation, no bid"]
     F --> K["Review (when the inference resolves —<br/>same frame spatially, f+1 temporally):<br/>error = the neurons the inference got wrong"]
     K --> L{"Error > 0?"}
-    L -->|yes| M["Add test: candidate = this frame's observation.<br/>Solo benefit > 1+|O|? Else price the swap.<br/>A mint serves NEXT recurrence, never its birth frame.<br/>Settle: reassign wins, purify the normal, update benefits,<br/>delete anything that stopped paying — cascade until quiet"]
+    L -->|yes| M["Add test: candidate = this frame's observation.<br/>Solo benefit > 1+|O|? Else price the swap.<br/>Passing means REQUEST a pattern — not create one"]
+    M -->|"request (channel, level, definition)"| P["The machine creates the symbol<br/>and returns its identity"]
+    P --> Q["Register it as an entry, then settle:<br/>reassign wins, purify the normal, update benefits,<br/>delete anything that stopped paying — cascade until quiet.<br/>The newborn serves NEXT recurrence, never its birth frame"]
     L -->|no| N["Nothing to reconsider"]
     E --> O["Process the next level up"]
-    M --> O
+    Q --> O
     N --> O
     X --> O
 ```
@@ -694,10 +710,17 @@ processing, then actions and rewards — and the deltas against the current code
   errors, so a cluster captured by a child but served badly is repaired only when a nearby normal-served error
   offers a candidate that wins those frames, or when the child starves. Watch persistent child-served error in
   diagnostics; if it accumulates, the trigger may need to widen to any served error.
+- **One-shot mints are steady-state, not warmup.** A single frame far enough from a settled normal out-bids
+  the opening cost by itself: the triggering record's error alone can exceed `1 + |O|` — an observation
+  disjoint from a normal of two or more members already suffices, and the sharper the normal, the more frames
+  qualify. Each such mint is still exact over the window (the record is remembered demand, and the entry
+  starves at that record's eviction if nothing recurs), but churn must be watched in steady state, not only
+  over the first thousand frames, and it makes the medoid risk below considerably more likely to bite.
 - **Medoid-only candidates.** Children are always observed frames, never synthesized centers, so incoherent
   per-frame noise on a recurring core can produce families of near-duplicate children. The swap consolidates
-  them over exposure; if diagnostics still show the pattern, the one-step majority candidate (noted under
-  [creating a child](#creating-a-child)) is the measured remedy.
+  them over exposure — but with one-shot minting the default rather than the exception, the one-step majority
+  candidate (noted under [creating a child](#creating-a-child)) may be needed sooner than
+  diagnostics-later suggests.
 - **Dormant staleness.** Neuron-relative time means a long-dormant neuron wakes with its old model intact. If
   the world changed meanwhile, it must first accumulate errors before restructuring. Accepted as the right
   default; worth remembering when reading diagnostics after distribution shifts.
