@@ -124,6 +124,13 @@ what precedes (actions). On the spatial axis they are the same set — the norma
 connections both range over the co-occurring neighbors — and this document says **neighborhood** wherever
 that one spatial set is meant.
 
+**One mechanism for all four pattern types.** A neuron holds a normal and children, keeps a FIFO history of
+the frames it was active for, routes each frame to the closest entry, and creates or deletes children by the
+one test — error-triggered, swap included, margins maintained by events. None of it needs the context and the
+inference to be the same set; it needs only a distance and a storage cost. The sections below specify that
+general mechanism, with the spatial event case as the running concrete example and the temporal differences —
+the two statistic tables, the one-frame-late review — called out where they occur.
+
 **Channels gate eligibility, nothing else.** Two children of the same neuron may name overlapping but different
 channel sets — `{A, B, C}` and `{B, C, D}` are just two sets. No mechanism below ever needs to know which
 channel a neuron belongs to; the declared neighbor graph decides who *can* appear in a neighborhood — where a
@@ -135,7 +142,7 @@ one level up, and the count would square at every level.
 
 ## The fit
 
-A stored configuration names a set; the neuron observed a set. The distance between them is the symmetric
+An entry's definition names a set; the neuron observed a set. The distance between them is the symmetric
 difference:
 
 ```
@@ -179,7 +186,7 @@ the initial case, not an error.
 
 ### The normal
 
-The **normal** is the connection counts resolved to a single configuration — the element-wise majority:
+The **normal** is the connection counts resolved to a single set — the element-wise majority:
 
 ```
 normal = { n : 2 · count(n) > served }
@@ -187,8 +194,9 @@ normal = { n : 2 · count(n) > served }
 
 where `served` is the number of normal-served records in the history. A neuron is in the normal iff it was
 present in more than half of the frames the normal serves. This is the storage-free entry: it has no pattern
-neuron, it never propagates, and it is never deleted — its storage is the connections, which are paid for
-already. It competes for frames like any other entry and appears in the history like any other server. Before a
+neuron, it never propagates, and it is never deleted — it is a tally over the remembered frames, recomputable
+from the file, so there is nothing to pay for ([the cost](#the-cost-it-is-all-one-file)). It competes for
+frames like any other entry and appears in the history like any other server. Before a
 neuron has any child, it is the only candidate.
 
 The normal is **not** a frozen first observation. It is recomputed as the counts move — and it *sharpens as
@@ -214,10 +222,16 @@ Each record is:
 (O, server, best_distance, fallback, fallback_distance)
 ```
 
-— the neighborhood observed, the entry that served it, that entry's distance, the runner-up entry, and the
-runner-up's distance. Records with the same neighborhood have identical distances to every entry, so the
-storage is a **histogram** — distinct neighborhoods with a count and one shared assignment — plus a FIFO ring
-of references in arrival order for eviction.
+— the context observed (spatially, the neighborhood), the entry that served it, that entry's distance, the
+runner-up entry, and the runner-up's distance. Records with the same context have identical distances to
+every entry, so the storage is a **histogram** — distinct contexts with a count and one shared assignment —
+plus a FIFO ring of references in arrival order for eviction.
+
+On the temporal axis the record completes **one frame late**: the context is written at `f`, the outcome when
+it arrives at `f+1`. Each temporal entry keeps two statistic tables — context-side counts (what the situation
+looked like) and outcome-side counts (what followed) — and both move together whenever a record changes hands
+between entries. A bookkeeping delay, not a structural difference: the ring, the histogram, and every test
+below read the same on both axes.
 
 **Aging is one-out-one-in.** Once the ring is full, recording this frame evicts exactly the oldest record —
 "age before add" is the data structure, not a rule to remember. Eviction has consequences
@@ -253,7 +267,7 @@ sum. Open too few and customers are served from far away; open too many and you 
 | A customer, i.e. one unit of demand | One record in the [history](#the-history) |
 | A facility | A child |
 | Opening a facility | Creating a child, and the pattern neuron it mints one level up |
-| Opening cost | `1 + |C|` — the neuron created, plus the configuration stored |
+| Opening cost | `1 + |C|` — the neuron created, plus the definition stored |
 | Serving a customer from a facility | Describing that frame's neighborhood through that child |
 | Service cost, i.e. distance | The [fit](#the-fit) — the neurons the child got wrong |
 | The assignment of customers to facilities | The routing — closest entry serves |
@@ -271,7 +285,7 @@ the history:
   two mediocre children can jointly block the one good one, with no single add or delete able to fix it.
 
 **Move**, the fourth classical operation, lives entirely on the normal: it is recomputed from its counts, so it
-shifts the moment its demand does. Children never move — a child's configuration is frozen at mint, and
+shifts the moment its demand does. Children never move — a child's definition is frozen at mint, and
 consolidation happens through swaps, not drift. **Split** and **merge** need no machinery of their own: split
 is what add does to an overloaded entry's demand, merge is what swap does to redundant entries.
 
@@ -412,7 +426,7 @@ commit iff  Δ > 0
 The two sums are over **disjoint** record sets — the first reprices everything `X` served, the second counts
 `C`'s gains everywhere else — so no improvement is ever counted twice.
 
-The normal is priced **frozen** at its current configuration. That is conservative: the recomputation
+The normal is priced **frozen** where it currently stands. That is conservative: the recomputation
 afterward only improves things, so a positive frozen score understates the realized gain and is always safe to
 commit.
 
@@ -426,8 +440,9 @@ entries as exposure accumulates.
 **What the child is, at birth.** The pattern **inherits its parent's channel** and mints **one level above its
 parent's level** — both are what the `1 + |O|` paid for. It is **created with no connections**: its connections
 belong to its own level, which has not been observed at the moment of creation; it learns them there by
-ordinary counting. Its configuration is **frozen at mint** — the normal is the entry that tracks the data;
-children are consolidated by swaps, not by drifting. Its own structure — those connections, children of its
+ordinary counting. The temporal case is the same rule one frame over: a new temporal pattern's inference
+connections are empty until the next frame arrives, and it learns them then. Its definition is **frozen at
+mint** — the normal is the entry that tracks the data; children are consolidated by swaps, not by drifting. Its own structure — those connections, children of its
 own — is judged by its own tests at its own level. A neuron's *existence* is decided by its parent; a neuron's
 *structure* is decided by itself.
 
@@ -448,7 +463,7 @@ event, so **there is no delete scan**. Exactly two kinds of event can push a mar
    plants a closer fallback under records it keeps — **fallback collapse**: the child still serves its frames,
    but the error it spares shrank because the frames now have somewhere better to fall.
 
-**Deleting a child, exactly:** its configuration leaves the routing table and the pattern neuron one level up
+**Deleting a child, exactly:** its definition leaves the routing table and the pattern neuron one level up
 is released. Each record it *served* reassigns to its stored fallback (now its best), and a fresh fallback for
 those records is computed against the surviving entries. Each record where the dead child was the *fallback*
 keeps its server but recomputes its fallback, and that server's margin updates. Records landing on the normal
@@ -456,7 +471,7 @@ rejoin the connection counts, and the normal recomputes. **Deletions are sequent
 re-checking margins after each — because two children covering the same demand each look redundant while the
 other stands. Every deletion strictly shortens the file, so cascades settle.
 
-Nothing irreplaceable dies. The evidence lives in the history, not in the entry — if the same configuration is
+Nothing irreplaceable dies. The evidence lives in the history, not in the entry — if the same definition is
 justified again, the add test rebuilds it from the same frames.
 
 ## Settlement
@@ -481,8 +496,8 @@ is bounded by the horizon.
 Take the whole run and write it as a single file a decoder could read back to reproduce every frame exactly.
 The file has two parts:
 
-1. **The dictionary.** For each neuron, what it is: itself, the neurons its connections reach, and the
-   configuration of each of its children.
+1. **The dictionary.** For each neuron, the definition of each of its children — the lower-level symbols the
+   child names. The connections are not here: they are tallies the reader recounts from the frames below.
 2. **The frames.** For each frame, its apex neurons, followed by whatever those apex neurons got wrong about
    the level below them. Anything unstated is silence.
 
@@ -491,7 +506,7 @@ Every cost in this design is a part of that file, counted in neurons — one sym
 ```
 activating an apex neuron  =  1                             a line in the frames
 the errors it made         =  the neurons it got wrong      the corrections after it
-having a child             =  1 + |configuration|           a line in the dictionary
+having a child             =  1 + |definition|              a line in the dictionary
 ```
 
 This is a **fixed-length code**: every neuron costs one symbol regardless of how often it is used. Pricing
@@ -502,7 +517,7 @@ design — see [forgetting.md](forgetting.md).
 over and over. Over one horizon — for each neuron, the activations its history holds — the file length is:
 
 ```
-L  =  Σ over entries (1 + |configuration|)          written once
+L  =  Σ over entries (1 + |definition|)             written once
    +  Σ over remembered frames (1 + errors)         written every frame
 ```
 
@@ -556,8 +571,8 @@ Only **active** neurons need accounting for; a silent dimension is unstated and 
 uncovered.
 
 **Recognition bids only.** The election's input is one **recognition bid** per neuron whose routing chose a
-child: the active neurons that child's configuration names correctly this frame, the bidder included. The
-configuration names only the neighborhood; the bidder itself is implied, because a child *is* its parent in
+child: the active neurons that child's definition names correctly this frame, the bidder included. The
+definition names only the neighborhood; the bidder itself is implied, because a child *is* its parent in
 that neighborhood — the entry lives in the parent's routing table, so expanding the unit recovers the parent
 along with the neighbors it names. A neuron that served from its normal makes no bid; it can be covered by a
 neighbor's bid but never propagates one of its own. **Creation never bids.** A child minted this frame (step 6)
@@ -576,7 +591,7 @@ about the neuron's evidence. (The cost of this independence, accepted deliberate
 covered can still mint a child from its own local demand, and that child may rarely win elections yet stay
 paid-for locally — see [risks](#risks).)
 
-**A bid's price.** If the configuration names neurons that are **not** active this frame, the decoder
+**A bid's price.** If the definition names neurons that are **not** active this frame, the decoder
 expanding the unit would assert them, and corrections must turn them off. So a bid's cost is `1 + f`, where
 `f` is its named-but-absent count this frame — not a flat 1. Routing keeps `f` small (the closest entry
 served), but it must be charged, or a large sloppy pattern looks artificially cheap.
@@ -619,140 +634,12 @@ active neurons** beyond it. A pattern can never name past its own neighborhood, 
 composition. The reduction is set by the data, not the topology: a frame the patterns predict well collapses
 hard; a frame full of surprise barely collapses at all, which is the honest thing for it to do.
 
-## Neuron state
-
-The complete per-neuron state on the spatial axis. Sets are sorted id lists; nothing stores a frame number.
-
-```
-id                                          // (dim, bucket) at base; opaque id above
-
-// the dictionary line
-children:     Map<child_id, config>         // config = sorted set of neuron ids; frozen at mint
-connections:  Map<neuron_id, count>         // counts over the normal-served records in the history
-served:       int                           // number of normal-served records (majority denominator)
-normal:       config                        // cached majority set { n : 2·count(n) > served }
-
-// the evidence
-history:
-  ring:       FIFO<config_ref>              // capacity = the horizon; arrival order = eviction order
-  histogram:  Map<config, {
-                 count,                     // how many remembered records are this neighborhood
-                 server,                    // Normal | Child(id) — closest entry under the CURRENT entry set
-                 best_distance,             // d(config, server's configuration)
-                 fallback,                  // second-closest entry
-                 fallback_distance }        // d(config, fallback's configuration)
-
-// the running one test
-benefits:     Map<child_id, benefit>        // Σ (fallback_distance − best_distance)·count over records served
-```
-
-**What must always hold.** Every method may do what it wants while it runs, but by the time it returns these
-four statements must be true again. They are the design's debug assertions — each one is checkable in a test
-by recomputing from the raw history and comparing against the incrementally-maintained state:
-
-- `connections` / `served` describe exactly the histogram entries with `server == Normal`, weighted by count —
-  a from-scratch recount of the normal-served records always matches. `normal` is their element-wise majority.
-- Every histogram entry's `server` / `fallback` really are the closest and second-closest entries under the
-  *current* entry set. Adds, deletes, and normal movement re-derive them; this is what lets routing read the
-  stored assignment instead of rescanning when the neighborhood is already remembered.
-- `benefits[child]` always equals what a from-scratch recomputation would give:
-  `Σ (fallback_distance − best_distance)·count` over the entries it serves. The delete test is then just
-  "delete iff `benefits[child] < 1 + |children[child]|`" — strictly below cost, kept at equality — checked
-  only when an event moved the benefit.
-- Every committed structural change strictly decreases `L`. Since `L` is a non-negative whole number, cascades
-  terminate and nothing can churn.
-
-The normal has no margin: no storage line, never deleted.
-
-On the temporal axis the same shape holds with two statistic tables per entry — context-side counts and
-outcome-side counts — both moved together when a record changes hands, and records completed one frame late
-([the open port](#temporal-the-open-port)).
-
-## Neuron methods
-
-In call order within a frame. All distances are the [fit](#the-fit); all sums run over the histogram, which
-never holds more entries than the horizon.
-
-**`evict_if_full()`** — frame step 1. If the ring is at capacity: pop the oldest ref; decrement its histogram
-entry's count (drop the entry at zero). If its server was the normal: subtract the neighborhood from
-`connections`, decrement `served`, mark the normal dirty. If a child: `benefits[child] -= (fallback_distance −
-best_distance)`; if the benefit falls strictly below that child's cost, `delete_child(child)`.
-
-**`route_and_record(O) → (server, best_d, fallback, fb_d)`** — frame step 2, one operation. If `O` is already
-in the histogram, read the stored assignment (settlement and deletion keep it current); otherwise scan the
-normal and every child for the two smallest distances, ties to the older entry. Then write the record from the
-same scan: push the ref, upsert the histogram entry — the server is routing's choice, promoted or not, covered
-or not. If the normal serves: add `O` to `connections`, increment `served`, mark dirty. Nothing recorded here
-is ever revoked — there is no pending state and no retraction.
-
-**`serve(server)`** — frame step 3. Child: **activate it** — it fires, and the thalamus gets the recognition
-bid: the active neurons the child's configuration names correctly, bidder included, plus `f` = its
-named-but-absent count. **Then return — the neuron is done for the frame.** The record already carries the
-served distance as priced demand (a badly-served child frame is demand a future add can win); the add test
-never runs on this path — the neighborhood was recognized, and the description job went up a level with the
-child. Normal: no activation, no bid; fall through to the steps below.
-
-*(The election runs in the thalamus, concurrently as far as the neuron is concerned — see
-[contraction](#contraction-building-the-level-above). It reads the bids and writes only the level above; none
-of the methods below depend on its outcome.)*
-
-**`infer()`** — frame step 4, normal path only, at frame `f`. Predict the inference set from `connections`,
-used as the per-neighbor distribution they are. Spatially the inference is the neighborhood itself; temporally
-it is the vote for the frame ahead.
-
-**`review(best_d) → error`** — frame step 5, when the inference resolves: spatially `error = best_d`,
-immediately; temporally at `f+1`, when the actuals arrive — and `add_test` below runs then too.
-
-**`add_test(O)`** — frame step 6, only on a nonzero error. Solo benefit = `Σ` over histogram entries strictly
-closer to `O` than to their current server of `(best_distance − d)·count` — the triggering frame is already
-recorded, so its error enters through its own entry, no special term. Pass iff `benefit > 1 + |O|`, else
-`swap_test(O)`.
-
-**`swap_test(C)`** — for the child `X` most overlapped by `C`'s would-be wins (found during the solo pass; a
-heuristic — see [the swap](#the-swap)): price `{add C, delete X}` jointly — reassign `X`'s records to the best
-of the surviving entries plus `C`, sum the changes, add `C`'s wins over the records `X` did **not** serve (the
-two sums are disjoint), refund `1 + |C(X)|`, charge `1 + |C|`; the normal frozen.
-
-**`commit_add(C)`** — on a passing test: mint through the thalamus (pattern neuron one level up, parent's
-channel, no connections); insert into `children`; then `settle(C)`. **The newborn does not fire this frame** —
-it is a routing-table entry that first serves, bids, and subsumes on the next frame its neighborhood recurs.
-For a swap, `delete_child(X)` runs in the same move.
-
-**`settle(C)`** — frame step 6, after a commit:
-1. For each histogram entry `C` wins (`d < best_distance`): old server's benefit drops by its gap; `fallback ←`
-   old server, `server ← C`, distances update; `benefits[C]` gains the new gap; if the old server was the
-   normal, subtract `count` copies of the neighborhood from `connections`, decrement `served`, mark dirty.
-2. For each entry where `C` is closer than the stored fallback but not the server: replace the fallback,
-   adjust the server's benefit by the change in gap.
-3. If dirty: `refresh_normal()`.
-4. Any benefit strictly below its cost: `delete_child`, one at a time, re-checking after each.
-
-**`refresh_normal()`** — recompute `normal = { n : 2·count(n) > served }`. If it changed: re-derive `server` /
-`fallback` for the histogram entries (bounded by the horizon); apply any handoffs exactly as in `settle`
-step 1 — records leaving the normal subtract counts, records arriving add them — and re-check touched
-benefits. A record changes hands only for a **strictly** smaller distance — ties keep the incumbent — so every
-handoff shortens the file by at least one symbol and the pass cannot cycle; when no strict improvement
-remains, it stops.
-
-**`delete_child(X)`** — remove from `children` and `benefits`; release the pattern neuron through the
-thalamus. For each entry served by `X`: `server ← fallback`, `best_distance ← fallback_distance`, recompute a
-fresh fallback against the survivors; entries landing on the normal add their counts (dirty). For each entry
-whose *fallback* was `X`: recompute the fallback, adjust the server's benefit. `refresh_normal()` if dirty;
-re-check any benefit the reassignments moved — cascade sequentially.
-
-**Wall-clock shape:** no test ever scans the history — the add test is one pass over the histogram and only
-runs on a normal-served error, rare for a settled neuron; settlement and deletion are bounded by the
-histogram; the running benefits make every delete decision O(1) per event. What *does* scale with the
-dictionary is routing itself: a novel neighborhood is one distance against the normal and every child, so the
-per-frame cost grows with the child count. The one test is what bounds that count — only children that pay
-for their storage survive — but how large it gets in practice is the open question below.
-
 ## Estimation
 
 **No probability sets a cost.** Distance is a count of neurons, cost is a count of neurons, savings is a count
 of neurons — the pricing never leaves whole numbers, so no estimator, smoothing, or boundary correction is
 needed. The only frequencies in the design are the connection counts, and they are used raw: the majority rule
-only has to pick members, not price them. A new child's configuration is the exact observation that created
+only has to pick members, not price them. A new child's definition is the exact observation that created
 it, so it serves that observation with zero error from its first frame.
 
 Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by how often each neuron
@@ -778,67 +665,17 @@ flowchart TD
     X --> O
 ```
 
-## Implementation plan
+## Implementation
 
-Each phase lands independently and is measured before the next. The headline metric is the objective itself —
-**apex neurons per level per frame, paired with the dictionary size that bought them** — now tracked **as a
-function of exposure**: on recurring data both curves should fall and flatten. Alongside: churn (creates +
-deletes per thousand frames, which should decay as dictionaries settle), MNIST accuracy (train and held-out),
-neuron counts per level, and wall-clock per frame.
-
-**Phase 1 — substrate and evidence.** Sparse activation (a dimension with nothing happening supplies no
-symbol; no neuron is emitted for it); the FIFO history with the histogram, stored fallbacks, and running benefits;
-routing and serving; unconditional recording. No structural moves yet — verify the running benefits agree with a
-brute-force recomputation on a fixed run, and measure history memory and per-frame wall-clock.
-
-**Phase 2 — the dictionary lifecycle.** The error-triggered add test, the swap, event-driven deletes, and
-settlement. This is the heart. Gate on the exposure curves: dictionary size sublinear in exposures, apex per
-frame falling, churn decaying. Cap at one level so the recursion is not a variable yet.
-
-**Phase 3 — contraction.** The bids, the election, derived adjacency, and the level-above construction,
-adapted to the sparse substrate (only active neurons need cover). Measured by the per-level reduction factor
-actually achieved and the depth at which it settles.
-
-**Phase 4 — the readout gate.** Compare held-out accuracy against what the level counts justify. Do not build
-past this phase if the answer is no.
-
-Variable-length pricing lands on its own track, specified in [forgetting.md](forgetting.md).
-
-### Changes required in the current code (not yet implemented)
-
-The current implementation (`thalamus.rs` / `neuron.rs` on this branch) predates the recognition-only
-election. Bringing it in line is its own session; the deltas are:
-
-1. **Remove the new-child bid path.** Delete the `NEW_CHILD_BID` sentinel (`neuron.rs`) and every branch keyed
-   on it: the request construction in `process_spatial_frame`, the split into `recognized` /
-   `new_child_parents` in `process_spatial_level`, and the mid-frame create-install-activate block. New
-   children stop competing in `elect_spatial_bids` entirely.
-2. **Move minting after the review.** The add test (and swap) runs for normal-served neurons with a nonzero
-   error, after the frame's records commit — no election input of any kind. The mint allocates and installs
-   the child but does **not** activate it: it fires first on its next recognition.
-3. **Delete the birth special cases** — they exist only to patch mid-frame minting: the newborn's insertion
-   into `new_error_pattern_ids` for the level above, the no-subsume-on-birth-frame rule, and the
-   fires-but-does-not-record state.
-4. **Record unconditionally.** Every active neuron commits its frame, as routed: winners, losing recognizers
-   (server = the child, at its routed distance), normal-serves, covered or not. Today a losing bid commits
-   nothing and the frame vanishes — that goes.
-5. **Delete the evidence coupling to the election.** Remove `prune_inhibited_spatial_history` /
-   `drop_inhibited_spatial_frame` and the subsumed-set plumbing from the evidence path entirely. The subsumed
-   set survives only where it belongs: deciding what the level above (and the apex handoff) sees. The
-   election writes nothing into any neuron.
-6. **Price false positives in bids.** `covered` stays correct-names-only; carry `f = |config \ observed|` on
-   the bid and change the survival test in `spatial_survivors` from a flat `≥ 2` to `k ≥ 2 + f`. This is a
-   known gap between the doc and the code.
-7. **Watch the MNIST gate for the one expected regression:** action wiring reaches a new child one recurrence
-   later than today, since newborns no longer fire on their birth frame.
-8. **Replace the above-base adjacency heuristics with the filter rule.** The eight-sector nearest rule
-   (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: while a neighbor filter is
-   declared for a level, it applies; above the declared levels, the neighborhood is the level's active set.
+The per-neuron state and methods, the staged build plan — spatial event processing, then temporal event
+processing, then actions and rewards — and the deltas against the current code live in
+[algorithm-implementation.md](algorithm-implementation.md).
 
 ## Risks
 
 - **The readout is unvalidated.** Compressing harder can produce a worse classifier, because a readout can be
-  living on exactly the position-and-class-specific duplicates that compression deletes. Phase 4 is the gate.
+  living on exactly the position-and-class-specific duplicates that compression deletes. The readout gate in
+  [algorithm-implementation.md](algorithm-implementation.md) is the check.
 - **Horizon sensitivity is sharp.** Every decision is exact with respect to the horizon and blind beyond it; there
   is no smoothing anywhere. Too small and neurons build structure for coincidences; too large and they are
   slow to follow a drifting source. Measure early.
@@ -867,11 +704,11 @@ election. Bringing it in line is its own session; the deltas are:
 
 ## Open questions
 
-- **Configuration space beyond the small case.** Eight binary neighbors is 256 possible neighborhoods — finite
+- **Context space beyond the small case.** Eight binary neighbors is 256 possible neighborhoods — finite
   and countable, and sparsity shrinks it further in practice. Radius 2 and richer alphabets multiply it. The
-  histogram bounds what is *remembered* at the horizon, but what bounds the number of *distinct* neighborhoods worth
+  histogram bounds what is *remembered* at the horizon, but what bounds the number of *distinct* contexts worth
   remembering when the space is large?
-- **Configuration space at higher levels.** Above level 0 the neighbors are patterns, and the per-channel
+- **Context space at higher levels.** Above level 0 the neighbors are patterns, and the per-channel
   alphabet grows as patterns are created. At-most-one-active per neuron holds each channel to a single state,
   but the space still expands with the structure. Above the declared filter levels, every active neuron is a
   neighbor, so `|O|` is the level's whole active count: minting throttles itself there — a candidate is
@@ -881,33 +718,11 @@ election. Bringing it in line is its own session; the deltas are:
 - **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Contraction's
   election is sequential and deliberately so — small enough to settle in a handful of rounds — but on much
   larger inputs than MNIST that judgement would need revisiting.
-
-## Temporal: the open port
-
-The temporal axis — events at `d > 0`, actions at `d < 0` — is not specified here. What is known about where
-it lands:
-
-- **The mechanism is the same on both axes.** A neuron holds a normal and children, keeps a FIFO history of
-  the frames it was active for, routes each frame to the closest entry, and creates or deletes children by the
-  one test — error-triggered, swap included, margins maintained by events. Nothing in that needs the context
-  and the inference to be the same set — it needs only a distance and a storage cost.
-- **Context and inference come apart.** A temporal entry carries two statistic tables — context-side (what the
-  situation looked like) and outcome-side (what followed) — and both move together when a record changes hands
-  between entries. The record cannot be scored until the next frame arrives; it is completed one frame late.
-  That is a bookkeeping delay, not a structural difference.
-- **Its election runs at recognition time, over recognition bids only** — at frame `f`, when the context
-  matches. The error exists only at `f+1`, one frame after the election it would have needed to bid in, so
-  creation structurally cannot compete. This is the constraint the spatial frame order is copied from
-  ([the frame](#the-frame-step-by-step)): recognition elects, creation follows the review, the newborn first
-  competes at its next recognition — identical on both axes.
-- **A temporal pattern infers its own level**, so at the moment of its creation its inference connections are
-  empty — the next frame has not been observed yet. It learns them once that frame arrives, the same rule as
-  the spatial side.
-- **One context can lead to several outcomes.** Spatially the demand point fully specifies the child, because
-  the neighborhood is both the match and the prediction. Temporally the demand point is a (context, outcome)
+- **One context, several outcomes (temporal).** Spatially the demand point fully specifies the child: the
+  neighborhood is both the match and the prediction. Temporally the demand point is a (context, outcome)
   pair, and two frames sharing a context but differing in outcome cannot both be served by a context-keyed
   child. The economics degrades gracefully — the normal predicts the dominant outcome, eats the error on the
-  rest, and the test creates children until whatever genuinely distinguishes the contexts is found. What
+  rest, and the test creates children until whatever genuinely distinguishes the contexts is found; what
   remains after that is irreducible uncertainty, which no model removes. Whether the temporal axis needs more
   than this — a tiebreak among same-context children, or a child carrying several outcomes — is the open
   decision.
