@@ -1,19 +1,55 @@
 # Universal Compression with Actions and Rewards (UCAR)
 
-UCAR is the design for the full pattern lifecycle: recognition of existing patterns, creation of new ones, and
-their removal when they stop paying. The substrate is an online compression engine whose dictionary entries are
-situations — "universal" in the sense that nothing in it assumes a particular source.
+UCAR is the design for a machine that compresses observed events by forming a dynamic hierarchical dictionary
+of patterns, and learns the best actions to take by observing rewards. Dictionary entries represent situations.
 
-The structural unit is the **neighborhood**. A neuron looks at its whole neighborhood, and a recurring
-neighborhood that pays for itself becomes a pattern one level up. Resolution shrinks going up by
-**contraction**: the thalamus keeps only the fewest units that still reconstruct the level below.
+Like a Turing machine, the machine is defined by its alphabets:
+
+- the **event alphabet** — the base event symbols it can observe (its input), and
+- the **action alphabet** — the base action symbols it can execute (its output).
+
+Above each base alphabet the machine forms dynamic symbols of its own — patterns — and every symbol, base or
+pattern, event or action, is a **neuron**.
+
+The machine runs in frames, and many neurons can be active in one frame. Each frame it reads its inputs: the
+active base event neurons — what is happening right now — and the rewards for past actions. From the active
+events it recognizes and activates higher-level event patterns, then outputs a set of actions. The actions
+execute at the end of the frame and are active in the following frame, alongside that frame's inputs. The
+machine learns the rewards of the actions it took for the events that were active. Observed events start with
+default actions — that is the bootstrap — and once a default action's rewards are learned, the machine keeps
+trying different actions while the rewards are negative.
+
+Patterns are learned spatio-temporally: four types, one pattern-learning algorithm, distinguished only by the
+time distance between a pattern and what it names:
+
+- **Spatial event patterns** (d = 0) — events that co-occur.
+- **Spatial action patterns** (d = 0) — actions that co-execute.
+- **Temporal event patterns** (d > 0) — events that follow other events; they infer what happens next.
+- **Temporal action patterns** (d < 0) — actions that precede other actions; they infer what actions led here.
+
+The two hierarchies connect to each other, at every level. Event patterns and action patterns are active in
+the same frames, so an action pattern's context can name event patterns — a high-level situation connected to
+a high-level response, with the rewards learned on that connection. This is how a complex action sequence is
+learned as the answer to a complex event sequence: each side compresses its sequence into one symbol, and a
+single association joins them.
+
+Recognition and execution run in opposite directions. Events compose bottom-up: base events activate patterns,
+patterns activate higher patterns. Actions unfold top-down: selecting a high-level action pattern is a
+commitment to perform it, and it expands into its constituent actions over the coming frames — at the time
+distances its structure recorded — until base actions execute. The machine recognizes with one direction and
+performs with the other.
+
+Patterns are learned from inference failures. Before a neuron knows any patterns, it learns a **normal** by
+observation, and infers with it. On the spatial axis the normal is the co-occurring neighborhood — what the
+neuron expects around itself, which is also what it infers. On the temporal axes it is what follows the neuron
+(events) or what precedes it (actions); those live on a different frame than the neuron itself, so the
+learning lands one frame late. A pattern is created only where the normal keeps failing — and a recurring
+pattern that pays for itself becomes a symbol one level up. Resolution shrinks going up by **contraction**:
+the machine keeps only the fewest units that still reconstruct the level below.
 
 Every structural decision a neuron makes is [one test](#the-one-test), evaluated exactly against the
 [frames it remembers](#the-history) — and structure is only ever reconsidered in response to an **error**.
 A neuron whose situations are all explained builds nothing and deletes nothing.
-
-This document specifies the spatial axis (`d = 0`, same frame). The event axis (`d > 0`) and action axis
-(`d < 0`) are [open ports](#temporal-the-open-port).
 
 ## The substrate
 
@@ -85,8 +121,8 @@ it never asks which channel a neuron belongs to, which is what makes variable-ch
 
 ## The base model: what a neuron expects
 
-Before any pattern exists, a neuron already has a cheap expectation about its neighborhood, and it gets it by
-counting. The counters are its **connections**, and they are governed by one rule that must always hold:
+Before any pattern exists, a neuron learns its context and inferences, and it gets them by counting. 
+The counters are its **connections**, and they are governed by one rule that must always hold:
 
 > **The connection counts are the sufficient statistics of exactly the frames the normal currently serves,
 > within the history.**
@@ -107,9 +143,8 @@ neighbor is usually on, but never that they are on *together*. That gap is what 
 creation  → connections → child patterns
 ```
 
-Connections are not free — they are part of the neuron's line in the dictionary and are counted in its
-[cost](#the-cost-it-is-all-one-file). What separates them from patterns is that their count is capped at the
-neighbor set's size and stops growing, while a neuron's children have no such ceiling.
+Connections cost nothing in the file: they are tallies over the remembered frames, recomputable by any reader ([the cost](#the-cost-it-is-all-one-file)). 
+What separates them from patterns is that their count is capped at the neighbor set's size and stops growing, while a neuron's children have no such ceiling.
 
 **Cold start is silence.** A neuron with no neighbors seen yet has no connections and infers nothing. That is
 the initial case, not an error.
@@ -436,7 +471,7 @@ symbols by actual occurrence is a variable-length code over the same file, an ex
 design — see [forgetting.md](forgetting.md).
 
 **The horizon is what makes the two parts comparable.** The dictionary is written once; the frames are written
-over and over. Over one horizon — for each neuron, the activations its history holds — the file is
+over and over. Over one horizon — for each neuron, the activations its history holds — the file length is:
 
 ```
 L  =  Σ over entries (1 + |configuration|)          written once
@@ -447,23 +482,22 @@ and the one test is nothing more than the derivative of this: an entry belongs i
 lengthen the file more than deleting its line would shorten it. **Nothing is amortized and nothing is
 estimated** — the neuron holds the frames, so it evaluates the sum.
 
-**Which file `L` prices — the convention, stated once.** `L` is the cost of re-encoding the **remembered
-window under the current dictionary** — not the transcript that was actually emitted. It has to be: the delete
-test reprices frames that went out the door long ago, under entries that did not exist when they were emitted.
-Past emissions are sunk; the window is the pricing model. A structural move is judged by the window it leaves
-behind, never by the frames it missed — so a child minted this frame is credited for the triggering frame
-through that frame's *record* (reassigned to it in settlement), even though the emitted frame itself carried
-the corrections.
+`L` is the cost of encoding the remembered window under the current dictionary. 
+The delete test reprices frames that went out the door long ago, under entries that did not exist when they were emitted.
+Past emissions are sunk; the window is the pricing model. 
+A structural move is judged by the window it leaves behind, not by the frames it missed.
+A child minted this frame is credited for the triggering frame through that frame's record (reassigned to it in settlement), even though the emitted frame itself carried the corrections.
 
-**Where the connections sit in this accounting.** The connections' dictionary line is defined as **fixed**: one
-counter per eligible neighbor, present even at zero — a preallocated vector in the pricing model, whatever the
-code stores. (Counts *move* as frames change hands, and a count may sit at zero, but the line's length never
-changes.) A line that exists whether or not the neuron has children, with a length no add, swap, or delete can
-change, is the same on both sides of every comparison and drops out of the decision — which is why the sums
-above price only children and frames. At higher levels the eligible alphabet grows over time, but that growth
-is caused and priced by mints at the level below, not by this neuron's decisions, so the argument survives
-there. "Storage-free" for the normal means exactly this: its storage is the connections' fixed line, already
-paid for — not that it costs nothing in the file.
+**Where the connections sit in this accounting.** 
+The dictionary pays for one thing per child: the list of lower-level symbols it stands for, written once when the child is created.
+That list must be written, because nothing else in the file says it — it was chosen from frames that have since been forgotten, and no reader could reconstruct it.
+The synapses (the normal context and connections) are a different kind of thing: they are tallies over the remembered frames, and the remembered frames are already in the file.
+A reader could recount them from what is written, and anything recountable from the file adds nothing to its length.
+This is how every adaptive compressor works: it never transmits its count tables, because the receiver rebuilds the same tables from the data as it decodes.
+So the dividing line is simple: **the file contains exactly what cannot be recomputed from it.**
+What a symbol is made of cannot be recomputed — it costs one line plus the symbols it names.
+What a symbol would infer can be recomputed — it is free.
+Storage-free for the normal means exactly this: the normal is a running tally of the file's own contents, and a tally of what is already written carries no new information.
 
 **A short horizon overfits.** With too few frames in view, a neuron builds structure for coincidences that
 have not proven themselves beyond the window. There is no smoothing to hide behind, so sensitivity to the
