@@ -53,15 +53,23 @@ A neuron whose situations are all explained builds nothing and deletes nothing.
 
 ## The substrate
 
-The encoder declares **channels**; each channel declares **dimensions**; each dimension declares a resolution
-(its bucket count) and a **rest state** — the value that means "nothing happening": 0 for a binary pixel, the
-no-change bucket for a return, baseline for a sensor. Every frame, every dimension quantizes its input, and:
+The alphabets are not given as bare symbol lists — they are declared as structure, and the declaration is part
+of the machine's definition. The machine declares **channels**; each channel declares **dimensions** — event
+dimensions and action dimensions; each dimension declares its resolution (its bucket count). A base symbol is
+a dimension–bucket pair, so this declaration *is* the alphabet definition: the event dimensions spell out the
+event alphabet, the action dimensions the action alphabet.
 
-> **A neuron fires only on departure from rest. At most one neuron is active per dimension per frame; a
-> dimension at rest is silent.**
+Every frame, each event dimension quantizes what was observed — if anything was — and each action dimension
+carries the action executed at the end of the previous frame — if one was. And:
 
-Rest is not a signal to be stored — it is what the decoder assumes for anything the file does not state. This
-buys three things at once:
+> **A neuron fires only when something happens: an event neuron on an observation, an action neuron on an
+> execution. At most one neuron is active per dimension per frame; a dimension with nothing to report is
+> silent.**
+
+There is no declared rest value: a dimension where nothing is happening simply supplies no symbol. Whether a
+0 pixel is a black event or nothing-to-see is the encoding's choice, made where the input is produced — the
+machine only ever sees the symbols it is given. Silence is not a symbol to be stored — it is what the decoder
+assumes for anything the file does not state. This buys three things at once:
 
 - **Blank regions cost nothing.** No activations, no history, no dictionary, no compute — a neuron that is not
   active does not process the frame at all.
@@ -71,8 +79,8 @@ buys three things at once:
   active neurons inside the ring are present-but-unnamed and the distance counts them. Offness carries
   information through the distance without ever costing storage.
 
-A dimension with no meaningful rest state simply stays dense; nothing below depends on sparsity — it only
-profits from it.
+A dimension where something always happens is simply always active; nothing below depends on sparsity — it
+only profits from it.
 
 A neuron's coordinate is `(dim_id, bucket_id)`; its channel is the channel owning that dimension.
 
@@ -80,26 +88,46 @@ A neuron's coordinate is `(dim_id, bucket_id)`; its channel is the channel ownin
 different neighborhoods over two different neurons, learned independently. Nothing shares a shape across
 positions the way a convolution shares a filter — a retinotopic layout cannot, and the design does not try to.
 Each position pays for its own patterns out of its own [history](#the-history), so the redundancy is bounded by
-what actually recurs there. Sharing structure across contexts is a concern of the event axis, not this one.
+what actually recurs there. Sharing structure across contexts is a concern of the temporal axis, not this one.
 
-The encoder also declares which channels are neighbors of which. This declaration is for the base level only;
-higher levels derive their own adjacency ([contraction](#contraction-building-the-level-above)). Receptive
-fields grow with depth through composition. This is the only place topology enters the design.
+The machine's definition also declares which channels are neighbors of which — and may declare wider neighbor
+sets for the first levels above the base, where the input's geometry is still meaningful (a growing
+retinotopic radius, for example). The declaration is a **filter**, and it runs out where the declared geometry
+runs out: **above the declared levels, every active neuron is a neighbor.** Receptive fields grow with depth
+through composition. This is the only place topology enters the design, and the levels above it assume none.
+
+### Rewards
+
+A reward is an input, not a symbol: alongside the observations, a frame may carry reward for actions already
+taken. Credit lands on the **apex active action** — the highest action pattern in control of its channel that
+frame, falling back to the base action when nothing higher covers it. The apex is the unit that was actually
+in control: a committed higher action holds the channel and suppresses its constituents, so crediting the base
+would reward suppressed subordinates and calcify primitive-level policy. Value accrues at the same granularity
+as structure — selection happens over patterns, so reward must land on patterns to be seen. Before any action
+pattern exists the apex is the base action itself, so the same rule holds across all of development.
+
+How a reward distributes over *time* is a separable policy ([global-rewards.md](global-rewards.md)): the
+current policy credits the apex actions of the immediately preceding frame; the planned generalization
+distributes each reward across the apex actions of the preceding span, weighted by linear decay — linear
+rather than exponential so distant antecedents keep nonzero credit under long-latency reward.
 
 ## The unit: a neuron and its neighborhood
 
-A neuron's **neighborhood** is the set of active neurons in its declared neighbor channels. A spatial pattern is
-a **named neighborhood**: the neuron looks around and reports what it sees upward.
+A neuron's **neighborhood** is the set of active neurons its level admits: the active neurons in its declared
+neighbor channels while a filter is declared, every active neuron above that. A spatial pattern is a **named
+neighborhood**: the neuron looks around and reports what it sees upward.
 
-**On the spatial axis, neighborhood, context, and inferences are one set.** The neurons a neuron infers are
-exactly the neurons it uses as context, which are exactly its neighbors — there is no separate target set and no
-separate conditioning set. This document says **neighborhood** throughout. (On the event axis context and
-inference come apart — see [the open port](#temporal-the-open-port).)
+**Context and inference, named precisely.** A neuron recognizes with a **recognition context** — its normal
+or one of its children — and predicts through its **inference connections**. On the temporal axis the two are
+different sets: the context is what the situation looked like; the inferences are what follows (events) or
+what precedes (actions). On the spatial axis they are the same set — the normal context and the inference
+connections both range over the co-occurring neighbors — and this document says **neighborhood** wherever
+that one spatial set is meant.
 
 **Channels gate eligibility, nothing else.** Two children of the same neuron may name overlapping but different
 channel sets — `{A, B, C}` and `{B, C, D}` are just two sets. No mechanism below ever needs to know which
-channel a neuron belongs to; the declared neighbor graph decides who *can* appear in a neighborhood, and the
-[fit](#the-fit) does the rest without channel structure.
+channel a neuron belongs to; the declared neighbor graph decides who *can* appear in a neighborhood — where a
+filter is declared at all — and the [fit](#the-fit) does the rest without channel structure.
 
 **One neighborhood per neuron per frame**, and **at most one child fires per neuron per frame**. If a neuron
 could activate several children, each channel would carry several active units, those would all become neighbors
@@ -280,7 +308,7 @@ Two processes run over the same frame, and they are **independent**. The neuron'
 record, serve, infer, review, reconsider structure — reads and writes only the neuron's own state, and depends
 on nothing the election decides. Contraction reads the level's recognition bids and decides only what is represented
 above; it has **zero side effects on neuron state**. Creation still follows the review rather than
-participating in recognition — that ordering is forced by the event axis, where recognition happens at frame
+participating in recognition — that ordering is forced by the temporal axis, where recognition happens at frame
 `f` but the error is only known at `f+1`, so a new child can never bid in the election that judged the frame
 that created it.
 
@@ -302,8 +330,8 @@ For an active neuron with observed neighborhood `O`:
    normal serves, there is no activation and no bid — the neuron continues.
 4. **Infer** — normal path only, at frame `f`. The neuron predicts its inference set from the connections,
    used as the per-neighbor distribution they are. On the spatial axis the inference is the neighborhood
-   itself; on the event axis it is the vote for the frame ahead.
-5. **Review** — when the inference resolves: the same frame spatially, frame `f+1` on the event axis. The
+   itself; on the temporal axis it is the vote for the frame ahead.
+5. **Review** — when the inference resolves: the same frame spatially, frame `f+1` on the temporal axis. The
    error is the neurons the inference got wrong — spatially, the served distance.
 6. **Add test and settle** — only on a nonzero error. The candidate is this frame's observation, exactly; if
    the solo test fails, price the swap. At most one add per frame. A passing test mints the child **now, for
@@ -328,7 +356,7 @@ covered-or-not branch — the entire transaction protocol this document once nee
 
 **The trigger is an error, nothing else.** No background process proposes candidates and no accumulator waits
 to fire. The neuron served from its normal, inferred, and the inference was wrong — that error is the only
-moment structure is considered, on the spatial axis in the same frame, on the event axis when the actuals
+moment structure is considered, on the spatial axis in the same frame, on the temporal axis when the actuals
 arrive. The error is the neuron's own — the served distance, read off its own routing; no election outcome
 enters into it. A neighborhood the connections already predict costs nothing to serve no matter how often it
 recurs; surprise is the size of the bill, not a gate on it.
@@ -456,7 +484,7 @@ The file has two parts:
 1. **The dictionary.** For each neuron, what it is: itself, the neurons its connections reach, and the
    configuration of each of its children.
 2. **The frames.** For each frame, its apex neurons, followed by whatever those apex neurons got wrong about
-   the level below them. Anything unstated is at rest.
+   the level below them. Anything unstated is silence.
 
 Every cost in this design is a part of that file, counted in neurons — one symbol is one neuron:
 
@@ -524,7 +552,7 @@ level above that reconstruct the active neurons below.** It runs between levels 
 level 0 is processed, contraction decides what propagates to level 1, level 1 is processed, and so on. Nothing
 it decides persists — it is this frame's grouping, recomputed next frame.
 
-Only **active** neurons need accounting for; a dimension at rest is unstated and costs nothing to leave
+Only **active** neurons need accounting for; a silent dimension is unstated and costs nothing to leave
 uncovered.
 
 **Recognition bids only.** The election's input is one **recognition bid** per neuron whose routing chose a
@@ -534,7 +562,7 @@ that neighborhood — the entry lives in the parent's routing table, so expandin
 along with the neighbors it names. A neuron that served from its normal makes no bid; it can be covered by a
 neighbor's bid but never propagates one of its own. **Creation never bids.** A child minted this frame (step 6)
 does not exist for this frame's election — it first competes at its next recognition. This is what keeps the
-two axes identical: on the event axis the error arrives one frame after the election it would have needed to
+two axes identical: on the temporal axis the error arrives one frame after the election it would have needed to
 bid in, so same-frame creation bids are impossible there, and the spatial axis does not exploit the
 coincidence that its inference resolves in-frame.
 
@@ -585,9 +613,9 @@ grid hops — and settles in a handful of rounds. The older-id tiebreak does dou
 (a recurring input yields a recurring group for the level above to latch onto), and steady pressure toward
 established patterns over interchangeable new ones.
 
-**What this builds.** Each surviving bid contributes one unit to the level above. Adjacency there is
-**derived**: two units are neighbors iff any of their members were neighbors below. Reach is radius 1 by
-construction — a configuration cannot name past its own neighborhood — and receptive fields grow by
+**What this builds.** Each surviving bid contributes one unit to the level above. Adjacency there is the
+substrate's rule for that level: the declared filter while the input's geometry is still declared, **all
+active neurons** beyond it. A pattern can never name past its own neighborhood, and receptive fields grow by
 composition. The reduction is set by the data, not the topology: a frame the patterns predict well collapses
 hard; a frame full of surprise barely collapses at all, which is the honest thing for it to do.
 
@@ -636,7 +664,7 @@ by recomputing from the raw history and comparing against the incrementally-main
 
 The normal has no margin: no storage line, never deleted.
 
-On the event axis the same shape holds with two statistic tables per entry — context-side counts and
+On the temporal axis the same shape holds with two statistic tables per entry — context-side counts and
 outcome-side counts — both moved together when a record changes hands, and records completed one frame late
 ([the open port](#temporal-the-open-port)).
 
@@ -734,7 +762,7 @@ occurs — the one variable-length code in which probabilities set costs.
 
 ```mermaid
 flowchart TD
-    A["Frame: active neurons = departures from rest"] --> B["Age: if the ring is full, evict the oldest record<br/>(counts, benefits update; starved child deletes)"]
+    A["Frame: active neurons = what happened"] --> B["Age: if the ring is full, evict the oldest record<br/>(counts, benefits update; starved child deletes)"]
     B --> C["Route AND record, one operation:<br/>closest entry serves, runner-up is the fallback;<br/>the record is written from the same scan, unconditionally"]
     C --> D{"Was a child recognized?"}
     D -->|yes| E["Serve: the child ACTIVATES — fires, bids.<br/>DONE for the frame (the record already<br/>carries the distance as priced demand)"]
@@ -758,8 +786,8 @@ function of exposure**: on recurring data both curves should fall and flatten. A
 deletes per thousand frames, which should decay as dictionaries settle), MNIST accuracy (train and held-out),
 neuron counts per level, and wall-clock per frame.
 
-**Phase 1 — substrate and evidence.** Sparse activation (rest states declared in the encoder; rest-bucket
-neurons no longer emitted); the FIFO history with the histogram, stored fallbacks, and running benefits;
+**Phase 1 — substrate and evidence.** Sparse activation (a dimension with nothing happening supplies no
+symbol; no neuron is emitted for it); the FIFO history with the histogram, stored fallbacks, and running benefits;
 routing and serving; unconditional recording. No structural moves yet — verify the running benefits agree with a
 brute-force recomputation on a fixed run, and measure history memory and per-frame wall-clock.
 
@@ -803,6 +831,9 @@ election. Bringing it in line is its own session; the deltas are:
    known gap between the doc and the code.
 7. **Watch the MNIST gate for the one expected regression:** action wiring reaches a new child one recurrence
    later than today, since newborns no longer fire on their birth frame.
+8. **Replace the above-base adjacency heuristics with the filter rule.** The eight-sector nearest rule
+   (`directional_neighbors`) and the reuse-the-last-declared-set fallback both go: while a neighbor filter is
+   declared for a level, it applies; above the declared levels, the neighborhood is the level's active set.
 
 ## Risks
 
@@ -842,14 +873,19 @@ election. Bringing it in line is its own session; the deltas are:
   remembering when the space is large?
 - **Configuration space at higher levels.** Above level 0 the neighbors are patterns, and the per-channel
   alphabet grows as patterns are created. At-most-one-active per neuron holds each channel to a single state,
-  but the space still expands with the structure. What bounds the child count there?
+  but the space still expands with the structure. Above the declared filter levels, every active neuron is a
+  neighbor, so `|O|` is the level's whole active count: minting throttles itself there — a candidate is
+  charged `1 + |O|`, so wide neighborhoods make children expensive exactly where they are uninformative — but
+  routing still prices every child against a large `O` each frame. What bounds the child count, and the
+  routing cost it drives, is the open measurement.
 - **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Contraction's
   election is sequential and deliberately so — small enough to settle in a handful of rounds — but on much
   larger inputs than MNIST that judgement would need revisiting.
 
 ## Temporal: the open port
 
-The event axis (`d > 0`) is not specified here. What is known about where it lands:
+The temporal axis — events at `d > 0`, actions at `d < 0` — is not specified here. What is known about where
+it lands:
 
 - **The mechanism is the same on both axes.** A neuron holds a normal and children, keeps a FIFO history of
   the frames it was active for, routes each frame to the closest entry, and creates or deletes children by the
@@ -864,7 +900,7 @@ The event axis (`d > 0`) is not specified here. What is known about where it lan
   creation structurally cannot compete. This is the constraint the spatial frame order is copied from
   ([the frame](#the-frame-step-by-step)): recognition elects, creation follows the review, the newborn first
   competes at its next recognition — identical on both axes.
-- **A temporal pattern infers its own level**, so at the moment of its creation its event connections are
+- **A temporal pattern infers its own level**, so at the moment of its creation its inference connections are
   empty — the next frame has not been observed yet. It learns them once that frame arrives, the same rule as
   the spatial side.
 - **One context can lead to several outcomes.** Spatially the demand point fully specifies the child, because
@@ -872,6 +908,6 @@ The event axis (`d > 0`) is not specified here. What is known about where it lan
   pair, and two frames sharing a context but differing in outcome cannot both be served by a context-keyed
   child. The economics degrades gracefully — the normal predicts the dominant outcome, eats the error on the
   rest, and the test creates children until whatever genuinely distinguishes the contexts is found. What
-  remains after that is irreducible uncertainty, which no model removes. Whether the event axis needs more
+  remains after that is irreducible uncertainty, which no model removes. Whether the temporal axis needs more
   than this — a tiebreak among same-context children, or a child carrying several outcomes — is the open
   decision.
