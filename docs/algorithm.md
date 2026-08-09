@@ -579,7 +579,7 @@ prediction error *is* file length and the one test prices it without any new ter
 principle the design already relies on for the counts: the decoder recomputes anything it can, and is told
 only what it cannot derive.
 
-Every cost in this design is a part of that file, counted in symbols:
+Every cost in this design is a part of a file — the machine's here, a neuron's below — counted in symbols:
 
 ```
 activating an apex unit    =  1                             a line in the frames
@@ -602,6 +602,17 @@ L  =  Σ over entries (1 + |definition|)             written once
 and the one test is nothing more than the derivative of this: an entry belongs in `L` when removing it would
 lengthen the file more than deleting its line would shorten it. **Nothing is amortized and nothing is
 estimated** — the neuron holds the records, so it evaluates the sum.
+
+**Two scopes, two files.** The `L` above is the neuron's own file: what it would take to reconstruct the
+windows it remembers. The machine's file is a different object, because its frame part holds only apex units —
+an activation that a neighbor's promoted unit subsumed never appears there at all. Neither file approximates
+the other, and a neuron never needs the other one: it compresses its own exactly, knowing nothing about the
+election, which is what lets the pipeline stay independent of contraction. Contraction then compresses the
+machine's frame part over whatever the neurons offer it. **That the two compose — that exactly compressed
+local files plus a greedy election yield a short global file — is an assumption of this design, not a result.**
+It is the same assumption [the falsifiable claim](#the-falsifiable-claim) puts on the table, and the
+[redundant children](#risks) a neuron mints against errors the machine's file never charged are what it looks
+like when the composition leaks.
 
 **Where the counts sit in this accounting.** The dictionary pays for one thing per child: the pairs it stands
 for, written once when the child is created. That list must be written, because nothing else in the file says
@@ -828,6 +839,18 @@ Each risk states what would be done about it, so that measurement has a decision
 - **Election slack.** The election is a heuristic for prize-collecting set cover with unmeasured slack, and
   apex-units-per-frame is the headline metric — so slack and real structure are currently conflated.
   **Diagnostic:** solve one small window exactly (ILP) and compare.
+
+- **The composition gap.** Two scopes are optimized separately and nothing bounds the distance between their
+  result and a joint one ([two scopes, two files](#the-cost-it-is-all-one-file)). A neuron compresses its own
+  file exactly, knowing nothing about the election; contraction then compresses the machine's frame part over
+  whatever the neurons happened to offer it. Each step is defensible on its own and the pair has no guarantee.
+  This is distinct from election slack, which measures the election against a perfect election over the same
+  bids — this measures the whole two-step scheme against optimizing dictionary and frames together.
+  **Diagnostic:** over a short run on one small level, compare the file this design writes against the file a
+  joint optimization over the same records produces. The gap is the price of locality, and it is the number
+  that decides whether contraction should stay purely inhibitory or start supplying candidates back into the
+  routing tables it covered — the constituents of one chunk each mint their own near-duplicate of it today,
+  which is where a constructive variant would pay first ([cross-position redundancy](#risks) sizes the rest).
 
 - **Dormant staleness.** Neuron-relative time means a long-dormant neuron wakes with its old model intact.
   Accepted as the right default; worth remembering when reading diagnostics after distribution shifts.
