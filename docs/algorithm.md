@@ -20,14 +20,20 @@ default actions — that is the bootstrap — and once a default action's reward
 trying different actions while the rewards are negative.
 
 **A pattern is a name for a chunk of spacetime.** One pattern-learning algorithm, and the only thing that
-distinguishes the four types is the sign of the time offsets a pattern names:
+distinguishes the four types is the sign of the time offsets a pattern **infers over**. Every window spans
+`[f − R, f + R]` whatever the type; what the type settles is which half is the **context** the pattern is
+routed on and which half is the **inference** it asserts:
 
 - **Spatial event patterns** (offsets all 0) — events that co-occur.
 - **Spatial action patterns** (offsets all 0) — actions that co-execute.
-- **Temporal event patterns** (offsets span the past *and the future*) — a situation and what follows it.
-- **Temporal action patterns** (offsets span the future and the past) — a set of actions and what preceded them.
+- **Temporal event patterns** (context in the past, inference in the future) — a situation and what follows it.
+- **Temporal action patterns** (context in the future, inference in the past) — a set of actions and what
+  preceded them.
 
-The spatial case is not a separate mechanism: it is the case where every offset is zero.
+The spatial case is not a separate mechanism: it is the case where every offset is zero. Events and actions
+are not separate mechanisms either: they are the same window read in opposite directions, which is why an
+action pattern naming what precedes it is not a forecast of its own behavior but the situation it is
+recognized by.
 
 The two hierarchies connect to each other, at every level. Event patterns and action patterns are active in
 the same frames, so an action pattern's context can name event patterns — a high-level situation connected to
@@ -169,6 +175,16 @@ d(O, C)  =  d_backward   (offsets ≤ 0, fully observed at fire time)
 - **`d_backward` is what routing uses.** It is all that exists when the entry has to be chosen.
 - **`d_forward` is the prediction, scored.** The entry's forward members are asserted at fire time; whatever
   they got wrong is counted as it arrives.
+
+**The action mirror.** That decomposition is the event case, written in event terms because that is where the
+asymmetry bites. An action pattern reads the same window the other way: context forward, inference backward.
+So `d_forward` is what routing uses and `d_backward` is the retrodiction, scored. This inverts the timing
+rather than complicating it. An action neuron cannot route at `f`, because its context has not happened yet —
+it routes at `f + R`, and by then the whole window `[f − R, f + R]` has been observed. The action record is
+therefore born complete: routing, recording, serving and the add test happen in one step, on full
+information, `R` frames after the activation they describe. There are no in-flight action records,
+`server_distance` is the true minimum, and the fallback is the true runner-up. Selection and execution stay
+at `f` and run top-down; only learning moves to `f + R`.
 
 **Two different objects.** `d_forward` is what *this entry* got wrong, counted against its own history — exact,
 local, and the only prediction signal a neuron ever learns from. The file's frame part counts what the
@@ -339,7 +355,8 @@ always blank there while still sitting in the [collapse](#the-collapse)'s denomi
 therefore draw on at most `horizon − k` records against a threshold of `horizon / 2`, and is nameable only
 when `k < horizon / 2`. The deepest slot is `k = R`, so a horizon of `2R` or less makes the outer forward
 offsets unnameable no matter how reliably they recur — and silently, since a slot that never had the votes
-looks exactly like a slot with nothing to say.
+looks exactly like a slot with nothing to say. This binds the event side only: action records are complete
+when they are written ([the action mirror](#the-fit)), so nothing there is ever judged against a blank.
 
 ## The one test
 
