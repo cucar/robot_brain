@@ -47,8 +47,8 @@ pattern that pays for itself becomes a symbol one level up. Resolution shrinks g
 machine keeps only the fewest units that still reconstruct the level below.
 
 Every structural decision a neuron makes is [one test](#the-one-test), evaluated exactly against the
-[frames it remembers](#the-history) — and structure is only ever reconsidered in response to an **error**.
-A neuron whose situations are all explained builds nothing and deletes nothing.
+[frames it remembers](#the-history) — and children are only ever added in response to an **error**.
+A neuron whose situations are all explained builds nothing.
 
 ## The substrate
 
@@ -332,6 +332,14 @@ know anything at.
 window `W = 2R` and the contraction window). Everything else that could be called a parameter is a declaration
 of the machine's interface — channels, dimensions, resolutions, the neighbor filter and its depth — or a
 backstop that does not affect the settled result (the election's round cap).
+
+**The two are not independent: `horizon > 2R` is required.** A record enters an entry's served count at fire
+time, but its slot at offset `+k` cannot be counted until `k` frames later, so the `k` most recent records are
+always blank there while still sitting in the [collapse](#the-collapse)'s denominator. The slot at `+k` can
+therefore draw on at most `horizon − k` records against a threshold of `horizon / 2`, and is nameable only
+when `k < horizon / 2`. The deepest slot is `k = R`, so a horizon of `2R` or less makes the outer forward
+offsets unnameable no matter how reliably they recur — and silently, since a slot that never had the votes
+looks exactly like a slot with nothing to say.
 
 ## The one test
 
@@ -782,7 +790,12 @@ Each risk states what would be done about it, so that measurement has a decision
   there is no smoothing anywhere. Horizon too small and entries form on coincidences; too large and they are
   slow to follow a drifting source. Radius too small and no chunk can span what recurs; too large and every
   window is mostly noise at mint time, and the election window grows with it. Measure both early, and measure
-  them jointly — they interact through `|C|`.
+  them jointly — they interact through `|C|`, and through the collapse. Above the `horizon > 2R` floor a
+  forward slot at `+k` still needs `horizon / 2` votes from the `horizon − k` records that could cast one, so
+  deep offsets are held to a supermajority that relaxes only as `horizon / R` grows: at `horizon = 4R` the
+  outermost slot needs two thirds of the records that could speak for it, against one half at offset 0.
+  **Fallback:** count each slot against the records that have matured to it, `n_k`, rather than against the
+  served count — every offset then faces the same strict majority both derivations call for, at any horizon.
 
 - **Cold-start churn.** With a nearly-empty history, early tests are decided by very little evidence.
   Re-centering is the main defense — an entry created on thin evidence is pulled toward its cluster rather
