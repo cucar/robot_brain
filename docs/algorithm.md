@@ -19,21 +19,21 @@ machine learns the rewards of the actions it took for the events that were activ
 default actions — that is the bootstrap — and once a default action's rewards are learned, the machine keeps
 trying different actions while the rewards are negative.
 
-**A pattern is a name for a chunk of spacetime.** One pattern-learning algorithm, and the only thing that
-distinguishes the four types is the sign of the time offsets a pattern **infers over**. Every window spans
-`[f − R, f + R]` whatever the type; what the type settles is which half is the **context** the pattern is
-routed on and which half is the **inference** it asserts:
+**A pattern is a name for a chunk of spacetime.** One pattern-learning algorithm and one kind of pattern: a
+set of `(neuron, offset)` pairs over `[f − R, f + R]`, naming what was present in the frames behind it and
+the frames ahead of it, at once. A pattern is minted at a delay, once its chunk has been observed, so both
+directions are ordinary evidence and neither is privileged. There are four types only in the sense that two
+declarations cross:
 
-- **Spatial event patterns** (offsets all 0) — events that co-occur.
-- **Spatial action patterns** (offsets all 0) — actions that co-execute.
-- **Temporal event patterns** (context in the past, inference in the future) — a situation and what follows it.
-- **Temporal action patterns** (context in the future, inference in the past) — a set of actions and what
-  preceded them.
+- **Offsets** — all zero, or spanning. The spatial case is not a separate mechanism: it is the case where
+  every offset is zero.
+- **Dimension** — event or action. Not a separate mechanism either, for a plainer reason than it looks: the
+  machine observes its own actions. Each action dimension carries what was executed, so an action is a symbol
+  read back the same way a pixel is, and a pattern over it is learned by the same counting.
 
-The spatial case is not a separate mechanism: it is the case where every offset is zero. Events and actions
-are not separate mechanisms either: they are the same window read in opposite directions, which is why an
-action pattern naming what precedes it is not a forecast of its own behavior but the situation it is
-recognized by.
+You could not tell from a dictionary line which of the four you were holding. **The one asymmetry lives
+outside the pattern: events infer actions and never the reverse, and that inference runs on
+[rewards](#rewards).**
 
 The two hierarchies connect to each other, at every level. Event patterns and action patterns are active in
 the same frames, so an action pattern's context can name event patterns — a high-level situation connected to
@@ -115,6 +115,16 @@ would reward suppressed subordinates and calcify primitive-level policy. Value a
 as structure — selection happens over patterns, so reward must land on patterns to be seen. Before any action
 pattern exists the apex is the base action itself, so the same rule holds across all of development.
 
+**Selection is the whole of what separates events from actions.** Structure is symmetric — an action pattern
+is learned exactly as an event pattern is, from the same counting over the same kind of window — but no fit
+ever says which action to take. It says only what an action set looks like. Choosing comes from the
+connection an active event pattern holds to the action patterns that have followed it: each connection
+carries the reward that arrived, averaged over its exposures, so it is a running estimate of what that action
+is worth in that situation. The machine executes the best of them. **Events infer actions this way and
+actions never infer events**, and that direction is the only asymmetry between the two hierarchies. The
+bootstrap is a declared default action: a situation with no reward history has nothing to choose on, so the
+default executes and its connection begins accumulating from the first frame.
+
 How a reward distributes over *time* is a separable policy ([global-rewards.md](global-rewards.md)): the
 current policy credits the apex actions of the immediately preceding frame; the planned generalization
 distributes each reward across the apex actions of the preceding span, weighted by linear decay — linear
@@ -176,15 +186,13 @@ d(O, C)  =  d_backward   (offsets ≤ 0, fully observed at fire time)
 - **`d_forward` is the prediction, scored.** The entry's forward members are asserted at fire time; whatever
   they got wrong is counted as it arrives.
 
-**The action mirror.** That decomposition is the event case, written in event terms because that is where the
-asymmetry bites. An action pattern reads the same window the other way: context forward, inference backward.
-So `d_forward` is what routing uses and `d_backward` is the retrodiction, scored. This inverts the timing
-rather than complicating it. An action neuron cannot route at `f`, because its context has not happened yet —
-it routes at `f + R`, and by then the whole window `[f − R, f + R]` has been observed. The action record is
-therefore born complete: routing, recording, serving and the add test happen in one step, on full
-information, `R` frames after the activation they describe. There are no in-flight action records,
-`server_distance` is the true minimum, and the fallback is the true runner-up. Selection and execution stay
-at `f` and run top-down; only learning moves to `f + R`.
+**The split is about availability, not meaning.** A definition names both directions symmetrically and a
+pattern is minted after its chunk has been seen, so nothing about backward members makes them more defining
+than forward ones. Routing is what cannot wait: an entry has to be chosen while the neuron is firing, and at
+that moment only the past exists. `d_backward` carries routing for no deeper reason than that it is the half
+that has happened. This binds every neuron that routes at fire time — action neurons no less than event
+ones, since an action neuron fires when its action executes and waits out its forward half exactly the same
+way.
 
 **Two different objects.** `d_forward` is what *this entry* got wrong, counted against its own history — exact,
 local, and the only prediction signal a neuron ever learns from. The file's frame part counts what the
@@ -355,8 +363,8 @@ always blank there while still sitting in the [collapse](#the-collapse)'s denomi
 therefore draw on at most `horizon − k` records against a threshold of `horizon / 2`, and is nameable only
 when `k < horizon / 2`. The deepest slot is `k = R`, so a horizon of `2R` or less makes the outer forward
 offsets unnameable no matter how reliably they recur — and silently, since a slot that never had the votes
-looks exactly like a slot with nothing to say. This binds the event side only: action records are complete
-when they are written ([the action mirror](#the-fit)), so nothing there is ever judged against a blank.
+looks exactly like a slot with nothing to say. This binds the temporal levels only: spatial runs at `R = 0`,
+so a spatial record is complete when it is written and nothing there is ever judged against a blank.
 
 ## The one test
 
@@ -744,8 +752,27 @@ hard; a window full of surprise barely collapses at all, which is the honest thi
 
 ## The order of a frame
 
-The spatial levels resolve first, and the apex units of the top spatial level are the inputs to temporal
-processing. The temporal levels then resolve the same way.
+**The spatial stack resolves first, and it is the `R = 0` case of everything above.** Spatial means every
+offset is zero, so a spatial window is a single frame. There is no forward half, nothing arrives late,
+records are complete when they are written, `server_distance` is the true minimum and the fallback is the
+true runner-up. The whole late-arrival apparatus is vacuous down here — no completion step, no `d_forward`,
+and the `horizon > 2R` floor reduces to `horizon > 0`. Spatial needs no radius of its own, which is why the
+machine has one and not two.
+
+**The stack grows until it stalls, and it does so per frame.** Base neurons build their neighborhoods, mint
+children where it is economical, and recognize them; contraction then settles which of those children
+propagate, and the survivors are the active neurons of level 1 — the fewest that cover the active base
+neurons. Level 1 forms its own neighborhoods and the same thing happens again. When a level's active neurons
+fire no children at all, nothing propagates and there is no level above it on this frame. Nothing declares
+the depth and nothing caps it: it is however far this frame's data paid to go, so a rich frame builds deeper
+than a sparse one.
+
+**The spatial apex is a frontier, not a level.** It is every active neuron that did not fire a child — so a
+base neuron nothing found worth chunking stands in it beside a level-4 pattern. This is the same frontier the
+file's frame part writes and the same one [rewards](#rewards) credit, which is why the apex rule needs no
+special case before any pattern exists. Temporal processing reads that frontier and nothing else: everything
+underneath it is recovered by expanding it, so time sees the coarsest description the spatial stack could pay
+for. The temporal levels then resolve the same way, at the declared `R`.
 
 **Events and actions run in parallel within a level — and get connected there.** They are active in the same
 frames, so it is during that shared per-level processing that an event neuron builds its connections to the
@@ -782,7 +809,7 @@ flowchart TD
     M -->|"request (channel, level, definition)"| P["The machine creates the symbol<br/>and returns its identity"]
     P --> Q["Register, then settle: reassign wins,<br/>RECOMPUTE fallbacks (server was not the minimum),<br/>re-center every entry whose set changed,<br/>delete anything that stopped paying — until quiet.<br/>The newborn serves NEXT recurrence"]
     L -->|no| N["Nothing to reconsider"]
-    Q --> O["Process the next level up<br/>(spatial levels first; their apexes<br/>are the inputs to the temporal levels)"]
+    Q --> O["Process the next level up<br/>(spatial first, at R = 0, until a level fires no children;<br/>the frontier of neurons that fired none<br/>is the input to the temporal levels)"]
     N --> O
     X --> O
     O --> Y["After the LAST temporal level:<br/>the promoted units' forward members ARE the assertion —<br/>one owner per slot, settled by the same election.<br/>Remembered, scored as the frames arrive"]
