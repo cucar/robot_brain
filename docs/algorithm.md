@@ -712,9 +712,8 @@ a few units short of optimal costs a few symbols on frames that are gone next wi
 
 **Claims persist.** A promoted unit has spoken for the frames its definition names, including frames ahead.
 Those claims stand until the span completes — the same commitment rule already written for high-level actions,
-which hold their channel and suppress their constituents until they expand out. The earlier statement that
-"nothing contraction decides persists" was true only of a purely spatial election and does not survive
-offsets. So the election settles the future along with the present: the unit holding a slot is the one whose
+which hold their channel and suppress their constituents until they expand out. 
+So the election settles the future along with the present: the unit holding a slot is the one whose
 prediction counts there, and two promoted units can never contradict each other, because only one of them
 holds it.
 
@@ -725,10 +724,26 @@ it dies. This makes contraction a deterministic left-to-right sweep over time, c
 irrevocable at fire time. **It is a deliberate bias toward earlier-firing units, not a neutral optimization** —
 named here so it is not mistaken for an artifact.
 
+**When a frame can be written.** A unit firing at `h` names `[h − R, h + R]`, so a slot at frame `g` can
+still be claimed by a unit that fires as late as `g + R`. Until that frame has been processed, nothing about
+`g` is settled.
+
+That settles one level. Which level-1 unit covers a base neuron at `g` is known once `g + R` has passed — but
+the file writes the apex frontier, and whether that level-1 unit is itself covered settles `R` frames after
+*it* fired. The question walks upward: **the frame part is written at a lag of `R` per level, so `D · R` for a
+frame whose hierarchy reached depth `D`.** Each level needs only its own `2R` election window, so it is the
+delay that stacks, not the memory. A frame is written once, when its last possible claimant at every level
+has fired, and is never revised.
+
+Depth is data-dependent and uncapped, so the lag is too. That cost is real and it is confined to the file,
+which is an accounting object rather than a channel anyone waits on. **Selection never waits.** Actions are
+asserted forward and execute at the end of the frame that chose them, so the machine acts at full speed while
+its own description of what it just did is still settling behind it.
+
 **Best-effort promotion.** A unit is promoted on the strength of its backward match and asserts its forward
 members on faith. When the future disagrees, corrections are appended and price the completed claim; they do
-not revise the election that made it. There is no retraction and no delayed emission: the file is exact either
-way, because a wrong assertion is simply a longer file.
+not revise the election that made it. There is no retraction, and no delay beyond the settlement lag the frame
+part is already written at: the file is exact either way, because a wrong assertion is simply a longer file.
 
 **The election, in detail.** Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled
 by a cheap election:
@@ -820,6 +835,24 @@ A's entry asserts   (C, +2)                        an L1 claim, expand it:
 
 > **For each `(channel, frame)` slot, the highest-level active unit whose expansion names it owns it. Lower
 > units fill only the slots left silent above them. Within a level, first claim wins.**
+
+**The assertion only reaches forward.** Expanding a unit reaches in both directions, so a claim at `+2` whose
+definition reaches `−3` lands at `−1`. Claims landing at or before the asserting neuron's own frame are
+discarded, and nothing is lost by it: the decoder builds each frame from what was asserted *before* it, so a
+claim made later cannot arrive in time to be information, whatever it says. This is the split the fit already
+makes, applied at every level of the expansion rather than only at the top — backward members are recognition
+context, forward members are the assertion.
+
+**How this composes with contraction.** Contraction settles slots too, and the two divide the work by scope
+rather than by direction. A bid is *priced* on its backward half but a promoted unit *claims* its whole span,
+frames ahead included, so contested forward slots **within a level** are already settled by firing order
+before any expansion happens — that is first claim wins. Precedence resolves the case contraction
+structurally cannot see: a level-3 claim and a level-0 claim landing on the same base slot once both are
+expanded. Within a level, firing order; across levels, promotion.
+
+The backward half never enters this at all. Coverage settles which unit *represents* an already-observed
+neuron in the frame part, and the decoder recovers the covering unit and its constituents together by
+expanding it. That is a different question from what is claimed about a frame nobody has seen.
 
 **Why precedence and not a vote.** The election has already judged this: a unit was promoted over its
 constituents because it covered more pairs at less cost, which *is* the finding that it describes this region
