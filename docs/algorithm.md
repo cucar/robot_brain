@@ -64,6 +64,12 @@ dimensions and action dimensions; each dimension declares its resolution (its bu
 a dimension–bucket pair, so this declaration *is* the alphabet definition: the event dimensions spell out the
 event alphabet, the action dimensions the action alphabet.
 
+**Channels are declared and never created.** No mechanism anywhere mints one: a pattern inherits its parent's
+channel, so every neuron the machine ever builds lands in a channel that was there at definition time. What
+grows is the population inside a channel — patterns are added level by level, without bound. So the base
+alphabet is fixed while the machine's own alphabet above it is not, and the channel set stays a fixed,
+enumerable index over the whole run, which is what lets `(channel, offset)` name a slot at any level.
+
 Every frame, each event dimension quantizes what was observed — if anything was — and each action dimension
 carries the action executed at the end of the previous frame — if one was. And:
 
