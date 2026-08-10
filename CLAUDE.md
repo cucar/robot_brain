@@ -8,7 +8,11 @@ This is absolute. It is not a default to be weighed against anything else.
   work, not because a change looks complete. Leave edits uncommitted in the
   working tree and tell me what you changed. I decide when something is
   committed.
-- **Never run `git push`.**
+- **Never run `git push`** on your own initiative.
+- **Approval to commit is approval to push.** When I approve a commit, commit
+  and push it in the same step — do not stop afterwards to ask about pushing,
+  and do not leave the branch sitting ahead of the remote. The only exception is
+  when I say not to push.
 - **Never create a branch** — no `git branch`, no `git checkout -b`, no
   `git switch -c`. Work on the branch that is already checked out. If you think
   the work belongs somewhere else, say so and stop.
