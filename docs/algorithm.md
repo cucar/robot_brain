@@ -105,6 +105,12 @@ Each channel has at most one event dimension and one action dimension; processin
 inherit their parent's channel and dimension. Thus, within an event or action window, `(channel, offset)` identifies
 one mutually exclusive slot.
 
+**The exclusion is per level.** At most one neuron per channel is active at a given level in a given frame —
+declared for the base, and preserved upward by construction: one active neuron per channel per level offers at
+most one bid, so [contraction](#contraction-building-the-level-above) promotes at most one unit into that
+channel one level up. This is what keeps a slot resolvable at every level, and it is why window size does not
+square as the hierarchy deepens.
+
 ### Rewards
 
 A reward is an input, not a symbol: alongside the observations, a frame may carry reward for actions already
@@ -779,10 +785,10 @@ unrelated arguments, and no new parameter enters.
 neighbor's winning bid still records its window, learns, and runs its tests exactly as if the election had
 gone the other way.
 
-**What this builds.** Each surviving bid contributes one unit to the level above. Adjacency there is the
-substrate's rule for that level. A pattern can never name past its own window, and receptive fields grow by
-composition. The reduction is set by the data, not the topology: a window the entries describe well collapses
-hard; a window full of surprise barely collapses at all, which is the honest thing for it to do.
+**What this builds.** Each surviving bid contributes one unit to the level above. A pattern can never name
+past its own window, and receptive fields grow by composition. The reduction is set by the data, not the
+topology: a window the entries describe well collapses hard; a window full of surprise barely collapses at all,
+which is the honest thing for it to do.
 
 ## The order of a frame
 
