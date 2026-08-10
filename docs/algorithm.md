@@ -798,10 +798,51 @@ frames, so it is during that shared per-level processing that an event neuron bu
 action neurons, and updates them as rewards arrive. The parallelism is per level, and so is the coupling: the
 association between a situation and the response to it is formed at the level where both exist.
 
-When the last temporal level has settled, the forward members of the promoted units — read off their
-definitions, one owner per slot — are the machine's prediction for the coming `R` frames. It is remembered,
-and as each frame arrives the part that came due is scored: what it named correctly is free, what it got wrong
-is written as corrections.
+### The assertion
+
+When the last temporal level has settled, every active neuron at every level has served an entry, and every
+served entry has forward members. **All of them assert** — being covered by a neighbor's unit silences a
+neuron in the frame part, not in its own model. So the machine holds a stack of claims at different levels
+about the same coming frames, and it has to resolve them into one asserted set, because the file scores
+corrections against an asserted set and "what the machine got wrong" is undefined until one claim owns each
+slot.
+
+**Expand, then let precedence decide.** A claim at level `k` names level-`k` units, which are not yet
+anything the file can be wrong about. Expanding a unit recovers the pairs its definition names one level
+down, at that unit's offset plus theirs; repeat until everything is a base symbol. Every claim then has the
+same shape — `(channel, frame, symbol)` — and slots can be compared:
+
+```
+a's entry asserts   (b, +1)                        → b's channel at f+1
+A's entry asserts   (C, +2)                        an L1 claim, expand it:
+  C names {(p, 0), (q, +1)}                        → p's channel at f+2, q's channel at f+3
+```
+
+> **For each `(channel, frame)` slot, the highest-level active unit whose expansion names it owns it. Lower
+> units fill only the slots left silent above them. Within a level, first claim wins.**
+
+**Why precedence and not a vote.** The election has already judged this: a unit was promoted over its
+constituents because it covered more pairs at less cost, which *is* the finding that it describes this region
+better. Re-deciding the same question at assertion time, by a second and differently-shaped comparison, would
+be answering it twice by two rules. Precedence also keeps the stance promotion already takes — a unit asserts
+its forward members on faith, and when the future disagrees the file pays corrections and the entry's benefit
+bleeds until it dies. Structure self-corrects; the assertion does not second-guess it. Nothing here consults
+counts, so nothing here needs an estimate, and the decoder reproduces the whole procedure exactly because it
+knows every active unit at every level once it has expanded the frame it just decoded.
+
+**Events and actions, one procedure.** The rule is identical on both sides and runs on both every frame.
+What differs is only who consumes the result: the asserted **event** set is what the machine expects to
+observe, scored as the frames arrive; the asserted **action** set is what it has committed to execute, and
+expanding it *is* the top-down unrolling — a high action pattern becomes its constituent actions at the time
+distances its definition recorded, down to base actions that execute. Execution is not a second mechanism. It
+is this expansion, read as a program instead of as a forecast.
+
+**The horizon compounds.** A unit claimed at `+2` may name something at `+1` of its own, so expansion places
+a base-level claim at `+3` — past the radius. Reach grows with depth the way receptive fields do. `R` bounds
+what a single pattern may **name**; it does not bound how far the machine can see.
+
+As each frame arrives, the part of the assertion that came due is scored: what it named correctly is free,
+what it got wrong is written as corrections.
 
 ## Estimation
 
@@ -831,7 +872,7 @@ flowchart TD
     Q --> O["Process the next level up<br/>(spatial first, at R = 0, until a level fires no children;<br/>the frontier of neurons that fired none<br/>is the input to the temporal levels)"]
     N --> O
     X --> O
-    O --> Y["After the LAST temporal level:<br/>the promoted units' forward members ARE the assertion —<br/>one owner per slot, settled by the same election.<br/>Remembered, scored as the frames arrive"]
+    O --> Y["After the LAST temporal level: EVERY active neuron<br/>at every level asserts. Expand all claims to base symbols,<br/>then per slot the highest-level unit that names it owns it;<br/>lower units fill the gaps. Events → scored as frames arrive;<br/>actions → the same expansion, executed"]
 ```
 
 ## Implementation
@@ -891,13 +932,19 @@ Each risk states what would be done about it, so that measurement has a decision
   **Diagnostic:** count distinct child definitions across positions. That number is what a shared-dictionary
   variant would buy, and it should be known before anyone asks why filters are not shared.
 
-- **Contested forward slots.** First claim wins settles slot ownership by firing order, and that order was
-  chosen for the backward half, where it follows from routing being irrevocable at fire time. Nothing argues
-  the earlier-firing unit is the *better predictor* of a contested future slot. **Diagnostic:** count contested
-  forward slots per frame and how often the holder was right against the unit it displaced. **Fallback:** break
-  forward contests on the holders' slot majorities instead of firing order — the counts are already there and
-  the decoder can recount them, so it costs the file nothing; it costs only the determinism of a single sweep
-  order.
+- **Contested forward slots, within a level and across levels.** Two rules settle who owns a contested future
+  slot, and neither argues from prediction. Within a level, first claim wins settles it by firing order, an
+  order chosen for the backward half where it follows from routing being irrevocable at fire time. Across
+  levels, [precedence](#the-assertion) settles it by promotion, and promotion is a finding about *description*
+  — nothing establishes that the better describer of a region is the better predictor of one slot inside it.
+  Both rules are cheap, deterministic and reuse decisions already made; both discard a claim that might have
+  been right. **Diagnostic:** count contested forward slots per frame, split by within-level and cross-level,
+  and how often the holder was right against the unit it displaced. **Fallback, within a level only:** break
+  contests on the holders' slot majorities instead of firing order — the counts are already there and the
+  decoder can recount them, so it costs the file nothing, and it costs only the determinism of a single sweep
+  order. That fallback does **not** extend across levels: comparing a level-3 claim to a level-0 one would
+  mean composing shares through the expansion, which is a probability estimate, and this design prices in
+  whole numbers.
 
 - **Election slack.** The election is a heuristic for prize-collecting set cover with unmeasured slack, and
   apex-units-per-frame is the headline metric — so slack and real structure are currently conflated.
