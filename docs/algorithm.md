@@ -115,6 +115,16 @@ would reward suppressed subordinates and calcify primitive-level policy. Value a
 as structure — selection happens over patterns, so reward must land on patterns to be seen. Before any action
 pattern exists the apex is the base action itself, so the same rule holds across all of development.
 
+**Two objectives, meeting at one place.** Everything structural in this design is priced in file length: the
+one test builds and deletes, and nothing else does. Reward prices nothing structural, and cannot. A policy is
+not a description — the decoder replays the actions the file records rather than choosing any, so no
+arrangement of connections could ever shorten the file, and compression has nothing to say about a preference
+between two actions that describe equally well. So the machine runs **two** objectives: compression, which
+decides what structure exists, and reward, which decides which of that structure is executed. They meet at
+exactly one place, the event→action connection, and nowhere else. Those connections are not in the file, are
+not priced by the one test, and are not meant to be. Read "everything derives from file length" as a claim
+about structure; selection is the other half of the machine and it answers to reward.
+
 **Selection is the whole of what separates events from actions.** Structure is symmetric — an action pattern
 is learned exactly as an event pattern is, from the same counting over the same kind of window — but no fit
 ever says which action to take. It says only what an action set looks like. Choosing comes from the
@@ -124,6 +134,15 @@ is worth in that situation. The machine executes the best of them. **Events infe
 actions never infer events**, and that direction is the only asymmetry between the two hierarchies. The
 bootstrap is a declared default action: a situation with no reward history has nothing to choose on, so the
 default executes and its connection begins accumulating from the first frame.
+
+**Exploration is a policy, and the default one is deterministic.** Always executing the best-known action is
+the old explore-versus-exploit problem: an action that merely scores acceptably can hold a situation forever
+while a better one is never sampled. The default here resolves it without randomness. **The action alphabet
+is declared in order**, and while a situation's reward is negative the machine walks that order, trying the
+next action each time the situation recurs. Deterministic, so a run reproduces and a regression is a real
+regression rather than a seed. Other strategies drop into the same slot — Thompson sampling over the
+connections is the obvious probabilistic one — and swapping them changes no structure, because exploration
+touches selection only.
 
 How a reward distributes over *time* is a separable policy ([global-rewards.md](global-rewards.md)): the
 current policy credits the apex actions of the immediately preceding frame; the planned generalization
