@@ -20,7 +20,7 @@ default actions — that is the bootstrap — and once a default action's reward
 trying different actions while the rewards are negative.
 
 **A pattern is a name for a chunk of spacetime.** One pattern-learning algorithm and one kind of pattern: a
-set of `(neuron, offset)` pairs over `[f − R, f + R]`, naming what was present in the frames behind it and
+set of `(neuron, offset)` neighbors over `[f − R, f + R]`, naming what was present in the frames behind it and
 the frames ahead of it, at once. A pattern is minted at a delay, once its chunk has been observed, so both
 directions are ordinary evidence and neither is privileged. There are four types only in the sense that two
 declarations cross:
@@ -74,8 +74,16 @@ Every frame, each event dimension quantizes what was observed — if anything wa
 carries the action executed at the end of the previous frame — if one was. And:
 
 > **A neuron fires only when something happens: an event neuron on an observation, an action neuron on an
-> execution. At most one neuron is active per dimension per frame; a dimension with nothing to report is
-> silent.**
+> execution. At most one neuron fires per dimension per level in a frame; a dimension with nothing to report
+> is silent.**
+
+**A firing stays open for `R` frames.** A neuron *fires* at frame `f`, and that activation stays open through
+`f + R` — exactly how long its window takes to fill. While open it keeps working: arriving neighbors fold into its
+server's counts, the server re-centers, distances and margins update. It does not fire again while open, and
+it does not re-enter other neurons' windows — membership is by firing frame, so one firing is one neighbor at one
+offset and nothing more. Several firings of the same neuron can be open at once, each with its own window,
+record and server. **The exclusion is about firing, not about being open**, which is why a channel can carry
+several firings in one frame at different levels, all of them inhibited except the apex.
 
 There is no declared rest value: a dimension where nothing is happening simply supplies no symbol. Whether a
 0 pixel is a black event or nothing-to-see is the encoding's choice, made where the input is produced — the
@@ -161,24 +169,24 @@ current policy credits the apex actions of the immediately preceding frame; the 
 distributes each reward across the apex actions of the preceding span, weighted by linear decay — linear
 rather than exponential so distant antecedents keep nonzero credit under long-latency reward.
 
-## The unit: a neuron and its window
+## The neighborhood
 
-A neuron that fires at frame `f` observes a **window**: the active neurons its level admits, across the frames
-`[f − R, f + R]`, each tagged with its offset from `f`. `R` is the **radius** — the reach of a definition in
+A neuron that fires at frame `f` observes a **neighborhood**: the active neurons its level admits, across the frames
+`[f − R, f + R]`, each tagged with its offset from `f`. `R` is the **radius** — the reach of a neighborhood in
 either direction. The buffer that holds the window is `W = 2R` frames wide.
 
-The observation is therefore a set of `(neuron, offset)` pairs:
+The observation is therefore a set of `(neuron, offset)` neighbors:
 
 ```
 O = { (p, −4), (a, −3), (r, −2), (i, −1), (␣, +1) }
 ```
 
-for a neuron `s` in a stream reading `p a r i s ␣`. The pairs at offset 0 are the neuron's co-occurring
-neighbors — its spatial neighborhood. The pairs at negative offsets are what led here. The pairs at positive
+for a neuron `s` in a stream reading `p a r i s ␣`. The neighbors at offset 0 are the neuron's co-occurring
+neighbors — the spatial part of it. The neighbors at negative offsets are what led here. The neighbors at positive
 offsets are what followed. **All three are the same kind of thing**, and the sections below never distinguish
 them.
 
-Which neurons may appear in a window at all is the substrate's rule for that level: the declared neighbor
+Which neurons may appear in a neighborhood at all is the substrate's rule for that level: the declared neighbor
 channels while a filter is declared, every active neuron above that. **Channels gate eligibility, nothing
 else.** Two children of the same neuron may name overlapping but different channel sets — `{A, B, C}` and
 `{B, C, D}` are just two sets. The [fit](#the-fit) needs no channel structure.
@@ -193,12 +201,12 @@ respect it: **nothing is ever priced before it has been observed.**
 
 ## The fit
 
-An entry's definition names a set of `(neuron, offset)` pairs; the neuron observed a set. The distance between
+An entry's neighborhood names a set of `(neuron, offset)` neighbors; the neuron observed a set. The distance between
 them is the symmetric difference:
 
 ```
-d(O, C) = |O △ C|   =   pairs present that C does not name
-                      + pairs C names that are not present
+d(O, C) = |O △ C|   =   neighbors present that C does not name
+                      + neighbors C names that are not present
 ```
 
 This is not a separate notion invented for matching — it is literally the corrections that would follow this
@@ -217,7 +225,13 @@ d(O, C)  =  d_backward   (offsets ≤ 0, fully observed at fire time)
 - **`d_forward` is the prediction, scored.** The entry's forward members are asserted at fire time; whatever
   they got wrong is counted as it arrives.
 
-**The split is about availability, not meaning.** A definition names both directions symmetrically and a
+**Two comparisons, kept apart.** Which entry *serves* a record is decided on `d_backward`, because that is all
+routing ever sees. What a record *costs* is its distance over every offset observed so far — the backward half
+at fire time, growing as the forward frames arrive, final only when the record completes. Everywhere below,
+"wins", "closest" and "runner-up" mean the first; "distance", "cost" and "benefit" mean the second. At `R = 0`
+the two coincide, which is why the spatial case never had to tell them apart.
+
+**The split is about availability, not meaning.** A neighborhood names both directions symmetrically and a
 pattern is minted after its chunk has been seen, so nothing about backward members makes them more defining
 than forward ones. Routing is what cannot wait: an entry has to be chosen while the neuron is firing, and at
 that moment only the past exists. `d_backward` carries routing for no deeper reason than that it is the half
@@ -248,9 +262,9 @@ sum. Open too few and customers are served from far away; open too many and you 
 | A customer, i.e. one unit of demand | One record in the [history](#the-history) |
 | A facility | An entry — the normal or a child |
 | Opening a facility | Creating a child, and the pattern neuron it mints one level up |
-| Opening cost | `1 + |C|` — the neuron created, plus the definition stored |
+| Opening cost | `1 + |C|` — the neuron created, plus the neighborhood stored |
 | Serving a customer from a facility | Describing that window through that entry |
-| Service cost, i.e. distance | The [fit](#the-fit) — the pairs the entry got wrong |
+| Service cost, i.e. distance | The [fit](#the-fit) — the neighbors the entry got wrong |
 | The assignment of customers to facilities | The routing — closest entry serves |
 
 The opening cost is not a tax bolted on — if opening were free you would put a warehouse on top of every
@@ -272,16 +286,18 @@ merge is what swap does to redundant entries.
 
 ## Entries: one kind of thing
 
-**Every entry — the normal and every child — is the same object:** counts over the records it serves, and a
-definition that is the collapse of those counts. The normal is not a special mechanism. It is the entry with
-no dictionary line.
+**Every entry — the normal and every child — is the same object:** counts over the records it serves, a
+**neighborhood** that is the collapse of those counts, and a child to activate. The neighborhood is the whole
+of what an entry knows — the neighbors around the neuron, behind it and ahead of it, with no separate notion of
+context or of what it infers. The normal is not a special mechanism: it is the entry whose child is null, so
+it has no dictionary line to pay for. One structure serves the whole routing table.
 
 ### The counts
 
 Each entry keeps, over exactly the records it currently serves within the history:
 
 ```
-count(neuron, offset)  =  how often that pair was present
+count(neuron, offset)  =  how often that neighbor was present
 ```
 
 Every event that changes *which records an entry serves* moves counts, in both directions: the entry serves a
@@ -297,7 +313,7 @@ child; every record is served by exactly one entry, and no entry learns from ano
 Routing needs a set, not a distribution. The counts collapse to one by a **per-slot vote**:
 
 > **For each `(channel, offset)` slot, let `n` be the entry's served-record count and `count(p)` the number
-> of those records containing neuron `p` in that slot. The definition includes `p` exactly when
+> of those records containing neuron `p` in that slot. The neighborhood includes `p` exactly when
 > `count(p) > n / 2`; otherwise the slot is omitted.**
 
 A slot cannot hold two neurons — a channel carries at most one active neuron of the processed type per frame —
@@ -325,23 +341,32 @@ The consequences are the point of the design:
 
 - **Definitions track their demand.** An entry created from thin evidence is pulled toward its cluster as
   exposure accumulates. There is no permanent bet on one observation.
-- **Coincidence is voted out.** A pair that was present once and never again loses its strict majority to
-  silence, and drops out of the definition.
+- **Coincidence is voted out.** A neighbor that was present once and never again loses its strict majority to
+  silence, and drops out of the neighborhood.
 - **Reach emerges.** Offsets where nothing recurs contribute no stable winner and fall away; offsets where
   something does are kept. How far a pattern reaches into the past and future is discovered, not declared.
   The radius `R` bounds it; it does not set it.
 
-A moved definition changes distances, so records may change hands — [settlement](#settlement) handles this
+A moved neighborhood changes distances, so records may change hands — [settlement](#settlement) handles this
 exactly.
 
-**Cold start is silence.** An entry with no records yet has no counts and no definition. That is the initial
+**Fallbacks move with it.** A record that names the moved entry as its *fallback* is not served by it and does
+not change hands, but its `fallback_distance` was measured against a neighborhood that no longer exists — and
+a stale fallback quietly corrupts its **server's** margin, so the delete test would fire on a gap that is no
+longer there. Re-centering therefore updates both sides: the records the entry serves, and the records that
+fall back to it, whose servers' margins adjust by the change. This cannot cascade on its own, because a
+fallback serves nothing and no record moves; it only pushes margins into the settlement loop that already
+handles them. The cost is that an entry has to know which records name it as fallback — a reverse index, which
+is the one piece of bookkeeping the routing table keeps purely for the delete test.
+
+**Cold start is silence.** An entry with no records yet has no counts and no neighborhood. That is the initial
 case, not an error.
 
 ## The history
 
 A neuron remembers a fixed number of windows it was active for — its **horizon**, measured in its own
 activations, not in absolute time. **There are no frame numbers anywhere in the history and nothing needs
-them**: benefit is a sum over records, cost is a count of pairs, and the only role time ever played was
+them**: benefit is a sum over records, cost is a count of neighbors, and the only role time ever played was
 eviction order, which a FIFO provides by construction. This makes the one test uniform across neurons under
 sparse activation: a busy neuron and a rarely-active neuron judge over the same amount of *evidence*, not the
 same amount of someone else's clock.
@@ -403,7 +428,7 @@ There is exactly one structural rule in the design:
 
 > **An entry earns its place when the errors it removes from the history exceed what it costs to store.**
 
-Both halves are counts of pairs, and both are read off the history:
+Both halves are counts of neighbors, and both are read off the history:
 
 ```
 cost(e)     =  1 + |C(e)|
@@ -445,11 +470,11 @@ it has **zero side effects on neuron state**.
 
 For an active neuron at frame `f` with observed backward window `O⁻`:
 
-1. **Age.** If the history ring is full, evict the oldest record. Its histogram count decrements; its pairs
+1. **Age.** If the history ring is full, evict the oldest record. Its histogram count decrements; its neighbors
    leave its server's counts; that server re-centers; its benefit drops — and an entry whose benefit falls
    strictly below its cost is deleted now ([deletion](#deletion)).
 
-2. **Complete.** For each in-flight record whose forward frames have now arrived, fold the new pairs into the
+2. **Complete.** For each in-flight record whose forward frames have now arrived, fold the new neighbors into the
    server's counts, re-center, and update distances and margins. This is where prediction is scored.
 
 3. **Route and record** — one operation. The closest entry by `d_backward` serves — the normal and every child
@@ -458,18 +483,18 @@ For an active neuron at frame `f` with observed backward window `O⁻`:
    `O⁻` into the server's counts and re-center.
 
 4. **Serve.** The serving entry **activates**: it fires, and the neuron hands the machine its **recognition
-   bid** — an offer to represent its chunk at the level above, spanning the frames its definition names. The
+   bid** — an offer to represent its chunk at the level above, spanning the frames its neighborhood names. The
    bid is the pipeline's only output to the election, and the election sends nothing back. **Creation never
    bids.**
 
 5. **Assert.** The served entry's forward members are the neuron's prediction for the coming `R` frames. They
-   are not computed — they are read off the definition. The unmatched part, when it arrives, is the surprise,
+   are not computed — they are read off the neighborhood. The unmatched part, when it arrives, is the surprise,
    and it is scored at step 2 of a later frame. What the *machine* asserts is a separate question, settled once
    every level has resolved ([the assertion](#the-order-of-a-frame)); a neuron scores its own
    forward members against its own history either way.
 
 6. **Add test** — on **any nonzero served error**, whether the server was the normal or a child. Under
-   trajectory definitions a child is not an admission of ignorance — it is the sharper model, so a child that
+   trajectory neighborhoods a child is not an admission of ignorance — it is the sharper model, so a child that
    describes badly is exactly the error worth acting on. At most one add per activation. A passing test does
    not create the pattern — the neuron **requests** one. A neuron names its own children but cannot bring
    them into being: a pattern is a symbol at the level above, and that level's alphabet belongs to the
@@ -484,6 +509,41 @@ Meanwhile — before, after, or alongside; the pipeline cannot tell — contract
 window's bids and promotes the survivors. Because no write ever depends on the election, there is no pending
 state, no retraction, and no covered-or-not branch.
 
+### One activation, across its frames
+
+The steps above are one frame. An activation lives for `R` of them, and what happens to it in between is the
+whole of how a neuron learns. Take `R = 2`, a neuron with the normal `N` and a child `K`:
+
+```
+K names  {(a,−2), (b,−1), (c,+1), (d,+2)}
+N names  {(b,−1)}
+```
+
+**Frame 10 — it fires.** `a` was present at −2 and `b` at −1, so `K` matches the observed half exactly at
+`d_backward = 0` while `N` misses `a` at `d_backward = 1`. `K` serves. The record is written with `K` as
+server and `N` as fallback, and `K` asserts `c` at frame 11 and `d` at frame 12 — on faith, because neither
+has happened. Served error is 0, so nothing is reconsidered.
+
+**Frame 11 — `c` does not come; `e` fires in that channel instead.** Four things happen at once, and they are
+step 2:
+
+- **The distance grows.** `K` named `c` and got `e`: two neighbors wrong. `N` named nothing there and got `e`:
+  one. Neither number was wrong before; both were simply incomplete.
+- **The counts move.** `(e, +1)` folds into `K`'s counts.
+- **`K` re-centers, so its own future changes.** If most of `K`'s records carry `e` at that offset the
+  neighborhood flips `c → e`; if they are split, the slot loses its majority to silence and `K` stops naming
+  that offset at all. This is [reach emerging](#re-centering) in motion — an entry's forward half is whatever
+  currently recurs, never what it was minted with.
+- **The margin updates**, by the change in `fallback_distance − server_distance` for that record. It can go
+  negative, and if the margin falls strictly below `1 + |K|`, `K` is deleted right there.
+
+**Frame 12.** The `+2` offset lands, the same four things happen, and the record is complete. Its distance is
+final and never moves again.
+
+**What does not happen is retraction.** `K` claimed `c` at frame 11 and the file paid for being wrong. Moving
+`K`'s neighborhood afterwards changes what it asserts at the *next* recurrence; it does not reach back. Every
+number in the design grows forward into its final value, and none is ever revised.
+
 ## Creating a child
 
 **The trigger is an error, nothing else.** No background process proposes candidates and no accumulator waits
@@ -491,7 +551,7 @@ to fire. The serving entry described the window and got some of it wrong — tha
 structure is considered. A window the entries already describe costs nothing to serve no matter how often it
 recurs; surprise is the size of the bill, not a gate on it.
 
-**Creation happens after recognition, never inside it.** A new child is minted after the test and fires for
+**Creation happens after recognition.** A new child is minted after the test and fires for
 the first time on the next activation its window recurs. It does not serve, cover, or propagate on its birth
 frame — that frame was already encoded, corrections and all. **Structure never pays off on the evidence that
 created it, only on recurrence.** Nothing compresses at first exposure. It also keeps the election
@@ -499,28 +559,40 @@ single-purpose — recognition bids only — with no birth-frame special cases.
 
 **The candidate is a center, not a sample.** Two passes over the histogram, both cheap, both only on error:
 
-1. **Find the demand.** Using the triggering observation `O` as a probe, collect the records it would win —
-   those where `d(record, O) < record.server_distance`.
+1. **Find the demand.** Using the triggering observation `O` as a probe, collect the records routing would
+   hand it — those where `d_backward(record, O) < d_backward(record, record.server)`.
 2. **Collapse.** Take the per-slot vote over exactly those records. The result is `C`.
 
 `C` is the L1 center of the demand the child would serve, not the one window that happened to trigger the
-test. Incidental pairs — present in the trigger, absent from the cluster — lose their slots and never enter
-the definition. `|C|` is therefore the size of what recurs, not the size of one observation, which matters
+test. Incidental neighbors — present in the trigger, absent from the cluster — lose their slots and never enter
+the neighborhood. `|C|` is therefore the size of what recurs, not the size of one observation, which matters
 enormously over a window `2R` frames wide.
 
 The win set may shift slightly once `C` replaces `O` as the probe; price `C` against its recomputed win set.
 
+**Winning and pricing are different questions.** A record is won on `d_backward`, because that is what routing
+will compare when the window recurs. It is priced on the distance as observed, because that is what the record
+will cost. Deciding the win set on the observed distance instead would count a candidate as winning records it
+can never be routed to — exactly the ones whose advantage is entirely in the forward half — and overstate the
+children most likely to disappoint. The comparison is against the server's **current** neighborhood, not the
+one it had when the record was written: what matters is where routing would send the window next time.
+
 **The solo test.** Would a child at `C` pay for its storage?
 
 ```
-benefit  =  Σ over histogram entries e with d(e.O, C) < e.server_distance:
-                (e.server_distance − d(e.O, C)) · e.count
+win set  =  histogram entries e with  d_backward(e.O, C) < d_backward(e.O, e.server)
+benefit  =  Σ over the win set:  (e.server_distance − d(e.O, C)) · e.count
 commit iff  benefit > 1 + |C|
 ```
 
+Both sides of a term are read over the same offsets: for a record still in flight, `d(e.O, C)` counts only
+the offsets that record has observed, so nothing is priced against a frame that has not happened. A term can
+be negative — `C` wins a record on the backward half and describes it worse in total — and that is not an
+anomaly to clamp away but the honest cost of a child routing will hand windows it predicts badly.
+
 There is no special term for the triggering window: it was recorded at step 3, so it sits in the histogram
-like any other record and the candidate wins it like any other. One pass over the histogram — never more
-distinct windows than the horizon holds.
+like any other record and is priced on the neighbors observed so far, like any other. One pass over the
+histogram — never more distinct windows than the horizon holds.
 
 **A candidate rejected today is not lost.** Every future error offers a new probe, and re-centering means a
 child that does get minted improves with exposure rather than being frozen at whatever the probe happened to
@@ -533,12 +605,16 @@ served records `C` would win the most of (the overlap is visible in the solo pas
 `{add C, delete X}` exactly:
 
 ```
-Δ =   Σ over X's records:  cost served by X  −  cost served by best of (surviving entries + C)
+Δ =   Σ over X's records:  cost served by X  −  cost served by whichever of
+                           (surviving entries + C) routing would pick
    +  Σ over records NOT served by X that C wins:  (server_distance − d) · count
    +  (1 + |C(X)|)          // X's storage refunded
    −  (1 + |C|)             // C's storage charged
 commit iff  Δ > 0
 ```
+
+"Wins" and "would pick" are `d_backward`; every "cost" is the distance as observed — the same split as the
+solo test.
 
 The two sums are over **disjoint** record sets, so no improvement is counted twice. Entries are priced
 **frozen** where they currently stand; the re-centering afterward only improves things, so a positive frozen
@@ -570,7 +646,7 @@ event, so **there is no delete scan**. Three kinds of event can push a margin ne
    fallback under records it keeps — **fallback collapse**: the entry still serves its records, but the error
    it spares shrank because the records now have somewhere better to fall.
 
-**Deleting a child, exactly:** its definition leaves the routing table and the pattern neuron one level up is
+**Deleting a child, exactly:** its neighborhood leaves the routing table and the pattern neuron one level up is
 released. Each record it *served* reassigns to its stored fallback, and a fresh fallback for those records is
 computed against the surviving entries. Each record where the dead child was the *fallback* keeps its server
 but recomputes its fallback, and that server's margin updates. Every entry that gained or lost records
@@ -579,7 +655,7 @@ covering the same demand each look redundant while the other stands.
 
 The normal is never deleted: it has no dictionary line, so there is nothing to refund.
 
-Nothing irreplaceable dies. The evidence lives in the history, not in the entry — if the same definition is
+Nothing irreplaceable dies. The evidence lives in the history, not in the entry — if the same neighborhood is
 justified again, the add test rebuilds it from the same records.
 
 ## Settlement
@@ -593,10 +669,11 @@ What follows a committed add, swap, or delete, in order:
    *not* guaranteed to be the new runner-up. Every affected record's fallback is recomputed against the
    surviving entries. This is a correction to the earlier design, which assumed the displaced server could be
    promoted to fallback for free.
-3. **Fallback collapse propagates.** For each record `C` did not win but where `C` is closer than the stored
+3. **Fallback collapse propagates.** For each record `C` did not win but where `C` is nearer by `d_backward`
+   than the stored
    fallback: the fallback is replaced and the server's margin adjusts by the change in the gap.
-4. **Re-centering settles.** Every entry whose served set changed recomputes its definition. A moved
-   definition changes distances, which may cause further handoffs, which move counts again. Repeat until no
+4. **Re-centering settles.** Every entry whose served set changed recomputes its neighborhood. A moved
+   neighborhood changes distances, which may cause further handoffs, which move counts again. Repeat until no
    record changes hands.
 5. **Margins that went negative trigger deletion**, sequentially, cascading as needed.
 
@@ -610,12 +687,12 @@ backstop**, and the fallback if cascades prove deep is in [risks](#risks).
 Take the whole run and write it as a single file a decoder could read back to reproduce every frame exactly.
 The file has two parts:
 
-1. **The dictionary.** For each neuron, the definition of each of its children — the `(neuron, offset)` pairs
+1. **The dictionary.** For each neuron, the neighborhood of each of its children — the `(neuron, offset)` neighbors
    the child names. The counts are not here: they are tallies the reader recounts from the frames below.
 2. **The frames.** The apex units, and the corrections where they were wrong. Anything unstated is silence.
 
 **The frame part is predictively coded.** The decoder runs the same model as the encoder — it has decoded
-everything up to the present, so it can compute the same definitions and the same assertions. It therefore
+everything up to the present, so it can compute the same neighborhoods and the same assertions. It therefore
 already knows what each active unit predicts about the frames ahead. **The encoder writes only the surprise.**
 
 ```
@@ -639,8 +716,8 @@ Every cost in this design is a part of a file — the machine's here, a neuron's
 
 ```
 activating an apex unit    =  1                             a line in the frames
-what it got wrong          =  the pairs it got wrong        the corrections after it
-having a child             =  1 + |definition|              a line in the dictionary
+what it got wrong          =  the neighbors it got wrong        the corrections after it
+having a child             =  1 + |neighborhood|              a line in the dictionary
 ```
 
 This is a **fixed-length code**: every symbol costs one regardless of how often it is used. Pricing by actual
@@ -651,7 +728,7 @@ occurrence is a variable-length code over the same file, an experiment rather th
 over and over. Over one horizon the file length is:
 
 ```
-L  =  Σ over entries (1 + |definition|)             written once
+L  =  Σ over entries (1 + |neighborhood|)             written once
    +  Σ over remembered records (1 + errors)        written every activation
 ```
 
@@ -670,7 +747,7 @@ It is the same assumption [the falsifiable claim](#the-falsifiable-claim) puts o
 [redundant children](#risks) a neuron mints against errors the machine's file never charged are what it looks
 like when the composition leaks.
 
-**Where the counts sit in this accounting.** The dictionary pays for one thing per child: the pairs it stands
+**Where the counts sit in this accounting.** The dictionary pays for one thing per child: the neighbors it stands
 for, written once when the child is created. That list must be written, because nothing else in the file says
 it — it was chosen from records that have since been forgotten, and no reader could reconstruct it. The counts
 are a different kind of thing: they are tallies over the remembered records, and the remembered records are
@@ -679,12 +756,12 @@ length. This is how every adaptive compressor works: it never transmits its coun
 rebuilds them while decoding. **The file contains exactly what cannot be recomputed from it.**
 
 This is also precisely why the normal is free and a child is not — not because context is cheap and outcomes
-are expensive, but because the normal is recomputable and a child's definition is not. Forward members cost
-the same as backward ones. There is no free half of a definition.
+are expensive, but because the normal is recomputable and a child's neighborhood is not. Forward members cost
+the same as backward ones. There is no free half of a neighborhood.
 
 **Every decision is local.** Each neuron evaluates `L` over its own window only. The global quantity is
 measured directly rather than summed: **apex units per level per frame, and the dictionary size that bought
-them.** That pair is the standing metric, and under this design it should *fall with exposure* on recurring
+them.** That neighbor is the standing metric, and under this design it should *fall with exposure* on recurring
 data: early structure is provisional, re-centering consolidates it, the swap retires what is left.
 
 ## Contraction: building the level above
@@ -693,16 +770,16 @@ A neuron firing an entry is not yet compression. If 49 active neurons all fire e
 units and nothing has shrunk. **Contraction is the machine choosing the fewest units at the level above that
 reconstruct the level below.**
 
-It is **axis-general**. A definition names pairs at offsets, so a promoted unit replaces a chunk of spacetime,
+It is **axis-general**. A neighborhood names neighbors at offsets, so a promoted unit replaces a chunk of spacetime,
 not a slice of one frame. Spatial contraction is the case where every offset is zero.
 
-**Recognition bids only.** The election's input is one bid per active neuron: the observed backward pairs its
+**Recognition bids only.** The election's input is one bid per active neuron: the observed backward neighbors its
 serving entry names correctly, the bidder included. Forward members are assertions carried by a promoted bid,
 not evidence available to its election. The bidder is implied, because a child *is* its parent in that window —
 the entry lives in the parent's routing table, so expanding the unit recovers the parent along with what it
 names. Creation never bids; a child minted this frame first competes at its next recognition.
 
-**A bid's price.** At election time, `f` counts only definition members in the observed backward portion that
+**A bid's price.** At election time, `f` counts only neighborhood members in the observed backward portion that
 are absent. The decoder expanding the unit asserts its forward members on faith; any that prove absent are
 later corrections, not information available to this election. A bid's present price is therefore `1 + f`,
 not a flat 1.
@@ -717,24 +794,37 @@ would price only part of a claim and the cheapest bid would be whichever one the
 most. `2R` is also exactly the buffer already held, so the election window costs no new memory and introduces
 no new parameter.
 
+**The window is a map of slot ownership, not a pool of bids to re-elect.** It is how much of the
+`(channel, frame)` map a bid can reach, so that what it claims and what is already gone are both visible. The
+election's pool is **this frame's bids, against the map as it currently stands** — a written slot is gone for
+good, and an unwritten one is held by whichever claim is best supported so far, which this frame's bids may
+beat. No earlier promotion is re-elected; what can change is which unit holds a slot that has not yet been
+committed. It is the same election the spatial case runs, with a frame coordinate on the slot.
+
 *Exact settlement of a single frame would need `4R` — frame `g` can be claimed by units firing anywhere in
 `[g − R, g + R]`, and those units reach `[g − 2R, g + 2R]`. `2R` therefore scores bids at the leading edge
 against partially-visible competition. This is accepted: contraction mints nothing that lasts, and a grouping
 a few units short of optimal costs a few symbols on frames that are gone next window.*
 
-**Claims persist.** A promoted unit has spoken for the frames its definition names, including frames ahead.
+**Claims persist.** A promoted unit has spoken for the frames its neighborhood names, including frames ahead.
 Those claims stand until the span completes — the same commitment rule already written for high-level actions,
 which hold their channel and suppress their constituents until they expand out. 
 So the election settles the future along with the present: the unit holding a slot is the one whose
 prediction counts there, and two promoted units can never contradict each other, because only one of them
-holds it.
+holds it. Holding is not permanent while the slot is still unwritten — a later, better-supported claim can
+take it — but at every moment exactly one unit holds it, which is all the file needs.
 
-**First claim wins.** Where two units claim the same `(channel, frame)` slot, the earlier-firing unit holds it;
-ties go to the older pattern id. The slot is the unit of ownership, not the frame — several channels are
-active in a frame and units in different channels are not in competition. The loser eats the overlap as mismatch, and if that keeps happening its benefit bleeds and
-it dies. This makes contraction a deterministic left-to-right sweep over time, consistent with routing being
-irrevocable at fire time. **It is a deliberate bias toward earlier-firing units, not a neutral optimization** —
-named here so it is not mistaken for an artifact.
+**A slot is settled when it is written, not when it is first claimed.** Where two units claim the same
+`(channel, frame)` slot, the better-supported claim holds it — and a later firing can displace an earlier one
+for as long as that slot remains unwritten. The slot is the unit of ownership, not the frame: several channels
+are active in a frame and units in different channels never compete. The displaced unit eats the overlap as
+mismatch, and if that keeps happening its benefit bleeds and it dies.
+
+Revision inside that window is free. The frame part is written at a lag, so encoder and decoder both arrive at
+a slot with the same information and both apply the same rule; a later claim that fits better simply makes the
+file shorter. **Support is the claimant's count share for that slot** — already tallied, and recountable by the
+decoder, so nothing about revising is transmitted. Ties go to the older pattern id. Once the slot is written
+it is final, and nothing after that can reach it.
 
 **When a frame can be written.** A unit firing at `h` names `[h − R, h + R]`, so a slot at frame `g` can
 still be claimed by a unit that fires as late as `g + R`. Until that frame has been processed, nothing about
@@ -762,7 +852,7 @@ by a cheap election:
 
 - **Voters** are every active neuron named by at least one bid. Voters are walked in sorted id order and bids
   in a fixed order, so the outcome is independent of dispatch order.
-- **The ranking rule**: among a pool of bids, the best covers the most pairs; ties go to the **older pattern
+- **The ranking rule**: among a pool of bids, the best covers the most neighbors; ties go to the **older pattern
   id**. Ranking is a total, deterministic order.
 - **Rounds**: (1) compute the **survivors** — bids whose current voters outweigh their price, `k ≥ 2 + f`.
   (2) Each voter looks at the bids naming it: if any survived, it elects the best among the survivors; if none
@@ -835,7 +925,7 @@ corrections against an asserted set and "what the machine got wrong" is undefine
 slot.
 
 **Expand, then let precedence decide.** A claim at level `k` names level-`k` units, which are not yet
-anything the file can be wrong about. Expanding a unit recovers the pairs its definition names one level
+anything the file can be wrong about. Expanding a unit recovers the neighbors its neighborhood names one level
 down, at that unit's offset plus theirs; repeat until everything is a base symbol. Every claim then has the
 same shape — `(channel, frame, symbol)` — and slots can be compared:
 
@@ -846,10 +936,10 @@ A's entry asserts   (C, +2)                        an L1 claim, expand it:
 ```
 
 > **For each `(channel, frame)` slot, the highest-level active unit whose expansion names it owns it. Lower
-> units fill only the slots left silent above them. Within a level, first claim wins.**
+> units fill only the slots left silent above them. Within a level, the best-supported claim holds it.**
 
 **The assertion only reaches forward.** Expanding a unit reaches in both directions, so a claim at `+2` whose
-definition reaches `−3` lands at `−1`. Claims landing at or before the asserting neuron's own frame are
+neighborhood reaches `−3` lands at `−1`. Claims landing at or before the asserting neuron's own frame are
 discarded, and nothing is lost by it: the decoder builds each frame from what was asserted *before* it, so a
 claim made later cannot arrive in time to be information, whatever it says. This is the split the fit already
 makes, applied at every level of the expansion rather than only at the top — backward members are recognition
@@ -857,17 +947,17 @@ context, forward members are the assertion.
 
 **How this composes with contraction.** Contraction settles slots too, and the two divide the work by scope
 rather than by direction. A bid is *priced* on its backward half but a promoted unit *claims* its whole span,
-frames ahead included, so contested forward slots **within a level** are already settled by firing order
-before any expansion happens — that is first claim wins. Precedence resolves the case contraction
-structurally cannot see: a level-3 claim and a level-0 claim landing on the same base slot once both are
-expanded. Within a level, firing order; across levels, promotion.
+frames ahead included, so contested forward slots **within a level** are settled by support before any
+expansion happens — the best-supported claim holds the slot until it is written. Precedence resolves the case
+contraction structurally cannot see: a level-3 claim and a level-0 claim landing on the same base slot once
+both are expanded. Within a level, support; across levels, promotion.
 
 The backward half never enters this at all. Coverage settles which unit *represents* an already-observed
 neuron in the frame part, and the decoder recovers the covering unit and its constituents together by
 expanding it. That is a different question from what is claimed about a frame nobody has seen.
 
 **Why precedence and not a vote.** The election has already judged this: a unit was promoted over its
-constituents because it covered more pairs at less cost, which *is* the finding that it describes this region
+constituents because it covered more neighbors at less cost, which *is* the finding that it describes this region
 better. Re-deciding the same question at assertion time, by a second and differently-shaped comparison, would
 be answering it twice by two rules. Precedence also keeps the stance promotion already takes — a unit asserts
 its forward members on faith, and when the future disagrees the file pays corrections and the entry's benefit
@@ -879,7 +969,7 @@ knows every active unit at every level once it has expanded the frame it just de
 What differs is only who consumes the result: the asserted **event** set is what the machine expects to
 observe, scored as the frames arrive; the asserted **action** set is what it has committed to execute, and
 expanding it *is* the top-down unrolling — a high action pattern becomes its constituent actions at the time
-distances its definition recorded, down to base actions that execute. Execution is not a second mechanism. It
+distances its neighborhood recorded, down to base actions that execute. Execution is not a second mechanism. It
 is this expansion, read as a program instead of as a forecast.
 
 **The horizon compounds.** A unit claimed at `+2` may name something at `+1` of its own, so expansion places
@@ -891,8 +981,8 @@ what it got wrong is written as corrections.
 
 ## Estimation
 
-**No probability sets a cost.** Distance is a count of pairs, cost is a count of pairs, savings is a count of
-pairs — the pricing never leaves whole numbers, so no estimator, smoothing, or boundary correction is needed.
+**No probability sets a cost.** Distance is a count of neighbors, cost is a count of neighbors, savings is a count of
+neighbors — the pricing never leaves whole numbers, so no estimator, smoothing, or boundary correction is needed.
 The only frequencies in the design are the counts, and they are used raw: the per-slot vote only has to pick
 members, not price them, and because it is a comparison within a slot rather than a test against a total, it
 needs no denominator at all.
@@ -908,10 +998,10 @@ flowchart TD
     B --> C["Complete: in-flight records whose forward frames<br/>have arrived fold in — prediction is scored here.<br/>Counts move, servers re-center, margins update"]
     C --> D["Route AND record, one operation:<br/>closest entry by d_backward serves, runner-up is the<br/>fallback; record written from the same scan.<br/>server_distance is NOT the minimum"]
     D --> E["Serve: the entry ACTIVATES — fires, bids.<br/>Its forward members are asserted as the prediction"]
-    E -.->|"bid (the only output;<br/>nothing comes back)"| X["Contraction, independently:<br/>election over a 2R window;<br/>claims persist across their span;<br/>first claim wins.<br/>Zero side effects on neuron state"]
+    E -.->|"bid (the only output;<br/>nothing comes back)"| X["Contraction, independently:<br/>election over a 2R window;<br/>claims persist across their span;<br/>best-supported claim holds a slot until it is written.<br/>Zero side effects on neuron state"]
     E --> L{"Served error > 0?<br/>(normal OR child)"}
     L -->|yes| M["Add test, two passes:<br/>1. probe with O — which records would it win?<br/>2. collapse those records — that is C.<br/>Solo benefit > 1+|C|? Else price the swap.<br/>Passing means REQUEST — not create"]
-    M -->|"request (channel, level, definition)"| P["The machine creates the symbol<br/>and returns its identity"]
+    M -->|"request (channel, level, neighborhood)"| P["The machine creates the symbol<br/>and returns its identity"]
     P --> Q["Register, then settle: reassign wins,<br/>RECOMPUTE fallbacks (server was not the minimum),<br/>re-center every entry whose set changed,<br/>delete anything that stopped paying — until quiet.<br/>The newborn serves NEXT recurrence"]
     L -->|no| N["Nothing to reconsider"]
     Q --> O["Process the next level up<br/>(spatial first, at R = 0, until a level fires no children;<br/>the frontier of neurons that fired none<br/>is the input to the temporal levels)"]
@@ -962,8 +1052,8 @@ Each risk states what would be done about it, so that measurement has a decision
   than frozen — but measure churn over the first thousand frames and again in steady state.
 
 - **One-shot mints.** A single window far enough from a settled entry can out-bid the opening cost by itself.
-  Under the old frozen-definition design this was serious, because the mistake was permanent. Re-centering
-  largely defuses it: the definition is pulled toward whatever recurs, or the entry starves.
+  Under the old frozen-neighborhood design this was serious, because the mistake was permanent. Re-centering
+  largely defuses it: the neighborhood is pulled toward whatever recurs, or the entry starves.
   **Fallback if it still churns:** require the candidate's win set to span at least two distinct records
   before minting. Exact against the window, costs one recurrence of latency.
 
@@ -974,22 +1064,17 @@ Each risk states what would be done about it, so that measurement has a decision
 
 - **Cross-position dictionary redundancy.** No local test can see that 700 positions each learned the same
   edge. The objective is global, but every decision is local and contraction compresses only the frame part.
-  **Diagnostic:** count distinct child definitions across positions. That number is what a shared-dictionary
+  **Diagnostic:** count distinct child neighborhoods across positions. That number is what a shared-dictionary
   variant would buy, and it should be known before anyone asks why filters are not shared.
 
-- **Contested forward slots, within a level and across levels.** Two rules settle who owns a contested future
-  slot, and neither argues from prediction. Within a level, first claim wins settles it by firing order, an
-  order chosen for the backward half where it follows from routing being irrevocable at fire time. Across
-  levels, [precedence](#the-assertion) settles it by promotion, and promotion is a finding about *description*
-  — nothing establishes that the better describer of a region is the better predictor of one slot inside it.
-  Both rules are cheap, deterministic and reuse decisions already made; both discard a claim that might have
-  been right. **Diagnostic:** count contested forward slots per frame, split by within-level and cross-level,
-  and how often the holder was right against the unit it displaced. **Fallback, within a level only:** break
-  contests on the holders' slot majorities instead of firing order — the counts are already there and the
-  decoder can recount them, so it costs the file nothing, and it costs only the determinism of a single sweep
-  order. That fallback does **not** extend across levels: comparing a level-3 claim to a level-0 one would
-  mean composing shares through the expansion, which is a probability estimate, and this design prices in
-  whole numbers.
+- **Contested forward slots across levels.** Within a level a contest is settled by support, and a claim can
+  be revised until its slot is written, so nothing there is decided on less than the best evidence available
+  at the moment of writing. Across levels it is [precedence](#the-assertion) — the highest unit whose
+  expansion names a slot owns it — and promotion is a finding about *description*: nothing establishes that
+  the better describer of a region is the better predictor of one slot inside it. Support cannot break that
+  tie, because comparing a level-3 claim to a level-0 one means composing shares through the expansion, which
+  is a probability estimate, and this design prices in whole numbers. **Diagnostic:** count cross-level
+  contests per frame and how often the holder was right against the unit it displaced.
 
 - **Election slack.** The election is a heuristic for prize-collecting set cover with unmeasured slack, and
   apex-units-per-frame is the headline metric — so slack and real structure are currently conflated.
@@ -1034,8 +1119,8 @@ is the assumption everything else rests on.
   makes them slightly less independent — settlement now touches more entries — and contraction's election is
   sequential and deliberately so. On much larger inputs than MNIST both judgements need revisiting.
 
-- **Asymmetric reach.** A definition's backward and forward reach both emerge from the vote, bounded by the
+- **Asymmetric reach.** A neighborhood's backward and forward reach both emerge from the vote, bounded by the
   same `R`. Whether a single radius is right — or whether the two directions want separate bounds, since "how
   much do I need to recognize myself" and "how far can I reliably predict" are different questions — is
   unresolved. One radius is the committed choice; separate radii are the fallback if diagnostics show
-  definitions consistently reaching to the bound in one direction and not the other.
+  neighborhoods consistently reaching to the bound in one direction and not the other.
