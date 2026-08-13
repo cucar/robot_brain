@@ -78,11 +78,12 @@ carries the action executed at the end of the previous frame — if one was. And
 > is silent.**
 
 **A firing stays open for `R` frames.** A neuron *fires* at frame `f`, and that activation stays open through
-`f + R` — exactly how long its window takes to fill. While open it keeps working: arriving neighbors fold into its
-server's counts, the server re-centers, distances and margins update. It does not fire again while open, and
-it does not re-enter other neurons' windows — membership is by firing frame, so one firing is one neighbor at one
-offset and nothing more. Several firings of the same neuron can be open at once, each with its own window,
-record and server. **The exclusion is about firing, not about being open**, which is why a channel can carry
+`f + R` — exactly how long its neighborhood takes to fill. While open it keeps working: arriving neighbors fold into its
+server's counts, the server re-centers, distances and margins update. That activation does not re-fire — it is
+one firing, not a state — and it does not re-enter other neurons' neighborhoods, since membership is by firing
+frame, so one firing is one neighbor at one offset and nothing more. The neuron itself is free to fire afresh
+while an earlier activation is still open, and several firings can be open at once, each with its own
+neighborhood, record and server. **The exclusion is about firing, not about being open**, which is why a channel can carry
 several firings in one frame at different levels, all of them inhibited except the apex.
 
 There is no declared rest value: a dimension where nothing is happening simply supplies no symbol. Whether a
@@ -116,13 +117,13 @@ runs out: **above the declared levels, every active neuron is a neighbor.** Rece
 through composition. This is the only place topology enters the design, and the levels above it assume none.
 
 Each channel has at most one event dimension and one action dimension; processing is type-specific, and children
-inherit their parent's channel and dimension. Thus, within an event or action window, `(channel, offset)` identifies
+inherit their parent's channel and dimension. Thus, within an event or action neighborhood, `(channel, offset)` identifies
 one mutually exclusive slot.
 
 **The exclusion is per level.** At most one neuron per channel is active at a given level in a given frame —
 declared for the base, and preserved upward by construction: one active neuron per channel per level offers at
 most one bid, so [contraction](#contraction-building-the-level-above) promotes at most one unit into that
-channel one level up. This is what keeps a slot resolvable at every level, and it is why window size does not
+channel one level up. This is what keeps a slot resolvable at every level, and it is why neighborhood size does not
 square as the hierarchy deepens.
 
 ### Rewards
@@ -146,7 +147,7 @@ not priced by the one test, and are not meant to be. Read "everything derives fr
 about structure; selection is the other half of the machine and it answers to reward.
 
 **Selection is the whole of what separates events from actions.** Structure is symmetric — an action pattern
-is learned exactly as an event pattern is, from the same counting over the same kind of window — but no fit
+is learned exactly as an event pattern is, from the same counting over the same kind of neighborhood — but no fit
 ever says which action to take. It says only what an action set looks like. Choosing comes from the
 connection an active event pattern holds to the action patterns that have followed it: each connection
 carries the reward that arrived, averaged over its exposures, so it is a running estimate of what that action
@@ -173,7 +174,11 @@ rather than exponential so distant antecedents keep nonzero credit under long-la
 
 A neuron that fires at frame `f` observes a **neighborhood**: the active neurons its level admits, across the frames
 `[f − R, f + R]`, each tagged with its offset from `f`. `R` is the **radius** — the reach of a neighborhood in
-either direction. The buffer that holds the window is `W = 2R` frames wide.
+either direction. The buffer that holds it is `W = 2R` frames wide.
+
+**Spatial processing is the `R = 0` case**: the neighborhood is one frame wide and every neighbor sits at
+offset 0. The sections below are written in the general form, which reads temporally because that is the case
+with parts to keep apart — [the fit](#the-fit) says how the vocabulary collapses when the radius is zero.
 
 The observation is therefore a set of `(neuron, offset)` neighbors:
 
@@ -192,12 +197,14 @@ else.** Two children of the same neuron may name overlapping but different chann
 `{B, C, D}` are just two sets. The [fit](#the-fit) needs no channel structure.
 
 **One window per neuron per activation**, and **at most one entry serves it**. If a neuron could activate
-several children, each channel would carry several active units, those would all become window members one
+several children, each channel would carry several active units, those would all become neighborhood members one
 level up, and the count would square at every level.
 
-**The forward part arrives late.** At fire time the neuron can see `[f − R, f]`; the rest of the window fills
-in over the following `R` frames. This is the only asymmetry in the design, and everything below is written to
-respect it: **nothing is ever priced before it has been observed.**
+**The forward part arrives late.** At fire time the neuron can see `[f − R, f]`; the rest of the neighborhood
+fills in over the following `R` frames, while the activation is still open. **Each frame is priced once, as it
+arrives**: whatever the serving entry got wrong at that offset is added to the totals then, and never
+revisited. Nothing is charged for a frame that has not happened, and nothing already charged is recomputed —
+the numbers grow to their final values and stop.
 
 ## The fit
 
@@ -224,6 +231,22 @@ d(O, C)  =  d_backward   (offsets ≤ 0, fully observed at fire time)
 - **`d_backward` is what routing uses.** It is all that exists when the entry has to be chosen.
 - **`d_forward` is the prediction, scored.** The entry's forward members are asserted at fire time; whatever
   they got wrong is counted as it arrives.
+
+**At `R = 0` the vocabulary collapses onto the spatial case.** With every offset zero there is no forward half:
+`d_forward` is empty, `d_backward` is the whole distance, and "the backward neighborhood" is just the
+neighborhood. Read the rest of this document with the temporal parts struck out and it is the spatial
+algorithm, unchanged —
+
+- routing on `d_backward` is routing on the entire observation, so `server_distance` **is** the minimum and a
+  fallback **is** the true runner-up;
+- an occurrence completes at fire time, so nothing is ever in flight, no total ever grows, and the
+  [completion step](#the-frame-step-by-step) has nothing to do;
+- the [history](#the-history) keys its bins on the whole neighborhood, and every price is final the moment it
+  is written;
+- `horizon > 2R` reduces to `horizon > 0`.
+
+Spatial is not a reduced version of the machinery. It is the same machinery with an empty half, which is why
+the [spatial stack](#the-order-of-a-frame) needs no radius of its own and costs no parameter.
 
 **Two comparisons, kept apart.** Which entry *serves* a record is decided on `d_backward`, because that is all
 routing ever sees. What a record *costs* is its distance over every offset observed so far — the backward half
@@ -263,12 +286,12 @@ sum. Open too few and customers are served from far away; open too many and you 
 | A facility | An entry — the normal or a child |
 | Opening a facility | Creating a child, and the pattern neuron it mints one level up |
 | Opening cost | `1 + |C|` — the neuron created, plus the neighborhood stored |
-| Serving a customer from a facility | Describing that window through that entry |
+| Serving a customer from a facility | Describing that neighborhood through that entry |
 | Service cost, i.e. distance | The [fit](#the-fit) — the neighbors the entry got wrong |
 | The assignment of customers to facilities | The routing — closest entry serves |
 
 The opening cost is not a tax bolted on — if opening were free you would put a warehouse on top of every
-customer: perfect service, zero distance, one facility per window ever seen. It is the only thing standing
+customer: perfect service, zero distance, one facility per neighborhood ever seen. It is the only thing standing
 between the design and memorizing every frame.
 
 The local search over this problem has **four** moves, and each appears below as an exact operation against the
@@ -305,7 +328,7 @@ record → increment; a served record leaves the history → decrement; a new ch
 the old server decrements and the child increments; a deleted entry's records fall back → the fallback
 increments. A record's forward part landing → increment. Nothing else touches the counts.
 
-**An entry counts only its own records.** A neuron either describes a window with its normal or delegates to a
+**An entry counts only its own records.** A neuron either describes a neighborhood with its normal or delegates to a
 child; every record is served by exactly one entry, and no entry learns from another's records.
 
 ### The collapse
@@ -325,7 +348,7 @@ count, and the strict-majority boundary is required by the exact L1 minimization
 The result is the exact **L1 center** of the served set under symmetric difference — the set minimizing
 `Σ d(O, C)` over all possible sets. Note the terminology: it is a *center*, not a *medoid* in the usual sense
 of an observed point. It is synthesized, and it may be a set the neuron has never literally seen. That is the
-point — it is the typical window, not a sample of one.
+point — it is the typical neighborhood, not a sample of one.
 
 *(Why not a centroid? A centroid over sets is a fractional vector — `p` present 0.7 — which is not a set, cannot
 be written into the file, and has no symmetric difference. The counts **are** the fractional object; the
@@ -359,39 +382,77 @@ fallback serves nothing and no record moves; it only pushes margins into the set
 handles them. The cost is that an entry has to know which records name it as fallback — a reverse index, which
 is the one piece of bookkeeping the routing table keeps purely for the delete test.
 
+**What re-centering does not do is re-elect the fallback.** It keeps `fallback_distance` true for the entry a
+record names; it does not notice when some *third* entry has moved close enough that it should now be the
+fallback. So a fallback is the best alternative as of the last add, swap or delete, not as of this frame. The
+error has one direction: the named fallback is too far, so the gap looks larger than it is, so benefit is
+overstated and entries live a little longer than they have earned. Never the reverse — no entry is ever
+deleted on a fallback that flattered a rival. The exact variant is in [risks](#risks).
+
 **Cold start is silence.** An entry with no records yet has no counts and no neighborhood. That is the initial
 case, not an error.
 
 ## The history
 
-A neuron remembers a fixed number of windows it was active for — its **horizon**, measured in its own
+A neuron remembers a fixed number of neighborhoods it was active for — its **horizon**, measured in its own
 activations, not in absolute time. **There are no frame numbers anywhere in the history and nothing needs
 them**: benefit is a sum over records, cost is a count of neighbors, and the only role time ever played was
 eviction order, which a FIFO provides by construction. This makes the one test uniform across neurons under
 sparse activation: a busy neuron and a rarely-active neuron judge over the same amount of *evidence*, not the
 same amount of someone else's clock.
 
-Each record is:
+**The history is keyed on the backward half.** Two activations whose backward neighborhoods are identical sit
+at the same `d_backward` from every entry, so routing sent both to the same server and the same fallback. That
+makes the backward half — and only the backward half — safe to share an assignment across. The forward half
+cannot key anything: it does not exist yet when the assignment is made.
+
+So the history is a **bin per distinct backward neighborhood**:
 
 ```
-(O, server, server_distance, fallback, fallback_distance)
+bin  =  (backward neighborhood, occurrences, server, fallback,
+         d_backward to each, per-slot forward counts, Σ server mismatch, Σ fallback mismatch)
 ```
+
+and a **FIFO ring of the occurrences themselves**, in arrival order, each carrying the forward frames it
+actually saw:
+
+```
+occurrence  =  (bin, forward neighbors as they arrive)
+```
+
+**A bin is to its occurrences what an entry is to its bins** — the same aggregate, one level down. The
+backward distance is a property of the bin, identical for every occurrence in it. The forward half is
+statistics: what followed this context, per slot, tallied.
+
+**Everything the design asks of the history is a sum over slots, so the tallies answer it exactly.** Distance
+to a candidate `C` is `occurrences × d_backward` plus, at each forward slot, two for every occurrence holding
+some other neuron than `C` names there and one for every occurrence holding nothing — or one for every
+occurrence holding anything, where `C` names nothing. The collapse is a per-slot vote, so summing the won
+bins' tallies gives the same answer as walking individual windows. Benefit needs only the totals. Nothing
+anywhere asks whether `c` at `+1` came with `d` at `+2`.
+
+**The ring is what makes eviction exact.** Removing the oldest occurrence means subtracting the neurons *it*
+contributed, and a tally cannot say which those were — so the occurrence carries its own forward frames, and
+the bin is the cached aggregate over them. This is not a saving in storage. What it buys is that the add test
+scans **distinct backward contexts** rather than occurrences, and reads pre-summed tallies instead of
+re-walking windows.
+
+**It also makes the win test per bin.** A candidate wins on `d_backward`, which is a property of the bin, so a
+bin is won or not won whole. No bin ever has to be split, and every occurrence in it keeps agreeing with every
+other about who serves it.
 
 **`server_distance` is not the minimum.** Routing chose on `d_backward`; the total is only known `R` frames
 later, and the entry that won the prefix can end up further away than the runner-up once the forward parts
 land. The name says so. Nothing below may assume the server was the closest entry in total distance.
 
-Records with the same window have identical distances to every entry, so the storage is a **histogram** —
-distinct windows with a count and one shared assignment — plus a FIFO ring of references in arrival order for
-eviction.
-
-**A record completes over `R` frames.** Its backward part is written at fire time; its forward part fills in
-as the frames arrive. Distances, counts, and benefits update on each arrival. A record that is evicted before
-completing simply contributes what it had.
+**An occurrence completes over `R` frames.** Its backward half is fixed at fire time — that is its bin — and
+its forward frames arrive one at a time, each folding into its bin's tallies, its server's counts, and the
+distance totals. An occurrence evicted before completing simply contributes what it had, and subtracts
+exactly that.
 
 **Aging is one-out-one-in.** Once the ring is full, recording this activation evicts exactly the oldest record —
 "age before add" is the data structure, not a rule to remember. Eviction has consequences
-([deletion](#deletion)). Recording is unconditional: a neuron's evidence is the windows it was active for, and
+([deletion](#deletion)). Recording is unconditional: a neuron's evidence is the neighborhoods it was active for, and
 no election outcome ever edits a history.
 
 **Why the fallback is stored.** The delete test asks what an entry's records would cost without it, and the
@@ -468,9 +529,9 @@ record, serve, reconsider structure — reads and writes only the neuron's own s
 election decides. Contraction reads the level's recognition bids and decides only what is represented above;
 it has **zero side effects on neuron state**.
 
-For an active neuron at frame `f` with observed backward window `O⁻`:
+For an active neuron at frame `f` with observed backward neighborhood `O⁻`:
 
-1. **Age.** If the history ring is full, evict the oldest record. Its histogram count decrements; its neighbors
+1. **Age.** If the history ring is full, evict the oldest occurrence. Its bin's count decrements; its neighbors
    leave its server's counts; that server re-centers; its benefit drops — and an entry whose benefit falls
    strictly below its cost is deleted now ([deletion](#deletion)).
 
@@ -502,7 +563,7 @@ For an active neuron at frame `f` with observed backward window `O⁻`:
 
 7. **Register and settle.** The machine creates the requested pattern and returns its identity; the neuron
    registers it as an entry, and [settlement](#settlement) follows. The newborn is installed **now, for
-   later** — it fires for the first time on the next activation its window recurs, and never covers,
+   later** — it fires for the first time on the next activation its neighborhood recurs, and never covers,
    propagates, or serves on its birth frame.
 
 Meanwhile — before, after, or alongside; the pipeline cannot tell — contraction runs its election over the
@@ -547,23 +608,24 @@ number in the design grows forward into its final value, and none is ever revise
 ## Creating a child
 
 **The trigger is an error, nothing else.** No background process proposes candidates and no accumulator waits
-to fire. The serving entry described the window and got some of it wrong — that error is the only moment
-structure is considered. A window the entries already describe costs nothing to serve no matter how often it
+to fire. The serving entry described the neighborhood and got some of it wrong — that error is the only moment
+structure is considered. A neighborhood the entries already describe costs nothing to serve no matter how often it
 recurs; surprise is the size of the bill, not a gate on it.
 
 **Creation happens after recognition.** A new child is minted after the test and fires for
-the first time on the next activation its window recurs. It does not serve, cover, or propagate on its birth
+the first time on the next activation its neighborhood recurs. It does not serve, cover, or propagate on its birth
 frame — that frame was already encoded, corrections and all. **Structure never pays off on the evidence that
 created it, only on recurrence.** Nothing compresses at first exposure. It also keeps the election
 single-purpose — recognition bids only — with no birth-frame special cases.
 
-**The candidate is a center, not a sample.** Two passes over the histogram, both cheap, both only on error:
+**The candidate is a center, not a sample.** Two passes over the bins, both cheap, both only on error:
 
-1. **Find the demand.** Using the triggering observation `O` as a probe, collect the records routing would
-   hand it — those where `d_backward(record, O) < d_backward(record, record.server)`.
-2. **Collapse.** Take the per-slot vote over exactly those records. The result is `C`.
+1. **Find the demand.** Using the triggering observation `O` as a probe, collect the bins routing would hand
+   it — those where `d_backward(bin, O) < d_backward(bin, bin.server)`. A bin is won whole, since
+   `d_backward` is a property of the bin.
+2. **Collapse.** Take the per-slot vote over exactly those bins, summing their tallies. The result is `C`.
 
-`C` is the L1 center of the demand the child would serve, not the one window that happened to trigger the
+`C` is the L1 center of the demand the child would serve, not the one neighborhood that happened to trigger the
 test. Incidental neighbors — present in the trigger, absent from the cluster — lose their slots and never enter
 the neighborhood. `|C|` is therefore the size of what recurs, not the size of one observation, which matters
 enormously over a window `2R` frames wide.
@@ -575,24 +637,25 @@ will compare when the window recurs. It is priced on the distance as observed, b
 will cost. Deciding the win set on the observed distance instead would count a candidate as winning records it
 can never be routed to — exactly the ones whose advantage is entirely in the forward half — and overstate the
 children most likely to disappoint. The comparison is against the server's **current** neighborhood, not the
-one it had when the record was written: what matters is where routing would send the window next time.
+one it had when the record was written: what matters is where routing would send the neighborhood next time.
 
 **The solo test.** Would a child at `C` pay for its storage?
 
 ```
-win set  =  histogram entries e with  d_backward(e.O, C) < d_backward(e.O, e.server)
-benefit  =  Σ over the win set:  (e.server_distance − d(e.O, C)) · e.count
+win set  =  bins b with  d_backward(b, C) < d_backward(b, b.server)
+benefit  =  Σ over the win set:  b.Σ server mismatch  −  d(b, C)
 commit iff  benefit > 1 + |C|
 ```
 
-Both sides of a term are read over the same offsets: for a record still in flight, `d(e.O, C)` counts only
-the offsets that record has observed, so nothing is priced against a frame that has not happened. A term can
-be negative — `C` wins a record on the backward half and describes it worse in total — and that is not an
-anomaly to clamp away but the honest cost of a child routing will hand windows it predicts badly.
+`d(b, C)` is summed over the bin's occurrences straight off its tallies, so both sides of a term are read over
+the same offsets and over the same occurrences: an occurrence that has not seen a frame yet contributes
+nothing there, on either side, and nothing is priced against a frame that has not happened. A term can be
+negative — `C` wins a bin on the backward half and describes it worse in total — and that is not an anomaly to
+clamp away but the honest cost of a child routing will hand neighborhoods it predicts badly.
 
-There is no special term for the triggering window: it was recorded at step 3, so it sits in the histogram
-like any other record and is priced on the neighbors observed so far, like any other. One pass over the
-histogram — never more distinct windows than the horizon holds.
+There is no special term for the triggering neighborhood: it was recorded at step 3, so it sits in its bin
+like any other occurrence and is priced on the neighbors observed so far, like any other. One pass over the
+bins — never more distinct backward contexts than the horizon holds.
 
 **A candidate rejected today is not lost.** Every future error offers a new probe, and re-centering means a
 child that does get minted improves with exposure rather than being frozen at whatever the probe happened to
@@ -628,7 +691,7 @@ it, since the test only runs on error.
 
 **What the child is, at birth.** The parent requests, the machine creates. The pattern **inherits its parent's
 channel** and mints **one level above its parent's level** — both are carried on the request, so the machine
-allocating the symbol decides nothing about what it means. It is **created with no counts**: its own window
+allocating the symbol decides nothing about what it means. It is **created with no counts**: its own neighborhood
 belongs to its own level, which it has not observed yet, and it learns it there by ordinary counting. Its
 *existence* is decided by its parent; its own *structure* is decided by itself, by its own tests, at its own
 level.
@@ -647,10 +710,12 @@ event, so **there is no delete scan**. Three kinds of event can push a margin ne
    it spares shrank because the records now have somewhere better to fall.
 
 **Deleting a child, exactly:** its neighborhood leaves the routing table and the pattern neuron one level up is
-released. Each record it *served* reassigns to its stored fallback, and a fresh fallback for those records is
-computed against the surviving entries. Each record where the dead child was the *fallback* keeps its server
-but recomputes its fallback, and that server's margin updates. Every entry that gained or lost records
-re-centers. **Deletions are sequential** — one at a time, re-checking margins after each — because two entries
+released. Each record it *served* reassigns to its stored fallback, which gains those records — counts in,
+re-center, and **its margin gains the new gaps**, which is what can rescue an entry that was itself close to
+starving. A fresh fallback for those records is computed against the surviving entries by `d_backward`. Each
+record where the dead child was the *fallback* keeps its server but recomputes its fallback, and that server's
+margin updates too — downward, since the record now has nowhere as good to fall. Every entry that gained or
+lost records re-centers. **Deletions are sequential** — one at a time, re-checking margins after each — because two entries
 covering the same demand each look redundant while the other stands.
 
 The normal is never deleted: it has no dictionary line, so there is nothing to refund.
@@ -662,13 +727,13 @@ justified again, the add test rebuilds it from the same records.
 
 What follows a committed add, swap, or delete, in order:
 
-1. **The won records change hands.** For each histogram entry the new child `C` wins: the old server's margin
+1. **The won records change hands.** For each bin the new child `C` wins: the old server's margin
    drops by the gap it was earning; `server = C`, distances update; `C`'s margin gains the new gap. Both
    entries' counts move and both re-center.
 2. **Fallbacks are recomputed, not inherited.** Because routing chose on `d_backward`, the previous server is
    *not* guaranteed to be the new runner-up. Every affected record's fallback is recomputed against the
-   surviving entries. This is a correction to the earlier design, which assumed the displaced server could be
-   promoted to fallback for free.
+   surviving entries, by `d_backward` — the fallback is whichever entry routing would pick if the server were
+   gone, so it is selected the way routing selects.
 3. **Fallback collapse propagates.** For each record `C` did not win but where `C` is nearer by `d_backward`
    than the stored
    fallback: the fallback is replaced and the server's margin adjusts by the change in the gap.
@@ -679,7 +744,7 @@ What follows a committed add, swap, or delete, in order:
 
 Step 4 is the one place this design cannot offer a clean monotonicity proof: handoffs strictly decrease `L`,
 but a collapse can change `|C|` either way. In practice each round strictly reduces the number of misassigned
-records, and the work is bounded by the histogram, which is bounded by the horizon. **A round cap is the
+records, and the work is bounded by the bin count, which is bounded by the horizon. **A round cap is the
 backstop**, and the fallback if cascades prove deep is in [risks](#risks).
 
 ## The cost: it is all one file
@@ -759,7 +824,7 @@ This is also precisely why the normal is free and a child is not — not because
 are expensive, but because the normal is recomputable and a child's neighborhood is not. Forward members cost
 the same as backward ones. There is no free half of a neighborhood.
 
-**Every decision is local.** Each neuron evaluates `L` over its own window only. The global quantity is
+**Every decision is local.** Each neuron evaluates `L` over its own neighborhood only. The global quantity is
 measured directly rather than summed: **apex units per level per frame, and the dictionary size that bought
 them.** That neighbor is the standing metric, and under this design it should *fall with exposure* on recurring
 data: early structure is provisional, re-centering consolidates it, the swap retires what is left.
@@ -775,7 +840,7 @@ not a slice of one frame. Spatial contraction is the case where every offset is 
 
 **Recognition bids only.** The election's input is one bid per active neuron: the observed backward neighbors its
 serving entry names correctly, the bidder included. Forward members are assertions carried by a promoted bid,
-not evidence available to its election. The bidder is implied, because a child *is* its parent in that window —
+not evidence available to its election. The bidder is implied, because a child *is* its parent in that neighborhood —
 the entry lives in the parent's routing table, so expanding the unit recovers the parent along with what it
 names. Creation never bids; a child minted this frame first competes at its next recognition.
 
@@ -878,12 +943,12 @@ Silence cancels and the boundary is a strict majority. The constant is therefore
 unrelated arguments, and no new parameter enters.
 
 **Subsumption is a fact about the level above, never about a neuron's evidence.** A neuron covered by a
-neighbor's winning bid still records its window, learns, and runs its tests exactly as if the election had
+neighbor's winning bid still records its neighborhood, learns, and runs its tests exactly as if the election had
 gone the other way.
 
 **What this builds.** Each surviving bid contributes one unit to the level above. A pattern can never name
 past its own window, and receptive fields grow by composition. The reduction is set by the data, not the
-topology: a window the entries describe well collapses hard; a window full of surprise barely collapses at all,
+topology: a neighborhood the entries describe well collapses hard; a neighborhood full of surprise barely collapses at all,
 which is the honest thing for it to do.
 
 ## The order of a frame
@@ -1022,7 +1087,7 @@ Each risk states what would be done about it, so that measurement has a decision
 
 - **Cascade depth under re-centering.** Re-centering couples entries: an entry moves → records change hands →
   neighboring entries' served sets change → their centers move → more handoffs. Under the old design only the
-  normal did this and the coupling was one-directional. Bounded in practice by the histogram, but the work per
+  normal did this and the coupling was one-directional. Bounded in practice by the bin count, but the work per
   frame is unmeasured and the monotonicity proof does not cover it.
   **Fallback:** cap collapses at one entry per frame, chosen round-robin by staleness. Degrades to slower
   adaptation, never to incorrect state, and every other guarantee is untouched.
@@ -1051,11 +1116,11 @@ Each risk states what would be done about it, so that measurement has a decision
   Re-centering is the main defense — an entry created on thin evidence is pulled toward its cluster rather
   than frozen — but measure churn over the first thousand frames and again in steady state.
 
-- **One-shot mints.** A single window far enough from a settled entry can out-bid the opening cost by itself.
+- **One-shot mints.** A single neighborhood far enough from a settled entry can out-bid the opening cost by itself.
   Under the old frozen-neighborhood design this was serious, because the mistake was permanent. Re-centering
   largely defuses it: the neighborhood is pulled toward whatever recurs, or the entry starves.
   **Fallback if it still churns:** require the candidate's win set to span at least two distinct records
-  before minting. Exact against the window, costs one recurrence of latency.
+  before minting. Exact against the history, costs one recurrence of latency.
 
 - **Redundant, never-promoted children.** Evidence is independent of the election, so a neuron reliably covered
   by a neighbor's unit still mints from its own local error demand. Accepted deliberately: contraction keeps
@@ -1066,6 +1131,15 @@ Each risk states what would be done about it, so that measurement has a decision
   edge. The objective is global, but every decision is local and contraction compresses only the frame part.
   **Diagnostic:** count distinct child neighborhoods across positions. That number is what a shared-dictionary
   variant would buy, and it should be known before anyone asks why filters are not shared.
+
+- **Stale fallback identity.** Re-centering keeps a record's `fallback_distance` honest for the entry it names
+  but never re-elects the fallback itself, so a record can go on pointing at a worse alternative than the one
+  routing would actually pick. Benefit is overstated by the difference and entries outlive their earnings —
+  bounded, one-directional, and invisible without instrumentation. **Diagnostic:** sample records and compare
+  the stored fallback against the true `d_backward` runner-up; report the mean gap and how many entries sit
+  within it of deletion. **Fallback:** run settlement's fallback-collapse pass on every re-centering. That is
+  exact and it is the only place in the design where a routine event would scan the history, so it is a real
+  cost to weigh rather than an obvious upgrade.
 
 - **Contested forward slots across levels.** Within a level a contest is settled by support, and a claim can
   be revised until its slot is written, so nothing there is decided on less than the best evidence available
@@ -1108,11 +1182,11 @@ is the assumption everything else rests on.
 
 ## Open questions
 
-- **Context space at higher levels.** Above level 0 the window members are patterns, and the per-channel
+- **Context space at higher levels.** Above level 0 the neighborhood members are patterns, and the per-channel
   alphabet grows as patterns are created. At-most-one-active per neuron holds each channel to a single state,
   but the space still expands with the structure. Above the declared filter levels every active neuron is a
   window member, so `|O|` is the level's whole active count across `2R` frames: minting throttles itself there
-  — a candidate is charged `1 + |C|` — but routing still prices every entry against a large window each frame.
+  — a candidate is charged `1 + |C|` — but routing still prices every entry against a large neighborhood each frame.
   What bounds the entry count, and the routing cost it drives, is the open measurement.
 
 - **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering
