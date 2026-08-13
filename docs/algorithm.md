@@ -20,7 +20,7 @@ default actions — that is the bootstrap — and once a default action's reward
 trying different actions while the rewards are negative.
 
 **A pattern is a name for a chunk of spacetime.** One pattern-learning algorithm and one kind of pattern: a
-set of `(neuron, offset)` neighbors over `[f − R, f + R]`, naming what was present in the frames behind it and
+set of `(neuron, offset)` neighbors over `[f − (R−1), f + (R−1)]`, naming what was present in the frames behind it and
 the frames ahead of it, at once. A pattern is minted at a delay, once its chunk has been observed, so both
 directions are ordinary evidence and neither is privileged. There are four types only in the sense that two
 declarations cross:
@@ -77,8 +77,8 @@ carries the action executed at the end of the previous frame — if one was. And
 > execution. At most one neuron fires per dimension per level in a frame; a dimension with nothing to report
 > is silent.**
 
-**A firing stays open for `R` frames.** A neuron *fires* at frame `f`, and that activation stays open through
-`f + R` — exactly how long its neighborhood takes to fill. While open it keeps working: arriving neighbors fold into its
+**A firing stays open for `R − 1` frames.** A neuron *fires* at frame `f`, and that activation stays open through
+`f + (R−1)` — exactly how long its neighborhood takes to fill, which is how long it takes to slide from the newest edge of the buffer to the oldest. While open it keeps working: arriving neighbors fold into its
 server's counts, the server re-centers, distances and margins update. That activation does not re-fire — it is
 one firing, not a state — and it does not re-enter other neurons' neighborhoods, since membership is by firing
 frame, so one firing is one neighbor at one offset and nothing more. The neuron itself is free to fire afresh
@@ -173,12 +173,14 @@ rather than exponential so distant antecedents keep nonzero credit under long-la
 ## The neighborhood
 
 A neuron that fires at frame `f` observes a **neighborhood**: the active neurons its level admits, across the frames
-`[f − R, f + R]`, each tagged with its offset from `f`. `R` is the **radius** — the reach of a neighborhood in
-either direction. The buffer that holds it is `W = 2R` frames wide.
+`[f − (R−1), f + (R−1)]`, each tagged with its offset from `f`. `R` is the **radius** — the depth of the
+buffer, `W = R` frames, which gives a reach of `R − 1` in either direction. A neuron sits at the newest edge
+of the buffer when it fires, with `R − 1` frames of context behind it, and slides to the oldest edge as its
+neighborhood completes.
 
-**Spatial processing is the `R = 0` case**: the neighborhood is one frame wide and every neighbor sits at
+**Spatial processing is the `R = 1` case**: the neighborhood is one frame wide and every neighbor sits at
 offset 0. The sections below are written in the general form, which reads temporally because that is the case
-with parts to keep apart — [the fit](#the-fit) says how the vocabulary collapses when the radius is zero.
+with parts to keep apart — [the fit](#the-fit) says how the vocabulary collapses there.
 
 The observation is therefore a set of `(neuron, offset)` neighbors:
 
@@ -200,7 +202,7 @@ else.** Two children of the same neuron may name overlapping but different chann
 several children, each channel would carry several active units, those would all become neighborhood members one
 level up, and the count would square at every level.
 
-**The forward part arrives late.** At fire time the neuron can see `[f − R, f]`; the rest of the neighborhood
+**The forward part arrives late.** At fire time the neuron can see `[f − (R−1), f]`; the rest of the neighborhood
 fills in over the following `R` frames, while the activation is still open. **Each frame is priced once, as it
 arrives**: whatever the serving entry got wrong at that offset is added to the totals then, and never
 revisited. Nothing is charged for a frame that has not happened, and nothing already charged is recomputed —
@@ -225,14 +227,14 @@ The distance decomposes at the present:
 
 ```
 d(O, C)  =  d_backward   (offsets ≤ 0, fully observed at fire time)
-         +  d_forward    (offsets > 0, accrues over the next R frames)
+         +  d_forward    (offsets > 0, accrues over the next R − 1 frames)
 ```
 
 - **`d_backward` is what routing uses.** It is all that exists when the entry has to be chosen.
 - **`d_forward` is the prediction, scored.** The entry's forward members are asserted at fire time; whatever
   they got wrong is counted as it arrives.
 
-**At `R = 0` the vocabulary collapses onto the spatial case.** With every offset zero there is no forward half:
+**At `R = 1` the vocabulary collapses onto the spatial case.** With every offset zero there is no forward half:
 `d_forward` is empty, `d_backward` is the whole distance, and "the backward neighborhood" is just the
 neighborhood. Read the rest of this document with the temporal parts struck out and it is the spatial
 algorithm, unchanged —
@@ -243,7 +245,7 @@ algorithm, unchanged —
   [completion step](#the-frame-step-by-step) has nothing to do;
 - the [history](#the-history) keys its bins on the whole neighborhood, and every price is final the moment it
   is written;
-- `horizon > 2R` reduces to `horizon > 0`.
+- `horizon > 2(R−1)` reduces to `horizon > 0`, so the constraint binds nothing.
 
 Spatial is not a reduced version of the machinery. It is the same machinery with an empty half, which is why
 the [spatial stack](#the-order-of-a-frame) needs no radius of its own and costs no parameter.
@@ -251,7 +253,7 @@ the [spatial stack](#the-order-of-a-frame) needs no radius of its own and costs 
 **Two comparisons, kept apart.** Which entry *serves* a record is decided on `d_backward`, because that is all
 routing ever sees. What a record *costs* is its distance over every offset observed so far — the backward half
 at fire time, growing as the forward frames arrive, final only when the record completes. Everywhere below,
-"wins", "closest" and "runner-up" mean the first; "distance", "cost" and "benefit" mean the second. At `R = 0`
+"wins", "closest" and "runner-up" mean the first; "distance", "cost" and "benefit" mean the second. At `R = 1`
 the two coincide, which is why the spatial case never had to tell them apart.
 
 **The split is about availability, not meaning.** A neighborhood names both directions symmetrically and a
@@ -470,17 +472,17 @@ and restructuring proceeds at the pace of new evidence, which is the only pace a
 know anything at.
 
 **Free parameters.** Two: the **horizon** (the history's capacity) and the **radius** `R` (which sets the
-window `W = 2R` and the contraction window). Everything else that could be called a parameter is a declaration
+window `W = R` and the contraction window). Everything else that could be called a parameter is a declaration
 of the machine's interface — channels, dimensions, resolutions, the neighbor filter and its depth — or a
 backstop that does not affect the settled result (the election's round cap).
 
-**The two are not independent: `horizon > 2R` is required.** A record enters an entry's served count at fire
+**The two are not independent: `horizon > 2(R−1)` is required.** A record enters an entry's served count at fire
 time, but its slot at offset `+k` cannot be counted until `k` frames later, so the `k` most recent records are
 always blank there while still sitting in the [collapse](#the-collapse)'s denominator. The slot at `+k` can
 therefore draw on at most `horizon − k` records against a threshold of `horizon / 2`, and is nameable only
-when `k < horizon / 2`. The deepest slot is `k = R`, so a horizon of `2R` or less makes the outer forward
+when `k < horizon / 2`. The deepest slot is `k = R − 1`, so a horizon of `2(R−1)` or less makes the outer forward
 offsets unnameable no matter how reliably they recur — and silently, since a slot that never had the votes
-looks exactly like a slot with nothing to say. This binds the temporal levels only: spatial runs at `R = 0`,
+looks exactly like a slot with nothing to say. This binds the temporal levels only: spatial runs at `R = 1`,
 so a spatial record is complete when it is written and nothing there is ever judged against a blank.
 
 ## The one test
@@ -572,8 +574,8 @@ state, no retraction, and no covered-or-not branch.
 
 ### One activation, across its frames
 
-The steps above are one frame. An activation lives for `R` of them, and what happens to it in between is the
-whole of how a neuron learns. Take `R = 2`, a neuron with the normal `N` and a child `K`:
+The steps above are one frame. An activation lives for `R − 1` more of them, and what happens to it in between is the
+whole of how a neuron learns. Take `R = 3`, a neuron with the normal `N` and a child `K`:
 
 ```
 K names  {(a,−2), (b,−1), (c,+1), (d,+2)}
@@ -628,7 +630,7 @@ single-purpose — recognition bids only — with no birth-frame special cases.
 `C` is the L1 center of the demand the child would serve, not the one neighborhood that happened to trigger the
 test. Incidental neighbors — present in the trigger, absent from the cluster — lose their slots and never enter
 the neighborhood. `|C|` is therefore the size of what recurs, not the size of one observation, which matters
-enormously over a window `2R` frames wide.
+enormously over a window `2R − 1` frames wide.
 
 The win set may shift slightly once `C` replaces `O` as the probe; price `C` against its recomputed win set.
 
@@ -854,10 +856,11 @@ not a flat 1.
 `Σ accepted (1 + f) + corrections`. This is prize-collecting set cover, in the same currency as everything
 else.
 
-**The window is `2R`.** A bid firing at frame `g` names `[g − R, g + R]`, so a window narrower than `2R`
+**The window is `2R − 1`.** A bid firing at frame `g` names `[g − (R−1), g + (R−1)]`, so a window narrower than `2R − 1`
 would price only part of a claim and the cheapest bid would be whichever one the window happened to truncate
-most. `2R` is also exactly the buffer already held, so the election window costs no new memory and introduces
-no new parameter.
+most. It is wider than the `R`-frame buffer, because a bid reaches `R − 1` ahead of the newest frame in hand —
+but what it spans is slot *ownership*, not frames, and slots are retired as they are written. So it introduces
+no new parameter and no second buffer of observations.
 
 **The window is a map of slot ownership, not a pool of bids to re-elect.** It is how much of the
 `(channel, frame)` map a bid can reach, so that what it claims and what is already gone are both visible. The
@@ -866,8 +869,8 @@ good, and an unwritten one is held by whichever claim is best supported so far, 
 beat. No earlier promotion is re-elected; what can change is which unit holds a slot that has not yet been
 committed. It is the same election the spatial case runs, with a frame coordinate on the slot.
 
-*Exact settlement of a single frame would need `4R` — frame `g` can be claimed by units firing anywhere in
-`[g − R, g + R]`, and those units reach `[g − 2R, g + 2R]`. `2R` therefore scores bids at the leading edge
+*Exact settlement of a single frame would need `4R − 3` — frame `g` can be claimed by units firing anywhere in
+`[g − (R−1), g + (R−1)]`, and those units reach `[g − 2(R−1), g + 2(R−1)]`. `2R − 1` therefore scores bids at the leading edge
 against partially-visible competition. This is accepted: contraction mints nothing that lasts, and a grouping
 a few units short of optimal costs a few symbols on frames that are gone next window.*
 
@@ -892,13 +895,13 @@ decoder, so nothing about revising is transmitted. Ties go to the older pattern 
 it is final, and nothing after that can reach it.
 
 **When a frame can be written.** A unit firing at `h` names `[h − R, h + R]`, so a slot at frame `g` can
-still be claimed by a unit that fires as late as `g + R`. Until that frame has been processed, nothing about
+still be claimed by a unit that fires as late as `g + (R−1)`. Until that frame has been processed, nothing about
 `g` is settled.
 
-That settles one level. Which level-1 unit covers a base neuron at `g` is known once `g + R` has passed — but
+That settles one level. Which level-1 unit covers a base neuron at `g` is known once `g + (R−1)` has passed — but
 the file writes the apex frontier, and whether that level-1 unit is itself covered settles `R` frames after
 *it* fired. The question walks upward: **the frame part is written at a lag of `R` per level, so `D · R` for a
-frame whose hierarchy reached depth `D`.** Each level needs only its own `2R` election window, so it is the
+frame whose hierarchy reached depth `D`.** Each level needs only its own `2R − 1` election window, so it is the
 delay that stacks, not the memory. A frame is written once, when its last possible claimant at every level
 has fired, and is never revised.
 
@@ -953,11 +956,11 @@ which is the honest thing for it to do.
 
 ## The order of a frame
 
-**The spatial stack resolves first, and it is the `R = 0` case of everything above.** Spatial means every
+**The spatial stack resolves first, and it is the `R = 1` case of everything above.** Spatial means every
 offset is zero, so a spatial window is a single frame. There is no forward half, nothing arrives late,
 records are complete when they are written, `server_distance` is the true minimum and the fallback is the
 true runner-up. The whole late-arrival apparatus is vacuous down here — no completion step, no `d_forward`,
-and the `horizon > 2R` floor reduces to `horizon > 0`. Spatial needs no radius of its own, which is why the
+and the `horizon > 2(R−1)` floor reduces to `horizon > 0`. Spatial needs no radius of its own, which is why the
 machine has one and not two.
 
 **The stack grows until it stalls, and it does so per frame.** Base neurons build their neighborhoods, mint
@@ -1063,13 +1066,13 @@ flowchart TD
     B --> C["Complete: in-flight records whose forward frames<br/>have arrived fold in — prediction is scored here.<br/>Counts move, servers re-center, margins update"]
     C --> D["Route AND record, one operation:<br/>closest entry by d_backward serves, runner-up is the<br/>fallback; record written from the same scan.<br/>server_distance is NOT the minimum"]
     D --> E["Serve: the entry ACTIVATES — fires, bids.<br/>Its forward members are asserted as the prediction"]
-    E -.->|"bid (the only output;<br/>nothing comes back)"| X["Contraction, independently:<br/>election over a 2R window;<br/>claims persist across their span;<br/>best-supported claim holds a slot until it is written.<br/>Zero side effects on neuron state"]
+    E -.->|"bid (the only output;<br/>nothing comes back)"| X["Contraction, independently:<br/>election over a 2R − 1 window;<br/>claims persist across their span;<br/>best-supported claim holds a slot until it is written.<br/>Zero side effects on neuron state"]
     E --> L{"Served error > 0?<br/>(normal OR child)"}
     L -->|yes| M["Add test, two passes:<br/>1. probe with O — which records would it win?<br/>2. collapse those records — that is C.<br/>Solo benefit > 1+|C|? Else price the swap.<br/>Passing means REQUEST — not create"]
     M -->|"request (channel, level, neighborhood)"| P["The machine creates the symbol<br/>and returns its identity"]
     P --> Q["Register, then settle: reassign wins,<br/>RECOMPUTE fallbacks (server was not the minimum),<br/>re-center every entry whose set changed,<br/>delete anything that stopped paying — until quiet.<br/>The newborn serves NEXT recurrence"]
     L -->|no| N["Nothing to reconsider"]
-    Q --> O["Process the next level up<br/>(spatial first, at R = 0, until a level fires no children;<br/>the frontier of neurons that fired none<br/>is the input to the temporal levels)"]
+    Q --> O["Process the next level up<br/>(spatial first, at R = 1, until a level fires no children;<br/>the frontier of neurons that fired none<br/>is the input to the temporal levels)"]
     N --> O
     X --> O
     O --> Y["After the LAST temporal level: EVERY active neuron<br/>at every level asserts. Expand all claims to base symbols,<br/>then per slot the highest-level unit that names it owns it;<br/>lower units fill the gaps. Events → scored as frames arrive;<br/>actions → the same expansion, executed"]
@@ -1077,7 +1080,7 @@ flowchart TD
 
 ## Implementation
 
-The per-neuron state and methods, the staged build plan — spatial event processing (`R = 0`), then the full
+The per-neuron state and methods, the staged build plan — spatial event processing (`R = 1`), then the full
 window, then actions and rewards — and the deltas against the current code live in
 [algorithm-implementation.md](algorithm-implementation.md).
 
@@ -1092,7 +1095,7 @@ Each risk states what would be done about it, so that measurement has a decision
   **Fallback:** cap collapses at one entry per frame, chosen round-robin by staleness. Degrades to slower
   adaptation, never to incorrect state, and every other guarantee is untouched.
 
-- **Definition growth over long spans.** `|C|` can grow as an entry accumulates stable slots across `2R`
+- **Definition growth over long spans.** `|C|` can grow as an entry accumulates stable slots across `2R − 1`
   frames, and cost grows with it. An entry can in principle price itself out by learning too much.
   **Fallback:** cap `|C|`; at collapse, drop the lowest-vote members first. The vote already ranks them, so
   the cap needs no new machinery.
@@ -1105,9 +1108,9 @@ Each risk states what would be done about it, so that measurement has a decision
   there is no smoothing anywhere. Horizon too small and entries form on coincidences; too large and they are
   slow to follow a drifting source. Radius too small and no chunk can span what recurs; too large and every
   window is mostly noise at mint time, and the election window grows with it. Measure both early, and measure
-  them jointly — they interact through `|C|`, and through the collapse. Above the `horizon > 2R` floor a
+  them jointly — they interact through `|C|`, and through the collapse. Above the `horizon > 2(R−1)` floor a
   forward slot at `+k` still needs `horizon / 2` votes from the `horizon − k` records that could cast one, so
-  deep offsets are held to a supermajority that relaxes only as `horizon / R` grows: at `horizon = 4R` the
+  deep offsets are held to a supermajority that relaxes only as `horizon / R` grows: at `horizon = 4(R−1)` the
   outermost slot needs two thirds of the records that could speak for it, against one half at offset 0.
   **Fallback:** count each slot against the records that have matured to it, `n_k`, rather than against the
   served count — every offset then faces the same strict majority both derivations call for, at any horizon.
@@ -1185,7 +1188,7 @@ is the assumption everything else rests on.
 - **Context space at higher levels.** Above level 0 the neighborhood members are patterns, and the per-channel
   alphabet grows as patterns are created. At-most-one-active per neuron holds each channel to a single state,
   but the space still expands with the structure. Above the declared filter levels every active neuron is a
-  window member, so `|O|` is the level's whole active count across `2R` frames: minting throttles itself there
+  window member, so `|O|` is the level's whole active count across `2R − 1` frames: minting throttles itself there
   — a candidate is charged `1 + |C|` — but routing still prices every entry against a large neighborhood each frame.
   What bounds the entry count, and the routing cost it drives, is the open measurement.
 
