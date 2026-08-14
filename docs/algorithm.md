@@ -371,6 +371,12 @@ runner-up for its occurrences must be recomputed from the occurrences themselves
 > Neither is channel adjacency (D4): it is part of a channel's definition, it applies at the base level only,
 > and it has no depth to choose. **Nothing else in the design is tuned, and nothing anywhere is capped.**
 
+> **T10 — Every loop in the design is bounded, and none is capped.** Settlement terminates in at most `Φ`
+> passes (T8). Deletion cascades run at most once per entry (R18). The election is a single greedy pass
+> (R28). The level stack is at most `log₂ N` deep (T9), which also bounds the write lag and the depth of an
+> assertion's expansion. Every bound falls out of a quantity the design already counts, so nothing has to be
+> chosen to make the machine halt.
+
 > **R11 — They are not independent: `horizon > 2(R−1)`.** An occurrence enters the served count at fire time,
 > but its slot at `+k` cannot be counted for `k` more frames, so the `k` most recent occurrences are blank
 > there while sitting in R4's denominator. The slot at `+k` can draw on at most `horizon − k` occurrences
@@ -709,10 +715,11 @@ means by settled-when-written rather than settled-when-claimed.
 > whose hierarchy reached depth `D`.** Each level needs only its own `2R − 1` map, so the delay stacks, not
 > the memory. A frame is written once and never revised.
 
-Depth is data-dependent and uncapped, so the lag is too. That cost is real and confined to the file, which is
-an accounting object rather than a channel anyone waits on. **Selection never waits**: actions are asserted
-forward and execute at the end of the frame that chose them, so the machine acts at full speed while its own
-description of what it just did is still settling behind it.
+Depth is data-dependent, but not unbounded: T9 gives `D ≤ log₂ N` for `N` active neurons, so the lag is at
+most `(R−1)·log₂ N`. That cost is confined to the file, which is an accounting object rather than a channel
+anyone waits on. **Selection never waits**: actions are asserted forward and execute at the end of the frame
+that chose them, so the machine acts at full speed while its own description of what it just did is still
+settling behind it.
 
 > **R27 — Best-effort promotion.** A unit is promoted on its backward match and asserts its forward members on
 > faith. When the future disagrees, corrections are appended and price the completed claim; they do not revise
@@ -727,17 +734,23 @@ leading edge against partially-visible competition. This is accepted — contrac
 
 Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled cheaply:
 
-> **R28 — The election.**
-> - **Voters** are every active neuron named by at least one bid, walked in sorted id order, bids in a fixed
->   order, so the outcome is independent of dispatch order.
-> - **Ranking**: among a pool, the best bid covers the most neighbors; ties to the older pattern id. A total,
->   deterministic order.
-> - **Rounds**: (1) compute **survivors**, bids whose current voters outweigh their price, `k ≥ 2 + m`.
->   (2) Each voter elects the best survivor naming it, or — if none survived — the best of all of them, so a
->   dropped bid can be **resurrected** when orphaned voters re-converge on it. (3) Repeat until a full pass
->   changes no vote. **Convergence is not proven**, and nothing is capped to conceal that.
-> - **Outcome**: survivors are promoted, one unit each, and their covered neurons are subsumed. Voters whose
->   final pick did not survive, and actives covered by nothing, are corrections.
+> **R28 — The election is greedy.** Repeatedly take the bid with the highest ratio of **not-yet-covered**
+> neurons it names to its price `1 + m`, and accept it if it names more than `1 + m` of them. Mark those
+> neurons covered and continue. Stop when no bid clears its price. Ties go to the older pattern id, so the
+> outcome is independent of dispatch order.
+>
+> **Outcome**: accepted bids are promoted, one unit each, and the neurons they cover are subsumed. Every
+> active neuron left uncovered is a correction.
+
+One pass, `O(B log B)` with a priority queue, and it is the classical greedy for set cover, so the slack
+against R22's optimum is bounded rather than unknown. There are no voters and nothing to iterate: a bid is
+scored against the coverage that actually remains at the moment it is considered.
+
+> **T9 — Every level at least halves.** An accepted bid covers more than `1 + m` new neurons, and `m ≥ 0`, so
+> it covers at least 2. Each neuron is covered once, so out of `N` active neurons at most `N/2` bids can be
+> accepted. **The level above therefore has at most half as many active neurons, and the stack is at most
+> `log₂ N` levels deep.** A bid that covers only itself can never clear its price, which is what forces the
+> halving.
 
 > **T6 — Why a strict majority, again.** Resolving a slot leaves a symbol or silence, and the cut is the same
 > `count(p) > n/2` as R4. There it is required by L1 minimization; here it falls out of D10's prices, because
@@ -764,7 +777,7 @@ all, which is the correct outcome for it.
 > level 1 — the fewest that cover the active base neurons. Level 1 forms its own neighborhoods and it happens
 > again. **When a level's active neurons fire no children, nothing propagates and there is no level above it
 > on this frame.** Nothing declares the depth and nothing caps it: a rich frame builds deeper than a sparse
-> one.
+> one, and by T9 no frame builds deeper than `log₂ N`.
 
 > **R31 — The apex is a frontier, not a level.** It is every active neuron that did not fire a child, so a
 > base neuron nothing found worth chunking stands in it beside a level-4 pattern. This is the same frontier
@@ -929,11 +942,9 @@ neighborhood, then actions and rewards — and the deltas against current code l
 
 Each risk states what would be done about it, so measurement has a decision attached.
 
-- **The election is the one unbounded loop left.** R28's rounds repeat until no vote changes, and the vote
-  iteration could in principle cycle: a bid's survival depends on its voters, its voters depend on which bids
-  survived. Work per round is bounded, so what is unbounded is the round count. No cap is imposed, because a
-  cap that binds picks an answer while claiming not to. Settlement is bounded by T8; this is the one place that is not.
-  **Fallback:** replace the rounds with a single greedy pass, described in §19.
+- **Neither election nor settlement finds the optimum.** Greedy (R28) is an approximation to R22, and the
+  settlement alternation (T8) reaches a fixed point that is stable rather than best. Both are bounded, and
+  neither is exact. **Diagnostic:** the election's gap is already covered by the ILP comparison below.
 
 - **Settlement is stable, not optimal.** T8 proves the alternation reaches a fixed point; it does not prove
   the fixed point is the best routing table for those bins. Lloyd converges to a local optimum, and this is
@@ -1024,16 +1035,6 @@ consolidates it, the swap retires what is left.
   levels. Minting throttles itself there, since a candidate is charged `1 + |C|`, but routing still prices
   every entry against a large neighborhood each frame. What bounds the entry count, and the routing cost it
   drives, is the open measurement.
-
-- **The election's rounds, replaced by greedy.** Settlement is bounded because it batches (T8); the election
-  iterates instead. Replace the vote-until-quiet rounds with a single **greedy** pass:
-  repeatedly take the bid with the best ratio of not-yet-covered voters to its price `1 + m`, promote it if it
-  still pays over the voters that remain uncovered, and mark those voters covered. One step per bid,
-  `O(B log B)` with a priority queue. Resurrection becomes unnecessary, because greedy already scores each bid
-  against the uncovered set as it stands when the bid is considered, which is what resurrection was patching.
-  Determinism survives on the existing tie rule. And greedy carries a classical approximation guarantee for
-  set cover, so the election's slack — unmeasured today — would become a proven bound rather than an open
-  question. The cost is the same one T8 accepts: bounded and approximate in place of exact and unbounded.
 
 - **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering
   makes them slightly less independent, and the election is sequential and deliberately so. On much larger
