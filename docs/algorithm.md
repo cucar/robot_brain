@@ -33,10 +33,11 @@ The alphabets are declared as structure, and the declaration is part of the mach
 > inside one: patterns are added level by level, without bound. The channel set is therefore a fixed,
 > enumerable index over the whole run, which is what lets `(channel, offset)` name a slot at any level.
 
-> **D4 — Adjacency.** The declaration also names which channels are neighbors of which, and may declare wider
-> neighbor sets for the first levels above the base, where the input's geometry is still meaningful. The
-> declaration is a **filter**, and it runs out where the declared geometry does: **above the declared levels,
-> every active neuron is a neighbor.** This is the only place topology enters the design.
+> **D4 — Adjacency.** Each channel declares which channels are its neighbors. This is part of the channel
+> definition, and it applies **at the base level only**, where the input's geometry is still meaningful.
+> **Above the base, every active neuron is a neighbor.** This is the only place topology enters the design,
+> and it introduces no number to tune: there is no depth to choose, because there is only ever one level to
+> which the declaration applies.
 
 **Remark.** Receptive fields grow with depth through composition, not through a declared radius. Channels gate
 eligibility and nothing else — two children of one neuron may name overlapping but different channel sets, and
@@ -309,16 +310,10 @@ Three consequences, and they are the point of the design:
 - **Reach emerges.** Offsets where nothing recurs fall away. How far a pattern reaches is discovered, not
   declared. `R` bounds it; it does not set it.
 
-> **R6 — Fallbacks move with it.** An occurrence naming the moved entry as *fallback* does not change hands,
-> but its `fallback_distance` was measured against a neighborhood that no longer exists, and a stale fallback
-> corrupts its **server's** margin. So re-centering updates both sides. This cannot cascade on its own — a
-> fallback serves nothing — it only pushes margins into settlement. The cost is a reverse index from entry to
-> the occurrences naming it as fallback.
-
-**Re-centering does not re-elect the fallback.** It keeps the distance true for the entry named; it does not
-notice when a *third* entry has moved closer. A fallback is therefore the best alternative as of the last add,
-swap or delete. The error is one-directional — the named fallback is too far, so benefit is overstated and
-entries live slightly longer than earned, never the reverse (§Risks).
+> **R6 — Servers and fallbacks are re-elected, not patched.** A moved neighborhood changes every distance
+> measured against it, for the bins it serves and for the bins that merely name it as fallback. Nothing is
+> repaired in place: settlement (R19) rescans the whole table and takes `argmin` and second-best afresh, so
+> both are current by construction after every pass, and no reverse index is needed.
 
 **Cold start is silence.** An entry with no occurrences has no counts and no neighborhood. That is the initial
 case, not an error.
@@ -369,9 +364,12 @@ so no test ever scans.
 **Why records and not a summary.** A running error total cannot answer deletion: when an entry goes, the *new*
 runner-up for its occurrences must be recomputed from the occurrences themselves.
 
-> **R10 — Free parameters: two.** The **horizon** and the **radius** `R`. Everything else is either a
-> declaration of the interface (channels, dimensions, resolutions, the neighbor filter and its depth) or a
-> backstop that does not affect the settled result (the election's round cap).
+> **R10 — Free parameters: two.** The **horizon** and the **radius** `R`. The alphabet 
+> (channels, dimensions, resolutions) is not a third: a resolution defines what a base symbol *is*, so it is
+> the problem statement rather than a knob on the algorithm, the way a Turing machine's tape alphabet is.
+
+> Neither is channel adjacency (D4): it is part of a channel's definition, it applies at the base level only,
+> and it has no depth to choose. **Nothing else in the design is tuned, and nothing anywhere is capped.**
 
 > **R11 — They are not independent: `horizon > 2(R−1)`.** An occurrence enters the served count at fire time,
 > but its slot at `+k` cannot be counted for `k` more frames, so the `k` most recent occurrences are blank
@@ -405,12 +403,12 @@ backward match but predicted worse than the runner-up contributes a negative ter
 where an entry names a chunk correctly and gets its future wrong, and it needs no separate mechanism: it drags
 the entry toward deletion and triggers the add test that proposes the replacement.
 
-> **T5 — What terminates, and what is not proven.** Every *handoff* strictly decreases `L`, and `L` is a
-> non-negative integer, so settlement cascades terminate. **Re-centering is different**: it minimizes service
-> cost over the served set but can change `|e|`, so a single collapse may raise `L`. So: settlement
-> terminates, with a round cap as backstop; `L` is a Lyapunov function for handoffs, not for the learning
-> dynamics as a whole; cross-frame churn is bounded by the error-only trigger and the strict margins, and it
-> is measured, not assumed.
+> **T5 — What `L` is a potential for, and what it is not.** Every *handoff* strictly decreases `L`, and `L` is
+> a non-negative integer. **Re-centering is different**: it minimises service cost over the served set but can
+> change `|e|`, so a single collapse may raise `L`. So `L` is a Lyapunov function for handoffs, not for the
+> learning dynamics as a whole. Settlement's termination does not rest on `L` — it rests on `Φ`, which
+> excludes the dictionary term and which both halves of a pass decrease (T8). Cross-frame churn is bounded by
+> the error-only trigger and the strict margins, and it is measured, not assumed.
 
 # 8. The four moves
 
@@ -499,38 +497,56 @@ event, so **there is no delete scan**. Three events push a margin negative:
 
 1. **Eviction.** Served occurrences leave as demand drifts; the entry is starved.
 2. **Completion.** A forward part lands and the entry predicted worse than the fallback would have.
-3. **Settlement.** A committed add or swap takes occurrences directly, or plants a closer fallback under
-   occurrences it keeps — **fallback collapse**: the entry still serves them, but the error it spares shrank.
+3. **Settlement.** A pass takes occurrences from an entry, or leaves it serving them with a closer alternative
+   now sitting under them — either way the error it spares shrank.
 
 > **R18 — Deleting a child.** Its neighborhood leaves the routing table and its pattern neuron is released.
-> Each occurrence it *served* reassigns to its stored fallback, which gains them — counts in, re-center, and
-> **its margin gains the new gaps**, which is what can rescue an entry that was itself close to starving. A
-> fresh fallback for those occurrences is computed against the survivors by `d_backward`. Each occurrence
-> where the dead child was the *fallback* keeps its server, recomputes its fallback, and that server's margin
-> updates downward. Every entry that gained or lost occurrences re-centers. **Deletions are sequential**,
-> re-checking margins after each, because two entries covering the same demand each look redundant while the
-> other stands.
+> The occurrences it served, and any that named it as fallback, are re-elected by the next settlement pass
+> (R19), which rescans the table — so nothing has to be patched by hand and the entry that inherits gains its
+> margin there. **Deletions are sequential**, re-checking margins after each, because two entries covering the
+> same demand each look redundant while the other stands. The cascade is bounded: each deletion removes an
+> entry and creates none, so it runs at most `|routing table|` times.
 
 The normal is never deleted: it has no dictionary line to refund. And nothing irreplaceable dies — the
 evidence lives in the history, so if the same neighborhood is justified again the add test rebuilds it.
 
 ## 8.4 Settlement
 
-> **R19 — Settlement.** After a committed add, swap or delete, in order:
-> 1. **Won bins change hands.** The old server's margin drops by the gap it was earning; `server = C`;
->    distances update; `C`'s margin gains the new gap. Both entries' counts move and both re-center.
-> 2. **Fallbacks are recomputed, not inherited.** Because routing chose on `d_backward`, the previous server
->    is not guaranteed to be the new runner-up. Every affected fallback is recomputed against the survivors by
->    `d_backward` — the fallback is whichever entry routing would pick if the server were gone.
-> 3. **Fallback collapse propagates.** Where `C` is nearer by `d_backward` than a stored fallback, it replaces
->    it and the server's margin adjusts by the change in the gap.
-> 4. **Re-centering settles.** Every entry whose served set changed recomputes its neighborhood, which changes
->    distances, which may cause further handoffs. Repeat until nothing changes hands.
-> 5. **Negative margins delete**, sequentially, cascading as needed.
+Settlement is one batch pass over the whole table, run once per activation and after any committed add, swap
+or delete. It is not an incremental repair and it chases nothing.
 
-Step 4 is the one place without a clean monotonicity proof (T5). In practice each round strictly reduces the
-number of misassigned occurrences, and the work is bounded by the bin count, which is bounded by the horizon.
-A round cap is the backstop.
+> **R19 — Settlement.** One pass, in order:
+> 1. **Recompute.** For every entry whose neighborhood moved since the last pass, recompute `d_backward(b, e)`
+>    for all bins `b`.
+> 2. **Assign.** Every bin takes `server = argmin` and `fallback = second-best` over the whole routing table,
+>    both from the same scan.
+> 3. **Re-center.** Every entry whose served set changed recomputes its neighborhood (R4).
+>
+> Then negative margins delete (R18), which is bounded: each deletion removes an entry and creates none, so
+> the cascade runs at most `|routing table|` times.
+
+> **T8 — Settlement converges.** Let `Φ = Σ over bins of d_backward(bin, its server)` — service cost only, no
+> dictionary term. Step 2 minimises each bin's term independently, so `Φ` cannot rise. Step 3 replaces each
+> entry with the exact L1 centre of its served set (T1), so `Φ` cannot rise. `Φ` is a count of neighbors,
+> hence a non-negative integer, and it strictly drops by at least 1 whenever anything changes. **The
+> alternation therefore terminates, in at most `Φ` passes from wherever it starts.**
+
+**Remark — this is Lloyd's algorithm.** Assign points to nearest centre, move each centre to the minimiser
+over its assigned points, repeat: Lloyd 1957, better known as k-means. This is its L1 variant over sets, with
+the collapse as the minimiser. Two differences. `Φ` is integer-valued, so the bound is `Φ` passes rather than
+the usual "finitely many partitions". And `k` is not fixed here — add, delete and swap change the number of
+entries — which is why those moves exist alongside the alternation: Lloyd only optimises assignment for a
+given set of centres. **The caveat carries over too: a fixed point is stable, not optimal.**
+
+**The proof depends on each step completing before the other begins.** Interleaving them — moving one entry,
+handing over the bins that reach for it, touching the next entry — leaves neither step finished and nothing to
+descend. Batching is what makes `Φ` a potential.
+
+Handover, fallback re-election and fallback collapse are not separate operations. All three are consequences
+of step 2's argmin, which is why R19 has no step for them.
+
+Note this does not contradict T5. `L` carries the dictionary term `Σ(1 + |e|)`, which re-centering can raise.
+`Φ` excludes it. `Φ` is the potential; `L` never was.
 
 # 9. The frame, per neuron
 
@@ -558,8 +574,11 @@ For a neuron firing at frame `f` with observed backward neighborhood `O⁻`:
    not an admission of ignorance but the sharper model, so a child that describes badly is exactly the error
    worth acting on. At most one add per activation, and a passing test **requests** rather than creates: a
    pattern is a symbol at the level above, and that alphabet belongs to the machine.
-7. **Register and settle.** The machine returns the pattern's identity, the neuron registers it as an entry,
-   and R19 follows. The newborn is installed **now, for later**.
+7. **Register and settle.** If a pattern was requested, the machine returns its identity and the neuron
+   registers it as an entry; the newborn is installed **now, for later**. Then R19 runs — one batch pass,
+   recompute, assign, re-center — followed by any deletions. R19 runs on every activation, not only after a
+   mint: it is what keeps servers and fallbacks current, and on a quiet activation its first step finds
+   nothing moved and it costs one comparison sweep.
 
 ## 9.1 One activation, across its frames
 
@@ -716,7 +735,7 @@ Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled
 > - **Rounds**: (1) compute **survivors**, bids whose current voters outweigh their price, `k ≥ 2 + m`.
 >   (2) Each voter elects the best survivor naming it, or — if none survived — the best of all of them, so a
 >   dropped bid can be **resurrected** when orphaned voters re-converge on it. (3) Repeat until a full pass
->   changes no vote, with a round cap at the bid count as backstop.
+>   changes no vote. **Convergence is not proven**, and nothing is capped to conceal that.
 > - **Outcome**: survivors are promoted, one unit each, and their covered neurons are subsumed. Voters whose
 >   final pick did not survive, and actives covered by nothing, are corrections.
 
@@ -890,7 +909,7 @@ flowchart TD
     E --> L{"6 Served error > 0?"}
     L -->|yes| M["Add test: probe with O for the win set,<br/>collapse it to C, benefit > 1+|C|?<br/>Else price the swap. Passing REQUESTS"]
     M --> P["The machine creates the symbol"]
-    P --> Q["7 Register and settle: hand over won bins,<br/>recompute fallbacks, re-center, delete<br/>what stopped paying. Newborn serves NEXT time"]
+    P --> Q["7 Register, then settle — ONE batch pass:<br/>recompute moved distances, assign every bin to<br/>argmin (fallback = second), re-center what changed,<br/>delete what stopped paying. Φ descends, so it ends.<br/>Newborn serves NEXT time"]
     L -->|no| N["Nothing to reconsider"]
     Q --> O["Next level up (spatial at R=1 until a level<br/>fires no children; that frontier feeds temporal)"]
     N --> O
@@ -910,10 +929,18 @@ neighborhood, then actions and rewards — and the deltas against current code l
 
 Each risk states what would be done about it, so measurement has a decision attached.
 
-- **Cascade depth under re-centering.** An entry moves → occurrences change hands → neighbors' served sets
-  change → their centers move → more handoffs. Bounded in practice by the bin count, but the work per frame is
-  unmeasured and T5 does not cover it. **Fallback:** cap collapses at one entry per frame, round-robin by
-  staleness. Degrades to slower adaptation, never to incorrect state.
+- **The election is the one unbounded loop left.** R28's rounds repeat until no vote changes, and the vote
+  iteration could in principle cycle: a bid's survival depends on its voters, its voters depend on which bids
+  survived. Work per round is bounded, so what is unbounded is the round count. No cap is imposed, because a
+  cap that binds picks an answer while claiming not to. Settlement is bounded by T8; this is the one place that is not.
+  **Fallback:** replace the rounds with a single greedy pass, described in §19.
+
+- **Settlement is stable, not optimal.** T8 proves the alternation reaches a fixed point; it does not prove
+  the fixed point is the best routing table for those bins. Lloyd converges to a local optimum, and this is
+  Lloyd. Add, delete and swap are what move the table between basins, and they are error-triggered, so a
+  neuron whose situations are all explained sits in whatever basin it landed in. **Diagnostic:** on a small
+  neuron, compare the settled `Φ` against an exact assignment solved offline over the same bins and entry
+  count.
 
 - **Neighborhood growth over long spans.** `|e|` can grow as an entry accumulates stable slots across `2R − 1`
   frames, and cost grows with it, so an entry can price itself out by learning too much. **Fallback:** cap
@@ -949,13 +976,6 @@ Each risk states what would be done about it, so measurement has a decision atta
 - **Cross-position dictionary redundancy.** No local test can see that 700 positions each learned the same
   edge. **Diagnostic:** count distinct child neighborhoods across positions. That number is what a
   shared-dictionary variant would buy.
-
-- **Stale fallback identity.** R6 keeps `fallback_distance` honest for the entry named but never re-elects the
-  fallback, so an occurrence can point at a worse alternative than routing would pick. Benefit is overstated
-  and entries outlive their earnings — bounded, one-directional, invisible without instrumentation.
-  **Diagnostic:** sample occurrences and compare the stored fallback against the true `d_backward` runner-up.
-  **Fallback:** run R19's step 3 on every re-centering. Exact, and the only place a routine event would scan
-  the history — a real cost, not an obvious upgrade.
 
 - **Contested forward slots across levels.** Within a level a contest is settled by support and revisable
   until written, so nothing there is decided on less than the best available evidence. Across levels it is
@@ -999,10 +1019,21 @@ consolidates it, the swap retires what is left.
 
 - **Neighborhood space at higher levels.** Above level 0 the members are patterns, and the per-channel
   alphabet grows as patterns are created. D5 holds each channel to a single state, but the space still expands
-  with the structure. Above the declared filter levels every active neuron is eligible, so `|O|` is the
-  level's whole active count across `2R − 1` frames: minting throttles itself there, since a candidate is
-  charged `1 + |C|`, but routing still prices every entry against a large neighborhood each frame. What bounds
-  the entry count, and the routing cost it drives, is the open measurement.
+  with the structure. From level 1 up every active neuron is eligible (D4), so `|O|` is the level's whole
+  active count across `2R − 1` frames — which starts at level 1, not after some run of geometrically declared
+  levels. Minting throttles itself there, since a candidate is charged `1 + |C|`, but routing still prices
+  every entry against a large neighborhood each frame. What bounds the entry count, and the routing cost it
+  drives, is the open measurement.
+
+- **The election's rounds, replaced by greedy.** Settlement is bounded because it batches (T8); the election
+  iterates instead. Replace the vote-until-quiet rounds with a single **greedy** pass:
+  repeatedly take the bid with the best ratio of not-yet-covered voters to its price `1 + m`, promote it if it
+  still pays over the voters that remain uncovered, and mark those voters covered. One step per bid,
+  `O(B log B)` with a priority queue. Resurrection becomes unnecessary, because greedy already scores each bid
+  against the uncovered set as it stands when the bid is considered, which is what resurrection was patching.
+  Determinism survives on the existing tie rule. And greedy carries a classical approximation guarantee for
+  set cover, so the election's slack — unmeasured today — would become a proven bound rather than an open
+  question. The cost is the same one T8 accepts: bounded and approximate in place of exact and unbounded.
 
 - **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering
   makes them slightly less independent, and the election is sequential and deliberately so. On much larger
