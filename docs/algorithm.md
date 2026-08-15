@@ -5,7 +5,8 @@ learns what to do by observing rewards. It is defined by two alphabets, like a T
 alphabet** it can observe and the **action alphabet** it can execute — and above each it forms symbols of its
 own. Every symbol, base or learned, event or action, is a **neuron**.
 
-This document is the specification. Numbered definitions and rules are the machine; **Remarks** are commentary
+This document is the specification. **D** is a definition and **R** a rule — together they are the machine.
+**T** is a theorem: a claim that follows from them, stated with its argument. **Remarks** are commentary
 and can be skipped. Section 2 states the objective everything else is derived from, so it comes before the
 mechanisms that optimize it.
 
@@ -183,8 +184,9 @@ That is the whole of D6: the activation is open for `R − 1` frames because tha
 fall out of an `R`-deep buffer. A firing at 11 opens while this one is still open, so several activations of
 one neuron are in flight at once, each at a different position in the buffer.
 
-> **D16 — Spatial is `R = 1`.** One frame, every neighbor at offset 0. Not a separate mechanism — the same
-> machinery with an empty half.
+> **D16 — Spatial is `R = 1`.** One frame, every neighbor at offset 0. Not a separate mechanism and not a
+> separate phase — the same machinery with an empty half, at every level of one stack (R30). A run at `R = 1`
+> is this machine spatially configured, not a spatial subsystem of it.
 
 **A pattern is a name for a chunk of spacetime.** One pattern-learning algorithm and one kind of pattern.
 There are four types only in the sense that two declarations cross: **offsets** are all zero or spanning,
@@ -230,7 +232,9 @@ same way.
 **Remark — at `R = 1` the vocabulary collapses.** `d_forward` is empty and `d_backward` is the whole distance,
 so `server_distance` **is** the minimum and a fallback **is** the true runner-up; nothing is ever in flight;
 the completion step has nothing to do; bins key on the whole neighborhood; and `horizon > 2(R−1)` binds
-nothing. Read the document with the temporal parts struck out and it is the spatial algorithm, unchanged.
+nothing. Contraction loses its cross-frame contention, since every claim spans one frame. Read the document
+with the temporal parts struck out and it is the spatial algorithm, unchanged — the whole machine, not a stage
+of it, which is what makes `R` a configuration rather than an architecture.
 
 **Remark — two different objects.** `d_forward` is what *this entry* got wrong against its own history — the
 only prediction signal a neuron learns from. The file's frame part counts what the *decoder* got wrong, once
@@ -772,18 +776,39 @@ all, which is the correct outcome for it.
 
 # 11. The order of a frame
 
-> **R30 — The spatial stack resolves first, at `R = 1`.** Base neurons build their neighborhoods, mint
-> children where economical, and recognize them; contraction settles which propagate, and the survivors are
-> level 1 — the fewest that cover the active base neurons. Level 1 forms its own neighborhoods and it happens
-> again. **When a level's active neurons fire no children, nothing propagates and there is no level above it
-> on this frame.** Nothing declares the depth and nothing caps it: a rich frame builds deeper than a sparse
-> one, and by T9 no frame builds deeper than `log₂ N`.
+> **R30 — One stack, at the declared `R`.** Base neurons build their neighborhoods, mint children where
+> economical, and recognize them; contraction settles which propagate, and the survivors are level 1 — the
+> fewest that cover the active base neurons. Level 1 forms its own neighborhoods and it happens again. **When a
+> level's active neurons fire no children, nothing propagates and there is no level above it on this frame.**
+> Nothing declares the depth and nothing caps it: a rich frame builds deeper than a sparse one, and by T9 no
+> frame builds deeper than `log₂ N`.
+>
+> Every level runs the same radius. There is no spatial stack that resolves before a temporal one, because
+> there is nothing for such a boundary to separate: a neighborhood names offsets, and a pattern at any level
+> may name neighbors in its own frame, in earlier ones, in later ones, or in a mix. **Compression is
+> spatio-temporal at every level, in one pass.**
+
+**Why there is no phase boundary.** Splitting the stack would declare a radius schedule — `R = 1` below the
+boundary, the declared `R` above it, and a transition wherever the lower half happened to stop firing children.
+Nothing derives that schedule, and it would contradict D16: if spatial is `R = 1`, then a spatial phase is a
+configuration of this machine, not a stage in front of it.
+
+**Which makes the distinction emergent, which is the point.** Reach already emerges from the vote (R5) — offsets
+where nothing recurs lose their slots. Under one stack a pattern *discovers* whether it is spatial, temporal or
+mixed, rather than being whichever the phase that minted it allowed. A level-1 pattern naming one neighbor in
+its own frame and one two frames back is an ordinary pattern, and there is no stage at which it would have been
+unrepresentable.
+
+> **T14 — One pass still resolves inside the frame.** A bid carries only backward members (R20), so every
+> election runs on frames already in hand. A unit promoted at `f` is available as an offset-0 neighbor to the
+> level above at `f`, and its own forward half completing later gates nothing. **Spanning patterns therefore
+> cost no latency in the stack**; the only lag anywhere is R26's, and that is the file's.
 
 > **R31 — The apex is a frontier, not a level.** It is every active neuron that did not fire a child, so a
 > base neuron nothing found worth chunking stands in it beside a level-4 pattern. This is the same frontier
 > the file's frame part writes and the same one rewards credit, which is why the apex rule needs no special
-> case before any pattern exists. **Temporal processing reads that frontier and nothing else** — everything
-> underneath is recovered by expanding it. The temporal levels then resolve the same way, at the declared `R`.
+> case before any pattern exists. Everything underneath it is recovered by expanding it, which is why the
+> frontier is all the file's frame part ever needs to state.
 
 The frontier cuts across levels, not along one:
 
@@ -798,8 +823,8 @@ The frontier cuts across levels, not along one:
 ```
 
 `i` and `j` fired no child, so they stand in the frontier beside a level-3 pattern. The frame part writes
-exactly this set, rewards credit exactly this set, and temporal processing reads exactly this set. A flat
-"top level" would be none of those things.
+exactly this set, rewards credit exactly this set, and the assertion (§12) resolves precedence over exactly
+this set. A flat "top level" would be none of those things.
 
 **Events and actions run in parallel within a level, and are connected there.** They are active in the same
 frames, so it is during that shared per-level processing that an event neuron builds its connections to action
@@ -807,7 +832,7 @@ neurons and updates them as rewards arrive. The parallelism is per level, and so
 
 # 12. The assertion
 
-When the last temporal level has settled, every active neuron at every level has served an entry, and every
+When the last level has settled, every active neuron at every level has served an entry, and every
 served entry has forward members. **All of them assert** — being covered silences a neuron in the frame part,
 not in its own model. The machine therefore holds a stack of claims at different levels about the same coming
 frames, and must resolve them, because the file scores corrections against an asserted set.
@@ -924,19 +949,20 @@ flowchart TD
     M --> P["The machine creates the symbol"]
     P --> Q["7 Register, then settle — ONE batch pass:<br/>recompute moved distances, assign every bin to<br/>argmin (fallback = second), re-center what changed,<br/>delete what stopped paying. Φ descends, so it ends.<br/>Newborn serves NEXT time"]
     L -->|no| N["Nothing to reconsider"]
-    Q --> O["Next level up (spatial at R=1 until a level<br/>fires no children; that frontier feeds temporal)"]
+    Q --> O["Next level up, same radius, one stack<br/>(until a level fires no children — that frontier<br/>is the apex)"]
     N --> O
     X --> O
-    O --> Y["12 After the last temporal level: every active neuron<br/>asserts. Expand to base symbols, then per slot the<br/>highest-level unit that names it owns it.<br/>Events → scored; actions → executed"]
+    O --> Y["12 After the last level: every active neuron<br/>asserts. Expand to base symbols, then per slot the<br/>highest-level unit that names it owns it.<br/>Events → scored; actions → executed"]
 ```
 
 ---
 
 # 16. Implementation
 
-Per-neuron state and methods, the staged build plan — spatial event processing (`R = 1`), then the full
-neighborhood, then actions and rewards — and the deltas against current code live in
-[algorithm-implementation.md](algorithm-implementation.md).
+Per-neuron state and methods, the staged build plan — the whole machine at `R = 1`, then the same machine at
+the declared `R`, then actions and rewards — and the deltas against current code live in
+[algorithm-implementation.md](algorithm-implementation.md). The stages raise a parameter; none of them adds a
+mechanism.
 
 # 17. Risks
 
