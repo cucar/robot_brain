@@ -31,8 +31,9 @@ The alphabets are declared as structure, and the declaration is part of the mach
 > its parent.
 
 > **D3 — Channels are declared, never created.** No mechanism mints a channel. What grows is the population
-> inside one: patterns are added level by level, without bound. The channel set is therefore a fixed,
-> enumerable index over the whole run, which is what lets `(channel, offset)` name a slot at any level.
+> inside one: patterns are added level by level, without bound. The channel set, and with it the dimension set,
+> is therefore a fixed, enumerable index over the whole run, which is what lets `(dimension, offset)` name a
+> slot at any level.
 
 > **D4 — Adjacency.** Each channel declares which channels are its neighbors. This is part of the channel
 > definition, and it applies **at the base level only**, where the input's geometry is still meaningful.
@@ -66,10 +67,10 @@ carries the action executed at the end of the previous frame — if one was.
 > open activation**, and each is processed by the same rules at its own age. Nothing distinguishes them but
 > age: a new firing is simply the activation whose age is 0.
 
-> **D7 — Exclusion is per level, and about firing.** At most one neuron per channel fires at a given level in
-> a given frame. Declared for the base, preserved upward by construction: one firing per channel per level
-> offers at most one bid, so contraction (§10) promotes at most one unit into that channel one level up. A
-> channel can carry firings at several levels in one frame; all are inhibited except the apex.
+> **D7 — Exclusion is per level, and about firing.** D5's one-per-dimension bound is declared for the base and
+> preserved upward by construction: one firing per dimension per level offers at most one bid, so contraction
+> (§10) promotes at most one unit into that dimension one level up. A dimension can carry firings at several
+> levels in one frame; all are inhibited except the apex.
 
 There is no rest value. A dimension where nothing happens supplies no symbol, and silence is what the decoder
 assumes for anything the file does not state. Three consequences:
@@ -153,16 +154,16 @@ wrong costs corrections, so prediction error *is* file length and the one test p
 > for a neuron `s` in a stream reading `p a r i s ␣`. Neighbors at offset 0 co-occur; at negative offsets they
 > led here; at positive offsets they followed. **All three are the same kind of thing.**
 
-A neighborhood is a slice of the `(channel, frame)` grid, one column per offset, at most one neuron per
-channel per column (D5). With `R = 3`:
+A neighborhood is a slice of the `(dimension, frame)` grid, one column per offset, at most one neuron per
+dimension per column (D5). With `R = 3`:
 
 ```
                                 offset
                     −2     −1      0     +1     +2
-         ch A        ·      a      ◉      ·      ·        ◉  the firing neuron
-         ch B        ·      b      ·      ·      ·        a  a named neighbor
-         ch C        q      ·      ·      c      ·        ·  silent
-         ch D        ·      ·      ·      ·      d
+        dim A        ·      a      ◉      ·      ·        ◉  the firing neuron
+        dim B        ·      b      ·      ·      ·        a  a named neighbor
+        dim C        q      ·      ·      c      ·        ·  silent
+        dim D        ·      ·      ·      ·      d
                     ╰──── d_backward ────╯╰──── d_pending ────╯
                      seen at age 0           arrives as the activation ages;
                      recognition uses this   the split sweeps right to age R−1
@@ -205,7 +206,7 @@ line which of the four you were holding.** The one asymmetry lives outside the p
 and never the reverse, and that inference runs on reward (R37).
 
 **One neighborhood per firing, and at most one entry serves it.** If a neuron could activate several children,
-each channel would carry several active units and the count would square at every level.
+each dimension would carry several active units and the count would square at every level.
 
 ## 3.2 The fit
 
@@ -216,7 +217,7 @@ each channel would carry several active units and the count would square at ever
 > ```
 
 This is not a notion invented for matching: it is literally the corrections that would follow the activation
-in the file. Service cost and match distance are one number, channel-free and offset-blind — a missed neighbor
+in the file. Service cost and match distance are one number, dimension-free and offset-blind — a missed neighbor
 and a missed prediction cost the same, because in the file they are the same thing.
 
 > **D18 — Decomposition, at the activation's age.** A slot has happened for an activation when `offset ≤ age`.
@@ -306,7 +307,7 @@ learns from another's.
 
 Routing needs a set, not a distribution.
 
-> **R4 — The collapse.** For each `(channel, offset)` slot, let `n` be the entry's served-occurrence count and
+> **R4 — The collapse.** For each `(dimension, offset)` slot, let `n` be the entry's served-occurrence count and
 > `count(p)` the number of those containing neuron `p` in that slot. The neighborhood includes `p` exactly
 > when `count(p) > n / 2`; otherwise the slot is omitted.
 
@@ -508,10 +509,10 @@ There is no special term for the triggering neighborhood: it sits in its bin lik
 child that does get minted improves with exposure rather than freezing at whatever the probe happened to be.
 
 > **R17 — What the child is at birth.** The parent requests; the machine creates. The pattern inherits its
-> parent's channel and mints one level above it, both carried on the request, so the machine allocating the
-> symbol decides nothing about what it means. It is created with **no counts**: its own neighborhood belongs
-> to its own level, which it has not observed yet. Its *existence* is decided by its parent; its *structure*
-> by itself, at its own level.
+> parent's channel and dimension and mints one level above it, all carried on the request, so the machine
+> allocating the symbol decides nothing about what it means. It is created with **no counts**: its own
+> neighborhood belongs to its own level, which it has not observed yet. Its *existence* is decided by its
+> parent; its *structure* by itself, at its own level.
 
 ## 8.2 Swap
 
@@ -720,7 +721,7 @@ at `d_backward = 0` while `N` misses `a` at 1. `K` serves. The occurrence is wri
 as fallback, and `K` asserts `c` at frame 11 and `d` at frame 12, on faith. From here the choice is locked: the
 neuron has bid on `K` and may have been promoted on it.
 
-**Frame 11 — age 1. `c` does not come; `e` fires in that channel instead.** Three things happen, and they are
+**Frame 11 — age 1. `c` does not come; `e` fires in that dimension instead.** Three things happen, and they are
 all of §9.2:
 
 - **The distance grows.** `K` named `c` and got `e`: two neighbors wrong. `N` named nothing and got `e`: one.
@@ -806,24 +807,24 @@ units and nothing has shrunk.
 > present: the unit holding a slot is the one whose prediction counts there.
 
 > **R25 — A slot is settled when it is written, not when first claimed.** Where two units claim the same
-> `(channel, frame)` slot, the better-supported claim holds it, and a later firing can displace an earlier one
+> `(dimension, frame)` slot, the better-supported claim holds it, and a later firing can displace an earlier one
 > while the slot remains unwritten. **Support is the claimant's count share for that slot** — already tallied
 > and recountable by the decoder, so revising transmits nothing. Ties go to the older pattern id. Once written
 > it is final. The displaced unit eats the overlap as mismatch, and if that keeps happening it dies.
 
 **Remark.** Revision inside that window is free: the frame part is written at a lag, so encoder and decoder
 reach a slot with the same information and apply the same rule. A later claim that fits better simply makes
-the file shorter. The slot is the unit of ownership, not the frame — units in different channels never
+the file shorter. The slot is the unit of ownership, not the frame — units in different dimensions never
 compete.
 
-The map, mid-run. Each cell is one `(channel, frame)` slot and holds the unit that has claimed it:
+The map, mid-run. Each cell is one `(dimension, frame)` slot and holds the unit that has claimed it:
 
 ```
                                     frame
                      97    98    99   100   101   102   103
-        ch A        ▓L1   ▓L1   ▓L2    L2    L2    L2     ·
-        ch B        ▓L0   ▓L1   ▓L1    L0     ·    L1    L1
-        ch C        ▓L0   ▓L0   ▓L2    ·     L0     ·     ·
+       dim A        ▓L1   ▓L1   ▓L2    L2    L2    L2     ·
+       dim B        ▓L0   ▓L1   ▓L1    L0     ·    L1    L1
+       dim C        ▓L0   ▓L0   ▓L2    ·     L0     ·     ·
                     ╰──── written ────╯╰──── open to revision ────╯
                                       ▲
                        write boundary, sweeping right at lag D·(R−1)
@@ -846,7 +847,7 @@ means by settled-when-written rather than settled-when-claimed.
 > the memory. A frame is written once and never revised.
 
 Depth is data-dependent, but not unbounded: T9 gives `D ≤ log₂ N` for `N` active neurons, so the lag is at
-most `(R−1)·log₂ N`. That cost is confined to the file, which is an accounting object rather than a channel
+most `(R−1)·log₂ N`. That cost is confined to the file, which is an accounting object rather than something
 anyone waits on. **Selection never waits**: actions are asserted forward and execute at the end of the frame
 that chose them, so the machine acts at full speed while its own description of what it just did is still
 settling behind it.
@@ -966,15 +967,15 @@ frames, and must resolve them, because the file scores corrections against an as
 > **R32 — Expand, then precedence.** A claim at level `k` names level-`k` units, which are not yet anything
 > the file can be wrong about. Expanding a unit recovers the neighbors its neighborhood names one level down,
 > at that unit's offset plus theirs; repeat to base symbols. Every claim then has the shape
-> `(channel, frame, symbol)`.
+> `(dimension, frame, symbol)`.
 >
-> **For each `(channel, frame)` slot, the highest-level active unit whose expansion names it owns it. Lower
+> **For each `(dimension, frame)` slot, the highest-level active unit whose expansion names it owns it. Lower
 > units fill only the slots left silent above them. Within a level, the best-supported claim holds it.**
 
 ```
-a's entry asserts  (b, +1)                     → b's channel at f+1
+a's entry asserts  (b, +1)                     → b's dimension at f+1
 A's entry asserts  (C, +2)     expand it:
-  C names {(p, 0), (q, +1)}                    → p's channel at f+2, q's channel at f+3
+  C names {(p, 0), (q, +1)}                    → p's dimension at f+2, q's dimension at f+3
 ```
 
 > **R33 — The assertion only reaches forward.** Expansion reaches both directions, so a claim at `+2` whose
@@ -1014,9 +1015,9 @@ what it got wrong is written as corrections.
 A reward is an input, not a symbol: alongside the observations, a frame may carry reward for actions already
 taken.
 
-> **R35 — Credit lands on the apex active action** — the highest action pattern in control of its channel that
-> frame, falling back to the base action when nothing higher covers it. A committed higher action holds the
-> channel and suppresses its constituents, so crediting the base would reward suppressed subordinates and
+> **R35 — Credit lands on the apex active action** — the highest action pattern in control of its dimension
+> that frame, falling back to the base action when nothing higher covers it. A committed higher action holds
+> the dimension and suppresses its constituents, so crediting the base would reward suppressed subordinates and
 > calcify primitive-level policy. Before any action pattern exists the apex is the base action, so the rule
 > holds across all of development.
 
@@ -1180,8 +1181,8 @@ consolidates it, the swap retires what is left.
 
 # 19. Open questions
 
-- **Neighborhood space at higher levels.** Above level 0 the members are patterns, and the per-channel
-  alphabet grows as patterns are created. D5 holds each channel to a single state, but the space still expands
+- **Neighborhood space at higher levels.** Above level 0 the members are patterns, and the per-dimension
+  alphabet grows as patterns are created. D5 holds each dimension to a single state, but the space still expands
   with the structure. From level 1 up every active neuron is eligible (D4), so `|O|` is the level's whole
   active count across `2R − 1` frames — which starts at level 1, not after some run of geometrically declared
   levels. Minting throttles itself there, since a candidate is charged `1 + |C|`, but routing still prices
