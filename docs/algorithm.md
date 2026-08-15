@@ -37,9 +37,10 @@ The alphabets are declared as structure, and the declaration is part of the mach
 
 > **D4 — Adjacency.** Each channel declares which channels are its neighbors. This is part of the channel
 > definition, and it applies **at the base level only**, where the input's geometry is still meaningful.
-> **Above the base, every active neuron is a neighbor.** This is the only place topology enters the design,
-> and it introduces no number to tune: there is no depth to choose, because there is only ever one level to
-> which the declaration applies.
+> **Above the base, every active neuron at that level is a neighbor.** Neighbors are always at the neuron's
+> own level — a neighborhood is written over the symbols that level offers — so adjacency only ever selects
+> among them. This is the only place topology enters the design, and it introduces no number to tune: there is
+> no depth to choose, because there is only ever one level to which the declaration applies.
 
 **Remark.** Receptive fields grow with depth through composition, not through a declared radius. Channels gate
 eligibility and nothing else — two children of one neuron may name overlapping but different channel sets, and
@@ -146,8 +147,8 @@ wrong costs corrections, so prediction error *is* file length and the one test p
 
 ## 3.1 The neighborhood
 
-> **D14 — Neighborhood.** A neuron firing at frame `f` observes the active neurons its level admits across
-> `[f − (R−1), f + (R−1)]`, each tagged with its offset from `f`:
+> **D14 — Neighborhood.** A neuron firing at frame `f` observes the active neurons of its own level that
+> adjacency admits (D4), across `[f − (R−1), f + (R−1)]`, each tagged with its offset from `f`:
 > ```
 > O = { (p, −4), (a, −3), (r, −2), (i, −1), (␣, +1) }
 > ```
