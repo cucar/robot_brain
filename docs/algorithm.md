@@ -50,11 +50,15 @@ the fit needs no channel structure.
 ## 1.2 Firing
 
 Every frame, each event dimension quantizes what was observed — if anything was — and each action dimension
-carries the action executed at the end of the previous frame — if one was.
+carries the action executing in that same frame — if one is.
 
-> **D5 — Firing.** A neuron fires only when something happens: an event neuron input, or an action neuron output 
+> **D5 — Firing.** A neuron fires only when something happens: an event neuron input, or an action neuron output
 > (when its action is executed). **At most one neuron fires per dimension per level in a frame.**
 > A dimension with nothing to report is silent.
+>
+> **A frame's two halves are simultaneous, not sequential.** What is observed and what is executed occupy the
+> same column of the grid, so an action is not a reply appended to a frame — it runs alongside that frame's
+> events, and both are in hand together (§13).
 
 > **D6 — An activation stays open.** A firing at frame `f` remains open through `f + (R−1)`, which is how long
 > its observation takes to fill. While open it **collects and nothing more**: arriving neighbors are written
@@ -207,7 +211,7 @@ Spatial is D16. Event and action are not separate for a plainer reason than it l
 its own actions, since each action dimension carries what was executed, so an action is a symbol read back the
 way a pixel is and a pattern over it is learned by the same counting. **You could not tell from a dictionary
 line which of the four you were holding.** The one asymmetry lives outside the pattern: events infer actions
-and never the reverse, and that inference runs on reward (R37).
+and never the reverse, and that inference runs on reward (R38).
 
 **One neighborhood per firing, and at most one entry serves it.** If a neuron could activate several children,
 each dimension would carry several active units and the count would square at every level.
@@ -961,9 +965,9 @@ means by settled-when-written rather than settled-when-claimed.
 
 Depth is data-dependent, but not unbounded: T9 gives `D ≤ log₂ N` for `N` active neurons, so the lag is at
 most `(R−1)·log₂ N`. That cost is confined to the file, which is an accounting object rather than something
-anyone waits on. **Selection never waits**: actions are asserted forward and execute at the end of the frame
-that chose them, so the machine acts at full speed while its own description of what it just did is still
-settling behind it.
+anyone waits on. **Selection never waits**: an action asserted at `f` executes at `f + 1` (§13), the very next
+frame, so the machine acts at full speed while its own description of what it just did is still settling
+behind it.
 
 > **R27 — Best-effort promotion.** A unit is promoted on its backward match and asserts its forward members on
 > faith. When the future disagrees, corrections are appended and price the completed claim; they do not revise
@@ -1066,9 +1070,10 @@ The frontier cuts across levels, not along one:
 exactly this set, rewards credit exactly this set, and the assertion (§12) resolves precedence over exactly
 this set. A flat "top level" would be none of those things.
 
-**Events and actions run in parallel within a level, and are connected there.** They are active in the same
-frames, so it is during that shared per-level processing that an event neuron builds its connections to action
-neurons and updates them as rewards arrive. The parallelism is per level, and so is the coupling.
+**Events and actions run in parallel within a level, and are connected there.** An action fires in the same
+column as the events it runs alongside (D5), so it meets them in that level's own processing — and the
+connection formed there joins it to the event patterns that chose it one frame earlier, the ones that won the
+assertion (R35). The parallelism is per level, and so is the coupling.
 
 # 12. The assertion
 
@@ -1114,7 +1119,8 @@ procedure exactly.
 > the asserted **event** set is what the machine expects to observe, scored as frames arrive; the asserted
 > **action** set is what it has committed to execute, and expanding it *is* the top-down unrolling — a high
 > action pattern becomes its constituent actions at the distances its neighborhood recorded, down to base
-> actions that execute. Execution is not a second mechanism; it is this expansion read as a program.
+> actions that execute. Execution is not a second mechanism; it is this expansion read as a program. Each base
+> action executes in the frame its expansion places it in, the nearest being `+1` (R35).
 
 > **T7 — Reach compounds.** A unit claimed at `+2` may name something at `+1` of its own, so expansion places
 > a base claim at `+3`, past the radius. `R` bounds what a single pattern may **name**; it does not bound how
@@ -1125,30 +1131,44 @@ what it got wrong is written as corrections.
 
 # 13. Rewards, selection, and actions
 
-A reward is an input, not a symbol: alongside what it reports observed, a frame may carry reward for actions
-already taken.
+A reward is an input, not a symbol: alongside what it reports observed, a frame may carry reward for an action
+already executed.
 
-> **R35 — Credit lands on the apex active action** — the highest action pattern in control of its dimension
-> that frame, falling back to the base action when nothing higher covers it. A committed higher action holds
-> the dimension and suppresses its constituents, so crediting the base would reward suppressed subordinates and
-> calcify primitive-level policy. Before any action pattern exists the apex is the base action, so the rule
-> holds across all of development.
+> **R35 — Three frames: infer, execute, reward.** Selection spans a fixed chain, one frame per step.
+> ```
+> f      infer     the frame's events are recognized and the assertion resolves (§12),
+>                  committing an action for the frame ahead
+> f + 1  execute   the action runs, and its neuron fires in this frame's column alongside
+>                  this frame's events — the connection is made here
+> f + 2  reward    what the action earned arrives as input, and updates that connection
+> ```
+> The action is at offset `+1` from the events that chose it, so **the event→action relation is an ordinary
+> forward member** — nothing about it is special to actions. It could not be at offset 0: the events at `f` are
+> recognized before the action is chosen, so an action in their own column would be part of a backward half
+> that is not yet in hand when they route (D18), and a bid could name a neighbor the election has not picked
+> yet (R20).
 
-> **R36 — Two objectives, meeting at one place.** Everything structural is priced in file length; reward
+> **R36 — Credit lands on the apex active action of the executing frame** — the highest action pattern in
+> control of its dimension at `f + 1`, not at the frame the reward arrives in — falling back to the base action
+> when nothing higher covers it. A committed higher action holds the dimension and suppresses its constituents,
+> so crediting the base would reward suppressed subordinates and calcify primitive-level policy. Before any
+> action pattern exists the apex is the base action, so the rule holds across all of development.
+
+> **R37 — Two objectives, meeting at one place.** Everything structural is priced in file length; reward
 > prices nothing structural and cannot. A policy is not a description — the decoder replays the actions the
 > file records rather than choosing any, so no arrangement of connections could shorten the file. The machine
 > therefore runs **two** objectives: compression, which decides what structure exists, and reward, which
 > decides which of it is executed. They meet at exactly one place, the event→action connection. Those
 > connections are not in the file, are not priced by the one test, and are not meant to be.
 
-> **R37 — Selection.** No fit says which action to take; it says only what an action set looks like. Choosing
+> **R38 — Selection.** No fit says which action to take; it says only what an action set looks like. Choosing
 > comes from the connection an active event pattern holds to the action patterns that have followed it. Each
 > connection carries the reward that arrived, averaged over its exposures, so it is a running estimate of what
 > that action is worth in that situation, and the machine executes the best. **Events infer actions this way
 > and actions never infer events** — the only asymmetry between the two hierarchies. The bootstrap is a
 > declared default action, which executes when there is no history to choose on.
 
-> **R38 — Exploration.** Always executing the best-known action is the explore–exploit problem: an action that
+> **R39 — Exploration.** Always executing the best-known action is the explore–exploit problem: an action that
 > merely scores acceptably can hold a situation forever. The default policy resolves it without randomness —
 > **the action alphabet is declared in order**, and while a situation's reward is negative the machine walks
 > that order, trying the next action each time the situation recurs. Deterministic, so a run reproduces and a
@@ -1161,10 +1181,9 @@ level, so an action pattern's neighborhood can name event patterns — a high-le
 high-level response by a single association, which is how a complex action sequence is learned as the answer
 to a complex event sequence.
 
-**Remark — distribution over time** is a separable policy ([global-rewards.md](global-rewards.md)). The
-current policy credits the apex actions of the immediately preceding frame; the planned generalization spreads
-each reward across the preceding span with linear decay, so distant antecedents keep nonzero credit under
-long-latency reward.
+**Remark — distribution over time** is a separable policy ([global-rewards.md](global-rewards.md)). R35's chain
+credits one frame back; the planned generalization spreads each reward across the preceding span with linear
+decay, so distant antecedents keep nonzero credit under long-latency reward.
 
 # 14. Estimation
 
