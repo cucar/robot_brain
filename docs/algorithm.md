@@ -742,7 +742,9 @@ nothing there could change its answer (T11).
 >    current.
 > 2. **Assign.** Every bin takes `server = argmin` and `fallback = second-best` over the whole routing table,
 >    both from the same scan.
-> 3. **Re-center.** Every entry whose served set changed recomputes its neighborhood (R4).
+> 3. **Re-center.** Every entry whose served set changed **in step 2** recomputes its neighborhood (R4). The
+>    fold and the eviction re-centered their own servers when they moved those counts (§9.3), so what is left
+>    here is the bins that changed hands.
 >
 > Then negative margins retire (R18), which is bounded: each retirement removes an entry from competition and
 > creates none, so the cascade runs at most `|routing table|` times.
@@ -839,9 +841,11 @@ order:
    server re-centers. **This is where prediction is scored**, on the complete chunk rather than a frame at a
    time.
 2. **Age.** Evict every observation now older than `horizon` frames (D26, R9) — none if the neuron has been
-   busy, many if it has been quiet. Each departing span leaves its server's counts, that server re-centers, and
-   its benefit drops. The history holds whatever the neuron fired on inside the window, plus the open
-   activations that are still collecting and count toward nothing.
+   busy, many if it has been quiet. Each departing span leaves its server's counts and that server re-centers.
+   **Nothing is priced here.** An entry that loses its evidence loses its benefit with it, but a benefit is a
+   measurement against a neighborhood that just moved (R2) — settlement takes it in step 4, and step 5 acts on
+   it. The history holds whatever the neuron fired on inside the window, plus the open activations that are
+   still collecting and count toward nothing.
 3. **Test**, on **any nonzero served error** — whether the server was the normal or a child. A child is not an
    admission of ignorance but the sharper model, so a child that describes badly is exactly the error worth
    acting on. Price the add (R16), else the swap (§8.2). **At most one structural move per activation**, and a
