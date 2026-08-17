@@ -10,7 +10,7 @@ This document is the specification. **D** is a definition and **R** a rule — t
 and can be skipped. Section 2 states the objective everything else is derived from, so it comes before the
 mechanisms that optimize it.
 
-**Notation.** `f, g, h` are frame indices. `R` is the radius, `W` the buffer depth. `O` is an observation —
+**Notation.** `f, g, h` are frame numbers. `R` is the radius, `W` the buffer depth. `O` is an observation —
 what a neuron saw — and `C` a candidate neighborhood; `nbhd(e)` is an entry's neighborhood and `|e|` its size
 (D19). `d` is distance, `n` a count of observations, `m` a bid's miss count, `L` a file length, `D` a
 hierarchy depth.
@@ -99,10 +99,16 @@ it only profits from it.
 
 # 2. The objective: it is all one file
 
-Take the whole run and write it as a single file a decoder could read back to reproduce every frame exactly.
+Take the last `horizon` frames and write them as a single file a decoder could read back to reproduce each of
+them exactly. **The file is a window, not a log of the run.** It moves with the machine, and everything the
+machine's structure is worth is measured against what fits inside it.
 
-> **D9 — The file.** Two parts. **The dictionary**: for each neuron, the neighborhood of each of its children.
-> **The frames**: the apex units, and the corrections where they were wrong. Anything unstated is silence.
+> **D9 — The file.** Two parts, both over that window (D26). **The dictionary**: for each neuron, the
+> neighborhood of each of its children. **The history**: the apex units, and the corrections where they were
+> wrong. Anything unstated is silence.
+
+The machine's history and a neuron's (§6) are the same part of the file read at two scopes, which is why D13
+names them with one word. Where it matters which, the text says whose.
 
 > **D10 — Predictive coding.** The decoder runs the same model as the encoder, so it already knows what each
 > active unit predicts about the frames ahead. **The encoder writes only the surprise.**
@@ -118,31 +124,36 @@ to a symbol at all, and it is derived from again in §5.2 and §10.4.
 
 > **D11 — Prices.** Every cost in the design is part of a file, counted in symbols:
 > ```
-> activating an apex unit  =  1                    a line in the frames
+> activating an apex unit  =  1                    a line in the history
 > what it got wrong        =  the neighbors wrong  the corrections after it
 > having a child           =  1 + |e|              a line in the dictionary
 > ```
 > This is a fixed-length code: a symbol costs one regardless of how often it is used.
 
-> **D12 — The file contains exactly what cannot be recomputed from it.** A child's neighborhood must be
-> written: it was chosen from records since forgotten, and no reader could reconstruct it. Counts must not:
-> they are tallies over remembered records, and the records are already in the file, so the decoder recounts
-> them while decoding. This is why the normal is free and a child is not.
+> **D12 — What the file holds.** The dictionary, and the history encoded against it. A child's neighborhood
+> must be written: it is the collapse of observations the window no longer holds, so there is nothing in the
+> file to recover it from. **A symbol is not one line per frame** — a unit firing at `h` names
+> `[h − (R−1), h + (R−1)]`, so writing it discharges up to `2R − 1` frames of the window at once. That is where
+> compression across space and time is actually paid out, and it is why the floor on the horizon is stated
+> against `R` (R11). What the machine holds and the file does not is search state — counts, tallies, distances,
+> margins — because expanding an apex unit needs the neighborhoods and nothing else. This is why the normal is
+> free and a child is not.
 
 > **D13 — Local file length.** Over one horizon, a neuron's own file is
 > ```
-> L  =  Σ over entries (1 + |e|)          written once
+> L  =  Σ over dictionary (1 + |e|)  written once
 >    +  Σ over history (1 + errors)  written every activation
 > ```
 > and §7's test is the derivative of it.
 
-**Remark — two scopes, two files.** `L` is the neuron's own file. The machine's file is a different object,
-because its frame part holds only apex units, so an activation that a neighbor's promoted unit subsumed never
-appears there. Neither approximates the other, and a neuron never needs the other one — which is what lets its
-pipeline stay independent of the election. **That the two compose is an assumption of this design, not a
-result** (§Risks, the composition gap).
+**Remark — two scopes, one span.** `L` is the neuron's own file. Since D26 it covers the same window as the
+machine's, but it is still a different object, because the machine's history holds only apex units and an
+activation that a neighbor's promoted unit subsumed never appears there. Sharing a span is what makes the two
+commensurable; it does not make either an approximation of the other, and a neuron never needs the other one —
+which is what lets its pipeline stay independent of the election. **That the two compose is an assumption of
+this design, not a result** (§Risks, the composition gap).
 
-**Remark — why predictive coding is load-bearing.** Under a literal frame part, a prediction that comes true
+**Remark — why predictive coding is load-bearing.** Under a literal history, a prediction that comes true
 saves nothing, so no test could ever value prediction. Under predictive coding, being right is free and being
 wrong costs corrections, so prediction error *is* file length and the one test prices it with no new term.
 
@@ -275,7 +286,7 @@ machine, not a stage of it, which is what makes `R` a configuration rather than 
 
 **Remark — two different objects.** An entry's forward mismatch is what *this entry* got wrong against its
 own history — the only prediction signal a neuron learns from.
-The file's frame part counts what the *decoder* got wrong, once per slot, over the machine's single arbitrated
+The machine's history counts what the *decoder* got wrong, once per slot, over its single arbitrated
 assertion (§12). They coincide when one entry owns a slot
 outright and diverge otherwise.
 
@@ -312,7 +323,7 @@ decided to keep, and the commitments its open activations have already acted on.
 >
 > history          = (bins, ring)                  complete observations only
 > ring             = observations, oldest first
-> observation      = (backward half, forward half)
+> observation      = (frame number, backward half, forward half)
 > bin              = (backward half, observation count,
 >                     tallies°, distance to each entry°, server°, fallback°,
 >                     Σ server mismatch°, Σ fallback mismatch°)
@@ -325,7 +336,8 @@ An `id` is creation order — a handle that survives re-centering, and the tie-b
 for. A `neighborhood` is carried rather than derived because it is a position in settlement's iteration (R19),
 not a value with a closed form. An observation stores no backward half: every observation in a bin carries
 that bin's key exactly (R7), so the bin holds it once. A bin is an aggregate, not a container — it knows how
-many observations it has, never which.
+many observations it has, never which. The `frame number` is the one absolute quantity anywhere in a neuron,
+and expiry (R9) is the only thing that reads it: no comparison, price or count in the design ever does.
 
 **An open activation ends at its bill.** Its forward half becomes the observation's, and its `committed entry`
 goes with it — that field records a bid already acted on, and once the span is closed there is nothing left to
@@ -438,12 +450,23 @@ case, not an error.
 
 # 6. The history
 
-> **D26 — Horizon.** A neuron remembers a fixed number of the observations it fired on, measured in its own
-> activations, not in absolute time. There are no frame numbers anywhere in the history: benefit is a sum,
-> cost is a count, and time's only role was eviction order, which a FIFO provides by construction.
+> **D26 — Horizon.** The window the file covers, in frames, and every neuron's history is that same window. A
+> neuron remembers the observations it fired on within the last `horizon` frames — all of them, however often
+> or rarely it fired. Each observation carries the frame number it fired on, and expiry is the only thing
+> that reads it.
+>
+> The ring still holds at most `horizon` observations, since a neuron fires at most once per frame (D5). What
+> changes is that it can hold fewer: occupancy is how often the neuron fired, not a constant.
 
-**Remark.** This makes the one test uniform under sparse activation — a busy neuron and a rare one judge over
-the same amount of *evidence*, not the same amount of someone else's clock.
+**Remark — one clock, so one file.** A neuron's `L` (D13) is a slice of the machine's file over the same span,
+so an entry earns its dictionary line against errors the file actually contains. Under a neuron-relative clock
+the two windows diverged without bound, and a rare neuron could justify a line out of evidence the file no
+longer held.
+
+**Remark — forgetting is on the machine's clock.** A symbol that stops occurring loses its structure within a
+horizon: its neuron's observations expire, its entries are left serving nothing, and they are starved into
+retirement at the next bill (§8.3, R18). That is what a windowed file means rather than a cost it imposes —
+the dictionary describes the window, so an entry that describes nothing in the window has no line to earn.
 
 > **R7 — Keyed on the backward half — both sides.** Two observations with identical backward halves sit at the
 > same `d_backward` from every entry, so routing hands both to the same server and fallback. That makes the
@@ -480,8 +503,13 @@ slot, tallied.
 > **T3 — The win test is per bin.** A candidate wins on `d_backward`, a property of the bin, so a bin is won
 > whole. No bin is ever split.
 
-> **R9 — Aging is one-out-one-in.** Once the ring is full, recording evicts exactly the oldest observation.
-> Recording is unconditional, and no election outcome ever edits a history.
+> **R9 — Aging is by the clock.** At each activation, every observation older than `horizon` frames leaves the
+> head of the ring — none, one, or many, depending on how long the neuron was quiet. The ring is still a FIFO
+> and eviction is still from the oldest end; the frame number sets the threshold, not the order.
+>
+> **Expiry is lazy.** A neuron that does not fire does nothing, and clears its arrears at its next activation,
+> so nothing sweeps the population per frame. Recording is unconditional, and no election outcome ever edits a
+> history.
 
 > **T4 — `server_distance` is not the minimum.** Routing chose on `d_backward`; the total is known `R − 1`
 > frames later, and the entry that won the prefix can end up further than the runner-up. Nothing may assume
@@ -512,17 +540,20 @@ per entry could not produce it.
 > chosen to make the machine halt.
 
 > **R11 — The floor: `horizon > 2R`.** A radius declares a capacity — willingness to name patterns spanning
-> `2R − 1` frames — and the horizon is what pays for it, since a reach is only nameable where the history can
-> establish recurrence over it. A neuron holds one activation per age (D5), so `R` observations are collecting
-> at any moment; `horizon > 2R` keeps the settled population more than twice that, so the machine always
-> judges on more than it is currently gathering. The constant is the in-flight population, not a chosen number.
+> `2R − 1` frames — and the horizon is the window that has to hold them. A unit firing at `h` names
+> `[h − (R−1), h + (R−1)]`, so one span is `2R − 1` frames wide and two firings a frame apart span `2R`.
+> `horizon > 2R` is the strict floor for the window to contain more than two complete overlapping spans, which
+> is the least that lets a reach recur inside the file at all. **The constant is the span, not a chosen
+> number.**
 >
-> Under-provision it and nothing breaks — the outer reaches stay nameable — they are simply never used to
-> capacity, and the neuron pays for a radius its history cannot justify patterns at.
+> Below the floor this is a correctness condition, not a provisioning one: a span wider than the window has
+> corrections falling outside the file, so the symbol asserting it cannot be priced. Above it, the horizon is
+> provisioning — the outer reaches stay nameable, and an under-provisioned neuron simply pays for a radius its
+> window rarely establishes recurrence over.
 
-**Remark — the trade, stated plainly.** Wall-clock staleness is unbounded: a neuron dormant for a million
-frames wakes with its model intact. Absence of evidence is not evidence the structure died, and if the world
-changed, errors start arriving immediately and restructuring proceeds at the pace of new evidence.
+**Remark — the trade, stated plainly.** Nothing is stale, because nothing outlives its window. Absence of
+evidence *is* treated as evidence the structure died (D26), so nothing waits dormant to be contradicted. If
+the world changed, errors arrive immediately and restructuring proceeds at the pace of new evidence.
 
 # 7. The one test
 
@@ -695,8 +726,9 @@ inherits gains its margin there. **Retirements are sequential**, re-checking mar
 entries covering the same demand each look redundant while the other stands. That cascade is bounded too: each
 retirement removes an entry and creates none, so it runs at most `|routing table|` times.
 
-The normal is never retired: it has no dictionary line to refund. And nothing irreplaceable dies — the
-evidence lives in the history, so if the same neighborhood is justified again the add test rebuilds it.
+The normal is never retired: it has no dictionary line to refund. And nothing irreplaceable dies — an entry
+retired while its evidence is still in the window is rebuilt by the add test the moment that evidence pays
+again. An entry starved by expiry has no such evidence left, and waits on the neighborhood recurring.
 
 ## 8.4 Settlement
 
@@ -806,10 +838,10 @@ order:
    **the whole span folds into the bin's server's counts at once** — every offset, one increment each (R3). The
    server re-centers. **This is where prediction is scored**, on the complete chunk rather than a frame at a
    time.
-2. **Age.** If the history is full, evict the oldest observation — the horizon is measured in activations, not
-   frames (D26). Its span leaves its server's counts, that server re-centers, and its benefit drops. One
-   observation joins and one leaves at each bill, so the history holds `horizon` settled observations, plus
-   the open activations that are still collecting and count toward nothing.
+2. **Age.** Evict every observation now older than `horizon` frames (D26, R9) — none if the neuron has been
+   busy, many if it has been quiet. Each departing span leaves its server's counts, that server re-centers, and
+   its benefit drops. The history holds whatever the neuron fired on inside the window, plus the open
+   activations that are still collecting and count toward nothing.
 3. **Test**, on **any nonzero served error** — whether the server was the normal or a child. A child is not an
    admission of ignorance but the sharper model, so a child that describes badly is exactly the error worth
    acting on. Price the add (R16), else the swap (§8.2). **At most one structural move per activation**, and a
@@ -866,7 +898,7 @@ loses its majority to silence and `K` stops naming that offset. This is reach em
 move rather than being chased frame by frame.
 
 Then the machine decides. `K` cost two against `N`'s three, so this observation paid `K` back and nothing
-changes. Had `d` failed too, served error is nonzero and §9.3 runs in full — evict the oldest observation,
+changes. Had `d` failed too, served error is nonzero and §9.3 runs in full — expire what fell out of the window,
 price a child against the demand `K` is describing badly, else price the swap, settle the table, and if `K`'s
 margin has gone strictly negative, retire it.
 
@@ -948,7 +980,7 @@ units and nothing has shrunk.
 > and recountable by the decoder, so revising transmits nothing. Ties go to the older pattern id. Once written
 > it is final. The displaced unit eats the overlap as mismatch, and if that keeps happening it dies.
 
-**Remark.** Revision inside that window is free: the frame part is written at a lag, so encoder and decoder
+**Remark.** Revision inside that window is free: the history is written at a lag, so encoder and decoder
 reach a slot with the same information and apply the same rule. A later claim that fits better simply makes
 the file shorter. The slot is the unit of ownership, not the frame — units in different dimensions never
 compete.
@@ -978,7 +1010,7 @@ means by settled-when-written rather than settled-when-claimed.
 > **R26 — The write lag.** A unit firing at `h` names `[h − (R−1), h + (R−1)]`, so a slot at `g` can still be
 > claimed by a unit firing as late as `g + (R−1)`. That settles one level. But the file writes the apex
 > frontier, and whether the covering unit is itself covered settles `R − 1` frames after *it* fired, so the
-> question walks upward: **the frame part is written at a lag of `R − 1` per level, `D · (R−1)` for a frame
+> question walks upward: **the history is written at a lag of `R − 1` per level, `D · (R−1)` for a frame
 > whose hierarchy reached depth `D`.** Each level needs only its own `2R − 1` map, so the delay stacks, not
 > the memory. A frame is written once and never revised.
 
@@ -1069,9 +1101,9 @@ unrepresentable.
 
 > **R31 — The apex is a frontier, not a level.** It is every active neuron that did not fire a child, so a
 > base neuron nothing found worth chunking stands in it beside a level-4 pattern. This is the same frontier
-> the file's frame part writes and the same one rewards credit, which is why the apex rule needs no special
+> the file's history writes and the same one rewards credit, which is why the apex rule needs no special
 > case before any pattern exists. Everything underneath it is recovered by expanding it, which is why the
-> frontier is all the file's frame part ever needs to state.
+> frontier is all the file's history ever needs to state.
 
 The frontier cuts across levels, not along one:
 
@@ -1085,7 +1117,7 @@ The frontier cuts across levels, not along one:
    frontier  =  { L1 over (a,b),  L2 over (c,d),  L3 over (e,f,g,h),  i,  j }
 ```
 
-`i` and `j` fired no child, so they stand in the frontier beside a level-3 pattern. The frame part writes
+`i` and `j` fired no child, so they stand in the frontier beside a level-3 pattern. The history writes
 exactly this set, rewards credit exactly this set, and the assertion (§12) resolves precedence over exactly
 this set. A flat "top level" would be none of those things.
 
@@ -1097,8 +1129,8 @@ assertion (R35). The parallelism is per level, and so is the coupling.
 # 12. The assertion
 
 When the last level has settled, every active neuron at every level has committed to an entry, and every
-committed entry has forward members. **All of them assert** — being covered silences a neuron in the frame part,
-not in its own model. The machine therefore holds a stack of claims at different levels about the same coming
+committed entry has forward members. **All of them assert** — being covered silences a neuron in the machine's
+history, not in its own model. The machine therefore holds a stack of claims at different levels about the same coming
 frames, and must resolve them, because the file scores corrections against an asserted set.
 
 > **R32 — Expand, then precedence.** A claim at level `k` names level-`k` units, which are not yet anything
@@ -1221,7 +1253,7 @@ flowchart TD
     D --> E["Serve: the committed entry fires and bids.<br/>Its forward members are asserted"]
     E -.->|"bid (only output;<br/>nothing returns)"| X["Contraction, independently:<br/>2R−1 slot map; claims persist;<br/>best-supported claim holds a slot<br/>until it is written"]
     E --> C["AGES IN BETWEEN — collect:<br/>write the arriving offset into the activation's<br/>forward half, re-read the committed entry and assert.<br/>NOTHING folded, re-centered, re-priced or compared —<br/>a half-built observation is not evidence"]
-    C --> B["AGE R−1 — THE BILL: the observation is COMPLETE.<br/>It enters its bin and the WHOLE SPAN folds into that<br/>bin's server at once; the server re-centers over every<br/>offset. Prediction is scored here. Then evict the oldest<br/>observation (horizon counts activations, not frames)"]
+    C --> B["AGE R−1 — THE BILL: the observation is COMPLETE.<br/>It enters its bin and the WHOLE SPAN folds into that<br/>bin's server at once; the server re-centers over every<br/>offset. Prediction is scored here. Then expire everything<br/>older than the horizon (a window in frames, R9)"]
     B --> L{"Served error > 0?"}
     L -->|yes| M["Collapse the demand to C, benefit > 1+|C|?<br/>Else price the swap. ONE move per activation.<br/>Passing REQUESTS"]
     M --> P["The machine creates the symbol"]
@@ -1269,11 +1301,11 @@ Each risk states what would be done about it, so measurement has a decision atta
   Horizon too small and entries form on coincidences; too large and they follow a drifting source slowly.
   Radius too small and no chunk spans what recurs; too large and every neighborhood is mostly noise at mint
   time. Measure both early and jointly — they interact through `|e|`, not through R4, whose denominator is the
-  same at every offset now that only complete observations are counted (§5.2). What R11's floor asserts is a
-  provisioning claim rather than a correctness one: that `horizon > 2R` is enough history to exercise the
-  declared radius. **Diagnostic:** compare how often the outermost offset is named against offset 0, across
-  `horizon / R`. If the outer reaches stay empty well above the floor, the radius is bigger than the data
-  supports and the horizon is not what is limiting it.
+  same at every offset now that only complete observations are counted (§5.2). R11's floor is a correctness
+  condition below `2R` — a span wider than the window cannot be priced — and a provisioning claim above it.
+  **Diagnostic:** compare how often the outermost offset is named against offset 0, across `horizon / R`. If
+  the outer reaches stay empty well above the floor, the radius is bigger than the data supports and the
+  horizon is not what is limiting it.
 
 - **Cold-start churn.** Early tests are decided by very little evidence. Re-centering is the main defense, but
   measure churn over the first thousand frames and again in steady state.
@@ -1285,7 +1317,7 @@ Each risk states what would be done about it, so measurement has a decision atta
 
 - **Redundant, never-promoted children.** Evidence is independent of the election (R29), so a neuron reliably
   covered by a neighbor's unit still mints from its own local error demand. Accepted deliberately: contraction
-  keeps it out of the frame part, the standing metric makes it visible, and the variable-length track in
+  keeps it out of the machine's history, the standing metric makes it visible, and the variable-length track in
   [forgetting.md](forgetting.md) is the principled reaper.
 
 - **Cross-position dictionary redundancy.** No local test can see that 700 positions each learned the same
@@ -1312,13 +1344,10 @@ Each risk states what would be done about it, so measurement has a decision atta
   of one chunk each mint their own near-duplicate of it today, which is where a constructive variant would pay
   first.
 
-- **Dormant staleness.** Neuron-relative time means a long-dormant neuron wakes with its old model intact.
-  Accepted as the right default; worth remembering when reading diagnostics after distribution shifts.
-
 # 18. The falsifiable claim
 
 Nothing here optimizes for prediction. The one test prices file length; prediction error is priced only
-because, under a predictively coded frame part, it *is* file length. The machine gets better at predicting by
+because, under a predictively coded history, it *is* file length. The machine gets better at predicting by
 compressing better — richer chunks propagate, and entries upstairs describe over richer symbols.
 
 So: **prediction accuracy should track apex reduction across levels, with no part of the machine pursuing
