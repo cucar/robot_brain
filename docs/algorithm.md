@@ -440,10 +440,19 @@ case, not an error.
 **Remark.** This makes the one test uniform under sparse activation — a busy neuron and a rare one judge over
 the same amount of *evidence*, not the same amount of someone else's clock.
 
-> **R7 — Keyed on the backward half.** Two observations with identical backward halves sit at the same
-> `d_backward` from every entry, so routing hands both to the same server and fallback. That makes the backward
-> half — and only it — safe to share an assignment across. The forward half cannot key anything: it does not
-> exist when the assignment is made.
+> **R7 — Keyed on the backward half — both sides.** Two observations with identical backward halves sit at the
+> same `d_backward` from every entry, so routing hands both to the same server and fallback. That makes the
+> backward half — and only it — safe to share an assignment across. The forward half cannot key anything: it
+> does not exist when the assignment is made.
+>
+> **An entry is keyed the same way**, by its own backward half, and no two entries may share one: routing sees
+> only `d_backward`, so a pair with equal backward halves would be indistinguishable to it, the tie would go to
+> the older `id` every time, and the younger could never serve.
+
+Both sides of the comparison are therefore backward halves, but they are **different populations**. A bin's is
+a context that was actually observed; an entry's is a claim, the collapse of everything it serves (D19), and an
+observation is routed to the nearest entry rather than to an equal one. Only when a bin's backward half happens
+to coincide with an entry's are the two the same set.
 
 A **bin** is the aggregate over its observations exactly as an entry is the aggregate over its bins. The
 backward distance is a property of the bin. The forward half is statistics: what followed this context, per
@@ -746,11 +755,14 @@ the middle band is pure accumulation.
 
 The neuron fired this frame, and the backward half of its observation, `O⁻`, is in hand.
 
-1. **Route and commit.** Take `d_backward` from `O⁻` to every entry; the normal and every child compete, ties
-   to the older `id`, and retired entries do not compete (R18). The closest becomes this activation's
-   **committed entry** (R14). Open the activation at age 0, holding that commitment and an empty forward half.
-   **This writes one thing — the open activation — and touches no counts, no tallies and no bin.** The
-   observation does not exist yet; there is only a backward half and `R − 1` frames to go.
+1. **Route and commit.** Compare `O⁻` against every entry's own backward half and take the closest: the normal
+   and every child compete, ties to the older `id`, retired entries do not (R18). That entry becomes the
+   activation's **committed entry** (R14). If `O⁻` has been seen before it already has a bin, whose distance
+   row is exactly these numbers (D23) and is kept current by settlement — so a recurring context routes by
+   reading a row, and only a novel one measures. Open the activation at age 0 holding that commitment and an
+   empty forward half.
+   **Nothing is written but the open activation.** No bin is opened for `O⁻` if it has none: the observation
+   does not exist yet, and a bin holds observations.
 2. **Serve.** The committed entry fires, and the neuron hands the machine a **recognition bid** — an offer to
    represent its chunk one level up. The bid is the pipeline's only output to the election, and the election
    sends nothing back. **Creation never bids.**
@@ -783,10 +795,12 @@ reproduce its own input (T11). Everything the activation has to say, it says at 
 The activation's last forward frame arrives, so its observation is complete. Everything happens here, in this
 order:
 
-1. **Enter the history.** Record the final offset, and the observation now exists. It finds its bin by its
-   backward half, or opens one; the bin's server takes it, and **the whole span folds into that server's
-   counts at once** — every offset, one increment each (R3). The server re-centers. **This is where prediction
-   is scored**, and it is scored on the complete chunk rather than a frame at a time.
+1. **Enter the history.** Record the final offset, and the observation now exists. It joins the bin for its own
+   backward half, **opening that bin if this is the first time that context has completed** — bins are created
+   here and nowhere else. The bin's count rises by one, its tallies take one increment per forward offset, and
+   **the whole span folds into the bin's server's counts at once** — every offset, one increment each (R3). The
+   server re-centers. **This is where prediction is scored**, on the complete chunk rather than a frame at a
+   time.
 2. **Age.** If the history is full, evict the oldest observation — the horizon is measured in activations, not
    frames (D26). Its span leaves its server's counts, that server re-centers, and its benefit drops. One
    observation joins and one leaves at each bill, so the history holds `horizon` settled observations, plus
