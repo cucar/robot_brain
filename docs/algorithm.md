@@ -327,6 +327,11 @@ not a value with a closed form. An observation stores no backward half: every ob
 that bin's key exactly (R7), so the bin holds it once. A bin is an aggregate, not a container — it knows how
 many observations it has, never which.
 
+**An open activation ends at its bill.** Its forward half becomes the observation's, and its `committed entry`
+goes with it — that field records a bid already acted on, and once the span is closed there is nothing left to
+act. **A settled observation therefore has no server of its own**; it is priced against its bin's, whatever
+that currently is. This is what keeps a bin homogeneous (T3) however long its observations have sat there.
+
 > **D22 — Three lifetimes.** Three notions of an entry standing in relation to an observation, expiring at
 > different times. Holding them in one field is what made them look like one thing.
 > ```
@@ -567,7 +572,7 @@ is what add does to overloaded demand, merge is what swap does to redundant entr
 > **R14 — Two decision points: the bet at age 0, the bill at age `R − 1`.** At age 0 the neuron recognizes —
 > it picks an entry on backward evidence alone, **commits to it**, bids on it and asserts from it. That entry
 > is the activation's `committed entry` (D21) and **the commitment is locked for the whole window**; the
-> frames that follow re-price and re-center it, but never re-open it. At age `R − 1` the activation has seen
+> frames that follow only collect, and never re-open it. At age `R − 1` the activation has seen
 > its full `2R − 1` frames and the bill comes due: this is where the machine asks whether to add, to swap, or
 > to retire. Every structural move happens there and nowhere else.
 >
