@@ -65,8 +65,9 @@ entry's count (drop the entry at zero). If its server was the normal: subtract t
 best_distance)`; if the benefit falls strictly below that child's cost, `delete_child(child)`.
 
 **`route_and_record(O) → (server, best_d, fallback, fb_d)`** — frame step 2, one operation. If `O` is already
-in the histogram, read the stored assignment (settlement and deletion keep it current); otherwise scan the
-normal and every child for the two smallest distances, ties to the older entry. Then write the record from the
+in the histogram, take `argmin` over its stored distances — the assignment is re-derived here, so a stale
+server corrects itself the moment the context recurs; otherwise scan the normal and every child for the two
+smallest distances, ties to the older entry. Then write the record from the
 same scan: push the ref, upsert the histogram entry — the server is routing's choice, promoted or not, covered
 or not. If the normal serves: add `O` to `connections`, increment `served`, mark dirty. Nothing recorded here
 is ever revoked — there is no pending state and no retraction.
@@ -92,54 +93,57 @@ immediately; temporally at `f+1`, when the actuals arrive — and `add_test` bel
 **`add_test(O) → Option<MintRequest>`** — frame step 6, only on a nonzero error. Solo benefit = `Σ` over
 histogram entries strictly closer to `O` than to their current server of `(best_distance − d)·count` — the
 triggering frame is already recorded, so its error enters through its own entry, no special term. Pass iff
-`benefit > 1 + |O|`, else `swap_test(O)`. A pass returns a **request**, not a child: `{definition: O, level:
-own + 1, channel: own, retire: Option<child_id>}` — everything the allocation needs, decided here so the
-allocator decides nothing. The neuron's state is unchanged at this point; a request that never comes back
-leaves nothing to undo.
+`benefit > 1 + |O|`. A pass inserts `C` into `children` under a **pending id**, seeds `benefits[C] = 0`, runs
+`settle(C)`, and returns a **request**, not a child: `{definition: C, level: own + 1, channel: own}` —
+everything the allocation needs, decided here so the allocator decides nothing. The definition on the request is
+read *after* `settle`, so it is the one `C` ends the frame with rather than the one the test priced.
 
-**`swap_test(C)`** — for the child `X` most overlapped by `C`'s would-be wins (found during the solo pass; a
-heuristic — see algorithm.md, "The swap"): price `{add C, delete X}` jointly — reassign `X`'s records to the
-best of the surviving entries plus `C`, sum the changes, add `C`'s wins over the records `X` did **not** serve
-(the two sums are disjoint), refund `1 + |C(X)|`, charge `1 + |C|`; the normal frozen. A pass returns the same
-request with `retire = Some(X)`.
+**No joint add-and-delete test.** `C` is priced on its own wins while every incumbent is still paid for, and an
+incumbent left worthless by the takeover fails its own delete check in `settle` step 3, in the same move
+(algorithm.md, "Delete — pruning the table"). What the sequence cannot reach is a candidate that would pay only
+if some child's storage were refunded first; that case is given up deliberately.
 
-**The round trip.** `add_test` ends the neuron's first pass. The thalamus collects the frame's requests, batch-
-allocates a pattern neuron per request (level and channel off the request, no connections), creates the objects
-so the level above can dispatch to them, and dispatches `register_child` back to each requesting parent. This
-is the same shape as today's install path, moved after the review; the difference is that the returned id is
-what `settle` needs, so registration and settlement run in the second dispatch rather than inline.
-
-**`register_child(id, C)`** — frame step 7, on the returned identity: insert `(id → C)` into `children`, seed
-`benefits[id] = 0`, then `settle(id)`. For a swap, `delete_child(X)` runs first in the same move, so the
-records `X` held are already loose when `C` competes for them. **The newborn does not fire this frame** — it is
-a routing-table entry that first serves, bids, and subsumes on the next frame its context recurs.
-
-**`settle(C)`** — frame step 7, after registration:
+**`settle(C)`** — inline, immediately on a passing add test:
 1. For each histogram entry `C` wins (`d < best_distance`): old server's benefit drops by its gap; `fallback ←`
    old server, `server ← C`, distances update; `benefits[C]` gains the new gap; if the old server was the
    normal, subtract `count` copies of the context from `connections`, decrement `served`, mark dirty.
 2. For each entry where `C` is closer than the stored fallback but not the server: replace the fallback,
    adjust the server's benefit by the change in gap.
-3. If dirty: `refresh_normal()`.
-4. Any benefit strictly below its cost: `delete_child`, one at a time, re-checking after each.
+3. Any benefit strictly below its cost: `delete_child`, one at a time, re-checking after each.
+4. If dirty: `refresh_normal()`. **This is the frame's only re-center for structure** — the deletes in step 3
+   mark dirty and do not refresh, so the normal is recomputed once, after every handoff has landed.
 
 **`refresh_normal()`** — recompute `normal = { n : 2·count(n) > served }`. If it changed: re-derive `server` /
 `fallback` for the histogram entries (bounded by the horizon); apply any handoffs exactly as in `settle`
 step 1 — records leaving the normal subtract counts, records arriving add them — and re-check touched
-benefits. A record changes hands only for a **strictly** smaller distance — ties keep the incumbent — so every
-handoff shortens the file by at least one symbol and the pass cannot cycle; when no strict improvement
-remains, it stops.
+benefits. A record changes hands only for a **strictly** smaller distance, ties keep the incumbent. **One
+sweep, not a loop**: those handoffs move `connections` again, so the definition ends the frame one step behind
+its own served set, and `route_and_record` re-derives the assignment when the context next recurs (algorithm.md,
+"The bill's pass").
+
+**The round trip.** `settle` ends the neuron's first pass, so the request leaves with every local decision
+already made. The thalamus collects the frame's requests, batch-allocates a pattern neuron per request (level
+and channel off the request, no connections), creates the objects so the level above can dispatch to them, and
+dispatches `register_child` back to each requesting parent. This is the same shape as today's install path,
+moved after the review. The same result carries the ids released by any deletes, so a frame touches the
+allocator once, in one direction or both.
+
+**`register_child(id)`** — on the returned identity: rebind the pending entry in `children` and `benefits` to
+`id`. Nothing else moves — the table settled before the request went out. **The newborn does not fire this
+frame**: it is a routing-table entry that first serves, bids, and subsumes on the next frame its context
+recurs.
 
 **`delete_child(X)`** — remove from `children` and `benefits`, and report `X` on the pass's result so the
 thalamus can release the pattern neuron and scrub its cross-neuron references. Unlike a mint, a delete needs no
 round trip: the neuron already holds everything the reassignment requires, and the released id is only of
 interest outside. For each entry served by `X`: `server ← fallback`, `best_distance ← fallback_distance`, recompute a
 fresh fallback against the survivors; entries landing on the normal add their counts (dirty). For each entry
-whose *fallback* was `X`: recompute the fallback, adjust the server's benefit. `refresh_normal()` if dirty;
-re-check any benefit the reassignments moved — cascade sequentially.
+whose *fallback* was `X`: recompute the fallback, adjust the server's benefit. Re-check any benefit the
+reassignments moved and cascade sequentially. **It does not refresh the normal** — it only marks dirty, and
+`settle` step 4 does that once for the whole frame.
 
 **Wall-clock shape:** no test ever scans the history — the add test is one pass over the histogram and only
-runs on a normal-served error, rare for a settled neuron; settlement and deletion are bounded by the
+runs on a normal-served error, rare for a settled neuron; `settle` and deletion are bounded by the
 histogram; the running benefits make every delete decision O(1) per event. What *does* scale with the
 dictionary is routing itself: a novel context is one distance against the normal and every child, so the
 per-frame cost grows with the child count. The one test is what bounds that count — only children that pay
@@ -163,8 +167,7 @@ structure produces no exposure curves, and the accuracy it reports is the readou
 - *Substrate and evidence.* Sparse activation (a dimension with nothing happening supplies no symbol; no neuron
   is emitted for it); the FIFO history with the histogram, stored fallbacks, and running benefits; routing and
   serving; unconditional recording.
-- *The lifecycle.* The error-triggered add test, the swap, event-driven deletes, and settlement. This is the
-  heart.
+- *The lifecycle.* The error-triggered add test, `settle`, and event-driven deletes. This is the heart.
 
 The evidence half is verified rather than measured: the four invariants under "What must always hold" become
 `debug_assertions` that recompute from the raw history and compare against the incrementally-maintained state
@@ -215,21 +218,21 @@ is tagged with the phase it lands in.
    and writes both into the record. This is what every later item reads.
 4. **Replace the delete scan with running benefits.** `spatial_delete_candidate` and
    `spatial_delete_candidate_uncached` are deleted outright — not ported. Delete becomes
-   `benefits[child] < 1 + |definition|`, checked only where an event moved the benefit (eviction, settlement),
-   strictly below cost, all failing children sequentially with cascade. Today's version scans the histogram on
+   `benefits[child] < 1 + |definition|`, checked only where an event moved the benefit (eviction, a mint's
+   handoffs), strictly below cost, all failing children sequentially with cascade. Today's version scans the histogram on
    every active neuron every frame, deletes at most one, and deletes at equality; all three change.
 5. **Switch the normal to element-wise majority.** `spatial_normal_config`'s per-channel argmax becomes
    `{ n : 2·count(n) > served }`, which needs a new `served` counter. `spatial_target_channels` and the channel
    plumbing that feeds it go — the normal is channel-free.
-6. **Add the swap and settlement.** Both are new. `reassign_after_mint` is settlement step 1 only and is
-   subsumed by `settle`.
+6. **Add `settle`.** New. `reassign_after_mint` is its step 1 only and is subsumed by it.
 7. **Remove the new-child bid path.** Delete the `NEW_CHILD_BID` sentinel (`neuron.rs`) and every branch keyed
    on it: the request construction in `process_spatial_frame`, the split into `recognized` /
    `new_child_parents` in `process_spatial_level`, and the mid-frame create-install-activate block. New
    children stop competing in `elect_spatial_bids` entirely.
 8. **Move minting after the review, as a request and a reply.** The add test runs for normal-served neurons
-   with a nonzero error, after the record is written — no election input of any kind. It returns a request; the
-   thalamus batch-allocates and dispatches `register_child` back; the parent registers and settles. The
+   with a nonzero error, after the record is written — no election input of any kind. It settles the table
+   against a pending child and returns a request; the thalamus batch-allocates and dispatches `register_child`
+   back; the parent rebinds the pending entry to the returned id. The
    existing install path (`allocate_spatial_pattern_neuron`, `install_spatial_corrections`) is the right shape
    already and moves after the review. The newborn is **not** activated: it fires first on its next
    recognition.
