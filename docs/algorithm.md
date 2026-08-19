@@ -1029,54 +1029,114 @@ measurement taken now (D22).
 A neuron firing an entry is not yet compression: if 49 active neurons all fire entries, level 1 has 49 active
 units and nothing has shrunk.
 
-> **D27 — Contraction.** The machine chooses the fewest units at the level above that reconstruct the level
-> below. It is **axis-general** — a neighborhood names neighbors at offsets, so a promoted unit replaces a
-> chunk of spacetime. Spatial contraction is the case where every offset is zero.
+> **D27 — Contraction.** The machine chooses the units at the level above that cover the level below most
+> cheaply. **Cover, not reconstruct**: R22 is prize-collecting, so a neuron no unit covers is allowed to fall
+> through as a correction whenever that is the shorter file. It is **axis-general** — a neighborhood names
+> neighbors at offsets, so a promoted unit replaces a chunk of spacetime. Spatial contraction is the case
+> where every offset is zero.
 
 ## 10.1 Bids
 
-> **R20 — Recognition bids only.** One bid per firing: the observed backward neighbors its committed entry names
-> correctly, the bidder included. Forward members are assertions carried by a promoted bid, not evidence
-> available to its election. The bidder is implied, because a child *is* its parent in that neighborhood.
-> Creation never bids.
+> **R20 — Recognition bids only.** One bid per firing, carrying three things:
+> ```
+> the neighborhood   the committed entry's whole span, backward and forward
+> the covered set    the backward members that are actually present, bidder included
+> the price          R21
+> ```
+> The **whole** neighborhood travels, because it *is* the dictionary line for the symbol being proposed (D9):
+> a machine that holds a unit it cannot expand cannot state the file. The bidder is implied, because a child
+> *is* its parent in that neighborhood. An activation committed to the normal bids nothing — the normal has no
+> child to propose (D24). Creation never bids.
+>
+> **What a bid carries and what it is scored on are different questions.** The election reads the covered set
+> and nothing else, and not by preference: covering means subsuming a neuron that fired, and a member at `+2`
+> has not fired. There is nothing there to cover. The forward half rides along as definition, not as evidence.
 
-> **R21 — A bid's price.** `m` counts the neighborhood members in the observed backward portion that are
-> absent. A bid's price is `1 + m`, not a flat 1.
+> **R21 — The neuron prices the bid.** Three terms, the first two of them D11's:
+> ```
+> 1          the unit's line in the history
+> m          members named in the observed backward portion that are absent
+> forward    the entry's mismatch over the offsets ahead, per observation it serves
+> ```
+> The first two are what this activation has cost so far. The third is what it will probably cost. `m` is
+> backward-only by construction, so a price stopping there quietly assumes the forward half will be free, and
+> since the election is never revisited (R27) every bid would look cheaper than it turns out to be. The neuron
+> already holds the honest figure — its entry's forward mismatch summed over everything it serves, divided by
+> that count, both maintained already (D23, T2) — so nothing new is measured and no constant is chosen.
+>
+> **This is a price for one *use*, not for the symbol.** The dictionary line `1 + |e|` is paid once per horizon
+> by the neuron's own test (R12, R16), which is what decides whether the symbol should exist at all. Charging
+> it again at every activation would make a symbol used forty times pay for its definition forty times, and the
+> machine would systematically under-promote.
 
-> **R22 — The objective.** Accept a subset of bids. Each accepted bid propagates one unit at cost `1 + m`;
-> every active neuron not covered by an accepted bid is a correction, at cost 1. Minimize
-> `Σ accepted (1 + m) + corrections`. This is prize-collecting set cover, in the same currency as everything
-> else.
+> **R22 — The objective.** Accept a subset `S` of bids. Each accepted bid propagates one unit at its price
+> (R21); every active neuron that no accepted bid covers is a correction, at cost 1.
+> ```
+> cost(S)  =  Σ over S of price  +  # active neurons S leaves uncovered
+> ```
+> Minimize it. This is prize-collecting set cover, in the same currency as everything else.
+>
+> **Savings is not a property of a bid.** What one bid is worth is `cost(S) − cost(S ∪ {bid})` — the same fixed
+> objective evaluated at two points — so it depends on what has already been accepted. A neuron can state what
+> it covers and what it costs, both of which are facts about itself. It cannot state what it saves, because
+> that is a fact about the board.
+
+**Contraction proposes nothing.** Every candidate comes from a neuron's own history, and the machine only ever
+accepts or declines one. It never edits a bid, never merges two, never invents a third, and the unit it
+promotes has exactly the neighborhood the neuron named. That is what keeps contraction a filter rather than a
+second learner — and it is why the composition gap (§17) is stated as a gap rather than closed by letting the
+election feed candidates back down.
 
 ## 10.2 Slots and claims
 
-> **D28 — The window is `2R − 1`, and it is a map of slot ownership.** A bid firing at `g` names
-> `[g − (R−1), g + (R−1)]`, so a narrower window would price only part of a claim. It spans slot *ownership*,
-> not frames — wider than the `R`-frame buffer, because a bid reaches `R − 1` ahead of the newest frame in
-> hand — and slots leave the map as they are written, so it introduces no new parameter and no second buffer.
+> **D28 — Two windows, not one.** A bid firing at `g` reaches `[g − (R−1), g + (R−1)]`, and its two halves are
+> different objects the machine keeps separately.
+> ```
+> coverage set    per level, backward    which active neurons an accepted bid has subsumed
+>                 accumulate-only        overlap is legal; nothing is ever un-covered
+>
+> assertion map   global, forward        which unit owns each base (dimension, frame) slot
+>                 exclusive              one owner per slot, re-resolved every frame (§12)
+> ```
+> Both span `2R − 1` and both age out with it, so neither introduces a parameter or a second buffer, and the
+> machine holds nothing on the horizon's scale.
+>
+> **The asymmetry is what the two halves are.** Backward, a neuron is a fact that needs accounting for, and two
+> accounts of one fact are redundant but never contradictory — so coverage is additive and no one owns
+> anything. Forward, a slot is a prediction that needs deciding, and two predictions of one slot is an
+> ambiguity the decoder cannot resolve — so exactly one unit owns it.
 
-> **R23 — The pool is this frame's bids against the map as it stands.** A written slot takes no more bids; an
-> unwritten one is held by whichever claim is best supported so far, which this frame's bids may beat. No
-> earlier promotion is re-elected. It is the same election the spatial case runs, with a frame coordinate on
-> the slot.
+> **R23 — This frame's bids against both windows as they stand.** Against the **coverage set**: a bid is
+> credited only for neurons no accepted bid has covered yet, so a chunk already represented is not paid for
+> twice. Nothing is ever removed from that set and **no earlier promotion is re-scored** — what was accepted
+> stays accepted, at the price it was accepted for. Against the **assertion map**: a slot no live unit can
+> still reach takes no more claims; an open one is held by whichever claim currently wins (§12). It is the
+> same election the spatial case runs, with a frame coordinate on the slot.
 
 > **R24 — Claims persist.** A promoted unit has spoken for the frames its neighborhood names, including frames
 > ahead, and those claims stand until the span completes. So the election settles the future along with the
 > present: the unit holding a slot is the one whose prediction counts there.
 
-> **R25 — A slot is settled when it is written, not when first claimed.** Where two units claim the same
-> `(dimension, frame)` slot, the better-supported claim holds it, and a later firing can displace an earlier one
-> while the slot remains unwritten. **Support is the claimant's count share for that slot** — already tallied
-> and recountable by the decoder, so revising transmits nothing. Ties go to the older pattern id. Once
-> written, **ownership** is final — what the owner expands to is not, and never was (D9). The displaced unit
-> eats the overlap as mismatch, and if that keeps happening it dies.
+> **R25 — A slot's owner is whatever the resolution currently says.** §12 re-resolves every slot every frame
+> from the live active set, so a unit that fires later takes a slot by winning that resolution — nothing is
+> displaced, because nothing was being held. **Where two units of the same level claim one `(dimension, frame)`
+> slot, the better-supported holds it. Support is the claimant's count share for that slot** — already tallied
+> and recountable by the decoder, so revising transmits nothing. Ties go to the older symbol — creation order
+> for a pattern, declaration order (D1) for a base neuron, which has no creation to be ordered by.
+>
+> **Writing is the consequence, not the cause.** A slot stops changing when no live unit can still reach it,
+> which is R2's shape at machine scope: the answer is re-derived until the evidence that could move it runs
+> out. **This rule is about forward slots only** — backward coverage is never exclusive and never displaced
+> (R23). A unit that keeps losing slots simply stands in the file with corrections after it, and its own
+> neuron's tests are untouched either way (R29).
 
 **Remark.** Revision inside that window is free: the history is written at a lag, so encoder and decoder
 reach a slot with the same information and apply the same rule. A later claim that fits better simply makes
 the file shorter. The slot is the unit of ownership, not the frame — units in different dimensions never
 compete.
 
-The map, mid-run. Each cell is one `(dimension, frame)` slot and holds the unit that has claimed it:
+The assertion map, mid-run. Each cell is one base `(dimension, frame)` slot and holds the unit that currently
+owns it. The coverage set is a different object and is not drawn here:
 
 ```
                                     frame
@@ -1133,9 +1193,22 @@ leading edge against partially-visible competition. This is accepted — contrac
 Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled cheaply:
 
 > **R28 — The election is greedy.** Repeatedly take the bid with the highest ratio of **not-yet-covered**
-> neurons it names to its price `1 + m`, and accept it if it names more than `1 + m` of them. Mark those
-> neurons covered and continue. Stop when no bid clears its price. Ties go to the older pattern id, so the
-> outcome is independent of dispatch order.
+> neurons it names to its price (R21), and accept it if it names more of them than it costs. Add those neurons
+> to the level's coverage set and continue. Stop when no bid clears its price. Ties go to the older symbol —
+> creation order for a pattern, declaration order (D1) for a base neuron — so the outcome is independent of
+> dispatch order.
+>
+> **Not-yet-covered is read across the window, not within the frame.** A bid at `g` reaches back to
+> `g − (R−1)`, so the neurons it names already went through their own frames' elections and some may already
+> be covered. The coverage set is where that is recorded (D28).
+>
+> **The bid is never modified; the objective is differentiated.** A bid always covers everything it named and
+> always costs what it costs. Discounting what is already covered is R22's `cost(S) − cost(S ∪ {bid})` written
+> out — what moves between rounds is what accepting it would still buy, not the bid. So **overlap is legal and
+> priced, never forbidden**: two chunks sharing a boundary neuron is how a stream tiles, and refusing the
+> second would cost a symbol rather than save one. Declining to pay twice for one neuron is the whole of the
+> inhibition here, and it needs no mechanism — a bid whose territory is taken stops clearing its price on its
+> own.
 >
 > **Outcome**: accepted bids are promoted, one unit each, and the neurons they cover are subsumed. Every
 > active neuron left uncovered is a correction.
@@ -1144,11 +1217,17 @@ One pass, `O(B log B)` with a priority queue, and it is the classical greedy for
 against R22's optimum is bounded rather than unknown. There are no voters and nothing to iterate: a bid is
 scored against the coverage that actually remains at the moment it is considered.
 
-> **T9 — Every level at least halves.** An accepted bid covers more than `1 + m` new neurons, and `m ≥ 0`, so
-> it covers at least 2. Each neuron is covered once, so out of `N` active neurons at most `N/2` bids can be
-> accepted. **The level above therefore has at most half as many active neurons, and the stack is at most
-> `log₂ N` levels deep.** A bid that covers only itself can never clear its price, which is what forces the
-> halving.
+> **T9 — Every level at least halves, over the window.** An accepted bid newly covers more neurons than it
+> costs, and a price is at least 1, so it newly covers at least 2. Each neuron is **newly** covered once — the
+> coverage set only grows, so newly-covered sets are disjoint however much the bids themselves overlap. Out of
+> `N` active neurons in the window, at most `N/2` bids can therefore be accepted, and **the level above has at
+> most half as many active neurons over that window.** A bid that newly covers only itself can never clear its
+> price, which is what forces the halving.
+>
+> **The count is over the covered span, not one frame.** With temporal contraction one unit can cover neurons
+> from two frames, so a single frame's count need not halve even though the window's does. The `log₂ N` depth
+> bound and the write lag that rests on it (R26) are stated per frame and are not licensed by this argument as
+> it stands.
 
 > **T6 — Why a strict majority, again.** Resolving a slot leaves a symbol or silence, and the cut is the same
 > `count(p) > n/2` as R4. There it is required by L1 minimization; here it falls out of D10's prices, because
@@ -1350,7 +1429,7 @@ how often each symbol occurs — the one variable-length code in which probabili
 flowchart TD
     A["Frame: the machine calls the neuron.<br/>The neuron holds its own open activations,<br/>each at its own age"] --> D["AGE 0 — THE BET: route on d_backward. Closest entry<br/>wins (retired entries do not compete) and the activation<br/>COMMITS to it for the window. Writes ONLY the open<br/>activation — no bin, no counts, no price"]
     D --> E["Serve: the committed entry fires and bids.<br/>Its forward members are asserted"]
-    E -.->|"bid (only output;<br/>nothing returns)"| X["Contraction, independently:<br/>2R−1 slot map; claims persist;<br/>best-supported claim holds a slot<br/>until it is written"]
+    E -.->|"bid (only output;<br/>nothing returns)"| X["Contraction, independently: score each bid on what<br/>the level's COVERAGE SET does not already hold, over<br/>the 2R−1 window. Overlap is legal and priced, never<br/>forbidden. The machine picks bids; it never edits one"]
     E --> C["AGES IN BETWEEN — collect:<br/>write the arriving offset into the activation's<br/>forward half, re-read the committed entry and assert.<br/>NOTHING folded, re-centered, re-priced or compared —<br/>a half-built observation is not evidence"]
     C --> B["AGE R−1 — THE BILL: the observation is COMPLETE.<br/>It enters its bin and the WHOLE SPAN folds into that<br/>bin's server at once; the server re-centers over every<br/>offset. Prediction is scored here. Then expire everything<br/>older than the horizon (a window in frames, R9)"]
     B --> L{"Residual > 0?"}
