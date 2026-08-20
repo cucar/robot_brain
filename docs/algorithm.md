@@ -12,8 +12,8 @@ mechanisms that optimize it.
 
 **Notation.** `f, g, h` are frame numbers. `R` is the radius, `W` the buffer depth. `O` is an observation —
 what a neuron saw — and `C` a candidate neighborhood; `nbhd(e)` is an entry's neighborhood and `|e|` its size
-(D19). `d` is distance, `n` a count of observations, `m` a bid's miss count, `L` a file length, `D` a
-hierarchy depth.
+(D19). `d` is distance, `n` a count of observations, `m` a bid's miss count, `L` the file length, `S` an
+accepted set of bids, `D` a hierarchy depth.
 
 ---
 
@@ -113,11 +113,11 @@ machine's structure is worth is measured against what fits inside it.
 > without that symbol and the frames it used to cover are expressed by whatever the dictionary now offers,
 > with corrections where that is worse. Nothing is retained that the machine could not expand.
 
-**Two scopes, two dictionaries.** The machine's history and a neuron's (§6) are the same part of the file read
-at two scopes, which is why D13 names them with one word — but their dictionaries hold different sets. A
-neuron's own file carries a line for every child in its routing table, since every one of them serves
-observations in that neuron's history. The machine's carries only the symbols promotion actually used, since
-those are the only ones its history states. Where it matters which, the text says whose.
+**One file, one dictionary.** A neuron's history (§6) is a neuron's own record of what it saw; it is not a
+second file and it has no dictionary of its own. The dictionary holds the symbols the history states, and the
+history is the machine's. An entry in a routing table is a **standing claim on a dictionary line** — a
+proposal that the file would be shorter for holding this symbol — and whether that claim is honoured is
+settled where the file is, not where the proposal was made (R12).
 
 > **D10 — Predictive coding.** The decoder runs the same model as the encoder, so it already knows what each
 > active unit predicts about the frames ahead. **The encoder writes only the surprise.**
@@ -148,23 +148,43 @@ to a symbol at all, and it is derived from again in §5.2 and §10.4.
 > margins — because expanding an apex unit needs the neighborhoods and nothing else. This is why the normal is
 > free and a child is not.
 
-> **D13 — Local file length.** Over one horizon, a neuron's own file is
+> **D13 — File length, and what a symbol is worth.** Over one horizon the file is
 > ```
 > L  =  Σ over dictionary (1 + |e|)  written once
 >    +  Σ over history (1 + errors)  written every activation
 > ```
-> and §7's test is the derivative of it.
+> summing D11's prices over what D12 says the file holds. **There is one `L`.** A neuron has a history but no
+> file and no dictionary of its own, so nothing anywhere is a local copy of this quantity.
+>
+> **The two sums are what the two mechanisms minimize, and that is the whole division of labour.** Contraction
+> minimizes the second over a given dictionary — R22 is exactly `Σ price + # uncovered`, the history half of
+> `L` for the window it can see. The one test decides the first, entry by entry (R12). Neither can do the
+> other's job: the election cannot create or destroy a symbol, and a neuron cannot see what its symbol saved.
+>
+> **What a symbol is worth is the drop in `L`**, and that is not a fact a neuron can produce. R22 states it: a
+> neuron can say what it covers and what it costs, both facts about itself, but not what it saves, because that
+> is a fact about the board. **So the benefit term of the one test is measured by the election and returned to
+> the neuron** (R28), and there is no second, local reckoning of it.
+> ```
+> savings  =  L(S) − L(S ∪ {bid})  =  newly covered − price          per accepted bid  (R22)
+> ```
+> Every accepted bid has `savings ≥ 1`, since R28 accepts only bids naming more not-yet-covered neurons than
+> they cost. A declined bid earns nothing. That is the whole of what crosses back down, and **§7's test is the
+> derivative of `L` with respect to holding one entry**: the savings its uses delivered, against the `1 + |e|`
+> its line costs.
 
-**Remark — two scopes, one span.** `L` is the neuron's own file. Since D26 it covers the same window as the
-machine's, but it is still a different object, because the machine's history holds only apex units and an
-activation that a neighbor's promoted unit subsumed never appears there. Sharing a span is what makes the two
-commensurable; it does not make either an approximation of the other, and a neuron never needs the other one —
-which is what lets its pipeline stay independent of the election. **That the two compose is an assumption of
-this design, not a result** (§Risks, the composition gap).
+**Remark — why the history is not a second file.** A neuron's history is evidence, not an encoding: it records
+what was seen so the collapse can center on it (R4), and it states nothing a decoder would read. It never
+prices anything. The one place a price is needed — does this entry earn its dictionary line — reads a drop in
+`L` that the election measured against the real file. So **evidence is local and economics is global**, and
+there is exactly one `L` for the economics to be about.
 
-**Remark — why predictive coding is load-bearing.** Under a literal history, a prediction that comes true
-saves nothing, so no test could ever value prediction. Under predictive coding, being right is free and being
-wrong costs corrections, so prediction error *is* file length and the one test prices it with no new term.
+**Remark — why predictive coding is load-bearing.** Under a literal history, a prediction that comes true saves
+nothing, so no test could ever value prediction. Under predictive coding, being right is free and being wrong
+costs corrections, so prediction error *is* file length, and it needs no term of its own anywhere. It enters
+twice, in the same currency both times: the admission test measures it directly against the neuron's own
+observations (R16), and the bid's price carries the entry's forward mismatch into the election (R21), where it
+comes back out as savings.
 
 ---
 
@@ -281,6 +301,12 @@ and a missed prediction cost the same, because in the file they are the same thi
 > different kinds of thing. A price is re-derived from whatever the table currently says and keeps no history
 > of its own. A structural move — adding, deleting (R14, R18) — is a decision that stands until something
 > reverses it.
+>
+> **The verdict is the one exception, and it is a record on purpose.** What the election paid for a bid (D13)
+> cannot be re-derived: it was measured against a coverage set that no longer exists, on a board that has moved
+> on. So a verdict is stamped once, at the frame of the election, and never revisited — R23's "no earlier
+> promotion is re-scored" read from the neuron's side. It expires with the observation carrying it (R9) and
+> with nothing else.
 
 **Remark — the split is availability, not meaning.** A neighborhood names both directions symmetrically, and a
 pattern is minted after its chunk has been seen. Routing is simply what cannot wait. This binds action neurons
@@ -288,7 +314,7 @@ no less than event ones: an action neuron fires when its action executes and wai
 same way.
 
 **Remark — at `R = 1` the vocabulary collapses.** `d_backward` **is** `d`, so the two distances of D18 are one;
-`server_distance` **is** the minimum and a fallback **is** the true runner-up; nothing is ever in flight; the
+`server_distance` **is** the minimum; nothing is ever in flight; the
 recording step has nothing to do; the bet and the bill fall in the same frame; and bins key on the whole
 neighborhood. Contraction loses its cross-frame contention, since every claim spans one frame.
 Read the document with the temporal parts struck out and it is the spatial algorithm, unchanged — the whole
@@ -333,26 +359,29 @@ decided to keep, and the commitments its open activations have already acted on.
 >
 > history          = (bins, ring)                  complete observations only
 > ring             = observations, oldest first
-> observation      = (frame number, backward half, forward half)
+> observation      = (frame number, backward half, forward half, savings)
 > bin              = (backward half, observation count,
->                     tallies°, distance to each entry°, server°, fallback°,
->                     Σ server mismatch°, Σ fallback mismatch°)
+>                     tallies°, distance to each entry°, server°,
+>                     Σ server mismatch°, Σ savings°)
 >
 > open activations = at most R, one per age        still collecting
-> open activation  = (forward half so far, age, committed entry)
+> open activation  = (forward half so far, age, committed entry, verdict)
 > ```
 
-An `id` is creation order — a handle that survives re-centering, and the tie-break §9.1, R25 and R28 reach
-for. A `neighborhood` is carried rather than derived because it is what an entry currently claims, moved by
-re-centering as its served set moves (R5), not a value with a closed form. An observation stores no backward half: every observation in a bin carries
-that bin's key exactly (R7), so the bin holds it once. A bin is an aggregate, not a container — it knows how
-many observations it has, never which. The `frame number` is the one absolute quantity anywhere in a neuron,
-and expiry (R9) is the only thing that reads it: no comparison, price or count in the design ever does.
+An entry also carries its **birth frame**, which only R18's pricing gate reads. An `id` is creation order — a
+handle that survives re-centering, and the tie-break §9.1, R25 and R28 reach for. A `neighborhood` is carried
+rather than derived because it is what an entry currently claims, moved by re-centering as its served set moves
+(R5), not a value with a closed form. An observation stores no backward half: every observation in a bin
+carries that bin's key exactly (R7), so the bin holds it once. A bin is an aggregate, not a container — it knows how
+many observations it has, never which. **Frame numbers are the only absolute quantities anywhere in a neuron**
+— an observation's, read by expiry (R9), and an entry's birth frame, read by R18 to know whether the entry has
+a full window to be priced over. No comparison, price or count in the design reads either.
 
-**An open activation ends at its bill.** Its forward half becomes the observation's, and its `committed entry`
-goes with it — that field records a bid already acted on, and once the span is closed there is nothing left to
-act. **A settled observation therefore has no server of its own**; it is priced against its bin's, whatever
-that currently is. This is what keeps a bin homogeneous (T3) however long its observations have sat there.
+**An open activation ends at its bill.** Its forward half and its verdict's savings become the observation's,
+and its `committed entry` goes with it — that field records a bid already acted on, and once the span is closed
+there is nothing left to act. **A settled observation therefore has no server of its own**; it is priced
+against its bin's, whatever that currently is. This is what keeps a bin homogeneous (T3) however long its
+observations have sat there.
 
 > **D22 — Three lifetimes.** Three notions of an entry standing in relation to an observation, expiring at
 > different times. Holding them in one field is what made them look like one thing.
@@ -363,6 +392,12 @@ that currently is. This is what keeps a bin homogeneous (T3) however long its ob
 > ```
 > An observation whose bin is handed to another entry is priced against the new one, while the activation that
 > recorded it goes on asserting what it committed to. Those were never the same question.
+>
+> **The verdict is not a fourth row here**, because it stands in relation to no entry. It is a fact about the
+> board — what the file did with this activation — frozen at the same instant as the commitment and carried on
+> the same open activation, then banked on the *bin* rather than on any entry (D23). Savings belongs to the
+> context, not to whichever entry happened to bid on it: coverage subsumes a **neuron** (D28), so the verdict
+> would have been the same from any entry the neuron holds.
 
 > **D23 — What the totals owe.** In dependency order, so the list also says what to recompute when something
 > moves.
@@ -372,9 +407,14 @@ that currently is. This is what keeps a bin homogeneous (T3) however long its ob
 >                       Σ over served bins:  observation count × the bin's key (backward)
 > entry.served bins  =  { b : b.server = this entry }
 > bin.distance[e]    =  d_backward(bin's key, e.neighborhood)
-> bin.server         =  argmin over that row;  fallback = second
+> bin.server         =  argmin over that row
 > bin.Σ mismatch     =  d(bin, that neighborhood), summed off the tallies
+> bin.Σ savings      =  Σ over its observations:  their savings                (D13)
 > ```
+>
+> `Σ savings` is the only total that is not a function of the table: it is a sum of stamped records (R2), so it
+> moves when an observation joins the bin or is evicted and at no other time. Handover carries it, like every
+> other total, because a bin moves whole (T3).
 
 Only the forward half needs tallies; backward, every observation carries the key, so the count *is* the tally.
 The distance rows are the reverse index R6 says is unnecessary — an entry that moved is one column, and every
@@ -397,8 +437,8 @@ no separate notion of context or of what it infers.
 
 > **R3 — What moves counts.** An observation completes and enters the history → its server increments. A
 > served observation is evicted → decrement. A new child captures a bin → old server decrements, child
-> increments. A retired entry's bins fall back → the fallback increments. **Nothing else, and never a
-> fraction of an observation** — counts move by whole spans or not at all.
+> increments. A retired entry's bins fall to the next entry in their rows → that entry increments. **Nothing
+> else, and never a fraction of an observation** — counts move by whole spans or not at all.
 
 **An entry counts only its own observations.** Every observation is served by exactly one entry, and no entry
 learns from another's.
@@ -455,12 +495,11 @@ Three consequences, and they are the point of the design:
 - **Reach emerges.** Offsets where nothing recurs fall away. How far a pattern reaches is discovered, not
   declared. `R` bounds it; it does not set it.
 
-> **R6 — Servers and fallbacks are re-derived, not patched.** A moved neighborhood changes every distance
-> measured against it, for the bins it serves and for the bins that merely name it as fallback. What is
-> maintained is the *column*: an entry that re-centers recomputes its distance to every bin, and nothing else
-> is repaired. `argmin` and second-best are then taken from a bin's row whenever that bin is used — by
-> recognition when it fires (§9.1), and by the tests when they scan the table (R19). No reverse index is
-> needed beyond the distance rows themselves (D23).
+> **R6 — Servers are re-derived, not patched.** A moved neighborhood changes every distance measured against
+> it. What is maintained is the *column*: an entry that re-centers recomputes its distance to every bin, and
+> nothing else is repaired. `argmin` is then taken from a bin's row whenever that bin is used — by recognition
+> when it fires (§9.1), and by the tests when they scan the table (R19). No reverse index is needed beyond the
+> distance rows themselves (D23).
 
 **Cold start is silence.** An entry with no observations has no counts and no neighborhood. That is the initial
 case, not an error.
@@ -475,10 +514,9 @@ case, not an error.
 > The ring still holds at most `horizon` observations, since a neuron fires at most once per frame (D5). What
 > changes is that it can hold fewer: occupancy is how often the neuron fired, not a constant.
 
-**Remark — one clock, so one file.** A neuron's `L` (D13) is a slice of the machine's file over the same span,
-so an entry earns its dictionary line against errors the file actually contains. Under a neuron-relative clock
-the two windows diverged without bound, and a rare neuron could justify a line out of evidence the file no
-longer held.
+**Remark — one clock, so one window.** The horizon is the file's window and the neuron's alike, so an entry's
+savings (D13) and the observations it serves are measured over the same span. Under a neuron-relative clock a
+rare neuron would be pricing a line against a stretch of run the file no longer covers.
 
 **Remark — forgetting is on the machine's clock.** A symbol that stops occurring loses its structure within a
 horizon: its neuron's observations expire, its entries are left serving nothing, and they are retired at the
@@ -486,7 +524,7 @@ next bill (§8.2, R18). That is what a windowed file means rather than a cost it
 describes the window, so an entry that describes nothing in the window has no line to earn.
 
 > **R7 — Keyed on the backward half — both sides.** Two observations with identical backward halves sit at the
-> same `d_backward` from every entry, so routing hands both to the same server and fallback. That makes the
+> same `d_backward` from every entry, so routing hands both to the same server. That makes the
 > backward half — and only it — safe to share an assignment across. The forward half cannot key anything: it
 > does not exist when the assignment is made.
 >
@@ -507,8 +545,13 @@ slot, tallied.
 > tallies answer it exactly. `d(b, C)` is `observations × d_backward` plus, at each forward slot, two for every
 > observation holding a neuron other than the one `C` names and one for every observation holding nothing — or
 > one for every observation holding anything, where `C` names nothing. Every observation in the bin appears in
-> every slot's arithmetic, because none of them is partial. The collapse sums tallies. Benefit needs only
-> totals. Nothing asks whether `c` at `+1` came with `d` at `+2`.
+> every slot's arithmetic, because none of them is partial. The collapse sums tallies. Nothing asks whether `c`
+> at `+1` came with `d` at `+2`.
+>
+> **Savings is the one quantity tallies cannot express**, since it is a stamped record rather than a function
+> of the slots (R2). It is summed per bin like everything else and needs no slot structure at all — one integer
+> per observation, one per bin — but it is why the exclusion in §17's mixed-verdict risk would cost a second
+> set of tallies rather than a second column.
 
 > **R8 — The ring makes eviction exact.** Removing the oldest observation means subtracting the neurons *it*
 > contributed, which a tally cannot recover, so each observation keeps its own forward half and the bin is the
@@ -528,19 +571,13 @@ slot, tallied.
 > so nothing sweeps the population per frame. Recording is unconditional, and no election outcome ever edits a
 > history.
 
-> **T4 — `server_distance` is not the minimum.** Routing chose on `d_backward`; the total is known `R − 1`
-> frames later, and the entry that won the prefix can end up further than the runner-up. Nothing may assume
-> the server was closest in total distance.
+> **T4 — The server is not the closest entry.** Routing chose on `d_backward`; the total is known `R − 1`
+> frames later, and the entry that won the prefix can end up further in full distance than one that lost it.
+> Nothing may assume the server was closest overall.
 
-**Why the fallback is stored.** The test asks what an entry's observations would cost without it, and the answer
-is the fallback. Both sides of that subtraction are current measurements against current neighborhoods (R2) —
-the fallback always was, since it is a counterfactual that was never charged to anything, and under R2 the
-server side is too. Storing the fallback is what lets the bill's own scan answer the test without a pass of its
-own.
-
-**Why records and not a summary.** An error total cannot answer retirement: when an entry goes, the *new*
-runner-up for its bins must be found afresh, which needs the bins and their distance rows — a single number
-per entry could not produce it.
+**Why records and not a summary.** An error total cannot answer retirement: when an entry goes, the new server
+for its bins must be found afresh, which needs the bins and their distance rows — a single number per entry
+could not produce it.
 
 > **R10 — Free parameters: two.** The **horizon** and the **radius** `R`. The alphabet 
 > (channels, dimensions, resolutions) is not a third: a resolution defines what a base symbol *is*, so it is
@@ -574,41 +611,54 @@ the world changed, errors arrive immediately and restructuring proceeds at the p
 
 # 7. The one test
 
-> **R12 — The one test.** An entry earns its place when the errors it removes from the history exceed what it
-> costs to store.
+> **R12 — The one test.** An entry earns its dictionary line when the file was shorter for holding it than it
+> cost to state.
 > ```
-> cost(e)     =  1 + |e|
-> benefit(e)  =  Σ over the observations e serves: (fallback_distance − server_distance)
->                each a full-span `d` against current neighborhoods  (R2)
+> benefit(e)  =  Σ over the bins e serves:  their Σ savings          what the election paid  (D13)
+> cost(e)     =  1 + |e|   if benefit(e) > 0,  else 0                the line, once per window  (D11)
 > margin(e)   =  benefit(e) − cost(e)
 > ```
-> An entry is **added** only when its margin is strictly positive and **retired** only when strictly negative
-> (R18). At equality nothing happens, so the boundary cannot flip-flop.
+> An entry is **retired** only when its margin is strictly negative (R18). At equality nothing happens, so the
+> boundary cannot flip-flop.
 
-Benefit changes only on events — the entry gains or loses an observation, or a neighborhood moves. The first
-is O(1). The second re-prices every observation the entry serves, and the scan the test is already making
-(R19) is that walk, so benefit falls out of it. **No test needs a pass of its own.**
+**The line is charged only if the symbol is in the file.** D9 says the dictionary holds what the history
+states, so a symbol the history never states needs no line. Every accepted bid pays at least 1 (D13), so
+`benefit > 0` is exactly "promoted at least once inside the window" — the condition is the benefit term itself,
+not a second piece of state. **An entry whose child was never promoted therefore has cost 0, benefit 0 and
+margin 0: it survives, inert, at no charge to the file.** That is the honest accounting rather than a
+concession — an unused symbol makes the file no longer. What it costs is compute, and compute is not this
+machine's currency; the reaper for it is the variable-length track in [forgetting.md](forgetting.md).
 
-**Negative-benefit observations are legal, and they are the signal.** An observation whose server won the
-backward match but predicted worse than the runner-up contributes a negative term. That is exactly the case
-where an entry names a chunk correctly and gets its future wrong, and it needs no separate mechanism: it drags
-the entry toward retirement and triggers the add test that proposes the replacement.
+**Benefit moves only when observations move.** The entry gains or loses a bin, or an observation joins or is
+evicted from one it serves — all `O(1)` off the bin's `Σ savings`. It does not move when a neighborhood moves,
+because savings is a stamped record rather than a re-derived price (R2). So the delete test needs no walk over
+what an entry serves and **no test needs a pass of its own.**
 
-> **T5 — What `L` is a potential for, and what it is not.** Every *handoff* strictly decreases `L`, and `L` is
-> a non-negative integer. **Re-centering is different**: it minimises service cost over the served set but can
-> change `|e|`, so a single collapse may raise `L`. So `L` is a Lyapunov function for handoffs, not for the
-> learning dynamics as a whole. Nothing else rests on `L` descending either: a bill is a single improvement
-> step and not an iteration to a fixed point (R19), so it needs no potential. Cross-frame churn is bounded by
-> the error-only trigger, the strict margins and the fact that structure moves only at age `R − 1` (R14) — and
-> it is measured, not assumed. Prices are re-derived rather than accumulated (R2), so nothing here claims `L`
-> descends monotonically.
+**Zero-benefit observations are legal, and they are the signal.** An observation the file expressed some other
+way, or paid a correction for, contributes nothing however well the entry describes it. An entry accumulating
+those is describing chunks the file does not use, and it drags itself toward retirement without any mechanism
+aimed at redundancy.
+
+> **T5 — `L` is the objective, not a potential.** Nothing in the design descends it monotonically and nothing
+> needs to. A handoff lowers the neuron's service cost, but service cost is a fit against remembered evidence
+> rather than a term of `L`, so it carries no guarantee about the file; re-centering minimises it over the
+> served set while `|e|` may grow, so a single collapse can lengthen `L` outright. Nothing rests on descent
+> either: a bill is a single improvement step and not an iteration to a fixed point (R19). Cross-frame churn is
+> bounded by the error-only trigger, the strict margin, the horizon gate on pricing (R18) and the fact that
+> structure moves only at age `R − 1` (R14) — and it is measured, not assumed.
 
 # 8. The two moves
 
 A neuron can do exactly two things to its routing table: **add** an entry and **delete** one. Re-centering is
 neither. It costs nothing to decide, it is not triggered by an error, and it happens whether or not anything is
-wrong — it is what moving counts means (R5). So the whole of restructuring is two economic tests, asked in that
-order, at a bill and nowhere else.
+wrong — it is what moving counts means (R5). So the whole of restructuring is two tests, asked in that order,
+at a bill and nowhere else.
+
+**They are no longer the same test asked twice.** Add is local and optimistic: the neuron proposes a center for
+demand its entries serve badly, priced on its own evidence, which is an over-estimate because overlap can only
+remove savings and never add them (R22). Delete is global and measured: it reads what the file actually paid
+(R12). **A relaxation for admission, the truth for survival.** That asymmetry is forced — nothing can know what
+a new symbol saves until the election has had the chance to decline it in favour of something overlapping.
 
 **Remark — this is facility location.** Observations are customers, entries are facilities, opening one costs
 `1 + |e|`, serving costs the fit, and routing is the assignment. The opening cost is the only thing standing
@@ -620,9 +670,12 @@ stranded fails the pruning test a moment later.
 
 ## 8.1 Add — creating a child
 
-> **R13 — The trigger is an error, nothing else.** No background process proposes candidates. A neighborhood
-> the entries already describe costs nothing to serve however often it recurs; surprise is the size of the
-> bill, not a gate on it.
+> **R13 — The trigger is an error the file paid for.** No background process proposes candidates. A
+> neighborhood the entries already describe costs nothing to serve however often it recurs; surprise is the
+> size of the bill, not a gate on it. **An activation the election left subsumed triggers nothing**, whatever
+> its residual: another unit already expresses that chunk, so a sharper child here would shorten no file. The
+> gate is on the trigger only — once a non-subsumed activation opens the test, the demand is the demand, and
+> R15 probes with a context the file is provably paying for.
 
 > **R14 — Two decision points: the bet at age 0, the bill at age `R − 1`.** At age 0 the neuron recognizes —
 > it picks an entry on backward evidence alone, **commits to it**, bids on it and asserts from it. That entry
@@ -664,9 +717,14 @@ its recomputed win set.
 > ```
 > **`b.server` is the `argmin` of the bin's row, re-derived as the scan reads it.** A bill re-centers after it
 > restructures (R19 step 5), so a cached server can lag its row until something reads it. Pricing `C` against
-> a lagging one would credit it savings a third, closer entry already delivers. The scan is the read that
+> a lagging one would credit it a saving a third, closer entry already delivers. The scan is the read that
 > corrects it, which costs nothing: the row is already there (D23), and T8 puts the re-derivation on exactly
 > the passes that consume it.
+>
+> **This is an admission test, not a verdict.** `benefit` here is file length the *neuron* can see, and the
+> neuron cannot see overlap, so it is an upper bound on what `C` will actually earn (R22). Admissible in the
+> branch-and-bound sense: it never under-states, so nothing worth minting is refused, and everything it lets
+> through is judged by R12 on measured savings once `C` has bid.
 
 **The win set spans the whole table.** A bin is taken from whoever currently holds it — the normal, another
 child, it makes no difference — so a candidate is always a takeover and never an addition to one entry's
@@ -718,15 +776,23 @@ firing is a past fact, and no election outcome ever edits a history (R9) — and
 which is re-derived from the structure as it now stands (D9).
 
 > **R18 — Retire, then delete.** Scan the whole routing table, a candidate the add test just installed
-> included. Every entry whose margin is strictly negative (R12) is **retired**, one at a time, re-checking the
-> rest after each — two entries covering the same demand each look redundant while the other stands. The pass
-> is bounded: every retirement removes an entry from competition and creates none, so it runs at most
-> `|routing table|` times.
+> included. Every entry **whose window is complete** and whose margin is strictly negative (R12) is
+> **retired**, one at a time, re-checking the rest after each — two entries covering the same demand each look
+> redundant while the other stands. The pass is bounded: every retirement removes an entry from competition
+> and creates none, so it runs at most `|routing table|` times.
+>
+> **An entry younger than the horizon is not priced.** Benefit is a sum over the window (D13, D26), and D18's
+> rule holds at every scale: nothing is priced over a partial span. An entry minted at frame `g` has not had a
+> window of its own bidding until `g + horizon`, so a margin read before then is a margin over a window the
+> entry was absent from most of. Read early it is fatal rather than merely noisy — an entry accepted once has
+> `benefit = 1` against a line costing `1 + |e|`, so every newborn would be killed by the first bill after its
+> first acceptance and could never reach the forty uses that justify it. **The gate is the horizon, not a
+> chosen number**, and it expires exactly when the measurement becomes complete.
 >
 > **Retiring** takes the entry out of service that instant. It stops competing for recognition, so no further
-> activation may commit to it, and it is no longer offered as a fallback. Its bins fall to the next entry in
-> their rows (R6). Having no served set, it has no margin and nothing to re-center — **the neighborhood it
-> held stops moving**, and it is not a candidate for anything again.
+> activation may commit to it. Its bins fall to the next entry in their rows (R6). Having no served set, it
+> has no margin and nothing to re-center — **the neighborhood it held stops moving**, and it is not a candidate
+> for anything again.
 >
 > **Deleting** removes the entry and its pattern neuron together, the moment no open activation is committed
 > to that entry. Usually that is the same pass: nothing was committed, and retire and delete run back to back.
@@ -747,8 +813,8 @@ a bill there are three.
 1. **A child took its bins.** The add test's takeover strips it, and this is the pass that collects it — the
    child arrives and the entry it made redundant leaves, in the same bill.
 2. **Eviction.** Served observations leave as demand drifts, and the entry is starved.
-3. **The observation itself.** It folded into the entry serving its bin, and that entry predicted it worse than
-   the fallback would have.
+3. **The verdict.** The observation folded into the bin its server holds, carrying what the election paid for
+   it — nothing, if the file expressed that chunk some other way.
 
 **A candidate cannot be pruned by the pass that follows it.** Every retirement either hands `C` bins or removes
 a competitor, so retirements only raise its benefit: its margin at the end of the pass is at least what the add
@@ -767,9 +833,10 @@ none of its children has fired either, so none of them has open activations, and
 neuron under a deletable entry is therefore deletable in the same step. There is no staged cascade and nothing
 to wait on at any level — what made the root safe to delete has already made its whole subtree safe.
 
-Observations left behind by a retirement, and any that named the departed entry as fallback, need no repair: a row
-holds the distance to every entry, so the next reader takes `argmin` over what remains (R6). The entry that
-inherits gains its margin at the next bill that scans.
+Observations left behind by a retirement need no repair: a row holds the distance to every entry, so the next
+reader takes `argmin` over what remains (R6). The entry that inherits takes the bins' savings with them (D23)
+and gains its margin at the next bill that scans — which is also how a newborn taking bins off an earning
+incumbent starts life with real benefit rather than at zero.
 
 The normal is never retired: it has no dictionary line to refund. And nothing irreplaceable dies — an entry
 retired while its evidence is still in the window is rebuilt by the add test the moment that evidence pays
@@ -781,12 +848,14 @@ Both tests are scans of the same table, and they are the only scans a neuron mak
 keeps the table current between them.
 
 > **R19 — The bill's pass.** Once per bill, in order:
-> 1. **Fold and age.** The completed observation joins its bin; a new bin starts at the normal, its only
->    defined server before it has ever been compared. The whole span folds into that bin's server's counts at
->    once; observations past the horizon leave theirs (R9). Counts moving carries its
->    collapse (R5), so every entry this step touched is centered before anything is priced.
+> 1. **Fold and age.** The completed observation joins its bin, carrying the savings its verdict stamped
+>    (D13); a new bin starts at the normal, its only defined server before it has ever been compared. The whole
+>    span folds into that bin's server's counts at once and the bin's `Σ savings` moves with it; observations
+>    past the horizon leave theirs (R9). Counts moving carries its collapse (R5), so every entry this step
+>    touched is centered before anything is priced.
 > 2. **Read the residual.** `d` between the observation and its bin's server, as that server now stands. Zero,
->    and the bill is over.
+>    and the bill is over. **Subsumed, and the bill is over too** (R13) — the file expressed this chunk some
+>    other way, so there is no error here that structure could remove.
 > 3. **Add.** Collapse the demand into `C` (R15) and price it (R16). If it pays, `C` enters the table
 >    provisionally and takes every bin it wins.
 > 4. **Retire and delete.** The pruning pass over the whole table, `C` included (R18): retire every strictly
@@ -796,6 +865,11 @@ keeps the table current between them.
 >    column of `d_backward` is recomputed with it, so every bin's row is current again.
 > 6. **One request to the machine.** The add if `C` survived, and the release of every symbol deleted in
 >    step 4. Nothing else in the bill reaches another level, and the bill ends on it.
+
+**Steps 3 and 4 no longer share a currency.** Step 3 prices in file length the neuron can see; step 4 prices
+in savings the election measured. That is the whole of the change, and it is why the order still holds: a
+candidate the pruning pass strands is still collected in the same bill, because a stranded entry stops being
+promoted and its savings expire within a horizon.
 
 **Two kinds of count movement, and only one of them waits.** Evidence moves counts in step 1 and its collapse
 follows immediately, because the tests have to price against centers that already hold the new observation:
@@ -819,9 +893,9 @@ Sending last also settles what the request carries. A candidate can inherit bins
 retired, so `C` may re-center in step 5; the definition on the request is then the final one, not the one the
 add test happened to price.
 
-> **T8 — The tests are the assignment.** The only consumer of a table-wide picture of servers and fallbacks is
-> the benefit sum (R12), and the only readers of that sum are the add test and the delete test — which scan the
-> whole table anyway. Everything else wants one bin's server: recognition takes `argmin` over that bin's row
+> **T8 — The tests are the assignment.** The only consumer of a table-wide picture of servers is the add
+> test's win set (R16), and the delete test reads it only through `served bins`. Both scan the whole table
+> anyway. Everything else wants one bin's server: recognition takes `argmin` over that bin's row
 > (§9.1), the fold reads it for one bin, eviction reads it per departing observation. **So no pass exists to
 > keep a global assignment current, and none is needed** — the scan that prices a move is the scan that makes
 > it.
@@ -849,9 +923,10 @@ need to be. It needs to be current for the next recognition, and that is one row
 
 # 9. The frame, per neuron
 
-Two processes run over the same frame and they are **independent**. The neuron's pipeline reads and writes
-only the neuron's own state and depends on nothing the election decides; contraction reads the level's bids
-and has **zero side effects on neuron state**.
+Two processes run over the same frame, and the split between them is **evidence local, economics global**. The
+neuron's pipeline records, routes and re-centers on its own state alone, and depends on nothing the election
+decides. Contraction reads the level's bids and returns exactly one thing: each activation's **verdict**
+(D29), which is what the neuron's economics is made of and what its evidence is untouched by.
 
 **The machine does not track activations; the neuron does.** The machine calls a neuron while it is active and
 nothing more. The neuron holds its own open activations, each with the forward neighborhood it is still filling
@@ -879,9 +954,16 @@ The neuron fired this frame, and the backward half of its observation, `O⁻`, i
    — an offer to represent its chunk one level up. **An activation committed to the normal makes no bid**: the
    normal is the entry whose child is null (D24), so there is no unit to propose and nothing for the election
    to accept. A neuron the entries describe only in general therefore contributes nothing above it, which is
-   R30's "fire no children" read one neuron at a time. The bid is the pipeline's only output to the election,
-   and the election sends nothing back. **Creation never bids.**
-3. **Assert.** The committed entry's forward members are the neuron's prediction, read off the neighborhood,
+   R30's "fire no children" read one neuron at a time. The bid is the pipeline's only output to the election.
+   **Creation never bids.**
+3. **Take the verdict.** The election resolves this level in this frame, and returns the activation's verdict
+   (D29). It is stamped on the open activation and read twice, both times at the bill: `subsumed` closes the
+   bill after the fold (R13), and the savings go into the history with the observation (D23). **Nothing it says
+   touches recognition, the counts or the collapse** — the fold is unconditional, so what the neuron learns is
+   never selected by what the election chose. If it were, counts would come from elections rather than frames:
+   counts set the collapse, the collapse sets the bid, the bid sets the election, and the loop would close on
+   itself with no fixed point and no counterweight to rich-get-richer.
+4. **Assert.** The committed entry's forward members are the neuron's prediction, read off the neighborhood,
    not computed. The read is repeated at every age until the window closes (§9.2). What the *machine* asserts
    is settled once every level has resolved (§12).
 
@@ -913,26 +995,30 @@ The activation's last forward frame arrives, so its observation is complete. Thi
 1. **Enter the history.** Record the final offset, and the observation now exists. It joins the bin for its own
    backward half, **opening that bin if this is the first time that context has completed** — bins are created
    here and nowhere else, and destroyed in step 2 when the last observation they hold is evicted. **A new bin
-   starts with the normal as its server.** The bin's count rises by one, its
-   tallies take one increment per forward offset, and
-   **the whole span folds into the bin's server's counts at once** — every offset, one increment each (R3). The
-   server re-centers, and its column is recomputed. **This is where prediction is scored**, on the complete
-   chunk rather than a frame at a time.
+   starts with the normal as its server.** The bin's count rises by one, its tallies take one increment per
+   forward offset, its `Σ savings` rises by whatever the verdict stamped at age 0 (D29), and **the whole span
+   folds into the bin's server's counts at once** — every offset, one increment each (R3). The server
+   re-centers, and its column is recomputed. **This is where prediction is scored**, on the complete chunk
+   rather than a frame at a time. **The fold is unconditional**: a subsumed activation records exactly as a
+   promoted one does, because what the neuron saw is not a matter of what the election chose (R29).
 2. **Age.** Evict every observation now older than `horizon` frames (D26, R9) — none if the neuron has been
    busy, many if it has been quiet. Each departing span leaves its server's counts, and that server re-centers
-   the same way. **Nothing is priced here.** An entry that loses its evidence loses its benefit with it, but a
-   benefit is a measurement against a neighborhood that just moved (R2), so it is read where it is used — in
-   the tests below. The history holds whatever the neuron fired on inside the window, plus the open activations
-   that are still collecting and count toward nothing.
-3. **Add**, on **any nonzero residual** — the observation against its bin's server, as that server now stands
-   after step 1. It makes no difference whether the server is the normal or a child: a child is not an
-   admission of ignorance but the sharper model, so a child that describes badly is exactly the error worth
-   acting on. Collapse the demand into `C` (R15) and price it (R16). **At most one candidate per activation.**
-   A passing test installs `C` provisionally and hands it every bin it wins.
-4. **Retire and delete.** The pruning pass over the whole table, `C` included: retire every strictly negative
-   margin, sequentially (R18). Their bins fall to the next entry in their rows and the neighborhoods they held
-   freeze. Then delete every retired entry — this bill's and any older one still waiting — that no open
-   activation is committed to, taking its pattern neuron and that neuron's subtree with it.
+   the same way, and its `Σ savings` leaves the bin with it. **Nothing is priced here.** An entry that loses
+   its evidence loses its benefit with it, and the loss is exact rather than estimated because each observation
+   carries the savings it earned (R8's argument, applied to a second per-observation quantity). The history
+   holds whatever the neuron fired on inside the window, plus the open activations that are still collecting
+   and count toward nothing.
+3. **Add**, on **any nonzero residual from a non-subsumed activation** (R13) — the observation against its
+   bin's server, as that server now stands after step 1. A subsumed activation stops here: its bill was a
+   recording, not a decision. Otherwise it makes no difference whether the server is the normal or a child: a
+   child is not an admission of ignorance but the sharper model, so a child that describes badly is exactly the
+   error worth acting on. Collapse the demand into `C` (R15) and price it (R16). **At most one candidate per
+   activation.** A passing test installs `C` provisionally and hands it every bin it wins.
+4. **Retire and delete.** The pruning pass over the whole table, `C` included: retire every entry old enough to
+   be priced whose margin is strictly negative, sequentially (R18). Their bins fall to the next entry in their
+   rows and the neighborhoods they held freeze. Then delete every retired entry — this bill's and any older one
+   still waiting — that no open activation is committed to, taking its pattern neuron and that neuron's subtree
+   with it.
 5. **Re-center.** Every entry whose served set changed in step 3 or 4 collapses again, and its column is
    recomputed with it — `C` among them, if the pruning pass handed it anything.
 6. **One request, and the bill returns.** If `C` survived, the machine returns its identity and the neuron
@@ -941,17 +1027,20 @@ The activation's last forward frame arrives, so its observation is complete. Thi
    step 4. The newborn is installed **now, for later**.
 
 A neuron fires at most once per level per frame (D5, D7), so at most one activation reaches age `R − 1` in any
-frame: **one bet and one bill per neuron per frame, at most.** The bill is processed after the bet, and the
-order is forced rather than chosen: at `R = 1` they are the same activation, and an observation cannot be
-judged before it has been recognized. D16 makes `R = 1` the same machine, so the general case runs the same
-way — a chunk recognized this frame is never judged in the same pass that recognized it, unless there is no
-window between them, which is the next case.
+frame: **one bet and one bill per neuron per frame, at most.** The bill is processed after the bet, and now
+after the level's election too, since the bill reads the verdict the election stamped (D29). The order is
+forced rather than chosen at every step: an observation cannot be judged before it has been recognized, and it
+cannot be priced before the file has said what it did with it. D16 makes `R = 1` the same machine, so the
+general case runs the same way — a chunk recognized this frame is never judged in the same pass that recognized
+it, unless there is no window between them, which is the next case.
 
 ## 9.4 At `R = 1` the bet and the bill are the same frame
 
 The span is one frame, so an activation is born at age 0 and reaches age `R − 1 = 0` immediately. §9.2 does
 not exist — there is nothing to collect — and the observation is complete the moment it is recognized, so the
-neuron recognizes a chunk and then, later in the same pass, records and judges that same chunk. This is what
+neuron recognizes a chunk, the level's election settles, and then, later in the same pass, the neuron records
+and judges that same chunk. **The verdict is what separates the two halves of that pass**: the bet and the
+bill fall in one frame, but not in one step, because the election runs between them. This is what
 makes **spatial-only processing a matter of setting `R = 1`**, which is the configuration MNIST and any other
 single-frame problem runs: recognize, then record, then test, then re-center, all within the frame.
 
@@ -969,7 +1058,9 @@ N names  {(b,−1)}
 at `d_backward = 0` while `N` misses `a` at 1. `K` wins, and the activation opens committed to `K`, holding an
 empty forward half. `K` asserts `c` at frame 11 and `d` at frame 12, on faith. **No bin was touched and no
 count moved** — there is no observation yet, only a backward half and two frames to go. From here the
-commitment is locked: the neuron has bid on `K` and may have been promoted on it.
+commitment is locked: the neuron has bid on `K` and may have been promoted on it. **The election resolves this
+frame and stamps the verdict** (D29) on the open activation — say `promoted`, at savings 3. Nothing else about
+the activation changes; the savings is carried, not acted on.
 
 **Frame 11 — age 1. `c` does not come; `e` fires in that dimension instead.** One thing happens: `(e, +1)` is
 written into this activation's forward half. Then the neuron re-reads `K` and asserts `d` at frame 12.
@@ -986,10 +1077,15 @@ if most of its observations carry `e` at `+1`, the neighborhood flips `c → e`;
 loses its majority to silence and `K` stops naming that offset. This is reach emerging, and it happens in one
 move rather than being chased frame by frame.
 
-Then the neuron decides. `K` cost two against `N`'s three, so this observation paid `K` back and nothing
-changes. Had `d` failed too, the residual is nonzero and §9.3 runs in full — expire what fell out of the
-window, price a child against the demand `K` is describing badly, then prune the whole table and retire `K` if
-its margin has gone strictly negative, request and release once, and re-center whatever changed hands.
+The savings goes in with it: the bin's `Σ savings` rises by 3, and so does `K`'s benefit, since `K` serves
+that bin.
+
+Then the neuron decides. The residual is nonzero — `K` named `c` and got `e` — so §9.3 runs in full: expire
+what fell out of the window, price a child against the demand `K` is describing badly, then prune the whole
+table and retire `K` if its window is complete and its margin has gone strictly negative, request and release
+once, and re-center whatever changed hands. Had the verdict been `subsumed`, the bill would have ended after
+the fold: a neighbor's unit already expresses this chunk, so nothing a sharper child could name here would
+shorten the file.
 
 ```
    frame 10  (age 0)         frame 11  (age 1)        frame 12  (age R−1)
@@ -997,8 +1093,9 @@ its margin has gone strictly negative, request and release once, and re-center w
    fire                      +1 arrives               +2 arrives
    route on d_backward       write (e,+1) into        observation complete
    commit to K, bid            the forward half       enters bin, folds into K
-   assert c at 11, d at 12   re-read K, assert d      K re-centers, all offsets
-                             nothing else             add / delete / re-center
+   take the verdict          re-read K, assert d      savings go in with it
+   assert c at 11, d at 12   nothing else             K re-centers, all offsets
+                                                      add / delete / re-center
    ────────────────────────  ───────────────────────  ──────────────────────
    THE BET ─────────────── committed, collecting ───────────────── THE BILL ▶
 ```
@@ -1065,27 +1162,39 @@ units and nothing has shrunk.
 > that count, both maintained already (D23, T2) — so nothing new is measured and no constant is chosen.
 >
 > **This is a price for one *use*, not for the symbol.** The dictionary line `1 + |e|` is paid once per horizon
-> by the neuron's own test (R12, R16), which is what decides whether the symbol should exist at all. Charging
-> it again at every activation would make a symbol used forty times pay for its definition forty times, and the
-> machine would systematically under-promote.
+> by the one test (R12), which is what decides whether the symbol should exist at all. Charging it again at
+> every activation would make a symbol used forty times pay for its definition forty times, and the machine
+> would systematically under-promote.
+>
+> **The two clocks are why R12 can only be read over a full window.** The line is per horizon and the savings
+> are per use, so a symbol used forty times settles at `40 − (1 + |e|)` and the same symbol read after its
+> first use settles at `1 − (1 + |e|)`. Same entry, opposite verdict. R18's horizon gate is that observation.
 
 > **R22 — The objective.** Accept a subset `S` of bids. Each accepted bid propagates one unit at its price
 > (R21); every active neuron that no accepted bid covers is a correction, at cost 1.
 > ```
 > cost(S)  =  Σ over S of price  +  # active neurons S leaves uncovered
 > ```
-> Minimize it. This is prize-collecting set cover, in the same currency as everything else.
+> Minimize it. This is prize-collecting set cover, and it is **the history half of `L`** (D13) over the window
+> the election can see — not a separate objective in a matching currency, the same objective restricted to the
+> term this mechanism can move. The dictionary half is R12's, and neither test touches the other's sum.
 >
 > **Savings is not a property of a bid.** What one bid is worth is `cost(S) − cost(S ∪ {bid})` — the same fixed
 > objective evaluated at two points — so it depends on what has already been accepted. A neuron can state what
 > it covers and what it costs, both of which are facts about itself. It cannot state what it saves, because
 > that is a fact about the board.
+>
+> **Which is why the number goes back down.** The one test (R12) asks whether an entry's dictionary line pays,
+> and that is a question about savings. So the election computes it here — it has to, to decide acceptance —
+> and returns it as the verdict (D29). Nowhere else in the design is a saving named, and nothing recomputes
+> this one locally.
 
-**Contraction proposes nothing.** Every candidate comes from a neuron's own history, and the machine only ever
-accepts or declines one. It never edits a bid, never merges two, never invents a third, and the unit it
-promotes has exactly the neighborhood the neuron named. That is what keeps contraction a filter rather than a
-second learner — and it is why the composition gap (§17) is stated as a gap rather than closed by letting the
-election feed candidates back down.
+**Contraction proposes nothing, and now it judges.** Every candidate comes from a neuron's own history, and
+the machine only ever accepts or declines one. It never edits a bid, never merges two, never invents a third,
+and the unit it promotes has exactly the neighborhood the neuron named. What it does do is price the outcome
+and say so (D29) — which is what keeps it a filter rather than a second learner while still being the only
+authority on what anything saved. The flow is one-directional in each currency: **candidates go up, savings
+come down, and neither becomes the other.**
 
 ## 10.2 Slots and claims
 
@@ -1105,6 +1214,22 @@ election feed candidates back down.
 > accounts of one fact are redundant but never contradictory — so coverage is additive and no one owns
 > anything. Forward, a slot is a prediction that needs deciding, and two predictions of one slot is an
 > ambiguity the decoder cannot resolve — so exactly one unit owns it.
+
+> **D29 — The verdict.** After the election, each active neuron is told which of three conditions its
+> activation ended in. All three words are R22's and R28's.
+> ```
+> promoted   its bid was accepted            savings = newly covered − price,  ≥ 1
+> subsumed   an accepted bid covers it       savings = 0;  the file says this chunk another way
+> uncovered  nothing covers it               savings = 0;  the file pays 1 for it as a correction
+> ```
+> **Subsumed and uncovered are not one condition**, and collapsing them is the mistake the return channel
+> exists to avoid. Subsumed means the chunk is already in the file, cheaper, through someone else — a sharper
+> child here would shorten nothing, so the economics goes quiet (R13). Uncovered means the file is paying a
+> symbol for this neuron right now — the case where minting matters most, so the economics stays fully alive.
+> They agree only on savings, which is zero for both.
+>
+> An activation committed to the normal makes no bid and so is never promoted, but it is still subsumed or
+> uncovered like any other: coverage is a fact about a **neuron** (D28), not about a bid.
 
 > **R23 — This frame's bids against both windows as they stand.** Against the **coverage set**: a bid is
 > credited only for neurons no accepted bid has covered yet, so a chunk already represented is not paid for
@@ -1211,7 +1336,10 @@ Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled
 > own.
 >
 > **Outcome**: accepted bids are promoted, one unit each, and the neurons they cover are subsumed. Every
-> active neuron left uncovered is a correction.
+> active neuron left uncovered is a correction. **Each of those three words is returned to the neuron it
+> describes** (D29), the accepted bids carrying the surplus that admitted them — `newly covered − price`,
+> already computed to make the decision. The election therefore costs nothing extra to report, and it reports
+> nothing it did not have to know.
 
 One pass, `O(B log B)` with a priority queue, and it is the classical greedy for set cover, so the slack
 against R22's optimum is bounded rather than unknown. There are no voters and nothing to iterate: a bid is
@@ -1240,8 +1368,20 @@ scored against the coverage that actually remains at the moment it is considered
 > ```
 > Silence cancels. The constant is derived twice, from unrelated arguments, and no new parameter enters.
 
-> **R29 — Subsumption is a fact about the level above, never about a neuron's evidence.** A neuron covered by
-> a neighbor's winning bid still records, learns and tests exactly as if the election had gone the other way.
+> **R29 — Subsumption governs a neuron's economics and never its evidence.** A neuron covered by a neighbor's
+> winning bid records and re-centers exactly as if the election had gone the other way: the fold is
+> unconditional, so the collapse stays the L1 center of what the neuron *saw* rather than of what it was
+> elected on (T1). Were it otherwise, counts would be selected by elections that counts had produced, and the
+> loop would close on itself with no fixed point — an entry that wins would sharpen and win more, while a
+> subsumed neuron's neighborhood froze at whatever it held when it was last promoted, going stale by exactly
+> the amount the world moved, and having nothing to bid when its coverer is retired a horizon later. It would
+> also break D26: the neuron's history would stop being the window, which is the identity that lets one clock
+> serve one file.
+>
+> **What subsumption does govern is every economic reading.** It zeroes the observation's savings, so the
+> entry serving that bin earns nothing from it (R12), and it closes the bill before the add test, so no
+> candidate is minted against a chunk the file already states some other way (R13). **Evidence is local,
+> economics is global**, and this rule is the seam.
 
 **What this builds.** Each surviving bid contributes one unit above. The reduction is set by the data, not the
 topology: a neighborhood the entries describe well collapses hard; one full of surprise barely collapses at
@@ -1249,10 +1389,15 @@ all, which is the correct outcome for it.
 
 # 11. The order of a frame
 
-> **R30 — One stack, at the declared `R`.** Base neurons build their neighborhoods, recognize them, and mint
-> children where economical; contraction settles which propagate, and the survivors are level 1 — the fewest
-> that cover the active base neurons. Level 1 forms its own neighborhoods and it happens again. **When a
-> level's active neurons fire no children, nothing propagates and there is no level above it on this frame.**
+> **R30 — One stack, at the declared `R`.** Base neurons build their neighborhoods, recognize them and bid;
+> contraction settles which propagate and returns each neuron its verdict; the neurons then bill, minting
+> children where economical. The survivors are level 1 — the fewest that cover the active base neurons. Level 1
+> forms its own neighborhoods and it happens again. **When a level's active neurons fire no children, nothing
+> propagates and there is no level above it on this frame.**
+>
+> **Within a level the order is bet, election, bill**, and it cannot be otherwise: a bid is made before the
+> election because that is what the election is over, and a bill is settled after it because a margin is a
+> statement about savings (R12). Nothing in that round trip leaves the level or the frame (T14).
 > Nothing declares the depth and nothing caps it: a rich frame builds deeper than a sparse one, and by T9 no
 > frame builds deeper than `log₂ N`.
 >
@@ -1273,15 +1418,22 @@ its own frame and one two frames back is an ordinary pattern, and there is no st
 unrepresentable.
 
 > **T14 — One pass still resolves inside the frame.** A bid carries only backward members (R20), so every
-> election runs on frames already in hand. A unit promoted at `f` is available as an offset-0 neighbor to the
+> election runs on frames already in hand, and its verdicts are back before the level's bills — the whole
+> round trip is inside the level and inside the frame, which is why the return channel costs no latency in the
+> stack. A unit promoted at `f` is available as an offset-0 neighbor to the
 > level above at `f`, and its own forward half completing later gates nothing. **Spanning patterns therefore
 > cost no latency in the stack**; the only lag anywhere is R26's, and that is the file's.
 
-> **R31 — The apex is a frontier, not a level.** It is every active neuron that did not fire a child, so a
-> base neuron nothing found worth chunking stands in it beside a level-4 pattern. This is the same frontier
-> the file's history writes and the same one rewards credit, which is why the apex rule needs no special
-> case before any pattern exists. Everything underneath it is recovered by expanding it, which is why the
-> frontier is all the file's history ever needs to state.
+> **R31 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
+> uncovered set of D29, at every level at once — so a base neuron nothing found worth chunking stands in it
+> beside a level-4 pattern. This is the same frontier the file's history writes and the same one rewards
+> credit, which is why the apex rule needs no special case before any pattern exists. Everything underneath it
+> is recovered by expanding it, which is why the frontier is all the file's history ever needs to state.
+>
+> **Uncovered, not childless.** A neuron that fired a child and had its bid declined with nothing else covering
+> it is still on the frontier, because the decoder has no other way to recover it: R22 charges it as a
+> correction, and the history has to state what the file pays for. Coverage is the criterion, and being covered
+> is exactly what the verdict reports.
 
 The frontier cuts across levels, not along one:
 
@@ -1295,9 +1447,10 @@ The frontier cuts across levels, not along one:
    frontier  =  { L1 over (a,b),  L2 over (c,d),  L3 over (e,f,g,h),  i,  j }
 ```
 
-`i` and `j` fired no child, so they stand in the frontier beside a level-3 pattern. The history writes
-exactly this set, rewards credit exactly this set, and the assertion (§12) resolves precedence over exactly
-this set. A flat "top level" would be none of those things.
+`i` and `j` are covered by nothing, so they stand in the frontier beside a level-3 pattern — whether that is
+because they fired no child or because the child they fired lost its election makes no difference to the file.
+The history writes exactly this set, rewards credit exactly this set, and the assertion (§12) resolves
+precedence over exactly this set. A flat "top level" would be none of those things.
 
 **Events and actions run in parallel within a level, and are connected there.** An action fires in the same
 column as the events it runs alongside (D5), so it meets them in that level's own processing — and the
@@ -1429,15 +1582,16 @@ how often each symbol occurs — the one variable-length code in which probabili
 flowchart TD
     A["Frame: the machine calls the neuron.<br/>The neuron holds its own open activations,<br/>each at its own age"] --> D["AGE 0 — THE BET: route on d_backward. Closest entry<br/>wins (retired entries do not compete) and the activation<br/>COMMITS to it for the window. Writes ONLY the open<br/>activation — no bin, no counts, no price"]
     D --> E["Serve: the committed entry fires and bids.<br/>Its forward members are asserted"]
-    E -.->|"bid (only output;<br/>nothing returns)"| X["Contraction, independently: score each bid on what<br/>the level's COVERAGE SET does not already hold, over<br/>the 2R−1 window. Overlap is legal and priced, never<br/>forbidden. The machine picks bids; it never edits one"]
+    E -.->|"the bid goes up"| X["Contraction: score each bid on what the level's<br/>COVERAGE SET does not already hold, over the 2R−1<br/>window. Overlap is legal and priced, never forbidden.<br/>The machine picks bids; it never edits one"]
+    X -.->|"the VERDICT comes down:<br/>promoted (with savings) /<br/>subsumed / uncovered"| E
     E --> C["AGES IN BETWEEN — collect:<br/>write the arriving offset into the activation's<br/>forward half, re-read the committed entry and assert.<br/>NOTHING folded, re-centered, re-priced or compared —<br/>a half-built observation is not evidence"]
-    C --> B["AGE R−1 — THE BILL: the observation is COMPLETE.<br/>It enters its bin and the WHOLE SPAN folds into that<br/>bin's server at once; the server re-centers over every<br/>offset. Prediction is scored here. Then expire everything<br/>older than the horizon (a window in frames, R9)"]
-    B --> L{"Residual > 0?"}
-    L -->|yes| M["ADD: collapse the demand to C, benefit > 1+|C|?<br/>If so C enters provisionally and TAKES every bin it wins,<br/>from the normal or from any child. ONE candidate"]
-    M --> DEL["RETIRE + DELETE: prune the whole table, C included.<br/>Retire every strictly negative margin, one at a time,<br/>re-checking after each. Their bins fall to the next entry<br/>in their rows and their neighborhoods freeze. Delete every<br/>retired entry nothing is committed to, subtree and all.<br/>This is where a stranded incumbent dies — add + retire IS the swap"]
+    C --> B["AGE R−1 — THE BILL: the observation is COMPLETE.<br/>It enters its bin — carrying the savings its verdict<br/>stamped — and the WHOLE SPAN folds into that bin's server<br/>at once; the server re-centers over every offset. The fold<br/>is UNCONDITIONAL: evidence is local. Prediction is scored<br/>here. Then expire everything older than the horizon (R9)"]
+    B --> L{"Residual > 0<br/>AND not subsumed?"}
+    L -->|yes| M["ADD — local, optimistic: collapse the demand to C,<br/>benefit > 1+|C|? An UPPER BOUND, since the neuron cannot<br/>see overlap. If so C enters provisionally and TAKES every<br/>bin it wins, from the normal or any child. ONE candidate"]
+    M --> DEL["RETIRE + DELETE — global, measured: prune the whole table,<br/>C included. Margin = the savings the ELECTION paid over the<br/>window, minus 1+|e|. Entries younger than a horizon are not<br/>priced at all. Retire every strictly negative margin, one at<br/>a time, re-checking after each. Their bins fall to the next<br/>entry in their rows and their neighborhoods freeze. Delete<br/>every retired entry nothing is committed to, subtree and all.<br/>This is where a stranded incumbent dies — add + retire IS the swap"]
     DEL --> Q["RE-CENTER, once: every entry whose served set changed<br/>collapses again and its column is recomputed.<br/>No iteration to a fixed point — one improvement step,<br/>and the next recognition re-derives argmin from the row"]
     Q --> P["ONE request to the machine, and the bill returns:<br/>the add if C survived — carrying its final definition —<br/>plus the release of every symbol deleted this bill.<br/>Newborn serves NEXT time"]
-    L -->|no| N["Nothing to reconsider"]
+    L -->|no| N["Nothing to reconsider — a subsumed<br/>activation's bill is a recording, not a decision"]
     P --> O["Next level up, same radius, one stack<br/>(until a level fires no children — that frontier<br/>is the apex)"]
     N --> O
     X --> O
@@ -1490,17 +1644,42 @@ Each risk states what would be done about it, so measurement has a decision atta
   horizon is not what is limiting it.
 
 - **Cold-start churn.** Early tests are decided by very little evidence. Re-centering is the main defense, but
-  measure churn over the first thousand frames and again in steady state.
+  measure churn over the first thousand frames and again in steady state. The first horizon is a special case:
+  no entry can be retired inside it (R18), so the table only grows until the first window closes.
 
 - **One-shot mints.** A single neighborhood far enough from a settled entry can out-bid the opening cost by
   itself. Re-centering largely defuses it — the neighborhood is pulled toward whatever recurs, or the entry
   starves. **Fallback if it still churns:** require the win set to span at least two distinct bins. Exact, and
   costs one recurrence of latency.
 
-- **Redundant, never-promoted children.** Evidence is independent of the election (R29), so a neuron reliably
-  covered by a neighbor's unit still mints from its own local error demand. Accepted deliberately: contraction
-  keeps it out of the machine's history, the standing metric makes it visible, and the variable-length track in
-  [forgetting.md](forgetting.md) is the principled reaper.
+- **Relaxation churn.** Add admits on a local upper bound and delete executes on measured savings (§8), so
+  anything in the gap can cycle with period one horizon: mint `C`, bids declined, zero savings, retired, the
+  same demand re-proposes the same `C`. The subsumed gate (R13) removes the common case — a neuron whose
+  territory a neighbor holds stops triggering at all. What survives is the persistently **uncovered** neuron
+  whose bid cannot clear its price even at its best fit. **Diagnostic:** count mints per entry-slot per
+  horizon, and the fraction of retirements whose demand re-mints within the next horizon. **Fallback,** in
+  election currency and needing no parameter: require `C`'s bid to dominate the incumbent's on covered-set size
+  over price (R21). A candidate that neither lowers the price nor widens the cover cannot change an election
+  outcome, so it cannot produce savings, and there is no reason to mint it.
+
+- **Mixed-verdict bins.** The subsumed gate is on the *trigger* only. Once a non-subsumed activation opens the
+  add test, `d(b, C)` is summed over each bin whole (T2), subsumed observations included, so a neuron that is
+  subsumed most of the time still prices its candidate against demand the file partly does not pay for.
+  Excluding at observation granularity would need a second set of forward tallies per bin — the tallies cannot
+  recover a subset — which doubles the history's aggregate storage. Not taken. **Diagnostic:** the subsumed
+  fraction within triggering bins. If it is high, the split tallies buy something; if it is low, the trigger
+  gate was the whole of it.
+
+- **A horizon of latency on bad mints.** R18 cannot price an entry until it has a full window, so a mint that
+  turns out worthless holds its line for up to a horizon. This is the price of sourcing benefit from the
+  election rather than locally, and it is not avoidable by any gate shorter than the window the benefit is
+  summed over. **Diagnostic:** the standing count of entries whose lifetime savings never exceeded 1.
+
+- **Inert entries are free, and stay.** An entry whose child is never promoted has cost 0 and benefit 0, so
+  R12 leaves it alone — correctly, since an unused symbol makes the file no longer. It still consumes routing
+  compute and still competes for recognition, which is a cost in a currency this design does not price.
+  The standing metric makes it visible and the variable-length track in [forgetting.md](forgetting.md) is the
+  principled reaper.
 
 - **Cross-position dictionary redundancy.** No local test can see that 700 positions each learned the same
   edge. **Diagnostic:** count distinct child neighborhoods across positions. That number is what a
@@ -1517,9 +1696,11 @@ Each risk states what would be done about it, so measurement has a decision atta
   headline metric, so slack and real structure are conflated. **Diagnostic:** solve one small window exactly
   (ILP) and compare.
 
-- **The composition gap.** Two scopes are optimized separately and nothing bounds the distance to a joint
-  result. Distinct from election slack, which measures the election against a perfect election over the same
-  bids; this measures the whole two-step scheme against optimizing dictionary and frames together.
+- **The composition gap.** Narrowed, not closed. There is one objective now and one authority on savings, so
+  the gap is no longer two objectives pulling apart — it is that candidates are *generated* locally, on an
+  upper bound, and only *judged* globally. A demand no neuron proposes is a symbol the election never gets to
+  consider. Distinct from election slack, which measures the election against a perfect election over the same
+  bids; this measures proposal-then-judge against optimizing dictionary and frames together.
   **Diagnostic:** over a short run on one small level, compare the file this design writes against the file a
   joint optimization over the same observations produces. That gap decides whether contraction should stay
   purely inhibitory or start supplying candidates back into the routing tables it covered — the constituents
@@ -1552,8 +1733,16 @@ consolidates it, and the pruning pass retires what is left.
   drives, is the open measurement.
 
 - **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering
-  makes them slightly less independent, and the election is sequential and deliberately so. On much larger
-  inputs than MNIST both judgements need revisiting.
+  makes them slightly less independent, and the election is sequential and deliberately so. The verdict adds a
+  barrier that was not there before: a level's bets must all be in before its election runs, and its verdicts
+  must be back before any of its bills. Both fall inside one frame (T14) and neither crosses a level, but on
+  much larger inputs than MNIST all three judgements need revisiting.
+
+- **What an uncovered activation should cost.** The file pays 1 for it as a correction, and nothing in the
+  design charges anyone for that. Charging the neuron would be charging it for a decision the board made;
+  leaving it free means the only signal a persistently uncovered neuron gets is the absence of savings, which
+  is the same signal a subsumed one gets less the permission to keep minting. Whether the correction should
+  enter the one test as a term of its own is open.
 
 - **Asymmetric reach.** Backward and forward reach both emerge from the vote, bounded by the same `R`. Whether
   one radius is right — "how much do I need to recognize myself" and "how far can I reliably predict" are
