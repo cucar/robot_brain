@@ -470,20 +470,48 @@ T3 buys a cost as well as a guarantee.
 
 ## 5.2 The collapse
 
-Routing needs a set, not a distribution.
+Routing needs a set, not a distribution. So does the file: every slot it states holds one symbol or nothing,
+never a distribution over symbols. The collapse is how the design gets from counts to that, and it is the only
+operation anywhere that decides what goes in a slot.
 
-> **R4 — The collapse.** For each `(dimension, offset)` slot, let `n` be the number of observations the entry
-> serves and `count(p)` the number of those holding neuron `p` in that slot. The neighborhood includes `p`
-> exactly when `count(p) > n / 2`; otherwise the slot is omitted.
+> **R4 — The collapse.** Over a population that each has something to say about a slot, let `n` be the size of
+> that population and `count(p)` the number of it naming neuron `p` there. **The slot takes `p` exactly when
+> `count(p) > n / 2`; otherwise it is empty.**
+>
+> Nothing is divided: `2 · count(p) > n` is an integer comparison, and no fraction is ever formed. A slot
+> cannot hold two neurons (D5), so at most one candidate can hold a strict majority, and the leftover —
+> `n − Σ count(p)` — is the alternative that wins by default.
+>
+> **An entry's neighborhood** is this run over the observations the entry serves, slot by slot across
+> `(dimension, offset)`. That is the case §5 is about and the one T1 proves.
+
+> **The three populations.** One arithmetic, three times, and nothing else in the design puts a symbol in a
+> slot.
+> ```
+> an entry's neighborhood   the observations it serves         R4, at every bill (R5)
+> a candidate's             the bins it would win              R15, when the add test fires
+> a slot's owner            the claims landing on it, at one   R25, when the assertion resolves one level at a time
+> ```
+> The first two build structure and the third reads it back out, but the question is identical each time:
+> **given a population with something to say about this slot, what does the file put there?** The threshold is
+> derived twice over, from unrelated arguments — by L1 minimization for the first two (T1) and by D10's prices
+> for the third (T6) — and it is the same `1/2` both times.
 
 **One denominator, every offset.** An observation enters the history only when its whole span is complete
 (D21), so every observation an entry serves has something to say at every offset — a neuron or a silence. The
 outermost forward slot is decided by exactly the same population as offset 0, and `n` is that population.
 
-A slot cannot hold two neurons (D5), so at most one candidate can hold a strict majority. Silence is the
-implicit alternative with count `n − Σ count(p)`, so a rare or split observation loses to it. There is no
-tunable threshold, smoothing, or probability estimate: the denominator is the served count and the boundary is
-required by exact L1 minimization.
+**An observation cannot abstain; a claim can.** That is the one way the three populations differ, and it is a
+difference in what they are rather than in the rule. An observation is a record: it held a neuron at that slot
+or it held silence, and either way it is in the population — which is why R4's silence needs no vote of its own
+and is simply the leftover. A claim is a prediction, and a unit naming nothing at a slot has **no opinion about
+it**, not a prediction of silence. D10 prices exactly that difference: asserting the wrong symbol costs 2,
+asserting nothing and being surprised costs 1. So a unit that could have claimed a slot and did not is not in
+`n` at all.
+
+There is no tunable threshold, smoothing, or probability estimate anywhere in this, and the denominator is
+never shared between two populations — nothing in the design ever compares one population's share against
+another's.
 
 > **T1 — The collapse is the L1 center.** The result minimizes `Σ d(O, C)` over all sets, and the sum is over
 > the whole span for every observation in it, because no partial observation is ever a member. It is a
@@ -725,7 +753,8 @@ was the right choice overall, and would mint against a pattern it has only half 
 > 1. **Find the demand.** With the triggering observation `O` as probe, collect the bins routing would hand
 >    it: `d_backward(b, O) < d_backward(b, b.server)`, taking each bin's server as the `argmin` of its row
 >    **now** (R6), not the value cached from the last time it was read.
-> 2. **Collapse.** Per-slot vote over exactly those bins, summing tallies. The result is `C`.
+> 2. **Collapse.** R4 over exactly those bins, summing tallies — the second of its three populations. The
+>    result is `C`.
 
 `C` is the L1 center of the demand the child would serve, not the one neighborhood that triggered the test.
 Incidental neighbors lose their slots and never enter it, so `|C|` is the size of what recurs — which matters
@@ -1253,7 +1282,7 @@ board comes down, and neither is an arithmetic the other performs.**
 >              itself among them — that an accepted bid other than this one has subsumed
 >
 > superseded   forward, off the assertion map:  slots this activation's assertion does not own, held
->              by a higher or better-supported unit (R25, R32)
+>              by a level above, or by the majority claim at its own level (R25, R32)
 > ```
 > It freezes into the observation as the bill folds it (D21). **The machine reports facts, never numbers.**
 > What the overlap is worth depends on a neighborhood that is still moving, so the worth is re-derived at every
@@ -1299,16 +1328,27 @@ observation — which is what lets a newborn child be priced on evidence older t
 
 > **R25 — A slot's owner is whatever the resolution currently says.** §12 re-resolves every slot every frame
 > from the live active set, so a unit that fires later takes a slot by winning that resolution — nothing is
-> displaced, because nothing was being held. **Where two units of the same level claim one `(dimension, frame)`
-> slot, the better-supported holds it. Support is the claimant's count share for that slot** — already tallied
-> and recountable by the decoder, so revising transmits nothing. Ties go to the older symbol — creation order
-> for a pattern, declaration order (D1) for a base neuron, which has no creation to be ordered by.
+> displaced, because nothing was being held.
+>
+> **Within a level, the collapse decides it** (R4). The population is the claims of that level landing on that
+> slot; `n` is how many there are and `count(p)` how many name `p`; the slot takes `p` iff `count(p) > n/2`.
+> One claim carries its slot, two that disagree carry neither, two that agree carry it, three carry it when
+> two of them agree.
+>
+> **A level with no majority is silent there, and the contest passes down** (R32). A split is not a decision to
+> leave the slot empty — it is that level having nothing to say, which is exactly the condition under which the
+> next level down resolves it. The slot goes to whichever level first produces a majority, so the level
+> structure is choosing *which population votes*, not overriding the vote.
+>
+> **No tie-break is needed and none exists.** No strict majority means the level abstains, so nothing here ever
+> turns on creation order. And nothing is compared across populations: two claims are counted, never weighed.
 >
 > **Writing is the consequence, not the cause.** A slot stops changing when no live unit can still reach it,
 > which is R2's shape at machine scope: the answer is re-derived until the evidence that could move it runs
 > out. **This rule is about forward slots only** — backward coverage is never exclusive and never displaced
-> (R23). A unit that loses a slot is neither right nor wrong there: the file says nothing on its behalf, so it
-> pays no correction and earns no credit. That is what the `superseded` half of the adjustment records (D29).
+> (R23). A unit that loses a slot — outvoted at its own level, or outranked by a level above — is neither
+> right nor wrong there: the file says nothing on its behalf, so it pays no correction and earns no credit.
+> That is what the `superseded` half of the adjustment records (D29).
 
 **Remark.** Revision inside that window is free: the history is written at a lag, so encoder and decoder
 reach a slot with the same information and apply the same rule. A later claim that fits better simply makes
@@ -1329,7 +1369,7 @@ owns it. The coverage set is a different object and is not drawn here:
                        write boundary, sweeping right at lag D·(R−1)
 
         ▓  final — no later claim can reach it
-        L2 held by a level-2 unit; a better-supported claim may still take it
+        L2 held by a level-2 unit; a later claim may still shift or split that level's vote
         ·  unclaimed; a correction if nothing claims it before the boundary passes
 ```
 
@@ -1411,16 +1451,22 @@ scored against the coverage that actually remains at the moment it is considered
 > bound and the write lag that rests on it (R26) are stated per frame and are not licensed by this argument as
 > it stands.
 
-> **T6 — Why a strict majority, again.** Resolving a slot leaves a symbol or silence, and the cut is the same
-> `count(p) > n/2` as R4. There it is required by L1 minimization; here it falls out of D10's prices, because
-> a wrong symbol costs 2 and a missing one costs 1. Writing `q_p` for the leading member's share and `q_∅` for
-> silence's:
+> **T6 — Why a strict majority, again.** Resolving a slot in the assertion is R4's third population (§5.2), and
+> the cut is the same. For an entry's neighborhood it is required by L1 minimization (T1); here it falls out of
+> D10's prices instead, because a wrong symbol costs 2 and a missing one costs 1. Writing `q_p` for the leading
+> claim's share of the population and `q_∅` for the share saying nothing:
 > ```
 > take p        q_∅·1 + (1 − q_p − q_∅)·2  =  2 − 2·q_p − q_∅
 > take silence  (1 − q_∅)·1                =  1 − q_∅
 > take p  iff  2 − 2q_p − q_∅ < 1 − q_∅   iff   q_p > 1/2
 > ```
-> Silence cancels. The constant is derived twice, from unrelated arguments, and no new parameter enters.
+> **Silence cancels**, which is what makes the rule independent of whether anything abstains — so the cut
+> stands unchanged over a population of claims, where nothing abstains at all and `q_∅` is 0 (§5.2). The
+> constant is derived twice, from unrelated arguments, and no new parameter enters.
+>
+> **Two claims that disagree therefore leave the slot to the level below**, and that is arithmetic rather than
+> a default: at `q_p = 1/2` asserting costs 2 with even odds where abstaining costs 1, so silence at that level
+> is strictly the shorter file.
 
 > **R29 — Subsumption is recorded beside a neuron's evidence, never inside it.** A neuron covered by a
 > neighbor's winning bid records and re-centers exactly as if the election had gone the other way: the fold is
@@ -1525,8 +1571,12 @@ frames, and must resolve them, because the file scores corrections against an as
 > at that unit's offset plus theirs; repeat to base symbols. Every claim then has the shape
 > `(dimension, frame, symbol)`.
 >
-> **For each `(dimension, frame)` slot, the highest-level active unit whose expansion names it owns it. Lower
-> units fill only the slots left silent above them. Within a level, the best-supported claim holds it.**
+> **For each `(dimension, frame)` slot, work down from the highest level that claims it. Within a level, the
+> collapse over the claims landing there decides the slot (R4, R25). A level with no majority is silent, and
+> the next level down resolves it. A slot no level carries is a correction.**
+>
+> **Precedence chooses the electorate; the collapse decides the outcome.** Those are two questions, not one
+> rule applied twice, which is why one is a cascade and the other a vote.
 
 ```
 a's entry asserts  (b, +1)                     → b's dimension at f+1
@@ -1540,18 +1590,24 @@ A's entry asserts  (C, +2)     expand it:
 > made later cannot arrive in time to be information.
 
 **How this composes with contraction.** The two divide by scope. A bid is *priced* on its backward half but a
-promoted unit *claims* its whole span, so contested forward slots **within a level** are settled by support
-before any expansion (R25). Precedence resolves what contraction cannot see: a level-3 claim and a level-0
-claim landing on the same base slot once both are expanded. Within a level, support; across levels, promotion.
-The backward half never enters this — coverage settles which unit *represents* an already-observed neuron, a
-different question from what is claimed about a frame nobody has seen.
+promoted unit *claims* its whole span, so contested forward slots within a level are settled by the collapse
+(R25). The cascade resolves what contraction cannot see: a level-3 claim and a level-0 claim landing on the
+same base slot once both are expanded. The backward half never enters this — coverage settles which unit
+*represents* an already-observed neuron, a different question from what is claimed about a frame nobody has
+seen.
 
-**Why precedence and not a vote.** The election has already judged it: a unit was promoted over its
-constituents because it covered more neighbors at less cost, which *is* the finding that it describes the
-region better. Re-deciding by a second, differently-shaped comparison would answer one question twice.
-Precedence also keeps R27's stance — structure self-corrects through corrections; the assertion does not
-second-guess it. Nothing here consults counts, so nothing needs an estimate, and the decoder reproduces the
-procedure exactly.
+**Why a vote within a level and a cascade across them.** Within a level the claimants are independent: different
+neurons, different histories, and one does not contain another. Across levels they are not — the lower units
+are the higher one's own **constituents**, so letting three level-0 claims outvote the level-1 unit that
+subsumes them would count one body of evidence twice at two resolutions. That is what makes a vote legitimate
+in one direction and not the other, and it is why the cascade is not an override: a level that cannot decide
+hands the question to the finer description underneath it, which is the only place a genuinely independent
+second opinion lives.
+
+**Nothing here consults counts.** The vote counts claims, not observations — no entry's statistics are read, no
+share is formed, and no two populations are compared. So the decoder reproduces the procedure exactly from the
+active set, and R27's stance holds: structure self-corrects through corrections, and the assertion does not
+second-guess the election.
 
 > **R34 — Events and actions, one procedure.** The rule is identical on both sides. Only the consumer differs:
 > the asserted **event** set is what the machine expects to observe, scored as frames arrive; the asserted
@@ -1625,9 +1681,11 @@ decay, so distant antecedents keep nonzero credit under long-latency reward.
 
 # 14. Estimation
 
-**No probability sets a cost.** Distance, cost and benefit are all counts of neighbors, so the pricing never
-leaves whole numbers and no estimator, smoothing or boundary correction is needed. The only frequencies are
-the counts, used raw. Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by
+**No probability sets a cost, and nothing anywhere is divided.** Distance, cost and benefit are all counts of
+neighbors, so the pricing never leaves whole numbers and no estimator, smoothing or boundary correction is
+needed. The only frequencies are the counts, used raw, and the only test applied to them is the collapse's
+`2 · count(p) > n` — an integer comparison against one population, never a share weighed against another's
+(§5.2). Estimators return only in [forgetting.md](forgetting.md), where the file is re-priced by
 how often each symbol occurs — the one variable-length code in which probabilities set costs.
 
 ---
@@ -1651,7 +1709,7 @@ flowchart TD
     P --> O["Next level up, same radius, one stack<br/>(until a level fires no children — that frontier<br/>is the apex)"]
     N --> O
     X --> O
-    O --> Y["12 After the last level: every active neuron<br/>asserts. Expand to base symbols, then per slot the<br/>highest-level unit that names it owns it.<br/>Events → scored; actions → executed"]
+    O --> Y["12 After the last level: every active neuron asserts.<br/>Expand to base symbols, then per slot work DOWN from the<br/>highest level claiming it — within a level the COLLAPSE over<br/>the claims decides (count &gt; n/2); no majority and that level<br/>is silent, so the next one down resolves it.<br/>Events → scored; actions → executed"]
 ```
 
 ---
@@ -1730,12 +1788,13 @@ Each risk states what would be done about it, so measurement has a decision atta
   edge. **Diagnostic:** count distinct child neighborhoods across positions. That number is what a
   shared-dictionary variant would buy.
 
-- **Contested forward slots across levels.** Within a level a contest is settled by support and revisable
-  until written, so nothing there is decided on less than the best available evidence. Across levels it is
-  precedence, and promotion is a finding about *description*: nothing establishes that the better describer of
-  a region is the better predictor of one slot inside it. Support cannot break that tie, since comparing a
-  level-3 claim to a level-0 one means composing shares through the expansion, which is a probability
-  estimate. **Diagnostic:** count cross-level contests and how often the holder was right.
+- **A level's bare majority takes a slot from a level that knew better.** Within a level the collapse settles
+  a contest on claims alone and is revisable until written, so nothing there rests on an estimate. Across
+  levels the cascade gives the higher level first refusal, and promotion is a finding about *description*:
+  nothing establishes that the better describer of a region is the better predictor of one slot inside it. Two
+  level-3 claims agreeing take the slot even where the level-0 neuron owning that dimension would have been
+  right. The cascade only steps down when a level cannot decide, never when it decides badly. **Diagnostic:**
+  count cross-level contests and how often the holder was right against how often the level below it was.
 
 - **Election slack.** R28 is a heuristic for R22 with unmeasured slack, and apex-units-per-frame is the
   headline metric, so slack and real structure are conflated. **Diagnostic:** solve one small window exactly
