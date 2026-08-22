@@ -173,8 +173,11 @@ to a symbol at all, and it is derived from again in §5.2 and §10.4.
 > out of it.
 > ```
 > contribution of e to one observation o
->       =  | backward members of nbhd(e) present in o and credited |   −   price(e, o)
->          if that is positive; otherwise 0, since the election would decline the bid  (R28)
+>       =  credited(o)  −  price(e, o)       if that is positive; otherwise 0,
+>                                            since the election would decline such a use  (R28)
+>
+> credited(o)  =  the use's covered set as the board left it: the named members present in o, and the
+>                 neuron itself, less everything o's adjustment marks covered   (R20, D29)
 >
 > price(e, o)  =  1  +  m  +  mismatch over the forward slots o's adjustment leaves e owning   (R21)
 > ```
@@ -182,19 +185,29 @@ to a symbol at all, and it is derived from again in §5.2 and §10.4.
 > and the mismatch follow it. The adjustment is the only frozen part, and it is frozen because it is a fact
 > about a board that has moved on. **§7's test is the derivative of `L` with respect to holding one entry**:
 > these contributions summed over the window, against the `1 + |e|` its line costs.
+>
+> **A contribution is a bid's net, settled.** `cover − price` is what a bid states at the election (R20, R21);
+> `credited − price` is the same quantity on the same members, re-measured after the board spoke. For a
+> promoted use it is what the unit actually held; for any other it is what the board left unspoken for — the
+> net the file would get here, measured against the coverage that actually stood. So the benefit R12 sums is
+> a ledger of per-use nets, and every term in it is either the neuron's own record or the machine's — the
+> machine's part being exactly the part the neuron could not know. **The machine considers the past once per
+> use, when it writes the adjustment, and the one test is the sum of the machine's own verdicts.** The neuron
+> keeps the ledger; it cannot invent a line of it.
 
 **Remark — why the history is not a second file.** A neuron's history is evidence, not an encoding: it records
 what was seen so the collapse can center on it (R4), and it states nothing a decoder would read. It never
-prices anything. The one place a price is needed — does this entry earn its dictionary line — reads a drop in
-`L` that the election measured against the real file. So **evidence is local and economics is global**, and
-there is exactly one `L` for the economics to be about.
+prices anything. The one place a price is needed — does this entry earn its dictionary line — is a drop in `L`
+the neuron works out for itself, over its own evidence, corrected by the one fact it could not have: which of
+its claims the rest of the level had already taken. So there is exactly one `L`, and exactly one thing that
+crosses between scopes to keep the arithmetic honest.
 
 **Remark — why predictive coding is load-bearing.** Under a literal history, a prediction that comes true saves
 nothing, so no test could ever value prediction. Under predictive coding, being right is free and being wrong
 costs corrections, so prediction error *is* file length, and it needs no term of its own anywhere. It enters
-twice, in the same currency both times: the admission test measures it directly against the neuron's own
-observations (R16), and the bid's price carries the entry's forward mismatch into the election (R21), where it
-and is paid back in the credited members it lets one symbol discharge.
+twice, in the same currency both times: the one test measures it directly against the neuron's own
+observations (R12, R16), and the bid's price carries the entry's forward mismatch into the election (R21),
+where it is set against the credited members that one symbol discharges.
 
 ---
 
@@ -637,9 +650,10 @@ could not produce it.
 > **T10 — Every loop in the design is bounded, and none is capped.** A bill is a fixed number of scans and no
 > iteration to a fixed point (R19). The pruning pass removes an entry from competition and creates none, so it
 > runs at most once per entry; a retirement is collected within `R − 1` frames and takes its whole subtree in
-> one step (R18). The election is a single greedy pass (R28). The level stack is at most `log₂ N` deep (T9), which also bounds the write lag and
-> the depth of an assertion's expansion. Every bound falls out of a quantity the design already counts, so
-> nothing has to be chosen to make the machine halt.
+> one step (R18). The election is two passes and no iteration (R28). The level stack is bounded by the base
+> activity behind a frame (T15), which also bounds the settlement walk (R26) and the depth of an assertion's expansion.
+> Every bound falls out of a quantity the design already counts, so nothing has to be chosen to make the
+> machine halt.
 
 > **R11 — The floor: `horizon > 2R`.** A radius declares a capacity — willingness to name patterns spanning
 > `2R − 1` frames — and the horizon is the window that has to hold them. A unit firing at `h` names
@@ -689,6 +703,22 @@ accumulating either drags itself toward retirement, and neither needs a mechanis
 **Benefit is a measurement, so it moves when anything under it moves.** The entry gains or loses a bin, an
 observation joins or is evicted, or its neighborhood re-centers — the first two are `O(1)` off the bin's
 tallies, and the third is the walk the scan is already making (R19). **No test needs a pass of its own.**
+
+**The line brackets the symbol's life, and the elections fill in the middle.**
+
+```
+mint      would past uses, as adjusted, have summed past 1 + |C|?     the line, prospectively    (R16)
+elect     does this use cover more than 1 + m + forward?              one use, no line           (R28)
+adjust    what did the board actually credit this use?                the fact, recorded         (D29)
+retire    do the credited uses still sum past 1 + |e|?                the line, retrospectively  (R18)
+```
+
+The aggregate questions sit at the ends, where aggregates belong; the middle is per-frame because a use is the
+only per-frame quantity in `L`. A newborn needs exactly this and nothing more. Where its territory was
+corrections, the slots are free and it is promoted on its first recurrence — no line at the election means no
+deadlock at birth. Where its territory is already covered, the adjustments say so, the credit never arrives,
+and the ledger retires it. Both endings are decided by the machine's own records, and neither needs a rule of
+its own.
 
 > **T5 — `L` is the objective, not a potential.** Nothing in the design descends it monotonically and nothing
 > needs to. A handoff lowers the neuron's service cost, but service cost is a fit against remembered evidence
@@ -1196,8 +1226,9 @@ units and nothing has shrunk.
 > ```
 > The **whole** neighborhood travels, because it *is* the dictionary line for the symbol being proposed (D9):
 > a machine that holds a unit it cannot expand cannot state the file. The bidder is implied, because a child
-> *is* its parent in that neighborhood. An activation committed to the normal bids nothing — the normal has no
-> child to propose (D24). Creation never bids.
+> *is* its parent in that neighborhood. **An activation committed to the normal bids nothing** — the normal is
+> the entry whose child is null (D24), so there is no unit to propose and nothing for the election to accept.
+> Creation never bids.
 >
 > **What a bid carries and what it is scored on are different questions.** The election reads the covered set
 > and nothing else, and not by preference: covering means subsuming a neuron that fired, and a member at `+2`
@@ -1216,9 +1247,19 @@ units and nothing has shrunk.
 > that count, both maintained already (D23, T2) — so nothing new is measured and no constant is chosen.
 >
 > **This is a price for one *use*, not for the symbol.** The dictionary line `1 + |e|` is paid once per horizon
-> by the one test (R12), which is what decides whether the symbol should exist at all. Charging it again at
-> every activation would make a symbol used forty times pay for its definition forty times, and the machine
-> would systematically under-promote.
+> by the one test (R12), which is what decides whether the symbol should exist at all. It appears nowhere in
+> this price and nowhere in the election.
+>
+> **With the line in this price, promotion would be impossible outright.** A cover is at most the named
+> backward members plus the bidder, so it never exceeds `|e| + 1`; a price carrying the line starts at
+> `1 + |e|`. `cover > price` could then never hold — not on a perfect match with nothing contested, let alone
+> under overlap. A test that asks one use to pay an aggregate charge declines every use.
+>
+> **So overlap eats surplus, not existence.** An entry naming ten members, eight of them present, with a
+> forward record of one, bids `cover 9` at `price 4` — it can concede four of its nine slots to other
+> children and still clear. Chronic overlap is priced at the symbol instead: every conceded member is credit
+> the observation does not carry, the ledger drains, and R12 retires an entry whose territory is mostly
+> spoken for. **Occasional conflict costs a little; chronic conflict costs the line.**
 >
 > **The two clocks meet in R12, and the window is what reconciles them.** The line is charged once per horizon
 > and the uses are counted over that same horizon, so a symbol serving forty observations is weighed against
@@ -1256,8 +1297,8 @@ board comes down, and neither is an arithmetic the other performs.**
 > **D28 — Two windows, not one.** A bid firing at `g` reaches `[g − (R−1), g + (R−1)]`, and its two halves are
 > different objects the machine keeps separately.
 > ```
-> coverage set    per level, backward    which active neurons an accepted bid has subsumed
->                 accumulate-only        overlap is legal; nothing is ever un-covered
+> coverage set    per level, backward    which accepted bid holds each subsumed active neuron
+>                 an assignment          one holder per neuron; settled frames are never re-assigned
 >
 > assertion map   global, forward        which unit owns each base (dimension, frame) slot
 >                 exclusive              one owner per slot, re-resolved every frame (§12)
@@ -1265,10 +1306,12 @@ board comes down, and neither is an arithmetic the other performs.**
 > Both span `2R − 1` and both age out with it, so neither introduces a parameter or a second buffer, and the
 > machine holds nothing on the horizon's scale.
 >
-> **The asymmetry is what the two halves are.** Backward, a neuron is a fact that needs accounting for, and two
-> accounts of one fact are redundant but never contradictory — so coverage is additive and no one owns
-> anything. Forward, a slot is a prediction that needs deciding, and two predictions of one slot is an
-> ambiguity the decoder cannot resolve — so exactly one unit owns it.
+> **The asymmetry is what the two halves are, and it is not about ownership.** Backward, a neuron is a fact
+> that needs accounting for exactly once — two bids may both name it, and both may be accepted, but only one is
+> paid for it, so the assignment is about **credit**. Forward, a slot is a prediction that needs deciding, and
+> two predictions of one slot is an ambiguity the decoder cannot resolve, so the assignment is about **truth**.
+> That is why one is settled once and never revisited (R23) and the other keeps re-resolving until nothing can
+> reach it (R25).
 >
 > **These two windows are the whole of what a neuron ever learns from the machine.** D29 is a read off them and
 > nothing more, which is why it adds no state and no message anywhere: the machine already had to hold both to
@@ -1279,7 +1322,7 @@ board comes down, and neither is an arithmetic the other performs.**
 > assertion — **nothing is computed for it, pushed to it, or held on its behalf.**
 > ```
 > covered      backward, off the coverage set:  members of this activation's neighborhood — the neuron
->              itself among them — that an accepted bid other than this one has subsumed
+>              itself among them — that the assignment gave to an accepted bid other than this one
 >
 > superseded   forward, off the assertion map:  slots this activation's assertion does not own, held
 >              by a level above, or by the majority claim at its own level (R25, R32)
@@ -1288,9 +1331,9 @@ board comes down, and neither is an arithmetic the other performs.**
 > What the overlap is worth depends on a neighborhood that is still moving, so the worth is re-derived at every
 > reading (D13) and only the fact is kept.
 >
-> **Nothing is ever decided twice.** The coverage set is accumulate-only and an election is never revisited
+> **Nothing is ever decided twice.** An election settles its own frame's assignment and is never revisited
 > (R23), so there is no in-flight coverage to maintain and no report to deliver between the bet and the bill.
-> The set simply grows as later frames elect, and the activation reads it when its span closes.
+> The assignment simply fills in as later frames elect, and the activation reads it when its span closes.
 
 > **T12 — The bill is the one frame at which the adjustment can be read.** An activation firing at `g` names
 > backward members across `[g − (R−1), g]`. A member at `f` can be covered by a bid firing anywhere in
@@ -1315,12 +1358,13 @@ assertion map is exclusive and re-resolved, so a later read supersedes an earlie
 coverage is a fact about a **neuron** (D28), so what it records applies to any entry later priced against that
 observation — which is what lets a newborn child be priced on evidence older than itself (R16).
 
-> **R23 — This frame's bids against both windows as they stand.** Against the **coverage set**: a bid is
-> credited only for neurons no accepted bid has covered yet, so a chunk already represented is not paid for
-> twice. Nothing is ever removed from that set and **no earlier promotion is re-scored** — what was accepted
-> stays accepted, at the price it was accepted for. Against the **assertion map**: a slot no live unit can
-> still reach takes no more claims; an open one is held by whichever claim currently wins (§12). It is the
-> same election the spatial case runs, with a frame coordinate on the slot.
+> **R23 — This frame's bids against both windows as they stand.** Against the **coverage set**: only neurons
+> no earlier frame's election has assigned are in play, so a chunk already paid for is not paid for twice. **No
+> earlier promotion is ever re-scored** — what was accepted stays accepted, at the price it was accepted for,
+> which is what makes R27's no-retraction stance possible. Re-assignment happens only inside the frame that is
+> electing, and only among that frame's own bids (R28 step 3). Against the **assertion map**: a slot no live
+> unit can still reach takes no more claims; an open one is held by whichever claim currently wins (§12). It is
+> the same election the spatial case runs, with a frame coordinate on the slot.
 
 > **R24 — Claims persist.** A promoted unit has spoken for the frames its neighborhood names, including frames
 > ahead, and those claims stand until the span completes. So the election settles the future along with the
@@ -1350,10 +1394,10 @@ observation — which is what lets a newborn child be priced on evidence older t
 > right nor wrong there: the file says nothing on its behalf, so it pays no correction and earns no credit.
 > That is what the `superseded` half of the adjustment records (D29).
 
-**Remark.** Revision inside that window is free: the history is written at a lag, so encoder and decoder
-reach a slot with the same information and apply the same rule. A later claim that fits better simply makes
-the file shorter. The slot is the unit of ownership, not the frame — units in different dimensions never
-compete.
+**Remark.** Revision inside that window is free: encoder and decoder reach a slot with the same information and
+apply the same rule, because neither reads one until nothing live can still claim it. A later claim that fits
+better simply makes the file shorter. The slot is the unit of ownership, not the frame — units in different
+dimensions never compete.
 
 The assertion map, mid-run. Each cell is one base `(dimension, frame)` slot and holds the unit that currently
 owns it. The coverage set is a different object and is not drawn here:
@@ -1364,92 +1408,178 @@ owns it. The coverage set is a different object and is not drawn here:
        dim A        ▓L1   ▓L1   ▓L2    L2    L2    L2     ·
        dim B        ▓L0   ▓L1   ▓L1    L0     ·    L1    L1
        dim C        ▓L0   ▓L0   ▓L2    ·     L0     ·     ·
-                    ╰──── written ────╯╰──── open to revision ────╯
-                                      ▲
-                       write boundary, sweeping right at lag D·(R−1)
 
-        ▓  final — no later claim can reach it
-        L2 held by a level-2 unit; a later claim may still shift or split that level's vote
-        ·  unclaimed; a correction if nothing claims it before the boundary passes
+       depth over     1     1     2     4     1     3     2
+       settled?       ▓     ▓     ▓     ·     ▓     ·     ·
+
+        ▓  settled — no live unit at any level can still reach this frame
+        ·  still open — a claim may yet arrive, or one already here be outranked or outvoted
+        L2 currently held by a level-2 unit
 ```
 
-Slots left of the boundary have their owners settled; slots right of it are still being competed for, which is
-what R25 means by settled-when-written rather than settled-when-claimed.
+**Frame 101 is settled while frame 100 is not**, because the stack over 100 went four levels deep and the stack
+over 101 went one. That is T13: the edge is ragged, it does not sweep, and there is no boundary to point at.
+A settled frame's owners can no longer move; an open frame's can, which is what R25 means by
+settled-when-written rather than settled-when-claimed.
 
-**What the boundary settles is the election, not the file.** It marks the point past which no further bid can
-reach a slot, because every unit that could still claim it has already fired. What the winning units then
+**What settlement settles is the election, not the file.** It marks the point past which no further claim can
+reach a frame, because every unit that could still make one has already fired. What the winning units then
 *expand to* is the current dictionary's business (D9): neighborhoods keep re-centering underneath them, and a
 unit whose defining entry has been deleted stops being available at all, so the window is re-encoded from what
 remains. The file is a snapshot of the best encoding of the window, not a stream that something has already
-committed to — which is why re-deriving it costs nothing and contradicts no earlier decision. **Contraction
-settles who covers what; D9 settles what that costs to say.**
+committed to — which is why re-deriving it costs nothing, contradicts no earlier decision, and needs no frame
+to be settled before it can state one. **Contraction settles who covers what; D9 settles what that costs to
+say.**
 
-## 10.3 When a frame can be written
+## 10.3 When a frame is settled
 
-> **R26 — The write lag.** A unit firing at `h` names `[h − (R−1), h + (R−1)]`, so a slot at `g` can still be
-> claimed by a unit firing as late as `g + (R−1)`. That settles one level. But the file writes the apex
-> frontier, and whether the covering unit is itself covered settles `R − 1` frames after *it* fired, so the
-> question walks upward: **the history is written at a lag of `R − 1` per level, `D · (R−1)` for a frame
-> whose hierarchy reached depth `D`.** Each level needs only its own `2R − 1` map, so the delay stacks, not
-> the memory. A frame's owners are elected once and never re-elected.
+**Nothing in this section is a delay in anything the machine does.** No pass blocks on it, no neuron waits for
+it, no decision is deferred by it. A neuron bills at age `R − 1` on a board that is settled for exactly what it
+reads (T12); an action asserted at `f` executes at `f + 1`; a level elects in the frame its bids were made in.
+**Selection, learning and contraction all run at full speed.**
 
-Depth is data-dependent, but not unbounded: T9 gives `D ≤ log₂ N` for `N` active neurons, so the lag is at
-most `(R−1)·log₂ N`. That cost is confined to the file, which is an accounting object rather than something
-anyone waits on. **Selection never waits**: an action asserted at `f` executes at `f + 1` (§13), the very next
-frame, so the machine acts at full speed while its own description of what it just did is still settling
-behind it.
+What settles slowly is one accounting fact: **how long after frame `g` before the file's statement about `g`
+can no longer change.** With `R = 3`, a base neuron firing at 100 can be covered by a bid firing at 100, 101 or
+102, so whether the history states it as an apex unit or omits it as subsumed is not known until 102 has
+elected. If a level-1 unit took it, whether *that* unit is itself apex is not known until `R − 1` after it
+fired, and so on upward. The file has a complete encoding of the window at every moment, since D9 re-derives it
+— what is unsettled is not missing, it is still liable to move.
+
+**The only consumer is measurement.** When `L` or apex-units-per-frame is read, the settled frames are the ones
+whose numbers are final. That is the whole of what the rest of this section is for.
+
+**Two things settle at different rates, and only one of them stacks.**
+
+> **R26 — Settlement is a condition to detect, not a schedule to predict.**
+>
+> **Frontier membership settles one level, in `R − 1` frames.** Whether an activation at frame `h` is covered
+> is decided by bids firing no later than `h + (R−1)`, which is T12 — the same fact the neuron reads at its
+> own bill. No walk and no depth enter it, which is why a neuron's economics never waits on any of what
+> follows.
+>
+> **A frame's encoding settles at the top of whatever stack reached it.** Reach compounds (T7): a unit one
+> level up, firing later, can name a lower unit that names frame `g`, so the set of frontier units whose
+> expansion reaches `g` keeps changing while any level above is still live. **Frame `g` is settled when no
+> level holds a live unit that could still join or leave that set** — a closure over the levels, evaluated
+> upward, not a delay counted out.
+>
+> **`D` is reached, not known.** It is the depth the stack actually got to over that region, and it is not
+> available at `g`: a bid accepted at `g + (R−1)` can add a level after the fact. Nothing needs it in advance.
+> The walk stops where a level accepts no bids and therefore produces none above it, and T15 bounds how many
+> levels that can be from the base activity behind the frame. **`D · (R−1)` is a bound on a condition, not a
+> countdown to run.**
+>
+> Each level needs only its own **coverage set**, `2R − 1` wide (D28). The assertion map is a different object
+> — one global map over base slots, holding units from every level by construction — so the delay stacks and
+> the memory does not.
+
+> **T13 — The settled frames are not a prefix.** Each frame settles once and stays settled: settlement is the
+> absence of any live unit that could reach it, and units only ever fall out of reach. But the depth over one
+> frame is data, so a frame whose stack stayed shallow settles while a deeper predecessor is still open. **The
+> edge is ragged and does not sweep.**
+>
+> Nothing depends on the order, because nothing is streamed. The file is re-derived whole from current
+> structure (D9), so an unsettled frame is not a gap — it has an encoding like any other, one still liable to
+> change. "Settled" says what can no longer move, never what has been emitted.
+
+**Coverage is elected once and never re-elected** (R23); it is the assertion map that keeps re-resolving
+(R25), and that is what the settlement condition is actually waiting on.
 
 > **R27 — Best-effort promotion.** A unit is promoted on its backward match and asserts its forward members on
 > faith. When the future disagrees, corrections are appended and price the completed claim; they do not revise
-> the election that made it. There is no retraction and no delay beyond the settlement lag — the file is exact
+> the election that made it. **There is no retraction and nothing is held back waiting** — the file is exact
 > either way, because a wrong assertion is simply a longer file.
 
 *Exact settlement of a single frame would need `4R − 3`: frame `g` can be claimed by units firing anywhere in
 `[g − (R−1), g + (R−1)]`, and those reach `[g − 2(R−1), g + 2(R−1)]`. `2R − 1` therefore scores bids at the
-leading edge against partially-visible competition. This is accepted — contraction mints nothing that lasts.*
+leading edge against partially-visible competition. This is accepted — contraction mints nothing that lasts,
+and it is the same shortfall D29 accepts when it reads `superseded` at the bill.*
 
 ## 10.4 The election
 
-Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled cheaply:
+Set cover is NP-hard, but contraction mints nothing that lasts, so it is settled cheaply. **Every neuron a bid
+covers has to end up credited to exactly one bid** — that is what stops one chunk being paid for twice — and
+the only question is how that assignment is made. It is made per slot, by the same shape of rule §5.2 uses
+everywhere else.
 
-> **R28 — The election is greedy.** Repeatedly take the bid with the highest ratio of **not-yet-covered**
-> neurons it names to its price (R21), and accept it if it names more of them than it costs. Add those neurons
-> to the level's coverage set and continue. Stop when no bid clears its price. Ties go to the older symbol —
-> creation order for a pattern, declaration order (D1) for a base neuron — so the outcome is independent of
-> dispatch order.
+> **R28 — The election assigns slots, then bids settle up.** Two passes, each over every slot or every bid at
+> once, and neither runs twice.
 >
-> **Not-yet-covered is read across the window, not within the frame.** A bid at `g` reaches back to
-> `g − (R−1)`, so the neurons it names already went through their own frames' elections and some may already
-> be covered. The coverage set is where that is recorded (D28).
+> 1. **Resolve each free slot.** A slot here is one active neuron of the level below, at its own frame, that
+>    some bid this frame claims. Slots already assigned by an earlier frame's election are not in play (R23).
+>    The slot goes to the claimant with the most **covered neurons per unit of price**: compare
+>    `cover₁ · price₂` against `cover₂ · price₁`, cross-multiplied, so this is an integer comparison and
+>    nothing is divided (§14). Ties go to the
+>    older symbol: creation order for a pattern, declaration order (D1) for a base neuron. **Every slot
+>    resolves independently of every other.**
+> 2. **Tally and test.** Each bid counts the slots it holds and is accepted iff it holds strictly more than its
+>    price — the same test as ever, asked of an assignment rather than an accumulation. **This is the bid in
+>    its modified form**: the collapse may have taken slots from it, so the benefit it stated is not the benefit
+>    it delivers, and only the machine could have known the difference.
 >
-> **The bid is never modified; the objective is differentiated.** A bid always covers everything it named and
-> always costs what it costs. Discounting what is already covered is R22's `cost(S) − cost(S ∪ {bid})` written
-> out — what moves between rounds is what accepting it would still buy, not the bid. So **overlap is legal and
-> priced, never forbidden**: two chunks sharing a boundary neuron is how a stream tiles, and refusing the
-> second would cost a symbol rather than save one. Declining to pay twice for one neuron is the whole of the
-> inhibition here, and it needs no mechanism — a bid whose territory is taken stops clearing its price on its
-> own.
+> **Nothing iterates and nothing is revisited.** A bid rejected in step 2 does not hand its slots back: the
+> neurons it claimed are covered by whatever other accepted bid names them, or they are corrections, and either
+> way the file is exact. The pass can therefore **under-accept but never over-accept** — it can leave a neuron
+> to a correction that a second look would have covered, and it can never promote two units for one chunk,
+> which is the failure contraction exists to prevent.
 >
-> **Outcome**: accepted bids are promoted, one unit each, and the neurons they cover are subsumed. Every
-> active neuron left uncovered is a correction. **The election delivers nothing to anyone**: it credits the
-> coverage set and stops. What a neuron makes of that it reads for itself, once, when a span closes (D29) — off
-> the same structure the election needed to run at all.
+> **The assignment is a partition, and that is the whole of the inhibition.** A neuron belongs to one bid, so a
+> chunk is never paid for twice, and no bid is ever edited or forbidden — **overlap is legal and priced**, since
+> two chunks sharing a boundary neuron is how a stream tiles, and the bid that loses that neuron simply counts
+> one fewer. A bid whose territory is taken stops clearing its price on its own.
+>
+> **Outcome**: accepted bids are promoted, one unit each, and the neurons assigned to them are subsumed. Every
+> active neuron no accepted bid holds is a correction. **The election delivers nothing to anyone**: it writes
+> the assignment and stops. What a neuron makes of that it reads for itself, once, when a span closes (D29) —
+> off the same structure the election needed to run at all.
 
-One pass, `O(B log B)` with a priority queue, and it is the classical greedy for set cover, so the slack
-against R22's optimum is bounded rather than unknown. There are no voters and nothing to iterate: a bid is
-scored against the coverage that actually remains at the moment it is considered.
+**Why per slot rather than by ratio, repeatedly.** A greedy pass over the ratio makes the same *kind* of
+assignment — every covered neuron ends up credited to whichever bid the queue reached first — but it makes it
+implicitly, by processing order, which is why it needs a tie-break clause to be deterministic at all and why it
+cannot be run in parallel. Resolving each slot on its own merits makes the assignment explicit,
+order-independent by construction, and parallel across slots. It also makes contraction the fourth use of one
+primitive rather than a mechanism of its own (§5.2).
 
-> **T9 — Every level at least halves, over the window.** An accepted bid newly covers more neurons than it
-> costs, and a price is at least 1, so it newly covers at least 2. Each neuron is **newly** covered once — the
-> coverage set only grows, so newly-covered sets are disjoint however much the bids themselves overlap. Out of
-> `N` active neurons in the window, at most `N/2` bids can therefore be accepted, and **the level above has at
-> most half as many active neurons over that window.** A bid that newly covers only itself can never clear its
-> price, which is what forces the halving.
+**What is given up.** Greedy is the classical approximation for set cover, with slack against R22's optimum
+bounded by `ln n`. Two fixed passes have no such guarantee, so the slack becomes unmeasured rather than
+bounded, and §17's ILP comparison is the only handle on it. The case it loses is a boundary one — a bid that
+sheds most of its territory to better ratios, falls under its price, and takes down a neighbour that would have
+cleared with the slot it took. Accepted deliberately, and for the same reason the whole section settles
+cheaply: **contraction mints nothing that lasts**, so a marginal cover costs a bounded handful of corrections
+and nothing structural.
+
+> **T9 — Each level halves, over a span that widens by `R − 1`.** An accepted bid holds more slots than it
+> costs, and a price is at least 1, so it holds at least 2. **The assignment is a partition** (R28), so no two
+> accepted bids hold the same slot — disjointness is definitional here, not an argument about the order things
+> were taken in. One accepted bid promotes exactly one unit, firing at the bid's own frame. Writing
+> `A_k[a, b]` for the level-`k` activations in frames `[a, b]`:
+> ```
+> A_{k+1}[a, b]   ≤   ½ · A_k[a − (R−1), b]
+> ```
+> A bid holding only its own slot can never clear its price, which is what forces the halving.
 >
-> **The count is over the covered span, not one frame.** With temporal contraction one unit can cover neurons
-> from two frames, so a single frame's count need not halve even though the window's does. The `log₂ N` depth
-> bound and the write lag that rests on it (R26) are stated per frame and are not licensed by this argument as
-> it stands.
+> **The span widens because coverage reaches back.** A bid firing at `b` covers neurons as far back as
+> `b − (R−1)`, so the neurons that pay for a unit inside `[a, b]` need not lie inside `[a, b]` themselves. At
+> `a = b` the right-hand side spans `R` frames rather than one, so **a single frame's count need not halve** —
+> which is exactly what a per-frame reading of this theorem would assume.
+
+> **T15 — How deep a frame can build.** Unroll T9 from `a = b = f`, widening by `R − 1` at each step:
+> ```
+> A_D[f, f]   ≤   2^(−D) · A_0[f − D(R−1), f]
+> ```
+> Level `D` is active at `f` only if `A_D[f, f] ≥ 1`, so **a frame reaches depth `D` only when the base fired
+> at least `2^D` times in the `D(R−1) + 1` frames ending there.** Depth is the largest `D` satisfying that, and
+> since a frame holds at most one firing per dimension (D5) the base rate is bounded by the declared dimension
+> count `B` — giving `2^D ≤ B · (D(R−1) + 1)`, which resolves for any `B` and `R`. **Nothing is declared or
+> capped: the bound is read off the alphabet and the radius, both already given.**
+>
+> **At `R = 1` the span collapses and this is the plain logarithm.** `2^D ≤ A_0[f, f]`, so `D` is at most
+> `log₂` of that frame's own active base count. Depth is bounded by a single frame's activity exactly where a
+> chunk cannot span frames, and by a widening stretch of it everywhere else.
+>
+> **Deeper levels cost proportionally longer stretches of base activity**, since each one adds `R − 1` frames
+> to the span that has to supply the doubling. That is why a rich frame in a quiet stretch does not build
+> deep: the exponent needs history, not just breadth.
 
 > **T6 — Why a strict majority, again.** Resolving a slot in the assertion is R4's third population (§5.2), and
 > the cut is the same. For an entry's neighborhood it is required by L1 minimization (T1); here it falls out of
@@ -1500,8 +1630,8 @@ all, which is the correct outcome for it.
 > election because that is what the election is over, and a bill comes after it because the bill reads a board
 > that this frame's election is the last to move (T12). Nothing in that order leaves the level or the frame
 > (T14).
-> Nothing declares the depth and nothing caps it: a rich frame builds deeper than a sparse one, and by T9 no
-> frame builds deeper than `log₂ N`.
+> Nothing declares the depth and nothing caps it: a rich frame builds deeper than a sparse one, and by T15 no
+> frame builds deeper than the base activity behind it affords.
 >
 > Every level runs the same radius. There is no spatial stack that resolves before a temporal one, because
 > there is nothing for such a boundary to separate: a neighborhood names offsets, and a pattern at any level
@@ -1524,7 +1654,8 @@ unrepresentable.
 > bill are all inside the level and inside the frame, which is why nothing in the loop costs latency in the
 > stack. A unit promoted at `f` is available as an offset-0 neighbor to the
 > level above at `f`, and its own forward half completing later gates nothing. **Spanning patterns therefore
-> cost no latency in the stack**; the only lag anywhere is R26's, and that is the file's.
+> cost no latency in the stack**; the only thing that settles late anywhere is R26's accounting, and nothing
+> waits on it.
 
 > **R31 — The apex is a frontier, not a level.** It is every active neuron **no accepted bid covers** — the
 > uncovered set of D29, at every level at once — so a base neuron nothing found worth chunking stands in it
@@ -1696,7 +1827,7 @@ how often each symbol occurs — the one variable-length code in which probabili
 flowchart TD
     A["Frame: the machine calls the neuron.<br/>The neuron holds its own open activations,<br/>each at its own age"] --> D["AGE 0 — THE BET: route on d_backward. Closest entry<br/>wins (retired entries do not compete) and the activation<br/>COMMITS to it for the window. Writes ONLY the open<br/>activation — no bin, no counts, no price"]
     D --> E["Serve: the committed entry fires and bids.<br/>Its forward members are asserted.<br/>NOTHING comes back here — what the election<br/>settles about this activation is not settled yet"]
-    E -.->|"the bid goes up"| X["Contraction: score each bid on what the level's<br/>COVERAGE SET does not already hold, over the 2R−1<br/>window. Overlap is legal and priced, never forbidden.<br/>The machine picks bids; it never edits one"]
+    E -.->|"the bid goes up:<br/>expected benefit + cost"| X["Contraction, two passes, no iteration: ASSIGN each free<br/>slot to the claimant with the most covered neurons per unit<br/>of price, every slot independently; then ACCEPT each bid<br/>that still holds more slots than it costs — the bid in its<br/>MODIFIED form. The dictionary line is NEVER charged here —<br/>that is R12's, once per window, against the summed nets.<br/>Overlap is legal and priced. No bid is ever edited<br/>and none is revisited"]
     E --> C["AGES IN BETWEEN — collect:<br/>write the arriving offset into the activation's<br/>forward half, re-read the committed entry and assert.<br/>NOTHING folded, re-centered, re-priced or compared —<br/>a half-built observation is not evidence"]
     C --> B["AGE R−1 — THE BILL: the observation is COMPLETE. READ<br/>the ADJUSTMENT off the coverage set and assertion map —<br/>settled this frame and expiring the next, so this is its one<br/>legal moment (T12). Both enter the bin and the WHOLE SPAN<br/>folds into that bin's server; it re-centers over every offset.<br/>The fold is UNCONDITIONAL — what the neuron saw is not<br/>selected by what the election chose. Prediction is scored<br/>here. Then expire past the horizon (R9)"]
     X -.->|"the board is READ here, once"| B
@@ -1796,9 +1927,12 @@ Each risk states what would be done about it, so measurement has a decision atta
   right. The cascade only steps down when a level cannot decide, never when it decides badly. **Diagnostic:**
   count cross-level contests and how often the holder was right against how often the level below it was.
 
-- **Election slack.** R28 is a heuristic for R22 with unmeasured slack, and apex-units-per-frame is the
-  headline metric, so slack and real structure are conflated. **Diagnostic:** solve one small window exactly
-  (ILP) and compare.
+- **Election slack, and now with no bound at all.** R28 is a heuristic for R22, and unlike the greedy it
+  replaced it carries no approximation guarantee — two fixed passes over a static per-slot rule have no `ln n`
+  backstop. Since apex-units-per-frame is the headline metric, slack and real structure are conflated, and the
+  slack is now unmeasured rather than merely unmeasured-but-bounded. **Diagnostic:** solve one small window
+  exactly (ILP) and compare — and compare the per-slot rule against a greedy pass over the same bids, which is
+  the cheaper of the two comparisons and isolates what the change cost.
 
 - **The composition gap.** Narrowed, not closed. Both scopes now price in one currency against one `L`, and
   the adjustment removes the double-counting that made them disagree. What remains is that candidates are
@@ -1838,12 +1972,21 @@ consolidates it, and the pruning pass retires what is left.
   drives, is the open measurement.
 
 - **Parallelism.** The per-neuron passes are independent across neurons and could run at once. Re-centering
-  makes them slightly less independent, and the election is sequential and deliberately so. The adjustment adds
-  one ordering constraint and no message traffic: a level's bets must all be in before its election runs, and
-  that election must have run before any of its bills read the board. Both fall inside one frame (T14) and
-  neither crosses a level, but on much larger inputs than MNIST all three judgements need revisiting.
+  makes them slightly less independent. The election is no longer sequential: R28 is two passes, each over
+  every slot or every bid at once, with nothing revisited. The adjustment adds one ordering
+  constraint and no message traffic: a level's bets must all be in before its election runs, and that election
+  must have run before any of its bills read the board. Both fall inside one frame (T14) and neither crosses a
+  level, but on much larger inputs than MNIST all three judgements need revisiting.
 
 - **Asymmetric reach.** Backward and forward reach both emerge from the vote, bounded by the same `R`. Whether
   one radius is right — "how much do I need to recognize myself" and "how far can I reliably predict" are
   different questions — is unresolved. One radius is the committed choice; separate radii are the fallback if
   diagnostics show neighborhoods consistently reaching the bound in one direction only.
+
+- **The pattern does not learn what the price learns.** A member some other unit reliably covers earns an
+  entry nothing, and the contributions say so (D13) — but the collapse votes on presence, so the member stays
+  in the neighborhood and the line keeps paying for it, and the entry can only shed it by dying whole. The
+  tallies to change this already exist: a credited-presence vote is `presence − covered`, per slot, off D23.
+  What it would cost is the seam — letting the candidate's collapse read election outcomes lets the board
+  shape a *claim* (R29 guards evidence, and a claim is not evidence, so it may be legal), and it changes what
+  T1's center means. Whether structure should learn creditedness, or only prices should, is open.
